@@ -1518,6 +1518,29 @@ unixNoLLMServer(
 )
 
 unixNoLLMServer(
+  "shell decodes stdout and stderr independently",
+  () =>
+    Effect.gen(function* () {
+      const { prompt, run, chat } = yield* boot()
+      const result = yield* prompt.shell({
+        sessionID: chat.id,
+        agent: "build",
+        command: "printf '\\360'; sleep 0.05; printf 'stderr\\n' >&2; sleep 0.05; printf '\\237\\231\\202'; sleep 0.05",
+      })
+
+      const tool = completedTool(result.parts)
+      if (!tool) return
+
+      expect(tool.state.output).toContain("stderr")
+      expect(tool.state.output).toContain("🙂")
+      expect(tool.state.output).not.toContain("\uFFFD")
+      expect(tool.state.metadata.output).not.toContain("\uFFFD")
+      yield* run.assertNotBusy(chat.id)
+    }),
+  { config: cfg },
+)
+
+unixNoLLMServer(
   "shell completes a fast command on the preferred shell",
   () =>
     Effect.gen(function* () {

@@ -38,6 +38,7 @@ import { LLM } from "./llm"
 import { Shell } from "@opencode-ai/core/shell"
 import { ShellID } from "@/tool/shell/id"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { AppProcess } from "@opencode-ai/core/process"
 import { Truncate } from "@/tool/truncate"
 import { Image } from "@/image/image"
 import { decodeDataUrl } from "@/util/data-url"
@@ -564,7 +565,7 @@ const layer = Layer.effect(
                 forceKillAfter: "3 seconds",
               })
               const handle = yield* spawner.spawn(cmd)
-              yield* Stream.runForEach(Stream.decodeText(handle.all), (chunk) =>
+              yield* Stream.runForEach(AppProcess.mergeTextOutput(handle), (chunk) =>
                 Effect.gen(function* () {
                   output += chunk
                   if (part.state.status === "running") {

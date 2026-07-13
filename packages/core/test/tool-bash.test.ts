@@ -169,7 +169,7 @@ describe("BashTool", () => {
             })
             expect(runs).toMatchObject([{ command: "pwd", cwd: realpathSync(tmp.path) }])
             expect(runs[0]?.options).toMatchObject({
-              combineOutput: true,
+              combineOutput: "utf8",
               maxOutputBytes: BashTool.MAX_CAPTURE_BYTES,
             })
             expect(assertions).toMatchObject([{ sessionID, action: "bash", resources: ["pwd"], save: ["pwd"] }])

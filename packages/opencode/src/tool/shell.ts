@@ -9,6 +9,7 @@ import { lazy } from "@/util/lazy"
 import { Language, type Node } from "web-tree-sitter"
 
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { AppProcess } from "@opencode-ai/core/process"
 import { fileURLToPath } from "url"
 import { Config } from "@/config/config"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -484,7 +485,7 @@ export const ShellTool = Tool.define(
           const handle = yield* spawner.spawn(cmd(input.shell, input.command, input.cwd, input.env))
 
           yield* Effect.forkScoped(
-            Stream.runForEach(Stream.decodeText(handle.all), (chunk) => {
+            Stream.runForEach(AppProcess.mergeTextOutput(handle), (chunk) => {
               const size = Buffer.byteLength(chunk, "utf-8")
               list.push({ text: chunk, size })
               used += size

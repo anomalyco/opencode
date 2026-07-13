@@ -165,7 +165,7 @@ const layer = Layer.effectDiscard(
               const timeout = input.timeout ?? DEFAULT_TIMEOUT_MS
               const result = yield* appProcess
                 .run(command, {
-                  combineOutput: true,
+                  combineOutput: "utf8",
                   timeout: Duration.millis(timeout),
                   maxOutputBytes: MAX_CAPTURE_BYTES,
                 })

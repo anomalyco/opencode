@@ -3,7 +3,7 @@ import fs from "fs/promises"
 import { realpathSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { Effect, Exit, Fiber, Stream } from "effect"
+import { Effect, Exit, Fiber, Latch, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { AppProcess } from "@opencode-ai/core/process"
@@ -27,6 +27,30 @@ const waitForFile = (file: string) =>
   })
 
 describe("AppProcess", () => {
+  describe("mergeTextOutput", () => {
+    it.effect(
+      "keeps decoder state isolated per stream",
+      Effect.gen(function* () {
+        const stdoutStarted = yield* Latch.make()
+        const stderrDecoded = yield* Latch.make()
+        const stdout = Stream.concat(
+          Stream.fromEffect(stdoutStarted.open.pipe(Effect.as(Uint8Array.of(0xf0)))),
+          Stream.fromEffect(stderrDecoded.await.pipe(Effect.as(Uint8Array.of(0x9f, 0x99, 0x82)))),
+        )
+        const stderr = Stream.fromEffect(stdoutStarted.await.pipe(Effect.as(new TextEncoder().encode("stderr\n"))))
+        const output = Array.from(
+          yield* AppProcess.mergeTextOutput({ stdout, stderr }).pipe(
+            Stream.tap((chunk) => (chunk.includes("stderr") ? stderrDecoded.open : Effect.void)),
+            Stream.runCollect,
+          ),
+        ).join("")
+        expect(output).toContain("stderr")
+        expect(output).toContain("🙂")
+        expect(output).not.toContain("\uFFFD")
+      }),
+    )
+  })
+
   describe("run", () => {
     it.effect(
       "captures stdout and exit code zero",
@@ -53,6 +77,24 @@ describe("AppProcess", () => {
         expect(result.output?.toString("utf8")).toBe("out 1\nerr 1\nout 2\n")
         expect(result.stdout.toString("utf8")).toBe("")
         expect(result.stderr.toString("utf8")).toBe("")
+      }),
+    )
+
+    it.live(
+      "decodes combined UTF-8 output independently per stream",
+      Effect.gen(function* () {
+        const svc = yield* AppProcess.Service
+        const script = [
+          'const bytes = Buffer.from("🙂")',
+          "process.stdout.write(bytes.subarray(0, 1))",
+          'setTimeout(() => process.stderr.write("stderr\\n"), 20)',
+          "setTimeout(() => process.stdout.write(bytes.subarray(1)), 40)",
+        ].join(";")
+        const result = yield* svc.run(cmd("-e", script), { combineOutput: "utf8" })
+        const output = result.output?.toString("utf8")
+        expect(output).toContain("stderr")
+        expect(output).toContain("🙂")
+        expect(output).not.toContain("\uFFFD")
       }),
     )
 

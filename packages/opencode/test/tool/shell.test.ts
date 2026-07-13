@@ -1131,6 +1131,24 @@ describe("tool.shell abort", () => {
   )
 })
 
+if (process.platform !== "win32") {
+  it.live("tool.shell decodes stdout and stderr independently", () =>
+    runIn(
+      projectRoot,
+      Effect.gen(function* () {
+        const result = yield* run({
+          command:
+            "printf '\\360'; sleep 0.05; printf 'stderr\\n' >&2; sleep 0.05; printf '\\237\\231\\202'; sleep 0.05",
+        })
+        expect(result.output).toContain("stderr")
+        expect(result.output).toContain("🙂")
+        expect(result.output).not.toContain("\uFFFD")
+        expect(result.metadata.exit).toBe(0)
+      }),
+    ),
+  )
+}
+
 describe("tool.shell truncation", () => {
   it.live("truncates output exceeding line limit", () =>
     runIn(

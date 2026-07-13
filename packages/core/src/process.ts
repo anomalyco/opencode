@@ -1,7 +1,7 @@
 import { Context, Duration, Effect, Fiber, Layer, Schema, Stream } from "effect"
 import type { PlatformError } from "effect/PlatformError"
 import { ChildProcess } from "effect/unstable/process"
-import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
+import { ChildProcessSpawner, type ChildProcessHandle } from "effect/unstable/process/ChildProcessSpawner"
 import { CrossSpawnSpawner } from "./cross-spawn-spawner"
 import { makeGlobalNode } from "./effect/app-node"
 
@@ -20,7 +20,8 @@ export class AppProcessError extends Schema.TaggedErrorClass<AppProcessError>()(
 }
 
 export interface RunOptions {
-  readonly combineOutput?: boolean
+  // "utf8" keeps each pipe's decoder state independent before combining output.
+  readonly combineOutput?: boolean | "utf8"
   readonly maxOutputBytes?: number
   readonly maxErrorBytes?: number
   readonly signal?: AbortSignal
@@ -118,6 +119,10 @@ const normalizeStdin = (
       ? Stream.make(input)
       : input
 
+// Byte streams must be decoded independently so one pipe cannot complete a partial character from the other.
+export const mergeTextOutput = (handle: Pick<ChildProcessHandle, "stdout" | "stderr">) =>
+  Stream.merge(Stream.decodeText(handle.stdout), Stream.decodeText(handle.stderr))
+
 export const collectStream = (stream: Stream.Stream<Uint8Array, PlatformError>, maxOutputBytes: number | undefined) =>
   Stream.runFold(
     stream,
@@ -147,8 +152,10 @@ const layer = Layer.effect(
         Effect.gen(function* () {
           const handle = yield* spawner.spawn(command)
           if (options?.combineOutput) {
+            const source =
+              options.combineOutput === "utf8" ? mergeTextOutput(handle).pipe(Stream.encodeText) : handle.all
             const [output, exitCode] = yield* Effect.all(
-              [collectStream(handle.all, options.maxOutputBytes), handle.exitCode],
+              [collectStream(source, options.maxOutputBytes), handle.exitCode],
               { concurrency: "unbounded" },
             )
             return {
