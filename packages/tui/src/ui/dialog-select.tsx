@@ -47,22 +47,21 @@ export interface DialogSelectProps<T> {
   focusCurrent?: boolean
 }
 
-type DialogSelectActionBase = {
+type DialogSelectActionBase<T> = {
   command: string
   title: string
   side?: "left" | "right"
   hidden?: boolean
+  disabled?: boolean | ((option: DialogSelectOption<T> | undefined) => boolean)
 }
 
 export type DialogSelectAction<T> =
-  | (DialogSelectActionBase & {
+  | (DialogSelectActionBase<T> & {
       selection?: "required"
-      disabled?: boolean | ((option: DialogSelectOption<T> | undefined) => boolean)
       onTrigger: (option: DialogSelectOption<T>) => void
     })
-  | (DialogSelectActionBase & {
+  | (DialogSelectActionBase<T> & {
       selection: "none"
-      disabled?: boolean | (() => boolean)
       onTrigger: () => void
     })
 
@@ -526,9 +525,9 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   }
 
   function isActionDisabled(item: Action) {
-    if (typeof item.disabled !== "function") return item.disabled
-    if (item.selection === "none") return item.disabled()
-    return item.disabled(selected())
+    const option = selected()
+    if (item.selection !== "none" && !option) return true
+    return typeof item.disabled === "function" ? item.disabled(option) : item.disabled
   }
 
   function isActionFocused(item: VisibleAction) {

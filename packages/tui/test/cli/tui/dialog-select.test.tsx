@@ -54,15 +54,15 @@ async function renderSelect(
                     options={options}
                     actions={[
                       {
+                        command: "dialog.move_session.delete",
+                        title: "delete",
+                        onTrigger: onRow,
+                      },
+                      {
                         command: "dialog.move_session.new",
                         title: "new",
                         selection: "none",
                         onTrigger: onGlobal,
-                      },
-                      {
-                        command: "dialog.move_session.delete",
-                        title: "delete",
-                        onTrigger: onRow,
                       },
                     ]}
                   />
