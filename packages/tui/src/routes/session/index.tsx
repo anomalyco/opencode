@@ -2394,7 +2394,8 @@ function Subagent(props: ToolProps) {
         description() ?? "Subagent",
       )}
       <Show when={background()}>
-        <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}> Background </span>
+        {" "}
+        <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}>Background</span>
       </Show>
     </InlineTool>
   )
