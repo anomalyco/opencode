@@ -335,11 +335,27 @@ test("parseModel correctly parses provider/model string", () => {
   const result = Provider.parseModel("anthropic/claude-sonnet-4")
   expect(String(result.providerID)).toBe("anthropic")
   expect(String(result.modelID)).toBe("claude-sonnet-4")
+  expect(result.profile).toBeUndefined()
 })
 
 test("parseModel handles model IDs with slashes", () => {
   const result = Provider.parseModel("openrouter/anthropic/claude-3-opus")
   expect(String(result.providerID)).toBe("openrouter")
+  expect(String(result.modelID)).toBe("anthropic/claude-3-opus")
+  expect(result.profile).toBeUndefined()
+})
+
+test("parseModel extracts profile from provider:profile/model format", () => {
+  const result = Provider.parseModel("openrouter:work/claude-sonnet-4")
+  expect(String(result.providerID)).toBe("openrouter")
+  expect(result.profile).toBe("work")
+  expect(String(result.modelID)).toBe("claude-sonnet-4")
+})
+
+test("parseModel handles profile with model IDs containing slashes", () => {
+  const result = Provider.parseModel("openrouter:personal/anthropic/claude-3-opus")
+  expect(String(result.providerID)).toBe("openrouter")
+  expect(result.profile).toBe("personal")
   expect(String(result.modelID)).toBe("anthropic/claude-3-opus")
 })
 
