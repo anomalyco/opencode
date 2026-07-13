@@ -26,6 +26,7 @@ export function DialogSessionList() {
   const client = useClient()
   const local = useLocal()
   const toast = useToast()
+  const [filter, setFilter] = createSignal("")
   const [search, setSearch] = createDebouncedSignal("", 150)
   const [toDelete, setToDelete] = createSignal<string>()
   const quickSwitch1 = useCommandShortcut("session.quick_switch.1")
@@ -44,21 +45,30 @@ export function DialogSessionList() {
         directory: location.directory,
         workspace: location.workspaceID,
       })
-      return { query, sessions: response.data }
+      return { query, sessions: response.data, error: undefined }
     } catch (error) {
       // A transient transport failure must degrade search, not crash the TUI
       // through the root ErrorBoundary when the errored resource is read.
-      toast.show({ message: errorMessage(error), variant: "error", duration: 5000 })
-      return { query, sessions: [] as SessionInfo[] }
+      return { query, sessions: [] as SessionInfo[], error }
     }
   })
 
   const currentSessionID = createMemo(() => (route.data.type === "session" ? route.data.sessionID : undefined))
   const sessions = createMemo(() => {
-    const query = search()
+    const query = filter()
     if (!query) return data.session.list()
+    if (query !== search() || searchResults.loading) return []
     const result = searchResults()
     return result?.query === query ? result.sessions : []
+  })
+  const searchState = createMemo(() => {
+    const query = filter()
+    if (!query) return { message: "No sessions available", error: false }
+    if (query !== search() || searchResults.loading) return { message: "Searching sessions…", error: false }
+    const result = searchResults()
+    if (result?.query === query && result.error)
+      return { message: "Could not search sessions. Change the search to try again.", error: true }
+    return { message: "No sessions found", error: false }
   })
 
   const quickSwitchHint = createMemo(() => {
@@ -120,7 +130,20 @@ export function DialogSessionList() {
       options={options()}
       skipFilter={true}
       current={currentSessionID()}
-      onFilter={setSearch}
+      onFilter={(query) => {
+        setFilter(query)
+        setSearch(query)
+      }}
+      emptyView={
+        <box paddingLeft={4} paddingRight={4} paddingTop={1}>
+          <text fg={theme.textMuted}>No sessions available</text>
+        </box>
+      }
+      noMatchView={
+        <box paddingLeft={4} paddingRight={4} paddingTop={1}>
+          <text fg={searchState().error ? theme.error : theme.textMuted}>{searchState().message}</text>
+        </box>
+      }
       onMove={() => setToDelete(undefined)}
       onSelect={(option) => {
         route.navigate({ type: "session", sessionID: option.value })

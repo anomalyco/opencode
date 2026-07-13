@@ -113,7 +113,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
     )
     return normalizeDiffs(result.data ?? [])
   })
-  const files = createMemo(() => diff() ?? [])
+  const files = createMemo(() => (diff.error ? [] : (diff() ?? [])))
   const [focus, setFocus] = createSignal<DiffViewerFocus>("patches")
   const [fileTreeEnabled, setFileTreeEnabled] = createSignal(config.data.diffs?.tree ?? true)
   const showFileTree = createMemo(() => showDiffViewerFileTree(fileTreeEnabled(), files().length))
@@ -748,9 +748,11 @@ function DiffViewer(props: { api: TuiPluginApi }) {
           <text fg={theme().text}>Diff </text>
           <text fg={theme().textMuted}>{diffSourceLabel(mode())}</text>
           <box flexGrow={1} />
-          <text fg={theme().textMuted}>
-            {files().length} {files().length === 1 ? "file" : "files"}
-          </text>
+          <Show when={!diff.loading && !diff.error}>
+            <text fg={theme().textMuted}>
+              {files().length} {files().length === 1 ? "file" : "files"}
+            </text>
+          </Show>
         </Panel>
 
         <box flexGrow={1} minHeight={0}>
@@ -758,19 +760,19 @@ function DiffViewer(props: { api: TuiPluginApi }) {
             <Match when={diff.loading}>
               <Separator axis="x" />
               <box flexGrow={1} paddingLeft={1}>
-                <text fg={theme().textMuted}>Loading diff...</text>
-              </box>
-            </Match>
-            <Match when={!diff.loading && files().length === 0}>
-              <Separator axis="x" />
-              <box flexGrow={1} paddingLeft={1}>
-                <text fg={theme().textMuted}>No diff!</text>
+                <text fg={theme().textMuted}>Loading diff…</text>
               </box>
             </Match>
             <Match when={!diff.loading && diff.error}>
               <Separator axis="x" />
               <box flexGrow={1} paddingLeft={1}>
-                <text fg={theme().error}>Failed to load diff</text>
+                <text fg={theme().error}>Could not load diff. Reopen the diff viewer to try again.</text>
+              </box>
+            </Match>
+            <Match when={!diff.loading && files().length === 0}>
+              <Separator axis="x" />
+              <box flexGrow={1} paddingLeft={1}>
+                <text fg={theme().textMuted}>No changes to show</text>
               </box>
             </Match>
             <Match when={!diff.loading}>

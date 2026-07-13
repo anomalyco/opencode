@@ -90,6 +90,11 @@ export function DialogIntegration(props: { onConnected?: OnIntegrationConnected 
           <text fg={theme.textMuted}>No integrations available</text>
         </box>
       }
+      noMatchView={
+        <box paddingLeft={4} paddingRight={4} paddingTop={1}>
+          <text fg={theme.textMuted}>No integrations found</text>
+        </box>
+      }
     />
   )
 }

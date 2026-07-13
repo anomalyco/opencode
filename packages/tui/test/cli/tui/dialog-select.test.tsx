@@ -267,7 +267,7 @@ test("selects a repopulated option after removing the only option", async () => 
 
   try {
     select.replaceOptions([])
-    await select.app.waitForFrame((frame) => frame.includes("No results found"))
+    await select.app.waitForFrame((frame) => frame.includes("No items available"))
     select.app.mockInput.pressEnter()
     expect(select.selected).toEqual([])
 

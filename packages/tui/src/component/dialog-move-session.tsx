@@ -21,7 +21,9 @@ import type { ProjectDirectoriesOutput } from "@opencode-ai/client"
 import { useRoute } from "../context/route"
 import { DialogProjectCopyName } from "./dialog-project-copy-name"
 
-export type MoveSessionSelection = { type: "directory"; directory: string; subdirectory: boolean } | { type: "new"; name: string }
+export type MoveSessionSelection =
+  | { type: "directory"; directory: string; subdirectory: boolean }
+  | { type: "new"; name: string }
 type ProjectDirectory = ProjectDirectoriesOutput[number]
 
 type DialogMoveSessionProps = {
@@ -120,7 +122,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
     if (showError()) return []
     const data = directoryData()
     const current = currentRoot()?.directory
-    if (directories.loading && !data && !current) return [{ title: "Loading project directories...", value: undefined }]
+    if (directories.loading && !data && !current) return []
     const roots = [...(data ?? [])]
     if (current && !roots.some((item) => item.directory === current)) roots.unshift({ directory: current })
     roots.sort((a, b) => {
@@ -130,13 +132,12 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
       if (!a.strategy && !b.strategy) return a.directory.length - b.directory.length
       return 0
     })
-    if (roots.length === 0) return [{ title: "No project directories found", value: undefined }]
+    if (roots.length === 0) return []
 
     const subdirectories = sessionData.session
       .list()
       .filter(
-        (session) =>
-          session.projectID === props.projectID && session.subpath && ![".", "/"].includes(session.subpath),
+        (session) => session.projectID === props.projectID && session.subpath && ![".", "/"].includes(session.subpath),
       )
       .map((session) => session.location.directory)
       .filter((directory) => !roots.some((root) => root.directory === directory))
@@ -326,13 +327,27 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
         options={options()}
         emptyView={
           showError() ? (
-            <box paddingLeft={4} paddingRight={4}>
+            <box paddingLeft={4} paddingRight={4} paddingTop={1}>
               <text fg={theme.error} attributes={TextAttributes.BOLD}>
                 Could not load project directories
               </text>
               <text fg={theme.textMuted}>{errorMessage(loadError())}</text>
+              <text fg={theme.textMuted}>Close and reopen Move session to try again.</text>
             </box>
-          ) : undefined
+          ) : directories.loading || loadedProject.loading ? (
+            <box paddingLeft={4} paddingRight={4} paddingTop={1}>
+              <text fg={theme.textMuted}>Loading project directories…</text>
+            </box>
+          ) : (
+            <box paddingLeft={4} paddingRight={4} paddingTop={1}>
+              <text fg={theme.textMuted}>No project directories available</text>
+            </box>
+          )
+        }
+        noMatchView={
+          <box paddingLeft={4} paddingRight={4} paddingTop={1}>
+            <text fg={theme.textMuted}>No project directories found</text>
+          </box>
         }
         locked={showError() || directories.loading || loadedProject.loading || Boolean(removing())}
         current={current()}

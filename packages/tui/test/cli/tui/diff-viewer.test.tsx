@@ -36,6 +36,16 @@ test("closing the diff viewer returns to the route it opened from", async () => 
   }
 })
 
+test("shows an error instead of an empty diff when loading fails", async () => {
+  const viewer = await renderDiffViewer([], 20, undefined, true)
+  try {
+    await viewer.app.waitForFrame((frame) => frame.includes("Could not load diff"))
+    expect(viewer.app.captureCharFrame()).not.toContain("No changes to show")
+  } finally {
+    viewer.app.renderer.destroy()
+  }
+})
+
 test("brackets navigate diff hunks", async () => {
   const viewer = await renderDiffViewer(
     [
@@ -102,7 +112,7 @@ test("brackets navigate diff hunks", async () => {
   }
 })
 
-async function renderDiffViewer(vcsDiff: unknown[], height = 20, initialRoute?: TuiRouteCurrent) {
+async function renderDiffViewer(vcsDiff: unknown[], height = 20, initialRoute?: TuiRouteCurrent, fail = false) {
   const commands = new Map<
     string,
     NonNullable<Parameters<TuiPluginApi["keymap"]["registerLayer"]>[0]["commands"]>[number]
@@ -113,6 +123,7 @@ async function renderDiffViewer(vcsDiff: unknown[], height = 20, initialRoute?: 
   const config = createTuiResolvedConfig()
   const transport = createFetch((url) => {
     if (url.pathname !== "/api/vcs/diff") return
+    if (fail) return json({ message: "boom" }, { status: 500 })
     vcsDiffInput = {
       location: { directory: url.searchParams.get("location[directory]") },
       mode: url.searchParams.get("mode"),

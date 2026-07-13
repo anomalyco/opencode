@@ -46,11 +46,7 @@ export function DialogPair(props: { credentials?: DialogPairCredentials }) {
     const value = info()
     if (!value) return
     return (
-      <box
-        flexDirection={horizontal() ? "row" : "column"}
-        alignItems={horizontal() ? "flex-start" : "center"}
-        gap={2}
-      >
+      <box flexDirection={horizontal() ? "row" : "column"} alignItems={horizontal() ? "flex-start" : "center"} gap={2}>
         <box width={horizontal() ? 29 : "100%"} flexShrink={0} gap={1}>
           <box>
             <text fg={theme.textMuted}>URLs</text>
@@ -72,9 +68,7 @@ export function DialogPair(props: { credentials?: DialogPairCredentials }) {
               {showPassword() ? value.password : "************"}
             </text>
           </box>
-          <Show
-            when={value.urls.some((url) => ["localhost", "127.0.0.1", "[::1]"].includes(new URL(url).hostname))}
-          >
+          <Show when={value.urls.some((url) => ["localhost", "127.0.0.1", "[::1]"].includes(new URL(url).hostname))}>
             <text fg={theme.textMuted} wrapMode="word">
               Run `opencode service set hostname 0.0.0.0` to access the service remotely.
             </text>
@@ -102,23 +96,35 @@ export function DialogPair(props: { credentials?: DialogPairCredentials }) {
           esc
         </text>
       </box>
-      <Show when={loadError()}>
-        {(error) => <text fg={theme.error}>{errorMessage(error())}</text>}
-      </Show>
-      <Show when={info()} fallback={<text fg={theme.textMuted}>Loading server information...</text>}>
-        <Show
-          when={dimensions().height >= 36}
-          fallback={
-            <scrollbox
-              height={Math.max(8, dimensions().height - Math.floor(dimensions().height / 4) - 6)}
-              scrollbarOptions={{ visible: false }}
+      <Show
+        when={loadError()}
+        fallback={
+          <Show when={info()} fallback={<text fg={theme.textMuted}>Loading server information…</text>}>
+            <Show
+              when={dimensions().height >= 36}
+              fallback={
+                <scrollbox
+                  height={Math.max(8, dimensions().height - Math.floor(dimensions().height / 4) - 6)}
+                  scrollbarOptions={{ visible: false }}
+                >
+                  {content()}
+                </scrollbox>
+              }
             >
               {content()}
-            </scrollbox>
-          }
-        >
-          {content()}
-        </Show>
+            </Show>
+          </Show>
+        }
+      >
+        {(error) => (
+          <box>
+            <text fg={theme.error} attributes={TextAttributes.BOLD}>
+              Could not load server information
+            </text>
+            <text fg={theme.textMuted}>{errorMessage(error())}</text>
+            <text fg={theme.textMuted}>Close and reopen Pair to try again.</text>
+          </box>
+        )}
       </Show>
     </box>
   )
