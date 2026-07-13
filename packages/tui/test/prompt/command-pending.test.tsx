@@ -1,29 +1,25 @@
 /** @jsxImportSource @opentui/solid */
 import { TextareaRenderable } from "@opentui/core"
-import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
-import { testRender, useRenderer } from "@opentui/solid"
+import { testRender } from "@opentui/solid"
 import { expect, test } from "bun:test"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
-import { createSignal, onCleanup, Show, type Setter } from "solid-js"
+import { createEffect, createSignal, Show, type Setter } from "solid-js"
 import { Prompt, type PromptRef } from "../../src/component/prompt"
-import { TuiConfigProvider } from "../../src/config/v1"
+import { ConfigProvider } from "../../src/config"
 import { ArgsProvider } from "../../src/context/args"
+import { ClientProvider } from "../../src/context/client"
 import { ClipboardProvider } from "../../src/context/clipboard"
 import { DataProvider, useData } from "../../src/context/data"
 import { EditorContextProvider } from "../../src/context/editor"
 import { ExitProvider } from "../../src/context/exit"
-import { KVProvider } from "../../src/context/kv"
+import { Keymap } from "../../src/context/keymap"
 import { LocalProvider } from "../../src/context/local"
-import { LocationProvider } from "../../src/context/location"
+import { LocationProvider, useLocation } from "../../src/context/location"
 import { PermissionProvider } from "../../src/context/permission"
 import { PromptRefProvider, usePromptRef } from "../../src/context/prompt"
-import { ProjectProvider } from "../../src/context/project"
 import { RouteProvider } from "../../src/context/route"
-import { SDKProvider } from "../../src/context/sdk"
-import { SyncProvider } from "../../src/context/sync"
 import { ThemeProvider } from "../../src/context/theme"
-import { OpencodeKeymapProvider, registerOpencodeKeymap } from "../../src/keymap"
 import { FrecencyProvider } from "../../src/prompt/frecency"
 import { PromptHistoryProvider } from "../../src/prompt/history"
 import { PromptStashProvider } from "../../src/prompt/stash"
@@ -32,7 +28,7 @@ import { Toast, ToastProvider } from "../../src/ui/toast"
 import { tmpdir } from "../fixture/fixture"
 import { TestTuiContexts } from "../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../fixture/tui-runtime"
-import { createApi, createClient, createEventStream, createFetch, directory, json } from "../fixture/tui-sdk"
+import { createApi, createEventStream, createFetch, directory, json } from "../fixture/tui-client"
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -141,6 +137,8 @@ async function mountPrompt(root: string) {
 
   function Content() {
     data = useData()
+    const location = useLocation()
+    createEffect(() => location.set(data?.location.default()))
     return (
       <box width="100%" flexDirection="column">
         <Prompt
@@ -155,56 +153,45 @@ async function mountPrompt(root: string) {
   }
 
   function Harness() {
-    const renderer = useRenderer()
-    const keymap = createDefaultOpenTuiKeymap(renderer)
-    const off = registerOpencodeKeymap(keymap, renderer, config)
-    onCleanup(off)
-
     return (
       <TestTuiContexts directory={directory} paths={{ home: root, state, worktree: "/tmp/opencode" }}>
         <ExitProvider exit={() => {}}>
           <ClipboardProvider value={{}}>
-            <OpencodeKeymapProvider keymap={keymap}>
-              <ArgsProvider>
-                <KVProvider>
+            <ArgsProvider>
+              <ConfigProvider config={config}>
+                <Keymap.Provider>
                   <ToastProvider>
                     <RouteProvider initialRoute={{ type: "session", sessionID: "ses_test" }}>
-                      <TuiConfigProvider config={config}>
-                        <SDKProvider client={createClient(transport.fetch)} api={createApi(transport.fetch)}>
-                          <PermissionProvider>
-                            <ProjectProvider>
-                              <SyncProvider>
-                                <DataProvider>
-                                  <ThemeProvider mode="dark" source={{ discover: () => Promise.resolve({}) }}>
-                                    <LocalProvider>
-                                      <PromptStashProvider>
-                                        <DialogProvider>
-                                          <FrecencyProvider>
-                                            <PromptHistoryProvider>
-                                              <PromptRefProvider>
-                                                <EditorContextProvider integration={{}}>
-                                                  <LocationProvider location={{ directory }}>
-                                                    <Content />
-                                                  </LocationProvider>
-                                                </EditorContextProvider>
-                                              </PromptRefProvider>
-                                            </PromptHistoryProvider>
-                                          </FrecencyProvider>
-                                        </DialogProvider>
-                                      </PromptStashProvider>
-                                    </LocalProvider>
-                                  </ThemeProvider>
-                                </DataProvider>
-                              </SyncProvider>
-                            </ProjectProvider>
-                          </PermissionProvider>
-                        </SDKProvider>
-                      </TuiConfigProvider>
+                      <ClientProvider api={createApi(transport.fetch)}>
+                        <PermissionProvider>
+                          <DataProvider>
+                            <LocationProvider>
+                              <ThemeProvider mode="dark" source={{ discover: () => Promise.resolve({}) }}>
+                                <LocalProvider>
+                                  <PromptStashProvider>
+                                    <DialogProvider>
+                                      <FrecencyProvider>
+                                        <PromptHistoryProvider>
+                                          <PromptRefProvider>
+                                            <EditorContextProvider integration={{}}>
+                                              <Content />
+                                            </EditorContextProvider>
+                                          </PromptRefProvider>
+                                        </PromptHistoryProvider>
+                                      </FrecencyProvider>
+                                    </DialogProvider>
+                                  </PromptStashProvider>
+                                </LocalProvider>
+                              </ThemeProvider>
+                            </LocationProvider>
+                          </DataProvider>
+                        </PermissionProvider>
+                      </ClientProvider>
                     </RouteProvider>
                   </ToastProvider>
-                </KVProvider>
-              </ArgsProvider>
-            </OpencodeKeymapProvider>
+                </Keymap.Provider>
+              </ConfigProvider>
+            </ArgsProvider>
           </ClipboardProvider>
         </ExitProvider>
       </TestTuiContexts>
