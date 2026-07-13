@@ -513,11 +513,8 @@ describe("V2 mini transport", () => {
         request: {
           id: "per_1",
           sessionID: "ses_1",
-          permission: "read",
-          patterns: ["/tmp/file"],
-          metadata: {},
-          always: [],
-          tool: undefined,
+          action: "read",
+          resources: ["/tmp/file"],
         },
       },
     })

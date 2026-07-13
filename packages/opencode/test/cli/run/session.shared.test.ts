@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
-import { OpenCode } from "@opencode-ai/client/promise"
+import { OpenCode, type SessionMessageUser } from "@opencode-ai/client/promise"
 import {
   createSession,
   resolveCurrentSession,
@@ -8,12 +8,6 @@ import {
   type RunSession,
   type SessionMessages,
 } from "@opencode-ai/cli/mini/session.shared"
-
-type Message = SessionMessages[number]
-type Part = Message["parts"][number]
-type TextPart = Extract<Part, { type: "text" }>
-type AgentPart = Extract<Part, { type: "agent" }>
-type FilePart = Extract<Part, { type: "file" }>
 
 const model = {
   providerID: "openai",
@@ -24,107 +18,30 @@ afterEach(() => {
   mock.restore()
 })
 
-function userMessage(id: string, parts: Message["parts"], variant = "high"): Message {
-  return {
-    info: {
-      id,
-      sessionID: "session-1",
-      role: "user",
-      time: {
-        created: 1,
-      },
-      agent: "build",
-      model: {
-        ...model,
-        variant,
-      },
-    },
-    parts,
-  }
-}
-
-function assistantMessage(id: string, parts: Message["parts"]): Message {
-  return {
-    info: {
-      id,
-      sessionID: "session-1",
-      role: "assistant",
-      time: {
-        created: 1,
-      },
-      parentID: "msg-user-1",
-      modelID: "gpt-5",
-      providerID: "openai",
-      mode: "chat",
-      agent: "build",
-      path: {
-        cwd: "/tmp",
-        root: "/tmp",
-      },
-      cost: 0,
-      tokens: {
-        input: 1,
-        output: 1,
-        reasoning: 0,
-        cache: {
-          read: 0,
-          write: 0,
-        },
-      },
-    },
-    parts,
-  }
-}
-
-function textPart(id: string, messageID: string, text: string, input: Partial<TextPart> = {}): TextPart {
+function userMessage(id: string, text: string, input: Partial<SessionMessageUser> = {}): SessionMessageUser {
   return {
     id,
-    sessionID: "session-1",
-    messageID,
-    type: "text",
+    type: "user",
     text,
-    synthetic: input.synthetic,
-  }
-}
-
-function agentPart(id: string, messageID: string, name: string, source?: AgentPart["source"]): AgentPart {
-  return {
-    id,
-    sessionID: "session-1",
-    messageID,
-    type: "agent",
-    name,
-    source,
-  }
-}
-
-function filePart(id: string, messageID: string, url: string, input: Partial<FilePart> = {}): FilePart {
-  return {
-    id,
-    sessionID: "session-1",
-    messageID,
-    type: "file",
-    mime: input.mime ?? "text/plain",
-    filename: input.filename,
-    url,
-    source: input.source,
+    time: { created: 1 },
+    ...input,
   }
 }
 
 describe("run session shared", () => {
-  test("builds user prompt text from text, file, and agent parts", () => {
+  test("builds user prompts from projected text and attachments", () => {
     const msgs: SessionMessages = [
-      assistantMessage("msg-assistant-1", [textPart("txt-assistant-1", "msg-assistant-1", "ignore me")]),
-      userMessage("msg-user-1", [
-        textPart("txt-user-1", "msg-user-1", "look @scan"),
-        textPart("txt-user-2", "msg-user-1", "hidden", { synthetic: true }),
-        agentPart("agent-user-1", "msg-user-1", "scan", {
-          start: 5,
-          end: 10,
-          value: "@scan",
-        }),
-        filePart("file-user-1", "msg-user-1", "file:///tmp/note.ts"),
-      ]),
+      userMessage("msg-user-1", "look @scan @note.ts", {
+        agents: [{ name: "scan", mention: { start: 5, end: 10, text: "@scan" } }],
+        files: [
+          {
+            data: "",
+            mime: "text/plain",
+            source: { type: "uri", uri: "file:///tmp/note.ts" },
+            mention: { start: 11, end: 19, text: "@note.ts" },
+          },
+        ],
+      }),
     ]
 
     const out = createSession(msgs)
@@ -132,15 +49,6 @@ describe("run session shared", () => {
     expect(out.turns).toHaveLength(1)
     expect(out.turns[0]?.prompt.text).toBe("look @scan @note.ts")
     expect(out.turns[0]?.prompt.parts).toEqual([
-      {
-        type: "agent",
-        name: "scan",
-        source: {
-          start: 5,
-          end: 10,
-          value: "@scan",
-        },
-      },
       {
         type: "file",
         mime: "text/plain",
@@ -156,44 +64,40 @@ describe("run session shared", () => {
           },
         },
       },
+      {
+        type: "agent",
+        name: "scan",
+        source: {
+          start: 5,
+          end: 10,
+          value: "@scan",
+        },
+      },
     ])
   })
 
-  test("reuses existing mentions when file and agent parts have no source", () => {
+  test("leaves attachment sources undefined when projected mentions are absent", () => {
     const out = createSession([
-      userMessage("msg-user-1", [
-        textPart("txt-user-1", "msg-user-1", "look @scan @note.ts"),
-        agentPart("agent-user-1", "msg-user-1", "scan"),
-        filePart("file-user-1", "msg-user-1", "file:///tmp/note.ts"),
-      ]),
+      userMessage("msg-user-1", "look @scan @note.ts", {
+        agents: [{ name: "scan" }],
+        files: [{ data: "", mime: "text/plain", source: { type: "uri", uri: "file:///tmp/note.ts" } }],
+      }),
     ])
 
     expect(out.turns[0]?.prompt).toEqual({
       text: "look @scan @note.ts",
       parts: [
         {
-          type: "agent",
-          name: "scan",
-          source: {
-            start: 5,
-            end: 10,
-            value: "@scan",
-          },
-        },
-        {
           type: "file",
           mime: "text/plain",
           filename: undefined,
           url: "file:///tmp/note.ts",
-          source: {
-            type: "file",
-            path: "file:///tmp/note.ts",
-            text: {
-              start: 11,
-              end: 19,
-              value: "@note.ts",
-            },
-          },
+          source: undefined,
+        },
+        {
+          type: "agent",
+          name: "scan",
+          source: undefined,
         },
       ],
     })

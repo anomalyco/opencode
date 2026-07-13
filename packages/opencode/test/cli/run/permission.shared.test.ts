@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { PermissionRequest } from "@opencode-ai/sdk/v2"
+import type { PermissionV2Request } from "@opencode-ai/client/promise"
 import {
   createPermissionBodyState,
   permissionAlwaysLines,
@@ -10,14 +10,14 @@ import {
   permissionRun,
 } from "@opencode-ai/cli/mini/permission.shared"
 
-function req(input: Partial<PermissionRequest> = {}): PermissionRequest {
+function req(input: Partial<PermissionV2Request> = {}): PermissionV2Request {
   return {
     id: "perm-1",
     sessionID: "session-1",
-    permission: "read",
-    patterns: [],
+    action: "read",
+    resources: [],
     metadata: {},
-    always: [],
+    save: [],
     ...input,
   }
 }
@@ -80,7 +80,7 @@ describe("run permission shared", () => {
     expect(
       permissionInfo(
         req({
-          permission: "bash",
+          action: "bash",
           metadata: {
             input: {
               command: "git status --short",
@@ -96,7 +96,7 @@ describe("run permission shared", () => {
     expect(
       permissionInfo(
         req({
-          permission: "task",
+          action: "task",
           metadata: {
             description: "investigate stream",
             subagent_type: "general",
@@ -111,8 +111,8 @@ describe("run permission shared", () => {
     expect(
       permissionInfo(
         req({
-          permission: "external_directory",
-          patterns: ["/tmp/work/**/*.ts", "/tmp/work/**/*.tsx"],
+          action: "external_directory",
+          resources: ["/tmp/work/**/*.ts", "/tmp/work/**/*.tsx"],
         }),
       ),
     ).toMatchObject({
@@ -120,22 +120,22 @@ describe("run permission shared", () => {
       lines: ["- /tmp/work/**/*.ts", "- /tmp/work/**/*.tsx"],
     })
 
-    expect(permissionInfo(req({ permission: "doom_loop" }))).toMatchObject({
+    expect(permissionInfo(req({ action: "doom_loop" }))).toMatchObject({
       title: "Continue after repeated failures",
     })
 
-    expect(permissionInfo(req({ permission: "custom_tool" }))).toMatchObject({
+    expect(permissionInfo(req({ action: "custom_tool" }))).toMatchObject({
       title: "Call tool custom_tool",
       lines: ["Tool: custom_tool"],
     })
   })
 
   test("formats always-allow copy for wildcard and explicit patterns", () => {
-    expect(permissionAlwaysLines(req({ permission: "bash", always: ["*"] }))).toEqual([
+    expect(permissionAlwaysLines(req({ action: "bash", save: ["*"] }))).toEqual([
       "This will allow bash until OpenCode is restarted.",
     ])
 
-    expect(permissionAlwaysLines(req({ always: ["src/**/*.ts", "src/**/*.tsx"] }))).toEqual([
+    expect(permissionAlwaysLines(req({ save: ["src/**/*.ts", "src/**/*.tsx"] }))).toEqual([
       "This will allow the following patterns until OpenCode is restarted.",
       "- src/**/*.ts",
       "- src/**/*.tsx",
