@@ -1,241 +1,623 @@
-# Service Lifecycle: Update, Election, and Reconnect
-
-Design for how the managed V2 service restarts, how exactly one server wins,
-and what clients do while it happens.
+# Service Lifecycle: Election, Restart, and Reconnect
 
 Status: proposed
+
 Incident: [#36688](https://github.com/anomalyco/opencode/issues/36688)
+
+## Summary
+
+The managed V2 service keeps its current update policy: the background updater
+may install a new package, but only a freshly launched TUI activates that update
+after finding an older running service. Existing TUIs never replace a service;
+they only reconnect.
+
+The restart path changes in three places:
+
+1. A process-held OS file lock, not the HTTP port or registration file, elects
+   exactly one server owner for its lifetime.
+2. The elected process binds and registers a minimal lifecycle surface before
+   it initializes the application, so clients can distinguish a slow winner
+   from an absent server.
+3. TUIs rediscover and reconnect indefinitely. Transport loss is never a
+   terminal error by itself.
+
+Several clients may spawn small contenders during a restart. This is safe and
+intentional: one contender acquires the lock and initializes, while every loser
+exits before expensive server boot. The design does not require clients to
+agree on a single initiator.
+
+This proposal does not introduce a supervisor process, warm candidate server,
+protocol negotiation, idle background restart, or general execution-recovery
+framework.
 
 ## Context
 
-The V2 CLI runs a long-lived shared service (`serve --service`) that all TUIs
-and API clients connect to. The service auto-updates the on-disk package in the
-background. Today, a version-mismatched client connecting triggers the running
-server to tear itself down, and every open TUI's reconnect loop independently
-races to spawn a replacement.
+The V2 CLI runs a shared managed service that owns Sessions, location graphs,
+plugins, permissions, and tool execution. The service updater can replace the
+installed package while the current process continues running the old image.
+A later TUI launch then detects the version mismatch and replaces the service.
 
-Incident #36688 showed the failure modes of this design in one 45-second
-window:
+Incident #36688 showed four failures in that replacement path:
 
-- The old server tore down on mismatch; ~10 contenders spawned in two waves.
-- The first winner spent ~20s cold-booting location graphs while invisible
-  (no registration, nothing answering health), so the second wave concluded
-  there was no server and displaced it mid-boot: a double-bounce.
-- A freshly launched TUI exhausted its reconnect budget (3 attempts, ~16s)
-  during the window and crashed with an unhandled transport defect.
-- A losing contender from the previous day was still alive, unregistered,
-  holding ~1GB RSS.
+- Multiple TUIs spawned heavyweight server contenders.
+- A winner remained unobservable while it cold-booted, so another wave treated
+  it as absent and displaced it.
+- A fresh TUI exhausted its reconnect budget and crashed with an unhandled
+  transport defect.
+- A losing contender remained alive and consumed about 1 GB of RSS.
+
+Today the service election path uses no lock at all. Election is
+last-writer-wins on the registration file: every `ensureRunning` spawns a full
+server, the newest process overwrites `server.json`, and a displaced server
+notices within its 10-second registration self-check and terminates itself.
+Every contender is a complete application boot, and ownership can change hands
+after the fact.
+
+The codebase does expose a file-locking utility, `Flock` and `EffectFlock` in
+`packages/core/src/util`, used for config writes, MCP auth, npm installs, and
+repository caching. Despite its name it is an atomic-mkdir lease with a
+heartbeat and 60-second staleness takeover, not an OS-held lock. It remains
+appropriate for those short critical sections and is not the service ownership
+primitive.
+
+The current implementation also mixes three different concepts:
+
+- **Ownership:** which process is allowed to be the managed server.
+- **Discovery:** where clients can reach that process.
+- **Lifecycle:** whether that process is starting, ready, stopping, or failed.
+
+This design gives each concept one authority.
+
+```definitions
+[
+  {
+    "term": "Owner",
+    "definition": "The one process holding the process-held OS service lock."
+  },
+  {
+    "term": "Contender",
+    "definition": "A small serve process attempting to acquire the service lock. It must not initialize the application before winning."
+  },
+  {
+    "term": "Registration",
+    "definition": "An atomic discovery record containing the elected owner's identity and endpoint. Registration never grants ownership."
+  },
+  {
+    "term": "Lifecycle shell",
+    "definition": "The minimal HTTP surface bound by the elected process before application initialization. It serves health and retryable startup responses."
+  },
+  {
+    "term": "Application",
+    "definition": "The full server routes and global or location-scoped modules used for normal OpenCode work."
+  }
+]
+```
 
 ## Goals
 
-- A service restart, updates included, costs open clients a brief, honest
-  "updating" state and nothing else.
-- No client crashes from server unavailability, ever.
-- At most one server bounce per restart cause.
-- No leaked service processes.
-- In-flight interactive state (permissions, questions, tool calls) survives
-  restarts via a defined recovery path.
+- At most one process initializes and serves the managed application.
+- Losing contenders exit before database, route, plugin, MCP, or location boot.
+- A slow winner becomes observable before expensive initialization.
+- Existing and freshly launched TUIs survive retryable service unavailability.
+- Reconnect follows service state instead of displaying retry counts or raw
+  transport failures.
+- Version-mismatch replacement remains triggered by a fresh TUI launch.
+- A stale or malformed registration cannot create a second owner.
+- An unresponsive owner is never killed automatically by an arbitrary TUI.
+- Every spawned contender has a bounded path to ownership or exit.
 
 ## Non-goals
 
-- Cross-version protocol compatibility (client tolerating an older server).
-  Gated on protocol versioning/negotiation work; see Decision 1.
-- Cold-boot load management for many locations (boot concurrency limits,
-  interaction priority, boot-free cheap surface). Deferred follow-up.
+- Restarting automatically when a background update finds an idle window.
+- Running old and candidate application servers concurrently.
+- Adding a permanent steward, proxy, or supervisor process.
+- Zero-downtime worker handoff or automatic rollback.
+- Application protocol negotiation or automatic TUI self-restart.
+- General hard-crash recovery for active Sessions.
+- Defining recovery semantics for provider attempts, tools, shells, sub-agents,
+  permissions, questions, or background jobs.
+- Automatically killing a frozen owner.
+- Bounding concurrent location cold boots after clients reconnect.
 - Multi-machine or clustered service placement.
 
-## Target UX
+## Invariants
 
-A user with several open TUIs pushes an update (or the service self-updates):
+1. **The service lock is ownership.** Exactly one process may hold the OS lock
+   for one installation channel and service profile.
+2. **Ownership precedes boot.** A contender performs no expensive application
+   initialization before it acquires the lock.
+3. **Ownership lasts for the process lifetime.** The owner holds an open lock
+   handle until the managed server exits. The OS releases it on process death
+   without a cleanup callback.
+4. **The port is transport, not election.** The owner may select a dynamic port
+   after acquiring the lock.
+5. **Registration is discovery, not election.** Deleting, corrupting, or
+   replacing registration does not invalidate a live owner's lock.
+6. **Only a fresh launch enforces package version.** Existing TUIs reconnect to
+   the current owner without initiating version replacement.
+7. **Transport loss is retryable.** It never terminates a TUI without a separate
+   diagnosed, non-retryable cause.
+8. **Clients do not kill an unresponsive owner automatically.** Destructive
+   recovery requires the explicit `service restart` command.
+9. **Lifecycle does not promise execution semantics.** Graceful replacement
+   invokes Session suspension and resumption hooks, but tool-level continuity
+   belongs to a separate design.
 
-1. Each open TUI shows a single calm status line, e.g. `Updating to
-   v0.0.0-next-15427...`, driven by real server status, not retry counters.
-2. Within a couple of seconds the successor is answering; TUIs resume where
-   they were. Sessions that were mid-step resume; a pending permission or
-   question is re-asked.
-3. A TUI launched during the window waits on the same status line instead of
-   erroring. It only hard-fails with a message that names an actionable cause.
+## System Model
 
-## Decisions
+```mermaid
+flowchart LR
+  TUI[Fresh or existing TUI]
+  REG[Registration file]
+  LOCK[Process-held OS service lock]
+  SHELL[Lifecycle shell]
+  APP[OpenCode application]
 
-### 1. Restart trigger: client-triggered on mismatch now, idle self-restart layered on top
+  TUI -->|discover| REG
+  TUI -->|observe| SHELL
+  TUI -->|normal requests| APP
+  SHELL --> APP
+  LOCK -->|authorizes one owner| SHELL
+```
 
-The TUI and the generated protocol client are version-locked to the server
-protocol, with no cross-version compatibility guarantee. A newer client cannot
-safely talk to an older server, so version-mismatch teardown remains the
-correctness mechanism: a connecting client that detects a stale server
-initiates a restart.
+The lifecycle shell and application run in the same process. The distinction is
+initialization order and responsibility, not process topology.
 
-Layered on top, the server that has downloaded an update watches for an idle
-window (no active drains, no pending interactions, no busy sessions) and
-restarts itself proactively. This makes the mismatch-triggered path rare
-rather than the only path, which matters most while updates ship many times
-per day.
+## Lifecycle Contract
 
-Full skew tolerance ("new client reads from old server until it restarts") is
-explicitly deferred until the protocol has a compatibility window or version
-negotiation.
+The lifecycle type represents only states that a bound owner can report:
 
-### 2. Successor spawning: the initiator spawns exactly one
+```typescript
+type ServiceLifecycle =
+  | {
+      type: "starting"
+    }
+  | {
+      type: "ready"
+    }
+  | {
+      type: "stopping"
+      transition: {
+        type: "version_mismatch"
+        fromVersion: string
+        toVersion: string
+      }
+    }
+  | {
+      type: "failed"
+      failure: {
+        code: string
+        message: string
+        action: string
+      }
+    }
+```
 
-Whoever causes a restart owns producing the replacement:
+There is no `absent` lifecycle state because an absent process cannot answer a
+request. Absence and unreachability are client observations:
 
-- On version mismatch, the triggering client spawns exactly one new-version
-  `serve --service` process.
-- On idle self-restart, the exiting server spawns its successor before exiting.
+```typescript
+type ServiceObservation =
+  | {
+      type: "absent"
+    }
+  | {
+      type: "unreachable"
+      registration: ServiceRegistration
+    }
+  | {
+      type: "reachable"
+      registration: ServiceRegistration
+      lifecycle: ServiceLifecycle
+    }
+```
 
-All other clients never spawn. They reconnect with jittered backoff. Client-
-side spawning survives only as the frozen-owner fallback (Decision 7).
+The health response retains the existing fields for old clients and adds the
+lifecycle discriminant:
 
-This removes the thundering herd of contender processes and the class of bugs
-that come with it (races, displacement, leaked losers).
+```typescript
+type ServiceHealth = {
+  healthy: true
+  version: string
+  pid: number
+  instanceID: string
+  lifecycle: ServiceLifecycle
+}
+```
 
-### 3. Successor visibility: register first, boot lazily
+`healthy: true` means the registered lifecycle shell is responding and its
+identity matches registration. New clients use `lifecycle.type === "ready"` as
+the application-readiness signal.
 
-The winner's first act after acquiring ownership is binding the service port
-and answering health:
+During `starting` or `stopping`, application requests are not held in memory.
+They receive an immediate retryable response:
 
-- Health reports `{ status: "starting" }` immediately, flipping to healthy
-  when the server is ready to serve normally.
-- Requests arriving during startup are held briefly or answered with a
-  retryable "starting" status.
-- Location graphs are not eagerly rebooted; they boot on demand as clients
-  ask for them (existing `LocationServiceMap` behavior).
+```http
+HTTP/1.1 503 Service Unavailable
+Retry-After: 1
+Content-Type: application/json
 
-Time-to-visible drops from ~20s (full boot) to under a second. This gives
-clients a crisp two-signal contract:
+{"code":"service_starting"}
+```
 
-- Connected but `starting`: wait quietly.
-- No registration at all: start the fallback timer (Decision 7).
+`stopping` uses `service_stopping`. A failed application boot uses
+`service_failed` and includes a safe diagnostic message.
 
-The incident's double-bounce is impossible under this ordering: there is no
-window where a winner exists but cannot be observed.
+A failed owner remains bound and keeps holding the service lock. Exiting on
+failure would let every waiting client's `ensureRunning` loop elect a new
+contender that repeats the same heavy failing boot, so staying bound turns a
+deterministic boot failure into one observable `failed` state instead of a
+client-driven respawn loop. Recovery still works: a fresh launch observes the
+failed instance through the stop path, and explicit `service restart` replaces
+it.
 
-### 4. Client reconnect: transport failure is never terminal
+## Registration Contract
 
-Transport failure carries no diagnosis, so it never terminates a client by
-itself.
+Registration contains only discovery identity:
 
-- An already-open TUI reconnects indefinitely with jittered backoff. Its
-  screen is state-aware, driven by the health contract from Decision 3:
-  `Updating to vX...` when the registration says starting, `Waiting for
-  server...` when unregistered. Never a retry counter, never a raw transport
-  error name.
-- A fresh launch waits the same way, and may act as initiator (Decision 1) or
-  fallback spawner (Decision 7).
-- Hard exit is reserved for diagnosable causes: the server process this
-  client spawned exited nonzero (surface its stderr), the port is held by a
-  foreign process, configuration is invalid.
-- The transport error domain is handled exhaustively at the TUI run boundary
-  (`packages/cli/src/commands/handlers/default.ts`, `packages/tui/src/app.tsx`).
-  No escaped defects; an unexpected failure still exits with a clean message.
+```typescript
+type ServiceRegistration = {
+  schema: 1
+  instanceID: string
+  version: string
+  url: string
+  pid: number
+}
+```
 
-### 5. In-flight state: cancel-and-resume is the universal invariant
+Authentication continues to use the existing private service credential
+storage. The registration schema does not change that policy.
 
-Crashes exist regardless of update policy, so every in-flight interaction must
-have a defined cancel-and-resume path. Restart behavior is a special case of
-crash recovery, not its own mechanism.
+The owner writes registration only after the lifecycle shell has bound:
 
-- In-flight tool calls are canceled; the resumed runner re-executes them at
-  the durable step boundary.
-- Pending permission requests and question forms are canceled; the re-run
-  step re-asks them.
-- A foreground sub-agent's parent tool call is re-invoked on resume. The
-  child session is durable, so re-invocation reconciles against the existing
-  child session rather than redoing completed work where possible.
+1. Bind the lifecycle shell.
+2. Write a temporary registration file with mode `0600`.
+3. Atomically rename it over the old registration.
+4. Serve lifecycle health as `starting`.
 
-Follow-up: make pending permissions/questions durable rows so they survive
-restarts without re-asking. They are small, schema-friendly values and are the
-most user-painful cancels.
+On shutdown, the owner removes registration only if the current file still has
+its `instanceID`. An old finalizer can never remove a successor's registration.
 
-Independent bug (not a restart design choice): background sub-agent completion
-must be recorded as a durable event the parent session consumes on wake.
-Today the parent misses the completion whenever it is not running when the
-child finishes, even without any restart involved.
+While running, the owner periodically asserts its registration. Because the
+lock guarantees exactly one live owner, any registration that does not name the
+owner is stale or corrupt, and the owner rewrites it. A deleted or clobbered
+registration therefore heals within one assertion interval instead of leaving
+clients waiting on absent discovery. This inverts today's self-check loop,
+which terminates the displaced process instead of repairing discovery.
 
-### 6. Cold-boot herd: deferred
+Legacy registration shapes are decoded by a compatibility adapter. The new
+domain type does not make fields optional to represent old formats.
 
-When many clients reconnect at once, demand-driven location boot still causes
-a herd of concurrent cold boots. Bounding boot concurrency, prioritizing
-locations with active user interaction, and making the cheap surface (health,
-reconnect handshake, session metadata) boot-free are a follow-up. Nothing in
-this design precludes them.
+## Election
 
-### 7. Election: the port is the lock
+This design introduces election where none exists today. Last-writer-wins
+registration is replaced by a process-held OS lock that is acquired before any
+expensive boot work and held for the entire service lifetime.
 
-Exclusive bind on the service port is the only mutex. There is no separate
-lock file: nothing to leak past process death, no second source of truth to
-disagree with the port.
+A heartbeat-and-staleness lease, including the existing `Flock` utility, is not
+sufficient for service ownership: after a 60-second heartbeat gap its lock can
+be broken and recreated, so an event-loop stall, a suspended machine, or a
+debugger pause can make a live owner appear stale and allow a contender to
+displace it. Service ownership requires a process-held OS lock, such as `flock`
+on Unix and `LockFileEx` on Windows. It cannot be broken because a heartbeat
+exceeded a timeout. Process death releases the lock through the OS.
 
-- A contender that fails to bind concludes someone else won, logs it, and
-  exits immediately. Losers never linger.
-- Displacement is structurally impossible: a bound port cannot be bound again.
-- Frozen owner escalation: if a bound port fails health checks for M seconds,
-  a fallback contender verifies the registered PID is an opencode service
-  binary, kills it, and retries the bind. This is the only destructive action
-  in the scheme and is logged loudly.
-- Fallback contenders re-check the registration immediately before spawning
-  and stagger with jitter, so even the rare fallback path seldom produces
-  more than one loser.
+Neither Bun nor Node exposes these primitives directly, the existing `Flock`
+utility is an mkdir-plus-heartbeat lease rather than an OS-held lock, and the
+common lockfile packages are staleness-based leases as well. The lock therefore
+needs a small platform layer, for example `bun:ffi` to `flock` on POSIX and
+`LockFileEx` on Windows, which can live alongside the existing utility in
+`packages/core/src/util`. This primitive is the foundation of the design, so
+the delivery sequence spikes it first.
 
-## Failure-mode walkthroughs
+```mermaid
+flowchart TD
+  A[Contender process starts]
+  B{Acquire service lock?}
+  C[Exit successfully]
+  D[Bind lifecycle shell]
+  E[Write registration]
+  F[Report starting]
+  G[Initialize application]
+  H[Report ready]
+  I[Serve until shutdown]
 
-Update while TUIs are open (the incident scenario):
+  A --> B
+  B -->|No| C
+  B -->|Yes| D
+  D --> E --> F --> G
+  G -->|Success| H --> I
+  G -->|Failure| J[Report failed and stay bound]
+```
 
-1. Server downloads vNext in the background (existing behavior).
-2. Either the server finds an idle window and self-restarts (Decision 1
-   layer), or a new vNext client connects, detects mismatch, and initiates.
-3. The initiator spawns exactly one successor (Decision 2). The old server
-   drains and exits; in-flight interactions cancel (Decision 5).
-4. The successor binds the port and registers within ~1s, answering
-   `starting` (Decision 3).
-5. Open TUIs show `Updating to vNext...` and resume when healthy
-   (Decision 4). Canceled steps resume; forms re-ask.
+Lock acquisition by a contender is nonblocking or tightly bounded. A loser
+must exit before constructing application routes or importing startup-heavy
+modules.
 
-Server crash:
+Several clients may spawn contenders concurrently. The design guarantees one
+heavy winner, not one process spawn. If the winner crashes during startup, the
+OS releases the lock and a later client retry starts another election.
 
-1. Clients see connection loss with no registration; fallback timers start.
-2. After the pre-check and jitter, one client binds the port and becomes the
-   server; any other contender fails to bind and exits (Decision 7).
-3. Recovery of in-flight state follows the same cancel-and-resume invariant.
+The lock is scoped by installation channel and service profile. Local, preview,
+and stable installations cannot displace one another.
 
-Wedged server (process alive, unresponsive):
+## Update Activation
 
-1. Port stays bound; health fails for M seconds.
-2. A fallback contender verifies the PID, kills it, binds, and registers.
+Background update behavior remains unchanged:
 
-## Incident mapping
+1. The running service checks for an update.
+2. The updater installs the package in the background.
+3. The running process continues using its existing process image.
+4. No idle check or automatic restart occurs.
 
-| #36688 problem | Addressed by |
+A fresh TUI launch activates the installed update:
+
+1. Read registration and authenticate the responding service.
+2. If its package version matches the fresh client, attach normally.
+3. If the version differs, request graceful stop of that exact registered
+   instance using the existing authenticated stop path.
+4. Re-check instance identity before every signal or escalation in that path.
+5. Wait for the old process to exit and release the service lock.
+6. Call `ensureRunning` until a compatible service becomes ready.
+
+Concurrent fresh launchers may all observe the same old instance. Stopping that
+exact instance must be idempotent. Once registration names a different instance,
+a stale launcher stops signaling and returns to discovery.
+
+No durable restart-transition record is introduced. The initiating fresh TUI
+already knows the source and target versions and can display its update
+preflight. Existing TUIs may display `Updating...` if they observed `stopping`;
+otherwise `Waiting for background service...` is the honest fallback.
+
+## Fresh Launch Versus Reconnect
+
+Fresh launch and reconnect deliberately have different version policies:
+
+```typescript
+type ManagedConnection =
+  | {
+      type: "launch"
+      requiredVersion: string
+    }
+  | {
+      type: "reconnect"
+    }
+```
+
+- `launch` requires the installed package version and may activate replacement.
+- `reconnect` accepts the current owner and never activates replacement.
+
+This preserves today's permissive reconnect behavior. Explicit application
+protocol negotiation and automatic TUI re-exec remain follow-ups.
+
+## Client Reconnect
+
+Fresh and existing TUIs use the same observation loop after startup:
+
+1. Read registration on every attempt. Do not retry a stale URL indefinitely.
+2. If registration is absent, call `ensureRunning` and continue waiting.
+3. If registration is unreachable, call `ensureRunning`. A live owner prevents
+   contenders from acquiring the lock; a dead owner does not.
+4. If lifecycle is `starting` or `stopping`, wait.
+5. If lifecycle is `failed`, show its actionable message.
+6. If lifecycle is `ready`, rebuild HTTP and event-stream clients for the new
+   endpoint and perform authoritative state reconciliation.
+
+Retry uses bounded exponential backoff with jitter. Retry counts are telemetry,
+not user-facing state. The TUI waits until the service is ready or the user
+exits.
+
+Transport failures are handled at the TUI run boundary. A raw client transport
+error or Effect defect must not escape to the terminal. Hard exit is reserved
+for diagnosed causes such as invalid local configuration, failed authentication,
+or a foreign process occupying an explicitly configured port.
+
+The UI derives text from observations:
+
+| Observation | User-facing state |
 | --- | --- |
-| TUI crash after 3 reconnect attempts | Decision 4 |
-| ~45s window with no answering server | Decisions 2, 3 |
-| Double-bounce: mid-boot winner displaced | Decisions 3, 7 |
-| Leaked losing contender (1GB RSS, day-old) | Decision 7 |
-| Every TUI bounces on each daily push | Decision 1 (idle layer) |
+| No registration | `Starting background service...` |
+| Registration unreachable | `Waiting for background service...` |
+| Lifecycle `starting` | `Starting OpenCode vX...` |
+| Lifecycle `stopping` | `Updating to vX...` |
+| Lifecycle `failed` | Actionable failure message |
+| Lifecycle `ready` | Normal TUI |
 
-## Sequencing
+## Graceful Session Continuity
 
-1. Decision 4: exhaustive transport handling and indefinite state-aware
-   reconnect. Client-side only; stops the crashes immediately.
-2. Decisions 7 and 3: port-as-lock, register-first, `starting` health status.
-   Kills the double-bounce and process leaks.
-3. Decision 2: initiator-spawns-one; demote client spawn to fallback.
-4. Decision 5: cancel-and-resume audit across permissions, questions, tool
-   calls, sub-agents; durable background-completion event.
-5. Decision 1 layer: idle self-restart after background update.
-6. Follow-ups: durable permission/question forms, cold-boot load management,
-   protocol compatibility for true skew tolerance.
+Version-mismatch replacement uses the existing graceful Session suspension and
+resumption hooks:
 
-## Open questions
+1. The old server snapshots active Session IDs during graceful teardown.
+2. The successor schedules those Sessions for continuation.
+3. The runner reloads durable Session history before continuing.
 
-- What are good values for the fallback timer (no registration for N seconds)
-  and the frozen-owner escalation (unhealthy bind for M seconds)? N must
-  comfortably exceed successor spawn+bind time; M must exceed the slowest
-  acceptable startup hold.
-- How does `starting` interact with request holding: hold with a deadline,
-  or immediately return a retryable status and let clients poll?
-- Does the idle self-restart need a user-visible opt-out (`autoupdate`
-  config already exists for the download side)?
-- Exact verification rule before the frozen-owner kill (binary path check,
-  registration PID match, or both).
+This lifecycle design does not define what an interrupted physical provider
+attempt or tool invocation means. It does not promise that external side effects
+did not occur, replay the exact interrupted tool, preserve an in-memory form, or
+recover process-local background work.
+
+Those concerns require a separate execution-continuity design covering tools,
+shells, sub-agents, permissions, questions, provider attempts, and hard-crash
+recovery.
+
+## Unresponsive Owner
+
+An unreachable registration does not prove that the owner is dead. A contender
+attempts the service lock:
+
+- If the lock is free, the contender starts a replacement.
+- If the lock is held, the contender exits and the client keeps waiting.
+
+After a bounded diagnostic threshold, the client may show:
+
+```text
+The background service owns the service lock but is not responding.
+Run `opencode service restart` to recover it.
+```
+
+Only explicit `service restart` may perform destructive recovery. It verifies
+the complete registration and process instance before signaling, waits for
+graceful exit, re-checks identity before escalation, and refuses to kill a
+process it cannot positively identify.
+
+Automatic frozen-owner recovery is deferred.
+
+## Failure Walkthroughs
+
+### Update with open TUIs
+
+1. The old service installs vNext but keeps running.
+2. A fresh vNext TUI finds the healthy vOld service and requests graceful stop.
+3. The old service reports `stopping`, suspends active Sessions, and exits.
+4. Open TUIs enter their indefinite observation loops.
+5. One or more clients spawn contenders.
+6. One contender acquires the service lock. Losers exit before heavy boot.
+7. The winner binds and registers the lifecycle shell as `starting`.
+8. Clients stop spawning and wait on the observable winner.
+9. The winner initializes the application and reports `ready`.
+10. TUIs rebuild clients, reconcile state, and resume.
+
+### Server crashes while ready
+
+1. The endpoint becomes unreachable and registration may remain stale.
+2. Clients call `ensureRunning`.
+3. Process death has released the service lock.
+4. One contender wins, replaces registration, and starts normally.
+5. Detailed active-execution recovery is outside this design.
+
+### Winner crashes during startup
+
+1. Clients observed `starting` and remain alive.
+2. Process death releases the service lock.
+3. A later reconnect attempt starts another election.
+4. One new contender wins; all other contenders exit.
+
+### Registration is deleted while the owner is healthy
+
+1. Clients may call `ensureRunning` because discovery is absent.
+2. Every contender fails to acquire the owner's lock and exits.
+3. No second application initializes.
+4. The owner's next registration assertion republishes discovery.
+
+### Owner is alive but unresponsive
+
+1. Health fails, but the process still holds the service lock.
+2. Contenders fail lock acquisition and exit.
+3. Clients wait and eventually show explicit recovery guidance.
+4. No TUI kills the owner automatically.
+
+## TDD Verification
+
+Implementation should proceed test-first with real subprocesses and real locks.
+Mocks cannot establish process death, lock release, loser cleanup, or port
+behavior.
+
+### Election tests
+
+| Scenario | Required result |
+| --- | --- |
+| Ten contenders start simultaneously | Exactly one crosses the application-boot boundary |
+| Winner pauses after lock acquisition | No loser initializes or remains alive |
+| Winner event loop pauses beyond the old stale timeout | Ownership is not displaced |
+| Winner crashes before bind | Lock releases; a later attempt wins |
+| Winner crashes after bind but before registration | Lock releases; a later attempt replaces stale discovery |
+| Registration is deleted while owner runs | No second owner initializes |
+| Registration is malformed | Lock still prevents a second owner |
+| Registration names a dead PID | New contender can acquire the released lock |
+| Two installation channels start | Each elects an independent owner |
+| Explicit configured port is foreign-owned | Fail diagnostically; do not kill the foreign process |
+
+The fixture records a marker immediately before application initialization. The
+tests assert that only one process writes that marker and that every loser exits
+within a bounded interval. The harness should also assert that a loser's peak
+RSS stays an order of magnitude below an application boot, since import weight
+was the observed incident cost.
+
+### Lifecycle tests
+
+| Scenario | Required result |
+| --- | --- |
+| Winner owns lock but application boot is paused | Health reports `starting` |
+| Application request arrives during startup | Immediate retryable `503` |
+| Application becomes ready | Lifecycle changes once from `starting` to `ready` |
+| Graceful replacement begins | Lifecycle reports `stopping` before disconnect |
+| Application initialization fails | Actionable `failed` observation; owner stays bound and holds the lock |
+| Registration is deleted while owner runs | Owner republishes it within one assertion interval |
+| Owner exits | Registration is removed only if it still names that owner |
+
+### Update tests
+
+| Scenario | Required result |
+| --- | --- |
+| Background update installs vNext | Running vOld service does not restart |
+| Fresh vNext launch finds vOld | Exact old instance stops; vNext eventually becomes ready |
+| Two fresh vNext launches race | One heavy successor; both clients attach |
+| Existing vOld TUI reconnects to vNext | It never requests replacement |
+| Stale launcher observes a new instance | It does not signal the new instance |
+
+### Reconnect tests
+
+| Scenario | Required result |
+| --- | --- |
+| Endpoint disappears and changes port | TUI rediscovers and rebuilds clients |
+| Service remains unavailable beyond old retry budget | TUI remains alive |
+| Event stream reconnects | Client performs authoritative state reconciliation |
+| Transport returns an unexpected defect | TUI formats it; no raw stack escapes |
+| Owner remains unresponsive | TUI waits and shows explicit restart guidance |
+
+## Delivery Sequence
+
+1. **Spike the lock primitive.** Prove a nonblocking, process-held OS lock
+   under Bun on macOS, Linux, and Windows (`bun:ffi` to `flock` and
+   `LockFileEx`), including release on hard kill and behavior across
+   containers and network filesystems used in CI.
+2. **Build the subprocess test harness.** Cover simultaneous contenders, lock
+   release on crash, and loser exit before changing election. Pin the harness
+   to compiled-style startup, because dev-mode `start()` unconditionally
+   replaces a matching server and would mask attach behavior.
+3. **Contain client failure.** Make transport loss nonterminal, rediscover on
+   every cycle, and format unexpected failures at the TUI boundary.
+4. **Introduce process-held lock election.** Acquire the lock before
+   application imports or initialization, hold it until process exit, make
+   losing contenders exit immediately, and invert the registration self-check
+   from self-termination to reassertion.
+5. **Bind the lifecycle shell first.** Publish registration and `starting`,
+   return retryable `503` for application requests, then initialize the app.
+   The health contract change is public API: regenerate clients from
+   `packages/client` with `bun run generate`.
+6. **Codify launch versus reconnect.** Fresh launch enforces installed version;
+   reconnect never activates replacement.
+7. **Integrate graceful replacement.** Preserve current background-install and
+   fresh-launch activation behavior while invoking Session continuity hooks.
+8. **Harden explicit recovery.** Verify exact process identity in `service
+   restart`; never automatically kill an unresponsive owner.
+9. **Run the full multi-process suite.** Include repeated restart cycles and
+   assert that no contender or child process remains afterward.
+
+## Acceptance Criteria
+
+- Ten concurrent restart observers produce one application initialization.
+- No losing contender survives or builds a location graph.
+- A 30-second application boot remains continuously observable as `starting`.
+- A TUI remains alive through a service outage longer than the previous retry
+  budget.
+- A service endpoint change does not require restarting an existing TUI.
+- Background installation alone does not restart the service.
+- A fresh mismatched TUI eventually attaches to the installed service version.
+- Existing reconnecting TUIs never replace the current owner.
+- Registration corruption cannot produce two owners.
+- A deleted registration heals without restarting the owner or any client.
+- An unresponsive owner is not killed without an explicit recovery command.
+- Raw transport defects never escape to the terminal.
+
+## Follow-ups
+
+- Idle background update activation with an admission fence.
+- Application protocol compatibility and automatic local TUI re-exec.
+- Durable execution recovery for provider attempts and tools.
+- Shell, sub-agent, permission, question, and background-job continuity.
+- Automatic recovery for a positively identified frozen owner.
+- Cold-boot concurrency limits and interaction-prioritized location loading.
+- A steward or socket-handoff architecture if zero-downtime replacement becomes
+  a real requirement.
