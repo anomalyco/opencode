@@ -260,3 +260,38 @@ test("a message removed during hydration does not regain stale parts", async () 
     app.renderer.destroy()
   }
 })
+
+test("pending permissions and questions are hydrated on connect without a live event", async () => {
+  await using tmp = await tmpdir()
+  await Bun.write(`${tmp.path}/kv.json`, "{}")
+
+  const permission = {
+    id: "per_hydrated",
+    sessionID,
+    permission: "bash",
+    patterns: ["rm -rf /"],
+    metadata: {},
+    always: ["rm -rf /"],
+  }
+  const question = {
+    id: "que_hydrated",
+    sessionID,
+    questions: [{ question: "Proceed?", header: "Confirm", options: [{ label: "Yes", description: "do it" }] }],
+  }
+
+  // The TUI has just (re)attached: the *.asked events fired while it was
+  // detached, so the only way it can learn about these pending prompts is by
+  // fetching them on connect. No live event is emitted in this test.
+  const { app, sync } = await mount((url) => {
+    if (url.pathname === "/permission") return json([permission])
+    if (url.pathname === "/question") return json([question])
+    return undefined
+  }, tmp.path)
+
+  try {
+    expect(sync.data.permission[sessionID]).toEqual([permission])
+    expect(sync.data.question[sessionID]).toEqual([question])
+  } finally {
+    app.renderer.destroy()
+  }
+})
