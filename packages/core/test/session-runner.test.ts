@@ -1614,14 +1614,14 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("runs one durable compaction barrier before later steer and queued prompts", () =>
+  it.effect("runs one durable compaction barrier after tool settlement and before later inputs", () =>
     Effect.gen(function* () {
       const session = yield* setup
       currentModel = recoveryModel
       streamGate = yield* Deferred.make<void>()
       streamStarted = yield* Deferred.make<void>()
       responses = [
-        reply.text("Active complete", "text-active"),
+        reply.tool("call-active", "echo", { text: "active" }),
         [LLMEvent.textDelta({ id: "summary", text: "durable summary" })],
         reply.text("Steer complete", "text-steer"),
         reply.text("Queue complete", "text-queue"),

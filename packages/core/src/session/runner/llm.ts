@@ -543,7 +543,8 @@ const layer = Layer.effect(
           needsContinuation = result.needsContinuation
           step = result.step + 1
           if (needsContinuation) {
-            promotion = (yield* SessionPending.compaction(db, input.sessionID)) ? undefined : "steer"
+            yield* runPendingCompaction(input.sessionID)
+            promotion = "steer"
             continue
           }
           yield* runPendingCompaction(input.sessionID)
