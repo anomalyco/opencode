@@ -768,13 +768,19 @@ describe("OpenAPI.fromSpec", () => {
     )
   })
 
-  test("rejects oversized and malformed JSON responses", async () => {
+  test("rejects oversized, malformed, empty, and invalid UTF-8 JSON responses", async () => {
     const tool = toolAt(OpenAPI.fromSpec({ baseUrl, spec: singleOperation({}) }).tools, "test")
     if (!Tool.isDefinition(tool)) throw new Error("test was not generated")
     const oversized = recordingClient(
       () => new Response(null, { headers: { "content-length": String(50 * 1024 * 1024 + 1) } }),
     )
     const malformed = recordingClient(() => new Response("{", { headers: { "content-type": "application/json" } }))
+    const empty = recordingClient(() => new Response(null, { headers: { "content-type": "application/json" } }))
+    const invalid = recordingClient(
+      () => new Response(new Uint8Array([0x7b, 0x22, 0x78, 0x22, 0x3a, 0x22, 0xc3, 0x28, 0x22, 0x7d]), {
+        headers: { "content-type": "application/json" },
+      }),
+    )
     const chunked = recordingClient(() => new Response(new Uint8Array(50 * 1024 * 1024 + 1)))
 
     await expect(Effect.runPromise(tool.run({}).pipe(Effect.provide(oversized.layer)))).rejects.toThrow(
@@ -783,9 +789,33 @@ describe("OpenAPI.fromSpec", () => {
     await expect(Effect.runPromise(tool.run({}).pipe(Effect.provide(malformed.layer)))).rejects.toThrow(
       "returned malformed JSON",
     )
+    await expect(Effect.runPromise(tool.run({}).pipe(Effect.provide(empty.layer)))).rejects.toThrow(
+      "returned an empty JSON response",
+    )
+    await expect(Effect.runPromise(tool.run({}).pipe(Effect.provide(invalid.layer)))).rejects.toThrow(
+      "returned invalid UTF-8",
+    )
     await expect(Effect.runPromise(tool.run({}).pipe(Effect.provide(chunked.layer)))).rejects.toThrow(
       "response exceeds 50 MiB",
     )
+  })
+
+  test.each([204, 205])("accepts empty JSON responses for HTTP %i", async (status) => {
+    const tool = toolAt(OpenAPI.fromSpec({ baseUrl, spec: singleOperation({}) }).tools, "test")
+    if (!Tool.isDefinition(tool)) throw new Error("test was not generated")
+    const client = recordingClient(() =>
+      new Response(null, { status, headers: { "content-type": "application/json" } }),
+    )
+
+    await expect(Effect.runPromise(tool.run({}).pipe(Effect.provide(client.layer)))).resolves.toBeNull()
+  })
+
+  test("accepts an empty JSON response to HEAD", async () => {
+    const tool = toolAt(OpenAPI.fromSpec({ baseUrl, spec: singleOperation({}, "head") }).tools, "test")
+    if (!Tool.isDefinition(tool)) throw new Error("test was not generated")
+    const client = recordingClient(() => new Response(null, { headers: { "content-type": "application/json" } }))
+
+    await expect(Effect.runPromise(tool.run({}).pipe(Effect.provide(client.layer)))).resolves.toBeNull()
   })
 
   test("keeps non-JSON responses raw and unions every success output", async () => {

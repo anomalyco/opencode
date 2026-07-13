@@ -31,8 +31,9 @@ export const invoke = (plan: Plan, input: unknown): Effect.Effect<unknown, unkno
     const text = yield* readResponseBody(response, plan)
     const mediaType = response.headers["content-type"]?.split(";")[0]?.trim().toLowerCase()
     const json = mediaType === "application/json" || mediaType?.endsWith("+json") === true
-    const decoded = text === "" ? Option.some(null) : json ? decodeJson(text) : Option.none()
-    const parsed = json ? Option.getOrElse(decoded, () => text) : text === "" ? null : text
+    const empty = text === ""
+    const decoded = json && !empty ? decodeJson(text) : Option.none()
+    const parsed = json ? (empty ? null : Option.getOrElse(decoded, () => text)) : empty ? null : text
     if (response.status < 200 || response.status >= 300) {
       const rendered = typeof parsed === "string" ? parsed : (JSON.stringify(parsed) ?? "")
       const summary =
@@ -45,7 +46,13 @@ export const invoke = (plan: Plan, input: unknown): Effect.Effect<unknown, unkno
         toolError(`${plan.operation.method} ${plan.operation.path} failed with HTTP ${response.status}: ${summary}`),
       )
     }
-    if (json && Option.isNone(decoded)) {
+    const bodyless = plan.operation.method === "HEAD" || response.status === 204 || response.status === 205
+    if (json && empty && !bodyless) {
+      return yield* Effect.fail(
+        toolError(`${plan.operation.method} ${plan.operation.path} returned an empty JSON response.`),
+      )
+    }
+    if (json && !empty && Option.isNone(decoded)) {
       return yield* Effect.fail(toolError(`${plan.operation.method} ${plan.operation.path} returned malformed JSON.`))
     }
     return parsed
@@ -322,5 +329,9 @@ const readResponseBody = (
         )
       }),
     )
-    return new TextDecoder().decode(body.subarray(0, size))
+    return yield* Effect.try({
+      try: () => new TextDecoder("utf-8", { fatal: true }).decode(body.subarray(0, size)),
+      catch: (cause) =>
+        toolError(`${plan.operation.method} ${plan.operation.path} returned invalid UTF-8.`, cause),
+    })
   })
