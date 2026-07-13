@@ -41,6 +41,17 @@ function copilotTotalNanoAiu(value: unknown) {
   return total
 }
 
+// The OpenAI usage shape has no cache-write field, so @ai-sdk/openai-compatible always leaves
+// cacheWriteTokens undefined. Gateways fronting Anthropic still report the count as an extra key,
+// which survives untouched in `raw`.
+function rawCacheWriteTokens(value: unknown) {
+  if (!value || typeof value !== "object") return
+  const raw = value as Record<string, unknown>
+  const total = raw.cache_creation_input_tokens ?? raw.cache_write_tokens
+  if (typeof total !== "number" || !Number.isFinite(total) || total < 0) return
+  return total
+}
+
 function usage(value: unknown) {
   if (!value || typeof value !== "object") return undefined
   const item = value as {
@@ -51,6 +62,7 @@ function usage(value: unknown) {
     cachedInputTokens?: number
     inputTokenDetails?: { cacheReadTokens?: number; cacheWriteTokens?: number }
     outputTokenDetails?: { reasoningTokens?: number }
+    raw?: unknown
   }
   const entries = Object.entries({
     inputTokens: item.inputTokens,
@@ -58,7 +70,7 @@ function usage(value: unknown) {
     totalTokens: item.totalTokens,
     reasoningTokens: item.outputTokenDetails?.reasoningTokens ?? item.reasoningTokens,
     cacheReadInputTokens: item.inputTokenDetails?.cacheReadTokens ?? item.cachedInputTokens,
-    cacheWriteInputTokens: item.inputTokenDetails?.cacheWriteTokens,
+    cacheWriteInputTokens: item.inputTokenDetails?.cacheWriteTokens ?? rawCacheWriteTokens(item.raw),
   }).filter((entry) => entry[1] !== undefined)
   return entries.length === 0 ? undefined : Object.fromEntries(entries)
 }
