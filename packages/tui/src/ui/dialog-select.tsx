@@ -51,6 +51,7 @@ export interface DialogSelectProps<T> {
   }[]
   bindings?: readonly Binding<Renderable, KeyEvent>[]
   current?: T
+  focusCurrent?: boolean
 }
 
 export interface DialogSelectOption<T = any> {
@@ -104,6 +105,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     on(
       () => props.current,
       (current) => {
+        if (props.focusCurrent === false) return
         if (current) {
           const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, current))
           if (currentIndex >= 0) {
@@ -229,7 +231,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           return
         }
         if (!selection) {
-          if (props.current !== undefined) {
+          if (props.focusCurrent !== false && props.current !== undefined) {
             const index = flat().findIndex((option) => isDeepEqual(option.value, props.current))
             if (index >= 0) {
               setStore("selected", index)
@@ -279,7 +281,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
       setTimeout(() => {
         if (filter.length > 0) {
           moveTo(0, true, false)
-        } else if (current) {
+        } else if (current && props.focusCurrent !== false) {
           const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, current))
           if (currentIndex >= 0) {
             moveTo(currentIndex, true)

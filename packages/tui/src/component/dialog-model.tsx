@@ -154,6 +154,7 @@ export function DialogModel(props: { providerID?: string }) {
       skipFilter={true}
       title={title()}
       current={local.model.current()}
+      focusCurrent={false}
     />
   )
 }
