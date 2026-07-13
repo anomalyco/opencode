@@ -9,7 +9,10 @@ export async function upgrade() {
   // A local dev build (working-tree dist, channel "local") must never be
   // nudged toward a release build — 0.0.0-dev-* vs 1.x always reads as a
   // major update. Only real installs (curl/brew/npm channels) check.
-  if (InstallationLocal) return
+  // OPENCODE_ALWAYS_NOTIFY_UPDATE is the explicit test hook and overrides
+  // this: it forces the toast even on a dev build, for verifying the
+  // notification path without installing a release.
+  if (InstallationLocal && !Flag.OPENCODE_ALWAYS_NOTIFY_UPDATE) return
   const config = await AppRuntime.runPromise(Config.Service.use((cfg) => cfg.getGlobal()))
   if (config.autoupdate === false || Flag.OPENCODE_DISABLE_AUTOUPDATE) return
   const method = await Installation.method()
