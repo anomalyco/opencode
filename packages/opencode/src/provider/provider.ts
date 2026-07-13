@@ -1740,8 +1740,14 @@ const layer = Layer.effect(
           if (opts.signal) signals.push(opts.signal)
           if (chunkAbortCtl) signals.push(chunkAbortCtl.signal)
           if (headerTimeoutCtl) signals.push(headerTimeoutCtl.signal)
-          if (options["timeout"] !== undefined && options["timeout"] !== null && options["timeout"] !== false)
-            signals.push(AbortSignal.timeout(options["timeout"]))
+          // Apply the documented 300000ms request-timeout default when the user
+          // did not set `timeout` and did not explicitly disable it with `false`.
+          // Without this, LLM requests can hang indefinitely because Bun's socket
+          // timeout is intentionally disabled (see bun#16682) and the documented
+          // default never reaches AbortSignal.timeout. See #13841.
+          const requestTimeout = options["timeout"] === undefined ? 300000 : options["timeout"]
+          if (requestTimeout !== null && requestTimeout !== false)
+            signals.push(AbortSignal.timeout(requestTimeout as number))
 
           const combined = signals.length === 0 ? null : signals.length === 1 ? signals[0] : AbortSignal.any(signals)
           if (combined) opts.signal = combined
