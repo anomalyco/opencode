@@ -201,6 +201,7 @@ export default function FileTree(props: {
   kinds?: ReadonlyMap<string, Kind>
   draggable?: boolean
   onFileClick?: (file: FileNode) => void
+  onFileDoubleClick?: (file: FileNode) => void
 
   _filter?: Filter
   _marks?: Set<string>
@@ -440,6 +441,7 @@ export default function FileTree(props: {
                         active={props.active}
                         draggable={props.draggable}
                         onFileClick={props.onFileClick}
+                        onFileDoubleClick={props.onFileDoubleClick}
                         _filter={filter()}
                         _marks={marks()}
                         _deeps={deeps()}
@@ -462,6 +464,7 @@ export default function FileTree(props: {
                   as="button"
                   type="button"
                   onClick={() => props.onFileClick?.(node)}
+                  onDblClick={() => props.onFileDoubleClick?.(node)}
                 >
                   <div class="w-4 shrink-0" />
                   <Switch>

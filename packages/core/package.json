@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "1.17.15",
+  "version": "1.17.18",
   "name": "@opencode-ai/core",
   "type": "module",
   "license": "MIT",
@@ -80,7 +80,7 @@
     "@ai-sdk/provider-utils": "4.0.23",
     "@ai-sdk/togetherai": "2.0.41",
     "@ai-sdk/vercel": "2.0.39",
-    "@ai-sdk/xai": "3.0.82",
+    "@ai-sdk/xai": "3.0.102",
     "@aws-sdk/credential-providers": "3.1057.0",
     "@effect/opentelemetry": "catalog:",
     "@effect/platform-node": "catalog:",

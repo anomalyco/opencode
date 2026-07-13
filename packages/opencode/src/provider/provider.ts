@@ -207,6 +207,13 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         },
         options: { headerTimeout: OPENAI_HEADER_TIMEOUT_DEFAULT },
       }),
+    meta: () =>
+      Effect.succeed({
+        autoload: false,
+        async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
+          return sdk.responses(modelID)
+        },
+      }),
     xai: () =>
       Effect.succeed({
         autoload: false,
@@ -974,6 +981,21 @@ const ProviderInterleaved = Schema.Union([
   }),
 ])
 
+const ProviderReasoningOption = Schema.Union([
+  Schema.Struct({
+    type: Schema.Literal("effort"),
+    values: Schema.Array(Schema.NullOr(Schema.String)),
+  }),
+  Schema.Struct({
+    type: Schema.Literal("toggle"),
+  }),
+  Schema.Struct({
+    type: Schema.Literal("budget_tokens"),
+    min: optional(Schema.Finite),
+    max: optional(Schema.Finite),
+  }),
+])
+
 const ProviderCapabilities = Schema.Struct({
   temperature: Schema.Boolean,
   reasoning: Schema.Boolean,
@@ -1032,6 +1054,7 @@ export const Model = Schema.Struct({
   options: Schema.Record(Schema.String, Schema.Any),
   headers: Schema.Record(Schema.String, Schema.String),
   release_date: Schema.String,
+  reasoning_options: optional(Schema.Array(ProviderReasoningOption)),
   variants: optional(Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Any))),
 }).annotate({ identifier: "Model" })
 export type Model = Types.DeepMutable<Schema.Schema.Type<typeof Model>>
@@ -1064,11 +1087,17 @@ export type ConfigProvidersResult = Types.DeepMutable<Schema.Schema.Type<typeof 
 
 export function toPublicInfo(provider: Info): Info {
   return JSON.parse(
-    JSON.stringify(provider, (_, value) => {
-      if (typeof value === "function" || typeof value === "symbol" || value === undefined) return undefined
-      if (typeof value === "bigint") return value.toString()
-      return value
-    }),
+    JSON.stringify(
+      {
+        ...provider,
+        models: Object.fromEntries(Object.entries(provider.models).filter(([, model]) => Schema.is(Model)(model))),
+      },
+      (_, value) => {
+        if (typeof value === "function" || typeof value === "symbol" || value === undefined) return undefined
+        if (typeof value === "bigint") return value.toString()
+        return value
+      },
+    ),
   )
 }
 
@@ -1189,6 +1218,36 @@ function cost(c: ModelsDev.Model["cost"]): Model["cost"] {
   return result
 }
 
+type ReasoningOption = NonNullable<Model["reasoning_options"]>[number]
+
+function reasoningOptions(input: unknown): Model["reasoning_options"] {
+  if (!Array.isArray(input)) return []
+  return input.flatMap((option) => {
+    const normalized = normalizeReasoningOption(option)
+    return normalized ? [normalized] : []
+  })
+}
+
+function normalizeReasoningOption(option: unknown): ReasoningOption | undefined {
+  if (!isRecord(option)) return
+  if (option.type === "effort") {
+    if (!Array.isArray(option.values)) return
+    return {
+      type: "effort",
+      values: option.values.filter((value): value is string | null => value === null || typeof value === "string"),
+    }
+  }
+  if (option.type === "toggle") return { type: "toggle" }
+  if (option.type !== "budget_tokens") return
+  const min = typeof option.min === "number" && Number.isFinite(option.min) ? option.min : undefined
+  const max = typeof option.max === "number" && Number.isFinite(option.max) ? option.max : undefined
+  return {
+    type: "budget_tokens",
+    ...(min === undefined ? {} : { min }),
+    ...(max === undefined ? {} : { max }),
+  }
+}
+
 function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model): Model {
   const base: Model = {
     id: ModelV2.ID.make(model.id),
@@ -1231,6 +1290,7 @@ function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model
       interleaved: model.interleaved ?? false,
     },
     release_date: model.release_date ?? "",
+    reasoning_options: reasoningOptions(model.reasoning_options),
     variants: {},
   }
 
@@ -1477,6 +1537,7 @@ const layer = Layer.effect(
               headers: mergeDeep(existingModel?.headers ?? {}, model.headers ?? {}),
               family: model.family ?? existingModel?.family ?? "",
               release_date: model.release_date ?? existingModel?.release_date ?? "",
+              reasoning_options: existingModel?.reasoning_options,
               variants: {},
             }
             const merged = mergeDeep(ProviderTransform.variants(parsedModel), model.variants ?? {})
