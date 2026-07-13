@@ -167,6 +167,71 @@ export const {
         .then((x) => (x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)))
     }
 
+    // Insert a pending request into its per-session list, kept sorted by id so the
+    // binary `search` stays valid. Idempotent: skip a request a live `*.asked` event
+    // already added, so hydration and live events can interleave safely.
+    function upsertPermission(request: PermissionRequest) {
+      const requests = store.permission[request.sessionID]
+      if (!requests) {
+        setStore("permission", request.sessionID, [request])
+        return
+      }
+      const match = search(requests, request.id, (r) => r.id)
+      if (match.found) return
+      setStore(
+        "permission",
+        request.sessionID,
+        produce((draft) => {
+          draft.splice(match.index, 0, request)
+        }),
+      )
+    }
+
+    function upsertQuestion(request: QuestionRequest) {
+      const requests = store.question[request.sessionID]
+      if (!requests) {
+        setStore("question", request.sessionID, [request])
+        return
+      }
+      const match = search(requests, request.id, (r) => r.id)
+      if (match.found) return
+      setStore(
+        "question",
+        request.sessionID,
+        produce((draft) => {
+          draft.splice(match.index, 0, request)
+        }),
+      )
+    }
+
+    // Fetch pending prompts on (re)connect. The `*.asked` events fire once, at ask
+    // time, and aren't replayed, so a client that connects afterwards (e.g. after
+    // detaching the TUI) never sees them via events alone and would leave the agent
+    // blocked with no prompt to answer.
+    function hydratePending(workspace: string | undefined) {
+      const permissions = sdk.client.permission
+        .list({ workspace })
+        .then((x) => {
+          for (const request of x.data ?? []) {
+            if (permission.mode === "auto") {
+              void sdk.client.permission.reply({ requestID: request.id, reply: "once", workspace })
+              continue
+            }
+            upsertPermission(request)
+          }
+        })
+        .catch(() => {})
+      const questions = sdk.client.question
+        .list({ workspace })
+        .then((x) => {
+          for (const request of x.data ?? []) {
+            upsertQuestion(request)
+          }
+        })
+        .catch(() => {})
+      return Promise.all([permissions, questions])
+    }
+
     event.subscribe((event, { directory, workspace }) => {
       switch (event.type) {
         case "server.instance.disposed":
@@ -526,6 +591,7 @@ export const {
             }),
             sdk.client.provider.auth({ workspace }).then((x) => setStore("provider_auth", reconcile(x.data ?? {}))),
             sdk.client.vcs.get({ workspace }).then((x) => setStore("vcs", reconcile(x.data))),
+            hydratePending(workspace),
             project.workspace.sync(),
           ]).then(() => {
             setStore("status", "complete")
