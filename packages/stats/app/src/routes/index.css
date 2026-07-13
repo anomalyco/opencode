@@ -3125,7 +3125,8 @@
   color: currentColor;
 }
 
-[data-page="stats"] [data-slot="stats-breadcrumb-select-trigger"][data-expanded]
+[data-page="stats"]
+  [data-slot="stats-breadcrumb-select-trigger"][data-expanded]
   [data-slot="stats-breadcrumb-select-icon"] {
   transform: rotate(180deg);
 }
@@ -5536,8 +5537,7 @@
   color: var(--stats-hero-muted);
 }
 
-[data-page="stats"] [data-component="compare-home-breadcrumb"]
-  [data-slot="compare-home-crumb"][data-current="true"] {
+[data-page="stats"] [data-component="compare-home-breadcrumb"] [data-slot="compare-home-crumb"][data-current="true"] {
   color: var(--stats-text);
 }
 
@@ -7884,8 +7884,7 @@
     max-width: min(100%, 240px);
   }
 
-  [data-page="stats"] [data-component="model-hero-breadcrumb"]
-    [data-slot="stats-breadcrumb-select-trigger"] {
+  [data-page="stats"] [data-component="model-hero-breadcrumb"] [data-slot="stats-breadcrumb-select-trigger"] {
     max-width: min(100%, 240px);
   }
 
