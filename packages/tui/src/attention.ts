@@ -38,7 +38,7 @@ type TuiAttentionHost = TuiAttention & {
   dispose(): void
 }
 
-const DEFAULT_TITLE = "opencode"
+const DEFAULT_TITLE = "OpenCode"
 const DEFAULT_PACK_ID = "opencode.default"
 const TITLE_LIMIT = 80
 const MESSAGE_LIMIT = 240
