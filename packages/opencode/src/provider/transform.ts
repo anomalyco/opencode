@@ -1611,17 +1611,14 @@ function effortVariants(model: Provider.Model, values: readonly unknown[]) {
 }
 
 function budgetVariants(model: Provider.Model, min?: number, max?: number) {
-  const limit = model.limit.output - 1
-  if (limit <= 0) return {}
-  const high = Math.min(
-    max === undefined ? Math.max(min ?? 0, 16_000) : Math.min(Math.max(min ?? 0, 16_000), max),
-    limit,
-  )
-  const maximum = max === undefined ? undefined : Math.min(max, limit)
+  const allocation = Math.min(max ?? 32_000, model.limit.output)
+  if (allocation <= 1) return {}
+  const maximum = allocation - 1
+  const high = Math.min(Math.max(min ?? 0, Math.floor(allocation / 2)), maximum)
   return Object.fromEntries(
     [
       { id: "high", budget: high },
-      ...(maximum === undefined || maximum === high ? [] : [{ id: "max", budget: maximum }]),
+      { id: "max", budget: maximum },
     ].flatMap((item) => {
       const settings = reasoningBudget(model, item.budget)
       return settings ? [[item.id, settings]] : []
