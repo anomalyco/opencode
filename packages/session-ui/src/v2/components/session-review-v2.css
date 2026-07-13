@@ -77,6 +77,11 @@
 }
 
 [data-component="session-review-v2-sidebar-root"]
+  [data-slot="session-review-v2-sidebar-title"]:not(:has([data-component="select-v2-root"])) {
+  margin-left: 8px;
+}
+
+[data-component="session-review-v2-sidebar-root"]
   [data-slot="session-review-v2-sidebar-title"]
   [data-component="select-v2-root"] {
   width: fit-content;
@@ -97,7 +102,7 @@
   width: 100%;
   max-width: 100%;
   min-width: 0;
-  margin-top: 2px;
+  margin-top: 3px;
 }
 
 [data-component="session-review-v2-sidebar-root"] [data-slot="session-review-v2-sidebar-tree"] {
