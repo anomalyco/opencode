@@ -39,19 +39,17 @@ const applicationServices = LayerNode.group([
 export function createRoutes(password?: string) {
   return makeRoutes(
     password
-      ? ServerAuth.Config.layer({ username: "opencode", password: Option.some(password) })
-      : ServerAuth.Config.defaultLayer,
+      ? ServerAuth.Config.configLayer({ username: "opencode", password: Option.some(password) })
+      : ServerAuth.Config.layer,
   )
 }
 
 export function createEmbeddedRoutes() {
-  return makeRoutes(ServerAuth.Config.layer({ username: "opencode", password: Option.none() }))
+  return makeRoutes(ServerAuth.Config.configLayer({ username: "opencode", password: Option.none() }))
 }
 
 function makeRoutes<AuthError, AuthServices>(auth: Layer.Layer<ServerAuth.Config, AuthError, AuthServices>) {
-  const serviceLayer = AppNodeBuilder.build(
-    LayerNode.bind(applicationServices, SessionExecution.node, SessionExecutionLocal.node),
-  )
+  const serviceLayer = AppNodeBuilder.build(applicationServices, [[SessionExecution.node, SessionExecutionLocal.node]])
 
   return HttpApiBuilder.layer(Api, { openapiPath: "/openapi.json" }).pipe(
     Layer.provide(handlers),

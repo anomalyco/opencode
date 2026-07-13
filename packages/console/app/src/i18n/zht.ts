@@ -240,7 +240,6 @@ export const dict = {
   "zen.privacy.exceptionsLink": "以下例外情況",
 
   "go.title": "OpenCode Go | 低成本全民編碼模型",
-  "go.banner.text": "MiniMax M3 限時享有 3 倍使用額度",
   "go.meta.description":
     "Go 首月 $5，之後 $10/月，提供對 GLM-5.2、GLM-5.1、Kimi K2.7 Code、Kimi K2.6、MiMo-V2.5-Pro、MiMo-V2.5、Qwen3.7 Max、Qwen3.7 Plus、Qwen3.6 Plus、MiniMax M2.7、MiniMax M3、DeepSeek V4 Pro 和 DeepSeek V4 Flash 的 5 小時充裕請求額度。",
   "go.hero.title": "低成本全民編碼模型",
@@ -356,6 +355,7 @@ export const dict = {
     "你的工作區已達到每月支出限額 ${{amount}}。請在此處管理你的限額：{{billingUrl}}",
   "zen.api.error.userMonthlyLimitReached": "你已達到每月支出限額 ${{amount}}。請在此處管理你的限額：{{membersUrl}}",
   "zen.api.error.modelDisabled": "模型已停用",
+  "zen.api.error.regionNotAllowed": "此模型部署於中國。如果你想使用此模型，請在設定中啟用它：{{consoleGoUrl}}",
   "zen.api.error.trialEnded": "{{model}} 的限免活动已結束。您可以訂閱 OpenCode Go 繼續使用該模型 - {{link}}",
 
   "black.meta.title": "OpenCode Black | 存取全球最佳編碼模型",
@@ -631,6 +631,9 @@ export const dict = {
   "workspace.lite.subscription.useBalance": "達到使用限制後使用您的可用餘額",
   "workspace.lite.subscription.selectProvider":
     "在您的 opencode 設定中選擇「OpenCode Go」作為提供商，即可使用 Go 模型。",
+  "workspace.lite.providers.title": "提供商",
+  "workspace.lite.providers.description": "控制用於路由的提供商。",
+  "workspace.lite.providers.useChina": "啟用部署在中國的模型",
   "workspace.lite.black.message": "您目前已訂閱 OpenCode Black 或在候補名單中。若要切換至 Go，請先取消訂閱。",
   "workspace.lite.other.message": "此工作區中的另一位成員已訂閱 OpenCode Go。每個工作區只能有一位成員訂閱。",
   "workspace.lite.promo.description":

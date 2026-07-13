@@ -2,7 +2,6 @@ import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
 import { Effect, Exit, Layer } from "effect"
-import { makeLocationNode } from "@opencode-ai/core/effect/app-node"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FileSystem } from "@opencode-ai/core/filesystem"
 import { Location } from "@opencode-ai/core/location"
@@ -13,20 +12,12 @@ import { it } from "./lib/effect"
 
 const provide = (directory: string) =>
   Effect.provide(
-    LayerNode.compile(
-      LayerNode.bind(
-        FileSystem.node,
+    LayerNode.compile(FileSystem.node, [
+      [
         Location.node,
-        makeLocationNode({
-          service: Location.Service,
-          layer: Layer.succeed(
-            Location.Service,
-            Location.Service.of(location({ directory: AbsolutePath.make(directory) })),
-          ),
-          deps: [],
-        }),
-      ),
-    ),
+        Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
+      ],
+    ]),
   )
 
 const withTmp = <A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>) =>

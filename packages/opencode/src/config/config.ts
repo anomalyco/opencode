@@ -172,7 +172,7 @@ function writableGlobal(info: Info) {
   return next
 }
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
@@ -293,6 +293,7 @@ export const layer = Layer.effect(
     })
 
     const ensureGitignore = Effect.fn("Config.ensureGitignore")(function* (dir: string) {
+      yield* fs.ensureDir(dir)
       const gitignore = path.join(dir, ".gitignore")
       const hasIgnore = yield* fs.existsSafe(gitignore)
       if (!hasIgnore) {
@@ -669,16 +670,6 @@ export const layer = Layer.effect(
       waitForDependencies,
     })
   }),
-)
-
-export const defaultLayer = layer.pipe(
-  Layer.provide(EffectFlock.defaultLayer),
-  Layer.provide(FSUtil.defaultLayer),
-  Layer.provide(Env.defaultLayer),
-  Layer.provide(Auth.defaultLayer),
-  Layer.provide(Account.defaultLayer),
-  Layer.provide(Npm.defaultLayer),
-  Layer.provide(FetchHttpClient.layer),
 )
 
 export const node = LayerNode.make({

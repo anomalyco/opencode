@@ -1,12 +1,10 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { compile, emitEffectImported, emitPromise, write } from "@opencode-ai/httpapi-codegen"
-import { ClientApi } from "../src/contract"
+import { ClientApi, endpointNames, groupNames, omitEndpoints } from "../src/contract"
 import { Effect } from "effect"
 import { fileURLToPath } from "url"
 
-const contract = compile(ClientApi, {
-  groupNames: { "server.session": "sessions", "server.event": "events" },
-})
+const contract = compile(ClientApi, { groupNames, endpointNames, omitEndpoints })
 
 await Effect.runPromise(
   Effect.all(

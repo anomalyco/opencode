@@ -1,4 +1,4 @@
-import { For, Show, splitProps, type Accessor, type ComponentProps } from "solid-js"
+import { createEffect, For, onCleanup, Show, splitProps, type Accessor, type ComponentProps } from "solid-js"
 import { createStore } from "solid-js/store"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -8,6 +8,7 @@ import { getProjectAvatarVariant } from "@/context/layout"
 import { useLanguage } from "@/context/language"
 import { displayName, getProjectAvatarSource } from "@/pages/layout/helpers"
 import { pathKey } from "@/utils/path-key"
+import { handleDocumentSearchKeydown } from "@/utils/search-keydown"
 
 export type PromptProject = {
   name?: string
@@ -101,6 +102,16 @@ export function createPromptProjectController(input: {
     setStore({ open: false, search: "", active: "" })
     input.controls().add(language.t("command.project.open"), server)
   }
+  const setSearch = (value: string) => {
+    const search = value.trim().toLowerCase()
+    const first = input
+      .controls()
+      .available.find((project) => !search || displayName(project).toLowerCase().includes(search))
+    setStore({
+      search: value,
+      active: first ? projectKey(first) : actionKey(servers().length > 1 ? undefined : servers()[0]?.key),
+    })
+  }
 
   return {
     selected,
@@ -127,16 +138,7 @@ export function createPromptProjectController(input: {
       }
       setStore({ open: false, search: "", active: "" })
     },
-    setSearch(value: string) {
-      const search = value.trim().toLowerCase()
-      const first = input
-        .controls()
-        .available.find((project) => !search || displayName(project).toLowerCase().includes(search))
-      setStore({
-        search: value,
-        active: first ? projectKey(first) : actionKey(servers().length > 1 ? undefined : servers()[0]?.key),
-      })
-    },
+    setSearch,
     clearSearch() {
       setStore({ search: "", active: initialActive() })
       setTimeout(() => searchRef?.focus())
@@ -169,6 +171,9 @@ export function createPromptProjectController(input: {
     },
     focusSearch() {
       setTimeout(() => requestAnimationFrame(() => searchRef?.focus()))
+    },
+    handleSearchKeydown(event: KeyboardEvent) {
+      return handleDocumentSearchKeydown(searchRef, event, store.search, setSearch)
     },
   }
 }
@@ -242,6 +247,13 @@ export function PromptProjectSelector(props: {
     const project = props.controller.selected()
     return project ? props.controller.projectKey(project) : undefined
   }
+
+  createEffect(() => {
+    if (!props.controller.open()) return
+    const handler = (event: KeyboardEvent) => props.controller.handleSearchKeydown(event)
+    document.addEventListener("keydown", handler, true)
+    onCleanup(() => document.removeEventListener("keydown", handler, true))
+  })
 
   return (
     <DropdownMenu

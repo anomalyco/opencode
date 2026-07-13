@@ -1,7 +1,8 @@
 import { query } from "@solidjs/router"
 
-export const modelCatalogSourceUrl = "https://models.dev/models.json"
+export const modelCatalogSourceUrl = "https://models.dev/catalog.json"
 export const modelCatalogPricingUrl = "https://models.dev/api.json"
+export const modelCatalogLabSourceUrl = "https://models.dev/labs"
 
 export type ModelCatalogCost = {
   input: number
@@ -15,6 +16,7 @@ export type ModelCatalogEntry = {
   lab: string
   slug: string
   name: string
+  description?: string
   family?: string
   knowledge?: string
   releaseDate?: string
@@ -45,6 +47,7 @@ export type ModelCatalogBenchmark = {
 export type ModelCatalogLab = {
   id: string
   name: string
+  description?: string
   models: ModelCatalogEntry[]
 }
 
@@ -53,13 +56,18 @@ export type ModelCatalog = {
   labs: ModelCatalogLab[]
 }
 
-export const getModelCatalog = query(async () => {
-  "use server"
-  const [models, pricing] = await Promise.all([
+export async function loadModelCatalog() {
+  const [models, pricing, labs] = await Promise.all([
     fetchCatalogPayload(modelCatalogSourceUrl),
     fetchCatalogPayload(modelCatalogPricingUrl),
+    fetchLabCatalogPayload(modelCatalogLabSourceUrl),
   ])
-  return buildModelCatalog(models, pricing)
+  return buildModelCatalog(models, pricing, labs)
+}
+
+export const getModelCatalog = query(async () => {
+  "use server"
+  return loadModelCatalog()
 }, "getModelCatalog")
 
 export function findModelCatalogEntry(catalog: ModelCatalog, model: string, lab?: string) {
@@ -111,9 +119,10 @@ export function catalogSlug(value: string) {
     .replace(/-{2,}/g, "-")
 }
 
-function buildModelCatalog(payload: unknown, pricingPayload?: unknown): ModelCatalog {
+function buildModelCatalog(payload: unknown, pricingPayload?: unknown, labPayload?: unknown): ModelCatalog {
   const costs = readCatalogCosts(pricingPayload)
-  const models = (Array.isArray(payload) ? payload : isRecord(payload) ? Object.values(payload) : [])
+  const labDescriptions = readCatalogLabDescriptions(payload, pricingPayload, labPayload)
+  const models = readCatalogModels(payload)
     .flatMap(readModelCatalogEntry)
     .map((model) => ({
       ...model,
@@ -131,6 +140,7 @@ function buildModelCatalog(payload: unknown, pricingPayload?: unknown): ModelCat
         result[model.lab] = {
           id: model.lab,
           name: formatCatalogLabName(model.lab),
+          description: result[model.lab]?.description ?? labDescriptions.get(model.lab),
           models: [...(result[model.lab]?.models ?? []), model],
         }
         return result
@@ -152,6 +162,7 @@ function readModelCatalogEntry(value: unknown): ModelCatalogEntry[] {
       lab: catalogSlug(lab),
       slug: catalogSlug(slug),
       name,
+      description: stringValue(value.description),
       family: stringValue(value.family),
       knowledge: stringValue(value.knowledge),
       releaseDate: stringValue(value.release_date),
@@ -170,10 +181,71 @@ function readModelCatalogEntry(value: unknown): ModelCatalogEntry[] {
   ]
 }
 
+function readCatalogModels(payload: unknown): unknown[] {
+  if (Array.isArray(payload)) return payload
+  if (!isRecord(payload)) return []
+  if (Array.isArray(payload.models)) return payload.models
+  if (isRecord(payload.models)) return Object.values(payload.models)
+  return Object.values(payload)
+}
+
+function readCatalogLabDescriptions(...payloads: unknown[]) {
+  const descriptions = new Map<string, string>()
+  const add = (value: unknown, fallbackId?: string) => {
+    if (!isRecord(value)) return
+    const description = stringValue(value.description)
+    if (!description) return
+    const id = stringValue(value.id) ?? fallbackId
+    const name = stringValue(value.name)
+    const title = stringValue(value.title)
+    const keys = [id, name, title]
+    keys.forEach((key) => {
+      if (!key) return
+      descriptions.set(catalogLabSlug(key), description)
+    })
+  }
+  const addCollection = (value: unknown) => {
+    if (Array.isArray(value)) {
+      value.forEach((item) => add(item))
+      return
+    }
+    if (!isRecord(value)) return
+    Object.entries(value).forEach(([key, item]) => add(item, key))
+  }
+
+  payloads.forEach((payload) => {
+    if (Array.isArray(payload)) {
+      payload.forEach((item) => add(item))
+      return
+    }
+    if (!isRecord(payload)) return
+    addCollection(payload.labs)
+    addCollection(payload.providers)
+    Object.entries(payload).forEach(([key, value]) => add(value, key))
+  })
+
+  return descriptions
+}
+
 async function fetchCatalogPayload(url: string) {
   return fetch(url)
     .then((response): Promise<unknown> => (response.ok ? (response.json() as Promise<unknown>) : Promise.resolve()))
     .catch(() => undefined)
+}
+
+async function fetchLabCatalogPayload(url: string) {
+  return fetch(url)
+    .then((response) => (response.ok ? response.text() : Promise.resolve("")))
+    .then(readLabSearchIndex)
+    .catch(() => undefined)
+}
+
+function readLabSearchIndex(html: string) {
+  const match = /<script[^>]*id=["']search-index["'][^>]*>([\s\S]*?)<\/script>/.exec(html)
+  if (!match) return undefined
+  const parsed = JSON.parse(match[1]) as unknown
+  if (!Array.isArray(parsed)) return undefined
+  return parsed.filter((item) => isRecord(item) && item.type === "lab")
 }
 
 function readCatalogCosts(payload: unknown) {

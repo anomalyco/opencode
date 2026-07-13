@@ -19,6 +19,8 @@ import { MessageID, SessionID } from "@/session/schema"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
+import { MCP } from "@/mcp"
+import type { Tool as MCPToolDef } from "@modelcontextprotocol/sdk/types.js"
 
 const configLayer = TestConfig.layer({
   directories: () => InstanceState.directory.pipe(Effect.map((dir) => [path.join(dir, ".opencode")])),
@@ -50,22 +52,48 @@ const brokenPluginLayer = Layer.succeed(
 
 const root = LayerNode.group([ToolRegistry.node, Agent.node])
 const replacements = [
-  LayerNode.replace(Config.layer, configLayer),
-  LayerNode.replace(RuntimeFlags.defaultLayer, RuntimeFlags.layer()),
-]
+  [Config.node, configLayer],
+  [RuntimeFlags.node, RuntimeFlags.layer()],
+] as const
 
-const it = testEffect(LayerNode.compile(root, new Map(replacements.map((item) => [item.source, item.replacement]))))
-const withBrokenPlugin = testEffect(
-  LayerNode.compile(
-    root,
-    new Map(
-      [...replacements, LayerNode.replace(Plugin.layer, brokenPluginLayer)].map((item) => [
-        item.source,
-        item.replacement,
-      ]),
-    ),
-  ),
+const it = testEffect(LayerNode.compile(root, replacements))
+const withCodeMode = testEffect(
+  LayerNode.compile(root, [
+    [Config.node, configLayer],
+    [RuntimeFlags.node, RuntimeFlags.layer({ experimentalCodeMode: true })],
+    [
+      MCP.node,
+      Layer.mock(MCP.Service, {
+        tools: () =>
+          Effect.succeed({
+            weather_current: {
+              def: {
+                name: "current",
+                description: "current weather",
+                inputSchema: { type: "object", properties: { city: { type: "string" } }, required: ["city"] },
+              } as MCPToolDef,
+              client: {} as MCP.McpTool["client"],
+            },
+          }),
+        clients: () => Effect.succeed({ weather: {} as any }),
+      }),
+    ],
+  ]),
 )
+const withEmptyCodeMode = testEffect(
+  LayerNode.compile(root, [
+    [Config.node, configLayer],
+    [RuntimeFlags.node, RuntimeFlags.layer({ experimentalCodeMode: true })],
+    [
+      MCP.node,
+      Layer.mock(MCP.Service, {
+        tools: () => Effect.succeed({}),
+        clients: () => Effect.succeed({}),
+      }),
+    ],
+  ]),
+)
+const withBrokenPlugin = testEffect(LayerNode.compile(root, [...replacements, [Plugin.node, brokenPluginLayer]]))
 
 afterEach(async () => {
   await disposeAllInstances()
@@ -78,6 +106,47 @@ describe("tool.registry", () => {
       const ids = yield* registry.ids()
 
       expect(ids).not.toContain("task_status")
+    }),
+  )
+
+  it.instance("does not expose execute unless code mode is enabled", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const ids = yield* registry.ids()
+
+      expect(ids).not.toContain("execute")
+    }),
+  )
+
+  withCodeMode.instance("exposes execute when code mode is enabled", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const agents = yield* Agent.Service
+      const ids = yield* registry.ids()
+      const tools = yield* registry.tools({
+        providerID: ProviderV2.ID.opencode,
+        modelID: ModelV2.ID.make("test"),
+        agent: yield* agents.defaultInfo(),
+      })
+      const execute = tools.find((tool) => tool.id === "execute")
+
+      expect(ids).toContain("execute")
+      expect(tools.map((tool) => tool.id)).toContain("execute")
+      expect(execute?.description).toContain("tools.weather.current(input: {\n  city: string,\n})")
+    }),
+  )
+
+  withEmptyCodeMode.instance("does not expose execute when code mode has no visible tools", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const agents = yield* Agent.Service
+      const tools = yield* registry.tools({
+        providerID: ProviderV2.ID.opencode,
+        modelID: ModelV2.ID.make("test"),
+        agent: yield* agents.defaultInfo(),
+      })
+
+      expect(tools.map((tool) => tool.id)).not.toContain("execute")
     }),
   )
 

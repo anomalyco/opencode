@@ -78,7 +78,7 @@ type StreamEvent = LLMEvent
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionProcessor") {}
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const session = yield* Session.Service
@@ -192,6 +192,8 @@ export const layer = Layer.effect(
             status: "error",
             input: match.part.state.input,
             error: errorMessage(error),
+            // Keep metadata streamed while running so failures retain progress detail (e.g. execute's child calls).
+            metadata: match.part.state.metadata,
             time: { start: match.part.state.time.start, end: Date.now() },
           },
         })
@@ -692,23 +694,6 @@ export const layer = Layer.effect(
 
     return Service.of({ create })
   }),
-)
-
-export const defaultLayer = Layer.suspend(() =>
-  layer.pipe(
-    Layer.provide(Session.defaultLayer),
-    Layer.provide(Snapshot.defaultLayer),
-    Layer.provide(Agent.defaultLayer),
-    Layer.provide(LLM.defaultLayer),
-    Layer.provide(Permission.defaultLayer),
-    Layer.provide(Plugin.defaultLayer),
-    Layer.provide(SessionSummary.defaultLayer),
-    Layer.provide(SessionStatus.defaultLayer),
-    Layer.provide(Image.defaultLayer),
-    Layer.provide(Config.defaultLayer),
-    Layer.provide(Database.defaultLayer),
-    Layer.provide(EventV2Bridge.defaultLayer),
-  ),
 )
 
 export const node = LayerNode.make({
