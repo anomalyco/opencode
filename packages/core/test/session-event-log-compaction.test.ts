@@ -54,6 +54,7 @@ describe("SessionEventLogCompaction", () => {
       yield* events.publish(SessionV1.Event.MessageUpdated, { sessionID, info: message("before") })
       yield* events.publish(SessionV1.Event.MessageUpdated, { sessionID, info: message("after") })
       const projection = yield* db.select().from(MessageTable).where(eq(MessageTable.id, messageID)).get()
+      expect(yield* SessionEventLogCompaction.status(db)).toMatchObject({ events: 2, compactableEvents: 2 })
       const dryRun = yield* SessionEventLogCompaction.compact(db, { aggregateID: sessionID })
 
       expect(dryRun).toMatchObject({ candidates: 1, rewritten: 0, payloadBytesReclaimed: expect.any(Number) })
@@ -121,6 +122,17 @@ describe("SessionEventLogCompaction", () => {
       yield* events.publish(SessionV1.Event.MessageUpdated, { sessionID, info: malformed("after") })
       yield* db.run(sql`UPDATE event SET data = 'not json' WHERE type = 'message.updated.1' AND seq = 6`)
       expect(yield* SessionEventLogCompaction.compact(db, { aggregateID: sessionID })).toMatchObject({ malformed: 1 })
+
+      const appendedID = SessionV1.MessageID.ascending("msg_event_log_appended")
+      const appended = (agent: string) => ({ ...message(agent), id: appendedID })
+      yield* events.publish(SessionV1.Event.MessageUpdated, { sessionID, info: appended("before") })
+      yield* events.publish(SessionV1.Event.MessageUpdated, { sessionID, info: appended("middle") })
+      expect((yield* SessionEventLogCompaction.compact(db, { aggregateID: sessionID })).candidates).toBeGreaterThan(0)
+      yield* events.publish(SessionV1.Event.MessageUpdated, { sessionID, info: appended("latest") })
+      yield* SessionEventLogCompaction.compact(db, { aggregateID: sessionID, apply: true })
+      expect((yield* db.select().from(MessageTable).where(eq(MessageTable.id, appendedID)).get())?.data).toMatchObject({
+        agent: "latest",
+      })
 
       const ownedID = SessionV1.MessageID.ascending("msg_event_log_owned")
       const owned = (agent: string) => ({ ...message(agent), id: ownedID })
