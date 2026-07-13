@@ -1376,16 +1376,17 @@ it.instance(
   },
 )
 
-test("mode cost preserves over-200k pricing from base model", () => {
+test("mode options and cost are derived from the base model", () => {
   const provider = {
     id: "openai",
     name: "OpenAI",
     env: [],
+    npm: "@ai-sdk/openai",
     api: "https://api.openai.com/v1",
     models: {
-      "gpt-5.4": {
-        id: "gpt-5.4",
-        name: "GPT-5.4",
+      "gpt-5.6-sol": {
+        id: "gpt-5.6-sol",
+        name: "GPT-5.6 Sol",
         family: "gpt",
         release_date: "2026-03-05",
         attachment: true,
@@ -1421,18 +1422,29 @@ test("mode cost preserves over-200k pricing from base model", () => {
                 },
               },
             },
+            pro: {
+              provider: {
+                body: {
+                  reasoning: { mode: "pro" },
+                  service_tier: "priority",
+                },
+              },
+            },
           },
         },
       },
     },
   } as unknown as ModelsDev.Provider
 
-  const model = Provider.fromModelsDevProvider(provider).models["gpt-5.4-fast"]
+  const model = Provider.fromModelsDevProvider(provider).models["gpt-5.6-sol-fast"]
   expect(model.cost.input).toEqual(5)
   expect(model.cost.output).toEqual(30)
   expect(model.cost.cache.read).toEqual(0.5)
   expect(model.cost.cache.write).toEqual(0)
   expect(model.options["serviceTier"]).toEqual("priority")
+  const pro = Provider.fromModelsDevProvider(provider).models["gpt-5.6-sol-pro"]
+  expect(pro.api.id).toEqual("gpt-5.6-sol")
+  expect(pro.options).toEqual({ reasoningMode: "pro", serviceTier: "priority" })
   expect(model.cost.experimentalOver200K).toEqual({
     input: 5,
     output: 22.5,
