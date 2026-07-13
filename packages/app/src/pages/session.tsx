@@ -653,7 +653,7 @@ export default function Page() {
   const mobileChanges = createMemo(() => !isDesktop() && store.mobileTab === "changes")
   const wantsReview = createMemo(() =>
     isDesktop()
-      ? desktopFileTreeOpen() || (desktopReviewOpen() && activeTab() === "review")
+      ? desktopFileTreeOpen() || (desktopReviewOpen() && (activeTab() === "review" || !!activeFileTab()))
       : store.mobileTab === "changes",
   )
   const vcsMode = createMemo<VcsMode | undefined>(() => {
@@ -2281,6 +2281,8 @@ export default function Page() {
             reviewHasFocusableContent={hasReview}
             reviewCount={reviewCount}
             reviewPanel={reviewPanel}
+            diffVersion={vcsQuery.dataUpdatedAt}
+            loadDiff={loadReviewDiff}
             activeDiff={activeReviewFile()}
             focusReviewDiff={focusReviewDiff}
             reviewSnap={ui.reviewSnap}
@@ -2301,6 +2303,9 @@ export default function Page() {
                     reviewHasFocusableContent={() => hasReview() || reviewV2State.sidebarOpened()}
                     reviewCount={reviewCount}
                     reviewPanel={reviewPanelV2}
+                    diffVersion={vcsQuery.dataUpdatedAt}
+                    loadDiff={loadReviewDiff}
+                    expandUnchanged={reviewV2State.expandMode() === "expand"}
                     reviewSidebarToggle={(disabled) => (
                       <SessionReviewV2SidebarToggle
                         opened={reviewV2State.sidebarOpened()}
