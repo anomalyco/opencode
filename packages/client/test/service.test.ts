@@ -1,6 +1,6 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { afterEach, expect, test } from "bun:test"
-import { Effect, Exit } from "effect"
+import { Effect } from "effect"
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -19,9 +19,7 @@ afterEach(async () => {
 test("a concurrent same-version start cannot invalidate a resolved endpoint", async () => {
   const directory = await temp()
   const registration = join(directory, "service.json")
-  const firstRequest = join(directory, "first-request")
-  const release = join(directory, "release")
-  const existing = spawn(registration, "modern", firstRequest, release)
+  spawn(registration, "modern")
   await waitForFile(registration)
   const original = await Bun.file(registration).json()
 
@@ -32,19 +30,17 @@ test("a concurrent same-version start cannot invalidate a resolved endpoint", as
       version: "test",
       command: [],
       onStart: (reason) => starts.push(reason),
-    }).pipe(Effect.exit),
+    }),
   )
-  await waitForFile(firstRequest)
+  await waitForFile(registration + ".first-request")
 
   const resolved = await run(Service.start({ file: registration, version: "test" }))
   expect(resolved.url).toBe(original.url)
 
-  await writeFile(release, "")
-  const result = await first
+  await writeFile(registration + ".release", "")
+  await first
 
-  expect(Exit.isSuccess(result)).toBe(true)
   expect(starts).toEqual([])
-  expect(existing.exitCode).toBe(null)
   expect(await Bun.file(registration).json()).toEqual(original)
   expect(await health(resolved.url)).toEqual({ healthy: true, version: "test", pid: original.pid })
 })
@@ -56,15 +52,9 @@ test("a legacy health response is still replaced", async () => {
   await waitForFile(registration)
 
   const starts: Service.StartReason[] = []
-  const result = await run(
-    Service.start({
-      file: registration,
-      command: [],
-      onStart: (reason) => starts.push(reason),
-    }).pipe(Effect.exit),
-  )
+  const result = run(Service.start({ file: registration, command: [], onStart: (reason) => starts.push(reason) }))
 
-  expect(Exit.isFailure(result)).toBe(true)
+  await expect(result).rejects.toThrow("Missing service command")
   expect(starts).toEqual(["version-mismatch"])
   await existing.exited
 })
