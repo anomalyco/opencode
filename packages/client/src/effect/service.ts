@@ -59,11 +59,11 @@ const discoverLocal = Effect.fnUntraced(function* (options: Options) {
 export const start = Effect.fn("service.start")(function* (options: StartOptions = {}) {
   const compatible = yield* discover(options)
   if (compatible !== undefined) return compatible
-  const mismatched = yield* find(options)
-  yield* Effect.sync(() =>
-    options.onStart?.(mismatched === undefined ? "missing" : "version-mismatch", mismatched?.info),
-  )
-  if (mismatched !== undefined) yield* kill(mismatched.info, options).pipe(Effect.ignore)
+  const existing = yield* find(options)
+  if (existing !== undefined && (options.version === undefined || existing.version === options.version))
+    return existing.endpoint
+  yield* Effect.sync(() => options.onStart?.(existing === undefined ? "missing" : "version-mismatch", existing?.info))
+  if (existing !== undefined) yield* kill(existing.info, options).pipe(Effect.ignore)
 
   const [command, ...args] = options.command ?? ["opencode", "serve", "--service"]
   if (command === undefined) return yield* Effect.fail(new Error("Missing service command"))
@@ -138,6 +138,7 @@ const read = Effect.fnUntraced(function* (file?: string) {
 type LocalService = {
   readonly info: Info
   readonly endpoint: Endpoint
+  readonly version?: string
 }
 
 const probe = Effect.fnUntraced(function* (info: Info, version?: string, allowLegacy = false) {
@@ -161,7 +162,7 @@ const probe = Effect.fnUntraced(function* (info: Info, version?: string, allowLe
     if (health.value.pid !== info.pid) return undefined
     if (info.version !== undefined && health.value.version !== info.version) return undefined
     if (version !== undefined && health.value.version !== version) return undefined
-    return { info, endpoint } satisfies LocalService
+    return { info, endpoint, version: health.value.version } satisfies LocalService
   }
   if (
     !allowLegacy ||
