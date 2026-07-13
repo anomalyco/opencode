@@ -1097,10 +1097,7 @@ export function options(input: {
     result["toolStreaming"] = false
   }
 
-  // OpenAI-family Responses clients default to stateless mode (store: false).
-  // For @ai-sdk/xai, store:false also causes the SDK to inject
-  // include: ["reasoning.encrypted_content"] so follow-up turns can receive
-  // encrypted reasoning for rehydration.
+  // openai and providers using openai package should set store to false by default.
   if (
     input.model.providerID === "openai" ||
     input.model.api.npm === "@ai-sdk/openai" ||
