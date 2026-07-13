@@ -99,6 +99,23 @@ function ReminderAlignmentFixture() {
   )
 }
 
+function TrailingStatusFixture() {
+  return (
+    <InlineToolRow
+      icon=":"
+      complete={true}
+      pending=""
+      trailing={
+        <text paddingLeft={1} paddingRight={1} flexShrink={0}>
+          Background
+        </text>
+      }
+    >
+      Explore Subagent — Inspect renderer status styling
+    </InlineToolRow>
+  )
+}
+
 async function renderFrame(component: () => JSX.Element, options: { width: number; height: number }) {
   testSetup = await testRender(component, options)
   await testSetup.renderOnce()
@@ -139,6 +156,15 @@ describe("TUI inline tool wrapping", () => {
   test("aligns switch reminders with instruction reminders", async () => {
     expect(await renderFrame(() => <ReminderAlignmentFixture />, { width: 35, height: 2 })).toBe(
       "   Switched variant to medium\n   ◈ Instructions updated",
+    )
+  })
+
+  test("wraps a trailing status as one padded item", async () => {
+    expect(await renderFrame(() => <TrailingStatusFixture />, { width: 70, height: 2 })).toBe(
+      "   : Explore Subagent — Inspect renderer status styling Background",
+    )
+    expect(await renderFrame(() => <TrailingStatusFixture />, { width: 62, height: 2 })).toBe(
+      "   : Explore Subagent — Inspect renderer status styling\n     Background",
     )
   })
 

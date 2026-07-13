@@ -1978,6 +1978,7 @@ function InlineTool(props: {
   pending: string
   failure?: string
   spinner?: boolean
+  trailing?: JSX.Element
   children: JSX.Element
   part: SessionMessageAssistantTool
   onClick?: () => void
@@ -2028,6 +2029,7 @@ function InlineTool(props: {
       pending={props.pending}
       failure={props.failure}
       spinner={props.spinner}
+      trailing={props.trailing}
       onMouseOver={() => clickable() && setHover(true)}
       onMouseOut={() => setHover(false)}
       onMouseUp={() => {
@@ -2057,6 +2059,7 @@ export function InlineToolRow(props: {
   pending: string
   failure?: string
   spinner?: boolean
+  trailing?: JSX.Element
   children: JSX.Element
   onMouseOver?: () => void
   onMouseOut?: () => void
@@ -2066,7 +2069,7 @@ export function InlineToolRow(props: {
     <box paddingLeft={3} onMouseOver={props.onMouseOver} onMouseOut={props.onMouseOut} onMouseUp={props.onMouseUp}>
       <Switch>
         <Match when={props.spinner}>
-          <Spinner color={props.color} children={props.children} />
+          <Spinner color={props.color} children={props.children} trailing={props.trailing} />
         </Match>
         <Match when={true}>
           <Show fallback={<Spinner color={props.color}>{props.pending}</Spinner>} when={props.complete || props.failed}>
@@ -2078,13 +2081,32 @@ export function InlineToolRow(props: {
               >
                 {props.icon}
               </text>
-              <text
-                flexGrow={1}
-                fg={props.failed ? props.errorColor : props.color}
-                attributes={props.denied ? TextAttributes.STRIKETHROUGH : undefined}
+              <Show
+                when={props.trailing}
+                fallback={
+                  <text
+                    flexGrow={1}
+                    fg={props.failed ? props.errorColor : props.color}
+                    attributes={props.denied ? TextAttributes.STRIKETHROUGH : undefined}
+                  >
+                    {props.failed && !props.complete ? (props.failure ?? props.children) : props.children}
+                  </text>
+                }
               >
-                {props.failed && !props.complete ? (props.failure ?? props.children) : props.children}
-              </text>
+                {(trailing) => (
+                  <box flexDirection="row" flexWrap="wrap" columnGap={1} flexGrow={1}>
+                    <text
+                      maxWidth="100%"
+                      flexShrink={0}
+                      fg={props.failed ? props.errorColor : props.color}
+                      attributes={props.denied ? TextAttributes.STRIKETHROUGH : undefined}
+                    >
+                      {props.failed && !props.complete ? (props.failure ?? props.children) : props.children}
+                    </text>
+                    {trailing()}
+                  </box>
+                )}
+              </Show>
             </box>
           </Show>
         </Match>
@@ -2388,15 +2410,18 @@ function Subagent(props: ToolProps) {
         const id = sessionID()
         if (id) navigate({ type: "session", sessionID: id })
       }}
+      trailing={
+        background() ? (
+          <text paddingLeft={1} paddingRight={1} flexShrink={0} bg={theme.backgroundElement} fg={theme.textMuted}>
+            Background
+          </text>
+        ) : undefined
+      }
     >
       {formatSubagentTitle(
         Locale.titlecase(stringValue(props.input.agent) ?? stringValue(props.input.subagent_type) ?? "General"),
         description() ?? "Subagent",
       )}
-      <Show when={background()}>
-        {" "}
-        <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}>Background</span>
-      </Show>
     </InlineTool>
   )
 }
