@@ -24,7 +24,9 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const db = yield* makeDatabase
 
-    yield* db.run("PRAGMA journal_mode = WAL")
+    // The driver layer owns the journal-mode decision (WAL, or DELETE as a
+    // fallback on network filesystems) and the corruption recovery that runs
+    // before the file is opened for real. See ./sqlite.bun.ts / ./sqlite.node.ts.
     yield* db.run("PRAGMA synchronous = NORMAL")
     yield* db.run("PRAGMA busy_timeout = 5000")
     yield* db.run("PRAGMA cache_size = -64000")

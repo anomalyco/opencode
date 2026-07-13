@@ -14,6 +14,22 @@ import type { Connection } from "effect/unstable/sql/SqlConnection"
 import { classifySqliteError, SqlError } from "effect/unstable/sql/SqlError"
 import * as Statement from "effect/unstable/sql/Statement"
 import { Sqlite } from "./sqlite"
+import { DatabaseRecovery } from "./recovery"
+
+// Uses prepare() + finalize() rather than the cached query() so no read cursor
+// stays open on the connection; a lingering read lock makes a later
+// wal_checkpoint fail with SQLITE_LOCKED.
+function pragmaValue(native: Database, pragma: string) {
+  const statement = native.prepare(pragma)
+  try {
+    const row = statement.get() as Record<string, string> | null
+    return row ? Object.values(row)[0] : undefined
+  } catch {
+    return undefined
+  } finally {
+    statement.finalize()
+  }
+}
 
 const ATTR_DB_SYSTEM_NAME = "db.system.name"
 
@@ -155,13 +171,49 @@ const nativeLayer = (config: Config) =>
   Layer.effect(
     Sqlite.Native,
     Effect.gen(function* () {
-      const native = new Database(config.filename, {
-        readonly: config.readonly,
-        readwrite: config.readwrite ?? true,
-        create: config.create ?? true,
-      })
+      const open = () =>
+        new Database(config.filename, {
+          readonly: config.readonly,
+          readwrite: config.readwrite ?? true,
+          create: config.create ?? true,
+        })
+      let native = open()
       yield* Effect.addFinalizer(() => Effect.sync(() => native.close()))
-      if (config.disableWAL !== true) native.run("PRAGMA journal_mode = WAL;")
+
+      // Returns whether the connection is healthy. Journal mode is set before the
+      // integrity check on purpose: the check reads pages, and in a rollback
+      // journal that read holds a lock that later makes a concurrent
+      // wal_checkpoint fail with SQLITE_LOCKED. In WAL mode the read is harmless.
+      const prepare = () => {
+        try {
+          // busy_timeout first: switching journal mode needs an exclusive lock
+          // and NFS can hold stale locks from killed processes.
+          native.run("PRAGMA busy_timeout = 5000;")
+          // WAL coordinates writers through an mmap'd -shm file, which is broken
+          // on NFS and other network filesystems and corrupts the database.
+          // SQLite refuses WAL there, so verify it stuck and fall back to DELETE
+          // (file-level locks only) when it did not.
+          if (config.disableWAL !== true) {
+            native.run("PRAGMA journal_mode = WAL;")
+            if (pragmaValue(native, "PRAGMA journal_mode") !== "wal") native.run("PRAGMA journal_mode = DELETE;")
+          }
+          return pragmaValue(native, "PRAGMA quick_check") === "ok"
+        } catch {
+          return false
+        }
+      }
+
+      // quick_check is fast; integrity_check reads every page and can hang on
+      // large corrupt databases. On corruption, move the malformed files aside
+      // (preserving them for later salvage) and reopen a fresh database instead
+      // of crash-looping every launch.
+      const durable = config.filename !== ":memory:" && config.readonly !== true
+      if (!prepare() && durable) {
+        native.close()
+        DatabaseRecovery.renameAside(config.filename)
+        native = open()
+        prepare()
+      }
       return native
     }),
   )
