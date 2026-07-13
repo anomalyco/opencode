@@ -3,7 +3,6 @@ import { For } from "solid-js"
 import { testRender, type JSX } from "@opentui/solid"
 import {
   formatSubagentRetry,
-  formatSubagentTitle,
   InlineToolRow,
   parseApplyPatchFiles,
   parseDiagnostics,
@@ -101,13 +100,14 @@ function ReminderAlignmentFixture() {
 
 function TrailingStatusFixture() {
   return (
-    <InlineToolRow icon=":" complete={true} pending="" trailing={<text flexShrink={0}> Background </text>}>
+    <InlineToolRow icon=":" complete={true} pending="" status={<text flexShrink={0}> Background </text>}>
       Explore Subagent — Inspect renderer status styling
     </InlineToolRow>
   )
 }
 
 async function renderFrame(component: () => JSX.Element, options: { width: number; height: number }) {
+  testSetup?.renderer.destroy()
   testSetup = await testRender(component, options)
   await testSetup.renderOnce()
   await testSetup.renderOnce()
@@ -195,10 +195,6 @@ describe("TUI inline tool wrapping", () => {
         "a.ts",
       ),
     ).toEqual([{ message: "valid", range: { start: { line: 2, character: 3 } } }])
-  })
-
-  test("keeps status styling separate from the subagent title", () => {
-    expect(formatSubagentTitle("Explore", "Inspect renderer")).toBe("Explore Subagent — Inspect renderer")
   })
 
   test("keeps retry status ahead of wrapping messages", () => {

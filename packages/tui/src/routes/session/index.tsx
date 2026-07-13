@@ -1978,7 +1978,7 @@ function InlineTool(props: {
   pending: string
   failure?: string
   spinner?: boolean
-  trailing?: JSX.Element
+  status?: JSX.Element
   children: JSX.Element
   part: SessionMessageAssistantTool
   onClick?: () => void
@@ -2029,7 +2029,7 @@ function InlineTool(props: {
       pending={props.pending}
       failure={props.failure}
       spinner={props.spinner}
-      trailing={props.trailing}
+      status={props.status}
       onMouseOver={() => clickable() && setHover(true)}
       onMouseOut={() => setHover(false)}
       onMouseUp={() => {
@@ -2059,7 +2059,7 @@ export function InlineToolRow(props: {
   pending: string
   failure?: string
   spinner?: boolean
-  trailing?: JSX.Element
+  status?: JSX.Element
   children: JSX.Element
   onMouseOver?: () => void
   onMouseOut?: () => void
@@ -2069,7 +2069,16 @@ export function InlineToolRow(props: {
     <box paddingLeft={3} onMouseOver={props.onMouseOver} onMouseOut={props.onMouseOut} onMouseUp={props.onMouseUp}>
       <Switch>
         <Match when={props.spinner}>
-          <Spinner color={props.color} children={props.children} trailing={props.trailing} />
+          <Show when={props.status} fallback={<Spinner color={props.color} children={props.children} />}>
+            {(status) => (
+              <box flexDirection="row" gap={1}>
+                <Spinner color={props.color} />
+                <InlineToolLabel color={props.color} status={status()}>
+                  {props.children}
+                </InlineToolLabel>
+              </box>
+            )}
+          </Show>
         </Match>
         <Match when={true}>
           <Show fallback={<Spinner color={props.color}>{props.pending}</Spinner>} when={props.complete || props.failed}>
@@ -2082,7 +2091,7 @@ export function InlineToolRow(props: {
                 {props.icon}
               </text>
               <Show
-                when={props.trailing}
+                when={props.status}
                 fallback={
                   <text
                     flexGrow={1}
@@ -2093,18 +2102,14 @@ export function InlineToolRow(props: {
                   </text>
                 }
               >
-                {(trailing) => (
-                  <box flexDirection="row" flexWrap="wrap" columnGap={1} flexGrow={1}>
-                    <text
-                      maxWidth="100%"
-                      flexShrink={0}
-                      fg={props.failed ? props.errorColor : props.color}
-                      attributes={props.denied ? TextAttributes.STRIKETHROUGH : undefined}
-                    >
-                      {props.failed && !props.complete ? (props.failure ?? props.children) : props.children}
-                    </text>
-                    {trailing()}
-                  </box>
+                {(status) => (
+                  <InlineToolLabel
+                    color={props.failed ? props.errorColor : props.color}
+                    denied={props.denied}
+                    status={status()}
+                  >
+                    {props.failed && !props.complete ? (props.failure ?? props.children) : props.children}
+                  </InlineToolLabel>
                 )}
               </Show>
             </box>
@@ -2117,6 +2122,32 @@ export function InlineToolRow(props: {
         </box>
       </Show>
     </box>
+  )
+}
+
+function InlineToolLabel(props: { color?: RGBA; denied?: boolean; status: JSX.Element; children: JSX.Element }) {
+  return (
+    <box flexDirection="row" flexWrap="wrap" columnGap={1} flexGrow={1}>
+      <text
+        maxWidth="100%"
+        flexShrink={0}
+        fg={props.color}
+        attributes={props.denied ? TextAttributes.STRIKETHROUGH : undefined}
+      >
+        {props.children}
+      </text>
+      {props.status}
+    </box>
+  )
+}
+
+function StatusBadge(props: { children: string }) {
+  const { theme } = useTheme()
+  return (
+    <text flexShrink={0} bg={theme.backgroundElement} fg={theme.textMuted}>
+      {" "}
+      {props.children}{" "}
+    </text>
   )
 }
 
@@ -2263,9 +2294,7 @@ function Shell(props: ToolProps) {
           </Show>
         </Show>
         <Show when={shellID()}>
-          <text>
-            <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}> Background </span>
-          </text>
+          <StatusBadge>Background</StatusBadge>
         </Show>
         <Show when={collapsed().overflow}>
           <text fg={theme.textMuted}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
@@ -2389,11 +2418,9 @@ function WebSearch(props: ToolProps) {
 
 function Subagent(props: ToolProps) {
   const { navigate } = useRoute()
-  const { theme } = useTheme()
   const data = useData()
   const sessionID = createMemo(() => stringValue(props.metadata.sessionID) ?? stringValue(props.metadata.sessionId))
   const description = createMemo(() => stringValue(props.input.description))
-  const background = createMemo(() => props.input.background === true || props.metadata.status === "running")
   const isRunning = createMemo(() => {
     const id = sessionID()
     return props.part.state.status === "running" || Boolean(id && data.session.status(id) === "running")
@@ -2410,25 +2437,15 @@ function Subagent(props: ToolProps) {
         const id = sessionID()
         if (id) navigate({ type: "session", sessionID: id })
       }}
-      trailing={
-        background() ? (
-          <text flexShrink={0} bg={theme.backgroundElement} fg={theme.textMuted}>
-            {" "}
-            Background{" "}
-          </text>
+      status={
+        props.input.background === true || props.metadata.status === "running" ? (
+          <StatusBadge>Background</StatusBadge>
         ) : undefined
       }
     >
-      {formatSubagentTitle(
-        Locale.titlecase(stringValue(props.input.agent) ?? stringValue(props.input.subagent_type) ?? "General"),
-        description() ?? "Subagent",
-      )}
+      {`${Locale.titlecase(stringValue(props.input.agent) ?? stringValue(props.input.subagent_type) ?? "General")} Subagent — ${description() ?? "Subagent"}`}
     </InlineTool>
   )
-}
-
-export function formatSubagentTitle(agent: string, description: string) {
-  return `${agent} Subagent — ${description}`
 }
 
 export function formatSubagentRetry(attempt: number, message: string) {

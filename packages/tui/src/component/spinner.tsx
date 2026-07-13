@@ -9,25 +9,21 @@ registerOpencodeSpinner()
 
 export const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
-export function Spinner(props: { children?: JSX.Element; color?: RGBA; trailing?: JSX.Element }) {
+export function Spinner(props: { children?: JSX.Element; color?: RGBA }) {
   const { theme } = useTheme()
   const config = useConfig().data
   const color = () => props.color ?? theme.textMuted
   return (
-    <box flexDirection="row" gap={1}>
-      <Show when={config.animations ?? true} fallback={<text fg={color()}>⋯</text>}>
+    <Show
+      when={config.animations ?? true}
+      fallback={<text fg={color()}>{props.children ? <>⋯ {props.children}</> : "⋯"}</text>}
+    >
+      <box flexDirection="row" gap={1}>
         <spinner frames={SPINNER_FRAMES} interval={80} color={color()} />
-      </Show>
-      <Show when={props.children}>
-        <Show when={props.trailing} fallback={<text fg={color()}>{props.children}</text>}>
-          {(trailing) => (
-            <box flexDirection="row" flexWrap="wrap" columnGap={1} flexGrow={1}>
-              <text fg={color()}>{props.children}</text>
-              {trailing()}
-            </box>
-          )}
+        <Show when={props.children}>
+          <text fg={color()}>{props.children}</text>
         </Show>
-      </Show>
-    </box>
+      </box>
+    </Show>
   )
 }
