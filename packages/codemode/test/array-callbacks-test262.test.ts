@@ -26,9 +26,11 @@
  * - test/built-ins/Array/prototype/forEach/15.4.4.18-7-1.js
  * - test/built-ins/Array/prototype/forEach/15.4.4.18-7-2.js
  * - test/built-ins/Array/prototype/reduce/15.4.4.21-9-5.js
+ * - test/built-ins/Array/prototype/reduce/15.4.4.21-9-c-ii-20.js
  * - test/built-ins/Array/prototype/reduce/15.4.4.21-9-1.js
  * - test/built-ins/Array/prototype/reduce/15.4.4.21-10-1.js
  * - test/built-ins/Array/prototype/reduceRight/15.4.4.22-9-5.js
+ * - test/built-ins/Array/prototype/reduceRight/15.4.4.22-9-c-ii-20.js
  * - test/built-ins/Array/prototype/reduceRight/15.4.4.22-9-1.js
  * - test/built-ins/Array/prototype/reduceRight/15.4.4.22-10-1.js
  * - test/built-ins/Array/prototype/flatMap/depth-always-one.js
@@ -211,6 +213,11 @@ const cases = [
     expected: [1, 0],
   },
   {
+    path: "test/built-ins/Array/prototype/reduce/15.4.4.21-9-c-ii-20.js",
+    code: `let accessed = false; const result = [11].reduce((previous) => { accessed = true; return previous === undefined }, undefined); return [result, accessed]`,
+    expected: [true, true],
+  },
+  {
     path: "test/built-ins/Array/prototype/reduce/15.4.4.21-10-1.js",
     code: `const input = [1, 2, 3, 4, 5]; input.reduce(() => 1); return input`,
     expected: [1, 2, 3, 4, 5],
@@ -224,6 +231,11 @@ const cases = [
     path: "test/built-ins/Array/prototype/reduceRight/15.4.4.22-9-5.js",
     code: `let calls = 0; const result = [1].reduceRight(() => { calls += 1; return 2 }); return [result, calls]`,
     expected: [1, 0],
+  },
+  {
+    path: "test/built-ins/Array/prototype/reduceRight/15.4.4.22-9-c-ii-20.js",
+    code: `let accessed = false; const result = [11].reduceRight((previous) => { accessed = true; return previous === undefined }, undefined); return [result, accessed]`,
+    expected: [true, true],
   },
   {
     path: "test/built-ins/Array/prototype/reduceRight/15.4.4.22-10-1.js",
@@ -331,7 +343,9 @@ describe("Array callback regressions", () => {
         const left = []
         left[2] = 3
         const right = []
-        right[2] = 4
+        right[0] = 4
+        right[3] = 1
+        right.pop()
         return [left.reduce((a, b) => a + b), right.reduceRight((a, b) => a + b)]
       `),
     ).toEqual([3, 4])
@@ -343,13 +357,13 @@ describe("Array callback regressions", () => {
         const values = []
         values[2] = 1
         values.pop()
-        let left = false
-        let right = false
-        try { values.reduce((a, b) => a + b) } catch { left = true }
-        try { values.reduceRight((a, b) => a + b) } catch { right = true }
+        let left
+        let right
+        try { values.reduce((a, b) => a + b) } catch (error) { left = error.name }
+        try { values.reduceRight((a, b) => a + b) } catch (error) { right = error.name }
         return [left, right]
       `),
-    ).toEqual([true, true])
+    ).toEqual(["TypeError", "TypeError"])
   })
 
   test("findLast returns the value observed before predicate mutation", async () => {

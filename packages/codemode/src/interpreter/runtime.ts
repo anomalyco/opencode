@@ -1814,10 +1814,18 @@ export class Interpreter<R> {
       }
 
       if (Array.isArray(objectValue)) {
-        if (key === "length" || (typeof key === "string" && arrayMethods.has(key))) {
-          return { target: objectValue, key }
+        if (
+          key !== "length" &&
+          !(typeof key === "string" && arrayMethods.has(key)) &&
+          typeof key !== "number" &&
+          !/^\d+$/.test(key)
+        ) {
+          if (typeof key === "string" && Object.hasOwn(objectValue, key)) {
+            return new ComputedValue((objectValue as Record<string, unknown> & Array<unknown>)[key])
+          }
+          return new ComputedValue(undefined)
         }
-        return { target: objectValue, key: arrayPropertyKey(key) }
+        return { target: objectValue, key }
       }
 
       return { target: objectValue as SafeObject, key }
@@ -1841,8 +1849,7 @@ export class Interpreter<R> {
         if (typeof reference.key === "string" && arrayMethods.has(reference.key)) {
           return new IntrinsicReference(reference.target, reference.key)
         }
-        if (reference.key !== "length" && !Object.hasOwn(reference.target, reference.key)) return undefined
-        return reference.key === "length" ? reference.target.length : Reflect.get(reference.target, reference.key)
+        return reference.key === "length" ? reference.target.length : reference.target[Number(reference.key)]
       }
       if (reference.target instanceof SandboxURL) {
         return (reference.target.url as unknown as Record<string, unknown>)[String(reference.key)]
@@ -1882,13 +1889,11 @@ export class Interpreter<R> {
           throw new InterpreterRuntimeError("Array methods cannot be assigned in CodeMode.", node)
         }
       }
-      const key = Array.isArray(reference.target) ? reference.key : String(reference.key)
+      const key = Array.isArray(reference.target) ? Number(reference.key) : String(reference.key)
       const current =
         reference.target instanceof SandboxURL
           ? (reference.target.url as unknown as Record<string, unknown>)[key]
-          : Array.isArray(reference.target) && !Object.hasOwn(reference.target, key)
-            ? undefined
-            : (reference.target as Record<PropertyKey, unknown>)[key]
+          : (reference.target as Record<PropertyKey, unknown>)[key]
       const { write, next, result } = yield* compute(current)
       if (write) self.assignToReference(reference, key, next, node)
       return result
@@ -1898,8 +1903,16 @@ export class Interpreter<R> {
   private assignToReference(reference: MemberReference, key: number | string, next: unknown, node: AstNode): void {
     if (Array.isArray(reference.target)) {
       const target = reference.target
+      const index = key as number
+      if (!Number.isInteger(index) || index < 0) {
+        throw new InterpreterRuntimeError(
+          "Array assignment index must be a non-negative integer.",
+          node,
+          "InvalidDataValue",
+        )
+      }
       rejectCircularInsertion(target, next, "Array assignment result", node)
-      Object.defineProperty(target, key, { value: next, writable: true, enumerable: true, configurable: true })
+      target[index] = next
       return
     }
     if (reference.target instanceof SandboxURL) {
@@ -1929,13 +1942,4 @@ export class Interpreter<R> {
 
     throw new InterpreterRuntimeError("Property key must be a string or number.", node)
   }
-}
-
-const arrayPropertyKey = (key: string | number): string | number => {
-  if (typeof key === "number") {
-    return Number.isInteger(key) && key >= 0 && key < 2 ** 32 - 1 ? key : String(key)
-  }
-  if (!/^(0|[1-9]\d*)$/.test(key)) return key
-  const index = Number(key)
-  return index < 2 ** 32 - 1 ? index : key
 }

@@ -732,7 +732,9 @@ const invokeArrayMethod = <R>(
         if (args.length < 2) {
           while (start < length && !(start in target)) start += 1
           if (start === length)
-            throw new InterpreterRuntimeError("Array.reduce of an empty array with no initial value.", node)
+            throw new InterpreterRuntimeError("Array.reduce of an empty array with no initial value.", node).as(
+              "TypeError",
+            )
           accumulator = target[start]
           start += 1
         }
@@ -748,7 +750,9 @@ const invokeArrayMethod = <R>(
         if (args.length < 2) {
           while (start >= 0 && !(start in target)) start -= 1
           if (start < 0)
-            throw new InterpreterRuntimeError("Array.reduceRight of an empty array with no initial value.", node)
+            throw new InterpreterRuntimeError("Array.reduceRight of an empty array with no initial value.", node).as(
+              "TypeError",
+            )
           accumulator = target[start]
           start -= 1
         }
