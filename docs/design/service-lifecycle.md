@@ -13,7 +13,7 @@ they only reconnect.
 
 The restart path changes in three places:
 
-1. A process-held OS file lock, not the HTTP port or registration file, elects
+1. A process-held OS lock, not the HTTP port or registration file, elects
    exactly one server owner for its lifetime.
 2. The elected process binds and registers a minimal lifecycle surface before
    it initializes the application, so clients can distinguish a slow winner
@@ -37,6 +37,7 @@ framework.
 | Lifetime ownership        | Implemented on this branch with a scoped OS lock                      |
 | Contender behavior        | Implemented; losers exit before the server module is imported         |
 | Registration repair       | Implemented; the owner reasserts deleted or corrupt discovery         |
+| Channel isolation         | Implemented with no-clobber migration for legacy preview discovery    |
 | Client startup waiting    | Implemented; slow winners are not killed and waiting is indefinite    |
 | Lifecycle shell           | Pending; registration still appears only after application boot       |
 | Failed-state latching     | Pending; deterministic boot failure is reported but not held by owner |
@@ -318,17 +319,17 @@ sufficient for service ownership: the service configures a three-second stale
 timeout, after which its lock can be broken and recreated. An event-loop stall,
 a suspended machine, or a debugger pause can therefore make a live owner appear
 stale and allow a contender to displace it. Service ownership requires a
-process-held OS lock, such as `flock` on Unix and `LockFileEx` on Windows. It
-cannot be broken because a heartbeat exceeded a timeout. Process death releases
-the lock through the OS.
+process-held OS lock: `flock` on Unix and an exclusively bound named pipe on
+Windows. It cannot be broken because a heartbeat exceeded a timeout. Process
+death releases the lock through the OS.
 
-Neither Bun nor Node exposes these primitives directly, the existing `Flock`
-utility is an mkdir-plus-heartbeat lease rather than an OS-held lock, and the
-common lockfile packages are staleness-based leases as well. The lock therefore
-needs a small platform layer, for example `bun:ffi` to `flock` on POSIX and
-`LockFileEx` on Windows, which can live alongside the existing utility in
-`packages/core/src/util`. This primitive is the foundation of the design, so
-the delivery sequence spikes it first.
+Neither Bun nor Node exposes `flock` directly, the existing `Flock` utility is
+an mkdir-plus-heartbeat lease rather than an OS-held lock, and the common
+lockfile packages are staleness-based leases as well. The platform layer uses
+`bun:ffi` to call `flock` on POSIX and Node's named-pipe server support on
+Windows, where Bun FFI is not available on every shipped architecture. It lives
+alongside the existing utility in `packages/core/src/util`. This primitive is
+the foundation of the design, so the delivery sequence spikes it first.
 
 ```mermaid
 flowchart TD
@@ -589,8 +590,8 @@ was the observed incident cost.
 ## Delivery Sequence
 
 1. **Spike the lock primitive.** Prove a nonblocking, process-held OS lock
-   under Bun on macOS, Linux, and Windows (`bun:ffi` to `flock` and
-   `LockFileEx`), including release on hard kill and behavior across
+   under Bun on macOS, Linux, and Windows (`bun:ffi` to `flock` on POSIX and a
+   named pipe on Windows), including release on hard kill and behavior across
    containers and network filesystems used in CI.
 2. **Expand the subprocess test harness.** Begin from the baseline
    two-contender test and cover ten contenders, lock release on crash, a paused
