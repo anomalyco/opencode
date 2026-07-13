@@ -2100,6 +2100,20 @@ export type Model = {
     [key: string]: string
   }
   release_date: string
+  reasoning_options?: Array<
+    | {
+        type: "effort"
+        values: Array<string>
+      }
+    | {
+        type: "toggle"
+      }
+    | {
+        type: "budget_tokens"
+        min?: number
+        max?: number
+      }
+  >
   variants?: {
     [key: string]: {
       [key: string]: unknown
