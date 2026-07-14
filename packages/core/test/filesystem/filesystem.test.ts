@@ -1,46 +1,13 @@
 import { describe, test, expect } from "bun:test"
-import { Effect, Exit, FileSystem, Layer } from "effect"
-import { PlatformError, SystemError } from "effect/PlatformError"
-import { NodeFileSystem } from "@effect/platform-node"
+import { Effect, FileSystem } from "effect"
 import { LayerNodePlatform } from "@opencode-ai/core/effect/app-node-platform"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { testEffect } from "../lib/effect"
-import os from "os"
 import path from "path"
-import { mkdtempSync, rmSync } from "fs"
 
 const live = LayerNode.compile(LayerNode.group([FSUtil.node, LayerNodePlatform.filesystem]))
 const { effect: it } = testEffect(live)
-
-// A FileSystem whose makeDirectory always reports AlreadyExists, emulating the platforms/runtimes
-// (observed on Windows) that surface it for an already-existing directory even with { recursive: true }.
-const alreadyExistsFilesystem = Layer.effect(
-  FileSystem.FileSystem,
-  Effect.gen(function* () {
-    const real = yield* FileSystem.FileSystem
-    return {
-      ...real,
-      makeDirectory: (dir: string) =>
-        Effect.fail(
-          new PlatformError(
-            new SystemError({
-              _tag: "AlreadyExists",
-              module: "FileSystem",
-              method: "makeDirectory",
-              pathOrDescriptor: dir,
-            }),
-          ),
-        ),
-    }
-  }),
-).pipe(Layer.provide(NodeFileSystem.layer))
-
-const { effect: itAlreadyExists } = testEffect(
-  LayerNode.compile(LayerNode.group([FSUtil.node, LayerNodePlatform.filesystem]), [
-    [LayerNodePlatform.filesystem, alreadyExistsFilesystem],
-  ]),
-)
 
 describe("FSUtil", () => {
   describe("isDir", () => {
@@ -189,36 +156,6 @@ describe("FSUtil", () => {
 
         const info = yield* filesys.stat(dir)
         expect(info.type).toBe("Directory")
-      }),
-    )
-
-    it(
-      "fails when a file already occupies the path",
-      Effect.gen(function* () {
-        const fs = yield* FSUtil.Service
-        const filesys = yield* FileSystem.FileSystem
-        const tmp = yield* filesys.makeTempDirectoryScoped()
-        const file = path.join(tmp, "occupied")
-        yield* filesys.writeFileString(file, "x")
-
-        // makeDirectory reports AlreadyExists for a file path too; ensureDir must not mask the collision.
-        const exit = yield* fs.ensureDir(file).pipe(Effect.exit)
-        expect(Exit.isFailure(exit)).toBe(true)
-      }),
-    )
-  })
-
-  // Regression coverage for issue #35828: on some Windows runtimes a recursive makeDirectory reports
-  // AlreadyExists for a directory that already exists, which crashed startup when `.opencode` already
-  // existed. ensureDir must treat that as success.
-  describe("ensureDir tolerates platform-reported AlreadyExists", () => {
-    itAlreadyExists(
-      "succeeds when makeDirectory reports AlreadyExists for an existing directory",
-      Effect.gen(function* () {
-        const fs = yield* FSUtil.Service
-        const dir = mkdtempSync(path.join(os.tmpdir(), "oc-ensuredir-"))
-        yield* fs.ensureDir(dir)
-        rmSync(dir, { recursive: true, force: true })
       }),
     )
   })

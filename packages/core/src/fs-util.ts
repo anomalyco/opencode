@@ -114,15 +114,10 @@ export namespace FSUtil {
       })
 
       const ensureDir = Effect.fn("FileSystem.ensureDir")(function* (path: string) {
-        yield* fs.makeDirectory(path, { recursive: true }).pipe(
-          // Recursive makeDirectory should be idempotent, but some platforms (observed on Windows)
-          // surface AlreadyExists when the directory already exists. Tolerate that, but only when the
-          // path is genuinely a directory so a file occupying the path still fails loudly.
-          Effect.catchIf(
-            (e) => e.reason._tag === "AlreadyExists",
-            (e) => isDir(path).pipe(Effect.flatMap((exists) => (exists ? Effect.void : Effect.fail(e)))),
-          ),
-        )
+        // Bun on Windows can throw EEXIST here despite recursive mode.
+        // https://github.com/oven-sh/bun/issues/29521
+        if (yield* isDir(path)) return
+        yield* fs.makeDirectory(path, { recursive: true })
       })
 
       const writeWithDirs = Effect.fn("FileSystem.writeWithDirs")(function* (
