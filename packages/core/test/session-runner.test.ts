@@ -3068,6 +3068,10 @@ describe("SessionRunnerLLM", () => {
         sessionID,
         otherSessionID,
       ])
+      expect(requests.map((request) => request.http?.headers?.["x-opencode-session"])).toEqual([
+        sessionID,
+        otherSessionID,
+      ])
       yield* Deferred.succeed(streamGate, undefined)
       yield* Fiber.join(first)
       yield* Fiber.join(second)
