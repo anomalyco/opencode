@@ -1,11 +1,6 @@
 import type { PermissionRequest, QuestionRequest, Session } from "@opencode-ai/sdk/v2/client"
 
-function sessionTreeRequest<T>(
-  session: Session[],
-  request: Record<string, T[] | undefined>,
-  sessionID?: string,
-  include: (item: T) => boolean = () => true,
-) {
+function sessionTreeIDs(session: Session[], sessionID?: string) {
   if (!sessionID) return
 
   const map = session.reduce((acc, item) => {
@@ -28,9 +23,18 @@ function sessionTreeRequest<T>(
     }
   }
 
-  const id = ids.find((id) => request[id]?.some(include))
-  if (!id) return
-  return request[id]?.find(include)
+  return ids
+}
+
+function sessionTreeRequest<T>(
+  session: Session[],
+  request: Record<string, T[] | undefined>,
+  sessionID?: string,
+  include: (item: T) => boolean = () => true,
+) {
+  const ids = sessionTreeIDs(session, sessionID)
+  if (!ids) return
+  return ids.flatMap((id) => request[id] ?? []).find(include)
 }
 
 export function sessionPermissionRequest(
@@ -48,5 +52,23 @@ export function sessionQuestionRequest(
   sessionID?: string,
   include?: (item: QuestionRequest) => boolean,
 ) {
-  return sessionTreeRequest(session, request, sessionID, include)
+  return sessionQuestionRequests(session, request, sessionID, include)[0]
+}
+
+export function sessionQuestionRequests(
+  session: Session[],
+  request: Record<string, QuestionRequest[] | undefined>,
+  sessionID?: string,
+  include: (item: QuestionRequest) => boolean = () => true,
+) {
+  const ids = sessionTreeIDs(session, sessionID)
+  if (!ids) return []
+  return ids
+    .flatMap((id) => request[id] ?? [])
+    .filter(include)
+    .toSorted((a, b) => a.id.localeCompare(b.id))
+}
+
+export function activeQuestion(queue: QuestionRequest[], requestID?: string) {
+  return queue.find((request) => request.id === requestID) ?? queue[0]
 }

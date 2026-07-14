@@ -81,14 +81,14 @@ describe("sessionPermissionRequest", () => {
 })
 
 describe("sessionQuestionRequest", () => {
-  test("prefers the current session question", () => {
+  test("returns the oldest question across the session tree", () => {
     const sessions = [session({ id: "root" }), session({ id: "child", parentID: "root" })]
     const questions = {
-      root: [question("q-root", "root")],
-      child: [question("q-child", "child")],
+      root: [question("que_02", "root")],
+      child: [question("que_01", "child")],
     }
 
-    expect(sessionQuestionRequest(sessions, questions, "root")?.id).toBe("q-root")
+    expect(sessionQuestionRequest(sessions, questions, "root")?.id).toBe("que_01")
   })
 
   test("returns a nested child question", () => {

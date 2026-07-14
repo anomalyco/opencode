@@ -61,7 +61,12 @@ function Option(props: {
   )
 }
 
-export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit: () => void }> = (props) => {
+export const SessionQuestionDock: Component<{
+  request: QuestionRequest
+  directory?: string
+  workspace?: string
+  onSubmit: () => void
+}> = (props) => {
   const sdk = useSDK()
   const serverSDK = useServerSDK()
   const language = useLanguage()
@@ -223,7 +228,13 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   }
 
   const replyMutation = useMutation(() => ({
-    mutationFn: (answers: QuestionAnswer[]) => sdk().client.question.reply({ requestID: props.request.id, answers }),
+    mutationFn: (answers: QuestionAnswer[]) =>
+      sdk().client.question.reply({
+        requestID: props.request.id,
+        directory: props.directory,
+        workspace: props.workspace,
+        answers,
+      }),
     onMutate: () => {
       props.onSubmit()
     },
@@ -235,7 +246,12 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   }))
 
   const rejectMutation = useMutation(() => ({
-    mutationFn: () => sdk().client.question.reject({ requestID: props.request.id }),
+    mutationFn: () =>
+      sdk().client.question.reject({
+        requestID: props.request.id,
+        directory: props.directory,
+        workspace: props.workspace,
+      }),
     onMutate: () => {
       props.onSubmit()
     },

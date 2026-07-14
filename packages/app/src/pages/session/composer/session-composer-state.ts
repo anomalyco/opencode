@@ -8,7 +8,7 @@ import { useLanguage } from "@/context/language"
 import { usePermission } from "@/context/permission"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
-import { sessionPermissionRequest, sessionQuestionRequest } from "./session-request-tree"
+import { activeQuestion, sessionPermissionRequest, sessionQuestionRequests } from "./session-request-tree"
 
 export const todoState = (input: {
   count: number
@@ -33,8 +33,27 @@ export function createSessionComposerController(options?: { closeMs?: number | (
   const language = useLanguage()
   const permission = usePermission()
 
+  const questionSelection = {
+    sessionID: params.id,
+    requestID: undefined as string | undefined,
+  }
+  const questionRequests = createMemo(() => {
+    return sessionQuestionRequests(sync().data.session, sync().data.question, params.id)
+  })
   const questionRequest = createMemo((): QuestionRequest | undefined => {
-    return sessionQuestionRequest(sync().data.session, sync().data.question, params.id)
+    if (questionSelection.sessionID !== params.id) {
+      questionSelection.sessionID = params.id
+      questionSelection.requestID = undefined
+    }
+    const request = activeQuestion(questionRequests(), questionSelection.requestID)
+    questionSelection.requestID = request?.id
+    return request
+  })
+  const questionLocation = createMemo(() => {
+    const request = questionRequest()
+    if (!request) return
+    const session = serverSync().session.get(request.sessionID)
+    return { directory: session?.directory, workspace: session?.workspaceID }
   })
 
   const permissionRequest = createMemo((): PermissionRequest | undefined => {
@@ -188,6 +207,7 @@ export function createSessionComposerController(options?: { closeMs?: number | (
   return {
     blocked,
     questionRequest,
+    questionLocation,
     permissionRequest,
     permissionResponding,
     decide,

@@ -65,7 +65,8 @@ import { usePromptRef } from "../../context/prompt"
 import { useEpilogue } from "../../context/epilogue"
 import { normalizePath } from "../../util/path"
 import { PermissionPrompt } from "./permission"
-import { QuestionPrompt } from "./question"
+import { clearQuestionDraft, QuestionPrompt } from "./question"
+import { activeQuestion, sessionQuestionQueue } from "./question-queue"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
 import * as Model from "../../util/model"
 import { formatTranscript } from "../../util/transcript"
@@ -230,7 +231,22 @@ export function Session() {
   })
   const questions = createMemo(() => {
     if (session()?.parentID) return []
-    return children().flatMap((x) => sync.data.question[x.id] ?? [])
+    return sessionQuestionQueue(sync.data.session, sync.data.question, session()?.id)
+  })
+  const knownQuestions = { ids: new Set<string>() }
+  createEffect(() => {
+    const next = new Set(questions().map((request) => request.id))
+    for (const id of knownQuestions.ids) {
+      if (!next.has(id)) clearQuestionDraft(id)
+    }
+    knownQuestions.ids = next
+  })
+  const [activeQuestionID, setActiveQuestionID] = createSignal<string>()
+  const question = createMemo(() => activeQuestion(questions(), activeQuestionID()))
+  createEffect(() => {
+    const next = question()?.id
+    if (next === activeQuestionID()) return
+    setActiveQuestionID(next)
   })
   const visible = createMemo(() => !session()?.parentID && permissions().length === 0 && questions().length === 0)
   const disabled = createMemo(() => permissions().length > 0 || questions().length > 0)
@@ -1286,11 +1302,14 @@ export function Session() {
                     directory={sync.session.get(permissions()[0].sessionID)?.directory}
                   />
                 </Show>
-                <Show when={permissions().length === 0 && questions().length > 0}>
-                  <QuestionPrompt
-                    request={questions()[0]}
-                    directory={sync.session.get(questions()[0].sessionID)?.directory}
-                  />
+                <Show when={permissions().length === 0 ? question() : undefined} keyed>
+                  {(request) => (
+                    <QuestionPrompt
+                      request={request}
+                      directory={sync.session.get(request.sessionID)?.directory}
+                      workspace={sync.session.get(request.sessionID)?.workspaceID}
+                    />
+                  )}
                 </Show>
                 <Show when={session()?.parentID}>
                   <SubagentFooter />

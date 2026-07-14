@@ -39,7 +39,12 @@ export function SessionComposerRegion(props: {
         <Show when={controller.state.questionRequest()} keyed>
           {(request) => (
             <div>
-              <SessionQuestionDock request={request} onSubmit={controller.onResponseSubmit} />
+              <SessionQuestionDock
+                request={request}
+                directory={controller.state.questionLocation()?.directory}
+                workspace={controller.state.questionLocation()?.workspace}
+                onSubmit={controller.onResponseSubmit}
+              />
             </div>
           )}
         </Show>

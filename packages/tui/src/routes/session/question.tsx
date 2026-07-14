@@ -8,29 +8,64 @@ import { useSDK } from "../../context/sdk"
 import { SplitBorder } from "../../ui/border"
 import { useTuiConfig } from "../../config"
 import { useBindings, useOpencodeModeStack } from "../../keymap"
+import { useToast } from "../../ui/toast"
 
 const QUESTION_MODE = "question"
 
-export function QuestionPrompt(props: { request: QuestionRequest; directory?: string }) {
+type Draft = {
+  tab: number
+  answers: QuestionAnswer[]
+  custom: string[]
+  buffers: (string | undefined)[]
+  selected: number
+  editing: boolean
+}
+
+const drafts = new Map<string, Draft>()
+
+export function clearQuestionDraft(requestID: string) {
+  drafts.delete(requestID)
+}
+
+export function QuestionPrompt(props: { request: QuestionRequest; directory?: string; workspace?: string }) {
   const sdk = useSDK()
+  const toast = useToast()
   const { theme } = useTheme()
   const renderer = useRenderer()
   const tuiConfig = useTuiConfig()
   const modeStack = useOpencodeModeStack()
+  const draft = drafts.get(props.request.id)
 
   const questions = createMemo(() => props.request.questions)
   const single = createMemo(() => questions().length === 1 && questions()[0]?.multiple !== true)
   const tabs = createMemo(() => (single() ? 1 : questions().length + 1)) // questions + confirm tab (no confirm for single select)
   const [tabHover, setTabHover] = createSignal<number | "confirm" | null>(null)
   const [store, setStore] = createStore({
-    tab: 0,
-    answers: [] as QuestionAnswer[],
-    custom: [] as string[],
-    selected: 0,
-    editing: false,
+    tab: draft?.tab ?? 0,
+    answers: draft?.answers ?? ([] as QuestionAnswer[]),
+    custom: draft?.custom ?? ([] as string[]),
+    buffers: draft?.buffers ?? ([] as (string | undefined)[]),
+    selected: draft?.selected ?? 0,
+    editing: draft?.editing ?? false,
+    submitting: false,
   })
 
   let textarea: TextareaRenderable | undefined
+  const lifecycle = { settled: false }
+
+  onCleanup(() => {
+    if (lifecycle.settled) return
+    const buffers = [...store.buffers]
+    if (store.editing && textarea) buffers[store.tab] = textarea.plainText
+    drafts.set(props.request.id, {
+      tab: store.tab,
+      answers: store.answers.map((answer) => (answer ? [...answer] : [])),
+      custom: store.custom.map((value) => value ?? ""),
+      buffers,
+      selected: store.selected,
+      editing: store.editing,
+    })
+  })
 
   const question = createMemo(() => questions()[store.tab])
   const confirm = createMemo(() => !single() && store.tab === questions().length)
@@ -45,20 +80,44 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
     return store.answers[store.tab]?.includes(value) ?? false
   })
 
+  function reply(answers: QuestionAnswer[]) {
+    if (store.submitting) return
+    const requestID = props.request.id
+    const directory = props.directory
+    const workspace = props.workspace
+    setStore("submitting", true)
+    void sdk.client.question
+      .reply({ requestID, directory, workspace, answers }, { throwOnError: true })
+      .then(() => {
+        lifecycle.settled = true
+        drafts.delete(requestID)
+      })
+      .catch((error: unknown) => {
+        setStore("submitting", false)
+        toast.error(error)
+      })
+  }
+
   function submit() {
-    const answers = questions().map((_, i) => store.answers[i] ?? [])
-    void sdk.client.question.reply({
-      requestID: props.request.id,
-      directory: props.directory,
-      answers,
-    })
+    reply(questions().map((_, i) => store.answers[i] ?? []))
   }
 
   function reject() {
-    void sdk.client.question.reject({
-      requestID: props.request.id,
-      directory: props.directory,
-    })
+    if (store.submitting) return
+    const requestID = props.request.id
+    const directory = props.directory
+    const workspace = props.workspace
+    setStore("submitting", true)
+    void sdk.client.question
+      .reject({ requestID, directory, workspace }, { throwOnError: true })
+      .then(() => {
+        lifecycle.settled = true
+        drafts.delete(requestID)
+      })
+      .catch((error: unknown) => {
+        setStore("submitting", false)
+        toast.error(error)
+      })
   }
 
   function pick(answer: string, custom: boolean = false) {
@@ -71,11 +130,7 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
       setStore("custom", inputs)
     }
     if (single()) {
-      void sdk.client.question.reply({
-        requestID: props.request.id,
-        directory: props.directory,
-        answers: [[answer]],
-      })
+      reply([[answer]])
       return
     }
     setStore("tab", store.tab + 1)
@@ -141,6 +196,7 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
         run() {
           const text = textarea?.plainText ?? ""
           if (!text) {
+            setStore("buffers", store.tab, undefined)
             setStore("editing", false)
             return
           }
@@ -154,6 +210,7 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
         desc: "Cancel answer edit",
         group: "Question",
         cmd: () => {
+          setStore("buffers", store.tab, undefined)
           setStore("editing", false)
         },
       },
@@ -165,6 +222,7 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
         cmd: () => {
           const text = textarea?.plainText?.trim() ?? ""
           const prev = store.custom[store.tab]
+          setStore("buffers", store.tab, undefined)
 
           if (!text) {
             if (prev) {
@@ -433,7 +491,7 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
                             val.gotoLineEnd()
                           })
                         }}
-                        initialValue={input()}
+                        initialValue={store.buffers[store.tab] ?? input()}
                         placeholder="Type your own answer"
                         placeholderColor={theme.textMuted}
                         minHeight={1}
