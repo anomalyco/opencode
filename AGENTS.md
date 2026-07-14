@@ -4,7 +4,7 @@
 - The default branch in this repo is `main`.
 - Use `main` or `origin/main` for diffs against the default branch.
 - This fork is TUI/CLI-focused. Do not assume web app, desktop, or console packages (`packages/app`, `packages/desktop`, `packages/web`, `packages/console`) still exist.
-- Spec-driven planning uses OpenSpec (`openspec/`). Keep day-to-day coding rules here; OpenSpec `openspec/config.yaml` summarizes product scope for planning prompts. OpenSpec skills live under `.agents/skills/openspec-*/`; slash-style commands under `.agents/commands/` (`opsx-*`).
+- Spec-driven planning uses OpenSpec (`openspec/`). Keep day-to-day coding rules here; OpenSpec `openspec/config.yaml` summarizes product scope for planning prompts. Cursor slash commands live under `.cursor/commands/` (`/opsx:*`).
 - Product display name is **KanCode** (`kancode`). Keep `@opencode-ai/*` package names, `packages/opencode`, Effect service IDs, and the provider id `"opencode"` (OpenCode Zen) unchanged unless an explicit change renames them.
 - Config compatibility: project/worktree dual-reads `kancode.json(c)` / `opencode.json(c)` and `.kancode/` / `.opencode/` (`.kancode` wins on conflict); **user scope** (XDG/global config, `~/.kancode`) is KanCode-only — no `.opencode` / `opencode.json` fallback. Honor `OPENCODE_*` env flags and `KANCODE_*` aliases (`KANCODE_*` wins). Config XDG dir is always `kancode`; data/cache/state/tmp prefer nonempty `kancode` else fall back to `opencode`.
 
