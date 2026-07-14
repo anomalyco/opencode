@@ -1087,7 +1087,7 @@ function SessionReasoningGroupView(props: {
   message: (messageID: string) => SessionMessageInfo | undefined
 }) {
   const ctx = use()
-  const { theme } = useTheme()
+  const { theme, syntax } = useTheme()
   const renderer = useRenderer()
   const [expanded, setExpanded] = createSignal(false)
   const [hover, setHover] = createSignal(false)
@@ -1108,25 +1108,13 @@ function SessionReasoningGroupView(props: {
     if (item.part.time?.completed !== undefined || item.message.time.completed !== undefined) return null
     return previous
   }, null)
-  const duration = createMemo(() => {
-    const fallback = new Set(
-      parts().flatMap((item) =>
-        item.part.time?.created === undefined || item.part.time.completed === undefined ? [item.message.id] : [],
-      ),
-    )
-    const counted = new Set<string>()
-    return parts().reduce((total, item) => {
-      if (fallback.has(item.message.id)) {
-        if (counted.has(item.message.id)) return total
-        counted.add(item.message.id)
-        const end = item.message.time.completed
-        return total + (end === undefined ? 0 : Math.max(0, end - item.message.time.created))
-      }
+  const duration = createMemo(() =>
+    parts().reduce((total, item) => {
       const start = item.part.time?.created
       const end = item.part.time?.completed
       return total + (start === undefined || end === undefined ? 0 : Math.max(0, end - start))
-    }, 0)
-  })
+    }, 0),
+  )
 
   return (
     <Show when={parts().length > 0}>
@@ -1162,56 +1150,49 @@ function SessionReasoningGroupView(props: {
           <Show when={expanded()}>
             <box paddingLeft={3}>
               <For each={props.refs}>
-                {(ref) => (
-                  <SessionReasoningGroupPartView partRef={ref} completed={props.completed} message={props.message} />
-                )}
+                {(ref) => {
+                  const message = createMemo(() => {
+                    const item = props.message(ref.messageID)
+                    return item?.type === "assistant" ? item : undefined
+                  })
+                  const part = createMemo(() => {
+                    const item = message()
+                    if (!item) return undefined
+                    const part = resolvePart(item, ref.partID)
+                    return part?.type === "reasoning" ? part : undefined
+                  })
+                  const content = createMemo(() => {
+                    const item = part()
+                    return item ? reasoningContent(item) : ""
+                  })
+                  return (
+                    <Show when={content()}>
+                      <box marginTop={1}>
+                        <box
+                          border={["left"]}
+                          customBorderChars={SplitBorder.customBorderChars}
+                          borderColor={theme.backgroundElement}
+                          paddingLeft={1}
+                        >
+                          <code
+                            filetype="markdown"
+                            drawUnstyledText={false}
+                            streaming={part()?.time?.completed === undefined && message()?.time.completed === undefined}
+                            syntaxStyle={syntax()}
+                            content={content()}
+                            conceal={ctx.markdownMode() === "rendered"}
+                            fg={theme.textMuted}
+                          />
+                        </box>
+                      </box>
+                    </Show>
+                  )
+                }}
               </For>
             </box>
           </Show>
         </box>
       </Show>
-    </Show>
-  )
-}
-
-function SessionReasoningGroupPartView(props: {
-  partRef: PartRef
-  completed: boolean
-  message: (messageID: string) => SessionMessageInfo | undefined
-}) {
-  const ctx = use()
-  const { theme, syntax } = useTheme()
-  const part = createMemo(() => {
-    const message = props.message(props.partRef.messageID)
-    if (message?.type !== "assistant") return undefined
-    const part = resolvePart(message, props.partRef.partID)
-    return part?.type === "reasoning" ? part : undefined
-  })
-  const content = createMemo(() => {
-    const item = part()
-    return item ? reasoningContent(item) : ""
-  })
-
-  return (
-    <Show when={content()}>
-      <box marginTop={1}>
-        <box
-          border={["left"]}
-          customBorderChars={SplitBorder.customBorderChars}
-          borderColor={theme.backgroundElement}
-          paddingLeft={1}
-        >
-          <code
-            filetype="markdown"
-            drawUnstyledText={false}
-            streaming={!props.completed}
-            syntaxStyle={syntax()}
-            content={content()}
-            conceal={ctx.markdownMode() === "rendered"}
-            fg={theme.textMuted}
-          />
-        </box>
-      </box>
     </Show>
   )
 }

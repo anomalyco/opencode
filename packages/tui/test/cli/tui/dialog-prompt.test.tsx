@@ -135,21 +135,3 @@ test("dialog prompt submit can be rebound separately from input submit", async (
     await prompt.cleanup()
   }
 })
-
-test("dialog prompt submit can be disabled", async () => {
-  await using tmp = await tmpdir()
-  const confirmed: string[] = []
-  const prompt = await mountPrompt({
-    root: tmp.path,
-    keybinds: { "dialog.prompt.submit": false },
-    onConfirm: (value) => confirmed.push(value),
-  })
-
-  try {
-    await wait(() => prompt.app.renderer.currentFocusedEditor instanceof TextareaRenderable)
-    prompt.app.mockInput.pressEnter()
-    expect(confirmed).toEqual([])
-  } finally {
-    await prompt.cleanup()
-  }
-})

@@ -38,7 +38,7 @@ test("keeps non-exploration tools as individual part rows", () => {
   const messages: SessionMessageInfo[] = [
     assistant("assistant-1", [
       { type: "tool", id: "read-1", name: "read", state: pending(), time: { created: 1 } },
-      { type: "tool", id: "bash-1", name: "bash", state: pending(), time: { created: 2 } },
+      { type: "tool", id: "reasoning:0", name: "bash", state: pending(), time: { created: 2 } },
       { type: "tool", id: "grep-1", name: "grep", state: pending(), time: { created: 3 } },
     ]),
   ]
@@ -51,7 +51,7 @@ test("keeps non-exploration tools as individual part rows", () => {
       completed: true,
       refs: [{ messageID: "assistant-1", partID: "read-1" }],
     },
-    { type: "part", ref: { messageID: "assistant-1", partID: "bash-1" } },
+    { type: "part", ref: { messageID: "assistant-1", partID: "reasoning:0" } },
     {
       type: "group",
       kind: "exploration",
@@ -59,18 +59,6 @@ test("keeps non-exploration tools as individual part rows", () => {
       completed: false,
       refs: [{ messageID: "assistant-1", partID: "grep-1" }],
     },
-  ])
-})
-
-test("classifies tool rows independently of their call ID", () => {
-  const messages: SessionMessageInfo[] = [
-    assistant("assistant-1", [
-      { type: "tool", id: "reasoning:0", name: "bash", state: pending(), time: { created: 1 } },
-    ]),
-  ]
-
-  expect(reduceSessionRows(messages)).toEqual([
-    { type: "part", ref: { messageID: "assistant-1", partID: "reasoning:0" } },
   ])
 })
 
