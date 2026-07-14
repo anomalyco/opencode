@@ -3,7 +3,8 @@ import { Auth } from "../route/auth"
 import type { ProviderAuthOption } from "../route/auth-options"
 import type { ProviderPackage } from "../provider-package"
 import { ProviderID, type ModelID } from "../schema"
-import * as AnthropicMessages from "../protocols/anthropic-messages"
+import { AnthropicMessages } from "../protocols/anthropic-messages"
+import { AnthropicCompatible } from "./anthropic-compatible"
 
 export const id = ProviderID.make("anthropic")
 
@@ -24,16 +25,17 @@ const auth = (options: ProviderAuthOption<"optional">) => {
     .pipe(Auth.header("x-api-key"))
 }
 
-const configuredRoute = (input: Config) => {
-  const { apiKey: _, auth: _auth, baseURL, ...rest } = input
-  return AnthropicMessages.route.with({ ...rest, endpoint: { baseURL }, auth: auth(input) })
-}
-
 export const configure = (input: Config = {}) => {
-  const route = configuredRoute(input)
+  const { apiKey: _, auth: _auth, baseURL, ...rest } = input
+  const compatible = AnthropicCompatible.configure({
+    ...rest,
+    auth: auth(input),
+    baseURL: baseURL ?? AnthropicMessages.DEFAULT_BASE_URL,
+    provider: id,
+  })
   return {
     id,
-    model: (modelID: string | ModelID) => route.model({ id: modelID }),
+    model: (modelID: string | ModelID) => compatible.model(modelID),
     configure,
   }
 }

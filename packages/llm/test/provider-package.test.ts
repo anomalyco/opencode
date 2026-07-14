@@ -8,6 +8,7 @@ describe("provider package entrypoints", () => {
       import("@opencode-ai/llm/providers/openai/responses"),
       import("@opencode-ai/llm/providers/openai/chat"),
       import("@opencode-ai/llm/providers/anthropic"),
+      import("@opencode-ai/llm/providers/anthropic-compatible"),
       import("@opencode-ai/llm/providers/openai-compatible"),
       import("@opencode-ai/llm/providers/openai-compatible/responses"),
       import("@opencode-ai/llm/providers/amazon-bedrock"),
@@ -19,7 +20,7 @@ describe("provider package entrypoints", () => {
 
     for (const module of modules) expect(module.model).toBeFunction()
     expect(modules[0].model).toBe(modules[1].model)
-    expect(modules[7].model).toBe(modules[8].model)
+    expect(modules[8].model).toBe(modules[9].model)
   })
 
   test("maps package settings onto the executable model", () => {
@@ -67,6 +68,35 @@ describe("provider package entrypoints", () => {
     expect(selected.route.defaults.providerOptions).toEqual({
       openai: { reasoningEffort: "low", store: true },
     })
+  })
+
+  test("maps Anthropic-compatible settings onto the executable model", async () => {
+    const AnthropicCompatible = await import("@opencode-ai/llm/providers/anthropic-compatible")
+    const selected = AnthropicCompatible.model("compatible-model", {
+      apiKey: "fixture",
+      baseURL: "https://messages.example.test/v1",
+      provider: "example",
+      headers: { "x-application": "opencode" },
+      body: { metadata: { user_id: "user_1" } },
+      limits: { context: 200_000, output: 64_000 },
+    })
+
+    expect(String(selected.provider)).toBe("example")
+    expect(selected.route.id).toBe("anthropic-messages")
+    expect(selected.route.endpoint).toMatchObject({
+      baseURL: "https://messages.example.test/v1",
+      path: "/messages",
+    })
+    expect(selected.route.defaults.headers).toEqual({ "x-application": "opencode" })
+    expect(selected.route.defaults.http?.body).toEqual({ metadata: { user_id: "user_1" } })
+    expect(selected.route.defaults.limits).toEqual({ context: 200_000, output: 64_000 })
+  })
+
+  test("requires an Anthropic-compatible base URL at runtime", async () => {
+    const AnthropicCompatible = await import("@opencode-ai/llm/providers/anthropic-compatible")
+    expect(() =>
+      Reflect.apply(AnthropicCompatible.model, undefined, ["compatible-model", { apiKey: "fixture" }]),
+    ).toThrow("Anthropic-compatible providers require a baseURL")
   })
 
   test("maps legacy OpenAI organization and project settings to headers", () => {

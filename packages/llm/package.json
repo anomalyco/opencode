@@ -18,6 +18,7 @@
     "./provider-package": "./src/provider-package.ts",
     "./providers/amazon-bedrock": "./src/providers/amazon-bedrock.ts",
     "./providers/anthropic": "./src/providers/anthropic.ts",
+    "./providers/anthropic-compatible": "./src/providers/anthropic-compatible.ts",
     "./providers/azure": "./src/providers/azure.ts",
     "./providers/azure/responses": "./src/providers/azure/responses.ts",
     "./providers/azure/chat": "./src/providers/azure/chat.ts",

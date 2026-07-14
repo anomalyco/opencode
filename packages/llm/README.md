@@ -104,7 +104,7 @@ const gateway = CloudflareAIGateway.configure({
 }).model("workers-ai/@cf/meta/llama-3.1-8b-instruct")
 ```
 
-Included providers: OpenAI, Anthropic, Google (Gemini), Amazon Bedrock, Azure OpenAI, Cloudflare AI Gateway, Cloudflare Workers AI, GitHub Copilot, OpenRouter, xAI, plus generic OpenAI-compatible Chat helpers for DeepSeek, Cerebras, Groq, Fireworks, Together, etc. and a generic Responses entrypoint.
+Included providers: OpenAI, Anthropic, Google (Gemini), Amazon Bedrock, Azure OpenAI, Cloudflare AI Gateway, Cloudflare Workers AI, GitHub Copilot, OpenRouter, xAI, plus generic OpenAI-compatible Chat and Responses entrypoints and an Anthropic Messages-compatible entrypoint.
 
 ### Package-like entrypoints
 
@@ -126,8 +126,9 @@ OpenAI Chat and OpenAI Responses are separate semantic entrypoints:
 - `@opencode-ai/llm/providers/openai/chat`
 - `@opencode-ai/llm/providers/openai/responses`
 - `@opencode-ai/llm/providers/openai-compatible/responses`
+- `@opencode-ai/llm/providers/anthropic-compatible`
 
-Responses HTTP versus WebSocket is a scoped `transport` setting on the OpenAI Responses entrypoint, not another entrypoint. Azure follows the same Chat/Responses split at `providers/azure/chat` and `providers/azure/responses`. Generic OpenAI-compatible Chat remains at `providers/openai-compatible`; compatible Responses is separate at `providers/openai-compatible/responses`. Anthropic, Google Gemini, and Amazon Bedrock expose their single native API through their existing provider paths.
+Responses HTTP versus WebSocket is a scoped `transport` setting on the OpenAI Responses entrypoint, not another entrypoint. Azure follows the same Chat/Responses split at `providers/azure/chat` and `providers/azure/responses`. Generic OpenAI-compatible Chat remains at `providers/openai-compatible`; compatible Responses is separate at `providers/openai-compatible/responses`. Generic Anthropic Messages-compatible providers use `providers/anthropic-compatible`, which the named Anthropic provider composes. Google Gemini and Amazon Bedrock expose their single native API through their existing provider paths.
 
 Provider facades such as `OpenAI.configure(...).responses(...)` remain the direct application API. Package-like entrypoints are the self-similar loading contract used when a catalog selects behavior by export path.
 

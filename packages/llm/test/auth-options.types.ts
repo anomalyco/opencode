@@ -5,6 +5,7 @@ import { Auth as RuntimeAuth } from "../src/route/auth"
 import * as OpenAIChat from "../src/protocols/openai-chat"
 import * as AmazonBedrock from "../src/providers/amazon-bedrock"
 import * as Anthropic from "../src/providers/anthropic"
+import * as AnthropicCompatible from "../src/providers/anthropic-compatible"
 import * as Azure from "../src/providers/azure"
 import * as Cloudflare from "../src/providers/cloudflare"
 import * as GitHubCopilot from "../src/providers/github-copilot"
@@ -135,6 +136,16 @@ Azure.configure({ resourceName: "resource", apiKey: "azure-key", auth: RuntimeAu
 Anthropic.configure({ apiKey: "anthropic-key" }).model("claude-haiku")
 // @ts-expect-error Anthropic model selectors only accept model ids.
 Anthropic.configure({ apiKey: "anthropic-key" }).model("claude-haiku", {})
+
+AnthropicCompatible.configure({
+  apiKey: "messages-key",
+  baseURL: "https://messages.example.com/v1",
+  provider: "example",
+}).model("compatible-model")
+// @ts-expect-error Anthropic-compatible providers require a base URL.
+AnthropicCompatible.configure({ apiKey: "messages-key" })
+// @ts-expect-error Anthropic-compatible model selectors only accept model ids.
+AnthropicCompatible.configure({ baseURL: "https://messages.example.com/v1" }).model("compatible-model", {})
 
 Google.configure({ apiKey: "google-key" }).model("gemini-2.5-flash")
 // @ts-expect-error Google model selectors only accept model ids.
