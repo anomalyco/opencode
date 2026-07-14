@@ -27,6 +27,18 @@ import { Database } from "@opencode-ai/core/database/database"
 import { Usage, type LLMEvent } from "@opencode-ai/llm"
 
 const DOOM_LOOP_THRESHOLD = 3
+
+const MINIMAX_TRAILING_TOOL_CALL_LEAK_RE = /\]<\]minimax\[>\[<\/tool_call>\s*$/i
+const TRAILING_TOOL_CALL_RE = /<\/tool_call>\s*$/i
+
+function sanitizeTrailingToolCallLeak(text: string, modelID: string) {
+  if (!modelID.toLowerCase().includes("minimax")) return text
+  const withoutMinimaxMarker = text.replace(MINIMAX_TRAILING_TOOL_CALL_LEAK_RE, "")
+  const withoutToolCall = withoutMinimaxMarker.replace(TRAILING_TOOL_CALL_RE, "")
+  if (withoutToolCall === text) return text
+  return withoutToolCall.trimEnd()
+}
+
 export type Result = "compact" | "stop" | "continue"
 
 export interface Handle {
@@ -522,6 +534,7 @@ const layer = Layer.effect(
               },
               { text: ctx.currentText.text },
             )).text
+            ctx.currentText.text = sanitizeTrailingToolCallLeak(ctx.currentText.text, ctx.model.id)
             {
               const end = Date.now()
               ctx.currentText.time = { start: ctx.currentText.time?.start ?? end, end }

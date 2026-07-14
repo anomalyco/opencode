@@ -226,6 +226,28 @@ const fragmentFailureLLM = Layer.succeed(
 const fragmentFailureEnv = LayerNode.compile(root, [...replacements, [LLM.node, fragmentFailureLLM]])
 const itFragmentFailure = testEffect(fragmentFailureEnv)
 
+const minimaxLeakLLM = Layer.succeed(
+  LLM.Service,
+  LLM.Service.of({
+    stream: () =>
+      Stream.make(
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.textStart({ id: "text-1" }),
+        LLMEvent.textDelta({ id: "text-1", text: "Answer ]<" }),
+        LLMEvent.textDelta({ id: "text-1", text: "]minimax[>[" }),
+        LLMEvent.textDelta({ id: "text-1", text: "</tool_call>" }),
+        LLMEvent.textEnd({ id: "text-1" }),
+        LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+        LLMEvent.finish({ reason: "stop" }),
+      ),
+  }),
+)
+const minimaxLeakEnv = LayerNode.compile(root, [
+  ...replacements,
+  [LLM.node, minimaxLeakLLM],
+])
+const itMinimaxLeak = testEffect(minimaxLeakEnv)
+
 const boot = Effect.fn("test.boot")(function* () {
   const processors = yield* SessionProcessor.Service
   const session = yield* Session.Service
@@ -1061,6 +1083,98 @@ itFragmentFailure.live("session.processor effect tests retain partial legacy par
         expect(seen).toContain(MessageV2.Event.PartUpdated.type)
         expect(seen).toContain(Session.Event.Error.type)
         expect(seen.filter((type) => type.startsWith("session.next."))).toEqual([])
+      }),
+    { config: cfg },
+  ),
+)
+
+itMinimaxLeak.live("session.processor strips MiniMax trailing tool_call leak suffix from assistant text", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "test minimax leak")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const baseModel = yield* provider.getModel(ref.providerID, ref.modelID)
+        const minimaxModel = {
+          ...baseModel,
+          id: ModelV2.ID.make("minimax-m3-free"),
+          api: {
+            ...baseModel.api,
+            id: "minimax-m3-free",
+          },
+        } as typeof baseModel
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: minimaxModel,
+        })
+
+        yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies SessionV1.User,
+          sessionID: chat.id,
+          model: minimaxModel,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "hi" }],
+          tools: {},
+        } satisfies LLM.StreamInput)
+
+        const parts = yield* MessageV2.parts(msg.id)
+        const textParts = parts.filter((p): p is SessionV1.TextPart => p.type === "text")
+        expect(textParts).toHaveLength(1)
+        expect(textParts[0].text).toBe("Answer")
+      }),
+    { config: cfg },
+  ),
+)
+
+itMinimaxLeak.live("session.processor does not strip MiniMax suffix from non-MiniMax models", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "test no leak")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const nonMinimaxModel = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: nonMinimaxModel,
+        })
+
+        yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies SessionV1.User,
+          sessionID: chat.id,
+          model: nonMinimaxModel,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "hi" }],
+          tools: {},
+        } satisfies LLM.StreamInput)
+
+        const parts = yield* MessageV2.parts(msg.id)
+        const textParts = parts.filter((p): p is SessionV1.TextPart => p.type === "text")
+        expect(textParts).toHaveLength(1)
+        expect(textParts[0].text).toBe("Answer ]<]minimax[>[</tool_call>")
       }),
     { config: cfg },
   ),
