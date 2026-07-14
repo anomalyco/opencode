@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Gentle OpenCode — Installer for Windows
+    Gentle OpenCode -- Installer for Windows
     Installs opencode-fork + gentle-ai in one step.
 
 .DESCRIPTION
@@ -29,7 +29,7 @@ $ErrorActionPreference = "Stop"
 $null = & chcp 65001 2>$null
 try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}
 
-# ─── Configuration ─────────────────────────────────────────────────────────
+# --- Configuration ---------------------------------------------------------
 
 $OPENCODE_REPO = "ivanfernadezm99/opencode"
 $GENTLE_REPO = "Gentleman-Programming/gentle-ai"
@@ -44,7 +44,7 @@ $FALLBACK_VERSION = "v1.0.6"
 $OPENCODE_DIR = Join-Path $env:LOCALAPPDATA "opencode\bin"
 $GENTLE_DIR = Join-Path $env:LOCALAPPDATA "gentle-ai\bin"
 
-# ─── Colors / Logging ──────────────────────────────────────────────────────
+# --- Colors / Logging ------------------------------------------------------
 
 function Write-Info    { param([string]$Message) Write-Host "  $Message" -ForegroundColor Blue }
 function Write-Success { param([string]$Message) Write-Host "  $Message" -ForegroundColor Green }
@@ -58,7 +58,7 @@ function Stop-WithError {
     exit 1
 }
 
-# ─── Banner ─────────────────────────────────────────────────────────────────
+# --- Banner -----------------------------------------------------------------
 
 function Show-Banner {
     Write-Host ""
@@ -72,7 +72,7 @@ function Show-Banner {
     Write-Host ""
 }
 
-# ─── Platform ───────────────────────────────────────────────────────────────
+# --- Platform ---------------------------------------------------------------
 
 function Get-Arch {
     if (-not [Environment]::Is64BitOperatingSystem) {
@@ -82,7 +82,7 @@ function Get-Arch {
     return "amd64"
 }
 
-# ─── Version Detection ──────────────────────────────────────────────────────
+# --- Version Detection ------------------------------------------------------
 
 function Get-LatestVersion {
     param([string]$Repo)
@@ -160,7 +160,7 @@ function Get-LatestFromNextcloud {
     return $null
 }
 
-# ─── Download Binary ───────────────────────────────────────────────────────
+# --- Download Binary -------------------------------------------------------
 
 function Download-WithRetry {
     param([string]$Url, [string]$OutFile, [int]$MaxRetries = 3)
@@ -262,7 +262,7 @@ function Install-Binary {
     }
 }
 
-# ─── PATH Management ───────────────────────────────────────────────────────
+# --- PATH Management -------------------------------------------------------
 
 function Add-ToUserPath {
     param([string]$Dir)
@@ -285,7 +285,7 @@ function Add-ToUserPath {
     }
 }
 
-# ─── Main ───────────────────────────────────────────────────────────────────
+# --- Main -------------------------------------------------------------------
 
 function Main {
     [CmdletBinding()]
@@ -300,7 +300,7 @@ function Main {
 
     Show-Banner
 
-    # ─── Version detection ──────────────────────────────────────────────────
+    # --- Version detection --------------------------------------------------
 
     if (-not $Version) {
         $Version = Get-LatestVersion -Repo $OPENCODE_REPO
@@ -321,7 +321,7 @@ function Main {
         Stop-WithError "Could not determine opencode version and no mirror available."
     }
 
-    # ─── Prerequisites ──────────────────────────────────────────────────────
+    # --- Prerequisites ------------------------------------------------------
 
     Write-Step "Checking prerequisites"
 
@@ -360,7 +360,7 @@ function Main {
                     Write-Info "Installing Node.js (LTS)..."
                     winget install --id OpenJS.NodeJS.LTS --source winget --accept-package-agreements --accept-source-agreements
                 } elseif ($tool -eq "npm") {
-                    Write-Info "npm is bundled with Node.js — will be available after Node install"
+                    Write-Info "npm is bundled with Node.js -- will be available after Node install"
                 }
             }
             Write-Warn "Prerequisites were just installed. Restart your terminal and re-run this installer."
@@ -381,7 +381,7 @@ function Main {
             exit 1
         }
     }
-    Write-Success "git, node, npm — all present"
+    Write-Success "git, node, npm -- all present"
 
     Write-Step "Installing opencode-fork"
     $installParams = @{
@@ -421,7 +421,7 @@ function Main {
         $dbSize = (Get-Item $engramDbPath).Length
         Write-Success "Backed up engram.db ($([math]::Round($dbSize / 1KB)) KB) -> $backupName"
     } else {
-        Write-Info "No existing engram.db found — fresh install"
+        Write-Info "No existing engram.db found -- fresh install"
     }
 
     Write-Step "Configuring gentle-ai for opencode"
@@ -476,7 +476,7 @@ function Main {
         Copy-Item -Path "$globalConfig\*" -Destination $desktopConfig -Recurse -Force
         Write-Success "Desktop app config linked"
     } else {
-        Write-Warn "No global config found — desktop app may need manual setup"
+        Write-Warn "No global config found -- desktop app may need manual setup"
     }
 
     Write-Step "Verifying installation"
