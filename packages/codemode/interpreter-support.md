@@ -174,7 +174,7 @@ ultimate source of truth.
 
 - [x] The `Array` constructor with or without `new`: `Array(a, b)` collects arguments, `Array(n)` creates a
       sparse array of that length (invalid lengths throw a `RangeError`). Holes behave like JS in iteration,
-      spread, join, and JSON; `sort` densifies trailing holes into `undefined`, and results returned to the
+      spread, join, and JSON; `sort` densifies holes into trailing `undefined`, and results returned to the
       host normalize holes to `null`.
 - [x] Static methods: `Array.isArray`, `Array.of`, and `Array.from`, including the `Array.from` mapper form with
       `(value, index)` arguments.

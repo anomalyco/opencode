@@ -170,7 +170,14 @@ describe("thisArg is accepted and ignored, like JS arrows", () => {
     expect(await value(`return [1, 2].map((x) => x * 2, {})`)).toEqual([2, 4])
     expect(await value(`return [1, 2].map((x) => x, undefined)`)).toEqual([1, 2])
     expect(await value(`return Array.from([1], (x) => x + 1, {})`)).toEqual([2])
-    expect(await value(`const out = []; new Set([1]).forEach((v) => out.push(v), "self"); return out`)).toEqual([1])
+  })
+
+  test("Map, Set, and URLSearchParams forEach ignore a thisArg", async () => {
+    expect(await value(`const o = []; new Map([["a", 1]]).forEach((v, k) => o.push(k), {}); return o`)).toEqual(["a"])
+    expect(await value(`const o = []; new Set([1]).forEach((v) => o.push(v), "self"); return o`)).toEqual([1])
+    expect(await value(`const o = []; new URLSearchParams("a=1").forEach((v) => o.push(v), 0); return o`)).toEqual([
+      "1",
+    ])
   })
 })
 
@@ -227,5 +234,7 @@ describe("still-rejected callables get the wrap hint", () => {
       "JSON.parse revivers are not supported",
     )
     expect(await value(`return JSON.parse('{"a":1}', undefined)`)).toEqual({ a: 1 })
+    // A non-callable reviver is silently ignored, matching JS's IsCallable check.
+    expect(await value(`return JSON.parse('{"a":1}', 42)`)).toEqual({ a: 1 })
   })
 })
