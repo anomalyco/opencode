@@ -10,6 +10,8 @@ import * as Azure from "../src/providers/azure"
 import * as Cloudflare from "../src/providers/cloudflare"
 import * as GitHubCopilot from "../src/providers/github-copilot"
 import * as Google from "../src/providers/google"
+import * as GoogleVertex from "../src/providers/google-vertex"
+import * as GoogleVertexAnthropic from "../src/providers/google-vertex-anthropic"
 import * as OpenAI from "../src/providers/openai"
 import * as OpenAICompatible from "../src/providers/openai-compatible"
 import * as OpenRouter from "../src/providers/openrouter"
@@ -150,6 +152,22 @@ AnthropicCompatible.configure({ baseURL: "https://messages.example.com/v1" }).mo
 Google.configure({ apiKey: "google-key" }).model("gemini-2.5-flash")
 // @ts-expect-error Google model selectors only accept model ids.
 Google.configure({ apiKey: "google-key" }).model("gemini-2.5-flash", {})
+
+GoogleVertex.configure({ apiKey: "vertex-key" }).model("gemini-2.5-flash")
+GoogleVertex.configure({ accessToken: "vertex-token", project: "project" }).model("gemini-2.5-flash")
+GoogleVertex.configure({ auth: RuntimeAuth.bearer("vertex-token"), project: "project" }).model("gemini-2.5-flash")
+// @ts-expect-error Vertex Gemini model selectors only accept model ids.
+GoogleVertex.configure({ apiKey: "vertex-key" }).model("gemini-2.5-flash", {})
+
+GoogleVertexAnthropic.configure({ accessToken: "vertex-token", project: "project" }).model("claude-sonnet-4@20250514")
+GoogleVertexAnthropic.configure({ auth: RuntimeAuth.bearer("vertex-token"), project: "project" }).model(
+  "claude-sonnet-4@20250514",
+)
+GoogleVertexAnthropic.configure({ accessToken: "vertex-token", project: "project" }).model(
+  "claude-sonnet-4@20250514",
+  // @ts-expect-error Vertex Anthropic model selectors only accept model ids.
+  {},
+)
 
 AmazonBedrock.configure({ apiKey: "bedrock-key" }).model("anthropic.claude")
 // @ts-expect-error Bedrock model selectors only accept model ids.

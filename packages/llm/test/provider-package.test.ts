@@ -16,6 +16,8 @@ describe("provider package entrypoints", () => {
       import("@opencode-ai/llm/providers/azure/responses"),
       import("@opencode-ai/llm/providers/azure/chat"),
       import("@opencode-ai/llm/providers/google"),
+      import("@opencode-ai/llm/providers/google-vertex"),
+      import("@opencode-ai/llm/providers/google-vertex/anthropic"),
     ])
 
     for (const module of modules) expect(module.model).toBeFunction()
@@ -155,5 +157,38 @@ describe("provider package entrypoints", () => {
     expect(selected.route.defaults.providerOptions).toEqual({
       gemini: { thinkingConfig: { thinkingBudget: 1_024 } },
     })
+  })
+
+  test("selects Vertex entrypoints with the same model contract", async () => {
+    const GoogleVertex = await import("@opencode-ai/llm/providers/google-vertex")
+    const GoogleVertexAnthropic = await import("@opencode-ai/llm/providers/google-vertex/anthropic")
+    const gemini = GoogleVertex.model("gemini-2.5-flash", {
+      apiKey: "fixture",
+      headers: { "x-application": "opencode" },
+      body: { safetySettings: [] },
+      limits: { context: 1_000_000, output: 65_536 },
+    })
+    const anthropic = GoogleVertexAnthropic.model("claude-sonnet-4@20250514", {
+      accessToken: "fixture",
+      location: "global",
+      project: "vertex-project",
+    })
+
+    expect(gemini.route.id).toBe("google-vertex-gemini")
+    expect(gemini.route.endpoint.baseURL).toBe("https://aiplatform.googleapis.com/v1/publishers/google")
+    expect(gemini.route.defaults.headers).toEqual({ "x-application": "opencode" })
+    expect(gemini.route.defaults.http?.body).toEqual({ safetySettings: [] })
+    expect(gemini.route.defaults.limits).toEqual({ context: 1_000_000, output: 65_536 })
+    expect(
+      GoogleVertex.model("gemini-2.5-flash", {
+        accessToken: "fixture",
+        location: "eu",
+        project: "vertex-project",
+      }).route.endpoint.baseURL,
+    ).toBe("https://aiplatform.eu.rep.googleapis.com/v1beta1/projects/vertex-project/locations/eu/publishers/google")
+    expect(anthropic.route.id).toBe("google-vertex-anthropic")
+    expect(anthropic.route.endpoint.baseURL).toBe(
+      "https://aiplatform.googleapis.com/v1/projects/vertex-project/locations/global/publishers/anthropic/models",
+    )
   })
 })

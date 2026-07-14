@@ -25,6 +25,8 @@
     "./providers/cloudflare": "./src/providers/cloudflare.ts",
     "./providers/github-copilot": "./src/providers/github-copilot.ts",
     "./providers/google": "./src/providers/google.ts",
+    "./providers/google-vertex": "./src/providers/google-vertex.ts",
+    "./providers/google-vertex/anthropic": "./src/providers/google-vertex/anthropic.ts",
     "./providers/openai": "./src/providers/openai.ts",
     "./providers/openai/responses": "./src/providers/openai/responses.ts",
     "./providers/openai/chat": "./src/providers/openai/chat.ts",
@@ -37,6 +39,8 @@
     "./protocols/anthropic-messages": "./src/protocols/anthropic-messages.ts",
     "./protocols/bedrock-converse": "./src/protocols/bedrock-converse.ts",
     "./protocols/gemini": "./src/protocols/gemini.ts",
+    "./protocols/google-vertex-anthropic": "./src/protocols/google-vertex-anthropic.ts",
+    "./protocols/google-vertex-gemini": "./src/protocols/google-vertex-gemini.ts",
     "./protocols/openai-chat": "./src/protocols/openai-chat.ts",
     "./protocols/openai-compatible-chat": "./src/protocols/openai-compatible-chat.ts",
     "./protocols/openai-compatible-responses": "./src/protocols/openai-compatible-responses.ts",
@@ -55,6 +59,7 @@
     "@smithy/util-utf8": "4.2.2",
     "@opencode-ai/schema": "workspace:*",
     "aws4fetch": "1.0.20",
-    "effect": "catalog:"
+    "effect": "catalog:",
+    "google-auth-library": "10.5.0"
   }
 }

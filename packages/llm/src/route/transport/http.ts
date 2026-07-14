@@ -29,6 +29,7 @@ const applyQuery = (url: string, query: Record<string, string> | undefined) => {
 }
 
 const PROTOCOL_BODY_OVERLAY_DENYLIST = new Set([
+  "anthropic_version",
   "content",
   "contents",
   "frequencyPenalty",

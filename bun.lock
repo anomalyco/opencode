@@ -569,6 +569,7 @@
         "@smithy/util-utf8": "4.2.2",
         "aws4fetch": "1.0.20",
         "effect": "catalog:",
+        "google-auth-library": "10.5.0",
       },
       "devDependencies": {
         "@clack/prompts": "1.0.0-alpha.1",

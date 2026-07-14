@@ -182,7 +182,7 @@ const AnthropicBodyFields = {
   thinking: Schema.optional(AnthropicThinking),
   output_config: Schema.optional(AnthropicOutputConfig),
 }
-const AnthropicMessagesBody = Schema.Struct(AnthropicBodyFields)
+export const AnthropicMessagesBody = Schema.Struct(AnthropicBodyFields)
 export type AnthropicMessagesBody = Schema.Schema.Type<typeof AnthropicMessagesBody>
 
 const AnthropicUsage = Schema.Struct({

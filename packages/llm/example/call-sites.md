@@ -360,6 +360,21 @@ import { model } from "@opencode-ai/llm/providers/openai/responses"
 model("gpt-4o", { apiKey, transport: "websocket" })
 ```
 
+Vertex keeps Gemini and Anthropic Messages as separate package-like entrypoints,
+while sharing project/location resolution and ADC authentication internally:
+
+```ts
+import { model } from "@opencode-ai/llm/providers/google-vertex"
+
+model("gemini-2.5-flash", { project, location: "us-central1" })
+```
+
+```ts
+import { model } from "@opencode-ai/llm/providers/google-vertex/anthropic"
+
+model("claude-sonnet-4@20250514", { project, location: "global" })
+```
+
 The client should not require a different public layer just because a selected
 route uses WebSocket. Use one `LLMClient.layer` with HTTP and WebSocket runtime
 capabilities available; routes that do not need WebSocket simply never touch it.

@@ -104,7 +104,7 @@ const gateway = CloudflareAIGateway.configure({
 }).model("workers-ai/@cf/meta/llama-3.1-8b-instruct")
 ```
 
-Included providers: OpenAI, Anthropic, Google (Gemini), Amazon Bedrock, Azure OpenAI, Cloudflare AI Gateway, Cloudflare Workers AI, GitHub Copilot, OpenRouter, xAI, plus generic OpenAI-compatible Chat and Responses entrypoints and an Anthropic Messages-compatible entrypoint.
+Included providers: OpenAI, Anthropic, Google (Gemini), Google Vertex Gemini and Anthropic, Amazon Bedrock, Azure OpenAI, Cloudflare AI Gateway, Cloudflare Workers AI, GitHub Copilot, OpenRouter, xAI, plus generic OpenAI-compatible Chat and Responses entrypoints and an Anthropic Messages-compatible entrypoint.
 
 ### Package-like entrypoints
 
@@ -127,8 +127,24 @@ OpenAI Chat and OpenAI Responses are separate semantic entrypoints:
 - `@opencode-ai/llm/providers/openai/responses`
 - `@opencode-ai/llm/providers/openai-compatible/responses`
 - `@opencode-ai/llm/providers/anthropic-compatible`
+- `@opencode-ai/llm/providers/google-vertex`
+- `@opencode-ai/llm/providers/google-vertex/anthropic`
 
 Responses HTTP versus WebSocket is a scoped `transport` setting on the OpenAI Responses entrypoint, not another entrypoint. Azure follows the same Chat/Responses split at `providers/azure/chat` and `providers/azure/responses`. Generic OpenAI-compatible Chat remains at `providers/openai-compatible`; compatible Responses is separate at `providers/openai-compatible/responses`. Generic Anthropic Messages-compatible providers use `providers/anthropic-compatible`, which the named Anthropic provider composes. Google Gemini and Amazon Bedrock expose their single native API through their existing provider paths.
+
+Vertex Gemini and Vertex Anthropic are separate products with separate entrypoints. Both accept `project`, `location`, and an optional `accessToken`; when no token is supplied they lazily use Google Application Default Credentials. Vertex Gemini also supports express mode through `apiKey` or `GOOGLE_VERTEX_API_KEY`.
+
+```ts
+import { model } from "@opencode-ai/llm/providers/google-vertex"
+
+model("gemini-2.5-flash", { project: "my-project", location: "us-central1" })
+```
+
+```ts
+import { model } from "@opencode-ai/llm/providers/google-vertex/anthropic"
+
+model("claude-sonnet-4@20250514", { project: "my-project", location: "global" })
+```
 
 Provider facades such as `OpenAI.configure(...).responses(...)` remain the direct application API. Package-like entrypoints are the self-similar loading contract used when a catalog selects behavior by export path.
 
