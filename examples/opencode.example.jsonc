@@ -1,0 +1,49 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+
+  // -- Smart Auto-Context --
+  // Automatically adds relevant files to session context based on user query
+  "context": {
+    "autoAdd": true,
+    "maxFiles": 10,
+    "includeTests": true
+  },
+
+  // -- Multi-Agent Teams --
+  // Configure /team command execution modes
+  "multiAgent": {
+    "defaultMode": "parallel",
+    "maxAgents": 3
+  },
+
+  // -- Mermaid Diagrams --
+  // Enable diagram generation in model responses
+  "diagrams": {
+    "enabled": true,
+    "format": "svg"
+  },
+
+  // -- Auto-Fix --
+  // Post-turn lint/type checking with automatic fix iteration
+  "autoFix": {
+    "enabled": true,
+    "maxIterations": 3,
+    "tools": ["tsc", "biome"]
+  },
+
+  // -- Git Commit Generation --
+  // Controls /commit command behavior
+  "git": {
+    "autoStage": false,
+    "conventional": true
+  },
+
+  // -- Test Generation --
+  // Controls /test command behavior
+  "testing": {
+    "testCommand": "bun test",
+    "framework": "vitest",
+    "enabled": true,
+    "maxFixIterations": 2
+  }
+}

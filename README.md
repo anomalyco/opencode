@@ -177,7 +177,8 @@ Learn more about [agents](https://opencode.ai/docs/agents).
 
 ### Documentation
 
-For more info on how to configure OpenCode, [**head over to our docs**](https://opencode.ai/docs).
+For more info on how to configure OpenCode, [**head over to our docs**](https://opencode.ai/docs).  
+See [`examples/opencode.example.jsonc`](./examples/opencode.example.jsonc) for a complete configuration example with all new features.
 
 ### Contributing
 
