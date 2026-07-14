@@ -1,4 +1,4 @@
-import { TextAttributes } from "@opentui/core"
+import { TextareaRenderable, TextAttributes } from "@opentui/core"
 import type { TuiPlugin, TuiPluginApi, TuiPromptRef } from "@opencode-ai/plugin/tui"
 import { Show, createSignal, onCleanup } from "solid-js"
 import type { BuiltinTuiPlugin } from "../builtins"
@@ -36,6 +36,16 @@ export function bindings(keys: TuiPluginApi["tuiConfig"]["keybinds"]) {
   return keys
     .gather(`${id}.submit`, ["input.submit", "prompt.submit"])
     .map((binding) => ({ ...binding, cmd: cmd.submit, desc: "Submit side question" }))
+}
+
+export function parse(input: string, session?: string) {
+  const match = input.match(/^\/(?:btw|ask)(?:\s+([\s\S]*))?$/i)
+  if (!match) return { type: "pass" as const }
+  if (!session) return { type: "missing" as const }
+  const question = match[1]?.trim()
+  if (question) return { type: "ask" as const, question }
+  if (/\s$/.test(input)) return { type: "empty" as const }
+  return { type: "pass" as const }
 }
 
 function Input(props: {
@@ -155,6 +165,7 @@ const tui: TuiPlugin = async (api) => {
         namespace: "palette",
         slashName: "btw",
         slashAliases: ["ask"],
+        enabled: () => session() !== undefined,
         run() {
           const prompt = ref()
           if (!session() || !prompt) return false
@@ -167,20 +178,28 @@ const tui: TuiPlugin = async (api) => {
         name: cmd.submit,
         title: "Submit side question",
         hidden: true,
-        run() {
+        run(ctx) {
           const prompt = ref()
           const sessionID = session()
-          if (!prompt?.focused || !sessionID) return false
-          const match = prompt.current.input.match(/^\/(?:btw|ask)(?:\s+([\s\S]*))?$/i)
-          if (!match) return false
-          const question = match[1]?.trim()
-          if (!question) {
-            if (!/\s$/.test(prompt.current.input)) return false
+          const input = prompt?.focused
+            ? prompt.current.input
+            : api.route.current.name === "home" && ctx.focused instanceof TextareaRenderable
+              ? ctx.focused.plainText
+              : undefined
+          if (!input) return false
+          const result = parse(input, sessionID)
+          if (result.type === "pass") return false
+          if (result.type === "missing") {
+            api.ui.toast({ variant: "warning", message: "Open a session before asking a side question" })
+            return true
+          }
+          if (result.type === "empty") {
             api.ui.toast({ variant: "warning", message: "Add a question after /btw" })
             return true
           }
+          if (!prompt || !sessionID) return false
           prompt.reset()
-          ask(sessionID, question)
+          ask(sessionID, result.question)
           return true
         },
       },
