@@ -39,7 +39,7 @@ $GENTLE_NAME = "gentle-ai"
 $NEXTCLOUD_MIRROR = "https://enlaceschacocloud.duckdns.org/s/ojAcbHDQBTX97oD/download"
 $NEXTCLOUD_WEBDAV = "https://enlaceschacocloud.duckdns.org/public.php/webdav"
 $NEXTCLOUD_TOKEN = "ojAcbHDQBTX97oD"
-$FALLBACK_VERSION = "v1.0.7"
+$FALLBACK_VERSION = "v1.0.8"
 
 $OPENCODE_DIR = Join-Path $env:LOCALAPPDATA "opencode\bin"
 $GENTLE_DIR = Join-Path $env:LOCALAPPDATA "gentle-ai\bin"
@@ -327,22 +327,14 @@ function Main {
 
     $missing = @()
     if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
-        $null = & git --version 2>$null
-        if ($LASTEXITCODE -ne 0 -and -not (Get-Command git -ErrorAction SilentlyContinue)) {
-            $missing += "git"
-        }
+        $missing += "git"
     }
     if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
-        $null = & node --version 2>$null
-        if ($LASTEXITCODE -ne 0 -and -not (Get-Command node -ErrorAction SilentlyContinue)) {
-            $missing += "node"
-        }
+        $missing += "node"
     }
-    if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
-        $null = & npm --version 2>$null
-        if ($LASTEXITCODE -ne 0 -and -not (Get-Command npm -ErrorAction SilentlyContinue)) {
-            $missing += "npm"
-        }
+    # npm is bundled with Node.js — check only if node is present but npm isn't
+    if ((Get-Command node -ErrorAction SilentlyContinue) -and -not (Get-Command npm -ErrorAction SilentlyContinue)) {
+        $missing += "npm"
     }
 
     if ($missing.Count -gt 0) {
