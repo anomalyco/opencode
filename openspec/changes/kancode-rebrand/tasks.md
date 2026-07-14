@@ -16,4 +16,4 @@
 
 - [x] 3.1 Run `bunx --bun @fission-ai/openspec@latest validate --all --strict`
 - [x] 3.2 Run `bun typecheck` in `packages/opencode`, `packages/tui`, `packages/core`
-- [ ] 3.3 Commit OpenSpec + implementation with conventional messages (do not push)
+- [x] 3.3 Commit OpenSpec + implementation with conventional messages (do not push)
