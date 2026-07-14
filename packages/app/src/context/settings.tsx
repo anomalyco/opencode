@@ -81,10 +81,20 @@ export function isAppUpgrade(previous: string | undefined, current: string | und
   return comparison !== undefined && comparison > 0
 }
 
+export function shouldDisplayTabsToast(
+  previous: string | undefined,
+  current: string | undefined,
+  existingInstall: boolean,
+) {
+  return isAppUpgrade(previous, current) || (!previous && existingInstall)
+}
+
 export function shouldEnableNewLayout(previous: string | undefined, current: string | undefined) {
-  if (!previous || !current || !isAppUpgrade(previous, current)) return false
-  const previousComparison = compareVersions(previous, newLayoutDesignsUpgradeCutoff)
+  if (!current) return false
   const currentComparison = compareVersions(current, newLayoutDesignsUpgradeCutoff)
+  if (!previous) return currentComparison !== undefined && currentComparison > 0
+  if (!isAppUpgrade(previous, current)) return false
+  const previousComparison = compareVersions(previous, newLayoutDesignsUpgradeCutoff)
   return (
     previousComparison !== undefined &&
     currentComparison !== undefined &&
@@ -285,13 +295,21 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
 
     createEffect(() => {
       if (!ready() || !launchState.classified || launchState.migrationApplied) return
-      if (typeof store.general?.shouldDisplayTabsToast !== "boolean") {
-        setStore("general", "shouldDisplayTabsToast", isAppUpgrade(launchState.previous, platform.version))
-      }
       if (layoutUpgrade() && store.general?.newLayoutDesigns !== true) {
         setStore("general", "newLayoutDesigns", true)
       }
       setLaunchState("migrationApplied", true)
+    })
+
+    createEffect(() => {
+      if (!ready() || !launchState.classified) return
+      if (typeof store.general?.shouldDisplayTabsToast === "boolean") return
+      if (!launchState.previous && !layoutTransitionClassified()) return
+      setStore(
+        "general",
+        "shouldDisplayTabsToast",
+        shouldDisplayTabsToast(launchState.previous, platform.version, layoutTransitionEligible()),
+      )
     })
 
     createEffect(() => {
