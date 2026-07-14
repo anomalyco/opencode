@@ -1,5 +1,6 @@
 import { Tooltip as KobalteTooltip } from "@kobalte/core/tooltip"
-import { createEffect, Match, onCleanup, splitProps, Switch, type JSX } from "solid-js"
+import { makeEventListener } from "@solid-primitives/event-listener"
+import { createEffect, createRenderEffect, Match, onCleanup, splitProps, Switch, type JSX } from "solid-js"
 import type { ComponentProps } from "solid-js"
 import { createStore } from "solid-js/store"
 import "./tooltip-v2.css"
@@ -11,6 +12,7 @@ export interface TooltipV2Props extends ComponentProps<typeof KobalteTooltip> {
   contentStyle?: JSX.CSSProperties
   inactive?: boolean
   forceOpen?: boolean
+  keepOpenOnScroll?: boolean
 }
 
 export function TooltipV2(props: TooltipV2Props) {
@@ -27,6 +29,7 @@ export function TooltipV2(props: TooltipV2Props) {
     "contentStyle",
     "inactive",
     "forceOpen",
+    "keepOpenOnScroll",
     "ignoreSafeArea",
     "value",
   ])
@@ -62,7 +65,35 @@ export function TooltipV2(props: TooltipV2Props) {
     close()
   }
 
+  let scrollingTrigger = false
+  let scrollFrame: number | undefined
+
+  const clearScroll = () => {
+    if (scrollFrame !== undefined) cancelAnimationFrame(scrollFrame)
+    scrollFrame = undefined
+    scrollingTrigger = false
+  }
+
+  createRenderEffect(() => {
+    if (!local.keepOpenOnScroll) return
+    makeEventListener(
+      window,
+      "scroll",
+      (event) => {
+        if (!state.open || !ref || !(event.target instanceof Node) || !event.target.contains(ref)) return
+        clearScroll()
+        scrollingTrigger = true
+        scrollFrame = requestAnimationFrame(() => {
+          scrollingTrigger = false
+          scrollFrame = undefined
+        })
+      },
+      { capture: true },
+    )
+  })
+
   const leave = () => {
+    clearScroll()
     if (!inside()) close()
     drop()
   }
@@ -97,6 +128,7 @@ export function TooltipV2(props: TooltipV2Props) {
           onOpenChange={(open) => {
             if (local.forceOpen) return
             if (state.block && open) return
+            if (!open && scrollingTrigger && ref?.matches(":hover")) return
             if (justClickedTrigger) {
               justClickedTrigger = false
               return
@@ -110,6 +142,7 @@ export function TooltipV2(props: TooltipV2Props) {
             data-component="tooltip-v2-trigger"
             class={local.class}
             onPointerDownCapture={arm}
+            onBlur={clearScroll}
             onKeyDownCapture={(event: KeyboardEvent) => {
               if (event.key !== "Enter" && event.key !== " ") return
               arm()
@@ -130,6 +163,7 @@ export function TooltipV2(props: TooltipV2Props) {
               data-force-open={local.forceOpen}
               class={local.contentClass}
               style={local.contentStyle}
+              onEscapeKeyDown={clearScroll}
               onPointerDownOutside={(e) => {
                 if (ref === e.target || (e.target instanceof Node && ref?.contains(e.target))) {
                   justClickedTrigger = true

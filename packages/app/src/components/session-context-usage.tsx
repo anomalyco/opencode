@@ -138,7 +138,12 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
 
   return (
     <Show when={params.id}>
-      <TooltipV2 value={tooltipValue()} placement={props.placement ?? "top"} shift={-8}>
+      <TooltipV2
+        value={tooltipValue()}
+        placement={props.placement ?? "top"}
+        shift={-8}
+        keepOpenOnScroll={buttonAppearance() === "v2"}
+      >
         <Switch>
           <Match when={variant() === "indicator"}>{circle()}</Match>
           <Match when={buttonAppearance() === "v2"}>
