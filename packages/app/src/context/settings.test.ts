@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import {
+  isAppUpgrade,
   layoutTransitionState,
   maximumSunsetTimeout,
   newLayoutDesignsDefault,
@@ -39,15 +40,22 @@ describe("layout transition", () => {
     expect(nextSunsetCheckDelay(9_000, 10_000)).toBe(0)
   })
 
-  test("enables the new layout when upgrading from 1.17.20 or earlier", () => {
-    expect(shouldEnableNewLayout("v1.17.20", "1.17.21")).toBe(true)
+  test("enables the new layout when upgrading from 1.17.19 or earlier", () => {
+    expect(shouldEnableNewLayout("v1.17.19", "1.17.20")).toBe(true)
     expect(shouldEnableNewLayout("1.16.9", "2.0.0")).toBe(true)
   })
 
+  test("detects upgrades only when a previous version is older", () => {
+    expect(isAppUpgrade("1.17.19", "1.17.20")).toBe(true)
+    expect(isAppUpgrade(undefined, "1.17.20")).toBe(false)
+    expect(isAppUpgrade("1.17.20", "1.17.20")).toBe(false)
+    expect(isAppUpgrade("1.17.21", "1.17.20")).toBe(false)
+  })
+
   test("does not enable the new layout without a qualifying upgrade", () => {
-    expect(shouldEnableNewLayout("1.17.20", "1.17.20")).toBe(false)
-    expect(shouldEnableNewLayout("1.17.21", "1.17.22")).toBe(false)
-    expect(shouldEnableNewLayout(undefined, "1.17.21")).toBe(false)
-    expect(shouldEnableNewLayout("dev", "1.17.21")).toBe(false)
+    expect(shouldEnableNewLayout("1.17.19", "1.17.19")).toBe(false)
+    expect(shouldEnableNewLayout("1.17.20", "1.17.21")).toBe(false)
+    expect(shouldEnableNewLayout(undefined, "1.17.20")).toBe(false)
+    expect(shouldEnableNewLayout("dev", "1.17.20")).toBe(false)
   })
 })

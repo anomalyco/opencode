@@ -4,6 +4,7 @@ import { createSignal, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Drawer, DrawerClose, DrawerContent } from "@/components/ui/drawer"
 import { usePlatform } from "@/context/platform"
+import { useSettings } from "@/context/settings"
 import introducingTabsVideo from "@/assets/help/introducing-tabs.mp4"
 import homeImage from "@/assets/help/home.png"
 import tabsImage from "@/assets/help/tabs.png"
@@ -58,13 +59,14 @@ export function HelpButton() {
 export function TabsInfoPopup() {
   if (import.meta.env.VITE_OPENCODE_CHANNEL !== "dev") return null
 
+  const settings = useSettings()
   const [state, setState] = persisted(Persist.global("tabsInfoPopup"), createStore({ dismissed: false }))
   // setState({ dismissed: false }) // for testing
   const [drawerOpen, setDrawerOpen] = createSignal(false)
 
   return (
     <Drawer open={drawerOpen()} onOpenChange={setDrawerOpen} side="right">
-      <Show when={!state.dismissed}>
+      <Show when={settings.appUpgrade() && !state.dismissed}>
         <div
           class="fixed bottom-14 right-5 z-50 h-[240px] w-[192px] rounded-[8px] bg-v2-background-bg-base p-1 shadow-[var(--v2-elevation-floating)]"
           aria-label="Introducing Tabs. Organize your work and active sessions with tabs"

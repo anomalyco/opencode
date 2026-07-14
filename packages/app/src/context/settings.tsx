@@ -59,7 +59,7 @@ const legacyNewLayoutDesignsDefault = import.meta.env.VITE_OPENCODE_CHANNEL !== 
 export const newLayoutDesignsDefault = true
 // Existing users can switch layouts until local midnight on this date. Set new Date(YYYY, M-1, D) to show.
 export const oldInterfaceSunset = new Date(2026, 8, 14)
-const newLayoutDesignsUpgradeCutoff = "1.17.20"
+const newLayoutDesignsUpgradeCutoff = "1.17.19"
 
 function compareVersions(a: string, b: string) {
   const parse = (version: string) => {
@@ -74,11 +74,22 @@ function compareVersions(a: string, b: string) {
   return index === -1 ? 0 : left[index]! - right[index]!
 }
 
-export function shouldEnableNewLayout(previous: string | undefined, current: string | undefined) {
+export function isAppUpgrade(previous: string | undefined, current: string | undefined) {
   if (!previous || !current) return false
+  const comparison = compareVersions(current, previous)
+  return comparison !== undefined && comparison > 0
+}
+
+export function shouldEnableNewLayout(previous: string | undefined, current: string | undefined) {
+  if (!previous || !current || !isAppUpgrade(previous, current)) return false
   const previousComparison = compareVersions(previous, newLayoutDesignsUpgradeCutoff)
   const currentComparison = compareVersions(current, newLayoutDesignsUpgradeCutoff)
-  return previousComparison !== undefined && currentComparison !== undefined && previousComparison <= 0 && currentComparison > 0
+  return (
+    previousComparison !== undefined &&
+    currentComparison !== undefined &&
+    previousComparison <= 0 &&
+    currentComparison > 0
+  )
 }
 
 export function layoutTransitionState(scheduled: boolean, eligible: boolean, retired: boolean, dismissed: boolean) {
@@ -203,6 +214,11 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
       "app-version.v1",
       createStore<{ version?: string }>({ version: undefined }),
     )
+    const [launchState, setLaunchState] = createStore({
+      classified: false,
+      previous: undefined as string | undefined,
+      upgraded: false,
+    })
     const showFileTree = withFallback(() => store.general?.showFileTree, defaultSettings.general.showFileTree)
     const showSearch = withFallback(() => store.general?.showSearch, defaultSettings.general.showSearch)
     const showStatus = withFallback(() => store.general?.showStatus, defaultSettings.general.showStatus)
@@ -216,7 +232,7 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
     const layoutTransitionEligible = withFallback(() => store.general?.layoutTransitionEligible, false)
     const newInterfaceNoticeDismissed = withFallback(() => store.general?.newInterfaceNoticeDismissed, false)
     const layoutUpgrade = createMemo(() =>
-      launchReady() ? shouldEnableNewLayout(launch.version, platform.version) : false,
+      launchState.classified ? shouldEnableNewLayout(launchState.previous, platform.version) : false,
     )
     const layoutTransition = createMemo(() =>
       layoutTransitionState(!!sunset, layoutTransitionEligible(), oldInterfaceRetired(), newInterfaceNoticeDismissed()),
@@ -255,12 +271,21 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
     }
 
     createEffect(() => {
-      if (!ready() || !launchReady()) return
+      if (!launchReady() || launchState.classified) return
+      setLaunchState({
+        classified: true,
+        previous: launch.version,
+        upgraded: isAppUpgrade(launch.version, platform.version),
+      })
+      if (!platform.version || launch.version === platform.version) return
+      setLaunch("version", platform.version)
+    })
+
+    createEffect(() => {
+      if (!ready() || !launchState.classified) return
       if (layoutUpgrade() && store.general?.newLayoutDesigns !== true) {
         setStore("general", "newLayoutDesigns", true)
       }
-      if (!platform.version || launch.version === platform.version) return
-      setLaunch("version", platform.version)
     })
 
     createEffect(() => {
@@ -283,6 +308,7 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
 
     return {
       ready,
+      appUpgrade: createMemo(() => launchState.classified && launchState.upgraded),
       get current() {
         return store
       },
