@@ -39,7 +39,7 @@ $GENTLE_NAME = "gentle-ai"
 $NEXTCLOUD_MIRROR = "https://enlaceschacocloud.duckdns.org/s/ojAcbHDQBTX97oD/download"
 $NEXTCLOUD_WEBDAV = "https://enlaceschacocloud.duckdns.org/public.php/webdav"
 $NEXTCLOUD_TOKEN = "ojAcbHDQBTX97oD"
-$FALLBACK_VERSION = "v1.0.4"
+$FALLBACK_VERSION = "v1.0.6"
 
 $OPENCODE_DIR = Join-Path $env:LOCALAPPDATA "opencode\bin"
 $GENTLE_DIR = Join-Path $env:LOCALAPPDATA "gentle-ai\bin"
@@ -93,7 +93,7 @@ function Get-LatestVersion {
     $url = "https://github.com/$Repo/releases/latest"
     try {
         $response = Invoke-WebRequest -Uri $url -MaximumRedirection 0 -ErrorAction Stop `
-            -Headers @{ "User-Agent" = "gentle-opencode-installer" }
+            -UseBasicParsing -Headers @{ "User-Agent" = "gentle-opencode-installer" }
     } catch {
         $response = $_.Exception.Response
     }
@@ -130,8 +130,8 @@ function Get-LatestFromNextcloud {
     try {
         $auth = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("${NEXTCLOUD_TOKEN}:"))
         $response = Invoke-WebRequest -Uri $NEXTCLOUD_WEBDAV -Method PROPFIND `
-            -Headers @{ "Authorization" = "Basic $auth" } `
-            -TimeoutSec 10 -UseBasicParsing
+            -UseBasicParsing -TimeoutSec 10 `
+            -Headers @{ "Authorization" = "Basic $auth" } -UseBasicParsing
     } catch {
         Write-Warn "Cannot reach Nextcloud mirror."
         return $null
@@ -162,6 +162,25 @@ function Get-LatestFromNextcloud {
 
 # ─── Download Binary ───────────────────────────────────────────────────────
 
+function Download-WithRetry {
+    param([string]$Url, [string]$OutFile, [int]$MaxRetries = 3)
+
+    for ($i = 1; $i -le $MaxRetries; $i++) {
+        try {
+            if ($i -gt 1) {
+                $wait = [math]::Pow(2, $i)
+                Write-Warn "Retry $i/$MaxRetries in ${wait}s..."
+                Start-Sleep -Seconds $wait
+            }
+            Invoke-WebRequest -Uri $Url -OutFile $OutFile -UseBasicParsing -TimeoutSec 30
+            return $true
+        } catch {
+            Write-Warn "Download attempt $i failed: $_"
+        }
+    }
+    return $false
+}
+
 function Install-Binary {
     param(
         [string]$Repo,
@@ -175,19 +194,16 @@ function Install-Binary {
 
     $arch = Get-Arch
 
+    # Build primary URL
     if ($MirrorUrl) {
-        if ($Version) {
-            $archiveName = "${BinaryName}_$($Version -replace '^v','')_windows_${arch}.zip"
-        } else {
-            $archiveName = "${BinaryName}_windows_${arch}.zip"
-        }
-        $downloadUrl = "${MirrorUrl}?path=/&files=${archiveName}"
-        Write-Info "Using mirror: $MirrorUrl"
-    } else {
-        $version = Get-LatestVersion -Repo $Repo
-        $versionNumber = $version.TrimStart("v")
+        $versionNumber = $Version -replace '^v',''
         $archiveName = "${BinaryName}_${versionNumber}_windows_${arch}.zip"
-        $downloadUrl = "https://github.com/$Repo/releases/download/$version/$archiveName"
+        $downloadUrl = "${MirrorUrl}?path=/&files=${archiveName}"
+        Write-Info "Using mirror: Nextcloud"
+    } else {
+        $versionNumber = $Version -replace '^v',''
+        $archiveName = "${BinaryName}_${versionNumber}_windows_${arch}.zip"
+        $downloadUrl = "https://github.com/$Repo/releases/download/$Version/$archiveName"
     }
 
     New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
@@ -198,15 +214,29 @@ function Install-Binary {
     try {
         Write-Info "Downloading $archiveName..."
         $archivePath = Join-Path $tmpDir $archiveName
-        Invoke-WebRequest -Uri $downloadUrl -OutFile $archivePath -UseBasicParsing
+
+        # Try primary download
+        $ok = Download-WithRetry -Url $downloadUrl -OutFile $archivePath
+
+        # If primary fails and we have a mirror option, try mirror
+        if (-not $ok -and -not $MirrorUrl -and $BinaryName -eq "opencode" -and $Version) {
+            Write-Warn "GitHub download failed. Trying Nextcloud mirror..."
+            $mirrorDownloadUrl = "${NEXTCLOUD_MIRROR}?path=/&files=${archiveName}"
+            $ok = Download-WithRetry -Url $mirrorDownloadUrl -OutFile $archivePath
+        }
+
+        if (-not $ok) {
+            Stop-WithError "Failed to download $archiveName after all attempts."
+        }
 
         $fileSize = (Get-Item $archivePath).Length
         if ($fileSize -lt 1000) {
             Stop-WithError "Downloaded file is suspiciously small (${fileSize} bytes)."
         }
-        Write-Success "Downloaded ($([math]::Round($fileSize / 1KB)) KB)"
+        Write-Success "Downloaded ($([math]::Round($fileSize / 1MB, 1)) MB)"
 
         if ($NeedsExtract) {
+            Write-Info "Extracting..."
             Expand-Archive -Path $archivePath -DestinationPath $tmpDir -Force
             $binaryPath = Join-Path $tmpDir "$BinaryName.exe"
         } else {
@@ -214,7 +244,6 @@ function Install-Binary {
         }
 
         if (-not (Test-Path $binaryPath)) {
-            # Try with .exe extension
             $binaryPath = Join-Path $tmpDir "$BinaryName.exe"
             if (-not (Test-Path $binaryPath)) {
                 Stop-WithError "Binary '$BinaryName.exe' not found in archive"
@@ -224,7 +253,7 @@ function Install-Binary {
         $destPath = Join-Path $OutputDir "$BinaryName.exe"
         Write-Info "Installing to $destPath..."
         Copy-Item -Path $binaryPath -Destination $destPath -Force
-        Write-Success "Installed $BinaryName"
+        Write-Success "Installed $BinaryName $Version"
 
         return $destPath
     }
@@ -359,15 +388,16 @@ function Main {
     Write-Success "git, node, npm — all present"
 
     Write-Step "Installing opencode-fork"
-    if ($UseMirror) {
-        Write-Info "Downloading from Nextcloud mirror..."
-        Install-Binary -Repo $OPENCODE_REPO -OutputDir $OPENCODE_DIR -AssetName "opencode" -BinaryName "opencode" -MirrorUrl $NEXTCLOUD_MIRROR -Version $Version
-    } else {
-        Install-Binary -Repo $OPENCODE_REPO -OutputDir $OPENCODE_DIR -AssetName "opencode" -BinaryName "opencode"
-    }
+    Install-Binary -Repo $OPENCODE_REPO -OutputDir $OPENCODE_DIR -AssetName "opencode" -BinaryName "opencode" `
+        -Version $Version $(if ($UseMirror) { "-MirrorUrl $NEXTCLOUD_MIRROR" } else { "" })
 
     Write-Step "Installing gentle-ai"
-    Install-Binary -Repo $GENTLE_REPO -OutputDir $GENTLE_DIR -AssetName "gentle-ai" -BinaryName "gentle-ai"
+    $gentleVersion = Get-LatestVersion -Repo $GENTLE_REPO
+    if (-not $gentleVersion) {
+        Write-Warn "Cannot reach GitHub for gentle-ai. Trying anyway with known version..."
+        $gentleVersion = "v2.1.5"  # last known stable
+    }
+    Install-Binary -Repo $GENTLE_REPO -OutputDir $GENTLE_DIR -AssetName "gentle-ai" -BinaryName "gentle-ai" -Version $gentleVersion
 
     Write-Step "Setting up PATH"
     if (-not $NoModifyPath) {
