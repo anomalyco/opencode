@@ -17,7 +17,7 @@
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
-    "@fontsource/adwaita-mono": "5.2.1",
+    "@fontsource/commit-mono": "5.2.5",
     "@napi-rs/canvas": "1.0.2",
     "@opencode-ai/core": "workspace:*",
     "@opencode-ai/llm": "workspace:*",

@@ -879,7 +879,7 @@
       "name": "@opencode-ai/simulation",
       "version": "1.17.13",
       "dependencies": {
-        "@fontsource/adwaita-mono": "5.2.1",
+        "@fontsource/commit-mono": "5.2.5",
         "@napi-rs/canvas": "1.0.2",
         "@opencode-ai/core": "workspace:*",
         "@opencode-ai/llm": "workspace:*",
@@ -1764,7 +1764,7 @@
 
     "@floating-ui/utils": ["@floating-ui/utils@0.2.11", "", {}, "sha512-RiB/yIh78pcIxl6lLMG0CgBXAZ2Y0eVHqMPYugu+9U0AeT6YBeiJpf7lbdJNIugFP5SIjwNRgo4DhR1Qxi26Gg=="],
 
-    "@fontsource/adwaita-mono": ["@fontsource/adwaita-mono@5.2.1", "", {}, "sha512-6+Q1UIvklJ9REijs6kv7YlRNt6yktRj0iW8H69YIugdD9P2h3eIX1AB8/9ICMfpVyVeywlsrCXg82y/LfRrjyg=="],
+    "@fontsource/commit-mono": ["@fontsource/commit-mono@5.2.5", "", {}, "sha512-htX8yQWtiPt5L1Hzh4sirvfUJT2+KYiquDB/Q2sY2tWQYplpBUOD5zHnIM3k36Hnm4V+JIIqA/wmwupSQ68WjA=="],
 
     "@fontsource/ibm-plex-mono": ["@fontsource/ibm-plex-mono@5.2.5", "", {}, "sha512-G09N3GfuT9qj3Ax2FDZvKqZttzM3v+cco2l8uXamhKyXLdmlaUDH5o88/C3vtTHj2oT7yRKsvxz9F+BXbWKMYA=="],
 

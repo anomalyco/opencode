@@ -1,22 +1,20 @@
-import { fileURLToPath } from "node:url"
+/// <reference path="../assets.d.ts" />
 import { GlobalFonts, createCanvas } from "@napi-rs/canvas"
 import { TextAttributes, type CapturedFrame, type CliRenderer, type RGBA } from "@opentui/core"
+import regularFont from "@fontsource/commit-mono/files/commit-mono-latin-400-normal.woff2" with { type: "file" }
+import boldFont from "@fontsource/commit-mono/files/commit-mono-latin-700-normal.woff2" with { type: "file" }
+import italicFont from "@fontsource/commit-mono/files/commit-mono-latin-400-italic.woff2" with { type: "file" }
+import boldItalicFont from "@fontsource/commit-mono/files/commit-mono-latin-700-italic.woff2" with { type: "file" }
 
 const CellWidth = 10
 const CellHeight = 20
 const FontSize = 16
 const FontFamily = "OpenCode Mono"
 
-for (const file of [
-  "adwaita-mono-latin-400-normal.woff2",
-  "adwaita-mono-latin-700-normal.woff2",
-  "adwaita-mono-latin-400-italic.woff2",
-  "adwaita-mono-latin-700-italic.woff2",
-]) {
-  GlobalFonts.registerFromPath(
-    fileURLToPath(import.meta.resolve(`@fontsource/adwaita-mono/files/${file}`)),
-    FontFamily,
-  )
+for (const file of [regularFont, boldFont, italicFont, boldItalicFont]) {
+  const font = Buffer.from(await Bun.file(file).arrayBuffer())
+  if (!GlobalFonts.register(font, FontFamily))
+    throw new Error(`Failed to register screenshot font: ${file}`)
 }
 
 export function screenshot(renderer: CliRenderer) {
