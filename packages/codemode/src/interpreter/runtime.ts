@@ -998,6 +998,13 @@ export class Interpreter<R> {
     if (errorConstructors.has(name)) {
       return Effect.map(this.evaluateCallArguments(argNodes), (args) => constructErrorValue(name, args, node))
     }
+    // Array and Object construct identically with or without new, like JS.
+    if (name === "Array") {
+      return Effect.map(this.evaluateCallArguments(argNodes), (args) => self.constructArray(args, node))
+    }
+    if (name === "Object") {
+      return Effect.map(this.evaluateCallArguments(argNodes), (args) => self.constructObject(args, node))
+    }
     if (valueConstructors.has(name)) {
       return Effect.gen(function* () {
         const args = yield* self.evaluateCallArguments(argNodes)
@@ -1018,6 +1025,27 @@ export class Interpreter<R> {
       })
     }
     throw unsupportedSyntax("NewExpression", node)
+  }
+
+  private constructArray(args: Array<unknown>, node: AstNode): Array<unknown> {
+    if (args.length !== 1) return [...args]
+    const first = args[0]
+    if (typeof first !== "number") return [first]
+    if (!Number.isInteger(first) || first < 0 || first > 4294967295) {
+      throw new InterpreterRuntimeError("Invalid array length.", node).as("RangeError")
+    }
+    // Sparse like JS: Array(3) has holes, and combinator loops already skip them.
+    return new Array(first)
+  }
+
+  private constructObject(args: Array<unknown>, node: AstNode): unknown {
+    const first = args[0]
+    if (first === null || first === undefined) return {}
+    if (typeof first === "object") return first
+    throw new InterpreterRuntimeError(
+      `Object(${typeof first}) wrapper objects are not supported in CodeMode; use the primitive value directly.`,
+      node,
+    )
   }
 
   private constructDate(args: Array<unknown>): CodeModeDate {
@@ -1458,6 +1486,20 @@ export class Interpreter<R> {
       }
       if (callable instanceof ErrorConstructorReference) {
         return constructErrorValue(callable.name, args, node)
+      }
+      if (callable instanceof GlobalNamespace) {
+        // Real JS permits calling Array, Object, Date, and RegExp without new.
+        if (callable.name === "Array") return self.constructArray(args, node)
+        if (callable.name === "Object") return self.constructObject(args, node)
+        if (callable.name === "Date") return new Date().toString()
+        if (callable.name === "RegExp") return self.constructRegExp(args, node)
+        if (typeofValue(callable) === "function") {
+          throw new InterpreterRuntimeError(`Constructor ${callable.name} requires 'new'.`, node).as("TypeError")
+        }
+        throw new InterpreterRuntimeError(`${callable.name} is not a function.`, node).as("TypeError")
+      }
+      if (callable instanceof PromiseNamespace) {
+        throw new InterpreterRuntimeError("Constructor Promise requires 'new'.", node).as("TypeError")
       }
       if (callable instanceof PromiseCapabilityFunction) {
         callable.settle(args[0])

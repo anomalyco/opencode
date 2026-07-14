@@ -3,10 +3,13 @@ import {
   type AstNode,
   CodeModeFunction,
   CoercionFunction,
+  ErrorConstructorReference,
   GlobalMethodReference,
+  GlobalNamespace,
   IntrinsicReference,
   InterpreterRuntimeError,
   PromiseCapabilityFunction,
+  PromiseNamespace,
   UriFunction,
 } from "./model.js"
 import { rejectCircularInsertion, typeofValue } from "./references.js"
@@ -49,6 +52,9 @@ export type SupportedCallback =
   | PromiseCapabilityFunction
   | GlobalMethodReference
   | IntrinsicReference
+  | ErrorConstructorReference
+  | GlobalNamespace
+  | PromiseNamespace
 
 export const isSupportedCallback = (value: unknown): value is SupportedCallback =>
   value instanceof CodeModeFunction ||
@@ -56,7 +62,12 @@ export const isSupportedCallback = (value: unknown): value is SupportedCallback 
   value instanceof UriFunction ||
   value instanceof PromiseCapabilityFunction ||
   value instanceof GlobalMethodReference ||
-  value instanceof IntrinsicReference
+  value instanceof IntrinsicReference ||
+  value instanceof ErrorConstructorReference ||
+  // Callable namespaces dispatch like JS: Array/Object/Date/RegExp construct,
+  // new-requiring constructors throw a TypeError. Math/JSON/console stay non-callable.
+  (value instanceof GlobalNamespace && typeofValue(value) === "function") ||
+  value instanceof PromiseNamespace
 
 export const invokeIntrinsic = <R>(
   runner: CallbackRunner<R>,

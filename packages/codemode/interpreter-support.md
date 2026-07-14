@@ -85,8 +85,10 @@ ultimate source of truth.
       does not consume are ignored, like JS; consumed arguments stay strictly validated (`Math.floor` still rejects a
       string). Intrinsic references keep their receiver (`"abc".includes` works as a predicate), unlike detached JS
       methods, which lose `this`.
-- [x] Tool references, `Error` constructors, and `Promise` statics are rejected as callbacks with a hint to wrap
-      them in an arrow function.
+- [x] Constructors work as callbacks with JS call semantics: `Error` types construct (`messages.map(Error)`),
+      and new-requiring constructors (`Map`, `Set`, `URL`, `Promise`) throw a `TypeError`, like JS.
+- [x] Tool references and detached `Promise` statics are rejected as callbacks with a hint to wrap them in an
+      arrow function.
 - [x] Async string replacement callbacks; replacements are evaluated sequentially.
 - [x] A non-`undefined` `thisArg` for iteration methods is rejected explicitly: CodeMode functions have no `this`.
 - [ ] `this`, `super`, constructor functions, or function prototype methods such as `call`, `apply`, and `bind`.
@@ -153,6 +155,8 @@ ultimate source of truth.
 ## Objects and properties
 
 - [x] Own-field reads and writes on plain data objects.
+- [x] `Object()` and `new Object()` return `{}` for nullish arguments and pass objects through unchanged;
+      primitive wrapper objects (`Object(1)`) are rejected explicitly.
 - [x] Computed property names and object spread.
 - [x] `Object.keys`, `Object.values`, `Object.entries`, `Object.hasOwn`, `Object.assign`, and `Object.fromEntries`.
 - [x] `Object.keys` over arrays and tool references.
@@ -165,6 +169,8 @@ ultimate source of truth.
 
 ## Arrays
 
+- [x] The `Array` constructor with or without `new`: `Array(a, b)` collects arguments, `Array(n)` creates a
+      sparse array of that length (invalid lengths throw a `RangeError`), and holes behave like JS.
 - [x] Static methods: `Array.isArray`, `Array.of`, and `Array.from`, including the `Array.from` mapper form with
       `(value, index)` arguments.
 - [x] Iteration/transformation: `map`, `filter`, `flatMap`, and `forEach`.
@@ -228,6 +234,7 @@ ultimate source of truth.
 
 - [x] `Date.now`, `Date.parse`, and `Date.UTC`.
 - [x] `new Date()` from the current time, epoch milliseconds, a date string, another Date, or local components.
+- [x] `Date()` without `new` returns the current time as a string, like JS.
 - [x] `getTime`, `valueOf`, `toISOString`, `toJSON`, and deterministic ISO `toString`.
 - [x] Local getters: `getFullYear`, `getMonth`, `getDate`, `getDay`, `getHours`, `getMinutes`, `getSeconds`, and
       `getMilliseconds`.
@@ -243,7 +250,7 @@ ultimate source of truth.
 
 ## Regular expressions
 
-- [x] Literal and `new RegExp(pattern, flags)` construction.
+- [x] Literal and `RegExp(pattern, flags)` construction, with or without `new`.
 - [x] `test`, `exec`, and `toString`.
 - [x] Readable `source`, `flags`, `lastIndex`, `global`, `ignoreCase`, `multiline`, `sticky`, `unicode`, and `dotAll`.
 - [x] Captures, named groups, match indexes, and stateful global matching.

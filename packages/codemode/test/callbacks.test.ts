@@ -75,6 +75,42 @@ describe("built-in method references as callbacks", () => {
   })
 })
 
+describe("constructors callable without new, like JS", () => {
+  test("Error constructors work as callbacks and direct calls", async () => {
+    expect(await value(`return ["boom"].map(Error)[0].message`)).toBe("boom")
+    expect(await value(`return TypeError("bad").name`)).toBe("TypeError")
+  })
+
+  test("Array constructs from arguments or a length", async () => {
+    expect(await value(`return Array(1, 2, 3)`)).toEqual([1, 2, 3])
+    expect(await value(`return Array("3")`)).toEqual(["3"])
+    expect(await value(`return Array(3).length`)).toBe(3)
+    expect(await value(`return new Array(2).length`)).toBe(2)
+    // Holes stay holes, like JS: map skips them, spread materializes undefined.
+    expect(await value(`return Array(3).map((x) => 1)`)).toEqual([])
+    expect(await value(`return [...Array(3)].map((_, i) => i)`)).toEqual([0, 1, 2])
+    expect((await error(`return Array(-1)`)).message).toContain("Invalid array length")
+    expect((await error(`return Array(1.5)`)).message).toContain("Invalid array length")
+  })
+
+  test("Object returns objects unchanged and rejects primitive wrappers", async () => {
+    expect(await value(`return Object()`)).toEqual({})
+    expect(await value(`const o = { a: 1 }; return Object(o) === o`)).toBe(true)
+    expect((await error(`return Object(1)`)).message).toContain("wrapper objects are not supported")
+  })
+
+  test("Date() without new returns a string, RegExp() constructs", async () => {
+    expect(await value(`return typeof Date()`)).toBe("string")
+    expect(await value(`return "abc".replace(RegExp("b"), "x")`)).toBe("axc")
+  })
+
+  test("new-requiring constructors throw a TypeError when called", async () => {
+    expect((await error(`return Map()`)).message).toContain("Constructor Map requires 'new'")
+    expect((await error(`return [1].map(Set)`)).message).toContain("Constructor Set requires 'new'")
+    expect((await error(`return Promise(() => 1)`)).message).toContain("Constructor Promise requires 'new'")
+  })
+})
+
 describe("sort accepts the unified callback set", () => {
   test("sort and toSorted take built-in comparators", async () => {
     expect(await value(`return [0, 1, 0].sort(Boolean)`)).toEqual([0, 0, 1])
@@ -135,8 +171,7 @@ describe("still-rejected callables get the wrap hint", () => {
     })
   })
 
-  test("Error constructors and Promise statics as callbacks suggest an arrow wrapper", async () => {
-    expect((await error(`return [1].map(Error)`)).message).toContain("wrap it in an arrow function")
+  test("detached Promise statics as callbacks suggest an arrow wrapper", async () => {
     expect((await error(`return [1].map(Promise.resolve)`)).message).toContain("wrap it in an arrow function")
   })
 

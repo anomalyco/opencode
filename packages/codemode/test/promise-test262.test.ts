@@ -1406,9 +1406,8 @@ describe("Test262 Promise constructor", () => {
     ).toEqual(["before", "executor", "after"])
   })
 
-  test.failing("calling Promise without new throws TypeError", async () => {
+  test("calling Promise without new throws TypeError", async () => {
     // Source: test/built-ins/Promise/undefined-newtarget.js
-    // CodeMode currently reports a generic Error ("Only tools are callable in CodeMode.").
     expect(
       await value(`
         try {
