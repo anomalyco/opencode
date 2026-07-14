@@ -103,7 +103,7 @@ function wrapSSE(res: Response, ms: number, ctl: AbortController) {
 }
 
 function prepareOptions(model: ModelV2.Info, pkg: string) {
-  const projected = projectOptions(model)
+  const projected = mapBodyToProviderOptions(model)
   const options: Record<string, any> = {
     name: model.providerID,
     ...(model.settings ?? {}),
@@ -302,7 +302,7 @@ export const defaultLayer = locationLayer
 
 function modelFromLanguage(info: ModelV2.Info, language: LanguageModelV3) {
   const packageName = ProviderV2.packageName(info.package)
-  const projected = projectOptions(info)
+  const projected = mapBodyToProviderOptions(info)
   const optionKey = providerOptionKey(packageName, info.providerID)
   const route: AnyRoute = {
     id: `ai-sdk:${ProviderV2.packageName(info.package) ?? "unknown"}`,
@@ -365,22 +365,13 @@ function requestSettings(settings: Readonly<Record<string, unknown>> | undefined
   return Object.keys(result).length === 0 ? undefined : result
 }
 
-function projectOptions(model: ModelV2.Info) {
+function mapBodyToProviderOptions(model: ModelV2.Info) {
   const settings = requestSettings(model.settings)
   if (ProviderV2.packageName(model.package) !== "@ai-sdk/openai") return { settings, body: model.body }
-  const reasoning = model.body?.reasoning
-  if (
-    typeof reasoning !== "object" ||
-    reasoning === null ||
-    Array.isArray(reasoning) ||
-    !("mode" in reasoning) ||
-    reasoning.mode !== "pro"
-  )
+  if (!Schema.is(Schema.Struct({ mode: Schema.Literal("pro") }))(model.body?.reasoning))
     return { settings, body: model.body }
   const body = { ...model.body }
-  const remaining = Object.fromEntries(Object.entries(reasoning).filter(([key]) => key !== "mode"))
-  if (Object.keys(remaining).length === 0) delete body.reasoning
-  if (Object.keys(remaining).length > 0) body.reasoning = remaining
+  delete body.reasoning
   return {
     settings: ProviderV2.mergeOverlay(settings, { reasoningMode: "pro" }),
     body: Object.keys(body).length === 0 ? undefined : body,
