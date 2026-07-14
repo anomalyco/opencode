@@ -1,5 +1,6 @@
 import { describe, test, expect } from "bun:test"
-import { Effect, FileSystem } from "effect"
+import { Effect, Exit, FileSystem, Layer } from "effect"
+import { NodeFileSystem } from "@effect/platform-node"
 import { LayerNodePlatform } from "@opencode-ai/core/effect/app-node-platform"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
@@ -8,6 +9,18 @@ import path from "path"
 
 const live = LayerNode.compile(LayerNode.group([FSUtil.node, LayerNodePlatform.filesystem]))
 const { effect: it } = testEffect(live)
+const alreadyExistsFilesystem = Layer.effect(
+  FileSystem.FileSystem,
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem
+    return { ...fs, makeDirectory: (path: string) => fs.makeDirectory(path) }
+  }),
+).pipe(Layer.provide(NodeFileSystem.layer))
+const { effect: itAlreadyExists } = testEffect(
+  LayerNode.compile(LayerNode.group([FSUtil.node, LayerNodePlatform.filesystem]), [
+    [LayerNodePlatform.filesystem, alreadyExistsFilesystem],
+  ]),
+)
 
 describe("FSUtil", () => {
   describe("isDir", () => {
@@ -156,6 +169,28 @@ describe("FSUtil", () => {
 
         const info = yield* filesys.stat(dir)
         expect(info.type).toBe("Directory")
+      }),
+    )
+  })
+
+  describe("ensureDir with platform-reported AlreadyExists", () => {
+    itAlreadyExists(
+      "accepts an existing directory",
+      Effect.gen(function* () {
+        const fs = yield* FSUtil.Service
+        const filesys = yield* FileSystem.FileSystem
+        yield* fs.ensureDir(yield* filesys.makeTempDirectoryScoped())
+      }),
+    )
+
+    itAlreadyExists(
+      "rejects a file collision",
+      Effect.gen(function* () {
+        const fs = yield* FSUtil.Service
+        const filesys = yield* FileSystem.FileSystem
+        const file = path.join(yield* filesys.makeTempDirectoryScoped(), "occupied")
+        yield* filesys.writeFileString(file, "x")
+        expect(Exit.isFailure(yield* fs.ensureDir(file).pipe(Effect.exit))).toBe(true)
       }),
     )
   })
