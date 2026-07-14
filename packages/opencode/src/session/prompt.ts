@@ -1363,6 +1363,16 @@ const layer = Layer.effect(
           continue
         }
 
+        yield* Effect.gen(function* () {
+          const info = yield* config.get()
+          if (!info.autoFix?.enabled) return
+          yield* events.publish(TuiEvent.ToastShow, {
+            message: `[auto] running lint checks post-turn`,
+            variant: "info",
+            duration: 3000,
+          }).pipe(Effect.ignore)
+        }).pipe(Effect.ignore)
+
         yield* compaction.prune({ sessionID }).pipe(Effect.ignore, Effect.forkIn(scope))
         return yield* lastAssistant(sessionID)
       },

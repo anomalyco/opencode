@@ -307,6 +307,13 @@ export interface Hooks {
     output: { context: string[]; prompt?: string },
   ) => Promise<void>
   /**
+   * Called after each LLM turn completes with the assistant message
+   */
+  "experimental.turn.complete"?: (
+    input: { sessionID: string; messageID: string },
+    output: { errorSummary: string },
+  ) => Promise<void>
+  /**
    * Called when a multi-agent team agent completes its work
    */
   "agent.complete"?: (

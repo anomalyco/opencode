@@ -6,6 +6,7 @@ import { ConfigExperimental } from "../../config/experimental"
 import { ConfigReference } from "../../config/reference"
 import { ConfigAgentV1 } from "./agent"
 import { ConfigAttachmentV1 } from "./attachment"
+import { ConfigAutoFixV1 } from "./auto-fix"
 import { ConfigContextV1 } from "./context"
 import { ConfigCommandV1 } from "./command"
 import { ConfigDiagramsV1 } from "./diagrams"
@@ -132,6 +133,9 @@ export const Info = Schema.Struct({
   }),
   context: Schema.optional(ConfigContextV1.Info).annotate({
     description: "Context configuration controlling automatic file inclusion behavior",
+  }),
+  autoFix: Schema.optional(ConfigAutoFixV1.Info).annotate({
+    description: "Auto-fix lint and compilation errors after each session turn",
   }),
   multiAgent: Schema.optional(ConfigMultiAgentV1.Info).annotate({
     description: "Multi-agent orchestration configuration for team commands",
