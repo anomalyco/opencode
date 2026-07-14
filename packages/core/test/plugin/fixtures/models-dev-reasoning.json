@@ -27,6 +27,11 @@
                 "headers": { "x-mode": "high" },
                 "body": { "service_tier": "priority" }
               }
+            },
+            "pro": {
+              "provider": {
+                "body": { "reasoning": { "mode": "pro" } }
+              }
             }
           }
         }
@@ -49,10 +54,10 @@
         "reasoning_options": [{ "type": "budget_tokens", "min": 1024, "max": 64000 }],
         "temperature": true,
         "tool_call": true,
-        "limit": { "context": 128000, "output": 8192 }
+        "limit": { "context": 128000, "output": 64000 }
       },
       "claude-effort": {
-        "id": "claude-effort",
+        "id": "claude-opus-4.7",
         "name": "Claude Effort",
         "release_date": "2026-01-01",
         "attachment": false,
@@ -61,6 +66,36 @@
         "temperature": true,
         "tool_call": true,
         "limit": { "context": 128000, "output": 8192 }
+      }
+    }
+  },
+  "alibaba": {
+    "id": "alibaba",
+    "name": "Alibaba",
+    "env": ["ALIBABA_API_KEY"],
+    "npm": "@ai-sdk/alibaba",
+    "models": {
+      "toggle-only": {
+        "id": "toggle-only",
+        "name": "Toggle Only",
+        "release_date": "2026-01-01",
+        "attachment": false,
+        "reasoning": true,
+        "reasoning_options": [{ "type": "toggle" }],
+        "temperature": true,
+        "tool_call": true,
+        "limit": { "context": 128000, "output": 20000 }
+      },
+      "toggle-budget": {
+        "id": "toggle-budget",
+        "name": "Toggle Budget",
+        "release_date": "2026-01-01",
+        "attachment": false,
+        "reasoning": true,
+        "reasoning_options": [{ "type": "toggle" }, { "type": "budget_tokens", "max": 16000 }],
+        "temperature": true,
+        "tool_call": true,
+        "limit": { "context": 128000, "output": 20000 }
       }
     }
   }

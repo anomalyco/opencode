@@ -292,6 +292,12 @@ describe("ModelsDevPlugin", () => {
             ModelV2.VariantID.make("high"),
           ])
 
+          const pro = yield* catalog.model.get(ProviderV2.ID.openai, ModelV2.ID.make("gpt-reasoning-pro"))
+          expect(pro).toMatchObject({
+            id: "gpt-reasoning-pro",
+            body: { reasoning: { mode: "pro" } },
+          })
+
           const budgetModel = yield* catalog.model.get(ProviderV2.ID.anthropic, ModelV2.ID.make("claude-budget"))
           expect(budgetModel?.variants).toContainEqual({
             id: ModelV2.VariantID.make("high"),
@@ -299,17 +305,36 @@ describe("ModelsDevPlugin", () => {
           })
           expect(budgetModel?.variants).toContainEqual({
             id: ModelV2.VariantID.make("max"),
-            settings: { thinking: { type: "enabled", budgetTokens: 64000 } },
+            settings: { thinking: { type: "enabled", budgetTokens: 31999 } },
           })
 
           const anthropicEffortModel = yield* catalog.model.get(
             ProviderV2.ID.anthropic,
-            ModelV2.ID.make("claude-effort"),
+            ModelV2.ID.make("claude-opus-4.7"),
           )
           expect(anthropicEffortModel?.variants).toContainEqual({
             id: ModelV2.VariantID.make("low"),
             settings: { thinking: { type: "adaptive", display: "summarized" }, effort: "low" },
           })
+
+          const toggle = yield* catalog.model.get(ProviderV2.ID.make("alibaba"), ModelV2.ID.make("toggle-only"))
+          expect(toggle?.variants).toEqual([
+            { id: ModelV2.VariantID.make("none"), settings: { enableThinking: false } },
+            { id: ModelV2.VariantID.make("thinking"), settings: { enableThinking: true } },
+          ])
+
+          const combined = yield* catalog.model.get(ProviderV2.ID.make("alibaba"), ModelV2.ID.make("toggle-budget"))
+          expect(combined?.variants).toEqual([
+            { id: ModelV2.VariantID.make("none"), settings: { enableThinking: false } },
+            {
+              id: ModelV2.VariantID.make("high"),
+              settings: { enableThinking: true, thinkingBudget: 8000 },
+            },
+            {
+              id: ModelV2.VariantID.make("max"),
+              settings: { enableThinking: true, thinkingBudget: 16000 },
+            },
+          ])
         }).pipe(Effect.provide(AppNodeBuilder.build(ModelsDev.node))),
       (previous) =>
         Effect.sync(() => {

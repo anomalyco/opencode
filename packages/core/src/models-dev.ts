@@ -56,7 +56,10 @@ type SourceModel = {
         string,
         {
           readonly cost?: Cost
-          readonly provider?: { readonly body?: ProviderV2.Settings; readonly headers?: Readonly<Record<string, string>> }
+          readonly provider?: {
+            readonly body?: ProviderV2.Settings
+            readonly headers?: Readonly<Record<string, string>>
+          }
         }
       >
     >
@@ -185,61 +188,162 @@ function mergeCost(base: ModelV2.Info["cost"], override: SourceModel["cost"] | u
 }
 
 const OPENAI_INCLUDE_ENCRYPTED_REASONING = ["reasoning.encrypted_content"]
+const OUTPUT_TOKEN_MAX = 32_000
 
 function reasoningVariants(provider: SourceProvider, model: SourceModel): NonNullable<ModelV2.Info["variants"]> {
   const npm = model.provider?.npm ?? provider.npm
-  const options = model.reasoning_options ?? []
+  const options = model.reasoning_options
+  if (options === undefined) return []
+  if (options.length === 0) return []
   const effort = options.find((option) => option.type === "effort")
   if (effort?.type === "effort") {
     return effort.values.flatMap((value) => {
       const raw: unknown = value
       const id = raw === null ? "none" : typeof raw === "string" ? raw : undefined
       if (id === undefined) return []
-      const settings = settingsForEffort(npm, id)
+      const settings = settingsForEffort(npm, model.id, id)
       return settings ? [{ id: ModelV2.VariantID.make(id), settings }] : []
     })
   }
+  const toggle = options.some((option) => option.type === "toggle")
   const budget = options.find((option) => option.type === "budget_tokens")
-  if (budget?.type === "budget_tokens") return budgetVariants(npm, budget)
-  return []
+  const variants = [
+    ...(toggle ? toggleVariants(npm, budget ? "high" : "thinking") : []),
+    ...(budget?.type === "budget_tokens" ? budgetVariants(npm, model, budget) : []),
+  ]
+  return [...new Map(variants.map((variant) => [variant.id, variant])).values()]
 }
 
-function settingsForEffort(npm: string | undefined, effort: string): ProviderV2.Settings | undefined {
+function settingsForEffort(npm: string | undefined, modelID: string, effort: string): ProviderV2.Settings | undefined {
   if (npm === "@openrouter/ai-sdk-provider") return { reasoning: { effort } }
-  if (npm === "@ai-sdk/anthropic" || npm === "@ai-sdk/google-vertex/anthropic")
-    return { thinking: { type: "adaptive", display: "summarized" }, effort }
+  if (npm === "@ai-sdk/anthropic" || npm === "@ai-sdk/google-vertex/anthropic") {
+    if (["opus-4-5", "opus-4.5"].some((value) => modelID.includes(value))) return { effort }
+    if (!anthropicAdaptive(modelID)) return
+    return {
+      thinking: { type: "adaptive", ...(anthropicOmitsThinking(modelID) ? { display: "summarized" } : {}) },
+      effort,
+    }
+  }
   if (npm === "@ai-sdk/google" || npm === "@ai-sdk/google-vertex")
     return { thinkingConfig: { includeThoughts: true, thinkingLevel: effort } }
-  if (npm === "@ai-sdk/azure") return { reasoningEffort: effort }
-  if (npm === "@ai-sdk/openai")
+  if (npm === "@ai-sdk/amazon-bedrock") {
+    if (anthropicAdaptive(modelID))
+      return {
+        reasoningConfig: {
+          type: "adaptive",
+          maxReasoningEffort: effort,
+          ...(anthropicOmitsThinking(modelID) ? { display: "summarized" } : {}),
+        },
+      }
+    if (modelID.includes("anthropic")) return
+    return { reasoningConfig: { type: "enabled", maxReasoningEffort: effort } }
+  }
+  if (npm === "@ai-sdk/gateway") {
+    if (modelID.includes("anthropic")) return { thinking: { type: "adaptive", display: "summarized" }, effort }
+    if (modelID.includes("google")) return { thinkingConfig: { includeThoughts: true, thinkingLevel: effort } }
+    return { reasoningEffort: effort }
+  }
+  if (npm === "@ai-sdk/github-copilot") {
+    if (modelID.includes("gemini")) return
+    if (modelID.includes("claude")) return { reasoningEffort: effort }
     return { reasoningEffort: effort, reasoningSummary: "auto", include: OPENAI_INCLUDE_ENCRYPTED_REASONING }
-  if (npm === "@ai-sdk/openai-compatible") return { reasoningEffort: effort }
+  }
+  if (npm === "@ai-sdk/openai" || npm === "@ai-sdk/amazon-bedrock/mantle" || npm === "@ai-sdk/azure")
+    return { reasoningEffort: effort, reasoningSummary: "auto", include: OPENAI_INCLUDE_ENCRYPTED_REASONING }
+  if (npm === "@jerome-benoit/sap-ai-provider-v2") {
+    if (modelID.includes("anthropic"))
+      return { modelParams: { thinking: { type: "adaptive", display: "summarized" }, output_config: { effort } } }
+    return { modelParams: { reasoning_effort: effort } }
+  }
+  if (
+    [
+      "@ai-sdk/openai-compatible",
+      "@ai-sdk/xai",
+      "@ai-sdk/mistral",
+      "@ai-sdk/groq",
+      "@ai-sdk/cerebras",
+      "@ai-sdk/deepinfra",
+      "@ai-sdk/togetherai",
+      "venice-ai-sdk-provider",
+      "ai-gateway-provider",
+    ].includes(npm ?? "")
+  )
+    return { reasoningEffort: effort }
 }
 
 function budgetVariants(
   npm: string | undefined,
+  model: SourceModel,
   option: Extract<NonNullable<SourceModel["reasoning_options"]>[number], { type: "budget_tokens" }>,
 ): NonNullable<ModelV2.Info["variants"]> {
-  const max = option.max
-  const high =
-    option.max === undefined
-      ? Math.max(option.min ?? 0, 16_000)
-      : Math.min(Math.max(option.min ?? 0, 16_000), option.max)
+  const maximum = Math.min(option.max ?? OUTPUT_TOKEN_MAX - 1, model.limit.output - 1, OUTPUT_TOKEN_MAX - 1)
+  if (maximum <= 0) return []
+  const high = Math.min(Math.max(option.min ?? 0, Math.floor((maximum + 1) / 2)), maximum)
   return [
     { id: "high", budget: high },
-    ...(max === undefined || max === high ? [] : [{ id: "max", budget: max }]),
+    { id: "max", budget: maximum },
   ].flatMap((item) => {
-    const settings = settingsForBudget(npm, item.budget)
+    const settings = settingsForBudget(npm, model.id, item.budget)
     return settings ? [{ id: ModelV2.VariantID.make(item.id), settings }] : []
   })
 }
 
-function settingsForBudget(npm: string | undefined, budget: number): ProviderV2.Settings | undefined {
+function toggleVariants(
+  npm: string | undefined,
+  enabledID: "thinking" | "high",
+): NonNullable<ModelV2.Info["variants"]> {
+  if (npm === "@ai-sdk/alibaba")
+    return [
+      { id: ModelV2.VariantID.make("none"), settings: { enableThinking: false } },
+      { id: ModelV2.VariantID.make(enabledID), settings: { enableThinking: true } },
+    ]
+  if (npm === "@ai-sdk/cohere")
+    return [
+      { id: ModelV2.VariantID.make("none"), settings: { thinking: { type: "disabled" } } },
+      { id: ModelV2.VariantID.make(enabledID), settings: { thinking: { type: "enabled" } } },
+    ]
+  return []
+}
+
+function settingsForBudget(npm: string | undefined, modelID: string, budget: number): ProviderV2.Settings | undefined {
   if (npm === "@openrouter/ai-sdk-provider") return { reasoning: { max_tokens: budget } }
   if (npm === "@ai-sdk/anthropic" || npm === "@ai-sdk/google-vertex/anthropic")
     return { thinking: { type: "enabled", budgetTokens: budget } }
   if (npm === "@ai-sdk/google" || npm === "@ai-sdk/google-vertex")
     return { thinkingConfig: { includeThoughts: true, thinkingBudget: budget } }
+  if (npm === "@ai-sdk/amazon-bedrock") return { reasoningConfig: { type: "enabled", budgetTokens: budget } }
+  if (npm === "@ai-sdk/gateway") {
+    if (modelID.includes("anthropic")) return { thinking: { type: "enabled", budgetTokens: budget } }
+    if (modelID.includes("google")) return { thinkingConfig: { includeThoughts: true, thinkingBudget: budget } }
+    return
+  }
+  if (npm === "@ai-sdk/cohere") return { thinking: { type: "enabled", tokenBudget: budget } }
+  if (npm === "@ai-sdk/alibaba") return { enableThinking: true, thinkingBudget: budget }
+  if (npm === "@jerome-benoit/sap-ai-provider-v2") {
+    if (modelID.includes("anthropic")) return { modelParams: { thinking: { type: "enabled", budget_tokens: budget } } }
+    if (modelID.includes("gemini"))
+      return { modelParams: { thinkingConfig: { includeThoughts: true, thinkingBudget: budget } } }
+  }
+}
+
+function anthropicAdaptive(modelID: string) {
+  return (
+    anthropicOmitsThinking(modelID) ||
+    ["opus-4-6", "opus-4.6", "4-6-opus", "4.6-opus", "sonnet-4-6", "sonnet-4.6", "4-6-sonnet", "4.6-sonnet"].some(
+      (value) => modelID.includes(value),
+    )
+  )
+}
+
+function anthropicOmitsThinking(modelID: string) {
+  const opus = /opus-(\d+)[.-](\d+)(?:[.@-]|$)|claude-(\d+)[.-](\d+)-opus(?:[.@-]|$)/i.exec(modelID)
+  if (opus) {
+    const major = Number(opus[1] ?? opus[3])
+    const minor = Number(opus[2] ?? opus[4])
+    if (major > 4 || (major === 4 && minor >= 7)) return true
+  }
+  const sonnet = /sonnet-(\d+)(?:[.@-]|$)|claude-(\d+)-sonnet(?:[.@-]|$)/i.exec(modelID)
+  return (sonnet !== null && Number(sonnet[1] ?? sonnet[2]) >= 5) || modelID.includes("fable-5")
 }
 
 function modeName(model: SourceModel, mode: string) {
