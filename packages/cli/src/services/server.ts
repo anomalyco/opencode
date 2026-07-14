@@ -27,9 +27,7 @@ export const resolve = Effect.fn("cli.server.resolve")(function* (args: Args) {
     const password = yield* Env.password
     const endpoint = {
       url: args.server,
-      auth: password
-        ? { type: "basic" as const, username: "opencode", password: Redacted.value(password) }
-        : undefined,
+      auth: password ? { type: "basic" as const, username: "opencode", password: Redacted.value(password) } : undefined,
     } satisfies Service.Endpoint
     const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) })
     const health = yield* Effect.tryPromise({
@@ -48,18 +46,9 @@ export const resolve = Effect.fn("cli.server.resolve")(function* (args: Args) {
 
   const options = yield* ServiceConfig.options()
   const endpoint = yield* resolveManaged({ ...options, onStart: args.onStart }, args.mismatch ?? "replace")
-  const reconnectOptions = { ...options, version: undefined }
   return {
     endpoint,
-    reconnect: (attempt) =>
-      Effect.runPromise(
-        Effect.gen(function* () {
-          if (attempt > 3) return yield* Service.start(reconnectOptions)
-          const endpoint = yield* Service.discover(reconnectOptions)
-          if (endpoint !== undefined) return endpoint
-          return yield* Effect.fail(new Error("Background server is unavailable"))
-        }).pipe(Effect.provide(NodeFileSystem.layer)),
-      ),
+    reconnect: () => Effect.runPromise(managedReconnect(options).pipe(Effect.provide(NodeFileSystem.layer))),
     reload: () =>
       Effect.runPromise(
         Effect.gen(function* () {
@@ -68,6 +57,10 @@ export const resolve = Effect.fn("cli.server.resolve")(function* (args: Args) {
         }).pipe(Effect.provide(NodeFileSystem.layer)),
       ),
   } satisfies Resolved
+})
+
+export const managedReconnect = Effect.fnUntraced(function* (options: Service.StartOptions) {
+  return yield* Service.start({ ...options, version: undefined })
 })
 
 const resolveManaged = Effect.fnUntraced(function* (
@@ -80,7 +73,8 @@ const resolveManaged = Effect.fnUntraced(function* (
   const compatible = yield* Service.discover(options)
   if (compatible !== undefined) return compatible
   const existing = yield* Service.discover({ ...options, version: undefined })
-  if (existing !== undefined) return yield* Effect.fail(new Error("Background server version does not match this client"))
+  if (existing !== undefined)
+    return yield* Effect.fail(new Error("Background server version does not match this client"))
   return yield* Service.start(options)
 })
 
