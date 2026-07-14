@@ -590,6 +590,9 @@ export const dict = {
   "settings.general.row.followup.option.steer": "조종",
   "settings.general.row.reasoningSummaries.title": "추론 요약 표시",
   "settings.general.row.reasoningSummaries.description": "타임라인에 모델 추론 요약 표시",
+  "settings.general.row.keepModelOverride.title": "모델 재정의 유지",
+  "settings.general.row.keepModelOverride.description":
+    "메시지를 보낸 후에도 현재 대화에서 수동으로 선택한 모델을 유지합니다",
   "settings.general.row.shellToolPartsExpanded.title": "shell 도구 파트 펼치기",
   "settings.general.row.shellToolPartsExpanded.description":
     "타임라인에서 기본적으로 shell 도구 파트를 펼친 상태로 표시합니다",
@@ -795,6 +798,9 @@ export const dict = {
   "session.header.open.finder": "Finder",
   "session.header.open.fileExplorer": "파일 탐색기",
   "session.header.open.fileManager": "파일 관리자",
+  "session.header.reveal.finder": "Finder에서 보기",
+  "session.header.reveal.fileExplorer": "파일 탐색기에서 보기",
+  "session.header.reveal.containingFolder": "포함된 폴더 열기",
   "session.header.open.app.vscode": "VS Code",
   "session.header.open.app.cursor": "Cursor",
   "session.header.open.app.zed": "Zed",

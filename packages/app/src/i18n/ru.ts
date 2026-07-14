@@ -805,6 +805,9 @@ export const dict = {
   "settings.general.row.showCustomAgents.description": "Показывать выбор агента в редакторе запросов",
   "settings.general.row.reasoningSummaries.title": "Показывать сводки рассуждений",
   "settings.general.row.reasoningSummaries.description": "Отображать сводки рассуждений модели в ленте",
+  "settings.general.row.keepModelOverride.title": "Сохранять переопределение модели",
+  "settings.general.row.keepModelOverride.description":
+    "Сохранять выбранную вручную модель для текущего диалога после отправки сообщения",
 
   "settings.general.row.shellToolPartsExpanded.title": "Разворачивать элементы инструмента shell",
   "settings.general.row.shellToolPartsExpanded.description":
@@ -1039,6 +1042,9 @@ export const dict = {
   "session.header.open.finder": "Finder",
   "session.header.open.fileExplorer": "Проводник",
   "session.header.open.fileManager": "Файловый менеджер",
+  "session.header.reveal.finder": "Показать в Finder",
+  "session.header.reveal.fileExplorer": "Показать в Проводнике",
+  "session.header.reveal.containingFolder": "Открыть содержащую папку",
   "session.header.open.app.vscode": "VS Code",
   "session.header.open.app.cursor": "Cursor",
   "session.header.open.app.zed": "Zed",

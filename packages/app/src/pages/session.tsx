@@ -577,7 +577,7 @@ export default function Page() {
     if (!id || !prompt.ready() || !local.session.ready()) return
     if (restoredModelSession !== id) {
       restoredModelSession = id
-      if (restorePromptModel(local, prompt)) return
+      if (settings.general.keepModelOverride() && restorePromptModel(local, prompt)) return
     }
     syncPromptModel(local, prompt)
   })

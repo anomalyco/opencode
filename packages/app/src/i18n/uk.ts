@@ -714,6 +714,9 @@ export const dict = {
   "session.header.open.finder": "Finder",
   "session.header.open.fileExplorer": "Провідник файлів",
   "session.header.open.fileManager": "Файловий менеджер",
+  "session.header.reveal.finder": "Показати у Finder",
+  "session.header.reveal.fileExplorer": "Показати у Провіднику файлів",
+  "session.header.reveal.containingFolder": "Відкрити теку з файлом",
   "session.header.open.app.vscode": "VS Code",
   "session.header.open.app.cursor": "Cursor",
   "session.header.open.app.zed": "Zed",
@@ -896,6 +899,9 @@ export const dict = {
   "settings.general.row.showCustomAgents.description": "Показувати вибір агента в редакторі запиту",
   "settings.general.row.reasoningSummaries.title": "Показувати підсумки мислення",
   "settings.general.row.reasoningSummaries.description": "Відображати підсумки мислення моделі на часовій шкалі",
+  "settings.general.row.keepModelOverride.title": "Зберігати перевизначення моделі",
+  "settings.general.row.keepModelOverride.description":
+    "Зберігати вибрану вручну модель для поточної розмови після надсилання повідомлення",
   "settings.general.row.shellToolPartsExpanded.title": "Розгортати частини інструменту оболонки",
   "settings.general.row.shellToolPartsExpanded.description":
     "Показувати частини інструменту оболонки розгорнутими за замовчуванням на часовій шкалі",

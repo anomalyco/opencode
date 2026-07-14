@@ -804,6 +804,9 @@ export const dict = {
   "settings.general.row.showCustomAgents.description": "Prikaži izbor agenta u uređivaču poruke",
   "settings.general.row.reasoningSummaries.title": "Prikaži sažetke rasuđivanja",
   "settings.general.row.reasoningSummaries.description": "Prikaži sažetke rasuđivanja modela na vremenskoj traci",
+  "settings.general.row.keepModelOverride.title": "Zadrži nadjačavanje modela",
+  "settings.general.row.keepModelOverride.description":
+    "Zadrži ručno odabrani model za trenutni razgovor nakon slanja poruke",
 
   "settings.general.row.shellToolPartsExpanded.title": "Proširi dijelove shell alata",
   "settings.general.row.shellToolPartsExpanded.description":
@@ -1036,6 +1039,9 @@ export const dict = {
   "session.header.open.finder": "Finder",
   "session.header.open.fileExplorer": "File Explorer",
   "session.header.open.fileManager": "File Manager",
+  "session.header.reveal.finder": "Prikaži u Finderu",
+  "session.header.reveal.fileExplorer": "Prikaži u File Exploreru",
+  "session.header.reveal.containingFolder": "Otvori nadređeni folder",
   "session.header.open.app.vscode": "VS Code",
   "session.header.open.app.cursor": "Cursor",
   "session.header.open.app.zed": "Zed",

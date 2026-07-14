@@ -53,6 +53,7 @@ function PromptInputExample() {
       selection: model,
       paid: true,
       loading: false,
+      keepOverride: false,
     },
     session: {
       id: "story-session",
@@ -135,6 +136,7 @@ function PromptInputWithOpenDock() {
       },
       paid: true,
       loading: false,
+      keepOverride: false,
     },
     session: {
       id: "story-session",

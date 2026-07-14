@@ -753,6 +753,9 @@ export const dict = {
   "settings.general.row.reasoningSummaries.title": "Reasoning-Zusammenfassungen anzeigen",
   "settings.general.row.reasoningSummaries.description":
     "Zusammenfassungen des Modell-Reasonings in der Timeline anzeigen",
+  "settings.general.row.keepModelOverride.title": "Modellüberschreibung behalten",
+  "settings.general.row.keepModelOverride.description":
+    "Ein manuell ausgewähltes Modell nach dem Senden einer Nachricht für die aktuelle Unterhaltung behalten",
   "settings.general.row.shellToolPartsExpanded.title": "Shell-Tool-Abschnitte ausklappen",
   "settings.general.row.shellToolPartsExpanded.description":
     "Shell-Tool-Abschnitte standardmäßig in der Timeline ausgeklappt anzeigen",
@@ -973,6 +976,9 @@ export const dict = {
   "session.header.open.finder": "Finder",
   "session.header.open.fileExplorer": "Datei-Explorer",
   "session.header.open.fileManager": "Dateimanager",
+  "session.header.reveal.finder": "Im Finder anzeigen",
+  "session.header.reveal.fileExplorer": "Im Datei-Explorer anzeigen",
+  "session.header.reveal.containingFolder": "Enthaltenden Ordner öffnen",
   "session.header.open.app.vscode": "VS Code",
   "session.header.open.app.cursor": "Cursor",
   "session.header.open.app.zed": "Zed",

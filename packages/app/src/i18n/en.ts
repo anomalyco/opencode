@@ -893,6 +893,9 @@ export const dict = {
     "Switch between agents in the composer. When hidden, defaults to Build agent.",
   "settings.general.row.reasoningSummaries.title": "Show reasoning summaries",
   "settings.general.row.reasoningSummaries.description": "Display model reasoning summaries in the timeline",
+  "settings.general.row.keepModelOverride.title": "Keep model override",
+  "settings.general.row.keepModelOverride.description":
+    "Keep a manually selected model for the current conversation after sending a message",
   "settings.general.row.shellToolPartsExpanded.title": "Expand shell tool parts",
   "settings.general.row.shellToolPartsExpanded.description":
     "Show shell tool parts expanded by default in the timeline",

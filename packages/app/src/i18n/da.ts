@@ -798,6 +798,9 @@ export const dict = {
   "settings.general.row.showCustomAgents.description": "Vis agentvælgeren i promptfeltet",
   "settings.general.row.reasoningSummaries.title": "Vis tænkeoversigter",
   "settings.general.row.reasoningSummaries.description": "Vis model tænkeoversigter i tidslinjen",
+  "settings.general.row.keepModelOverride.title": "Behold modeloverstyring",
+  "settings.general.row.keepModelOverride.description":
+    "Behold en manuelt valgt model for den aktuelle samtale efter afsendelse af en besked",
 
   "settings.general.row.shellToolPartsExpanded.title": "Udvid shell-værktøjsdele",
   "settings.general.row.shellToolPartsExpanded.description": "Vis shell-værktøjsdele udvidet som standard i tidslinjen",
@@ -1028,6 +1031,9 @@ export const dict = {
   "session.header.open.finder": "Finder",
   "session.header.open.fileExplorer": "Stifinder",
   "session.header.open.fileManager": "Filhåndtering",
+  "session.header.reveal.finder": "Vis i Finder",
+  "session.header.reveal.fileExplorer": "Vis i Stifinder",
+  "session.header.reveal.containingFolder": "Åbn indeholdende mappe",
   "session.header.open.app.vscode": "VS Code",
   "session.header.open.app.cursor": "Cursor",
   "session.header.open.app.zed": "Zed",

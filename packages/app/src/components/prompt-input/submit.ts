@@ -188,6 +188,7 @@ type PromptSubmitInput = {
   newSessionWorktree?: Accessor<string | undefined>
   onNewSessionWorktreeReset?: () => void
   shouldQueue?: Accessor<boolean>
+  keepModelOverride?: Accessor<boolean>
   onQueue?: (draft: FollowupDraft) => void
   onAbort?: () => void
   onSubmit?: () => void
@@ -310,6 +311,12 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       })
       return
     }
+    const keepModelOverride = input.keepModelOverride?.() ?? false
+    const model = {
+      modelID: currentModel.id,
+      providerID: currentModel.provider.id,
+    }
+    const agent = currentAgent.name
 
     input.addToHistory(currentPrompt, mode)
     input.resetHistoryNavigation()
@@ -381,9 +388,9 @@ export function createPromptSubmit(input: PromptSubmitInput) {
           if (!session) return
           if (shouldAutoAccept) permissionState.enableAutoAccept(session.id, sessionDirectory)
           local.session.promote(sessionDirectory, session.id, {
-            agent: currentAgent.name,
-            model: { providerID: currentModel.provider.id, modelID: currentModel.id },
-            variant: variant ?? null,
+            agent,
+            model: keepModelOverride ? model : undefined,
+            variant: keepModelOverride ? (variant ?? null) : null,
           })
           layout.handoff.setTabs(base64Encode(sessionDirectory), session.id)
           const draftID = search.draftId
@@ -401,11 +408,6 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       return
     }
 
-    const model = {
-      modelID: currentModel.id,
-      providerID: currentModel.provider.id,
-    }
-    const agent = currentAgent.name
     const draft: FollowupDraft = {
       sessionID: session.id,
       sessionDirectory,
@@ -420,6 +422,11 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       submission.clear()
       input.setMode("normal")
       input.setPopover(null)
+    }
+
+    const resetModelOverride = () => {
+      if (keepModelOverride) return
+      modelSelection.set(undefined)
     }
 
     const restoreInput = () => {
@@ -443,6 +450,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       input.onQueue?.(draft)
       clearContext(submission.target())
       clearInput()
+      resetModelOverride()
       return
     }
 
@@ -450,6 +458,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
 
     if (mode === "shell") {
       clearInput()
+      resetModelOverride()
       client.session
         .shell({
           sessionID: session.id,
@@ -473,6 +482,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       const customCommand = sync().data.command.find((c) => c.name === commandName)
       if (customCommand) {
         clearInput()
+        resetModelOverride()
         client.session
           .command({
             sessionID: session.id,
@@ -513,6 +523,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
 
     for (const item of commentItems) submission.target().context.remove(item.key)
     clearInput()
+    resetModelOverride()
 
     const waitForWorktree = async () => {
       const worktree = WorktreeState.get(sdk().scope, sessionDirectory)

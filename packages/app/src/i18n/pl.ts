@@ -740,6 +740,9 @@ export const dict = {
   "settings.general.row.showCustomAgents.description": "Pokaż wybór agenta w edytorze wiadomości",
   "settings.general.row.reasoningSummaries.title": "Pokaż podsumowania wnioskowania",
   "settings.general.row.reasoningSummaries.description": "Wyświetlaj podsumowania wnioskowania modelu na osi czasu",
+  "settings.general.row.keepModelOverride.title": "Zachowaj zastąpienie modelu",
+  "settings.general.row.keepModelOverride.description":
+    "Zachowaj ręcznie wybrany model dla bieżącej rozmowy po wysłaniu wiadomości",
   "settings.general.row.shellToolPartsExpanded.title": "Rozwijaj elementy narzędzia shell",
   "settings.general.row.shellToolPartsExpanded.description":
     "Domyślnie pokazuj rozwinięte elementy narzędzia shell na osi czasu",
@@ -959,6 +962,9 @@ export const dict = {
   "session.header.open.finder": "Finder",
   "session.header.open.fileExplorer": "Eksplorator plików",
   "session.header.open.fileManager": "Menedżer plików",
+  "session.header.reveal.finder": "Pokaż w Finderze",
+  "session.header.reveal.fileExplorer": "Pokaż w Eksploratorze plików",
+  "session.header.reveal.containingFolder": "Otwórz folder zawierający",
   "session.header.open.app.vscode": "VS Code",
   "session.header.open.app.cursor": "Cursor",
   "session.header.open.app.zed": "Zed",

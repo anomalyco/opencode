@@ -740,6 +740,9 @@ export const dict = {
   "settings.general.row.showCustomAgents.description": "Mostrar o seletor de agentes na área de composição",
   "settings.general.row.reasoningSummaries.title": "Mostrar resumos de raciocínio",
   "settings.general.row.reasoningSummaries.description": "Exibir resumos de raciocínio do modelo na linha do tempo",
+  "settings.general.row.keepModelOverride.title": "Manter substituição de modelo",
+  "settings.general.row.keepModelOverride.description":
+    "Mantém um modelo selecionado manualmente para a conversa atual após enviar uma mensagem",
   "settings.general.row.shellToolPartsExpanded.title": "Expandir partes da ferramenta shell",
   "settings.general.row.shellToolPartsExpanded.description":
     "Mostrar partes da ferramenta shell expandidas por padrão na linha do tempo",
@@ -960,6 +963,9 @@ export const dict = {
   "session.header.open.finder": "Finder",
   "session.header.open.fileExplorer": "Explorador de Arquivos",
   "session.header.open.fileManager": "Gerenciador de Arquivos",
+  "session.header.reveal.finder": "Mostrar no Finder",
+  "session.header.reveal.fileExplorer": "Mostrar no Explorador de Arquivos",
+  "session.header.reveal.containingFolder": "Abrir pasta que contém",
   "session.header.open.app.vscode": "VS Code",
   "session.header.open.app.cursor": "Cursor",
   "session.header.open.app.zed": "Zed",

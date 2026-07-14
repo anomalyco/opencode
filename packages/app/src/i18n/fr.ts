@@ -750,6 +750,9 @@ export const dict = {
   "settings.general.row.reasoningSummaries.title": "Afficher les résumés de raisonnement",
   "settings.general.row.reasoningSummaries.description":
     "Afficher les résumés de raisonnement du modèle dans la chronologie",
+  "settings.general.row.keepModelOverride.title": "Conserver le remplacement du modèle",
+  "settings.general.row.keepModelOverride.description":
+    "Conserver un modèle sélectionné manuellement pour la conversation actuelle après l'envoi d'un message",
   "settings.general.row.shellToolPartsExpanded.title": "Développer les parties de l'outil shell",
   "settings.general.row.shellToolPartsExpanded.description":
     "Afficher les parties de l'outil shell développées par défaut dans la chronologie",
@@ -971,6 +974,9 @@ export const dict = {
   "session.header.open.finder": "Finder",
   "session.header.open.fileExplorer": "Explorateur de fichiers",
   "session.header.open.fileManager": "Gestionnaire de fichiers",
+  "session.header.reveal.finder": "Afficher dans le Finder",
+  "session.header.reveal.fileExplorer": "Afficher dans l'Explorateur de fichiers",
+  "session.header.reveal.containingFolder": "Ouvrir le dossier contenant",
   "session.header.open.app.vscode": "VS Code",
   "session.header.open.app.cursor": "Cursor",
   "session.header.open.app.zed": "Zed",

@@ -303,9 +303,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               type: "model",
               agent: agent.current()?.name,
               model: item ?? null,
-              variant: selected(),
+              variant: item ? selected() : null,
             })
-            write({ model: item })
+            write(item ? { model: item } : { model: undefined, variant: null })
             if (!item) return
             models.setVisibility(item, true)
             if (!options?.recent) return

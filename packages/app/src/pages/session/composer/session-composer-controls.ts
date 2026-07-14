@@ -48,6 +48,7 @@ export function createPromptInputController(input: {
       selection: input.model ?? local.model,
       paid: providers.paid().length > 0,
       loading: agentsQuery.isLoading || providersQuery.isLoading || globalProvidersQuery.isLoading,
+      keepOverride: settings.general.keepModelOverride(),
     },
     session: {
       id: input.sessionID(),

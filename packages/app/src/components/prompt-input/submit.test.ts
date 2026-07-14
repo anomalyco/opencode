@@ -19,9 +19,11 @@ const optimistic: Array<{
 const optimisticSeeded: boolean[] = []
 const storedSessions: Record<string, Array<{ id: string; title?: string }>> = {}
 const promoted: Array<{ directory: string; sessionID: string }> = []
+const promotedStates: unknown[] = []
 const sentShell: string[] = []
 const syncedDirectories: string[] = []
 const promotedDrafts: Array<{ draftID: string; server: string; sessionId: string }> = []
+const modelResets: unknown[] = []
 
 let params: { id?: string } = {}
 let search: { draftId?: string } = {}
@@ -106,20 +108,23 @@ beforeAll(async () => {
 
   mock.module("@opencode-ai/core/util/encode", () => ({
     base64Encode: (value: string) => value,
+    checksum: (value: string) => value,
   }))
 
   mock.module("@/context/local", () => ({
     useLocal: () => ({
       model: {
         current: () => ({ id: "model", provider: { id: "provider" } }),
+        set: (model: unknown) => modelResets.push(model),
         variant: { current: () => variant },
       },
       agent: {
         current: () => ({ name: "agent" }),
       },
       session: {
-        promote(directory: string, sessionID: string) {
+        promote(directory: string, sessionID: string, state: unknown) {
           promoted.push({ directory, sessionID })
+          promotedStates.push(state)
         },
       },
     }),
@@ -248,7 +253,9 @@ beforeEach(() => {
   optimistic.length = 0
   optimisticSeeded.length = 0
   promoted.length = 0
+  promotedStates.length = 0
   promotedDrafts.length = 0
+  modelResets.length = 0
   params = {}
   search = {}
   sentShell.length = 0
@@ -387,6 +394,40 @@ describe("prompt submit worktree selection", () => {
     expect(promotedDrafts).toEqual([{ draftID: "draft-1", server: "project-server", sessionId: "session-1" }])
   })
 
+  test("promotes selected model for new sessions when override persistence is enabled", async () => {
+    variant = "high"
+
+    const submit = createPromptSubmit({
+      prompt,
+      info: () => undefined,
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      keepModelOverride: () => true,
+      onSubmit: () => undefined,
+    })
+
+    await submit.handleSubmit({ preventDefault: () => undefined } as unknown as Event)
+
+    expect(promotedStates).toEqual([
+      {
+        agent: "agent",
+        model: { providerID: "provider", modelID: "model" },
+        variant: "high",
+      },
+    ])
+    expect(modelResets).toEqual([])
+  })
+
   test("includes the selected variant on optimistic prompts", async () => {
     params = { id: "session-1" }
     variant = "high"
@@ -420,12 +461,42 @@ describe("prompt submit worktree selection", () => {
         model: { providerID: "provider", modelID: "model", variant: "high" },
       },
     })
+    expect(modelResets).toEqual([undefined])
+  })
+
+  test("keeps model override when enabled", async () => {
+    params = { id: "session-1" }
+
+    const submit = createPromptSubmit({
+      prompt,
+      info: () => ({ id: "session-1" }),
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      keepModelOverride: () => true,
+      onSubmit: () => undefined,
+    })
+
+    await submit.handleSubmit({ preventDefault: () => undefined } as unknown as Event)
+
+    expect(modelResets).toEqual([])
   })
 
   test("uses an injected model selection", async () => {
     params = { id: "session-1" }
+    const resets: unknown[] = []
     const model = {
       current: () => ({ id: "draft-model", provider: { id: "draft-provider" } }),
+      set: (value: unknown) => resets.push(value),
       variant: { current: () => "draft-variant" },
     } as unknown as ModelSelection
     const submit = createPromptSubmit({
@@ -453,6 +524,7 @@ describe("prompt submit worktree selection", () => {
         model: { providerID: "draft-provider", modelID: "draft-model", variant: "draft-variant" },
       },
     })
+    expect(resets).toEqual([undefined])
   })
 
   test("seeds new sessions before optimistic prompts are added", async () => {

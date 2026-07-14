@@ -735,6 +735,9 @@ export const dict = {
   "settings.general.row.showCustomAgents.description": "コンポーザーにエージェント選択を表示します",
   "settings.general.row.reasoningSummaries.title": "推論の要約を表示",
   "settings.general.row.reasoningSummaries.description": "タイムラインにモデルの推論の要約を表示します",
+  "settings.general.row.keepModelOverride.title": "モデルの上書きを保持",
+  "settings.general.row.keepModelOverride.description":
+    "メッセージ送信後も、現在の会話で手動選択したモデルを保持します",
   "settings.general.row.shellToolPartsExpanded.title": "shell ツールパーツを展開",
   "settings.general.row.shellToolPartsExpanded.description":
     "タイムラインで shell ツールパーツをデフォルトで展開して表示します",
@@ -953,6 +956,9 @@ export const dict = {
   "session.header.open.finder": "Finder",
   "session.header.open.fileExplorer": "エクスプローラー",
   "session.header.open.fileManager": "ファイルマネージャー",
+  "session.header.reveal.finder": "Finder で表示",
+  "session.header.reveal.fileExplorer": "エクスプローラーで表示",
+  "session.header.reveal.containingFolder": "含まれるフォルダーを開く",
   "session.header.open.app.vscode": "VS Code",
   "session.header.open.app.cursor": "Cursor",
   "session.header.open.app.zed": "Zed",

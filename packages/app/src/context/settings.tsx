@@ -30,6 +30,7 @@ export interface Settings {
     showStatus: boolean
     showTerminal: boolean
     showReasoningSummaries: boolean
+    keepModelOverride: boolean
     shellToolPartsExpanded: boolean
     editToolPartsExpanded: boolean
     showCustomAgents: boolean
@@ -181,6 +182,7 @@ const defaultSettings: Settings = {
     showStatus: false,
     showTerminal: false,
     showReasoningSummaries: false,
+    keepModelOverride: false,
     shellToolPartsExpanded: false,
     editToolPartsExpanded: false,
     showCustomAgents: false,
@@ -377,6 +379,13 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         ),
         setShowReasoningSummaries(value: boolean) {
           setStore("general", "showReasoningSummaries", value)
+        },
+        keepModelOverride: withFallback(
+          () => store.general?.keepModelOverride,
+          defaultSettings.general.keepModelOverride,
+        ),
+        setKeepModelOverride(value: boolean) {
+          setStore("general", "keepModelOverride", value)
         },
         shellToolPartsExpanded: withFallback(
           () => store.general?.shellToolPartsExpanded,

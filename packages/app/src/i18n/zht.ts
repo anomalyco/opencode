@@ -787,6 +787,8 @@ export const dict = {
   "settings.general.row.showCustomAgents.description": "在輸入區顯示代理程式選擇器",
   "settings.general.row.reasoningSummaries.title": "顯示推理摘要",
   "settings.general.row.reasoningSummaries.description": "在時間軸中顯示模型推理摘要",
+  "settings.general.row.keepModelOverride.title": "保留模型覆寫",
+  "settings.general.row.keepModelOverride.description": "傳送訊息後，為目前對話保留手動選取的模型",
 
   "settings.general.row.shellToolPartsExpanded.title": "展開 shell 工具區塊",
   "settings.general.row.shellToolPartsExpanded.description": "在時間軸中預設展開 shell 工具區塊",
@@ -1012,6 +1014,9 @@ export const dict = {
   "session.header.open.finder": "Finder",
   "session.header.open.fileExplorer": "檔案總管",
   "session.header.open.fileManager": "檔案管理員",
+  "session.header.reveal.finder": "在 Finder 中顯示",
+  "session.header.reveal.fileExplorer": "在檔案總管中顯示",
+  "session.header.reveal.containingFolder": "開啟所在資料夾",
   "session.header.open.app.vscode": "VS Code",
   "session.header.open.app.cursor": "Cursor",
   "session.header.open.app.zed": "Zed",

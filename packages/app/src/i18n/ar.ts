@@ -729,6 +729,9 @@ export const dict = {
   "settings.general.row.showCustomAgents.description": "إظهار محدد الوكلاء في محرر الرسائل",
   "settings.general.row.reasoningSummaries.title": "إظهار ملخصات الاستنتاج",
   "settings.general.row.reasoningSummaries.description": "عرض ملخصات استنتاج النموذج في الشريط الزمني",
+  "settings.general.row.keepModelOverride.title": "الاحتفاظ بتجاوز النموذج",
+  "settings.general.row.keepModelOverride.description":
+    "الاحتفاظ بالنموذج المحدد يدويًا للمحادثة الحالية بعد إرسال رسالة",
   "settings.general.row.shellToolPartsExpanded.title": "توسيع أجزاء أداة shell",
   "settings.general.row.shellToolPartsExpanded.description":
     "إظهار أجزاء أداة shell موسعة بشكل افتراضي في الشريط الزمني",
@@ -946,6 +949,9 @@ export const dict = {
   "session.header.open.finder": "Finder",
   "session.header.open.fileExplorer": "مستكشف الملفات",
   "session.header.open.fileManager": "مدير الملفات",
+  "session.header.reveal.finder": "إظهار في Finder",
+  "session.header.reveal.fileExplorer": "إظهار في مستكشف الملفات",
+  "session.header.reveal.containingFolder": "فتح المجلد المحتوي",
   "session.header.open.app.vscode": "VS Code",
   "session.header.open.app.cursor": "Cursor",
   "session.header.open.app.zed": "Zed",

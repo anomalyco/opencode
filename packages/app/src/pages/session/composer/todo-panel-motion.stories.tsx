@@ -65,6 +65,7 @@ const controls = {
     },
     paid: true,
     loading: false,
+    keepOverride: false,
   },
   session: {
     id: "story-session",

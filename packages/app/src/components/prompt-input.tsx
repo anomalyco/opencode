@@ -102,6 +102,7 @@ export type PromptInputControls = {
     selection: ReturnType<typeof useLocal>["model"]
     paid: boolean
     loading: boolean
+    keepOverride: boolean
   }
   session: {
     id?: string
@@ -1335,6 +1336,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       newSessionWorktree: () => props.newSessionWorktree,
       onNewSessionWorktreeReset: props.onNewSessionWorktreeReset,
       shouldQueue: props.shouldQueue,
+      keepModelOverride: () => props.controls.model.keepOverride,
       onQueue: props.onQueue,
       onAbort: props.onAbort,
       onSubmit: props.onSubmit,

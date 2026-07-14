@@ -810,6 +810,9 @@ export const dict = {
   "settings.general.row.showCustomAgents.description": "Yazma alanında ajan seçiciyi göster",
   "settings.general.row.reasoningSummaries.title": "Akıl yürütme özetlerini göster",
   "settings.general.row.reasoningSummaries.description": "Zaman çizelgesinde model akıl yürütme özetlerini görüntüle",
+  "settings.general.row.keepModelOverride.title": "Model geçersiz kılmasını koru",
+  "settings.general.row.keepModelOverride.description":
+    "Mesaj gönderdikten sonra geçerli sohbet için elle seçilen modeli koru",
   "settings.general.row.shellToolPartsExpanded.title": "Kabuk araç bileşenlerini genişlet",
   "settings.general.row.shellToolPartsExpanded.description":
     "Zaman çizelgesinde kabuk araç bileşenlerini varsayılan olarak genişletilmiş göster",
@@ -1043,6 +1046,9 @@ export const dict = {
   "session.header.open.finder": "Finder",
   "session.header.open.fileExplorer": "Dosya Gezgini",
   "session.header.open.fileManager": "Dosya Yöneticisi",
+  "session.header.reveal.finder": "Finder'da göster",
+  "session.header.reveal.fileExplorer": "Dosya Gezgini'nde göster",
+  "session.header.reveal.containingFolder": "İçeren klasörü aç",
   "session.header.open.app.vscode": "VS Code",
   "session.header.open.app.cursor": "Cursor",
   "session.header.open.app.zed": "Zed",
