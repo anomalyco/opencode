@@ -331,19 +331,12 @@ const live: Layer.Layer<
                 async transformParams(args) {
                   if (args.type === "stream") {
                     const prompt = args.params.prompt as ModelMessage[]
-                    // Debug: log what the provider options look like
-                    const proxyConfig = (item?.options as Record<string, unknown>)?.vision_proxy
-                    if (proxyConfig) {
-                      console.error("[vision-proxy] vision_proxy config found:", JSON.stringify(proxyConfig))
-                      console.error("[vision-proxy] model supports image:", model.capabilities.input.image)
-                      console.error("[vision-proxy] baseURL:", item?.options?.baseURL)
-                      console.error("[vision-proxy] apiKey present:", !!item?.options?.apiKey)
-                    }
                     const proxied = await proxyUnsupportedImages(
                       prompt,
                       input.model,
                       item.options,
                       item,
+                      cfg,
                     )
                     args.params.prompt = ProviderTransform.message(
                       proxied,

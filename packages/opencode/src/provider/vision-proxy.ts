@@ -4,10 +4,14 @@ import type * as Provider from "./provider"
 export interface VisionProxyConfig {
   model: string
   prompt?: string
+  apiKey?: string
+  baseURL?: string
 }
 
 const DEFAULT_VISION_PROMPT =
   "Describe this image in detail for a text-only AI model. Include all visible text (exact wording, including error messages, labels, buttons), layout and structure, colours and visual styling, any data or numbers visible, and the apparent context. Be thorough — omit nothing visible."
+
+const DEFAULT_VISION_BASE_URL = "https://openrouter.ai/api"
 
 interface ImageLike {
   type: string
@@ -33,7 +37,6 @@ function toBase64DataUrl(data: Uint8Array | ArrayBuffer | Buffer, mimeType = "im
 }
 
 function extractImageData(part: ImageLike): string | null {
-  // Case 1: image part with data URL string
   if (part.type === "image") {
     const img = part.image
     if (typeof img === "string") {
@@ -51,7 +54,6 @@ function extractImageData(part: ImageLike): string | null {
     }
   }
 
-  // Case 2: file part with image MIME
   if (part.type === "file" && part.mediaType?.startsWith("image/")) {
     const url = part.url
     if (typeof url === "string") {
@@ -74,27 +76,51 @@ function extractImageData(part: ImageLike): string | null {
   return null
 }
 
-function getVisionProxyConfig(options: Record<string, unknown>): VisionProxyConfig | null {
-  const raw = options?.vision_proxy
-  if (!raw || typeof raw !== "object") return null
-  const cfg = raw as VisionProxyConfig
-  if (!cfg.model || typeof cfg.model !== "string") return null
-  return { model: cfg.model, prompt: cfg.prompt || DEFAULT_VISION_PROMPT }
+function getVisionProxyConfig(
+  providerOptions: Record<string, unknown> | undefined,
+  globalConfig: { provider?: Record<string, { options?: Record<string, unknown> }> } | undefined,
+): VisionProxyConfig | null {
+  // Check provider-level config first
+  const providerRaw = providerOptions?.vision_proxy
+  if (providerRaw && typeof providerRaw === "object") {
+    const cfg = providerRaw as VisionProxyConfig
+    if (cfg.model && typeof cfg.model === "string") {
+      return { ...cfg, prompt: cfg.prompt || DEFAULT_VISION_PROMPT }
+    }
+  }
+
+  // Fall back: scan all providers for a vision_proxy config
+  if (globalConfig?.provider) {
+    for (const [, provider] of Object.entries(globalConfig.provider)) {
+      const raw = provider?.options?.vision_proxy
+      if (raw && typeof raw === "object") {
+        const cfg = raw as VisionProxyConfig
+        if (cfg.model && typeof cfg.model === "string") {
+          return { ...cfg, prompt: cfg.prompt || DEFAULT_VISION_PROMPT }
+        }
+      }
+    }
+  }
+
+  return null
 }
 
 async function describeImage(
   imageDataUrl: string,
   proxyConfig: VisionProxyConfig,
-  baseURL: string,
-  apiKey: string,
 ): Promise<string | null> {
   if (!imageDataUrl) return null
+
+  const baseURL = proxyConfig.baseURL || DEFAULT_VISION_BASE_URL
+  const apiKey = proxyConfig.apiKey || ""
+  if (!apiKey) return null
 
   const url = baseURL.endsWith("/v1")
     ? `${baseURL}/chat/completions`
     : baseURL.endsWith("/")
       ? `${baseURL}v1/chat/completions`
       : `${baseURL}/v1/chat/completions`
+
   const body = {
     model: proxyConfig.model,
     messages: [
@@ -134,15 +160,17 @@ export async function proxyUnsupportedImages(
   model: Provider.Model,
   providerOptions: Record<string, unknown> | undefined,
   providerInfo: { api?: { url?: string }; options?: { apiKey?: string; baseURL?: string } } | undefined,
+  globalConfig: { provider?: Record<string, { options?: Record<string, unknown> }> } | undefined,
 ): Promise<ModelMessage[]> {
   if (model.capabilities.input.image) return msgs
 
-  const proxyConfig = getVisionProxyConfig(providerOptions ?? {})
+  const proxyConfig = getVisionProxyConfig(providerOptions, globalConfig)
   if (!proxyConfig) return msgs
 
-  const baseURL = providerInfo?.options?.baseURL || providerInfo?.api?.url || "https://openrouter.ai/api"
-  const apiKey = providerInfo?.options?.apiKey || ""
-  if (!apiKey) return msgs
+  // If the proxy config doesn't include its own apiKey, try the provider's
+  if (!proxyConfig.apiKey && providerInfo?.options?.apiKey) {
+    proxyConfig.apiKey = providerInfo.options.apiKey
+  }
 
   const result: ModelMessage[] = []
   for (const msg of msgs) {
@@ -158,7 +186,7 @@ export async function proxyUnsupportedImages(
       const imageData = extractImageData(imageLike)
       if (imageData) {
         hadImages = true
-        const description = await describeImage(imageData, proxyConfig, baseURL, apiKey)
+        const description = await describeImage(imageData, proxyConfig)
         if (description) {
           newContent.push({
             type: "text",
