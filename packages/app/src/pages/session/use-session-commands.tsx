@@ -459,6 +459,18 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       disabled: !params.id || visibleUserMessages().length === 0,
       onSelect: fork,
     }),
+    sessionCommand({
+      id: "session.archived",
+      title: "Archived Sessions",
+      description: "Browse and navigate to archived sessions",
+      slash: "archived",
+      onSelect: () => {
+        void openDialog(
+          () => import("@/components/dialog-archived-sessions"),
+          (x) => dialog.show(() => <x.DialogArchivedSessions />),
+        )
+      },
+    }),
   ]
 
   const fileCmds = () => {
