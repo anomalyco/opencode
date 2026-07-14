@@ -179,6 +179,14 @@ export const Info = Schema.Struct({
       mcp_timeout: Schema.optional(PositiveInt).annotate({
         description: "Timeout in milliseconds for model context protocol (MCP) requests",
       }),
+      tool_timeout: Schema.optional(PositiveInt).annotate({
+        description:
+          "Default execution timeout in ms for any tool call. When a tool runs longer than this, opencode aborts it and synthesizes a tool-result so the agent loop can continue instead of wedging. 0 disables. Default: 600000 (10 min). See #20096.",
+      }),
+      task_timeout: Schema.optional(PositiveInt).annotate({
+        description:
+          "Execution timeout in ms for the `task` (subagent) tool. Falls back to experimental.tool_timeout when unset. 0 disables. See #20096.",
+      }),
       policies: Schema.optional(Schema.mutable(Schema.Array(ConfigExperimental.Policy))).annotate({
         description: "Policy statements applied to supported resources, such as provider access",
       }),

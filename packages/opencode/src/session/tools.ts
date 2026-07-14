@@ -23,6 +23,7 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { isRecord } from "@/util/record"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { ToolTimeout } from "./tool-timeout"
 
 const MCP_RESOURCE_TOOLS = {
   list: "list_mcp_resources",
@@ -102,31 +103,62 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
       execute(args, options) {
         return run.promise(
           Effect.gen(function* () {
-            const ctx = context(args, options)
+            const timeoutMs = yield* ToolTimeout.resolve({ tool: item.id, agent: input.agent })
+            // Compose the user's abort signal with our own timer-driven controller
+            // so an Esc interrupt OR a timeout expires both fire the same signal
+            // that the tool's `execute(ctx.abort)` already listens to.
+            const controller = timeoutMs > 0 ? new AbortController() : undefined
+            const timer =
+              controller && setTimeout(
+                () => controller.abort(new ToolTimeout.ToolTimeoutError({ tool: item.id, timeoutMs })),
+                timeoutMs,
+              )
+            const mergedSignal = composeSignals(options.abortSignal, controller?.signal)
+            const ctx = context(args, { ...options, abortSignal: mergedSignal })
             yield* plugin.trigger(
               "tool.execute.before",
               { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID },
               { args },
             )
-            const result = yield* item.execute(args, ctx)
-            const output = {
-              ...result,
-              attachments: result.attachments?.map((attachment) => ({
-                ...attachment,
-                id: PartID.ascending(),
-                sessionID: ctx.sessionID,
-                messageID: input.processor.message.id,
-              })),
+            try {
+              const result = yield* item.execute(args, ctx)
+              const output = {
+                ...result,
+                attachments: result.attachments?.map((attachment) => ({
+                  ...attachment,
+                  id: PartID.ascending(),
+                  sessionID: ctx.sessionID,
+                  messageID: input.processor.message.id,
+                })),
+              }
+              yield* plugin.trigger(
+                "tool.execute.after",
+                { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID, args },
+                output,
+              )
+              if (options.abortSignal?.aborted) {
+                yield* input.processor.completeToolCall(options.toolCallId, output)
+              }
+              return output
+            } catch (error) {
+              if (error instanceof ToolTimeout.ToolTimeoutError) {
+                // Synthesize a tool-result so the agent loop continues instead of
+                // wedging on a part that stays `status="running"` forever. The
+                // underlying process may still be alive — the abort signal we
+                // fired into `ctx.abort` is the cleanup nudge, but completion is
+                // best-effort. See #20096.
+                const output = {
+                  title: `Tool timed out after ${timeoutMs}ms`,
+                  metadata: { timeout: true, tool: item.id, timeoutMs },
+                  output: `Tool "${item.id}" was aborted after ${timeoutMs}ms. The underlying process may still be running. Consider retrying with a different approach, a shorter scope, or splitting the work into smaller steps.`,
+                }
+                yield* input.processor.completeToolCall(options.toolCallId, output)
+                return output
+              }
+              throw error
+            } finally {
+              if (timer) clearTimeout(timer)
             }
-            yield* plugin.trigger(
-              "tool.execute.after",
-              { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID, args },
-              output,
-            )
-            if (options.abortSignal?.aborted) {
-              yield* input.processor.completeToolCall(options.toolCallId, output)
-            }
-            return output
           }),
         )
       },
@@ -398,92 +430,116 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
     item.execute = (args, opts) =>
       run.promise(
         Effect.gen(function* () {
-          const ctx = context(args, opts)
+          const timeoutMs = yield* ToolTimeout.resolve({ tool: key, agent: input.agent })
+          const controller = timeoutMs > 0 ? new AbortController() : undefined
+          const timer =
+            controller && setTimeout(
+              () => controller.abort(new ToolTimeout.ToolTimeoutError({ tool: key, timeoutMs })),
+              timeoutMs,
+            )
+          const mergedSignal = composeSignals(opts.abortSignal, controller?.signal)
+          const ctx = context(args, { ...opts, abortSignal: mergedSignal })
           yield* plugin.trigger(
             "tool.execute.before",
             { tool: key, sessionID: ctx.sessionID, callID: opts.toolCallId },
             { args },
           )
-          const result: Awaited<ReturnType<NonNullable<typeof execute>>> = yield* Effect.gen(function* () {
-            yield* ctx.ask({ permission: key, metadata: {}, patterns: ["*"], always: ["*"] })
-            return yield* Effect.promise(() => execute(args, opts))
-          }).pipe(
-            Effect.withSpan("Tool.execute", {
-              attributes: {
-                "tool.name": key,
-                "tool.call_id": opts.toolCallId,
-                "session.id": ctx.sessionID,
-                "message.id": input.processor.message.id,
-              },
-            }),
-          )
-          yield* plugin.trigger(
-            "tool.execute.after",
-            { tool: key, sessionID: ctx.sessionID, callID: opts.toolCallId, args },
-            result,
-          )
+          try {
+            const result: Awaited<ReturnType<NonNullable<typeof execute>>> = yield* Effect.gen(function* () {
+              yield* ctx.ask({ permission: key, metadata: {}, patterns: ["*"], always: ["*"] })
+              return yield* Effect.promise(() => execute(args, { ...opts, abortSignal: mergedSignal }))
+            }).pipe(
+              Effect.withSpan("Tool.execute", {
+                attributes: {
+                  "tool.name": key,
+                  "tool.call_id": opts.toolCallId,
+                  "session.id": ctx.sessionID,
+                  "message.id": input.processor.message.id,
+                },
+              }),
+            )
+            yield* plugin.trigger(
+              "tool.execute.after",
+              { tool: key, sessionID: ctx.sessionID, callID: opts.toolCallId, args },
+              result,
+            )
 
-          const textParts: string[] = []
-          const attachments: Omit<SessionV1.FilePart, "id" | "sessionID" | "messageID">[] = []
-          for (const contentItem of result.content) {
-            if (contentItem.type === "text") textParts.push(contentItem.text)
-            else if (contentItem.type === "image") {
-              attachments.push({
-                type: "file",
-                mime: contentItem.mimeType,
-                url: `data:${contentItem.mimeType};base64,${contentItem.data}`,
-              })
-            } else if (contentItem.type === "resource") {
-              const { resource } = contentItem
-              if (resource.text) textParts.push(resource.text)
-              if (resource.blob) {
-                const mime = resource.mimeType ?? "application/octet-stream"
-                const size = base64Size(resource.blob)
-                if (!SUPPORTED_MCP_RESOURCE_ATTACHMENT_MIMES.has(mime)) {
-                  textParts.push(
-                    `[Binary MCP resource omitted: ${resource.uri} (${mime}, ${formatBytes(size)}) is not a supported attachment type]`,
-                  )
-                  continue
-                }
-                if (size > MAX_MCP_RESOURCE_BLOB_BYTES) {
-                  textParts.push(
-                    `[Binary MCP resource omitted: ${resource.uri} (${mime}, ${formatBytes(size)}) exceeds ${formatBytes(MAX_MCP_RESOURCE_BLOB_BYTES)}]`,
-                  )
-                  continue
-                }
+            const textParts: string[] = []
+            const attachments: Omit<SessionV1.FilePart, "id" | "sessionID" | "messageID">[] = []
+            for (const contentItem of result.content) {
+              if (contentItem.type === "text") textParts.push(contentItem.text)
+              else if (contentItem.type === "image") {
                 attachments.push({
                   type: "file",
-                  mime,
-                  url: `data:${mime};base64,${resource.blob}`,
-                  filename: resource.uri,
+                  mime: contentItem.mimeType,
+                  url: `data:${contentItem.mimeType};base64,${contentItem.data}`,
                 })
+              } else if (contentItem.type === "resource") {
+                const { resource } = contentItem
+                if (resource.text) textParts.push(resource.text)
+                if (resource.blob) {
+                  const mime = resource.mimeType ?? "application/octet-stream"
+                  const size = base64Size(resource.blob)
+                  if (!SUPPORTED_MCP_RESOURCE_ATTACHMENT_MIMES.has(mime)) {
+                    textParts.push(
+                      `[Binary MCP resource omitted: ${resource.uri} (${mime}, ${formatBytes(size)}) is not a supported attachment type]`,
+                    )
+                    continue
+                  }
+                  if (size > MAX_MCP_RESOURCE_BLOB_BYTES) {
+                    textParts.push(
+                      `[Binary MCP resource omitted: ${resource.uri} (${mime}, ${formatBytes(size)}) exceeds ${formatBytes(MAX_MCP_RESOURCE_BLOB_BYTES)}]`,
+                    )
+                    continue
+                  }
+                  attachments.push({
+                    type: "file",
+                    mime,
+                    url: `data:${mime};base64,${resource.blob}`,
+                    filename: resource.uri,
+                  })
+                }
               }
             }
-          }
 
-          const truncated = yield* truncate.output(textParts.join("\n\n"), {}, input.agent)
-          const metadata = {
-            ...result.metadata,
-            truncated: truncated.truncated,
-            ...(truncated.truncated && { outputPath: truncated.outputPath }),
-          }
+            const truncated = yield* truncate.output(textParts.join("\n\n"), {}, input.agent)
+            const metadata = {
+              ...result.metadata,
+              truncated: truncated.truncated,
+              ...(truncated.truncated && { outputPath: truncated.outputPath }),
+            }
 
-          const output = {
-            title: "",
-            metadata,
-            output: truncated.content,
-            attachments: attachments.map((attachment) => ({
-              ...attachment,
-              id: PartID.ascending(),
-              sessionID: ctx.sessionID,
-              messageID: input.processor.message.id,
-            })),
-            content: result.content,
+            const output = {
+              title: "",
+              metadata,
+              output: truncated.content,
+              attachments: attachments.map((attachment) => ({
+                ...attachment,
+                id: PartID.ascending(),
+                sessionID: ctx.sessionID,
+                messageID: input.processor.message.id,
+              })),
+              content: result.content,
+            }
+            if (opts.abortSignal?.aborted) {
+              yield* input.processor.completeToolCall(opts.toolCallId, output)
+            }
+            return output
+          } catch (error) {
+            if (error instanceof ToolTimeout.ToolTimeoutError) {
+              const output = {
+                title: `Tool timed out after ${timeoutMs}ms`,
+                metadata: { timeout: true, tool: key, timeoutMs },
+                output: `Tool "${key}" was aborted after ${timeoutMs}ms. The underlying MCP server may still be processing. Consider retrying with a different approach, a shorter scope, or splitting the work.`,
+                content: [],
+              }
+              yield* input.processor.completeToolCall(opts.toolCallId, output)
+              return output
+            }
+            throw error
+          } finally {
+            if (timer) clearTimeout(timer)
           }
-          if (opts.abortSignal?.aborted) {
-            yield* input.processor.completeToolCall(opts.toolCallId, output)
-          }
-          return output
         }),
       )
     tools[key] = item
@@ -495,6 +551,17 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
 function toRecord(value: unknown) {
   if (isRecord(value)) return value
   return {}
+}
+
+// Combine the upstream caller's AbortSignal (user-initiated Esc interrupt) with
+// our session-level timeout controller so a single `ctx.abort` surfaces both.
+// `AbortSignal.any` is Node 20+/Bun-native; when both inputs are missing we
+// return undefined so we don't replace nothing with nothing.
+function composeSignals(user?: AbortSignal, ours?: AbortSignal): AbortSignal | undefined {
+  const signals = [user, ours].filter((s): s is AbortSignal => Boolean(s))
+  if (signals.length === 0) return undefined
+  if (signals.length === 1) return signals[0]
+  return AbortSignal.any(signals)
 }
 
 function parseListMcpResourcesArgs(value: unknown) {

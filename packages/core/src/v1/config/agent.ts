@@ -35,6 +35,10 @@ const AgentSchema = Schema.StructWithRest(
       description: "Maximum number of agentic iterations before forcing text-only response",
     }),
     maxSteps: Schema.optional(PositiveInt).annotate({ description: "@deprecated Use 'steps' field instead." }),
+    tool_timeout: Schema.optional(PositiveInt).annotate({
+      description:
+        "Per-agent override for tool execution timeout in ms. 0 disables. Beats experimental.tool_timeout. See #20096.",
+    }),
     permission: Schema.optional(ConfigPermissionV1.Info),
   }),
   [Schema.Record(Schema.String, Schema.Any)],
@@ -53,6 +57,7 @@ const KNOWN_KEYS = new Set([
   "color",
   "steps",
   "maxSteps",
+  "tool_timeout",
   "options",
   "permission",
   "disable",
