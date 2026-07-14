@@ -317,6 +317,31 @@ function normalizeMessages(
     })
   }
 
+  // Cloudflare Workers AI rejects inconsistent content types across messages.
+  // Some providers (e.g. Anthropic) emit string content alongside array
+  // content (text parts), and Cloudflare's schema expects all messages to use
+  // the same shape. Normalize text-only array content into flat strings.
+  if (model.providerID === "cloudflare-workers-ai") {
+    msgs = msgs.map((msg) => {
+      if (msg.role === "tool") return msg
+
+      if (Array.isArray(msg.content)) {
+        const isAllText = msg.content.every((part) => part.type === "text")
+        if (isAllText) {
+          return {
+            ...msg,
+            content: msg.content
+              .filter((part) => part.type === "text")
+              .map((part) => (part.type === "text" ? part.text : ""))
+              .join("\n"),
+          }
+        }
+      }
+
+      return msg
+    })
+  }
+
   return msgs
 }
 

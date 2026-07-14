@@ -5128,3 +5128,213 @@ describe("ProviderTransform.providerOptions - ai-gateway-provider", () => {
     expect(result).toEqual({ openaiCompatible: { reasoningEffort: "high" } })
   })
 })
+
+describe("ProviderTransform.message - cloudflare-workers-ai content normalization", () => {
+  const cfModel = {
+    id: ModelV2.ID.make("cloudflare-workers-ai/@cf/meta/llama-3.1-8b-instruct"),
+    providerID: ProviderV2.ID.make("cloudflare-workers-ai"),
+    api: {
+      id: "@cf/meta/llama-3.1-8b-instruct",
+      url: "https://api.cloudflare.com/client/v4",
+      npm: "@ai-sdk/openai-compatible",
+    },
+    name: "Cloudflare Workers AI",
+    capabilities: {
+      temperature: true,
+      reasoning: false,
+      attachment: false,
+      toolcall: false,
+      input: { text: true, audio: false, image: false, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+    limit: { context: 8192, output: 2048 },
+    status: "active",
+    options: {},
+    headers: {},
+  } as any
+
+  const nonCFModel = {
+    ...cfModel,
+    providerID: ProviderV2.ID.make("openai"),
+    api: {
+      id: "gpt-4",
+      url: "https://api.openai.com",
+      npm: "@ai-sdk/openai",
+    },
+  } as any
+
+  test("flattens text-only array content to string for user messages", () => {
+    const msgs = [
+      { role: "user", content: [{ type: "text", text: "Hello" }] },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, cfModel, {})
+
+    expect(result[0].content).toBe("Hello")
+  })
+
+  test("flattens text-only array content to string for assistant messages", () => {
+    const msgs = [
+      { role: "assistant", content: [{ type: "text", text: "Response" }] },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, cfModel, {})
+
+    expect(result[0].content).toBe("Response")
+  })
+
+  test("normalizes mixed string/array content across messages", () => {
+    const msgs = [
+      { role: "user", content: "Hello" },
+      { role: "user", content: [{ type: "text", text: "World" }] },
+      { role: "assistant", content: [{ type: "text", text: "Hi there" }] },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, cfModel, {})
+
+    expect(result[0].content).toBe("Hello")
+    expect(result[1].content).toBe("World")
+    expect(result[2].content).toBe("Hi there")
+  })
+
+  test("preserves string content for user messages", () => {
+    const msgs = [
+      { role: "user", content: "Hello" },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, cfModel, {})
+
+    expect(result[0].content).toBe("Hello")
+  })
+
+  test("preserves string content for assistant messages", () => {
+    const msgs = [
+      { role: "assistant", content: "Response" },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, cfModel, {})
+
+    expect(result[0].content).toBe("Response")
+  })
+
+  test("joins multiple text parts with newlines", () => {
+    const msgs = [
+      { role: "user", content: [{ type: "text", text: "Line 1" }, { type: "text", text: "Line 2" }] },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, cfModel, {})
+
+    expect(result[0].content).toBe("Line 1\nLine 2")
+  })
+
+  test("preserves non-text array content (tool calls)", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "Let me check" },
+          {
+            type: "tool-call",
+            toolCallId: "call-1",
+            toolName: "bash",
+            input: { command: "ls" },
+          },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, cfModel, {})
+
+    expect(Array.isArray(result[0].content)).toBe(true)
+    expect(result[0].content).toHaveLength(2)
+    expect(result[0].content[0]).toEqual({ type: "text", text: "Let me check" })
+  })
+
+  test("preserves tool messages unchanged", () => {
+    const msgs = [
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call-1",
+            toolName: "bash",
+            output: { type: "text", value: "output" },
+          },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, cfModel, {})
+
+    expect(Array.isArray(result[0].content)).toBe(true)
+    const toolContent = result[0].content as any[]
+    expect(toolContent[0].type).toBe("tool-result")
+  })
+
+  test("preserves system messages unchanged", () => {
+    const msgs = [
+      { role: "system", content: "You are helpful" },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, cfModel, {})
+
+    expect(result[0].content).toBe("You are helpful")
+  })
+
+  test("preserves non-text array content (image)", () => {
+    const imageModel = {
+      ...cfModel,
+      capabilities: {
+        ...cfModel.capabilities,
+        input: { text: true, audio: false, image: true, video: false, pdf: false },
+      },
+    } as any
+
+    const msgs = [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "What is this?" },
+          { type: "image", image: "data:image/png;base64,abc123" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, imageModel, {})
+
+    expect(Array.isArray(result[0].content)).toBe(true)
+    expect(result[0].content).toHaveLength(2)
+  })
+
+  test("flattens unsupported media after conversion to error text", () => {
+    const msgs = [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "What is this?" },
+          { type: "image", image: "data:image/png;base64," },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, cfModel, {})
+
+    expect(typeof result[0].content).toBe("string")
+    expect(result[0].content).toContain("What is this?")
+    expect(result[0].content).toContain("ERROR")
+  })
+
+  test("does not affect non-cloudflare-workers-ai providers", () => {
+    const msgs = [
+      { role: "user", content: [{ type: "text", text: "Hello" }] },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, nonCFModel, {})
+
+    expect(Array.isArray(result[0].content)).toBe(true)
+    expect(result[0].content[0]).toEqual({ type: "text", text: "Hello" })
+  })
+})
