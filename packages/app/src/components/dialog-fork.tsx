@@ -64,12 +64,31 @@ export const DialogFork: Component = () => {
     const sessionID = params.id
     if (!sessionID) return
 
+    const dir = base64Encode(sdk().directory)
+
+    if (item.kind === "full") {
+      sdk()
+        .client.session.fork({ sessionID })
+        .then((forked) => {
+          if (!forked.data) {
+            showToast({ title: language.t("common.requestFailed") })
+            return
+          }
+          dialog.close()
+          navigate(`/${dir}/session/${forked.data.id}`)
+        })
+        .catch((err: unknown) => {
+          const message = err instanceof Error ? err.message : String(err)
+          showToast({ title: language.t("common.requestFailed"), description: message })
+        })
+      return
+    }
+
     const parts = sync().data.part[item.id] ?? []
     const restored = extractPromptFromParts(parts, {
       directory: sdk().directory,
       attachmentName: language.t("common.attachment"),
     })
-    const dir = base64Encode(sdk().directory)
 
     sdk()
       .client.session.fork({ sessionID, messageID: item.id })
