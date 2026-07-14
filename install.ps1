@@ -37,6 +37,9 @@ $BINARY_NAME = "opencode"
 $GENTLE_NAME = "gentle-ai"
 
 $NEXTCLOUD_MIRROR = "https://enlaceschacocloud.duckdns.org/s/ojAcbHDQBTX97oD/download"
+$NEXTCLOUD_WEBDAV = "https://enlaceschacocloud.duckdns.org/public.php/webdav"
+$NEXTCLOUD_TOKEN = "ojAcbHDQBTX97oD"
+$FALLBACK_VERSION = "v1.0.4"
 
 $OPENCODE_DIR = Join-Path $env:LOCALAPPDATA "opencode\bin"
 $GENTLE_DIR = Join-Path $env:LOCALAPPDATA "gentle-ai\bin"
@@ -79,24 +82,23 @@ function Get-Arch {
     return "amd64"
 }
 
-# ─── GitHub Latest Version ─────────────────────────────────────────────────
+# ─── Version Detection ──────────────────────────────────────────────────────
 
 function Get-LatestVersion {
     param([string]$Repo)
 
-    Write-Info "Fetching latest release from $Repo..."
+    Write-Info "Checking $Repo..."
 
-    # Use HTTP redirect (no API rate limit) instead of api.github.com
+    # Method 1: HTTP redirect (no rate limit)
     $url = "https://github.com/$Repo/releases/latest"
     try {
         $response = Invoke-WebRequest -Uri $url -MaximumRedirection 0 -ErrorAction Stop `
             -Headers @{ "User-Agent" = "gentle-opencode-installer" }
     } catch {
-        # Invoke-WebRequest throws on 3xx with MaximumRedirection 0, catch the response
         $response = $_.Exception.Response
     }
 
-    if ($response.StatusCode -eq 302 -and $response.Headers["Location"]) {
+    if ($response -and $response.StatusCode -eq 302 -and $response.Headers["Location"]) {
         $location = $response.Headers["Location"]
         if ($location -match '/tag/(v[\d.]+)') {
             $version = $matches[1]
@@ -105,24 +107,57 @@ function Get-LatestVersion {
         }
     }
 
-    # Fallback: try the API
-    Write-Warn "Redirect detection failed, trying API..."
+    # Method 2: API fallback
+    Write-Warn "Redirect failed, trying API..."
     $apiUrl = "https://api.github.com/repos/$Repo/releases/latest"
     try {
         $apiResponse = Invoke-RestMethod -Uri $apiUrl -Headers @{ "User-Agent" = "gentle-opencode-installer" }
+        $version = $apiResponse.tag_name
+        if ($version) {
+            Write-Success "Latest: $version"
+            return $version
+        }
     } catch {
-        # Rate limited or blocked — use mirror-only mode
-        Write-Warn "GitHub API unavailable (rate limited?). Falling back to mirror."
-        Write-Warn "If you have a Nextcloud mirror, use -UseMirror flag."
-        Stop-WithError "Could not determine latest version from $Repo.`nTry: install.ps1 -UseMirror"
+        Write-Warn "GitHub API also failed."
     }
 
-    $version = $apiResponse.tag_name
-    if (-not $version) {
-        Stop-WithError "Could not determine latest version from $Repo"
+    return $null
+}
+
+function Get-LatestFromNextcloud {
+    Write-Info "Checking Nextcloud for latest version..."
+
+    try {
+        $auth = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("${NEXTCLOUD_TOKEN}:"))
+        $response = Invoke-WebRequest -Uri $NEXTCLOUD_WEBDAV -Method PROPFIND `
+            -Headers @{ "Authorization" = "Basic $auth" } `
+            -TimeoutSec 10 -UseBasicParsing
+    } catch {
+        Write-Warn "Cannot reach Nextcloud mirror."
+        return $null
     }
-    Write-Success "Latest: $version"
-    return $version
+
+    # Extract versions from opencode_X.Y.Z_windows_amd64.zip filenames
+    $highest = $null
+    $highestVer = [version]"0.0.0"
+    $matches = [regex]::Matches($response.Content, 'opencode_([\d.]+)_windows_amd64\.zip')
+    foreach ($m in $matches) {
+        $v = $m.Groups[1].Value
+        try {
+            $parsed = [version]$v
+            if ($parsed -gt $highestVer) {
+                $highestVer = $parsed
+                $highest = "v$v"
+            }
+        } catch {}
+    }
+
+    if ($highest) {
+        Write-Success "Nextcloud mirror has: $highest"
+        return $highest
+    }
+    Write-Warn "No opencode versions found on mirror."
+    return $null
 }
 
 # ─── Download Binary ───────────────────────────────────────────────────────
@@ -234,12 +269,28 @@ function Main {
 
     if ($Channel -eq "nightly") { $Channel = "beta" }
 
-    # Resolve version early (needed for mirror download filenames)
+    Show-Banner
+
+    # ─── Version detection ──────────────────────────────────────────────────
+
     if (-not $Version) {
         $Version = Get-LatestVersion -Repo $OPENCODE_REPO
     }
 
-    Show-Banner
+    if (-not $Version -and -not $UseMirror) {
+        Write-Warn "GitHub is unreachable. Trying Nextcloud mirror..."
+        $Version = Get-LatestFromNextcloud
+        if (-not $Version) {
+            $Version = $FALLBACK_VERSION
+            Write-Warn "Using fallback version: $Version"
+        }
+        $UseMirror = $true
+        Write-Info "Mirror mode enabled automatically."
+    }
+
+    if (-not $Version) {
+        Stop-WithError "Could not determine opencode version and no mirror available."
+    }
 
     # ─── Prerequisites ──────────────────────────────────────────────────────
 
