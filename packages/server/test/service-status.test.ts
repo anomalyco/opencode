@@ -6,7 +6,7 @@ import { Status } from "../src/service-status"
 
 it.effect("moves from starting to ready", () =>
   Effect.gen(function* () {
-    const status = yield* Status.make({ instanceID: "one", managed: false, onStop: () => {} })
+    const status = yield* Status.make({ instanceID: "one", managed: false, onStop: Effect.void })
     expect(yield* status.current).toEqual({ type: "starting" })
     yield* status.ready
     expect(yield* status.current).toEqual({ type: "ready" })
@@ -15,7 +15,7 @@ it.effect("moves from starting to ready", () =>
 
 it.effect("keeps a startup failure until shutdown", () =>
   Effect.gen(function* () {
-    const status = yield* Status.make({ instanceID: "one", managed: true, onStop: () => {} })
+    const status = yield* Status.make({ instanceID: "one", managed: true, onStop: Effect.void })
     yield* status.fail({ message: "Could not open the database.", action: "Check the database path." })
     yield* status.ready
     yield* status.fail({ message: "Different failure.", action: "Different action." })
@@ -33,9 +33,9 @@ it.live("stops only the addressed managed instance", () =>
     const status = yield* Status.make({
       instanceID: "one",
       managed: true,
-      onStop: () => {
+      onStop: Effect.sync(() => {
         stops += 1
-      },
+      }),
     })
 
     expect(yield* status.requestStop({ instanceID: "other", targetVersion: "next" })).toBe(false)
@@ -54,9 +54,9 @@ it.live("does not schedule another stop after shutdown begins", () =>
     const status = yield* Status.make({
       instanceID: "one",
       managed: true,
-      onStop: () => {
+      onStop: Effect.sync(() => {
         stops += 1
-      },
+      }),
     })
 
     yield* status.beginStopping("next")

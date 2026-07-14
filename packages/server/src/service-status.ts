@@ -16,7 +16,7 @@ export interface Interface {
 export const make = Effect.fnUntraced(function* (options: {
   readonly instanceID: string
   readonly managed: boolean
-  readonly onStop: () => void
+  readonly onStop: Effect.Effect<void>
   readonly initial?: ServiceStatus.State
 }) {
   const current = yield* Ref.make(options.initial ?? ({ type: "starting" } satisfies ServiceStatus.State))
@@ -54,13 +54,7 @@ export const make = Effect.fnUntraced(function* (options: {
       if (!options.managed || request.instanceID !== options.instanceID) return Effect.succeed(false)
       return transitionToStopping(request.targetVersion).pipe(
         Effect.flatMap((changed) =>
-          changed
-            ? Effect.sync(() =>
-                setTimeout(() => {
-                  options.onStop()
-                }, 25),
-              )
-            : Effect.void,
+          changed ? options.onStop.pipe(Effect.delay("25 millis"), Effect.forkDetach, Effect.asVoid) : Effect.void,
         ),
         Effect.as(true),
       )

@@ -3,7 +3,7 @@ export * as ServerProcess from "./process"
 import { NodeHttpServer } from "@effect/platform-node"
 import { SessionRestart } from "@opencode-ai/core/session/execution/restart"
 import { ServiceStatus } from "@opencode-ai/protocol/groups/health"
-import { Cause, Context, Effect, Exit, Layer, Option, Ref, Schema, Scope } from "effect"
+import { Cause, Context, Deferred, Effect, Exit, Layer, Option, Ref, Schema, Scope } from "effect"
 import { HttpMiddleware, HttpRouter, HttpServer, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { createServer } from "node:http"
 import { ServerAuth } from "./auth"
@@ -29,10 +29,11 @@ type App = Effect.Effect<
 
 export const start = Effect.fn("ServerProcess.start")(function* <E, R>(options: Options<E, R>) {
   if (!options.password) return yield* Effect.fail(new Error("Missing server password"))
+  const shutdown = yield* Deferred.make<void>()
   const status = yield* Status.make({
     instanceID: options.instanceID,
     managed: options.service !== undefined,
-    onStop: () => process.kill(process.pid, "SIGTERM"),
+    onStop: Deferred.succeed(shutdown, undefined).pipe(Effect.asVoid),
   })
   const bound = yield* listen(options)
   const shellApp: App = dispatch(options.password, status)
@@ -51,7 +52,7 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(options: 
       ),
   )
 
-  return yield* Effect.gen(function* () {
+  const boot = Effect.gen(function* () {
     const context = yield* Layer.buildWithScope(
       createRoutes(options.password, () => {
         const address = bound.server.address()
@@ -71,7 +72,7 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(options: 
       dispatch(options.password, status, Context.get(context, HttpRouter.HttpRouter).asHttpEffect()),
     )
     yield* status.ready
-    return bound.http.address
+    return { address: bound.http.address, shutdown: Deferred.await(shutdown) }
   }).pipe(
     Effect.catchCause((cause) => {
       if (!options.service || Cause.hasInterruptsOnly(cause)) return Effect.failCause(cause)
@@ -94,6 +95,8 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(options: 
         )
     }),
   )
+  if (!options.service) return yield* boot
+  return yield* Effect.raceFirst(boot, Deferred.await(shutdown).pipe(Effect.andThen(Effect.interrupt)))
 })
 
 function listen(options: { readonly hostname: string; readonly port: Option.Option<number> }) {
