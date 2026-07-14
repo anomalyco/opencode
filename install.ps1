@@ -388,8 +388,18 @@ function Main {
     Write-Success "git, node, npm — all present"
 
     Write-Step "Installing opencode-fork"
-    Install-Binary -Repo $OPENCODE_REPO -OutputDir $OPENCODE_DIR -AssetName "opencode" -BinaryName "opencode" `
-        -Version $Version $(if ($UseMirror) { "-MirrorUrl $NEXTCLOUD_MIRROR" } else { "" })
+    $installParams = @{
+        Repo       = $OPENCODE_REPO
+        OutputDir  = $OPENCODE_DIR
+        AssetName  = "opencode"
+        BinaryName = "opencode"
+        Version    = $Version
+    }
+    if ($UseMirror) {
+        Write-Info "Downloading from Nextcloud mirror..."
+        $installParams.MirrorUrl = $NEXTCLOUD_MIRROR
+    }
+    Install-Binary @installParams
 
     Write-Step "Installing gentle-ai"
     $gentleVersion = Get-LatestVersion -Repo $GENTLE_REPO
