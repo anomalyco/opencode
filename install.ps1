@@ -193,6 +193,72 @@ function Main {
 
     Show-Banner
 
+    # ─── Prerequisites ──────────────────────────────────────────────────────
+
+    Write-Step "Checking prerequisites"
+
+    $missing = @()
+    if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+        $null = & git --version 2>$null
+        if ($LASTEXITCODE -ne 0 -and -not (Get-Command git -ErrorAction SilentlyContinue)) {
+            $missing += "git"
+        }
+    }
+    if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+        $null = & node --version 2>$null
+        if ($LASTEXITCODE -ne 0 -and -not (Get-Command node -ErrorAction SilentlyContinue)) {
+            $missing += "node"
+        }
+    }
+    if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
+        $null = & npm --version 2>$null
+        if ($LASTEXITCODE -ne 0 -and -not (Get-Command npm -ErrorAction SilentlyContinue)) {
+            $missing += "npm"
+        }
+    }
+
+    if ($missing.Count -gt 0) {
+        Write-Warn "Missing: $($missing -join ', ')"
+        Write-Info "gentle-ai needs git, node, and npm to install skills and plugins."
+
+        $winget = Get-Command winget -ErrorAction SilentlyContinue
+        if ($winget) {
+            Write-Info "Attempting auto-install via winget..."
+            foreach ($tool in $missing) {
+                switch ($tool) {
+                    "git" {
+                        Write-Info "Installing Git..."
+                        winget install --id Git.Git --source winget --accept-package-agreements --accept-source-agreements
+                    }
+                    "node" {
+                        Write-Info "Installing Node.js (LTS)..."
+                        winget install --id OpenJS.NodeJS.LTS --source winget --accept-package-agreements --accept-source-agreements
+                    }
+                    "npm" {
+                        Write-Info "npm is bundled with Node.js — will be available after Node install"
+                    }
+                }
+            }
+            Write-Warn "Prerequisites were just installed. Restart your terminal and re-run this installer."
+            Write-Host ""
+            Write-Host "  1. Close this window" -ForegroundColor Cyan
+            Write-Host "  2. Open a NEW PowerShell as Administrator" -ForegroundColor Cyan
+            Write-Host "  3. Re-run: irm https://github.com/ivanfernadezm99/opencode/releases/latest/download/install.ps1 | iex" -ForegroundColor DarkGray
+            Write-Host ""
+            exit 0
+        } else {
+            Write-Err "winget not found. Please install manually:"
+            Write-Host ""
+            Write-Host "  Git:      https://git-scm.com/download/win" -ForegroundColor Cyan
+            Write-Host "  Node.js:  https://nodejs.org/ (LTS)" -ForegroundColor Cyan
+            Write-Host ""
+            Write-Host "  After installing, OPEN A NEW TERMINAL and re-run the installer." -ForegroundColor Yellow
+            Write-Host ""
+            exit 1
+        }
+    }
+    Write-Success "git, node, npm — all present"
+
     Write-Step "Installing opencode-fork"
     Install-Binary -Repo $OPENCODE_REPO -OutputDir $OPENCODE_DIR -AssetName "opencode" -BinaryName "opencode"
 
