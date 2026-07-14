@@ -85,14 +85,39 @@ function Get-LatestVersion {
     param([string]$Repo)
 
     Write-Info "Fetching latest release from $Repo..."
-    $url = "https://api.github.com/repos/$Repo/releases/latest"
+
+    # Use HTTP redirect (no API rate limit) instead of api.github.com
+    $url = "https://github.com/$Repo/releases/latest"
     try {
-        $response = Invoke-RestMethod -Uri $url -Headers @{ "User-Agent" = "gentle-opencode-installer" }
+        $response = Invoke-WebRequest -Uri $url -MaximumRedirection 0 -ErrorAction Stop `
+            -Headers @{ "User-Agent" = "gentle-opencode-installer" }
     } catch {
-        Stop-WithError "Failed to fetch latest release from $Repo.`n$_"
+        # Invoke-WebRequest throws on 3xx with MaximumRedirection 0, catch the response
+        $response = $_.Exception.Response
     }
 
-    $version = $response.tag_name
+    if ($response.StatusCode -eq 302 -and $response.Headers["Location"]) {
+        $location = $response.Headers["Location"]
+        if ($location -match '/tag/(v[\d.]+)') {
+            $version = $matches[1]
+            Write-Success "Latest: $version"
+            return $version
+        }
+    }
+
+    # Fallback: try the API
+    Write-Warn "Redirect detection failed, trying API..."
+    $apiUrl = "https://api.github.com/repos/$Repo/releases/latest"
+    try {
+        $apiResponse = Invoke-RestMethod -Uri $apiUrl -Headers @{ "User-Agent" = "gentle-opencode-installer" }
+    } catch {
+        # Rate limited or blocked — use mirror-only mode
+        Write-Warn "GitHub API unavailable (rate limited?). Falling back to mirror."
+        Write-Warn "If you have a Nextcloud mirror, use -UseMirror flag."
+        Stop-WithError "Could not determine latest version from $Repo.`nTry: install.ps1 -UseMirror"
+    }
+
+    $version = $apiResponse.tag_name
     if (-not $version) {
         Stop-WithError "Could not determine latest version from $Repo"
     }
