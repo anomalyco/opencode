@@ -184,3 +184,104 @@ const table = sqliteTable("session", {
 | POS Frontend Reform | `posfrontreform-stage.up.railway.app` | — |
 | POS Backend | `posbackend-staging.up.railway.app/api` | `posbackend-production-e8e4.up.railway.app/api` |
 | Chatbot API | `ecchatbot.enlaceschaco.ar/admin` | `ecchatbot.enlaceschaco.ar/admin` |
+
+## Fork: gentle-opencode
+
+Este fork de opencode se distribuye con gentle-ai integrado.
+
+### Objetivo
+
+Que el usuario en Windows haga un solo install y ya tenga opencode fork + gentle-ai + skills + config listos para funcionar. Sin pasos adicionales.
+
+### Plan de instalación
+
+El `install.ps1` de este fork (o script Shell) debe:
+
+1. Bajar y extraer `opencode-fork.exe`
+2. Bajar la ultima release de gentle-ai desde GitHub Releases
+3. Poner gentle-ai en PATH (ej. `%LOCALAPPDATA%\\gentle-ai\\bin`)
+4. Ejecutar `gentle-ai install --agent opencode` (non-interactive)
+5. Eso baja persona, engram, sdd, skills, permisos, plugins, todo
+
+### Provider / modelos
+
+- El provider `opencode-go` viene del catalog `https://models.dev/api.json` -- no necesita código extra en el fork.
+- Los modelos como `opencode-go/deepseek-v4-flash` requieren la env var `OPENCODE_API_KEY` configurada.
+
+### A futuro
+
+- La configuración se manejara remotamente a través del login de Microsoft del usuario.
+- gentle-ai seguira siendo source of truth de skills/prompts/agentes/config.
+- Este fork solo asegura compatibilidad con gentle-ai (no bloquear, no pisar config).
+
+### Principio rector
+
+gentle-ai ya tiene instalador, persona, skills, SDD, Engram, permisos, commands. Este fork NO duplica, modifica, ni extiende nada de eso. gentle-ai es el encargado de gestionar la config del agente.
+
+### Releases
+
+- **Repo**: `ivanfernadezm99/opencode`
+- **GitHub Releases**: https://github.com/ivanfernadezm99/opencode/releases
+- **Nextcloud mirror** (descarga pública): https://enlaceschacocloud.duckdns.org/s/ojAcbHDQBTX97oD
+- **Sync script**: `scripts/sync-to-nextcloud.sh` — baja assets de GitHub y los sube a Nextcloud
+
+#### Flujo de release
+
+```bash
+# 1. Taggear y pushear
+git tag -a vX.Y.Z -m "vX.Y.Z: descripción"
+git push fork vX.Y.Z --force --no-verify
+
+# 2. Crear release en GitHub con assets
+gh release create vX.Y.Z \
+  --repo ivanfernadezm99/opencode \
+  --title "Gentle OpenCode vX.Y.Z" \
+  --notes "..." \
+  install.ps1 install.bat opencode_X.Y.Z_windows_amd64.zip
+
+# 3. Sincronizar a Nextcloud
+./scripts/sync-to-nextcloud.sh vX.Y.Z
+```
+
+#### Archivos del release
+
+| Archivo | Peso | Descripción |
+|---|---|---|
+| `install.ps1` | ~17 KB | Instalador PowerShell (detecta prerequisitos, usa winget si faltan) |
+| `install.bat` | 398 B | Wrapper para doble-click (invoca install.ps1 con -ExecutionPolicy Bypass) |
+| `opencode_X.Y.Z_windows_amd64.zip` | ~55 MB | Binario CLI compilado para Windows x64 |
+
+#### Qué hace el installer
+
+1. Chequea git, node, npm → si faltan, los instala con winget
+2. Backup de `%USERPROFILE%\.engram\engram.db` antes de reinstalar (la memoria de Engram sobrevive)
+3. Baja opencode-fork desde GitHub (o Nextcloud con `-UseMirror`)
+4. Baja gentle-ai desde GitHub
+5. Agrega ambos a PATH
+6. Ejecuta `gentle-ai install --agent opencode` (baja persona, engram, SDD, skills, plugins)
+7. Linkea config para la app de escritorio
+
+#### Instalación
+
+```powershell
+# Estándar (PowerShell como Admin)
+irm https://github.com/ivanfernadezm99/opencode/releases/latest/download/install.ps1 | iex
+
+# Con mirror Nextcloud (si GitHub está lento/bloqueado)
+.\install.ps1 -UseMirror
+```
+
+#### Engram DB
+
+- **Ubicación**: `%USERPROFILE%\.engram\engram.db` (Windows), `~/.engram/engram.db` (Linux)
+- **Separado de la config**: `gentle-ai install` solo toca `~/.config/opencode/`, nunca la base de datos
+- **Backup automático**: el installer crea `engram.db.backup-YYYYMMDD-HHmmss` antes de reinstalar
+
+#### Historial de versiones del fork
+
+| Versión | Cambio |
+|---|---|
+| v1.0.0 | Release inicial: installer NSIS + CLI binario |
+| v1.0.1 | Backup automático de engram.db antes de reinstalar |
+| v1.0.2 | Auto-install de git, node, npm vía winget en Windows frescas |
+| v1.0.3 | Soporte mirror Nextcloud + script de sync (`-UseMirror`) |
