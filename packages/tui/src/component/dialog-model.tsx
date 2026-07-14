@@ -48,7 +48,12 @@ export function DialogModel(props: { providerID?: string }) {
             description: provider.name,
             category,
             disabled: provider.id === "opencode" && model.id.includes("-nano"),
-            footer: model.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
+            // sizeBytes rides on the runtime provider Model (llama-skein
+            // size_bytes) but isn't in the generated SDK type yet — read it
+            // loosely; regen the SDK to type it properly.
+            footer:
+              formatModelSize((model as { sizeBytes?: number }).sizeBytes) ??
+              (model.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined),
             onSelect: () => {
               onSelect(provider.id, model.id)
             },
@@ -86,7 +91,9 @@ export function DialogModel(props: { providerID?: string }) {
               : undefined,
             category: connected() ? provider.name : undefined,
             disabled: provider.id === "opencode" && model.includes("-nano"),
-            footer: info.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
+            footer:
+              formatModelSize((info as { sizeBytes?: number }).sizeBytes) ??
+              (info.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined),
             onSelect() {
               onSelect(provider.id, model)
             },
@@ -199,6 +206,16 @@ export function DialogModel(props: { providerID?: string }) {
       current={local.model.current()}
     />
   )
+}
+
+// formatModelSize renders a llama-skein size_bytes weight size as a compact
+// GB/MB string for the picker footer, so similar quantizations are told apart
+// by disk size. undefined when unknown (non-local models, size not reported).
+export function formatModelSize(bytes?: number): string | undefined {
+  if (!bytes || bytes <= 0) return undefined
+  const gb = bytes / 1024 ** 3
+  if (gb >= 1) return `${gb.toFixed(1)} GB`
+  return `${Math.round(bytes / 1024 ** 2)} MB`
 }
 
 export function sortModelOptions<T extends { footer?: string; releaseDate: string | number; title: string }>(

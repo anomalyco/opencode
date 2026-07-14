@@ -130,6 +130,10 @@ export type Model = {
     context_length?: number;
     max_output_tokens?: number;
     /**
+     * On-disk size of the model weights in bytes: the GGUF file size for llama.cpp, or the summed safetensors size for MLX. Lets clients show a human-readable size (e.g. GB) when picking between similar quantizations. Omitted when the size can't be determined (peer models, un-resolvable path).
+     */
+    size_bytes?: number;
+    /**
      * Current --n-cpu-moe value parsed from the model command, when set (llama.cpp MoE expert CPU offload).
      */
     n_cpu_moe?: number;

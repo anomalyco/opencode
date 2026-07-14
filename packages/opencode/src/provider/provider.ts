@@ -1091,6 +1091,9 @@ export const Model = Schema.Struct({
   api: ProviderApiInfo,
   name: Schema.String,
   family: optionalOmitUndefined(Schema.String),
+  // fork: on-disk weight size in bytes (llama-skein size_bytes), for showing a
+  // GB figure in the model picker to disambiguate quantizations. Local only.
+  sizeBytes: optionalOmitUndefined(Schema.Finite),
   capabilities: ProviderCapabilities,
   cost: ProviderCost,
   limit: ProviderLimit,
@@ -1508,6 +1511,7 @@ async function discoverOpenAICompatibleModels(input: {
           id: ModelV2.ID.make(modelID),
           providerID: input.providerID,
           name,
+          sizeBytes: numberFrom(item.size_bytes) ?? existingModel?.sizeBytes,
           api: {
             id: existingModel?.api.id ?? modelID,
             url: input.provider.api ?? existingModel?.api.url ?? "",
@@ -1734,6 +1738,7 @@ export const layer = Layer.effect(
               },
               status: model.status ?? existingModel?.status ?? "active",
               name,
+              sizeBytes: existingModel?.sizeBytes,
               providerID: ProviderV2.ID.make(providerID),
               capabilities: {
                 temperature: model.temperature ?? existingModel?.capabilities.temperature ?? false,
