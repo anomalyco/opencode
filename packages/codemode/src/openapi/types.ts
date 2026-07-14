@@ -85,7 +85,12 @@ export type InputField = {
   readonly explode: boolean | undefined
 }
 
-export type Body = { readonly required: boolean; readonly mode: "object" | "value"; readonly mediaType: string }
+export type Body = {
+  readonly required: boolean
+  readonly mode: "object" | "value"
+  readonly mediaType: string
+  readonly serialization?: "form"
+}
 
 export type OperationInput = {
   readonly fields: ReadonlyArray<InputField>

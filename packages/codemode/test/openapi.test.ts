@@ -33,8 +33,13 @@ const recordingClient = (respond: (request: HttpClientRequest.HttpClientRequest)
   const layer = Layer.succeed(HttpClient.HttpClient)(
     HttpClient.make((request) =>
       Effect.gen(function* () {
+        const bodyText = request.body._tag === "Uint8Array" ? new TextDecoder().decode(request.body.body) : undefined
         const body =
-          request.body._tag === "Uint8Array" ? JSON.parse(new TextDecoder().decode(request.body.body)) : undefined
+          bodyText === undefined
+            ? undefined
+            : request.headers["content-type"]?.includes("json")
+              ? JSON.parse(bodyText)
+              : bodyText
         const url = Option.map(HttpClientRequest.toUrl(request), (resolved) => resolved.toString())
         requests.push({
           method: request.method,
@@ -766,6 +771,109 @@ describe("OpenAPI.fromSpec", () => {
     await expect(Effect.runPromise(tool.run({ body: cyclic }).pipe(Effect.provide(client.layer)))).rejects.toThrow(
       "Invalid JSON body",
     )
+  })
+
+  test("serializes flat URL-encoded request bodies", async () => {
+    const resolutions: Array<string> = []
+    const client = recordingClient(() => json({ ok: true }))
+    const api = OpenAPI.fromSpec({
+      baseUrl,
+      spec: {
+        ...singleOperation(
+          {
+            requestBody: {
+              required: true,
+              content: {
+                "application/x-www-form-urlencoded; charset=utf-8": {
+                  schema: {
+                    type: "object",
+                    additionalProperties: false,
+                    required: ["grant_type"],
+                    properties: {
+                      grant_type: { type: "string" },
+                      count: { type: "integer" },
+                      enabled: { type: "boolean" },
+                    },
+                  },
+                },
+              },
+            },
+            security: [{ bearer: [] }],
+          },
+          "post",
+        ),
+        components: { securitySchemes: { bearer: { type: "http", scheme: "bearer" } } },
+      },
+      auth: {
+        resolve: ({ name }) => {
+          resolutions.push(name)
+          return Effect.succeed({ type: "bearer", token: "secret" })
+        },
+      },
+    })
+    const tool = toolAt(api.tools, "test")
+
+    expect(api.skipped).toEqual([])
+    if (!Tool.isDefinition(tool)) throw new Error("form operation was not generated")
+    expect(inputTypeScript(tool)).toBe("{ grant_type: string; count?: number; enabled?: boolean }")
+
+    await expect(
+      Effect.runPromise(tool.run({ grant_type: { nested: true } }).pipe(Effect.provide(client.layer))),
+    ).rejects.toThrow("must be a scalar value")
+    expect(resolutions).toEqual([])
+    expect(client.requests).toEqual([])
+
+    await Effect.runPromise(
+      tool
+        .run({ grant_type: "client + secret", count: 2, enabled: false })
+        .pipe(Effect.provide(client.layer)),
+    )
+
+    expect(client.requests).toHaveLength(1)
+    expect(resolutions).toEqual(["bearer"])
+    expect(client.requests[0]!.headers.authorization).toBe("Bearer secret")
+    expect(client.requests[0]!.headers["content-type"]).toBe(
+      "application/x-www-form-urlencoded; charset=utf-8",
+    )
+    expect(client.requests[0]!.body).toBe("grant_type=client+%2B+secret&count=2&enabled=false")
+  })
+
+  test.each([
+    {
+      name: "nested fields",
+      media: {
+        schema: {
+          type: "object",
+          additionalProperties: false,
+          properties: { metadata: { type: "object", properties: { source: { type: "string" } } } },
+        },
+      },
+      reason: "URL-encoded body field 'metadata' must use a scalar schema",
+    },
+    {
+      name: "property encoding",
+      media: {
+        schema: { type: "object", additionalProperties: false, properties: { tags: { type: "string" } } },
+        encoding: { tags: { allowReserved: true } },
+      },
+      reason: "URL-encoded request body uses unsupported property encoding",
+    },
+    {
+      name: "open object schemas",
+      media: { schema: { type: "object", properties: { value: { type: "string" } } } },
+      reason: "URL-encoded request body must declare a closed object schema with properties",
+    },
+  ])("skips URL-encoded bodies with $name", ({ media, reason }) => {
+    const result = OpenAPI.fromSpec({
+      baseUrl,
+      spec: singleOperation(
+        { requestBody: { content: { "application/x-www-form-urlencoded": media } } },
+        "post",
+      ),
+    })
+
+    expect(result.skipped).toEqual([{ method: "POST", path: "/test", reason }])
+    expect(toolAt(result.tools, "test")).toBeUndefined()
   })
 
   test("rejects oversized and malformed JSON responses", async () => {

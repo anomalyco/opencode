@@ -85,6 +85,24 @@ const jsonContent = (
   return entry !== undefined && isRecord(entry[1]) ? { mediaType: entry[0], schema: entry[1].schema } : undefined
 }
 
+const formContent = (
+  content: Record<string, unknown>,
+): { readonly mediaType: string; readonly schema: unknown; readonly encoding: unknown } | undefined => {
+  const entry = Object.entries(content).find(
+    ([mediaType]) => mediaType.split(";")[0]?.trim().toLowerCase() === "application/x-www-form-urlencoded",
+  )
+  return entry !== undefined && isRecord(entry[1])
+    ? { mediaType: entry[0], schema: entry[1].schema, encoding: entry[1].encoding }
+    : undefined
+}
+
+const isFormScalarSchema = (document: Document, value: unknown): boolean => {
+  const schema = resolve(document, value)
+  if (!isRecord(schema) || schema.nullable === true || schema.format === "binary") return false
+  if (schema.anyOf !== undefined || schema.oneOf !== undefined || schema.allOf !== undefined) return false
+  return schema.type === "string" || schema.type === "number" || schema.type === "integer" || schema.type === "boolean"
+}
+
 const isFlattenableObjectBody = (
   schema: unknown,
   requestRequired: boolean,
@@ -185,7 +203,9 @@ const operationBody = (
   const resolved = resolve(document, operation.requestBody)
   if (!isRecord(resolved)) return { ok: true, value: { fields: [], body: undefined } }
   const content = isRecord(resolved.content) ? resolved.content : {}
-  const selected = jsonContent(content)
+  const json = jsonContent(content)
+  const form = json === undefined ? formContent(content) : undefined
+  const selected = json ?? form
   if (selected === undefined) {
     return {
       ok: false,
@@ -194,6 +214,40 @@ const operationBody = (
   }
   const schema = resolve(document, selected.schema)
   const required = resolved.required === true
+  if (form !== undefined) {
+    if (form.encoding !== undefined && (!isRecord(form.encoding) || Object.keys(form.encoding).length > 0)) {
+      return { ok: false, reason: "URL-encoded request body uses unsupported property encoding" }
+    }
+    if (
+      !isRecord(schema) ||
+      schema.type !== "object" ||
+      !isRecord(schema.properties) ||
+      schema.additionalProperties !== false
+    ) {
+      return { ok: false, reason: "URL-encoded request body must declare a closed object schema with properties" }
+    }
+    const unsupported = Object.entries(schema.properties).find(([, value]) => !isFormScalarSchema(document, value))
+    if (unsupported !== undefined) {
+      return { ok: false, reason: `URL-encoded body field '${unsupported[0]}' must use a scalar schema` }
+    }
+    const requiredProperties = new Set(
+      Array.isArray(schema.required) ? schema.required.filter((item): item is string => typeof item === "string") : [],
+    )
+    return {
+      ok: true,
+      value: {
+        fields: Object.entries(schema.properties).map(([name, value]) => ({
+          name,
+          location: "body" as const,
+          required: required && requiredProperties.has(name),
+          schema: projectSchema(document, value),
+          style: undefined,
+          explode: undefined,
+        })),
+        body: { required, mode: "object", mediaType: form.mediaType, serialization: "form" },
+      },
+    }
+  }
   if (!isFlattenableObjectBody(schema, required)) {
     return {
       ok: true,

@@ -8,6 +8,9 @@ const decodeJson = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
 const maxErrorBodyChars = 1_024
 const maxResponseBodyBytes = 50 * 1024 * 1024
 
+const isFormScalarValue = (value: unknown): value is string | number | boolean =>
+  typeof value === "string" || typeof value === "boolean" || (typeof value === "number" && Number.isFinite(value))
+
 export const invoke = (plan: Plan, input: unknown): Effect.Effect<unknown, unknown, HttpClient.HttpClient> =>
   Effect.gen(function* () {
     const value = isRecord(input) ? input : {}
@@ -88,7 +91,7 @@ const buildRequest = (
       request = HttpClientRequest.setHeader(request, field.name, serialized)
     }
 
-    const setBody = (value: unknown, mediaType: string) =>
+    const setJsonBody = (value: unknown, mediaType: string) =>
       HttpClientRequest.bodyJson(request, value).pipe(
         Effect.map((next) => HttpClientRequest.setHeader(next, "content-type", mediaType)),
         Effect.mapError((cause) =>
@@ -98,7 +101,7 @@ const buildRequest = (
     if (plan.body?.mode === "value") {
       const field = plan.fields.find((field) => field.location === "body")
       const body = field === undefined ? undefined : own(input, field.inputName)
-      if (body !== undefined) request = yield* setBody(body, plan.body.mediaType)
+      if (body !== undefined) request = yield* setJsonBody(body, plan.body.mediaType)
     }
     if (plan.body?.mode === "object") {
       const entries = plan.fields.flatMap((field) => {
@@ -107,7 +110,21 @@ const buildRequest = (
         return item === undefined ? [] : [[field.name, item] as const]
       })
       if (plan.body.required || entries.length > 0) {
-        request = yield* setBody(Object.fromEntries(entries), plan.body.mediaType)
+        if (plan.body.serialization === "form") {
+          const unsupported = entries.find(([, item]) => !isFormScalarValue(item))
+          if (unsupported !== undefined) {
+            return yield* Effect.fail(toolError(`URL-encoded body field '${unsupported[0]}' must be a scalar value.`))
+          }
+          request = HttpClientRequest.bodyUrlParams(
+            request,
+            entries.filter((entry): entry is readonly [string, string | number | boolean] =>
+              isFormScalarValue(entry[1]),
+            ),
+          )
+          request = HttpClientRequest.setHeader(request, "content-type", plan.body.mediaType)
+        } else {
+          request = yield* setJsonBody(Object.fromEntries(entries), plan.body.mediaType)
+        }
       }
     }
     return request
