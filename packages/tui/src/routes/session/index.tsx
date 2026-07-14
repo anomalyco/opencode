@@ -968,7 +968,10 @@ function SessionRowView(props: { row: SessionRow; message: (messageID: string) =
         <Match when={props.row.type === "part" ? props.row : undefined}>
           {(row) => <SessionPartView partRef={row().ref} message={props.message} />}
         </Match>
-        <Match when={props.row.type === "group" ? props.row : undefined}>
+        <Match when={props.row.type === "group" && props.row.kind === "reasoning" ? props.row : undefined}>
+          {(row) => <SessionReasoningGroupView refs={row().refs} completed={row().completed} message={props.message} />}
+        </Match>
+        <Match when={props.row.type === "group" && props.row.kind === "exploration" ? props.row : undefined}>
           {(row) => (
             <SessionGroupView
               refs={row().refs}
@@ -1074,6 +1077,114 @@ function SessionPartView(props: { partRef: PartRef; message: (messageID: string)
           </Match>
         </Switch>
       )}
+    </Show>
+  )
+}
+
+function SessionReasoningGroupView(props: {
+  refs: PartRef[]
+  completed: boolean
+  message: (messageID: string) => SessionMessageInfo | undefined
+}) {
+  const ctx = use()
+  const { theme, syntax } = useTheme()
+  const renderer = useRenderer()
+  const [expanded, setExpanded] = createSignal(false)
+  const parts = createMemo<{ message: SessionMessageAssistant; part: SessionMessageAssistantReasoning }[]>(
+    (previous) => {
+      const next = props.refs.flatMap((ref) => {
+        const message = props.message(ref.messageID)
+        if (message?.type !== "assistant") return []
+        const part = resolvePart(message, ref.partID)
+        if (part?.type !== "reasoning" || !part.text.replace("[REDACTED]", "").trim()) return []
+        return [{ message, part }]
+      })
+      return next.length > 0 ? next : previous
+    },
+    [] as { message: SessionMessageAssistant; part: SessionMessageAssistantReasoning }[],
+  )
+  const latest = createMemo((previous: string | null) => {
+    const item = parts().at(-1)
+    if (!item) return previous
+    const title = reasoningSummary(item.part.text.replace("[REDACTED]", "").trim()).title
+    if (title) return title
+    if (item.part.time?.completed !== undefined || item.message.time.completed !== undefined) return null
+    return previous
+  }, null)
+  const duration = createMemo(() =>
+    parts().reduce((total, item) => {
+      const end = item.part.time?.completed ?? item.message.time.completed
+      const start = item.part.time?.created ?? item.message.time.created
+      return total + (end === undefined ? 0 : Math.max(0, end - start))
+    }, 0),
+  )
+
+  return (
+    <Show when={parts().length > 0}>
+      <Show
+        when={ctx.thinkingMode() === "hide"}
+        fallback={
+          <For each={parts()}>{(item) => <ReasoningPart part={item.part} message={item.message} last={false} />}</For>
+        }
+      >
+        <box paddingLeft={3} flexDirection="column" flexShrink={0}>
+          <box
+            onMouseUp={() => {
+              if (renderer.getSelection()?.getSelectedText()) return
+              setExpanded((value) => !value)
+            }}
+          >
+            <Show
+              when={props.completed}
+              fallback={<Spinner color={theme.warning}>{latest() ? `Thinking: ${latest()}` : "Thinking"}</Spinner>}
+            >
+              <Show
+                when={expanded()}
+                fallback={
+                  <text fg={theme.warning} wrapMode="none">
+                    + Thought
+                    <Show when={latest()}>: {latest()}</Show>
+                    <Show when={parts().length > 1}> · {parts().length} steps</Show>
+                    <Show when={duration()}> · {Locale.duration(duration())}</Show>
+                  </text>
+                }
+              >
+                <text fg={theme.warning} wrapMode="none">
+                  - Thought
+                  <Show when={parts().length > 1}> · {parts().length} steps</Show>
+                  <Show when={duration()}> · {Locale.duration(duration())}</Show>
+                </text>
+              </Show>
+            </Show>
+          </box>
+          <Show when={expanded()}>
+            <For each={parts()}>
+              {(item) => {
+                const content = createMemo(() => item.part.text.replace("[REDACTED]", "").trim())
+                const summary = createMemo(() => reasoningSummary(content()))
+                const markdown = createMemo(() => {
+                  if (!summary().title) return content()
+                  if (!summary().body) return `**${summary().title}**`
+                  return `**${summary().title}** · ${summary().body}`
+                })
+                return (
+                  <box marginTop={1}>
+                    <code
+                      filetype="markdown"
+                      drawUnstyledText={false}
+                      streaming={false}
+                      syntaxStyle={syntax()}
+                      content={markdown()}
+                      conceal={ctx.markdownMode() === "rendered"}
+                      fg={theme.textMuted}
+                    />
+                  </box>
+                )
+              }}
+            </For>
+          </Show>
+        </box>
+      </Show>
     </Show>
   )
 }

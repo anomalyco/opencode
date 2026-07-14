@@ -14,6 +14,12 @@ export type SessionRow =
   | { type: "part"; ref: PartRef }
   | {
       type: "group"
+      kind: "reasoning"
+      refs: PartRef[]
+      completed: boolean
+    }
+  | {
+      type: "group"
       kind: "exploration"
       refs: PartRef[]
       pending: PartRef[]
@@ -131,6 +137,16 @@ export function createSessionRows(sessionID: Accessor<string>) {
       produce((draft) => {
         if (hasPart(draft, ref)) return
         const index = queuedStart(draft)
+        if (ref.partID.startsWith("reasoning:")) {
+          const previous = draft[index - 1]
+          if (previous?.type === "group" && previous.kind === "reasoning") {
+            previous.refs.push(ref)
+            return
+          }
+          completePrevious(draft, index)
+          draft.splice(index, 0, { type: "group", kind: "reasoning", refs: [ref], completed: false })
+          return
+        }
         if (name && exploration(name)) {
           const previous = draft[index - 1]
           if (previous?.type === "group" && previous.kind === "exploration") {
@@ -213,7 +229,7 @@ export function createSessionRows(sessionID: Accessor<string>) {
     data.on("session.agent.selected", message),
     data.on("session.model.selected", message),
     data.on("session.text.delta", (event) => {
-      if (event.data.sessionID === sessionID())
+      if (event.data.sessionID === sessionID() && event.data.delta.trim())
         appendPart({ messageID: event.data.assistantMessageID, partID: `text:${event.data.ordinal}` })
     }),
     data.on("session.text.ended", (event) => {
@@ -290,6 +306,16 @@ export function resolvePart(message: SessionMessageAssistant, partID: string) {
 }
 
 function append(rows: SessionRow[], ref: PartRef, part: SessionMessageAssistant["content"][number]) {
+  if (part.type === "reasoning") {
+    const previous = rows.at(-1)
+    if (previous?.type === "group" && previous.kind === "reasoning") {
+      previous.refs.push(ref)
+      return
+    }
+    completePrevious(rows)
+    rows.push({ type: "group", kind: "reasoning", refs: [ref], completed: false })
+    return
+  }
   if (part.type === "tool") {
     if (exploration(part.name)) {
       const previous = rows.at(-1)
@@ -313,7 +339,7 @@ function completePrevious(rows: SessionRow[], index = rows.length) {
 
 function partitionPending(rows: SessionRow[], pending: Set<string>) {
   rows.forEach((row) => {
-    if (row.type !== "group") return
+    if (row.type !== "group" || row.kind !== "exploration") return
     const refs = [...row.refs, ...row.pending]
     row.refs = refs.filter((ref) => !pending.has(ref.partID))
     row.pending = refs.filter((ref) => pending.has(ref.partID))
@@ -328,6 +354,7 @@ function hasPart(rows: SessionRow[], ref: PartRef) {
   return rows.some((row) => {
     if (row.type === "part") return row.ref.messageID === ref.messageID && row.ref.partID === ref.partID
     if (row.type !== "group") return false
-    return [...row.refs, ...row.pending].some((item) => item.messageID === ref.messageID && item.partID === ref.partID)
+    const refs = row.kind === "exploration" ? [...row.refs, ...row.pending] : row.refs
+    return refs.some((item) => item.messageID === ref.messageID && item.partID === ref.partID)
   })
 }

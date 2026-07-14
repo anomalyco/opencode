@@ -74,9 +74,49 @@ test("assigns stable kind ordinals within an assistant message", () => {
 
   expect(reduceSessionRows(messages)).toEqual([
     { type: "part", ref: { messageID: "assistant-1", partID: "text:0" } },
-    { type: "part", ref: { messageID: "assistant-1", partID: "reasoning:0" } },
+    {
+      type: "group",
+      kind: "reasoning",
+      completed: true,
+      refs: [{ messageID: "assistant-1", partID: "reasoning:0" }],
+    },
     { type: "part", ref: { messageID: "assistant-1", partID: "text:1" } },
-    { type: "part", ref: { messageID: "assistant-1", partID: "reasoning:1" } },
+    {
+      type: "group",
+      kind: "reasoning",
+      completed: false,
+      refs: [{ messageID: "assistant-1", partID: "reasoning:1" }],
+    },
+  ])
+})
+
+test("groups adjacent reasoning parts until a visible boundary", () => {
+  const messages: SessionMessageInfo[] = [
+    assistant("assistant-1", [
+      { type: "reasoning", text: "First" },
+      { type: "reasoning", text: "Second" },
+      { type: "text", text: "Visible" },
+      { type: "reasoning", text: "Third" },
+    ]),
+  ]
+
+  expect(reduceSessionRows(messages)).toEqual([
+    {
+      type: "group",
+      kind: "reasoning",
+      completed: true,
+      refs: [
+        { messageID: "assistant-1", partID: "reasoning:0" },
+        { messageID: "assistant-1", partID: "reasoning:1" },
+      ],
+    },
+    { type: "part", ref: { messageID: "assistant-1", partID: "text:0" } },
+    {
+      type: "group",
+      kind: "reasoning",
+      completed: false,
+      refs: [{ messageID: "assistant-1", partID: "reasoning:2" }],
+    },
   ])
 })
 
@@ -93,7 +133,12 @@ test("groups across empty assistant reasoning parts", () => {
   ]
 
   expect(reduceSessionRows(messages)).toEqual([
-    { type: "part", ref: { messageID: "assistant-1", partID: "reasoning:0" } },
+    {
+      type: "group",
+      kind: "reasoning",
+      completed: true,
+      refs: [{ messageID: "assistant-1", partID: "reasoning:0" }],
+    },
     {
       type: "group",
       kind: "exploration",
