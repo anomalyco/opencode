@@ -484,23 +484,22 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
-  it.effect("emits provider-error events for mid-stream provider errors", () =>
+  it.effect("fails with a typed provider error for stream error frames", () =>
     Effect.gen(function* () {
-      const response = yield* LLMClient.generate(request).pipe(
+      const error = yield* LLMClient.generate(request).pipe(
         Effect.provide(
           fixedResponse(sseEvents({ type: "error", error: { type: "overloaded_error", message: "Overloaded" } })),
         ),
+        Effect.flip,
       )
 
-      // Prefix the error type so consumers can distinguish overloads, rate
-      // limits, and quota errors without parsing the message string.
-      expect(response.events).toEqual([{ type: "provider-error", message: "overloaded_error: Overloaded" }])
+      expect(error.reason).toMatchObject({ _tag: "ProviderInternal", message: "overloaded_error: Overloaded" })
     }),
   )
 
   it.effect("classifies prompt-too-long provider errors", () =>
     Effect.gen(function* () {
-      const response = yield* LLMClient.generate(request).pipe(
+      const error = yield* LLMClient.generate(request).pipe(
         Effect.provide(
           fixedResponse(
             sseEvents({
@@ -509,35 +508,36 @@ describe("Anthropic Messages route", () => {
             }),
           ),
         ),
+        Effect.flip,
       )
 
-      expect(response.events).toEqual([
-        {
-          type: "provider-error",
-          message: "invalid_request_error: prompt is too long: 210000 tokens",
-          classification: "context-overflow",
-        },
-      ])
+      expect(error.reason).toMatchObject({
+        _tag: "InvalidRequest",
+        message: "invalid_request_error: prompt is too long: 210000 tokens",
+        classification: "context-overflow",
+      })
     }),
   )
 
   it.effect("falls back to error type when no message is present", () =>
     Effect.gen(function* () {
-      const response = yield* LLMClient.generate(request).pipe(
+      const error = yield* LLMClient.generate(request).pipe(
         Effect.provide(fixedResponse(sseEvents({ type: "error", error: { type: "overloaded_error", message: "" } }))),
+        Effect.flip,
       )
 
-      expect(response.events).toEqual([{ type: "provider-error", message: "overloaded_error" }])
+      expect(error.reason).toMatchObject({ _tag: "ProviderInternal", message: "overloaded_error" })
     }),
   )
 
   it.effect("falls back to a stable default when error payload is absent", () =>
     Effect.gen(function* () {
-      const response = yield* LLMClient.generate(request).pipe(
+      const error = yield* LLMClient.generate(request).pipe(
         Effect.provide(fixedResponse(sseEvents({ type: "error" }))),
+        Effect.flip,
       )
 
-      expect(response.events).toEqual([{ type: "provider-error", message: "Anthropic Messages stream error" }])
+      expect(error.reason).toMatchObject({ _tag: "UnknownProvider", message: "Anthropic Messages stream error" })
     }),
   )
 

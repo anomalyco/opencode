@@ -8,21 +8,14 @@ import {
   HttpClientResponse,
 } from "effect/unstable/http"
 import {
-  AuthenticationReason,
-  ContentPolicyReason,
   HttpContext,
   HttpRateLimitDetails,
   HttpRequestDetails,
   HttpResponseDetails,
-  InvalidRequestReason,
   LLMError,
-  ProviderInternalReason,
-  QuotaExceededReason,
-  RateLimitReason,
   TransportReason,
-  UnknownProviderReason,
 } from "../schema"
-import { isContextOverflow } from "../provider-error"
+import { classifyProviderFailure } from "../provider-error"
 
 export interface Interface {
   readonly execute: (
@@ -84,8 +77,6 @@ const requestId = (headers: Record<string, string>) => {
     headers["cf-ray"]
   )
 }
-
-const providerInternalStatus = (status: number) => status === 429 || status === 503 || status === 504 || status === 529
 
 const retryAfterMs = (headers: Record<string, string>) => {
   const millis = Number(headers["retry-after-ms"])
@@ -219,58 +210,6 @@ const responseHttp = (input: {
     rateLimit: input.rateLimit,
   })
 
-const statusReason = (input: {
-  readonly status: number
-  readonly message: string
-  readonly retryAfterMs?: number | undefined
-  readonly rateLimit?: HttpRateLimitDetails | undefined
-  readonly http: HttpContext
-}) => {
-  const body = input.http.body ?? ""
-  if (/content[-_\s]?policy|content_filter|safety/i.test(body)) {
-    return new ContentPolicyReason({ message: input.message, http: input.http })
-  }
-  if (input.status === 401) {
-    return new AuthenticationReason({ message: input.message, kind: "invalid", http: input.http })
-  }
-  if (input.status === 403) {
-    return new AuthenticationReason({ message: input.message, kind: "insufficient-permissions", http: input.http })
-  }
-  if (input.status === 429) {
-    if (/insufficient[-_\s]?quota|quota[-_\s]?exceeded/i.test(body)) {
-      return new QuotaExceededReason({ message: input.message, http: input.http })
-    }
-    return new RateLimitReason({
-      message: input.message,
-      retryAfterMs: input.retryAfterMs,
-      rateLimit: input.rateLimit,
-      http: input.http,
-    })
-  }
-  if (
-    input.status === 400 ||
-    input.status === 404 ||
-    input.status === 409 ||
-    input.status === 413 ||
-    input.status === 422
-  ) {
-    return new InvalidRequestReason({
-      message: input.message,
-      classification: isContextOverflow(body) ? "context-overflow" : undefined,
-      http: input.http,
-    })
-  }
-  if (input.status >= 500 || providerInternalStatus(input.status)) {
-    return new ProviderInternalReason({
-      message: input.message,
-      status: input.status,
-      retryAfterMs: input.retryAfterMs,
-      http: input.http,
-    })
-  }
-  return new UnknownProviderReason({ message: input.message, status: input.status, http: input.http })
-}
-
 const statusError =
   (request: HttpClientRequest.HttpClientRequest, redactedNames: ReadonlyArray<string | RegExp>) =>
   (response: HttpClientResponse.HttpClientResponse) =>
@@ -284,7 +223,7 @@ const statusError =
       return yield* new LLMError({
         module: "RequestExecutor",
         method: "execute",
-        reason: statusReason({
+        reason: classifyProviderFailure({
           status: response.status,
           message: providerMessage(response.status, details),
           retryAfterMs: retryAfter,

@@ -355,31 +355,29 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
-  it.effect("emits provider-error for throttlingException", () =>
+  it.effect("classifies throttlingException as a rate limit", () =>
     Effect.gen(function* () {
       const body = eventStreamBody(
         ["messageStart", { role: "assistant" }],
         ["throttlingException", { message: "Slow down" }],
       )
-      const response = yield* LLMClient.generate(baseRequest).pipe(Effect.provide(fixedBytes(body)))
+      const error = yield* LLMClient.generate(baseRequest).pipe(Effect.provide(fixedBytes(body)), Effect.flip)
 
-      expect(response.events.find((event) => event.type === "provider-error")).toEqual({
-        type: "provider-error",
-        message: "Slow down",
-      })
+      expect(error.reason).toMatchObject({ _tag: "RateLimit", message: "Slow down" })
     }),
   )
 
   it.effect("classifies input-too-long validation exceptions", () =>
     Effect.gen(function* () {
-      const response = yield* LLMClient.generate(baseRequest).pipe(
+      const error = yield* LLMClient.generate(baseRequest).pipe(
         Effect.provide(
           fixedBytes(eventStreamBody(["validationException", { message: "Input is too long for requested model" }])),
         ),
+        Effect.flip,
       )
 
-      expect(response.events.find((event) => event.type === "provider-error")).toEqual({
-        type: "provider-error",
+      expect(error.reason).toMatchObject({
+        _tag: "InvalidRequest",
         message: "Input is too long for requested model",
         classification: "context-overflow",
       })

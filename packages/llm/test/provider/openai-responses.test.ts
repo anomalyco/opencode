@@ -1368,37 +1368,37 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("emits provider-error events for mid-stream provider errors", () =>
+  it.effect("fails with a typed rate limit for provider error frames", () =>
     Effect.gen(function* () {
-      const response = yield* LLMClient.generate(request).pipe(
+      const error = yield* LLMClient.generate(request).pipe(
         Effect.provide(fixedResponse(sseEvents({ type: "error", code: "rate_limit_exceeded", message: "Slow down" }))),
+        Effect.flip,
       )
 
-      // Prefix the code so consumers see the failure mode, not just the
-      // sometimes-generic provider message. The bare message alone meant
-      // production errors like rate limits were indistinguishable from
-      // unrelated stream failures.
-      expect(response.events).toEqual([{ type: "provider-error", message: "rate_limit_exceeded: Slow down" }])
+      expect(error).toBeInstanceOf(LLMError)
+      expect(error.reason).toMatchObject({ _tag: "RateLimit", message: "rate_limit_exceeded: Slow down" })
     }),
   )
 
   it.effect("falls back to error code when no message is present", () =>
     Effect.gen(function* () {
-      const response = yield* LLMClient.generate(request).pipe(
+      const error = yield* LLMClient.generate(request).pipe(
         Effect.provide(fixedResponse(sseEvents({ type: "error", code: "internal_error" }))),
+        Effect.flip,
       )
 
-      expect(response.events).toEqual([{ type: "provider-error", message: "internal_error" }])
+      expect(error.reason).toMatchObject({ _tag: "ProviderInternal", message: "internal_error" })
     }),
   )
 
   it.effect("falls back to error code when message is empty", () =>
     Effect.gen(function* () {
-      const response = yield* LLMClient.generate(request).pipe(
+      const error = yield* LLMClient.generate(request).pipe(
         Effect.provide(fixedResponse(sseEvents({ type: "error", code: "internal_error", message: "" }))),
+        Effect.flip,
       )
 
-      expect(response.events).toEqual([{ type: "provider-error", message: "internal_error" }])
+      expect(error.reason).toMatchObject({ _tag: "ProviderInternal", message: "internal_error" })
     }),
   )
 
@@ -1408,7 +1408,7 @@ describe("OpenAI Responses route", () => {
   // "OpenAI Responses response failed" string, hiding the real cause.
   it.effect("surfaces response.failed details from response.error", () =>
     Effect.gen(function* () {
-      const response = yield* LLMClient.generate(request).pipe(
+      const error = yield* LLMClient.generate(request).pipe(
         Effect.provide(
           fixedResponse(
             sseEvents({
@@ -1420,15 +1420,19 @@ describe("OpenAI Responses route", () => {
             }),
           ),
         ),
+        Effect.flip,
       )
 
-      expect(response.events).toEqual([{ type: "provider-error", message: "server_error: Upstream model unavailable" }])
+      expect(error.reason).toMatchObject({
+        _tag: "ProviderInternal",
+        message: "server_error: Upstream model unavailable",
+      })
     }),
   )
 
   it.effect("surfaces response.failed code when no nested message is present", () =>
     Effect.gen(function* () {
-      const response = yield* LLMClient.generate(request).pipe(
+      const error = yield* LLMClient.generate(request).pipe(
         Effect.provide(
           fixedResponse(
             sseEvents({
@@ -1437,9 +1441,10 @@ describe("OpenAI Responses route", () => {
             }),
           ),
         ),
+        Effect.flip,
       )
 
-      expect(response.events).toEqual([{ type: "provider-error", message: "invalid_prompt" }])
+      expect(error.reason).toMatchObject({ _tag: "InvalidRequest", message: "invalid_prompt" })
     }),
   )
 
@@ -1450,7 +1455,7 @@ describe("OpenAI Responses route", () => {
       // when they bubble up an HTTP error as an SSE `error` event. Honour
       // both shapes so the user still sees the underlying cause instead
       // of the catch-all string.
-      const response = yield* LLMClient.generate(request).pipe(
+      const error = yield* LLMClient.generate(request).pipe(
         Effect.provide(
           fixedResponse(
             sseEvents({
@@ -1459,21 +1464,20 @@ describe("OpenAI Responses route", () => {
             }),
           ),
         ),
+        Effect.flip,
       )
 
-      expect(response.events).toEqual([
-        {
-          type: "provider-error",
-          message: "context_length_exceeded: prompt too long",
-          classification: "context-overflow",
-        },
-      ])
+      expect(error.reason).toMatchObject({
+        _tag: "InvalidRequest",
+        message: "context_length_exceeded: prompt too long",
+        classification: "context-overflow",
+      })
     }),
   )
 
   it.effect("surfaces error event details nested under error", () =>
     Effect.gen(function* () {
-      const response = yield* LLMClient.generate(request).pipe(
+      const error = yield* LLMClient.generate(request).pipe(
         Effect.provide(
           fixedResponse(
             sseEvents({
@@ -1488,21 +1492,20 @@ describe("OpenAI Responses route", () => {
             }),
           ),
         ),
+        Effect.flip,
       )
 
-      expect(response.events).toEqual([
-        {
-          type: "provider-error",
-          message: "context_length_exceeded: prompt too long",
-          classification: "context-overflow",
-        },
-      ])
+      expect(error.reason).toMatchObject({
+        _tag: "InvalidRequest",
+        message: "context_length_exceeded: prompt too long",
+        classification: "context-overflow",
+      })
     }),
   )
 
   it.effect("accepts nullable fields in spec-compliant error events", () =>
     Effect.gen(function* () {
-      const response = yield* LLMClient.generate(request).pipe(
+      const error = yield* LLMClient.generate(request).pipe(
         Effect.provide(
           fixedResponse(
             sseEvents({
@@ -1514,39 +1517,43 @@ describe("OpenAI Responses route", () => {
             }),
           ),
         ),
+        Effect.flip,
       )
 
-      expect(response.events).toEqual([{ type: "provider-error", message: "Something went wrong" }])
+      expect(error.reason).toMatchObject({ _tag: "UnknownProvider", message: "Something went wrong" })
     }),
   )
 
   it.effect("falls back to a stable default when error is null", () =>
     Effect.gen(function* () {
-      const response = yield* LLMClient.generate(request).pipe(
+      const error = yield* LLMClient.generate(request).pipe(
         Effect.provide(fixedResponse(sseEvents({ type: "error", error: null }))),
+        Effect.flip,
       )
 
-      expect(response.events).toEqual([{ type: "provider-error", message: "OpenAI Responses stream error" }])
+      expect(error.reason).toMatchObject({ _tag: "UnknownProvider", message: "OpenAI Responses stream error" })
     }),
   )
 
   it.effect("falls back to a stable default when both error and response are absent", () =>
     Effect.gen(function* () {
-      const response = yield* LLMClient.generate(request).pipe(
+      const error = yield* LLMClient.generate(request).pipe(
         Effect.provide(fixedResponse(sseEvents({ type: "error" }))),
+        Effect.flip,
       )
 
-      expect(response.events).toEqual([{ type: "provider-error", message: "OpenAI Responses stream error" }])
+      expect(error.reason).toMatchObject({ _tag: "UnknownProvider", message: "OpenAI Responses stream error" })
     }),
   )
 
   it.effect("falls back to a stable default when response.failed has no error payload", () =>
     Effect.gen(function* () {
-      const response = yield* LLMClient.generate(request).pipe(
+      const error = yield* LLMClient.generate(request).pipe(
         Effect.provide(fixedResponse(sseEvents({ type: "response.failed", response: { id: "resp_failed_3" } }))),
+        Effect.flip,
       )
 
-      expect(response.events).toEqual([{ type: "provider-error", message: "OpenAI Responses response failed" }])
+      expect(error.reason).toMatchObject({ _tag: "UnknownProvider", message: "OpenAI Responses response failed" })
     }),
   )
 

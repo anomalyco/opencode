@@ -3854,6 +3854,32 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("does not retry eligible failures after observable output", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      yield* admit(session, "Do not replay partial output")
+      const failure = rateLimited()
+      responseStream = Stream.fromIterable([
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.textStart({ id: "partial-rate-limit" }),
+        LLMEvent.textDelta({ id: "partial-rate-limit", text: "Partial" }),
+      ]).pipe(Stream.concat(Stream.fail(failure)))
+
+      expect(yield* session.resume(sessionID).pipe(Effect.flip)).toBe(failure)
+      expect(requests).toHaveLength(1)
+      expect(yield* recordedEventTypes(sessionID)).not.toContain("session.retry.scheduled.1")
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user" },
+        {
+          type: "assistant",
+          finish: "error",
+          error: { type: "provider.rate-limit" },
+          content: [{ type: "text", text: "Partial" }],
+        },
+      ])
+    }),
+  )
+
   it.effect("stops after five total retry attempts", () =>
     Effect.gen(function* () {
       const session = yield* setup

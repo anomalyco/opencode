@@ -5,6 +5,7 @@ import { Endpoint } from "../route/endpoint"
 import { HttpTransport, WebSocketTransport } from "../route/transport"
 import { Protocol } from "../route/protocol"
 import {
+  LLMError,
   LLMEvent,
   Usage,
   type FinishReason,
@@ -19,7 +20,7 @@ import {
   type ToolResultPart,
 } from "../schema"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared"
-import { isContextOverflow } from "../provider-error"
+import { classifyProviderFailure } from "../provider-error"
 import { OpenAIOptions } from "./utils/openai-options"
 import { Lifecycle } from "./utils/lifecycle"
 import { ToolSchemaProjection } from "./utils/tool-schema"
@@ -606,9 +607,8 @@ type StepResult = readonly [ParserState, ReadonlyArray<LLMEvent>]
 const NO_EVENTS: StepResult["1"] = []
 
 // `response.completed` / `response.incomplete` are clean finishes that emit a
-// `finish` event; `response.failed` is a hard failure that emits a
-// `provider-error`. All three end the stream — kept in one set so `step` and
-// the protocol's `terminal` predicate stay in sync.
+// `finish` event; `response.failed` is a hard failure. All three end the stream,
+// so keep this set aligned with `step` and the protocol's terminal predicate.
 const TERMINAL_TYPES = new Set(["response.completed", "response.incomplete", "response.failed"])
 
 const onOutputTextDelta = (state: ParserState, event: OpenAIResponsesEvent): StepResult => {
@@ -910,21 +910,12 @@ const providerErrorMessage = (event: OpenAIResponsesEvent, fallback: string): st
 const providerError = (event: OpenAIResponsesEvent, fallback: string) => {
   const code = event.code || event.error?.code || event.response?.error?.code || undefined
   const message = providerErrorMessage(event, fallback)
-  return LLMEvent.providerError({
-    message,
-    classification: code === "context_length_exceeded" || isContextOverflow(message) ? "context-overflow" : undefined,
+  return new LLMError({
+    module: ADAPTER,
+    method: "stream",
+    reason: classifyProviderFailure({ message, code }),
   })
 }
-
-const onResponseFailed = (state: ParserState, event: OpenAIResponsesEvent): StepResult => [
-  state,
-  [providerError(event, "OpenAI Responses response failed")],
-]
-
-const onError = (state: ParserState, event: OpenAIResponsesEvent): StepResult => [
-  state,
-  [providerError(event, "OpenAI Responses stream error")],
-]
 
 const step = (state: ParserState, event: OpenAIResponsesEvent) => {
   if (event.type === "response.output_text.delta") return Effect.succeed(onOutputTextDelta(state, event))
@@ -950,8 +941,8 @@ const step = (state: ParserState, event: OpenAIResponsesEvent) => {
   if (event.type === "response.output_item.done") return onOutputItemDone(state, event)
   if (event.type === "response.completed" || event.type === "response.incomplete")
     return Effect.succeed(onResponseFinish(state, event))
-  if (event.type === "response.failed") return Effect.succeed(onResponseFailed(state, event))
-  if (event.type === "error") return Effect.succeed(onError(state, event))
+  if (event.type === "response.failed") return providerError(event, "OpenAI Responses response failed")
+  if (event.type === "error") return providerError(event, "OpenAI Responses stream error")
   return Effect.succeed<StepResult>([state, NO_EVENTS])
 }
 

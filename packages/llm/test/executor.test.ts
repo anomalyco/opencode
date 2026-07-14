@@ -107,6 +107,39 @@ describe("RequestExecutor", () => {
     }).pipe(Effect.provide(responsesLayer([new Response("invalid parameter", { status: 400 })]))),
   )
 
+  it.effect("classifies provider rate limits hidden behind HTTP 400", () =>
+    Effect.gen(function* () {
+      const classify = (body: string) =>
+        Effect.gen(function* () {
+          const executor = yield* RequestExecutor.Service
+          const error = yield* executor.execute(request).pipe(Effect.flip)
+
+          expectLLMError(error)
+          expect(error.reason).toMatchObject({ _tag: "RateLimit" })
+        }).pipe(Effect.provide(responsesLayer([new Response(body, { status: 400 })])))
+
+      yield* classify("Request rate increased too quickly")
+      yield* classify('{"type":"error","error":{"type":"too_many_requests"}}')
+      yield* classify('{"type":"error","error":{"code":"rate_limit_exceeded"}}')
+    }),
+  )
+
+  it.effect("classifies provider overloads hidden behind HTTP 400", () =>
+    Effect.gen(function* () {
+      const classify = (body: string) =>
+        Effect.gen(function* () {
+          const executor = yield* RequestExecutor.Service
+          const error = yield* executor.execute(request).pipe(Effect.flip)
+
+          expectLLMError(error)
+          expect(error.reason).toMatchObject({ _tag: "ProviderInternal" })
+        }).pipe(Effect.provide(responsesLayer([new Response(body, { status: 400 })])))
+
+      yield* classify('{"code":"resource_exhausted"}')
+      yield* classify('{"code":"service_unavailable"}')
+    }),
+  )
+
   it.effect("returns redacted diagnostics for rate limits", () =>
     Effect.gen(function* () {
       const executor = yield* RequestExecutor.Service

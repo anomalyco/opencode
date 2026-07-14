@@ -85,7 +85,7 @@ export class ContentPolicyReason extends Schema.Class<ContentPolicyReason>("LLM.
 export class ProviderInternalReason extends Schema.Class<ProviderInternalReason>("LLM.Error.ProviderInternal")({
   _tag: Schema.tag("ProviderInternal"),
   message: Schema.String,
-  status: Schema.Number,
+  status: Schema.optional(Schema.Number),
   retryAfterMs: Schema.optional(Schema.Number),
   providerMetadata: Schema.optional(ProviderMetadata),
   http: Schema.optional(HttpContext),
