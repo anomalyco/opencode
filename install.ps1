@@ -36,10 +36,9 @@ $GENTLE_REPO = "Gentleman-Programming/gentle-ai"
 $BINARY_NAME = "opencode"
 $GENTLE_NAME = "gentle-ai"
 
-$NEXTCLOUD_MIRROR = "https://enlaceschacocloud.duckdns.org/s/ojAcbHDQBTX97oD/download"
-$NEXTCLOUD_WEBDAV = "https://enlaceschacocloud.duckdns.org/public.php/webdav"
+$NEXTCLOUD_MIRROR = "https://enlaceschacocloud.duckdns.org/public.php/webdav"
 $NEXTCLOUD_TOKEN = "ojAcbHDQBTX97oD"
-$FALLBACK_VERSION = "v1.0.8"
+$FALLBACK_VERSION = "v1.0.9"
 
 $OPENCODE_DIR = Join-Path $env:LOCALAPPDATA "opencode\bin"
 $GENTLE_DIR = Join-Path $env:LOCALAPPDATA "gentle-ai\bin"
@@ -129,9 +128,9 @@ function Get-LatestFromNextcloud {
 
     try {
         $auth = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("${NEXTCLOUD_TOKEN}:"))
-        $response = Invoke-WebRequest -Uri $NEXTCLOUD_WEBDAV -Method PROPFIND `
+        $response = Invoke-WebRequest -Uri $NEXTCLOUD_MIRROR -Method PROPFIND `
             -UseBasicParsing -TimeoutSec 10 `
-            -Headers @{ "Authorization" = "Basic $auth" } -UseBasicParsing
+            -Headers @{ "Authorization" = "Basic $auth" }
     } catch {
         Write-Warn "Cannot reach Nextcloud mirror."
         return $null
@@ -163,7 +162,7 @@ function Get-LatestFromNextcloud {
 # --- Download Binary -------------------------------------------------------
 
 function Download-WithRetry {
-    param([string]$Url, [string]$OutFile, [int]$MaxRetries = 3)
+    param([string]$Url, [string]$OutFile, [int]$MaxRetries = 3, [hashtable]$Headers = @{})
 
     for ($i = 1; $i -le $MaxRetries; $i++) {
         try {
@@ -172,7 +171,16 @@ function Download-WithRetry {
                 Write-Warn "Retry $i/$MaxRetries in ${wait}s..."
                 Start-Sleep -Seconds $wait
             }
-            Invoke-WebRequest -Uri $Url -OutFile $OutFile -UseBasicParsing -TimeoutSec 30
+            $iwrParams = @{
+                Uri = $Url
+                OutFile = $OutFile
+                UseBasicParsing = $true
+                TimeoutSec = 300
+            }
+            if ($Headers.Count -gt 0) {
+                $iwrParams.Headers = $Headers
+            }
+            Invoke-WebRequest @iwrParams
             return $true
         } catch {
             Write-Warn "Download attempt $i failed: $_"
@@ -195,10 +203,13 @@ function Install-Binary {
     $arch = Get-Arch
 
     # Build primary URL
+    $mirrorHeaders = @{}
     if ($MirrorUrl) {
         $versionNumber = $Version -replace '^v',''
         $archiveName = "${BinaryName}_${versionNumber}_windows_${arch}.zip"
-        $downloadUrl = "${MirrorUrl}?path=/&files=${archiveName}"
+        $downloadUrl = "$MirrorUrl/$archiveName"
+        $auth = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("${NEXTCLOUD_TOKEN}:"))
+        $mirrorHeaders = @{ "Authorization" = "Basic $auth" }
         Write-Info "Using mirror: Nextcloud"
     } else {
         $versionNumber = $Version -replace '^v',''
@@ -216,13 +227,14 @@ function Install-Binary {
         $archivePath = Join-Path $tmpDir $archiveName
 
         # Try primary download
-        $ok = Download-WithRetry -Url $downloadUrl -OutFile $archivePath
+        $ok = Download-WithRetry -Url $downloadUrl -OutFile $archivePath -Headers $mirrorHeaders
 
-        # If primary fails and we have a mirror option, try mirror
+        # If primary fails and we're not already on mirror, try Nextcloud
         if (-not $ok -and -not $MirrorUrl -and $BinaryName -eq "opencode" -and $Version) {
             Write-Warn "GitHub download failed. Trying Nextcloud mirror..."
-            $mirrorDownloadUrl = "${NEXTCLOUD_MIRROR}?path=/&files=${archiveName}"
-            $ok = Download-WithRetry -Url $mirrorDownloadUrl -OutFile $archivePath
+            $mirrorDownloadUrl = "$NEXTCLOUD_MIRROR/$archiveName"
+            $auth = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("${NEXTCLOUD_TOKEN}:"))
+            $ok = Download-WithRetry -Url $mirrorDownloadUrl -OutFile $archivePath -Headers @{ "Authorization" = "Basic $auth" }
         }
 
         if (-not $ok) {
