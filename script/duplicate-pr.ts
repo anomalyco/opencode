@@ -76,4 +76,4 @@ Examples:
   }
 }
 
-main()
+void main()

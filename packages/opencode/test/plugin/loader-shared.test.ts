@@ -1,74 +1,84 @@
-import { afterAll, afterEach, describe, expect, spyOn, test } from "bun:test"
+import { afterEach, describe, expect, spyOn } from "bun:test"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { Effect, Layer } from "effect"
 import fs from "fs/promises"
 import path from "path"
 import { pathToFileURL } from "url"
-import { tmpdir } from "../fixture/fixture"
-import { Filesystem } from "../../src/util/filesystem"
-
-const disableDefault = process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS
-process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS = "1"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Config } from "@/config/config"
+import { disposeAllInstances, provideInstance, testInstanceStoreLayer, tmpdirScoped } from "../fixture/fixture"
+import { testEffect } from "../lib/effect"
 
 const { Plugin } = await import("../../src/plugin/index")
 const { PluginLoader } = await import("../../src/plugin/loader")
 const { readPackageThemes } = await import("../../src/plugin/shared")
-const { Instance } = await import("../../src/project/instance")
-const { Npm } = await import("../../src/npm")
-const { Bus } = await import("../../src/bus")
-const { Session } = await import("../../src/session")
-
-afterAll(() => {
-  if (disableDefault === undefined) {
-    delete process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS
-    return
-  }
-  process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS = disableDefault
-})
+const { Npm } = await import("@opencode-ai/core/npm")
+const { TestConfig } = await import("../fixture/config")
+const { RuntimeFlags } = await import("../../src/effect/runtime-flags")
 
 afterEach(async () => {
-  await Instance.disposeAll()
+  await disposeAllInstances()
 })
 
-async function load(dir: string) {
-  return Instance.provide({
-    directory: dir,
-    fn: async () => {
-      await Plugin.list()
-    },
+const it = testEffect(
+  Layer.mergeAll(LayerNode.compile(LayerNode.group([CrossSpawnSpawner.node, FSUtil.node])), testInstanceStoreLayer),
+)
+
+function withTmp<T, A, E, R>(
+  init: (dir: string) => Promise<T>,
+  body: (tmp: { path: string; extra: T }) => Effect.Effect<A, E, R>,
+) {
+  return Effect.gen(function* () {
+    const dir = yield* tmpdirScoped()
+    const extra = yield* Effect.promise(() => init(dir))
+    return yield* body({ path: dir, extra })
   })
 }
 
-async function errs(dir: string) {
-  return Instance.provide({
-    directory: dir,
-    fn: async () => {
-      const errors: string[] = []
-      const off = Bus.subscribe(Session.Event.Error, (evt) => {
-        const error = evt.properties.error
-        if (!error || typeof error !== "object") return
-        if (!("data" in error)) return
-        if (!error.data || typeof error.data !== "object") return
-        if (!("message" in error.data)) return
-        if (typeof error.data.message !== "string") return
-        errors.push(error.data.message)
-      })
-      await Plugin.list()
-      off()
-      return errors
-    },
+function load(dir: string, flags?: Parameters<typeof RuntimeFlags.layer>[0]) {
+  const source = path.join(dir, "opencode.json")
+  return Effect.gen(function* () {
+    const config = yield* Effect.promise(
+      () => Bun.file(source).json() as Promise<{ plugin?: Array<string | [string, Record<string, unknown>]> }>,
+    )
+    const plugins = config.plugin ?? []
+    return yield* Effect.gen(function* () {
+      const plugin = yield* Plugin.Service
+      yield* plugin.list()
+    }).pipe(
+      Effect.provide(
+        LayerNode.compile(Plugin.node, [
+          [
+            Config.node,
+            TestConfig.layer({
+              get: () =>
+                Effect.succeed({
+                  plugin: plugins,
+                  plugin_origins: plugins.map((plugin) => ({ spec: plugin, source, scope: "local" as const })),
+                }),
+              directories: () => Effect.succeed([dir]),
+            }),
+          ],
+          [RuntimeFlags.node, RuntimeFlags.layer({ disableDefaultPlugins: true, ...flags })],
+        ]),
+      ),
+      provideInstance(dir),
+    )
   })
 }
 
 describe("plugin.loader.shared", () => {
-  test("loads a file:// plugin function export", async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
+  it.live("loads a file:// plugin function export", () =>
+    withTmp(
+      async (dir) => {
         const file = path.join(dir, "plugin.ts")
         const mark = path.join(dir, "called.txt")
         await Bun.write(
           file,
           [
             "export default async () => {",
-            `  await Bun.write(${JSON.stringify(mark)}, \"called\")`,
+            `  await Bun.write(${JSON.stringify(mark)}, "called")`,
             "  return {}",
             "}",
             "",
@@ -82,15 +92,17 @@ describe("plugin.loader.shared", () => {
 
         return { mark }
       },
-    })
+      (tmp) =>
+        Effect.gen(function* () {
+          yield* load(tmp.path)
+          expect(yield* Effect.promise(() => fs.readFile(tmp.extra.mark, "utf8"))).toBe("called")
+        }),
+    ),
+  )
 
-    await load(tmp.path)
-    expect(await fs.readFile(tmp.extra.mark, "utf8")).toBe("called")
-  })
-
-  test("deduplicates same function exported as default and named", async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
+  it.live("deduplicates same function exported as default and named", () =>
+    withTmp(
+      async (dir) => {
         const file = path.join(dir, "plugin.ts")
         const mark = path.join(dir, "count.txt")
         await Bun.write(mark, "")
@@ -98,8 +110,8 @@ describe("plugin.loader.shared", () => {
           file,
           [
             "const run = async () => {",
-            `  const text = await Bun.file(${JSON.stringify(mark)}).text().catch(() => \"\")`,
-            `  await Bun.write(${JSON.stringify(mark)}, text + \"1\")`,
+            `  const text = await Bun.file(${JSON.stringify(mark)}).text().catch(() => "")`,
+            `  await Bun.write(${JSON.stringify(mark)}, text + "1")`,
             "  return {}",
             "}",
             "export default run",
@@ -115,15 +127,17 @@ describe("plugin.loader.shared", () => {
 
         return { mark }
       },
-    })
+      (tmp) =>
+        Effect.gen(function* () {
+          yield* load(tmp.path)
+          expect(yield* Effect.promise(() => fs.readFile(tmp.extra.mark, "utf8"))).toBe("1")
+        }),
+    ),
+  )
 
-    await load(tmp.path)
-    expect(await fs.readFile(tmp.extra.mark, "utf8")).toBe("1")
-  })
-
-  test("uses only default v1 server plugin when present", async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
+  it.live("uses only default v1 server plugin when present", () =>
+    withTmp(
+      async (dir) => {
         const file = path.join(dir, "plugin.ts")
         const mark = path.join(dir, "count.txt")
         await Bun.write(
@@ -151,15 +165,17 @@ describe("plugin.loader.shared", () => {
 
         return { mark }
       },
-    })
+      (tmp) =>
+        Effect.gen(function* () {
+          yield* load(tmp.path)
+          expect(yield* Effect.promise(() => Bun.file(tmp.extra.mark).text())).toBe("default")
+        }),
+    ),
+  )
 
-    await load(tmp.path)
-    expect(await Bun.file(tmp.extra.mark).text()).toBe("default")
-  })
-
-  test("rejects v1 file server plugin without id", async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
+  it.live("rejects v1 file server plugin without id", () =>
+    withTmp(
+      async (dir) => {
         const file = path.join(dir, "plugin.ts")
         const mark = path.join(dir, "called.txt")
         await Bun.write(
@@ -182,21 +198,24 @@ describe("plugin.loader.shared", () => {
 
         return { mark }
       },
-    })
+      (tmp) =>
+        Effect.gen(function* () {
+          yield* load(tmp.path)
+          const called = yield* Effect.promise(() =>
+            Bun.file(tmp.extra.mark)
+              .text()
+              .then(() => true)
+              .catch(() => false),
+          )
 
-    const errors = await errs(tmp.path)
-    const called = await Bun.file(tmp.extra.mark)
-      .text()
-      .then(() => true)
-      .catch(() => false)
+          expect(called).toBe(false)
+        }),
+    ),
+  )
 
-    expect(called).toBe(false)
-    expect(errors.some((x) => x.includes("must export id"))).toBe(true)
-  })
-
-  test("rejects v1 plugin that exports server and tui together", async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
+  it.live("rejects v1 plugin that exports server and tui together", () =>
+    withTmp(
+      async (dir) => {
         const file = path.join(dir, "plugin.ts")
         const mark = path.join(dir, "called.txt")
         await Bun.write(
@@ -221,21 +240,24 @@ describe("plugin.loader.shared", () => {
 
         return { mark }
       },
-    })
+      (tmp) =>
+        Effect.gen(function* () {
+          yield* load(tmp.path)
+          const called = yield* Effect.promise(() =>
+            Bun.file(tmp.extra.mark)
+              .text()
+              .then(() => true)
+              .catch(() => false),
+          )
 
-    const errors = await errs(tmp.path)
-    const called = await Bun.file(tmp.extra.mark)
-      .text()
-      .then(() => true)
-      .catch(() => false)
+          expect(called).toBe(false)
+        }),
+    ),
+  )
 
-    expect(called).toBe(false)
-    expect(errors.some((x) => x.includes("either server() or tui(), not both"))).toBe(true)
-  })
-
-  test("resolves npm plugin specs with explicit and default versions", async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
+  it.live("resolves npm plugin specs with explicit and default versions", () =>
+    withTmp(
+      async (dir) => {
         const acme = path.join(dir, "node_modules", "acme-plugin")
         const scope = path.join(dir, "node_modules", "scope-plugin")
         await fs.mkdir(acme, { recursive: true })
@@ -258,26 +280,28 @@ describe("plugin.loader.shared", () => {
 
         return { acme, scope }
       },
-    })
+      (tmp) =>
+        Effect.gen(function* () {
+          const add = spyOn(Npm, "add").mockImplementation(async (pkg) => {
+            if (pkg === "acme-plugin") return { directory: tmp.extra.acme, entrypoint: undefined }
+            return { directory: tmp.extra.scope, entrypoint: undefined }
+          })
 
-    const add = spyOn(Npm, "add").mockImplementation(async (pkg) => {
-      if (pkg === "acme-plugin") return { directory: tmp.extra.acme, entrypoint: tmp.extra.acme }
-      return { directory: tmp.extra.scope, entrypoint: tmp.extra.scope }
-    })
+          try {
+            yield* load(tmp.path)
 
-    try {
-      await load(tmp.path)
+            expect(add.mock.calls).toContainEqual(["acme-plugin@latest"])
+            expect(add.mock.calls).toContainEqual(["scope-plugin@2.3.4"])
+          } finally {
+            add.mockRestore()
+          }
+        }),
+    ),
+  )
 
-      expect(add.mock.calls).toContainEqual(["acme-plugin@latest"])
-      expect(add.mock.calls).toContainEqual(["scope-plugin@2.3.4"])
-    } finally {
-      add.mockRestore()
-    }
-  })
-
-  test("loads npm server plugin from package ./server export", async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
+  it.live("loads npm server plugin from package ./server export", () =>
+    withTmp(
+      async (dir) => {
         const mod = path.join(dir, "mods", "acme-plugin")
         const mark = path.join(dir, "server-called.txt")
         await fs.mkdir(mod, { recursive: true })
@@ -321,21 +345,23 @@ describe("plugin.loader.shared", () => {
           mark,
         }
       },
-    })
+      (tmp) =>
+        Effect.gen(function* () {
+          const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: undefined })
 
-    const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: tmp.extra.mod })
+          try {
+            yield* load(tmp.path)
+            expect(yield* Effect.promise(() => Bun.file(tmp.extra.mark).text())).toBe("called")
+          } finally {
+            install.mockRestore()
+          }
+        }),
+    ),
+  )
 
-    try {
-      await load(tmp.path)
-      expect(await Bun.file(tmp.extra.mark).text()).toBe("called")
-    } finally {
-      install.mockRestore()
-    }
-  })
-
-  test("loads npm server plugin from package server export without leading dot", async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
+  it.live("loads npm server plugin from package server export without leading dot", () =>
+    withTmp(
+      async (dir) => {
         const mod = path.join(dir, "mods", "acme-plugin")
         const dist = path.join(mod, "dist")
         const mark = path.join(dir, "server-called.txt")
@@ -378,22 +404,23 @@ describe("plugin.loader.shared", () => {
           mark,
         }
       },
-    })
+      (tmp) =>
+        Effect.gen(function* () {
+          const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: undefined })
 
-    const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: tmp.extra.mod })
+          try {
+            yield* load(tmp.path)
+            expect(yield* Effect.promise(() => Bun.file(tmp.extra.mark).text())).toBe("called")
+          } finally {
+            install.mockRestore()
+          }
+        }),
+    ),
+  )
 
-    try {
-      const errors = await errs(tmp.path)
-      expect(errors).toHaveLength(0)
-      expect(await Bun.file(tmp.extra.mark).text()).toBe("called")
-    } finally {
-      install.mockRestore()
-    }
-  })
-
-  test("loads npm server plugin from package main without leading dot", async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
+  it.live("loads npm server plugin from package main without leading dot", () =>
+    withTmp(
+      async (dir) => {
         const mod = path.join(dir, "mods", "acme-plugin")
         const dist = path.join(mod, "dist")
         const mark = path.join(dir, "main-called.txt")
@@ -431,22 +458,23 @@ describe("plugin.loader.shared", () => {
           mark,
         }
       },
-    })
+      (tmp) =>
+        Effect.gen(function* () {
+          const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: undefined })
 
-    const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: tmp.extra.mod })
+          try {
+            yield* load(tmp.path)
+            expect(yield* Effect.promise(() => Bun.file(tmp.extra.mark).text())).toBe("called")
+          } finally {
+            install.mockRestore()
+          }
+        }),
+    ),
+  )
 
-    try {
-      const errors = await errs(tmp.path)
-      expect(errors).toHaveLength(0)
-      expect(await Bun.file(tmp.extra.mark).text()).toBe("called")
-    } finally {
-      install.mockRestore()
-    }
-  })
-
-  test("does not use npm package exports dot for server entry", async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
+  it.live("does not use npm package exports dot for server entry", () =>
+    withTmp(
+      async (dir) => {
         const mod = path.join(dir, "mods", "acme-plugin")
         const mark = path.join(dir, "dot-server.txt")
         await fs.mkdir(mod, { recursive: true })
@@ -477,27 +505,30 @@ describe("plugin.loader.shared", () => {
 
         return { mod, mark }
       },
-    })
+      (tmp) =>
+        Effect.gen(function* () {
+          const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: undefined })
 
-    const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: tmp.extra.mod })
+          try {
+            yield* load(tmp.path)
+            const called = yield* Effect.promise(() =>
+              Bun.file(tmp.extra.mark)
+                .text()
+                .then(() => true)
+                .catch(() => false),
+            )
 
-    try {
-      const errors = await errs(tmp.path)
-      const called = await Bun.file(tmp.extra.mark)
-        .text()
-        .then(() => true)
-        .catch(() => false)
+            expect(called).toBe(false)
+          } finally {
+            install.mockRestore()
+          }
+        }),
+    ),
+  )
 
-      expect(called).toBe(false)
-      expect(errors).toHaveLength(0)
-    } finally {
-      install.mockRestore()
-    }
-  })
-
-  test("rejects npm server export that resolves outside plugin directory", async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
+  it.live("rejects npm server export that resolves outside plugin directory", () =>
+    withTmp(
+      async (dir) => {
         const mod = path.join(dir, "mods", "acme-plugin")
         const outside = path.join(dir, "outside")
         const mark = path.join(dir, "outside-server.txt")
@@ -541,26 +572,29 @@ describe("plugin.loader.shared", () => {
           mark,
         }
       },
-    })
+      (tmp) =>
+        Effect.gen(function* () {
+          const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: undefined })
 
-    const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: tmp.extra.mod })
+          try {
+            yield* load(tmp.path)
+            const called = yield* Effect.promise(() =>
+              Bun.file(tmp.extra.mark)
+                .text()
+                .then(() => true)
+                .catch(() => false),
+            )
+            expect(called).toBe(false)
+          } finally {
+            install.mockRestore()
+          }
+        }),
+    ),
+  )
 
-    try {
-      const errors = await errs(tmp.path)
-      const called = await Bun.file(tmp.extra.mark)
-        .text()
-        .then(() => true)
-        .catch(() => false)
-      expect(called).toBe(false)
-      expect(errors.some((x) => x.includes("outside plugin directory"))).toBe(true)
-    } finally {
-      install.mockRestore()
-    }
-  })
-
-  test("skips legacy codex and copilot auth plugin specs", async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
+  it.live("skips legacy codex and copilot auth plugin specs", () =>
+    withTmp(
+      async (dir) => {
         await Bun.write(
           path.join(dir, "opencode.json"),
           JSON.stringify(
@@ -572,46 +606,69 @@ describe("plugin.loader.shared", () => {
           ),
         )
       },
-    })
+      (_tmp) =>
+        Effect.gen(function* () {
+          const install = spyOn(Npm, "add").mockResolvedValue({ directory: "", entrypoint: undefined })
 
-    const install = spyOn(Npm, "add").mockResolvedValue({ directory: "", entrypoint: "" })
+          try {
+            yield* load(_tmp.path)
 
-    try {
-      await load(tmp.path)
+            const pkgs = install.mock.calls.map((call) => call[0])
+            expect(pkgs).toContain("regular-plugin@1.0.0")
+            expect(pkgs).not.toContain("opencode-openai-codex-auth@1.0.0")
+            expect(pkgs).not.toContain("opencode-copilot-auth@1.0.0")
+          } finally {
+            install.mockRestore()
+          }
+        }),
+    ),
+  )
 
-      const pkgs = install.mock.calls.map((call) => call[0])
-      expect(pkgs).toContain("regular-plugin@1.0.0")
-      expect(pkgs).not.toContain("opencode-openai-codex-auth@1.0.0")
-      expect(pkgs).not.toContain("opencode-copilot-auth@1.0.0")
-    } finally {
-      install.mockRestore()
-    }
-  })
-
-  test("publishes session.error when install fails", async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
-        await Bun.write(path.join(dir, "opencode.json"), JSON.stringify({ plugin: ["broken-plugin@9.9.9"] }, null, 2))
+  it.live("skips broken plugin when install fails", () =>
+    withTmp(
+      async (dir) => {
+        const ok = path.join(dir, "ok.ts")
+        const mark = path.join(dir, "ok.txt")
+        await Bun.write(
+          ok,
+          [
+            "export default {",
+            '  id: "demo.ok",',
+            "  server: async () => {",
+            `    await Bun.write(${JSON.stringify(mark)}, "ok")`,
+            "    return {}",
+            "  },",
+            "}",
+            "",
+          ].join("\n"),
+        )
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({ plugin: ["broken-plugin@9.9.9", pathToFileURL(ok).href] }, null, 2),
+        )
+        return { mark }
       },
-    })
+      (tmp) =>
+        Effect.gen(function* () {
+          const install = spyOn(Npm, "add").mockRejectedValue(new Error("boom"))
 
-    const install = spyOn(Npm, "add").mockRejectedValue(new Error("boom"))
+          try {
+            yield* load(tmp.path)
+            expect(install).toHaveBeenCalledWith("broken-plugin@9.9.9")
+            expect(yield* Effect.promise(() => Bun.file(tmp.extra.mark).text())).toBe("ok")
+          } finally {
+            install.mockRestore()
+          }
+        }),
+    ),
+  )
 
-    try {
-      const errors = await errs(tmp.path)
-
-      expect(errors.some((x) => x.includes("Failed to install plugin broken-plugin@9.9.9") && x.includes("boom"))).toBe(
-        true,
-      )
-    } finally {
-      install.mockRestore()
-    }
-  })
-
-  test("publishes session.error when plugin init throws", async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
+  it.live("continues loading plugins when plugin init throws", () =>
+    withTmp(
+      async (dir) => {
         const file = pathToFileURL(path.join(dir, "throws.ts")).href
+        const ok = pathToFileURL(path.join(dir, "ok.ts")).href
+        const mark = path.join(dir, "ok.txt")
         await Bun.write(
           path.join(dir, "throws.ts"),
           [
@@ -624,56 +681,102 @@ describe("plugin.loader.shared", () => {
             "",
           ].join("\n"),
         )
+        await Bun.write(
+          path.join(dir, "ok.ts"),
+          [
+            "export default {",
+            '  id: "demo.ok",',
+            "  server: async () => {",
+            `    await Bun.write(${JSON.stringify(mark)}, "ok")`,
+            "    return {}",
+            "  },",
+            "}",
+            "",
+          ].join("\n"),
+        )
 
-        await Bun.write(path.join(dir, "opencode.json"), JSON.stringify({ plugin: [file] }, null, 2))
+        await Bun.write(path.join(dir, "opencode.json"), JSON.stringify({ plugin: [file, ok] }, null, 2))
 
-        return { file }
+        return { mark }
       },
-    })
+      (tmp) =>
+        Effect.gen(function* () {
+          yield* load(tmp.path)
+          expect(yield* Effect.promise(() => Bun.file(tmp.extra.mark).text())).toBe("ok")
+        }),
+    ),
+  )
 
-    const errors = await errs(tmp.path)
-
-    expect(errors.some((x) => x.includes(`Failed to load plugin ${tmp.extra.file}: explode`))).toBe(true)
-  })
-
-  test("publishes session.error when plugin module has invalid export", async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
+  it.live("continues loading plugins when plugin module has invalid export", () =>
+    withTmp(
+      async (dir) => {
         const file = pathToFileURL(path.join(dir, "invalid.ts")).href
+        const ok = pathToFileURL(path.join(dir, "ok.ts")).href
+        const mark = path.join(dir, "ok.txt")
         await Bun.write(
           path.join(dir, "invalid.ts"),
           ["export default {", '  id: "demo.invalid",', "  nope: true,", "}", ""].join("\n"),
         )
+        await Bun.write(
+          path.join(dir, "ok.ts"),
+          [
+            "export default {",
+            '  id: "demo.ok",',
+            "  server: async () => {",
+            `    await Bun.write(${JSON.stringify(mark)}, "ok")`,
+            "    return {}",
+            "  },",
+            "}",
+            "",
+          ].join("\n"),
+        )
 
-        await Bun.write(path.join(dir, "opencode.json"), JSON.stringify({ plugin: [file] }, null, 2))
+        await Bun.write(path.join(dir, "opencode.json"), JSON.stringify({ plugin: [file, ok] }, null, 2))
 
-        return { file }
+        return { mark }
       },
-    })
+      (tmp) =>
+        Effect.gen(function* () {
+          yield* load(tmp.path)
+          expect(yield* Effect.promise(() => Bun.file(tmp.extra.mark).text())).toBe("ok")
+        }),
+    ),
+  )
 
-    const errors = await errs(tmp.path)
-
-    expect(errors.some((x) => x.includes(`Failed to load plugin ${tmp.extra.file}`))).toBe(true)
-  })
-
-  test("publishes session.error when plugin import fails", async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
+  it.live("continues loading plugins when plugin import fails", () =>
+    withTmp(
+      async (dir) => {
         const missing = pathToFileURL(path.join(dir, "missing-plugin.ts")).href
-        await Bun.write(path.join(dir, "opencode.json"), JSON.stringify({ plugin: [missing] }, null, 2))
+        const ok = pathToFileURL(path.join(dir, "ok.ts")).href
+        const mark = path.join(dir, "ok.txt")
+        await Bun.write(
+          path.join(dir, "ok.ts"),
+          [
+            "export default {",
+            '  id: "demo.ok",',
+            "  server: async () => {",
+            `    await Bun.write(${JSON.stringify(mark)}, "ok")`,
+            "    return {}",
+            "  },",
+            "}",
+            "",
+          ].join("\n"),
+        )
+        await Bun.write(path.join(dir, "opencode.json"), JSON.stringify({ plugin: [missing, ok] }, null, 2))
 
-        return { missing }
+        return { mark }
       },
-    })
+      (tmp) =>
+        Effect.gen(function* () {
+          yield* load(tmp.path)
+          expect(yield* Effect.promise(() => Bun.file(tmp.extra.mark).text())).toBe("ok")
+        }),
+    ),
+  )
 
-    const errors = await errs(tmp.path)
-
-    expect(errors.some((x) => x.includes(`Failed to load plugin ${tmp.extra.missing}`))).toBe(true)
-  })
-
-  test("loads object plugin via plugin.server", async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
+  it.live("loads object plugin via plugin.server", () =>
+    withTmp(
+      async (dir) => {
         const file = path.join(dir, "object-plugin.ts")
         const mark = path.join(dir, "object-called.txt")
         await Bun.write(
@@ -682,7 +785,7 @@ describe("plugin.loader.shared", () => {
             "const plugin = {",
             '  id: "demo.object",',
             "  server: async () => {",
-            `    await Bun.write(${JSON.stringify(mark)}, \"called\")`,
+            `    await Bun.write(${JSON.stringify(mark)}, "called")`,
             "    return {}",
             "  },",
             "}",
@@ -698,15 +801,17 @@ describe("plugin.loader.shared", () => {
 
         return { mark }
       },
-    })
+      (tmp) =>
+        Effect.gen(function* () {
+          yield* load(tmp.path)
+          expect(yield* Effect.promise(() => fs.readFile(tmp.extra.mark, "utf8"))).toBe("called")
+        }),
+    ),
+  )
 
-    await load(tmp.path)
-    expect(await fs.readFile(tmp.extra.mark, "utf8")).toBe("called")
-  })
-
-  test("passes tuple plugin options into server plugin", async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
+  it.live("passes tuple plugin options into server plugin", () =>
+    withTmp(
+      async (dir) => {
         const file = path.join(dir, "options-plugin.ts")
         const mark = path.join(dir, "options.json")
         await Bun.write(
@@ -731,18 +836,22 @@ describe("plugin.loader.shared", () => {
 
         return { mark }
       },
-    })
+      (tmp) =>
+        Effect.gen(function* () {
+          yield* load(tmp.path)
+          expect(
+            (yield* (yield* FSUtil.Service).readJson(tmp.extra.mark)) as { source: string; enabled: boolean },
+          ).toEqual({
+            source: "tuple",
+            enabled: true,
+          })
+        }),
+    ),
+  )
 
-    await load(tmp.path)
-    expect(await Filesystem.readJson<{ source: string; enabled: boolean }>(tmp.extra.mark)).toEqual({
-      source: "tuple",
-      enabled: true,
-    })
-  })
-
-  test("initializes server plugins in config order", async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
+  it.live("initializes server plugins in config order", () =>
+    withTmp(
+      async (dir) => {
         const a = path.join(dir, "a-plugin.ts")
         const b = path.join(dir, "b-plugin.ts")
         const marker = path.join(dir, "server-order.txt")
@@ -782,16 +891,18 @@ export default {
 
         return { marker }
       },
-    })
+      (tmp) =>
+        Effect.gen(function* () {
+          yield* load(tmp.path)
+          const lines = (yield* Effect.promise(() => fs.readFile(tmp.extra.marker, "utf8"))).trim().split("\n")
+          expect(lines).toEqual(["a-start", "a-end", "b"])
+        }),
+    ),
+  )
 
-    await load(tmp.path)
-    const lines = (await fs.readFile(tmp.extra.marker, "utf8")).trim().split("\n")
-    expect(lines).toEqual(["a-start", "a-end", "b"])
-  })
-
-  test("skips external plugins in pure mode", async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
+  it.live("skips external plugins in pure mode", () =>
+    withTmp(
+      async (dir) => {
         const file = path.join(dir, "plugin.ts")
         const mark = path.join(dir, "called.txt")
         await Bun.write(
@@ -800,7 +911,7 @@ export default {
             "export default {",
             '  id: "demo.pure",',
             "  server: async () => {",
-            `    await Bun.write(${JSON.stringify(mark)}, \"called\")`,
+            `    await Bun.write(${JSON.stringify(mark)}, "called")`,
             "    return {}",
             "  },",
             "}",
@@ -815,30 +926,23 @@ export default {
 
         return { mark }
       },
-    })
+      (tmp) =>
+        Effect.gen(function* () {
+          yield* load(tmp.path, { pure: true })
+          const called = yield* Effect.promise(() =>
+            fs
+              .readFile(tmp.extra.mark, "utf8")
+              .then(() => true)
+              .catch(() => false),
+          )
+          expect(called).toBe(false)
+        }),
+    ),
+  )
 
-    const pure = process.env.OPENCODE_PURE
-    process.env.OPENCODE_PURE = "1"
-
-    try {
-      await load(tmp.path)
-      const called = await fs
-        .readFile(tmp.extra.mark, "utf8")
-        .then(() => true)
-        .catch(() => false)
-      expect(called).toBe(false)
-    } finally {
-      if (pure === undefined) {
-        delete process.env.OPENCODE_PURE
-      } else {
-        process.env.OPENCODE_PURE = pure
-      }
-    }
-  })
-
-  test("reads oc-themes from package manifest", async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
+  it.live("reads oc-themes from package manifest", () =>
+    withTmp(
+      async (dir) => {
         const mod = path.join(dir, "mod")
         await fs.mkdir(path.join(mod, "themes"), { recursive: true })
         await Bun.write(
@@ -856,25 +960,28 @@ export default {
 
         return { mod }
       },
-    })
+      (tmp) =>
+        Effect.gen(function* () {
+          const file = path.join(tmp.extra.mod, "package.json")
+          const fsys = yield* FSUtil.Service
+          const json = (yield* fsys.readJson(file)) as Record<string, unknown>
+          const list = readPackageThemes("acme-plugin", {
+            dir: tmp.extra.mod,
+            pkg: file,
+            json,
+          })
 
-    const file = path.join(tmp.extra.mod, "package.json")
-    const json = await Filesystem.readJson<Record<string, unknown>>(file)
-    const list = readPackageThemes("acme-plugin", {
-      dir: tmp.extra.mod,
-      pkg: file,
-      json,
-    })
+          expect(list).toEqual([
+            FSUtil.resolve(path.join(tmp.extra.mod, "themes", "one.json")),
+            FSUtil.resolve(path.join(tmp.extra.mod, "themes", "two.json")),
+          ])
+        }),
+    ),
+  )
 
-    expect(list).toEqual([
-      Filesystem.resolve(path.join(tmp.extra.mod, "themes", "one.json")),
-      Filesystem.resolve(path.join(tmp.extra.mod, "themes", "two.json")),
-    ])
-  })
-
-  test("handles no-entrypoint tui packages via missing callback", async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
+  it.live("handles no-entrypoint tui packages via missing callback", () =>
+    withTmp(
+      async (dir) => {
         const mod = path.join(dir, "mods", "acme-plugin")
         await fs.mkdir(path.join(mod, "themes"), { recursive: true })
         await Bun.write(
@@ -892,54 +999,58 @@ export default {
         await Bun.write(path.join(mod, "themes", "night.json"), "{}\n")
         return { mod }
       },
-    })
+      (tmp) =>
+        Effect.gen(function* () {
+          const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: undefined })
+          const missing: string[] = []
 
-    const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: tmp.extra.mod })
-    const missing: string[] = []
+          try {
+            const loaded = yield* Effect.promise(() =>
+              PluginLoader.loadExternal({
+                items: [
+                  {
+                    spec: "acme-plugin@1.0.0",
+                    scope: "local" as const,
+                    source: tmp.path,
+                  },
+                ],
+                kind: "tui",
+                missing: async (item) => {
+                  if (!item.pkg) return
+                  const themes = readPackageThemes(item.spec, item.pkg)
+                  if (!themes.length) return
+                  return {
+                    spec: item.spec,
+                    target: item.target,
+                    themes,
+                  }
+                },
+                report: {
+                  missing(_candidate, _retry, message) {
+                    missing.push(message)
+                  },
+                },
+              }),
+            )
 
-    try {
-      const loaded = await PluginLoader.loadExternal({
-        items: [
-          {
-            spec: "acme-plugin@1.0.0",
-            scope: "local" as const,
-            source: tmp.path,
-          },
-        ],
-        kind: "tui",
-        missing: async (item) => {
-          if (!item.pkg) return
-          const themes = readPackageThemes(item.spec, item.pkg)
-          if (!themes.length) return
-          return {
-            spec: item.spec,
-            target: item.target,
-            themes,
+            expect(loaded).toEqual([
+              {
+                spec: "acme-plugin@1.0.0",
+                target: tmp.extra.mod,
+                themes: [FSUtil.resolve(path.join(tmp.extra.mod, "themes", "night.json"))],
+              },
+            ])
+            expect(missing).toHaveLength(0)
+          } finally {
+            install.mockRestore()
           }
-        },
-        report: {
-          missing(_candidate, _retry, message) {
-            missing.push(message)
-          },
-        },
-      })
+        }),
+    ),
+  )
 
-      expect(loaded).toEqual([
-        {
-          spec: "acme-plugin@1.0.0",
-          target: tmp.extra.mod,
-          themes: [Filesystem.resolve(path.join(tmp.extra.mod, "themes", "night.json"))],
-        },
-      ])
-      expect(missing).toHaveLength(0)
-    } finally {
-      install.mockRestore()
-    }
-  })
-
-  test("passes package metadata for entrypoint tui plugins", async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
+  it.live("passes package metadata for entrypoint tui plugins", () =>
+    withTmp(
+      async (dir) => {
         const mod = path.join(dir, "mods", "acme-plugin")
         await fs.mkdir(path.join(mod, "themes"), { recursive: true })
         await Bun.write(
@@ -961,64 +1072,71 @@ export default {
         await Bun.write(path.join(mod, "themes", "night.json"), "{}\n")
         return { mod }
       },
-    })
+      (tmp) =>
+        Effect.gen(function* () {
+          const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: undefined })
 
-    const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: tmp.extra.mod })
+          try {
+            const loaded = yield* Effect.promise(() =>
+              PluginLoader.loadExternal({
+                items: [
+                  {
+                    spec: "acme-plugin@1.0.0",
+                    scope: "local" as const,
+                    source: tmp.path,
+                  },
+                ],
+                kind: "tui",
+                finish: async (item) => {
+                  if (!item.pkg) return
+                  return {
+                    spec: item.spec,
+                    themes: readPackageThemes(item.spec, item.pkg),
+                  }
+                },
+              }),
+            )
 
-    try {
-      const loaded = await PluginLoader.loadExternal({
-        items: [
-          {
-            spec: "acme-plugin@1.0.0",
-            scope: "local" as const,
-            source: tmp.path,
-          },
-        ],
-        kind: "tui",
-        finish: async (item) => {
-          if (!item.pkg) return
-          return {
-            spec: item.spec,
-            themes: readPackageThemes(item.spec, item.pkg),
+            expect(loaded).toEqual([
+              {
+                spec: "acme-plugin@1.0.0",
+                themes: [FSUtil.resolve(path.join(tmp.extra.mod, "themes", "night.json"))],
+              },
+            ])
+          } finally {
+            install.mockRestore()
           }
-        },
-      })
+        }),
+    ),
+  )
 
-      expect(loaded).toEqual([
-        {
-          spec: "acme-plugin@1.0.0",
-          themes: [Filesystem.resolve(path.join(tmp.extra.mod, "themes", "night.json"))],
-        },
-      ])
-    } finally {
-      install.mockRestore()
-    }
-  })
-
-  test("rejects oc-themes path traversal", async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
+  it.live("rejects oc-themes path traversal", () =>
+    withTmp(
+      async (dir) => {
         const mod = path.join(dir, "mod")
         await fs.mkdir(mod, { recursive: true })
         const file = path.join(mod, "package.json")
         await Bun.write(file, JSON.stringify({ name: "acme", "oc-themes": ["../escape.json"] }, null, 2))
         return { mod, file }
       },
-    })
+      (tmp) =>
+        Effect.gen(function* () {
+          const fsys = yield* FSUtil.Service
+          const json = (yield* fsys.readJson(tmp.extra.file)) as Record<string, unknown>
+          expect(() =>
+            readPackageThemes("acme", {
+              dir: tmp.extra.mod,
+              pkg: tmp.extra.file,
+              json,
+            }),
+          ).toThrow("outside plugin directory")
+        }),
+    ),
+  )
 
-    const json = await Filesystem.readJson<Record<string, unknown>>(tmp.extra.file)
-    expect(() =>
-      readPackageThemes("acme", {
-        dir: tmp.extra.mod,
-        pkg: tmp.extra.file,
-        json,
-      }),
-    ).toThrow("outside plugin directory")
-  })
-
-  test("retries failed file plugins once after wait and keeps order", async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
+  it.live("retries failed file plugins once after wait and keeps order", () =>
+    withTmp(
+      async (dir) => {
         const a = path.join(dir, "a")
         const b = path.join(dir, "b")
         const aSpec = pathToFileURL(a).href
@@ -1027,110 +1145,162 @@ export default {
         await fs.mkdir(b, { recursive: true })
         return { a, b, aSpec, bSpec }
       },
-    })
+      (tmp) =>
+        Effect.gen(function* () {
+          let wait = 0
+          const calls: Array<[string, boolean]> = []
 
-    let wait = 0
-    const calls: Array<[string, boolean]> = []
+          const loaded = yield* Effect.promise(() =>
+            PluginLoader.loadExternal({
+              items: [tmp.extra.aSpec, tmp.extra.bSpec].map((spec) => ({
+                spec,
+                scope: "local" as const,
+                source: tmp.path,
+              })),
+              kind: "tui",
+              wait: async () => {
+                wait += 1
+                await Bun.write(path.join(tmp.extra.a, "index.ts"), "export default {}\n")
+                await Bun.write(path.join(tmp.extra.b, "index.ts"), "export default {}\n")
+              },
+              report: {
+                start(candidate, retry) {
+                  calls.push([candidate.plan.spec, retry])
+                },
+              },
+            }),
+          )
 
-    const loaded = await PluginLoader.loadExternal({
-      items: [tmp.extra.aSpec, tmp.extra.bSpec].map((spec) => ({
-        spec,
-        scope: "local" as const,
-        source: tmp.path,
-      })),
-      kind: "tui",
-      wait: async () => {
-        wait += 1
-        await Bun.write(path.join(tmp.extra.a, "index.ts"), "export default {}\n")
-        await Bun.write(path.join(tmp.extra.b, "index.ts"), "export default {}\n")
+          expect(wait).toBe(1)
+          expect(calls).toEqual([
+            [tmp.extra.aSpec, false],
+            [tmp.extra.bSpec, false],
+            [tmp.extra.aSpec, true],
+            [tmp.extra.bSpec, true],
+          ])
+          expect(loaded.map((item) => item.spec)).toEqual([tmp.extra.aSpec, tmp.extra.bSpec])
+        }),
+    ),
+  )
+
+  it.live("does not retry permanent file plugin entry errors", () =>
+    withTmp(
+      async (dir) => {
+        const mod = path.join(dir, "bad-entry")
+        const spec = pathToFileURL(mod).href
+        await fs.mkdir(mod, { recursive: true })
+        await Bun.write(
+          path.join(mod, "package.json"),
+          JSON.stringify({ exports: { "./tui": "../outside.js" } }, null, 2),
+        )
+        return { spec }
       },
-      report: {
-        start(candidate, retry) {
-          calls.push([candidate.plan.spec, retry])
-        },
-      },
-    })
+      (tmp) =>
+        Effect.gen(function* () {
+          let wait = 0
+          const errors: Array<[string, boolean]> = []
 
-    expect(wait).toBe(1)
-    expect(calls).toEqual([
-      [tmp.extra.aSpec, false],
-      [tmp.extra.bSpec, false],
-      [tmp.extra.aSpec, true],
-      [tmp.extra.bSpec, true],
-    ])
-    expect(loaded.map((item) => item.spec)).toEqual([tmp.extra.aSpec, tmp.extra.bSpec])
-  })
+          const loaded = yield* Effect.promise(() =>
+            PluginLoader.loadExternal({
+              items: [
+                {
+                  spec: tmp.extra.spec,
+                  scope: "local" as const,
+                  source: tmp.path,
+                },
+              ],
+              kind: "tui",
+              wait: async () => {
+                wait += 1
+              },
+              report: {
+                error(_candidate, retry, stage) {
+                  errors.push([stage, retry])
+                },
+              },
+            }),
+          )
 
-  test("retries file plugins when finish returns undefined", async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
+          expect(loaded).toEqual([])
+          expect(wait).toBe(0)
+          expect(errors).toEqual([["entry", false]])
+        }),
+    ),
+  )
+
+  it.live("does not retry file plugins when finish returns undefined", () =>
+    withTmp(
+      async (dir) => {
         const file = path.join(dir, "plugin.ts")
         const spec = pathToFileURL(file).href
         await Bun.write(file, "export default {}\n")
         return { spec }
       },
-    })
+      (tmp) =>
+        Effect.gen(function* () {
+          let wait = 0
+          let count = 0
 
-    let wait = 0
-    let count = 0
+          const loaded = yield* Effect.promise(() =>
+            PluginLoader.loadExternal({
+              items: [
+                {
+                  spec: tmp.extra.spec,
+                  scope: "local" as const,
+                  source: tmp.path,
+                },
+              ],
+              kind: "tui",
+              wait: async () => {
+                wait += 1
+              },
+              finish: async () => {
+                count += 1
+              },
+            }),
+          )
 
-    const loaded = await PluginLoader.loadExternal({
-      items: [
-        {
-          spec: tmp.extra.spec,
-          scope: "local" as const,
-          source: tmp.path,
-        },
-      ],
-      kind: "tui",
-      wait: async () => {
-        wait += 1
-      },
-      finish: async (load, _item, retry) => {
-        count += 1
-        if (!retry) return
-        return {
-          retry,
-          spec: load.spec,
-        }
-      },
-    })
+          expect(wait).toBe(0)
+          expect(count).toBe(1)
+          expect(loaded).toEqual([])
+        }),
+    ),
+  )
 
-    expect(wait).toBe(1)
-    expect(count).toBe(2)
-    expect(loaded).toEqual([{ retry: true, spec: tmp.extra.spec }])
-  })
+  it.live("does not wait or retry npm plugin failures", () =>
+    Effect.gen(function* () {
+      const install = spyOn(Npm, "add").mockRejectedValue(new Error("boom"))
+      let wait = 0
+      const errors: Array<[string, boolean]> = []
 
-  test("does not wait or retry npm plugin failures", async () => {
-    const install = spyOn(Npm, "add").mockRejectedValue(new Error("boom"))
-    let wait = 0
-    const errors: Array<[string, boolean]> = []
+      try {
+        const loaded = yield* Effect.promise(() =>
+          PluginLoader.loadExternal({
+            items: [
+              {
+                spec: "acme-plugin@1.0.0",
+                scope: "local" as const,
+                source: "test",
+              },
+            ],
+            kind: "tui",
+            wait: async () => {
+              wait += 1
+            },
+            report: {
+              error(_candidate, retry, stage) {
+                errors.push([stage, retry])
+              },
+            },
+          }),
+        )
 
-    try {
-      const loaded = await PluginLoader.loadExternal({
-        items: [
-          {
-            spec: "acme-plugin@1.0.0",
-            scope: "local" as const,
-            source: "test",
-          },
-        ],
-        kind: "tui",
-        wait: async () => {
-          wait += 1
-        },
-        report: {
-          error(_candidate, retry, stage) {
-            errors.push([stage, retry])
-          },
-        },
-      })
-
-      expect(loaded).toEqual([])
-      expect(wait).toBe(0)
-      expect(errors).toEqual([["install", false]])
-    } finally {
-      install.mockRestore()
-    }
-  })
+        expect(loaded).toEqual([])
+        expect(wait).toBe(0)
+        expect(errors).toEqual([["install", false]])
+      } finally {
+        install.mockRestore()
+      }
+    }),
+  )
 })

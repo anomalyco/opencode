@@ -40,7 +40,7 @@ export function Card(props: CardProps) {
   const variant = () => split.variant ?? "normal"
   const accent = () => {
     const v = variant()
-    if (v === "error") return "var(--icon-critical-base)"
+    if (v === "error") return "var(--v2-state-fg-danger)"
     if (v === "warning") return "var(--icon-warning-active)"
     if (v === "success") return "var(--icon-success-active)"
     if (v === "info") return "var(--icon-info-active)"
@@ -53,7 +53,7 @@ export function Card(props: CardProps) {
       data-variant={variant()}
       style={mix(split.style, accent())}
       classList={{
-        ...(split.classList ?? {}),
+        ...split.classList,
         [split.class ?? ""]: !!split.class,
       }}
     >
@@ -76,7 +76,7 @@ export function CardTitle(props: CardTitleProps) {
       {...rest}
       data-slot="card-title"
       classList={{
-        ...(split.classList ?? {}),
+        ...split.classList,
         [split.class ?? ""]: !!split.class,
       }}
     >
@@ -97,7 +97,7 @@ export function CardDescription(props: ComponentProps<"div">) {
       {...rest}
       data-slot="card-description"
       classList={{
-        ...(split.classList ?? {}),
+        ...split.classList,
         [split.class ?? ""]: !!split.class,
       }}
     >
@@ -113,7 +113,7 @@ export function CardActions(props: ComponentProps<"div">) {
       {...rest}
       data-slot="card-actions"
       classList={{
-        ...(split.classList ?? {}),
+        ...split.classList,
         [split.class ?? ""]: !!split.class,
       }}
     >

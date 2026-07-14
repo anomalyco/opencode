@@ -1,6 +1,6 @@
 import { type ComponentProps, createMemo, splitProps } from "solid-js"
 
-export interface ProgressCircleProps extends Pick<ComponentProps<"svg">, "class" | "classList"> {
+export interface ProgressCircleProps extends Pick<ComponentProps<"svg">, "class" | "classList" | "style"> {
   percentage: number
   size?: number
   strokeWidth?: number
@@ -32,7 +32,7 @@ export function ProgressCircle(props: ProgressCircleProps) {
       fill="none"
       data-component="progress-circle"
       classList={{
-        ...(split.classList ?? {}),
+        ...split.classList,
         [split.class ?? ""]: !!split.class,
       }}
     >
@@ -41,6 +41,13 @@ export function ProgressCircle(props: ProgressCircleProps) {
         cy={center}
         r={radius()}
         data-slot="progress-circle-background"
+        stroke-width={strokeWidth()}
+      />
+      <circle
+        cx={center}
+        cy={center}
+        r={radius()}
+        data-slot="progress-circle-background-overlay"
         stroke-width={strokeWidth()}
       />
       <circle

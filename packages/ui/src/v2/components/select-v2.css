@@ -1,0 +1,286 @@
+@import "./menu-v2.css";
+
+/* Above modal dialogs (z-index 50); matches legacy select-content. */
+[data-popper-positioner]:has([data-slot="select-v2-content"]) {
+  z-index: 60;
+}
+
+/* Dropdown surface (Type=menu) — overrides shared menu-v2 defaults for selects only. */
+[data-component="menu-v2-content"][data-slot="select-v2-content"] {
+  padding: 0;
+  min-width: 160px;
+  max-width: 23rem;
+  overflow: hidden;
+  z-index: 60;
+  pointer-events: auto;
+  background: var(--v2-background-bg-layer-01);
+  border-radius: 6px;
+  box-shadow: var(--v2-elevation-floating);
+  transform-origin: top center;
+  animation: select-v2-content-in 120ms ease-out;
+}
+
+[data-component="menu-v2-content"][data-slot="select-v2-content"][data-closed] {
+  animation: select-v2-content-out 80ms ease-in forwards;
+}
+
+@keyframes select-v2-content-in {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes select-v2-content-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+}
+
+/* Trigger shell — aligned with text-input-v2 */
+[data-component="select-v2"] {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  padding: 0 6px 0 0;
+  gap: 8px;
+  width: 280px;
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  outline: 1px solid transparent;
+  outline-offset: 0;
+  background:
+    linear-gradient(180deg, var(--v2-alpha-light-2) 0%, var(--v2-alpha-light-0) 100%), var(--v2-background-bg-base);
+  box-shadow: var(--v2-elevation-button-neutral);
+  flex: none;
+  align-self: stretch;
+  user-select: none;
+  transition:
+    background 85ms ease-out,
+    outline-color 85ms ease-out,
+    box-shadow 85ms ease-out;
+}
+
+[data-component="select-v2"][data-appearance="large"] {
+  height: 32px;
+  padding: 0 8px 0 0;
+}
+
+[data-component="select-v2"]:where(:hover):not([data-disabled], [data-invalid]):not(:focus-within):not(
+    [data-expanded]
+  ) {
+  background:
+    linear-gradient(0deg, var(--v2-overlay-simple-overlay-hover), var(--v2-overlay-simple-overlay-hover)),
+    linear-gradient(180deg, var(--v2-alpha-light-2) 0%, var(--v2-alpha-light-0) 100%), var(--v2-background-bg-base);
+}
+
+[data-component="select-v2"]:where([data-expanded]):not([data-disabled], [data-invalid]) {
+  background:
+    linear-gradient(0deg, var(--v2-overlay-simple-overlay-hover), var(--v2-overlay-simple-overlay-hover)),
+    linear-gradient(180deg, var(--v2-alpha-light-2) 0%, var(--v2-alpha-light-0) 100%), var(--v2-background-bg-base);
+  outline-color: transparent;
+}
+
+[data-component="select-v2"]:where(:focus-within):not([data-disabled], [data-invalid]):not([data-expanded]) {
+  outline-color: var(--v2-border-border-focus);
+  box-shadow: none;
+}
+
+[data-component="select-v2"]:where([data-invalid]):not([data-disabled]) {
+  outline-color: var(--v2-state-fg-danger);
+  box-shadow: none;
+}
+
+[data-component="select-v2"]:where([data-disabled]) {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+[data-component="select-v2"] [data-slot="select-v2-value"] {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  align-self: stretch;
+  padding: 0;
+  min-width: 0;
+  flex: 1 1 auto;
+  min-height: 0;
+  cursor: default;
+}
+
+[data-component="select-v2"] [data-slot="select-v2-value-text"] {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 0 0 8px;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  outline: none;
+  text-align: left;
+  font-style: normal;
+  font-weight: 440;
+  font-size: 13px;
+  line-height: 16px;
+  letter-spacing: -0.04px;
+  color: var(--v2-text-text-base);
+  font-variation-settings: "slnt" 0;
+  cursor: default;
+}
+
+[data-component="select-v2"] [data-slot="select-v2-value-text"][data-placeholder-shown] {
+  color: var(--v2-text-text-faint);
+}
+
+[data-component="select-v2"][data-numeric] [data-slot="select-v2-value-text"] {
+  font-variant-numeric: tabular-nums;
+}
+
+[data-component="select-v2"]:where([data-invalid]):not([data-disabled]) [data-slot="select-v2-value-text"] {
+  color: var(--v2-state-fg-danger);
+}
+
+[data-component="select-v2"] [data-slot="select-v2-chevron"] {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  align-self: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  padding: 2px;
+  gap: 3px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--v2-icon-icon-muted);
+  pointer-events: none;
+}
+
+[data-component="select-v2"] [data-slot="select-v2-chevron"] svg {
+  display: block;
+  flex: none;
+  transform: rotate(180deg);
+  transform-origin: 50% 50%;
+}
+
+[data-component="select-v2"][data-expanded] [data-slot="select-v2-chevron"] svg {
+  transform: rotate(0deg);
+}
+
+/* Compact trigger for settings rows and similar inline contexts. */
+[data-component="select-v2"][data-appearance="inline"] {
+  width: fit-content;
+  max-width: 100%;
+  height: 24px;
+  padding: 4px 4px 4px 8px;
+  gap: 4px;
+  border-radius: 4px;
+  background: transparent;
+  box-shadow: none;
+  outline: none;
+  align-self: auto;
+}
+
+[data-component="select-v2"][data-appearance="inline"]:where(:hover):not([data-disabled], [data-invalid]):not(
+    :focus-within
+  ):not([data-expanded]) {
+  background: var(--v2-overlay-simple-overlay-hover);
+}
+
+[data-component="select-v2"][data-appearance="inline"]:where([data-expanded]):not([data-disabled], [data-invalid]) {
+  background: var(--v2-overlay-simple-overlay-hover);
+  outline: none;
+  box-shadow: none;
+}
+
+[data-component="select-v2"][data-appearance="inline"]:where(:active):not([data-disabled], [data-invalid]):not(
+    [data-expanded]
+  ) {
+  background: var(--v2-overlay-simple-overlay-pressed);
+}
+
+[data-component="select-v2"][data-appearance="inline"] [data-slot="select-v2-value-text"] {
+  padding: 0;
+  font-weight: 530;
+}
+
+[data-component="select-v2"][data-appearance="inline"] [data-slot="select-v2-chevron"] {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+}
+
+/* Listbox inside menu surface */
+[data-component="menu-v2-content"][data-slot="select-v2-content"] [data-slot="select-v2-listbox"] {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  min-width: 0;
+  width: 100%;
+  max-height: 12rem;
+  overflow-x: hidden;
+  overflow-y: auto;
+  outline: none;
+  white-space: nowrap;
+
+  &:focus {
+    outline: none;
+  }
+
+  > *:not([role="presentation"]) + *:not([role="presentation"]) {
+    margin-top: 2px;
+  }
+}
+
+[data-slot="select-v2-listbox"] [data-component="menu-v2-item"],
+[data-slot="select-v2-listbox"] [data-slot="menu-v2-group-label"] {
+  flex: none;
+}
+
+[data-slot="select-v2-listbox"] [data-component="menu-v2-item"] {
+  --menu-v2-fg: var(--v2-text-text-base);
+  --menu-v2-fg-muted: var(--v2-text-text-faint);
+  --menu-v2-fg-subtle: var(--v2-text-text-muted);
+  --menu-v2-icon: var(--v2-icon-icon-base);
+  --menu-v2-accent: var(--v2-text-text-accent);
+  --menu-v2-badge-bg: var(--v2-background-bg-layer-02);
+  --menu-v2-badge-border: var(--v2-border-border-base);
+  --menu-v2-hover: var(--v2-overlay-simple-overlay-hover);
+}
+
+/* Listbox uses data-selected; menu item CSS uses data-checked — mirror accent */
+[data-slot="select-v2-listbox"] [data-component="menu-v2-item"][data-selected] [data-slot="menu-v2-item-content"] {
+  font-weight: 530;
+  color: var(--menu-v2-accent);
+}
+
+[data-slot="select-v2-listbox"] [data-component="menu-v2-item"][data-selected] [data-slot="menu-v2-item-indicator"] {
+  color: var(--menu-v2-accent);
+}
+
+[data-slot="select-v2-listbox"]
+  [data-component="menu-v2-item"]:not([data-selected])
+  [data-slot="menu-v2-item-indicator"]
+  svg {
+  visibility: hidden;
+}

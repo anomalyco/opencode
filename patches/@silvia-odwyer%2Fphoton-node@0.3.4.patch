@@ -1,0 +1,285 @@
+diff --git a/photon_rs.js b/photon_rs.js
+index 8f4144d..29a964a 100644
+--- a/photon_rs.js
++++ b/photon_rs.js
+@@ -1,6 +1,7 @@
+ 
+ let imports = {};
+-imports['__wbindgen_placeholder__'] = module.exports;
++const __wbindgen_placeholder__ = {};
++imports['__wbindgen_placeholder__'] = __wbindgen_placeholder__;
+ let wasm;
+ const { TextEncoder, TextDecoder } = require(`util`);
+ 
+@@ -4272,12 +4273,12 @@ class Rgba {
+ }
+ module.exports.Rgba = Rgba;
+ 
+-module.exports.__wbg_new_abda76e883ba8a5f = function() {
++__wbindgen_placeholder__.__wbg_new_abda76e883ba8a5f = function() {
+     const ret = new Error();
+     return ret;
+ };
+ 
+-module.exports.__wbg_stack_658279fe44541cf6 = function(arg0, arg1) {
++__wbindgen_placeholder__.__wbg_stack_658279fe44541cf6 = function(arg0, arg1) {
+     const ret = arg1.stack;
+     const ptr1 = passStringToWasm0(ret, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+     const len1 = WASM_VECTOR_LEN;
+@@ -4285,7 +4286,7 @@ module.exports.__wbg_stack_658279fe44541cf6 = function(arg0, arg1) {
+     getDataViewMemory0().setInt32(arg0 + 4 * 0, ptr1, true);
+ };
+ 
+-module.exports.__wbg_error_f851667af71bcfc6 = function(arg0, arg1) {
++__wbindgen_placeholder__.__wbg_error_f851667af71bcfc6 = function(arg0, arg1) {
+     let deferred0_0;
+     let deferred0_1;
+     try {
+@@ -4297,7 +4298,7 @@ module.exports.__wbg_error_f851667af71bcfc6 = function(arg0, arg1) {
+     }
+ };
+ 
+-module.exports.__wbg_instanceof_Window_c4b70662a0d2c5ec = function(arg0) {
++__wbindgen_placeholder__.__wbg_instanceof_Window_c4b70662a0d2c5ec = function(arg0) {
+     let result;
+     try {
+         result = arg0 instanceof Window;
+@@ -4308,42 +4309,42 @@ module.exports.__wbg_instanceof_Window_c4b70662a0d2c5ec = function(arg0) {
+     return ret;
+ };
+ 
+-module.exports.__wbg_document_e5c1786dea6542e4 = function(arg0) {
++__wbindgen_placeholder__.__wbg_document_e5c1786dea6542e4 = function(arg0) {
+     const ret = arg0.document;
+     return isLikeNone(ret) ? 0 : addToExternrefTable0(ret);
+ };
+ 
+-module.exports.__wbg_body_e70ae6abd01ae584 = function(arg0) {
++__wbindgen_placeholder__.__wbg_body_e70ae6abd01ae584 = function(arg0) {
+     const ret = arg0.body;
+     return isLikeNone(ret) ? 0 : addToExternrefTable0(ret);
+ };
+ 
+-module.exports.__wbg_createElement_5d4c76f218b78145 = function() { return handleError(function (arg0, arg1, arg2) {
++__wbindgen_placeholder__.__wbg_createElement_5d4c76f218b78145 = function() { return handleError(function (arg0, arg1, arg2) {
+     const ret = arg0.createElement(getStringFromWasm0(arg1, arg2));
+     return ret;
+ }, arguments) };
+ 
+-module.exports.__wbg_width_4c6f0048d64cf86b = function(arg0) {
++__wbindgen_placeholder__.__wbg_width_4c6f0048d64cf86b = function(arg0) {
+     const ret = arg0.width;
+     return ret;
+ };
+ 
+-module.exports.__wbg_height_21f0d3fd8f753394 = function(arg0) {
++__wbindgen_placeholder__.__wbg_height_21f0d3fd8f753394 = function(arg0) {
+     const ret = arg0.height;
+     return ret;
+ };
+ 
+-module.exports.__wbg_width_79e0847ed5883b03 = function(arg0) {
++__wbindgen_placeholder__.__wbg_width_79e0847ed5883b03 = function(arg0) {
+     const ret = arg0.width;
+     return ret;
+ };
+ 
+-module.exports.__wbg_height_e4e4e4779f8feac0 = function(arg0) {
++__wbindgen_placeholder__.__wbg_height_e4e4e4779f8feac0 = function(arg0) {
+     const ret = arg0.height;
+     return ret;
+ };
+ 
+-module.exports.__wbg_data_fda507064d127f5b = function(arg0, arg1) {
++__wbindgen_placeholder__.__wbg_data_fda507064d127f5b = function(arg0, arg1) {
+     const ret = arg1.data;
+     const ptr1 = passArray8ToWasm0(ret, wasm.__wbindgen_malloc);
+     const len1 = WASM_VECTOR_LEN;
+@@ -4351,12 +4352,12 @@ module.exports.__wbg_data_fda507064d127f5b = function(arg0, arg1) {
+     getDataViewMemory0().setInt32(arg0 + 4 * 0, ptr1, true);
+ };
+ 
+-module.exports.__wbg_newwithu8clampedarrayandsh_1fddccb3a94a5e05 = function() { return handleError(function (arg0, arg1, arg2, arg3) {
++__wbindgen_placeholder__.__wbg_newwithu8clampedarrayandsh_1fddccb3a94a5e05 = function() { return handleError(function (arg0, arg1, arg2, arg3) {
+     const ret = new ImageData(getClampedArrayU8FromWasm0(arg0, arg1), arg2 >>> 0, arg3 >>> 0);
+     return ret;
+ }, arguments) };
+ 
+-module.exports.__wbg_instanceof_CanvasRenderingContext2d_3abbe7ec7af32cae = function(arg0) {
++__wbindgen_placeholder__.__wbg_instanceof_CanvasRenderingContext2d_3abbe7ec7af32cae = function(arg0) {
+     let result;
+     try {
+         result = arg0 instanceof CanvasRenderingContext2D;
+@@ -4367,24 +4368,24 @@ module.exports.__wbg_instanceof_CanvasRenderingContext2d_3abbe7ec7af32cae = fun
+     return ret;
+ };
+ 
+-module.exports.__wbg_drawImage_fede06db74e39a60 = function() { return handleError(function (arg0, arg1, arg2, arg3) {
++__wbindgen_placeholder__.__wbg_drawImage_fede06db74e39a60 = function() { return handleError(function (arg0, arg1, arg2, arg3) {
+     arg0.drawImage(arg1, arg2, arg3);
+ }, arguments) };
+ 
+-module.exports.__wbg_drawImage_f395c8e43c79a909 = function() { return handleError(function (arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9) {
++__wbindgen_placeholder__.__wbg_drawImage_f395c8e43c79a909 = function() { return handleError(function (arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9) {
+     arg0.drawImage(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9);
+ }, arguments) };
+ 
+-module.exports.__wbg_getImageData_5e1c242046e6b59e = function() { return handleError(function (arg0, arg1, arg2, arg3, arg4) {
++__wbindgen_placeholder__.__wbg_getImageData_5e1c242046e6b59e = function() { return handleError(function (arg0, arg1, arg2, arg3, arg4) {
+     const ret = arg0.getImageData(arg1, arg2, arg3, arg4);
+     return ret;
+ }, arguments) };
+ 
+-module.exports.__wbg_putImageData_a8b3e177ee06d521 = function() { return handleError(function (arg0, arg1, arg2, arg3) {
++__wbindgen_placeholder__.__wbg_putImageData_a8b3e177ee06d521 = function() { return handleError(function (arg0, arg1, arg2, arg3) {
+     arg0.putImageData(arg1, arg2, arg3);
+ }, arguments) };
+ 
+-module.exports.__wbg_instanceof_HtmlCanvasElement_25d964a0dde6717e = function(arg0) {
++__wbindgen_placeholder__.__wbg_instanceof_HtmlCanvasElement_25d964a0dde6717e = function(arg0) {
+     let result;
+     try {
+         result = arg0 instanceof HTMLCanvasElement;
+@@ -4395,93 +4396,93 @@ module.exports.__wbg_instanceof_HtmlCanvasElement_25d964a0dde6717e = function(a
+     return ret;
+ };
+ 
+-module.exports.__wbg_width_dc225e55343b745e = function(arg0) {
++__wbindgen_placeholder__.__wbg_width_dc225e55343b745e = function(arg0) {
+     const ret = arg0.width;
+     return ret;
+ };
+ 
+-module.exports.__wbg_setwidth_488780db69b08846 = function(arg0, arg1) {
++__wbindgen_placeholder__.__wbg_setwidth_488780db69b08846 = function(arg0, arg1) {
+     arg0.width = arg1 >>> 0;
+ };
+ 
+-module.exports.__wbg_height_3a8bec2f3fe71b26 = function(arg0) {
++__wbindgen_placeholder__.__wbg_height_3a8bec2f3fe71b26 = function(arg0) {
+     const ret = arg0.height;
+     return ret;
+ };
+ 
+-module.exports.__wbg_setheight_1761808c18403921 = function(arg0, arg1) {
++__wbindgen_placeholder__.__wbg_setheight_1761808c18403921 = function(arg0, arg1) {
+     arg0.height = arg1 >>> 0;
+ };
+ 
+-module.exports.__wbg_getContext_fc99dbd3a9a7e318 = function() { return handleError(function (arg0, arg1, arg2) {
++__wbindgen_placeholder__.__wbg_getContext_fc99dbd3a9a7e318 = function() { return handleError(function (arg0, arg1, arg2) {
+     const ret = arg0.getContext(getStringFromWasm0(arg1, arg2));
+     return isLikeNone(ret) ? 0 : addToExternrefTable0(ret);
+ }, arguments) };
+ 
+-module.exports.__wbg_settextContent_f82a86a8df347e1c = function(arg0, arg1, arg2) {
++__wbindgen_placeholder__.__wbg_settextContent_f82a86a8df347e1c = function(arg0, arg1, arg2) {
+     arg0.textContent = arg1 === 0 ? undefined : getStringFromWasm0(arg1, arg2);
+ };
+ 
+-module.exports.__wbg_appendChild_fa3b00dade9fc4cf = function() { return handleError(function (arg0, arg1) {
++__wbindgen_placeholder__.__wbg_appendChild_fa3b00dade9fc4cf = function() { return handleError(function (arg0, arg1) {
+     const ret = arg0.appendChild(arg1);
+     return ret;
+ }, arguments) };
+ 
+-module.exports.__wbg_newnoargs_e643855c6572a4a8 = function(arg0, arg1) {
++__wbindgen_placeholder__.__wbg_newnoargs_e643855c6572a4a8 = function(arg0, arg1) {
+     const ret = new Function(getStringFromWasm0(arg0, arg1));
+     return ret;
+ };
+ 
+-module.exports.__wbg_call_f96b398515635514 = function() { return handleError(function (arg0, arg1) {
++__wbindgen_placeholder__.__wbg_call_f96b398515635514 = function() { return handleError(function (arg0, arg1) {
+     const ret = arg0.call(arg1);
+     return ret;
+ }, arguments) };
+ 
+-module.exports.__wbg_self_b9aad7f1c618bfaf = function() { return handleError(function () {
++__wbindgen_placeholder__.__wbg_self_b9aad7f1c618bfaf = function() { return handleError(function () {
+     const ret = self.self;
+     return ret;
+ }, arguments) };
+ 
+-module.exports.__wbg_window_55e469842c98b086 = function() { return handleError(function () {
++__wbindgen_placeholder__.__wbg_window_55e469842c98b086 = function() { return handleError(function () {
+     const ret = window.window;
+     return ret;
+ }, arguments) };
+ 
+-module.exports.__wbg_globalThis_d0957e302752547e = function() { return handleError(function () {
++__wbindgen_placeholder__.__wbg_globalThis_d0957e302752547e = function() { return handleError(function () {
+     const ret = globalThis.globalThis;
+     return ret;
+ }, arguments) };
+ 
+-module.exports.__wbg_global_ae2f87312b8987fb = function() { return handleError(function () {
++__wbindgen_placeholder__.__wbg_global_ae2f87312b8987fb = function() { return handleError(function () {
+     const ret = global.global;
+     return ret;
+ }, arguments) };
+ 
+-module.exports.__wbindgen_is_undefined = function(arg0) {
++__wbindgen_placeholder__.__wbindgen_is_undefined = function(arg0) {
+     const ret = arg0 === undefined;
+     return ret;
+ };
+ 
+-module.exports.__wbg_buffer_fcbfb6d88b2732e9 = function(arg0) {
++__wbindgen_placeholder__.__wbg_buffer_fcbfb6d88b2732e9 = function(arg0) {
+     const ret = arg0.buffer;
+     return ret;
+ };
+ 
+-module.exports.__wbg_new_bc5d9aad3f9ac80e = function(arg0) {
++__wbindgen_placeholder__.__wbg_new_bc5d9aad3f9ac80e = function(arg0) {
+     const ret = new Uint8Array(arg0);
+     return ret;
+ };
+ 
+-module.exports.__wbg_set_4b3aa8445ac1e91c = function(arg0, arg1, arg2) {
++__wbindgen_placeholder__.__wbg_set_4b3aa8445ac1e91c = function(arg0, arg1, arg2) {
+     arg0.set(arg1, arg2 >>> 0);
+ };
+ 
+-module.exports.__wbg_length_d9c4ded7e708c6a1 = function(arg0) {
++__wbindgen_placeholder__.__wbg_length_d9c4ded7e708c6a1 = function(arg0) {
+     const ret = arg0.length;
+     return ret;
+ };
+ 
+-module.exports.__wbindgen_debug_string = function(arg0, arg1) {
++__wbindgen_placeholder__.__wbindgen_debug_string = function(arg0, arg1) {
+     const ret = debugString(arg1);
+     const ptr1 = passStringToWasm0(ret, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+     const len1 = WASM_VECTOR_LEN;
+@@ -4489,16 +4490,16 @@ module.exports.__wbindgen_debug_string = function(arg0, arg1) {
+     getDataViewMemory0().setInt32(arg0 + 4 * 0, ptr1, true);
+ };
+ 
+-module.exports.__wbindgen_throw = function(arg0, arg1) {
++__wbindgen_placeholder__.__wbindgen_throw = function(arg0, arg1) {
+     throw new Error(getStringFromWasm0(arg0, arg1));
+ };
+ 
+-module.exports.__wbindgen_memory = function() {
++__wbindgen_placeholder__.__wbindgen_memory = function() {
+     const ret = wasm.memory;
+     return ret;
+ };
+ 
+-module.exports.__wbindgen_init_externref_table = function() {
++__wbindgen_placeholder__.__wbindgen_init_externref_table = function() {
+     const table = wasm.__wbindgen_export_2;
+     const offset = table.grow(4);
+     table.set(0, undefined);
+@@ -4509,7 +4510,8 @@ module.exports.__wbindgen_init_externref_table = function() {
+      ;
+  };
+  
+-const path = require('path').join(__dirname, 'photon_rs_bg.wasm');
++// Allow opencode's Bun compiled binary to point photon-node at its embedded wasm asset.
++const path = globalThis.__OPENCODE_PHOTON_WASM_PATH || require('path').join(__dirname, 'photon_rs_bg.wasm');
+ const bytes = require('fs').readFileSync(path);
+ 
+ const wasmModule = new WebAssembly.Module(bytes);

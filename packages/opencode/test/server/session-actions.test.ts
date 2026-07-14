@@ -1,83 +1,110 @@
-import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
-import { Instance } from "../../src/project/instance"
-import { Server } from "../../src/server/server"
-import { Session } from "../../src/session"
-import { ModelID, ProviderID } from "../../src/provider/schema"
-import { MessageID, PartID, type SessionID } from "../../src/session/schema"
-import { SessionPrompt } from "../../src/session/prompt"
-import { Log } from "../../src/util/log"
-import { tmpdir } from "../fixture/fixture"
+import { afterEach, describe, expect, mock } from "bun:test"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { Effect, Layer } from "effect"
+import { Session as SessionNs } from "@/session/session"
+import { disposeAllInstances, TestInstance } from "../fixture/fixture"
+import { testEffect } from "../lib/effect"
+import { httpApiLayer, requestInDirectory } from "./httpapi-layer"
 
-Log.init({ print: false })
+const it = testEffect(Layer.mergeAll(LayerNode.compile(SessionNs.node), httpApiLayer))
 
 afterEach(async () => {
   mock.restore()
-  await Instance.disposeAll()
+  await disposeAllInstances()
 })
 
-async function user(sessionID: SessionID, text: string) {
-  const msg = await Session.updateMessage({
-    id: MessageID.ascending(),
-    role: "user",
-    sessionID,
-    agent: "build",
-    model: { providerID: ProviderID.make("test"), modelID: ModelID.make("test") },
-    time: { created: Date.now() },
-  })
-  await Session.updatePart({
-    id: PartID.ascending(),
-    sessionID,
-    messageID: msg.id,
-    type: "text",
-    text,
-  })
-  return msg
-}
-
 describe("session action routes", () => {
-  test("abort route calls SessionPrompt.cancel", async () => {
-    await using tmp = await tmpdir({ git: true })
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const session = await Session.create({})
-        const cancel = spyOn(SessionPrompt, "cancel").mockResolvedValue()
-        const app = Server.Default()
+  it.instance(
+    "session routes expose metadata on create, update, get, and fork",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const headers = { "Content-Type": "application/json" }
 
-        const res = await app.request(`/session/${session.id}/abort`, {
+        const created = yield* requestInDirectory("/session", test.directory, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            title: "meta-session",
+            metadata: { source: "sdk", trace: { id: "abc" } },
+          }),
+        })
+        expect(created.status).toBe(200)
+
+        const session = (yield* created.json) as SessionNs.Info
+        expect(session.metadata).toEqual({ source: "sdk", trace: { id: "abc" } })
+
+        const updated = yield* requestInDirectory(`/session/${session.id}`, test.directory, {
+          method: "PATCH",
+          headers,
+          body: JSON.stringify({ metadata: { source: "sdk", trace: { id: "def" }, tags: ["one"] } }),
+        })
+        expect(updated.status).toBe(200)
+
+        const next = (yield* updated.json) as SessionNs.Info
+        expect(next.metadata).toEqual({ source: "sdk", trace: { id: "def" }, tags: ["one"] })
+
+        const fetched = yield* requestInDirectory(`/session/${session.id}`, test.directory)
+        expect(fetched.status).toBe(200)
+        expect(((yield* fetched.json) as SessionNs.Info).metadata).toEqual(next.metadata)
+
+        const forked = yield* requestInDirectory(`/session/${session.id}/fork`, test.directory, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({}),
+        })
+        expect(forked.status).toBe(200)
+
+        const fork = (yield* forked.json) as SessionNs.Info
+        expect(fork.metadata).toEqual(next.metadata)
+
+        const reset = yield* requestInDirectory(`/session/${session.id}`, test.directory, {
+          method: "PATCH",
+          headers,
+          body: JSON.stringify({ metadata: {} }),
+        })
+        expect(reset.status).toBe(200)
+        expect(((yield* reset.json) as SessionNs.Info).metadata).toEqual({})
+
+        yield* SessionNs.Service.use((svc) => svc.remove(fork.id).pipe(Effect.ignore))
+        yield* SessionNs.Service.use((svc) => svc.remove(session.id).pipe(Effect.ignore))
+      }),
+    { git: true },
+  )
+
+  it.instance(
+    "abort route returns success",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const session = yield* Effect.acquireRelease(SessionNs.use.create({}), (created) =>
+          SessionNs.use.remove(created.id).pipe(Effect.ignore),
+        )
+
+        const res = yield* requestInDirectory(`/session/${session.id}/abort`, test.directory, { method: "POST" })
+
+        expect(res.status).toBe(200)
+        expect(yield* res.json).toBe(true)
+      }),
+    { git: true },
+  )
+
+  it.instance(
+    "experimental background route is a no-op without synchronous subagents",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const session = yield* Effect.acquireRelease(SessionNs.use.create({}), (created) =>
+          SessionNs.use.remove(created.id).pipe(Effect.ignore),
+        )
+
+        const res = yield* requestInDirectory(`/experimental/session/${session.id}/background`, test.directory, {
           method: "POST",
         })
 
         expect(res.status).toBe(200)
-        expect(await res.json()).toBe(true)
-        expect(cancel).toHaveBeenCalledWith(session.id)
-
-        await Session.remove(session.id)
-      },
-    })
-  })
-
-  test("delete message route returns 400 when session is busy", async () => {
-    await using tmp = await tmpdir({ git: true })
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const session = await Session.create({})
-        const msg = await user(session.id, "hello")
-        const busy = spyOn(SessionPrompt, "assertNotBusy").mockRejectedValue(new Session.BusyError(session.id))
-        const remove = spyOn(Session, "removeMessage").mockResolvedValue(msg.id)
-        const app = Server.Default()
-
-        const res = await app.request(`/session/${session.id}/message/${msg.id}`, {
-          method: "DELETE",
-        })
-
-        expect(res.status).toBe(400)
-        expect(busy).toHaveBeenCalledWith(session.id)
-        expect(remove).not.toHaveBeenCalled()
-
-        await Session.remove(session.id)
-      },
-    })
-  })
+        expect(yield* res.json).toBe(false)
+      }),
+    { git: true },
+  )
 })

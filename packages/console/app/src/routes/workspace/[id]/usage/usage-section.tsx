@@ -53,7 +53,7 @@ export function UsageSection() {
   }
 
   const calculateTotalOutputTokens = (u: Awaited<ReturnType<typeof getUsageInfo>>[0]) => {
-    return u.outputTokens + (u.reasoningTokens ?? 0)
+    return u.outputTokens
   }
 
   const goPrev = async () => {

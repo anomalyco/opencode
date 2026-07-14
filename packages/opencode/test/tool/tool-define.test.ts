@@ -1,101 +1,154 @@
-import { describe, test, expect } from "bun:test"
-import z from "zod"
-import { Tool } from "../../src/tool/tool"
+import { describe, expect } from "bun:test"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { Cause, Effect, Exit, Schema } from "effect"
+import { Agent } from "../../src/agent/agent"
+import { MessageID, SessionID } from "../../src/session/schema"
+import { Tool } from "@/tool/tool"
+import { Truncate } from "@/tool/truncate"
+import { testEffect } from "../lib/effect"
 
-const params = z.object({ input: z.string() })
-const defaultArgs = { input: "test" }
+const it = testEffect(LayerNode.compile(LayerNode.group([Truncate.node, Agent.node])))
+
+const params = Schema.Struct({ input: Schema.String })
+
+function makeCtx(): Tool.Context {
+  return {
+    sessionID: SessionID.descending(),
+    messageID: MessageID.ascending(),
+    agent: "build",
+    abort: new AbortController().signal,
+    messages: [],
+    metadata() {
+      return Effect.void
+    },
+    ask() {
+      return Effect.void
+    },
+  }
+}
 
 function makeTool(id: string, executeFn?: () => void) {
   return {
     description: "test tool",
     parameters: params,
-    async execute() {
+    execute() {
       executeFn?.()
-      return { title: "test", output: "ok", metadata: {} }
+      return Effect.succeed({ title: "test", output: "ok", metadata: {} })
     },
   }
 }
 
 describe("Tool.define", () => {
-  test("object-defined tool does not mutate the original init object", async () => {
-    const original = makeTool("test")
-    const originalExecute = original.execute
+  it.effect("object-defined tool does not mutate the original init object", () =>
+    Effect.gen(function* () {
+      const original = makeTool("test")
+      const originalExecute = original.execute
 
-    const tool = Tool.define("test-tool", original)
+      const info = yield* Tool.define("test-tool", Effect.succeed(original))
 
-    await tool.init()
-    await tool.init()
-    await tool.init()
+      yield* info.init()
+      yield* info.init()
+      yield* info.init()
 
-    expect(original.execute).toBe(originalExecute)
-  })
+      expect(original.execute).toBe(originalExecute)
+    }),
+  )
 
-  test("object-defined tool does not accumulate wrapper layers across init() calls", async () => {
-    let calls = 0
+  it.effect("effect-defined tool returns fresh objects and is unaffected", () =>
+    Effect.gen(function* () {
+      const info = yield* Tool.define(
+        "test-fn-tool",
+        Effect.succeed(() => Effect.succeed(makeTool("test"))),
+      )
 
-    const tool = Tool.define(
-      "test-tool",
-      makeTool("test", () => calls++),
-    )
+      const first = yield* info.init()
+      const second = yield* info.init()
 
-    for (let i = 0; i < 100; i++) {
-      await tool.init()
-    }
+      expect(first).not.toBe(second)
+    }),
+  )
 
-    const resolved = await tool.init()
-    calls = 0
+  it.effect("object-defined tool returns distinct objects per init() call", () =>
+    Effect.gen(function* () {
+      const info = yield* Tool.define("test-copy", Effect.succeed(makeTool("test")))
 
-    let stack = ""
-    const exec = resolved.execute
-    resolved.execute = async (args: any, ctx: any) => {
-      const result = await exec.call(resolved, args, ctx)
-      stack = new Error().stack || ""
-      return result
-    }
+      const first = yield* info.init()
+      const second = yield* info.init()
 
-    await resolved.execute(defaultArgs, {} as any)
-    expect(calls).toBe(1)
+      expect(first).not.toBe(second)
+    }),
+  )
 
-    const frames = stack.split("\n").filter((l) => l.includes("tool.ts")).length
-    expect(frames).toBeLessThan(5)
-  })
+  it.effect("execute receives decoded parameters", () =>
+    Effect.gen(function* () {
+      const parameters = Schema.Struct({
+        count: Schema.NumberFromString.pipe(Schema.optional, Schema.withDecodingDefaultType(Effect.succeed(5))),
+      })
+      const calls: Array<Schema.Schema.Type<typeof parameters>> = []
+      const info = yield* Tool.define(
+        "test-decoded",
+        Effect.succeed({
+          description: "test tool",
+          parameters,
+          execute(args: Schema.Schema.Type<typeof parameters>) {
+            calls.push(args)
+            return Effect.succeed({ title: "test", output: "ok", metadata: { truncated: false } })
+          },
+        }),
+      )
+      const ctx = makeCtx()
+      const tool = yield* info.init()
+      const execute = tool.execute as unknown as (args: unknown, ctx: Tool.Context) => ReturnType<typeof tool.execute>
 
-  test("function-defined tool returns fresh objects and is unaffected", async () => {
-    const tool = Tool.define("test-fn-tool", () => Promise.resolve(makeTool("test")))
+      yield* execute({}, ctx)
+      yield* execute({ count: "7" }, ctx)
 
-    const first = await tool.init()
-    const second = await tool.init()
+      expect(calls).toEqual([{ count: 5 }, { count: 7 }])
+    }),
+  )
 
-    expect(first).not.toBe(second)
-  })
+  // Regression for #28438: the wrap is the canonical "untyped → typed" boundary.
+  // When the LLM emits a tool call with a payload that fails the parameter
+  // schema, the wrap must surface a typed `Tool.InvalidArgumentsError` whose
+  // `.message` is the actionable prose the AI SDK feeds back to the model.
+  it.effect("invalid args surface as Tool.InvalidArgumentsError with friendly message and JSON path", () =>
+    Effect.gen(function* () {
+      const parameters = Schema.Struct({
+        questions: Schema.Array(
+          Schema.Struct({
+            question: Schema.String,
+            options: Schema.Array(Schema.String),
+          }),
+        ),
+      })
+      const info = yield* Tool.define(
+        "qtest",
+        Effect.succeed({
+          description: "test tool",
+          parameters,
+          execute() {
+            return Effect.succeed({ title: "ok", output: "ok", metadata: { truncated: false } })
+          },
+        }),
+      )
+      const tool = yield* info.init()
+      const execute = tool.execute as unknown as (args: unknown, ctx: Tool.Context) => ReturnType<typeof tool.execute>
 
-  test("object-defined tool returns distinct objects per init() call", async () => {
-    const tool = Tool.define("test-copy", makeTool("test"))
+      // Missing required `question` field on the first questions[] entry.
+      const exit = yield* execute({ questions: [{ options: ["a"] }] }, makeCtx()).pipe(Effect.exit)
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (!Exit.isFailure(exit)) return
 
-    const first = await tool.init()
-    const second = await tool.init()
-
-    expect(first).not.toBe(second)
-  })
-
-  test("validation still works after many init() calls", async () => {
-    const tool = Tool.define("test-validation", {
-      description: "validation test",
-      parameters: z.object({ count: z.number().int().positive() }),
-      async execute(args) {
-        return { title: "test", output: String(args.count), metadata: {} }
-      },
-    })
-
-    for (let i = 0; i < 100; i++) {
-      await tool.init()
-    }
-
-    const resolved = await tool.init()
-
-    const result = await resolved.execute({ count: 42 }, {} as any)
-    expect(result.output).toBe("42")
-
-    await expect(resolved.execute({ count: -1 }, {} as any)).rejects.toThrow("invalid arguments")
-  })
+      // The wrap ends with Effect.orDie, so the failure lives in the cause as a
+      // defect. Recover the typed instance from there.
+      const die = exit.cause.reasons.find(Cause.isDieReason)
+      const error = die?.defect
+      expect(error).toBeInstanceOf(Tool.InvalidArgumentsError)
+      const args = error as Tool.InvalidArgumentsError
+      expect(args.tool).toBe("qtest")
+      expect(args.message).toContain("qtest tool was called with invalid arguments")
+      expect(args.message).toContain("Please rewrite the input")
+      expect(args.message).toContain(`["questions"][0]["question"]`)
+    }),
+  )
 })

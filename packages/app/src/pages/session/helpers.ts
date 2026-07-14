@@ -2,6 +2,9 @@ import { batch, createMemo, onCleanup, onMount, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { same } from "@/utils/same"
+import { SESSION_OPEN_FILE_TAB } from "@/context/layout-tabs"
+
+export { SESSION_OPEN_FILE_TAB } from "@/context/layout-tabs"
 
 const emptyTabs: string[] = []
 
@@ -16,15 +19,26 @@ type TabsInput = {
   normalizeTab: (tab: string) => string
   review?: Accessor<boolean>
   hasReview?: Accessor<boolean>
+  fileBrowser?: Accessor<boolean>
 }
 
 export const getSessionKey = (dir: string | undefined, id: string | undefined) => `${dir ?? ""}${id ? `/${id}` : ""}`
 
+export function shouldShowFileTree(input: { visible: boolean; opened: boolean }) {
+  return input.opened && input.visible
+}
+
 export const createSessionTabs = (input: TabsInput) => {
   const review = input.review ?? (() => false)
   const hasReview = input.hasReview ?? (() => false)
+  const fileBrowser = input.fileBrowser ?? (() => false)
   const contextOpen = createMemo(() => input.tabs().active() === "context" || input.tabs().all().includes("context"))
-  const openedTabs = createMemo(
+  const openFileOpen = createMemo(
+    () =>
+      fileBrowser() &&
+      (input.tabs().active() === SESSION_OPEN_FILE_TAB || input.tabs().all().includes(SESSION_OPEN_FILE_TAB)),
+  )
+  const panelTabs = createMemo(
     () => {
       const seen = new Set<string>()
       return input
@@ -32,6 +46,7 @@ export const createSessionTabs = (input: TabsInput) => {
         .all()
         .flatMap((tab) => {
           if (tab === "context" || tab === "review") return []
+          if (tab === SESSION_OPEN_FILE_TAB && !fileBrowser()) return []
           const value = input.pathFromTab(tab) ? input.normalizeTab(tab) : tab
           if (seen.has(value)) return []
           seen.add(value)
@@ -41,9 +56,13 @@ export const createSessionTabs = (input: TabsInput) => {
     emptyTabs,
     { equals: same },
   )
+  const openedTabs = createMemo(() => panelTabs().filter((tab) => tab !== SESSION_OPEN_FILE_TAB), emptyTabs, {
+    equals: same,
+  })
   const activeTab = createMemo(() => {
     const active = input.tabs().active()
     if (active === "context") return active
+    if (active === SESSION_OPEN_FILE_TAB && openFileOpen()) return active
     if (active === "review" && review()) return active
     if (active && input.pathFromTab(active)) return input.normalizeTab(active)
 
@@ -61,12 +80,15 @@ export const createSessionTabs = (input: TabsInput) => {
   const closableTab = createMemo(() => {
     const active = activeTab()
     if (active === "context") return active
+    if (active === SESSION_OPEN_FILE_TAB && openFileOpen()) return active
     if (!openedTabs().includes(active)) return
     return active
   })
 
   return {
     contextOpen,
+    openFileOpen,
+    panelTabs,
     openedTabs,
     activeTab,
     activeFileTab,
@@ -94,13 +116,6 @@ export const focusTerminalById = (id: string) => {
   return true
 }
 
-const skip = new Set(["Alt", "Control", "Meta", "Shift"])
-
-export const shouldFocusTerminalOnKeyDown = (event: Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "altKey">) => {
-  if (skip.has(event.key)) return false
-  return !(event.ctrlKey || event.metaKey || event.altKey)
-}
-
 export const createOpenReviewFile = (input: {
   showAllFiles: () => void
   tabForPath: (path: string) => string
@@ -117,7 +132,7 @@ export const createOpenReviewFile = (input: {
         input.openTab(tab)
         input.setActive(tab)
       }
-      if (maybePromise instanceof Promise) maybePromise.then(open)
+      if (maybePromise instanceof Promise) void maybePromise.then(open)
       else open()
     })
   }
