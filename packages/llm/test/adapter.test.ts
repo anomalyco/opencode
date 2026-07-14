@@ -105,6 +105,9 @@ const echoLayer = dynamicResponse(({ text, respond }) =>
 )
 
 const it = testEffect(echoLayer)
+const unterminated = testEffect(
+  dynamicResponse(({ respond }) => Effect.succeed(respond(encodeJson([{ type: "text", text: "partial" }])))),
+)
 
 describe("llm route", () => {
   it.effect("stream and generate use the route pipeline", () =>
@@ -122,6 +125,15 @@ describe("llm route", () => {
       expect(response.usage).toEqual(reduced.usage)
       expect(response.finishReason).toEqual(reduced.finishReason)
       expect(response.message.content).toEqual([{ type: "text", text: 'echo:{"body":"hello"}' }])
+    }),
+  )
+
+  unterminated.effect("fails when the normalized stream ends without a terminal event", () =>
+    Effect.gen(function* () {
+      const error = yield* (yield* LLMClient.Service).stream(request).pipe(Stream.runDrain, Effect.flip)
+
+      expect(error.reason).toMatchObject({ _tag: "InvalidProviderOutput" })
+      expect(error.message).toContain("Provider stream ended without a terminal finish event")
     }),
   )
 

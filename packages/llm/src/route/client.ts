@@ -10,7 +10,7 @@ import { WebSocketExecutor } from "./transport"
 import type { Protocol } from "./protocol"
 import { applyCachePolicy } from "../cache-policy"
 import * as ProviderShared from "../protocols/shared"
-import type { LLMError, LLMEvent, PreparedRequestOf, ProtocolID, ProviderOptions } from "../schema"
+import type { LLMError, PreparedRequestOf, ProtocolID, ProviderOptions } from "../schema"
 import {
   GenerationOptions,
   HttpOptions,
@@ -19,6 +19,7 @@ import {
   Model,
   ModelLimits,
   LLMError as LLMErrorClass,
+  LLMEvent,
   PreparedRequest,
   ProviderID,
   mergeGenerationOptions,
@@ -229,6 +230,28 @@ const streamError = (route: string, message: string, cause: Cause.Cause<unknown>
   return ProviderShared.eventError(route, message, Cause.pretty(cause))
 }
 
+const requireTerminalEvent = (route: string) => (events: Stream.Stream<LLMEvent, LLMError>) =>
+  Stream.suspend(() => {
+    let terminal = false
+    return events.pipe(
+      Stream.mapEffect((event) => {
+        if (terminal)
+          return Effect.fail(
+            ProviderShared.eventError(route, `Provider emitted ${event.type} after the terminal event`),
+          )
+        if (LLMEvent.is.finish(event) || LLMEvent.is.providerError(event)) terminal = true
+        return Effect.succeed(event)
+      }),
+      Stream.onEnd(
+        Effect.suspend(() =>
+          terminal
+            ? Effect.void
+            : Effect.fail(ProviderShared.eventError(route, "Provider stream ended without a terminal finish event")),
+        ),
+      ),
+    )
+  })
+
 function makeFromTransport<Body, Prepared, Frame, Event, State>(
   input: MakeTransportInput<Body, Prepared, Frame, Event, State>,
 ): Route<Body, Prepared> {
@@ -298,6 +321,7 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
             protocol.stream.onHalt ? { onHalt: protocol.stream.onHalt } : undefined,
           ),
           Stream.catchCause((cause) => Stream.fail(streamError(route, `Failed to read ${route} stream`, cause))),
+          requireTerminalEvent(route),
         )
       },
     } satisfies Route<Body, Prepared>
