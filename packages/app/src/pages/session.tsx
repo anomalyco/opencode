@@ -66,7 +66,11 @@ import {
   SessionComposerRegion,
 } from "@/pages/session/composer"
 import { createOpenReviewFile, createSessionTabs, createSizing, shouldShowFileTree } from "@/pages/session/helpers"
-import { MessageTimeline } from "@/pages/session/timeline/message-timeline"
+import {
+  MessageTimeline,
+  timelineRootSessionID,
+  timelineScrollMemory,
+} from "@/pages/session/timeline/message-timeline"
 import { createTimelineModel } from "@/pages/session/timeline/model"
 import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/pages/session/review-tab"
 import { useSessionLayout } from "@/pages/session/session-layout"
@@ -355,6 +359,7 @@ export default function Page() {
   const location = useLocation()
   const navigate = useNavigate()
   const { params, sessionKey, workspaceKey, tabs, view } = useSessionLayout()
+  const appTabs = useTabs()
   const reviewMode = () => view().review.mode() ?? "git"
   const reviewFile = () => view().review.file()
   const sessionOwnership = createSessionOwnership(sessionKey)
@@ -1512,6 +1517,15 @@ export default function Page() {
       (id, previous) => {
         if (!id || !previous || id === previous) return
         if (location.hash || store.messageId || ui.pendingMessage) return
+        // The timeline restores the saved per-tab position itself; resuming
+        // here would reset it to the bottom.
+        const server = params.serverKey ? requireServerKey(params.serverKey) : ServerConnection.key(serverSDK().server)
+        const rootSessionID = timelineRootSessionID(id, sync().session.get)
+        if (
+          newSessionDesign() &&
+          timelineScrollMemory({ tabs: appTabs, server, rootSessionID }).has(id)
+        )
+          return
         autoScroll.resume()
       },
     ),
@@ -1999,7 +2013,11 @@ export default function Page() {
     on(
       () => params.id,
       (id) => {
-        if (!id) requestAnimationFrame(() => inputRef?.focus())
+        // Focus the composer whenever the session tab changes (and on the
+        // session-less route). Sessions are excluded on mobile so tab switches
+        // do not pop the on-screen keyboard.
+        if (id && !isDesktop()) return
+        requestAnimationFrame(() => inputRef?.focus())
       },
     ),
   )
@@ -2170,6 +2188,8 @@ export default function Page() {
                   actions={actions}
                   scroll={ui.scroll}
                   onResumeScroll={resumeScroll}
+                  onScrollRestored={autoScroll.pause}
+                  onScrollRestoreFailed={autoScroll.resume}
                   setScrollRef={setScrollRef}
                   onScheduleScrollState={scheduleScrollState}
                   onAutoScrollHandleScroll={autoScroll.handleScroll}

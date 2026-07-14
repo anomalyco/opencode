@@ -43,10 +43,20 @@ export function createTimelineModel(input: {
     const id = input.sessionID()
     return id ? (sync().data.message[id] ?? []) : []
   })
-  const ready = createMemo(() => {
-    const id = input.sessionID()
-    return !id || isTimelineReady(sync().data.message[id], serverSync().session.history.loading(id))
-  })
+  // Latch readiness per session: `ready` only exists to delay the first mount
+  // until messages are usable. Transient loading windows (stale refresh,
+  // history loads on event-primed child sessions) must never flip it back and
+  // unmount a live timeline, which would reset its scroll position.
+  const readyState = createMemo(
+    (prev: { id: string | undefined; ready: boolean }) => {
+      const id = input.sessionID()
+      if (!id) return { id, ready: true }
+      if (prev.id === id && prev.ready) return prev
+      return { id, ready: isTimelineReady(sync().data.message[id], serverSync().session.history.loading(id)) }
+    },
+    { id: undefined, ready: false },
+  )
+  const ready = createMemo(() => readyState().ready)
   const userMessages = createMemo(() => selectUserMessages(messages()), emptyUserMessages, { equals: same })
   const visibleUserMessages = createMemo(
     () => {

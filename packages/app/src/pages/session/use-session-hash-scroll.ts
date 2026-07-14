@@ -1,6 +1,6 @@
 import type { UserMessage } from "@opencode-ai/sdk/v2"
 import { useLocation, useNavigate } from "@solidjs/router"
-import { createEffect, createMemo, onCleanup, onMount } from "solid-js"
+import { createEffect, createMemo, on, onCleanup, onMount } from "solid-js"
 import { messageIdFromHash } from "./message-id-from-hash"
 
 export const useSessionHashScroll = (input: {
@@ -130,13 +130,22 @@ export const useSessionHashScroll = (input: {
     if (el) input.scheduleScrollState(el)
   }
 
-  createEffect(() => {
-    const hash = location.hash
-    if (!hash) clearing = false
-    if (!input.sessionID() || !input.messagesReady()) return
-    cancel()
-    queue(() => applyHash("auto"))
-  })
+  createEffect(
+    on(
+      () => [location.hash, input.sessionID(), input.messagesReady()] as const,
+      ([hash, sessionID, ready], previous) => {
+        if (!hash) clearing = false
+        if (!sessionID || !ready) return
+        cancel()
+        // Without a hash the only job is resuming follow-bottom after a message
+        // anchor was cleared in the same session. Session switches and initial
+        // mounts must not force the bottom: that would wipe a restored scroll
+        // position; the timeline handles its own mount anchoring.
+        if (!hash && (!previous?.[0] || previous[1] !== sessionID)) return
+        queue(() => applyHash("auto"))
+      },
+    ),
+  )
 
   createEffect(() => {
     if (!input.sessionID() || !input.messagesReady()) return

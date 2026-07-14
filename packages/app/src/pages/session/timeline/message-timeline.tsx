@@ -65,7 +65,8 @@ import { useSessionKey } from "@/pages/session/session-layout"
 import { useServerSDK } from "@/context/server-sdk"
 import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
-import { useTabs } from "@/context/tabs"
+import { ServerConnection } from "@/context/server"
+import { useTabs, type Tab } from "@/context/tabs"
 import { legacySessionHref, requireServerKey, sessionHref } from "@/utils/session-route"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
@@ -87,6 +88,43 @@ type TimelineRowByTag<T extends TimelineRow.TimelineRow["_tag"]> = Extract<Timel
 
 const timelineFallbackItemSize = 60
 const timelineCache = new Map<string, { measurements: VirtualItem[]; toolOpen: Record<string, boolean | undefined> }>()
+
+// Scroll position saved when the timeline unmounts away from the bottom, so
+// switching back to the tab restores the reading position instead of
+// re-anchoring to the latest message. The anchor (row key + offset into it)
+// re-asserts the position once panel animations settle, since row heights
+// re-measure during resizes and drift the raw offset.
+export type TimelineScroll = { offset: number; anchor?: { key: string; delta: number } }
+
+// Saved per tab rather than per session: switching tabs must preserve the
+// position, while closing a tab (tab memory is disposed) or reloading the app
+// must reset the reopened timeline to the bottom.
+export function timelineScrollMemory(input: {
+  tabs: ReturnType<typeof useTabs>
+  server: ServerConnection.Key
+  rootSessionID: string
+}) {
+  // Tab memory keys on tabKey(tab), so a synthesized tab resolves the same
+  // entry as the stored one; child sessions map onto their root's tab so
+  // closing it resets the whole lineage.
+  const tab = { type: "session", server: input.server, sessionId: input.rootSessionID } satisfies Tab
+  return input.tabs.state(tab, "timeline-scroll", () => new Map<string, TimelineScroll>())
+}
+
+export function timelineRootSessionID(
+  sessionID: string,
+  get: (sessionID: string) => { parentID?: string } | undefined,
+) {
+  const seen = new Set<string>()
+  let current = sessionID
+  while (!seen.has(current)) {
+    seen.add(current)
+    const parentID = get(current)?.parentID
+    if (!parentID) return current
+    current = parentID
+  }
+  return sessionID
+}
 
 const taskDescription = (part: PartType, sessionID: string) => {
   if (part.type !== "tool" || part.tool !== "task") return
@@ -240,6 +278,8 @@ export function MessageTimeline(props: {
   actions?: UserActions
   scroll: { overflow: boolean; bottom: boolean; jump: boolean }
   onResumeScroll: () => void
+  onScrollRestored: () => void
+  onScrollRestoreFailed: () => void
   setScrollRef: (el: HTMLDivElement | undefined) => void
   onScheduleScrollState: (el: HTMLDivElement) => void
   onAutoScrollHandleScroll: () => void
@@ -268,13 +308,55 @@ export function MessageTimeline(props: {
   const dialog = useDialog()
   const language = useLanguage()
   const { params, sessionKey } = useSessionKey()
+  const ownerSessionID = params.id!
   const ownerSessionKey = sessionKey()
   const cached = timelineCache.get(ownerSessionKey)
   const initialMeasurements = cached?.measurements
-  const coldBottomMount = !initialMeasurements?.length && props.shouldAnchorBottom()
+  const scrollServer = params.serverKey ? requireServerKey(params.serverKey) : ServerConnection.key(serverSDK().server)
+  const rootSessionID = timelineRootSessionID(ownerSessionID, sync().session.get)
+  const scrollMemory =
+    settings.general.newLayoutDesigns()
+      ? timelineScrollMemory({ tabs, server: scrollServer, rootSessionID })
+      : undefined
+  const restoredScroll = scrollMemory?.get(ownerSessionID)
+  const restoredScrollOffset = restoredScroll?.offset
+  const restoredScrollAnchor = restoredScroll?.anchor
+  // Suppress bottom-anchoring until the restored offset is applied in onMount;
+  // after that autoScroll (via props.shouldAnchorBottom) owns the decision again.
+  let restoringScroll = restoredScrollOffset !== undefined
+  let seededRestoredOffset = false
+  let restoreGesture = false
+  let resettleTimer: number | undefined
+  const shouldAnchorBottom = () => !restoringScroll && props.shouldAnchorBottom()
+  const coldBottomMount = !initialMeasurements?.length && shouldAnchorBottom()
   const platform = usePlatform()
 
   const [listRoot, setListRoot] = createSignal<HTMLDivElement>()
+  // The viewport binds after mount, so the restore is attempted from both the
+  // ref and the mount frames; the first attempt with a scrollable root wins.
+  const applyRestoredScroll = () => {
+    if (!restoringScroll || restoredScrollOffset === undefined) return
+    const root = listRoot()
+    if (!root || root.scrollHeight - root.clientHeight <= 1) return
+    root.scrollTop = restoredScrollOffset
+    // Pauses auto-follow so the anchor paths stay off once the flag clears.
+    props.onScrollRestored()
+    restoringScroll = false
+    // Panel enter/exit animations resize the viewport after mount and the
+    // resulting re-measurements drift the raw offset. Once the layout settles,
+    // snap back to the anchored row unless the user scrolled meanwhile.
+    if (!restoredScrollAnchor) return
+    resettleTimer = window.setTimeout(() => {
+      resettleTimer = undefined
+      if (restoreGesture || props.hasScrollGesture()) return
+      const settled = listRoot()
+      if (!settled) return
+      const item = virtualizer.measurementsCache.find((entry) => entry.key === restoredScrollAnchor.key)
+      if (!item) return
+      const target = Math.min(item.start + restoredScrollAnchor.delta, settled.scrollHeight - settled.clientHeight)
+      if (Math.abs(settled.scrollTop - target) > 1) settled.scrollTop = target
+    }, 400)
+  }
   const sessionID = createMemo(() => params.id)
   const sessionStatus = createMemo(() => {
     const id = sessionID()
@@ -408,7 +490,16 @@ export function MessageTimeline(props: {
       return timelineRows().length
     },
     getScrollElement: () => listRoot() ?? null,
-    initialOffset: () => (props.shouldAnchorBottom() ? Number.MAX_SAFE_INTEGER : 0),
+    // Consume the restored offset on the first seed only: the core re-reads
+    // initialOffset whenever its internal offset resets, and re-seeding a stale
+    // restore target mid-session would snap the user back to it.
+    initialOffset: () => {
+      if (!seededRestoredOffset && restoredScrollOffset !== undefined) {
+        seededRestoredOffset = true
+        return restoredScrollOffset
+      }
+      return shouldAnchorBottom() ? Number.MAX_SAFE_INTEGER : 0
+    },
     initialMeasurementsCache: initialMeasurements,
     estimateSize: () => timelineFallbackItemSize,
     scrollToFn: (offset, options, instance) => {
@@ -450,7 +541,7 @@ export function MessageTimeline(props: {
     resizeAnchorScheduled = true
     queueMicrotask(() => {
       resizeAnchorScheduled = false
-      if (!props.shouldAnchorBottom() || props.hasScrollGesture()) return
+      if (!shouldAnchorBottom() || props.hasScrollGesture()) return
       virtualizer.scrollToEnd()
     })
   }
@@ -475,10 +566,10 @@ export function MessageTimeline(props: {
       })
     }
     resizeItem(index, size)
-    if (root && props.shouldAnchorBottom()) anchorResizedBottom()
+    if (root && shouldAnchorBottom()) anchorResizedBottom()
   }
   virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item) => {
-    if (props.shouldAnchorBottom()) return false
+    if (shouldAnchorBottom()) return false
     const first = virtualizer.range?.startIndex
     return first !== undefined && item.index < first
   }
@@ -498,19 +589,29 @@ export function MessageTimeline(props: {
 
   let overscanFrame: number | undefined
   onMount(() => {
+    applyRestoredScroll()
     overscanFrame = requestAnimationFrame(() => {
-      if (props.shouldAnchorBottom()) virtualizer.scrollToEnd()
+      applyRestoredScroll()
+      if (shouldAnchorBottom()) virtualizer.scrollToEnd()
       overscanFrame = requestAnimationFrame(() => {
         overscanFrame = undefined
+        applyRestoredScroll()
+        if (restoringScroll) {
+          // The content never became scrollable, so the restore cannot apply.
+          // Resume bottom-following: the page-level resume was skipped in
+          // favor of this restore and must not stay stale.
+          restoringScroll = false
+          props.onScrollRestoreFailed()
+        }
         if (renderOverscan() < 20) setRenderOverscan(20)
-        if (props.shouldAnchorBottom()) virtualizer.scrollToEnd()
+        if (shouldAnchorBottom()) virtualizer.scrollToEnd()
       })
     })
   })
 
   const maybeAnchorBottom = () => {
     if (timelineRows().length === 0) return
-    if (!props.shouldAnchorBottom() || props.hasScrollGesture()) return
+    if (!shouldAnchorBottom() || props.hasScrollGesture()) return
     if (resizePinFrame !== undefined) cancelAnimationFrame(resizePinFrame)
     clearPrependAnchor()
     if (prependAnchorFrame !== undefined) cancelAnimationFrame(prependAnchorFrame)
@@ -530,6 +631,27 @@ export function MessageTimeline(props: {
 
   onCleanup(() => {
     clearPrependAnchor()
+    const root = listRoot()
+    // Only remember positions meaningfully away from the bottom; near-bottom
+    // sessions keep the default follow-bottom behavior on return.
+    const scrollOffset =
+      root && root.scrollHeight - root.clientHeight - root.scrollTop > 32 ? root.scrollTop : undefined
+    const anchorItem =
+      scrollOffset === undefined
+        ? undefined
+        : virtualizer.measurementsCache.findLast((entry) => entry.start <= scrollOffset)
+    if (resettleTimer !== undefined) window.clearTimeout(resettleTimer)
+    // While a restore is still pending (rapid tab cycling unmounts the
+    // timeline before it ever became scrollable), the current scroll state is
+    // meaningless; keep the saved entry instead of wiping it.
+    if (scrollMemory && !restoringScroll) {
+      if (scrollOffset === undefined) scrollMemory.delete(ownerSessionID)
+      else
+        scrollMemory.set(ownerSessionID, {
+          offset: scrollOffset,
+          anchor: anchorItem ? { key: String(anchorItem.key), delta: scrollOffset - anchorItem.start } : undefined,
+        })
+    }
     timelineCache.delete(ownerSessionKey)
     timelineCache.set(ownerSessionKey, { measurements: virtualizer.takeSnapshot(), toolOpen: { ...toolOpen } })
     while (timelineCache.size > 16) timelineCache.delete(timelineCache.keys().next().value!)
@@ -559,6 +681,7 @@ export function MessageTimeline(props: {
     if (root === listRoot()) return
     setListRoot(root)
     props.setScrollRef(root)
+    applyRestoredScroll()
   }
 
   const handleListWheel = (event: WheelEvent & { currentTarget: HTMLDivElement }) => {
@@ -570,6 +693,7 @@ export function MessageTimeline(props: {
       rootHeight: root.clientHeight,
     })
     if (!delta) return
+    restoreGesture = true
     markBoundaryGesture({ root, target: event.target, delta, onMarkScrollGesture: props.onMarkScrollGesture })
   }
 
@@ -579,6 +703,7 @@ export function MessageTimeline(props: {
   }
 
   const handleListTouchMove = (event: TouchEvent & { currentTarget: HTMLDivElement }) => {
+    restoreGesture = true
     const next = event.touches[0]?.clientY
     const prev = touchGesture
     touchGesture = next
@@ -600,6 +725,7 @@ export function MessageTimeline(props: {
   }
 
   const handleListPointerDown = (event: PointerEvent & { currentTarget: HTMLDivElement }) => {
+    restoreGesture = true
     if (!prependLoading) clearPrependAnchor()
     props.onMarkScrollGesture(event.target)
   }
@@ -613,6 +739,7 @@ export function MessageTimeline(props: {
     const key = scrollKey(event)
     if (!key) return
     if (!isScrollKeyTarget(event.target, key)) return
+    restoreGesture = true
     if (scrollKeyOwner(event.currentTarget, event.target, key) !== event.currentTarget) return
     if (!prependLoading) clearPrependAnchor()
     props.onMarkScrollGesture(event.currentTarget)
