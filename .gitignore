@@ -28,3 +28,7 @@ opencode-dev
 logs/
 *.bun-build
 tsconfig.tsbuildinfo
+
+# axiomic-dev workflow (scratch + worktrees)
+workspace/
+*-worktrees/

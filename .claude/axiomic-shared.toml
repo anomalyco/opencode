@@ -1,0 +1,8 @@
+# Shared by ALL Axiomic repos. Set ONCE here; `sync` propagates this to every repo as
+# .claude/axiomic-shared.toml. One Linear team serves everything; each ticket is tagged
+# with the repo's label (repo:<name>, set per-repo in .axiomic.toml). Edit here, never
+# in a repo.
+
+linear_team      = "AXI"            # team identifier — ticket ids are AXI-<n>
+linear_team_name = "Axiomic Dev"    # human name (to resolve the team in the Linear MCP)
+github_org       = "axiomic-agents"

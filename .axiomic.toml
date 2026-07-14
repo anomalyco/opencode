@@ -1,0 +1,22 @@
+# .axiomic.toml — per-repo config the workflow skills read.
+# Seeded once by `sync` and NOT overwritten afterward — edit freely for this repo.
+
+# --- Linear (one team for ALL repos; the team key is shared via
+#     .claude/axiomic-shared.toml — set it there, not here). This repo's label: ---
+ticket_label = "repo:REPLACE_ME"         # e.g. "repo:agents-platform"
+
+# --- Git ---
+github_repo  = "axiomic-agents/REPLACE_ME"
+default_base = "staging"                 # branch new work targets (some repos: main/master)
+
+# --- Stack: "python" | "node" ---
+stack = "python"
+
+# --- Commands (used by /implement, /pr, /adversarial-review) ---
+# python preset:  format="pdm run format"  lint="ruff check"  typecheck="pdm run typecheck"  test="pdm run test"
+# node preset:    format="npm run format"  lint="npm run lint" typecheck="npm run typecheck"  test="npm test"
+[commands]
+format    = "REPLACE_ME"
+lint      = "REPLACE_ME"
+typecheck = "REPLACE_ME"
+test      = "REPLACE_ME"
