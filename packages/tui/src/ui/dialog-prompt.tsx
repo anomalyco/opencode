@@ -38,7 +38,6 @@ export function DialogPrompt(props: DialogPromptProps) {
       {
         id: "dialog.prompt.submit",
         title: "Submit dialog prompt",
-        bind: "return",
         group: "Dialog",
         run: confirm,
       },

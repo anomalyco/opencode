@@ -737,6 +737,52 @@ test("completes exploration when a queued prompt is promoted", async () => {
   }
 })
 
+test("classifies live tool rows independently of their call ID", async () => {
+  const events = createEventStream()
+  const sessionID = "session-tool-call-id"
+  const calls = createFetch((url) => {
+    if (url.pathname === `/api/session/${sessionID}/message`) return json({ data: [], cursor: {} })
+  }, events)
+  let rows!: ReturnType<typeof createSessionRows>
+
+  function Probe() {
+    rows = createSessionRows(() => sessionID)
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <ClientProvider api={createApi(calls.fetch)}>
+        <ProjectProvider>
+          <DataProvider>
+            <Probe />
+          </DataProvider>
+        </ProjectProvider>
+      </ClientProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    emitEvent(events, {
+      id: "evt_tool_started",
+      created: 1,
+      type: "session.tool.input.started",
+      durable: durable(sessionID),
+      data: {
+        sessionID,
+        assistantMessageID: "message-assistant",
+        callID: "reasoning:0",
+        name: "bash",
+      },
+    })
+
+    await wait(() => rows.length > 0)
+    expect(rows).toEqual([{ type: "part", ref: { messageID: "message-assistant", partID: "reasoning:0" } }])
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("removes committed revert messages from local state", async () => {
   const events = createEventStream()
   const sessionID = "session-revert"

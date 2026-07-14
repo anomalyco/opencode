@@ -62,6 +62,18 @@ test("keeps non-exploration tools as individual part rows", () => {
   ])
 })
 
+test("classifies tool rows independently of their call ID", () => {
+  const messages: SessionMessageInfo[] = [
+    assistant("assistant-1", [
+      { type: "tool", id: "reasoning:0", name: "bash", state: pending(), time: { created: 1 } },
+    ]),
+  ]
+
+  expect(reduceSessionRows(messages)).toEqual([
+    { type: "part", ref: { messageID: "assistant-1", partID: "reasoning:0" } },
+  ])
+})
+
 test("assigns stable kind ordinals within an assistant message", () => {
   const messages: SessionMessageInfo[] = [
     assistant("assistant-1", [

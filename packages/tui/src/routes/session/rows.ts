@@ -132,39 +132,11 @@ export function createSessionRows(sessionID: Accessor<string>) {
       }),
     )
 
-  const appendPart = (ref: PartRef, name?: string) =>
+  const appendPart = (ref: PartRef, part: AppendPart) =>
     setRows(
       produce((draft) => {
         if (hasPart(draft, ref)) return
-        const index = queuedStart(draft)
-        if (ref.partID.startsWith("reasoning:")) {
-          const previous = draft[index - 1]
-          if (previous?.type === "group" && previous.kind === "reasoning") {
-            previous.refs.push(ref)
-            return
-          }
-          completePrevious(draft, index)
-          draft.splice(index, 0, { type: "group", kind: "reasoning", refs: [ref], completed: false })
-          return
-        }
-        if (name && exploration(name)) {
-          const previous = draft[index - 1]
-          if (previous?.type === "group" && previous.kind === "exploration") {
-            previous.refs.push(ref)
-            return
-          }
-          completePrevious(draft, index)
-          draft.splice(index, 0, {
-            type: "group",
-            kind: "exploration",
-            refs: [ref],
-            pending: [],
-            completed: false,
-          })
-          return
-        }
-        completePrevious(draft, index)
-        draft.splice(index, 0, { type: "part", ref })
+        append(draft, ref, part, queuedStart(draft))
       }),
     )
 
@@ -230,23 +202,32 @@ export function createSessionRows(sessionID: Accessor<string>) {
     data.on("session.model.selected", message),
     data.on("session.text.delta", (event) => {
       if (event.data.sessionID === sessionID() && event.data.delta.trim())
-        appendPart({ messageID: event.data.assistantMessageID, partID: `text:${event.data.ordinal}` })
+        appendPart({ messageID: event.data.assistantMessageID, partID: `text:${event.data.ordinal}` }, { type: "text" })
     }),
     data.on("session.text.ended", (event) => {
       if (event.data.sessionID === sessionID() && event.data.text.trim())
-        appendPart({ messageID: event.data.assistantMessageID, partID: `text:${event.data.ordinal}` })
+        appendPart({ messageID: event.data.assistantMessageID, partID: `text:${event.data.ordinal}` }, { type: "text" })
     }),
     data.on("session.reasoning.delta", (event) => {
-      if (event.data.sessionID === sessionID())
-        appendPart({ messageID: event.data.assistantMessageID, partID: `reasoning:${event.data.ordinal}` })
+      if (event.data.sessionID === sessionID() && event.data.delta.trim())
+        appendPart(
+          { messageID: event.data.assistantMessageID, partID: `reasoning:${event.data.ordinal}` },
+          { type: "reasoning" },
+        )
     }),
     data.on("session.reasoning.ended", (event) => {
       if (event.data.sessionID === sessionID() && event.data.text.trim())
-        appendPart({ messageID: event.data.assistantMessageID, partID: `reasoning:${event.data.ordinal}` })
+        appendPart(
+          { messageID: event.data.assistantMessageID, partID: `reasoning:${event.data.ordinal}` },
+          { type: "reasoning" },
+        )
     }),
     data.on("session.tool.input.started", (event) => {
       if (event.data.sessionID === sessionID())
-        appendPart({ messageID: event.data.assistantMessageID, partID: event.data.callID }, event.data.name)
+        appendPart(
+          { messageID: event.data.assistantMessageID, partID: event.data.callID },
+          { type: "tool", name: event.data.name },
+        )
     }),
     data.on("session.retry.scheduled", (event) => {
       if (event.data.sessionID === sessionID()) appendFooter(event.data.assistantMessageID)
@@ -305,31 +286,31 @@ export function resolvePart(message: SessionMessageAssistant, partID: string) {
   return message.content.filter((part) => part.type === match[1])[ordinal]
 }
 
-function append(rows: SessionRow[], ref: PartRef, part: SessionMessageAssistant["content"][number]) {
+type AppendPart = { type: "text" } | { type: "reasoning" } | { type: "tool"; name: string }
+
+function append(rows: SessionRow[], ref: PartRef, part: AppendPart, index = rows.length) {
   if (part.type === "reasoning") {
-    const previous = rows.at(-1)
+    const previous = rows[index - 1]
     if (previous?.type === "group" && previous.kind === "reasoning") {
       previous.refs.push(ref)
       return
     }
-    completePrevious(rows)
-    rows.push({ type: "group", kind: "reasoning", refs: [ref], completed: false })
+    completePrevious(rows, index)
+    rows.splice(index, 0, { type: "group", kind: "reasoning", refs: [ref], completed: false })
     return
   }
-  if (part.type === "tool") {
-    if (exploration(part.name)) {
-      const previous = rows.at(-1)
-      if (previous?.type === "group" && previous.kind === "exploration") {
-        previous.refs.push(ref)
-        return
-      }
-      completePrevious(rows)
-      rows.push({ type: "group", kind: "exploration", refs: [ref], pending: [], completed: false })
+  if (part.type === "tool" && exploration(part.name)) {
+    const previous = rows[index - 1]
+    if (previous?.type === "group" && previous.kind === "exploration") {
+      previous.refs.push(ref)
       return
     }
+    completePrevious(rows, index)
+    rows.splice(index, 0, { type: "group", kind: "exploration", refs: [ref], pending: [], completed: false })
+    return
   }
-  completePrevious(rows)
-  rows.push({ type: "part", ref })
+  completePrevious(rows, index)
+  rows.splice(index, 0, { type: "part", ref })
 }
 
 function completePrevious(rows: SessionRow[], index = rows.length) {
