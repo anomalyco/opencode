@@ -4,9 +4,6 @@
   </a>
 </p>
 <p align="center">The open source AI coding agent (TUI / CLI).</p>
-<p align="center">
-  <a href="https://github.com/puetsua/kancode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/puetsua/kancode/publish.yml?style=flat-square&branch=main" /></a>
-</p>
 
 <p align="center">
   <a href="README.md">English</a> |
