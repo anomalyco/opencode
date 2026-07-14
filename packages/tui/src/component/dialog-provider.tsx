@@ -17,12 +17,10 @@ import { useBindings } from "../keymap"
 import { useClipboard } from "../context/clipboard"
 
 const PROVIDER_PRIORITY: Record<string, number> = {
-  opencode: 0,
-  "opencode-go": 1,
-  openai: 2,
-  "github-copilot": 3,
-  anthropic: 4,
-  google: 5,
+  openai: 0,
+  "github-copilot": 1,
+  anthropic: 2,
+  google: 3,
 }
 
 const CUSTOM_PROVIDER_OPTION_VALUE = "__opencode_custom_provider__"
@@ -59,10 +57,10 @@ export function providerOptions(list: { id: string; name: string }[]): ProviderO
         value: provider.id,
         providerID: provider.id,
         description: {
-          opencode: "(Recommended)",
           anthropic: "(API key)",
           openai: "(ChatGPT Plus/Pro or API key)",
-          "opencode-go": "Low cost subscription for everyone",
+          opencode: "(Upstream OpenCode Zen — optional)",
+          "opencode-go": "(Upstream subscription — optional)",
         }[provider.id],
         category: provider.id in PROVIDER_PRIORITY ? "Popular" : "Providers",
       })),
@@ -371,7 +369,8 @@ function ApiMethod(props: ApiMethodProps) {
           opencode: (
             <box gap={1}>
               <text fg={theme.textMuted}>
-                OpenCode Zen (upstream provider) gives access to curated coding models with a single API key.
+                OpenCode Zen is an upstream provider. KanCode does not operate this service; connect a key only if you
+                already use it.
               </text>
               <text fg={theme.text}>
                 Get a key at <span style={{ fg: theme.primary }}>https://opencode.ai/zen</span>

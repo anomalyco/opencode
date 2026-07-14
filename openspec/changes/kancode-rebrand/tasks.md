@@ -15,6 +15,7 @@
 - [x] 2.4 Uninstall/account/splash/footer permission copy and other hotspot user strings
 - [x] 2.5 README.md, README.zht.md, AGENTS.md, openspec/config.yaml — product name + compatibility rules
 - [x] 2.6 Align GitHub tips with handler: tips document `/opencode`/`/oc` (upstream Action); do not claim `/kancode` works
+- [x] 2.7 Stop defaulting to OpenCode Zen: no public free-tier autoload; ACP/TUI/CLI do not prefer `"opencode"`; Zen remains opt-in via connect/config/env
 
 ## 3. Validate
 
@@ -22,3 +23,4 @@
 - [x] 3.2 Run `bun typecheck` in `packages/opencode`, `packages/tui`, `packages/core`
 - [x] 3.3 Commit OpenSpec + implementation with conventional messages (do not push)
 - [x] 3.4 Focused tests: core dual-read precedence; ConfigPaths writable helpers; mcp add → kancode.json
+- [x] 3.5 Focused tests: Zen does not autoload without credentials; loads when config/auth present

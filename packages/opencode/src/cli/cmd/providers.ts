@@ -464,7 +464,9 @@ export const ProvidersLoginCommand = effectCmd({
     }
 
     if (provider === "opencode") {
-      yield* Prompt.log.info("Create an api key at https://opencode.ai/auth")
+      yield* Prompt.log.info(
+        "OpenCode Zen is optional (upstream). Create an API key at https://opencode.ai/zen if you use that provider.",
+      )
     }
 
     if (provider === "vercel") {

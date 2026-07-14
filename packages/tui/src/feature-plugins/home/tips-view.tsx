@@ -275,7 +275,7 @@ const TIPS: Tip[] = [
       ? `Toggle username display in chat via the command palette (${shortcutText(shortcuts.commandList())})`
       : "Toggle username display in chat via the command palette",
   "Clone {highlight}https://github.com/puetsua/kancode{/highlight} and run {highlight}bun dev{/highlight} from source",
-  "Use {highlight}/connect{/highlight} with OpenCode Zen (upstream provider) for curated models",
+  "Use {highlight}/connect{/highlight} to add a provider, or set models in {highlight}kancode.json{/highlight}",
   "Commit your project's {highlight}AGENTS.md{/highlight} file to Git for team sharing",
   "Use {highlight}/review{/highlight} to review uncommitted changes, branches, or PRs",
   (shortcuts) => `Use ${commandText("/help", shortcuts.helpShow())} to show the help dialog`,

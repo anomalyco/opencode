@@ -53,9 +53,9 @@ function View(props: { api: TuiPluginApi; sessionID: string }) {
                 ✕
               </text>
             </box>
-            <text fg={theme().textMuted}>KanCode includes free models so you can start immediately.</text>
+            <text fg={theme().textMuted}>Connect a provider to start — use /connect or set models in kancode.json.</text>
             <text fg={theme().textMuted}>
-              Connect from 75+ providers to use other models, including Claude, GPT, Gemini etc
+              75+ providers are supported, including Claude, GPT, Gemini, and optional upstream OpenCode Zen
             </text>
             <box flexDirection="row" gap={1} justifyContent="space-between">
               <text fg={theme().text}>Connect provider</text>

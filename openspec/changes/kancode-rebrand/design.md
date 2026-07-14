@@ -73,7 +73,11 @@ Leave as OpenCode where they are product/provider/schema/package identity:
 
 ### 7. Upsell / SaaS copy
 
-**Decision:** Soften OpenCode Go / zen marketing in TUI and retry tips. Keep OpenCode Zen as a connectable provider (product name), but remove pressure copy that pushes opencode.ai subscriptions where this fork does not operate that SaaS. Bug report URL → `https://github.com/puetsua/kancode/issues`.
+**Decision:** Soften OpenCode Go / zen marketing in TUI and retry tips. Keep OpenCode Zen as a connectable provider (product name / id `"opencode"`), but do **not** ship it as the default or promote a public free tier. Users enable Zen explicitly via `/connect`, `OPENCODE_API_KEY`, auth credentials, or `provider.opencode` in `kancode.json` / `opencode.json`. Remove pressure copy that pushes opencode.ai subscriptions where this fork does not operate that SaaS. Bug report URL → `https://github.com/puetsua/kancode/issues`.
+
+### 8. OpenCode Zen is opt-in
+
+**Decision:** Stop auto-loading Zen with a public API key and stop preferring `"opencode"` when resolving a default model. First-run / no-config installs require the user to configure any provider (Anthropic, OpenAI, Copilot, Zen, etc.). Zen plugin code and models.dev catalog entry remain so configured users keep full access.
 
 ## Risks / Trade-offs
 

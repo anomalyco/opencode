@@ -22,8 +22,15 @@ describe("providerOptions", () => {
         { id: "anthropic", name: "Anthropic" },
         { id: "mistral", name: "Mistral" },
         { id: "aws", name: "AWS Bedrock" },
+        { id: "opencode", name: "OpenCode Zen" },
       ]).map((option) => option.value),
-    ).toEqual(["openai", "anthropic", "aws", "mistral", "custom-z", "__opencode_custom_provider__"])
+    ).toEqual(["openai", "anthropic", "aws", "mistral", "opencode", "custom-z", "__opencode_custom_provider__"])
+  })
+
+  test("does not mark OpenCode Zen as recommended", () => {
+    const zen = providerOptions([{ id: "opencode", name: "OpenCode Zen" }]).find((option) => option.value === "opencode")
+    expect(zen?.description).toContain("optional")
+    expect(zen?.description).not.toContain("Recommended")
   })
 
   test("does not collide with a configured provider named other", () => {

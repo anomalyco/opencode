@@ -75,8 +75,17 @@ Global data, config, cache, state, and tmp paths SHALL prefer the `kancode` XDG 
 
 ### Requirement: Soften Upstream SaaS Upsell
 
-User-facing copy that clearly markets anomalyco/opencode.ai SaaS subscriptions (for example OpenCode Go upsell) SHALL be softened or removed in the TUI and related prompts. Provider product names that are not SaaS upsell (for example OpenCode Zen as a provider) MAY remain.
+User-facing copy that clearly markets anomalyco/opencode.ai SaaS subscriptions (for example OpenCode Go upsell) SHALL be softened or removed in the TUI and related prompts. Provider product names that are not SaaS upsell (for example OpenCode Zen as a provider) MAY remain when the user opts in, but MUST NOT be presented as KanCode's default or recommended provider.
 
 #### Scenario: Go upsell is not pushed as fork marketing
 - **WHEN** a user encounters retry or provider messaging in the TUI
 - **THEN** the copy does not push an OpenCode Go subscription as a KanCode product offering
+
+#### Scenario: Zen is not the default provider
+- **WHEN** a fresh install has no provider credentials and no configured model
+- **THEN** OpenCode Zen (`"opencode"`) is not auto-loaded as an available default provider
+- **AND** the user must configure a provider explicitly (for example `/connect`, env API key, or `provider` / `model` in kancode.json)
+
+#### Scenario: Zen remains configurable
+- **WHEN** the user sets `OPENCODE_API_KEY`, stores Zen auth via `/connect`, or configures `provider.opencode` with an API key
+- **THEN** OpenCode Zen loads and can be selected like any other provider
