@@ -8,9 +8,8 @@ import { usePromptRef } from "../context/prompt"
 import { useLocal } from "../context/local"
 import { usePluginRuntime } from "../plugin/runtime"
 import { useEditorContext } from "../context/editor"
-import { HomeSessionDestinationProvider } from "./home/session-destination"
 import { useData } from "../context/data"
-import { LocationProvider } from "../context/location"
+import { useSetLocation } from "../context/location"
 import { FormPrompt } from "./session/form"
 import { PluginSlot } from "../plugin/context"
 
@@ -29,9 +28,12 @@ export function Home() {
   const local = useLocal()
   const editor = useEditorContext()
   const data = useData()
+  const setLocation = useSetLocation()
   // Global MCP elicitations can arrive without a session route, so keep them reachable from Home.
   const forms = createMemo(() => data.session.form.list("global", data.location.default()) ?? [])
   let sent = false
+
+  createEffect(() => setLocation(data.location.default()))
 
   onMount(() => {
     editor.clearSelection()
@@ -64,47 +66,45 @@ export function Home() {
   })
 
   return (
-    <LocationProvider location={data.location.default()}>
-      <HomeSessionDestinationProvider>
-        <box flexGrow={1} alignItems="center" paddingLeft={2} paddingRight={2}>
-          <box flexGrow={1} minHeight={0} />
-          <box height={4} minHeight={0} flexShrink={1} />
-          <box flexShrink={0}>
-            <pluginRuntime.Slot name="home_logo" mode="replace">
-              <Logo />
-            </pluginRuntime.Slot>
-          </box>
-          <box height={1} minHeight={0} flexShrink={1} />
-          <box width="100%" maxWidth={75} zIndex={1000} paddingTop={1} flexShrink={0}>
-            <pluginRuntime.Slot name="home_prompt" mode="replace" ref={bind}>
-              <Prompt
-                ref={bind}
-                right={<pluginRuntime.Slot name="home_prompt_right" />}
-                placeholders={placeholder}
-                disabled={forms().length > 0}
-              />
-            </pluginRuntime.Slot>
-          </box>
-          <PluginSlot name="home.bottom" />
-          <box flexGrow={1} minHeight={0} />
-          <Toast />
+    <>
+      <box flexGrow={1} alignItems="center" paddingLeft={2} paddingRight={2}>
+        <box flexGrow={1} minHeight={0} />
+        <box height={4} minHeight={0} flexShrink={1} />
+        <box flexShrink={0}>
+          <pluginRuntime.Slot name="home_logo" mode="replace">
+            <Logo />
+          </pluginRuntime.Slot>
         </box>
-        <box width="100%" flexShrink={0}>
-          <PluginSlot name="home.footer" />
+        <box height={1} minHeight={0} flexShrink={1} />
+        <box width="100%" maxWidth={75} zIndex={1000} paddingTop={1} flexShrink={0}>
+          <pluginRuntime.Slot name="home_prompt" mode="replace" ref={bind}>
+            <Prompt
+              ref={bind}
+              right={<pluginRuntime.Slot name="home_prompt_right" />}
+              placeholders={placeholder}
+              disabled={forms().length > 0}
+            />
+          </pluginRuntime.Slot>
         </box>
-        <Show when={forms()[0]?.id} keyed>
-          {(_) => {
-            const form = forms()[0]
-            return form ? (
-              <box position="absolute" zIndex={2000} left={0} right={0} bottom={1} paddingLeft={2} paddingRight={2}>
-                <box width="100%">
-                  <FormPrompt form={form} />
-                </box>
+        <PluginSlot name="home.bottom" />
+        <box flexGrow={1} minHeight={0} />
+        <Toast />
+      </box>
+      <box width="100%" flexShrink={0}>
+        <PluginSlot name="home.footer" />
+      </box>
+      <Show when={forms()[0]?.id} keyed>
+        {(_) => {
+          const form = forms()[0]
+          return form ? (
+            <box position="absolute" zIndex={2000} left={0} right={0} bottom={1} paddingLeft={2} paddingRight={2}>
+              <box width="100%">
+                <FormPrompt form={form} />
               </box>
-            ) : null
-          }}
-        </Show>
-      </HomeSessionDestinationProvider>
-    </LocationProvider>
+            </box>
+          ) : null
+        }}
+      </Show>
+    </>
   )
 }

@@ -129,6 +129,7 @@ describe("fromPromise", () => {
       const plugins = yield* PluginV2.Service
       const registry = yield* ToolRegistry.Service
       const host = yield* PluginHost.make(plugins)
+      const progress: ToolRegistry.Progress[] = []
       const promisePlugin = Plugin.define({
         id: "promise-tool",
         setup: async (ctx) => {
@@ -139,7 +140,10 @@ describe("fromPromise", () => {
               description: "Hello",
               input: Schema.Struct({ name: Schema.String }),
               output: Schema.String,
-              execute: async ({ name }) => `Hello, ${name}!`,
+              execute: async ({ name }, context) => {
+                await context.progress({ structured: { phase: "greeting" } })
+                return `Hello, ${name}!`
+              },
             })
           })
         },
@@ -153,10 +157,12 @@ describe("fromPromise", () => {
         yield* materialized.settle({
           sessionID: SessionV2.ID.make("ses_promise_tool"),
           agent: AgentV2.ID.make("build"),
-          assistantMessageID: SessionMessage.ID.make("msg_promise_tool"),
+          messageID: SessionMessage.ID.make("msg_promise_tool"),
+          progress: (update) => Effect.sync(() => progress.push(update)),
           call: { type: "tool-call", id: "call_promise_tool", name: "hello", input: { name: "world" } },
         }),
       ).toMatchObject({ result: { type: "text", value: "Hello, world!" } })
+      expect(progress).toEqual([{ structured: { phase: "greeting" }, content: [] }])
     }),
   )
 })

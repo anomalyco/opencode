@@ -7,7 +7,6 @@ import { useClient } from "../../context/client"
 import { useToast } from "../../ui/toast"
 import { DialogMoveSession, type MoveSessionSelection } from "../dialog-move-session"
 import { DialogWorkspaceFileChanges } from "../dialog-workspace-file-changes"
-import { useHomeSessionDestination } from "../../routes/home/session-destination"
 import { useProject } from "../../context/project"
 import { useData } from "../../context/data"
 
@@ -19,13 +18,13 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
   const dialog = useDialog()
   const client = useClient()
   const toast = useToast()
-  const homeDestination = useHomeSessionDestination()
   const project = useProject()
   const data = useData()
   const paths = useTuiPaths()
   const [creating, setCreating] = createSignal(false)
   const [creatingDots, setCreatingDots] = createSignal(3)
   const [progress, setProgress] = createSignal<string>()
+  const [destination, setDestination] = createSignal<MoveSessionSelection>()
 
   async function create(name: string) {
     const projectID = await resolveProjectID()
@@ -49,7 +48,7 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
       setProgress("Creating session")
       return directory
     } catch (err) {
-      homeDestination?.clear()
+      setDestination(undefined)
       setProgress(undefined)
       setCreating(false)
       toast.show({ title: "Creating workspace failed", message: errorMessage(err), variant: "error" })
@@ -69,7 +68,7 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
       <DialogMoveSession
         projectID={projectID}
         current={
-          homeDestination?.destination() ??
+          destination() ??
           (session
             ? {
                 type: "directory",
@@ -82,11 +81,11 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
                 subdirectory: project.instance.directory() !== project.instance.path().worktree,
               })
         }
-        onCurrentChange={(selection) => homeDestination?.setDestination(selection)}
+        onCurrentChange={setDestination}
         onSelect={(selection) => {
           const sessionID = input.sessionID()
           if (!sessionID) {
-            homeDestination?.setDestination(selection)
+            setDestination(selection)
             dialog.clear()
             return
           }
@@ -144,11 +143,11 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
     return data.session.get(sessionID)
   }
 
-  const pending = createMemo(() => Boolean(homeDestination?.destination()))
-  const pendingNew = createMemo(() => homeDestination?.destination()?.type === "new")
+  const pending = createMemo(() => Boolean(destination()))
+  const pendingNew = createMemo(() => destination()?.type === "new")
 
   async function getDirectory() {
-    const value = homeDestination?.destination()
+    const value = destination()
     if (!value) return
     if (value.type === "directory") {
       return value.directory
@@ -161,7 +160,7 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
   }
 
   function finishSubmit() {
-    homeDestination?.clear()
+    setDestination(undefined)
     setProgress(undefined)
     setCreating(false)
   }

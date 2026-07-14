@@ -333,8 +333,8 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
               tool: event.tool,
               sessionID: event.sessionID,
               agent: event.agent,
-              assistantMessageID: event.assistantMessageID,
-              toolCallID: event.toolCallID,
+              messageID: event.messageID,
+              callID: event.callID,
               input: event.input,
             }
             return Reflect.apply(callback, undefined, [output]).pipe(
@@ -347,8 +347,8 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
             tool: event.tool,
             sessionID: event.sessionID,
             agent: event.agent,
-            assistantMessageID: event.assistantMessageID,
-            toolCallID: event.toolCallID,
+            messageID: event.messageID,
+            callID: event.callID,
             input: event.input,
             result: event.result,
             output: event.output,

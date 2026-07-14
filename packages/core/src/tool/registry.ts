@@ -19,8 +19,14 @@ import { toSessionError } from "../session/to-session-error"
 export type ExecuteInput = {
   readonly sessionID: SessionSchema.ID
   readonly agent: AgentV2.ID
-  readonly assistantMessageID: SessionMessage.ID
+  readonly messageID: SessionMessage.ID
   readonly call: ToolCall
+  readonly progress?: (update: Progress) => Effect.Effect<void>
+}
+
+export interface Progress {
+  readonly structured: Readonly<Record<string, unknown>>
+  readonly content: ToolOutput["content"]
 }
 
 export interface Interface {
@@ -65,8 +71,8 @@ const registryLayer = Layer.effect(
         tool: input.call.name,
         sessionID: input.sessionID,
         agent: input.agent,
-        assistantMessageID: input.assistantMessageID,
-        toolCallID: input.call.id,
+        messageID: input.messageID,
+        callID: input.call.id,
         input: input.call.input,
       }
       yield* toolHooks.runBefore(beforeEvent)
@@ -76,8 +82,22 @@ const registryLayer = Layer.effect(
         {
           sessionID: input.sessionID,
           agent: input.agent,
-          assistantMessageID: input.assistantMessageID,
-          toolCallID: input.call.id,
+          messageID: input.messageID,
+          callID: input.call.id,
+          progress: (update) =>
+            input.progress?.({
+              structured: update.structured,
+              content: (update.content ?? []).map((part) =>
+                part.type === "text"
+                  ? { type: "text" as const, text: part.text }
+                  : {
+                      type: "file" as const,
+                      uri: `data:${part.mime};base64,${part.data}`,
+                      mime: part.mime,
+                      name: part.name,
+                    },
+              ),
+            }) ?? Effect.void,
         },
       ).pipe(
         Effect.map((output) => ({ output })),
@@ -94,7 +114,7 @@ const registryLayer = Layer.effect(
       } else {
         const bounded = yield* resources.bound({
           sessionID: input.sessionID,
-          toolCallID: input.call.id,
+          callID: input.call.id,
           output: pending.output,
         })
         const result = ToolOutput.toResultValue(bounded.output)
@@ -111,8 +131,8 @@ const registryLayer = Layer.effect(
         tool: input.call.name,
         sessionID: input.sessionID,
         agent: input.agent,
-        assistantMessageID: input.assistantMessageID,
-        toolCallID: input.call.id,
+        messageID: input.messageID,
+        callID: input.call.id,
         input: beforeEvent.input,
         result: settlement.result,
         output: settlement.output,

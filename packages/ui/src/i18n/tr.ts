@@ -153,6 +153,7 @@ export const dict = {
   "ui.common.close": "Kapat",
   "ui.common.next": "İleri",
   "ui.common.submit": "Gönder",
+  "ui.common.showMore": "Daha fazla göster",
 
   "ui.permission.deny": "Reddet",
   "ui.permission.allowAlways": "Her zaman izin ver",

@@ -163,6 +163,43 @@ function createWorkspaceTerminalSession(
       all: [],
     }),
   )
+  const [ui, setUi] = createStore({
+    focus: undefined as { request: number; id?: string; pending: boolean } | undefined,
+  })
+  const focus = { request: 0 }
+
+  const requestFocus = (id?: string, pending = false) => {
+    focus.request += 1
+    setUi("focus", { request: focus.request, id, pending })
+    return focus.request
+  }
+
+  const focusRequested = (id?: string) => {
+    if (!id) return false
+    if (!ui.focus || ui.focus.pending) return false
+    return !ui.focus.id || ui.focus.id === id
+  }
+
+  const consumeFocus = (id: string) => {
+    if (!focusRequested(id)) return
+    setUi("focus", undefined)
+  }
+
+  const cancelFocus = (request?: number) => {
+    if (request !== undefined && ui.focus?.request !== request) return
+    setUi("focus", undefined)
+  }
+
+  if (typeof document !== "undefined") {
+    const cancelOnOutsideFocus = (event: FocusEvent) => {
+      if (!ui.focus) return
+      if (!(event.target instanceof Element)) return
+      if (event.target.closest("#terminal-panel")) return
+      cancelFocus()
+    }
+    document.addEventListener("focusin", cancelOnOutsideFocus)
+    onCleanup(() => document.removeEventListener("focusin", cancelOnOutsideFocus))
+  }
 
   const pickNextTerminalNumber = () => {
     const existingTitleNumbers = new Set(
@@ -267,23 +304,33 @@ function createWorkspaceTerminalSession(
         setStore("all", [])
       })
     },
-    new() {
+    new(options?: { focus?: boolean }) {
       const nextNumber = pickNextTerminalNumber()
+      const focusRequest = options?.focus ? requestFocus(undefined, true) : undefined
 
       sdk.client.pty
         .create({ title: defaultTitle(nextNumber) })
         .then((pty: { data?: { id?: string; title?: string } }) => {
           const id = pty.data?.id
-          if (!id) return
+          if (!id) {
+            if (focusRequest !== undefined) cancelFocus(focusRequest)
+            return
+          }
           const newTerminal = {
             id,
             title: pty.data?.title ?? defaultTitle(nextNumber),
             titleNumber: nextNumber,
           }
-          setStore("all", store.all.length, newTerminal)
-          setStore("active", id)
+          batch(() => {
+            setStore("all", store.all.length, newTerminal)
+            setStore("active", id)
+            if (focusRequest !== undefined && ui.focus?.request === focusRequest) {
+              setUi("focus", { request: focusRequest, id, pending: false })
+            }
+          })
         })
         .catch((error: unknown) => {
+          if (focusRequest !== undefined) cancelFocus(focusRequest)
           console.error("Failed to create terminal", error)
         })
     },
@@ -323,6 +370,18 @@ function createWorkspaceTerminalSession(
     },
     open(id: string) {
       setStore("active", id)
+    },
+    requestFocus(id?: string) {
+      requestFocus(id)
+    },
+    focusRequested(id?: string) {
+      return focusRequested(id)
+    },
+    consumeFocus(id: string) {
+      consumeFocus(id)
+    },
+    cancelFocus() {
+      cancelFocus()
     },
     next() {
       const index = store.all.findIndex((x) => x.id === store.active)
@@ -442,13 +501,17 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
       ready: () => workspace().ready(),
       all: () => workspace().all(),
       active: () => workspace().active(),
-      new: () => workspace().new(),
+      new: (options?: { focus?: boolean }) => workspace().new(options),
       update: (pty: Partial<LocalPTY> & { id: string }) => workspace().update(pty),
       trim: (id: string) => workspace().trim(id),
       trimAll: () => workspace().trimAll(),
       clone: (id: string) => workspace().clone(id),
       bind: () => workspace(),
       open: (id: string) => workspace().open(id),
+      requestFocus: (id?: string) => workspace().requestFocus(id),
+      focusRequested: (id?: string) => workspace().focusRequested(id),
+      consumeFocus: (id: string) => workspace().consumeFocus(id),
+      cancelFocus: () => workspace().cancelFocus(),
       close: (id: string) => workspace().close(id),
       move: (id: string, to: number) => workspace().move(id, to),
       next: () => workspace().next(),

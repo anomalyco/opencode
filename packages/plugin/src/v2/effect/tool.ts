@@ -10,8 +10,14 @@ import type { Hooks, Transform } from "./registration.js"
 export interface Context {
   readonly sessionID: Session.ID
   readonly agent: Agent.ID
-  readonly assistantMessageID: SessionMessage.ID
-  readonly toolCallID: string
+  readonly messageID: SessionMessage.ID
+  readonly callID: string
+  readonly progress: (update: Progress) => Effect.Effect<void>
+}
+
+export interface Progress {
+  readonly structured: Readonly<Record<string, unknown>>
+  readonly content?: ReadonlyArray<Content>
 }
 
 export type SchemaType<A> = Schema.Codec<A, any>
@@ -253,8 +259,8 @@ export interface ToolExecuteBeforeEvent {
   readonly tool: string
   readonly sessionID: Session.ID
   readonly agent: Agent.ID
-  readonly assistantMessageID: SessionMessage.ID
-  readonly toolCallID: string
+  readonly messageID: SessionMessage.ID
+  readonly callID: string
   input: unknown
 }
 
@@ -262,8 +268,8 @@ export interface ToolExecuteAfterEvent {
   readonly tool: string
   readonly sessionID: Session.ID
   readonly agent: Agent.ID
-  readonly assistantMessageID: SessionMessage.ID
-  readonly toolCallID: string
+  readonly messageID: SessionMessage.ID
+  readonly callID: string
   readonly input: unknown
   result: ToolResultValue
   output?: ToolOutput

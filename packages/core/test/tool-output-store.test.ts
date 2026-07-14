@@ -52,7 +52,7 @@ describe("ToolOutputStore", () => {
         const second = "y".repeat(30_000) + "-TAIL"
         const result = yield* store.bound({
           sessionID,
-          toolCallID: "call-aggregate",
+          callID: "call-aggregate",
           output: {
             structured: { kind: "report" },
             content: [
@@ -74,7 +74,7 @@ describe("ToolOutputStore", () => {
     withStore(({ store, fs }) =>
       Effect.gen(function* () {
         const structured = { text: "x".repeat(ToolOutputStore.MAX_BYTES) }
-        const result = yield* store.bound({ sessionID, toolCallID: "call-json", output: { structured, content: [] } })
+        const result = yield* store.bound({ sessionID, callID: "call-json", output: { structured, content: [] } })
         expect(result.output.structured).toEqual(structured)
         expect(result.outputPaths).toHaveLength(1)
         expect(JSON.parse(yield* fs.readFileString(result.outputPaths[0]))).toEqual(structured)
@@ -89,7 +89,7 @@ describe("ToolOutputStore", () => {
         const data = "a".repeat(6 * 1024 * 1024)
         const result = yield* store.bound({
           sessionID,
-          toolCallID: "call-file",
+          callID: "call-file",
           output: {
             structured: { caption: "pixel" },
             content: [{ type: "file", uri: `data:image/png;base64,${data}`, mime: "image/png", name: "pixel.png" }],
@@ -120,7 +120,7 @@ describe("ToolOutputStore", () => {
         }
         const result = yield* store.bound({
           sessionID,
-          toolCallID: "call-text-and-media",
+          callID: "call-text-and-media",
           output: { structured: { caption: "pixel" }, content: [{ type: "text", text }, media] },
         })
 
@@ -136,7 +136,7 @@ describe("ToolOutputStore", () => {
       Effect.gen(function* () {
         const text = "x".repeat(30_000)
         const output = { structured: { output: text }, content: [{ type: "text" as const, text }] }
-        expect(yield* store.bound({ sessionID, toolCallID: "call-duplicated", output })).toEqual({
+        expect(yield* store.bound({ sessionID, callID: "call-duplicated", output })).toEqual({
           output,
           outputPaths: [],
         })
@@ -151,7 +151,7 @@ describe("ToolOutputStore", () => {
         const exit = yield* store
           .bound({
             sessionID,
-            toolCallID: "call-lossy",
+            callID: "call-lossy",
             output: { structured: {}, content: [{ type: "text", text: "x".repeat(ToolOutputStore.MAX_BYTES + 1) }] },
           })
           .pipe(Effect.exit)
@@ -166,7 +166,7 @@ describe("ToolOutputStore", () => {
     withStore(({ store }) =>
       Effect.gen(function* () {
         const output = { structured: { value: 1n }, content: [{ type: "text" as const, text: "readable text" }] }
-        expect(yield* store.bound({ sessionID, toolCallID: "call-unencodable", output })).toEqual({
+        expect(yield* store.bound({ sessionID, callID: "call-unencodable", output })).toEqual({
           output,
           outputPaths: [],
         })
@@ -197,7 +197,7 @@ describe("ToolOutputStore", () => {
         const fiber = yield* service
           .bound({
             sessionID,
-            toolCallID: "call-interrupted",
+            callID: "call-interrupted",
             output: { structured: {}, content: [{ type: "text", text: "x".repeat(ToolOutputStore.MAX_BYTES + 1) }] },
           })
           .pipe(Effect.forkChild)
@@ -216,7 +216,7 @@ describe("ToolOutputStore", () => {
           expect(yield* store.limits()).toEqual({ maxLines: 2, maxBytes: 1_000 })
           const result = yield* store.bound({
             sessionID,
-            toolCallID: "call-config",
+            callID: "call-config",
             output: { structured: {}, content: [{ type: "text", text: "one\ntwo\nthree" }] },
           })
           expect(result.outputPaths).toHaveLength(1)

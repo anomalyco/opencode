@@ -256,10 +256,22 @@ function fromPromiseTool(tool: AnyTool) {
   if ("jsonSchema" in tool)
     return Tool.make({
       ...tool,
-      execute: (input, context) => Effect.promise(() => tool.execute(input, context)),
+      execute: (input, context) =>
+        Effect.promise(() =>
+          tool.execute(input, {
+            ...context,
+            progress: (update) => Effect.runPromise(context.progress(update)),
+          }),
+        ),
     })
   return Tool.make({
     ...tool,
-    execute: (input, context) => Effect.promise(() => tool.execute(input, context)),
+    execute: (input, context) =>
+      Effect.promise(() =>
+        tool.execute(input, {
+          ...context,
+          progress: (update) => Effect.runPromise(context.progress(update)),
+        }),
+      ),
   })
 }

@@ -18,7 +18,7 @@ export const MANAGED_DIRECTORY = "tool-output"
 
 export interface BoundInput {
   readonly sessionID: SessionSchema.ID
-  readonly toolCallID: string
+  readonly callID: string
   readonly output: ToolOutput
 }
 

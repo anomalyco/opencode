@@ -166,7 +166,7 @@ describe("QuestionTool", () => {
       expect(capturedInput()).toEqual({
         sessionID,
         title: "Questions",
-        metadata: { kind: "question", tool: { messageID: toolIdentity.assistantMessageID, callID: "call-question" } },
+        metadata: { kind: "question", tool: { messageID: toolIdentity.messageID, callID: "call-question" } },
         fields: [
           {
             key: "q0",
@@ -212,7 +212,7 @@ describe("QuestionTool", () => {
       expect(capturedInput()).toEqual({
         sessionID,
         title: "Questions",
-        metadata: { kind: "question", tool: { messageID: toolIdentity.assistantMessageID, callID: "call-question" } },
+        metadata: { kind: "question", tool: { messageID: toolIdentity.messageID, callID: "call-question" } },
         fields: [
           {
             key: "q0",

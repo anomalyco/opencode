@@ -172,6 +172,7 @@ export interface UI {
 
 export interface Context {
   readonly options: Readonly<Record<string, any>>
+  readonly location: LocationRef | undefined
   readonly client: OpenCodeClient
   readonly data: Data
   readonly keymap: Keymap

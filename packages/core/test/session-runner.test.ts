@@ -783,14 +783,22 @@ describe("SessionRunnerLLM", () => {
           input: Schema.Struct({ query: Schema.String }),
           output: Schema.Struct({ answer: Schema.String }),
           execute: ({ query }, context) =>
-            Effect.sync(() => {
+            Effect.gen(function* () {
               contexts.push(context)
+              yield* context.progress({ structured: { phase: "reading" } })
               return { answer: query.toUpperCase() }
             }),
         }),
       }, { codemode: false })
       yield* admit(session, "Use application context")
       responses = [reply.tool("call-location", "location_context", { query: "hello" }), []]
+      const events = yield* EventV2.Service
+      const progressFiber = yield* events.subscribe(SessionEvent.Tool.Progress).pipe(
+        Stream.filter((event) => event.data.sessionID === sessionID && event.data.callID === "call-location"),
+        Stream.take(1),
+        Stream.runCollect,
+        Effect.forkScoped({ startImmediately: true }),
+      )
 
       yield* session.resume(sessionID)
 
@@ -799,10 +807,12 @@ describe("SessionRunnerLLM", () => {
         {
           sessionID,
           agent: AgentV2.ID.make("build"),
-          assistantMessageID: expect.stringMatching(/^msg_/),
-          toolCallID: "call-location",
+          messageID: expect.stringMatching(/^msg_/),
+          callID: "call-location",
+          progress: expect.any(Function),
         },
       ])
+      expect(Array.from(yield* Fiber.join(progressFiber))[0]?.data.structured).toEqual({ phase: "reading" })
       expect(yield* session.context(sessionID)).toMatchObject([
         { type: "user", text: "Use application context" },
         {
@@ -2252,7 +2262,7 @@ describe("SessionRunnerLLM", () => {
 
       expect(requests).toHaveLength(2)
       expect(requests[1]?.messages.map((message) => message.role)).toEqual(["user", "assistant", "tool"])
-      expect(authorizations).toMatchObject([{ sessionID, toolCallID: "call-echo" }])
+      expect(authorizations).toMatchObject([{ sessionID, callID: "call-echo" }])
       expect(executions).toEqual(["hello"])
       const context = yield* session.context(sessionID)
       expect(context).toMatchObject([

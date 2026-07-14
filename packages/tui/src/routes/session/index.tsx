@@ -71,7 +71,7 @@ import { collapseToolOutput } from "../../util/collapse-tool-output"
 import { usePluginRuntime } from "../../plugin/runtime"
 import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut } from "../../keymap"
 import { usePathFormatter } from "../../context/path-format"
-import { LocationProvider } from "../../context/location"
+import { useSetLocation } from "../../context/location"
 import { createSessionRows, resolvePart, type PartRef, type SessionRow } from "./rows"
 import { switchLabel } from "../../util/model"
 
@@ -115,6 +115,9 @@ export function Session() {
   const session = createMemo(() => data.session.get(route.sessionID))
   const messages = () => data.session.message.list(route.sessionID)
   const location = createMemo(() => session()?.location)
+  const setLocation = useSetLocation()
+
+  createEffect(() => setLocation(location()))
 
   createEffect(() => {
     const title = Locale.truncate(session()?.title ?? "", 50)
@@ -823,133 +826,131 @@ export function Session() {
   )
 
   return (
-    <LocationProvider location={location()}>
-      <context.Provider
-        value={{
-          get width() {
-            return contentWidth()
-          },
-          sessionID: route.sessionID,
-          thinkingMode,
-          showThinking,
-          markdownMode,
-          groupExploration,
-          diffWrapMode,
-          models,
-          config,
-        }}
-      >
-        <box flexDirection="row" flexGrow={1} minHeight={0}>
-          <box flexGrow={1} minHeight={0} paddingBottom={1} paddingLeft={2} paddingRight={2} gap={1}>
-            <Show when={session()}>
-              <scrollbox
-                ref={(r) => (scroll = r)}
-                viewportOptions={{
-                  paddingRight: showScrollbar() ? 1 : 0,
-                }}
-                verticalScrollbarOptions={{
-                  paddingLeft: 1,
-                  visible: showScrollbar(),
-                  trackOptions: {
-                    backgroundColor: theme.backgroundElement,
-                    foregroundColor: theme.border,
-                  },
-                }}
-                stickyScroll={true}
-                stickyStart="bottom"
-                flexGrow={1}
-                scrollAcceleration={scrollAcceleration()}
-              >
-                <For each={rows}>
-                  {(row) => (
-                    <SessionRowView
-                      row={row}
-                      message={(messageID) => data.session.message.get(route.sessionID, messageID)}
-                    />
-                  )}
-                </For>
-                <BackgroundToolHint messages={messages()} />
-                <Show when={session()?.revert?.messageID}>
-                  <RevertMessage
-                    count={
-                      messages().filter(
-                        (message) => message.id >= session()!.revert!.messageID && message.type === "user",
-                      ).length
-                    }
-                    files={session()!.revert!.files ?? []}
+    <context.Provider
+      value={{
+        get width() {
+          return contentWidth()
+        },
+        sessionID: route.sessionID,
+        thinkingMode,
+        showThinking,
+        markdownMode,
+        groupExploration,
+        diffWrapMode,
+        models,
+        config,
+      }}
+    >
+      <box flexDirection="row" flexGrow={1} minHeight={0}>
+        <box flexGrow={1} minHeight={0} paddingBottom={1} paddingLeft={2} paddingRight={2} gap={1}>
+          <Show when={session()}>
+            <scrollbox
+              ref={(r) => (scroll = r)}
+              viewportOptions={{
+                paddingRight: showScrollbar() ? 1 : 0,
+              }}
+              verticalScrollbarOptions={{
+                paddingLeft: 1,
+                visible: showScrollbar(),
+                trackOptions: {
+                  backgroundColor: theme.backgroundElement,
+                  foregroundColor: theme.border,
+                },
+              }}
+              stickyScroll={true}
+              stickyStart="bottom"
+              flexGrow={1}
+              scrollAcceleration={scrollAcceleration()}
+            >
+              <For each={rows}>
+                {(row) => (
+                  <SessionRowView
+                    row={row}
+                    message={(messageID) => data.session.message.get(route.sessionID, messageID)}
                   />
-                </Show>
-              </scrollbox>
-              <box flexShrink={0}>
-                <Composer
-                  sessionID={route.sessionID}
-                  open={composer.open || (!!session()?.parentID && forms().length === 0)}
-                  defaultTab={composer.tab ?? (session()?.parentID ? "subagents" : undefined)}
-                  onClose={() => setComposer("open", false)}
+                )}
+              </For>
+              <BackgroundToolHint messages={messages()} />
+              <Show when={session()?.revert?.messageID}>
+                <RevertMessage
+                  count={
+                    messages().filter(
+                      (message) => message.id >= session()!.revert!.messageID && message.type === "user",
+                    ).length
+                  }
+                  files={session()!.revert!.files ?? []}
                 />
-                <Switch>
-                  <Match when={composer.open || (!!session()?.parentID && forms().length === 0)}>{null}</Match>
-                  <Match when={permissions().length > 0}>
-                    <PermissionPrompt request={permissions()[0]} directory={session()?.location.directory} />
-                  </Match>
-                  <Match when={forms().length > 0}>
-                    <Show when={forms()[0]?.id} keyed>
-                      {(_) => {
-                        const form = forms()[0]
-                        return form ? <FormPrompt form={form} /> : null
-                      }}
-                    </Show>
-                  </Match>
-                  <Match when={!disabled()}>
-                    <pluginRuntime.Slot
-                      name="session_prompt"
-                      mode="replace"
-                      session_id={route.sessionID}
+              </Show>
+            </scrollbox>
+            <box flexShrink={0}>
+              <Composer
+                sessionID={route.sessionID}
+                open={composer.open || (!!session()?.parentID && forms().length === 0)}
+                defaultTab={composer.tab ?? (session()?.parentID ? "subagents" : undefined)}
+                onClose={() => setComposer("open", false)}
+              />
+              <Switch>
+                <Match when={composer.open || (!!session()?.parentID && forms().length === 0)}>{null}</Match>
+                <Match when={permissions().length > 0}>
+                  <PermissionPrompt request={permissions()[0]} directory={session()?.location.directory} />
+                </Match>
+                <Match when={forms().length > 0}>
+                  <Show when={forms()[0]?.id} keyed>
+                    {(_) => {
+                      const form = forms()[0]
+                      return form ? <FormPrompt form={form} /> : null
+                    }}
+                  </Show>
+                </Match>
+                <Match when={!disabled()}>
+                  <pluginRuntime.Slot
+                    name="session_prompt"
+                    mode="replace"
+                    session_id={route.sessionID}
+                    visible={true}
+                    disabled={false}
+                    on_submit={toBottom}
+                    ref={bind}
+                  >
+                    <Prompt
                       visible={true}
-                      disabled={false}
-                      on_submit={toBottom}
                       ref={bind}
-                    >
-                      <Prompt
-                        visible={true}
-                        ref={bind}
-                        disabled={false}
-                        onSubmit={() => {
-                          toBottom()
-                        }}
-                        sessionID={route.sessionID}
-                        right={<pluginRuntime.Slot name="session_prompt_right" session_id={route.sessionID} />}
-                      />
-                    </pluginRuntime.Slot>
-                  </Match>
-                </Switch>
-              </box>
-            </Show>
-            <Toast />
-          </box>
-          <Show when={sidebarVisible()}>
-            <Switch>
-              <Match when={wide()}>
-                <Sidebar sessionID={route.sessionID} />
-              </Match>
-              <Match when={!wide()}>
-                <box
-                  position="absolute"
-                  top={0}
-                  left={0}
-                  right={0}
-                  bottom={0}
-                  alignItems="flex-end"
-                  backgroundColor={RGBA.fromInts(0, 0, 0, 70)}
-                >
-                  <Sidebar sessionID={route.sessionID} />
-                </box>
-              </Match>
-            </Switch>
+                      disabled={false}
+                      onSubmit={() => {
+                        toBottom()
+                      }}
+                      sessionID={route.sessionID}
+                      right={<pluginRuntime.Slot name="session_prompt_right" session_id={route.sessionID} />}
+                    />
+                  </pluginRuntime.Slot>
+                </Match>
+              </Switch>
+            </box>
           </Show>
+          <Toast />
         </box>
-      </context.Provider>
-    </LocationProvider>
+        <Show when={sidebarVisible()}>
+          <Switch>
+            <Match when={wide()}>
+              <Sidebar sessionID={route.sessionID} />
+            </Match>
+            <Match when={!wide()}>
+              <box
+                position="absolute"
+                top={0}
+                left={0}
+                right={0}
+                bottom={0}
+                alignItems="flex-end"
+                backgroundColor={RGBA.fromInts(0, 0, 0, 70)}
+              >
+                <Sidebar sessionID={route.sessionID} />
+              </box>
+            </Match>
+          </Switch>
+        </Show>
+      </box>
+    </context.Provider>
   )
 }
 
@@ -2513,8 +2514,10 @@ function WebSearch(props: ToolProps) {
 function Subagent(props: ToolProps) {
   const { navigate } = useRoute()
   const data = useData()
-  const sessionID = createMemo(() => stringValue(props.metadata.sessionID) ?? stringValue(props.metadata.sessionId))
-  const description = createMemo(() => stringValue(props.input.description))
+  const input = createMemo(() => (typeof props.part.state.input === "string" ? {} : props.part.state.input))
+  const metadata = createMemo(() => (props.part.state.status === "streaming" ? {} : props.part.state.structured))
+  const sessionID = createMemo(() => stringValue(metadata().sessionID) ?? stringValue(metadata().sessionId))
+  const description = createMemo(() => stringValue(input().description))
   const isRunning = createMemo(() => {
     const id = sessionID()
     return props.part.state.status === "running" || Boolean(id && data.session.status(id) === "running")
@@ -2532,12 +2535,12 @@ function Subagent(props: ToolProps) {
         if (id) navigate({ type: "session", sessionID: id })
       }}
       status={
-        props.input.background === true || props.metadata.status === "running" ? (
+        input().background === true || metadata().status === "running" ? (
           <StatusBadge>Background</StatusBadge>
         ) : undefined
       }
     >
-      {`${Locale.titlecase(stringValue(props.input.agent) ?? stringValue(props.input.subagent_type) ?? "General")} Subagent — ${description() ?? "Subagent"}`}
+      {`${Locale.titlecase(stringValue(input().agent) ?? stringValue(input().subagent_type) ?? "General")} Subagent — ${description() ?? "Subagent"}`}
     </InlineTool>
   )
 }

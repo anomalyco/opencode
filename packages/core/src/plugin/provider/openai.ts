@@ -194,6 +194,10 @@ export const OpenAIPlugin = define({
         // ChatGPT-plan tokens only authorize codex-eligible models, and the
         // subscription covers usage, so hide the rest and zero the cost.
         evt.model.update(item.provider.id, model.id, (draft) => {
+          if (Schema.is(Schema.Struct({ mode: Schema.Literal("pro") }))(draft.body?.reasoning)) {
+            draft.enabled = false
+            return
+          }
           if (!OpenAICodex.eligible(draft.modelID ?? draft.id)) {
             draft.enabled = false
             return

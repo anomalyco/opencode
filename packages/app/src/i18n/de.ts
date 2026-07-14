@@ -756,9 +756,13 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Edit-Tool-Abschnitte ausklappen",
   "settings.general.row.editToolPartsExpanded.description":
     "Edit-, Write- und Patch-Tool-Abschnitte standardmäßig in der Timeline ausgeklappt anzeigen",
-  "settings.general.row.newLayoutDesigns.title": "Neues Layout und Design",
-  "settings.general.row.newLayoutDesigns.description":
-    "Neu gestaltetes Layout, Startseite, Eingabebereich und Sitzungsoberfläche aktivieren",
+  "settings.general.row.newInterface.title": "Neues Layout",
+  "settings.general.row.newInterface.badge": "Neu",
+  "settings.general.row.newInterface.description":
+    "Verwenden Sie die neuen Tabs und das Startseitenlayout. Für begrenzte Zeit können Sie zwischen den Layouts wechseln.",
+  "settings.general.row.newInterfaceNotice.title": "Sie verwenden jetzt das neue Layout",
+  "settings.general.row.newInterfaceNotice.description": "Das vorherige Layout ist nicht mehr verfügbar",
+  "settings.general.row.newInterfaceNotice.dismiss": "Verwerfen",
   "settings.general.row.pinchZoom.title": "Zoom per Fingergeste",
   "settings.general.row.pinchZoom.description": "Zoomen per Zwei-Finger- und Ctrl-Scroll-Geste erlauben",
   "settings.general.row.wayland.title": "Natives Wayland verwenden",

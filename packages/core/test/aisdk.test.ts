@@ -68,6 +68,28 @@ it.effect("projects request settings, headers, and body overlays", () =>
   }),
 )
 
+it.effect("maps pro reasoning bodies to AI SDK provider options", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    let body: unknown
+    yield* aisdk.hook.sdk((event) => {
+      body = event.options.body
+      event.sdk = { languageModel: () => ({ provider: event.model.providerID }) }
+    })
+
+    const resolved = yield* aisdk.model({
+      ...model("@ai-sdk/openai"),
+      body: { reasoning: { mode: "pro" } },
+    })
+    const prepared = yield* LLMClient.prepare<LanguageModelV3CallOptions>(
+      LLM.request({ model: resolved, prompt: "Hello" }),
+    )
+
+    expect(body).toBeUndefined()
+    expect(prepared.body.providerOptions).toEqual({ openai: { reasoningMode: "pro" } })
+  }),
+)
+
 it.effect("projects replay metadata onto AI SDK prompt parts", () =>
   Effect.gen(function* () {
     const aisdk = yield* AISDK.Service

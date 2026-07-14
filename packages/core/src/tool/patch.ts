@@ -85,8 +85,8 @@ export const Plugin = {
                 return Effect.gen(function* () {
                   const source = {
                     type: "tool" as const,
-                    messageID: context.assistantMessageID,
-                    callID: context.toolCallID,
+                    messageID: context.messageID,
+                    callID: context.callID,
                   }
                   if (!input.patchText.trim()) return yield* new ToolFailure({ message: "patchText is required" })
                   const hunks = yield* Effect.try({

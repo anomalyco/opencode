@@ -2276,10 +2276,34 @@ test("settles pending tools when a live failure arrives", async () => {
       },
     })
     emitEvent(events, {
+      id: "evt_progress_1",
+      created: 0,
+      type: "session.tool.progress",
+      durable: durable("session-1", 5),
+      data: {
+        sessionID: "session-1",
+        assistantMessageID: "msg_explicit_assistant_9",
+        callID: "call-1",
+        structured: { sessionID: "session-child", status: "running" },
+        content: [],
+      },
+    })
+
+    await wait(() => {
+      const assistant = sync.session.message.get("session-1", "msg_explicit_assistant_9")
+      return (
+        assistant?.type === "assistant" &&
+        assistant.content[0]?.type === "tool" &&
+        assistant.content[0].state.status === "running" &&
+        assistant.content[0].state.structured.sessionID === "session-child"
+      )
+    })
+
+    emitEvent(events, {
       id: "evt_failed_1",
       created: 0,
       type: "session.tool.failed",
-      durable: durable("session-1", 5),
+      durable: durable("session-1", 6),
       data: {
         sessionID: "session-1",
         assistantMessageID: "msg_explicit_assistant_9",
@@ -2310,7 +2334,7 @@ test("settles pending tools when a live failure arrives", async () => {
     if (tool.state.status !== "error") return
     expect(tool.state.error).toEqual({ type: "unknown", message: "aborted" })
     expect(tool.state.input).toEqual({})
-    expect(tool.state.structured).toEqual({})
+    expect(tool.state.structured).toEqual({ sessionID: "session-child", status: "running" })
     expect(tool.state.content).toEqual([])
     expect(tool.executed).toBe(false)
     expect(tool.providerState).toEqual({ call: true })

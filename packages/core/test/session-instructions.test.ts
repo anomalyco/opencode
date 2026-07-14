@@ -109,7 +109,7 @@ const it = testEffect(testLayer)
 
 const identity = {
   agent: AgentV2.ID.make("build"),
-  assistantMessageID: SessionMessage.ID.make("msg_nearby"),
+  messageID: SessionMessage.ID.make("msg_nearby"),
 }
 const readCall = (sessionID: SessionV2.ID, id: string, readPath: string): ToolRegistry.ExecuteInput => ({
   sessionID,

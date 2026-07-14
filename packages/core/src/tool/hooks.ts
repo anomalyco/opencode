@@ -12,8 +12,8 @@ export interface BeforeEvent {
   readonly tool: string
   readonly sessionID: Session.ID
   readonly agent: Agent.ID
-  readonly assistantMessageID: SessionMessage.ID
-  readonly toolCallID: string
+  readonly messageID: SessionMessage.ID
+  readonly callID: string
   input: unknown
 }
 
@@ -21,8 +21,8 @@ export interface AfterEvent {
   readonly tool: string
   readonly sessionID: Session.ID
   readonly agent: Agent.ID
-  readonly assistantMessageID: SessionMessage.ID
-  readonly toolCallID: string
+  readonly messageID: SessionMessage.ID
+  readonly callID: string
   readonly input: unknown
   result: ToolResultValue
   output?: ToolOutput

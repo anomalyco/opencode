@@ -813,9 +813,13 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Düzenleme araç bileşenlerini genişlet",
   "settings.general.row.editToolPartsExpanded.description":
     "Zaman çizelgesinde düzenleme, yazma ve yama araç bileşenlerini varsayılan olarak genişletilmiş göster",
-  "settings.general.row.newLayoutDesigns.title": "Yeni düzen ve tasarımlar",
-  "settings.general.row.newLayoutDesigns.description":
-    "Yeniden tasarlanan düzeni, ana sayfayı, yazma alanını ve oturum arayüzünü etkinleştir",
+  "settings.general.row.newInterface.title": "Yeni düzen",
+  "settings.general.row.newInterface.badge": "Yeni",
+  "settings.general.row.newInterface.description":
+    "Yeni sekmeleri ve ana sayfa düzenini kullanın. Sınırlı bir süre boyunca düzenler arasında geçiş yapabilirsiniz.",
+  "settings.general.row.newInterfaceNotice.title": "Artık yeni düzeni kullanıyorsunuz",
+  "settings.general.row.newInterfaceNotice.description": "Önceki düzen artık kullanılamıyor",
+  "settings.general.row.newInterfaceNotice.dismiss": "Kapat",
   "settings.general.row.pinchZoom.title": "Sıkıştırarak yakınlaştır",
   "settings.general.row.pinchZoom.description":
     "İzleme dörtgeninde sıkıştırma ve Ctrl-kaydırma hareketleriyle yakınlaştırmaya izin ver",

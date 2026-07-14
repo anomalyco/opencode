@@ -31,7 +31,7 @@ export const accountID = (credential: CredentialLike | undefined) => {
 }
 
 const allowed = new Set(["gpt-5.5", "gpt-5.3-codex-spark", "gpt-5.4", "gpt-5.4-mini"])
-const disallowed = new Set(["gpt-5.5-pro"])
+const disallowed = new Set(["gpt-5.5-pro", "gpt-5.6"])
 
 /** Which API model ids a ChatGPT subscription may call through the codex backend. */
 export const eligible = (apiID: string) => {

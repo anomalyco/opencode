@@ -333,15 +333,15 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                             <PermissionProvider>
                                               <ProjectProvider>
                                                 <DataProvider>
-                                                  <ThemeProvider mode={mode}>
-                                                    <LocalProvider>
-                                                      <PromptStashProvider>
-                                                        <DialogProvider>
-                                                          <FrecencyProvider>
-                                                            <PromptHistoryProvider>
-                                                              <PromptRefProvider>
-                                                                <EditorContextProvider>
-                                                                  <LocationProvider>
+                                                  <LocationProvider>
+                                                    <ThemeProvider mode={mode}>
+                                                      <LocalProvider>
+                                                        <PromptStashProvider>
+                                                          <DialogProvider>
+                                                            <FrecencyProvider>
+                                                              <PromptHistoryProvider>
+                                                                <PromptRefProvider>
+                                                                  <EditorContextProvider>
                                                                     <PluginProvider packages={input.packages}>
                                                                       <App
                                                                         pair={
@@ -354,15 +354,15 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                                         }
                                                                       />
                                                                     </PluginProvider>
-                                                                  </LocationProvider>
-                                                                </EditorContextProvider>
-                                                              </PromptRefProvider>
-                                                            </PromptHistoryProvider>
-                                                          </FrecencyProvider>
-                                                        </DialogProvider>
-                                                      </PromptStashProvider>
-                                                    </LocalProvider>
-                                                  </ThemeProvider>
+                                                                  </EditorContextProvider>
+                                                                </PromptRefProvider>
+                                                              </PromptHistoryProvider>
+                                                            </FrecencyProvider>
+                                                          </DialogProvider>
+                                                        </PromptStashProvider>
+                                                      </LocalProvider>
+                                                    </ThemeProvider>
+                                                  </LocationProvider>
                                                 </DataProvider>
                                               </ProjectProvider>
                                             </PermissionProvider>

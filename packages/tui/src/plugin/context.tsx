@@ -21,6 +21,7 @@ import { useData } from "../context/data"
 import { Keymap } from "../context/keymap"
 import { useRoute } from "../context/route"
 import { useTuiLifecycle } from "../context/runtime"
+import { useLocation } from "../context/location"
 import { builtins } from "./builtins"
 
 export interface PackageResolver {
@@ -63,6 +64,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
   const keymap = Keymap.use()
   const shortcuts = Keymap.useShortcuts()
   const lifecycle = useTuiLifecycle()
+  const location = useLocation()
   const directory = config.path ? path.dirname(config.path) : process.cwd()
   const [store, setStore] = createStore({
     ready: false,
@@ -82,6 +84,9 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
     const owned: Dispose[] = []
     const context: Context = {
       options: item.options ?? {},
+      get location() {
+        return location()
+      },
       client: client.api,
       data,
       keymap: {
