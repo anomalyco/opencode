@@ -155,6 +155,7 @@ export default function StatsLab() {
                     pairs={labComparisonPairs(data(), stats()?.models ?? [])}
                     title={`${data().name} Model Comparisons`}
                     description="Model pairs from this lab."
+                    variant="featured"
                   />
                 </>
               )}
