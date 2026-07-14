@@ -648,7 +648,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     setComposing(false)
     requestAnimationFrame(() => {
       if (composing()) return
-      reconcile(prompt.current().filter((part) => part.type !== "image"))
+      const parts = prompt.current().filter((part) => part.type !== "image")
+      if (!isPromptEqual(parts, parseFromDOM())) return handleInput()
+      reconcile(parts)
     })
   }
 

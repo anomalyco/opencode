@@ -1,5 +1,5 @@
 import { base64Encode } from "@opencode-ai/core/util/encode"
-import { expect, test } from "@playwright/test"
+import { expect, test, type Page } from "@playwright/test"
 import { mockOpenCodeServer } from "../utils/mock-server"
 import { expectSessionTitle } from "../utils/waits"
 
@@ -11,6 +11,82 @@ const ptyID = "pty_terminal_composer_focus"
 test.use({ viewport: { width: 1440, height: 900 } })
 
 test("routes typing to the composer unless the open terminal is focused", async ({ page }) => {
+  await mockServer(page)
+  await page.route("**/pty", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ id: ptyID, title: "Terminal 1" }),
+    }),
+  )
+  await page.route(`**/pty/${ptyID}`, (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "{}" }),
+  )
+  await page.route(`**/pty/${ptyID}/connect-token*`, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: { "access-control-allow-origin": "*" },
+      body: JSON.stringify({ ticket: "e2e-ticket" }),
+    }),
+  )
+  await page.routeWebSocket(new RegExp(`/pty/${ptyID}/connect`), () => undefined)
+
+  await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
+  await expectSessionTitle(page, "Terminal composer focus")
+
+  const composer = page.locator('[data-component="prompt-input"]')
+  const terminal = page.locator('[data-component="terminal"]')
+  await page.keyboard.press("Control+Backquote")
+  await expect(terminal).toBeVisible()
+  await expect.poll(() => terminal.evaluate((element) => element.contains(document.activeElement))).toBe(true)
+
+  await page.keyboard.type("x")
+  await expect(composer).toHaveText("")
+
+  await page.waitForTimeout(300)
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
+  await page.keyboard.type("a")
+
+  await expect(composer).toBeFocused()
+  await expect(composer).toHaveText("a")
+})
+
+test("keeps DOM text when a composition ends", async ({ page }) => {
+  await mockServer(page)
+  await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
+  await expectSessionTitle(page, "Terminal composer focus")
+
+  const composer = page.locator('[data-component="prompt-input"]')
+  const placeholder = page.locator('[data-component="session-composer-text"]')
+  await composer.focus()
+  await composer.dispatchEvent("compositionstart")
+  await composer.evaluate((element) => {
+    element.textContent = "resume draft"
+    const range = document.createRange()
+    range.selectNodeContents(element)
+    range.collapse(false)
+    const selection = window.getSelection()
+    selection?.removeAllRanges()
+    selection?.addRange(range)
+  })
+
+  await expect(composer).toHaveText("resume draft")
+  await expect(placeholder).toBeVisible()
+  await composer.dispatchEvent("compositionend")
+  await expect(placeholder).toBeHidden()
+  await composer.press("Space")
+  await expect(composer).toHaveText("resume draft ")
+
+  const submitted = page.waitForRequest(
+    (request) =>
+      request.method() === "POST" && new URL(request.url()).pathname === `/session/${sessionID}/prompt_async`,
+  )
+  await composer.press("Enter")
+  expect((await submitted).postData()).toContain("resume draft ")
+})
+
+async function mockServer(page: Page) {
   await mockOpenCodeServer(page, {
     directory,
     project: {
@@ -45,45 +121,8 @@ test("routes typing to the composer unless the open terminal is focused", async 
     ],
     pageMessages: () => ({ items: [] }),
   })
-  await page.route("**/pty", (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ id: ptyID, title: "Terminal 1" }),
-    }),
-  )
-  await page.route(`**/pty/${ptyID}`, (route) =>
-    route.fulfill({ status: 200, contentType: "application/json", body: "{}" }),
-  )
-  await page.route(`**/pty/${ptyID}/connect-token*`, (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      headers: { "access-control-allow-origin": "*" },
-      body: JSON.stringify({ ticket: "e2e-ticket" }),
-    }),
-  )
-  await page.routeWebSocket(new RegExp(`/pty/${ptyID}/connect`), () => undefined)
   await page.addInitScript(() => {
     localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: true } }))
+    localStorage.setItem("opencode.global.dat:tabsInfoPopup", JSON.stringify({ dismissed: true }))
   })
-
-  await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
-  await expectSessionTitle(page, "Terminal composer focus")
-
-  const composer = page.locator('[data-component="prompt-input"]')
-  const terminal = page.locator('[data-component="terminal"]')
-  await page.keyboard.press("Control+Backquote")
-  await expect(terminal).toBeVisible()
-  await expect.poll(() => terminal.evaluate((element) => element.contains(document.activeElement))).toBe(true)
-
-  await page.keyboard.type("x")
-  await expect(composer).toHaveText("")
-
-  await page.waitForTimeout(300)
-  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
-  await page.keyboard.type("a")
-
-  await expect(composer).toBeFocused()
-  await expect(composer).toHaveText("a")
-})
+}
