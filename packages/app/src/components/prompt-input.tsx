@@ -633,7 +633,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const isImeComposing = (event: KeyboardEvent) => event.isComposing || composing() || event.keyCode === 229
 
   const handleBlur = () => {
-    savedCursor = currentCursor()
+    const cursor = currentCursor()
+    savedCursor = cursor
+    if (cursor !== null && cursor !== prompt.cursor()) prompt.set(prompt.current(), cursor)
     closePopover()
     setComposing(false)
   }
@@ -2201,10 +2203,7 @@ type ComposerModelControlState = {
 
 function ComposerAgentControl(props: { state: ComposerAgentControlState }) {
   return (
-    <div class="relative">
-      <div class="pointer-events-none absolute left-2 top-1/2 z-10 flex size-4 -translate-y-1/2 items-center justify-center text-v2-icon-icon-muted">
-        <Icon name="sliders" size="small" />
-      </div>
+    <div>
       <TooltipV2
         placement="top"
         gutter={4}
@@ -2215,17 +2214,32 @@ function ComposerAgentControl(props: { state: ComposerAgentControlState }) {
           </>
         }
       >
-        <Select
-          size="normal"
-          options={props.state.options}
-          current={props.state.current}
-          onSelect={props.state.onSelect}
-          class="max-w-[175px] justify-start text-v2-text-text-faint [&_[data-component=icon]]:text-v2-icon-icon-muted"
-          valueClass="truncate pl-5 text-[13px] font-[440] leading-5 text-v2-text-text-faint"
-          triggerStyle={props.state.style}
-          triggerProps={{ "data-action": "prompt-agent" }}
-          variant="ghost"
-        />
+        <MenuV2 gutter={6} modal={false} placement="top-start">
+          <MenuV2.Trigger
+            as={ButtonV2}
+            data-action="prompt-agent"
+            variant="ghost-muted"
+            size="normal"
+            class="max-w-[175px] justify-start ![font-weight:440]"
+            style={props.state.style}
+          >
+            <span class="truncate capitalize leading-5">{props.state.current}</span>
+            <span class="-ml-0.5 -mr-1 flex shrink-0">
+              <Icon name="chevron-down" size="small" />
+            </span>
+          </MenuV2.Trigger>
+          <MenuV2.Portal>
+            <MenuV2.Content>
+              <MenuV2.RadioGroup value={props.state.current} onChange={props.state.onSelect}>
+                {props.state.options.map((value) => (
+                  <MenuV2.RadioItem value={value} class="capitalize">
+                    {value}
+                  </MenuV2.RadioItem>
+                ))}
+              </MenuV2.RadioGroup>
+            </MenuV2.Content>
+          </MenuV2.Portal>
+        </MenuV2>
       </TooltipV2>
     </div>
   )

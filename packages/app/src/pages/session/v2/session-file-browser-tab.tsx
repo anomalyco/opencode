@@ -19,6 +19,7 @@ const emptyFiles: string[] = []
 export type SessionFileBrowserState = {
   sidebarOpened: () => boolean
   sidebarWidth: () => number
+  sidebarTransition: () => boolean
   resizeSidebar: (width: number) => void
   toggleSidebar: () => void
 }
@@ -96,6 +97,7 @@ export function SessionFileBrowserTab(props: {
       sidebar={
         <SessionReviewV2Sidebar
           open={sidebarOpened()}
+          transition={props.state.sidebarTransition()}
           title={<span class="truncate">{title()}</span>}
           filter={filter()}
           onFilterChange={setFilter}

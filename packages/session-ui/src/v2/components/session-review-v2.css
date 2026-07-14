@@ -38,7 +38,8 @@
   border-right-width: 0;
 }
 
-[data-component="session-review-v2-sidebar-root"] [data-slot="session-review-v2-sidebar"]:not([data-resizing]) {
+[data-component="session-review-v2-sidebar-root"]
+  [data-slot="session-review-v2-sidebar"][data-transition]:not([data-resizing]) {
   transition:
     width 200ms cubic-bezier(0.22, 1, 0.36, 1),
     border-right-width 200ms cubic-bezier(0.22, 1, 0.36, 1);

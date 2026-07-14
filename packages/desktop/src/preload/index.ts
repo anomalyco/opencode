@@ -62,6 +62,7 @@ const api: ElectronAPI = {
   isFirstLaunchOnboardingPending: () => ipcRenderer.invoke("is-first-launch-onboarding-pending"),
   finishFirstLaunchOnboarding: (createDefaultProject) =>
     ipcRenderer.invoke("finish-first-launch-onboarding", createDefaultProject),
+  isOldLayoutEligible: () => ipcRenderer.invoke("is-old-layout-eligible"),
   getDisplayBackend: () => ipcRenderer.invoke("get-display-backend"),
   setDisplayBackend: (backend) => ipcRenderer.invoke("set-display-backend", backend),
   parseMarkdownCommand: (markdown) => ipcRenderer.invoke("parse-markdown", markdown),
