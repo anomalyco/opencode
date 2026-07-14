@@ -139,10 +139,18 @@ const layer = Layer.effect(
     const global = yield* Global.Service
     const location = yield* Location.Service
     const policy = yield* Policy.Service
-    const names = ["opencode.json", "opencode.jsonc"]
+    // Prefer KanCode filenames; fall back to OpenCode. First existing wins per directory.
+    const names = ["kancode.jsonc", "kancode.json", "opencode.jsonc", "opencode.json"] as const
+    // Discover `.opencode` before `.kancode` so KanCode wins on merge conflict.
+    const projectDirs = [".opencode", ".kancode"] as const
     const decodeOptions = { errors: "all", onExcessProperty: "ignore", propertyOrder: "original" } as const
     const decodeInfo = Schema.decodeUnknownOption(Info, decodeOptions)
     const decodeV1Info = Schema.decodeUnknownOption(ConfigV1.Info, decodeOptions)
+
+    const isProjectDir = (filepath: string) => {
+      const base = path.basename(filepath)
+      return base === ".opencode" || base === ".kancode"
+    }
 
     const loadFile = Effect.fnUntraced(function* (filepath: string) {
       const text = yield* fs.readFileStringSafe(filepath)
@@ -161,13 +169,16 @@ const layer = Layer.effect(
       return new Document({ type: "document", path: filepath, info })
     })
 
+    const loadPreferred = Effect.fnUntraced(function* (directory: string) {
+      for (const file of names) {
+        const config = yield* loadFile(path.join(directory, file))
+        if (config) return config
+      }
+    })
+
     const loadDirectory = Effect.fnUntraced(function* (directory: AbsolutePath) {
-      return [
-        ...(yield* Effect.forEach(names, (file) => loadFile(path.join(directory, file))).pipe(
-          Effect.map((configs) => configs.filter((config): config is Document => config !== undefined)),
-        )),
-        new Directory({ type: "directory", path: directory }),
-      ]
+      const preferred = yield* loadPreferred(directory)
+      return [...(preferred ? [preferred] : []), new Directory({ type: "directory", path: directory })]
     })
 
     const globalDirectory = AbsolutePath.make(global.config)
@@ -178,7 +189,7 @@ const layer = Layer.effect(
       ? []
       : yield* fs
           .up({
-            targets: [".opencode", ...names.toReversed()],
+            targets: [...projectDirs, ...names],
             start: location.directory,
             stop: location.project.directory,
           })
@@ -186,20 +197,37 @@ const layer = Layer.effect(
     const directories = [
       globalDirectory,
       ...discovered
-        .filter((item) => path.basename(item) === ".opencode")
+        .filter(isProjectDir)
         .toReversed()
+        // Keep ancestry order from toReversed, but within one parent always
+        // apply `.opencode` before `.kancode` so KanCode wins on merge.
+        .toSorted((a, b) => {
+          if (path.dirname(a) !== path.dirname(b)) return 0
+          const rank = (name: string) => (name === ".opencode" ? 0 : name === ".kancode" ? 1 : 2)
+          return rank(path.basename(a)) - rank(path.basename(b))
+        })
         .map((directory) => AbsolutePath.make(directory)),
     ]
     // A config closer to the opened directory should win over one higher up.
     // Search starts nearby, so reverse the results before applying them.
-    const directPaths = discovered.filter((item) => path.basename(item) !== ".opencode").toReversed()
-    const direct = yield* Effect.forEach(directPaths, loadFile).pipe(
+    // Prefer one config file per directory (KanCode over OpenCode). Skip
+    // unparseable preferred names and fall through to the next candidate.
+    const directDirs: string[] = []
+    const seenDirs = new Set<string>()
+    for (const item of discovered) {
+      if (isProjectDir(item)) continue
+      const dir = path.dirname(item)
+      if (seenDirs.has(dir)) continue
+      seenDirs.add(dir)
+      directDirs.push(dir)
+    }
+    const direct = yield* Effect.forEach(directDirs.toReversed(), loadPreferred).pipe(
       Effect.orDie,
       Effect.map((configs) => configs.filter((config): config is Document => config !== undefined)),
     )
     const supplementary = yield* Effect.forEach(directories, loadDirectory).pipe(Effect.orDie)
     // Apply general settings first and more specific settings last:
-    // global config, project files, then `.opencode` files.
+    // global config, project files, then project-dir files (`.opencode` then `.kancode`).
     const configs = [...(supplementary[0] ?? []), ...direct, ...supplementary.slice(1).flat()]
     // Rules use the opposite order so a user-global rule can override a
     // repository rule. Statement order inside each file stays unchanged.

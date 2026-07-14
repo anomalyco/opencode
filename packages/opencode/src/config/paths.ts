@@ -39,6 +39,18 @@ export function resolveWritableConfigFile(baseDir: string, opts?: { project?: bo
   return path.join(baseDir, "kancode.json")
 }
 
+/**
+ * Project config dir for writes: reuse existing `.kancode` or `.opencode`,
+ * otherwise create `.kancode`.
+ */
+export function resolveWritableProjectDir(baseDir: string) {
+  const kancode = path.join(baseDir, ".kancode")
+  if (existsSync(kancode)) return kancode
+  const opencode = path.join(baseDir, ".opencode")
+  if (existsSync(opencode)) return opencode
+  return kancode
+}
+
 export function isProjectConfigDir(dir: string) {
   return dir.endsWith(".opencode") || dir.endsWith(".kancode") || dir === Flag.OPENCODE_CONFIG_DIR
 }

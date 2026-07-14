@@ -161,7 +161,7 @@ describe("Config", () => {
     ),
   )
 
-  it.live("loads opencode JSON and JSONC files from lowest to highest priority", () =>
+  it.live("loads preferred config file only when both JSON and JSONC exist", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
@@ -177,7 +177,7 @@ describe("Config", () => {
               fs.writeFile(
                 path.join(tmp.path, "opencode.jsonc"),
                 `{
-                  // Later global files override scalar fields while retaining providers.
+                  // Preferred over opencode.json in the same directory.
                   "$schema": "last",
                   "providers": { "last": ${JSON.stringify(provider)} },
                 }`,
@@ -188,12 +188,10 @@ describe("Config", () => {
             const config = yield* Config.Service
             const documents = (yield* config.entries()).filter((entry) => entry.type === "document")
 
-            expect(documents).toHaveLength(2)
-            expect(documents.map((document) => document.type)).toEqual(["document", "document"])
-            expect(documents.map((document) => document.info.$schema)).toEqual(["base", "last"])
-            expect(documents[0]).toBeInstanceOf(Config.Document)
-            expect(documents[0]?.path).toBe(path.join(tmp.path, "opencode.json"))
-            expect(documents[1]?.info.providers?.last).toBeInstanceOf(ConfigProvider.Info)
+            expect(documents).toHaveLength(1)
+            expect(documents[0]?.path).toBe(path.join(tmp.path, "opencode.jsonc"))
+            expect(documents[0]?.info.$schema).toBe("last")
+            expect(documents[0]?.info.providers?.last).toBeInstanceOf(ConfigProvider.Info)
 
             yield* Effect.promise(() =>
               fs.writeFile(path.join(tmp.path, "opencode.jsonc"), JSON.stringify({ $schema: "changed" })),
@@ -202,7 +200,7 @@ describe("Config", () => {
               (yield* config.entries())
                 .filter((entry) => entry.type === "document")
                 .map((document) => document.info.$schema),
-            ).toEqual(["base", "last"])
+            ).toEqual(["last"])
           }).pipe(Effect.provide(testLayer(tmp.path)))
         }),
       ),
@@ -783,6 +781,67 @@ describe("Config", () => {
               "directory-dot",
               AbsolutePath.make(path.join(directory, ".opencode")),
             ])
+          }).pipe(
+            Effect.provide(
+              testLayer(directory, global, root, {
+                type: "git",
+                store: AbsolutePath.make(path.join(root, ".git")),
+              }),
+            ),
+          )
+        })
+      }),
+    ),
+  )
+
+  it.live("prefers kancode.json over opencode.json and loads both project dirs", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) => {
+        const global = path.join(tmp.path, "global")
+        const root = path.join(tmp.path, "repo")
+        const directory = path.join(root, "app")
+        return Effect.gen(function* () {
+          yield* Effect.promise(async () => {
+            await fs.mkdir(global, { recursive: true })
+            await fs.mkdir(directory, { recursive: true })
+            await fs.mkdir(path.join(directory, ".opencode"), { recursive: true })
+            await fs.mkdir(path.join(directory, ".kancode"), { recursive: true })
+            await Promise.all([
+              fs.writeFile(path.join(global, "kancode.json"), JSON.stringify({ $schema: "global-kancode" })),
+              fs.writeFile(path.join(global, "opencode.json"), JSON.stringify({ $schema: "global-opencode" })),
+              fs.writeFile(path.join(directory, "kancode.json"), JSON.stringify({ $schema: "dir-kancode" })),
+              fs.writeFile(path.join(directory, "opencode.json"), JSON.stringify({ $schema: "dir-opencode" })),
+              fs.writeFile(
+                path.join(directory, ".opencode", "opencode.json"),
+                JSON.stringify({ $schema: "dot-opencode" }),
+              ),
+              fs.writeFile(
+                path.join(directory, ".kancode", "kancode.json"),
+                JSON.stringify({ $schema: "dot-kancode" }),
+              ),
+            ])
+          })
+
+          return yield* Effect.gen(function* () {
+            const config = yield* Config.Service
+            const entries = yield* config.entries()
+            const documents = entries.filter((entry) => entry.type === "document")
+
+            expect(entries.filter((entry) => entry.type === "directory").map((entry) => entry.path)).toEqual([
+              AbsolutePath.make(global),
+              AbsolutePath.make(path.join(directory, ".opencode")),
+              AbsolutePath.make(path.join(directory, ".kancode")),
+            ])
+            expect(documents.map((document) => document.info.$schema)).toEqual([
+              "global-kancode",
+              "dir-kancode",
+              "dot-opencode",
+              "dot-kancode",
+            ])
+            expect(Config.latest(entries, "$schema")).toBe("dot-kancode")
           }).pipe(
             Effect.provide(
               testLayer(directory, global, root, {

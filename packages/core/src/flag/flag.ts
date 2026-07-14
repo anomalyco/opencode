@@ -47,11 +47,13 @@ export const Flag = {
   OPENCODE_SERVER_USERNAME: envAlias("SERVER_USERNAME"),
   OPENCODE_DISABLE_FFF: fff === undefined ? process.platform === "win32" : truthyAlias("DISABLE_FFF"),
 
-  // Experimental
-  OPENCODE_EXPERIMENTAL_FILEWATCHER: Config.boolean("OPENCODE_EXPERIMENTAL_FILEWATCHER").pipe(
+  // Experimental — KANCODE_* wins over OPENCODE_* when both are set
+  OPENCODE_EXPERIMENTAL_FILEWATCHER: Config.boolean("KANCODE_EXPERIMENTAL_FILEWATCHER").pipe(
+    Config.orElse(() => Config.boolean("OPENCODE_EXPERIMENTAL_FILEWATCHER")),
     Config.withDefault(false),
   ),
-  OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: Config.boolean("OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER").pipe(
+  OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: Config.boolean("KANCODE_EXPERIMENTAL_DISABLE_FILEWATCHER").pipe(
+    Config.orElse(() => Config.boolean("OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER")),
     Config.withDefault(false),
   ),
   OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT:
