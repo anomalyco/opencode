@@ -87,6 +87,7 @@ export type SessionItemProps = {
   clearHoverProjectSoon: () => void
   prefetchSession: (session: Session, priority?: "high" | "low") => void
   archiveSession: (session: Session) => Promise<void>
+  deleteSession?: (session: Session) => void
 }
 
 const SessionRow = (props: {
