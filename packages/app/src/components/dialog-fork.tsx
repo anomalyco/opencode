@@ -113,16 +113,20 @@ export const DialogFork: Component = () => {
         class="flex-1 px-3 min-h-0 [&_[data-slot=list-scroll]]:flex-1 [&_[data-slot=list-scroll]]:min-h-0"
         search={{ placeholder: language.t("common.search.placeholder"), autofocus: true }}
         emptyMessage={language.t("dialog.fork.empty")}
-        key={(x) => x.id}
+        key={(x) => x.kind === "full" ? "__full__" : x.id}
         items={items}
         filterKeys={["text"]}
         onSelect={handleSelect}
       >
         {(item) => (
-          <div class="w-full flex items-center gap-2">
-            <span class="truncate flex-1 min-w-0 text-left font-normal">{item.text}</span>
-            <span class="text-text-weak shrink-0 font-normal">{item.time}</span>
-          </div>
+          item.kind === "full"
+            ? <span>{language.t("dialog.fork.full")}</span>
+            : (
+              <div class="w-full flex items-center gap-2">
+                <span class="truncate flex-1 min-w-0 text-left font-normal">{item.text}</span>
+                <span class="text-text-weak shrink-0 font-normal">{item.time}</span>
+              </div>
+            )
         )}
       </List>
     </Dialog>
