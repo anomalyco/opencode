@@ -1,19 +1,10 @@
 export * as Orchestrator from "."
 
-import { Context, Effect, Layer, Schema } from "effect"
 import { Agent } from "@/agent/agent"
-import { Session } from "@/session/session"
-import { SessionID, MessageID } from "@/session/schema"
 import { Config } from "@/config/config"
-import { Plugin } from "@/plugin"
+import { Context, Effect, Layer, Schema } from "effect"
 
-export interface TeamAgentResult {
-  agentName: string
-  output: string
-  error?: string
-}
-
-const TeamMode = Schema.Literals(["parallel", "pipeline", "supervisor"])
+export const TeamMode = Schema.Literals(["parallel", "pipeline", "supervisor"])
 
 export const TeamInput = Schema.Struct({
   agents: Schema.Array(Schema.String),
@@ -29,11 +20,16 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Orchestrator") {}
 
+const MODE_DESC: Record<string, string> = {
+  parallel: "Run all agents simultaneously. Each agent works on the task independently.",
+  pipeline: "Run agents sequentially. Each receives the previous agent's output as context.",
+  supervisor: "One supervisor agent delegates work and synthesizes the final result.",
+}
+
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const agent = yield* Agent.Service
-    const plugin = yield* Plugin.Service
     const config = yield* Config.Service
 
     const createTeamPrompt = Effect.fn("Orchestrator.createTeamPrompt")(function* (input: TeamInput) {
@@ -49,61 +45,28 @@ const layer = Layer.effect(
       }
 
       const mode = input.mode ?? cfg.multiAgent?.defaultMode ?? "parallel"
-      const modeDescriptions: Record<string, string> = {
-        parallel: "Run all agents independently and simultaneously. Each works on the same task in parallel.",
-        pipeline: "Run agents sequentially. Each agent receives the output of the previous agent as context.",
-        supervisor: "One supervisor agent delegates work to the others and synthesizes the final result.",
-      }
-
-      const agentDescriptions: string[] = []
-      for (const name of input.agents) {
-        const ag = yield* agent.get(name)
-        agentDescriptions.push(`- @${name}: ${ag?.description ?? ""}`)
-      }
-
-      const supervisorNote = input.supervisor
-        ? `\nThe supervisor agent is @${input.supervisor}. It will delegate tasks and synthesize results.`
-        : mode === "supervisor"
-          ? `\nThe first agent (@${input.agents[0]}) acts as the supervisor.`
-          : ""
+      const agentsList = input.agents.map((n) => `- @${n}`).join("\n")
+      const supervisorNote = mode === "supervisor"
+        ? `\nSupervisor: @${input.supervisor ?? input.agents[0]}. Delegates tasks and synthesizes results.`
+        : ""
 
       const prompt = [
         `## Team Coordination Task`,
         ``,
-        `You are coordinating a team of agents to accomplish the following task:`,
-        ``,
         input.prompt,
         ``,
-        `### Available Agents`,
-        ...agentDescriptions,
+        `### Agents:`,
+        agentsList,
         ``,
-        `### Execution Mode: ${mode.toUpperCase()}`,
-        modeDescriptions[mode],
+        `### Mode: ${mode.toUpperCase()}`,
+        MODE_DESC[mode],
         supervisorNote,
         ``,
-        `### Instructions`,
         mode === "parallel"
-          ? [
-              `1. For each agent, use the \`task\` tool to delegate the work.`,
-              `   Pass the full task prompt and specify the subagent type.`,
-              `2. Launch all agents. You can run them sequentially — the tool handles each one.`,
-              `3. After all agents have completed, review their outputs and provide a summary.`,
-            ].join("\n")
+          ? `Use the \`task\` tool for each agent with the full prompt. Then summarize all results.`
           : mode === "pipeline"
-            ? [
-                `1. Start with the first agent. Use the \`task\` tool to delegate.`,
-                `2. Take that agent's output and pass it as context to the next agent.`,
-                `3. Continue until all agents have contributed.`,
-                `4. Provide the final pipeline output.`,
-              ].join("\n")
-            : [
-                `1. As the supervisor, analyze the task and determine what each agent should work on.`,
-                `2. Delegate to each agent using the \`task\` tool.`,
-                `3. After receiving all results, synthesize them into a final response.`,
-              ].join("\n"),
-        ``,
-        `### Output Format`,
-        `Provide a summary of what each agent produced and the final result.`,
+            ? `Start with agent 1. Pass its output as context to agent 2. Continue until done.`
+            : `As supervisor, delegate subtasks to each agent using the \`task\` tool, then synthesize.`,
       ].join("\n")
 
       return prompt
@@ -115,6 +78,6 @@ const layer = Layer.effect(
 
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 
-export const node = LayerNode.make({ service: Service, layer, deps: [Agent.node, Config.node, Plugin.node, Session.node] })
+export const node = LayerNode.make({ service: Service, layer, deps: [Agent.node, Config.node] })
 
 export { layer }
