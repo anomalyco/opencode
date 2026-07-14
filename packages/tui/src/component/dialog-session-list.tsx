@@ -54,12 +54,20 @@ export function DialogSessionList() {
   })
 
   const currentSessionID = createMemo(() => (route.data.type === "session" ? route.data.sessionID : undefined))
+  const localSessions = createMemo(() => {
+    const query = filter().trim().toLowerCase()
+    const sessions = data.session.list()
+    if (!query) return sessions
+    return sessions.filter((session) => !session.parentID && session.title.toLowerCase().includes(query))
+  })
   const sessions = createMemo(() => {
     const query = filter()
-    if (!query) return data.session.list()
-    if (query !== search() || searchResults.loading) return []
+    const local = localSessions()
+    if (!query) return local
+    if (query !== search() || searchResults.loading) return local
     const result = searchResults()
-    return result?.query === query ? result.sessions : []
+    if (result?.query !== query || result.error) return local
+    return result.sessions
   })
   const searchState = createMemo(() => {
     const query = filter()
