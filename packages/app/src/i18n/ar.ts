@@ -296,7 +296,7 @@ export const dict = {
   "mcp.auth.clickToAuthenticate": "انقر للمصادقة",
   "mcp.status.disabled": "معطل",
   "dialog.fork.empty": "لا توجد رسائل للتفرع منها",
-  "dialog.fork.full": "Full session",
+  "dialog.fork.full": "الجلسة كاملة",
   "dialog.directory.search.placeholder": "البحث في المجلدات",
   "dialog.directory.empty": "لم يتم العثور على مجلدات",
   "dialog.directory.action.selectFile": "اختيار ملف",

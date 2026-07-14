@@ -322,7 +322,7 @@ export const dict = {
   "mcp.auth.clickToAuthenticate": "Натисніть для автентифікації",
 
   "dialog.fork.empty": "Немає повідомлень для відгалуження",
-  "dialog.fork.full": "Full session",
+  "dialog.fork.full": "Повна сесія",
 
   "dialog.directory.search.placeholder": "Пошук папок",
   "dialog.directory.empty": "Папок не знайдено",
