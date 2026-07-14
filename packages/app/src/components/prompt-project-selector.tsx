@@ -1,4 +1,13 @@
-import { createEffect, For, onCleanup, Show, splitProps, type Accessor, type ComponentProps } from "solid-js"
+import {
+  createEffect,
+  createSignal,
+  For,
+  onCleanup,
+  Show,
+  splitProps,
+  type Accessor,
+  type ComponentProps,
+} from "solid-js"
 import { createStore } from "solid-js/store"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -184,8 +193,27 @@ export function PromptProjectSelector(props: {
   controller: PromptProjectController
   placement?: "bottom" | "bottom-start"
 }) {
+  const [triggerReady, setTriggerReady] = createSignal(false)
   let contentRef: HTMLDivElement | undefined
+  let triggerFrame: number | undefined
   let restoreTrigger = true
+
+  // Floating UI requires a connected anchor; route transitions can construct this trigger before adoption.
+  const setTriggerRef = (element: HTMLButtonElement) => {
+    const ready = () => {
+      if (!element.isConnected) {
+        triggerFrame = requestAnimationFrame(ready)
+        return
+      }
+      triggerFrame = undefined
+      setTriggerReady(true)
+    }
+    ready()
+  }
+
+  onCleanup(() => {
+    if (triggerFrame !== undefined) cancelAnimationFrame(triggerFrame)
+  })
 
   const activeItem = () =>
     props.controller.active()
@@ -257,13 +285,13 @@ export function PromptProjectSelector(props: {
 
   return (
     <DropdownMenu
-      open={props.controller.open()}
+      open={triggerReady() && props.controller.open()}
       placement={props.placement ?? "bottom"}
       gutter={4}
       modal={false}
       onOpenChange={(open) => props.controller.setOpen(open)}
     >
-      <DropdownMenu.Trigger as={ProjectTrigger} controller={props.controller} />
+      <DropdownMenu.Trigger as={ProjectTrigger} ref={setTriggerRef} controller={props.controller} />
       <DropdownMenu.Portal>
         <DropdownMenu.Content
           ref={contentRef}
