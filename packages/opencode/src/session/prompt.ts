@@ -1366,11 +1366,20 @@ const layer = Layer.effect(
         yield* Effect.gen(function* () {
           const info = yield* config.get()
           if (!info.autoFix?.enabled) return
-          yield* events.publish(TuiEvent.ToastShow, {
-            message: `[auto] running lint checks post-turn`,
-            variant: "info",
-            duration: 3000,
-          }).pipe(Effect.ignore)
+          const ctx = yield* InstanceState.context
+          const proc = Bun.spawn(["bun", "typecheck"], {
+            cwd: ctx.worktree,
+            stdio: ["ignore", "pipe", "pipe"],
+          })
+          const stderr = yield* Effect.promise(() => new Response(proc.stderr).text())
+          const errorCount = stderr.split("\n").filter((l) => l.includes("error TS")).length
+          if (errorCount > 0) {
+            yield* events.publish(TuiEvent.ToastShow, {
+              message: `[auto-fix] tsc: ${errorCount} error(s)`,
+              variant: "warning",
+              duration: 5000,
+            }).pipe(Effect.ignore)
+          }
         }).pipe(Effect.ignore)
 
         yield* compaction.prune({ sessionID }).pipe(Effect.ignore, Effect.forkIn(scope))
