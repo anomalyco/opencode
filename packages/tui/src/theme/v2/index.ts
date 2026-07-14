@@ -1,0 +1,30 @@
+export {
+  ActionState,
+  type ActionStateKey,
+  ActionVariant,
+  BaseHue,
+  FeedbackKind,
+  HueAlias,
+  HueStep,
+  MarkdownDefinition,
+  MarkdownToken,
+  ModeDefinition,
+  SyntaxDefinition,
+  SyntaxToken,
+  ThemeDefinition,
+  ThemeFile,
+  type BackgroundDefinition,
+  type DiffDefinition,
+  type FileThemeDefinition,
+  type HueDefinition,
+  type HueOverrideDefinition,
+  type MergeModeDefinition,
+  type Mode,
+  type StatefulColorDefinition,
+  type ContextKey,
+  type TextDefinition,
+  type ThemeTokensDefinition,
+} from "./schema"
+
+export type { Hue, HueScale, ResolvedActionState, ResolvedTheme, ResolvedThemeView, StatefulColor } from "./types"
+export { migrateV1 } from "./v1-migrate"
