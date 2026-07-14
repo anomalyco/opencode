@@ -16,6 +16,7 @@ import { getSessionContext } from "@/components/session/session-context-metrics"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { useSettings } from "@/context/settings"
+import { showToast } from "@/utils/toast"
 
 interface SessionContextUsageProps {
   variant?: "button" | "indicator"
@@ -101,6 +102,16 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
     })
   }
 
+  const compactSession = async () => {
+    if (!params.id) return
+
+    try {
+      await sdk().client.session.compact({ sessionID: params.id })
+    } catch {
+      showToast(language.t("common.requestFailed"))
+    }
+  }
+
   const circle = () => (
     <div class="flex items-center justify-center">
       <ProgressCircle
@@ -136,34 +147,52 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
     </div>
   )
 
+  const compactIcon = () => (
+    <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-linecap="square" stroke-width="1.5">
+      <path d="M5.83333 4.16406L2.5 7.4974L5.83333 10.8307M3.33333 7.4974H17.9167V15.4141H10" />
+    </svg>
+  )
+
   return (
     <Show when={params.id}>
-      <TooltipV2 value={tooltipValue()} placement={props.placement ?? "top"} shift={-8}>
-        <Switch>
-          <Match when={variant() === "indicator"}>{circle()}</Match>
-          <Match when={buttonAppearance() === "v2"}>
-            <IconButtonV2
-              type="button"
-              variant="ghost-muted"
-              size="large"
-              icon={circleV2()}
-              onClick={openContext}
-              aria-label={language.t("context.usage.view")}
-            />
-          </Match>
-          <Match when={true}>
-            <Button
-              type="button"
-              variant="ghost"
-              class="size-6"
-              onClick={openContext}
-              aria-label={language.t("context.usage.view")}
-            >
-              {circle()}
-            </Button>
-          </Match>
-        </Switch>
-      </TooltipV2>
+      <div class="flex items-center gap-1">
+        <TooltipV2 value={tooltipValue()} placement={props.placement ?? "top"} shift={-8}>
+          <Switch>
+            <Match when={variant() === "indicator"}>{circle()}</Match>
+            <Match when={buttonAppearance() === "v2"}>
+              <IconButtonV2
+                type="button"
+                variant="ghost-muted"
+                size="large"
+                icon={circleV2()}
+                onClick={openContext}
+                aria-label={language.t("context.usage.view")}
+              />
+            </Match>
+            <Match when={true}>
+              <Button
+                type="button"
+                variant="ghost"
+                class="size-6"
+                onClick={openContext}
+                aria-label={language.t("context.usage.view")}
+              >
+                {circle()}
+              </Button>
+            </Match>
+          </Switch>
+        </TooltipV2>
+        <TooltipV2 value={language.t("command.session.compact")} placement={props.placement ?? "top"} shift={-8}>
+          <IconButtonV2
+            type="button"
+            variant="ghost-muted"
+            size="small"
+            icon={compactIcon()}
+            onClick={compactSession}
+            aria-label={language.t("command.session.compact")}
+          />
+        </TooltipV2>
+      </div>
     </Show>
   )
 }
