@@ -86,8 +86,10 @@ describe("constructors callable without new, like JS", () => {
     expect(await value(`return Array("3")`)).toEqual(["3"])
     expect(await value(`return Array(3).length`)).toBe(3)
     expect(await value(`return new Array(2).length`)).toBe(2)
-    // Holes stay holes, like JS: map skips them, spread materializes undefined.
-    expect(await value(`return Array(3).map((x) => 1)`)).toEqual([])
+    // Holes stay holes, like JS: map skips them (length preserved, normalized to
+    // null at the host boundary), spread materializes undefined.
+    expect(await value(`return Array(3).map((x) => 1)`)).toEqual([null, null, null])
+    expect(await value(`return Array(3).map((x) => 1).length`)).toBe(3)
     expect(await value(`return [...Array(3)].map((_, i) => i)`)).toEqual([0, 1, 2])
     expect((await error(`return Array(-1)`)).message).toContain("Invalid array length")
     expect((await error(`return Array(1.5)`)).message).toContain("Invalid array length")
@@ -99,15 +101,36 @@ describe("constructors callable without new, like JS", () => {
     expect((await error(`return Object(1)`)).message).toContain("wrapper objects are not supported")
   })
 
-  test("Date() without new returns a string, RegExp() constructs", async () => {
-    expect(await value(`return typeof Date()`)).toBe("string")
+  test("Date() without new returns a deterministic ISO string and ignores arguments", async () => {
+    expect(await value(`return /^\\d{4}-\\d{2}-\\d{2}T.*Z$/.test(Date(1000))`)).toBe(true)
     expect(await value(`return "abc".replace(RegExp("b"), "x")`)).toBe("axc")
+  })
+
+  test("map(Array) matches the JS 3-argument call", async () => {
+    expect(await value(`return [7].map(Array)`)).toEqual([[7, 0, [7]]])
+  })
+
+  test("array length boundaries match JS", async () => {
+    expect(await value(`return Array(4294967295).length`)).toBe(4294967295)
+    const diagnostic = await error(`return Array(4294967296)`)
+    expect(diagnostic.message).toContain("Invalid array length")
+    expect((await error(`try { Array(-1) } catch (e) { throw Error(e.name) }`)).message).toContain("RangeError")
+  })
+
+  test("sort densifies trailing holes into undefined (documented divergence)", async () => {
+    expect(await value(`return Array(2).sort().map(() => 1)`)).toEqual([1, 1])
+  })
+
+  test("returned sparse arrays normalize holes to null at the host boundary", async () => {
+    expect(await value(`return Array(3)`)).toEqual([null, null, null])
   })
 
   test("new-requiring constructors throw a TypeError when called", async () => {
     expect((await error(`return Map()`)).message).toContain("Constructor Map requires 'new'")
     expect((await error(`return [1].map(Set)`)).message).toContain("Constructor Set requires 'new'")
     expect((await error(`return Promise(() => 1)`)).message).toContain("Constructor Promise requires 'new'")
+    // As a reaction handler the TypeError rejects the derived promise catchably, like JS.
+    expect(await value(`return await Promise.resolve(1).then(Map).catch((e) => e.name)`)).toBe("TypeError")
   })
 })
 

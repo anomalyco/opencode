@@ -1491,7 +1491,9 @@ export class Interpreter<R> {
         // Real JS permits calling Array, Object, Date, and RegExp without new.
         if (callable.name === "Array") return self.constructArray(args, node)
         if (callable.name === "Object") return self.constructObject(args, node)
-        if (callable.name === "Date") return new Date().toString()
+        // ISO instead of the host's locale string: CodeMode date strings are
+        // deterministic and must not leak the host timezone.
+        if (callable.name === "Date") return new Date().toISOString()
         if (callable.name === "RegExp") return self.constructRegExp(args, node)
         if (typeofValue(callable) === "function") {
           throw new InterpreterRuntimeError(`Constructor ${callable.name} requires 'new'.`, node).as("TypeError")

@@ -173,7 +173,9 @@ ultimate source of truth.
 ## Arrays
 
 - [x] The `Array` constructor with or without `new`: `Array(a, b)` collects arguments, `Array(n)` creates a
-      sparse array of that length (invalid lengths throw a `RangeError`), and holes behave like JS.
+      sparse array of that length (invalid lengths throw a `RangeError`). Holes behave like JS in iteration,
+      spread, join, and JSON; `sort` densifies trailing holes into `undefined`, and results returned to the
+      host normalize holes to `null`.
 - [x] Static methods: `Array.isArray`, `Array.of`, and `Array.from`, including the `Array.from` mapper form with
       `(value, index)` arguments.
 - [x] Iteration/transformation: `map`, `filter`, `flatMap`, and `forEach`.
@@ -237,7 +239,8 @@ ultimate source of truth.
 
 - [x] `Date.now`, `Date.parse`, and `Date.UTC`.
 - [x] `new Date()` from the current time, epoch milliseconds, a date string, another Date, or local components.
-- [x] `Date()` without `new` returns the current time as a string, like JS.
+- [x] `Date()` without `new` returns the current time as a string, like JS, but in deterministic ISO format
+      rather than the host's locale/timezone string.
 - [x] `getTime`, `valueOf`, `toISOString`, `toJSON`, and deterministic ISO `toString`.
 - [x] Local getters: `getFullYear`, `getMonth`, `getDate`, `getDay`, `getHours`, `getMinutes`, `getSeconds`, and
       `getMilliseconds`.
