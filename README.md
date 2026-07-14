@@ -1,23 +1,17 @@
 <p align="center">
   <a href="https://github.com/puetsua/kancode">
-    <picture>
-      <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
-      <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
-      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="OpenCode logo">
-    </picture>
+    <strong>kancode</strong>
   </a>
 </p>
-<p align="center">The open source AI coding agent.</p>
+<p align="center">The open source AI coding agent (TUI / CLI).</p>
 <p align="center">
-  <a href="https://github.com/puetsua/kancode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/puetsua/kancode/publish.yml?style=flat-square&branch=dev" /></a>
+  <a href="https://github.com/puetsua/kancode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/puetsua/kancode/publish.yml?style=flat-square&branch=main" /></a>
 </p>
 
 <p align="center">
   <a href="README.md">English</a> |
   <a href="README.zht.md">繁體中文</a>
 </p>
-
-![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)
 
 ---
 

@@ -70,10 +70,9 @@ Then run it with:
 Replace `<platform>` with your platform (e.g., `darwin-arm64`, `linux-x64`).
 
 - Core pieces:
-  - `packages/opencode`: OpenCode core business logic & server.
-  - `packages/opencode/src/cli/cmd/tui/`: The TUI code, written in SolidJS with [opentui](https://github.com/sst/opentui)
-  - `packages/app`: The shared web UI components, written in SolidJS
-  - `packages/desktop`: The native desktop app, built with Electron (wraps `packages/app`)
+  - `packages/opencode`: OpenCode CLI entrypoint, business logic glue & server wiring.
+  - `packages/tui`: The TUI, written in SolidJS with [opentui](https://github.com/sst/opentui)
+  - `packages/core`: Session, providers, tools, and durable runtime
   - `packages/plugin`: Source for `@opencode-ai/plugin`
 
 ### Understanding bun dev vs opencode
@@ -84,13 +83,11 @@ During development, `bun dev` is the local equivalent of the built `opencode` co
 # Development (from project root)
 bun dev --help           # Show all available commands
 bun dev serve            # Start headless API server
-bun dev web              # Start server + open web interface
 bun dev <directory>      # Start TUI in specific directory
 
 # Production
 opencode --help          # Show all available commands
 opencode serve           # Start headless API server
-opencode web             # Start server + open web interface
 opencode <directory>     # Start TUI in specific directory
 ```
 
@@ -108,38 +105,8 @@ This starts the headless server on port 4096 by default. You can specify a diffe
 bun dev serve --port 8080
 ```
 
-### Running the Web App
-
-To test UI changes during development:
-
-1. **First, start the OpenCode server** (see [Running the API Server](#running-the-api-server) section above)
-2. **Then run the web app:**
-
-```bash
-bun run --cwd packages/app dev
-```
-
-This starts a local dev server at http://localhost:5173 (or similar port shown in output). Most UI changes can be tested here, but the server must be running for full functionality.
-
-### Running the Desktop App
-
-The desktop app is an Electron application that wraps the web UI.
-
-To run the desktop app in development:
-
-```bash
-bun run --cwd packages/desktop dev
-```
-
-To create a production build and package the app:
-
-```bash
-bun run --cwd packages/desktop build
-bun run --cwd packages/desktop package
-```
-
 > [!NOTE]
-> If you make changes to the API or SDK (e.g. `packages/opencode/src/server/server.ts`), run `./script/generate.ts` to regenerate the SDK and related files.
+> If you make changes to the public Protocol or Server `HttpApi`, run `bun run generate` from `packages/client` to regenerate client types. Do not edit `src/generated` or `src/generated-effect` directly.
 
 Please try to follow the [style guide](./AGENTS.md)
 
