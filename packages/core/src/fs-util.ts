@@ -115,7 +115,7 @@ export namespace FSUtil {
 
       const ensureDir = Effect.fn("FileSystem.ensureDir")(function* (path: string) {
         // Bun on Windows can throw EEXIST here despite recursive mode.
-        // https://github.com/oven-sh/bun/issues/29521
+        // https://github.com/oven-sh/bun/issues/21901
         if (yield* isDir(path)) return
         yield* fs.makeDirectory(path, { recursive: true })
       })
