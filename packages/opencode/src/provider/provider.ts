@@ -31,6 +31,7 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { ModelStatus } from "./model-status"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderError } from "./error"
+import { ConfigProviderV1 } from "@opencode-ai/core/v1/config/provider"
 
 const OPENAI_HEADER_TIMEOUT_DEFAULT = 10_000
 
@@ -1054,6 +1055,121 @@ export const Info = Schema.Struct({
 }).annotate({ identifier: "Provider" })
 export type Info = Types.DeepMutable<Schema.Schema.Type<typeof Info>>
 
+function buildConfigModel(
+  providerID: string,
+  modelID: string,
+  model: ConfigProviderV1.Model,
+  provider: ConfigProviderV1.Info,
+  modelsDevProvider: ModelsDev.Provider | undefined,
+  existingModel: Model | undefined,
+): Model {
+  const apiID = model.id ?? existingModel?.api.id ?? modelID
+  const apiNpm =
+    model.provider?.npm ??
+    provider.npm ??
+    existingModel?.api.npm ??
+    modelsDevProvider?.npm ??
+    "@ai-sdk/openai-compatible"
+  const name = iife(() => {
+    if (model.name) return model.name
+    if (model.id && model.id !== modelID) return modelID
+    return existingModel?.name ?? modelID
+  })
+  const parsedModel: Model = {
+    id: ModelV2.ID.make(modelID),
+    api: {
+      id: apiID,
+      npm: apiNpm,
+      url: model.provider?.api ?? provider?.api ?? existingModel?.api.url ?? modelsDevProvider?.api ?? "",
+    },
+    status: model.status ?? existingModel?.status ?? "active",
+    name,
+    providerID: ProviderV2.ID.make(providerID),
+    capabilities: {
+      temperature: model.temperature ?? existingModel?.capabilities.temperature ?? false,
+      reasoning: model.reasoning ?? existingModel?.capabilities.reasoning ?? false,
+      attachment: model.attachment ?? existingModel?.capabilities.attachment ?? false,
+      toolcall: model.tool_call ?? existingModel?.capabilities.toolcall ?? true,
+      input: {
+        text: model.modalities?.input?.includes("text") ?? existingModel?.capabilities.input.text ?? true,
+        audio: model.modalities?.input?.includes("audio") ?? existingModel?.capabilities.input.audio ?? false,
+        image: model.modalities?.input?.includes("image") ?? existingModel?.capabilities.input.image ?? false,
+        video: model.modalities?.input?.includes("video") ?? existingModel?.capabilities.input.video ?? false,
+        pdf: model.modalities?.input?.includes("pdf") ?? existingModel?.capabilities.input.pdf ?? false,
+      },
+      output: {
+        text: model.modalities?.output?.includes("text") ?? existingModel?.capabilities.output.text ?? true,
+        audio: model.modalities?.output?.includes("audio") ?? existingModel?.capabilities.output.audio ?? false,
+        image: model.modalities?.output?.includes("image") ?? existingModel?.capabilities.output.image ?? false,
+        video: model.modalities?.output?.includes("video") ?? existingModel?.capabilities.output.video ?? false,
+        pdf: model.modalities?.output?.includes("pdf") ?? existingModel?.capabilities.output.pdf ?? false,
+      },
+      interleaved:
+        model.interleaved ??
+        existingModel?.capabilities.interleaved ??
+        (!existingModel && apiNpm === "@ai-sdk/openai-compatible" && apiID.includes("deepseek")
+          ? { field: "reasoning_content" }
+          : false),
+    },
+    cost: {
+      input: model?.cost?.input ?? existingModel?.cost?.input ?? 0,
+      output: model?.cost?.output ?? existingModel?.cost?.output ?? 0,
+      cache: {
+        read: model?.cost?.cache_read ?? existingModel?.cost?.cache.read ?? 0,
+        write: model?.cost?.cache_write ?? existingModel?.cost?.cache.write ?? 0,
+      },
+    },
+    options: mergeDeep(existingModel?.options ?? {}, model.options ?? {}),
+    limit: {
+      context: model.limit?.context ?? existingModel?.limit?.context ?? 0,
+      input: model.limit?.input ?? existingModel?.limit?.input,
+      output: model.limit?.output ?? existingModel?.limit?.output ?? 0,
+    },
+    headers: mergeDeep(existingModel?.headers ?? {}, model.headers ?? {}),
+    family: model.family ?? existingModel?.family ?? "",
+    release_date: model.release_date ?? existingModel?.release_date ?? "",
+    variants: {},
+  }
+  const variants =
+    existingModel?.api.npm === parsedModel.api.npm
+      ? (existingModel.variants ?? ProviderTransform.variants(parsedModel))
+      : ProviderTransform.variants(parsedModel)
+  const merged = mergeDeep(variants, model.variants ?? {})
+  parsedModel.variants = mapValues(
+    pickBy(merged, (v) => !v.disabled),
+    (v) => omit(v, ["disabled"]),
+  )
+  return parsedModel
+}
+
+async function discoverOpenAICompatibleModels(
+  providerID: string,
+  provider: ConfigProviderV1.Info,
+  modelsDevProvider: ModelsDev.Provider | undefined,
+  existingModels: Record<string, Model>,
+  providers: Record<ProviderV2.ID, Info>,
+): Promise<Record<string, Model>> {
+  const options = providers[ProviderV2.ID.make(providerID)]?.options ?? {}
+  const baseURL = typeof options.baseURL === "string" ? options.baseURL.replace(/\/+$/, "") : undefined
+  if (!baseURL) return {}
+
+  const headers: Record<string, string> = { ...options.headers }
+  if (typeof options.apiKey === "string" && options.apiKey) headers["Authorization"] = `Bearer ${options.apiKey}`
+
+  const response = await fetch(`${baseURL}/models`, { headers, signal: AbortSignal.timeout(5_000) })
+  if (!response.ok) return {}
+  const body = await response.json()
+  const list = Array.isArray(body?.data) ? body.data : []
+
+  const models: Record<string, Model> = {}
+  for (const item of list) {
+    const modelID = item?.id
+    if (typeof modelID !== "string" || !modelID) continue
+    models[modelID] = buildConfigModel(providerID, modelID, {}, provider, modelsDevProvider, existingModels[modelID])
+  }
+  return models
+}
+
 const DefaultModelIDs = Schema.Record(Schema.String, Schema.String)
 
 export const ListResult = Schema.Struct({
@@ -1428,86 +1544,14 @@ const layer = Layer.effect(
 
           for (const [modelID, model] of Object.entries(provider.models ?? {})) {
             const existingModel = parsed.models[model.id ?? modelID]
-            const apiID = model.id ?? existingModel?.api.id ?? modelID
-            const apiNpm =
-              model.provider?.npm ??
-              provider.npm ??
-              existingModel?.api.npm ??
-              modelsDev[providerID]?.npm ??
-              "@ai-sdk/openai-compatible"
-            const name = iife(() => {
-              if (model.name) return model.name
-              if (model.id && model.id !== modelID) return modelID
-              return existingModel?.name ?? modelID
-            })
-            const parsedModel: Model = {
-              id: ModelV2.ID.make(modelID),
-              api: {
-                id: apiID,
-                npm: apiNpm,
-                url: model.provider?.api ?? provider?.api ?? existingModel?.api.url ?? modelsDev[providerID]?.api ?? "",
-              },
-              status: model.status ?? existingModel?.status ?? "active",
-              name,
-              providerID: ProviderV2.ID.make(providerID),
-              capabilities: {
-                temperature: model.temperature ?? existingModel?.capabilities.temperature ?? false,
-                reasoning: model.reasoning ?? existingModel?.capabilities.reasoning ?? false,
-                attachment: model.attachment ?? existingModel?.capabilities.attachment ?? false,
-                toolcall: model.tool_call ?? existingModel?.capabilities.toolcall ?? true,
-                input: {
-                  text: model.modalities?.input?.includes("text") ?? existingModel?.capabilities.input.text ?? true,
-                  audio: model.modalities?.input?.includes("audio") ?? existingModel?.capabilities.input.audio ?? false,
-                  image: model.modalities?.input?.includes("image") ?? existingModel?.capabilities.input.image ?? false,
-                  video: model.modalities?.input?.includes("video") ?? existingModel?.capabilities.input.video ?? false,
-                  pdf: model.modalities?.input?.includes("pdf") ?? existingModel?.capabilities.input.pdf ?? false,
-                },
-                output: {
-                  text: model.modalities?.output?.includes("text") ?? existingModel?.capabilities.output.text ?? true,
-                  audio:
-                    model.modalities?.output?.includes("audio") ?? existingModel?.capabilities.output.audio ?? false,
-                  image:
-                    model.modalities?.output?.includes("image") ?? existingModel?.capabilities.output.image ?? false,
-                  video:
-                    model.modalities?.output?.includes("video") ?? existingModel?.capabilities.output.video ?? false,
-                  pdf: model.modalities?.output?.includes("pdf") ?? existingModel?.capabilities.output.pdf ?? false,
-                },
-                interleaved:
-                  model.interleaved ??
-                  existingModel?.capabilities.interleaved ??
-                  (!existingModel && apiNpm === "@ai-sdk/openai-compatible" && apiID.includes("deepseek")
-                    ? { field: "reasoning_content" }
-                    : false),
-              },
-              cost: {
-                input: model?.cost?.input ?? existingModel?.cost?.input ?? 0,
-                output: model?.cost?.output ?? existingModel?.cost?.output ?? 0,
-                cache: {
-                  read: model?.cost?.cache_read ?? existingModel?.cost?.cache.read ?? 0,
-                  write: model?.cost?.cache_write ?? existingModel?.cost?.cache.write ?? 0,
-                },
-              },
-              options: mergeDeep(existingModel?.options ?? {}, model.options ?? {}),
-              limit: {
-                context: model.limit?.context ?? existingModel?.limit?.context ?? 0,
-                input: model.limit?.input ?? existingModel?.limit?.input,
-                output: model.limit?.output ?? existingModel?.limit?.output ?? 0,
-              },
-              headers: mergeDeep(existingModel?.headers ?? {}, model.headers ?? {}),
-              family: model.family ?? existingModel?.family ?? "",
-              release_date: model.release_date ?? existingModel?.release_date ?? "",
-              variants: {},
-            }
-            const variants =
-              existingModel?.api.npm === parsedModel.api.npm
-                ? (existingModel.variants ?? ProviderTransform.variants(parsedModel))
-                : ProviderTransform.variants(parsedModel)
-            const merged = mergeDeep(variants, model.variants ?? {})
-            parsedModel.variants = mapValues(
-              pickBy(merged, (v) => !v.disabled),
-              (v) => omit(v, ["disabled"]),
+            parsed.models[modelID] = buildConfigModel(
+              providerID,
+              modelID,
+              model,
+              provider,
+              modelsDev[providerID],
+              existingModel,
             )
-            parsed.models[modelID] = parsedModel
           }
           database[providerID] = parsed
         }
@@ -1587,19 +1631,36 @@ const layer = Layer.effect(
           mergeProvider(providerID, partial)
         }
 
-        const gitlab = ProviderV2.ID.make("gitlab")
-        if (discoveryLoaders[gitlab] && providers[gitlab] && isProviderAllowed(gitlab)) {
-          yield* Effect.promise(async () => {
-            try {
-              const discovered = await discoveryLoaders[gitlab]()
-              for (const [modelID, model] of Object.entries(discovered)) {
-                if (!providers[gitlab].models[modelID]) {
-                  providers[gitlab].models[modelID] = model
-                }
-              }
-            } catch (e) {}
-          })
+        // a config-declared provider speaking the openai-compatible protocol can discover
+        // its own models from `${baseURL}/models` - opt-in per provider, since this makes
+        // an outbound request to whatever baseURL the user configured
+        for (const [id, provider] of configProviders) {
+          if (!provider.enable_model_discovery) continue
+          const providerID = ProviderV2.ID.make(id)
+          if (discoveryLoaders[providerID]) continue
+          const npm = provider.npm ?? modelsDev[id]?.npm ?? "@ai-sdk/openai-compatible"
+          if (npm !== "@ai-sdk/openai-compatible") continue
+          discoveryLoaders[providerID] = () =>
+            discoverOpenAICompatibleModels(id, provider, modelsDev[id], database[id]?.models ?? {}, providers)
         }
+
+        yield* Effect.promise(async () => {
+          await Promise.all(
+            Object.entries(discoveryLoaders).map(async ([id, discover]) => {
+              const providerID = ProviderV2.ID.make(id)
+              if (!providers[providerID] || !isProviderAllowed(providerID)) return
+              if (cfg.provider?.[providerID]?.disable_model_discovery) return
+              try {
+                const discovered = await discover()
+                for (const [modelID, model] of Object.entries(discovered)) {
+                  if (!providers[providerID].models[modelID]) {
+                    providers[providerID].models[modelID] = model
+                  }
+                }
+              } catch (e) {}
+            }),
+          )
+        })
 
         for (const [id, provider] of Object.entries(providers)) {
           const providerID = ProviderV2.ID.make(id)

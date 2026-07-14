@@ -84,6 +84,99 @@ Both options take an array of model IDs — the same IDs shown in the `/models` 
 
 ---
 
+#### Model discovery
+
+Some providers can discover their available models automatically instead of
+requiring every model to be listed by hand. Discovered models are merged with
+any models you've configured manually, without overwriting them.
+
+GitLab Duo Agent Platform workflow models work this way out of the box —
+they're fetched from your GitLab instance instead of being hardcoded.
+
+Any provider that speaks the **OpenAI-compatible** protocol (`npm:
+"@ai-sdk/openai-compatible"`, which is also the default for a provider not
+otherwise known to OpenCode) can opt into this with `enable_model_discovery`,
+as long as `options.baseURL` is also set. OpenCode then calls `GET
+{baseURL}/models` (5 second timeout) and expects the standard OpenAI-style
+response (`{ "data": [{ "id": "..." }, ...] }`). This means tools like LM
+Studio, Ollama, vLLM, or any custom OpenAI-compatible gateway don't need a
+`models` section at all:
+
+```json title="opencode.json" {6-7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "myprovider": {
+      "npm": "@ai-sdk/openai-compatible",
+      "enable_model_discovery": true,
+      "options": {
+        "baseURL": "http://localhost:1234/v1"
+      }
+    }
+  }
+}
+```
+
+This is opt-in, not automatic, because it means OpenCode makes an outbound
+request to whatever `baseURL` you've configured every time providers are
+resolved (each time OpenCode starts). Without `enable_model_discovery` set,
+nothing changes from today's behavior — you still list `models` by hand.
+
+Models you do list explicitly under `models` always take precedence — discovery
+only fills in models you haven't already configured.
+
+GitLab's discovery is a different mechanism (its own built-in integration, not
+the generic openai-compatible one above) and stays on by default, since it
+already ships that way. You can turn it off with `disable_model_discovery`:
+
+```json title="opencode.json" {6}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "gitlab": {
+      "disable_model_discovery": true
+    }
+  }
+}
+```
+
+If both `enable_model_discovery` and `disable_model_discovery` are set on the
+same provider, discovery is skipped.
+
+##### Implementing discovery in your own provider
+
+If you run an OpenAI-compatible inference server or gateway — not just LM
+Studio/Ollama, but something like Bifrost, llama-swap, LiteLLM, or your own
+proxy — your users can opt into this by setting `enable_model_discovery` and
+`options.baseURL` in their config, pointed at your server. There's no
+OpenCode-side registration or plugin hook required. To make sure discovery
+actually returns useful results, your server needs to:
+
+1. Expose `GET {baseURL}/models` (OpenCode strips a trailing slash from
+   `baseURL`, then appends `/models`), responding within 5 seconds.
+2. Return HTTP 200 with a JSON body shaped like the standard OpenAI
+   `/v1/models` response:
+
+   ```json
+   {
+     "object": "list",
+     "data": [{ "id": "my-model-name" }, { "id": "another-model" }]
+   }
+   ```
+
+   Only `data[].id` is read today — other fields (`created`, `owned_by`,
+   context length, pricing, etc.) are ignored.
+
+3. Accept the same auth OpenCode already sends on chat requests: if
+   `options.apiKey` is set, OpenCode sends `Authorization: Bearer <apiKey>`;
+   any `options.headers` you've configured are forwarded too.
+
+If your endpoint is slow, unreachable, times out, or returns something
+OpenCode can't parse, discovery just fails silently for that provider — it
+never blocks startup or the models your users already configured by hand.
+
+---
+
 ## OpenCode Zen
 
 OpenCode Zen is a list of models provided by the OpenCode team that have been
@@ -1054,7 +1147,8 @@ When a `duo-workflow-*` model is selected, OpenCode will:
 4. Route tool execution requests through OpenCode's permission-gated tool system
 
 Available DAP workflow models follow the `duo-workflow-*` naming convention and
-are dynamically discovered from your GitLab instance.
+are dynamically discovered from your GitLab instance. See [Model
+discovery](#model-discovery) to turn this off.
 
 ##### GitLab API Tools (Optional, but highly recommended)
 
@@ -1384,6 +1478,10 @@ In this example:
 - `options.baseURL` is the endpoint for the local server.
 - `models` is a map of model IDs to their configurations. The model name will be displayed in the model selection list.
 
+`models` is optional — llama-server exposes a `/v1/models` endpoint, so
+OpenCode can discover the loaded model automatically if you add
+`"enable_model_discovery": true`. See [Model discovery](#model-discovery).
+
 ---
 
 ### IO.NET
@@ -1446,6 +1544,10 @@ In this example:
 - `name` is the display name for the provider in the UI.
 - `options.baseURL` is the endpoint for the local server.
 - `models` is a map of model IDs to their configurations. The model name will be displayed in the model selection list.
+
+`models` is optional — LM Studio exposes a `/v1/models` endpoint, so OpenCode
+can discover loaded models automatically if you add
+`"enable_model_discovery": true`. See [Model discovery](#model-discovery).
 
 ---
 
@@ -1621,6 +1723,10 @@ In this example:
 - `name` is the display name for the provider in the UI.
 - `options.baseURL` is the endpoint for the local server.
 - `models` is a map of model IDs to their configurations. The model name will be displayed in the model selection list.
+
+`models` is optional — Ollama exposes a `/v1/models` endpoint, so OpenCode can
+discover pulled models automatically if you add `"enable_model_discovery":
+true`. See [Model discovery](#model-discovery).
 
 :::tip
 If tool calls aren't working, try increasing `num_ctx` in Ollama. Start around 16k - 32k.
@@ -2432,14 +2538,14 @@ You can use any OpenAI-compatible provider with opencode. Most modern AI provide
    Here are the configuration options:
    - **npm**: AI SDK package to use, `@ai-sdk/openai-compatible` for OpenAI-compatible providers (for `/v1/chat/completions`). If your provider/model uses `/v1/responses`, use `@ai-sdk/openai`.
    - **name**: Display name in UI.
-   - **models**: Available models.
+   - **models**: Available models. Optional if you set `enable_model_discovery` and the provider exposes a `/v1/models` endpoint — see [Model discovery](#model-discovery).
    - **options.baseURL**: API endpoint URL.
    - **options.apiKey**: Optionally set the API key, if not using auth.
    - **options.headers**: Optionally set custom headers.
 
    More on the advanced options in the example below.
 
-5. Run the `/models` command and your custom provider and models will appear in the selection list.
+5. Run the `/models` command and your custom provider and models will appear in the selection list. If you set `enable_model_discovery` and skipped `models` above, this list is populated from your provider's `/v1/models` endpoint.
 
 ---
 

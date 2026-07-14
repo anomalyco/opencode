@@ -1741,6 +1741,8 @@ export type ProviderConfig = {
   npm?: string
   whitelist?: Array<string>
   blacklist?: Array<string>
+  disable_model_discovery?: boolean
+  enable_model_discovery?: boolean
   options?: {
     apiKey?: string
     baseURL?: string
