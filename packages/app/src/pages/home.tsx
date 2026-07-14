@@ -40,7 +40,7 @@ import { DialogSelectServer, useServerManagementController } from "@/components/
 import { DialogServerV2 } from "@/components/settings-v2/dialog-server-v2"
 import { ServerConnection, serverName, useServer } from "@/context/server"
 import { sessionHasOpenTab, useTabs } from "@/context/tabs"
-import { useServerSync, type ServerSync } from "@/context/server-sync"
+import { useServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
 import { useNotification } from "@/context/notification"
 import {
@@ -50,7 +50,6 @@ import {
   getProjectAvatarSource,
   homeProjectDirectories,
   projectForSession,
-  sortedRootSessions,
   toggleHomeProjectSelection,
 } from "@/pages/layout/helpers"
 import { SessionTabAvatar } from "@/pages/layout/session-tab-avatar"
@@ -69,6 +68,11 @@ import { archiveHomeSession } from "./home-session-archive"
 import { shouldOpenSessionInBackground } from "./home-session-open"
 import { showToast } from "@/utils/toast"
 import { fileManagerApp } from "@/utils/file-manager"
+import {
+  loadHomeSessionIndex,
+  retainHomeSessions,
+  type HomeSessionEvents,
+} from "@/context/global-sync/home-session-index"
 
 const HOME_SESSION_LIMIT = 64
 const HOME_SESSION_HEADER_STICKY_TOP = 12
@@ -106,22 +110,24 @@ const HOME_SEARCH_RESULT_META =
 let pendingHomeNavigation: { server: ServerConnection.Key; href: string } | undefined
 
 function buildHomeSessionRecords(input: {
-  sync: Pick<ServerSync, "child">
+  sessions: () => Session[]
   projectDirectories: () => string[]
   projects: () => LocalProject[]
   projectByID: () => Map<string, LocalProject>
 }) {
-  return [
-    ...new Map(
-      input
-        .projectDirectories()
-        .flatMap((directory) => sortedRootSessions(input.sync.child(directory, { bootstrap: false })[0], Date.now()))
-        .map((session) => [`${pathKey(session.directory)}:${session.id}`, session] as const),
-    ).values(),
-  ]
+  const directories = new Set(input.projectDirectories().map(pathKey))
+  const sessions = input.sessions().filter((session) => directories.has(pathKey(session.directory)))
+  return [...new Map(sessions.map((session) => [session.id, session] as const)).values()]
     .sort((a, b) => (b.time.updated ?? b.time.created) - (a.time.updated ?? a.time.created))
     .flatMap((session) => {
-      const project = projectForSession(session, input.projects(), input.projectByID())
+      const directory = pathKey(session.directory)
+      const project =
+        input
+          .projects()
+          .find(
+            (item) =>
+              pathKey(item.worktree) === directory || item.sandboxes?.some((sandbox) => pathKey(sandbox) === directory),
+          ) ?? projectForSession(session, input.projects(), input.projectByID())
       if (!project) return []
       return {
         session,
@@ -286,6 +292,7 @@ export function NewHome() {
     return global.ensureServerCtx(conn)
   })
   const focusedSync = () => focusedServerCtx()?.sync ?? sync()
+  const homeSessions = () => focusedSync().homeSessions
   const projects = createMemo(() => focusedServerCtx()?.projects.list() ?? layout.projects.list())
   const recentlyClosed = createMemo(
     () => focusedServerCtx()?.projects.recentlyClosed() ?? layout.projects.recentlyClosed(),
@@ -318,24 +325,47 @@ export function NewHome() {
     }
     return language.t("home.sessions.search.placeholder")
   })
+  const sessionEventLoad = useQuery(() => ({
+    queryKey: homeSessions().eventsKey,
+    queryFn: async (): Promise<HomeSessionEvents> => ({ sequence: 0, entries: [] }),
+    initialData: { sequence: 0, entries: [] } satisfies HomeSessionEvents,
+    enabled: false,
+  }))
   const sessionLoad = useQuery(() => ({
-    queryKey: ["home", "sessions", selection().server, ...projectDirectories()] as const,
-    queryFn: async () => {
-      await Promise.all(
-        projectDirectories().map((directory) =>
-          focusedSync().project.loadSessions(directory, { limit: HOME_SESSION_LIMIT }),
-        ),
+    queryKey: homeSessions().indexKey,
+    enabled: !!focusedServerCtx(),
+    queryFn: async ({ signal }) => {
+      const ctx = focusedServerCtx()
+      if (!ctx) return { sessions: [], eventSequence: 0 }
+      const cache = homeSessions()
+      const eventSequence = cache.eventSequence()
+      const index = await loadHomeSessionIndex(
+        (input, options) => ctx.sdk.client.v2.session.list(input, options),
+        eventSequence,
+        signal,
       )
-      return null
+      cache.complete(eventSequence)
+      return index
     },
+    retry: false,
+    staleTime: 30_000,
+    refetchOnMount: true,
+    refetchOnReconnect: true,
   }))
 
   const projectByID = createMemo(
     () => new Map(projects().flatMap((project) => (project.id ? [[project.id, project] as const] : []))),
   )
+  const indexedSessions = createMemo(() =>
+    retainHomeSessions(
+      homeSessions().sessions(sessionLoad.data, sessionEventLoad.data),
+      HOME_SESSION_LIMIT,
+      Date.now(),
+    ),
+  )
   const allRecords = createMemo(() =>
     buildHomeSessionRecords({
-      sync: focusedSync(),
+      sessions: indexedSessions,
       projectDirectories,
       projects,
       projectByID,
@@ -363,8 +393,7 @@ export function NewHome() {
         prefetched.add(key)
         createRoot((dispose) => {
           try {
-            const directory = ctx.sync.ensureDirSyncContext(record.session.directory)
-            void directory.session
+            void ctx.sync.session
               .sync(record.session.id)
               .then(() => {
                 return Promise.all(
@@ -484,7 +513,13 @@ export function NewHome() {
   }
 
   function openSession(session: Session, options?: OpenSessionOptions) {
-    const project = projectForSession(session, projects(), projectByID())
+    const directoryKey = pathKey(session.directory)
+    const project =
+      projects().find(
+        (item) =>
+          pathKey(item.worktree) === directoryKey ||
+          item.sandboxes?.some((sandbox) => pathKey(sandbox) === directoryKey),
+      ) ?? projectForSession(session, projects(), projectByID())
     const conn = focusedServer()
     if (!conn) return
     const directory = project?.worktree ?? session.directory
