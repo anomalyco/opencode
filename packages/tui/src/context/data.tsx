@@ -27,7 +27,7 @@ import type {
   SkillInfo,
   OpenCodeEvent,
 } from "@opencode-ai/client"
-import type { Data } from "@opencode-ai/plugin/v2/tui/context"
+import type { Plugin } from "@opencode-ai/plugin/v2/tui"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { createSimpleContext } from "./helper"
 import { useClient } from "./client"
@@ -1108,7 +1108,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         },
       },
     }
-    result satisfies Data
+    result satisfies Plugin.Context["data"]
 
     async function bootstrap() {
       if (bootstrapping) return bootstrapping
