@@ -287,3 +287,4 @@ irm https://github.com/ivanfernadezm99/opencode/releases/latest/download/install
 | v1.0.3 | Soporte mirror Nextcloud + script de sync (`-UseMirror`) |
 | v1.0.4 | Sin rate limit de GitHub API (usa HTTP redirect en vez de api.github.com) |
 | v1.0.5 | Auto-fallback a Nextcloud cuando GitHub no responde |
+| v1.0.6 | `-UseBasicParsing` en todos lados, retry con backoff, mirror fallback en descargas |
