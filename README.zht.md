@@ -9,7 +9,6 @@
 </p>
 <p align="center">開源的 AI Coding Agent。</p>
 <p align="center">
-  <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
   <a href="https://github.com/puetsua/kancode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/puetsua/kancode/publish.yml?style=flat-square&branch=dev" /></a>
 </p>
 
@@ -22,62 +21,28 @@
 
 ---
 
-### 安裝
+### 開始使用
+
+本 fork 目前以從原始碼建置與執行為主。套件發行管道（npm、Homebrew、Scoop、安裝腳本、桌面安裝程式等）尚未提供。
+
+**需求：** [Bun](https://bun.sh) 1.3+
 
 ```bash
-# 複製本 fork
 git clone https://github.com/puetsua/kancode.git
-
-# 直接安裝 (YOLO)
-curl -fsSL https://opencode.ai/install | bash
-
-# 套件管理員
-npm i -g opencode-ai@latest        # 也可使用 bun/pnpm/yarn
-scoop install opencode             # Windows
-choco install opencode             # Windows
-brew install anomalyco/tap/opencode # macOS 與 Linux（推薦，始終保持最新）
-brew install opencode              # macOS 與 Linux（官方 brew formula，更新頻率較低）
-sudo pacman -S opencode            # Arch Linux (Stable)
-paru -S opencode-bin               # Arch Linux (Latest from AUR)
-mise use -g opencode               # 任何作業系統
-nix run nixpkgs#opencode           # 或使用 github:puetsua/kancode 以取得本 fork 最新開發分支
+cd kancode
+bun install
+bun dev
 ```
 
-> [!TIP]
-> 安裝前請先移除 0.1.x 以前的舊版本。
-
-### 桌面應用程式 (BETA)
-
-OpenCode 也提供桌面版應用程式。您可以直接從 [發佈頁面 (releases page)](https://github.com/puetsua/kancode/releases) 下載，或從本倉庫自行建置。上游二進位檔亦可從 [opencode.ai/download](https://opencode.ai/download) 取得。
-
-| 平台                  | 下載連結                           |
-| --------------------- | ---------------------------------- |
-| macOS (Apple Silicon) | `opencode-desktop-mac-arm64.dmg`   |
-| macOS (Intel)         | `opencode-desktop-mac-x64.dmg`     |
-| Windows               | `opencode-desktop-windows-x64.exe` |
-| Linux                 | `.deb`, `.rpm`, 或 AppImage        |
+`bun dev` 會啟動 OpenCode TUI。若要在其他目錄執行：
 
 ```bash
-# macOS (Homebrew Cask)
-brew install --cask opencode-desktop
-# Windows (Scoop)
-scoop bucket add extras; scoop install extras/opencode-desktop
+bun dev <directory>
+# 或在本倉庫根目錄執行
+bun dev .
 ```
 
-#### 安裝目錄
-
-安裝腳本會依據以下優先順序決定安裝路徑：
-
-1. `$OPENCODE_INSTALL_DIR` - 自定義安裝目錄
-2. `$XDG_BIN_DIR` - 符合 XDG 基礎目錄規範的路徑
-3. `$HOME/bin` - 標準使用者執行檔目錄 (若存在或可建立)
-4. `$HOME/.opencode/bin` - 預設備用路徑
-
-```bash
-# 範例
-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
-```
+更多貢獻說明、本機建置與其他工作流程，請參閱 [CONTRIBUTING.md](./CONTRIBUTING.md)。
 
 ### Agents
 
