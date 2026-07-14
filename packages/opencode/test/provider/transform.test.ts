@@ -156,6 +156,43 @@ describe("ProviderTransform.options - setCacheKey", () => {
     expect(result.store).toBe(false)
   })
 
+  test("should set store=false for xAI provider by default", () => {
+    const xaiModel = {
+      ...mockModel,
+      providerID: "xai",
+      api: {
+        id: "grok-4",
+        url: "https://api.x.ai",
+        npm: "@ai-sdk/xai",
+      },
+    }
+    const result = ProviderTransform.options({
+      model: xaiModel,
+      sessionID,
+      providerOptions: {},
+    })
+    expect(result.store).toBe(false)
+    expect(result.promptCacheKey).toBe(sessionID)
+  })
+
+  test("should set store=false for xAI SDK regardless of provider ID", () => {
+    const xaiModel = {
+      ...mockModel,
+      providerID: "custom-xai",
+      api: {
+        id: "grok-4",
+        url: "https://api.x.ai",
+        npm: "@ai-sdk/xai",
+      },
+    }
+    const result = ProviderTransform.options({
+      model: xaiModel,
+      sessionID,
+      providerOptions: {},
+    })
+    expect(result.store).toBe(false)
+  })
+
   test("should set store=false for azure provider by default", () => {
     const azureModel = {
       ...mockModel,
@@ -3111,9 +3148,9 @@ describe("ProviderTransform.reasoningVariants", () => {
     ["@ai-sdk/cohere", { thinking: { type: "enabled", tokenBudget: 16_000 } }],
     ["@ai-sdk/alibaba", { enableThinking: true, thinkingBudget: 16_000 }],
   ])("converts token budgets for %s", (npm, high) => {
-    expect(
-      ProviderTransform.reasoningVariants(model([{ type: "budget_tokens", min: 1_024, max: 16_000 }]), target(npm)),
-    ).toEqual({ high })
+    const variants = ProviderTransform.reasoningVariants(model([{ type: "budget_tokens", min: 1_024 }]), target(npm))
+    expect(variants?.high).toEqual(high)
+    expect(Object.keys(variants ?? {})).toEqual(["high", "max"])
   })
 
   test("maps null effort to none", () => {
@@ -3150,6 +3187,7 @@ describe("ProviderTransform.reasoningVariants", () => {
     ).toEqual({
       none: { thinking: { type: "disabled" } },
       high: { thinking: { type: "enabled", tokenBudget: 16_000 } },
+      max: { thinking: { type: "enabled", tokenBudget: 31_999 } },
     })
   })
 
@@ -3161,7 +3199,7 @@ describe("ProviderTransform.reasoningVariants", () => {
       ),
     ).toEqual({
       high: { thinking: { type: "enabled", budgetTokens: 16_000 } },
-      max: { thinking: { type: "enabled", budgetTokens: 63_999 } },
+      max: { thinking: { type: "enabled", budgetTokens: 31_999 } },
     })
   })
 
@@ -3171,7 +3209,32 @@ describe("ProviderTransform.reasoningVariants", () => {
     expect(
       ProviderTransform.reasoningVariants(model([{ type: "budget_tokens", min: 1_024, max: 64_000 }]), anthropic),
     ).toEqual({
-      high: { thinking: { type: "enabled", budgetTokens: 4_999 } },
+      high: { thinking: { type: "enabled", budgetTokens: 2_500 } },
+      max: { thinking: { type: "enabled", budgetTokens: 4_999 } },
+    })
+  })
+
+  test("derives high and max budgets when models.dev omits max", () => {
+    expect(
+      ProviderTransform.reasoningVariants(
+        model([{ type: "budget_tokens", min: 1_024 }]),
+        target("@ai-sdk/anthropic", "claude-haiku-4-5"),
+      ),
+    ).toEqual({
+      high: { thinking: { type: "enabled", budgetTokens: 16_000 } },
+      max: { thinking: { type: "enabled", budgetTokens: 31_999 } },
+    })
+  })
+
+  test("preserves explicit inclusive budget maxima", () => {
+    expect(
+      ProviderTransform.reasoningVariants(
+        model([{ type: "budget_tokens", min: 1_024, max: 24_576 }]),
+        target("@ai-sdk/google", "gemini-2.5-pro"),
+      ),
+    ).toEqual({
+      high: { thinkingConfig: { includeThoughts: true, thinkingBudget: 12_288 } },
+      max: { thinkingConfig: { includeThoughts: true, thinkingBudget: 24_576 } },
     })
   })
 

@@ -1102,7 +1102,8 @@ export function options(input: {
     input.model.providerID === "openai" ||
     input.model.api.npm === "@ai-sdk/openai" ||
     input.model.api.npm === "@ai-sdk/github-copilot" ||
-    input.model.api.npm === "@ai-sdk/amazon-bedrock/mantle"
+    input.model.api.npm === "@ai-sdk/amazon-bedrock/mantle" ||
+    input.model.api.npm === "@ai-sdk/xai"
   ) {
     result["store"] = false
   }
@@ -1257,7 +1258,8 @@ export function smallOptions(model: Provider.Model) {
   if (
     model.providerID === "openai" ||
     model.api.npm === "@ai-sdk/openai" ||
-    model.api.npm === "@ai-sdk/github-copilot"
+    model.api.npm === "@ai-sdk/github-copilot" ||
+    model.api.npm === "@ai-sdk/xai"
   ) {
     const base = { store: false }
     return mergeDeep(base, small)
@@ -1611,17 +1613,13 @@ function effortVariants(model: Provider.Model, values: readonly unknown[]) {
 }
 
 function budgetVariants(model: Provider.Model, min?: number, max?: number) {
-  const limit = model.limit.output - 1
-  if (limit <= 0) return {}
-  const high = Math.min(
-    max === undefined ? Math.max(min ?? 0, 16_000) : Math.min(Math.max(min ?? 0, 16_000), max),
-    limit,
-  )
-  const maximum = max === undefined ? undefined : Math.min(max, limit)
+  const maximum = Math.min(max ?? OUTPUT_TOKEN_MAX - 1, model.limit.output - 1, OUTPUT_TOKEN_MAX - 1)
+  if (maximum <= 0) return {}
+  const high = Math.min(Math.max(min ?? 0, Math.floor((maximum + 1) / 2)), maximum)
   return Object.fromEntries(
     [
       { id: "high", budget: high },
-      ...(maximum === undefined || maximum === high ? [] : [{ id: "max", budget: maximum }]),
+      { id: "max", budget: maximum },
     ].flatMap((item) => {
       const settings = reasoningBudget(model, item.budget)
       return settings ? [[item.id, settings]] : []

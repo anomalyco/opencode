@@ -39,6 +39,7 @@ import {
   uniqueComparisonPairs,
   type ComparisonModelRef,
 } from "../compare-cards"
+import { BreadcrumbSelect } from "../breadcrumb-select"
 import {
   applyThemePreference,
   Footer,
@@ -294,61 +295,46 @@ function ModelHero(props: {
         <Show
           when={labs().length > 0}
           fallback={
-            <span data-slot="model-hero-crumb" data-current="true">
+            <span data-slot="model-hero-crumb" data-menu="true">
               <span>{props.labName}</span>
               <ChevronDownIcon />
             </span>
           }
         >
-          <details data-component="model-hero-menu">
-            <summary data-slot="model-hero-crumb" data-current="true">
-              <span>{props.labName}</span>
-              <ChevronDownIcon />
-            </summary>
-            <div data-slot="model-hero-options">
-              <For each={labs()}>
-                {(lab) => (
-                  <a
-                    data-slot="model-hero-option"
-                    data-current={lab.id === providerSlug(labId()) ? "true" : undefined}
-                    href={language.route(`${import.meta.env.BASE_URL}${lab.id}`)}
-                  >
-                    {lab.name}
-                  </a>
-                )}
-              </For>
-            </div>
-          </details>
+          <BreadcrumbSelect
+            ariaLabel="Choose a lab"
+            label={props.labName}
+            options={labs().map((lab) => ({
+              href: language.route(`${import.meta.env.BASE_URL}${lab.id}`),
+              label: lab.name,
+              value: lab.id,
+            }))}
+            value={providerSlug(labId())}
+            variant="model"
+          />
         </Show>
         <span data-slot="model-hero-separator">/</span>
         <Show
           when={labModels().length > 0}
           fallback={
-            <span data-slot="model-hero-crumb" data-current="true" aria-current="page">
+            <span data-slot="model-hero-crumb" data-menu="true" data-current="true" aria-current="page">
               <span>{modelName()}</span>
               <ChevronDownIcon />
             </span>
           }
         >
-          <details data-component="model-hero-menu">
-            <summary data-slot="model-hero-crumb" data-current="true" aria-current="page">
-              <span>{modelName()}</span>
-              <ChevronDownIcon />
-            </summary>
-            <div data-slot="model-hero-options">
-              <For each={labModels()}>
-                {(model) => (
-                  <a
-                    data-slot="model-hero-option"
-                    data-current={model.id === props.catalog?.id ? "true" : undefined}
-                    href={language.route(`${import.meta.env.BASE_URL}${model.id}`)}
-                  >
-                    {model.name}
-                  </a>
-                )}
-              </For>
-            </div>
-          </details>
+          <BreadcrumbSelect
+            ariaLabel="Choose a model"
+            current
+            label={modelName()}
+            options={labModels().map((model) => ({
+              href: language.route(`${import.meta.env.BASE_URL}${model.id}`),
+              label: model.name,
+              value: model.id,
+            }))}
+            value={props.catalog?.id ?? ""}
+            variant="model"
+          />
         </Show>
       </nav>
       <div data-slot="model-hero-title-row">
@@ -432,7 +418,7 @@ function ModelHeroSparkline(props: { data: StatsModelData }) {
 function ChevronDownIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none">
-      <path d="M4.75 6.25L8 9.5L11.25 6.25" stroke="currentColor" stroke-width="1.5" />
+      <path d="M5 6.5L8 9.5L11 6.5" stroke="currentColor" />
     </svg>
   )
 }
