@@ -317,6 +317,15 @@ describe("ModelsDevPlugin", () => {
             settings: { thinking: { type: "adaptive", display: "summarized" }, effort: "low" },
           })
 
+          const anthropicToggleModel = yield* catalog.model.get(
+            ProviderV2.ID.anthropic,
+            ModelV2.ID.make("claude-toggle"),
+          )
+          expect(anthropicToggleModel?.variants).toEqual([
+            { id: ModelV2.VariantID.make("none"), settings: { thinking: { type: "disabled" } } },
+            { id: ModelV2.VariantID.make("thinking"), settings: { thinking: { type: "adaptive" } } },
+          ])
+
           const toggle = yield* catalog.model.get(ProviderV2.ID.make("alibaba"), ModelV2.ID.make("toggle-only"))
           expect(toggle?.variants).toEqual([
             { id: ModelV2.VariantID.make("none"), settings: { enableThinking: false } },
