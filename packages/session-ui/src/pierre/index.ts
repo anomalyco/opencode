@@ -15,6 +15,13 @@ export type DiffProps<T = {}> = FileDiffOptions<T> & {
 }
 
 const unsafeCSS = `
+:host {
+  --diffs-bg: var(
+    --opencode-diffs-bg,
+    light-dark(var(--diffs-light-bg, #fff), var(--diffs-dark-bg, #000))
+  );
+}
+
 [data-diff],
 [data-file] {
   /* Pierre 1.2 mixes these override targets at 12% in light mode and 20% in dark mode. */
@@ -129,7 +136,7 @@ const unsafeCSS = `
     height: 24px;
   }
   [data-column-number] {
-    background-color: var(--background-stronger);
+    background-color: var(--diffs-bg);
     cursor: default !important;
   }
 
