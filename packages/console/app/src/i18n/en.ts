@@ -102,8 +102,8 @@ export const dict = {
   "temp.logoDarkAlt": "opencode logo dark",
 
   "home.banner.badge": "New",
-  "home.banner.text": "Desktop app available in beta",
-  "home.banner.platforms": "on macOS, Windows, and Linux",
+  "home.banner.text": "Introducing tabs for desktop",
+  "home.banner.platforms": "Available on macOS, Windows, and Linux",
   "home.banner.downloadNow": "Download now",
   "home.banner.downloadBetaNow": "Download the desktop beta now",
 
@@ -712,7 +712,7 @@ export const dict = {
   "download.hero.subtitle": "Available in Beta for macOS, Windows, and Linux",
   "download.hero.button": "Download for {{os}}",
   "download.section.terminal": "OpenCode Terminal",
-  "download.section.desktop": "OpenCode Desktop (Beta)",
+  "download.section.desktop": "OpenCode Desktop",
   "download.section.extensions": "OpenCode Extensions",
   "download.section.integrations": "OpenCode Integrations",
   "download.action.download": "Download",
