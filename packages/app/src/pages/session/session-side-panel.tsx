@@ -211,7 +211,17 @@ export function SessionSidePanel(props: {
     previewTab(SESSION_OPEN_FILE_TAB)
     queueMicrotask(() => fileFilter?.focus())
   }
+  // Kobalte emits onChange when its collection temporarily loses the controlled
+  // tab during registration. Only persist changes initiated by user input.
+  let tabSelectionIntent = 0
+  const intendTabSelection = () => {
+    const intent = ++tabSelectionIntent
+    queueMicrotask(() => {
+      if (tabSelectionIntent === intent) tabSelectionIntent = 0
+    })
+  }
   const activateTab = (value: string) => {
+    if (!tabSelectionIntent) return
     const next = normalizeTab(value)
     const path = file.pathFromTab(next)
     if (path) void file.load(path)
@@ -347,6 +357,9 @@ export function SessionSidePanel(props: {
                               <Show when={reviewTab() && props.canReview()}>
                                 <Tabs.Trigger
                                   value="review"
+                                  onPointerDown={intendTabSelection}
+                                  onKeyDown={intendTabSelection}
+                                  onClick={intendTabSelection}
                                   id={reviewTabID}
                                   aria-controls={activeTab() === "review" ? reviewTabPanelID : undefined}
                                 >
@@ -361,6 +374,9 @@ export function SessionSidePanel(props: {
                               <Show when={contextOpen()}>
                                 <Tabs.Trigger
                                   value="context"
+                                  onPointerDown={intendTabSelection}
+                                  onKeyDown={intendTabSelection}
+                                  onClick={intendTabSelection}
                                   closeButton={
                                     <TooltipKeybind
                                       title={language.t("common.closeTab")}
@@ -394,7 +410,7 @@ export function SessionSidePanel(props: {
                                       fallback={
                                         <SortableTab
                                           tab={tab}
-                                          onSelectIntent={() => activateTab(tab)}
+                                          onSelectIntent={intendTabSelection}
                                           temporary={temporaryTab() === tab}
                                           onTabClose={tabs().close}
                                           onTabDoubleClick={temporaryTab() === tab ? openTab : undefined}
@@ -403,6 +419,9 @@ export function SessionSidePanel(props: {
                                     >
                                       <Tabs.Trigger
                                         value={SESSION_OPEN_FILE_TAB}
+                                        onPointerDown={intendTabSelection}
+                                        onKeyDown={intendTabSelection}
+                                        onClick={intendTabSelection}
                                         closeButton={
                                           <TooltipKeybind
                                             title={language.t("common.closeTab")}
@@ -559,6 +578,9 @@ export function SessionSidePanel(props: {
                             <Show when={reviewTab() && props.canReview()}>
                               <Tabs.Trigger
                                 value="review"
+                                onPointerDown={intendTabSelection}
+                                onKeyDown={intendTabSelection}
+                                onClick={intendTabSelection}
                                 id={reviewTabID}
                                 aria-controls={activeTab() === "review" ? reviewTabPanelID : undefined}
                               >
@@ -570,6 +592,9 @@ export function SessionSidePanel(props: {
                             <Show when={contextOpen()}>
                               <Tabs.Trigger
                                 value="context"
+                                onPointerDown={intendTabSelection}
+                                onKeyDown={intendTabSelection}
+                                onClick={intendTabSelection}
                                 closeButton={
                                   <TooltipKeybind
                                     title={language.t("common.closeTab")}
@@ -602,7 +627,7 @@ export function SessionSidePanel(props: {
                                   fallback={
                                     <SortableTabV2
                                       tab={tab}
-                                      onSelectIntent={() => activateTab(tab)}
+                                      onSelectIntent={intendTabSelection}
                                       index={() => tabs().all().indexOf(tab)}
                                       temporary={temporaryTab() === tab}
                                       onTabClose={tabs().close}
@@ -612,6 +637,9 @@ export function SessionSidePanel(props: {
                                 >
                                   <Tabs.Trigger
                                     value={SESSION_OPEN_FILE_TAB}
+                                    onPointerDown={intendTabSelection}
+                                    onKeyDown={intendTabSelection}
+                                    onClick={intendTabSelection}
                                     closeButton={
                                       <TooltipKeybind
                                         title={language.t("common.closeTab")}
