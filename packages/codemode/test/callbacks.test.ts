@@ -135,29 +135,19 @@ describe("Array.from mapper", () => {
     expect(await value(`return Array.from([1, 2], undefined)`)).toEqual([1, 2])
   })
 
-  test("rejects a non-callable mapper and a thisArg", async () => {
+  test("rejects a non-callable mapper", async () => {
     expect((await error(`return Array.from([1], 42)`)).message).toContain("Array.from expects a function callback")
-    const diagnostic = await error(`return Array.from([1], (x) => x, {})`)
-    expect(diagnostic.kind).toBe("UnsupportedSyntax")
-    expect(diagnostic.message).toContain("thisArg")
   })
 })
 
-describe("thisArg is rejected loudly", () => {
-  test("array iteration methods reject a thisArg and allow explicit undefined", async () => {
-    const diagnostic = await error(`return [1, 2].map((x) => x, {})`)
-    expect(diagnostic.kind).toBe("UnsupportedSyntax")
-    expect(diagnostic.message).toContain("Array.map does not support a thisArg")
-    expect((await error(`return [1].forEach((x) => x, "self")`)).message).toContain("thisArg")
+describe("thisArg is accepted and ignored, like JS arrows", () => {
+  // CodeMode functions have no `this`, so a thisArg can never change behavior —
+  // exactly like passing one alongside an arrow function in real JS.
+  test("iteration methods and Array.from ignore a thisArg", async () => {
+    expect(await value(`return [1, 2].map((x) => x * 2, {})`)).toEqual([2, 4])
     expect(await value(`return [1, 2].map((x) => x, undefined)`)).toEqual([1, 2])
-  })
-
-  test("Map, Set, and URLSearchParams forEach reject a thisArg", async () => {
-    expect((await error(`new Map([["a", 1]]).forEach(() => {}, {}); return null`)).message).toContain("Map.forEach")
-    expect((await error(`new Set([1]).forEach(() => {}, {}); return null`)).message).toContain("Set.forEach")
-    expect((await error(`new URLSearchParams("a=1").forEach(() => {}, {}); return null`)).message).toContain(
-      "URLSearchParams.forEach",
-    )
+    expect(await value(`return Array.from([1], (x) => x + 1, {})`)).toEqual([2])
+    expect(await value(`const out = []; new Set([1]).forEach((v) => out.push(v), "self"); return out`)).toEqual([1])
   })
 })
 
@@ -207,5 +197,12 @@ describe("still-rejected callables get the wrap hint", () => {
     expect((await toolError(`return JSON.stringify({ a: 1 }, tools.host.echo)`)).message).toContain(
       "JSON.stringify replacers are not supported",
     )
+  })
+
+  test("callable JSON.parse revivers are rejected, never silently ignored", async () => {
+    expect((await error(`return JSON.parse('{"a":1}', (key, v) => 99)`)).message).toContain(
+      "JSON.parse revivers are not supported",
+    )
+    expect(await value(`return JSON.parse('{"a":1}', undefined)`)).toEqual({ a: 1 })
   })
 })

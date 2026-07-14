@@ -86,12 +86,15 @@ ultimate source of truth.
       string). Intrinsic references keep their receiver (`"abc".includes` works as a predicate), unlike detached JS
       methods, which lose `this`.
 - [x] Constructors work as callbacks with JS call semantics: `Error` types construct (`messages.map(Error)`),
-      and new-requiring constructors (`Map`, `Set`, `URL`, `Promise`) throw a `TypeError`, like JS.
+      and new-requiring constructors (`Map`, `Set`, `URL`, `URLSearchParams`, `Promise`) throw a `TypeError`,
+      like JS.
 - [x] Tool references and detached `Promise` statics are rejected as callbacks with a hint to wrap them in an
       arrow function.
 - [x] Async string replacement callbacks; replacements are evaluated sequentially.
-- [x] A non-`undefined` `thisArg` for iteration methods is rejected explicitly: CodeMode functions have no `this`.
-- [ ] `this`, `super`, constructor functions, or function prototype methods such as `call`, `apply`, and `bind`.
+- [x] The optional `thisArg` of iteration methods is accepted and ignored: CodeMode functions have no `this`, so
+      ignoring it matches JS arrow-function semantics exactly.
+- [ ] `this`, `super`, user-defined constructor functions, or function prototype methods such as `call`, `apply`,
+      and `bind`.
 - [ ] Classes and private fields.
 - [ ] Generator functions and `yield`.
 - [ ] Async predicates, reducers, and comparators with automatic awaiting. Async mapping can be joined explicitly with
@@ -182,7 +185,7 @@ ultimate source of truth.
 - [x] Mutation: `push`, `pop`, `shift`, `unshift`, `splice`, `fill`, and `copyWithin`.
 - [x] Materialized iteration helpers: `keys`, `values`, and `entries` return arrays rather than iterators.
 - [x] `length`, numeric indexing, index assignment, spread, and `for...of`.
-- [ ] The `thisArg` form of `Array.from` (rejected explicitly; CodeMode functions have no `this`).
+- [x] The `thisArg` argument of `Array.from` is accepted and ignored, like JS arrows.
 - [ ] `Array.prototype.toSpliced`.
 - [ ] Canonical index handling: a key such as `"01"` must not alias index `1`.
 - [ ] Complete sparse-array parity. Promise combinators do consume holes as `undefined` members, as in JS.
@@ -313,8 +316,9 @@ These are actionable implementation items. Check them off only when behavior and
 - [ ] Complete lexical declaration and destructuring semantics listed above.
 - [x] Make callback acceptance consistent across built-ins: collections, sort, string replacers, `Array.from`
       mappers, and promise reactions share one acceptance rule.
-- [x] Reject every unsupported callback argument explicitly rather than silently ignoring it (`thisArg` and
-      unsupported `JSON.stringify` replacers now fail loudly).
+- [x] Reject every unsupported callable callback argument explicitly rather than silently ignoring it
+      (`JSON.stringify` replacers and `JSON.parse` revivers fail loudly). The iteration-method `thisArg` is
+      accepted and ignored: CodeMode functions have no `this`, so ignoring it matches JS arrow semantics.
 - [ ] Make async callback behavior consistent across built-ins; only string replacers settle async callback results
       today.
 - [ ] Resolve the built-in correctness gaps listed in the Array, String, Number, Date, and RegExp sections.

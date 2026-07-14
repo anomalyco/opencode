@@ -45,6 +45,8 @@ export type CallbackRunner<R> = {
 
 // The single acceptance list for callbacks: collections, sort, string replacers,
 // Array.from mappers, and promise reactions all admit exactly these callables.
+// Admission means dispatchable, not necessarily invocable: new-requiring
+// constructors pass the gate and throw a TypeError on call, like JS.
 export type SupportedCallback =
   | CodeModeFunction
   | CoercionFunction
@@ -347,7 +349,6 @@ export const invokeArrayFrom = <R>(
   args: Array<unknown>,
   node: AstNode,
 ): Effect.Effect<unknown, unknown, R> => {
-  rejectThisArg("Array.from", args, 2, node)
   const items = arrayFromItems(args[0], node)
   if (args.length < 2 || args[1] === undefined) return Effect.succeed(items)
   const apply = applyCollectionCallback(runner, args[1], "Array.from", node)
@@ -358,18 +359,6 @@ export const invokeArrayFrom = <R>(
     }
     return values
   })
-}
-
-const rejectThisArg = (name: string, args: Array<unknown>, start: number, node: AstNode): void => {
-  for (let index = start; index < args.length; index += 1) {
-    if (args[index] !== undefined) {
-      throw new InterpreterRuntimeError(
-        `${name} does not support a thisArg: CodeMode functions have no 'this'. Use an arrow function that closes over the values it needs.`,
-        node,
-        "UnsupportedSyntax",
-      )
-    }
-  }
 }
 
 const invokeStringReplacer = <R>(
@@ -487,7 +476,6 @@ const invokeMapMethod = <R>(
     case "entries":
       return Effect.sync(() => Array.from(target.map.entries(), ([key, item]): Array<unknown> => [key, item]))
     case "forEach": {
-      rejectThisArg("Map.forEach", args, 1, node)
       const apply = applyCollectionCallback(runner, args[0], "Map.forEach", node)
       return Effect.gen(function* () {
         for (const [key, item] of Array.from(target.map.entries())) yield* apply([item, key, target])
@@ -527,7 +515,6 @@ const invokeSetMethod = <R>(
     case "entries":
       return Effect.sync(() => Array.from(target.set.values(), (item): Array<unknown> => [item, item]))
     case "forEach": {
-      rejectThisArg("Set.forEach", args, 1, node)
       const apply = applyCollectionCallback(runner, args[0], "Set.forEach", node)
       return Effect.gen(function* () {
         for (const item of Array.from(target.set.values())) yield* apply([item, item, target])
@@ -602,7 +589,6 @@ const invokeURLSearchParamsMethod = <R>(
       return Effect.sync(() => target.params.toString())
     case "forEach": {
       requireArgs(1)
-      rejectThisArg("URLSearchParams.forEach", args, 1, node)
       const apply = applyCollectionCallback(runner, args[0], "URLSearchParams.forEach", node)
       return Effect.gen(function* () {
         for (const [key, value] of Array.from(target.params.entries())) yield* apply([value, key, target])
@@ -613,20 +599,6 @@ const invokeURLSearchParamsMethod = <R>(
       throw new InterpreterRuntimeError(`URLSearchParams method '${name}' is not available in CodeMode.`, node)
   }
 }
-
-// Methods whose spec signature is (callback, thisArg); reduce/reduceRight use args[1] as the initial value.
-const thisArgMethods = new Set([
-  "map",
-  "flatMap",
-  "filter",
-  "find",
-  "findIndex",
-  "some",
-  "every",
-  "forEach",
-  "findLast",
-  "findLastIndex",
-])
 
 const invokeArrayMethod = <R>(
   runner: CallbackRunner<R>,
@@ -736,7 +708,6 @@ const invokeArrayMethod = <R>(
       return Effect.succeed(Array.from(target.entries(), ([index, item]): Array<unknown> => [index, item]))
   }
 
-  if (thisArgMethods.has(name)) rejectThisArg(`Array.${name}`, args, 1, node)
   const apply = applyCollectionCallback(runner, args[0], `Array.${name}`, node)
   return Effect.gen(function* () {
     // Fix iteration length while reading existing elements live.

@@ -21,6 +21,14 @@ export const invokeJsonMethod = (name: string, args: Array<unknown>, node: AstNo
     case "parse": {
       const text = args[0]
       if (typeof text !== "string") throw new InterpreterRuntimeError("JSON.parse expects a string.", node)
+      if (typeofValue(args[1]) === "function") {
+        throw new InterpreterRuntimeError(
+          "JSON.parse revivers are not supported in CodeMode.",
+          node,
+          "UnsupportedSyntax",
+          [supportedSyntaxMessage],
+        )
+      }
       try {
         return copyIn(JSON.parse(text), "JSON.parse result")
       } catch (error) {
