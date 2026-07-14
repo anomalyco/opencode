@@ -1,0 +1,52 @@
+schema: spec-driven
+
+# Injected into every OpenSpec artifact prompt.
+# Keep this aligned with the live TUI/CLI monorepo (post non-TUI prune).
+context: |
+  Product: kancode — TUI/CLI-focused OpenCode fork (AI coding agent).
+  Primary UX: terminal TUI via `bun dev` (packages/opencode → packages/tui).
+  Package manager / runtime: Bun monorepo (packageManager bun@1.3.14).
+
+  In-scope packages (workspace):
+  - opencode (app entry / bin), tui, cli, ui
+  - core, server, client, protocol, schema
+  - sdk (packages/sdk/js), sdk-next, plugin, llm, codemode
+  - effect-drizzle-sqlite, http-recorder, httpapi-codegen, script
+
+  Out of scope / removed surfaces — do NOT propose or spec these as product surfaces:
+  - packages/app (web/Solid app)
+  - packages/desktop
+  - packages/web
+  - packages/console / enterprise console
+  - packages/slack, storybook, session-ui, and other pruned non-TUI packages
+  - Root `.github/` CI workflows (this fork intentionally has no GitHub Actions)
+
+  Agent / coding conventions live in root `AGENTS.md` and package-level `AGENTS.md`
+  files (e.g. packages/opencode/AGENTS.md). Follow those for style, Effect patterns,
+  dependency direction, testing, and typecheck. Prefer extending those files over
+  duplicating rules here.
+
+  Dependency direction (from AGENTS.md):
+  Schema → Core and Protocol → Server.
+  Client may depend on Schema and Protocol but never Core or Server.
+  sdk-next composes Client, Core, and Server.
+
+  Default branch: main. Conventional commits: type(scope): summary.
+  Branch names: at most three hyphenated words, no type prefixes.
+  Typecheck: `bun typecheck` from package dirs. Do not run tests from repo root.
+
+rules:
+  proposal:
+    - Scope changes to the TUI/CLI monorepo packages listed in context
+    - Call out Non-goals when a change might be mistaken for restoring web/desktop/console
+    - Prefer referencing existing AGENTS.md / package AGENTS.md over inventing new conventions
+  specs:
+    - Use SHALL/MUST with Given/When/Then (or WHEN/THEN) scenarios
+    - Do not invent requirements for deleted platforms (app, desktop, web, console)
+    - Prefer capability domains that match real packages (tui, session, protocol, etc.)
+  design:
+    - Respect Schema → Core/Protocol → Server dependency direction
+    - Prefer Bun APIs and existing Effect patterns from AGENTS.md
+  tasks:
+    - Run typecheck from the affected package directory (`bun typecheck`)
+    - Do not add GitHub Actions unless explicitly requested

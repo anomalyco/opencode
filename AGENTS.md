@@ -3,6 +3,8 @@
 - Keep runtime dependencies directed from Schema to Core and Protocol, then from Core and Protocol to Server. Client runtime code may depend on Schema and Protocol but never Core or Server; `sdk-next` composes Client, Core, and Server.
 - The default branch in this repo is `main`.
 - Use `main` or `origin/main` for diffs against the default branch.
+- This fork is TUI/CLI-focused. Do not assume web app, desktop, or console packages (`packages/app`, `packages/desktop`, `packages/web`, `packages/console`) still exist.
+- Spec-driven planning uses OpenSpec (`openspec/`). Keep day-to-day coding rules here; OpenSpec `openspec/config.yaml` summarizes product scope for planning prompts. Cursor slash commands live under `.cursor/commands/` (`/opsx:*`).
 
 ## Branch Names
 
@@ -14,7 +16,7 @@ Examples: `session-recovery`, `fix-scroll-state`, `regenerate-sdk`.
 
 Use conventional commit-style messages and PR titles: `type(scope): summary`.
 
-Valid types are `feat`, `fix`, `docs`, `chore`, `refactor`, and `test`. Scopes are optional; use the affected package or area when helpful, e.g. `core`, `opencode`, `tui`, `app`, `desktop`, `sdk`, or `plugin`.
+Valid types are `feat`, `fix`, `docs`, `chore`, `refactor`, and `test`. Scopes are optional; use the affected package or area when helpful, e.g. `core`, `opencode`, `tui`, `sdk`, `plugin`, `server`, or `cli`.
 
 Examples: `fix(tui): simplify thinking toggle styling`, `docs: update contributing guide`, `chore(sdk): regenerate types`.
 
