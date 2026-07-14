@@ -49,6 +49,7 @@ import { TaskTool, type TaskPromptOps } from "@/tool/task"
 import { SessionRunState } from "./run-state"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
+import { TuiEvent } from "@/server/tui-event"
 import { Database } from "@opencode-ai/core/database/database"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
@@ -150,8 +151,11 @@ const layer = Layer.effect(
       } satisfies TaskPromptOps
     })
 
+    const autoContextApplied = new Set<SessionID>()
+
     const cancel = Effect.fn("SessionPrompt.cancel")(function* (sessionID: SessionID) {
       yield* Effect.logInfo("cancel", { "session.id": sessionID })
+      autoContextApplied.delete(sessionID)
       yield* state.cancel(sessionID)
     })
 
@@ -1265,6 +1269,8 @@ const layer = Layer.effect(
                     const info = yield* config.get()
                     const cc = info.context
                     if (!cc?.autoAdd) return [] as string[]
+                    if (autoContextApplied.has(sessionID)) return [] as string[]
+                    autoContextApplied.add(sessionID)
                     const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
                     const query = lastUserMsg?.parts.filter((p) => p.type === "text").map((p) => (p as any).text ?? "").join(" ") ?? ""
                     const suggestions = yield* Effect.promise(() =>
@@ -1272,6 +1278,11 @@ const layer = Layer.effect(
                     )
                     if (suggestions.length === 0) return [] as string[]
                     const lines = suggestions.map((s) => `  - ${s.filePath} (${s.reason})`)
+                    yield* events.publish(TuiEvent.ToastShow, {
+                      message: `[auto] added ${suggestions.length} files: ${suggestions.map((s) => s.filePath).join(", ")}`,
+                      variant: "info",
+                      duration: 5000,
+                    }).pipe(Effect.ignore)
                     return [`[Auto context] Added ${suggestions.length} relevant file(s) based on your query:\n${lines.join("\n")}`]
                   })
                 : (Effect.succeed([]) as Effect.Effect<string[]>),
