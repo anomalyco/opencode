@@ -12,6 +12,8 @@ import type { TextPart as SDKTextPart } from "@opencode-ai/sdk/v2/client"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { useLanguage } from "@/context/language"
 
+type ForkOption = { kind: "full"; text: "" } | (ForkableMessage & { kind: "message" })
+
 interface ForkableMessage {
   id: string
   text: string
@@ -31,12 +33,12 @@ export const DialogFork: Component = () => {
   const dialog = useDialog()
   const language = useLanguage()
 
-  const messages = createMemo((): ForkableMessage[] => {
+  const items = createMemo((): ForkOption[] => {
     const sessionID = params.id
-    if (!sessionID) return []
+    if (!sessionID) return [{ kind: "full", text: "" }]
 
     const msgs = sync().data.message[sessionID] ?? []
-    const result: ForkableMessage[] = []
+    const result: ForkOption[] = [{ kind: "full", text: "" }]
 
     for (const message of msgs) {
       if (message.role !== "user") continue
@@ -46,16 +48,17 @@ export const DialogFork: Component = () => {
       if (!textPart) continue
 
       result.push({
+        kind: "message",
         id: message.id,
         text: textPart.text.replace(/\n/g, " ").slice(0, 200),
         time: formatTime(new Date(message.time.created)),
       })
     }
 
-    return result.reverse()
+    return result
   })
 
-  const handleSelect = (item: ForkableMessage | undefined) => {
+  const handleSelect = (item: ForkOption | undefined) => {
     if (!item) return
 
     const sessionID = params.id
@@ -92,7 +95,7 @@ export const DialogFork: Component = () => {
         search={{ placeholder: language.t("common.search.placeholder"), autofocus: true }}
         emptyMessage={language.t("dialog.fork.empty")}
         key={(x) => x.id}
-        items={messages}
+        items={items}
         filterKeys={["text"]}
         onSelect={handleSelect}
       >
