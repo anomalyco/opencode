@@ -37,6 +37,7 @@ export interface Settings {
     newLayoutDesigns?: boolean
     layoutTransitionEligible?: boolean
     newInterfaceNoticeDismissed?: boolean
+    shouldDisplayTabsToast?: boolean
   }
   appearance: {
     fontSize: number
@@ -216,8 +217,8 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
     )
     const [launchState, setLaunchState] = createStore({
       classified: false,
+      migrationApplied: false,
       previous: undefined as string | undefined,
-      upgraded: false,
     })
     const showFileTree = withFallback(() => store.general?.showFileTree, defaultSettings.general.showFileTree)
     const showSearch = withFallback(() => store.general?.showSearch, defaultSettings.general.showSearch)
@@ -232,7 +233,9 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
     const layoutTransitionEligible = withFallback(() => store.general?.layoutTransitionEligible, false)
     const newInterfaceNoticeDismissed = withFallback(() => store.general?.newInterfaceNoticeDismissed, false)
     const layoutUpgrade = createMemo(() =>
-      launchState.classified ? shouldEnableNewLayout(launchState.previous, platform.version) : false,
+      launchState.classified && !launchState.migrationApplied
+        ? shouldEnableNewLayout(launchState.previous, platform.version)
+        : false,
     )
     const layoutTransition = createMemo(() =>
       layoutTransitionState(!!sunset, layoutTransitionEligible(), oldInterfaceRetired(), newInterfaceNoticeDismissed()),
@@ -275,17 +278,20 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
       setLaunchState({
         classified: true,
         previous: launch.version,
-        upgraded: isAppUpgrade(launch.version, platform.version),
       })
       if (!platform.version || launch.version === platform.version) return
       setLaunch("version", platform.version)
     })
 
     createEffect(() => {
-      if (!ready() || !launchState.classified) return
+      if (!ready() || !launchState.classified || launchState.migrationApplied) return
+      if (typeof store.general?.shouldDisplayTabsToast !== "boolean") {
+        setStore("general", "shouldDisplayTabsToast", isAppUpgrade(launchState.previous, platform.version))
+      }
       if (layoutUpgrade() && store.general?.newLayoutDesigns !== true) {
         setStore("general", "newLayoutDesigns", true)
       }
+      setLaunchState("migrationApplied", true)
     })
 
     createEffect(() => {
@@ -308,7 +314,6 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
 
     return {
       ready,
-      appUpgrade: createMemo(() => launchState.classified && launchState.upgraded),
       get current() {
         return store
       },
@@ -382,7 +387,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         },
         newLayoutDesigns,
         setNewLayoutDesigns(value: boolean) {
-          setStore("general", "newLayoutDesigns", oldInterfaceRetired() ? true : value)
+          const next = oldInterfaceRetired() ? true : value
+          if (newLayoutDesigns() === next) return
+          setStore("general", "newLayoutDesigns", next)
+          if (typeof window !== "undefined") setTimeout(() => window.location.reload())
         },
         layoutTransitionClassified,
         setOldLayoutEligible(eligible: boolean) {
@@ -394,6 +402,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         newInterfaceNoticeVisible: createMemo(() => ready() && layoutTransition().notice),
         dismissNewInterfaceNotice() {
           setStore("general", "newInterfaceNoticeDismissed", true)
+        },
+        shouldDisplayTabsToast: withFallback(() => store.general?.shouldDisplayTabsToast, false),
+        dismissTabsToast() {
+          setStore("general", "shouldDisplayTabsToast", false)
         },
       },
       visibility: {
