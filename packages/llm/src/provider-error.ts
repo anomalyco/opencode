@@ -76,35 +76,30 @@ export interface ProviderFailure {
 // session retry policy never needs provider-specific string matching.
 export function classifyProviderFailure(input: ProviderFailure): LLMError["reason"] {
   const body = input.http?.body ?? ""
-  const code = input.code ?? providerCode(body) ?? providerCode(input.message)
-  const normalizedCode = code?.toLowerCase()
+  const codes = [input.code, ...providerCodes(body), ...providerCodes(input.message)]
+    .filter((code): code is string => code !== undefined)
+    .map((code) => code.toLowerCase())
   const text = body || input.message
   const common = { message: input.message, providerMetadata: input.providerMetadata, http: input.http }
   const clientScoped = input.status === undefined || (input.status >= 400 && input.status < 500)
 
   if (
     clientScoped &&
-    (normalizedCode === "context_length_exceeded" ||
-      normalizedCode === "model_context_window_exceeded" ||
+    (codes.includes("context_length_exceeded") ||
+      codes.includes("model_context_window_exceeded") ||
       isContextOverflow(text))
   )
     return new InvalidRequestReason({ ...common, classification: "context-overflow" })
   if (CONTENT_POLICY_TEXT.test(text)) return new ContentPolicyReason(common)
-  if (
-    (normalizedCode !== undefined && QUOTA_CODES.has(normalizedCode)) ||
-    (input.status === 429 && QUOTA_TEXT.test(text))
-  )
+  if (codes.some((code) => QUOTA_CODES.has(code)) || (input.status === 429 && QUOTA_TEXT.test(text)))
     return new QuotaExceededReason(common)
   if (input.status === 401) return new AuthenticationReason({ ...common, kind: "invalid" })
   if (input.status === 403) return new AuthenticationReason({ ...common, kind: "insufficient-permissions" })
-  if (normalizedCode === "authentication_error") return new AuthenticationReason({ ...common, kind: "invalid" })
-  if (normalizedCode === "permission_error")
+  if (codes.includes("authentication_error")) return new AuthenticationReason({ ...common, kind: "invalid" })
+  if (codes.includes("permission_error"))
     return new AuthenticationReason({ ...common, kind: "insufficient-permissions" })
   if (
-    normalizedCode !== undefined &&
-    (normalizedCode.includes("rate_limit") ||
-      normalizedCode === "too_many_requests" ||
-      normalizedCode === "throttlingexception")
+    codes.some((code) => code.includes("rate_limit") || code === "too_many_requests" || code === "throttlingexception")
   )
     return new RateLimitReason({
       ...common,
@@ -117,10 +112,7 @@ export function classifyProviderFailure(input: ProviderFailure): LLMError["reaso
       retryAfterMs: input.retryAfterMs,
       rateLimit: input.rateLimit,
     })
-  if (
-    normalizedCode !== undefined &&
-    (SERVER_CODES.has(normalizedCode) || normalizedCode.includes("exhausted") || normalizedCode.includes("unavailable"))
-  )
+  if (codes.some((code) => SERVER_CODES.has(code) || code.includes("exhausted") || code.includes("unavailable")))
     return new ProviderInternalReason({
       ...common,
       status: input.status,
@@ -139,7 +131,7 @@ export function classifyProviderFailure(input: ProviderFailure): LLMError["reaso
       status: input.status,
       retryAfterMs: input.retryAfterMs,
     })
-  if (normalizedCode !== undefined && INVALID_REQUEST_CODES.has(normalizedCode)) return new InvalidRequestReason(common)
+  if (codes.some((code) => INVALID_REQUEST_CODES.has(code))) return new InvalidRequestReason(common)
   if (
     input.status === 400 ||
     input.status === 404 ||
@@ -151,11 +143,11 @@ export function classifyProviderFailure(input: ProviderFailure): LLMError["reaso
   return new UnknownProviderReason({ ...common, status: input.status })
 }
 
-function providerCode(value: string) {
+function providerCodes(value: string) {
   const decoded = Option.getOrUndefined(decodeJson(value))
-  if (!isRecord(decoded)) return undefined
+  if (!isRecord(decoded)) return []
   const error = isRecord(decoded.error) ? decoded.error : undefined
-  return [decoded.code, error?.code, error?.type].find((value): value is string => typeof value === "string")
+  return [decoded.code, error?.code, error?.type].filter((value): value is string => typeof value === "string")
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
