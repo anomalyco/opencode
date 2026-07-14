@@ -31,7 +31,7 @@ import { invokeObjectMethod } from "../stdlib/object.js"
 import { invokeRegExpMethod, matchToValue, toHostRegex } from "../stdlib/regexp.js"
 import { invokeStringStatic } from "../stdlib/string.js"
 import { invokeURLMethod, invokeURLStatic, uriArgument } from "../stdlib/url.js"
-import { boundedData, coerceToNumber, coerceToString } from "../stdlib/value.js"
+import { boundedData, coerceToNumber, coerceToString, errorBrandName } from "../stdlib/value.js"
 
 export type CallbackRunner<R> = {
   readonly invokeFunction: (fn: CodeModeFunction, args: Array<unknown>) => Effect.Effect<unknown, unknown, R>
@@ -416,9 +416,12 @@ const invokeStringReplacer = <R>(
         args[1] instanceof CodeModeFunction && args[1].async && replacement instanceof CodeModePromise
           ? yield* runner.settlePromise(replacement)
           : replacement
+      // Error values are branded plain objects; boundedData would strip the brand before coercion.
       output.push(
         value.slice(end, match.offset),
-        coerceToString(boundedData(resolved, `String.${name} replacer result`)),
+        errorBrandName(resolved)
+          ? coerceToString(resolved)
+          : coerceToString(boundedData(resolved, `String.${name} replacer result`)),
       )
       end = match.offset + match.match.length
     }

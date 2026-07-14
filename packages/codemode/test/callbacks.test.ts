@@ -81,6 +81,20 @@ describe("constructors callable without new, like JS", () => {
     expect(await value(`return TypeError("bad").name`)).toBe("TypeError")
   })
 
+  test("error values stringify like JS Error.prototype.toString", async () => {
+    expect(await value(`return String(TypeError("bad"))`)).toBe("TypeError: bad")
+    expect(await value(`return String(Error(""))`)).toBe("Error")
+    expect(await value(`return "x" + RangeError("oops")`)).toBe("xRangeError: oops")
+    expect(await value(`return "a1b2".replace(/\\d/, Error)`)).toBe("aError: 1b2")
+  })
+
+  test("literal elisions are real holes, like JS", async () => {
+    expect(await value(`return (0 in [, 1])`)).toBe(false)
+    expect(await value(`return Object.keys([, 1, ,])`)).toEqual(["1"])
+    expect(await value(`return [, 1, ,].filter(() => true).length`)).toBe(1)
+    expect(await value(`return [, ,].every((x) => false)`)).toBe(true)
+  })
+
   test("Array constructs from arguments or a length", async () => {
     expect(await value(`return Array(1, 2, 3)`)).toEqual([1, 2, 3])
     expect(await value(`return Array("3")`)).toEqual(["3"])
@@ -123,6 +137,10 @@ describe("constructors callable without new, like JS", () => {
 
   test("returned sparse arrays normalize holes to null at the host boundary", async () => {
     expect(await value(`return Array(3)`)).toEqual([null, null, null])
+  })
+
+  test("RegExp with non-string flags throws a SyntaxError, like JS", async () => {
+    expect((await error(`try { RegExp("a", 0) } catch (e) { throw Error(e.name) }`)).message).toContain("SyntaxError")
   })
 
   test("new-requiring constructors throw a TypeError when called", async () => {

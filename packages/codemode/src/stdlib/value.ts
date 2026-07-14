@@ -41,6 +41,15 @@ export const coerceToString = (value: unknown): string => {
   if (value instanceof CodeModeSet) return "[object Set]"
   if (value instanceof CodeModeURL) return value.url.href
   if (value instanceof CodeModeURLSearchParams) return value.params.toString()
+  if (errorBrandName(value) !== undefined) {
+    // Match Error.prototype.toString: "name: message", or just one when the other is empty.
+    const error = value as { name?: unknown; message?: unknown }
+    const name = typeof error.name === "string" ? error.name : "Error"
+    const message = typeof error.message === "string" ? error.message : ""
+    if (message === "") return name
+    if (name === "") return message
+    return `${name}: ${message}`
+  }
   if (typeof value === "object") {
     return Array.isArray(value)
       ? value.map((item) => (item === null || item === undefined ? "" : coerceToString(item))).join(",")
@@ -57,6 +66,8 @@ export const coerceToNumber = (value: unknown): number => {
 
 export const invokeCoercion = (ref: CoercionFunction, args: Array<unknown>, node: AstNode): unknown => {
   const raw = args[0]
+  // Error values are plain SafeObjects; the boundedData path below would strip their brand.
+  if (ref.name === "String" && errorBrandName(raw) !== undefined) return coerceToString(raw)
   if (isCodeModeValue(raw)) {
     if (ref.name === "Boolean") return true
     if (ref.name === "Number") return coerceToNumber(raw)

@@ -1070,7 +1070,7 @@ export class Interpreter<R> {
       throw new InterpreterRuntimeError(
         `RegExp flags must be a string of flag characters (e.g. "g", "gi"), not ${flagsArg === null ? "null" : typeof flagsArg}.`,
         node,
-      )
+      ).as("SyntaxError")
     }
     const flags = flagsArg ?? (first instanceof CodeModeRegExp ? first.regex.flags : "")
     try {
@@ -1664,7 +1664,8 @@ export class Interpreter<R> {
     return Effect.gen(function* () {
       for (const elementValue of elements) {
         if (elementValue === null) {
-          values.push(undefined)
+          // A literal elision is a real hole, like JS: extend length without an own index.
+          values.length += 1
           continue
         }
         const element = asNode(elementValue, "elements")
