@@ -72,7 +72,7 @@ export const Plugin = {
                   },
                   sessionID: context.sessionID,
                   agent: context.agent,
-                  source: { type: "tool", messageID: context.assistantMessageID, callID: context.toolCallID },
+                  source: { type: "tool", messageID: context.messageID, callID: context.callID },
                 })
                 const cwd = path.resolve(location.directory, input.path ?? ".")
                 yield* fs

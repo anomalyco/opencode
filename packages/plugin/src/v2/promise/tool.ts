@@ -5,7 +5,9 @@ import type { SessionMessage } from "@opencode-ai/schema/session-message"
 import type { JsonSchema, Schema } from "effect"
 import type { Hooks, Transform } from "./registration.js"
 
-export type Context = Tool.Context
+export type Context = Omit<Tool.Context, "progress"> & {
+  readonly progress: (update: Tool.Progress) => Promise<void>
+}
 export type SchemaType<A> = Tool.SchemaType<A>
 export type Content = Tool.Content
 export type DynamicOutput = Tool.DynamicOutput
@@ -50,8 +52,8 @@ export interface ToolExecuteBeforeEvent {
   readonly tool: string
   readonly sessionID: Session.ID
   readonly agent: Agent.ID
-  readonly assistantMessageID: SessionMessage.ID
-  readonly toolCallID: string
+  readonly messageID: SessionMessage.ID
+  readonly callID: string
   input: unknown
 }
 
@@ -59,8 +61,8 @@ export interface ToolExecuteAfterEvent {
   readonly tool: string
   readonly sessionID: Session.ID
   readonly agent: Agent.ID
-  readonly assistantMessageID: SessionMessage.ID
-  readonly toolCallID: string
+  readonly messageID: SessionMessage.ID
+  readonly callID: string
   readonly input: unknown
   result: Tool.ToolExecuteAfterEvent["result"]
   output?: Tool.ToolExecuteAfterEvent["output"]

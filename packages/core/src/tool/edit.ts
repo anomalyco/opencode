@@ -122,8 +122,8 @@ export const Plugin = {
                 return Effect.gen(function* () {
                   const permissionSource = {
                     type: "tool" as const,
-                    messageID: context.assistantMessageID,
-                    callID: context.toolCallID,
+                    messageID: context.messageID,
+                    callID: context.callID,
                   }
                   if (input.oldString === input.newString) {
                     return yield* new ToolFailure({

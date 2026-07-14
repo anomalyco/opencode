@@ -4,19 +4,15 @@ import { createMemo, Match, Show, Switch } from "solid-js"
 import { useTerminalDimensions } from "@opentui/solid"
 import { useTuiPaths } from "../../context/runtime"
 import { useTheme } from "../../context/theme"
-import { useHomeSessionDestination } from "../../routes/home/session-destination"
 import { abbreviateHome } from "../../runtime"
 import { FilePath } from "../../ui/file-path"
 
 function Directory(props: { context: Plugin.Context; maxWidth: number }) {
   const { theme } = useTheme()
-  const destination = useHomeSessionDestination()
   const paths = useTuiPaths()
-  const directory = createMemo(() => {
-    const selected = destination?.destination()
-    if (!selected || selected.type === "new") return
-    return abbreviateHome(selected.directory || props.context.data.location.default().directory, paths.home)
-  })
+  const directory = createMemo(() =>
+    props.context.location ? abbreviateHome(props.context.location.directory, paths.home) : undefined,
+  )
 
   return (
     <Show when={directory()}>
@@ -27,7 +23,7 @@ function Directory(props: { context: Plugin.Context; maxWidth: number }) {
 
 function Mcp(props: { context: Plugin.Context }) {
   const { theme } = useTheme()
-  const list = createMemo(() => props.context.data.location.mcp.server.list() ?? [])
+  const list = createMemo(() => props.context.data.location.mcp.server.list(props.context.location) ?? [])
   const failed = createMemo(() => list().some((item) => item.status.status === "failed"))
   const count = createMemo(() => list().filter((item) => item.status.status === "connected").length)
 
@@ -55,7 +51,7 @@ function View(props: { context: Plugin.Context }) {
   const { theme } = useTheme()
   const dimensions = useTerminalDimensions()
   const mcpWidth = createMemo(() => {
-    const list = props.context.data.location.mcp.server.list() ?? []
+    const list = props.context.data.location.mcp.server.list(props.context.location) ?? []
     if (list.length === 0) return 0
     const count = list.filter((item) => item.status.status === "connected").length
     return Bun.stringWidth(`⊙ ${count} MCP /status`) + 2

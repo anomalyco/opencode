@@ -1,27 +1,38 @@
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
-import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
 import { DiffRenderable, type Renderable, ScrollBoxRenderable } from "@opentui/core"
-import { testRender, useRenderer } from "@opentui/solid"
-import type { TuiPluginApi, TuiPluginMeta, TuiRouteCurrent, TuiRouteDefinition } from "@opencode-ai/plugin/tui"
+import { testRender } from "@opentui/solid"
+import type {
+  Context,
+  Destination,
+  KeymapCommand,
+  KeymapLayer,
+  Page,
+  Route,
+  Slot,
+} from "@opencode-ai/plugin/v2/tui/context"
 import { ThemeProvider } from "../../../src/context/theme"
 import { ConfigProvider } from "../../../src/config"
-import { ClientProvider } from "../../../src/context/client"
 import { TuiKeybind } from "../../../src/config/keybind"
-import { OpencodeKeymapProvider } from "../../../src/keymap"
+import { Keymap } from "../../../src/context/keymap"
 import diffViewerPlugin from "../../../src/feature-plugins/system/diff-viewer"
-import { createTuiPluginApi } from "../../fixture/tui-plugin"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 import { TestTuiContexts } from "../../fixture/tui-environment"
 import { createApi, createEventStream, createFetch, json } from "../../fixture/tui-client"
+import { DialogProvider } from "../../../src/ui/dialog"
+import { ToastProvider } from "../../../src/ui/toast"
 
 test("closing the diff viewer returns to the route it opened from", async () => {
   const viewer = await renderDiffViewer([])
   try {
     expect(viewer.current()).toEqual({
+      type: "plugin",
+      id: "diff-viewer",
       name: "diff",
-      params: { mode: "working", sessionID: "session-1", returnRoute: startRoute },
+      data: { mode: "working", sessionID: "session-1", returnRoute: startRoute },
     })
+    const route = viewer.current()
+    expect(route.type === "plugin" ? route.data?.returnRoute : undefined).not.toBe(startRoute)
     expect(viewer.vcsDiffInput()).toEqual({
       location: { directory: "/repo/session" },
       mode: "working",
@@ -29,7 +40,7 @@ test("closing the diff viewer returns to the route it opened from", async () => 
     })
 
     expect(viewer.commands.has("diff.close")).toBe(true)
-    viewer.commands.get("diff.close")!.run?.({} as never)
+    viewer.commands.get("diff.close")!.run()
     expect(viewer.current()).toEqual(startRoute)
   } finally {
     viewer.app.renderer.destroy()
@@ -41,6 +52,19 @@ test("shows an error instead of an empty diff when loading fails", async () => {
   try {
     await viewer.app.waitForFrame((frame) => frame.includes("Could not load diff"))
     expect(viewer.app.captureCharFrame()).not.toContain("No changes to show")
+  } finally {
+    viewer.app.renderer.destroy()
+  }
+})
+
+test("uses the active location when opened outside a session", async () => {
+  const viewer = await renderDiffViewer([], 20, { type: "home" })
+  try {
+    expect(viewer.vcsDiffInput()).toEqual({
+      location: { directory: "/repo/default" },
+      mode: "working",
+      context: "12",
+    })
   } finally {
     viewer.app.renderer.destroy()
   }
@@ -85,26 +109,26 @@ test("brackets navigate diff hunks", async () => {
     expect(TuiKeybind.defaultValue("diff_next_hunk")).toBe("]")
     expect(TuiKeybind.defaultValue("diff_previous_hunk")).toBe("[")
 
-    viewer.commands.get("diff.next_hunk")!.run?.({} as never)
+    viewer.commands.get("diff.next_hunk")!.run()
     await viewer.app.renderOnce()
     const first = scroll.scrollTop
     expect(first).toBeGreaterThan(initial)
 
-    viewer.commands.get("diff.next_hunk")!.run?.({} as never)
+    viewer.commands.get("diff.next_hunk")!.run()
     await viewer.app.renderOnce()
     const second = scroll.scrollTop
     expect(second).toBeGreaterThan(first)
 
-    viewer.commands.get("diff.previous_hunk")!.run?.({} as never)
+    viewer.commands.get("diff.previous_hunk")!.run()
     await viewer.app.renderOnce()
     expect(scroll.scrollTop).toBe(first)
 
-    viewer.commands.get("diff.next_hunk")!.run?.({} as never)
+    viewer.commands.get("diff.next_hunk")!.run()
     await viewer.app.renderOnce()
     expect(scroll.scrollTop).toBe(second)
 
     scroll.scrollTo(initial)
-    viewer.commands.get("diff.next_hunk")!.run?.({} as never)
+    viewer.commands.get("diff.next_hunk")!.run()
     await viewer.app.renderOnce()
     expect(scroll.scrollTop).toBe(first)
   } finally {
@@ -112,13 +136,11 @@ test("brackets navigate diff hunks", async () => {
   }
 })
 
-async function renderDiffViewer(vcsDiff: unknown[], height = 20, initialRoute?: TuiRouteCurrent, fail = false) {
-  const commands = new Map<
-    string,
-    NonNullable<Parameters<TuiPluginApi["keymap"]["registerLayer"]>[0]["commands"]>[number]
-  >()
+async function renderDiffViewer(vcsDiff: unknown[], height = 20, initialRoute?: Route, fail = false) {
+  const commands = new Map<string, KeymapCommand>()
   let current = initialRoute ?? startRoute
-  let renderDiff: TuiRouteDefinition["render"] | undefined
+  let renderDiff: Page["render"] | undefined
+  let renderCommands: Slot | undefined
   let vcsDiffInput: unknown
   const config = createTuiResolvedConfig()
   const transport = createFetch((url) => {
@@ -135,51 +157,68 @@ async function renderDiffViewer(vcsDiff: unknown[], height = 20, initialRoute?: 
     })
   }, createEventStream())
   function Harness() {
-    const renderer = useRenderer()
-    const keymap = createDefaultOpenTuiKeymap(renderer)
-    const registerLayer = keymap.registerLayer.bind(keymap)
-    keymap.registerLayer = (layer) => {
-      layer.commands?.forEach((command) => commands.set(command.name, command))
-      return registerLayer(layer)
-    }
-    const base = createTuiPluginApi({
-      keymap,
-      state: {
-        session: {
-          get: () => session,
-        },
+    const context = {
+      options: {},
+      client: createApi(transport.fetch),
+      data: {
+        session: { get: () => session },
+        location: { default: () => ({ directory: "/repo/default" }) },
       },
-    })
-    const api = {
-      ...base,
-      route: {
-        register(routes) {
-          renderDiff = routes.find((route) => route.name === "diff")?.render
+      keymap: {
+        layer(input: () => KeymapLayer) {
+          input().commands?.forEach((command) => {
+            if (command.id) commands.set(command.id, command)
+          })
+        },
+        dispatch() {},
+        shortcut: () => undefined,
+        mode: { current: () => "base", push: () => () => {} },
+      },
+      ui: {
+        router: {
+          register(page: Page) {
+            if (page.name === "diff") renderDiff = page.render
+          return () => {}
+          },
+          navigate(destination: Destination) {
+            current = destination.type === "plugin" && !("id" in destination)
+              ? { ...destination, id: "diff-viewer" }
+              : destination
+          },
+          current: () => current,
+        },
+        slot(_name: string, render: Slot) {
+          renderCommands = render
           return () => {}
         },
-        navigate(name, params) {
-          current = params ? { name, params } : { name }
-        },
-        get current() {
-          return current
-        },
       },
-    } satisfies TuiPluginApi
+    } as unknown as Context
 
-    void diffViewerPlugin.tui(api, undefined, pluginMeta)
-    if (!initialRoute) commands.get("diff.open")?.run?.({} as never)
+    void diffViewerPlugin.setup(context)
+    function Content() {
+      const commandView = renderCommands?.({})
+      if (current.type !== "plugin") commands.get("diff.open")?.run()
+      return (
+        <>
+          {commandView}
+          {renderDiff?.({ data: current.type === "plugin" ? current.data : undefined })}
+        </>
+      )
+    }
 
     return (
       <TestTuiContexts>
-        <ClientProvider api={createApi(transport.fetch)}>
-          <OpencodeKeymapProvider keymap={keymap}>
-            <ConfigProvider config={config}>
+        <ConfigProvider config={config}>
+          <Keymap.Provider>
+            <ToastProvider>
               <ThemeProvider mode="dark">
-                {renderDiff?.({ params: "params" in current ? current.params : undefined })}
+                <DialogProvider>
+                  <Content />
+                </DialogProvider>
               </ThemeProvider>
-            </ConfigProvider>
-          </OpencodeKeymapProvider>
-        </ClientProvider>
+            </ToastProvider>
+          </Keymap.Provider>
+        </ConfigProvider>
       </TestTuiContexts>
     )
   }
@@ -194,7 +233,7 @@ async function renderDiffViewer(vcsDiff: unknown[], height = 20, initialRoute?: 
   }
 }
 
-const startRoute: TuiRouteCurrent = { name: "session", params: { sessionID: "session-1" } }
+const startRoute: Route = { type: "session", sessionID: "session-1" }
 
 function findScrollBox(root: Renderable): ScrollBoxRenderable | undefined {
   if (root instanceof ScrollBoxRenderable && containsDiff(root)) return root
@@ -208,26 +247,30 @@ function containsDiff(root: Renderable): boolean {
 
 const session = {
   id: "session-1",
-  slug: "session-1",
   projectID: "project-1",
-  directory: "/repo/session",
+  location: { directory: "/repo/session" },
   title: "Session",
-  version: "1",
+  cost: { currency: "USD", amount: 0 },
+  tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
   time: {
     created: 0,
     updated: 0,
   },
-} satisfies NonNullable<ReturnType<TuiPluginApi["state"]["session"]["get"]>>
+}
 
 test("branch diff source requests branch VCS diff", async () => {
   const viewer = await renderDiffViewer([], 20, {
+    type: "plugin",
+    id: "diff-viewer",
     name: "diff",
-    params: { mode: "branch", sessionID: "session-1", returnRoute: startRoute },
+    data: { mode: "branch", sessionID: "session-1", returnRoute: startRoute },
   })
   try {
     expect(viewer.current()).toEqual({
+      type: "plugin",
+      id: "diff-viewer",
       name: "diff",
-      params: { mode: "branch", sessionID: "session-1", returnRoute: startRoute },
+      data: { mode: "branch", sessionID: "session-1", returnRoute: startRoute },
     })
     expect(viewer.vcsDiffInput()).toEqual({
       location: { directory: "/repo/session" },
@@ -250,16 +293,3 @@ async function waitForCommand(
     await new Promise((resolve) => setTimeout(resolve, 25))
   }
 }
-
-const pluginMeta = {
-  id: "diff-viewer",
-  source: "internal",
-  spec: "diff-viewer",
-  target: "diff-viewer",
-  first_time: 0,
-  last_time: 0,
-  time_changed: 0,
-  load_count: 1,
-  fingerprint: "test",
-  state: "same",
-} satisfies TuiPluginMeta

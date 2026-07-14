@@ -4,16 +4,14 @@ import type { SafeObject } from "../tool-runtime.js"
 import {
   type AstNode,
   CodeModeFunction,
-  CoercionFunction,
   InterpreterRuntimeError,
   ProgramThrow,
   PromiseCapabilityFunction,
   PromiseInstanceMethodReference,
   PromiseMethodReference,
-  UriFunction,
 } from "./model.js"
 import { caughtErrorValue, normalizeError } from "./errors.js"
-import { applyCollectionCallback, type CallbackRunner } from "./methods.js"
+import { applyCollectionCallback, isSupportedCallback, type CallbackRunner, type SupportedCallback } from "./methods.js"
 import { typeofValue } from "./references.js"
 import { spreadItems } from "../stdlib/collections.js"
 import { createAggregateErrorValue } from "../stdlib/value.js"
@@ -258,20 +256,11 @@ class PromiseAnyFulfilled {
   constructor(readonly value: unknown) {}
 }
 
-type ReactionHandler = CodeModeFunction | CoercionFunction | UriFunction | PromiseCapabilityFunction
-
-const reactionHandler = (value: unknown, method: string, node: AstNode): ReactionHandler | undefined => {
-  if (
-    value instanceof CodeModeFunction ||
-    value instanceof CoercionFunction ||
-    value instanceof UriFunction ||
-    value instanceof PromiseCapabilityFunction
-  ) {
-    return value
-  }
+const reactionHandler = (value: unknown, method: string, node: AstNode): SupportedCallback | undefined => {
+  if (isSupportedCallback(value)) return value
   if (typeofValue(value) === "function") {
     throw new InterpreterRuntimeError(
-      `${method} handlers must be plain functions; wrap other callables in an arrow function, e.g. (value) => tools.ns.tool(value).`,
+      `${method} cannot use this callable as a handler; wrap it in an arrow function, e.g. (value) => tools.ns.tool(value).`,
       node,
     )
   }
@@ -294,8 +283,8 @@ const chainReaction = <R>(
   runner: CallbackRunner<R>,
   promises: PromiseRuntime<R>,
   source: CodeModePromise,
-  onFulfilled: ReactionHandler | undefined,
-  onRejected: ReactionHandler | undefined,
+  onFulfilled: SupportedCallback | undefined,
+  onRejected: SupportedCallback | undefined,
   method: string,
   node: AstNode,
 ): Effect.Effect<CodeModePromise, never, R> => {
@@ -320,7 +309,7 @@ const chainFinally = <R>(
   runner: CallbackRunner<R>,
   promises: PromiseRuntime<R>,
   source: CodeModePromise,
-  cleanup: ReactionHandler | undefined,
+  cleanup: SupportedCallback | undefined,
   method: string,
   node: AstNode,
 ): Effect.Effect<CodeModePromise, never, R> =>

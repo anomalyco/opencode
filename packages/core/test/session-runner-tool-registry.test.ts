@@ -15,10 +15,10 @@ const bounds: ToolOutputStore.BoundInput[] = []
 const retentionFailure = new ToolOutputStore.StorageError({ operation: "write", cause: new Error("disk full") })
 const outputStore = Layer.mock(ToolOutputStore.Service, {
   bound: (input) => {
-    if (input.toolCallID === "call-retention-failure") return Effect.fail(retentionFailure)
+    if (input.callID === "call-retention-failure") return Effect.fail(retentionFailure)
     return Effect.sync(() => bounds.push(input)).pipe(
       Effect.as(
-        input.toolCallID === "call-bounded"
+        input.callID === "call-bounded"
           ? {
               output: { structured: {}, content: [{ type: "text" as const, text: "bounded reference" }] },
               outputPaths: ["/managed/generic"],
@@ -32,7 +32,7 @@ const registryLayer = AppNodeBuilder.build(ToolRegistry.node, [[ToolOutputStore.
 const it = testEffect(registryLayer)
 const identity = {
   agent: AgentV2.ID.make("build"),
-  assistantMessageID: SessionMessage.ID.make("msg_registry"),
+  messageID: SessionMessage.ID.make("msg_registry"),
 }
 const sessionID = SessionV2.ID.make("ses_registry")
 const call = (name: string, id = `call-${name}`): ToolRegistry.ExecuteInput => ({
@@ -240,7 +240,9 @@ describe("ToolRegistry", () => {
         ...identity,
         call: { type: "tool-call", id: "call-context", name: "context", input: {} },
       })
-      expect(contexts).toEqual([{ sessionID, ...identity, toolCallID: "call-context" }])
+      expect(contexts).toEqual([
+        { sessionID, ...identity, callID: "call-context", progress: expect.any(Function) },
+      ])
     }),
   )
 

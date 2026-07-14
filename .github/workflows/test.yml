@@ -70,6 +70,14 @@ jobs:
         env:
           OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: ${{ runner.os == 'Windows' && 'true' || 'false' }}
 
+      - name: Verify compiled service lifecycle
+        if: always()
+        timeout-minutes: 10
+        working-directory: packages/cli
+        run: |
+          bun run script/build.ts --single --skip-install
+          bun run script/service-smoke.ts
+
       - name: Check generated client
         if: runner.os == 'Linux'
         working-directory: packages/client

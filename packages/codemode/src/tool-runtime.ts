@@ -270,7 +270,8 @@ export const copyOut = (value: unknown, undefinedAsNull = false): unknown => {
     return null
   }
   if (Array.isArray(value)) {
-    return value.map((item) => copyOut(item, undefinedAsNull))
+    // Array.from densifies holes so sparse arrays normalize at the boundary like JSON does.
+    return Array.from(value, (item) => copyOut(item, undefinedAsNull))
   }
 
   if (value !== null && typeof value === "object" && !(value instanceof ToolReference)) {

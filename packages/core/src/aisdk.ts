@@ -103,11 +103,12 @@ function wrapSSE(res: Response, ms: number, ctl: AbortController) {
 }
 
 function prepareOptions(model: ModelV2.Info, pkg: string) {
+  const projected = mapBodyToProviderOptions(model)
   const options: Record<string, any> = {
     name: model.providerID,
     ...(model.settings ?? {}),
     headers: model.headers,
-    body: model.body,
+    body: projected.body,
   }
 
   const customFetch = options.fetch
@@ -300,8 +301,9 @@ export const locationLayer = Layer.effect(
 export const defaultLayer = locationLayer
 
 function modelFromLanguage(info: ModelV2.Info, language: LanguageModelV3) {
-  const settings = requestSettings(info.settings)
-  const optionKey = providerOptionKey(ProviderV2.packageName(info.package), info.providerID)
+  const packageName = ProviderV2.packageName(info.package)
+  const projected = mapBodyToProviderOptions(info)
+  const optionKey = providerOptionKey(packageName, info.providerID)
   const route: AnyRoute = {
     id: `ai-sdk:${ProviderV2.packageName(info.package) ?? "unknown"}`,
     provider: ProviderID.make(info.providerID),
@@ -317,11 +319,14 @@ function modelFromLanguage(info: ModelV2.Info, language: LanguageModelV3) {
     defaults: {
       headers: info.headers,
       http:
-        info.body === undefined && info.headers === undefined
+        projected.body === undefined && info.headers === undefined
           ? undefined
-          : { body: info.body === undefined ? undefined : { ...info.body }, headers: info.headers },
+          : {
+              body: projected.body === undefined ? undefined : { ...projected.body },
+              headers: info.headers,
+            },
       limits: { context: info.limit.context, output: info.limit.output },
-      providerOptions: settings === undefined ? undefined : { [optionKey]: settings },
+      providerOptions: projected.settings === undefined ? undefined : { [optionKey]: projected.settings },
     },
     body: {
       schema: Schema.Unknown,
@@ -354,6 +359,18 @@ function requestSettings(settings: Readonly<Record<string, unknown>> | undefined
     ),
   )
   return Object.keys(result).length === 0 ? undefined : result
+}
+
+function mapBodyToProviderOptions(model: ModelV2.Info) {
+  const settings = requestSettings(model.settings)
+  if (!Schema.is(Schema.Struct({ mode: Schema.Literal("pro") }))(model.body?.reasoning))
+    return { settings, body: model.body }
+  const body = { ...model.body }
+  delete body.reasoning
+  return {
+    settings: ProviderV2.mergeOverlay(settings, { reasoningMode: "pro" }),
+    body: Object.keys(body).length === 0 ? undefined : body,
+  }
 }
 
 function callOptions(request: LLMRequest): LanguageModelV3CallOptions {

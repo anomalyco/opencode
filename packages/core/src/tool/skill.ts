@@ -79,7 +79,7 @@ export const Plugin = {
                     save: [skill.id],
                     sessionID: context.sessionID,
                     agent: context.agent,
-                    source: { type: "tool", messageID: context.assistantMessageID, callID: context.toolCallID },
+                    source: { type: "tool", messageID: context.messageID, callID: context.callID },
                   })
                   const directory = path.dirname(skill.location)
                   const files =

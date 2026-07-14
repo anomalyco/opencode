@@ -34,7 +34,7 @@ import {
   UriFunction,
 } from "./model.js"
 import { caughtErrorValue, constructErrorValue } from "./errors.js"
-import { type CallbackRunner, invokeGlobalMethod, invokeIntrinsic } from "./methods.js"
+import { type CallbackRunner, invokeArrayFrom, invokeGlobalMethod, invokeIntrinsic } from "./methods.js"
 import {
   constructPromise,
   invokePromiseInstanceMethod,
@@ -153,6 +153,7 @@ export class Interpreter<R> {
   private readonly promises: PromiseRuntime<R>
   private readonly runner: CallbackRunner<R> = {
     invokeFunction: (fn, args) => this.invokeFunction(fn, args),
+    invokeCallable: (callable, args, node) => this.invokeCallable(callable, args, node),
     settlePromise: (promise) => this.settlePromise(promise),
   }
 
@@ -997,6 +998,13 @@ export class Interpreter<R> {
     if (errorConstructors.has(name)) {
       return Effect.map(this.evaluateCallArguments(argNodes), (args) => constructErrorValue(name, args, node))
     }
+    // Array and Object construct identically with or without new, like JS.
+    if (name === "Array") {
+      return Effect.map(this.evaluateCallArguments(argNodes), (args) => self.constructArray(args, node))
+    }
+    if (name === "Object") {
+      return Effect.map(this.evaluateCallArguments(argNodes), (args) => self.constructObject(args, node))
+    }
     if (valueConstructors.has(name)) {
       return Effect.gen(function* () {
         const args = yield* self.evaluateCallArguments(argNodes)
@@ -1017,6 +1025,27 @@ export class Interpreter<R> {
       })
     }
     throw unsupportedSyntax("NewExpression", node)
+  }
+
+  private constructArray(args: Array<unknown>, node: AstNode): Array<unknown> {
+    if (args.length !== 1) return [...args]
+    const first = args[0]
+    if (typeof first !== "number") return [first]
+    if (!Number.isInteger(first) || first < 0 || first > 4294967295) {
+      throw new InterpreterRuntimeError("Invalid array length.", node).as("RangeError")
+    }
+    // Sparse like JS: Array(3) has holes, and combinator loops already skip them.
+    return new Array(first)
+  }
+
+  private constructObject(args: Array<unknown>, node: AstNode): unknown {
+    const first = args[0]
+    if (first === null || first === undefined) return {}
+    if (typeof first === "object") return first
+    throw new InterpreterRuntimeError(
+      `Object(${typeof first}) wrapper objects are not supported in CodeMode; use the primitive value directly.`,
+      node,
+    )
   }
 
   private constructDate(args: Array<unknown>): CodeModeDate {
@@ -1041,7 +1070,7 @@ export class Interpreter<R> {
       throw new InterpreterRuntimeError(
         `RegExp flags must be a string of flag characters (e.g. "g", "gi"), not ${flagsArg === null ? "null" : typeof flagsArg}.`,
         node,
-      )
+      ).as("SyntaxError")
     }
     const flags = flagsArg ?? (first instanceof CodeModeRegExp ? first.regex.flags : "")
     try {
@@ -1401,7 +1430,19 @@ export class Interpreter<R> {
       if ((callable === null || callable === undefined) && node.optional === true) return OptionalShortCircuit
 
       const args = yield* self.evaluateCallArguments(argNodes)
+      return yield* self.invokeCallable(callable, args, node, callee)
+    })
+  }
 
+  // The single dispatch for every invocation: call expressions and callbacks share it.
+  private invokeCallable(
+    callable: unknown,
+    args: Array<unknown>,
+    node: AstNode,
+    callee: AstNode = node,
+  ): Effect.Effect<unknown, unknown, R> {
+    const self = this
+    return Effect.gen(function* () {
       if (callable instanceof ToolReference) {
         if (callable.path.length === 0) throw new InterpreterRuntimeError("The tools root is not callable.", callee)
         return yield* self.createToolCallPromise(callable.path, args)
@@ -1426,7 +1467,10 @@ export class Interpreter<R> {
         if (callable.namespace === "Object" && objectMethodsPreservingIdentity.has(callable.name)) {
           return invokeGlobalMethod(callable, args, node)
         }
-        if (callable.namespace === "Array" && (callable.name === "from" || callable.name === "of")) {
+        if (callable.namespace === "Array" && callable.name === "from") {
+          return yield* invokeArrayFrom(self.runner, args, node)
+        }
+        if (callable.namespace === "Array" && callable.name === "of") {
           return invokeGlobalMethod(callable, args, node)
         }
         return boundedData(invokeGlobalMethod(callable, args, node), `${callable.namespace}.${callable.name} result`)
@@ -1442,6 +1486,22 @@ export class Interpreter<R> {
       }
       if (callable instanceof ErrorConstructorReference) {
         return constructErrorValue(callable.name, args, node)
+      }
+      if (callable instanceof GlobalNamespace) {
+        // Real JS permits calling Array, Object, Date, and RegExp without new.
+        if (callable.name === "Array") return self.constructArray(args, node)
+        if (callable.name === "Object") return self.constructObject(args, node)
+        // ISO instead of the host's locale string: CodeMode date strings are
+        // deterministic and must not leak the host timezone.
+        if (callable.name === "Date") return new Date().toISOString()
+        if (callable.name === "RegExp") return self.constructRegExp(args, node)
+        if (typeofValue(callable) === "function") {
+          throw new InterpreterRuntimeError(`Constructor ${callable.name} requires 'new'.`, node).as("TypeError")
+        }
+        throw new InterpreterRuntimeError(`${callable.name} is not a function.`, node).as("TypeError")
+      }
+      if (callable instanceof PromiseNamespace) {
+        throw new InterpreterRuntimeError("Constructor Promise requires 'new'.", node).as("TypeError")
       }
       if (callable instanceof PromiseCapabilityFunction) {
         callable.settle(args[0])
@@ -1604,7 +1664,8 @@ export class Interpreter<R> {
     return Effect.gen(function* () {
       for (const elementValue of elements) {
         if (elementValue === null) {
-          values.push(undefined)
+          // A literal elision is a real hole, like JS: extend length without an own index.
+          values.length += 1
           continue
         }
         const element = asNode(elementValue, "elements")

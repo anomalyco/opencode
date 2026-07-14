@@ -136,8 +136,8 @@ export const Plugin = {
                     agent: context.agent,
                     source: {
                       type: "tool",
-                      messageID: context.assistantMessageID,
-                      callID: context.toolCallID,
+                      messageID: context.messageID,
+                      callID: context.callID,
                     },
                   })
                   .pipe(Effect.mapError((error) => new ToolFailure({ message: `Subagent denied: ${agent.id}`, error })))
@@ -160,6 +160,9 @@ export const Plugin = {
                   )
 
                 const background = input.background === true
+                yield* context.progress({
+                  structured: { sessionID: child.id, status: "running" },
+                })
 
                 const run = Effect.gen(function* () {
                   // The child session owns its agent/model (set at create); prompt only admits input.

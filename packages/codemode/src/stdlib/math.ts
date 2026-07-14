@@ -42,16 +42,26 @@ export const mathMethods = new Set([
 export const invokeMathMethod = (name: string, args: Array<unknown>, node: AstNode): number => {
   if (!mathMethods.has(name)) throw new InterpreterRuntimeError(`Math.${name} is not available in CodeMode.`, node)
   if (name === "random") return Math.random()
-  const nums = args.map((arg) => {
+  // Validate only the arguments the method consumes; like JS, extras are ignored
+  // (so built-ins work as callbacks receiving (element, index, array)).
+  const num = (index: number): number => {
+    if (index >= args.length) return Number.NaN
+    const arg = args[index]
     if (typeof arg !== "number") throw new InterpreterRuntimeError(`Math.${name} expects number arguments.`, node)
     return arg
-  })
-  const [a = Number.NaN, b = Number.NaN] = nums
+  }
+  const nums = () =>
+    args.map((arg) => {
+      if (typeof arg !== "number") throw new InterpreterRuntimeError(`Math.${name} expects number arguments.`, node)
+      return arg
+    })
+  const a = num(0)
+  const b = () => num(1)
   switch (name) {
     case "max":
-      return Math.max(...nums)
+      return Math.max(...nums())
     case "min":
-      return Math.min(...nums)
+      return Math.min(...nums())
     case "abs":
       return Math.abs(a)
     case "acos":
@@ -65,7 +75,7 @@ export const invokeMathMethod = (name: string, args: Array<unknown>, node: AstNo
     case "atan":
       return Math.atan(a)
     case "atan2":
-      return Math.atan2(a, b)
+      return Math.atan2(a, b())
     case "atanh":
       return Math.atanh(a)
     case "floor":
@@ -83,9 +93,9 @@ export const invokeMathMethod = (name: string, args: Array<unknown>, node: AstNo
     case "cbrt":
       return Math.cbrt(a)
     case "pow":
-      return Math.pow(a, b)
+      return Math.pow(a, b())
     case "hypot":
-      return Math.hypot(...nums)
+      return Math.hypot(...nums())
     case "cos":
       return Math.cos(a)
     case "cosh":
@@ -117,7 +127,7 @@ export const invokeMathMethod = (name: string, args: Array<unknown>, node: AstNo
     case "clz32":
       return Math.clz32(a)
     case "imul":
-      return Math.imul(a, b)
+      return Math.imul(a, b())
   }
   throw new InterpreterRuntimeError(`Math.${name} is not available in CodeMode.`, node)
 }

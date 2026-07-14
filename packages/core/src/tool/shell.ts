@@ -165,8 +165,8 @@ export const Plugin = {
               Effect.gen(function* () {
                 const source = {
                   type: "tool" as const,
-                  messageID: context.assistantMessageID,
-                  callID: context.toolCallID,
+                  messageID: context.messageID,
+                  callID: context.callID,
                 }
                 const target = yield* mutation.resolve({ path: input.workdir ?? ".", kind: "directory" })
                 const external = target.externalDirectory
@@ -231,7 +231,7 @@ export const Plugin = {
                   Effect.onInterrupt(() => shell.remove(info.id).pipe(Effect.ignore)),
                 )
                 const job = yield* runtime.job.start({
-                  id: context.toolCallID,
+                  id: context.callID,
                   type: name,
                   title: input.command,
                   metadata: { sessionID: context.sessionID, shellID: info.id },
@@ -240,7 +240,7 @@ export const Plugin = {
 
                 if (input.background === true) {
                   yield* runtime.job.background(job.id)
-                  yield* notifyWhenDone(context.sessionID, context.toolCallID, input.command)
+                  yield* notifyWhenDone(context.sessionID, context.callID, input.command)
                   return {
                     output: BACKGROUND_STARTED,
                     shellID: info.id,
@@ -255,7 +255,7 @@ export const Plugin = {
                   .pipe(Effect.onInterrupt(() => runtime.job.cancel(job.id).pipe(Effect.ignore)))
                 if (result?.type === "backgrounded") {
                   yield* shell.timeout(info.id, 0)
-                  yield* notifyWhenDone(context.sessionID, context.toolCallID, input.command)
+                  yield* notifyWhenDone(context.sessionID, context.callID, input.command)
                   return {
                     output: BACKGROUND_STARTED,
                     shellID: info.id,

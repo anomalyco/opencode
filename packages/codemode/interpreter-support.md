@@ -77,16 +77,28 @@ ultimate source of truth.
 - [x] Synchronous and `async` functions.
 - [x] Closures, recursion, default parameters, rest parameters, and destructured parameters.
 - [x] Expression and block function bodies.
-- [x] User callbacks for the supported Array, Map, Set, URLSearchParams, sort, and string-replacement APIs.
-- [x] `Boolean`, `Number`, `String`, `parseInt`, `parseFloat`, and URI helpers as callbacks where applicable.
+- [x] User callbacks for the supported Array, Map, Set, URLSearchParams, sort, string-replacement, and `Array.from`
+      mapper APIs, with one shared acceptance rule everywhere including promise reactions.
+- [x] `Boolean`, `Number`, `String`, `parseInt`, `parseFloat`, and URI helpers as callbacks.
+- [x] Built-in method references as callbacks, such as `values.map(Math.abs)`, `records.map(JSON.stringify)`,
+      `items.forEach(console.log)`, and `Promise.resolve(-1).then(Math.abs)`. Extra callback arguments a built-in
+      does not consume are ignored, like JS; consumed arguments stay strictly validated (`Math.floor` still rejects a
+      string). Intrinsic references keep their receiver (`"abc".includes` works as a predicate), unlike detached JS
+      methods, which lose `this`.
+- [x] Constructors work as callbacks with JS call semantics: `Error` types construct (`messages.map(Error)`),
+      and new-requiring constructors (`Map`, `Set`, `URL`, `URLSearchParams`, `Promise`) throw a `TypeError`,
+      like JS.
+- [x] Tool references and detached `Promise` statics are rejected as callbacks with a hint to wrap them in an
+      arrow function.
 - [x] Async string replacement callbacks; replacements are evaluated sequentially.
-- [ ] `this`, `super`, constructor functions, or function prototype methods such as `call`, `apply`, and `bind`.
+- [x] The optional `thisArg` of iteration methods is accepted and ignored: CodeMode functions have no `this`, so
+      ignoring it matches JS arrow-function semantics exactly.
+- [ ] `this`, `super`, user-defined constructor functions, or function prototype methods such as `call`, `apply`,
+      and `bind`.
 - [ ] Classes and private fields.
 - [ ] Generator functions and `yield`.
 - [ ] Async predicates, reducers, and comparators with automatic awaiting. Async mapping can be joined explicitly with
       `Promise.all`, but a promise is not a meaningful predicate or sort result.
-- [ ] General built-in callable references as callbacks, such as `values.map(Math.abs)` or
-      `records.map(JSON.stringify)`.
 
 ## Expressions and operators
 
@@ -137,14 +149,17 @@ ultimate source of truth.
 - [x] `new Promise((resolve, reject) => ...)`: the executor runs synchronously and receives first-class resolve/reject
       callables that settle the promise exactly once (they may escape the executor and settle later); an executor
       throw rejects unless the promise already settled, resolving with a promise adopts it, and resolving with the
-      promise itself rejects with a `TypeError`. Resolver callables work as `.then`/`.catch` handlers and collection
-      callbacks but remain opaque references that cannot cross the data boundary.
+      promise itself rejects with a `TypeError`. Resolver callables work anywhere callbacks are accepted, including
+      `.then`/`.catch` handlers and collection callbacks, but remain opaque references that cannot cross the data
+      boundary.
 - [ ] Thenable assimilation (objects with a `then` method are plain data, not promises).
 - [ ] Async iterables, host streams, and stream consumption.
 
 ## Objects and properties
 
 - [x] Own-field reads and writes on plain data objects.
+- [x] `Object()` and `new Object()` return `{}` for nullish arguments and pass objects through unchanged;
+      primitive wrapper objects (`Object(1)`) are rejected explicitly.
 - [x] Computed property names and object spread.
 - [x] `Object.keys`, `Object.values`, `Object.entries`, `Object.hasOwn`, `Object.assign`, and `Object.fromEntries`.
 - [x] `Object.keys` over arrays and tool references.
@@ -157,7 +172,12 @@ ultimate source of truth.
 
 ## Arrays
 
-- [x] Static methods: `Array.isArray`, `Array.of`, and `Array.from`.
+- [x] The `Array` constructor with or without `new`: `Array(a, b)` collects arguments, `Array(n)` creates a
+      sparse array of that length (invalid lengths throw a `RangeError`). Holes behave like JS in iteration,
+      spread, join, and JSON; `sort` densifies holes into trailing `undefined`, and results returned to the
+      host normalize holes to `null`.
+- [x] Static methods: `Array.isArray`, `Array.of`, and `Array.from`, including the `Array.from` mapper form with
+      `(value, index)` arguments.
 - [x] Iteration/transformation: `map`, `filter`, `flatMap`, and `forEach`.
 - [x] Searching/tests: `find`, `findIndex`, `findLast`, `findLastIndex`, `some`, `every`, `includes`, `indexOf`, and
       `lastIndexOf`.
@@ -167,7 +187,7 @@ ultimate source of truth.
 - [x] Mutation: `push`, `pop`, `shift`, `unshift`, `splice`, `fill`, and `copyWithin`.
 - [x] Materialized iteration helpers: `keys`, `values`, and `entries` return arrays rather than iterators.
 - [x] `length`, numeric indexing, index assignment, spread, and `for...of`.
-- [ ] The mapper and `thisArg` forms of `Array.from`.
+- [x] The `thisArg` argument of `Array.from` is accepted and ignored, like JS arrows.
 - [ ] `Array.prototype.toSpliced`.
 - [ ] Canonical index handling: a key such as `"01"` must not alias index `1`.
 - [ ] Complete sparse-array parity. Promise combinators do consume holes as `undefined` members, as in JS.
@@ -219,6 +239,8 @@ ultimate source of truth.
 
 - [x] `Date.now`, `Date.parse`, and `Date.UTC`.
 - [x] `new Date()` from the current time, epoch milliseconds, a date string, another Date, or local components.
+- [x] `Date()` without `new` returns the current time as a string, like JS, but in deterministic ISO format
+      rather than the host's locale/timezone string.
 - [x] `getTime`, `valueOf`, `toISOString`, `toJSON`, and deterministic ISO `toString`.
 - [x] Local getters: `getFullYear`, `getMonth`, `getDate`, `getDay`, `getHours`, `getMinutes`, `getSeconds`, and
       `getMilliseconds`.
@@ -234,7 +256,7 @@ ultimate source of truth.
 
 ## Regular expressions
 
-- [x] Literal and `new RegExp(pattern, flags)` construction.
+- [x] Literal and `RegExp(pattern, flags)` construction, with or without `new`.
 - [x] `test`, `exec`, and `toString`.
 - [x] Readable `source`, `flags`, `lastIndex`, `global`, `ignoreCase`, `multiline`, `sticky`, `unicode`, and `dotAll`.
 - [x] Captures, named groups, match indexes, and stateful global matching.
@@ -295,8 +317,13 @@ These are actionable implementation items. Check them off only when behavior and
       `null` in render-only or OpenAPI tool calls.
 - [ ] Make regular-expression execution genuinely timeout-safe, or narrow the timeout guarantee explicitly.
 - [ ] Complete lexical declaration and destructuring semantics listed above.
-- [ ] Make callback acceptance and async callback behavior consistent across built-ins.
-- [ ] Reject every unsupported callback argument explicitly rather than silently ignoring it.
+- [x] Make callback acceptance consistent across built-ins: collections, sort, string replacers, `Array.from`
+      mappers, and promise reactions share one acceptance rule.
+- [x] Reject every unsupported callable callback argument explicitly rather than silently ignoring it
+      (`JSON.stringify` replacers and `JSON.parse` revivers fail loudly). The iteration-method `thisArg` is
+      accepted and ignored: CodeMode functions have no `this`, so ignoring it matches JS arrow semantics.
+- [ ] Make async callback behavior consistent across built-ins; only string replacers settle async callback results
+      today.
 - [ ] Resolve the built-in correctness gaps listed in the Array, String, Number, Date, and RegExp sections.
 - [ ] Make tool search tokenization Unicode-aware.
 - [ ] Design explicit tagged representations and size limits before adding binary values or streams.

@@ -26,8 +26,9 @@ test("execute preserves successful results with visible unhandled rejections", a
       {
         sessionID: Session.ID.make("ses_execute"),
         agent: Agent.ID.make("build"),
-        assistantMessageID: SessionMessage.ID.make("msg_execute"),
-        toolCallID: "call_execute",
+        messageID: SessionMessage.ID.make("msg_execute"),
+        callID: "call_execute",
+        progress: () => Effect.void,
       },
     ),
   )

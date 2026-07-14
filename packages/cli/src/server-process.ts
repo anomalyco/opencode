@@ -7,11 +7,10 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Global } from "@opencode-ai/core/global"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { AppProcess } from "@opencode-ai/core/process"
-import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
-import { start } from "@opencode-ai/server/process"
+import { ProcessLock } from "@opencode-ai/core/util/process-lock"
 import { randomBytes, randomUUID } from "node:crypto"
 import path from "node:path"
-import { Effect, Exit, FileSystem, Logger, Option, Redacted, Schedule, Schema, Scope } from "effect"
+import { Effect, FileSystem, Logger, Option, Redacted, Schedule, Schema } from "effect"
 import { HttpServer } from "effect/unstable/http"
 import { Env } from "./env"
 import { ServiceConfig } from "./services/service-config"
@@ -28,7 +27,7 @@ export type Options = {
 export const run = Effect.fn("cli.server-process.run")((options: Options) =>
   processEffect(options).pipe(
     Effect.provide(Updater.layer),
-    Effect.provide(AppNodeBuilder.build(LayerNode.group([Global.node, AppProcess.node, EffectFlock.node]))),
+    Effect.provide(AppNodeBuilder.build(LayerNode.group([Global.node, AppProcess.node]))),
     Effect.provide(NodeServices.layer),
   ),
 )
@@ -38,15 +37,15 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
   return yield* Effect.scoped(
     Effect.gen(function* () {
       const serviceOptions = options.mode === "service" ? yield* ServiceConfig.options() : undefined
-      const lockScope = serviceOptions === undefined ? undefined : yield* acquireServiceLock(serviceOptions.file)
-      if (
-        serviceOptions !== undefined &&
-        lockScope !== undefined &&
-        (yield* Service.discover(serviceOptions)) !== undefined
-      ) {
-        yield* Scope.close(lockScope, Exit.void)
-        return
+      if (serviceOptions !== undefined) {
+        const acquired = yield* ProcessLock.acquire(serviceOptions.file + ".lock").pipe(
+          Effect.as(true),
+          Effect.catchTag("ProcessLockHeldError", () => Effect.succeed(false)),
+        )
+        if (!acquired) return yield* Effect.void
+        if ((yield* Service.discover(serviceOptions)) !== undefined) return yield* Effect.void
       }
+      const { start } = yield* Effect.promise(() => import("@opencode-ai/server/process"))
       const environmentPassword = yield* Env.password
       // Keep the lease credential out of the environment inherited by tools.
       if (options.mode === "stdio") {
@@ -61,76 +60,81 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
             ? Redacted.value(environmentPassword)
             : randomBytes(32).toString("base64url")
       if (!password) return yield* Effect.fail(new Error("Missing server password"))
-      const address = yield* start({
+      const instanceID = randomUUID()
+      const server = yield* start({
         hostname: options.hostname ?? config.hostname ?? "127.0.0.1",
         port: Option.fromNullishOr(options.port ?? config.port),
         password,
-        restartContinuity: options.mode === "service",
+        instanceID,
+        service:
+          serviceOptions === undefined
+            ? undefined
+            : { onListen: (address) => register(address, password, instanceID, serviceOptions.file) },
       }).pipe(Effect.provide(Logger.layer([], { mergeWithExisting: false })))
-      if (lockScope !== undefined) {
-        yield* register(address, password)
-        yield* Scope.close(lockScope, Exit.void)
-      }
-      const url = HttpServer.formatAddress(address)
+      const url = HttpServer.formatAddress(server.address)
       console.log(options.mode === "stdio" ? JSON.stringify({ url }) : `server listening on ${url}`)
       if (options.mode === "default" && !environmentPassword) console.log(`server password ${password}`)
       const updater = yield* Updater.Service
       yield* updater.check().pipe(Effect.schedule(Schedule.spaced("10 minutes")), Effect.forkScoped)
-      return yield* options.mode === "stdio" ? waitForStdinClose() : Effect.never
+      return yield* options.mode === "service"
+        ? server.shutdown
+        : options.mode === "stdio"
+          ? waitForStdinClose()
+          : Effect.never
     }).pipe(Effect.annotateLogs({ role: "server" })),
   )
 })
 
-const acquireServiceLock = Effect.fnUntraced(function* (file: string) {
-  const flock = yield* EffectFlock.Service
-  const scope = yield* Scope.make()
-  yield* Effect.addFinalizer((exit) => Scope.close(scope, exit))
-  yield* flock
-    .acquire(`service:${file}`, undefined, { staleMs: 3_000, timeoutMs: 3_000 })
-    .pipe(Effect.provideService(Scope.Scope, scope))
-  return scope
-})
-
-// The latest atomic registration wins. A displaced process notices the new id,
-// exits, and cannot remove its successor's registration from its finalizer.
 const infoJson = Schema.fromJsonString(Service.Info)
 const encodeInfo = Schema.encodeEffect(infoJson)
 const decodeInfo = Schema.decodeUnknownEffect(infoJson)
 
-const register = Effect.fnUntraced(function* (address: HttpServer.Address, password: string) {
+const register = Effect.fnUntraced(function* (
+  address: HttpServer.Address,
+  password: string,
+  id: string,
+  file: string,
+) {
   const fs = yield* FileSystem.FileSystem
-  const options = yield* ServiceConfig.options()
-  const id = randomUUID()
-  const temp = options.file + "." + id + ".tmp"
-  yield* fs.makeDirectory(path.dirname(options.file), { recursive: true })
-  const encoded = yield* encodeInfo({
+  const temp = file + "." + id + ".tmp"
+  yield* fs.makeDirectory(path.dirname(file), { recursive: true })
+  const info = {
     id,
     version: InstallationVersion,
     url: HttpServer.formatAddress(address),
     pid: process.pid,
     password,
-  })
-  yield* fs.writeFileString(temp, encoded, { mode: 0o600 })
-  yield* fs.rename(temp, options.file)
-  const currentID = fs.readFileString(options.file).pipe(
+  }
+  const encoded = yield* encodeInfo(info)
+  const publish = fs.writeFileString(temp, encoded, { mode: 0o600 }).pipe(Effect.andThen(fs.rename(temp, file)))
+  yield* publish
+  const current = fs.readFileString(file).pipe(
     Effect.flatMap(decodeInfo),
-    Effect.map((info) => info.id),
     Effect.orElseSucceed(() => undefined),
   )
-  yield* currentID.pipe(
-    Effect.flatMap((current) =>
-      current === id
-        ? Effect.void
-        : Effect.try({ try: () => process.kill(process.pid, "SIGTERM"), catch: (cause) => cause }).pipe(Effect.ignore),
-    ),
-    Effect.repeat(Schedule.spaced("10 seconds")),
-    Effect.forkScoped,
-  )
+  const assertRegistration = Effect.gen(function* () {
+    const found = yield* current
+    if (
+      found !== undefined &&
+      found.id === info.id &&
+      found.version === info.version &&
+      found.url === info.url &&
+      found.pid === info.pid &&
+      found.password === info.password
+    )
+      return
+    yield* publish
+  })
   yield* Effect.addFinalizer(() =>
-    currentID.pipe(
-      Effect.flatMap((current) => (current === id ? fs.remove(options.file) : Effect.void)),
+    current.pipe(
+      Effect.flatMap((current) => (current?.id === id ? fs.remove(file) : Effect.void)),
       Effect.ignore,
     ),
+  )
+  yield* assertRegistration.pipe(
+    Effect.catchCause((cause) => Effect.logWarning("failed to reassert service registration", { cause })),
+    Effect.repeat(Schedule.spaced("5 seconds")),
+    Effect.forkScoped,
   )
 })
 

@@ -10,8 +10,17 @@ type StreamValue<A> = A extends Stream.Stream<infer Success, any, any> ? Success
 export type Endpoint0_0Output = EffectValue<ReturnType<RawClient["server.health"]["health.get"]>>
 export type HealthGetOperation<E = never> = () => Effect.Effect<Endpoint0_0Output, E>
 
+type Endpoint0_1Request = Parameters<RawClient["server.health"]["health.stop"]>[0]
+export type Endpoint0_1Input = {
+  readonly instanceID: Endpoint0_1Request["payload"]["instanceID"]
+  readonly targetVersion?: Endpoint0_1Request["payload"]["targetVersion"]
+}
+export type Endpoint0_1Output = EffectValue<ReturnType<RawClient["server.health"]["health.stop"]>>
+export type HealthStopOperation<E = never> = (input: Endpoint0_1Input) => Effect.Effect<Endpoint0_1Output, E>
+
 export interface HealthApi<E = never> {
   readonly get: HealthGetOperation<E>
+  readonly stop: HealthStopOperation<E>
 }
 
 export type Endpoint1_0Output = EffectValue<ReturnType<RawClient["server.server"]["server.get"]>>

@@ -178,10 +178,12 @@ describe("SubagentTool", () => {
           const locations = yield* LocationServiceMap.Service
           const registry = yield* ToolRegistry.Service.pipe(Effect.provide(locations.get(parent.location)))
           yield* waitForTool(registry, SubagentTool.name)
+          const progress: ToolRegistry.Progress[] = []
 
           const settled = yield* settleTool(registry, {
             sessionID: parent.id,
             ...toolIdentity,
+            progress: (update) => Effect.sync(() => progress.push(update)),
             call: {
               type: "tool-call",
               id: "call-subagent",
@@ -192,6 +194,7 @@ describe("SubagentTool", () => {
 
           expect(settled.output?.structured).toMatchObject({ status: "completed", output: childText })
           const child = yield* sessions.get(outputSessionID(settled.output?.structured))
+          expect(progress[0]?.structured).toEqual({ sessionID: child.id, status: "running" })
           expect(child).toMatchObject({
             parentID: parent.id,
             location: parent.location,

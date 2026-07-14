@@ -1,16 +1,14 @@
 /** @jsxImportSource @opentui/solid */
-import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
-import { testRender, useRenderer } from "@opentui/solid"
+import { testRender } from "@opentui/solid"
 import { expect, test } from "bun:test"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
-import { onCleanup } from "solid-js"
 import { ClipboardProvider } from "../../../src/context/clipboard"
 import type { FormWithLocation } from "../../../src/context/data"
 import { ClientProvider } from "../../../src/context/client"
 import { ThemeProvider } from "../../../src/context/theme"
+import { Keymap } from "../../../src/context/keymap"
 import { ConfigProvider } from "../../../src/config"
-import { OpencodeKeymapProvider, registerOpencodeKeymap } from "../../../src/keymap"
 import { ToastProvider } from "../../../src/ui/toast"
 import { tmpdir } from "../../fixture/fixture"
 import { TestTuiContexts } from "../../fixture/tui-environment"
@@ -51,11 +49,6 @@ async function mountForm(root: string, width = 80) {
   const { FormPrompt } = await import("../../../src/routes/session/form")
 
   function Harness() {
-    const renderer = useRenderer()
-    const keymap = createDefaultOpenTuiKeymap(renderer)
-    const off = registerOpencodeKeymap(keymap, renderer, config)
-    onCleanup(off)
-
     return (
       <TestTuiContexts
         directory={root}
@@ -73,8 +66,8 @@ async function mountForm(root: string, width = 80) {
             },
           }}
         >
-          <OpencodeKeymapProvider keymap={keymap}>
-            <ConfigProvider config={config}>
+          <ConfigProvider config={config}>
+            <Keymap.Provider>
               <ClientProvider api={createApi(transport.fetch)}>
                 <ThemeProvider mode="dark" source={{ discover: () => Promise.resolve({}) }}>
                   <ToastProvider>
@@ -82,8 +75,8 @@ async function mountForm(root: string, width = 80) {
                   </ToastProvider>
                 </ThemeProvider>
               </ClientProvider>
-            </ConfigProvider>
-          </OpencodeKeymapProvider>
+            </Keymap.Provider>
+          </ConfigProvider>
         </ClipboardProvider>
       </TestTuiContexts>
     )

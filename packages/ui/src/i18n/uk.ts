@@ -160,6 +160,7 @@ export const dict: Record<string, string> = {
   "ui.common.close": "Закрити",
   "ui.common.next": "Далі",
   "ui.common.submit": "Надіслати",
+  "ui.common.showMore": "Показати більше",
 
   "ui.permission.deny": "Заборонити",
   "ui.permission.allowAlways": "Дозволяти завжди",

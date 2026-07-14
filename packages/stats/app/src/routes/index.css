@@ -3063,7 +3063,7 @@
   min-width: 0;
 }
 
-[data-page="stats"] [data-slot="stats-breadcrumb-select-trigger"] {
+[data-page="stats"] button[data-slot="stats-breadcrumb-select-trigger"] {
   display: inline-flex;
   align-items: center;
   justify-content: flex-start;
@@ -3089,13 +3089,13 @@
   cursor: pointer;
 }
 
-[data-page="stats"] [data-slot="stats-breadcrumb-select-trigger"][data-current="true"],
-[data-page="stats"] [data-slot="stats-breadcrumb-select-trigger"]:hover,
-[data-page="stats"] [data-slot="stats-breadcrumb-select-trigger"][data-expanded] {
+[data-page="stats"] button[data-slot="stats-breadcrumb-select-trigger"][data-current="true"],
+[data-page="stats"] button[data-slot="stats-breadcrumb-select-trigger"]:hover,
+[data-page="stats"] button[data-slot="stats-breadcrumb-select-trigger"][data-expanded] {
   color: var(--stats-text);
 }
 
-[data-page="stats"] [data-slot="stats-breadcrumb-select-trigger"]:focus-visible {
+[data-page="stats"] button[data-slot="stats-breadcrumb-select-trigger"]:focus-visible {
   color: var(--stats-text);
   outline: 1px solid var(--stats-text);
   outline-offset: 2px;
@@ -3126,7 +3126,7 @@
 }
 
 [data-page="stats"]
-  [data-slot="stats-breadcrumb-select-trigger"][data-expanded]
+  button[data-slot="stats-breadcrumb-select-trigger"][data-expanded]
   [data-slot="stats-breadcrumb-select-icon"] {
   transform: rotate(180deg);
 }
@@ -6436,7 +6436,7 @@
   white-space: nowrap;
 }
 
-[data-page="stats"] button[data-slot="compare-detail-select-model"] svg {
+[data-page="stats"] button[data-slot="compare-detail-select-model"] > svg {
   flex: 0 0 auto;
   color: var(--stats-muted);
 }
@@ -6510,6 +6510,7 @@
 [data-page="stats"] [data-slot="compare-detail-label"][data-heading="true"] span {
   display: inline-flex;
   align-items: center;
+  flex: 0 0 auto;
   height: 24px;
   padding: 0 8px;
   color: var(--stats-muted);
@@ -6517,6 +6518,7 @@
   font-size: 12px;
   font-weight: 500;
   line-height: 1;
+  white-space: nowrap;
 }
 
 [data-page="stats"] [data-slot="compare-detail-value"] {
@@ -7884,7 +7886,7 @@
     max-width: min(100%, 240px);
   }
 
-  [data-page="stats"] [data-component="model-hero-breadcrumb"] [data-slot="stats-breadcrumb-select-trigger"] {
+  [data-page="stats"] [data-component="model-hero-breadcrumb"] button[data-slot="stats-breadcrumb-select-trigger"] {
     max-width: min(100%, 240px);
   }
 

@@ -213,7 +213,7 @@ export const Plugin = {
                   metadata: { ...input, provider },
                   sessionID: context.sessionID,
                   agent: context.agent,
-                  source: { type: "tool", messageID: context.assistantMessageID, callID: context.toolCallID },
+                  source: { type: "tool", messageID: context.messageID, callID: context.callID },
                 })
 
                 const text =

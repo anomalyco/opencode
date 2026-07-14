@@ -139,7 +139,7 @@ const appBindingCommands = [
 export type TuiInput = {
   server: {
     endpoint: Service.Endpoint
-    reconnect?: (attempt: number) => Promise<Service.Endpoint>
+    reconnect?: (onStatus: (status: Service.Status) => void, signal: AbortSignal) => Promise<Service.Endpoint>
     reload?: () => Promise<void>
   }
   args: Args
@@ -186,8 +186,8 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   const handoff = input.terminalHandoff ? yield* Effect.promise(input.terminalHandoff) : undefined
   const reconnectEndpoint = input.server.reconnect
   const reconnect = reconnectEndpoint
-    ? async (attempt: number) => {
-        const endpoint = await reconnectEndpoint(attempt)
+    ? async (onStatus: (status: Service.Status) => void, signal: AbortSignal) => {
+        const endpoint = await reconnectEndpoint(onStatus, signal)
         const next = { baseUrl: endpoint.url, headers: Service.headers(endpoint) }
         return {
           api: OpenCode.make(next),
@@ -329,15 +329,15 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                             <PermissionProvider>
                                               <ProjectProvider>
                                                 <DataProvider>
-                                                  <ThemeProvider mode={mode}>
-                                                    <LocalProvider>
-                                                      <PromptStashProvider>
-                                                        <DialogProvider>
-                                                          <FrecencyProvider>
-                                                            <PromptHistoryProvider>
-                                                              <PromptRefProvider>
-                                                                <EditorContextProvider>
-                                                                  <LocationProvider>
+                                                  <LocationProvider>
+                                                    <ThemeProvider mode={mode}>
+                                                      <LocalProvider>
+                                                        <PromptStashProvider>
+                                                          <DialogProvider>
+                                                            <FrecencyProvider>
+                                                              <PromptHistoryProvider>
+                                                                <PromptRefProvider>
+                                                                  <EditorContextProvider>
                                                                     <PluginProvider packages={input.packages}>
                                                                       <App
                                                                         pair={
@@ -350,15 +350,15 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                                         }
                                                                       />
                                                                     </PluginProvider>
-                                                                  </LocationProvider>
-                                                                </EditorContextProvider>
-                                                              </PromptRefProvider>
-                                                            </PromptHistoryProvider>
-                                                          </FrecencyProvider>
-                                                        </DialogProvider>
-                                                      </PromptStashProvider>
-                                                    </LocalProvider>
-                                                  </ThemeProvider>
+                                                                  </EditorContextProvider>
+                                                                </PromptRefProvider>
+                                                              </PromptHistoryProvider>
+                                                            </FrecencyProvider>
+                                                          </DialogProvider>
+                                                        </PromptStashProvider>
+                                                      </LocalProvider>
+                                                    </ThemeProvider>
+                                                  </LocationProvider>
                                                 </DataProvider>
                                               </ProjectProvider>
                                             </PermissionProvider>
@@ -1117,7 +1117,7 @@ function App(props: { pair?: DialogPairCredentials }) {
         <StartupLoading ready={plugins.ready} />
       </Show>
       <Show when={showReconnecting()}>
-        <Reconnecting attempt={client.connection.attempt()} error={client.connection.error()} />
+        <Reconnecting status={client.connection.service()} />
       </Show>
     </box>
   )

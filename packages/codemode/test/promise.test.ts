@@ -1083,9 +1083,10 @@ describe("promise chaining", () => {
     expect(result.warnings).toBeUndefined()
   })
 
-  test("non-plain-function handlers fail loudly instead of being ignored", async () => {
+  test("unsupported callable handlers fail loudly with a wrap hint", async () => {
     const diagnostic = await error(`return await tools.host.echo({ id: 1 }).then(tools.host.completed)`)
-    expect(diagnostic.message).toContain("Promise.prototype.then handlers must be plain functions")
+    expect(diagnostic.message).toContain("Promise.prototype.then cannot use this callable as a handler")
+    expect(diagnostic.message).toContain("wrap it in an arrow function")
   })
 
   test("chaining methods are opaque references until called", async () => {

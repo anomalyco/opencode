@@ -111,6 +111,5 @@ function simulateEnabled() {
   return !!process.env.OPENCODE_SIMULATE
 }
 
-export const routes = createRoutes()
-
-export const webHandler = () => HttpRouter.toWebHandler(routes.pipe(Layer.provide(HttpServer.layerServices)))
+export const webHandler = () =>
+  HttpRouter.toWebHandler(createRoutes().pipe(Layer.provide(HttpServer.layerServices)))

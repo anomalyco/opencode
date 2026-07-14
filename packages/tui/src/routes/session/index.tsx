@@ -71,7 +71,7 @@ import { collapseToolOutput } from "../../util/collapse-tool-output"
 import { usePluginRuntime } from "../../plugin/runtime"
 import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut } from "../../keymap"
 import { usePathFormatter } from "../../context/path-format"
-import { LocationProvider } from "../../context/location"
+import { useSetLocation } from "../../context/location"
 import { createSessionRows, resolvePart, type PartRef, type SessionRow } from "./rows"
 import { switchLabel } from "../../util/model"
 
@@ -115,6 +115,9 @@ export function Session() {
   const session = createMemo(() => data.session.get(route.sessionID))
   const messages = () => data.session.message.list(route.sessionID)
   const location = createMemo(() => session()?.location)
+  const setLocation = useSetLocation()
+
+  createEffect(() => setLocation(location()))
 
   createEffect(() => {
     const title = Locale.truncate(session()?.title ?? "", 50)
@@ -823,133 +826,131 @@ export function Session() {
   )
 
   return (
-    <LocationProvider location={location()}>
-      <context.Provider
-        value={{
-          get width() {
-            return contentWidth()
-          },
-          sessionID: route.sessionID,
-          thinkingMode,
-          showThinking,
-          markdownMode,
-          groupExploration,
-          diffWrapMode,
-          models,
-          config,
-        }}
-      >
-        <box flexDirection="row" flexGrow={1} minHeight={0}>
-          <box flexGrow={1} minHeight={0} paddingBottom={1} paddingLeft={2} paddingRight={2} gap={1}>
-            <Show when={session()}>
-              <scrollbox
-                ref={(r) => (scroll = r)}
-                viewportOptions={{
-                  paddingRight: showScrollbar() ? 1 : 0,
-                }}
-                verticalScrollbarOptions={{
-                  paddingLeft: 1,
-                  visible: showScrollbar(),
-                  trackOptions: {
-                    backgroundColor: theme.backgroundElement,
-                    foregroundColor: theme.border,
-                  },
-                }}
-                stickyScroll={true}
-                stickyStart="bottom"
-                flexGrow={1}
-                scrollAcceleration={scrollAcceleration()}
-              >
-                <For each={rows}>
-                  {(row) => (
-                    <SessionRowView
-                      row={row}
-                      message={(messageID) => data.session.message.get(route.sessionID, messageID)}
-                    />
-                  )}
-                </For>
-                <BackgroundToolHint messages={messages()} />
-                <Show when={session()?.revert?.messageID}>
-                  <RevertMessage
-                    count={
-                      messages().filter(
-                        (message) => message.id >= session()!.revert!.messageID && message.type === "user",
-                      ).length
-                    }
-                    files={session()!.revert!.files ?? []}
+    <context.Provider
+      value={{
+        get width() {
+          return contentWidth()
+        },
+        sessionID: route.sessionID,
+        thinkingMode,
+        showThinking,
+        markdownMode,
+        groupExploration,
+        diffWrapMode,
+        models,
+        config,
+      }}
+    >
+      <box flexDirection="row" flexGrow={1} minHeight={0}>
+        <box flexGrow={1} minHeight={0} paddingBottom={1} paddingLeft={2} paddingRight={2} gap={1}>
+          <Show when={session()}>
+            <scrollbox
+              ref={(r) => (scroll = r)}
+              viewportOptions={{
+                paddingRight: showScrollbar() ? 1 : 0,
+              }}
+              verticalScrollbarOptions={{
+                paddingLeft: 1,
+                visible: showScrollbar(),
+                trackOptions: {
+                  backgroundColor: theme.backgroundElement,
+                  foregroundColor: theme.border,
+                },
+              }}
+              stickyScroll={true}
+              stickyStart="bottom"
+              flexGrow={1}
+              scrollAcceleration={scrollAcceleration()}
+            >
+              <For each={rows}>
+                {(row) => (
+                  <SessionRowView
+                    row={row}
+                    message={(messageID) => data.session.message.get(route.sessionID, messageID)}
                   />
-                </Show>
-              </scrollbox>
-              <box flexShrink={0}>
-                <Composer
-                  sessionID={route.sessionID}
-                  open={composer.open || (!!session()?.parentID && forms().length === 0)}
-                  defaultTab={composer.tab ?? (session()?.parentID ? "subagents" : undefined)}
-                  onClose={() => setComposer("open", false)}
+                )}
+              </For>
+              <BackgroundToolHint messages={messages()} />
+              <Show when={session()?.revert?.messageID}>
+                <RevertMessage
+                  count={
+                    messages().filter(
+                      (message) => message.id >= session()!.revert!.messageID && message.type === "user",
+                    ).length
+                  }
+                  files={session()!.revert!.files ?? []}
                 />
-                <Switch>
-                  <Match when={composer.open || (!!session()?.parentID && forms().length === 0)}>{null}</Match>
-                  <Match when={permissions().length > 0}>
-                    <PermissionPrompt request={permissions()[0]} directory={session()?.location.directory} />
-                  </Match>
-                  <Match when={forms().length > 0}>
-                    <Show when={forms()[0]?.id} keyed>
-                      {(_) => {
-                        const form = forms()[0]
-                        return form ? <FormPrompt form={form} /> : null
-                      }}
-                    </Show>
-                  </Match>
-                  <Match when={!disabled()}>
-                    <pluginRuntime.Slot
-                      name="session_prompt"
-                      mode="replace"
-                      session_id={route.sessionID}
+              </Show>
+            </scrollbox>
+            <box flexShrink={0}>
+              <Composer
+                sessionID={route.sessionID}
+                open={composer.open || (!!session()?.parentID && forms().length === 0)}
+                defaultTab={composer.tab ?? (session()?.parentID ? "subagents" : undefined)}
+                onClose={() => setComposer("open", false)}
+              />
+              <Switch>
+                <Match when={composer.open || (!!session()?.parentID && forms().length === 0)}>{null}</Match>
+                <Match when={permissions().length > 0}>
+                  <PermissionPrompt request={permissions()[0]} directory={session()?.location.directory} />
+                </Match>
+                <Match when={forms().length > 0}>
+                  <Show when={forms()[0]?.id} keyed>
+                    {(_) => {
+                      const form = forms()[0]
+                      return form ? <FormPrompt form={form} /> : null
+                    }}
+                  </Show>
+                </Match>
+                <Match when={!disabled()}>
+                  <pluginRuntime.Slot
+                    name="session_prompt"
+                    mode="replace"
+                    session_id={route.sessionID}
+                    visible={true}
+                    disabled={false}
+                    on_submit={toBottom}
+                    ref={bind}
+                  >
+                    <Prompt
                       visible={true}
-                      disabled={false}
-                      on_submit={toBottom}
                       ref={bind}
-                    >
-                      <Prompt
-                        visible={true}
-                        ref={bind}
-                        disabled={false}
-                        onSubmit={() => {
-                          toBottom()
-                        }}
-                        sessionID={route.sessionID}
-                        right={<pluginRuntime.Slot name="session_prompt_right" session_id={route.sessionID} />}
-                      />
-                    </pluginRuntime.Slot>
-                  </Match>
-                </Switch>
-              </box>
-            </Show>
-            <Toast />
-          </box>
-          <Show when={sidebarVisible()}>
-            <Switch>
-              <Match when={wide()}>
-                <Sidebar sessionID={route.sessionID} />
-              </Match>
-              <Match when={!wide()}>
-                <box
-                  position="absolute"
-                  top={0}
-                  left={0}
-                  right={0}
-                  bottom={0}
-                  alignItems="flex-end"
-                  backgroundColor={RGBA.fromInts(0, 0, 0, 70)}
-                >
-                  <Sidebar sessionID={route.sessionID} />
-                </box>
-              </Match>
-            </Switch>
+                      disabled={false}
+                      onSubmit={() => {
+                        toBottom()
+                      }}
+                      sessionID={route.sessionID}
+                      right={<pluginRuntime.Slot name="session_prompt_right" session_id={route.sessionID} />}
+                    />
+                  </pluginRuntime.Slot>
+                </Match>
+              </Switch>
+            </box>
           </Show>
+          <Toast />
         </box>
-      </context.Provider>
-    </LocationProvider>
+        <Show when={sidebarVisible()}>
+          <Switch>
+            <Match when={wide()}>
+              <Sidebar sessionID={route.sessionID} />
+            </Match>
+            <Match when={!wide()}>
+              <box
+                position="absolute"
+                top={0}
+                left={0}
+                right={0}
+                bottom={0}
+                alignItems="flex-end"
+                backgroundColor={RGBA.fromInts(0, 0, 0, 70)}
+              >
+                <Sidebar sessionID={route.sessionID} />
+              </box>
+            </Match>
+          </Switch>
+        </Show>
+      </box>
+    </context.Provider>
   )
 }
 
@@ -968,7 +969,10 @@ function SessionRowView(props: { row: SessionRow; message: (messageID: string) =
         <Match when={props.row.type === "part" ? props.row : undefined}>
           {(row) => <SessionPartView partRef={row().ref} message={props.message} />}
         </Match>
-        <Match when={props.row.type === "group" ? props.row : undefined}>
+        <Match when={props.row.type === "group" && props.row.kind === "reasoning" ? props.row : undefined}>
+          {(row) => <SessionReasoningGroupView refs={row().refs} completed={row().completed} message={props.message} />}
+        </Match>
+        <Match when={props.row.type === "group" && props.row.kind === "exploration" ? props.row : undefined}>
           {(row) => (
             <SessionGroupView
               refs={row().refs}
@@ -1074,6 +1078,122 @@ function SessionPartView(props: { partRef: PartRef; message: (messageID: string)
           </Match>
         </Switch>
       )}
+    </Show>
+  )
+}
+
+function SessionReasoningGroupView(props: {
+  refs: PartRef[]
+  completed: boolean
+  message: (messageID: string) => SessionMessageInfo | undefined
+}) {
+  const ctx = use()
+  const { theme, syntax } = useTheme()
+  const renderer = useRenderer()
+  const [expanded, setExpanded] = createSignal(false)
+  const [hover, setHover] = createSignal(false)
+  const parts = createMemo(() =>
+    props.refs.flatMap((ref) => {
+      const message = props.message(ref.messageID)
+      if (message?.type !== "assistant") return []
+      const part = resolvePart(message, ref.partID)
+      if (part?.type !== "reasoning" || !reasoningContent(part)) return []
+      return [{ message, part }]
+    }),
+  )
+  const latest = createMemo((previous: string | null) => {
+    const item = parts().at(-1)
+    if (!item) return previous
+    const title = reasoningSummary(reasoningContent(item.part)).title
+    if (title) return title
+    if (item.part.time?.completed !== undefined || item.message.time.completed !== undefined) return null
+    return previous
+  }, null)
+  const duration = createMemo(() =>
+    parts().reduce((total, item) => {
+      const start = item.part.time?.created
+      const end = item.part.time?.completed
+      return total + (start === undefined || end === undefined ? 0 : Math.max(0, end - start))
+    }, 0),
+  )
+
+  return (
+    <Show when={parts().length > 0}>
+      <Show
+        when={ctx.thinkingMode() === "hide"}
+        fallback={<For each={props.refs}>{(ref) => <SessionPartView partRef={ref} message={props.message} />}</For>}
+      >
+        <box flexDirection="column" flexShrink={0}>
+          <InlineToolRow
+            icon={expanded() ? "-" : "+"}
+            color={
+              !props.completed
+                ? theme.text
+                : hover() || expanded()
+                  ? theme.warning
+                  : RGBA.fromValues(theme.warning.r, theme.warning.g, theme.warning.b, theme.thinkingOpacity)
+            }
+            complete={props.completed}
+            pending={latest() ? `Thinking: ${latest()}` : "Thinking"}
+            spinner={!props.completed}
+            onMouseOver={() => setHover(true)}
+            onMouseOut={() => setHover(false)}
+            onMouseUp={() => {
+              if (renderer.getSelection()?.getSelectedText()) return
+              setExpanded((value) => !value)
+            }}
+          >
+            {props.completed ? "Thought" : latest() ? `Thinking: ${latest()}` : "Thinking"}
+            <Show when={props.completed && !expanded() && latest()}>: {latest()}</Show>
+            <Show when={props.completed && parts().length > 1}> · {parts().length} steps</Show>
+            <Show when={props.completed && duration()}> · {Locale.duration(duration())}</Show>
+          </InlineToolRow>
+          <Show when={expanded()}>
+            <box paddingLeft={3}>
+              <For each={props.refs}>
+                {(ref) => {
+                  const message = createMemo(() => {
+                    const item = props.message(ref.messageID)
+                    return item?.type === "assistant" ? item : undefined
+                  })
+                  const part = createMemo(() => {
+                    const item = message()
+                    if (!item) return undefined
+                    const part = resolvePart(item, ref.partID)
+                    return part?.type === "reasoning" ? part : undefined
+                  })
+                  const content = createMemo(() => {
+                    const item = part()
+                    return item ? reasoningContent(item) : ""
+                  })
+                  return (
+                    <Show when={content()}>
+                      <box marginTop={1}>
+                        <box
+                          border={["left"]}
+                          customBorderChars={SplitBorder.customBorderChars}
+                          borderColor={theme.backgroundElement}
+                          paddingLeft={1}
+                        >
+                          <code
+                            filetype="markdown"
+                            drawUnstyledText={false}
+                            streaming={part()?.time?.completed === undefined && message()?.time.completed === undefined}
+                            syntaxStyle={syntax()}
+                            content={content()}
+                            conceal={ctx.markdownMode() === "rendered"}
+                            fg={theme.textMuted}
+                          />
+                        </box>
+                      </box>
+                    </Show>
+                  )
+                }}
+              </For>
+            </box>
+          </Show>
+        </box>
+      </Show>
     </Show>
   )
 }
@@ -1681,10 +1801,7 @@ function ReasoningPart(props: {
   // layout never shifts. Click to open the full markdown block, click to close.
   const [expanded, setExpanded] = createSignal(false)
 
-  const content = createMemo(() => {
-    // OpenRouter encrypts some reasoning blocks; drop the placeholder.
-    return props.part.text.replace("[REDACTED]", "").trim()
-  })
+  const content = createMemo(() => reasoningContent(props.part))
   const isDone = createMemo(
     () => props.part.time?.completed !== undefined || props.message.time.completed !== undefined,
   )
@@ -1703,31 +1820,50 @@ function ReasoningPart(props: {
   return (
     <Show when={content()}>
       <box paddingLeft={3} flexDirection="column" flexShrink={0}>
-        <box onMouseUp={toggle}>
-          <ReasoningHeader
-            toggleable={inMinimal()}
-            open={!inMinimal() || expanded()}
-            done={isDone()}
-            title={summary().title}
-            duration={isDone() ? Locale.duration(duration()) : undefined}
-          />
-        </box>
-        <Show when={(!inMinimal() || expanded()) && summary().body}>
-          <box paddingLeft={inMinimal() ? 2 : 0} marginTop={1}>
-            <code
-              filetype="markdown"
-              drawUnstyledText={false}
-              streaming={true}
-              syntaxStyle={syntax()}
-              content={summary().body}
-              conceal={ctx.markdownMode() === "rendered"}
-              fg={theme.textMuted}
+        <box
+          border={!inMinimal() || expanded() ? ["left"] : undefined}
+          customBorderChars={SplitBorder.customBorderChars}
+          borderColor={theme.backgroundElement}
+          paddingLeft={!inMinimal() || expanded() ? 1 : 0}
+        >
+          <box onMouseUp={toggle}>
+            <ReasoningHeader
+              toggleable={inMinimal()}
+              open={!inMinimal() || expanded()}
+              done={isDone()}
+              title={inMinimal() && !expanded() ? summary().title : null}
+              duration={isDone() ? Locale.duration(duration()) : undefined}
             />
+          </box>
+        </box>
+        <Show when={!inMinimal() || expanded()}>
+          <box marginTop={1}>
+            <box
+              border={["left"]}
+              customBorderChars={SplitBorder.customBorderChars}
+              borderColor={theme.backgroundElement}
+              paddingLeft={inMinimal() ? 3 : 1}
+            >
+              <code
+                filetype="markdown"
+                drawUnstyledText={false}
+                streaming={true}
+                syntaxStyle={syntax()}
+                content={content()}
+                conceal={ctx.markdownMode() === "rendered"}
+                fg={theme.textMuted}
+              />
+            </box>
           </box>
         </Show>
       </box>
     </Show>
   )
+}
+
+function reasoningContent(part: SessionMessageAssistantReasoning) {
+  // OpenRouter encrypts some reasoning blocks; drop the placeholder.
+  return part.text.replace("[REDACTED]", "").trim()
 }
 
 function ReasoningHeader(props: {
@@ -2378,8 +2514,10 @@ function WebSearch(props: ToolProps) {
 function Subagent(props: ToolProps) {
   const { navigate } = useRoute()
   const data = useData()
-  const sessionID = createMemo(() => stringValue(props.metadata.sessionID) ?? stringValue(props.metadata.sessionId))
-  const description = createMemo(() => stringValue(props.input.description))
+  const input = createMemo(() => (typeof props.part.state.input === "string" ? {} : props.part.state.input))
+  const metadata = createMemo(() => (props.part.state.status === "streaming" ? {} : props.part.state.structured))
+  const sessionID = createMemo(() => stringValue(metadata().sessionID) ?? stringValue(metadata().sessionId))
+  const description = createMemo(() => stringValue(input().description))
   const isRunning = createMemo(() => {
     const id = sessionID()
     return props.part.state.status === "running" || Boolean(id && data.session.status(id) === "running")
@@ -2397,12 +2535,12 @@ function Subagent(props: ToolProps) {
         if (id) navigate({ type: "session", sessionID: id })
       }}
       status={
-        props.input.background === true || props.metadata.status === "running" ? (
+        input().background === true || metadata().status === "running" ? (
           <StatusBadge>Background</StatusBadge>
         ) : undefined
       }
     >
-      {`${Locale.titlecase(stringValue(props.input.agent) ?? stringValue(props.input.subagent_type) ?? "General")} Subagent — ${description() ?? "Subagent"}`}
+      {`${Locale.titlecase(stringValue(input().agent) ?? stringValue(input().subagent_type) ?? "General")} Subagent — ${description() ?? "Subagent"}`}
     </InlineTool>
   )
 }

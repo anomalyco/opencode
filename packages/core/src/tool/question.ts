@@ -73,7 +73,7 @@ export const Plugin = {
                   resources: ["*"],
                   sessionID: context.sessionID,
                   agent: context.agent,
-                  source: { type: "tool", messageID: context.assistantMessageID, callID: context.toolCallID },
+                  source: { type: "tool", messageID: context.messageID, callID: context.callID },
                 })
                 .pipe(
                   Effect.mapError((error) => new ToolFailure({ message: "Permission denied: question", error })),
@@ -84,7 +84,7 @@ export const Plugin = {
                         title: "Questions",
                         metadata: {
                           kind: "question",
-                          tool: { messageID: context.assistantMessageID, callID: context.toolCallID },
+                          tool: { messageID: context.messageID, callID: context.callID },
                         },
                         fields: [
                           toField(input.questions[0], 0),

@@ -55,6 +55,7 @@
   },
   "devDependencies": {
     "@opencode-ai/script": "workspace:*",
+    "@opencode-ai/protocol": "workspace:*",
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
     "@types/semver": "catalog:",

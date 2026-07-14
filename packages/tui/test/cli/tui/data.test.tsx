@@ -737,6 +737,52 @@ test("completes exploration when a queued prompt is promoted", async () => {
   }
 })
 
+test("classifies live tool rows independently of their call ID", async () => {
+  const events = createEventStream()
+  const sessionID = "session-tool-call-id"
+  const calls = createFetch((url) => {
+    if (url.pathname === `/api/session/${sessionID}/message`) return json({ data: [], cursor: {} })
+  }, events)
+  let rows!: ReturnType<typeof createSessionRows>
+
+  function Probe() {
+    rows = createSessionRows(() => sessionID)
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <ClientProvider api={createApi(calls.fetch)}>
+        <ProjectProvider>
+          <DataProvider>
+            <Probe />
+          </DataProvider>
+        </ProjectProvider>
+      </ClientProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    emitEvent(events, {
+      id: "evt_tool_started",
+      created: 1,
+      type: "session.tool.input.started",
+      durable: durable(sessionID),
+      data: {
+        sessionID,
+        assistantMessageID: "message-assistant",
+        callID: "reasoning:0",
+        name: "bash",
+      },
+    })
+
+    await wait(() => rows.length > 0)
+    expect(rows).toEqual([{ type: "part", ref: { messageID: "message-assistant", partID: "reasoning:0" } }])
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("removes committed revert messages from local state", async () => {
   const events = createEventStream()
   const sessionID = "session-revert"
@@ -2230,10 +2276,34 @@ test("settles pending tools when a live failure arrives", async () => {
       },
     })
     emitEvent(events, {
+      id: "evt_progress_1",
+      created: 0,
+      type: "session.tool.progress",
+      durable: durable("session-1", 5),
+      data: {
+        sessionID: "session-1",
+        assistantMessageID: "msg_explicit_assistant_9",
+        callID: "call-1",
+        structured: { sessionID: "session-child", status: "running" },
+        content: [],
+      },
+    })
+
+    await wait(() => {
+      const assistant = sync.session.message.get("session-1", "msg_explicit_assistant_9")
+      return (
+        assistant?.type === "assistant" &&
+        assistant.content[0]?.type === "tool" &&
+        assistant.content[0].state.status === "running" &&
+        assistant.content[0].state.structured.sessionID === "session-child"
+      )
+    })
+
+    emitEvent(events, {
       id: "evt_failed_1",
       created: 0,
       type: "session.tool.failed",
-      durable: durable("session-1", 5),
+      durable: durable("session-1", 6),
       data: {
         sessionID: "session-1",
         assistantMessageID: "msg_explicit_assistant_9",
@@ -2264,7 +2334,7 @@ test("settles pending tools when a live failure arrives", async () => {
     if (tool.state.status !== "error") return
     expect(tool.state.error).toEqual({ type: "unknown", message: "aborted" })
     expect(tool.state.input).toEqual({})
-    expect(tool.state.structured).toEqual({})
+    expect(tool.state.structured).toEqual({ sessionID: "session-child", status: "running" })
     expect(tool.state.content).toEqual([])
     expect(tool.executed).toBe(false)
     expect(tool.providerState).toEqual({ call: true })

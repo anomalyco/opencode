@@ -1,4 +1,5 @@
-import { InputRenderable, TextareaRenderable, type Renderable } from "@opentui/core"
+import type { KeymapCommand, KeymapLayer } from "@opencode-ai/plugin/v2/tui/context"
+import { InputRenderable, TextareaRenderable } from "@opentui/core"
 import { stringifyKeyStroke } from "@opentui/keymap"
 import {
   registerBackspacePopsPendingSequence,
@@ -117,44 +118,7 @@ function Provider(props: ParentProps) {
   )
 }
 
-export interface KeymapCommand {
-  /** Stable command and config keybind identifier. Omit for an inline command. */
-  readonly id?: string
-  /** Optional label used by command discovery and keyboard-help UI. */
-  readonly title?: string
-  /** Optional longer description. */
-  readonly description?: string
-  /** Groups the command in discovery and keyboard-help UI. */
-  readonly group?: string
-  /** Enables or disables the command. */
-  readonly enabled?: boolean | (() => boolean)
-  /** Configures automatic binding, or disables it for a named command. */
-  readonly bind?: false | string
-  /** Adds a named command to the command palette. */
-  readonly palette?: true
-  /** Adds a named command to prompt slash completion. */
-  readonly slash?: {
-    readonly name: string
-    readonly aliases?: string[]
-  }
-  /** Executes the command. Return false to let keymap dispatch continue. */
-  readonly run: () => void | false | Promise<void>
-}
-
-export interface KeymapLayer {
-  /** Limits the layer to one OpenCode input mode. Use global to opt out; defaults to base. */
-  readonly mode?: string
-  /** Enables or disables the complete layer. */
-  readonly enabled?: boolean | (() => boolean)
-  /** Limits the layer to a focused renderable. */
-  readonly target?: () => Renderable | null | undefined
-  /** Resolves conflicts with other active layers. */
-  readonly priority?: number
-  /** Commands owned by this layer. */
-  readonly commands?: readonly KeymapCommand[]
-  /** IDs of commands whose configured bindings should be active in this layer. */
-  readonly bindings?: readonly string[]
-}
+export type { KeymapCommand, KeymapLayer } from "@opencode-ai/plugin/v2/tui/context"
 
 export interface Keymap {
   /** Dispatches a reachable command by ID. */

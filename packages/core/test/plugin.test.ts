@@ -363,7 +363,7 @@ describe("PluginV2", () => {
       const settlement = yield* materialized.settle({
         sessionID: SessionV2.ID.make("ses_hooks"),
         agent: AgentV2.ID.make("build"),
-        assistantMessageID: SessionMessage.ID.make("msg_hooks"),
+        messageID: SessionMessage.ID.make("msg_hooks"),
         call: { type: "tool-call", id: "call-hooks", name: "echo", input: { text: "original" } },
       })
 

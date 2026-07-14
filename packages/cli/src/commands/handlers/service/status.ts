@@ -8,7 +8,13 @@ import { ServiceConfig } from "../../../services/service-config"
 export default Runtime.handler(
   Commands.commands.service.commands.status,
   Effect.fn("cli.service.status")(function* () {
-    const found = yield* Service.discover(yield* ServiceConfig.options())
-    process.stdout.write((found ? found.url : "stopped") + EOL)
+    const options = yield* ServiceConfig.options()
+    const status = yield* Service.status(options)
+    if (status.type !== "ready") {
+      process.stdout.write(status.type + EOL)
+      return
+    }
+    const found = yield* Service.discover({ ...options, version: undefined })
+    process.stdout.write((found?.url ?? status.type) + EOL)
   }),
 )
