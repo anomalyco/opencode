@@ -8,6 +8,7 @@ import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { A, useParams } from "@solidjs/router"
 import { type Accessor, createMemo, For, type JSX, Match, Show, Switch } from "solid-js"
+import { Dynamic } from "solid-js/web"
 import { useServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
 import { getAvatarColors, type LocalProject, useLayout } from "@/context/layout"
@@ -17,6 +18,17 @@ import { messageAgentColor } from "@/utils/agent"
 import { sessionTitle } from "@/utils/session-title"
 import { sessionPermissionRequest } from "../session/composer/session-request-tree"
 import { childSessionOnPath, getProjectAvatarSource, hasProjectPermissions } from "./helpers"
+
+type InlineEditorComponent = (props: {
+  id: string
+  value: Accessor<string>
+  onSave: (next: string) => void
+  class?: string
+  displayClass?: string
+  editing?: boolean
+  stopPropagation?: boolean
+  openOnDblClick?: boolean
+}) => JSX.Element
 
 export const ProjectIcon = (props: {
   project: LocalProject
@@ -87,6 +99,10 @@ export type SessionItemProps = {
   clearHoverProjectSoon: () => void
   prefetchSession: (session: Session, priority?: "high" | "low") => void
   archiveSession: (session: Session) => Promise<void>
+  renameSession?: (sessionID: string, title: string) => void
+  InlineEditor?: InlineEditorComponent
+  editorOpen?: (id: string) => boolean
+  openEditor?: (id: string, value: string) => void
 }
 
 const SessionRow = (props: {
@@ -103,8 +119,10 @@ const SessionRow = (props: {
   sidebarOpened: Accessor<boolean>
   warmPress: () => void
   warmFocus: () => void
+  InlineEditor?: InlineEditorComponent
+  renameSession?: (sessionID: string, title: string) => void
 }): JSX.Element => {
-  const title = () => sessionTitle(props.session.title)
+  const title = () => sessionTitle(props.session.title) ?? ""
 
   return (
     <A
@@ -138,7 +156,21 @@ const SessionRow = (props: {
           </Switch>
         </div>
       </Show>
-      <span class="text-14-regular text-text-strong min-w-0 flex-1 truncate">{title()}</span>
+      <Show
+        when={props.InlineEditor && props.renameSession}
+        fallback={
+          <span class="text-14-regular text-text-strong min-w-0 flex-1 truncate">{title()}</span>
+        }
+      >
+        <Dynamic
+          component={props.InlineEditor}
+          id={`session:${props.session.id}`}
+          value={title}
+          onSave={(next: string) => props.renameSession!(props.session.id, next)}
+          displayClass="text-14-regular text-text-strong min-w-0 flex-1 truncate"
+          stopPropagation
+        />
+      </Show>
     </A>
   )
 }
@@ -212,6 +244,8 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
       sidebarOpened={layout.sidebar.opened}
       warmPress={() => warm(2, "high")}
       warmFocus={() => warm(2, "high")}
+      InlineEditor={props.InlineEditor}
+      renameSession={props.renameSession}
     />
   )
 

@@ -894,6 +894,12 @@ export default function LegacyLayout(props: ParentProps) {
     }
   }
 
+  async function renameSession(sessionID: string, title: string) {
+    const trimmed = title.trim()
+    if (!trimmed) return
+    await serverSDK().client.session.update({ sessionID, title: trimmed })
+  }
+
   command.register("layout", () => {
     const commands: CommandOption[] = [
       {
@@ -1913,6 +1919,10 @@ export default function LegacyLayout(props: ParentProps) {
       clearHoverProjectSoon,
       prefetchSession,
       archiveSession,
+      renameSession,
+      InlineEditor: editor.InlineEditor,
+      editorOpen: editor.editorOpen,
+      openEditor: editor.openEditor,
     },
   }
 
