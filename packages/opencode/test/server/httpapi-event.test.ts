@@ -1,6 +1,7 @@
 import { afterEach, describe, expect } from "bun:test"
 import { Effect, Layer, Queue, Schema, Stream } from "effect"
 import { EventPaths } from "../../src/server/routes/instance/httpapi/groups/event"
+import { TuiPaths } from "../../src/server/routes/instance/httpapi/groups/tui"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
@@ -88,6 +89,24 @@ describe("event HttpApi", () => {
         const created = yield* requestInDirectory("/session", directory, { method: "POST" })
         expect(created.status).toBe(200)
         expect(yield* readEvent(reader)).toMatchObject({ type: "session.created" })
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
+    "opens the theme dialog",
+    () =>
+      Effect.gen(function* () {
+        const { directory } = yield* TestInstance
+        const { reader } = yield* openEventStream(directory)
+        expect(yield* readEvent(reader)).toMatchObject({ type: "server.connected", properties: {} })
+
+        const response = yield* requestInDirectory(TuiPaths.openThemes, directory, { method: "POST" })
+        expect(response.status).toBe(200)
+        expect(yield* readEvent(reader)).toMatchObject({
+          type: "tui.command.execute",
+          properties: { command: "theme.switch" },
+        })
       }),
     { git: true, config: { formatter: false, lsp: false } },
   )

@@ -49,7 +49,7 @@ export const tuiHandlers = HttpApiBuilder.group(InstanceHttpApi, "tui", (handler
     })
 
     const openThemes = Effect.fn("TuiHttpApi.openThemes")(function* () {
-      yield* publishCommand("session.list")
+      yield* publishCommand("theme.switch")
       return true
     })
 
