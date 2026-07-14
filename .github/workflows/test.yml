@@ -71,6 +71,7 @@ jobs:
           OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: ${{ runner.os == 'Windows' && 'true' || 'false' }}
 
       - name: Verify compiled service lifecycle
+        if: always()
         timeout-minutes: 10
         working-directory: packages/cli
         run: |
