@@ -57,6 +57,7 @@ export const { use: useClient, provider: ClientProvider } = createSimpleContext(
       void (async () => {
         let attempt = 0
         while (!abort.signal.aborted && !controller.signal.aborted) {
+          let connectedAt: number | undefined
           const request = new AbortController()
           const cancel = () => request.abort(controller.signal.reason)
           const timeout = setTimeout(() => request.abort(new Error("Timed out connecting to server")), connectTimeout)
@@ -75,7 +76,7 @@ export const { use: useClient, provider: ClientProvider } = createSimpleContext(
               return new Error("Event stream did not start with server.connected")
             clearTimeout(timeout)
             record("connected", attempt)
-            attempt = 0
+            connectedAt = Date.now()
             log.info("event stream connected")
             events.emit(first.value.type, first.value)
             setConnection({ status: "connected", attempt: 0, error: undefined })
@@ -101,6 +102,7 @@ export const { use: useClient, provider: ClientProvider } = createSimpleContext(
               controller.signal.removeEventListener("abort", cancel)
             })
           if (abort.signal.aborted || controller.signal.aborted) return
+          if (connectedAt !== undefined && Date.now() - connectedAt >= 1_000) attempt = 0
           attempt += 1
           const message = error instanceof Error ? error.message : String(error)
           record("disconnected", attempt, message)
@@ -123,6 +125,7 @@ export const { use: useClient, provider: ClientProvider } = createSimpleContext(
             if (abort.signal.aborted || controller.signal.aborted) return
             if (next) {
               api = next.api
+              if (attempt === 1) continue
             }
           }
           await wait(1_000, controller.signal)

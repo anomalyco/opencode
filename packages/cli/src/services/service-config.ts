@@ -62,21 +62,22 @@ function configKey(key: string): Key {
   throw new Error(`Unknown service config key: ${key}`)
 }
 
-const env = Effect.gen(function* () {
+const paths = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem
   const global = yield* Global.Service
   const name = filename()
   const file = path.join(global.state, name)
-  yield* migrateRegistration(path.join(global.state, "service.json"), file)
   return {
     fs,
     file,
+    legacyFile: path.join(global.state, "service.json"),
     configFile: path.join(global.config, name),
   }
 })
 
 export const options = Effect.fnUntraced(function* () {
-  const { file } = yield* env
+  const { file, legacyFile } = yield* paths
+  yield* migrateRegistration(legacyFile, file)
   const compiled = path.basename(process.execPath).replace(/\.exe$/, "") !== "bun"
   const entrypoint = compiled ? undefined : process.argv[1]
   if (!compiled && entrypoint === undefined) return yield* Effect.fail(new Error("Failed to resolve CLI entrypoint"))
@@ -88,7 +89,7 @@ export const options = Effect.fnUntraced(function* () {
 })
 
 export const read = Effect.fn("cli.service-config.read")(function* () {
-  const { fs, configFile } = yield* env
+  const { fs, configFile } = yield* paths
   return yield* fs.readFileString(configFile).pipe(
     Effect.flatMap(decodeInfo),
     Effect.catch(() => Effect.succeed({} as Info)),
@@ -96,7 +97,7 @@ export const read = Effect.fn("cli.service-config.read")(function* () {
 })
 
 const write = Effect.fn("cli.service-config.write")(function* (value: Info) {
-  const { fs, configFile } = yield* env
+  const { fs, configFile } = yield* paths
   const temp = configFile + ".tmp"
   yield* fs.makeDirectory(path.dirname(configFile), { recursive: true })
   yield* fs.writeFileString(temp, JSON.stringify(value, null, 2) + "\n", { mode: 0o600 })

@@ -33,15 +33,31 @@ try {
   const registration = await waitForRegistration()
   const info = await Schema.decodeUnknownPromise(Service.Info)(await Bun.file(registration).json())
   if (info.id === undefined || info.password === undefined) throw new Error("Registration is missing service identity")
-  const headers = { authorization: "Basic " + btoa(`opencode:${info.password}`) }
+  const credential = btoa(`opencode:${info.password}`)
+  const headers = { authorization: "Basic " + credential }
+  const token = encodeURIComponent(credential)
   const health = await waitForReady(info.url, headers)
   if (health.pid !== info.pid || health.instanceID !== info.id)
     throw new Error("Health identity does not match registration")
+  const tokenHealth = await fetch(
+    new URL(`/api/health?auth_token=${token}`, info.url),
+    { signal: AbortSignal.timeout(5_000) },
+  )
+  if (tokenHealth.status !== 200) throw new Error("Compiled service rejected query authentication")
+  const tokenOpenApi = await fetch(
+    new URL(`/openapi.json?auth_token=${token}`, info.url),
+    { signal: AbortSignal.timeout(5_000) },
+  )
+  if (tokenOpenApi.status !== 200) throw new Error("Compiled application rejected query authentication")
 
   const unauthorizedHealth = await fetch(new URL("/api/health", info.url), {
     signal: AbortSignal.timeout(5_000),
   })
   if (unauthorizedHealth.status !== 401) throw new Error("Compiled service exposed health without authentication")
+  const unauthorizedOpenApi = await fetch(new URL("/openapi.json", info.url), {
+    signal: AbortSignal.timeout(5_000),
+  })
+  if (unauthorizedOpenApi.status !== 401) throw new Error("Compiled service exposed application routes without authentication")
   const unauthorizedStop = await fetch(new URL("/api/service/stop", info.url), {
     method: "POST",
     headers: { "content-type": "application/json" },

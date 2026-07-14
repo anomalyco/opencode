@@ -66,11 +66,10 @@ export const discover = Effect.fn("service.discover")(function* (options: Option
 })
 
 export const status = Effect.fn("service.status")(function* (options: Options = {}) {
-  const info = yield* read(options.file)
-  if (info === undefined) return { type: "missing" } satisfies Status
-  const found = yield* probe(info, undefined, true)
-  if (found === undefined) return { type: "unreachable" } satisfies Status
-  return publicStatus(found)
+  const result = yield* registered(options.file, true)
+  if (result.info === undefined) return { type: "missing" } satisfies Status
+  if (result.service === undefined) return { type: "unreachable" } satisfies Status
+  return publicStatus(result.service)
 })
 
 function publicStatus(service: LocalService): Status {
@@ -78,11 +77,9 @@ function publicStatus(service: LocalService): Status {
 }
 
 const discoverLocal = Effect.fnUntraced(function* (options: Options) {
-  const info = yield* read(options.file)
-  if (info === undefined) return undefined
-  if (options.version !== undefined && info.version !== options.version) return undefined
-  const found = yield* probe(info, options.version)
+  const found = (yield* registered(options.file)).service
   if (found?.status.type !== "ready") return undefined
+  if (options.version !== undefined && found.version !== options.version) return undefined
   return found
 })
 
@@ -94,6 +91,7 @@ export const start = Effect.fn("service.start")(function* (options: StartOptions
   let announced = false
   let reported: Status | undefined
   let lastSpawn = 0
+  let spawnDelay = 5_000
   let ownerHeld = false
   const announce = (reason: StartReason, existing?: Info) =>
     Effect.sync(() => {
@@ -118,8 +116,9 @@ export const start = Effect.fn("service.start")(function* (options: StartOptions
     })
   })
   const found = yield* Effect.gen(function* () {
-    const info = yield* read(options.file)
-    const service = info === undefined ? undefined : yield* probe(info, undefined, true)
+    const registration = yield* registered(options.file, true)
+    const info = registration.info
+    const service = registration.service
     const current: Status =
       service === undefined ? { type: info === undefined ? "missing" : "unreachable" } : publicStatus(service)
     const next = ownerHeld && service === undefined ? ({ type: "unresponsive" } satisfies Status) : current
@@ -130,6 +129,7 @@ export const start = Effect.fn("service.start")(function* (options: StartOptions
     })
     if (service !== undefined) {
       ownerHeld = false
+      spawnDelay = 5_000
       const compatible = !service.legacy && (options.version === undefined || service.version === options.version)
       if (compatible && service.status.type === "ready") return Option.some(service)
       if (compatible && service.status.type === "failed")
@@ -141,18 +141,22 @@ export const start = Effect.fn("service.start")(function* (options: StartOptions
       return Option.none<LocalService>()
     } else if (lastSpawn === 0 && info !== undefined) lastSpawn = Date.now()
 
-    if (Date.now() - lastSpawn >= 5_000) {
+    const failure = [...contenders].map(contenderFailure).find((error): error is Error => error !== undefined)
+    if (failure !== undefined) return yield* Effect.fail(failure)
+    const finished = [...contenders].filter(contenderFinished)
+    if (finished.some((item) => item.child.exitCode === 0)) {
+      ownerHeld = true
+      spawnDelay = Math.min(spawnDelay * 2, 30_000)
+    }
+    finished.forEach((item) => contenders.delete(item))
+    // Keep one candidate plus one lock probe so a pre-lock stall cannot block recovery.
+    if (contenders.size < 2 && Date.now() - lastSpawn >= spawnDelay) {
       yield* announce("missing")
       contenders.add(yield* spawnContender)
       lastSpawn = Date.now()
     }
-    const failure = [...contenders].map(contenderFailure).find((error): error is Error => error !== undefined)
-    const finished = [...contenders].filter(contenderFinished)
-    if (finished.some((contender) => contender.child.exitCode === 0)) ownerHeld = true
-    finished.forEach((contender) => contenders.delete(contender))
-    if (failure !== undefined) return yield* Effect.fail(failure)
     return Option.none<LocalService>()
-  }).pipe(Effect.repeat({ until: Option.isSome, schedule: Schedule.spaced("250 millis") }))
+  }).pipe(Effect.repeat({ until: Option.isSome, schedule: Schedule.spaced("1 second") }))
   return Option.getOrThrow(found).endpoint
 })
 
@@ -235,7 +239,7 @@ type LocalService = {
   readonly legacy: boolean
 }
 
-const probe = Effect.fnUntraced(function* (info: Info, version?: string, allowLegacy = false) {
+const probe = Effect.fnUntraced(function* (info: Info, allowLegacy = false) {
   const endpoint = {
     url: info.url,
     auth:
@@ -257,7 +261,6 @@ const probe = Effect.fnUntraced(function* (info: Info, version?: string, allowLe
     if (info.version !== undefined && health.value.version !== info.version) return undefined
     if (info.id !== undefined && health.value.instanceID !== undefined && health.value.instanceID !== info.id)
       return undefined
-    if (version !== undefined && health.value.version !== version) return undefined
     return {
       info,
       endpoint,
@@ -275,12 +278,16 @@ const probe = Effect.fnUntraced(function* (info: Info, version?: string, allowLe
   return { info, endpoint, status: { type: "ready" }, legacy: true } satisfies LocalService
 })
 
+const registered = Effect.fnUntraced(function* (file?: string, allowLegacy = false) {
+  const info = yield* read(file)
+  if (info === undefined) return { info: undefined, service: undefined }
+  return { info, service: yield* probe(info, allowLegacy) }
+})
+
 // Health-checked lookup without the version gate: status operations must be
 // able to see (and replace or stop) a server from a different version.
 const find = Effect.fnUntraced(function* (options: Options) {
-  const info = yield* read(options.file)
-  if (info === undefined) return undefined
-  return yield* probe(info, undefined, true)
+  return (yield* registered(options.file, true)).service
 })
 
 // 50ms cadence bounded at ~5s, shared by stop escalation and each start

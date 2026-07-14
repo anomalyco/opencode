@@ -128,20 +128,21 @@ test("a legacy health response is still replaced", async () => {
   await existing.exited
 }, 10_000)
 
-test("waits for a slow winner without killing it", async () => {
+test("waits for a slow winner while bounding lock probes", async () => {
   const directory = await temp()
   const registration = join(directory, "service.json")
   const endpoint = await run(
     Service.start({
       file: registration,
       version: "test",
-      command: [process.execPath, fixture, registration, "delayed", "6000"],
+      command: [process.execPath, fixture, registration, "coordinated"],
     }),
   )
   const info = await Bun.file(registration).json()
   try {
     expect(endpoint.url).toBe(info.url)
     expect(await health(endpoint.url)).toEqual({ healthy: true, version: "test", pid: info.pid })
+    expect((await Bun.file(registration + ".starts").text()).trim().split("\n")).toHaveLength(2)
   } finally {
     process.kill(info.pid, "SIGTERM")
   }
@@ -175,7 +176,7 @@ test("reports a contender terminated by a signal", async () => {
   ).rejects.toThrow(/Server process (terminated by|exited with code)/)
 }, 10_000)
 
-test("reports a slow winner that fails after later contenders exit", async () => {
+test("reports a slow contender that eventually fails", async () => {
   const directory = await temp()
   const registration = join(directory, "service.json")
   await expect(

@@ -1,4 +1,4 @@
-import { rename, writeFile } from "node:fs/promises"
+import { appendFile, rename, writeFile } from "node:fs/promises"
 
 const [registration, mode, delay] = process.argv.slice(2)
 if (registration === undefined || mode === undefined) throw new Error("Missing service fixture arguments")
@@ -9,12 +9,15 @@ if (mode === "record-start") {
 }
 if (mode === "signal") process.kill(process.pid, process.platform === "win32" ? "SIGTERM" : "SIGKILL")
 
-if (mode === "delayed" || mode === "delayed-failed") {
+if (mode === "delayed" || mode === "delayed-failed" || mode === "coordinated") {
+  await appendFile(registration + ".starts", process.pid + "\n")
   const owner = await writeFile(registration + ".owner", String(process.pid), { flag: "wx" })
     .then(() => true)
     .catch(() => false)
   if (!owner) process.exit()
-  await Bun.sleep(Number(delay))
+  if (mode === "coordinated") {
+    while ((await Bun.file(registration + ".starts").text()).trim().split("\n").length < 2) await Bun.sleep(10)
+  } else await Bun.sleep(Number(delay))
   if (mode === "delayed-failed") process.exit(1)
 }
 

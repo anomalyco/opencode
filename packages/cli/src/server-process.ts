@@ -67,7 +67,9 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
         password,
         instanceID,
         service:
-          serviceOptions === undefined ? undefined : { onListen: (address) => register(address, password, instanceID) },
+          serviceOptions === undefined
+            ? undefined
+            : { onListen: (address) => register(address, password, instanceID, serviceOptions.file) },
       }).pipe(Effect.provide(Logger.layer([], { mergeWithExisting: false })))
       const url = HttpServer.formatAddress(server.address)
       console.log(options.mode === "stdio" ? JSON.stringify({ url }) : `server listening on ${url}`)
@@ -87,11 +89,15 @@ const infoJson = Schema.fromJsonString(Service.Info)
 const encodeInfo = Schema.encodeEffect(infoJson)
 const decodeInfo = Schema.decodeUnknownEffect(infoJson)
 
-const register = Effect.fnUntraced(function* (address: HttpServer.Address, password: string, id: string) {
+const register = Effect.fnUntraced(function* (
+  address: HttpServer.Address,
+  password: string,
+  id: string,
+  file: string,
+) {
   const fs = yield* FileSystem.FileSystem
-  const options = yield* ServiceConfig.options()
-  const temp = options.file + "." + id + ".tmp"
-  yield* fs.makeDirectory(path.dirname(options.file), { recursive: true })
+  const temp = file + "." + id + ".tmp"
+  yield* fs.makeDirectory(path.dirname(file), { recursive: true })
   const info = {
     id,
     version: InstallationVersion,
@@ -100,9 +106,9 @@ const register = Effect.fnUntraced(function* (address: HttpServer.Address, passw
     password,
   }
   const encoded = yield* encodeInfo(info)
-  const publish = fs.writeFileString(temp, encoded, { mode: 0o600 }).pipe(Effect.andThen(fs.rename(temp, options.file)))
+  const publish = fs.writeFileString(temp, encoded, { mode: 0o600 }).pipe(Effect.andThen(fs.rename(temp, file)))
   yield* publish
-  const current = fs.readFileString(options.file).pipe(
+  const current = fs.readFileString(file).pipe(
     Effect.flatMap(decodeInfo),
     Effect.orElseSucceed(() => undefined),
   )
@@ -121,7 +127,7 @@ const register = Effect.fnUntraced(function* (address: HttpServer.Address, passw
   })
   yield* Effect.addFinalizer(() =>
     current.pipe(
-      Effect.flatMap((current) => (current?.id === id ? fs.remove(options.file) : Effect.void)),
+      Effect.flatMap((current) => (current?.id === id ? fs.remove(file) : Effect.void)),
       Effect.ignore,
     ),
   )

@@ -248,6 +248,47 @@ describe("useEvent", () => {
     }
   })
 
+  test("backs off when a resolved event stream keeps failing", async () => {
+    let calls = 0
+    const encoder = new TextEncoder()
+    const replacementCalls = createFetch((url) => {
+      if (url.pathname !== "/api/event") return undefined
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(
+              encoder.encode('data: {"id":"evt_connected","type":"server.connected","data":{}}\n\n'),
+            )
+            controller.close()
+          },
+        }),
+        { headers: { "content-type": "text/event-stream" } },
+      )
+    })
+    const replacement = {
+      api: createApi(replacementCalls.fetch),
+    }
+    const { app, events, client } = await mount(async () => {
+      calls += 1
+      return replacement
+    })
+
+    try {
+      await wait(() => client.connection.status() === "connected")
+      events.disconnect()
+      await Promise.race([
+        wait(() => calls === 2),
+        Bun.sleep(500).then(() => {
+          throw new Error("resolved event stream did not retry immediately")
+        }),
+      ])
+      await Bun.sleep(200)
+      expect(calls).toBe(2)
+    } finally {
+      app.renderer.destroy()
+    }
+  })
+
   test("reports service status while endpoint resolution is pending", async () => {
     const replacementEvents = createEventStream()
     const replacement = { api: createApi(createFetch(undefined, replacementEvents).fetch) }

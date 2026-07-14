@@ -1,12 +1,14 @@
 export * as ServerProcess from "./process"
 
-import { NodeHttpServer } from "@effect/platform-node"
+import { NodeHttpServer, NodeHttpServerRequest } from "@effect/platform-node"
 import { SessionRestart } from "@opencode-ai/core/session/execution/restart"
 import { ServiceStatus } from "@opencode-ai/protocol/groups/health"
+import { hasPtyConnectTicketURL } from "@opencode-ai/protocol/groups/pty"
 import { Cause, Context, Deferred, Effect, Exit, Layer, Option, Ref, Schema, Scope } from "effect"
 import { HttpMiddleware, HttpRouter, HttpServer, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { createServer } from "node:http"
 import { ServerAuth } from "./auth"
+import { authorizedRequest } from "./middleware/authorization"
 import { createRoutes } from "./routes"
 import { ServerInfo } from "./server-info"
 import { Status } from "./service-status"
@@ -33,12 +35,10 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(options: 
   const status = yield* Status.make({
     instanceID: options.instanceID,
     managed: options.service !== undefined,
-    onStop: Deferred.succeed(shutdown, undefined).pipe(Effect.asVoid),
   })
   const bound = yield* listen(options)
-  const shellApp: App = dispatch(options.password, status)
-  const current = yield* Ref.make(shellApp)
-  yield* bound.http.serve(Ref.get(current).pipe(Effect.flatMap((app) => app)), HttpMiddleware.logger)
+  const application = yield* Ref.make(Option.none<App>())
+  yield* bound.http.serve(dispatch(options.password, status, application, shutdown), HttpMiddleware.logger)
   if (options.service) yield* options.service.onListen(bound.http.address)
 
   const parentScope = yield* Scope.Scope
@@ -47,7 +47,7 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(options: 
     status
       .beginStopping()
       .pipe(
-        Effect.andThen(Ref.set(current, shellApp)),
+        Effect.andThen(Ref.set(application, Option.none())),
         Effect.andThen(Effect.sync(() => bound.server.closeAllConnections())),
       ),
   )
@@ -67,10 +67,7 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(options: 
         Effect.provideService(Scope.Scope, applicationScope),
       )
     }
-    yield* Ref.set(
-      current,
-      dispatch(options.password, status, Context.get(context, HttpRouter.HttpRouter).asHttpEffect()),
-    )
+    yield* Ref.set(application, Option.some(Context.get(context, HttpRouter.HttpRouter).asHttpEffect()))
     yield* status.ready
     return { address: bound.http.address, shutdown: Deferred.await(shutdown) }
   }).pipe(
@@ -82,7 +79,6 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(options: 
           action: "Run `opencode service restart` after checking the service logs.",
         })
         .pipe(
-          Effect.andThen(Ref.set(current, shellApp)),
           Effect.andThen(
             Scope.close(applicationScope, Exit.failCause(cause)).pipe(
               Effect.catchCause((cleanupCause) =>
@@ -115,31 +111,66 @@ function bind(hostname: string, port: number) {
   })
 }
 
-function dispatch(password: string, status: Status.Interface, app?: App): App {
-  const authorization = ServerAuth.header({ username: "opencode", password })
+function dispatch(
+  password: string,
+  status: Status.Interface,
+  application: Ref.Ref<Option.Option<App>>,
+  shutdown: Deferred.Deferred<void>,
+): App {
+  const auth = ServerAuth.Config.of({ username: "opencode", password: Option.some(password) })
   return Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest
-    if (request.headers.authorization !== authorization)
-      return HttpServerResponse.empty({
-        status: 401,
-        headers: { "www-authenticate": 'Basic realm="Secure Area"' },
-      })
-    const response = yield* control(request, status)
-    if (response) return response
+    const url = new URL(request.url, "http://localhost")
+    const lifecycle =
+      request.method === "GET" && url.pathname === "/api/health"
+        ? "health"
+        : request.method === "POST" && url.pathname === "/api/service/stop"
+          ? "stop"
+          : undefined
+    if (lifecycle !== undefined) {
+      if (!(yield* authorizedRequest(request, auth))) return unauthorized()
+      return yield* control(request, lifecycle, status, () => Deferred.doneUnsafe(shutdown, Effect.void))
+    }
     const state = yield* status.current
-    if (app && state.type !== "stopping") return yield* app
+    const app = yield* Ref.get(application)
+    const ready = state.type === "ready" && Option.isSome(app)
+    if ((!ready || !hasPtyConnectTicketURL(url)) && !(yield* authorizedRequest(request, auth))) return unauthorized()
+    if (ready) return yield* app.value
     return unavailable(state)
   })
 }
 
-const control = Effect.fnUntraced(function* (request: HttpServerRequest.HttpServerRequest, status: Status.Interface) {
-  const pathname = new URL(request.url, "http://localhost").pathname
-  if (request.method === "GET" && pathname === "/api/health") return yield* healthResponse(status)
-  if (request.method !== "POST" || pathname !== "/api/service/stop") return undefined
+function unauthorized() {
+  return HttpServerResponse.empty({
+    status: 401,
+    headers: { "www-authenticate": 'Basic realm="Secure Area"' },
+  })
+}
+
+const control = Effect.fnUntraced(function* (
+  request: HttpServerRequest.HttpServerRequest,
+  route: "health" | "stop",
+  status: Status.Interface,
+  stop: () => void,
+) {
+  if (route === "health") return yield* healthResponse(status)
   const body = yield* request.json.pipe(Effect.option)
   const input = Option.isSome(body) ? Schema.decodeUnknownOption(ServiceStatus.StopRequest)(body.value) : Option.none()
   if (Option.isNone(input)) return HttpServerResponse.jsonUnsafe({ code: "invalid_request" }, { status: 400 })
-  return HttpServerResponse.jsonUnsafe({ accepted: yield* status.requestStop(input.value) })
+  const accepted = yield* status.requestStop(input.value)
+  if (accepted) {
+    const response = NodeHttpServerRequest.toServerResponse(request)
+    yield* Effect.sync(() => {
+      const complete = () => {
+        response.off("finish", complete)
+        response.off("close", complete)
+        stop()
+      }
+      response.once("finish", complete)
+      response.once("close", complete)
+    })
+  }
+  return HttpServerResponse.jsonUnsafe({ accepted })
 })
 
 const healthResponse = Effect.fnUntraced(function* (status: Status.Interface) {

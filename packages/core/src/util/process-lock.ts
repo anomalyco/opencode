@@ -1,9 +1,9 @@
 import { dlopen, read, type Pointer } from "bun:ffi"
-import { createHash } from "node:crypto"
 import { closeSync, existsSync, mkdirSync, openSync } from "node:fs"
 import { connect, createServer, type Server } from "node:net"
 import path from "node:path"
 import { Effect, Schema } from "effect"
+import { Hash } from "./hash"
 
 export namespace ProcessLock {
   export class HeldError extends Schema.TaggedErrorClass<HeldError>()("ProcessLockHeldError", {
@@ -133,9 +133,7 @@ function errorCode(pointer: Pointer | null) {
 function acquireWindows(file: string) {
   return Effect.callback<Server, ProcessLock.LockError>((resume) => {
     const server = createServer()
-    const pipe = `\\\\.\\pipe\\opencode-process-lock-${createHash("sha256")
-      .update(path.resolve(file).toLowerCase())
-      .digest("hex")}`
+    const pipe = `\\\\.\\pipe\\opencode-process-lock-${Hash.sha256(path.resolve(file).toLowerCase())}`
     const onError = (cause: NodeJS.ErrnoException) => {
       server.off("listening", onListening)
       const probe = connect(pipe)
