@@ -66,11 +66,7 @@ import {
   SessionComposerRegion,
 } from "@/pages/session/composer"
 import { createOpenReviewFile, createSessionTabs, createSizing, shouldShowFileTree } from "@/pages/session/helpers"
-import {
-  MessageTimeline,
-  timelineRootSessionID,
-  timelineScrollMemory,
-} from "@/pages/session/timeline/message-timeline"
+import { MessageTimeline, timelineHasSavedScroll } from "@/pages/session/timeline/message-timeline"
 import { createTimelineModel } from "@/pages/session/timeline/model"
 import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/pages/session/review-tab"
 import { useSessionLayout } from "@/pages/session/session-layout"
@@ -1520,10 +1516,9 @@ export default function Page() {
         // The timeline restores the saved per-tab position itself; resuming
         // here would reset it to the bottom.
         const server = params.serverKey ? requireServerKey(params.serverKey) : ServerConnection.key(serverSDK().server)
-        const rootSessionID = timelineRootSessionID(id, sync().session.get)
         if (
           newSessionDesign() &&
-          timelineScrollMemory({ tabs: appTabs, server, rootSessionID }).has(id)
+          timelineHasSavedScroll({ tabs: appTabs, server, sessionID: id, get: sync().session.get })
         )
           return
         autoScroll.resume()
@@ -2188,8 +2183,7 @@ export default function Page() {
                   actions={actions}
                   scroll={ui.scroll}
                   onResumeScroll={resumeScroll}
-                  onScrollRestored={autoScroll.pause}
-                  onScrollRestoreFailed={autoScroll.resume}
+                  onScrollRestore={(applied) => (applied ? autoScroll.pause() : autoScroll.resume())}
                   setScrollRef={setScrollRef}
                   onScheduleScrollState={scheduleScrollState}
                   onAutoScrollHandleScroll={autoScroll.handleScroll}
