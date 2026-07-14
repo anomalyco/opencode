@@ -195,20 +195,26 @@ function reasoningVariants(provider: SourceProvider, model: SourceModel): NonNul
   const options = model.reasoning_options
   if (options === undefined) return []
   if (options.length === 0) return []
+  const toggle = options.some((option) => option.type === "toggle")
   const effort = options.find((option) => option.type === "effort")
   if (effort?.type === "effort") {
-    return effort.values.flatMap((value) => {
-      const raw: unknown = value
-      const id = raw === null ? "none" : typeof raw === "string" ? raw : undefined
-      if (id === undefined) return []
-      const settings = settingsForEffort(npm, model.id, id)
-      return settings ? [{ id: ModelV2.VariantID.make(id), settings }] : []
-    })
+    const off = toggle ? toggleVariants(npm).filter((variant) => variant.id === "none") : []
+    const variants = [
+      ...off,
+      ...effort.values.flatMap((value) => {
+        const raw: unknown = value
+        const id = raw === null ? "none" : typeof raw === "string" ? raw : undefined
+        if (id === undefined) return []
+        if (id === "none" && off.length > 0) return []
+        const settings = settingsForEffort(npm, model.id, id)
+        return settings ? [{ id: ModelV2.VariantID.make(id), settings }] : []
+      }),
+    ]
+    return [...new Map(variants.map((variant) => [variant.id, variant])).values()]
   }
-  const toggle = options.some((option) => option.type === "toggle")
   const budget = options.find((option) => option.type === "budget_tokens")
   const variants = [
-    ...(toggle ? toggleVariants(npm, budget ? "high" : "thinking") : []),
+    ...(toggle ? toggleVariants(npm).filter((variant) => budget === undefined || variant.id === "none") : []),
     ...(budget?.type === "budget_tokens" ? budgetVariants(npm, model, budget) : []),
   ]
   return [...new Map(variants.map((variant) => [variant.id, variant])).values()]
@@ -288,29 +294,26 @@ function budgetVariants(
   })
 }
 
-function toggleVariants(
-  npm: string | undefined,
-  enabledID: "thinking" | "high",
-): NonNullable<ModelV2.Info["variants"]> {
+function toggleVariants(npm: string | undefined): NonNullable<ModelV2.Info["variants"]> {
   if (npm === "@ai-sdk/gateway" || npm === "@openrouter/ai-sdk-provider")
     return [
       { id: ModelV2.VariantID.make("none"), settings: { reasoning: { enabled: false } } },
-      { id: ModelV2.VariantID.make(enabledID), settings: { reasoning: { enabled: true } } },
+      { id: ModelV2.VariantID.make("thinking"), settings: { reasoning: { enabled: true } } },
     ]
   if (npm === "@ai-sdk/anthropic" || npm === "@ai-sdk/google-vertex/anthropic")
     return [
       { id: ModelV2.VariantID.make("none"), settings: { thinking: { type: "disabled" } } },
-      { id: ModelV2.VariantID.make(enabledID), settings: { thinking: { type: "adaptive" } } },
+      { id: ModelV2.VariantID.make("thinking"), settings: { thinking: { type: "adaptive" } } },
     ]
   if (npm === "@ai-sdk/alibaba")
     return [
       { id: ModelV2.VariantID.make("none"), settings: { enableThinking: false } },
-      { id: ModelV2.VariantID.make(enabledID), settings: { enableThinking: true } },
+      { id: ModelV2.VariantID.make("thinking"), settings: { enableThinking: true } },
     ]
   if (npm === "@ai-sdk/cohere")
     return [
       { id: ModelV2.VariantID.make("none"), settings: { thinking: { type: "disabled" } } },
-      { id: ModelV2.VariantID.make(enabledID), settings: { thinking: { type: "enabled" } } },
+      { id: ModelV2.VariantID.make("thinking"), settings: { thinking: { type: "enabled" } } },
     ]
   return []
 }

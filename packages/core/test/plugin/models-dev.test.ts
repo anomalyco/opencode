@@ -312,10 +312,13 @@ describe("ModelsDevPlugin", () => {
             ProviderV2.ID.anthropic,
             ModelV2.ID.make("claude-opus-4.7"),
           )
-          expect(anthropicEffortModel?.variants).toContainEqual({
-            id: ModelV2.VariantID.make("low"),
-            settings: { thinking: { type: "adaptive", display: "summarized" }, effort: "low" },
-          })
+          expect(anthropicEffortModel?.variants).toEqual([
+            { id: ModelV2.VariantID.make("none"), settings: { thinking: { type: "disabled" } } },
+            {
+              id: ModelV2.VariantID.make("low"),
+              settings: { thinking: { type: "adaptive", display: "summarized" }, effort: "low" },
+            },
+          ])
 
           const anthropicToggleModel = yield* catalog.model.get(
             ProviderV2.ID.anthropic,
