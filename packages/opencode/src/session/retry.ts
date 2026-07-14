@@ -33,32 +33,28 @@ function cap(ms: number) {
 }
 
 export function delay(attempt: number, error?: SessionV1.APIError) {
-  if (error) {
-    const headers = error.data.responseHeaders
-    if (headers) {
-      const retryAfterMs = headers["retry-after-ms"]
-      if (retryAfterMs) {
-        const parsedMs = Number.parseFloat(retryAfterMs)
-        if (!Number.isNaN(parsedMs)) {
-          return cap(parsedMs)
-        }
+  const headers = error?.data.responseHeaders
+  if (headers) {
+    const retryAfterMs = headers["retry-after-ms"]
+    if (retryAfterMs) {
+      const parsedMs = Number.parseFloat(retryAfterMs)
+      if (!Number.isNaN(parsedMs)) {
+        return cap(parsedMs)
       }
+    }
 
-      const retryAfter = headers["retry-after"]
-      if (retryAfter) {
-        const parsedSeconds = Number.parseFloat(retryAfter)
-        if (!Number.isNaN(parsedSeconds)) {
-          // convert seconds to milliseconds
-          return cap(Math.ceil(parsedSeconds * 1000))
-        }
-        // Try parsing as HTTP date format
-        const parsed = Date.parse(retryAfter) - Date.now()
-        if (!Number.isNaN(parsed) && parsed > 0) {
-          return cap(Math.ceil(parsed))
-        }
+    const retryAfter = headers["retry-after"]
+    if (retryAfter) {
+      const parsedSeconds = Number.parseFloat(retryAfter)
+      if (!Number.isNaN(parsedSeconds)) {
+        // convert seconds to milliseconds
+        return cap(Math.ceil(parsedSeconds * 1000))
       }
-
-      return cap(RETRY_INITIAL_DELAY * Math.pow(RETRY_BACKOFF_FACTOR, attempt - 1))
+      // Try parsing as HTTP date format
+      const parsed = Date.parse(retryAfter) - Date.now()
+      if (!Number.isNaN(parsed) && parsed > 0) {
+        return cap(Math.ceil(parsed))
+      }
     }
   }
 
