@@ -633,7 +633,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const isImeComposing = (event: KeyboardEvent) => event.isComposing || composing() || event.keyCode === 229
 
   const handleBlur = () => {
-    savedCursor = currentCursor()
+    const cursor = currentCursor()
+    savedCursor = cursor
+    if (cursor !== null && cursor !== prompt.cursor()) prompt.set(prompt.current(), cursor)
     closePopover()
     setComposing(false)
   }

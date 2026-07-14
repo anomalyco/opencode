@@ -1067,6 +1067,7 @@
   ],
   "patchedDependencies": {
     "@pierre/trees@1.0.0-beta.4": "patches/@pierre%2Ftrees@1.0.0-beta.4.patch",
+    "@tanstack/virtual-core@3.17.3": "patches/@tanstack%2Fvirtual-core@3.17.3.patch",
     "@ai-sdk/xai@3.0.102": "patches/@ai-sdk%2Fxai@3.0.102.patch",
     "@modelcontextprotocol/sdk@1.29.0": "patches/@modelcontextprotocol%2Fsdk@1.29.0.patch",
     "gcp-metadata@8.1.2": "patches/gcp-metadata@8.1.2.patch",
@@ -1074,10 +1075,8 @@
     "effect@4.0.0-beta.83": "patches/effect@4.0.0-beta.83.patch",
     "@npmcli/agent@4.0.2": "patches/@npmcli%2Fagent@4.0.2.patch",
     "@silvia-odwyer/photon-node@0.3.4": "patches/@silvia-odwyer%2Fphoton-node@0.3.4.patch",
-    "@tanstack/solid-virtual@3.13.28": "patches/@tanstack%2Fsolid-virtual@3.13.28.patch",
     "solid-js@1.9.10": "patches/solid-js@1.9.10.patch",
     "@ai-sdk/google@3.0.73": "patches/@ai-sdk%2Fgoogle@3.0.73.patch",
-    "@tanstack/virtual-core@3.17.0": "patches/@tanstack%2Fvirtual-core@3.17.0.patch",
     "pacote@21.5.0": "patches/pacote@21.5.0.patch",
   },
   "overrides": {
@@ -1113,7 +1112,7 @@
     "@solidjs/router": "0.15.4",
     "@solidjs/start": "https://pkg.pr.new/@solidjs/start@dfb2020",
     "@tailwindcss/vite": "4.1.11",
-    "@tanstack/solid-virtual": "3.13.28",
+    "@tanstack/solid-virtual": "3.13.32",
     "@tsconfig/bun": "1.0.9",
     "@tsconfig/node22": "22.0.2",
     "@types/bun": "1.3.13",
@@ -1133,7 +1132,7 @@
     "hono": "4.10.7",
     "hono-openapi": "1.1.2",
     "luxon": "3.6.1",
-    "marked": "17.0.1",
+    "marked": "17.0.6",
     "marked-shiki": "1.2.1",
     "opentui-spinner": "0.0.7",
     "remeda": "2.26.0",
@@ -2781,9 +2780,9 @@
 
     "@tanstack/solid-query": ["@tanstack/solid-query@5.91.4", "", { "dependencies": { "@tanstack/query-core": "5.91.2" }, "peerDependencies": { "solid-js": "^1.6.0" } }, "sha512-oCEgn8iT7WnF/7ISd7usBpUK1C9EdvQfg8ZUpKNKZ4edVClICZrCX6f3/Bp8ZlwQnL21KLc2rp+CejEuehlRxg=="],
 
-    "@tanstack/solid-virtual": ["@tanstack/solid-virtual@3.13.28", "", { "dependencies": { "@tanstack/virtual-core": "3.17.0" }, "peerDependencies": { "solid-js": "^1.3.0" } }, "sha512-kRuOEL5orH/rzGgxNgfgOttsgV6cgrUeupVtrHMITb5p0rZ3hnxhbu/lhKcR9+7x+EJdfUtJIb2CVC85mlw15g=="],
+    "@tanstack/solid-virtual": ["@tanstack/solid-virtual@3.13.32", "", { "dependencies": { "@tanstack/virtual-core": "3.17.3" }, "peerDependencies": { "solid-js": "^1.3.0" } }, "sha512-yhX4A4Kgn+wyTg6Mmu8+zwoMTwjz4K1ucvLfRJ8f0rPGDDAIqSaf0v6oU0yT9+SvrjmUaZQ0VX7g4byexbhNng=="],
 
-    "@tanstack/virtual-core": ["@tanstack/virtual-core@3.17.0", "", {}, "sha512-gOxY/hFkPh/XQYhnThBHzkbkX3Ed+z/iushyz+R+JAr213aXxUDgQoTgTdrDpBSRsjFM73P/KfUyWmaF9WHMkQ=="],
+    "@tanstack/virtual-core": ["@tanstack/virtual-core@3.17.3", "", {}, "sha512-8Np/TFELpI0ySuJoVmjvOrQYXH/8sTX0Biv9szhFhY39xOdAAY+smrMxjxOum/ux3eM8MUJQsEJ0/R0UpvC8dw=="],
 
     "@testing-library/dom": ["@testing-library/dom@10.4.1", "", { "dependencies": { "@babel/code-frame": "^7.10.4", "@babel/runtime": "^7.12.5", "@types/aria-query": "^5.0.1", "aria-query": "5.3.0", "dom-accessibility-api": "^0.5.9", "lz-string": "^1.5.0", "picocolors": "1.1.1", "pretty-format": "^27.0.2" } }, "sha512-o4PXJQidqJl82ckFaXUeoAW+XysPLauYI43Abki5hABd853iMhitooc6znOnczgbTYmEP6U6/y1ZyKAIsvMKGg=="],
 
@@ -4313,7 +4312,7 @@
 
     "markdown-table": ["markdown-table@3.0.4", "", {}, "sha512-wiYz4+JrLyb/DqW2hkFJxP7Vd7JuTDm77fvbM8VfEQdmSMqcImWeeRbHwZjBjIFki/VaMK2BhFi7oUUZeM5bqw=="],
 
-    "marked": ["marked@17.0.1", "", { "bin": { "marked": "bin/marked.js" } }, "sha512-boeBdiS0ghpWcSwoNm/jJBwdpFaMnZWRzjA6SkUMYb40SVaN1x7mmfGKp0jvexGcx+7y2La5zRZsYFZI6Qpypg=="],
+    "marked": ["marked@17.0.6", "", { "bin": { "marked": "bin/marked.js" } }, "sha512-gB0gkNafnonOw0obSTEGZTT86IuhILt2Wfx0mWH/1Au83kybTayroZ/V6nS25mN7u8ASy+5fMhgB3XPNrOZdmA=="],
 
     "marked-katex-extension": ["marked-katex-extension@5.1.6", "", { "peerDependencies": { "katex": ">=0.16 <0.17", "marked": ">=4 <18" } }, "sha512-vYpLXwmlIDKILIhJtiRTgdyZRn5sEYdFBuTmbpjD7lbCIzg0/DWyK3HXIntN3Tp8zV6hvOUgpZNLWRCgWVc24A=="],
 
@@ -6050,6 +6049,8 @@
     "@opencode-ai/web/@shikijs/transformers": ["@shikijs/transformers@3.20.0", "", { "dependencies": { "@shikijs/core": "3.20.0", "@shikijs/types": "3.20.0" } }, "sha512-PrHHMRr3Q5W1qB/42kJW6laqFyWdhrPF2hNR9qjOm1xcSiAO3hAHo7HaVyHE6pMyevmy3i51O8kuGGXC78uK3g=="],
 
     "@opentui/core/diff": ["diff@9.0.0", "", {}, "sha512-svtcdpS8CgJyqAjEQIXdb3OjhFVVYjzGAPO8WGCmRbrml64SPw/jJD4GoE98aR7r25A0XcgrK3F02yw9R/vhQw=="],
+
+    "@opentui/core/marked": ["marked@17.0.1", "", { "bin": { "marked": "bin/marked.js" } }, "sha512-boeBdiS0ghpWcSwoNm/jJBwdpFaMnZWRzjA6SkUMYb40SVaN1x7mmfGKp0jvexGcx+7y2La5zRZsYFZI6Qpypg=="],
 
     "@opentui/solid/@babel/core": ["@babel/core@7.28.0", "", { "dependencies": { "@ampproject/remapping": "^2.2.0", "@babel/code-frame": "^7.27.1", "@babel/generator": "^7.28.0", "@babel/helper-compilation-targets": "^7.27.2", "@babel/helper-module-transforms": "^7.27.3", "@babel/helpers": "^7.27.6", "@babel/parser": "^7.28.0", "@babel/template": "^7.27.2", "@babel/traverse": "^7.28.0", "@babel/types": "^7.28.0", "convert-source-map": "^2.0.0", "debug": "^4.1.0", "gensync": "^1.0.0-beta.2", "json5": "^2.2.3", "semver": "^6.3.1" } }, "sha512-UlLAnTPrFdNGoFtbSXwcGFQBtQZJCNjaN6hQNP3UPvuNXT1i82N26KL3dZeIpNalWywr9IuQuncaAfUaS1g6sQ=="],
 
