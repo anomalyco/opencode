@@ -184,6 +184,16 @@ export function registerIpcHandlers(deps: Deps) {
     })
   })
 
+  ipcMain.handle("reveal-path", async (_event: IpcMainInvokeEvent, path: string) => {
+    const exists = await stat(path).then(
+      () => true,
+      () => false,
+    )
+    if (!exists) return false
+    shell.showItemInFolder(path)
+    return true
+  })
+
   ipcMain.handle("read-clipboard-image", () => {
     const image = clipboard.readImage()
     if (image.isEmpty()) return null
