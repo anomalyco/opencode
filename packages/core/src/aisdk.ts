@@ -103,11 +103,12 @@ function wrapSSE(res: Response, ms: number, ctl: AbortController) {
 }
 
 function prepareOptions(model: ModelV2.Info, pkg: string) {
+  const projected = projectOptions(model)
   const options: Record<string, any> = {
     name: model.providerID,
     ...(model.settings ?? {}),
     headers: model.headers,
-    body: model.body,
+    body: projected.body,
   }
 
   const customFetch = options.fetch
@@ -300,8 +301,9 @@ export const locationLayer = Layer.effect(
 export const defaultLayer = locationLayer
 
 function modelFromLanguage(info: ModelV2.Info, language: LanguageModelV3) {
-  const settings = requestSettings(info.settings)
-  const optionKey = providerOptionKey(ProviderV2.packageName(info.package), info.providerID)
+  const packageName = ProviderV2.packageName(info.package)
+  const projected = projectOptions(info)
+  const optionKey = providerOptionKey(packageName, info.providerID)
   const route: AnyRoute = {
     id: `ai-sdk:${ProviderV2.packageName(info.package) ?? "unknown"}`,
     provider: ProviderID.make(info.providerID),
@@ -317,11 +319,14 @@ function modelFromLanguage(info: ModelV2.Info, language: LanguageModelV3) {
     defaults: {
       headers: info.headers,
       http:
-        info.body === undefined && info.headers === undefined
+        projected.body === undefined && info.headers === undefined
           ? undefined
-          : { body: info.body === undefined ? undefined : { ...info.body }, headers: info.headers },
+          : {
+              body: projected.body === undefined ? undefined : { ...projected.body },
+              headers: info.headers,
+            },
       limits: { context: info.limit.context, output: info.limit.output },
-      providerOptions: settings === undefined ? undefined : { [optionKey]: settings },
+      providerOptions: projected.settings === undefined ? undefined : { [optionKey]: projected.settings },
     },
     body: {
       schema: Schema.Unknown,
@@ -339,9 +344,13 @@ function providerOptionKey(packageName: string | undefined, providerID: Provider
   if (packageName === "@ai-sdk/google") return "google"
   if (packageName === "@ai-sdk/google-vertex") return "vertex"
   if (packageName === "@ai-sdk/google-vertex/anthropic") return "anthropic"
-  if (packageName === "@ai-sdk/amazon-bedrock" || packageName === "@ai-sdk/amazon-bedrock/mantle") return "bedrock"
+  if (packageName === "@ai-sdk/amazon-bedrock") return "bedrock"
+  if (packageName === "@ai-sdk/amazon-bedrock/mantle") return "openai"
   if (packageName === "@ai-sdk/azure") return "azure"
+  if (packageName === "@ai-sdk/github-copilot") return "copilot"
+  if (packageName === "@ai-sdk/openai-compatible") return providerID.split(".")[0]
   if (packageName === "@openrouter/ai-sdk-provider") return "openrouter"
+  if (packageName === "ai-gateway-provider") return "openaiCompatible"
   if (packageName?.startsWith("@ai-sdk/")) return packageName.slice("@ai-sdk/".length)
   return providerID
 }
@@ -354,6 +363,28 @@ function requestSettings(settings: Readonly<Record<string, unknown>> | undefined
     ),
   )
   return Object.keys(result).length === 0 ? undefined : result
+}
+
+function projectOptions(model: ModelV2.Info) {
+  const settings = requestSettings(model.settings)
+  if (ProviderV2.packageName(model.package) !== "@ai-sdk/openai") return { settings, body: model.body }
+  const reasoning = model.body?.reasoning
+  if (
+    typeof reasoning !== "object" ||
+    reasoning === null ||
+    Array.isArray(reasoning) ||
+    !("mode" in reasoning) ||
+    reasoning.mode !== "pro"
+  )
+    return { settings, body: model.body }
+  const body = { ...model.body }
+  const remaining = Object.fromEntries(Object.entries(reasoning).filter(([key]) => key !== "mode"))
+  if (Object.keys(remaining).length === 0) delete body.reasoning
+  if (Object.keys(remaining).length > 0) body.reasoning = remaining
+  return {
+    settings: ProviderV2.mergeOverlay(settings, { reasoningMode: "pro" }),
+    body: Object.keys(body).length === 0 ? undefined : body,
+  }
 }
 
 function callOptions(request: LLMRequest): LanguageModelV3CallOptions {

@@ -68,6 +68,52 @@ it.effect("projects request settings, headers, and body overlays", () =>
   }),
 )
 
+it.effect("converts pro reasoning mode only at the OpenAI AI SDK boundary", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    let body: unknown
+    yield* aisdk.hook.sdk((event) => {
+      body = event.options.body
+      event.sdk = { languageModel: () => ({ provider: event.model.providerID }) }
+    })
+
+    const resolved = yield* aisdk.model({
+      ...model("@ai-sdk/openai"),
+      body: { reasoning: { mode: "pro" } },
+    })
+    const prepared = yield* LLMClient.prepare<LanguageModelV3CallOptions>(
+      LLM.request({ model: resolved, prompt: "Hello" }),
+    )
+
+    expect(body).toBeUndefined()
+    expect(prepared.body.providerOptions).toEqual({ openai: { reasoningMode: "pro" } })
+    expect(prepared.body).not.toHaveProperty("reasoning")
+  }),
+)
+
+it.effect("maps package-specific AI SDK provider option keys", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = { languageModel: () => ({ provider: event.model.providerID }) }
+    })
+
+    const cases = [
+      ["@ai-sdk/github-copilot", "copilot"],
+      ["@ai-sdk/amazon-bedrock/mantle", "openai"],
+      ["@ai-sdk/openai-compatible", "test-provider"],
+      ["ai-gateway-provider", "openaiCompatible"],
+    ] as const
+    for (const [packageName, key] of cases) {
+      const resolved = yield* aisdk.model(model(packageName, { reasoningEffort: "high" }))
+      const prepared = yield* LLMClient.prepare<LanguageModelV3CallOptions>(
+        LLM.request({ model: resolved, prompt: "Hello" }),
+      )
+      expect(prepared.body.providerOptions).toEqual({ [key]: { reasoningEffort: "high" } })
+    }
+  }),
+)
+
 it.effect("projects replay metadata onto AI SDK prompt parts", () =>
   Effect.gen(function* () {
     const aisdk = yield* AISDK.Service
