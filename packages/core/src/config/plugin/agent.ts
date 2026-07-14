@@ -11,6 +11,11 @@ import { FSUtil } from "../../fs-util"
 import { ModelV2 } from "../../model"
 import { ConfigAgentV1 } from "../../v1/config/agent"
 import { ConfigMigrateV1 } from "../../v1/config/migrate"
+import { Global } from "../../global"
+import { PermissionV2 } from "../../permission"
+import type { LocationMutation } from "../../location-mutation"
+import type { ReadTool } from "../../tool/read"
+import type { EditTool } from "../../tool/edit"
 
 const legacySources = [
   { pattern: "{agent,agents}/**/*.md", primary: false },
@@ -19,6 +24,11 @@ const legacySources = [
 const decodeAgent = Schema.decodeUnknownOption(ConfigAgent.Info)
 const decodeLegacyAgent = Schema.decodeUnknownOption(ConfigAgentV1.Info)
 const decodeConfig = Schema.decodeUnknownOption(Config.Info)
+type PathAction =
+  | LocationMutation.ExternalDirectoryAuthorization["action"]
+  | typeof ReadTool.name
+  | typeof EditTool.name
+const pathActions = ["external_directory", "read", "edit"] as const satisfies readonly PathAction[]
 const agentKeys = new Set([
   "model",
   "variant",
@@ -38,6 +48,7 @@ export const Plugin = define({
   effect: Effect.fn(function* (ctx) {
     const config = yield* Config.Service
     const fs = yield* FSUtil.Service
+    const global = yield* Global.Service
     yield* ctx.agent.transform(
       Effect.fn(function* (draft) {
         const documents = yield* Effect.forEach(yield* config.entries(), (entry) => {
@@ -56,11 +67,14 @@ export const Plugin = define({
             )
           })
         }).pipe(Effect.map((documents) => documents.flat()))
-        const global = documents.flatMap((document) => document.info.permissions ?? [])
+        const permissions = expandPermissions(
+          documents.flatMap((document) => document.info.permissions ?? []),
+          global.home,
+        )
         const configuredDefault = Config.latest(documents, "default_agent")
         if (configuredDefault !== undefined) draft.default(AgentV2.ID.make(configuredDefault))
         for (const current of draft.list()) {
-          draft.update(current.id, (agent) => agent.permissions.push(...global))
+          draft.update(current.id, (agent) => agent.permissions.push(...permissions))
         }
 
         for (const document of documents) {
@@ -73,7 +87,7 @@ export const Plugin = define({
 
             const exists = draft.get(agentID) !== undefined
             draft.update(agentID, (agent) => {
-              if (!exists) agent.permissions.push(...global)
+              if (!exists) agent.permissions.push(...permissions)
               if (item.model !== undefined) {
                 const model = ModelV2.parse(item.model)
                 agent.model = { id: model.modelID, providerID: model.providerID, variant: agent.model?.variant }
@@ -91,7 +105,9 @@ export const Plugin = define({
               if (item.hidden !== undefined) agent.hidden = item.hidden
               if (item.color !== undefined) agent.color = item.color
               if (item.steps !== undefined) agent.steps = item.steps
-              if (item.permissions !== undefined) agent.permissions.push(...item.permissions)
+              if (item.permissions !== undefined) {
+                agent.permissions.push(...expandPermissions(item.permissions, global.home))
+              }
             })
           }
         }
@@ -99,6 +115,27 @@ export const Plugin = define({
     )
   }),
 })
+
+function expandPermissions(rules: PermissionV2.Ruleset, home: string): PermissionV2.Ruleset {
+  // Expand only resources tools resolve as filesystem paths. Bash resources are raw shell text:
+  // rewriting `$HOME/private/**` would miss `$HOME/private/key`, and safe expansion needs shell-aware parsing.
+  return rules.map((rule) =>
+    isPathAction(rule.action) ? { ...rule, resource: expandHome(rule.resource, home) } : rule,
+  )
+}
+
+function isPathAction(action: string): action is PathAction {
+  return pathActions.some((item) => item === action)
+}
+
+function expandHome(resource: string, home: string) {
+  if (resource.startsWith("~/")) return home + resource.slice(1)
+  if (resource === "~") return home
+  if (resource === "$HOME") return home
+  if (resource.startsWith("$HOME/")) return home + resource.slice(5)
+  if (resource.startsWith("$HOME\\")) return home + resource.slice(5)
+  return resource
+}
 
 function discover(fs: FSUtil.Interface, directory: string) {
   return Effect.forEach(legacySources, (source) =>

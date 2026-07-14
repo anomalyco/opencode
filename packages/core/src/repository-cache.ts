@@ -121,7 +121,7 @@ export const validateBranch = Effect.fn("RepositoryCache.validateBranch")(functi
   })
 })
 
-export const layer: Layer.Layer<Service, never, FSUtil.Service | Git.Service | EffectFlock.Service | Global.Service> =
+const layer: Layer.Layer<Service, never, FSUtil.Service | Git.Service | EffectFlock.Service | Global.Service> =
   Layer.effect(
     Service,
     Effect.gen(function* () {
@@ -222,13 +222,6 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Git.Service | E
       })
     }),
   )
-
-export const defaultLayer: Layer.Layer<Service> = layer.pipe(
-  Layer.provide(EffectFlock.defaultLayer),
-  Layer.provide(FSUtil.defaultLayer),
-  Layer.provide(Git.defaultLayer),
-  Layer.provide(Global.defaultLayer),
-)
 
 export const node = makeGlobalNode({
   service: Service,

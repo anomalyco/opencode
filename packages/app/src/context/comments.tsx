@@ -85,7 +85,15 @@ function createCommentSessionState(store: Store<CommentStore>, setStore: SetStor
     active: null as CommentFocus | null,
   })
 
-  const all = () => aggregate(store.comments)
+  // Reuse the previous array when contents are unchanged so consumers keep a stable
+  // identity; a fresh array per call cascaded into diff annotation re-renders.
+  let lastAll: LineComment[] = []
+  const all = () => {
+    const next = aggregate(store.comments)
+    if (next.length === lastAll.length && next.every((item, index) => item === lastAll[index])) return lastAll
+    lastAll = next
+    return next
+  }
 
   const setRef = (
     key: "focus" | "active",

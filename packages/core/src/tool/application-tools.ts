@@ -27,7 +27,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ApplicationTools") {}
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const state = State.create<Data, Draft>({

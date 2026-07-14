@@ -86,7 +86,7 @@ export async function handler(
   type CostInfo = ReturnType<typeof calculateCost>
 
   const MAX_FAILOVER_RETRIES = 3
-  const MAX_429_RETRIES = 3
+  const MAX_RETRYABLE_STATUS_RETRIES = 3
   const dict = i18n(localeFromRequest(input.request))
   const t = (key: Key, params?: Record<string, string | number>) => resolve(dict[key], params)
   const ADMIN_WORKSPACES = [
@@ -179,6 +179,8 @@ export async function handler(
       logger.metric({
         provider: providerInfo.id,
         "provider.model": providerInfo.model,
+        shallowProvider: providerInfo.id,
+        "shallowProvider.model": providerInfo.model,
       })
 
       const startTimestamp = Date.now()
@@ -210,39 +212,44 @@ export async function handler(
       )
       logger.debug("REQUEST URL: " + reqUrl)
       logger.debug("REQUEST: " + reqBody.substring(0, 300) + "...")
-      const res = await fetchWith429Retry(reqUrl, {
-        method: "POST",
-        headers: (() => {
-          const headers = new Headers(input.request.headers)
-          providerInfo.modifyHeaders(headers, providerInfo.apiKey, stickyId)
-          Object.entries(providerInfo.headerModifier ?? {}).forEach(([k, v]) => {
-            if (v === "$ip") return headers.set(k, ip)
-            if (v === "$caller") return headers.set(k, stickyId)
-            if (v === "$session") return headers.set(k, sessionId)
-            if (v === "$model") return headers.set(k, model)
-            if (v === "$request") return headers.set(k, requestId)
-            if (v === "$project") return headers.set(k, projectId)
-            if (v === "$workspace") {
-              if (authInfo?.workspaceID) headers.set(k, authInfo.workspaceID)
-              return
-            }
-            headers.set(k, v)
-          })
-          headers.delete("host")
-          headers.delete("content-length")
-          headers.delete("x-opencode-request")
-          headers.delete("x-opencode-session")
-          headers.delete("x-opencode-project")
-          headers.delete("x-opencode-client")
-          return headers
-        })(),
-        body: reqBody,
-        // Propagate caller disconnects to the upstream provider request so
-        // abandoned Console requests do not leave orphaned inference work open.
-        signal: input.request.signal,
-      })
+      const isNewInference = providerInfo.id.startsWith("console.") || providerInfo.id.startsWith("console-go.")
+      const res = await fetchWithRetryableStatus(
+        reqUrl,
+        {
+          method: "POST",
+          headers: (() => {
+            const headers = new Headers(input.request.headers)
+            providerInfo.modifyHeaders(headers, providerInfo.apiKey, stickyId)
+            Object.entries(providerInfo.headerModifier ?? {}).forEach(([k, v]) => {
+              if (v === "$ip") return headers.set(k, ip)
+              if (v === "$caller") return headers.set(k, stickyId)
+              if (v === "$session") return headers.set(k, sessionId)
+              if (v === "$model") return headers.set(k, model)
+              if (v === "$request") return headers.set(k, requestId)
+              if (v === "$project") return headers.set(k, projectId)
+              if (v === "$workspace") {
+                if (authInfo?.workspaceID) headers.set(k, authInfo.workspaceID)
+                return
+              }
+              headers.set(k, v)
+            })
+            headers.delete("host")
+            headers.delete("content-length")
+            headers.delete("x-opencode-request")
+            headers.delete("x-opencode-session")
+            headers.delete("x-opencode-project")
+            headers.delete("x-opencode-client")
+            return headers
+          })(),
+          body: reqBody,
+          // Propagate caller disconnects to the upstream provider request so
+          // abandoned Console requests do not leave orphaned inference work open.
+          signal: input.request.signal,
+        },
+        { count: isNewInference ? MAX_RETRYABLE_STATUS_RETRIES : 0 },
+      )
 
-      if (providerInfo.id.startsWith("console.")) {
+      if (isNewInference) {
         const resEndpointId = res.headers.get("x-opencode-endpoint-id")
         const resEndpointModelId = res.headers.get("x-opencode-upstream-model-id")
         if (resEndpointId && resEndpointModelId)
@@ -261,6 +268,7 @@ export async function handler(
 
       // Try another provider => stop retrying if using fallback provider
       if (
+        //!isNewInference &&
         res.status !== 200 &&
         // ie. 400 error is usually provider error like malformed request
         res.status !== 400 &&
@@ -299,7 +307,7 @@ export async function handler(
     logger.debug("STATUS: " + res.status + " " + res.statusText)
 
     // Handle non-streaming response
-    if (!isStream || [400, 404, 429].includes(res.status)) {
+    if (!isStream || [400, 404, 429, 529].includes(res.status)) {
       const json = await res.json()
       await rateLimiter?.track()
       const usage = providerInfo.extractUsage(json)
@@ -587,70 +595,69 @@ export async function handler(
         }))
       }
 
-      if (retry.retryCount !== MAX_FAILOVER_RETRIES) {
-        let topPriority = Infinity
-        const providers = allProviders
-          .filter((provider) => provider.weight !== 0)
-          .filter((provider) => !retry.excludeProviders.includes(provider.id))
-          .filter((provider) => {
-            if (provider.budgetPriority === undefined) return true
-            if (!providerBudget) return true
-            return providerBudget.qualify(provider.id, provider.budgetPriority)
-          })
-          .filter((provider) => {
-            if (!provider.tpmLimit) return true
-            const usage = modelTpmLimits?.[`${provider.id}/${provider.model}`] ?? 0
-            return usage < provider.tpmLimit * 1_000_000
-          })
-          .filter((provider) => {
-            if (!provider.tpsGoal) return true
-            const tps = modelTpsLimits?.[`${provider.id}/${provider.model}/${provider.tpsGoal}`] ?? {
-              qualify: 0,
-              unqualify: 0,
-            }
-            const isLowTps = tps.qualify + tps.unqualify > 10 && tps.qualify < tps.unqualify
-            return !isLowTps
-          })
-          .map((provider) => {
-            topPriority = Math.min(topPriority, provider.priority)
-            return provider
-          })
-          .filter((p) => p.priority <= topPriority)
-          .flatMap((provider) => Array<typeof provider>(provider.weight).fill(provider))
+      // Use fallback provider if max retries reached
+      const fallbackProvider = allProviders.find((provider) => provider.id === modelInfo.fallbackProvider)
+      if (retry.retryCount === MAX_FAILOVER_RETRIES) return fallbackProvider
 
-        // Use the last 4 characters of session ID to select a provider
-        let h = 0
-        const l = stickyId.length
-        for (let i = l - 4; i < l; i++) {
-          h = (h * 31 + stickyId.charCodeAt(i)) | 0 // 32-bit int
-        }
-        const index = (h >>> 0) % providers.length // make unsigned + range 0..length-1
-        const provider = providers[index || 0]
-
-        // sticky provider does not exist => use selected provider
-        if (!stickyProviderId) return provider
-        const stickProvider = allProviders.find((provider) => provider.id === stickyProviderId)
-        if (!stickProvider) return provider
-
-        const preferBudgetProvider =
-          provider.budgetPriority !== undefined && providerBudget?.prefer(provider.id, provider.budgetPriority)
-
-        const preferTpsProvider = (() => {
-          if (!provider.tpsGoal) return false
+      let topPriority = Infinity
+      const providers = allProviders
+        .filter((provider) => provider.weight !== 0)
+        .filter((provider) => !retry.excludeProviders.includes(provider.id))
+        .filter((provider) => {
+          if (provider.budgetPriority === undefined) return true
+          if (!providerBudget) return true
+          return providerBudget.qualify(provider.id, provider.budgetPriority)
+        })
+        .filter((provider) => {
+          if (!provider.tpmLimit) return true
+          const usage = modelTpmLimits?.[`${provider.id}/${provider.model}`] ?? 0
+          return usage < provider.tpmLimit * 1_000_000
+        })
+        .filter((provider) => {
+          if (!provider.tpsGoal) return true
           const tps = modelTpsLimits?.[`${provider.id}/${provider.model}/${provider.tpsGoal}`] ?? {
             qualify: 0,
             unqualify: 0,
           }
-          return tps.qualify > tps.unqualify * 3
-        })()
+          const isLowTps = tps.qualify + tps.unqualify > 10 && tps.qualify < tps.unqualify
+          return !isLowTps
+        })
+        .map((provider) => {
+          topPriority = Math.min(topPriority, provider.priority)
+          return provider
+        })
+        .filter((p) => p.priority <= topPriority)
+        .flatMap((provider) => Array<typeof provider>(provider.weight).fill(provider))
 
-        if (!preferBudgetProvider && !preferTpsProvider) return stickProvider
-
-        return provider
+      // Use the last 4 characters of session ID to select a provider
+      let h = 0
+      const l = stickyId.length
+      for (let i = l - 4; i < l; i++) {
+        h = (h * 31 + stickyId.charCodeAt(i)) | 0 // 32-bit int
       }
+      const index = (h >>> 0) % providers.length // make unsigned + range 0..length-1
+      const provider = providers[index || 0] ?? fallbackProvider
 
-      // fallback provider
-      return allProviders.find((provider) => provider.id === modelInfo.fallbackProvider)
+      // sticky provider does not exist => use selected provider
+      if (!stickyProviderId) return provider
+      const stickProvider = allProviders.find((provider) => provider.id === stickyProviderId)
+      if (!stickProvider) return provider
+
+      const preferBudgetProvider =
+        provider.budgetPriority !== undefined && providerBudget?.prefer(provider.id, provider.budgetPriority)
+
+      const preferTpsProvider = (() => {
+        if (!provider.tpsGoal) return false
+        const tps = modelTpsLimits?.[`${provider.id}/${provider.model}/${provider.tpsGoal}`] ?? {
+          qualify: 0,
+          unqualify: 0,
+        }
+        return tps.qualify > tps.unqualify * 3
+      })()
+
+      if (!preferBudgetProvider && !preferTpsProvider) return stickProvider
+
+      return provider
     })()
 
     if (!modelProvider) throw new ModelError(t("zen.api.error.noProviderAvailable"))
@@ -992,11 +999,11 @@ export async function handler(
     providerInfo.apiKey = authInfo.provider.credentials
   }
 
-  async function fetchWith429Retry(url: string, options: RequestInit, retry = { count: 0 }) {
+  async function fetchWithRetryableStatus(url: string, options: RequestInit, retry = { count: 0 }) {
     const res = await fetch(url, options)
-    if (res.status === 429 && retry.count < MAX_429_RETRIES) {
+    if ([429, 529].includes(res.status) && retry.count < MAX_RETRYABLE_STATUS_RETRIES) {
       await new Promise((resolve) => setTimeout(resolve, Math.pow(2, retry.count) * 500))
-      return fetchWith429Retry(url, options, { count: retry.count + 1 })
+      return fetchWithRetryableStatus(url, options, { count: retry.count + 1 })
     }
     return res
   }

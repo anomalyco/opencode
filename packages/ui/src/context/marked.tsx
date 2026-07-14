@@ -1,9 +1,9 @@
-import { marked } from "marked"
-import markedKatex from "marked-katex-extension"
+import { marked, type MarkedExtension, type Tokens } from "marked"
 import markedShiki from "marked-shiki"
 import katex from "katex"
 import { bundledLanguages, type BundledLanguage } from "shiki"
 import { createSimpleContext } from "./helper"
+import { markedCodeSpanBoundary } from "./marked-code-span"
 import { getSharedHighlighter, registerCustomTheme, ThemeRegistrationResolved } from "@pierre/diffs"
 
 export const OpenCodeTheme = {
@@ -395,8 +395,8 @@ function renderMathInText(text: string): string {
     }
   })
 
-  // Inline math: $...$
-  const inlineMathRegex = /(?<!\$)\$(?!\$)((?:[^$\\]|\\.)+?)\$(?!\$)/g
+  // Inline math: \(...\)
+  const inlineMathRegex = /\\\(((?:\\.|[^\\\n])*?)\\\)/g
   result = result.replace(inlineMathRegex, (_, math) => {
     try {
       return katex.renderToString(math, {
@@ -404,11 +404,61 @@ function renderMathInText(text: string): string {
         throwOnError: false,
       })
     } catch {
-      return `$${math}$`
+      return `\\(${math}\\)`
     }
   })
 
   return result
+}
+
+const inlineMathRegex = /^\\\(((?:\\.|[^\\\n])*?)\\\)/
+const blockMathRegex = /^\$\$\n([\s\S]+?)\n\$\$(?:\n|$)/
+
+const katexExtension: MarkedExtension = {
+  extensions: [
+    {
+      name: "inlineKatex",
+      level: "inline",
+      start(src) {
+        const index = src.indexOf("\\(")
+        if (index === -1) return
+        return index
+      },
+      tokenizer(src) {
+        const match = src.match(inlineMathRegex)
+        if (!match) return
+        return {
+          type: "inlineKatex",
+          raw: match[0],
+          text: match[1].trim(),
+          displayMode: false,
+        }
+      },
+      renderer: renderKatexToken,
+    },
+    {
+      name: "blockKatex",
+      level: "block",
+      tokenizer(src) {
+        const match = src.match(blockMathRegex)
+        if (!match) return
+        return {
+          type: "blockKatex",
+          raw: match[0],
+          text: match[1].trim(),
+          displayMode: true,
+        }
+      },
+      renderer: renderKatexToken,
+    },
+  ],
+}
+
+function renderKatexToken(token: Tokens.Generic) {
+  return katex.renderToString(typeof token.text === "string" ? token.text : "", {
+    displayMode: token.displayMode === true,
+    throwOnError: false,
+  })
 }
 
 function renderMathExpressions(html: string): string {
@@ -472,6 +522,7 @@ export const { use: useMarked, provider: MarkedProvider } = createSimpleContext(
   name: "Marked",
   init: (props: { nativeParser?: NativeMarkdownParser }) => {
     const jsParser = marked.use(
+      markedCodeSpanBoundary,
       {
         renderer: {
           link({ href, title, text }) {
@@ -480,10 +531,7 @@ export const { use: useMarked, provider: MarkedProvider } = createSimpleContext(
           },
         },
       },
-      markedKatex({
-        throwOnError: false,
-        nonStandard: true,
-      }),
+      katexExtension,
       markedShiki({
         async highlight(code, lang) {
           const highlighter = await getSharedHighlighter({

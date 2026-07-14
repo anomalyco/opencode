@@ -28,7 +28,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Plugin") {}
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const events = yield* EventV2.Service
@@ -149,7 +149,6 @@ export const locationLayer = layer.pipe(
   Layer.provideMerge(CommandV2.locationLayer),
   Layer.provideMerge(Integration.locationLayer),
   Layer.provideMerge(Reference.locationLayer),
-  Layer.provideMerge(SkillV2.locationLayer),
 )
 
 export const node = makeLocationNode({
