@@ -353,18 +353,14 @@ function Main {
         if ($winget) {
             Write-Info "Attempting auto-install via winget..."
             foreach ($tool in $missing) {
-                switch ($tool) {
-                    "git" {
-                        Write-Info "Installing Git..."
-                        winget install --id Git.Git --source winget --accept-package-agreements --accept-source-agreements
-                    }
-                    "node" {
-                        Write-Info "Installing Node.js (LTS)..."
-                        winget install --id OpenJS.NodeJS.LTS --source winget --accept-package-agreements --accept-source-agreements
-                    }
-                    "npm" {
-                        Write-Info "npm is bundled with Node.js — will be available after Node install"
-                    }
+                if ($tool -eq "git") {
+                    Write-Info "Installing Git..."
+                    winget install --id Git.Git --source winget --accept-package-agreements --accept-source-agreements
+                } elseif ($tool -eq "node") {
+                    Write-Info "Installing Node.js (LTS)..."
+                    winget install --id OpenJS.NodeJS.LTS --source winget --accept-package-agreements --accept-source-agreements
+                } elseif ($tool -eq "npm") {
+                    Write-Info "npm is bundled with Node.js — will be available after Node install"
                 }
             }
             Write-Warn "Prerequisites were just installed. Restart your terminal and re-run this installer."
