@@ -394,6 +394,7 @@ export function SessionSidePanel(props: {
                                       fallback={
                                         <SortableTab
                                           tab={tab}
+                                          onSelectIntent={() => activateTab(tab)}
                                           temporary={temporaryTab() === tab}
                                           onTabClose={tabs().close}
                                           onTabDoubleClick={temporaryTab() === tab ? openTab : undefined}
@@ -601,6 +602,7 @@ export function SessionSidePanel(props: {
                                   fallback={
                                     <SortableTabV2
                                       tab={tab}
+                                      onSelectIntent={() => activateTab(tab)}
                                       index={() => tabs().all().indexOf(tab)}
                                       temporary={temporaryTab() === tab}
                                       onTabClose={tabs().close}
