@@ -104,13 +104,11 @@ function DiffViewer(props: { api: TuiPluginApi }) {
     }
   })
   const [diff] = createResource(diffInput, async (input) => {
-    const result = await client.api.vcs.diff(
-      {
-        location: input.directory ? { directory: input.directory } : undefined,
-        mode: input.mode,
-        context: VCS_DIFF_CONTEXT_LINES,
-      },
-    )
+    const result = await client.api.vcs.diff({
+      location: input.directory ? { directory: input.directory } : undefined,
+      mode: input.mode,
+      context: VCS_DIFF_CONTEXT_LINES,
+    })
     return normalizeDiffs(result.data ?? [])
   })
   const files = createMemo(() => (diff.error ? [] : (diff() ?? [])))

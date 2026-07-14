@@ -25,12 +25,10 @@ export function DialogPair(props: { credentials?: DialogPairCredentials }) {
   dialog.setCentered(true)
 
   const [server] = createResource(() =>
-    client.api.server
-      .get()
-      .catch((error) => {
-        setLoadError(error)
-        return undefined
-      }),
+    client.api.server.get().catch((error) => {
+      setLoadError(error)
+      return undefined
+    }),
   )
   const info = createMemo(() => {
     const current = server()

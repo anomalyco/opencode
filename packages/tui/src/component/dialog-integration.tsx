@@ -188,8 +188,8 @@ function KeyMethod(props: {
       placeholder="API key"
       onConfirm={(key) => {
         if (!key) return
-        void client.api.integration
-          .connect.key({
+        void client.api.integration.connect
+          .key({
             integrationID: props.integration.id,
             location: location(data),
             key,
@@ -227,8 +227,8 @@ function OAuthStarting(props: {
   const toast = useToast()
 
   onMount(() => {
-    void client.api.integration
-      .connect.oauth({
+    void client.api.integration.connect
+      .oauth({
         integrationID: props.integration.id,
         location: location(data),
         methodID: props.method.id,
@@ -296,8 +296,8 @@ function OAuthAuto(props: {
   }))
 
   const poll = () => {
-    void client.api.integration
-      .attempt.status({ attemptID: props.attempt.attemptID, location: location(data) })
+    void client.api.integration.attempt
+      .status({ attemptID: props.attempt.attemptID, location: location(data) })
       .then((result) => {
         const status = result.data
         if (status.status === "pending") {
@@ -362,8 +362,8 @@ function OAuthCode(props: {
       placeholder="Authorization code"
       onConfirm={(code) => {
         if (!code) return
-        void client.api.integration
-          .attempt.complete({ attemptID: props.attempt.attemptID, location: location(data), code })
+        void client.api.integration.attempt
+          .complete({ attemptID: props.attempt.attemptID, location: location(data), code })
           .then(() => {
             settled = true
             return connected(props.integration, data, dialog, toast, props.onConnected)
