@@ -42,6 +42,90 @@ function durable(sessionID: string, seq = 0, version = 1) {
   return { aggregateID: sessionID, seq, version }
 }
 
+test("bootstraps MCP data for the TUI location", async () => {
+  const events = createEventStream()
+  const requests: URL[] = []
+  const calls = createFetch((url) => {
+    if (url.pathname === "/api/mcp" || url.pathname === "/api/mcp/resource") requests.push(url)
+    return undefined
+  }, events)
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <ClientProvider api={createApi(calls.fetch)}>
+        <ProjectProvider>
+          <DataProvider>
+            <box />
+          </DataProvider>
+        </ProjectProvider>
+      </ClientProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await wait(() => requests.length === 2)
+    expect(requests.map((url) => url.searchParams.get("location[directory]"))).toEqual([
+      process.cwd(),
+      process.cwd(),
+    ])
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("refreshes MCP status when a connection settles during bootstrap", async () => {
+  const events = createEventStream()
+  let mcpRequests = 0
+  let resolveModels!: (response: Response) => void
+  const calls = createFetch((url) => {
+    if (url.pathname === "/api/mcp") {
+      mcpRequests++
+      return json({
+        location: { directory, project: { id: "proj_test", directory } },
+        data: [{ name: "context7", status: { status: mcpRequests === 1 ? "pending" : "connected" } }],
+      })
+    }
+    if (url.pathname === "/api/model")
+      return new Promise<Response>((resolve) => {
+        resolveModels = resolve
+      })
+    return undefined
+  }, events)
+  let data!: ReturnType<typeof useData>
+
+  function Probe() {
+    data = useData()
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <ClientProvider api={createApi(calls.fetch)}>
+        <ProjectProvider>
+          <DataProvider>
+            <Probe />
+          </DataProvider>
+        </ProjectProvider>
+      </ClientProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await wait(() => data.location.mcp.server.list()?.[0]?.status.status === "pending")
+    emitEvent(events, {
+      id: "evt_mcp_connected",
+      created: 1,
+      type: "mcp.status.changed",
+      data: { server: "context7" },
+    })
+    await wait(() => data.location.mcp.server.list()?.[0]?.status.status === "connected")
+    expect(mcpRequests).toBe(2)
+    resolveModels(json({ location: { directory, project: { id: "proj_test", directory } }, data: [] }))
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("refreshes resources into reactive getters", async () => {
   const events = createEventStream()
   const location = {
