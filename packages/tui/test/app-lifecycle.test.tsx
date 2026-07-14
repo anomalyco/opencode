@@ -1,6 +1,6 @@
 import { expect, mock, test } from "bun:test"
 import { createTestRenderer } from "@opentui/core/testing"
-import { Effect } from "effect"
+import { Effect, FileSystem } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Global } from "@opencode-ai/core/global"
 import { createEventStream, createFetch, directory, json } from "./fixture/tui-client"
@@ -33,7 +33,7 @@ test("SIGHUP clears title and disposes scoped resources once", async () => {
         packages: { resolve: async () => undefined },
         args: {},
         log: () => {},
-      }).pipe(Effect.provide(AppNodeBuilder.build(Global.node))),
+      }).pipe(Effect.provide(AppNodeBuilder.build(Global.node)), Effect.provide(FileSystem.layerNoop({}))),
     )
     await ready
     process.emit("SIGHUP")
@@ -105,7 +105,7 @@ test("session lifecycle updates the terminal title and prints the epilogue after
         packages: { resolve: async () => undefined },
         args: { sessionID: "dummy" },
         log: () => {},
-      }).pipe(Effect.provide(AppNodeBuilder.build(Global.node))),
+      }).pipe(Effect.provide(AppNodeBuilder.build(Global.node)), Effect.provide(FileSystem.layerNoop({}))),
     )
 
     await initialTitleSet

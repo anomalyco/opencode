@@ -76,14 +76,9 @@ function makeRoutes<AuthError, AuthServices>(
   const serviceLayer = simulateEnabled()
     ? Layer.unwrap(
         Effect.gen(function* () {
-          const { simulationReplacements, startDriveServer } = yield* Effect.promise(
-            () => import("@opencode-ai/simulation/backend"),
-          )
-          if (driveEnabled()) startDriveServer()
-          return AppNodeBuilder.build(applicationServices, [
-            ...replacements,
-            ...(simulateEnabled() ? simulationReplacements : []),
-          ])
+          const { simulationReplacements } = yield* Effect.promise(() => import("@opencode-ai/simulation/backend"))
+          const simulation = yield* simulationReplacements()
+          return AppNodeBuilder.build(applicationServices, [...replacements, ...simulation])
         }),
       )
     : AppNodeBuilder.build(applicationServices, replacements)
@@ -114,10 +109,6 @@ function makeRoutes<AuthError, AuthServices>(
 
 function simulateEnabled() {
   return !!process.env.OPENCODE_SIMULATE
-}
-
-function driveEnabled() {
-  return !!process.env.OPENCODE_DRIVE
 }
 
 export const routes = createRoutes()

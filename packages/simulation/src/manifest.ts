@@ -1,20 +1,54 @@
-import { existsSync, readFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { isAbsolute, join } from "node:path"
+import { Config, Effect, FileSystem, Schema } from "effect"
+import { PositiveInt } from "@opencode-ai/core/schema"
 
-export interface Manifest {
-  readonly endpoints: {
-    readonly ui: string
-    readonly backend: string
-  }
-  readonly viewport?: {
-    readonly cols: number
-    readonly rows: number
-  }
-  readonly recording?: {
-    readonly timeline: string
-  }
-}
+const InstanceName = Schema.String.check(
+  Schema.makeFilter((value) =>
+    /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/.test(value) ? undefined : "a valid Drive instance name",
+  ),
+)
+
+const Endpoint = Schema.String.check(
+  Schema.makeFilter((value) => {
+    if (!URL.canParse(value)) return "a loopback WebSocket endpoint with an explicit port"
+    const endpoint = new URL(value)
+    const port = Number(endpoint.port)
+    return endpoint.protocol === "ws:" && endpoint.hostname === "127.0.0.1" && Number.isInteger(port) && port >= 1
+      ? undefined
+      : "a loopback WebSocket endpoint with an explicit port"
+  }),
+)
+
+const AbsolutePath = Schema.String.check(
+  Schema.makeFilter((value) => (isAbsolute(value) ? undefined : "an absolute path")),
+)
+
+export const Manifest = Schema.Struct({
+  endpoints: Schema.Struct({
+    ui: Endpoint,
+    backend: Endpoint,
+  }),
+  viewport: Schema.optionalKey(
+    Schema.Struct({
+      cols: PositiveInt,
+      rows: PositiveInt,
+    }),
+  ),
+  recording: Schema.optionalKey(
+    Schema.Struct({
+      timeline: AbsolutePath,
+    }),
+  ),
+})
+export interface Manifest extends Schema.Schema.Type<typeof Manifest> {}
+
+export class ResolveError extends Schema.TaggedErrorClass<ResolveError>()("DriveManifest.ResolveError", {
+  reason: Schema.Literals(["config", "not-found", "read", "decode"]),
+  path: Schema.optionalKey(Schema.String),
+  message: Schema.String,
+  cause: Schema.Defect(),
+}) {}
 
 export const defaults: Manifest = {
   endpoints: {
@@ -23,48 +57,54 @@ export const defaults: Manifest = {
   },
 }
 
-export function resolve() {
-  const name = process.env.OPENCODE_DRIVE
-  if (!name) throw new Error("OPENCODE_DRIVE must contain a drive instance name")
+const decode = Schema.decodeUnknownEffect(Schema.fromJsonString(Manifest))
+
+const configError = (cause: unknown) =>
+  new ResolveError({
+    reason: "config",
+    message: `Invalid Drive configuration: ${String(cause)}`,
+    cause,
+  })
+
+export const resolve = Effect.fn("DriveManifest.resolve")(function* () {
+  const name = yield* Config.schema(InstanceName, "OPENCODE_DRIVE").pipe(Effect.mapError(configError))
   if (name === "1") return defaults
-  if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/.test(name)) throw new Error(`Invalid drive instance name: ${name}`)
 
-  const directory =
-    process.env.DRIVE_REGISTRY_DIR ??
-    join(process.env.XDG_STATE_HOME ?? join(homedir(), ".local", "state"), "opencode-drive", "instances")
+  const state = yield* Config.string("XDG_STATE_HOME").pipe(
+    Config.withDefault(join(homedir(), ".local", "state")),
+    Effect.mapError(configError),
+  )
+  const directory = yield* Config.string("DRIVE_REGISTRY_DIR").pipe(
+    Config.withDefault(join(state, "opencode-drive", "instances")),
+    Effect.mapError(configError),
+  )
   const file = join(directory, `${name}.json`)
-  if (!existsSync(file)) throw new Error(`Drive manifest not found: ${file}`)
-
-  const manifest: unknown = JSON.parse(readFileSync(file, "utf8"))
-  if (!isManifest(manifest)) throw new Error(`Invalid drive manifest: ${file}`)
-  validateEndpoint(manifest.endpoints.ui, "ui")
-  validateEndpoint(manifest.endpoints.backend, "backend")
-  if (manifest.viewport) validateViewport(manifest.viewport)
-  if (manifest.recording && !isAbsolute(manifest.recording.timeline)) {
-    throw new Error(`Invalid drive recording timeline path: ${manifest.recording.timeline}`)
-  }
-  return manifest
-}
-
-function isManifest(value: unknown): value is Manifest {
-  if (typeof value !== "object" || value === null || !("endpoints" in value)) return false
-  if (typeof value.endpoints !== "object" || value.endpoints === null) return false
-  return "ui" in value.endpoints && "backend" in value.endpoints
-}
-
-function validateEndpoint(value: string, name: string) {
-  const endpoint = new URL(value)
-  const port = Number(endpoint.port)
-  if (endpoint.protocol !== "ws:" || endpoint.hostname !== "127.0.0.1" || !Number.isInteger(port) || port < 1) {
-    throw new Error(`Invalid drive ${name} endpoint: ${value}`)
-  }
-}
-
-function validateViewport(value: Manifest["viewport"]) {
-  if (!value) return
-  if (!Number.isSafeInteger(value.cols) || value.cols <= 0 || !Number.isSafeInteger(value.rows) || value.rows <= 0) {
-    throw new Error(`Invalid drive viewport: ${JSON.stringify(value)}`)
-  }
-}
+  const fs = yield* FileSystem.FileSystem
+  const contents = yield* fs.readFileString(file).pipe(
+    Effect.mapError(
+      (cause) =>
+        new ResolveError({
+          reason: cause.reason._tag === "NotFound" ? "not-found" : "read",
+          path: file,
+          message:
+            cause.reason._tag === "NotFound"
+              ? `Drive manifest not found: ${file}`
+              : `Failed to read Drive manifest: ${file}: ${cause.message}`,
+          cause,
+        }),
+    ),
+  )
+  return yield* decode(contents).pipe(
+    Effect.mapError(
+      (cause) =>
+        new ResolveError({
+          reason: "decode",
+          path: file,
+          message: `Invalid Drive manifest: ${file}: ${cause.message}`,
+          cause,
+        }),
+    ),
+  )
+})
 
 export * as DriveManifest from "./manifest"

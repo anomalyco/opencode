@@ -145,6 +145,7 @@ export namespace Frontend {
   ])
   export type Request = Schema.Schema.Type<typeof Request>
   export const decodeRequest = Schema.decodeUnknownSync(Request)
+  export const decodeRequestEffect = Schema.decodeUnknownEffect(Schema.fromJsonString(Request))
 }
 
 export namespace Backend {
@@ -188,9 +189,10 @@ export namespace Backend {
   ])
   export type Request = Schema.Schema.Type<typeof Request>
   export const decodeRequest = Schema.decodeUnknownSync(Request)
+  export const decodeRequestEffect = Schema.decodeUnknownEffect(Schema.fromJsonString(Request))
 
-  export const OpenedExchange = Schema.Struct({ id: Schema.String, url: Schema.String, body: Schema.Json })
-  export interface OpenedExchange extends Schema.Schema.Type<typeof OpenedExchange> {}
+  export const ProviderInvocation = Schema.Struct({ id: Schema.String, url: Schema.String, body: Schema.Json })
+  export interface ProviderInvocation extends Schema.Schema.Type<typeof ProviderInvocation> {}
 
   export const NetworkLogEntry = Schema.Struct({
     time: Schema.Number,

@@ -1,9 +1,11 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { httpClient } from "@opencode-ai/core/effect/app-node-platform"
+import { Config, Effect, Layer } from "effect"
+import { HttpClient } from "effect/unstable/http"
 import { DriveManifest } from "../manifest"
-import { SimulationControl } from "./control"
 import { SimulationNetwork } from "./network"
 import { SimulationOpenAI } from "./openai"
+import { SimulatedProvider } from "./simulated-provider"
 
 /**
  * Layer replacements applied when the server is built in simulation mode.
@@ -17,17 +19,29 @@ import { SimulationOpenAI } from "./openai"
  *
  */
 
-SimulationNetwork.register(SimulationOpenAI.route)
-// ModelsDev dies when its catalog fetch fails, so simulation answers it with
-// an empty catalog; providers come from seeded config instead.
-SimulationNetwork.register(SimulationNetwork.json("GET", "https://models.dev/api.json", {}))
+export const simulationReplacements = Effect.fn("Simulation.replacements")(function* () {
+  // ModelsDev dies when its catalog fetch fails, so simulation answers it with
+  // an empty catalog; providers come from seeded config instead.
+  const models = SimulationNetwork.json("GET", "https://models.dev/api.json", {})
+  const drive = yield* Config.string("OPENCODE_DRIVE").pipe(Config.withDefault(undefined))
+  if (!drive) return [[httpClient, SimulationNetwork.layer([models])]] satisfies LayerNode.Replacements
 
-export function startDriveServer() {
-  return SimulationControl.start(DriveManifest.resolve().endpoints.backend)
-}
-
-export const simulationReplacements: LayerNode.Replacements = [
-  [httpClient, SimulationNetwork.layer],
-]
+  const manifest = yield* DriveManifest.resolve()
+  const networkLayer = Layer.effect(
+    HttpClient.HttpClient,
+    Effect.gen(function* () {
+      const provider = yield* SimulatedProvider.Service
+      const network = yield* SimulationNetwork.make([SimulationOpenAI.route(provider), models])
+      return network.client
+    }),
+  ).pipe(
+    Layer.provide(
+      SimulatedProvider.layerDrive({
+        endpoint: manifest.endpoints.backend,
+      }),
+    ),
+  )
+  return [[httpClient, networkLayer]] satisfies LayerNode.Replacements
+})
 
 export * as Simulation from "./index"

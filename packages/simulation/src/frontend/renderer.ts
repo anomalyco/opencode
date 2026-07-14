@@ -1,5 +1,6 @@
 import type { CliRenderer, CliRendererConfig } from "@opentui/core"
 import { createTestRenderer, type TestRendererSetup } from "@opentui/core/testing"
+import { Effect } from "effect"
 import { Timeline } from "../recording"
 
 const setups = new WeakMap<CliRenderer, TestRendererSetup>()
@@ -16,37 +17,47 @@ export interface Viewport {
   readonly rows: number
 }
 
-export async function create(options: CliRendererConfig, path?: string, viewport?: Viewport): Promise<CliRenderer> {
+export const create = Effect.fn("SimulationRenderer.create")(function* (
+  options: CliRendererConfig,
+  path?: string,
+  viewport?: Viewport,
+) {
   const cols = viewport?.cols ?? 100
   const rows = viewport?.rows ?? 40
-  if (!path) {
-    const setup = await createTestRenderer({
-      ...options,
-      width: cols,
-      height: rows,
-    })
-    setups.set(setup.renderer, setup)
-    return setup.renderer
-  }
-  const recording = await Timeline.create(path, cols, rows)
-  const setup = await createTestRenderer({
-    ...options,
-    width: cols,
-    height: rows,
-    stdout: recording as unknown as NodeJS.WriteStream,
-    bufferedOutput: "stdout",
-    onDestroy: () => {
-      void recording.finish().catch((error) => process.stderr.write(`Failed to finish UI recording: ${error}\n`))
-      options.onDestroy?.()
-    },
-  }).catch(async (error) => {
-    await recording.finish().catch(() => undefined)
-    throw error
-  })
+  const recording = path
+    ? yield* Effect.acquireRelease(
+        Effect.tryPromise(() => Timeline.create(path, cols, rows)),
+        (recording) =>
+          Effect.tryPromise(() => recording.finish()).pipe(
+            Effect.catch((error) =>
+              Effect.sync(() => process.stderr.write(`Failed to finish UI recording: ${error}\n`)),
+            ),
+          ),
+      )
+    : undefined
+  const setup = yield* Effect.acquireRelease(
+    Effect.tryPromise(() =>
+      createTestRenderer({
+        ...options,
+        width: cols,
+        height: rows,
+        ...(recording
+          ? {
+              stdout: recording as unknown as NodeJS.WriteStream,
+              bufferedOutput: "stdout" as const,
+            }
+          : {}),
+      }),
+    ),
+    (setup) =>
+      Effect.sync(() => {
+        if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+      }),
+  )
   setups.set(setup.renderer, setup)
-  recordings.set(setup.renderer, recording)
+  if (recording) recordings.set(setup.renderer, recording)
   return setup.renderer
-}
+})
 
 export function recordResize(renderer: CliRenderer, cols: number, rows: number) {
   recordings.get(renderer)?.resize(cols, rows)
@@ -58,8 +69,8 @@ export function setupFor(renderer: CliRenderer): TestRendererSetup | undefined {
 
 export function finish(renderer: CliRenderer) {
   const recording = recordings.get(renderer)
-  if (!recording) throw new Error("UI recording is not available")
-  return recording.finish()
+  if (!recording) return Effect.fail(new Error("UI recording is not available"))
+  return Effect.tryPromise(() => recording.finish())
 }
 
 export * as SimulationRenderer from "./renderer"

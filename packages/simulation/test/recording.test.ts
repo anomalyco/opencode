@@ -5,6 +5,7 @@ import { join } from "node:path"
 import { TextRenderable } from "@opentui/core"
 import { createHarness, matches } from "../src/frontend/actions"
 import { SimulationRenderer } from "../src/frontend/renderer"
+import { Effect } from "effect"
 import { Timeline, type Event } from "../src/recording"
 
 test("streams ANSI chunks into a versioned JSONL timeline", async () => {
@@ -39,21 +40,25 @@ test("streams ANSI chunks into a versioned JSONL timeline", async () => {
 test("captures native renderer output and finishes on destroy", async () => {
   const directory = await mkdtemp(join(tmpdir(), "simulation-renderer-recording-"))
   const path = join(directory, "timeline.jsonl")
-  const renderer = await SimulationRenderer.create({}, path)
 
   try {
-    await SimulationRenderer.setupFor(renderer)?.renderOnce()
-    renderer.destroy()
-    expect(await SimulationRenderer.finish(renderer)).toBe(path)
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const renderer = yield* SimulationRenderer.create({}, path)
+          yield* Effect.promise(() => SimulationRenderer.setupFor(renderer)?.renderOnce() ?? Promise.resolve())
+          renderer.destroy()
+          expect(yield* SimulationRenderer.finish(renderer)).toBe(path)
 
-    const events = (await Bun.file(path).text())
-      .trim()
-      .split("\n")
-      .map((line) => JSON.parse(line) as Event)
-    expect(events.some((event) => event.type === "output")).toBe(true)
+          const events = (yield* Effect.promise(() => Bun.file(path).text()))
+            .trim()
+            .split("\n")
+            .map((line) => JSON.parse(line) as Event)
+          expect(events.some((event) => event.type === "output")).toBe(true)
+        }),
+      ),
+    )
   } finally {
-    if (!renderer.isDestroyed) renderer.destroy()
-    await SimulationRenderer.finish(renderer)
     await rm(directory, { recursive: true, force: true })
   }
 })
@@ -61,16 +66,20 @@ test("captures native renderer output and finishes on destroy", async () => {
 test("matches live screen text while recording", async () => {
   const directory = await mkdtemp(join(tmpdir(), "simulation-recording-matches-"))
   const path = join(directory, "timeline.jsonl")
-  const renderer = await SimulationRenderer.create({}, path)
 
   try {
-    renderer.root.add(new TextRenderable(renderer, { content: "recorded screen text" }))
-    await SimulationRenderer.setupFor(renderer)?.renderOnce()
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const renderer = yield* SimulationRenderer.create({}, path)
+          renderer.root.add(new TextRenderable(renderer, { content: "recorded screen text" }))
+          yield* Effect.promise(() => SimulationRenderer.setupFor(renderer)?.renderOnce() ?? Promise.resolve())
 
-    expect(matches(createHarness(renderer), "recorded screen text")).toBe(true)
+          expect(matches(createHarness(renderer), "recorded screen text")).toBe(true)
+        }),
+      ),
+    )
   } finally {
-    renderer.destroy()
-    await SimulationRenderer.finish(renderer)
     await rm(directory, { recursive: true, force: true })
   }
 })

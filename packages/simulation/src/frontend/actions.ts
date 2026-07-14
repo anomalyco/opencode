@@ -1,8 +1,8 @@
-import { mkdir } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { extname, join, resolve } from "node:path"
 import type { CliRenderer, Renderable } from "@opentui/core"
 import { createMockKeys, createMockMouse, type MockInput, type MockMouse } from "@opentui/core/testing"
+import { Config, Effect, FileSystem } from "effect"
 import type { SimulationProtocol } from "../protocol"
 import { SimulationRenderer } from "./renderer"
 
@@ -71,10 +71,7 @@ export function createHarness(renderer: CliRenderer): Harness {
     // captureCharFrame follows the test renderer's output sink. Recording
     // redirects that sink to the timeline, so read the live render buffer
     // instead; it is also the source used by screenshots.
-    screen: () =>
-      decoder.decode(
-        (Reflect.get(renderer, "currentRenderBuffer") as RenderBuffer).getRealCharBytes(),
-      ),
+    screen: () => decoder.decode((Reflect.get(renderer, "currentRenderBuffer") as RenderBuffer).getRealCharBytes()),
   }
 }
 
@@ -113,32 +110,29 @@ export function matches(harness: Pick<Harness, "screen">, text: string) {
   return harness.screen().includes(text)
 }
 
-export async function screenshot(harness: Harness, name?: string) {
-  await harness.renderOnce()
-  const { SimulationPng } = await import("./png")
-  const image = SimulationPng.screenshot(harness.renderer)
+export const screenshot = Effect.fn("SimulationActions.screenshot")(function* (harness: Harness, name?: string) {
   const filename = name ?? `screenshot-${crypto.randomUUID()}`
-  if (
-    !filename ||
-    filename.includes("/") ||
-    filename.includes("\\") ||
-    extname(filename)
-  )
-    throw new Error("screenshot name must not contain a path or extension")
+  if (!filename || filename.includes("/") || filename.includes("\\") || extname(filename))
+    return yield* Effect.fail(new Error("screenshot name must not contain a path or extension"))
+  yield* Effect.tryPromise(() => harness.renderOnce())
+  const { SimulationPng } = yield* Effect.promise(() => import("./png"))
+  const image = SimulationPng.screenshot(harness.renderer)
   const directory = resolve(
-    process.env.OPENCODE_DRIVE_MEDIA_DIR ??
-      join(tmpdir(), "opencode-drive", "output"),
+    yield* Config.string("OPENCODE_DRIVE_MEDIA_DIR").pipe(
+      Config.withDefault(join(tmpdir(), "opencode-drive", "output")),
+    ),
   )
-  await mkdir(directory, { recursive: true })
+  const fs = yield* FileSystem.FileSystem
+  yield* fs.makeDirectory(directory, { recursive: true })
   const path = join(directory, `${filename}.png`)
-  await Bun.write(path, image.data)
+  yield* fs.writeFile(path, image.data)
   return path
-}
+})
 
-export async function execute(harness: Harness, action: Action) {
+export const execute = Effect.fn("SimulationActions.execute")(function* (harness: Harness, action: Action) {
   switch (action.type) {
     case "ui.type":
-      await harness.mockInput.typeText(action.text)
+      yield* Effect.tryPromise(() => harness.mockInput.typeText(action.text))
       break
     case "ui.press":
       harness.mockInput.pressKey(action.key, action.modifiers)
@@ -155,18 +149,23 @@ export async function execute(harness: Harness, action: Action) {
         ?.focus()
       break
     case "ui.click":
-      await harness.mockMouse.click(action.x, action.y)
+      yield* Effect.tryPromise(() => harness.mockMouse.click(action.x, action.y))
       break
     case "ui.resize":
-      if (!Number.isSafeInteger(action.cols) || action.cols <= 0 || !Number.isSafeInteger(action.rows) || action.rows <= 0) {
-        throw new Error("resize cols and rows must be positive integers")
+      if (
+        !Number.isSafeInteger(action.cols) ||
+        action.cols <= 0 ||
+        !Number.isSafeInteger(action.rows) ||
+        action.rows <= 0
+      ) {
+        return yield* Effect.fail(new Error("resize cols and rows must be positive integers"))
       }
       harness.resize(action.cols, action.rows)
       SimulationRenderer.recordResize(harness.renderer, action.cols, action.rows)
       break
   }
-  await harness.renderOnce()
+  yield* Effect.tryPromise(() => harness.renderOnce())
   return state(harness)
-}
+})
 
 export * as SimulationActions from "./actions"

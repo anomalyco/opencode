@@ -197,42 +197,38 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   const exit = { epilogue: undefined as string | undefined, reason: undefined as unknown }
   const result = yield* Effect.scoped(
     Effect.gen(function* () {
-      const renderer = yield* Effect.acquireRelease(
-        Effect.tryPromise({
-          try: async () => {
-            const options = {
-              externalOutputMode: "passthrough",
-              targetFps: 60,
-              gatherStats: false,
-              exitOnCtrlC: false,
-              useKittyKeyboard: {},
-              autoFocus: false,
-              openConsoleOnError: false,
-              useMouse: !Flag.OPENCODE_DISABLE_MOUSE && config.mouse,
-              consoleOptions: {
-                keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
-              },
-            } satisfies CliRendererConfig
-
-            if (handoff) {
-              handoff.renderer.useMouse = options.useMouse
-              return handoff.renderer
-            }
-
-            if (process.env.OPENCODE_DRIVE) {
-              const { Drive } = await import("@opencode-ai/simulation/frontend")
-              return Drive.create(options)
-            }
-
-            return createCliRenderer(options)
-          },
-          catch: (error) => (error instanceof Error ? error : new Error(String(error))),
-        }),
-        (renderer) =>
-          Effect.sync(() => {
-            destroyRenderer(renderer)
+      const options = {
+        externalOutputMode: "passthrough",
+        targetFps: 60,
+        gatherStats: false,
+        exitOnCtrlC: false,
+        useKittyKeyboard: {},
+        autoFocus: false,
+        openConsoleOnError: false,
+        useMouse: !Flag.OPENCODE_DISABLE_MOUSE && config.mouse,
+        consoleOptions: {
+          keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
+        },
+      } satisfies CliRendererConfig
+      const renderer = yield* Effect.gen(function* () {
+        if (handoff) {
+          handoff.renderer.useMouse = options.useMouse
+          return yield* Effect.acquireRelease(Effect.succeed(handoff.renderer), (renderer) =>
+            Effect.sync(() => destroyRenderer(renderer)),
+          )
+        }
+        if (process.env.OPENCODE_DRIVE) {
+          const { Drive } = yield* Effect.promise(() => import("@opencode-ai/simulation/frontend"))
+          return yield* Drive.create(options)
+        }
+        return yield* Effect.acquireRelease(
+          Effect.tryPromise({
+            try: () => createCliRenderer(options),
+            catch: (error) => (error instanceof Error ? error : new Error(String(error))),
           }),
-      )
+          (renderer) => Effect.sync(() => destroyRenderer(renderer)),
+        )
+      })
       win32DisableProcessedInput()
       const finalizers = new Set<() => Promise<void>>()
       yield* Effect.addFinalizer(() =>

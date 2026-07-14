@@ -4,7 +4,7 @@ Status: design for the Phase 2 network and LLM items in `simulation-phases.md`.
 
 ## Summary
 
-Simulation replaces the `HttpClient.HttpClient` platform node with a simulated network. The LLM is not a separate fake: it is one registered route in that network (`api.openai.com`), answered by the **external driver** over the existing control WebSocket. When the app issues a provider request, the backend forwards it to the driver and the driver streams response chunks back. There is no enqueueing and no scripted-response store; the driver is the model.
+Simulation replaces the `HttpClient.HttpClient` platform node with a simulated network. The LLM is not replaced: an OpenAI route intercepts the real provider request and delegates its response to a **simulated model provider** controlled by the external driver. There is no server-side response script or replay adapter; the driver decides what the provider returns.
 
 Everything above the HTTP boundary runs real: catalog and auth resolution, `LLMClient`, request body construction, SSE framing, the OpenAI protocol event schema, the `step` state machine, `Lifecycle` grammar, tool-argument accumulation, the session runner, tools, and permissions.
 
@@ -29,12 +29,12 @@ Replacing `httpClient` (already a `LayerNode` in `app-node-platform.ts`, already
 
 ### 1. Simulated network (`packages/simulation/src/backend/network.ts`)
 
-Replaces `httpClient` in `simulationReplacements`. An in-memory route table:
+Replaces `httpClient` in `simulationReplacements`. Each acquired network run owns its route table and bounded request log:
 
-- `register(matcher, responder)` where matcher is method + URL pattern and responder is `(HttpClientRequest) => Effect<HttpClientResponse>`.
+- `make(routes)` constructs one isolated client and log; routes are ordinary matchers supplied at acquisition.
 - Unknown requests fail loudly with a typed simulation error (spec: deny unknown external network by default).
 - Optional loopback allowance for the app's own server is not required server-side (the server does not call itself over HTTP); revisit if a consumer needs it.
-- Every request/response summary is traced.
+- Every request summary is timestamped through Effect `Clock` and retained only for that run.
 
 ### 2. OpenAI endpoint route (`packages/simulation/src/backend/openai.ts`)
 
@@ -42,36 +42,44 @@ Registered in the network at startup for `POST {DEFAULT_BASE_URL}{PATH}` from `p
 
 On request:
 
-1. Allocate an exchange id. Parse the real OpenAI request body (available to the driver for assertions).
-2. Publish a `request` record to the LLM exchange service (below) and create a chunk `Queue`.
-3. Return `HttpClientResponse` with `content-type: text/event-stream` whose body stream reads from the queue, encoding each item as an SSE `data:` frame, terminated by `[DONE]`.
+1. Parse the real OpenAI request body, which remains available to the driver for assertions.
+2. Call `SimulatedProvider.Service.stream({ url, body })`.
+3. Encode the returned provider response events as SSE `data:` frames and terminate a finished response with `[DONE]`.
 
 Chunks are constructed through the `OpenAIChatEvent` schema so drift in the protocol schema breaks the build, not the runtime.
 
-The response stream is interruptible like a real HTTP response: if the runner cancels (user interrupt), the exchange closes and the driver is notified.
+The response stream is interruptible like a real HTTP response. If the runner cancels, the provider invocation is removed and later driver commands for its id fail.
 
-### 3. LLM exchange service (`packages/simulation/src/backend/llm-exchange.ts`)
+### 3. Simulated provider (`packages/simulation/src/backend/simulated-provider.ts`)
 
-Process-global simulation service owning pending exchanges:
+The OpenAI route sees one Effect service:
 
+```ts
+interface SimulatedProvider {
+  stream(request: ProviderRequest): Stream<ProviderResponseEvent, ProviderDisconnectedError>
+}
 ```
-Exchange = { id, body, queue: Queue<Item | Error | Done>, deferred lifecycle }
-```
 
-- `requests()` — stream of newly opened exchanges (consumed by the control route).
-- `push(id, item)` — append one response item to an open exchange.
-- `finish(id, reason)` / `fail(id, failure)` — terminate the exchange.
-- Exchanges that receive no driver within a configurable timeout fail the provider request with a simulation error (surfaces in the real provider-error path).
+`SimulatedProvider.layerDrive({ endpoint })` owns the Drive adapter in one Effect scope:
+
+- Pending provider invocations and response queues.
+- Late controller attachment and pending-invocation replay.
+- The backend control WebSocket and its request fibers.
+- Stream interruption, explicit disconnect, finish, and scope cleanup.
+
+Invocation ids, queues, controller attachment, and WebSocket commands remain private to `layerDrive`. The OpenAI route only sees a provider request producing a response stream.
 
 ### 4. Backend control WebSocket (simulation-gated)
 
 Started when `OPENCODE_DRIVE` names a registry manifest: a loopback JSON-RPC 2.0 WebSocket at that manifest's exact backend endpoint, hosted by the backend process. Drivers connect to it directly — the standalone topology has exactly one backend per TUI, so there is no proxying through the frontend. This socket is also the headless-simulation interface: it works with no TUI at all.
 
-Server -> driver notification (after `llm.attach`; pending exchanges are replayed on attach so late-attaching drivers miss nothing):
+The backend and frontend control sockets share one scoped Effect adapter. It owns the Bun server, a bounded sequential message queue, its worker fiber, schema-based JSON decoding, and shutdown ordering.
+
+Server -> driver notification (after `llm.attach`; pending invocations are replayed on attach so late-attaching drivers miss nothing):
 
 ```
 { "jsonrpc": "2.0", "method": "llm.request",
-  "params": { "id": "ex_1", "url": "...", "body": { ...openai request body... } } }
+  "params": { "id": "inv_1", "url": "...", "body": { ...openai request body... } } }
 ```
 
 Driver -> server methods:
@@ -79,8 +87,9 @@ Driver -> server methods:
 ```
 llm.attach                                subscribe to llm.request notifications
 llm.chunk   { id, items: Item[] }         append response items
-llm.finish  { id, reason?: "stop" | ... } finish the exchange
-llm.pending                               list open exchanges
+llm.finish  { id, reason?: "stop" | ... } finish the invocation
+llm.disconnect { id }                     fail the provider response stream
+llm.pending                               list pending invocations
 network.log                               simulated network request log
 ```
 
@@ -102,13 +111,13 @@ Failure injection (`llm.fail`: HTTP status instead of SSE) is specced but not ye
 A driver manages two loopback WebSocket connections:
 
 - TUI control server (manifest `endpoints.ui`) — UI state, actions, render, trace.
-- Backend control server (manifest `endpoints.backend`) — LLM exchanges, network log.
+- Backend control server (manifest `endpoints.backend`) — simulated provider invocations. The network request log remains run-local diagnostic state.
 
 Both speak the same JSON-RPC shape. Headless drivers use only the backend socket plus the normal HTTP API. Multiple drivers are out of scope; last attach wins.
 
 ### 6. Pacing and the clock
 
-No server-side pacing by default: the driver controls timing by when it sends chunks, which is the point of driver-in-the-loop. A convenience `llm.chunk` option `{ delayMs }` may sleep via `Effect.sleep` between items server-side; because that uses the fiber `Clock`, scoping a controllable clock to the exchange stream (`Stream.provideService(Clock.Clock, simClock)`) remains available for deterministic replay without touching app time. Defer until replay work needs it.
+No server-side pacing exists. The driver controls timing by deciding when to send chunks.
 
 ### 7. Catalog and auth seeding
 
@@ -123,14 +132,14 @@ driver                TUI drive server             backend + drive WS
   |                            |-- (normal app HTTP) ---->|  session runner starts
   |                            |                          |  llm.stream -> HttpClient
   |                            |                          |  simulated network matches openai route
-  |<================== llm.request {ex_1} ===============|  exchange ex_1 opened
-  |-- llm.chunk {ex_1,[...]} ============================>|  SSE frames flow into the real
-  |-- llm.chunk {ex_1,[...]} ============================>|  decode -> step -> LLMEvents ->
-  |-- llm.finish {ex_1} =================================>|  runner publishes, TUI renders
+  |<================= llm.request {inv_1} ================|  provider invocation inv_1 opened
+  |-- llm.chunk {inv_1,[...]} ===========================>|  SSE frames flow into the real
+  |-- llm.chunk {inv_1,[...]} ===========================>|  decode -> step -> LLMEvents ->
+  |-- llm.finish {inv_1} ================================>|  runner publishes, TUI renders
   |                            |                          |
   |   (if toolCall was sent: runner executes the real tool against the
-  |    fake filesystem, then issues the next provider turn -> new exchange
-  |    ex_2 -> driver decides the next response)
+  |    fake filesystem, then starts the next model invocation -> inv_2
+  |    -> driver decides the next provider response)
 ```
 
 The driver observes the TUI through `ui.state` while chunks stream, so mid-stream UI assertions need no clock control at all: the driver simply has not sent the rest yet.
@@ -138,13 +147,13 @@ The driver observes the TUI through `ui.state` while chunks stream, so mid-strea
 ## Implementation order
 
 1. `network.ts`: simulated `HttpClient` + route table + deny-unknown + trace. Replace `httpClient` in `simulationReplacements`.
-2. `llm-exchange.ts` + `openai.ts`: exchange service and the OpenAI SSE route (schema-constructed chunks, `[DONE]`, interruption).
-3. `control.ts`: backend-hosted control WebSocket (`llm.attach|chunk|finish|pending`, `network.log`), started when the simulation module loads.
+2. `simulated-provider.ts` + `openai.ts`: scoped Drive-controlled provider and the OpenAI SSE route (schema-constructed chunks, `[DONE]`, interruption).
+3. `SimulatedProvider.layerDrive`: backend-hosted control WebSocket (`llm.attach|chunk|finish|disconnect|pending`), acquired only when `OPENCODE_DRIVE` is set.
 4. Config seeding for the sim provider; end-to-end verification via `packages/server/script/e2e-sim.ts` (headless) and `packages/tui/script/sim-llm-driver.ts` (TUI + backend sockets).
-5. Trace records for network and LLM exchange activity.
+5. Trace records for network and simulated provider activity.
 
 ## Consequences
 
 - No enqueue/script store to keep consistent; the driver is the single source of model behavior.
-- Deterministic tests write drivers (respond to `llm.request` programmatically) instead of pre-baked scripts; replay (Phase 4) records exchanges and replays them as an automatic driver.
+- Deterministic tests write drivers that respond to `llm.request` programmatically instead of adding a second provider implementation.
 - Provider-coupling is confined to `openai.ts` (one wire encoder against a schema that lives in the repo); a second simulated provider (e.g. Anthropic) is another route file if ever needed.

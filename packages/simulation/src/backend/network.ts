@@ -1,7 +1,8 @@
-import { Effect, Layer } from "effect"
-import { HttpClient, HttpClientResponse } from "effect/unstable/http"
+import { Clock, Effect, Layer, Ref } from "effect"
+import { HttpClient, HttpClientResponse, type HttpMethod } from "effect/unstable/http"
 import { HttpClientError, TransportError } from "effect/unstable/http/HttpClientError"
 import type { HttpClientRequest } from "effect/unstable/http"
+import { SimulationProtocol } from "../protocol"
 
 /**
  * Simulated network.
@@ -12,8 +13,7 @@ import type { HttpClientRequest } from "effect/unstable/http"
  * silently reach the real network. The scripted LLM is one registered route,
  * not a separate mechanism.
  *
- * The route table is process-global module state so the control surface and
- * the client layer observe the same registrations.
+ * Each acquired run owns its routes and request log.
  */
 
 export interface Route {
@@ -21,33 +21,15 @@ export interface Route {
   readonly match: (
     request: HttpClientRequest.HttpClientRequest,
     url: URL,
-  ) => Effect.Effect<HttpClientResponse.HttpClientResponse> | undefined
+  ) => Effect.Effect<HttpClientResponse.HttpClientResponse, HttpClientError> | undefined
 }
 
-interface LogEntry {
-  readonly time: number
-  readonly method: string
-  readonly url: string
-  readonly matched: boolean
-}
-
-const state = {
-  routes: [] as Route[],
-  log: [] as LogEntry[],
-}
+export type LogEntry = SimulationProtocol.Backend.NetworkLogEntry
 
 const LOG_LIMIT = 1000
 
-export function register(route: Route) {
-  state.routes.push(route)
-  return () => {
-    const index = state.routes.indexOf(route)
-    if (index >= 0) state.routes.splice(index, 1)
-  }
-}
-
 /** Static JSON route: exact method + origin/path match answered with a fixed body. */
-export function json(method: string, url: string, body: unknown): Route {
+export function json(method: HttpMethod.HttpMethod, url: string, body: unknown): Route {
   return {
     match: (request, requestUrl) => {
       if (request.method !== method) return undefined
@@ -62,24 +44,29 @@ export function json(method: string, url: string, body: unknown): Route {
   }
 }
 
-export function log(): readonly LogEntry[] {
-  return state.log
+export interface Run {
+  readonly client: HttpClient.HttpClient
+  readonly log: () => Effect.Effect<readonly LogEntry[]>
 }
 
-function record(entry: LogEntry) {
-  state.log.push(entry)
-  if (state.log.length > LOG_LIMIT) state.log.splice(0, state.log.length - LOG_LIMIT)
-}
-
-export const layer = Layer.sync(HttpClient.HttpClient)(() =>
-  HttpClient.make((request, url) =>
-    Effect.suspend(() => {
-      const matched = state.routes
-        .map((route) => route.match(request, url))
-        .find((response) => response !== undefined)
-      record({ time: Date.now(), method: request.method, url: url.toString(), matched: matched !== undefined })
-      if (matched) return matched
-      return Effect.fail(
+export const make = Effect.fn("SimulationNetwork.make")(function* (routes: readonly Route[] = []) {
+  const log = yield* Ref.make<readonly LogEntry[]>([])
+  const client = HttpClient.make((request, url) =>
+    Effect.gen(function* () {
+      let matched: Effect.Effect<HttpClientResponse.HttpClientResponse, HttpClientError> | undefined
+      for (const route of routes) {
+        matched = route.match(request, url)
+        if (matched) break
+      }
+      const entry = {
+        time: yield* Clock.currentTimeMillis,
+        method: request.method,
+        url: url.toString(),
+        matched: matched !== undefined,
+      }
+      yield* Ref.update(log, (entries) => [...entries, entry].slice(-LOG_LIMIT))
+      if (matched) return yield* matched
+      return yield* Effect.fail(
         new HttpClientError({
           reason: new TransportError({
             request,
@@ -88,7 +75,11 @@ export const layer = Layer.sync(HttpClient.HttpClient)(() =>
         }),
       )
     }),
-  ),
-)
+  )
+  return { client, log: () => Ref.get(log) } satisfies Run
+})
+
+export const layer = (routes: readonly Route[] = []) =>
+  Layer.effect(HttpClient.HttpClient, make(routes).pipe(Effect.map((run) => run.client)))
 
 export * as SimulationNetwork from "./network"
