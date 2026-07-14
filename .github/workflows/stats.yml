@@ -23,13 +23,5 @@ jobs:
 
       - name: Run stats script
         run: bun script/stats.ts
-
-      - name: Commit stats
-        run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git add STATS.md
-          git diff --staged --quiet || git commit -m "ignore: update download stats $(date -I)"
-          git push
         env:
           POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}

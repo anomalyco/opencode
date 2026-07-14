@@ -36,7 +36,6 @@ bun dev <directory>
 bun dev .
 ```
 
-For contributing details, local builds, and other workflows, see [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 ### Agents
 
@@ -57,6 +56,3 @@ Learn more about [agents](https://opencode.ai/docs/agents).
 
 For more info on how to configure OpenCode, see the [docs](https://opencode.ai/docs).
 
-### Contributing
-
-If you're interested in contributing, please read our [contributing docs](./CONTRIBUTING.md) before submitting a pull request.

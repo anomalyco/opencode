@@ -36,7 +36,7 @@ bun dev <directory>
 bun dev .
 ```
 
-更多貢獻說明、本機建置與其他工作流程，請參閱 [CONTRIBUTING.md](./CONTRIBUTING.md)。
+
 
 ### Agents
 
@@ -58,4 +58,4 @@ OpenCode 內建了兩種 Agent，您可以使用 `Tab` 鍵快速切換。
 
 ### 參與貢獻
 
-如果您有興趣參與開發，請在提交 Pull Request 前先閱讀我們的 [貢獻指南 (Contributing Docs)](./CONTRIBUTING.md)。
+

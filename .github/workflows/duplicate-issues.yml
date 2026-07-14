@@ -119,7 +119,7 @@ jobs:
 
           [If not compliant:]
           <!-- issue-compliance -->
-          This issue doesn't fully meet our [contributing guidelines](../blob/main/CONTRIBUTING.md).
+          This issue doesn't fully meet our issue and PR templates.
 
           **What needs to be fixed:**
           - [specific reasons]
