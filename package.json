@@ -91,7 +91,8 @@
       "@sentry/vite-plugin": "4.6.0",
       "solid-js": "1.9.10",
       "vite-plugin-solid": "2.11.10",
-      "@lydell/node-pty": "1.2.0-beta.12"
+      "@lydell/node-pty": "1.2.0-beta.12",
+      "@remix-run/router": "1.23.2"
     }
   },
   "devDependencies": {
@@ -140,7 +141,8 @@
     "@opentui/keymap": "catalog:",
     "@opentui/solid": "catalog:",
     "@types/bun": "catalog:",
-    "@types/node": "catalog:"
+    "@types/node": "catalog:",
+    "@remix-run/router": "catalog:"
   },
   "patchedDependencies": {
     "@ff-labs/fff-bun@0.9.3": "patches/@ff-labs%2Ffff-bun@0.9.3.patch",
