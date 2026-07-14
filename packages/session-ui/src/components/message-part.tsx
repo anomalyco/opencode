@@ -1339,7 +1339,7 @@ export function UserMessageDisplay(props: {
 
   return (
     <div data-component="user-message" data-timeline-part-id={textPart()?.id}>
-      <Show when={!newLayout()}>{renderAttachments()}</Show>
+      <Show when={!props.useV2Actions}>{renderAttachments()}</Show>
       <Show
         when={text()}
         fallback={
@@ -1357,8 +1357,8 @@ export function UserMessageDisplay(props: {
           </div>
         </div>
       </Show>
-      <Show when={newLayout()}>{renderAttachments()}</Show>
-      <Show when={text() || (newLayout() && messageComments().length > 0)}>
+      <Show when={props.useV2Actions}>{renderAttachments()}</Show>
+      <Show when={text() || (props.useV2Actions && messageComments().length > 0)}>
         <div data-slot="user-message-copy-wrapper">
           <Show when={metaHead() || metaTail()}>
             <span data-slot="user-message-meta-wrap">
