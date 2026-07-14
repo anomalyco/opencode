@@ -32,9 +32,16 @@ function message(err: unknown) {
   return "Side question failed"
 }
 
+export function bindings(keys: TuiPluginApi["tuiConfig"]["keybinds"]) {
+  return keys
+    .gather(`${id}.submit`, ["input.submit", "prompt.submit"])
+    .map((binding) => ({ ...binding, cmd: cmd.submit, desc: "Submit side question" }))
+}
+
 function Input(props: {
   api: TuiPluginApi
   session: string
+  state: State
   visible?: boolean
   disabled?: boolean
   submit?: () => void
@@ -47,14 +54,17 @@ function Input(props: {
   }
   onCleanup(() => bind(undefined))
   return (
-    <props.api.ui.Prompt
-      sessionID={props.session}
-      visible={props.visible}
-      disabled={props.disabled}
-      onSubmit={props.submit}
-      ref={bind}
-      right={<props.api.ui.Slot name="session_prompt_right" session_id={props.session} />}
-    />
+    <box width="100%" flexDirection="column" flexShrink={0} gap={1}>
+      <Panel state={props.state} />
+      <props.api.ui.Prompt
+        sessionID={props.session}
+        visible={props.visible}
+        disabled={props.disabled}
+        onSubmit={props.submit}
+        ref={bind}
+        right={<props.api.ui.Slot name="session_prompt_right" session_id={props.session} />}
+      />
+    </box>
   )
 }
 
@@ -64,12 +74,9 @@ function Panel(props: { state: State }) {
   return (
     <Show when={props.state.visible}>
       <box
-        position="absolute"
-        zIndex={2000}
-        left={2}
-        right={2}
-        bottom={4}
+        width="100%"
         maxHeight={14}
+        flexShrink={0}
         paddingLeft={2}
         paddingRight={2}
         paddingTop={1}
@@ -190,9 +197,7 @@ const tui: TuiPlugin = async (api) => {
     ],
     bindings: [
       { key: "escape,enter,space", cmd: cmd.close, desc: "Dismiss side question" },
-      ...api.tuiConfig.keybinds
-        .get("prompt.submit")
-        .map((binding) => ({ ...binding, cmd: cmd.submit, desc: "Submit side question" })),
+      ...bindings(api.tuiConfig.keybinds),
     ],
   })
 
@@ -204,6 +209,7 @@ const tui: TuiPlugin = async (api) => {
           <Input
             api={api}
             session={props.session_id}
+            state={state()}
             visible={props.visible}
             disabled={props.disabled}
             submit={props.on_submit}
@@ -211,9 +217,6 @@ const tui: TuiPlugin = async (api) => {
             set={setRef}
           />
         )
-      },
-      app() {
-        return <Panel state={state()} />
       },
     },
   })
