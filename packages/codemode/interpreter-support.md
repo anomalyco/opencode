@@ -306,8 +306,8 @@ These are actionable implementation items. Check them off only when behavior and
 - [ ] Complete lexical declaration and destructuring semantics listed above.
 - [x] Make callback acceptance consistent across built-ins: collections, sort, string replacers, `Array.from`
       mappers, and promise reactions share one acceptance rule.
-- [x] Reject every unsupported callback argument explicitly rather than silently ignoring it (`thisArg` now fails
-      loudly).
+- [x] Reject every unsupported callback argument explicitly rather than silently ignoring it (`thisArg` and
+      unsupported `JSON.stringify` replacers now fail loudly).
 - [ ] Make async callback behavior consistent across built-ins; only string replacers settle async callback results
       today.
 - [ ] Resolve the built-in correctness gaps listed in the Array, String, Number, Date, and RegExp sections.

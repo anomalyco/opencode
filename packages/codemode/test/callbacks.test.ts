@@ -158,4 +158,19 @@ describe("still-rejected callables get the wrap hint", () => {
   test("non-callables still get the plain callback error", async () => {
     expect((await error(`return [1].map(42)`)).message).toContain("Array.map expects a function callback")
   })
+
+  test("promise handlers reject opaque callables with the wrap hint", async () => {
+    const diagnostic = await toolError(`return await Promise.resolve(1).then(tools.host.echo)`)
+    expect(diagnostic.message).toContain("Promise.prototype.then cannot use this callable as a handler")
+    expect(diagnostic.message).toContain("wrap it in an arrow function")
+  })
+
+  test("callable JSON.stringify replacers are rejected, never silently ignored", async () => {
+    expect((await error(`return JSON.stringify({ a: 1 }, Math.abs)`)).message).toContain(
+      "JSON.stringify replacers are not supported",
+    )
+    expect((await toolError(`return JSON.stringify({ a: 1 }, tools.host.echo)`)).message).toContain(
+      "JSON.stringify replacers are not supported",
+    )
+  })
 })

@@ -1,16 +1,12 @@
-import {
-  type AstNode,
-  CodeModeFunction,
-  InterpreterRuntimeError,
-  supportedSyntaxMessage,
-} from "../interpreter/model.js"
+import { type AstNode, InterpreterRuntimeError, supportedSyntaxMessage } from "../interpreter/model.js"
+import { typeofValue } from "../interpreter/references.js"
 import { copyIn, copyOut } from "../tool-runtime.js"
 
 export const invokeJsonMethod = (name: string, args: Array<unknown>, node: AstNode): unknown => {
   switch (name) {
     case "stringify": {
       const replacer = args[1]
-      if (Array.isArray(replacer) || replacer instanceof CodeModeFunction) {
+      if (Array.isArray(replacer) || typeofValue(replacer) === "function") {
         throw new InterpreterRuntimeError(
           "JSON.stringify replacers are not supported in CodeMode.",
           node,

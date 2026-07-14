@@ -42,7 +42,15 @@ export type CallbackRunner<R> = {
 
 // The single acceptance list for callbacks: collections, sort, string replacers,
 // Array.from mappers, and promise reactions all admit exactly these callables.
-export const isSupportedCallback = (value: unknown): boolean =>
+export type SupportedCallback =
+  | CodeModeFunction
+  | CoercionFunction
+  | UriFunction
+  | PromiseCapabilityFunction
+  | GlobalMethodReference
+  | IntrinsicReference
+
+export const isSupportedCallback = (value: unknown): value is SupportedCallback =>
   value instanceof CodeModeFunction ||
   value instanceof CoercionFunction ||
   value instanceof UriFunction ||
