@@ -503,6 +503,60 @@ describe("session.llm.ai-sdk adapter", () => {
     expect(result.tokens.cache.read).toBe(200)
   })
 
+  // The OpenAI usage shape has no cache-write field, so @ai-sdk/openai-compatible leaves
+  // cacheWriteTokens undefined and passes the gateway payload through as usage.raw. A gateway
+  // fronting Anthropic still reports the count there, and providerMetadata carries nothing to
+  // fall back on, so raw is the only place the number survives.
+  test("reads cache write tokens from raw usage for an openai-compatible gateway", async () => {
+    const events = await adapt([
+      {
+        type: "finish-step",
+        response: { id: "msg_test", timestamp: new Date(0), modelId: "claude-sonnet-4" },
+        finishReason: "stop",
+        rawFinishReason: "stop",
+        usage: {
+          inputTokens: 19428,
+          outputTokens: 4,
+          totalTokens: 19432,
+          inputTokenDetails: { noCacheTokens: 19428, cacheReadTokens: 0, cacheWriteTokens: undefined },
+          outputTokenDetails: { textTokens: 4, reasoningTokens: undefined },
+          raw: { prompt_tokens: 19428, completion_tokens: 4, cache_creation_input_tokens: 19426 },
+        },
+        providerMetadata: undefined,
+      },
+    ])
+
+    expect(events).toHaveLength(1)
+    const stepFinish = events[0]
+    if (stepFinish.type !== "step-finish") throw new Error("expected step-finish")
+    expect(stepFinish.usage?.cacheWriteInputTokens).toBe(19426)
+
+    const result = SessionNs.getUsage({
+      model: {
+        id: "claude-sonnet-4",
+        providerID: "gateway",
+        name: "Claude via gateway",
+        limit: { context: 200_000, output: 8_000 },
+        cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+        capabilities: {
+          toolcall: true,
+          attachment: false,
+          reasoning: false,
+          temperature: true,
+          input: { text: true, image: false, audio: false, video: false },
+          output: { text: true, image: false, audio: false, video: false },
+        },
+        api: { npm: "@ai-sdk/openai-compatible" },
+        options: {},
+      } as never,
+      usage: stepFinish.usage!,
+      metadata: stepFinish.providerMetadata,
+    })
+    expect(result.tokens.cache.write).toBe(19426)
+    expect(result.tokens.input).toBe(2)
+    expect(result.tokens.output).toBe(4)
+  })
+
   test("captures Copilot billed usage from raw Anthropic message deltas per step", async () => {
     const events = await adapt([
       uncheckedAdapterEvent({
