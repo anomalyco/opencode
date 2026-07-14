@@ -764,8 +764,10 @@ test("classifies live tool rows independently of their call ID", async () => {
     if (url.pathname === `/api/session/${sessionID}/message`) return json({ data: [], cursor: {} })
   }, events)
   let rows!: ReturnType<typeof createSessionRows>
+  let client!: ReturnType<typeof useClient>
 
   function Probe() {
+    client = useClient()
     rows = createSessionRows(() => sessionID)
     return <box />
   }
@@ -783,6 +785,7 @@ test("classifies live tool rows independently of their call ID", async () => {
   ))
 
   try {
+    await wait(() => client.connection.status() === "connected")
     emitEvent(events, {
       id: "evt_tool_started",
       created: 1,
