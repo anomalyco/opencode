@@ -277,6 +277,39 @@ describe("opencode run (non-interactive subprocess)", () => {
     60_000,
   )
 
+  // Regression for #36868: the headless responder used to ignore permission
+  // asks from Task child sessions, leaving both child and parent blocked.
+  cliIt.concurrent(
+    "answers permission requests from Task child sessions",
+    ({ home, llm, opencode }) =>
+      Effect.gen(function* () {
+        yield* llm.push(
+          reply().tool("task", {
+            description: "exercise child permission",
+            prompt: "Create the requested marker file, then report completion.",
+            subagent_type: "general",
+          }),
+          reply().tool("bash", {
+            command: "touch child-approved",
+            description: "Create the child marker",
+          }),
+          reply().text("child completed"),
+          reply().text("root completed"),
+        )
+
+        const result = yield* opencode.run("delegate this task", {
+          permission: { task: "allow", bash: "ask" },
+          extraArgs: ["--auto"],
+          timeoutMs: 30_000,
+        })
+
+        opencode.expectExit(result, 0)
+        expect(result.stdout).toContain("root completed")
+        expect(yield* Effect.promise(() => Bun.file(`${home}/child-approved`).exists())).toBe(true)
+      }),
+    60_000,
+  )
+
   cliIt.live(
     "attach mode sends client-local file contents without a shared path",
     ({ home, llm, opencode }) =>

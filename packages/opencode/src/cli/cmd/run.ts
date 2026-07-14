@@ -37,6 +37,33 @@ function pick(value: string | undefined): ModelInput | undefined {
   } as ModelInput
 }
 
+function clientErrorStatus(error: unknown): number | undefined {
+  if (!(error instanceof Error) || typeof error.cause !== "object" || error.cause === null) return undefined
+  if (!("status" in error.cause) || typeof error.cause.status !== "number") return undefined
+  return error.cause.status
+}
+
+export async function isSessionInTree(
+  parent: (sessionID: string) => Promise<string | undefined>,
+  targetID: string,
+  sessions: Set<string>,
+): Promise<boolean> {
+  if (sessions.has(targetID)) return true
+  const lineage: string[] = []
+  const seen = new Set<string>()
+  let current = targetID
+  while (!sessions.has(current)) {
+    if (seen.has(current)) return false
+    seen.add(current)
+    lineage.push(current)
+    const parentID = await parent(current)
+    if (!parentID) return false
+    current = parentID
+  }
+  lineage.forEach((id) => sessions.add(id))
+  return true
+}
+
 function resolveRunInput(value?: string, piped?: string): string | undefined {
   if (!value) {
     return piped
@@ -690,15 +717,35 @@ export const RunCommand = effectCmd({
           return false
         }
 
+        const requestAbort = new AbortController()
+
         // Consume one subscribed event stream for the active session and mirror it
         // to stdout/UI. `client` is passed explicitly because attach mode may
         // rebind the SDK to the session's directory after the subscription is
         // created, and replies issued from inside the loop must use that client.
         async function loop(client: OpencodeClient, events: Awaited<ReturnType<typeof sdk.event.subscribe>>) {
           const toggles = new Map<string, boolean>()
+          const sessions = new Set([sessionID])
+          const parent = async (id: string): Promise<string | undefined> => {
+            try {
+              const result = await client.session.get(
+                { sessionID: id },
+                { throwOnError: true, signal: AbortSignal.timeout(10_000) },
+              )
+              return result.data.parentID
+            } catch (error) {
+              if (clientErrorStatus(error) === 404) return undefined
+              throw error
+            }
+          }
           let error: string | undefined
 
           for await (const event of events.stream) {
+            if (event.type === "session.created" || event.type === "session.updated") {
+              const info = event.properties.info
+              if (info.parentID && sessions.has(info.parentID)) sessions.add(info.id)
+            }
+
             if (
               event.type === "message.updated" &&
               event.properties.sessionID === sessionID &&
@@ -795,7 +842,14 @@ export const RunCommand = effectCmd({
 
             if (event.type === "permission.asked") {
               const permission = event.properties
-              if (permission.sessionID !== sessionID) continue
+              const related = await isSessionInTree(parent, permission.sessionID, sessions).catch(async (error) => {
+                requestAbort.abort(error)
+                await client.session
+                  .abort({ sessionID }, { throwOnError: true, signal: AbortSignal.timeout(5_000) })
+                  .catch(() => undefined)
+                throw error
+              })
+              if (!related) continue
 
               if (auto) {
                 await client.permission.reply({
@@ -838,14 +892,17 @@ export const RunCommand = effectCmd({
           }
 
           if (args.command) {
-            const result = await client.session.command({
-              sessionID,
-              agent,
-              model: args.model,
-              command: args.command,
-              arguments: message,
-              variant: args.variant,
-            })
+            const result = await client.session.command(
+              {
+                sessionID,
+                agent,
+                model: args.model,
+                command: args.command,
+                arguments: message,
+                variant: args.variant,
+              },
+              { signal: requestAbort.signal },
+            )
             if (result.error) {
               if (!emit("error", { error: result.error })) UI.error(formatRunError(result.error))
               process.exitCode = 1
@@ -856,13 +913,16 @@ export const RunCommand = effectCmd({
           }
 
           const model = pick(args.model)
-          const result = await client.session.prompt({
-            sessionID,
-            agent,
-            model,
-            variant: args.variant,
-            parts: [...files, { type: "text", text: message }],
-          })
+          const result = await client.session.prompt(
+            {
+              sessionID,
+              agent,
+              model,
+              variant: args.variant,
+              parts: [...files, { type: "text", text: message }],
+            },
+            { signal: requestAbort.signal },
+          )
           if (result.error) {
             if (!emit("error", { error: result.error })) UI.error(formatRunError(result.error))
             process.exitCode = 1
