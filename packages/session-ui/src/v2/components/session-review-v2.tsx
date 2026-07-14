@@ -26,7 +26,6 @@ export type SessionReviewV2Props = {
   empty?: JSX.Element
   sidebarOpen?: boolean
   sidebar?: JSX.Element
-  sidebarToggle?: JSX.Element
   activeFile?: string
   files: string[]
   onSelectFile: (file: string) => void
@@ -199,7 +198,6 @@ export function SessionReviewV2(props: SessionReviewV2Props) {
 
   const toolbarStart = () => (
     <>
-      {props.sidebarToggle}
       <Show when={showCollapsedMeta()}>
         <div data-slot="session-review-v2-toolbar-collapsed-meta">
           <Show when={title()}>
@@ -319,7 +317,7 @@ export function SessionReviewV2(props: SessionReviewV2Props) {
   )
 }
 
-export function SessionReviewV2SidebarToggle(props: { opened: boolean; onToggle: () => void }) {
+export function SessionReviewV2SidebarToggle(props: { opened: boolean; disabled?: boolean; onToggle: () => void }) {
   const i18n = useI18n()
 
   return (
@@ -330,6 +328,7 @@ export function SessionReviewV2SidebarToggle(props: { opened: boolean; onToggle:
         class="session-review-v2-sidebar-toggle"
         aria-label={i18n.t("ui.sessionReviewV2.toggleSidebar")}
         aria-expanded={props.opened}
+        disabled={props.disabled}
         onClick={props.onToggle}
         icon={<Icon name="filetree" />}
       />

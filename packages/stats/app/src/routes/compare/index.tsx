@@ -134,7 +134,7 @@ export default function ModelCompareIndex() {
                 Data
               </a>
               <span data-slot="compare-home-separator">/</span>
-              <span data-slot="compare-home-crumb" data-current="true">
+              <span data-slot="compare-home-crumb" data-current="true" aria-current="page">
                 Compare
               </span>
             </nav>

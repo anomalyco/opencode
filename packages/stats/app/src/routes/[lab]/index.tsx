@@ -29,6 +29,7 @@ import { SectionHeading } from "../section-heading"
 import { runStatsEffect } from "../../stats-runtime"
 import { setStatsPageCacheHeaders } from "../stats-cache"
 import { ComparisonCardsSection, modelRefFromCatalog, uniqueComparisonPairs } from "../compare-cards"
+import { BreadcrumbSelect } from "../breadcrumb-select"
 import {
   applyThemePreference,
   Footer,
@@ -205,6 +206,7 @@ function LabHero(props: { lab: ModelCatalogLab; labs: ModelCatalogLab[] }) {
 function LabHeroBreadcrumb(props: { label: string; labs?: ModelCatalogLab[] }) {
   const language = useLanguage()
   const labs = () => props.labs ?? []
+  const current = () => labs().find((lab) => lab.name === props.label)
   return (
     <nav data-component="lab-hero-breadcrumb" aria-label="Data breadcrumb">
       <a data-slot="lab-hero-crumb" href={language.route(import.meta.env.BASE_URL)}>
@@ -217,32 +219,23 @@ function LabHeroBreadcrumb(props: { label: string; labs?: ModelCatalogLab[] }) {
           <span data-slot="lab-hero-crumb" data-current="true" aria-current="page">
             <span>{props.label}</span>
             <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-              <path d="M4.75 6.25L8 9.5L11.25 6.25" fill="none" stroke="currentColor" stroke-width="1.5" />
+              <path d="M5 6.5L8 9.5L11 6.5" fill="none" stroke="currentColor" />
             </svg>
           </span>
         }
       >
-        <details data-component="lab-hero-menu">
-          <summary data-slot="lab-hero-crumb" data-current="true" aria-current="page">
-            <span>{props.label}</span>
-            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-              <path d="M4.75 6.25L8 9.5L11.25 6.25" fill="none" stroke="currentColor" stroke-width="1.5" />
-            </svg>
-          </summary>
-          <div data-slot="lab-hero-options">
-            <For each={labs()}>
-              {(lab) => (
-                <a
-                  data-slot="lab-hero-option"
-                  data-current={lab.name === props.label ? "true" : undefined}
-                  href={language.route(`${import.meta.env.BASE_URL}${lab.id}`)}
-                >
-                  {lab.name}
-                </a>
-              )}
-            </For>
-          </div>
-        </details>
+        <BreadcrumbSelect
+          ariaLabel="Choose a lab"
+          current
+          label={props.label}
+          options={labs().map((lab) => ({
+            href: language.route(`${import.meta.env.BASE_URL}${lab.id}`),
+            label: lab.name,
+            value: lab.id,
+          }))}
+          value={current()?.id ?? ""}
+          variant="lab"
+        />
       </Show>
     </nav>
   )

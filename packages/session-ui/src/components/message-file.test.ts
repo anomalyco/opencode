@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { FilePart } from "@opencode-ai/sdk/v2"
-import { attached, inline, kind } from "./message-file"
+import { attached, inline, kind, typeLabel } from "./message-file"
 
 function file(part: Partial<FilePart> = {}): FilePart {
   return {
@@ -51,5 +51,15 @@ describe("message-file", () => {
   test("separates image and file attachment kinds", () => {
     expect(kind(file({ mime: "image/png" }))).toBe("image")
     expect(kind(file({ mime: "application/pdf" }))).toBe("file")
+  })
+
+  test("labels attachment types from the basename extension", () => {
+    expect(typeLabel("list.md", "text/plain")).toBe("Markdown")
+    expect(typeLabel("/repo/src/main.ts", "text/plain")).toBe("TypeScript")
+    expect(typeLabel("/tmp/report.pdf", "application/pdf")).toBe("PDF")
+    expect(typeLabel("notes.xyz", "text/plain")).toBe("XYZ")
+    expect(typeLabel("/home/user/my.project/Makefile", "text/plain")).toBe("File")
+    expect(typeLabel(".gitignore", "text/plain")).toBe("File")
+    expect(typeLabel("/repo/.env", "text/plain")).toBe("File")
   })
 })
