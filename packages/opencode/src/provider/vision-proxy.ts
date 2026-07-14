@@ -22,9 +22,9 @@ interface ImageLike {
 }
 
 function toBase64DataUrl(data: Uint8Array | ArrayBuffer | Buffer, mimeType = "image/png"): string {
-  const bytes = data instanceof ArrayBuffer ? new Uint8Array(data) : data
+  const bytes: Uint8Array = data instanceof ArrayBuffer ? new Uint8Array(data) : data
   let binary = ""
-  const len = bytes instanceof Uint8Array ? bytes.byteLength : bytes.length
+  const len = bytes.byteLength
   const chunk = 0x8000
   for (let i = 0; i < len; i += chunk) {
     const slice = bytes instanceof Uint8Array
