@@ -281,7 +281,6 @@ const definitions = <R>(
   Object.entries(tools).flatMap(([name, value]) => {
     const next = [...path, name]
     if (isDefinition(value)) return [{ path: next.join("."), definition: value }]
-    if (typeof value === "function") return []
     return definitions(value, next)
   })
 
@@ -559,19 +558,14 @@ export const prepare = <R>(tools: Tools<R>, catalogBudget = defaultCatalogBudget
 const namespaceKeys = <R>(tools: Tools<R>, path: ReadonlyArray<string>): ReadonlyArray<string> => {
   let value: Definition<R> | Tools<R> = tools
   for (const segment of path) {
-    if (
-      isBlockedMember(segment) ||
-      typeof value === "function" ||
-      isDefinition(value) ||
-      !Object.hasOwn(value, segment)
-    ) {
+    if (isBlockedMember(segment) || isDefinition(value) || !Object.hasOwn(value, segment)) {
       throw new ToolRuntimeError("UnknownTool", `Unknown tool namespace '${path.join(".")}'.`, [
         "Object.keys(tools) lists the available namespaces; search({ query }) finds described tools.",
       ])
     }
     value = value[segment] as Definition<R> | Tools<R>
   }
-  if (typeof value === "function" || isDefinition(value)) return []
+  if (isDefinition(value)) return []
   return Object.keys(value)
 }
 
@@ -579,12 +573,7 @@ const resolve = <R>(tools: Tools<R>, path: ReadonlyArray<string>): Definition<R>
   let value: Definition<R> | Tools<R> = tools
 
   for (const segment of path) {
-    if (
-      isBlockedMember(segment) ||
-      typeof value === "function" ||
-      isDefinition(value) ||
-      !Object.hasOwn(value, segment)
-    ) {
+    if (isBlockedMember(segment) || isDefinition(value) || !Object.hasOwn(value, segment)) {
       throw new ToolRuntimeError("UnknownTool", `Unknown tool '${path.join(".")}'.`, [
         "Use search({ query }) to find available described tools.",
       ])

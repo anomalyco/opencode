@@ -52,26 +52,6 @@ describe("Object.keys over tool references", () => {
     expect(await value(`return Object.keys(tools.github.list_issues)`)).toEqual([])
   })
 
-  test("raw function leaves remain undiscoverable and uncallable", async () => {
-    const raw = Object.assign(() => Effect.succeed("raw"), {
-      child: echo("Hidden child"),
-      metadata: "not a namespace",
-    })
-    const runtime = CodeMode.make({
-      tools: { raw } as unknown as { readonly raw: Tool.Definition<never> },
-    })
-
-    expect(runtime.catalog()).toEqual([])
-    expect(await Effect.runPromise(runtime.execute(`return Object.keys(tools.raw)`))).toMatchObject({
-      ok: true,
-      value: [],
-    })
-    expect(await Effect.runPromise(runtime.execute(`return await tools.raw({})`))).toMatchObject({
-      ok: false,
-      error: { kind: "UnknownTool", message: "Tool 'raw' is not callable." },
-    })
-  })
-
   test("search is a global built-in function", async () => {
     expect(await value(`return typeof search`)).toBe("function")
   })
