@@ -90,6 +90,29 @@ it.effect("maps pro reasoning bodies to AI SDK provider options", () =>
   }),
 )
 
+it.effect("maps package-specific AI SDK provider option keys", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = { languageModel: () => ({ provider: event.model.providerID }) }
+    })
+
+    const cases = [
+      ["@ai-sdk/github-copilot", "copilot"],
+      ["@ai-sdk/amazon-bedrock/mantle", "openai"],
+      ["@ai-sdk/openai-compatible", "test-provider"],
+      ["ai-gateway-provider", "openaiCompatible"],
+    ] as const
+    for (const [packageName, key] of cases) {
+      const resolved = yield* aisdk.model(model(packageName, { reasoningEffort: "high" }))
+      const prepared = yield* LLMClient.prepare<LanguageModelV3CallOptions>(
+        LLM.request({ model: resolved, prompt: "Hello" }),
+      )
+      expect(prepared.body.providerOptions).toEqual({ [key]: { reasoningEffort: "high" } })
+    }
+  }),
+)
+
 it.effect("projects replay metadata onto AI SDK prompt parts", () =>
   Effect.gen(function* () {
     const aisdk = yield* AISDK.Service
