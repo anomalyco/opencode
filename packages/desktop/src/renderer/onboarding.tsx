@@ -5,6 +5,7 @@ import {
   useServer,
   useServerSDK,
   useServerSync,
+  useSettings,
   useTabs,
 } from "@opencode-ai/app"
 import { onMount, startTransition } from "solid-js"
@@ -13,6 +14,7 @@ export function DesktopFirstLaunchOnboarding(props: { initialUrl: string; onLoad
   const server = useServer()
   const serverSDK = useServerSDK()
   const serverSync = useServerSync()
+  const settings = useSettings()
   const layout = useLayout()
   const providers = useProviders()
   const tabs = useTabs()
@@ -28,6 +30,7 @@ export function DesktopFirstLaunchOnboarding(props: { initialUrl: string; onLoad
           (p) => p ?? Promise.resolve(),
         ),
       )
+      settings.general.setOldLayoutEligible(await window.api.isOldLayoutEligible())
       if (!server.isLocal()) return
 
       const pending = await window.api.isFirstLaunchOnboardingPending()

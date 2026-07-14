@@ -1,5 +1,6 @@
 import { createEffect, For, onCleanup, Show, splitProps, type Accessor, type ComponentProps } from "solid-js"
 import { createStore } from "solid-js/store"
+import { Dynamic } from "solid-js/web"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
@@ -433,7 +434,9 @@ function ProjectTrigger(props: ComponentProps<"button"> & { controller: PromptPr
   const [local, rest] = splitProps(props, ["controller", "class", "classList", "onClick", "onKeyDown"])
   const project = () => local.controller.selected()
   return (
-    <button
+    // Avoid an inert template clone that Floating UI can measure before browser adoption.
+    <Dynamic
+      component="button"
       {...rest}
       data-action="prompt-project"
       type="button"
@@ -470,7 +473,7 @@ function ProjectTrigger(props: ComponentProps<"button"> & { controller: PromptPr
         {project() ? displayName(project()!) : local.controller.labels.new()}
       </span>
       <Icon name="chevron-down" size="small" class="shrink-0 text-v2-icon-icon-muted" />
-    </button>
+    </Dynamic>
   )
 }
 
