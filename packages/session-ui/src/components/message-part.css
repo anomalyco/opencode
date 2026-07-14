@@ -1363,6 +1363,10 @@ body[data-new-layout] [data-component="user-message"] {
   }
 }
 
+[data-color-scheme="light"] body[data-new-layout] [data-component="user-message"] [data-slot="user-message-text"] {
+  background: var(--v2-background-bg-layer-02);
+}
+
 body:not([data-new-layout]) {
   [data-component="user-message"] {
     color: var(--text-strong);
