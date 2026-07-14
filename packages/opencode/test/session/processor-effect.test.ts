@@ -88,7 +88,7 @@ function providerCfg(url: string) {
 
 function agent(): Agent.Info {
   return {
-    name: "build",
+    name: "default",
     mode: "primary",
     options: {},
     permission: [{ permission: "*", pattern: "*", action: "allow" }],
@@ -120,7 +120,7 @@ const user = Effect.fn("TestSession.user")(function* (sessionID: SessionID, text
     id: MessageID.ascending(),
     role: "user",
     sessionID,
-    agent: "build",
+    agent: "default",
     model: ref,
     time: { created: Date.now() },
   })
@@ -144,8 +144,8 @@ const assistant = Effect.fn("TestSession.assistant")(function* (
     id: MessageID.ascending(),
     role: "assistant",
     sessionID,
-    mode: "build",
-    agent: "build",
+    mode: "default",
+    agent: "default",
     path: { cwd: root, root },
     cost: 0,
     tokens: {

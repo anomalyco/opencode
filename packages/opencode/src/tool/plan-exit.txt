@@ -1,6 +1,6 @@
 Use this tool when you have completed the planning phase and are ready to exit plan agent.
 
-This tool will ask the user if they want to switch to build agent to start implementing the plan.
+This tool will ask the user if they want to switch to default agent to start implementing the plan.
 
 Call this tool:
 - After you have written a complete plan to the plan file

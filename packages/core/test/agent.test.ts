@@ -17,7 +17,7 @@ describe("AgentV2", () => {
       const agent = yield* AgentV2.Service
 
       expect(yield* agent.all()).toEqual([])
-      expect(yield* agent.get(AgentV2.ID.make("build"))).toBeUndefined()
+      expect(yield* agent.get(AgentV2.ID.make("default"))).toBeUndefined()
     }),
   )
 
@@ -73,7 +73,7 @@ describe("AgentV2", () => {
   it.effect("applies direct agent updates", () =>
     Effect.gen(function* () {
       const agent = yield* AgentV2.Service
-      const id = AgentV2.ID.make("build")
+      const id = AgentV2.ID.make("default")
 
       yield* agent.transform((editor) =>
         editor.update(id, (info) => {
@@ -99,6 +99,28 @@ describe("AgentV2", () => {
     }),
   )
 
+  it.effect("aliases legacy build id to default", () =>
+    Effect.gen(function* () {
+      const agent = yield* AgentV2.Service
+      yield* AgentPlugin.Plugin.effect(
+        host({
+          agent: agentHost(agent),
+        }),
+      ).pipe(
+        Effect.provideService(
+          Location.Service,
+          Location.Service.of(location({ directory: AbsolutePath.make("/project") })),
+        ),
+      )
+
+      const viaAlias = yield* agent.get(AgentV2.ID.make("build"))
+      const viaName = yield* agent.get(AgentV2.defaultID)
+      expect(viaAlias?.id).toBe(AgentV2.defaultID)
+      expect(viaAlias).toEqual(viaName)
+      expect((yield* agent.select("build")).id).toBe(AgentV2.defaultID)
+    }),
+  )
+
   it.effect("does not ambiently opt built-in agents into bash", () =>
     Effect.gen(function* () {
       const agent = yield* AgentV2.Service
@@ -115,8 +137,8 @@ describe("AgentV2", () => {
 
       const agents = yield* agent.all()
       expect(agents.map((item) => String(item.id)).sort()).toEqual([
-        "build",
         "compaction",
+        "default",
         "explore",
         "general",
         "plan",

@@ -34,7 +34,7 @@ describe("acp session state", () => {
           createdAt,
           model: model("anthropic", "claude-sonnet"),
           variant: "high",
-          modeId: "build",
+          modeId: "default",
         }),
       )
       const loaded = yield* ACPSession.Service.use((session) => session.get("ses_1"))
@@ -45,7 +45,7 @@ describe("acp session state", () => {
         mcpServers: [mcpServer],
         model: model("anthropic", "claude-sonnet"),
         variant: "high",
-        modeId: "build",
+        modeId: "default",
       })
       expect(loaded.createdAt).toEqual(createdAt)
       expect(loaded.knownParts.size).toBe(0)
@@ -82,7 +82,7 @@ describe("acp session state", () => {
           mcpServers: [mcpServer],
           model: model("anthropic", "claude-sonnet"),
           variant: "high",
-          modeId: "build",
+          modeId: "default",
         }),
       )
 
@@ -95,7 +95,7 @@ describe("acp session state", () => {
       expect(updated.mcpServers).toEqual([mcpServer])
       expect(updated.model).toEqual(model("openai", "gpt-5"))
       expect(updated.variant).toBe("high")
-      expect(updated.modeId).toBe("build")
+      expect(updated.modeId).toBe("default")
     }),
   )
 
@@ -115,9 +115,9 @@ describe("acp session state", () => {
       expect(yield* ACPSession.Service.use((session) => session.getVariant("ses_config"))).toBe("high")
       expect(yield* ACPSession.Service.use((session) => session.getMode("ses_config"))).toBe("plan")
 
-      yield* ACPSession.Service.use((session) => session.setMode("ses_config", "build"))
+      yield* ACPSession.Service.use((session) => session.setMode("ses_config", "default"))
       expect(yield* ACPSession.Service.use((session) => session.getVariant("ses_config"))).toBe("high")
-      expect(yield* ACPSession.Service.use((session) => session.getMode("ses_config"))).toBe("build")
+      expect(yield* ACPSession.Service.use((session) => session.getMode("ses_config"))).toBe("default")
     }),
   )
 

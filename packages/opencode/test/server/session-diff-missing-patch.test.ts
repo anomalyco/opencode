@@ -77,7 +77,7 @@ describe("session diff with missing patch (#26574)", () => {
           sessionID: session.id,
           role: "user",
           time: { created: Date.now() },
-          agent: "build",
+          agent: "default",
           model: { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("model") },
           summary: {
             diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified" }],

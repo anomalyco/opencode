@@ -32,7 +32,7 @@ function seedNegativeTokenSession() {
       id: MessageID.ascending(),
       role: "user",
       sessionID: info.id,
-      agent: "build",
+      agent: "default",
       model: { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("test") },
       time: { created: Date.now() },
     })

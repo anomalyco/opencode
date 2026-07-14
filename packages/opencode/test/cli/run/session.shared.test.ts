@@ -27,7 +27,7 @@ function userMessage(id: string, parts: Message["parts"], variant = "high"): Mes
       time: {
         created: 1,
       },
-      agent: "build",
+      agent: "default",
       model: {
         ...model,
         variant,
@@ -50,7 +50,7 @@ function assistantMessage(id: string, parts: Message["parts"]): Message {
       modelID: "gpt-5",
       providerID: "openai",
       mode: "chat",
-      agent: "build",
+      agent: "default",
       path: {
         cwd: "/tmp",
         root: "/tmp",

@@ -72,14 +72,14 @@ export const Plugin = define({
           global.home,
         )
         const configuredDefault = Config.latest(documents, "default_agent")
-        if (configuredDefault !== undefined) draft.default(AgentV2.ID.make(configuredDefault))
+        if (configuredDefault !== undefined) draft.default(AgentV2.resolveID(configuredDefault))
         for (const current of draft.list()) {
           draft.update(current.id, (agent) => agent.permissions.push(...permissions))
         }
 
         for (const document of documents) {
           for (const [id, item] of Object.entries(document.info.agents ?? {})) {
-            const agentID = AgentV2.ID.make(id)
+            const agentID = AgentV2.resolveID(id)
             if (item.disabled) {
               draft.remove(agentID)
               continue

@@ -156,7 +156,7 @@ describe("run interactive runtime", () => {
             time: {
               created: 1,
             },
-            agent: "build",
+            agent: "default",
             model: {
               providerID: "openai",
               modelID: "gpt-5",
@@ -189,7 +189,7 @@ describe("run interactive runtime", () => {
         resume: true,
         replay: true,
         replayLimit: 100,
-        agent: "build",
+        agent: "default",
         model: {
           providerID: "openai",
           modelID: "gpt-5",

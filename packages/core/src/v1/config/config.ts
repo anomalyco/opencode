@@ -79,14 +79,18 @@ export const Info = Schema.Struct({
   }),
   default_agent: Schema.optional(Schema.String).annotate({
     description:
-      "Default agent to use when none is specified. Must be a primary agent. Falls back to 'build' if not set or if the specified agent is invalid.",
+      "Default agent to use when none is specified. Must be a primary agent. Falls back to 'default' if not set or if the specified agent is invalid. The legacy id 'build' is accepted as an alias for 'default'.",
   }),
   username: Schema.optional(Schema.String).annotate({
     description: "Custom username to display in conversations instead of system username",
   }),
   mode: Schema.optional(
     Schema.StructWithRest(
-      Schema.Struct({ build: Schema.optional(ConfigAgentV1.Info), plan: Schema.optional(ConfigAgentV1.Info) }),
+      Schema.Struct({
+        default: Schema.optional(ConfigAgentV1.Info),
+        build: Schema.optional(ConfigAgentV1.Info),
+        plan: Schema.optional(ConfigAgentV1.Info),
+      }),
       [Schema.Record(Schema.String, ConfigAgentV1.Info)],
     ),
   ).annotate({ description: "@deprecated Use `agent` field instead." }),
@@ -94,6 +98,7 @@ export const Info = Schema.Struct({
     Schema.StructWithRest(
       Schema.Struct({
         plan: Schema.optional(ConfigAgentV1.Info),
+        default: Schema.optional(ConfigAgentV1.Info),
         build: Schema.optional(ConfigAgentV1.Info),
         general: Schema.optional(ConfigAgentV1.Info),
         explore: Schema.optional(ConfigAgentV1.Info),

@@ -20,7 +20,7 @@ const it = testEffect(
 )
 
 const sessionID = SessionV2.ID.make("ses_application_tool")
-const agent = AgentV2.ID.make("build")
+const agent = AgentV2.ID.make("default")
 const assistantMessageID = SessionMessage.ID.make("msg_application_tool")
 const contextual = (contexts: Tool.Context[]) =>
   Tool.make({

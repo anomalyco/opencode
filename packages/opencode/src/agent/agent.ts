@@ -138,8 +138,8 @@ const layer = Layer.effect(
         const user = Permission.fromConfig(cfg.permission ?? {})
 
         const agents: Record<string, Info> = {
-          build: {
-            name: "build",
+          default: {
+            name: "default",
             description: "The default agent. Executes tools based on configured permissions.",
             options: {},
             permission: Permission.merge(
@@ -265,14 +265,15 @@ const layer = Layer.effect(
         }
 
         for (const [key, value] of Object.entries(cfg.agent ?? {})) {
+          const name = key === "build" ? "default" : key
           if (value.disable) {
-            delete agents[key]
+            delete agents[name]
             continue
           }
-          let item = agents[key]
+          let item = agents[name]
           if (!item)
-            item = agents[key] = {
-              name: key,
+            item = agents[name] = {
+              name,
               mode: "all",
               permission: Permission.merge(defaults, user),
               options: {},
@@ -310,16 +311,17 @@ const layer = Layer.effect(
         }
 
         const get = Effect.fnUntraced(function* (agent: string) {
-          return agents[agent]
+          return agents[agent === "build" ? "default" : agent]
         })
 
         const list = Effect.fnUntraced(function* () {
           const cfg = yield* config.get()
+          const preferred = cfg.default_agent === "build" ? "default" : cfg.default_agent
           return pipe(
             agents,
             values(),
             sortBy(
-              [(x) => (cfg.default_agent ? x.name === cfg.default_agent : x.name === "build"), "desc"],
+              [(x) => (preferred ? x.name === preferred : x.name === "default"), "desc"],
               [(x) => x.name, "asc"],
             ),
           )
@@ -328,7 +330,8 @@ const layer = Layer.effect(
         const defaultInfo = Effect.fnUntraced(function* () {
           const c = yield* config.get()
           if (c.default_agent) {
-            const agent = agents[c.default_agent]
+            const name = c.default_agent === "build" ? "default" : c.default_agent
+            const agent = agents[name]
             if (!agent) throw new Error(`default agent "${c.default_agent}" not found`)
             if (agent.mode === "subagent") throw new Error(`default agent "${c.default_agent}" is a subagent`)
             if (agent.hidden === true) throw new Error(`default agent "${c.default_agent}" is hidden`)

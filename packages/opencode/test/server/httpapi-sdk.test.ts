@@ -742,7 +742,7 @@ describe("HttpApi SDK", () => {
         const prompt = yield* capture(() =>
           sdk.session.prompt({
             sessionID,
-            agent: "build",
+            agent: "default",
             noReply: true,
             parts: [{ type: "text", text: "hello" }],
           }),
@@ -750,7 +750,7 @@ describe("HttpApi SDK", () => {
         const asyncPrompt = yield* capture(() =>
           sdk.session.promptAsync({
             sessionID,
-            agent: "build",
+            agent: "default",
             noReply: true,
             parts: [{ type: "text", text: "async hello" }],
           }),
@@ -785,7 +785,7 @@ describe("HttpApi SDK", () => {
         const prompt = yield* capture(() =>
           sdk.session.prompt({
             sessionID,
-            agent: "build",
+            agent: "default",
             model: { providerID: "test", modelID: "test-model" },
             parts: [{ type: "text", text: "hello llm" }],
           }),
@@ -820,7 +820,7 @@ describe("HttpApi SDK", () => {
         const prompt = yield* capture(() =>
           sdk.session.prompt({
             sessionID,
-            agent: "build",
+            agent: "default",
             model: { providerID: "test", modelID: "test-model" },
             parts: [{ type: "text", text: "hello skill context" }],
           }),

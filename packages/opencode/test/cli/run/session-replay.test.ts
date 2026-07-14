@@ -12,7 +12,7 @@ function userMessage(id: string, text: string): SessionMessages[number] {
       time: {
         created: 1,
       },
-      agent: "build",
+      agent: "default",
       model: {
         providerID: "openai",
         modelID: "gpt-5",
@@ -48,7 +48,7 @@ function assistantInfo(
     modelID: input.modelID ?? "gpt-5",
     providerID: input.providerID ?? "openai",
     mode: "chat",
-    agent: "build",
+    agent: "default",
     path: {
       cwd: "/tmp",
       root: "/tmp",
@@ -193,7 +193,7 @@ function shellUserMessage(id: string): SessionMessages[number] {
       time: {
         created: 1,
       },
-      agent: "build",
+      agent: "default",
       model: {
         providerID: "openai",
         modelID: "gpt-5",
@@ -284,7 +284,7 @@ describe("run session replay", () => {
         source: "system",
         messageID: "msg-1",
         summary: {
-          agent: "Build",
+          agent: "Default",
           model: "gpt-5",
           duration: "2.8s",
         },
@@ -316,7 +316,7 @@ describe("run session replay", () => {
         kind: "system",
         text: "▣ Build · Little Frank · 2.8s",
         summary: {
-          agent: "Build",
+          agent: "Default",
           model: "Little Frank",
           duration: "2.8s",
         },

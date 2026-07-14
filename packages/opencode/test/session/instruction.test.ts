@@ -83,7 +83,7 @@ function loaded(filepath: string): SessionV1.WithParts[] {
         sessionID,
         role: "user",
         time: { created: 0 },
-        agent: "build",
+        agent: "default",
         model: {
           providerID: ProviderV2.ID.make("anthropic"),
           modelID: ModelV2.ID.make("claude-sonnet-4-20250514"),

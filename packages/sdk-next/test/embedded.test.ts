@@ -28,7 +28,7 @@ test("embedded client uses the real router and handlers", async () => {
 
       const created = yield* opencode.sessions.create({
         id: sessionID,
-        agent: Agent.ID.make("build"),
+        agent: Agent.ID.make("default"),
         location: Location.Ref.make({ directory: AbsolutePath.make(directory) }),
       })
       yield* opencode.sessions.switchModel({ sessionID, model })

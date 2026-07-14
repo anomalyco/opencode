@@ -19,7 +19,7 @@ describe("toLLMMessages", () => {
       SessionMessage.Assistant.make({
         id: id(value),
         type: "assistant",
-        agent: "build",
+        agent: "default",
         model: { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") },
         content,
         time: { created, completed: created },
@@ -54,7 +54,7 @@ describe("toLLMMessages", () => {
         SessionMessage.AgentSwitched.make({
           id: id("agent"),
           type: "agent-switched",
-          agent: "build",
+          agent: "default",
           time: { created },
         }),
         SessionMessage.ModelSwitched.make({
@@ -74,7 +74,7 @@ describe("toLLMMessages", () => {
           type: "user",
           text: "Inspect this image",
           files: [file],
-          agents: [AgentAttachment.make({ name: "build" })],
+          agents: [AgentAttachment.make({ name: "default" })],
           time: { created },
         }),
         SessionMessage.Synthetic.make({
@@ -114,7 +114,7 @@ describe("toLLMMessages", () => {
           { type: "text", text: "Inspect this image" },
           { type: "media", mediaType: "image/png", data: "data:image/png;base64,aGVsbG8=", filename: "hello.png" },
         ],
-        metadata: { agents: [{ name: "build" }] },
+        metadata: { agents: [{ name: "default" }] },
       }),
     )
     expect(messages.slice(2).map((message) => message.content)).toEqual([
@@ -145,7 +145,7 @@ Recent work
         SessionMessage.Assistant.make({
           id: id("assistant"),
           type: "assistant",
-          agent: "build",
+          agent: "default",
           model: { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") },
           content: [
             SessionMessage.AssistantText.make({ type: "text", id: "text-1", text: "Checking" }),
@@ -302,7 +302,7 @@ Recent work
         SessionMessage.Assistant.make({
           id: id("assistant-openai-reasoning"),
           type: "assistant",
-          agent: "build",
+          agent: "default",
           model: { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") },
           content: [
             SessionMessage.AssistantReasoning.make({
@@ -333,7 +333,7 @@ Recent work
         SessionMessage.Assistant.make({
           id: id("assistant-failed"),
           type: "assistant",
-          agent: "build",
+          agent: "default",
           model: { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") },
           content: [
             SessionMessage.AssistantReasoning.make({
@@ -405,7 +405,7 @@ Recent work
         SessionMessage.Assistant.make({
           id: id("assistant-old-model"),
           type: "assistant",
-          agent: "build",
+          agent: "default",
           model: { id: ModelV2.ID.make("old-model"), providerID: ProviderV2.ID.make("provider") },
           content: [
             SessionMessage.AssistantReasoning.make({

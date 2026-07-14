@@ -4,7 +4,7 @@ import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { Effect } from "effect"
 
 export const toolIdentity = {
-  agent: AgentV2.ID.make("build"),
+  agent: AgentV2.ID.make("default"),
   assistantMessageID: SessionMessage.ID.make("msg_tool_test"),
 }
 

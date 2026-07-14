@@ -48,9 +48,9 @@ describe("ConfigAgentPlugin.Plugin", () => {
   it.effect("applies all global permissions before agent-specific permissions", () =>
     Effect.gen(function* () {
       const agents = yield* AgentV2.Service
-      const build = AgentV2.ID.make("build")
+      const primary = AgentV2.ID.make("default")
       yield* agents.transform((editor) =>
-        editor.update(build, (agent) => {
+        editor.update(primary, (agent) => {
           agent.mode = "primary"
           agent.permissions.push({ action: "bash", resource: "*", effect: "allow" })
         }),
@@ -64,7 +64,7 @@ describe("ConfigAgentPlugin.Plugin", () => {
               info: decode({
                 permissions: [{ action: "bash", resource: "*", effect: "ask" }],
                 agents: {
-                  build: {
+                  default: {
                     permissions: [{ action: "bash", resource: "git *", effect: "allow" }],
                   },
                   reviewer: {
@@ -100,16 +100,16 @@ describe("ConfigAgentPlugin.Plugin", () => {
         Effect.provideService(Config.Service, config),
       )
 
-      const buildAgent = yield* agents.get(build)
-      if (!buildAgent) throw new Error("expected configured build agent")
-      expect(buildAgent.permissions).toEqual([
+      const primaryAgent = yield* agents.get(primary)
+      if (!primaryAgent) throw new Error("expected configured default agent")
+      expect(primaryAgent.permissions).toEqual([
         { action: "bash", resource: "*", effect: "allow" },
         { action: "bash", resource: "*", effect: "ask" },
         { action: "read", resource: "*", effect: "allow" },
         { action: "bash", resource: "git *", effect: "allow" },
       ])
-      expect(PermissionV2.evaluate("bash", "git status", buildAgent.permissions).effect).toBe("allow")
-      expect(PermissionV2.evaluate("bash", "bun test", buildAgent.permissions).effect).toBe("ask")
+      expect(PermissionV2.evaluate("bash", "git status", primaryAgent.permissions).effect).toBe("allow")
+      expect(PermissionV2.evaluate("bash", "bun test", primaryAgent.permissions).effect).toBe("ask")
 
       const reviewer = yield* agents.get(AgentV2.ID.make("reviewer"))
       if (!reviewer) throw new Error("expected configured reviewer agent")
@@ -202,15 +202,15 @@ describe("ConfigAgentPlugin.Plugin", () => {
   it.effect("removes a built-in agent disabled by configuration", () =>
     Effect.gen(function* () {
       const agents = yield* AgentV2.Service
-      const build = AgentV2.ID.make("build")
-      yield* agents.transform((editor) => editor.update(build, () => {}))
+      const primary = AgentV2.ID.make("default")
+      yield* agents.transform((editor) => editor.update(primary, () => {}))
 
       const config = Config.Service.of({
         entries: () =>
           Effect.succeed([
             new Config.Document({
               type: "document",
-              info: decode({ agents: { build: { disabled: true } } }),
+              info: decode({ agents: { default: { disabled: true } } }),
             }),
           ]),
       })
@@ -219,7 +219,7 @@ describe("ConfigAgentPlugin.Plugin", () => {
         Effect.provideService(Config.Service, config),
       )
 
-      expect(yield* agents.get(build)).toBeUndefined()
+      expect(yield* agents.get(primary)).toBeUndefined()
     }),
   )
 
@@ -303,8 +303,8 @@ Use native v2 fields.`,
 function loadHomePermissions(home: string) {
   return Effect.gen(function* () {
     const agents = yield* AgentV2.Service
-    const build = AgentV2.ID.make("build")
-    yield* agents.transform((editor) => editor.update(build, () => {}))
+    const primary = AgentV2.ID.make("default")
+    yield* agents.transform((editor) => editor.update(primary, () => {}))
     const config = Config.Service.of({
       entries: () =>
         Effect.succeed([
@@ -323,7 +323,7 @@ function loadHomePermissions(home: string) {
                   },
                 },
                 agent: {
-                  build: {
+                  default: {
                     permission: {
                       external_directory: {
                         "$HOME/cache/**": "deny",
@@ -342,8 +342,8 @@ function loadHomePermissions(home: string) {
       Effect.provideService(Global.Service, Global.Service.of({ ...Global.make(), home })),
     )
 
-    const agent = yield* agents.get(build)
-    if (!agent) throw new Error("expected configured build agent")
+    const agent = yield* agents.get(primary)
+    if (!agent) throw new Error("expected configured default agent")
     return agent.permissions
   })
 }

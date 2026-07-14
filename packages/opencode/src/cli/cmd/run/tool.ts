@@ -473,7 +473,7 @@ function runLsp(p: ToolProps<typeof LspTool>): ToolInline {
 function runPlanExit(p: ToolProps<typeof PlanExitTool>): ToolInline {
   return {
     icon: "→",
-    title: text(p.frame.state.title) || "Switching to build agent",
+    title: text(p.frame.state.title) || "Switching to default agent",
     mode: "block",
     body: p.frame.status === "completed" ? text(p.frame.state.output) : undefined,
   }

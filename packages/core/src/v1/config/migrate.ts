@@ -37,7 +37,7 @@ export function migrate(info: typeof ConfigV1.Info.Type) {
     $schema: info.$schema,
     shell: info.shell,
     model: info.model,
-    default_agent: info.default_agent,
+    default_agent: info.default_agent === "build" ? "default" : info.default_agent,
     autoupdate: info.autoupdate,
     share: info.share ?? (info.autoshare ? "auto" : undefined),
     enterprise: info.enterprise,
@@ -100,7 +100,13 @@ function agents(info: typeof ConfigV1.Info.Type) {
     ...Object.entries(info.mode ?? {}).map(([name, agent]) => [name, { ...agent, mode: "primary" as const }] as const),
   ]
   if (!entries.length) return undefined
-  return Object.fromEntries(entries.flatMap(([name, agent]) => (agent ? [[name, migrateAgent(agent)]] : [])))
+  const migrated: Record<string, ReturnType<typeof migrateAgent>> = {}
+  for (const [name, agent] of entries) {
+    if (!agent) continue
+    const id = name === "build" ? "default" : name
+    migrated[id] = migrated[id] ? { ...migrated[id], ...migrateAgent(agent) } : migrateAgent(agent)
+  }
+  return migrated
 }
 
 export function migrateAgent(info: ConfigAgentV1.Info) {

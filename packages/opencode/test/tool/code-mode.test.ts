@@ -15,7 +15,7 @@ import { Cause, Effect, Exit, Layer, Schema } from "effect"
 const ctx: Tool.Context = {
   sessionID: SessionID.make("ses_code-mode"),
   messageID: MessageID.make("msg_code-mode"),
-  agent: "build",
+  agent: "default",
   abort: new AbortController().signal,
   callID: "call_code_mode",
   messages: [],
@@ -51,7 +51,7 @@ function harness(input: {
       output: (text: string) => Effect.succeed({ content: text, truncated: false as const }),
     }),
     Layer.mock(Agent.Service, {
-      get: () => Effect.succeed({ name: "build", permission: input.permission ?? [] } as any),
+      get: () => Effect.succeed({ name: "default", permission: input.permission ?? [] } as any),
     }),
     Layer.mock(Session.Service, {
       get: () => Effect.succeed({ permission: [] } as any),

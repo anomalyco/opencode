@@ -119,7 +119,7 @@ Examples:
 ```ts
 const turn = {
   request: {
-    agent: "build",
+    agent: "default",
     model: { providerID: "openai", modelID: "gpt-5" },
   },
 }

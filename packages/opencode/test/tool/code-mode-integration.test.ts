@@ -26,7 +26,7 @@ const SERVER = "fixtures"
 const ctx: Tool.Context = {
   sessionID: SessionID.make("ses_code-mode-int"),
   messageID: MessageID.make("msg_code-mode-int"),
-  agent: "build",
+  agent: "default",
   abort: new AbortController().signal,
   callID: "call_code_mode_int",
   messages: [],
@@ -146,7 +146,7 @@ async function buildTool() {
     Layer.mock(Truncate.Service, {
       output: (text: string) => Effect.succeed({ content: text, truncated: false as const }),
     }),
-    Layer.mock(Agent.Service, { get: () => Effect.succeed({ name: "build", permission: [] } as any) }),
+    Layer.mock(Agent.Service, { get: () => Effect.succeed({ name: "default", permission: [] } as any) }),
     Layer.mock(Session.Service, { get: () => Effect.succeed({ permission: [] } as any) }),
     Layer.mock(MCP.Service, {
       tools: () => Effect.succeed(mcpTools),

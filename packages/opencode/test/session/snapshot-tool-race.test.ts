@@ -145,7 +145,7 @@ it.live("tool execution produces non-empty session diff (snapshot race)", () =>
       // Seed user message
       yield* prompt.prompt({
         sessionID: session.id,
-        agent: "build",
+        agent: "default",
         noReply: true,
         parts: [{ type: "text", text: "create the file" }],
       })

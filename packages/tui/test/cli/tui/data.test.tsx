@@ -47,7 +47,7 @@ test("refreshes resources into reactive getters", async () => {
     if (url.pathname === "/api/agent")
       return json({
         location,
-        data: [{ id: "build", request: { headers: {}, body: {} }, mode: "primary", hidden: false, permissions: [] }],
+        data: [{ id: "default", request: { headers: {}, body: {} }, mode: "primary", hidden: false, permissions: [] }],
       })
     return undefined
   }, events)
@@ -86,7 +86,7 @@ test("refreshes resources into reactive getters", async () => {
 
     expect(data.session.get("ses_test")?.title).toBe("Test session")
     expect(data.location.default()).toEqual({ directory, workspaceID: undefined })
-    expect(data.location.agent.list(location)?.map((agent) => agent.id)).toEqual(["build"])
+    expect(data.location.agent.list(location)?.map((agent) => agent.id)).toEqual(["default"])
   } finally {
     app.renderer.destroy()
   }
@@ -273,7 +273,7 @@ test("settles pending tools when a live failure arrives", async () => {
     emitEvent(events, {
       id: "evt_agent_1",
       type: "session.next.agent.switched",
-      properties: { sessionID: "session-1", messageID: "msg_agent_1", timestamp: 0, agent: "build" },
+      properties: { sessionID: "session-1", messageID: "msg_agent_1", timestamp: 0, agent: "default" },
     })
     emitEvent(events, {
       id: "evt_model_1",
@@ -292,7 +292,7 @@ test("settles pending tools when a live failure arrives", async () => {
         sessionID: "session-1",
         assistantMessageID: "msg_explicit_assistant_9",
         timestamp: 1,
-        agent: "build",
+        agent: "default",
         model: { id: "model-1", providerID: "provider-1" },
       },
     })

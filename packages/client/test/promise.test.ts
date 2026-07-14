@@ -115,7 +115,7 @@ test("session methods use the public HTTP contract", async () => {
   const page = await client.sessions.list({ limit: 10, order: "desc" })
   const active = await client.sessions.active()
   const created = await client.sessions.create({ location: { directory: "/tmp/project" } })
-  await client.sessions.switchAgent({ sessionID: "ses_test", agent: "build" })
+  await client.sessions.switchAgent({ sessionID: "ses_test", agent: "default" })
   await client.sessions.switchModel({
     sessionID: "ses_test",
     model: { id: "claude", providerID: "anthropic" },

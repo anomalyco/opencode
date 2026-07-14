@@ -7,7 +7,12 @@ import { State } from "./state"
 
 export const ID = Agent.ID
 export type ID = typeof ID.Type
-export const defaultID = ID.make("build")
+export const defaultID = ID.make("default")
+
+/** Temporary alias: config/API still using agent id `build` resolve to `default`. */
+export function resolveID(id: ID | string) {
+  return ID.make(String(id) === "build" ? "default" : id)
+}
 
 export const Color = Agent.Color
 
@@ -49,18 +54,19 @@ const layer = Layer.effect(
       initial: () => ({ agents: new Map() }),
       draft: (draft) => ({
         list: () => Array.fromIterable(draft.agents.values()) as Info[],
-        get: (id) => draft.agents.get(id),
+        get: (id) => draft.agents.get(resolveID(id)),
         default: (id) => {
-          draft.default = id
+          draft.default = id === undefined ? undefined : resolveID(id)
         },
         update: (id, fn) => {
-          const current = draft.agents.get(id) ?? (Info.empty(id) as Types.DeepMutable<Info>)
-          if (!draft.agents.has(id)) draft.agents.set(id, current)
+          const resolved = resolveID(id)
+          const current = draft.agents.get(resolved) ?? (Info.empty(resolved) as Types.DeepMutable<Info>)
+          if (!draft.agents.has(resolved)) draft.agents.set(resolved, current)
           fn(current)
-          current.id = id
+          current.id = resolved
         },
         remove: (id) => {
-          draft.agents.delete(id)
+          draft.agents.delete(resolveID(id))
         },
       }),
     })
@@ -68,10 +74,10 @@ const layer = Layer.effect(
       agent && agent.mode !== "subagent" && !agent.hidden ? agent : undefined
     const selectedDefault = () => {
       const data = state.get()
-      const configured = data.default ? selectable(data.agents.get(data.default)) : undefined
+      const configured = data.default ? selectable(data.agents.get(resolveID(data.default))) : undefined
       if (configured) return configured
-      const build = selectable(data.agents.get(ID.make("build")))
-      if (build) return build
+      const primary = selectable(data.agents.get(defaultID))
+      if (primary) return primary
       for (const agent of data.agents.values()) {
         const fallback = selectable(agent)
         if (fallback) return fallback
@@ -82,18 +88,18 @@ const layer = Layer.effect(
       transform: state.transform,
       reload: state.reload,
       get: Effect.fn("AgentV2.get")(function* (id) {
-        return state.get().agents.get(id)
+        return state.get().agents.get(resolveID(id))
       }),
       default: Effect.fn("AgentV2.default")(function* () {
         return selectedDefault()
       }),
       resolve: Effect.fn("AgentV2.resolve")(function* (id) {
-        if (id !== undefined) return state.get().agents.get(ID.make(id))
+        if (id !== undefined) return state.get().agents.get(resolveID(id))
         return selectedDefault()
       }),
       select: Effect.fn("AgentV2.select")(function* (id) {
         if (id !== undefined) {
-          const selected = ID.make(id)
+          const selected = resolveID(id)
           return { id: selected, info: state.get().agents.get(selected) }
         }
         const info = selectedDefault()
