@@ -97,6 +97,69 @@ OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bas
 XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
 ```
 
+### Features
+
+#### Smart Auto-Context
+OpenCode automatically determines relevant files based on your query and adds them to the session context. Configure via `opencode.json`:
+
+```json
+{
+  "context": {
+    "autoAdd": true,
+    "maxFiles": 10,
+    "includeTests": true
+  }
+}
+```
+
+#### Multi-Agent Teams
+Run multiple agents in parallel, pipeline, or supervisor mode with the `/team` command:
+
+- **parallel**: All agents work simultaneously on the same task
+- **pipeline**: Each agent receives the previous agent's output as context
+- **supervisor**: A coordinating agent delegates work and synthesizes results
+
+Configure team execution via `opencode.json`:
+
+```json
+{
+  "multiAgent": {
+    "defaultMode": "parallel",
+    "maxAgents": 3
+  }
+}
+```
+
+#### Mermaid Diagram Support
+When enabled, the model is instructed to generate diagrams using Mermaid syntax inside ` ```mermaid ` code blocks.
+
+```json
+{
+  "diagrams": {
+    "enabled": true,
+    "format": "svg"
+  }
+}
+```
+
+#### Auto-Fix
+After each LLM turn, OpenCode can automatically run linters and report errors to the model for iterative fixing.
+
+```json
+{
+  "autoFix": {
+    "enabled": true,
+    "maxIterations": 3,
+    "tools": ["biome", "tsc"]
+  }
+}
+```
+
+#### Built-in Commands
+- **`/test`** — Generate and run tests for the current file
+- **`/commit`** — Generate a Conventional Commits message from staged changes
+- **`/team`** — Run a multi-agent team with configurable mode
+
 ### Agents
 
 OpenCode includes two built-in agents you can switch between with the `Tab` key.
