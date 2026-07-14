@@ -51,6 +51,24 @@ export const Plugin = {
     const permission = yield* Permission.Service
     const scope = yield* Scope.Scope
 
+    const agentList = yield* agents.list()
+    const subagentIDs = agentList
+      .filter((agent) => agent.mode !== "primary" && !agent.hidden)
+      .map((agent) => String(agent.id))
+    const agentDescription =
+      subagentIDs.length > 0
+        ? `The configured agent to run as the subagent. Available IDs: ${subagentIDs.join(", ")}`
+        : "The configured agent to run as the subagent"
+    const input = Schema.Struct({
+      agent: Schema.String.annotate({ description: agentDescription }),
+      description: Schema.String.annotate({ description: "A short 3-5 word label for the task, displayed to the user" }),
+      prompt: Schema.String.annotate({ description: "The task for the subagent to perform" }),
+      background: Schema.optionalKey(Schema.Boolean).annotate({
+        description:
+          "Run the subagent in the background and return immediately. You will be notified when it completes. DO NOT sleep, poll, or proactively check on its progress.",
+      }),
+    })
+
     // Concatenate the child's final completed assistant text. Distinguishes "completed with no
     // text" (generic string) from "failed" (the run effect fails, surfaced as a job error).
     const latestAssistantText = Effect.fn("SubagentTool.latestAssistantText")(function* (sessionID: SessionSchema.ID) {
@@ -116,7 +134,7 @@ export const Plugin = {
           name,
           options: { codemode: false },
           description,
-          input: Input,
+          input,
           output: Output,
           execute: (input, context) =>
             Effect.gen(function* () {
