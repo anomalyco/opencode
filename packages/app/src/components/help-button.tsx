@@ -5,6 +5,8 @@ import { createStore } from "solid-js/store"
 import { Drawer, DrawerClose, DrawerContent } from "@/components/ui/drawer"
 import { usePlatform } from "@/context/platform"
 import introducingTabsVideo from "@/assets/help/introducing-tabs.mp4"
+import homeImage from "@/assets/help/home.png"
+import tabsImage from "@/assets/help/tabs.png"
 import { Persist, persisted } from "@/utils/persist"
 
 const helpIcon = (
@@ -65,7 +67,7 @@ export function TabsInfoPopup() {
       <Show when={!state.dismissed}>
         <div
           class="fixed bottom-14 right-5 z-50 h-[240px] w-[192px] rounded-[8px] bg-v2-background-bg-base p-1 shadow-[var(--v2-elevation-floating)]"
-          aria-label="Introducing Tabs. A faster, more intuitive way to work."
+          aria-label="Introducing Tabs. Organize your work and active sessions with tabs"
         >
           <button
             type="button"
@@ -107,7 +109,7 @@ export function TabsInfoPopup() {
                 Introducing Tabs
               </p>
               <p class="w-full select-none text-[13px] font-[440] leading-[140%] tracking-[-0.04px] text-[#808080]">
-                A faster, more intuitive way to work.
+                Organize your work and active sessions with tabs
               </p>
             </div>
           </button>
@@ -127,16 +129,32 @@ export function TabsInfoPopup() {
             icon={<IconV2 name="xmark-small" />}
           />
         </div>
-        <div class="relative flex w-full flex-col items-start gap-6 p-8">
+        <div class="relative flex min-h-0 w-full flex-1 flex-col items-start gap-6 overflow-y-auto p-8">
           <p class="w-full shrink-0 self-stretch text-[21px] font-[610] leading-6 tracking-[-0.37px] tabular-nums text-v2-text-text-base">
-            Introducing Tabs Navigation.
+            Introducing Tabs
           </p>
-          <p class="w-full flex-1 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base">
-            We've introduced tabs as the primary navigation in OpenCode. Your most important session are now pinned at
-            the top of your screen at all times. No more hunting through menus or losing your place mid-session. Switch
-            contexts instantly, pick up exactly where you left off, and keep your focus where it belongs: on the
-            sessions.
-          </p>
+          <div class="flex w-full flex-1 flex-col gap-4 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base">
+            <p>OpenCode Desktop is now built around tabs.</p>
+            <img src={tabsImage} alt="" class="aspect-video w-full rounded-[6px] object-cover" />
+            <p>
+              Start a new session in a tab, or open an existing session from any of your projects. Open a new tab when
+              you're starting something new, and close it when you're done.
+            </p>
+            <p>
+              Keeping a few tabs open makes it easier to organize your active sessions. Rename tabs to something
+              memorable if you plan to keep them around.
+            </p>
+            <p>
+              You'll find all your sessions and projects on the new Home screen. Selecting a session opens it in a tab.
+            </p>
+            <img src={homeImage} alt="" class="aspect-video w-full rounded-[6px] object-cover" />
+            <p>When you reopen the app, your tabs are still open.</p>
+            <p>
+              The new design does not support Git Worktrees yet, it's coming soon. So if you'd prefer to continue using
+              the previous layout , you can switch between layouts in Settings. Just keep in mind that the new layout
+              will become permanent in a few weeks.
+            </p>
+          </div>
         </div>
       </DrawerContent>
     </Drawer>
