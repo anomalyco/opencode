@@ -102,7 +102,7 @@ export const dict = {
   "temp.logoDarkAlt": "opencodeのロゴ（ダーク）",
 
   "home.banner.badge": "新着",
-  "home.banner.text": "デスクトップ版にタブが登場",
+  "home.banner.text": "デスクトップ版にタブが登場。",
   "home.banner.platforms": "macOS、Windows、Linux で利用できます",
   "home.banner.downloadNow": "今すぐダウンロード",
   "home.banner.downloadBetaNow": "デスクトップベータ版を今すぐダウンロード",

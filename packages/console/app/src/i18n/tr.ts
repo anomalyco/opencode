@@ -102,7 +102,7 @@ export const dict = {
   "temp.logoDarkAlt": "opencode koyu logo",
 
   "home.banner.badge": "Yeni",
-  "home.banner.text": "Masaüstü uygulamasında sekmelerle tanışın",
+  "home.banner.text": "Masaüstü uygulamasında sekmelerle tanışın.",
   "home.banner.platforms": "macOS, Windows ve Linux'ta kullanılabilir",
   "home.banner.downloadNow": "Şimdi indir",
   "home.banner.downloadBetaNow": "Masaüstü betayı şimdi indir",

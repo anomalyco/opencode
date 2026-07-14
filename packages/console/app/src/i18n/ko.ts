@@ -102,7 +102,7 @@ export const dict = {
   "temp.logoDarkAlt": "opencode 어두운 로고",
 
   "home.banner.badge": "신규",
-  "home.banner.text": "데스크톱 탭을 소개합니다",
+  "home.banner.text": "데스크톱 탭을 소개합니다.",
   "home.banner.platforms": "macOS, Windows, Linux에서 사용할 수 있습니다",
   "home.banner.downloadNow": "지금 다운로드",
   "home.banner.downloadBetaNow": "데스크톱 베타 다운로드",

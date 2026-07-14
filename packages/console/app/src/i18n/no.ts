@@ -102,7 +102,7 @@ export const dict = {
   "temp.logoDarkAlt": "opencode logo mørk",
 
   "home.banner.badge": "Ny",
-  "home.banner.text": "Vi introduserer Tabs for Desktop",
+  "home.banner.text": "Vi introduserer Tabs for Desktop.",
   "home.banner.platforms": "Tilgjengelig på macOS, Windows og Linux",
   "home.banner.downloadNow": "Last ned nå",
   "home.banner.downloadBetaNow": "Last ned desktop-betaen nå",

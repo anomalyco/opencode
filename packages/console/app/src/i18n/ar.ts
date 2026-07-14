@@ -102,7 +102,7 @@ export const dict = {
   "temp.logoDarkAlt": "شعار opencode الداكن",
 
   "home.banner.badge": "جديد",
-  "home.banner.text": "نقدّم علامات التبويب لتطبيق سطح المكتب",
+  "home.banner.text": "نقدّم علامات التبويب لتطبيق سطح المكتب.",
   "home.banner.platforms": "متاحة على macOS وWindows وLinux",
   "home.banner.downloadNow": "حمّل الآن",
   "home.banner.downloadBetaNow": "حمّل النسخة التجريبية لتطبيق سطح المكتب الآن",

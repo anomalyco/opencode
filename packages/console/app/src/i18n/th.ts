@@ -102,7 +102,7 @@ export const dict = {
   "temp.logoDarkAlt": "โลโก้ opencode แบบมืด",
 
   "home.banner.badge": "ใหม่",
-  "home.banner.text": "ขอแนะนำแท็บสำหรับเดสก์ท็อป",
+  "home.banner.text": "ขอแนะนำแท็บสำหรับเดสก์ท็อป.",
   "home.banner.platforms": "พร้อมใช้งานบน macOS, Windows และ Linux",
   "home.banner.downloadNow": "ดาวน์โหลดตอนนี้",
   "home.banner.downloadBetaNow": "ดาวน์โหลดเบต้าเดสก์ท็อปตอนนี้",

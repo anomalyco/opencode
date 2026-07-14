@@ -103,7 +103,7 @@ export const dict = {
   "temp.logoDarkAlt": "opencode logo 暗色",
 
   "home.banner.badge": "新",
-  "home.banner.text": "桌面版标签页现已推出",
+  "home.banner.text": "桌面版标签页现已推出。",
   "home.banner.platforms": "适用于 macOS、Windows 和 Linux",
   "home.banner.downloadNow": "立即下载",
   "home.banner.downloadBetaNow": "立即下载桌面 Beta 版",

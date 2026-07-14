@@ -101,7 +101,7 @@ export const dict = {
   "temp.logoDarkAlt": "ciemne logo opencode",
 
   "home.banner.badge": "Nowość",
-  "home.banner.text": "Przedstawiamy karty w aplikacji desktopowej",
+  "home.banner.text": "Przedstawiamy karty w aplikacji desktopowej.",
   "home.banner.platforms": "Dostępne na macOS, Windows i Linux",
   "home.banner.downloadNow": "Pobierz teraz",
   "home.banner.downloadBetaNow": "Pobierz betę wersji desktopowej",
