@@ -23,6 +23,7 @@ import { Question } from "@/question"
 import { errorMessage } from "@/util/error"
 import { isRecord } from "@/util/record"
 import { EventV2Bridge } from "@/event-v2-bridge"
+import { SessionDiagram } from "./diagram"
 import { Database } from "@opencode-ai/core/database/database"
 import { Usage, type LLMEvent } from "@opencode-ai/llm"
 
@@ -522,6 +523,19 @@ const layer = Layer.effect(
               },
               { text: ctx.currentText.text },
             )).text
+            {
+              const mermaidBlocks = SessionDiagram.extractMermaidBlocks(ctx.currentText.text)
+              if (mermaidBlocks.length > 0) {
+                ctx.currentText.text = SessionDiagram.textWithoutMermaid(ctx.currentText.text) ||
+                  `[Diagram: ${mermaidBlocks.length} mermaid diagram(s) generated]`
+                yield* Effect.forEach(mermaidBlocks, (block) =>
+                  events.publish(SessionDiagram.DiagramRendered, {
+                    sessionID: ctx.sessionID,
+                    source: block.source,
+                  }).pipe(Effect.ignore),
+                )
+              }
+            }
             {
               const end = Date.now()
               ctx.currentText.time = { start: ctx.currentText.time?.start ?? end, end }
