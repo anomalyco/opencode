@@ -152,6 +152,7 @@ export const dict = {
   "ui.common.close": "关闭",
   "ui.common.next": "下一步",
   "ui.common.submit": "提交",
+  "ui.common.showMore": "显示更多",
 
   "ui.permission.deny": "拒绝",
   "ui.permission.allowAlways": "始终允许",
