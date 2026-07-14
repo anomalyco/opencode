@@ -23,6 +23,7 @@ const DEFAULT_TOGGLE_TERMINAL_KEYBIND = "ctrl+`"
 export interface TerminalProps extends ComponentProps<"div"> {
   pty: LocalPTY
   autoFocus?: boolean
+  onAutoFocus?: () => void
   onSubmit?: () => void
   onCleanup?: (pty: Partial<LocalPTY> & { id: string }) => void
   onConnect?: () => void
@@ -185,7 +186,15 @@ export const Terminal = (props: TerminalProps) => {
   const authToken = connection.type === "http" ? connection.authToken : false
   const sameOrigin = new URL(url, location.href).origin === location.origin
   let container!: HTMLDivElement
-  const [local, others] = splitProps(props, ["pty", "class", "classList", "autoFocus", "onConnect", "onConnectError"])
+  const [local, others] = splitProps(props, [
+    "pty",
+    "class",
+    "classList",
+    "autoFocus",
+    "onAutoFocus",
+    "onConnect",
+    "onConnectError",
+  ])
   const id = local.pty.id
   const restore = typeof local.pty.buffer === "string" ? local.pty.buffer : ""
   const restoreSize =
@@ -416,6 +425,7 @@ export const Terminal = (props: TerminalProps) => {
       fitAddon = fit
       serializeAddon = serializer
 
+      const active = document.activeElement
       t.open(container)
       useTerminalUiBindings({
         container,
@@ -425,7 +435,22 @@ export const Terminal = (props: TerminalProps) => {
         handleLinkClick,
       })
 
-      if (local.autoFocus !== false) focusTerminal()
+      if (local.autoFocus === true) {
+        focusTerminal()
+        local.onAutoFocus?.()
+      }
+      if (local.autoFocus !== true) {
+        const restoreFocus = () => {
+          const current = document.activeElement
+          if (current !== container && !container.contains(current)) return
+          t.blur()
+          t.textarea?.blur()
+          if (active instanceof HTMLElement && active.isConnected) active.focus()
+        }
+        restoreFocus()
+        const timer = setTimeout(restoreFocus, 0)
+        cleanups.push(() => clearTimeout(timer))
+      }
 
       if (typeof document !== "undefined" && document.fonts) {
         void document.fonts.ready.then(scheduleFit)
