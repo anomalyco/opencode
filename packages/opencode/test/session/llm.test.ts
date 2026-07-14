@@ -503,6 +503,106 @@ describe("session.llm.ai-sdk adapter", () => {
     expect(result.tokens.cache.read).toBe(200)
   })
 
+  test("extracts cache read tokens from openai-compatible metadata usage fallback", async () => {
+    const result = SessionNs.getUsage({
+      model: {
+        id: "custom-gpt",
+        providerID: "custom-provider",
+        name: "Custom GPT",
+        limit: { context: 200_000, output: 8_000 },
+        cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+        capabilities: {
+          toolcall: true,
+          attachment: false,
+          reasoning: false,
+          temperature: true,
+          input: { text: true, image: false, audio: false, video: false },
+          output: { text: true, image: false, audio: false, video: false },
+        },
+        api: { npm: "@ai-sdk/openai-compatible" },
+        options: {},
+      } as never,
+      usage: { inputTokens: 1000, outputTokens: 200, totalTokens: 1200 } as never,
+      metadata: {
+        custom: {
+          usage: {
+            prompt_tokens_details: {
+              cached_tokens: 450,
+            },
+          },
+        },
+      },
+    })
+
+    expect(result.tokens.cache.read).toBe(450)
+  })
+
+  test("extracts cache write tokens from openai-compatible metadata usage", async () => {
+    const result = SessionNs.getUsage({
+      model: {
+        id: "custom-gpt",
+        providerID: "custom-provider",
+        name: "Custom GPT",
+        limit: { context: 200_000, output: 8_000 },
+        cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+        capabilities: {
+          toolcall: true,
+          attachment: false,
+          reasoning: false,
+          temperature: true,
+          input: { text: true, image: false, audio: false, video: false },
+          output: { text: true, image: false, audio: false, video: false },
+        },
+        api: { npm: "@ai-sdk/openai-compatible" },
+        options: {},
+      } as never,
+      usage: { inputTokens: 1000, outputTokens: 200, totalTokens: 1200 } as never,
+      metadata: {
+        custom: {
+          usage: {
+            cache_creation_input_tokens: 200,
+          },
+        },
+      },
+    })
+
+    expect(result.tokens.cache.write).toBe(200)
+  })
+
+  test("respects usage.cacheReadInputTokens over metadata", async () => {
+    const result = SessionNs.getUsage({
+      model: {
+        id: "custom-gpt",
+        providerID: "custom-provider",
+        name: "Custom GPT",
+        limit: { context: 200_000, output: 8_000 },
+        cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+        capabilities: {
+          toolcall: true,
+          attachment: false,
+          reasoning: false,
+          temperature: true,
+          input: { text: true, image: false, audio: false, video: false },
+          output: { text: true, image: false, audio: false, video: false },
+        },
+        api: { npm: "@ai-sdk/openai-compatible" },
+        options: {},
+      } as never,
+      usage: { inputTokens: 1000, outputTokens: 200, totalTokens: 1200, cacheReadInputTokens: 100 } as never,
+      metadata: {
+        custom: {
+          usage: {
+            prompt_tokens_details: {
+              cached_tokens: 450,
+            },
+          },
+        },
+      },
+    })
+
+    expect(result.tokens.cache.read).toBe(100)
+  })
+
   test("captures Copilot billed usage from raw Anthropic message deltas per step", async () => {
     const events = await adapt([
       uncheckedAdapterEvent({
