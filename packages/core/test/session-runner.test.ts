@@ -19,6 +19,7 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNodePlatform } from "@opencode-ai/core/effect/app-node-platform"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { EventTable } from "@opencode-ai/core/event/sql"
 import { Project } from "@opencode-ai/core/project"
@@ -3044,31 +3045,18 @@ describe("SessionRunnerLLM", () => {
   )
 
   it.effect("adds session correlation headers to model requests", () =>
-    Effect.acquireUseRelease(
-      Effect.sync(() => {
-        const previous = process.env.OPENCODE_CLIENT
-        process.env.OPENCODE_CLIENT = "test-client"
-        return previous
-      }),
-      () =>
-        Effect.gen(function* () {
-          const session = yield* setup
-          yield* admit(session, "Run correlated request")
+    Effect.gen(function* () {
+      const session = yield* setup
+      yield* admit(session, "Run correlated request")
 
-          yield* session.resume(sessionID)
+      yield* session.resume(sessionID)
 
-          expect(requests[0]?.http?.headers).toEqual({
-            "x-opencode-project": Project.ID.global,
-            "x-opencode-session": sessionID,
-            "x-opencode-client": "test-client",
-          })
-        }),
-      (previous) =>
-        Effect.sync(() => {
-          if (previous === undefined) delete process.env.OPENCODE_CLIENT
-          else process.env.OPENCODE_CLIENT = previous
-        }),
-    ),
+      expect(requests[0]?.http?.headers).toEqual({
+        "x-opencode-project": Project.ID.global,
+        "x-opencode-session": sessionID,
+        "x-opencode-client": Flag.OPENCODE_CLIENT,
+      })
+    }),
   )
 
   it.effect("runs different sessions concurrently", () =>
