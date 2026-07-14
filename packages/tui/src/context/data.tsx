@@ -404,6 +404,14 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           })
           break
         case "session.instructions.updated":
+          const instructions = event.metadata?.instructions
+          if (
+            typeof instructions === "object" &&
+            instructions !== null &&
+            "initial" in instructions &&
+            instructions.initial === true
+          )
+            break
           message.update(event.data.sessionID, (draft, index) => {
             message.append(draft, index, {
               id: messageIDFromEvent(event.id),

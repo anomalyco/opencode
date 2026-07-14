@@ -30,6 +30,8 @@ export const prepare = Effect.fn("InstructionState.prepare")(function* (
       SessionEvent.InstructionsUpdated,
       { sessionID, delta: admission.delta },
       {
+        // Initial sync establishes the baseline; unlike later deltas it is not chronological history.
+        ...(!stored ? { metadata: { instructions: { initial: true } } } : {}),
         commit: () => insertBlobs(db, admission.blobs),
       },
     )

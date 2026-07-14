@@ -943,6 +943,30 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("marks the initial instruction sync as baseline metadata", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      const events = yield* EventV2.Service
+      const instructionEvents: EventV2.Payload[] = []
+      const unsubscribe = yield* events.listen((event) =>
+        Effect.sync(() => {
+          if (event.type === "session.instructions.updated") instructionEvents.push(event)
+        }),
+      )
+      yield* admit(session, "First")
+
+      yield* session.resume(sessionID)
+      systemBaseline = "Changed context"
+      yield* admit(session, "Second")
+      yield* session.resume(sessionID)
+      yield* unsubscribe
+
+      expect(instructionEvents).toHaveLength(2)
+      expect(instructionEvents[0]?.metadata).toEqual({ instructions: { initial: true } })
+      expect(instructionEvents[1]?.metadata).toBeUndefined()
+    }),
+  )
+
   it.effect("retries the first request after system context becomes available", () =>
     Effect.gen(function* () {
       const session = yield* setup

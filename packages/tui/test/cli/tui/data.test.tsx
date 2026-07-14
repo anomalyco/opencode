@@ -2385,7 +2385,7 @@ test("renders admitted prompts immediately and tracks them until promoted", asyn
   }
 })
 
-test("projects live instruction updates with their message ID", async () => {
+test("skips initial instruction state and projects later updates with their message ID", async () => {
   const events = createEventStream()
   const calls = createFetch(undefined, events)
   let sync!: ReturnType<typeof useData>
@@ -2419,18 +2419,30 @@ test("projects live instruction updates with their message ID", async () => {
       created: 0,
       type: "session.instructions.updated",
       durable: durable("session-1", 0, 2),
+      metadata: { instructions: { initial: true } },
       data: {
         sessionID: "session-1",
         delta: { "core/date": "0".repeat(64) },
       },
     })
+    emitEvent(events, {
+      id: "evt_instructions_2",
+      created: 1,
+      type: "session.instructions.updated",
+      durable: durable("session-1", 1, 2),
+      data: {
+        sessionID: "session-1",
+        delta: { "core/date": "1".repeat(64) },
+      },
+    })
 
-    await wait(() => sync.session.message.list("session-1")?.length === 1)
+    await wait(() => sync.session.message.list("session-1")?.some((message) => message.time.created === 1))
+    expect(sync.session.message.list("session-1")).toHaveLength(1)
     expect(sync.session.message.list("session-1")?.[0]).toMatchObject({
-      id: SessionMessage.ID.fromEvent(EventV2.ID.make("evt_instructions_1")),
+      id: SessionMessage.ID.fromEvent(EventV2.ID.make("evt_instructions_2")),
       type: "system",
       text: "Instructions updated: core/date",
-      time: { created: 0 },
+      time: { created: 1 },
     })
   } finally {
     app.renderer.destroy()
