@@ -865,10 +865,18 @@ describe("session.compaction.process", () => {
   itCompaction.instance(
     "marks summary message as errored on compact result",
     Effect.gen(function* () {
+      const events = yield* EventV2Bridge.Service
       const ssn = yield* SessionNs.Service
       const session = yield* ssn.create({})
       const msg = yield* createUserMessage(session.id, "hello")
       const msgs = yield* ssn.messages({ sessionID: session.id })
+      const errors: string[] = []
+      const off = yield* events.listen((event) => {
+        if (event.type !== SessionNs.Event.Error.type) return Effect.void
+        const data = event.data as typeof SessionNs.Event.Error.data.Type
+        if (data.sessionID === session.id && data.error) errors.push(data.error.name)
+        return Effect.void
+      })
 
       const result = yield* SessionCompaction.use.process({
         parentID: msg.id,
@@ -876,6 +884,7 @@ describe("session.compaction.process", () => {
         sessionID: session.id,
         auto: false,
       })
+      yield* off
 
       const summary = (yield* ssn.messages({ sessionID: session.id })).find(
         (msg) => msg.info.role === "assistant" && msg.info.summary,
@@ -887,6 +896,7 @@ describe("session.compaction.process", () => {
         expect(summary.info.finish).toBe("error")
         expect(JSON.stringify(summary.info.error)).toContain("Session too large to compact")
       }
+      expect(errors).toEqual(["ContextOverflowError"])
     }).pipe(withCompaction({ result: "compact" })),
   )
 

@@ -745,6 +745,51 @@ it.instance("loop stops provider overflow instead of auto-compacting when disabl
   }),
 )
 
+it.instance("loop auto-compacts provider overflow without surfacing a terminal error", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const events = yield* EventV2Bridge.Service
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const status = yield* SessionStatus.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+    const errors: NonNullable<SessionV1.Assistant["error"]>[] = []
+    const off = yield* events.listen((event) => {
+      if (event.type !== Session.Event.Error.type) return Effect.void
+      const data = event.data as typeof Session.Event.Error.data.Type
+      if (data.sessionID === chat.id && data.error) errors.push(data.error)
+      return Effect.void
+    })
+
+    yield* seed(chat.id, { finish: "stop" })
+    yield* llm.error(400, { type: "error", error: { code: "context_length_exceeded" } })
+    yield* llm.text("compacted summary")
+    yield* llm.text("resumed answer")
+
+    const result = yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      model: ref,
+      parts: [{ type: "text", text: "resume this exact prompt" }],
+    })
+    const messages = yield* sessions.messages({ sessionID: chat.id })
+    const inputs = yield* llm.inputs
+    yield* off
+
+    expect(yield* llm.calls).toBe(3)
+    expect(yield* llm.pending).toBe(0)
+    expect(JSON.stringify(inputs.at(-1)?.messages)).toContain("resume this exact prompt")
+    expect(result.parts).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: "text", text: "resumed answer" })]),
+    )
+    expect(messages.flatMap((message) => message.parts).filter((part) => part.type === "compaction")).toEqual([
+      expect.objectContaining({ auto: true, overflow: true }),
+    ])
+    expect(errors).toEqual([])
+    expect(yield* status.get(chat.id)).toEqual({ type: "idle" })
+  }),
+)
+
 noLLMServer.instance.skip(
   "prompt emits v2 prompted and synthetic events (v2 projector disabled)",
   () =>
