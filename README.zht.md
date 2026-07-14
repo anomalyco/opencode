@@ -56,6 +56,3 @@ OpenCode 內建了兩種 Agent，您可以使用 `Tab` 鍵快速切換。
 
 關於如何設定 OpenCode 的詳細資訊，請參閱 [文件](https://opencode.ai/docs)。
 
-### 參與貢獻
-
-
