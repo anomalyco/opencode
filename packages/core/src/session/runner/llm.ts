@@ -51,6 +51,7 @@ import { AgentNotFoundError, StepFailedError } from "../error"
 import { toSessionError } from "../to-session-error"
 import { SessionRunnerRetry } from "./retry"
 import { PluginSupervisor } from "../../plugin/supervisor"
+import { Flag } from "../../flag/flag"
 
 type StepTokens = {
   readonly input: number
@@ -197,7 +198,13 @@ const layer = Layer.effect(
       const promptCacheKey = /^ses_[0-9a-f]{64}$/.test(session.id) ? session.id.slice(4) : session.id
       const request = LLM.request({
         model,
-        http: { headers: { "x-opencode-session": session.id } },
+        http: {
+          headers: {
+            "x-opencode-project": session.projectID,
+            "x-opencode-session": session.id,
+            "x-opencode-client": Flag.OPENCODE_CLIENT,
+          },
+        },
         providerOptions: { openai: { promptCacheKey } },
         system: [agentInfo.system ? agentInfo.system : SessionRunnerSystemPrompt.provider(model), history.initial]
           .filter((part): part is string => part !== undefined && part.length > 0)

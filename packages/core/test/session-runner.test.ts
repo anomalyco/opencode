@@ -3072,6 +3072,14 @@ describe("SessionRunnerLLM", () => {
         sessionID,
         otherSessionID,
       ])
+      expect(requests.map((request) => request.http?.headers?.["x-opencode-project"])).toEqual([
+        Project.ID.global,
+        Project.ID.global,
+      ])
+      expect(requests.map((request) => request.http?.headers?.["x-opencode-client"])).toEqual([
+        process.env.OPENCODE_CLIENT ?? "cli",
+        process.env.OPENCODE_CLIENT ?? "cli",
+      ])
       yield* Deferred.succeed(streamGate, undefined)
       yield* Fiber.join(first)
       yield* Fiber.join(second)
