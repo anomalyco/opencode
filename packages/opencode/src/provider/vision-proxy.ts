@@ -12,22 +12,65 @@ const DEFAULT_VISION_PROMPT =
 interface ImageLike {
   type: string
   image?: unknown
-  url?: string
+  url?: unknown
   mediaType?: string
   filename?: string
 }
 
+function toBase64DataUrl(data: Uint8Array | ArrayBuffer | Buffer, mimeType = "image/png"): string {
+  const bytes = data instanceof ArrayBuffer ? new Uint8Array(data) : data
+  let binary = ""
+  const len = bytes instanceof Uint8Array ? bytes.byteLength : bytes.length
+  const chunk = 0x8000
+  for (let i = 0; i < len; i += chunk) {
+    const slice = bytes instanceof Uint8Array
+      ? bytes.subarray(i, Math.min(i + chunk, len))
+      : (bytes as Buffer).subarray(i, Math.min(i + chunk, len))
+    binary += String.fromCharCode(...slice)
+  }
+  const base64 = typeof btoa !== "undefined" ? btoa(binary) : Buffer.from(binary, "binary").toString("base64")
+  return `data:${mimeType};base64,${base64}`
+}
+
 function extractImageData(part: ImageLike): string | null {
+  // Case 1: image part with data URL string
   if (part.type === "image") {
-    const imageStr = String(part.image)
-    if (imageStr.startsWith("data:")) return imageStr
-    return `data:image/png;base64,${imageStr}`
+    const img = part.image
+    if (typeof img === "string") {
+      if (img.startsWith("data:")) return img
+      return `data:image/png;base64,${img}`
+    }
+    if (img instanceof Uint8Array || img instanceof ArrayBuffer) {
+      return toBase64DataUrl(img)
+    }
+    if (typeof Buffer !== "undefined" && Buffer.isBuffer(img)) {
+      return toBase64DataUrl(img)
+    }
+    if (img && typeof img === "object" && "byteLength" in img) {
+      return toBase64DataUrl(img as Uint8Array)
+    }
   }
+
+  // Case 2: file part with image MIME
   if (part.type === "file" && part.mediaType?.startsWith("image/")) {
-    const url = String(part.url)
-    if (url.startsWith("data:")) return url
-    return url
+    const url = part.url
+    if (typeof url === "string") {
+      if (url.startsWith("data:")) return url
+      return url
+    }
+    if (url instanceof URL) {
+      const urlStr = url.toString()
+      if (urlStr.startsWith("data:")) return urlStr
+      return urlStr
+    }
+    if (url instanceof Uint8Array || url instanceof ArrayBuffer) {
+      return toBase64DataUrl(url, part.mediaType)
+    }
+    if (typeof Buffer !== "undefined" && Buffer.isBuffer(url)) {
+      return toBase64DataUrl(url, part.mediaType)
+    }
   }
+
   return null
 }
 
@@ -45,6 +88,8 @@ async function describeImage(
   baseURL: string,
   apiKey: string,
 ): Promise<string | null> {
+  if (!imageDataUrl) return null
+
   const url = baseURL.endsWith("/v1")
     ? `${baseURL}/chat/completions`
     : baseURL.endsWith("/")
