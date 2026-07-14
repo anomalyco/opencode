@@ -1,0 +1,18 @@
+Generate a meaningful commit message based on staged changes and session context.
+
+Task: Review the git diff and generate a Conventional Commits-style message.
+
+### Instructions
+
+1. Run `git diff --staged` and `git status --porcelain` to see the changes
+2. If no files are staged, suggest files to add or ask for confirmation
+3. Check recent commit history with `git log --oneline -5` for style reference
+4. Generate a commit message in the format: `type(scope): summary`
+
+Valid types: feat, fix, docs, style, refactor, test, chore, ci, perf
+
+5. Show the generated message to the user
+6. If the user confirms, run `git commit -m "message"`
+
+### Output
+Present the proposed commit message and wait for user confirmation before executing.

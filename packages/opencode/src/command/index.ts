@@ -10,6 +10,8 @@ import { Skill } from "../skill"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
 import PROMPT_REVIEW from "./template/review.txt"
 import PROMPT_TEAM from "../orchestrator/template/team.txt"
+import PROMPT_TEST from "./template/test.txt"
+import PROMPT_COMMIT from "./template/commit.txt"
 import { LegacyEvent } from "@opencode-ai/schema/legacy-event"
 
 type State = {
@@ -48,6 +50,8 @@ export const Default = {
   INIT: "init",
   REVIEW: "review",
   TEAM: "team",
+  TEST: "test",
+  COMMIT: "commit",
 } as const
 
 export interface Interface {
@@ -96,6 +100,24 @@ const layer = Layer.effect(
           return PROMPT_TEAM
         },
         hints: hints(PROMPT_TEAM),
+      }
+      commands[Default.TEST] = {
+        name: Default.TEST,
+        description: "generate and run tests for the current file",
+        source: "command",
+        get template() {
+          return PROMPT_TEST
+        },
+        hints: hints(PROMPT_TEST),
+      }
+      commands[Default.COMMIT] = {
+        name: Default.COMMIT,
+        description: "generate a commit message from staged changes",
+        source: "command",
+        get template() {
+          return PROMPT_COMMIT
+        },
+        hints: hints(PROMPT_COMMIT),
       }
 
       for (const [name, command] of Object.entries(cfg.command ?? {})) {

@@ -11,6 +11,7 @@ import { ConfigContextV1 } from "./context"
 import { ConfigCommandV1 } from "./command"
 import { ConfigDiagramsV1 } from "./diagrams"
 import { ConfigFormatterV1 } from "./formatter"
+import { ConfigGitV1 } from "./git"
 import { ConfigLayoutV1 } from "./layout"
 import { ConfigLSPV1 } from "./lsp"
 import { ConfigMCPV1 } from "./mcp"
@@ -139,6 +140,9 @@ export const Info = Schema.Struct({
   }),
   multiAgent: Schema.optional(ConfigMultiAgentV1.Info).annotate({
     description: "Multi-agent orchestration configuration for team commands",
+  }),
+  git: Schema.optional(ConfigGitV1.Info).annotate({
+    description: "Git commit message generation configuration",
   }),
   enterprise: Schema.optional(
     Schema.Struct({ url: Schema.optional(Schema.String).annotate({ description: "Enterprise URL" }) }),
