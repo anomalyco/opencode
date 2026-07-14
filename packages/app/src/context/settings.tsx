@@ -2,6 +2,7 @@ import { createStore, reconcile } from "solid-js/store"
 import { createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { persisted } from "@/utils/persist"
+import { usePlatform } from "@/context/platform"
 
 export interface NotificationSettings {
   agent: boolean
@@ -57,7 +58,28 @@ export const terminalDefault = "JetBrainsMono Nerd Font Mono"
 const legacyNewLayoutDesignsDefault = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"
 export const newLayoutDesignsDefault = true
 // Existing users can switch layouts until local midnight on this date. Set new Date(YYYY, M-1, D) to show.
-export const oldInterfaceSunset = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod" ? new Date(2026, 7, 14) : null
+export const oldInterfaceSunset = new Date(2026, 8, 14)
+const newLayoutDesignsUpgradeCutoff = "1.17.20"
+
+function compareVersions(a: string, b: string) {
+  const parse = (version: string) => {
+    const match = /^v?(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/i.exec(version.trim())
+    if (!match) return
+    return match.slice(1).map(Number)
+  }
+  const left = parse(a)
+  const right = parse(b)
+  if (!left || !right) return
+  const index = left.findIndex((part, index) => part !== right[index])
+  return index === -1 ? 0 : left[index]! - right[index]!
+}
+
+export function shouldEnableNewLayout(previous: string | undefined, current: string | undefined) {
+  if (!previous || !current) return false
+  const previousComparison = compareVersions(previous, newLayoutDesignsUpgradeCutoff)
+  const currentComparison = compareVersions(current, newLayoutDesignsUpgradeCutoff)
+  return previousComparison !== undefined && currentComparison !== undefined && previousComparison <= 0 && currentComparison > 0
+}
 
 export function layoutTransitionState(scheduled: boolean, eligible: boolean, retired: boolean, dismissed: boolean) {
   return {
@@ -175,7 +197,12 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
   name: "Settings",
   gate: false,
   init: () => {
+    const platform = usePlatform()
     const [store, setStore, _, ready] = persisted("settings.v3", createStore<Settings>(defaultSettings))
+    const [launch, setLaunch, , launchReady] = persisted(
+      "app-version.v1",
+      createStore<{ version?: string }>({ version: undefined }),
+    )
     const showFileTree = withFallback(() => store.general?.showFileTree, defaultSettings.general.showFileTree)
     const showSearch = withFallback(() => store.general?.showSearch, defaultSettings.general.showSearch)
     const showStatus = withFallback(() => store.general?.showStatus, defaultSettings.general.showStatus)
@@ -188,10 +215,14 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
     const layoutTransitionClassified = createMemo(() => typeof store.general?.layoutTransitionEligible === "boolean")
     const layoutTransitionEligible = withFallback(() => store.general?.layoutTransitionEligible, false)
     const newInterfaceNoticeDismissed = withFallback(() => store.general?.newInterfaceNoticeDismissed, false)
+    const layoutUpgrade = createMemo(() =>
+      launchReady() ? shouldEnableNewLayout(launch.version, platform.version) : false,
+    )
     const layoutTransition = createMemo(() =>
       layoutTransitionState(!!sunset, layoutTransitionEligible(), oldInterfaceRetired(), newInterfaceNoticeDismissed()),
     )
     const newLayoutDesigns = createMemo(() => {
+      if (layoutUpgrade()) return true
       if (!ready() && !oldInterfaceRetired()) return legacyNewLayoutDesignsDefault
       if (!layoutTransitionClassified()) {
         return resolveNewLayoutDesigns(
@@ -222,6 +253,15 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         if (timeout.current !== undefined) clearTimeout(timeout.current)
       })
     }
+
+    createEffect(() => {
+      if (!ready() || !launchReady()) return
+      if (layoutUpgrade() && store.general?.newLayoutDesigns !== true) {
+        setStore("general", "newLayoutDesigns", true)
+      }
+      if (!platform.version || launch.version === platform.version) return
+      setLaunch("version", platform.version)
+    })
 
     createEffect(() => {
       if (!ready() || !oldInterfaceRetired()) return
