@@ -7,6 +7,7 @@ import { EffectDrizzleSqlite } from "@opencode-ai/effect-drizzle-sqlite"
 import { Effect, Layer } from "effect"
 import { eq, inArray, sql } from "drizzle-orm"
 import { DatabaseMigration } from "@opencode-ai/core/database/migration"
+import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 import { migrations } from "@opencode-ai/core/database/migration.gen"
 import sessionUsageMigration from "@opencode-ai/core/database/migration/20260510033149_session_usage"
 import normalizeStoragePathsMigration from "@opencode-ai/core/database/migration/20260601010001_normalize_storage_paths"
@@ -30,9 +31,15 @@ import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { tmpdir } from "./fixture/tmpdir"
 
-const run = <A, E>(effect: Effect.Effect<A, E, SqlClientService>) =>
+const flockLayer = LayerNode.compile(EffectFlock.node)
+
+const run = <A, E>(effect: Effect.Effect<A, E, SqlClientService | EffectFlock.Service>) =>
   Effect.runPromise(
-    effect.pipe(Effect.provide(SqliteClient.layer({ filename: ":memory:", disableWAL: true })), Effect.scoped),
+    effect.pipe(
+      Effect.provide(SqliteClient.layer({ filename: ":memory:", disableWAL: true })),
+      Effect.provide(flockLayer),
+      Effect.scoped,
+    ),
   )
 
 const makeDb = EffectDrizzleSqlite.makeWithDefaults()
@@ -45,7 +52,7 @@ describe("DatabaseMigration", () => {
 
     await Effect.runPromise(
       Effect.all(
-        layers.map((layer) => Effect.scoped(Layer.build(layer))),
+        layers.map((layer) => Effect.scoped(Layer.build(layer.pipe(Layer.provide(flockLayer))))),
         { concurrency: "unbounded" },
       ),
     )

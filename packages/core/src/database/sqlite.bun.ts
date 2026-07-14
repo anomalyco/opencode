@@ -46,86 +46,119 @@ interface SqliteConnection extends Connection {
 
 const make = (options: Config) =>
   Effect.gen(function* () {
-    const native = (yield* Sqlite.Native) as Database
+    const POOL_SIZE = options.filename === ":memory:" ? 1 : 3
 
     const compiler = Statement.makeCompilerSqlite(options.transformQueryNames)
     const transformRows = options.transformResultNames
       ? Statement.defaultTransforms(options.transformResultNames).array
       : undefined
 
-    const run = (query: string, params: ReadonlyArray<unknown> = []) =>
-      Effect.withFiber<Array<Record<string, unknown>>, SqlError>((fiber) => {
-        const statement = native.query(query)
-        // @ts-ignore bun-types missing safeIntegers method, fixed in https://github.com/oven-sh/bun/pull/26627
-        statement.safeIntegers(Context.get(fiber.context, Client.SafeIntegers))
-        try {
-          return Effect.succeed((statement.all(...(params as any)) ?? []) as Array<Record<string, unknown>>)
-        } catch (cause) {
-          return Effect.fail(
-            new SqlError({
-              reason: classifySqliteError(cause, { message: "Failed to execute statement", operation: "execute" }),
-            }),
-          )
-        }
-      })
+    const natives: Array<Database> = []
+    const connections: Array<SqliteConnection> = []
+    let nextAcquireIndex = 0
 
-    const runValues = (query: string, params: ReadonlyArray<unknown> = []) =>
-      Effect.withFiber<Array<unknown[]>, SqlError>((fiber) => {
-        const statement = native.query(query)
-        // @ts-ignore bun-types missing safeIntegers method, fixed in https://github.com/oven-sh/bun/pull/26627
-        statement.safeIntegers(Context.get(fiber.context, Client.SafeIntegers))
-        try {
-          return Effect.succeed((statement.values(...(params as any)) ?? []) as Array<unknown[]>)
-        } catch (cause) {
-          return Effect.fail(
-            new SqlError({
-              reason: classifySqliteError(cause, { message: "Failed to execute statement", operation: "execute" }),
-            }),
-          )
-        }
+    for (let i = 0; i < POOL_SIZE; i++) {
+      const native = new Database(options.filename, {
+        readonly: options.readonly,
+        readwrite: options.readwrite ?? true,
+        create: options.create ?? true,
       })
+      natives.push(native)
 
-    const connection = identity<SqliteConnection>({
-      execute(query, params, transformRows) {
-        return transformRows ? Effect.map(run(query, params), transformRows) : run(query, params)
-      },
-      executeRaw(query, params) {
-        return run(query, params)
-      },
-      executeValues(query, params) {
-        return runValues(query, params)
-      },
-      executeUnprepared(query, params, transformRows) {
-        return this.execute(query, params, transformRows)
-      },
-      executeStream() {
-        return Stream.die("executeStream not implemented")
-      },
-      export: Effect.try({
-        try: () => native.serialize(),
-        catch: (cause) =>
-          new SqlError({
-            reason: classifySqliteError(cause, { message: "Failed to export database", operation: "export" }),
+      if (i === 0 && options.disableWAL !== true && options.readonly !== true) {
+        native.run("PRAGMA journal_mode = WAL;")
+      }
+
+      const run = (query: string, params: ReadonlyArray<unknown> = []) =>
+        Effect.withFiber<Array<Record<string, unknown>>, SqlError>((fiber) => {
+          const statement = native.query(query)
+          // @ts-ignore bun-types missing safeIntegers method, fixed in https://github.com/oven-sh/bun/pull/26627
+          statement.safeIntegers(Context.get(fiber.context, Client.SafeIntegers))
+          try {
+            return Effect.succeed((statement.all(...(params as any)) ?? []) as Array<Record<string, unknown>>)
+          } catch (cause) {
+            return Effect.fail(
+              new SqlError({
+                reason: classifySqliteError(cause, { message: "Failed to execute statement", operation: "execute" }),
+              }),
+            )
+          }
+        })
+
+      const runValues = (query: string, params: ReadonlyArray<unknown> = []) =>
+        Effect.withFiber<Array<unknown[]>, SqlError>((fiber) => {
+          const statement = native.query(query)
+          // @ts-ignore bun-types missing safeIntegers method, fixed in https://github.com/oven-sh/bun/pull/26627
+          statement.safeIntegers(Context.get(fiber.context, Client.SafeIntegers))
+          try {
+            return Effect.succeed((statement.values(...(params as any)) ?? []) as Array<unknown[]>)
+          } catch (cause) {
+            return Effect.fail(
+              new SqlError({
+                reason: classifySqliteError(cause, { message: "Failed to execute statement", operation: "execute" }),
+              }),
+            )
+          }
+        })
+
+      connections.push(
+        identity<SqliteConnection>({
+          execute(query, params, transformRows) {
+            return transformRows ? Effect.map(run(query, params), transformRows) : run(query, params)
+          },
+          executeRaw(query, params) {
+            return run(query, params)
+          },
+          executeValues(query, params) {
+            return runValues(query, params)
+          },
+          executeUnprepared(query, params, transformRows) {
+            return this.execute(query, params, transformRows)
+          },
+          executeStream() {
+            return Stream.die("executeStream not implemented")
+          },
+          export: Effect.try({
+            try: () => native.serialize(),
+            catch: (cause) =>
+              new SqlError({
+                reason: classifySqliteError(cause, { message: "Failed to export database", operation: "export" }),
+              }),
           }),
-      }),
-      loadExtension: (path) =>
-        Effect.try({
-          try: () => native.loadExtension(path),
-          catch: (cause) =>
-            new SqlError({
-              reason: classifySqliteError(cause, { message: "Failed to load extension", operation: "loadExtension" }),
+          loadExtension: (path) =>
+            Effect.try({
+              try: () => native.loadExtension(path),
+              catch: (cause) =>
+                new SqlError({
+                  reason: classifySqliteError(cause, { message: "Failed to load extension", operation: "loadExtension" }),
+                }),
             }),
         }),
+      )
+    }
+
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        for (const n of natives) n.close()
+      }),
+    )
+
+    const semaphore = yield* Semaphore.make(POOL_SIZE)
+
+    const acquirer = Effect.suspend(() => {
+      const index = nextAcquireIndex % POOL_SIZE
+      nextAcquireIndex++
+      return semaphore.withPermits(1)(Effect.succeed(connections[index]))
     })
 
-    const semaphore = yield* Semaphore.make(1)
-    const acquirer = semaphore.withPermits(1)(Effect.succeed(connection))
     const transactionAcquirer = Effect.uninterruptibleMask((restore) => {
       const fiber = Fiber.getCurrent()!
       const scope = Context.getUnsafe(fiber.context, Scope.Scope)
+      const index = nextAcquireIndex % POOL_SIZE
+      nextAcquireIndex++
       return Effect.as(
         Effect.tap(restore(semaphore.take(1)), () => Scope.addFinalizer(scope, semaphore.release(1))),
-        connection,
+        connections[index],
       )
     })
 
@@ -161,7 +194,7 @@ const nativeLayer = (config: Config) =>
         create: config.create ?? true,
       })
       yield* Effect.addFinalizer(() => Effect.sync(() => native.close()))
-      if (config.disableWAL !== true) native.run("PRAGMA journal_mode = WAL;")
+      if (config.disableWAL !== true && config.readonly !== true) native.run("PRAGMA journal_mode = WAL;")
       return native
     }),
   )

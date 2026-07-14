@@ -23,8 +23,8 @@ export namespace Flock {
 
   // Defaults for callers that do not provide timing options.
   const defaultOpts = {
-    staleMs: 60_000,
-    timeoutMs: 5 * 60_000,
+    staleMs: 15_000,
+    timeoutMs: 30_000,
     baseDelayMs: 100,
     maxDelayMs: 2_000,
   }

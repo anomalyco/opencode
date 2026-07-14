@@ -46,80 +46,115 @@ interface SqliteConnection extends Connection {
 
 const make = (options: Config) =>
   Effect.gen(function* () {
-    const native = (yield* Sqlite.Native) as DatabaseSync
+    const POOL_SIZE = options.filename === ":memory:" ? 1 : 3
 
     const compiler = Statement.makeCompilerSqlite(options.transformQueryNames)
     const transformRows = options.transformResultNames
       ? Statement.defaultTransforms(options.transformResultNames).array
       : undefined
 
-    const run = (query: string, params: ReadonlyArray<unknown> = []) =>
-      Effect.withFiber<Array<Record<string, unknown>>, SqlError>((fiber) => {
-        const statement = native.prepare(query)
-        statement.setReadBigInts(Context.get(fiber.context, Client.SafeIntegers))
-        try {
-          return Effect.succeed(statement.all(...(params as SQLInputValue[])) as Array<Record<string, unknown>>)
-        } catch (cause) {
-          return Effect.fail(
-            new SqlError({
-              reason: classifySqliteError(cause, { message: "Failed to execute statement", operation: "execute" }),
-            }),
-          )
-        }
-      })
+    const natives: Array<DatabaseSync> = []
+    const connections: Array<SqliteConnection> = []
+    let nextAcquireIndex = 0
 
-    const runValues = (query: string, params: ReadonlyArray<unknown> = []) =>
-      Effect.withFiber<ReadonlyArray<ReadonlyArray<unknown>>, SqlError>((fiber) => {
-        const statement = native.prepare(query)
-        statement.setReadBigInts(Context.get(fiber.context, Client.SafeIntegers))
-        statement.setReturnArrays(true)
-        try {
-          return Effect.succeed(
-            statement.all(...(params as SQLInputValue[])) as unknown as ReadonlyArray<ReadonlyArray<unknown>>,
-          )
-        } catch (cause) {
-          return Effect.fail(
-            new SqlError({
-              reason: classifySqliteError(cause, { message: "Failed to execute statement", operation: "execute" }),
-            }),
-          )
-        }
+    for (let i = 0; i < POOL_SIZE; i++) {
+      const native = new DatabaseSync(options.filename, {
+        readOnly: options.readonly,
+        timeout: options.timeout,
+        allowExtension: options.allowExtension,
+        enableForeignKeyConstraints: true,
+        open: true,
       })
+      natives.push(native)
 
-    const connection = identity<SqliteConnection>({
-      execute(query, params, transformRows) {
-        return transformRows ? Effect.map(run(query, params), transformRows) : run(query, params)
-      },
-      executeRaw(query, params) {
-        return run(query, params)
-      },
-      executeValues(query, params) {
-        return runValues(query, params)
-      },
-      executeUnprepared(query, params, transformRows) {
-        return this.execute(query, params, transformRows)
-      },
-      executeStream() {
-        return Stream.die("executeStream not implemented")
-      },
-      loadExtension: (path) =>
-        Effect.try({
-          try: () => native.loadExtension(path),
-          catch: (cause) =>
-            new SqlError({
-              reason: classifySqliteError(cause, { message: "Failed to load extension", operation: "loadExtension" }),
+      if (i === 0 && options.disableWAL !== true && options.readonly !== true) {
+        native.exec("PRAGMA journal_mode = WAL;")
+      }
+
+      const run = (query: string, params: ReadonlyArray<unknown> = []) =>
+        Effect.withFiber<Array<Record<string, unknown>>, SqlError>((fiber) => {
+          const statement = native.prepare(query)
+          statement.setReadBigInts(Context.get(fiber.context, Client.SafeIntegers))
+          try {
+            return Effect.succeed(statement.all(...(params as SQLInputValue[])) as Array<Record<string, unknown>>)
+          } catch (cause) {
+            return Effect.fail(
+              new SqlError({
+                reason: classifySqliteError(cause, { message: "Failed to execute statement", operation: "execute" }),
+              }),
+            )
+          }
+        })
+
+      const runValues = (query: string, params: ReadonlyArray<unknown> = []) =>
+        Effect.withFiber<ReadonlyArray<ReadonlyArray<unknown>>, SqlError>((fiber) => {
+          const statement = native.prepare(query)
+          statement.setReadBigInts(Context.get(fiber.context, Client.SafeIntegers))
+          statement.setReturnArrays(true)
+          try {
+            return Effect.succeed(
+              statement.all(...(params as SQLInputValue[])) as unknown as ReadonlyArray<ReadonlyArray<unknown>>,
+            )
+          } catch (cause) {
+            return Effect.fail(
+              new SqlError({
+                reason: classifySqliteError(cause, { message: "Failed to execute statement", operation: "execute" }),
+              }),
+            )
+          }
+        })
+
+      connections.push(
+        identity<SqliteConnection>({
+          execute(query, params, transformRows) {
+            return transformRows ? Effect.map(run(query, params), transformRows) : run(query, params)
+          },
+          executeRaw(query, params) {
+            return run(query, params)
+          },
+          executeValues(query, params) {
+            return runValues(query, params)
+          },
+          executeUnprepared(query, params, transformRows) {
+            return this.execute(query, params, transformRows)
+          },
+          executeStream() {
+            return Stream.die("executeStream not implemented")
+          },
+          loadExtension: (path) =>
+            Effect.try({
+              try: () => native.loadExtension(path),
+              catch: (cause) =>
+                new SqlError({
+                  reason: classifySqliteError(cause, { message: "Failed to load extension", operation: "loadExtension" }),
+                }),
             }),
         }),
+      )
+    }
+
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        for (const n of natives) n.close()
+      }),
+    )
+
+    const semaphore = yield* Semaphore.make(POOL_SIZE)
+
+    const acquirer = Effect.suspend(() => {
+      const index = nextAcquireIndex % POOL_SIZE
+      nextAcquireIndex++
+      return semaphore.withPermits(1)(Effect.succeed(connections[index]))
     })
 
-    const semaphore = yield* Semaphore.make(1)
-    const acquirer = semaphore.withPermits(1)(Effect.succeed(connection))
     const transactionAcquirer = Effect.uninterruptibleMask((restore) => {
       const fiber = Fiber.getCurrent()!
       const scope = Context.getUnsafe(fiber.context, Scope.Scope)
+      const index = nextAcquireIndex % POOL_SIZE
+      nextAcquireIndex++
       return Effect.as(
         Effect.tap(restore(semaphore.take(1)), () => Scope.addFinalizer(scope, semaphore.release(1))),
-        connection,
+        connections[index],
       )
     })
 

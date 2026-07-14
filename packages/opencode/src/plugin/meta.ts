@@ -144,6 +144,18 @@ export async function touchMany(items: Touch[]): Promise<Array<{ state: State; e
   const file = storePath()
   const rows = await Promise.all(items.map((item) => row(item)))
 
+  const store = await read(file)
+  const now = Date.now()
+  const preview: Array<{ state: State; entry: Entry }> = []
+  let hasChanges = false
+  for (const item of rows) {
+    const hit = next(store[item.id], item.core, now)
+    preview.push(hit)
+    if (hit.state !== "same") hasChanges = true
+  }
+
+  if (!hasChanges) return preview
+
   return Flock.withLock(lock(file), async () => {
     const store = await read(file)
     const now = Date.now()
@@ -182,7 +194,7 @@ export async function setTheme(id: string, name: string, theme: Theme): Promise<
 
 export async function list(): Promise<Store> {
   const file = storePath()
-  return Flock.withLock(lock(file), async () => read(file))
+  return read(file)
 }
 
 export * as PluginMeta from "./meta"
