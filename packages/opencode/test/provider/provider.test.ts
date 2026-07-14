@@ -563,6 +563,45 @@ it.instance(
 )
 
 it.instance(
+  "model config preserves explicitly empty models.dev variants",
+  Effect.gen(function* () {
+    yield* set("OPENAI_API_KEY", "test-api-key")
+    const providers = yield* list
+    const model = providers[ProviderV2.ID.openai].models["custom-gpt-chat"]
+    expect(model.name).toBe("Custom GPT Chat")
+    expect(model.variants).toEqual({})
+  }),
+  {
+    config: {
+      provider: {
+        openai: { models: { "custom-gpt-chat": { id: "gpt-5-chat-latest", name: "Custom GPT Chat" } } },
+      },
+    },
+  },
+)
+
+it.instance(
+  "model config regenerates variants when overriding the provider package",
+  Effect.gen(function* () {
+    yield* set("ANTHROPIC_API_KEY", "test-api-key")
+    const providers = yield* list
+    const model = providers[ProviderV2.ID.anthropic].models["claude-sonnet-4-6"]
+    expect(model.variants?.low).toEqual({ reasoningEffort: "low" })
+    expect(model.variants?.max).toBeUndefined()
+  }),
+  {
+    config: {
+      provider: {
+        anthropic: {
+          npm: "@ai-sdk/openai-compatible",
+          models: { "claude-sonnet-4-6": { name: "Claude via OpenAI" } },
+        },
+      },
+    },
+  },
+)
+
+it.instance(
   "disabled_providers prevents loading even with env var",
   Effect.gen(function* () {
     yield* set("OPENAI_API_KEY", "test-openai-key")
@@ -1337,16 +1376,17 @@ it.instance(
   },
 )
 
-test("mode cost preserves over-200k pricing from base model", () => {
+test("mode options and cost are derived from the base model", () => {
   const provider = {
     id: "openai",
     name: "OpenAI",
     env: [],
+    npm: "@ai-sdk/openai",
     api: "https://api.openai.com/v1",
     models: {
-      "gpt-5.4": {
-        id: "gpt-5.4",
-        name: "GPT-5.4",
+      "gpt-5.6-sol": {
+        id: "gpt-5.6-sol",
+        name: "GPT-5.6 Sol",
         family: "gpt",
         release_date: "2026-03-05",
         attachment: true,
@@ -1382,18 +1422,29 @@ test("mode cost preserves over-200k pricing from base model", () => {
                 },
               },
             },
+            pro: {
+              provider: {
+                body: {
+                  reasoning: { mode: "pro" },
+                  service_tier: "priority",
+                },
+              },
+            },
           },
         },
       },
     },
   } as unknown as ModelsDev.Provider
 
-  const model = Provider.fromModelsDevProvider(provider).models["gpt-5.4-fast"]
+  const model = Provider.fromModelsDevProvider(provider).models["gpt-5.6-sol-fast"]
   expect(model.cost.input).toEqual(5)
   expect(model.cost.output).toEqual(30)
   expect(model.cost.cache.read).toEqual(0.5)
   expect(model.cost.cache.write).toEqual(0)
   expect(model.options["serviceTier"]).toEqual("priority")
+  const pro = Provider.fromModelsDevProvider(provider).models["gpt-5.6-sol-pro"]
+  expect(pro.api.id).toEqual("gpt-5.6-sol")
+  expect(pro.options).toEqual({ reasoningMode: "pro", serviceTier: "priority" })
   expect(model.cost.experimentalOver200K).toEqual({
     input: 5,
     output: 22.5,
@@ -1426,52 +1477,60 @@ test("models.dev normalization fills required response fields", () => {
   expect(model.release_date).toBe("")
 })
 
-test("models.dev reasoning options normalize to known shapes", () => {
-  const provider = Provider.fromModelsDevProvider({
-    id: "openai",
-    name: "OpenAI",
+test("models.dev reasoning options replace generated variants and unsupported options fall back", () => {
+  const provider = {
+    id: "reasoning",
+    name: "Reasoning",
     env: [],
     npm: "@ai-sdk/openai",
     models: {
-      reasoner: {
-        id: "reasoner",
-        name: "Reasoner",
-        reasoning: true,
-        reasoning_options: [
-          { type: "future_control", value: true },
-          { type: "effort", values: ["high", null, 42] },
-          { type: "toggle" },
-          { type: "budget_tokens", min: 1024, max: "invalid" },
-        ],
-        limit: { context: 128_000, output: 16_000 },
-      },
-    },
-  } as unknown as ModelsDev.Provider)
-
-  expect(provider.models.reasoner.reasoning_options).toEqual([
-    { type: "effort", values: ["high", null] },
-    { type: "toggle" },
-    { type: "budget_tokens", min: 1024 },
-  ])
-})
-
-test("models.dev models without reasoning options normalize to an empty list", () => {
-  const provider = Provider.fromModelsDevProvider({
-    id: "openai",
-    name: "OpenAI",
-    env: [],
-    npm: "@ai-sdk/openai",
-    models: {
-      reasoner: {
+      explicit: {
         id: "gpt-5.4",
-        name: "Reasoner",
+        name: "Explicit",
         reasoning: true,
-        limit: { context: 128_000, output: 16_000 },
+        reasoning_options: [{ type: "effort", values: ["low"] }],
+        limit: { context: 128_000, output: 64_000 },
+      },
+      empty: {
+        id: "gpt-5.4",
+        name: "Empty",
+        reasoning: true,
+        reasoning_options: [],
+        limit: { context: 128_000, output: 64_000 },
+      },
+      fallback: {
+        id: "gpt-5.4",
+        name: "Fallback",
+        reasoning: true,
+        reasoning_options: [{ type: "toggle" }],
+        limit: { context: 128_000, output: 64_000 },
+      },
+      override: {
+        id: "gemini-3-pro",
+        name: "Override",
+        reasoning: true,
+        reasoning_options: [{ type: "effort", values: ["high"] }],
+        provider: { npm: "@ai-sdk/google" },
+        limit: { context: 128_000, output: 64_000 },
+        experimental: { modes: { fast: {} } },
       },
     },
-  } as unknown as ModelsDev.Provider)
+  } as unknown as ModelsDev.Provider
 
-  expect(provider.models.reasoner.reasoning_options).toEqual([])
+  const models = Provider.fromModelsDevProvider(provider).models
+  expect(models.explicit.variants).toEqual({
+    low: {
+      reasoningEffort: "low",
+      reasoningSummary: "auto",
+      include: ["reasoning.encrypted_content"],
+    },
+  })
+  expect(models.empty.variants).toEqual({})
+  expect(Object.keys(models.fallback.variants ?? {})).toEqual(["none", "low", "medium", "high", "xhigh"])
+  expect(models.override.variants).toEqual({
+    high: { thinkingConfig: { includeThoughts: true, thinkingLevel: "high" } },
+  })
+  expect(models["gemini-3-pro-fast"].variants).toEqual(models.override.variants)
 })
 
 test("public provider info omits invalid models", () => {

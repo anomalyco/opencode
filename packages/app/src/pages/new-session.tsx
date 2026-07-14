@@ -28,7 +28,7 @@ import { PromptWorkspaceSelector } from "@/components/prompt-workspace-selector"
 import { useTitlebarRightMount } from "@/components/titlebar"
 import { useCommand } from "@/context/command"
 import { useProviders } from "@/hooks/use-providers"
-import { useSettingsDialog } from "@/components/settings-dialog"
+import { useSettingsCommand, useSettingsDialog } from "@/components/settings-dialog"
 import { Persist, persisted } from "@/utils/persist"
 import createPresence from "solid-presence"
 import { useLocal } from "@/context/local"
@@ -54,6 +54,7 @@ export default function NewSessionPage() {
   const command = useCommand()
   const providers = useProviders(() => sdk().directory)
   const openProviderSettings = useSettingsDialog("providers")
+  useSettingsCommand()
   const route = useSessionKey()
   const [searchParams, setSearchParams] = useSearchParams<{ draftId?: string; prompt?: string }>()
   const local = useLocal()

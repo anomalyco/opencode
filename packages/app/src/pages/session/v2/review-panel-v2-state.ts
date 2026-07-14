@@ -9,7 +9,7 @@ import { createStore } from "solid-js/store"
 import { Persist, persisted } from "@/utils/persist"
 
 export function createReviewPanelV2State() {
-  const [store, setStore] = persisted(
+  const [store, setStore, , ready] = persisted(
     Persist.global("review-panel-v2"),
     createStore({
       sidebarOpened: true,
@@ -24,6 +24,7 @@ export function createReviewPanelV2State() {
   return {
     sidebarOpened: () => store.sidebarOpened,
     sidebarWidth: () => store.sidebarWidth,
+    sidebarTransition: ready,
     filter,
     setFilter,
     expandMode: () => store.expandMode,

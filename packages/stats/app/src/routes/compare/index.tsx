@@ -74,7 +74,8 @@ export default function ModelCompareIndex() {
   const [themePreference, setThemePreference] = createSignal<ThemePreference>("system")
   const compareUrl = createMemo(() => localizedUrl(language.locale(), comparePath))
   const statsUnfurlUrl = new URL(statsUnfurlPath, localizedUrl("en", "/data/")).toString()
-  const featuredModels = createMemo(() => (catalog()?.models ?? []).slice(0, 120))
+  const models = createMemo(() => catalog()?.models ?? [])
+  const featuredModels = createMemo(() => models().slice(0, 120))
   const categories = createMemo(() => buildComparisonCategories(featuredModels()))
   const compareHeaderLinks = createMemo<readonly HeaderLink[]>(() => [
     { href: `${import.meta.env.BASE_URL}#top-models`, label: i18n.t("nav.topModels") },
@@ -134,7 +135,7 @@ export default function ModelCompareIndex() {
                 Data
               </a>
               <span data-slot="compare-home-separator">/</span>
-              <span data-slot="compare-home-crumb" data-current="true">
+              <span data-slot="compare-home-crumb" data-current="true" aria-current="page">
                 Compare
               </span>
             </nav>
@@ -150,7 +151,7 @@ export default function ModelCompareIndex() {
           </section>
           <section data-section="compare-home-selector" aria-label="Choose models to compare">
             <Show
-              when={featuredModels().length > 1}
+              when={models().length > 1}
               fallback={
                 <div data-component="empty-state" data-compact="true">
                   <strong>No models found</strong>
@@ -158,7 +159,7 @@ export default function ModelCompareIndex() {
                 </div>
               }
             >
-              <CompareHomeSelector models={featuredModels()} />
+              <CompareHomeSelector models={models()} />
             </Show>
           </section>
           <ComparisonCardsSection

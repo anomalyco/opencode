@@ -7,7 +7,7 @@ export function NewSessionDesignView(props: { children: JSX.Element }) {
     <div data-component="session-new-design" class="relative size-full overflow-hidden bg-v2-background-bg-deep ">
       <div class="absolute inset-x-0 top-[25.375%] flex justify-center px-6">
         <div class={NEW_SESSION_CONTENT_WIDTH}>
-          <WordmarkV2 class="h-auto w-full text-v2-icon-icon-base" />
+          <WordmarkV2 class="h-auto w-full text-v2-background-bg-inverse" />
           <div class="mt-8">{props.children}</div>
         </div>
       </div>
