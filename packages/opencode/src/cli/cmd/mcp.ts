@@ -19,6 +19,7 @@ import path from "path"
 import { Global } from "@opencode-ai/core/global"
 import { modify, applyEdits } from "jsonc-parser"
 import { Filesystem } from "@/util/filesystem"
+import { ConfigPaths } from "@/config/paths"
 import { Effect } from "effect"
 
 function getAuthStatusIcon(status: MCP.AuthStatus): string {
@@ -187,7 +188,7 @@ export const McpAuthCommand = effectCmd({
 
     if (servers.length === 0) {
       prompts.log.warn("No OAuth-capable MCP servers configured")
-      prompts.log.info("Remote MCP servers support OAuth by default. Add a remote server in opencode.json:")
+      prompts.log.info("Remote MCP servers support OAuth by default. Add a remote server in kancode.json:")
       prompts.log.info(`
   "mcp": {
     "my-server": {
@@ -392,21 +393,7 @@ export const McpLogoutCommand = effectCmd({
 })
 
 async function resolveConfigPath(baseDir: string, global = false) {
-  // Check for existing config files (prefer .jsonc over .json, check .opencode/ subdirectory too)
-  const candidates = [path.join(baseDir, "opencode.json"), path.join(baseDir, "opencode.jsonc")]
-
-  if (!global) {
-    candidates.push(path.join(baseDir, ".opencode", "opencode.json"), path.join(baseDir, ".opencode", "opencode.jsonc"))
-  }
-
-  for (const candidate of candidates) {
-    if (await Filesystem.exists(candidate)) {
-      return candidate
-    }
-  }
-
-  // Default to opencode.json if none exist
-  return candidates[0]
+  return ConfigPaths.resolveWritableConfigFile(baseDir, { project: !global })
 }
 
 async function addMcpToConfig(name: string, mcpConfig: ConfigMCPV1.Info, configPath: string) {

@@ -21,6 +21,24 @@ export function preferredConfigFile(dir: string) {
   }
 }
 
+/**
+ * Path to mutate for config writes: prefer an existing preferred file (KanCode
+ * then OpenCode). For project scope, also check `.kancode/` then `.opencode/`.
+ * Defaults to `kancode.json` so writers do not create a shadowed `opencode.json`
+ * beside an existing `kancode.json`.
+ */
+export function resolveWritableConfigFile(baseDir: string, opts?: { project?: boolean }) {
+  const root = preferredConfigFile(baseDir)
+  if (root) return root
+  if (opts?.project) {
+    const kancode = preferredConfigFile(path.join(baseDir, ".kancode"))
+    if (kancode) return kancode
+    const opencode = preferredConfigFile(path.join(baseDir, ".opencode"))
+    if (opencode) return opencode
+  }
+  return path.join(baseDir, "kancode.json")
+}
+
 export function isProjectConfigDir(dir: string) {
   return dir.endsWith(".opencode") || dir.endsWith(".kancode") || dir === Flag.OPENCODE_CONFIG_DIR
 }

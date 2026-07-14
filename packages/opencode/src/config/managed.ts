@@ -1,6 +1,6 @@
 export * as ConfigManaged from "./managed"
 
-import { existsSync } from "fs"
+import { existsSync, readdirSync } from "fs"
 import os from "os"
 import path from "path"
 import { Process } from "@/util/process"
@@ -17,6 +17,15 @@ const PLIST_META = new Set([
   "PayloadVersion",
   "_manualProfile",
 ])
+
+function nonemptyDir(dir: string) {
+  if (!existsSync(dir)) return false
+  try {
+    return readdirSync(dir).length > 0
+  } catch {
+    return false
+  }
+}
 
 function systemManagedConfigDir(): string {
   const kancode = (() => {
@@ -39,7 +48,8 @@ function systemManagedConfigDir(): string {
         return "/etc/opencode"
     }
   })()
-  if (existsSync(kancode)) return kancode
+  // Match XDG pickAppDir: nonempty kancode wins; else fall back to legacy opencode.
+  if (nonemptyDir(kancode)) return kancode
   if (existsSync(opencode)) return opencode
   return kancode
 }
