@@ -2,9 +2,10 @@ import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { batch, createEffect, createMemo, createRoot, on, onCleanup } from "solid-js"
 import { useParams } from "@solidjs/router"
-import { useSDK } from "./sdk"
+import { useSDK, type DirectorySDK } from "./sdk"
 import type { Platform } from "./platform"
-import { useServer } from "./server"
+import { useServerSDK } from "./server-sdk"
+import { base64Encode } from "@opencode-ai/core/util/encode"
 import { defaultTitle, titleNumber } from "./terminal-title"
 import { Persist, persisted, removePersisted } from "@/utils/persist"
 import { ScopedKey, ServerScope, type ServerScope as ServerScopeValue } from "@/utils/server-scope"
@@ -143,7 +144,7 @@ export function clearWorkspaceTerminals(
 }
 
 function createWorkspaceTerminalSession(
-  sdk: ReturnType<typeof useSDK>,
+  sdk: DirectorySDK,
   dir: string,
   scope: ServerScopeValue,
   legacySessionID?: string,
@@ -162,6 +163,43 @@ function createWorkspaceTerminalSession(
       all: [],
     }),
   )
+  const [ui, setUi] = createStore({
+    focus: undefined as { request: number; id?: string; pending: boolean } | undefined,
+  })
+  const focus = { request: 0 }
+
+  const requestFocus = (id?: string, pending = false) => {
+    focus.request += 1
+    setUi("focus", { request: focus.request, id, pending })
+    return focus.request
+  }
+
+  const focusRequested = (id?: string) => {
+    if (!id) return false
+    if (!ui.focus || ui.focus.pending) return false
+    return !ui.focus.id || ui.focus.id === id
+  }
+
+  const consumeFocus = (id: string) => {
+    if (!focusRequested(id)) return
+    setUi("focus", undefined)
+  }
+
+  const cancelFocus = (request?: number) => {
+    if (request !== undefined && ui.focus?.request !== request) return
+    setUi("focus", undefined)
+  }
+
+  if (typeof document !== "undefined") {
+    const cancelOnOutsideFocus = (event: FocusEvent) => {
+      if (!ui.focus) return
+      if (!(event.target instanceof Element)) return
+      if (event.target.closest("#terminal-panel")) return
+      cancelFocus()
+    }
+    document.addEventListener("focusin", cancelOnOutsideFocus)
+    onCleanup(() => document.removeEventListener("focusin", cancelOnOutsideFocus))
+  }
 
   const pickNextTerminalNumber = () => {
     const existingTitleNumbers = new Set(
@@ -202,7 +240,7 @@ function createWorkspaceTerminalSession(
   })
   onCleanup(unsub)
 
-  const update = (client: ReturnType<typeof useSDK>["client"], pty: Partial<LocalPTY> & { id: string }) => {
+  const update = (client: DirectorySDK["client"], pty: Partial<LocalPTY> & { id: string }) => {
     const index = store.all.findIndex((x) => x.id === pty.id)
     const previous = index >= 0 ? store.all[index] : undefined
     if (index >= 0) {
@@ -223,7 +261,7 @@ function createWorkspaceTerminalSession(
       })
   }
 
-  const clone = async (client: ReturnType<typeof useSDK>["client"], id: string) => {
+  const clone = async (client: DirectorySDK["client"], id: string) => {
     const index = store.all.findIndex((x) => x.id === id)
     const pty = store.all[index]
     if (!pty) return
@@ -266,23 +304,33 @@ function createWorkspaceTerminalSession(
         setStore("all", [])
       })
     },
-    new() {
+    new(options?: { focus?: boolean }) {
       const nextNumber = pickNextTerminalNumber()
+      const focusRequest = options?.focus ? requestFocus(undefined, true) : undefined
 
       sdk.client.pty
         .create({ title: defaultTitle(nextNumber) })
         .then((pty: { data?: { id?: string; title?: string } }) => {
           const id = pty.data?.id
-          if (!id) return
+          if (!id) {
+            if (focusRequest !== undefined) cancelFocus(focusRequest)
+            return
+          }
           const newTerminal = {
             id,
             title: pty.data?.title ?? defaultTitle(nextNumber),
             titleNumber: nextNumber,
           }
-          setStore("all", store.all.length, newTerminal)
-          setStore("active", id)
+          batch(() => {
+            setStore("all", store.all.length, newTerminal)
+            setStore("active", id)
+            if (focusRequest !== undefined && ui.focus?.request === focusRequest) {
+              setUi("focus", { request: focusRequest, id, pending: false })
+            }
+          })
         })
         .catch((error: unknown) => {
+          if (focusRequest !== undefined) cancelFocus(focusRequest)
           console.error("Failed to create terminal", error)
         })
     },
@@ -322,6 +370,18 @@ function createWorkspaceTerminalSession(
     },
     open(id: string) {
       setStore("active", id)
+    },
+    requestFocus(id?: string) {
+      requestFocus(id)
+    },
+    focusRequested(id?: string) {
+      return focusRequested(id)
+    },
+    consumeFocus(id: string) {
+      consumeFocus(id)
+    },
+    cancelFocus() {
+      cancelFocus()
     },
     next() {
       const index = store.all.findIndex((x) => x.id === store.active)
@@ -374,10 +434,11 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
   gate: false,
   init: () => {
     const sdk = useSDK()
-    const server = useServer()
+    const serverSDK = useServerSDK()
     const params = useParams()
     const cache = new Map<string, TerminalCacheEntry>()
-    const scope = server.scope()
+    const scope = () => serverSDK().scope
+    const directory = createMemo(() => base64Encode(sdk().directory))
 
     caches.add(cache)
     onCleanup(() => caches.delete(cache))
@@ -412,7 +473,7 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
       }
 
       const entry = createRoot((dispose) => ({
-        value: createWorkspaceTerminalSession(sdk, dir, serverScope, legacySessionID),
+        value: createWorkspaceTerminalSession(sdk(), dir, serverScope, legacySessionID),
         dispose,
       }))
 
@@ -421,11 +482,11 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
       return entry.value
     }
 
-    const workspace = createMemo(() => loadWorkspace(params.dir!, params.id, scope))
+    const workspace = createMemo(() => loadWorkspace(directory(), params.id, scope()))
 
     createEffect(
       on(
-        () => ({ dir: params.dir, id: params.id, scope }),
+        () => ({ dir: directory(), id: params.id, scope: scope() }),
         (next, prev) => {
           if (!prev?.dir) return
           if (next.dir === prev.dir && next.id === prev.id && next.scope === prev.scope) return
@@ -440,13 +501,17 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
       ready: () => workspace().ready(),
       all: () => workspace().all(),
       active: () => workspace().active(),
-      new: () => workspace().new(),
+      new: (options?: { focus?: boolean }) => workspace().new(options),
       update: (pty: Partial<LocalPTY> & { id: string }) => workspace().update(pty),
       trim: (id: string) => workspace().trim(id),
       trimAll: () => workspace().trimAll(),
       clone: (id: string) => workspace().clone(id),
       bind: () => workspace(),
       open: (id: string) => workspace().open(id),
+      requestFocus: (id?: string) => workspace().requestFocus(id),
+      focusRequested: (id?: string) => workspace().focusRequested(id),
+      consumeFocus: (id: string) => workspace().consumeFocus(id),
+      cancelFocus: () => workspace().cancelFocus(),
       close: (id: string) => workspace().close(id),
       move: (id: string, to: number) => workspace().move(id, to),
       next: () => workspace().next(),

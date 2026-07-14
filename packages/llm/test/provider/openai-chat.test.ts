@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
-import { LLM, LLMError, Message, Model, ToolCallPart, Usage } from "../../src"
+import { LLM, LLMError, LLMEvent, Message, Model, ToolCallPart, Usage } from "../../src"
 import * as Azure from "../../src/providers/azure"
 import * as OpenAI from "../../src/providers/openai"
 import * as OpenAIChat from "../../src/protocols/openai-chat"
@@ -220,6 +220,27 @@ describe("OpenAI Chat route", () => {
         ],
         stream: true,
         stream_options: { include_usage: true },
+      })
+    }),
+  )
+
+  it.effect("preserves structured tool errors for the model", () =>
+    Effect.gen(function* () {
+      const error = { error: { type: "unknown", message: "Tool execution interrupted" } }
+      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "bash", input: {} })]),
+            Message.tool({ id: "call_1", name: "bash", resultType: "error", result: error }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages.at(-1)).toEqual({
+        role: "tool",
+        tool_call_id: "call_1",
+        content: ProviderShared.encodeJson(error),
       })
     }),
   )
@@ -521,9 +542,9 @@ describe("OpenAI Chat route", () => {
         { type: "step-start", index: 0 },
         { type: "reasoning-start", id: "reasoning-0" },
         { type: "reasoning-delta", id: "reasoning-0", text: "thinking" },
+        { type: "reasoning-end", id: "reasoning-0" },
         { type: "text-start", id: "text-0" },
         { type: "text-delta", id: "text-0", text: "Hello" },
-        { type: "reasoning-end", id: "reasoning-0" },
         { type: "text-end", id: "text-0" },
         { type: "step-finish", index: 0, reason: "stop" },
         { type: "finish", reason: "stop" },
@@ -576,19 +597,22 @@ describe("OpenAI Chat route", () => {
         }),
         deltaChunk({ tool_calls: [{ index: 0, function: { arguments: ':"weather"}' } }] }),
       )
-      const response = yield* LLMClient.generate(
-        LLM.updateRequest(request, {
-          tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
-        }),
-      ).pipe(Effect.provide(fixedResponse(body)))
+      const input = LLM.updateRequest(request, {
+        tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
+      })
+      const events = Array.from(
+        yield* LLMClient.stream(input).pipe(Stream.runCollect, Effect.provide(fixedResponse(body))),
+      )
+      const error = yield* LLMClient.generate(input).pipe(Effect.provide(fixedResponse(body)), Effect.flip)
 
-      expect(response.events).toEqual([
+      expect(events).toEqual([
         { type: "step-start", index: 0 },
         { type: "tool-input-start", id: "call_1", name: "lookup", providerMetadata: undefined },
         { type: "tool-input-delta", id: "call_1", name: "lookup", text: '{"query"' },
         { type: "tool-input-delta", id: "call_1", name: "lookup", text: ':"weather"}' },
       ])
-      expect(response.toolCalls).toEqual([])
+      expect(events.filter(LLMEvent.is.toolCall)).toEqual([])
+      expect(error.message).toContain("Provider stream ended without a terminal finish event")
     }),
   )
 

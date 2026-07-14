@@ -101,7 +101,8 @@ export default {
         CREATE TABLE \`project_directory\` (
           \`project_id\` text NOT NULL,
           \`directory\` text NOT NULL,
-          \`type\` text NOT NULL,
+          \`type\` text,
+          \`strategy\` text,
           \`time_created\` integer NOT NULL,
           CONSTRAINT \`project_directory_pk\` PRIMARY KEY(\`project_id\`, \`directory\`),
           CONSTRAINT \`fk_project_directory_project_id_project_id_fk\` FOREIGN KEY (\`project_id\`) REFERENCES \`project\`(\`id\`) ON DELETE CASCADE
@@ -148,11 +149,8 @@ export default {
         CREATE TABLE \`session_context_epoch\` (
           \`session_id\` text PRIMARY KEY,
           \`baseline\` text NOT NULL,
-          \`agent\` text DEFAULT 'build' NOT NULL,
           \`snapshot\` text NOT NULL,
           \`baseline_seq\` integer NOT NULL,
-          \`replacement_seq\` integer,
-          \`revision\` integer DEFAULT 0 NOT NULL,
           CONSTRAINT \`fk_session_context_epoch_session_id_session_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session\`(\`id\`) ON DELETE CASCADE
         );
       `)

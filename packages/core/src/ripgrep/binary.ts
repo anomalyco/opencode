@@ -4,6 +4,8 @@ import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/
 import { ChildProcess } from "effect/unstable/process"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
 import { CrossSpawnSpawner } from "../cross-spawn-spawner"
+import { makeGlobalNode } from "../effect/app-node"
+import { httpClient } from "../effect/app-node-platform"
 import { FSUtil } from "../fs-util"
 import { Global } from "../global"
 import { which } from "../util/which"
@@ -26,7 +28,7 @@ export namespace RipgrepBinary {
 
   export class Service extends Context.Service<Service, Interface>()("@opencode/RipgrepBinary") {}
 
-  export const layer = Layer.effect(
+  const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
       const fs = yield* FSUtil.Service
@@ -122,9 +124,9 @@ export namespace RipgrepBinary {
     }),
   )
 
-  export const defaultLayer = layer.pipe(
-    Layer.provide(FetchHttpClient.layer),
-    Layer.provide(FSUtil.defaultLayer),
-    Layer.provide(CrossSpawnSpawner.defaultLayer),
-  )
+  export const node = makeGlobalNode({
+    service: Service,
+    layer: layer,
+    deps: [FSUtil.node, httpClient, CrossSpawnSpawner.node],
+  })
 }

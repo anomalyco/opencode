@@ -134,6 +134,26 @@ describe("applyGlobalEvent", () => {
 })
 
 describe("applyDirectoryEvent", () => {
+  test("initializes text delta accumulation from the current part text", () => {
+    const part = { ...textPart("part", "session", "message"), text: "existing" }
+    const [store, setStore] = createStore(baseState({ part: { message: [part] } }))
+
+    applyDirectoryEvent({
+      event: {
+        type: "message.part.delta",
+        properties: { messageID: "message", partID: "part", field: "text", delta: " appended" },
+      },
+      store,
+      setStore,
+      push() {},
+      directory: "/tmp",
+      loadLsp() {},
+    })
+
+    expect(store.part_text_accum_delta.part).toBe("existing appended")
+    expect((store.part.message?.[0] as { text: string }).text).toBe("existing appended")
+  })
+
   test("preserves a Home-specific retained session limit", () => {
     const [store, setStore] = createStore(
       baseState({
@@ -221,6 +241,22 @@ describe("applyDirectoryEvent", () => {
     expect(store.permission.ses_1).toBeUndefined()
     expect(store.question.ses_1).toBeUndefined()
     expect(store.session_status.ses_1).toBeUndefined()
+  })
+
+  test("ignores an archived session absent from a passive directory store", () => {
+    const [store, setStore] = createStore(baseState({ session: [], sessionTotal: 0 }))
+
+    applyDirectoryEvent({
+      event: { type: "session.updated", properties: { info: rootSession({ id: "missing", archived: 10 }) } },
+      store,
+      setStore,
+      push() {},
+      directory: "/tmp",
+      loadLsp() {},
+    })
+
+    expect(store.session).toEqual([])
+    expect(store.sessionTotal).toBe(0)
   })
 
   test("cleans session caches when deleted and decrements only root totals", () => {

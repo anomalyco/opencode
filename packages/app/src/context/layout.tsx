@@ -1,14 +1,15 @@
-import { createStore, produce } from "solid-js/store"
+import { createStore, produce, reconcile } from "solid-js/store"
 import { batch, createEffect, createMemo, onCleanup, onMount, type Accessor } from "solid-js"
 import { useLocation } from "@solidjs/router"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { useServerSync } from "./server-sync"
 import { useServerSDK } from "./server-sdk"
-import { ServerConnection, useServer } from "./server"
+import { RECENTLY_CLOSED_DISPLAY_LIMIT, ServerConnection, useServer } from "./server"
 import { usePlatform } from "./platform"
 import { Project } from "@opencode-ai/sdk/v2"
 import { Persist, persisted, removePersisted } from "@/utils/persist"
+import { pathKey } from "@/utils/path-key"
 import { decode64 } from "@/utils/base64"
 import { same } from "@/utils/same"
 import { createScrollPersistence, type SessionScroll } from "./layout-scroll"
@@ -16,6 +17,9 @@ import { createPathHelpers } from "./file/path"
 import type { ProjectAvatarVariant } from "@opencode-ai/ui/v2/project-avatar-v2"
 import { migrateLegacySessionStateKeys, ServerScope, SessionStateKey } from "@/utils/server-scope"
 import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys } from "./layout-helpers"
+import { requireServerKey } from "@/utils/session-route"
+import { type DraftTab, useTabs } from "./tabs"
+import { closeSessionTab, openSessionTab, previewSessionTab, type SessionTabs } from "./layout-tabs"
 
 export { createSessionKeyReader, ensureSessionKey, pruneSessionKeys }
 
@@ -26,6 +30,7 @@ const DEFAULT_SIDEBAR_WIDTH = 344
 const DEFAULT_FILE_TREE_WIDTH = 200
 const DEFAULT_SESSION_WIDTH = 600
 const DEFAULT_TERMINAL_HEIGHT = 280
+const DEFAULT_REVIEW_PANEL_OPENED = false
 export type AvatarColorKey = (typeof AVATAR_COLOR_KEYS)[number]
 
 export function getAvatarColors(key?: string) {
@@ -42,23 +47,28 @@ export function getAvatarColors(key?: string) {
 }
 
 export function getProjectAvatarVariant(key?: string): ProjectAvatarVariant {
-  if (key === "orange") return "orange"
-  if (key === "pink") return "pink"
-  if (key === "cyan") return "cyan"
-  if (key === "purple") return "purple"
   if (key === "mint") return "cyan"
   if (key === "lime") return "green"
+  if (
+    key === "orange" ||
+    key === "yellow" ||
+    key === "cyan" ||
+    key === "green" ||
+    key === "red" ||
+    key === "pink" ||
+    key === "blue" ||
+    key === "purple" ||
+    key === "gray"
+  )
+    return key
   return "gray"
-}
-
-type SessionTabs = {
-  active?: string
-  all: string[]
 }
 
 type SessionView = {
   scroll: Record<string, SessionScroll>
   reviewOpen?: string[]
+  reviewMode?: ReviewChangeMode
+  reviewFile?: string
   pendingMessage?: string
   pendingMessageAt?: number
   todoCollapsed?: boolean
@@ -72,22 +82,17 @@ type TabHandoff = {
 }
 
 export type LocalProject = Partial<Project> & { worktree: string; expanded: boolean }
+export type HomeProjectSelection = { server: ServerConnection.Key; directory?: string }
 
 export type ReviewDiffStyle = "unified" | "split"
+export type ReviewChangeMode = "git" | "branch" | "turn"
+export type ReviewPanelSource = "context-button" | "other"
 
 export type LayoutRoute =
   | { type: "home" }
   | { type: "draft"; draftID: string; server?: ServerConnection.Key }
   | { type: "dir-new-sesssion"; dir: string; dirBase64: string; server?: ServerConnection.Key }
-  | { type: "session"; dir: string; dirBase64: string; sessionId: string; server?: ServerConnection.Key }
-
-function nextSessionTabsForOpen(current: SessionTabs | undefined, tab: string): SessionTabs {
-  const all = current?.all ?? []
-  if (tab === "review") return { all: all.filter((x) => x !== "review"), active: tab }
-  if (tab === "context") return { all: [tab, ...all.filter((x) => x !== tab)], active: tab }
-  if (!all.includes(tab)) return { all: [...all, tab], active: tab }
-  return { all, active: tab }
-}
+  | { type: "session"; sessionId: string; server?: ServerConnection.Key }
 
 const sessionPath = (key: string) => {
   const dir = SessionStateKey.route(key).split("/")[0]
@@ -131,6 +136,14 @@ const currentRoute = (pathname: string, search: string): LayoutRoute => {
     return { type: "draft", draftID }
   }
 
+  if (parts[0] === "server" && parts[2] === "session" && parts[3]) {
+    return {
+      type: "session",
+      sessionId: parts[3],
+      server: requireServerKey(parts[1]),
+    }
+  }
+
   const dirBase64 = parts[0]
   const dir = decode64(dirBase64)
   if (!dir) return { type: "home" }
@@ -138,7 +151,7 @@ const currentRoute = (pathname: string, search: string): LayoutRoute => {
   if (parts[1] !== "session") return { type: "home" }
 
   const id = parts[2]
-  if (id) return { type: "session", dir, dirBase64, sessionId: id }
+  if (id) return { type: "session", sessionId: id }
   return { type: "dir-new-sesssion", dir, dirBase64 }
 }
 
@@ -149,11 +162,17 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     const serverSdk = useServerSDK()
     const serverSync = useServerSync()
     const server = useServer()
+    const tabs = useTabs()
     const platform = usePlatform()
     const location = useLocation()
     const route = createMemo(() => {
       const value = currentRoute(location.pathname, location.search)
       if (value.type === "home") return value
+      if (value.server) return value
+      if (value.type === "draft") {
+        const draft = tabs.store.find((tab): tab is DraftTab => tab.type === "draft" && tab.draftID === value.draftID)
+        if (draft) return { ...value, server: draft.server }
+      }
       return { ...value, server: server.key }
     })
 
@@ -193,7 +212,8 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         if (!isRecord(review)) return review
         if (typeof review.panelOpened === "boolean") return review
 
-        const opened = isRecord(fileTree) && typeof fileTree.opened === "boolean" ? fileTree.opened : true
+        const opened =
+          isRecord(fileTree) && typeof fileTree.opened === "boolean" ? fileTree.opened : DEFAULT_REVIEW_PANEL_OPENED
         return {
           ...review,
           panelOpened: opened,
@@ -246,7 +266,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       }
     }
 
-    const target = Persist.serverGlobal(serverSdk.scope, "layout", ["layout.v6"])
+    const target = Persist.serverGlobal(serverSdk().scope, "layout", ["layout.v6"])
     const [store, setStore, _, ready] = persisted(
       { ...target, migrate },
       createStore({
@@ -262,7 +282,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
         review: {
           diffStyle: "split" as ReviewDiffStyle,
-          panelOpened: true,
+          panelOpened: DEFAULT_REVIEW_PANEL_OPENED,
         },
         fileTree: {
           opened: false,
@@ -280,8 +300,15 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         handoff: {
           tabs: undefined as TabHandoff | undefined,
         },
+        home: {
+          selection: { server: server.key } as HomeProjectSelection,
+        },
       }),
     )
+    const [ephemeral, setEphemeral] = createStore({
+      reviewPanelSource: "other" as ReviewPanelSource,
+      sessionTabPreview: {} as Record<string, string | undefined>,
+    })
 
     const MAX_SESSION_KEYS = 50
     const PENDING_MESSAGE_TTL_MS = 2 * 60 * 1000
@@ -339,6 +366,12 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
       scroll.drop(drop)
       dropSessionState(drop)
+      setEphemeral(
+        "sessionTabPreview",
+        produce((draft) => {
+          for (const key of drop) delete draft[key]
+        }),
+      )
 
       for (const key of drop) {
         usage.used.delete(key)
@@ -409,11 +442,11 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     }
 
     function enrich(project: { worktree: string; expanded: boolean }) {
-      const [childStore] = serverSync.child(project.worktree, { bootstrap: false })
+      const [childStore] = serverSync().child(project.worktree, { bootstrap: false })
       const projectID = childStore.project
       const metadata = projectID
-        ? serverSync.data.project.find((x) => x.id === projectID)
-        : serverSync.data.project.find((x) => x.worktree === project.worktree)
+        ? serverSync().data.project.find((x) => x.id === projectID)
+        : serverSync().data.project.find((x) => x.worktree === project.worktree)
 
       // Preserve local icon override from per-workspace localStorage cache (childStore.icon).
       // Without this, different subdirectories of the same git repo would share the same
@@ -427,7 +460,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
     const roots = createMemo(() => {
       const map = new Map<string, string>()
-      for (const project of serverSync.data.project) {
+      for (const project of serverSync().data.project) {
         const sandboxes = project.sandboxes ?? []
         for (const sandbox of sandboxes) {
           map.set(sandbox, project.worktree)
@@ -467,7 +500,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           const root = rootFor(project.worktree)
           if (root === project.worktree) continue
 
-          server.projects.close(project.worktree)
+          server.projects.remove(project.worktree)
 
           if (!seen.has(root)) {
             server.projects.open(root)
@@ -493,12 +526,12 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     createEffect(() => {
       const projects = enriched()
       if (projects.length === 0) return
-      if (!serverSync.ready) return
+      if (!serverSync().ready) return
 
       for (const project of projects) {
         if (!project.id) continue
         if (project.id === "global") continue
-        serverSync.project.icon(project.worktree, project.icon?.override)
+        serverSync().project.icon(project.worktree, project.icon?.override)
       }
     })
 
@@ -532,12 +565,12 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         colorRequested.set(worktree, color)
 
         if (project.id === "global") {
-          serverSync.project.meta(worktree, { icon: { color } })
+          serverSync().project.meta(worktree, { icon: { color } })
           continue
         }
 
-        void serverSdk.client.project
-          .update({ projectID: project.id, directory: worktree, icon: { color } })
+        void serverSdk()
+          .client.project.update({ projectID: project.id, directory: worktree, icon: { color } })
           .catch(() => {
             if (colorRequested.get(worktree) === color) colorRequested.delete(worktree)
           })
@@ -554,7 +587,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           sessionTimer = undefined
           void Promise.all(
             server.projects.list().map((project) => {
-              return serverSync.project.loadSessions(project.worktree)
+              return serverSync().project.loadSessions(project.worktree)
             }),
           )
         }, 0)
@@ -569,10 +602,16 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     return {
       route,
       ready,
+      home: {
+        selection: createMemo(() => store.home.selection),
+        setSelection(selection: HomeProjectSelection) {
+          setStore("home", "selection", reconcile(selection))
+        },
+      },
       handoff: {
         tabs: createMemo(() => store.handoff?.tabs),
         setTabs(dir: string, id: string) {
-          setStore("handoff", "tabs", { scope: server.scope(), dir, id, at: Date.now() })
+          setStore("handoff", "tabs", { scope: serverSdk().scope, dir, id, at: Date.now() })
         },
         clearTabs() {
           if (!store.handoff?.tabs) return
@@ -581,10 +620,18 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       },
       projects: {
         list,
+        recentlyClosed: createMemo(() => {
+          const known = new Set(serverSync().data.project.map((project) => pathKey(project.worktree)))
+          return server.projects
+            .recentlyClosed()
+            .filter((worktree) => known.has(pathKey(worktree)))
+            .slice(0, RECENTLY_CLOSED_DISPLAY_LIMIT)
+            .map((worktree) => enrich({ worktree, expanded: false }))
+        }),
         open(directory: string) {
           const root = rootFor(directory)
           if (server.projects.list().find((x) => x.worktree === root)) return
-          void serverSync.project.loadSessions(root)
+          void serverSync().project.loadSessions(root)
           server.projects.open(root)
         },
         close(directory: string) {
@@ -636,7 +683,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         diffStyle: createMemo(() => store.review?.diffStyle ?? "split"),
         setDiffStyle(diffStyle: ReviewDiffStyle) {
           if (!store.review) {
-            setStore("review", { diffStyle, panelOpened: true })
+            setStore("review", { diffStyle, panelOpened: DEFAULT_REVIEW_PANEL_OPENED })
             return
           }
           setStore("review", "diffStyle", diffStyle)
@@ -750,8 +797,17 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       view(sessionKey: string | Accessor<string>) {
         const key = createSessionKeyReader(sessionKey, ensureKey)
         const s = createMemo(() => store.sessionView[key()] ?? { scroll: {} })
+        const reviewMode = createMemo(() => {
+          const mode = s().reviewMode
+          if (mode === "git" || mode === "branch" || mode === "turn") return mode
+        })
+        const reviewFile = createMemo(() => {
+          const file = s().reviewFile
+          if (typeof file === "string") return file
+        })
         const terminalOpened = createMemo(() => store.terminal?.opened ?? false)
-        const reviewPanelOpened = createMemo(() => store.review?.panelOpened ?? true)
+        const reviewPanelOpened = createMemo(() => store.review?.panelOpened ?? DEFAULT_REVIEW_PANEL_OPENED)
+        const reviewPanelSource = createMemo(() => (reviewPanelOpened() ? ephemeral.reviewPanelSource : "other"))
 
         function setTerminalOpened(next: boolean) {
           const current = store.terminal
@@ -765,16 +821,26 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           setStore("terminal", "opened", next)
         }
 
-        function setReviewPanelOpened(next: boolean) {
+        function setReviewPanelOpened(next: boolean, source: ReviewPanelSource) {
+          const nextSource = next ? source : "other"
           const current = store.review
           if (!current) {
-            setStore("review", { diffStyle: "split" as ReviewDiffStyle, panelOpened: next })
+            batch(() => {
+              setStore("review", { diffStyle: "split" as ReviewDiffStyle, panelOpened: next })
+              setEphemeral("reviewPanelSource", nextSource)
+            })
             return
           }
 
-          const value = current.panelOpened ?? true
-          if (value === next) return
-          setStore("review", "panelOpened", next)
+          const value = current.panelOpened ?? DEFAULT_REVIEW_PANEL_OPENED
+          if (value === next) {
+            if (ephemeral.reviewPanelSource !== nextSource) setEphemeral("reviewPanelSource", nextSource)
+            return
+          }
+          batch(() => {
+            setStore("review", "panelOpened", next)
+            setEphemeral("reviewPanelSource", nextSource)
+          })
         }
 
         return {
@@ -810,17 +876,44 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           },
           reviewPanel: {
             opened: reviewPanelOpened,
-            open() {
-              setReviewPanelOpened(true)
+            source: reviewPanelSource,
+            open(source: ReviewPanelSource = "other") {
+              setReviewPanelOpened(true, source)
             },
             close() {
-              setReviewPanelOpened(false)
+              setReviewPanelOpened(false, "other")
             },
             toggle() {
-              setReviewPanelOpened(!reviewPanelOpened())
+              setReviewPanelOpened(!reviewPanelOpened(), "other")
             },
           },
           review: {
+            mode: reviewMode,
+            setMode(mode: ReviewChangeMode) {
+              const session = key()
+              const current = store.sessionView[session]
+              if (!current) {
+                setStore("sessionView", session, { scroll: {}, reviewMode: mode })
+                prune(session)
+                return
+              }
+              if (current.reviewMode === mode) return
+              setStore("sessionView", session, "reviewMode", mode)
+              prune(session)
+            },
+            file: reviewFile,
+            setFile(file: string) {
+              const session = key()
+              const current = store.sessionView[session]
+              if (!current) {
+                setStore("sessionView", session, { scroll: {}, reviewFile: file })
+                prune(session)
+                return
+              }
+              if (current.reviewFile === file) return
+              setStore("sessionView", session, "reviewFile", file)
+              prune(session)
+            },
             open: createMemo(() => s().reviewOpen ?? []),
             setOpen(open: string[]) {
               const session = key()
@@ -892,10 +985,17 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         const tabs = createMemo(() => store.sessionTabs[key()] ?? { all: [] })
         const normalize = (tab: string) => normalizeSessionTab(path(), tab)
         const normalizeAll = (all: string[]) => normalizeSessionTabList(path(), all)
+        const apply = (session: string, next: ReturnType<typeof openSessionTab>) => {
+          batch(() => {
+            setStore("sessionTabs", session, next.tabs)
+            setEphemeral("sessionTabPreview", session, next.preview)
+          })
+        }
         return {
           tabs,
           active: createMemo(() => tabs().active),
           all: createMemo(() => tabs().all.filter((tab) => tab !== "review")),
+          preview: createMemo(() => ephemeral.sessionTabPreview[key()]),
           setActive(tab: string | undefined) {
             const session = key()
             const next = tab ? normalize(tab) : tab
@@ -908,40 +1008,44 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           setAll(all: string[]) {
             const session = key()
             const next = normalizeAll(all).filter((tab) => tab !== "review")
-            if (!store.sessionTabs[session]) {
-              setStore("sessionTabs", session, { all: next, active: undefined })
-            } else {
-              setStore("sessionTabs", session, "all", next)
-            }
+            batch(() => {
+              if (!store.sessionTabs[session]) {
+                setStore("sessionTabs", session, { all: next, active: undefined })
+              } else {
+                setStore("sessionTabs", session, "all", next)
+              }
+              const preview = ephemeral.sessionTabPreview[session]
+              if (preview && !next.includes(preview)) setEphemeral("sessionTabPreview", session, undefined)
+            })
           },
           async open(tab: string) {
             const session = key()
-            const next = nextSessionTabsForOpen(store.sessionTabs[session], normalize(tab))
-            setStore("sessionTabs", session, next)
+            apply(
+              session,
+              openSessionTab(
+                { tabs: store.sessionTabs[session] ?? { all: [] }, preview: ephemeral.sessionTabPreview[session] },
+                normalize(tab),
+              ),
+            )
+          },
+          previewTab(tab: string) {
+            const session = key()
+            apply(
+              session,
+              previewSessionTab(
+                { tabs: store.sessionTabs[session] ?? { all: [] }, preview: ephemeral.sessionTabPreview[session] },
+                normalize(tab),
+              ),
+            )
           },
           close(tab: string) {
             const session = key()
             const current = store.sessionTabs[session]
             if (!current) return
-
-            if (tab === "review") {
-              if (current.active !== tab) return
-              setStore("sessionTabs", session, "active", current.all[0])
-              return
-            }
-
-            const all = current.all.filter((x) => x !== tab)
-            if (current.active !== tab) {
-              setStore("sessionTabs", session, "all", all)
-              return
-            }
-
-            const index = current.all.findIndex((f) => f === tab)
-            const next = current.all[index - 1] ?? current.all[index + 1] ?? all[0]
-            batch(() => {
-              setStore("sessionTabs", session, "all", all)
-              setStore("sessionTabs", session, "active", next)
-            })
+            apply(
+              session,
+              closeSessionTab({ tabs: current, preview: ephemeral.sessionTabPreview[session] }, normalize(tab)),
+            )
           },
           move(tab: string, to: number) {
             const session = key()

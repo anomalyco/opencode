@@ -1,7 +1,8 @@
 import { withAlpha } from "@opencode-ai/ui/theme/color"
 import { useTheme } from "@opencode-ai/ui/theme/context"
 import { resolveThemeVariant } from "@opencode-ai/ui/theme/resolve"
-import type { HexColor } from "@opencode-ai/ui/theme/types"
+import { resolveThemeVariantV2 } from "@opencode-ai/ui/theme/v2/resolve"
+import type { HexColor, ResolvedV2Theme } from "@opencode-ai/ui/theme/types"
 import { showToast } from "@/utils/toast"
 import type { FitAddon, Ghostty, Terminal as Term } from "ghostty-web"
 import { type ComponentProps, createEffect, createMemo, onCleanup, onMount, splitProps } from "solid-js"
@@ -10,7 +11,7 @@ import { matchKeybind, parseKeybind } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { useSDK } from "@/context/sdk"
-import { useServer } from "@/context/server"
+import { useServerSDK } from "@/context/server-sdk"
 import { terminalFontFamily, useSettings } from "@/context/settings"
 import type { LocalPTY } from "@/context/terminal"
 import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "@/utils/runtime-adapters"
@@ -22,6 +23,7 @@ const DEFAULT_TOGGLE_TERMINAL_KEYBIND = "ctrl+`"
 export interface TerminalProps extends ComponentProps<"div"> {
   pty: LocalPTY
   autoFocus?: boolean
+  onAutoFocus?: () => void
   onSubmit?: () => void
   onCleanup?: (pty: Partial<LocalPTY> & { id: string }) => void
   onConnect?: () => void
@@ -66,6 +68,19 @@ const DEFAULT_TERMINAL_COLORS: Record<"light" | "dark", TerminalColors> = {
 const debugTerminal = (...values: unknown[]) => {
   if (!import.meta.env.DEV) return
   console.debug("[terminal]", ...values)
+}
+
+const resolveV2Token = (tokens: ResolvedV2Theme, key: string) => {
+  let current = tokens[key]
+  for (let i = 0; i < 8 && current; i++) {
+    const match = /^var\(--([^)]+)\)$/.exec(current.trim())
+    if (!match) {
+      const hex = current.trim()
+      if (/^#[0-9a-fA-F]{8}$/.test(hex)) return hex.slice(0, 7)
+      return hex
+    }
+    current = tokens[match[1]]
+  }
 }
 
 const useTerminalUiBindings = (input: {
@@ -160,16 +175,26 @@ export const Terminal = (props: TerminalProps) => {
   const settings = useSettings()
   const theme = useTheme()
   const language = useLanguage()
-  const server = useServer()
-  const directory = sdk.directory
-  const client = sdk.client
-  const url = sdk.url
-  const auth = server.current?.http
+  // Terminal captures its connection for the PTY lifetime, so callers must key it per server/session.
+  const connection = useServerSDK()().server
+  const directory = sdk().directory
+  const client = sdk().client
+  const url = sdk().url
+  const auth = connection.http
   const username = auth?.username ?? "opencode"
   const password = auth?.password ?? ""
+  const authToken = connection.type === "http" ? connection.authToken : false
   const sameOrigin = new URL(url, location.href).origin === location.origin
   let container!: HTMLDivElement
-  const [local, others] = splitProps(props, ["pty", "class", "classList", "autoFocus", "onConnect", "onConnectError"])
+  const [local, others] = splitProps(props, [
+    "pty",
+    "class",
+    "classList",
+    "autoFocus",
+    "onAutoFocus",
+    "onConnect",
+    "onConnectError",
+  ])
   const id = local.pty.id
   const restore = typeof local.pty.buffer === "string" ? local.pty.buffer : ""
   const restoreSize =
@@ -236,7 +261,10 @@ export const Terminal = (props: TerminalProps) => {
     if (!variant?.seeds && !variant?.palette) return fallback
     const resolved = resolveThemeVariant(variant, mode === "dark")
     const text = resolved["text-stronger"] ?? fallback.foreground
-    const background = resolved["background-stronger"] ?? fallback.background
+    const background = settings.general.newLayoutDesigns()
+      ? (resolveV2Token(resolveThemeVariantV2(variant, mode === "dark"), "v2-background-bg-base") ??
+        fallback.background)
+      : (resolved["background-stronger"] ?? fallback.background)
     const alpha = mode === "dark" ? 0.25 : 0.2
     const base = text.startsWith("#") ? (text as HexColor) : (fallback.foreground as HexColor)
     const selectionBackground = withAlpha(base, alpha)
@@ -397,6 +425,7 @@ export const Terminal = (props: TerminalProps) => {
       fitAddon = fit
       serializeAddon = serializer
 
+      const active = document.activeElement
       t.open(container)
       useTerminalUiBindings({
         container,
@@ -406,7 +435,22 @@ export const Terminal = (props: TerminalProps) => {
         handleLinkClick,
       })
 
-      if (local.autoFocus !== false) focusTerminal()
+      if (local.autoFocus === true) {
+        focusTerminal()
+        local.onAutoFocus?.()
+      }
+      if (local.autoFocus !== true) {
+        const restoreFocus = () => {
+          const current = document.activeElement
+          if (current !== container && !container.contains(current)) return
+          t.blur()
+          t.textarea?.blur()
+          if (active instanceof HTMLElement && active.isConnected) active.focus()
+        }
+        restoreFocus()
+        const timer = setTimeout(restoreFocus, 0)
+        cleanups.push(() => clearTimeout(timer))
+      }
 
       if (typeof document !== "undefined" && document.fonts) {
         void document.fonts.ready.then(scheduleFit)
@@ -540,7 +584,7 @@ export const Terminal = (props: TerminalProps) => {
             sameOrigin,
             username,
             password,
-            authToken: server.current?.type === "http" ? server.current.authToken : false,
+            authToken,
           }),
         )
         socket.binaryType = "arraybuffer"

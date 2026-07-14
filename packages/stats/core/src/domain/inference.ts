@@ -14,32 +14,21 @@ import { normalizeCountry, normalizeTier, type StatBaseAggregate } from "./stat"
 
 export type StatDimension = "model" | "provider" | "geo" | "geo_model"
 
-export function buildStatsQuery(periodStart: Date, periodEnd: Date, dimension: StatDimension) {
+// All stat dimensions and both grains are computed in one query via GROUPING SETS so
+// the source table is scanned once per sync pass; separate queries per dimension (and
+// the previous weekly/daily UNION ALL) each re-scanned the same events.
+export function buildStatsQuery(periodStart: Date, periodEnd: Date) {
   const periodStartValue = sqlString(periodStart.toISOString())
   const periodEndValue = sqlString(periodEnd.toISOString())
+  const periodStartDateValue = sqlString(periodStart.toISOString().slice(0, 10))
+  const periodEndDateValue = sqlString(periodEnd.toISOString().slice(0, 10))
   const sourceTable = [Resource.InferenceEvent.catalog, Resource.InferenceEvent.database, Resource.InferenceEvent.table]
     .map(sqlIdentifier)
     .join(".")
-  const dimensionSql = (() => {
-    if (dimension === "model")
-      return {
-        select: "provider, model, COALESCE(MAX(NULLIF(provider_model, '')), '') AS provider_model",
-        groupBy: "provider, model",
-      }
-    if (dimension === "provider") return { select: "provider", groupBy: "provider" }
-    if (dimension === "geo_model")
-      return {
-        select: "provider, model, country, COALESCE(MAX(NULLIF(continent, '')), '') AS continent",
-        groupBy: "provider, model, country",
-      }
-    return {
-      select: "'all' AS provider, 'all' AS model, country, COALESCE(MAX(NULLIF(continent, '')), '') AS continent",
-      groupBy: "country",
-    }
-  })()
   const aggregateColumns = `
     COUNT(DISTINCT session) AS sessions,
     COUNT(*) AS requests,
+    COUNT(DISTINCT user_key) AS unique_users,
     COALESCE(SUM(tokens_input), 0) AS input_tokens,
     COALESCE(SUM(tokens_output), 0) AS output_tokens,
     COALESCE(SUM(tokens_reasoning), 0) AS reasoning_tokens,
@@ -70,6 +59,9 @@ WITH normalized AS (
     UPPER(COALESCE(NULLIF(cf_country, ''), 'ZZ')) AS country,
     COALESCE(NULLIF(cf_continent, ''), '') AS continent,
     session,
+    COALESCE(NULLIF(workspace, ''), '') AS workspace,
+    COALESCE(NULLIF(api_key, ''), '') AS api_key,
+    COALESCE(NULLIF(user_id, ''), '') AS user_id,
     status,
     duration AS duration_ms,
     time_to_first_byte AS ttfb_ms,
@@ -92,6 +84,9 @@ WITH normalized AS (
   WHERE event_type = 'completions'
     AND model IS NOT NULL
     AND model <> ''
+    AND source = 'lite'
+    AND event_date >= ${periodStartDateValue}
+    AND event_date <= ${periodEndDateValue}
     AND event_timestamp >= ${periodStartValue}
     AND event_timestamp < ${periodEndValue}
 ), filtered AS (
@@ -108,6 +103,7 @@ WITH normalized AS (
     country,
     continent,
     session,
+    COALESCE(NULLIF(user_id, ''), NULLIF(workspace, ''), NULLIF(api_key, '')) AS user_key,
     status,
     duration_ms,
     ttfb_ms,
@@ -125,34 +121,41 @@ WITH normalized AS (
     COALESCE(cost_total_microcents, cost_total * 1000000) AS cost_total_microcents
   FROM normalized
   WHERE lower(model) NOT IN (${[...EXCLUDED_MODELS].map(sqlString).join(", ")})
-), weekly AS (
+), periods AS (
   SELECT
     concat(CAST(year_of_week(event_time) AS varchar), '-W', lpad(CAST(week(event_time) AS varchar), 2, '0')) AS week_key,
+    substr(to_iso8601(date_trunc('day', event_time)), 1, 10) AS day_key,
     *
-  FROM filtered
-), daily AS (
-  SELECT substr(to_iso8601(date_trunc('day', event_time)), 1, 10) AS day_key, *
   FROM filtered
 )
 SELECT
-  'week' AS grain,
-  week_key AS period_key,
+  CASE WHEN grouping(week_key) = 0 THEN 'week' ELSE 'day' END AS grain,
+  COALESCE(week_key, day_key) AS period_key,
   ${sqlString(Resource.StatsSyncConfig.dataset)} AS dataset,
+  CASE
+    WHEN grouping(country) = 0 AND grouping(model) = 0 THEN 'geo_model'
+    WHEN grouping(country) = 0 THEN 'geo'
+    WHEN grouping(model) = 0 THEN 'model'
+    ELSE 'provider'
+  END AS dimension,
   tier,
-  ${dimensionSql.select},
+  CASE WHEN grouping(provider) = 0 THEN provider ELSE 'all' END AS provider,
+  CASE WHEN grouping(model) = 0 THEN model WHEN grouping(country) = 0 THEN 'all' END AS model,
+  CASE WHEN grouping(model) = 0 AND grouping(country) = 1 THEN COALESCE(MAX(NULLIF(provider_model, '')), '') END AS provider_model,
+  CASE WHEN grouping(country) = 0 THEN country END AS country,
+  CASE WHEN grouping(country) = 0 THEN COALESCE(MAX(NULLIF(continent, '')), '') END AS continent,
   ${aggregateColumns}
-FROM weekly
-GROUP BY week_key, tier, ${dimensionSql.groupBy}
-UNION ALL
-SELECT
-  'day' AS grain,
-  day_key AS period_key,
-  ${sqlString(Resource.StatsSyncConfig.dataset)} AS dataset,
-  tier,
-  ${dimensionSql.select},
-  ${aggregateColumns}
-FROM daily
-GROUP BY day_key, tier, ${dimensionSql.groupBy}
+FROM periods
+GROUP BY GROUPING SETS (
+  (week_key, tier, provider, model),
+  (week_key, tier, provider),
+  (week_key, tier, country),
+  (week_key, tier, provider, model, country),
+  (day_key, tier, provider, model),
+  (day_key, tier, provider),
+  (day_key, tier, country),
+  (day_key, tier, provider, model, country)
+)
 ORDER BY grain, period_key, total_tokens DESC
 `
 }
@@ -197,6 +200,7 @@ function toStatBaseAggregate(data: AthenaData): StatBaseAggregate[] {
       tier: normalizeTier(data.tier || "unknown"),
       sessions: integer(data, "sessions"),
       requests: integer(data, "requests"),
+      unique_users: integer(data, "unique_users"),
       input_tokens: integer(data, "input_tokens"),
       output_tokens: integer(data, "output_tokens"),
       reasoning_tokens: integer(data, "reasoning_tokens"),

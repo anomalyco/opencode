@@ -1,8 +1,8 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "abd2f920-b822-49af-b8a7-2e48367d424f",
-  "prevIds": ["f25f9126-c7dc-4882-9ff4-af27e11d2da1"],
+  "id": "f14a9b18-8207-487e-a3d3-227e629ba9ad",
+  "prevIds": ["169a0f0f-d58f-479f-b024-fa1c7b9a09db"],
   "ddl": [
     {
       "name": "workspace",
@@ -622,11 +622,21 @@
     },
     {
       "type": "text",
-      "notNull": true,
+      "notNull": false,
       "autoincrement": false,
       "default": null,
       "generated": null,
       "name": "type",
+      "entityType": "columns",
+      "table": "project_directory"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "strategy",
       "entityType": "columns",
       "table": "project_directory"
     },
@@ -894,16 +904,6 @@
       "type": "text",
       "notNull": true,
       "autoincrement": false,
-      "default": "'build'",
-      "generated": null,
-      "name": "agent",
-      "entityType": "columns",
-      "table": "session_context_epoch"
-    },
-    {
-      "type": "text",
-      "notNull": true,
-      "autoincrement": false,
       "default": null,
       "generated": null,
       "name": "snapshot",
@@ -917,26 +917,6 @@
       "default": null,
       "generated": null,
       "name": "baseline_seq",
-      "entityType": "columns",
-      "table": "session_context_epoch"
-    },
-    {
-      "type": "integer",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "replacement_seq",
-      "entityType": "columns",
-      "table": "session_context_epoch"
-    },
-    {
-      "type": "integer",
-      "notNull": true,
-      "autoincrement": false,
-      "default": "0",
-      "generated": null,
-      "name": "revision",
       "entityType": "columns",
       "table": "session_context_epoch"
     },

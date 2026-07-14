@@ -50,8 +50,8 @@ export function convertTool(mcpTool: MCPToolDef, client: Client, timeout?: numbe
   return dynamicTool({
     description: mcpTool.description ?? "",
     inputSchema: jsonSchema(inputSchema),
-    execute: (args: unknown, options) =>
-      client.callTool(
+    execute: async (args: unknown, options) => {
+      const result = await client.callTool(
         {
           name: mcpTool.name,
           arguments: (args || {}) as Record<string, unknown>,
@@ -61,8 +61,24 @@ export function convertTool(mcpTool: MCPToolDef, client: Client, timeout?: numbe
           resetTimeoutOnProgress: true,
           signal: options.abortSignal,
           timeout,
+          // The MCP SDK only sends a progress token when this hook is present, enabling timeout resets.
+          onprogress: () => {},
         },
-      ),
+      )
+      if (result.isError)
+        throw new Error(
+          result.content
+            .flatMap((item) => (item.type === "text" ? [item.text] : []))
+            .filter((text) => text.trim())
+            .join("\n\n") || "MCP tool returned an error",
+        )
+      if (result.content.length > 0 || result.structuredContent === undefined || result.structuredContent === null)
+        return result
+      return {
+        ...result,
+        content: [{ type: "text" as const, text: JSON.stringify(result.structuredContent) }],
+      }
+    },
   })
 }
 
@@ -71,6 +87,7 @@ export function fetch<T extends { name: string }>(
   client: Client,
   list: (client: Client) => Promise<T[]>,
   label: string,
+  key?: (item: T) => string,
 ) {
   return Effect.tryPromise({
     try: () => list(client),
@@ -84,8 +101,13 @@ export function fetch<T extends { name: string }>(
     ),
     Effect.map((items) => {
       const sanitizedClient = sanitize(clientName)
+      // Escape both the separator and escape marker so `server:uri` keys remain unambiguous.
+      const resourceClient = clientName.replaceAll("%", "%25").replaceAll(":", "%3A")
       return Object.fromEntries(
-        items.map((item) => [sanitizedClient + ":" + sanitize(item.name), { ...item, client: clientName }]),
+        items.map((item) => [
+          key ? resourceClient + ":" + key(item) : sanitizedClient + ":" + sanitize(item.name),
+          { ...item, client: clientName },
+        ]),
       )
     }),
     Effect.orElseSucceed(() => undefined),
@@ -93,6 +115,8 @@ export function fetch<T extends { name: string }>(
 }
 
 export const sanitize = (value: string) => value.replace(/[^a-zA-Z0-9_-]/g, "_")
+
+export const toolName = (clientName: string, name: string) => sanitize(clientName) + "_" + sanitize(name)
 
 export function prompts(client: Client, timeout?: number) {
   if (!client.getServerCapabilities()?.prompts) return Promise.resolve([])
@@ -107,6 +131,14 @@ export function resources(client: Client, timeout?: number) {
   return paginate(
     (cursor) => client.listResources(cursor === undefined ? undefined : { cursor }, { timeout }),
     (result) => result.resources,
+  )
+}
+
+export function resourceTemplates(client: Client, timeout?: number) {
+  if (!client.getServerCapabilities()?.resources) return Promise.resolve([])
+  return paginate(
+    (cursor) => client.listResourceTemplates(cursor === undefined ? undefined : { cursor }, { timeout }),
+    (result) => result.resourceTemplates,
   )
 }
 

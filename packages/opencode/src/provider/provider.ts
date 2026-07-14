@@ -24,7 +24,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { EffectPromise } from "@/effect/promise"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { isRecord } from "@/util/record"
-import { optionalOmitUndefined } from "@opencode-ai/core/schema"
+import { optional } from "@opencode-ai/core/schema"
 import { ProviderTransform } from "./transform"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
@@ -207,6 +207,13 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         },
         options: { headerTimeout: OPENAI_HEADER_TIMEOUT_DEFAULT },
       }),
+    meta: () =>
+      Effect.succeed({
+        autoload: false,
+        async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
+          return sdk.responses(modelID)
+        },
+      }),
     xai: () =>
       Effect.succeed({
         autoload: false,
@@ -218,8 +225,12 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
     "github-copilot": () =>
       Effect.succeed({
         autoload: false,
-        async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
+        async getModel(sdk: any, modelID: string, _options?: Record<string, any>, model?: Model) {
           if (sdk.responses === undefined && sdk.chat === undefined) return sdk.languageModel(modelID)
+          if (model && "endpoint" in model.api) {
+            if (model.api.endpoint === "responses" && sdk.responses) return sdk.responses(modelID)
+            if (model.api.endpoint === "chat" && sdk.chat) return sdk.chat(modelID)
+          }
           const match = /^gpt-(\d+)/.exec(modelID)
           if (match && Number(match[1]) >= 5 && !modelID.startsWith("gpt-5-mini")) return sdk.responses(modelID)
           return sdk.chat(modelID)
@@ -816,7 +827,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         apiKey: apiToken,
         ...(Object.values(opts).some((v) => v !== undefined) ? { options: opts } : {}),
       })
-      const unified = createUnified()
+      const unified = createUnified({ apiKey: apiToken })
 
       return {
         autoload: true,
@@ -853,17 +864,23 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       const account =
         env["SNOWFLAKE_ACCOUNT"] ??
         (auth?.type === "api" ? auth.metadata?.account : undefined) ??
+        (auth?.type === "oauth" ? auth.accountId : undefined) ??
         input.options?.account
 
-      const pat = env["SNOWFLAKE_CORTEX_PAT"] ?? (auth?.type === "api" ? auth.key : undefined) ?? input.options?.apiKey
+      const envToken = env["SNOWFLAKE_CORTEX_TOKEN"] ?? env["SNOWFLAKE_CORTEX_PAT"]
+      const apiKeyToken = auth?.type === "api" ? auth.key : undefined
+      const oauthToken = auth?.type === "oauth" ? auth.access : undefined
+      const configToken = input.options?.token ?? input.options?.apiKey
 
-      if (!account || !pat) {
-        const missing = [!account && "SNOWFLAKE_ACCOUNT", !pat && "SNOWFLAKE_CORTEX_PAT"].filter(Boolean).join(", ")
+      const token = envToken ?? apiKeyToken ?? oauthToken ?? configToken
+
+      if (!account || !token) {
+        const missing = [!account && "SNOWFLAKE_ACCOUNT", !token && "SNOWFLAKE_CORTEX_TOKEN"].filter(Boolean).join(", ")
         return {
           autoload: false,
           async getModel() {
             throw new Error(
-              `Snowflake Cortex: missing credentials (${missing}). Set via env var, opencode auth, or provider options.`,
+              `Snowflake Cortex: missing credentials (${missing}). Provide a bearer token (OAuth, JWT, or PAT) via env var, opencode auth, or provider options.`,
             )
           },
         }
@@ -871,66 +888,73 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
 
       const baseURL = `https://${account}.snowflakecomputing.com/api/v2/cortex/v1`
 
+      const options: Record<string, any> = { baseURL, apiKey: token }
+
+      // Only skip provider-level fetch when the token is from OAuth with no override.
+      // For OAuth tokens, the plugin auth loader's combined fetch handles
+      // OAuth refresh + snowflake transformations in one place.
+      // For env/config/API-key tokens, the provider fetch applies snowflake
+      // transformations directly.
+      const useOAuthHandler =
+        oauthToken !== undefined && envToken === undefined && apiKeyToken === undefined && configToken === undefined
+      if (!useOAuthHandler) {
+        options.fetch = async (url: RequestInfo | URL, init?: RequestInit) => {
+          if (init?.body && typeof init.body === "string") {
+            try {
+              const body = JSON.parse(init.body)
+              if ("max_tokens" in body) {
+                body.max_completion_tokens = body.max_tokens
+                delete body.max_tokens
+                init = { ...init, body: JSON.stringify(body) }
+              }
+            } catch {}
+          }
+
+          const response = await fetch(url, init)
+
+          if (!response.ok && response.status === 400) {
+            try {
+              const errorData = await response.clone().json()
+              const errorMessage = String(errorData.message || errorData.error || "")
+              if (errorMessage.toLowerCase().includes("conversation complete")) {
+                return new Response(
+                  JSON.stringify({
+                    choices: [{ finish_reason: "stop", message: { content: "", role: "assistant" } }],
+                  }),
+                  { status: 200, headers: new Headers({ "content-type": "application/json" }) },
+                )
+              }
+            } catch {}
+          }
+
+          if (response.body && response.headers.get("content-type")?.includes("text/event-stream")) {
+            const reader = response.body.getReader()
+            const encoder = new TextEncoder()
+            const decoder = new TextDecoder()
+            const stream = new ReadableStream({
+              async pull(ctrl) {
+                const { done, value } = await reader.read()
+                if (done) {
+                  ctrl.close()
+                  return
+                }
+                const text = decoder.decode(value, { stream: true })
+                ctrl.enqueue(encoder.encode(text.replace(/"role"\s*:\s*""/g, '"role":"assistant"')))
+              },
+              cancel() {
+                reader.cancel()
+              },
+            })
+            return new Response(stream, { headers: response.headers, status: response.status })
+          }
+
+          return response
+        }
+      }
+
       return {
         autoload: input.source === "config",
-        options: {
-          baseURL,
-          apiKey: pat,
-          fetch: async (url: RequestInfo | URL, init?: RequestInit) => {
-            if (init?.body && typeof init.body === "string") {
-              try {
-                const body = JSON.parse(init.body)
-                if ("max_tokens" in body) {
-                  body.max_completion_tokens = body.max_tokens
-                  delete body.max_tokens
-                  init = { ...init, body: JSON.stringify(body) }
-                }
-              } catch {}
-            }
-
-            const response = await fetch(url, init)
-
-            // Cortex returns 400 "conversation complete" as a normal stop condition
-            if (!response.ok && response.status === 400) {
-              try {
-                const errorData = await response.clone().json()
-                const errorMessage = String(errorData.message || errorData.error || "")
-                if (errorMessage.toLowerCase().includes("conversation complete")) {
-                  return new Response(
-                    JSON.stringify({
-                      choices: [{ finish_reason: "stop", message: { content: "", role: "assistant" } }],
-                    }),
-                    { status: 200, headers: new Headers({ "content-type": "application/json" }) },
-                  )
-                }
-              } catch {}
-            }
-
-            // Cortex returns role:"" in streaming deltas; the AI SDK schema requires "assistant"
-            if (response.body && response.headers.get("content-type")?.includes("text/event-stream")) {
-              const reader = response.body.getReader()
-              const encoder = new TextEncoder()
-              const decoder = new TextDecoder()
-              const stream = new ReadableStream({
-                async pull(ctrl) {
-                  const { done, value } = await reader.read()
-                  if (done) {
-                    ctrl.close()
-                    return
-                  }
-                  const text = decoder.decode(value, { stream: true })
-                  ctrl.enqueue(encoder.encode(text.replace(/"role"\s*:\s*""/g, '"role":"assistant"')))
-                },
-                cancel() {
-                  reader.cancel()
-                },
-              })
-              return new Response(stream, { headers: response.headers, status: response.status })
-            }
-
-            return response
-          },
-        },
+        options,
       }
     }),
   }
@@ -986,8 +1010,8 @@ const ProviderCost = Schema.Struct({
   input: Schema.Finite,
   output: Schema.Finite,
   cache: ProviderCacheCost,
-  tiers: optionalOmitUndefined(Schema.Array(ProviderCostTier)),
-  experimentalOver200K: optionalOmitUndefined(
+  tiers: optional(Schema.Array(ProviderCostTier)),
+  experimentalOver200K: optional(
     Schema.Struct({
       input: Schema.Finite,
       output: Schema.Finite,
@@ -998,7 +1022,7 @@ const ProviderCost = Schema.Struct({
 
 const ProviderLimit = Schema.Struct({
   context: Schema.Finite,
-  input: optionalOmitUndefined(Schema.Finite),
+  input: optional(Schema.Finite),
   output: Schema.Finite,
 })
 
@@ -1007,7 +1031,7 @@ export const Model = Schema.Struct({
   providerID: ProviderV2.ID,
   api: ProviderApiInfo,
   name: Schema.String,
-  family: optionalOmitUndefined(Schema.String),
+  family: optional(Schema.String),
   capabilities: ProviderCapabilities,
   cost: ProviderCost,
   limit: ProviderLimit,
@@ -1015,7 +1039,7 @@ export const Model = Schema.Struct({
   options: Schema.Record(Schema.String, Schema.Any),
   headers: Schema.Record(Schema.String, Schema.String),
   release_date: Schema.String,
-  variants: optionalOmitUndefined(Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Any))),
+  variants: optional(Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Any))),
 }).annotate({ identifier: "Model" })
 export type Model = Types.DeepMutable<Schema.Schema.Type<typeof Model>>
 
@@ -1024,7 +1048,7 @@ export const Info = Schema.Struct({
   name: Schema.String,
   source: Schema.Literals(["env", "config", "custom", "api"]),
   env: Schema.Array(Schema.String),
-  key: optionalOmitUndefined(Schema.String),
+  key: optional(Schema.String),
   options: Schema.Record(Schema.String, Schema.Any),
   models: Schema.Record(Schema.String, Model),
 }).annotate({ identifier: "Provider" })
@@ -1047,11 +1071,17 @@ export type ConfigProvidersResult = Types.DeepMutable<Schema.Schema.Type<typeof 
 
 export function toPublicInfo(provider: Info): Info {
   return JSON.parse(
-    JSON.stringify(provider, (_, value) => {
-      if (typeof value === "function" || typeof value === "symbol" || value === undefined) return undefined
-      if (typeof value === "bigint") return value.toString()
-      return value
-    }),
+    JSON.stringify(
+      {
+        ...provider,
+        models: Object.fromEntries(Object.entries(provider.models).filter(([, model]) => Schema.is(Model)(model))),
+      },
+      (_, value) => {
+        if (typeof value === "function" || typeof value === "symbol" || value === undefined) return undefined
+        if (typeof value === "bigint") return value.toString()
+        return value
+      },
+    ),
   )
 }
 
@@ -1063,8 +1093,13 @@ export class ModelNotFoundError extends Schema.TaggedErrorClass<ModelNotFoundErr
   providerID: ProviderV2.ID,
   modelID: ModelV2.ID,
   suggestions: Schema.optional(Schema.Array(Schema.String)),
-  cause: Schema.optional(Schema.Defect),
+  cause: Schema.optional(Schema.Defect()),
 }) {
+  override get message() {
+    const suggestions = this.suggestions?.length ? ` Did you mean: ${this.suggestions.join(", ")}?` : ""
+    return `Model not found: ${this.providerID}/${this.modelID}.${suggestions}`
+  }
+
   static isInstance(input: unknown): input is ModelNotFoundError {
     return input instanceof ModelNotFoundError
   }
@@ -1072,14 +1107,22 @@ export class ModelNotFoundError extends Schema.TaggedErrorClass<ModelNotFoundErr
 
 export class InitError extends Schema.TaggedErrorClass<InitError>()("ProviderInitError", {
   providerID: ProviderV2.ID,
-  cause: Schema.optional(Schema.Defect),
+  cause: Schema.optional(Schema.Defect()),
 }) {
+  override get message() {
+    return `Failed to initialize provider: ${this.providerID}`
+  }
+
   static isInstance(input: unknown): input is InitError {
     return input instanceof InitError
   }
 }
 
 export class NoProvidersError extends Schema.TaggedErrorClass<NoProvidersError>()("ProviderNoProvidersError", {}) {
+  override get message() {
+    return "No providers are available"
+  }
+
   static isInstance(input: unknown): input is NoProvidersError {
     return input instanceof NoProvidersError
   }
@@ -1088,6 +1131,10 @@ export class NoProvidersError extends Schema.TaggedErrorClass<NoProvidersError>(
 export class NoModelsError extends Schema.TaggedErrorClass<NoModelsError>()("ProviderNoModelsError", {
   providerID: ProviderV2.ID,
 }) {
+  override get message() {
+    return `No models are available for provider: ${this.providerID}`
+  }
+
   static isInstance(input: unknown): input is NoModelsError {
     return input instanceof NoModelsError
   }
@@ -1200,9 +1247,11 @@ function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model
     variants: {},
   }
 
+  const variants = ProviderTransform.reasoningVariants(model, base) ?? ProviderTransform.variants(base)
+
   return {
     ...base,
-    variants: mapValues(ProviderTransform.variants(base), (v) => v),
+    variants: mapValues(variants, (v) => v),
   }
 }
 
@@ -1218,14 +1267,7 @@ export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
         id: ModelV2.ID.make(id),
         name: `${model.name} ${mode[0].toUpperCase()}${mode.slice(1)}`,
         cost: opts.cost ? mergeDeep(base.cost, cost(opts.cost)) : base.cost,
-        options: opts.provider?.body
-          ? Object.fromEntries(
-              Object.entries(opts.provider.body).map(([k, v]) => [
-                k.replace(/_([a-z])/g, (_, c) => c.toUpperCase()),
-                v,
-              ]),
-            )
-          : base.options,
+        options: modeOptions(base, opts.provider?.body),
         headers: opts.provider?.headers ?? base.headers,
       }
     }
@@ -1238,6 +1280,17 @@ export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
     options: {},
     models,
   }
+}
+
+function modeOptions(model: Model, body: Record<string, unknown> | undefined) {
+  if (!body) return model.options
+  const options = Object.fromEntries(
+    Object.entries(body).map(([key, value]) => [key.replace(/_([a-z])/g, (_, char) => char.toUpperCase()), value]),
+  )
+  const reasoning = body.reasoning
+  if (model.api.npm !== "@ai-sdk/openai" || !isRecord(reasoning) || typeof reasoning.mode !== "string") return options
+  const { reasoning: _, ...rest } = options
+  return { ...rest, reasoningMode: reasoning.mode }
 }
 
 function modelSuggestions(provider: Info | undefined, modelID: ModelV2.ID, enableExperimentalModels: boolean) {
@@ -1269,7 +1322,7 @@ function modelSuggestions(provider: Info | undefined, modelID: ModelV2.ID, enabl
     .map((item) => item.id)
 }
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
@@ -1445,7 +1498,11 @@ export const layer = Layer.effect(
               release_date: model.release_date ?? existingModel?.release_date ?? "",
               variants: {},
             }
-            const merged = mergeDeep(ProviderTransform.variants(parsedModel), model.variants ?? {})
+            const variants =
+              existingModel?.api.npm === parsedModel.api.npm
+                ? (existingModel.variants ?? ProviderTransform.variants(parsedModel))
+                : ProviderTransform.variants(parsedModel)
+            const merged = mergeDeep(variants, model.variants ?? {})
             parsedModel.variants = mapValues(
               pickBy(merged, (v) => !v.disabled),
               (v) => omit(v, ["disabled"]),
@@ -1573,7 +1630,7 @@ export const layer = Layer.effect(
             )
               delete provider.models[modelID]
 
-            if (!model.variants || Object.keys(model.variants).length === 0) {
+            if (model.variants === undefined) {
               model.variants = mapValues(ProviderTransform.variants(model), (v) => v)
             }
 
@@ -1838,44 +1895,43 @@ export const layer = Layer.effect(
         }
       }
 
-      const defaultPriority = [
-        "claude-haiku-4-5",
-        "claude-haiku-4.5",
-        "3-5-haiku",
-        "3.5-haiku",
-        "gemini-3-flash",
-        "gemini-2.5-flash",
-        "gpt-5-nano",
-      ]
+      // TODO: Remove these provider-specific assumptions once model syncing reliably reports available deployments.
+      if (providerID === ProviderV2.ID.azure || providerID === ProviderV2.ID.make("azure-cognitive-services")) {
+        return undefined
+      }
+
       const priority = providerID.startsWith("opencode")
-        ? ["gpt-5-nano"]
+        ? ["gpt-nano"]
         : providerID.startsWith("github-copilot")
-          ? ["gpt-5-mini", "claude-haiku-4.5", ...defaultPriority]
-          : defaultPriority
-      for (const item of priority) {
+          ? ["gpt-mini", ...smallModelFamilyPriority]
+          : smallModelFamilyPriority
+      const models = sortBy(
+        Object.values(provider.models),
+        [(model) => model.release_date, "desc"],
+        [(model) => model.id, "desc"],
+      )
+      for (const family of priority) {
+        const candidates = models.filter((model) => model.family === family)
         if (providerID === ProviderV2.ID.amazonBedrock) {
           const crossRegionPrefixes = ["global.", "us.", "eu."]
-          const candidates = Object.keys(provider.models).filter((m) => m.includes(item))
 
-          const globalMatch = candidates.find((m) => m.startsWith("global."))
-          if (globalMatch) return provider.models[globalMatch]
+          const globalMatch = candidates.find((model) => model.id.startsWith("global."))
+          if (globalMatch) return globalMatch
 
           const region = provider.options?.region
           if (region) {
             const regionPrefix = region.split("-")[0]
             if (regionPrefix === "us" || regionPrefix === "eu") {
-              const regionalMatch = candidates.find((m) => m.startsWith(`${regionPrefix}.`))
-              if (regionalMatch) return provider.models[regionalMatch]
+              const regionalMatch = candidates.find((model) => model.id.startsWith(`${regionPrefix}.`))
+              if (regionalMatch) return regionalMatch
             }
           }
 
-          const unprefixed = candidates.find((m) => !crossRegionPrefixes.some((p) => m.startsWith(p)))
-          if (unprefixed) return provider.models[unprefixed]
-        } else {
-          for (const model of Object.keys(provider.models)) {
-            if (model.includes(item)) return provider.models[model]
-          }
+          const unprefixed = candidates.find((model) => !crossRegionPrefixes.some((p) => model.id.startsWith(p)))
+          if (unprefixed) return unprefixed
+          continue
         }
+        if (candidates[0]) return candidates[0]
       }
 
       return undefined
@@ -1905,7 +1961,8 @@ export const layer = Layer.effect(
         return { providerID: entry.providerID, modelID: entry.modelID }
       }
 
-      const provider = Object.values(s.providers).find((p) => !cfg.provider || Object.keys(cfg.provider).includes(p.id))
+      const configured = Object.keys(cfg.provider ?? {})
+      const provider = Object.values(s.providers).find((p) => configured.length === 0 || configured.includes(p.id))
       if (!provider) return yield* new NoProvidersError()
       const [model] = sort(Object.values(provider.models))
       if (!model) return yield* new NoModelsError({ providerID: provider.id })
@@ -1919,19 +1976,8 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = Layer.suspend(() =>
-  layer.pipe(
-    Layer.provide(FSUtil.defaultLayer),
-    Layer.provide(Env.defaultLayer),
-    Layer.provide(Config.defaultLayer),
-    Layer.provide(Auth.defaultLayer),
-    Layer.provide(Plugin.defaultLayer),
-    Layer.provide(ModelsDev.defaultLayer),
-    Layer.provide(RuntimeFlags.defaultLayer),
-  ),
-)
-
 const priority = ["gpt-5", "claude-sonnet-4", "big-pickle", "gemini-3-pro"]
+const smallModelFamilyPriority = ["gemini-flash", "gpt-nano", "claude-haiku"]
 export function sort<T extends { id: string }>(models: T[]) {
   return sortBy(
     models,
@@ -1949,14 +1995,10 @@ export function parseModel(model: string) {
   }
 }
 
-export const node = LayerNode.make(layer, [
-  FSUtil.node,
-  Config.node,
-  Auth.node,
-  Env.node,
-  Plugin.node,
-  ModelsDev.node,
-  RuntimeFlags.node,
-])
+export const node = LayerNode.make({
+  service: Service,
+  layer: layer,
+  deps: [FSUtil.node, Config.node, Auth.node, Env.node, Plugin.node, ModelsDev.node, RuntimeFlags.node],
+})
 
 export * as Provider from "./provider"
