@@ -24,6 +24,14 @@ export interface TaskPromptOps {
 }
 
 const id = "task"
+// fork: total-duration backstop for a foreground subagent wait — see the
+// acquireUseRelease block below for why. Deliberately well above the
+// provider-layer header-timeout default (180s, provider.ts) since a
+// legitimate subagent task may make several round trips (multiple tool
+// calls, possibly more than one cold model load) before producing a final
+// result; this only needs to catch a task that is genuinely stuck, not cap
+// normal multi-step work.
+const SUBAGENT_TASK_TIMEOUT_MS = 20 * 60 * 1000
 const BACKGROUND_DESCRIPTION = [
   "Background mode: background=true launches the subagent asynchronously and returns immediately.",
   "Foreground is the default; use it when you need the result before continuing.",
@@ -347,10 +355,28 @@ export const TaskTool = Tool.define(
         }),
         () =>
           Effect.gen(function* () {
-            const result = yield* Effect.raceFirst(
-              background.wait({ id: nextSession.id }).pipe(Effect.map((waited) => waited.info)),
-              background.waitForPromotion(nextSession.id),
+            // fork: bound the whole foreground wait. Without this, a subagent
+            // stuck on an unresponsive backend (a hung fetch the provider-layer
+            // header timeout didn't catch, an infinite tool-call loop, etc.)
+            // left the parent session waiting forever with no error and no way
+            // to react. On timeout, cancel the subagent session outright
+            // (background.cancel — the same interrupt/cleanup path used for
+            // explicit user cancellation) rather than merely giving up on it:
+            // leaving it running would keep occupying its assigned local model
+            // slot indefinitely.
+            const waited = yield* Effect.raceFirst(
+              background.wait({ id: nextSession.id, timeout: SUBAGENT_TASK_TIMEOUT_MS }),
+              background.waitForPromotion(nextSession.id).pipe(Effect.map((info) => ({ info, timedOut: false as const }))),
             )
+            if (waited.timedOut) {
+              yield* background.cancel(nextSession.id)
+              return yield* Effect.fail(
+                new Error(
+                  `Subagent timed out after ${SUBAGENT_TASK_TIMEOUT_MS / 1000}s waiting for a response — the assigned model or host may be unresponsive. The subagent session was cancelled.`,
+                ),
+              )
+            }
+            const result = waited.info
             if (result?.metadata?.background === true) return backgroundResult()
             if (result?.status === "error") return yield* Effect.fail(new Error(result.error ?? "Task failed"))
             if (result?.status === "cancelled") return yield* Effect.fail(new Error("Task cancelled"))

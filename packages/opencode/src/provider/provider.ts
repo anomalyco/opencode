@@ -45,6 +45,16 @@ import * as Log from "@opencode-ai/core/util/log"
 const log = Log.create({ service: "provider" })
 
 const OPENAI_HEADER_TIMEOUT_DEFAULT = 10_000
+// fork: local/llama-skein providers (@ai-sdk/openai-compatible) got NO
+// default header timeout at all, so a backend that accepted a request and
+// then silently died (e.g. a model load crash) left the fetch waiting for
+// response headers forever — no error, no timeout, nothing for the caller
+// (including a Task subagent) to react to. 180s tolerates a cold load of a
+// large model (llama-skein's own healthCheckTimeout defaults to 120s) with
+// margin, while still turning a truly-dead connection into a clear timeout
+// error instead of an indefinite hang. A user-configured headerTimeout for
+// that provider always wins — this is only the fallback.
+const LOCAL_PROVIDER_HEADER_TIMEOUT_DEFAULT = 180_000
 
 function wrapSSE(res: Response, ms: number, ctl: AbortController) {
   if (typeof ms !== "number" || ms <= 0) return res
@@ -2038,7 +2048,12 @@ export const layer = Layer.effect(
 
         const customFetch = options["fetch"]
         const chunkTimeout = options["chunkTimeout"]
-        const headerTimeout = options["headerTimeout"]
+        // fork: default local/llama-skein providers to a header timeout when
+        // the user hasn't set one (?? only falls through on null/undefined,
+        // so an explicit `headerTimeout: false` opt-out is preserved).
+        const headerTimeout =
+          options["headerTimeout"] ??
+          (model.api.npm === "@ai-sdk/openai-compatible" ? LOCAL_PROVIDER_HEADER_TIMEOUT_DEFAULT : undefined)
         delete options["chunkTimeout"]
         delete options["headerTimeout"]
 
