@@ -307,6 +307,20 @@ export interface Hooks {
     output: { context: string[]; prompt?: string },
   ) => Promise<void>
   /**
+   * Called when a multi-agent team agent completes its work
+   */
+  "agent.complete"?: (
+    input: {
+      sessionID: string
+      agentName: string
+      mode: string
+    },
+    output: {
+      output: string
+      error?: string
+    },
+  ) => Promise<void>
+  /**
    * Called after compaction succeeds and before a synthetic user
    * auto-continue message is added.
    *

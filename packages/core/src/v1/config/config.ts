@@ -12,6 +12,7 @@ import { ConfigFormatterV1 } from "./formatter"
 import { ConfigLayoutV1 } from "./layout"
 import { ConfigLSPV1 } from "./lsp"
 import { ConfigMCPV1 } from "./mcp"
+import { ConfigMultiAgentV1 } from "./multi-agent"
 import { ConfigPermissionV1 } from "./permission"
 import { ConfigPluginV1 } from "./plugin"
 import { ConfigProviderV1 } from "./provider"
@@ -130,6 +131,9 @@ export const Info = Schema.Struct({
   }),
   context: Schema.optional(ConfigContextV1.Info).annotate({
     description: "Context configuration controlling automatic file inclusion behavior",
+  }),
+  multiAgent: Schema.optional(ConfigMultiAgentV1.Info).annotate({
+    description: "Multi-agent orchestration configuration for team commands",
   }),
   enterprise: Schema.optional(
     Schema.Struct({ url: Schema.optional(Schema.String).annotate({ description: "Enterprise URL" }) }),

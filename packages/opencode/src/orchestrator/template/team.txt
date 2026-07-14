@@ -1,0 +1,10 @@
+You are coordinating a team of agents to complete the following task:
+
+$ARGUMENTS
+
+### Available Agents
+This project has the following agents configured for team work.
+
+### Execution
+Use the `task` tool to delegate work to individual agents. Each agent will receive a child session with its own context.
+After all agents complete, review their outputs and provide a consolidated summary.

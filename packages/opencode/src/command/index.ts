@@ -9,6 +9,7 @@ import { MCP } from "../mcp"
 import { Skill } from "../skill"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
 import PROMPT_REVIEW from "./template/review.txt"
+import PROMPT_TEAM from "../orchestrator/template/team.txt"
 import { LegacyEvent } from "@opencode-ai/schema/legacy-event"
 
 type State = {
@@ -46,6 +47,7 @@ export function hints(template: string) {
 export const Default = {
   INIT: "init",
   REVIEW: "review",
+  TEAM: "team",
 } as const
 
 export interface Interface {
@@ -78,13 +80,22 @@ const layer = Layer.effect(
       }
       commands[Default.REVIEW] = {
         name: Default.REVIEW,
-        description: "review changes [commit|branch|pr], defaults to uncommitted",
+        description: "code review of recent changes",
         source: "command",
         get template() {
-          return PROMPT_REVIEW.replace("${path}", ctx.worktree)
+          return PROMPT_REVIEW
         },
-        subtask: true,
         hints: hints(PROMPT_REVIEW),
+      }
+      commands[Default.TEAM] = {
+        name: Default.TEAM,
+        description: "run a multi-agent team with parallel, pipeline, or supervisor mode",
+        agent: "plan",
+        source: "command",
+        get template() {
+          return PROMPT_TEAM
+        },
+        hints: hints(PROMPT_TEAM),
       }
 
       for (const [name, command] of Object.entries(cfg.command ?? {})) {
