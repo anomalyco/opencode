@@ -344,13 +344,9 @@ function providerOptionKey(packageName: string | undefined, providerID: Provider
   if (packageName === "@ai-sdk/google") return "google"
   if (packageName === "@ai-sdk/google-vertex") return "vertex"
   if (packageName === "@ai-sdk/google-vertex/anthropic") return "anthropic"
-  if (packageName === "@ai-sdk/amazon-bedrock") return "bedrock"
-  if (packageName === "@ai-sdk/amazon-bedrock/mantle") return "openai"
+  if (packageName === "@ai-sdk/amazon-bedrock" || packageName === "@ai-sdk/amazon-bedrock/mantle") return "bedrock"
   if (packageName === "@ai-sdk/azure") return "azure"
-  if (packageName === "@ai-sdk/github-copilot") return "copilot"
-  if (packageName === "@ai-sdk/openai-compatible") return providerID.split(".")[0]
   if (packageName === "@openrouter/ai-sdk-provider") return "openrouter"
-  if (packageName === "ai-gateway-provider") return "openaiCompatible"
   if (packageName?.startsWith("@ai-sdk/")) return packageName.slice("@ai-sdk/".length)
   return providerID
 }

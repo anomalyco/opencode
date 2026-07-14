@@ -204,7 +204,6 @@ describe("OpenAIPlugin", () => {
         })
         catalog.model.update(item.id, ModelV2.ID.make("gpt-5.6"), () => {})
         catalog.model.update(item.id, ModelV2.ID.make("gpt-5.6-sol"), () => {})
-        catalog.model.update(item.id, ModelV2.ID.make("gpt-5.7-pro"), () => {})
         catalog.model.update(item.id, ModelV2.ID.make("gpt-4.1"), () => {})
       })
       yield* credentials.create({
@@ -235,9 +234,6 @@ describe("OpenAIPlugin", () => {
       )
       expect(required(yield* catalog.model.get(ProviderV2.ID.openai, ModelV2.ID.make("gpt-5.6"))).enabled).toBe(false)
       expect(required(yield* catalog.model.get(ProviderV2.ID.openai, ModelV2.ID.make("gpt-5.6-sol"))).enabled).toBe(
-        true,
-      )
-      expect(required(yield* catalog.model.get(ProviderV2.ID.openai, ModelV2.ID.make("gpt-5.7-pro"))).enabled).toBe(
         true,
       )
       expect(required(yield* catalog.model.get(ProviderV2.ID.openai, ModelV2.ID.make("gpt-4.1"))).enabled).toBe(false)

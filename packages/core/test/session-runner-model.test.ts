@@ -154,19 +154,6 @@ describe("SessionRunnerModel", () => {
     }),
   )
 
-  it.effect("passes pro reasoning mode through the native request body", () =>
-    Effect.gen(function* () {
-      const resolved = yield* SessionRunnerModel.fromCatalogModel(
-        model(ProviderV2.aisdk("@ai-sdk/openai"), {
-          headers: {},
-          body: { reasoning: { mode: "pro" } },
-        }),
-      )
-
-      expect(resolved.route.defaults.http?.body).toEqual({ reasoning: { mode: "pro" } })
-    }),
-  )
-
   it.effect("overlays selected OpenAI-compatible Session variant bodies", () =>
     Effect.gen(function* () {
       const catalog = model(ProviderV2.aisdk("@ai-sdk/openai-compatible"), {
