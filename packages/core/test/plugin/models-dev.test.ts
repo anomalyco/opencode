@@ -344,6 +344,21 @@ describe("ModelsDevPlugin", () => {
               settings: { enableThinking: true, thinkingBudget: 16000 },
             },
           ])
+
+          const gateway = yield* catalog.model.get(ProviderV2.ID.make("vercel"), ModelV2.ID.make("gateway-toggle"))
+          expect(gateway?.variants).toEqual([
+            { id: ModelV2.VariantID.make("none"), settings: { reasoning: { enabled: false } } },
+            { id: ModelV2.VariantID.make("thinking"), settings: { reasoning: { enabled: true } } },
+          ])
+
+          const openrouter = yield* catalog.model.get(
+            ProviderV2.ID.make("openrouter"),
+            ModelV2.ID.make("openrouter-toggle"),
+          )
+          expect(openrouter?.variants).toEqual([
+            { id: ModelV2.VariantID.make("none"), settings: { reasoning: { enabled: false } } },
+            { id: ModelV2.VariantID.make("thinking"), settings: { reasoning: { enabled: true } } },
+          ])
         }).pipe(Effect.provide(AppNodeBuilder.build(ModelsDev.node))),
       (previous) =>
         Effect.sync(() => {

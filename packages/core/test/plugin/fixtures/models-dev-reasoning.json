@@ -109,5 +109,43 @@
         "limit": { "context": 128000, "output": 20000 }
       }
     }
+  },
+  "vercel": {
+    "id": "vercel",
+    "name": "Vercel AI Gateway",
+    "env": ["AI_GATEWAY_API_KEY"],
+    "npm": "@ai-sdk/gateway",
+    "models": {
+      "gateway-toggle": {
+        "id": "gateway-toggle",
+        "name": "Gateway Toggle",
+        "release_date": "2026-01-01",
+        "attachment": false,
+        "reasoning": true,
+        "reasoning_options": [{ "type": "toggle" }],
+        "temperature": true,
+        "tool_call": true,
+        "limit": { "context": 128000, "output": 20000 }
+      }
+    }
+  },
+  "openrouter": {
+    "id": "openrouter",
+    "name": "OpenRouter",
+    "env": ["OPENROUTER_API_KEY"],
+    "npm": "@openrouter/ai-sdk-provider",
+    "models": {
+      "openrouter-toggle": {
+        "id": "openrouter-toggle",
+        "name": "OpenRouter Toggle",
+        "release_date": "2026-01-01",
+        "attachment": false,
+        "reasoning": true,
+        "reasoning_options": [{ "type": "toggle" }],
+        "temperature": true,
+        "tool_call": true,
+        "limit": { "context": 128000, "output": 20000 }
+      }
+    }
   }
 }

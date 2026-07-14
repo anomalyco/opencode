@@ -292,6 +292,11 @@ function toggleVariants(
   npm: string | undefined,
   enabledID: "thinking" | "high",
 ): NonNullable<ModelV2.Info["variants"]> {
+  if (npm === "@ai-sdk/gateway" || npm === "@openrouter/ai-sdk-provider")
+    return [
+      { id: ModelV2.VariantID.make("none"), settings: { reasoning: { enabled: false } } },
+      { id: ModelV2.VariantID.make(enabledID), settings: { reasoning: { enabled: true } } },
+    ]
   if (npm === "@ai-sdk/anthropic" || npm === "@ai-sdk/google-vertex/anthropic")
     return [
       { id: ModelV2.VariantID.make("none"), settings: { thinking: { type: "disabled" } } },
