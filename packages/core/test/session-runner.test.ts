@@ -3044,18 +3044,31 @@ describe("SessionRunnerLLM", () => {
   )
 
   it.effect("adds session correlation headers to model requests", () =>
-    Effect.gen(function* () {
-      const session = yield* setup
-      yield* admit(session, "Run correlated request")
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const previous = process.env.OPENCODE_CLIENT
+        process.env.OPENCODE_CLIENT = "test-client"
+        return previous
+      }),
+      () =>
+        Effect.gen(function* () {
+          const session = yield* setup
+          yield* admit(session, "Run correlated request")
 
-      yield* session.resume(sessionID)
+          yield* session.resume(sessionID)
 
-      expect(requests[0]?.http?.headers).toEqual({
-        "x-opencode-project": Project.ID.global,
-        "x-opencode-session": sessionID,
-        "x-opencode-client": process.env.OPENCODE_CLIENT ?? "cli",
-      })
-    }),
+          expect(requests[0]?.http?.headers).toEqual({
+            "x-opencode-project": Project.ID.global,
+            "x-opencode-session": sessionID,
+            "x-opencode-client": "test-client",
+          })
+        }),
+      (previous) =>
+        Effect.sync(() => {
+          if (previous === undefined) delete process.env.OPENCODE_CLIENT
+          else process.env.OPENCODE_CLIENT = previous
+        }),
+    ),
   )
 
   it.effect("runs different sessions concurrently", () =>
