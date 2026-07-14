@@ -64,4 +64,29 @@ describe("VariantPlugin", () => {
       ])
     }),
   )
+
+  it.effect("adds Hy3 variants after catalog sources", () =>
+    Effect.gen(function* () {
+      const service = yield* Catalog.Service
+      yield* service.transform((catalog) => {
+        catalog.provider.update(ProviderV2.ID.opencode, (provider) => {
+          provider.api = { type: "aisdk", package: "@ai-sdk/openai-compatible" }
+        })
+        catalog.model.update(ProviderV2.ID.opencode, ModelV2.ID.make("hy3"), (model) => {
+          model.api = {
+            id: ModelV2.ID.make("hy3"),
+            type: "aisdk",
+            package: "@ai-sdk/openai-compatible",
+          }
+        })
+      })
+      yield* VariantPlugin.Plugin.effect(host({ catalog: catalogHost(service) }))
+
+      expect((yield* service.model.get(ProviderV2.ID.opencode, ModelV2.ID.make("hy3")))?.variants).toEqual([
+        expect.objectContaining({ id: "low", body: { reasoning_effort: "low" } }),
+        expect.objectContaining({ id: "medium", body: { reasoning_effort: "medium" } }),
+        expect.objectContaining({ id: "high", body: { reasoning_effort: "high" } }),
+      ])
+    }),
+  )
 })

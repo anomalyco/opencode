@@ -30,8 +30,15 @@ export const Plugin = define({
 export function generate(model: ModelV2Info): ModelV2Info["variants"] {
   if (model.api.type !== "aisdk" || model.api.package !== "@ai-sdk/openai-compatible") return []
   const ids = `${model.id} ${model.api.id}`.toLowerCase()
-  if (!["glm-5.2", "glm-5-2", "glm-5p2"].some((name) => ids.includes(name))) return []
-  return ["high", "max"].map((id) => ({
+  
+  const isGLM = ["glm-5.2", "glm-5-2", "glm-5p2"].some((name) => ids.includes(name))
+  const isHy3 = ["hy3"].some((name) => ids.includes(name))
+  
+  if (!isGLM && !isHy3) return []
+
+  const efforts = isHy3 ? ["low", "medium", "high"] : ["high", "max"]
+
+  return efforts.map((id) => ({
     id,
     headers: {},
     body: { reasoning_effort: id },
