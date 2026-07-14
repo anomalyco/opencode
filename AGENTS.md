@@ -288,3 +288,6 @@ irm https://github.com/ivanfernadezm99/opencode/releases/latest/download/install
 | v1.0.4 | Sin rate limit de GitHub API (usa HTTP redirect en vez de api.github.com) |
 | v1.0.5 | Auto-fallback a Nextcloud cuando GitHub no responde |
 | v1.0.6 | `-UseBasicParsing` en todos lados, retry con backoff, mirror fallback en descargas |
+| v1.0.7 | Fix: reemplazo de switch por if/elseif + splatting + caracteres ASCII-only para PS 5.1 |
+| v1.0.8 | Fix: detección de prerequisitos sin crashear (usa Get-Command, no ejecuta binarios) |
+| **v1.0.9** | **Fix: mirror Nextcloud usa WebDAV + auth, timeout de descarga 300s. Probado en Windows real.** |
