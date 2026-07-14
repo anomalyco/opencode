@@ -19,6 +19,9 @@
 
 .PARAMETER Channel
     gentle-ai channel: stable (default), beta, nightly
+
+.PARAMETER UseMirror
+    Download opencode from Nextcloud mirror instead of GitHub
 #>
 
 $ErrorActionPreference = "Stop"
@@ -32,6 +35,8 @@ $OPENCODE_REPO = "ivanfernadezm99/opencode"
 $GENTLE_REPO = "Gentleman-Programming/gentle-ai"
 $BINARY_NAME = "opencode"
 $GENTLE_NAME = "gentle-ai"
+
+$NEXTCLOUD_MIRROR = "https://enlaceschacocloud.duckdns.org/s/ojAcbHDQBTX97oD/download"
 
 $OPENCODE_DIR = Join-Path $env:LOCALAPPDATA "opencode\bin"
 $GENTLE_DIR = Join-Path $env:LOCALAPPDATA "gentle-ai\bin"
@@ -103,15 +108,27 @@ function Install-Binary {
         [string]$OutputDir,
         [string]$AssetName,
         [string]$BinaryName,
-        [bool]$NeedsExtract = $true
+        [bool]$NeedsExtract = $true,
+        [string]$MirrorUrl = "",
+        [string]$Version = ""
     )
 
-    $version = Get-LatestVersion -Repo $Repo
-    $versionNumber = $version.TrimStart("v")
-
     $arch = Get-Arch
-    $archiveName = "${BinaryName}_${versionNumber}_windows_${arch}.zip"
-    $downloadUrl = "https://github.com/$Repo/releases/download/$version/$archiveName"
+
+    if ($MirrorUrl) {
+        if ($Version) {
+            $archiveName = "${BinaryName}_$($Version -replace '^v','')_windows_${arch}.zip"
+        } else {
+            $archiveName = "${BinaryName}_windows_${arch}.zip"
+        }
+        $downloadUrl = "${MirrorUrl}?path=/&files=${archiveName}"
+        Write-Info "Using mirror: $MirrorUrl"
+    } else {
+        $version = Get-LatestVersion -Repo $Repo
+        $versionNumber = $version.TrimStart("v")
+        $archiveName = "${BinaryName}_${versionNumber}_windows_${arch}.zip"
+        $downloadUrl = "https://github.com/$Repo/releases/download/$version/$archiveName"
+    }
 
     New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
 
@@ -186,10 +203,16 @@ function Main {
     param(
         [string]$Version = "",
         [string]$Channel = $(if ($env:GENTLE_AI_CHANNEL) { $env:GENTLE_AI_CHANNEL } else { "stable" }),
-        [switch]$NoModifyPath
+        [switch]$NoModifyPath,
+        [switch]$UseMirror
     )
 
     if ($Channel -eq "nightly") { $Channel = "beta" }
+
+    # Resolve version early (needed for mirror download filenames)
+    if (-not $Version) {
+        $Version = Get-LatestVersion -Repo $OPENCODE_REPO
+    }
 
     Show-Banner
 
@@ -260,7 +283,12 @@ function Main {
     Write-Success "git, node, npm — all present"
 
     Write-Step "Installing opencode-fork"
-    Install-Binary -Repo $OPENCODE_REPO -OutputDir $OPENCODE_DIR -AssetName "opencode" -BinaryName "opencode"
+    if ($UseMirror) {
+        Write-Info "Downloading from Nextcloud mirror..."
+        Install-Binary -Repo $OPENCODE_REPO -OutputDir $OPENCODE_DIR -AssetName "opencode" -BinaryName "opencode" -MirrorUrl $NEXTCLOUD_MIRROR -Version $Version
+    } else {
+        Install-Binary -Repo $OPENCODE_REPO -OutputDir $OPENCODE_DIR -AssetName "opencode" -BinaryName "opencode"
+    }
 
     Write-Step "Installing gentle-ai"
     Install-Binary -Repo $GENTLE_REPO -OutputDir $GENTLE_DIR -AssetName "gentle-ai" -BinaryName "gentle-ai"
