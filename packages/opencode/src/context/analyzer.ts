@@ -4,6 +4,7 @@ import fuzzysort from "fuzzysort"
 import path from "path"
 import { readFile } from "fs/promises"
 import { statSync } from "fs"
+import ts from "typescript"
 
 export interface ContextSuggestion {
   filePath: string
@@ -11,7 +12,6 @@ export interface ContextSuggestion {
   reason: string
 }
 
-const IMPORT_RE = /(?:import\s+(?:[\w*\s{},]+\s+from\s+)?["']([^"']+)["']|require\s*\(\s*["']([^"']+)["']\s*\))/g
 const CONFIG_PATTERNS = ["package.json", "tsconfig.json", "tsconfig.*.json", ".env*", "*.config.*", "docker-compose*"]
 const TEST_FILE_RE = /\.(test|spec)\.[^/]+$/
 const TEST_DIR_RE = /\/[(_]tests?[)_]\/|__tests__\//
@@ -35,12 +35,22 @@ function rel(absPath: string, root: string): string {
 async function readImports(filePath: string): Promise<string[]> {
   try {
     const content = await readFile(filePath, "utf-8")
+    const sourceFile = ts.createSourceFile(filePath, content, ts.ScriptTarget.Latest, true)
     const imports: string[] = []
-    let match: RegExpExecArray | null
-    while ((match = IMPORT_RE.exec(content)) !== null) {
-      const spec = match[1] ?? match[2]
-      if (spec && (spec.startsWith(".") || spec.startsWith("/"))) imports.push(spec)
+    const visit = (node: ts.Node) => {
+      if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
+        const spec = node.moduleSpecifier.text
+        if (spec.startsWith(".") || spec.startsWith("/")) imports.push(spec)
+      } else if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "require") {
+        for (const arg of node.arguments) {
+          if (ts.isStringLiteral(arg) && (arg.text.startsWith(".") || arg.text.startsWith("/"))) {
+            imports.push(arg.text)
+          }
+        }
+      }
+      ts.forEachChild(node, visit)
     }
+    visit(sourceFile)
     return imports
   } catch {
     return []
