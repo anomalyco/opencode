@@ -54,13 +54,17 @@ export const PromptContextItems: Component<ContextItemsProps> = (props) => {
                     "group shrink-0 flex flex-col rounded-[6px] pl-2 pr-1 py-1 max-w-[200px] h-12 cursor-default transition-all transition-transform shadow-xs-border hover:shadow-xs-border-hover": true,
                     "hover:bg-surface-interactive-weak": !!item.commentID && !selected,
                     "bg-surface-interactive-hover hover:bg-surface-interactive-hover shadow-xs-border-hover": selected,
-                    "bg-background-stronger": !selected,
+                    "bg-background-stronger": !selected && !item.auto,
+                    "bg-surface-base text-text-weaker": !selected && !!item.auto,
                   }}
                   onClick={() => props.openComment(item)}
                 >
                   <div class="flex items-center gap-1.5">
                     <FileIcon node={{ path: item.path, type: "file" }} class="shrink-0 size-3.5" />
                     <div class="flex items-center text-[12px] min-w-0 font-medium leading-5">
+                      <Show when={item.auto}>
+                        <span class="text-10-regular text-text-weaker mr-1 uppercase">auto</span>
+                      </Show>
                       <span class="text-text-strong whitespace-nowrap">{label}</span>
                       <Show when={item.selection}>
                         {(sel) => (
