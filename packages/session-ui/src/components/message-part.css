@@ -57,8 +57,20 @@
     }
 
     &[data-type="image"] {
-      width: 48px;
-      height: 48px;
+      position: relative;
+      width: 58px;
+      height: 46px;
+      border: none;
+
+      /* inset box-shadows do not paint over <img> content, so the hairline is an overlay */
+      &::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        box-shadow: inset 0 0 0 0.5px var(--v2-border-border-base);
+        pointer-events: none;
+      }
     }
 
     &[data-type="file"] {
@@ -1322,6 +1334,16 @@ body:not([data-new-layout]) {
 
       &:hover {
         border-color: var(--border-strong-base);
+      }
+
+      &[data-type="image"] {
+        width: 48px;
+        height: 48px;
+        border: 1px solid var(--border-weak-base);
+
+        &::after {
+          content: none;
+        }
       }
     }
 

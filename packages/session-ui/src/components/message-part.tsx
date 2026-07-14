@@ -47,6 +47,8 @@ import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { Markdown } from "./markdown"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
 import { getDirectory as _getDirectory, getFilename } from "@opencode-ai/core/util/path"
+import { AttachmentCardV2 } from "../v2/components/attachment-card-v2"
+import { CommentCardV2 } from "../v2/components/comment-card-v2"
 import { checksum } from "@opencode-ai/core/util/encode"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -60,7 +62,7 @@ import { ToolStatusTitle } from "./tool-status-title"
 import { patchFiles } from "./apply-patch-file"
 import { animate } from "motion"
 import { useLocation } from "@solidjs/router"
-import { attached, inline, kind } from "./message-file"
+import { attached, inline, kind, typeLabel } from "./message-file"
 import { readPartText } from "./message-part-text"
 import { SessionProgressIndicatorV2 } from "../v2/components/session-progress-indicator-v2"
 
@@ -167,6 +169,7 @@ export interface MessageProps {
   showAssistantCopyPartID?: string | null
   showReasoningSummaries?: boolean
   useV2Actions?: boolean
+  comments?: UserMessageComment[]
 }
 
 export type SessionAction = (input: { sessionID: string; messageID: string }) => Promise<void> | void
@@ -174,6 +177,16 @@ export type SessionAction = (input: { sessionID: string; messageID: string }) =>
 export type UserActions = {
   fork?: SessionAction
   revert?: SessionAction
+  openAttachment?: (file: FilePart) => void
+}
+
+export type UserMessageComment = {
+  path: string
+  comment: string
+  selection?: {
+    startLine: number
+    endLine: number
+  }
 }
 
 export interface MessagePartProps {
@@ -946,6 +959,7 @@ export function Message(props: MessageProps) {
             parts={props.parts}
             actions={props.actions}
             useV2Actions={props.useV2Actions}
+            comments={props.comments}
           />
         )}
       </Match>
@@ -1163,6 +1177,7 @@ export function UserMessageDisplay(props: {
   parts: PartType[]
   actions?: UserActions
   useV2Actions?: boolean
+  comments?: UserMessageComment[]
 }) {
   const data = useData()
   const dialog = useDialog()
@@ -1183,6 +1198,8 @@ export function UserMessageDisplay(props: {
   const files = createMemo(() => (props.parts?.filter((p) => p.type === "file") as FilePart[]) ?? [])
 
   const attachments = createMemo(() => files().filter(attached))
+
+  const messageComments = createMemo(() => (newLayout() ? (props.comments ?? []) : []))
 
   const inlineFiles = createMemo(() => files().filter(inline))
 
@@ -1240,35 +1257,59 @@ export function UserMessageDisplay(props: {
 
   return (
     <div data-component="user-message" data-timeline-part-id={textPart()?.id}>
-      <Show when={attachments().length > 0}>
+      <Show when={attachments().length > 0 || messageComments().length > 0}>
         <div data-slot="user-message-attachments">
+          <For each={messageComments()}>
+            {(comment) => (
+              <CommentCardV2
+                comment={comment.comment}
+                path={comment.path}
+                selection={comment.selection}
+                title={comment.comment}
+              />
+            )}
+          </For>
           <For each={attachments()}>
             {(file) => {
               const type = kind(file)
               const name = file.filename ?? i18n.t("ui.message.attachment.alt")
 
               return (
-                <div
-                  data-slot="user-message-attachment"
-                  data-type={type}
-                  data-clickable={type === "image" ? "true" : undefined}
-                  title={type === "file" ? name : undefined}
-                  onClick={() => {
-                    if (type === "image") openImagePreview(file.url, name)
-                  }}
+                <Show
+                  when={newLayout() && type === "file"}
+                  fallback={
+                    <div
+                      data-slot="user-message-attachment"
+                      data-type={type}
+                      data-clickable={type === "image" ? "true" : undefined}
+                      title={type === "file" ? name : undefined}
+                      onClick={() => {
+                        if (type === "image") openImagePreview(file.url, name)
+                      }}
+                    >
+                      <Show
+                        when={type === "image"}
+                        fallback={
+                          <div data-slot="user-message-attachment-file">
+                            <FileIcon node={{ path: name, type: "file" }} />
+                            <span data-slot="user-message-attachment-name">{name}</span>
+                          </div>
+                        }
+                      >
+                        <img data-slot="user-message-attachment-image" src={file.url} alt={name} />
+                      </Show>
+                    </div>
+                  }
                 >
-                  <Show
-                    when={type === "image"}
-                    fallback={
-                      <div data-slot="user-message-attachment-file">
-                        <FileIcon node={{ path: name, type: "file" }} />
-                        <span data-slot="user-message-attachment-name">{name}</span>
-                      </div>
-                    }
+                  <AttachmentCardV2
+                    title={getFilename(name)}
+                    hover={name}
+                    clickable={!!props.actions?.openAttachment}
+                    onClick={() => props.actions?.openAttachment?.(file)}
                   >
-                    <img data-slot="user-message-attachment-image" src={file.url} alt={name} />
-                  </Show>
-                </div>
+                    {typeLabel(name, file.mime)}
+                  </AttachmentCardV2>
+                </Show>
               )
             }}
           </For>
