@@ -16,7 +16,7 @@ test("exposes every standard HTTP API group", () => {
     "generate",
     "provider",
     "integration",
-    "server.mcp",
+    "mcp",
     "credential",
     "project",
     "form",
@@ -93,7 +93,7 @@ test("MCP resource catalog uses the public HTTP contract", async () => {
     },
   })
 
-  const result = await client["server.mcp"].resource.catalog({ location: { directory: "/tmp/project" } })
+  const result = await client.mcp.resource.catalog({ location: { directory: "/tmp/project" } })
 
   expect(result.data.resources[0]?.uri).toBe("docs://readme")
   expect(request?.method).toBe("GET")
