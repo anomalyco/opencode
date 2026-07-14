@@ -1755,10 +1755,9 @@ function ReasoningPart(props: {
         </box>
         <Show when={(!inMinimal() || expanded()) && summary().body}>
           <box paddingLeft={inMinimal() ? 2 : 0} marginTop={1}>
-            <code
-              filetype="markdown"
-              drawUnstyledText={false}
+            <markdown
               streaming={true}
+              internalBlockMode="top-level"
               syntaxStyle={syntax()}
               content={summary().body}
               conceal={ctx.markdownMode() === "rendered"}
