@@ -11,6 +11,7 @@ import { FileVisual } from "./session-sortable-tab"
 
 export function SortableTabV2(props: {
   tab: string
+  onSelectIntent: () => void
   index: () => number
   temporary?: boolean
   onTabClose: (tab: string) => void
@@ -38,6 +39,9 @@ export function SortableTabV2(props: {
       <div class="relative">
         <Tabs.Trigger
           value={props.tab}
+          onPointerDown={props.onSelectIntent}
+          onKeyDown={props.onSelectIntent}
+          onClick={props.onSelectIntent}
           closeButton={
             <TooltipKeybind
               title={language.t("common.closeTab")}

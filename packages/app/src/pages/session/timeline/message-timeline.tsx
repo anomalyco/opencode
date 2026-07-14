@@ -115,16 +115,6 @@ function timelineRootSessionID(sessionID: string, get: (sessionID: string) => { 
   }
 }
 
-export function timelineHasSavedScroll(input: {
-  tabs: ReturnType<typeof useTabs>
-  server: ServerConnection.Key
-  sessionID: string
-  get: (sessionID: string) => { parentID?: string } | undefined
-}) {
-  const rootSessionID = timelineRootSessionID(input.sessionID, input.get)
-  return timelineScrollMemory({ tabs: input.tabs, server: input.server, rootSessionID }).has(input.sessionID)
-}
-
 const taskDescription = (part: PartType, sessionID: string) => {
   if (part.type !== "tool" || part.tool !== "task") return
   const metadata = "metadata" in part.state ? part.state.metadata : undefined
@@ -277,9 +267,9 @@ export function MessageTimeline(props: {
   actions?: UserActions
   scroll: { overflow: boolean; bottom: boolean; jump: boolean }
   onResumeScroll: () => void
-  // Reports the per-tab scroll restore: applied pauses auto-follow, failed
-  // resumes it (the page skips its own resume when a saved position exists).
-  onScrollRestore: (applied: boolean) => void
+  // Reports whether this mount restored a saved position. The owning page
+  // pauses auto-follow after a restore and resumes it for a fresh mount.
+  onMountScroll: (restored: boolean) => void
   setScrollRef: (el: HTMLDivElement | undefined) => void
   onScheduleScrollState: (el: HTMLDivElement) => void
   onAutoScrollHandleScroll: () => void
@@ -322,6 +312,8 @@ export function MessageTimeline(props: {
   // Suppress bottom-anchoring until the restored offset is applied (or given
   // up); after that autoScroll (via props.shouldAnchorBottom) owns the decision.
   let restoringScroll = restoredScrollOffset !== undefined
+  let mountScrollApplied = false
+  let seededRestoredOffset = false
   const shouldAnchorBottom = () => !restoringScroll && props.shouldAnchorBottom()
   const coldBottomMount = !initialMeasurements?.length && shouldAnchorBottom()
   const platform = usePlatform()
@@ -335,7 +327,8 @@ export function MessageTimeline(props: {
     if (!root || root.scrollHeight - root.clientHeight <= 1) return
     root.scrollTop = restoredScrollOffset
     // Pauses auto-follow so the anchor paths stay off once the flag clears.
-    props.onScrollRestore(true)
+    props.onMountScroll(true)
+    mountScrollApplied = true
     restoringScroll = false
   }
   const sessionID = createMemo(() => params.id)
@@ -471,7 +464,13 @@ export function MessageTimeline(props: {
       return timelineRows().length
     },
     getScrollElement: () => listRoot() ?? null,
-    initialOffset: () => restoredScrollOffset ?? (shouldAnchorBottom() ? Number.MAX_SAFE_INTEGER : 0),
+    initialOffset: () => {
+      if (!seededRestoredOffset && restoredScrollOffset !== undefined) {
+        seededRestoredOffset = true
+        return restoredScrollOffset
+      }
+      return shouldAnchorBottom() ? Number.MAX_SAFE_INTEGER : 0
+    },
     initialMeasurementsCache: initialMeasurements,
     estimateSize: () => timelineFallbackItemSize,
     scrollToFn: (offset, options, instance) => {
@@ -571,7 +570,8 @@ export function MessageTimeline(props: {
           // Resume bottom-following: the page-level resume was skipped in
           // favor of this restore and must not stay stale.
           restoringScroll = false
-          props.onScrollRestore(false)
+          props.onMountScroll(false)
+          mountScrollApplied = true
         }
         if (renderOverscan() < 20) setRenderOverscan(20)
         if (shouldAnchorBottom()) virtualizer.scrollToEnd()
@@ -643,6 +643,10 @@ export function MessageTimeline(props: {
     setListRoot(root)
     props.setScrollRef(root)
     applyRestoredScroll()
+    if (!restoringScroll && !mountScrollApplied) {
+      props.onMountScroll(false)
+      mountScrollApplied = true
+    }
   }
 
   const handleListWheel = (event: WheelEvent & { currentTarget: HTMLDivElement }) => {

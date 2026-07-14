@@ -1,5 +1,5 @@
 import { base64Encode } from "@opencode-ai/core/util/encode"
-import { expect, test, type Page } from "@playwright/test"
+import { expect, test, type Locator, type Page } from "@playwright/test"
 import { mockOpenCodeServer } from "../utils/mock-server"
 import { expectAppVisible, expectSessionTitle } from "../utils/waits"
 
@@ -58,10 +58,39 @@ test("keeps the v2 review pane mounted when switching session tabs in a workspac
   await expect(page.getByRole("button", { name: "generated-2739.ts" })).toBeVisible()
 })
 
+test("preserves each session's active file tab when switching sessions", async ({ page }) => {
+  await setup(page)
+
+  await page.goto(sessionHref(sessionA))
+  await expectSessionTitle(page, titleA)
+  await page.getByRole("button", { name: "Toggle review" }).click()
+
+  const panel = page.locator("#review-panel")
+  await openFile(panel, "alpha.ts")
+
+  await switchTab(page, titleB)
+  await expectSessionTitle(page, titleB)
+  await openFile(panel, "beta.ts")
+
+  await switchTab(page, titleA)
+  await expectSessionTitle(page, titleA)
+  await expect(panel.getByRole("tab", { name: "alpha.ts" })).toHaveAttribute("data-selected", "")
+
+  await switchTab(page, titleB)
+  await expectSessionTitle(page, titleB)
+  await expect(panel.getByRole("tab", { name: "beta.ts" })).toHaveAttribute("data-selected", "")
+})
+
 type Probed = HTMLElement & { __e2eProbe?: string }
 
 async function switchTab(page: Page, title: string) {
   await page.locator("[data-titlebar-tab-slot]", { hasText: title }).click()
+}
+
+async function openFile(panel: Locator, name: string) {
+  await panel.getByRole("button", { name: "Open file" }).click()
+  await panel.getByRole("button", { name }).click()
+  await expect(panel.getByRole("tab", { name })).toHaveAttribute("data-selected", "")
 }
 
 async function writeProbe(page: Page) {
@@ -98,6 +127,17 @@ async function setup(page: Page) {
     },
     sessions: [session(sessionA, titleA, 1700000000000), session(sessionB, titleB, 1700000001000)],
     vcsDiff: diffs,
+    fileList: (path) => {
+      if (path) return []
+      return ["alpha.ts", "beta.ts"].map((name) => ({
+        name,
+        path: name,
+        absolute: `${directory}/${name}`,
+        type: "file" as const,
+        ignored: false,
+      }))
+    },
+    fileContent: (path) => ({ type: "text", content: `contents:${path}` }),
     pageMessages: () => ({ items: [] }),
   })
 

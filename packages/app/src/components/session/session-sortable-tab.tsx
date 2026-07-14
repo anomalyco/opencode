@@ -31,6 +31,7 @@ export function FileVisual(props: { path: string; active?: boolean; temporary?: 
 
 export function SortableTab(props: {
   tab: string
+  onSelectIntent: () => void
   temporary?: boolean
   onTabClose: (tab: string) => void
   onTabDoubleClick?: (tab: string) => void
@@ -50,6 +51,9 @@ export function SortableTab(props: {
       <div class="relative">
         <Tabs.Trigger
           value={props.tab}
+          onPointerDown={props.onSelectIntent}
+          onKeyDown={props.onSelectIntent}
+          onClick={props.onSelectIntent}
           closeButton={
             <TooltipKeybind
               title={language.t("common.closeTab")}

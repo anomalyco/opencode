@@ -66,7 +66,7 @@ import {
   SessionComposerRegion,
 } from "@/pages/session/composer"
 import { createOpenReviewFile, createSessionTabs, createSizing, shouldShowFileTree } from "@/pages/session/helpers"
-import { MessageTimeline, timelineHasSavedScroll } from "@/pages/session/timeline/message-timeline"
+import { MessageTimeline } from "@/pages/session/timeline/message-timeline"
 import { createTimelineModel } from "@/pages/session/timeline/model"
 import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/pages/session/review-tab"
 import { useSessionLayout } from "@/pages/session/session-layout"
@@ -355,7 +355,6 @@ export default function Page() {
   const location = useLocation()
   const navigate = useNavigate()
   const { params, sessionKey, workspaceKey, tabs, view } = useSessionLayout()
-  const appTabs = useTabs()
   const reviewMode = () => view().review.mode() ?? "git"
   const reviewFile = () => view().review.file()
   const sessionOwnership = createSessionOwnership(sessionKey)
@@ -1507,25 +1506,6 @@ export default function Page() {
     working: () => true,
     overflowAnchor: "none",
   })
-  createEffect(
-    on(
-      () => params.id,
-      (id, previous) => {
-        if (!id || !previous || id === previous) return
-        if (location.hash || store.messageId || ui.pendingMessage) return
-        // The timeline restores the saved per-tab position itself; resuming
-        // here would reset it to the bottom.
-        const server = params.serverKey ? requireServerKey(params.serverKey) : ServerConnection.key(serverSDK().server)
-        if (
-          newSessionDesign() &&
-          timelineHasSavedScroll({ tabs: appTabs, server, sessionID: id, get: sync().session.get })
-        )
-          return
-        autoScroll.resume()
-      },
-    ),
-  )
-
   let scrollStateFrame: number | undefined
   let scrollStateTarget: HTMLDivElement | undefined
   let fillFrame: number | undefined
@@ -2183,7 +2163,7 @@ export default function Page() {
                   actions={actions}
                   scroll={ui.scroll}
                   onResumeScroll={resumeScroll}
-                  onScrollRestore={(applied) => (applied ? autoScroll.pause() : autoScroll.resume())}
+                  onMountScroll={(restored) => (restored ? autoScroll.pause() : autoScroll.resume())}
                   setScrollRef={setScrollRef}
                   onScheduleScrollState={scheduleScrollState}
                   onAutoScrollHandleScroll={autoScroll.handleScroll}
