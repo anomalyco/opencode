@@ -331,7 +331,7 @@ describe("SessionProjector", () => {
       ).toMatchObject({
         agent: "build",
         model,
-        time_updated: DateTime.toEpochMillis(created),
+        time_updated: DateTime.toEpochMillis(DateTime.makeUnsafe(1)),
       })
     }),
   )

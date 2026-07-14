@@ -186,6 +186,12 @@ function run(db: DatabaseService, event: SessionEvent.Event) {
       updateShell: updateMessage,
       appendMessage,
     }
+    yield* db
+      .update(SessionTable)
+      .set({ time_updated: DateTime.toEpochMillis(event.data.timestamp) })
+      .where(eq(SessionTable.id, event.data.sessionID))
+      .run()
+      .pipe(Effect.orDie)
     yield* SessionMessageUpdater.update(adapter, event)
   })
 }
