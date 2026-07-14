@@ -67,6 +67,17 @@ function fallback(markdown: string) {
 }
 
 async function code(text: string, language: string | undefined, key: string, complete = false) {
+  if (language === "mermaid" && !isServer) {
+    try {
+      const { default: mermaid } = await import("mermaid")
+      mermaid.initialize({ startOnLoad: false, theme: "default" })
+      const { svg } = await mermaid.render("md" + String(Math.random()).slice(2, 10), text)
+      return { language: "mermaid", generation: 0, stable: [[svg, ""] as MarkdownToken], unstable: [] }
+    } catch (error) {
+      console.error("Mermaid render failed", error)
+      return { language: "mermaid", generation: 0, stable: [[text, ""] as MarkdownToken], unstable: [] }
+    }
+  }
   const name = language && language in bundledLanguages ? language : "text"
   try {
     const result = await highlightStreamingCode(key, text, name, complete)
@@ -593,12 +604,50 @@ function updateBlock(container: HTMLDivElement, index: number, block: RenderedBl
   })
 }
 
+function createMermaidHTML(source: string) {
+  const container = document.createElement("div")
+  container.setAttribute("data-component", "mermaid-diagram")
+  container.style.cssText = "cursor:pointer;overflow-x:auto;margin:0.5em 0"
+  container.innerHTML = source
+  const downloadBtn = document.createElement("button")
+  downloadBtn.textContent = "⬇ .mmd"
+  downloadBtn.style.cssText =
+    "position:absolute;top:4px;right:4px;font-size:11px;padding:2px 6px;border-radius:4px;border:1px solid var(--border-base,#ccc);background:var(--surface-base,#fff);cursor:pointer;opacity:0;transition:opacity 0.15s"
+  container.style.position = "relative"
+  container.appendChild(downloadBtn)
+  container.addEventListener("mouseenter", () => (downloadBtn.style.opacity = "1"))
+  container.addEventListener("mouseleave", () => (downloadBtn.style.opacity = "0"))
+  return container
+}
+
 function updateCodeBlock(
   container: HTMLDivElement,
   current: Element | undefined,
   block: Extract<RenderedBlock, { mode: "code" }>,
   labels: CopyLabels,
 ) {
+  if (block.language === "mermaid") {
+    const svgHtml = block.stable[0]?.[0] ?? ""
+    if (svgHtml.startsWith("<svg")) {
+      const existing = current instanceof HTMLDivElement && current.dataset.markdownKey === block.key ? current : undefined
+      if (existing && existing.dataset.markdownComplete === (block.complete ? "true" : "false") && existing.dataset.markdownHash === block.hash) return
+      const wrapper = createMermaidHTML(svgHtml)
+      const div = document.createElement("div")
+      div.dataset.markdownBlock = ""
+      div.dataset.markdownKey = block.key
+      div.dataset.markdownHash = block.hash
+      div.dataset.markdownComplete = block.complete ? "true" : "false"
+      div.style.display = "contents"
+      div.appendChild(wrapper)
+      if (existing) {
+        existing.replaceWith(div)
+      } else {
+        container.appendChild(div)
+      }
+      return
+    }
+  }
+
   const existing = current instanceof HTMLDivElement && current.dataset.markdownKey === block.key ? current : undefined
   const next = existing ?? document.createElement("div")
   next.dataset.markdownBlock = ""
