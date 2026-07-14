@@ -894,6 +894,63 @@ export default function LegacyLayout(props: ParentProps) {
     }
   }
 
+  function deleteSession(session: Session) {
+    dialog.show(() => <DialogDeleteSession session={session} />)
+  }
+
+  function DialogDeleteSession(dprops: { session: Session }) {
+    const dialogCtx = useDialog()
+    const sdk = useServerSDK()
+    const sync = useServerSync()
+    const nav = useNavigate()
+    const prms = useParams()
+    const lang = useLanguage()
+    const name = () => sessionTitle(dprops.session.title)
+
+    const handleDelete = async () => {
+      const result = await sdk()
+        .client.session.delete({ sessionID: dprops.session.id })
+        .then((x) => x.data)
+        .catch((err) => {
+          showToast({
+            title: lang.t("session.delete.failed.title"),
+            description: errorMessage(err, lang.t("common.requestFailed")),
+          })
+          return false
+        })
+
+      if (!result) {
+        dialogCtx.close()
+        return
+      }
+
+      if (dprops.session.id === prms.id) {
+        const sessions = (sync().child(dprops.session.directory)[0].session ?? []).filter(
+          (s) => !s.parentID && !s.time?.archived,
+        )
+        const idx = sessions.findIndex((s) => s.id === dprops.session.id)
+        const next = sessions[idx + 1] ?? sessions[idx - 1]
+        if (next) nav(`/${prms.dir}/session/${next.id}`)
+        else nav(`/${prms.dir}/session`)
+      }
+
+      dialogCtx.close()
+    }
+
+    return (
+      <Dialog title={lang.t("session.delete.title")} description={lang.t("session.delete.confirm", { name: name() })}>
+        <div class="flex justify-end gap-2 mt-4">
+          <Button variant="secondary" onClick={() => dialogCtx.close()}>
+            {lang.t("common.cancel")}
+          </Button>
+          <Button variant="danger" onClick={handleDelete}>
+            {lang.t("session.delete.button")}
+          </Button>
+        </div>
+      </Dialog>
+    )
+  }
+
   command.register("layout", () => {
     const commands: CommandOption[] = [
       {
@@ -1913,6 +1970,7 @@ export default function LegacyLayout(props: ParentProps) {
       clearHoverProjectSoon,
       prefetchSession,
       archiveSession,
+      deleteSession,
     },
   }
 
