@@ -12,6 +12,7 @@ import { LLMClient } from "@opencode-ai/llm/route"
 import type { LLMClientService } from "@opencode-ai/llm/route"
 import { GitLabWorkflowLanguageModel } from "gitlab-ai-provider"
 import { ProviderTransform } from "@/provider/transform"
+import { proxyUnsupportedImages } from "@/provider/vision-proxy"
 import { Config } from "@/config/config"
 import type { Agent } from "@/agent/agent"
 import type { MessageV2 } from "./message-v2"
@@ -329,12 +330,18 @@ const live: Layer.Layer<
                 specificationVersion: "v3" as const,
                 async transformParams(args) {
                   if (args.type === "stream") {
-                    // @ts-expect-error
+                    const prompt = args.params.prompt as ModelMessage[]
+                    const proxied = await proxyUnsupportedImages(
+                      prompt,
+                      input.model,
+                      item.options,
+                      item,
+                    )
                     args.params.prompt = ProviderTransform.message(
-                      args.params.prompt,
+                      proxied,
                       input.model,
                       prepared.messageTransformOptions,
-                    )
+                    ) as typeof args.params.prompt
                   }
                   return args.params
                 },
