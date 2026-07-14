@@ -1,123 +1,32 @@
 import { Button } from "@opencode-ai/ui/button"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { TextField } from "@opencode-ai/ui/text-field"
-import { useMutation } from "@tanstack/solid-query"
 import { Icon } from "@opencode-ai/ui/icon"
-import { createMemo, For, Show } from "solid-js"
-import { createStore } from "solid-js/store"
+import { For, Show } from "solid-js"
 import { type LocalProject, getAvatarColors } from "@/context/layout"
-import { getFilename } from "@opencode-ai/core/util/path"
 import { Avatar } from "@opencode-ai/ui/avatar"
 import { useLanguage } from "@/context/language"
 import { getProjectAvatarSource } from "@/pages/layout/helpers"
 import { ServerConnection } from "@/context/server"
-import { useGlobal } from "@/context/global"
+import { createEditProjectModel } from "./edit-project"
 
 const AVATAR_COLOR_KEYS = ["pink", "mint", "orange", "purple", "cyan", "lime"] as const
 
 export function DialogEditProject(props: { project: LocalProject; server: ServerConnection.Any }) {
-  const dialog = useDialog()
-  const global = useGlobal()
   const language = useLanguage()
-  const serverCtx = createMemo(() => global.ensureServerCtx(props.server))
-  const serverSDK = () => serverCtx().sdk
-  const serverSync = () => serverCtx().sync
-
-  const folderName = createMemo(() => getFilename(props.project.worktree))
-  const defaultName = createMemo(() => props.project.name || folderName())
-
-  const [store, setStore] = createStore({
-    name: defaultName(),
-    color: props.project.icon?.color,
-    iconOverride: props.project.icon?.override,
-    startup: props.project.commands?.start ?? "",
-    dragOver: false,
-    iconHover: false,
-  })
-
-  let iconInput: HTMLInputElement | undefined
-
-  function handleFileSelect(file: File) {
-    if (!file.type.startsWith("image/")) return
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      setStore("iconOverride", e.target?.result as string)
-      setStore("iconHover", false)
-    }
-    reader.readAsDataURL(file)
-  }
-
-  function handleDrop(e: DragEvent) {
-    e.preventDefault()
-    setStore("dragOver", false)
-    const file = e.dataTransfer?.files[0]
-    if (file) handleFileSelect(file)
-  }
-
-  function handleDragOver(e: DragEvent) {
-    e.preventDefault()
-    setStore("dragOver", true)
-  }
-
-  function handleDragLeave() {
-    setStore("dragOver", false)
-  }
-
-  function handleInputChange(e: Event) {
-    const input = e.target as HTMLInputElement
-    const file = input.files?.[0]
-    if (file) handleFileSelect(file)
-  }
-
-  function clearIcon() {
-    setStore("iconOverride", "")
-  }
-
-  const saveMutation = useMutation(() => ({
-    mutationFn: async () => {
-      const name = store.name.trim() === folderName() ? "" : store.name.trim()
-      const start = store.startup.trim()
-
-      if (props.project.id && props.project.id !== "global") {
-        await serverSDK().client.project.update({
-          projectID: props.project.id,
-          directory: props.project.worktree,
-          name,
-          icon: { color: store.color || "", override: store.iconOverride || "" },
-          commands: { start },
-        })
-        serverSync().project.icon(props.project.worktree, store.iconOverride || undefined)
-        dialog.close()
-        return
-      }
-
-      serverSync().project.meta(props.project.worktree, {
-        name,
-        icon: { color: store.color || undefined, override: store.iconOverride || undefined },
-        commands: { start: start || undefined },
-      })
-      dialog.close()
-    },
-  }))
-
-  function handleSubmit(e: SubmitEvent) {
-    e.preventDefault()
-    if (saveMutation.isPending) return
-    saveMutation.mutate()
-  }
+  const model = createEditProjectModel(props)
 
   return (
     <Dialog title={language.t("dialog.project.edit.title")} class="w-full max-w-[480px] mx-auto">
-      <form onSubmit={handleSubmit} class="flex flex-col gap-6 p-6 pt-0">
+      <form onSubmit={model.submit} class="flex flex-col gap-6 p-6 pt-0">
         <div class="flex flex-col gap-4">
           <TextField
             autofocus
             type="text"
             label={language.t("dialog.project.edit.name")}
-            placeholder={folderName()}
-            value={store.name}
-            onChange={(v) => setStore("name", v)}
+            placeholder={model.folderName()}
+            value={model.store.name}
+            onChange={(v) => model.setStore("name", v)}
           />
 
           <div class="flex flex-col gap-2">
@@ -125,38 +34,32 @@ export function DialogEditProject(props: { project: LocalProject; server: Server
             <div class="flex gap-3 items-start">
               <div
                 class="relative"
-                onMouseEnter={() => setStore("iconHover", true)}
-                onMouseLeave={() => setStore("iconHover", false)}
+                onMouseEnter={() => model.setStore("iconHover", true)}
+                onMouseLeave={() => model.setStore("iconHover", false)}
               >
                 <div
                   class="relative size-16 rounded-md transition-colors cursor-pointer"
                   classList={{
-                    "border-text-interactive-base bg-surface-info-base/20": store.dragOver,
-                    "border-border-base hover:border-border-strong": !store.dragOver,
-                    "overflow-hidden": !!store.iconOverride,
+                    "border-text-interactive-base bg-surface-info-base/20": model.store.dragOver,
+                    "border-border-base hover:border-border-strong": !model.store.dragOver,
+                    "overflow-hidden": !!model.store.iconOverride,
                   }}
-                  onDrop={handleDrop}
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  onClick={() => {
-                    if (store.iconOverride && store.iconHover) {
-                      clearIcon()
-                    } else {
-                      iconInput?.click()
-                    }
-                  }}
+                  onDrop={model.drop}
+                  onDragOver={model.dragOver}
+                  onDragLeave={model.dragLeave}
+                  onClick={model.iconClick}
                 >
                   <Show
                     when={getProjectAvatarSource(props.project.id, {
-                      color: store.color,
+                      color: model.store.color,
                       url: props.project.icon?.url,
-                      override: store.iconOverride,
+                      override: model.store.iconOverride,
                     })}
                     fallback={
                       <div class="size-full flex items-center justify-center">
                         <Avatar
-                          fallback={store.name || defaultName()}
-                          {...getAvatarColors(store.color)}
+                          fallback={model.store.name || model.defaultName()}
+                          {...getAvatarColors(model.store.color)}
                           class="size-full text-[32px]"
                         />
                       </div>
@@ -174,8 +77,8 @@ export function DialogEditProject(props: { project: LocalProject; server: Server
                 <div
                   class="absolute inset-0 size-16 bg-surface-raised-stronger-non-alpha/90 rounded-[6px] z-10 pointer-events-none flex items-center justify-center transition-opacity"
                   classList={{
-                    "opacity-100": store.iconHover && !store.iconOverride,
-                    "opacity-0": !(store.iconHover && !store.iconOverride),
+                    "opacity-100": model.store.iconHover && !model.store.iconOverride,
+                    "opacity-0": !(model.store.iconHover && !model.store.iconOverride),
                   }}
                 >
                   <Icon name="cloud-upload" size="large" class="text-icon-on-interactive-base drop-shadow-sm" />
@@ -183,8 +86,8 @@ export function DialogEditProject(props: { project: LocalProject; server: Server
                 <div
                   class="absolute inset-0 size-16 bg-surface-raised-stronger-non-alpha/90 rounded-[6px] z-10 pointer-events-none flex items-center justify-center transition-opacity"
                   classList={{
-                    "opacity-100": store.iconHover && !!store.iconOverride,
-                    "opacity-0": !(store.iconHover && !!store.iconOverride),
+                    "opacity-100": model.store.iconHover && !!model.store.iconOverride,
+                    "opacity-0": !(model.store.iconHover && !!model.store.iconOverride),
                   }}
                 >
                   <Icon name="trash" size="large" class="text-icon-on-interactive-base drop-shadow-sm" />
@@ -193,12 +96,12 @@ export function DialogEditProject(props: { project: LocalProject; server: Server
               <input
                 id="icon-upload"
                 ref={(el) => {
-                  iconInput = el
+                  model.setIconInput(el)
                 }}
                 type="file"
                 accept="image/*"
                 class="hidden"
-                onChange={handleInputChange}
+                onChange={model.inputChange}
               />
               <div class="flex flex-col gap-1.5 text-12-regular text-text-weak self-center">
                 <span>{language.t("dialog.project.edit.icon.hint")}</span>
@@ -207,7 +110,7 @@ export function DialogEditProject(props: { project: LocalProject; server: Server
             </div>
           </div>
 
-          <Show when={!store.iconOverride}>
+          <Show when={!model.store.iconOverride}>
             <div class="flex flex-col gap-2">
               <label class="text-12-medium text-text-weak">{language.t("dialog.project.edit.color")}</label>
               <div class="flex gap-1.5">
@@ -216,21 +119,21 @@ export function DialogEditProject(props: { project: LocalProject; server: Server
                     <button
                       type="button"
                       aria-label={language.t("dialog.project.edit.color.select", { color })}
-                      aria-pressed={store.color === color}
+                      aria-pressed={model.store.color === color}
                       classList={{
                         "flex items-center justify-center size-10 p-0.5 rounded-lg overflow-hidden transition-colors cursor-default": true,
                         "bg-transparent border-2 border-icon-strong-base hover:bg-surface-base-hover":
-                          store.color === color,
+                          model.store.color === color,
                         "bg-transparent border border-transparent hover:bg-surface-base-hover hover:border-border-weak-base":
-                          store.color !== color,
+                          model.store.color !== color,
                       }}
                       onClick={() => {
-                        if (store.color === color && !props.project.icon?.url) return
-                        setStore("color", store.color === color ? undefined : color)
+                        if (model.store.color === color && !props.project.icon?.url) return
+                        model.setStore("color", model.store.color === color ? undefined : color)
                       }}
                     >
                       <Avatar
-                        fallback={store.name || defaultName()}
+                        fallback={model.store.name || model.defaultName()}
                         {...getAvatarColors(color)}
                         class="size-full rounded"
                       />
@@ -246,19 +149,19 @@ export function DialogEditProject(props: { project: LocalProject; server: Server
             label={language.t("dialog.project.edit.worktree.startup")}
             description={language.t("dialog.project.edit.worktree.startup.description")}
             placeholder={language.t("dialog.project.edit.worktree.startup.placeholder")}
-            value={store.startup}
-            onChange={(v) => setStore("startup", v)}
+            value={model.store.startup}
+            onChange={(v) => model.setStore("startup", v)}
             spellcheck={false}
             class="max-h-14 w-full overflow-y-auto font-mono text-xs"
           />
         </div>
 
         <div class="flex justify-end gap-2">
-          <Button type="button" variant="ghost" size="large" onClick={() => dialog.close()}>
+          <Button type="button" variant="ghost" size="large" onClick={model.close}>
             {language.t("common.cancel")}
           </Button>
-          <Button type="submit" variant="primary" size="large" disabled={saveMutation.isPending}>
-            {saveMutation.isPending ? language.t("common.saving") : language.t("common.save")}
+          <Button type="submit" variant="primary" size="large" disabled={model.save.isPending}>
+            {model.save.isPending ? language.t("common.saving") : language.t("common.save")}
           </Button>
         </div>
       </form>
