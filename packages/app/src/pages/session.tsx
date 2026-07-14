@@ -1944,7 +1944,25 @@ export default function Page() {
     download()
   }
 
-  const actions = { revert, openAttachment }
+  const fork = (input: { sessionID: string; messageID: string }) => {
+    if (reverting()) return
+    sdk()
+      .client.session.fork({ sessionID: input.sessionID, messageID: input.messageID })
+      .then((forked) => {
+        if (!forked.data) {
+          showToast({ title: language.t("common.requestFailed") })
+          return
+        }
+        const dir = base64Encode(sdk().directory)
+        navigate(`/${dir}/session/${forked.data.id}`)
+      })
+      .catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : String(err)
+        showToast({ title: language.t("common.requestFailed"), description: message })
+      })
+  }
+
+  const actions = { revert, fork, openAttachment }
 
   createEffect(() => {
     const sessionID = params.id

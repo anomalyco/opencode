@@ -203,6 +203,7 @@ export interface MessagePartProps {
   showAssistantCopyPartID?: string | null
   turnDurationMs?: number
   useV2Actions?: boolean
+  actions?: UserActions
 }
 
 function MessageActionButton(
@@ -1747,6 +1748,21 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
         </div>
         <Show when={showCopy()}>
           <div data-slot="text-part-copy-wrapper" data-interrupted={interrupted() ? "" : undefined}>
+            <Show when={props.actions?.fork && props.message.role === "assistant"}>
+              <IconButton
+                icon="fork"
+                size="normal"
+                variant="ghost"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  void props.actions!.fork!({
+                    sessionID: props.message.sessionID,
+                    messageID: props.message.id,
+                  })
+                }}
+                aria-label="Fork conversation from this point"
+              />
+            </Show>
             <MessageActionButton
               icon={copied() ? "check" : "copy"}
               label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
