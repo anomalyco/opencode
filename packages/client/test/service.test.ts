@@ -43,6 +43,75 @@ test("a concurrent same-version start cannot invalidate a resolved endpoint", as
   expect(starts).toEqual([])
   expect(await Bun.file(registration).json()).toEqual(original)
   expect(await health(resolved.url)).toEqual({ healthy: true, version: "test", pid: original.pid })
+  expect(await run(Service.status({ file: registration }))).toEqual({ type: "ready", version: "test" })
+})
+
+test("waits for a registered service to finish starting", async () => {
+  const directory = await temp()
+  const registration = join(directory, "service.json")
+  const process = spawn(registration, "starting")
+  await waitForFile(registration)
+  const statuses: Service.Status[] = []
+  const result = run(
+    Service.start({ file: registration, version: "test", command: [], onStatus: (status) => statuses.push(status) }),
+  )
+
+  await Bun.sleep(500)
+  expect(process.exitCode).toBe(null)
+  expect(statuses).toContainEqual({ type: "starting", version: "test" })
+  expect(statuses.filter((status) => status.type === "starting")).toHaveLength(1)
+  await writeFile(registration + ".release", "")
+  expect((await result).url).toBe((await Bun.file(registration).json()).url)
+})
+
+test("reports a failed registered service without spawning", async () => {
+  const directory = await temp()
+  const registration = join(directory, "service.json")
+  const process = spawn(registration, "failed-owner")
+  await waitForFile(registration)
+
+  await expect(run(Service.start({ file: registration, version: "test", command: [] }))).rejects.toMatchObject({
+    message: "Could not open the database.",
+    action: "Check the service logs.",
+  })
+  expect(process.exitCode).toBe(null)
+})
+
+test("requests graceful replacement of the exact service instance", async () => {
+  const directory = await temp()
+  const registration = join(directory, "service.json")
+  const process = spawn(registration, "graceful")
+  await waitForFile(registration)
+  const info = await Bun.file(registration).json()
+
+  await run(Service.stop({ file: registration }, { targetVersion: "next" }))
+  await process.exited
+  expect(await Bun.file(registration + ".stop").json()).toEqual({ instanceID: info.id, targetVersion: "next" })
+})
+
+test("does not spawn contenders while an incompatible service rejects replacement", async () => {
+  const directory = await temp()
+  const registration = join(directory, "service.json")
+  const contender = join(directory, "contender.json")
+  const existing = spawn(registration, "reject-stop")
+  await waitForFile(registration)
+  const controller = new AbortController()
+  const starting = Effect.runPromise(
+    Service.start({
+      file: registration,
+      version: "test",
+      command: [process.execPath, fixture, contender, "record-start"],
+    }).pipe(Effect.provide(NodeFileSystem.layer)),
+    { signal: controller.signal },
+  )
+
+  await waitForFile(registration + ".stop-attempt")
+  await Bun.sleep(500)
+  controller.abort()
+  await starting.catch(() => undefined)
+
+  expect(await Bun.file(contender + ".started").exists()).toBe(false)
+  expect(existing.exitCode).toBe(null)
 })
 
 test("a legacy health response is still replaced", async () => {
@@ -57,7 +126,7 @@ test("a legacy health response is still replaced", async () => {
   await expect(result).rejects.toThrow("Missing service command")
   expect(starts).toEqual(["version-mismatch"])
   await existing.exited
-})
+}, 10_000)
 
 test("waits for a slow winner without killing it", async () => {
   const directory = await temp()

@@ -1,5 +1,7 @@
 ---
 "@opencode-ai/client": patch
+"@opencode-ai/protocol": patch
+"@opencode-ai/cli": patch
 ---
 
-Reuse a same-version background service when a repeated health probe succeeds instead of replacing an endpoint another client may already be using.
+Expose background-service lifecycle status, preserve one process-held owner through startup and failure, reconnect TUIs without activating replacement, and stop exact service instances gracefully.

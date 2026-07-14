@@ -126,6 +126,7 @@
         "uqr": "0.1.3",
       },
       "devDependencies": {
+        "@opencode-ai/protocol": "workspace:*",
         "@opencode-ai/script": "workspace:*",
         "@tsconfig/bun": "catalog:",
         "@types/bun": "catalog:",

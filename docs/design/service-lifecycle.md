@@ -39,10 +39,10 @@ framework.
 | Registration repair       | Implemented; the owner reasserts deleted or corrupt discovery         |
 | Channel isolation         | Implemented with no-clobber migration for legacy preview discovery    |
 | Client startup waiting    | Implemented; slow winners are not killed and waiting is indefinite    |
-| Lifecycle shell           | Pending; registration still appears only after application boot       |
-| Failed-state latching     | Pending; deterministic boot failure is reported but not held by owner |
-| Recovery diagnostics      | Pending; unresponsive-owner guidance still needs lifecycle UI work    |
-| Cross-platform validation | macOS runtime verified; Linux and Windows require CI runtime coverage |
+| Lifecycle shell           | Implemented; the owner binds and registers before application boot    |
+| Failed-state latching     | Implemented; deterministic boot failure stays bound and actionable    |
+| Recovery diagnostics      | Implemented; the TUI shows status instead of transport internals      |
+| Cross-platform validation | macOS runtime verified; Linux and Windows run in the unit-test matrix |
 
 ## Context
 
@@ -182,12 +182,12 @@ flowchart LR
 The lifecycle shell and application run in the same process. The distinction is
 initialization order and responsibility, not process topology.
 
-## Lifecycle Contract
+## Service Status
 
-The lifecycle type represents only states that a bound owner can report:
+The server reports one small status value:
 
 ```typescript
-type ServiceLifecycle =
+type ServiceStatus =
   | {
       type: "starting"
     }
@@ -196,43 +196,23 @@ type ServiceLifecycle =
     }
   | {
       type: "stopping"
-      transition: {
-        type: "version_mismatch"
-        fromVersion: string
-        toVersion: string
-      }
+      targetVersion?: string
     }
   | {
       type: "failed"
-      failure: {
-        code: string
-        message: string
-        action: string
-      }
+      message: string
+      action: string
     }
 ```
 
-There is no `absent` lifecycle state because an absent process cannot answer a
-request. Absence and unreachability are client observations:
+The client adds only the discovery states needed by callers:
 
 ```typescript
-type ServiceObservation =
-  | {
-      type: "absent"
-    }
-  | {
-      type: "unreachable"
-      registration: ServiceRegistration
-    }
-  | {
-      type: "reachable"
-      registration: ServiceRegistration
-      lifecycle: ServiceLifecycle
-    }
+type Status = { type: "missing" } | { type: "unreachable" } | { type: "unresponsive" } | ServiceStatus
 ```
 
 The health response retains the existing fields for old clients and adds the
-lifecycle discriminant:
+status discriminant:
 
 ```typescript
 type ServiceHealth = {
@@ -240,12 +220,12 @@ type ServiceHealth = {
   version: string
   pid: number
   instanceID: string
-  lifecycle: ServiceLifecycle
+  status: ServiceStatus
 }
 ```
 
 `healthy: true` means the registered lifecycle shell is responding and its
-identity matches registration. New clients use `lifecycle.type === "ready"` as
+identity matches registration. New clients use `status.type === "ready"` as
 the application-readiness signal.
 
 During `starting` or `stopping`, application requests are not held in memory.
@@ -413,36 +393,35 @@ protocol negotiation and automatic TUI re-exec remain follow-ups.
 
 ## Client Reconnect
 
-Fresh and existing TUIs use the same observation loop after startup:
+Fresh and existing TUIs use the same status loop after startup:
 
 1. Read registration on every attempt. Do not retry a stale URL indefinitely.
 2. If registration is absent, call `ensureRunning` and continue waiting.
 3. If registration is unreachable, call `ensureRunning`. A live owner prevents
    contenders from acquiring the lock; a dead owner does not.
-4. If lifecycle is `starting` or `stopping`, wait.
-5. If lifecycle is `failed`, show its actionable message.
-6. If lifecycle is `ready`, rebuild HTTP and event-stream clients for the new
+4. If status is `starting` or `stopping`, wait.
+5. If status is `failed`, show its actionable message.
+6. If status is `ready`, rebuild HTTP and event-stream clients for the new
    endpoint and perform authoritative state reconciliation.
 
-Retry uses bounded exponential backoff with jitter. Retry counts are telemetry,
-not user-facing state. The TUI waits until the service is ready or the user
-exits.
+Retry cadence is internal policy. Retry counts are telemetry, not user-facing
+state. The TUI waits until the service is ready or the user exits.
 
 Transport failures are handled at the TUI run boundary. A raw client transport
 error or Effect defect must not escape to the terminal. Hard exit is reserved
 for diagnosed causes such as invalid local configuration, failed authentication,
 or a foreign process occupying an explicitly configured port.
 
-The UI derives text from observations:
+The UI derives text from status:
 
-| Observation              | User-facing state                   |
+| Status                   | User-facing state                   |
 | ------------------------ | ----------------------------------- |
 | No registration          | `Starting background service...`    |
 | Registration unreachable | `Waiting for background service...` |
-| Lifecycle `starting`     | `Starting OpenCode vX...`           |
-| Lifecycle `stopping`     | `Updating to vX...`                 |
-| Lifecycle `failed`       | Actionable failure message          |
-| Lifecycle `ready`        | Normal TUI                          |
+| `starting`               | `Starting OpenCode vX...`           |
+| `stopping`               | `Updating to vX...`                 |
+| `failed`                 | Actionable failure message          |
+| `ready`                  | Normal TUI                          |
 
 ## Graceful Session Continuity
 
@@ -491,7 +470,7 @@ Automatic frozen-owner recovery is deferred.
 1. The old service installs vNext but keeps running.
 2. A fresh vNext TUI finds the healthy vOld service and requests graceful stop.
 3. The old service reports `stopping`, suspends active Sessions, and exits.
-4. Open TUIs enter their indefinite observation loops.
+4. Open TUIs enter their indefinite status loops.
 5. One or more clients spawn contenders.
 6. One contender acquires the service lock. Losers exit before heavy boot.
 7. The winner binds and registers the lifecycle shell as `starting`.
@@ -557,15 +536,15 @@ was the observed incident cost.
 
 ### Lifecycle tests
 
-| Scenario                                        | Required result                                                       |
-| ----------------------------------------------- | --------------------------------------------------------------------- |
-| Winner owns lock but application boot is paused | Health reports `starting`                                             |
-| Application request arrives during startup      | Immediate retryable `503`                                             |
-| Application becomes ready                       | Lifecycle changes once from `starting` to `ready`                     |
-| Graceful replacement begins                     | Lifecycle reports `stopping` before disconnect                        |
-| Application initialization fails                | Actionable `failed` observation; owner stays bound and holds the lock |
-| Registration is deleted while owner runs        | Owner republishes it within one assertion interval                    |
-| Owner exits                                     | Registration is removed only if it still names that owner             |
+| Scenario                                        | Required result                                                  |
+| ----------------------------------------------- | ---------------------------------------------------------------- |
+| Winner owns lock but application boot is paused | Health reports `starting`                                        |
+| Application request arrives during startup      | Immediate retryable `503`                                        |
+| Application becomes ready                       | Status changes once from `starting` to `ready`                   |
+| Graceful replacement begins                     | Status reports `stopping` before disconnect                      |
+| Application initialization fails                | Actionable `failed` status; owner stays bound and holds the lock |
+| Registration is deleted while owner runs        | Owner republishes it within one assertion interval               |
+| Owner exits                                     | Registration is removed only if it still names that owner        |
 
 ### Update tests
 

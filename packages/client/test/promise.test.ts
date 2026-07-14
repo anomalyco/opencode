@@ -61,6 +61,22 @@ test("server.get uses the public HTTP contract", async () => {
   expect(request?.url).toBe("http://localhost:3000/api/server")
 })
 
+test("health.stop sends exact replacement identity", async () => {
+  let request: Request | undefined
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async (input, init) => {
+      request = input instanceof Request ? input : new Request(input, init)
+      return Response.json({ accepted: true })
+    },
+  })
+
+  expect(await client.health.stop({ instanceID: "instance", targetVersion: "next" })).toEqual({ accepted: true })
+  expect(request?.method).toBe("POST")
+  expect(request?.url).toBe("http://localhost:3000/api/service/stop")
+  expect(await request?.json()).toEqual({ instanceID: "instance", targetVersion: "next" })
+})
+
 test("MCP resource catalog uses the public HTTP contract", async () => {
   let request: Request | undefined
   const client = OpenCode.make({

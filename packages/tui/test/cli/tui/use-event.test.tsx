@@ -1,6 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 import { describe, expect, test } from "bun:test"
 import type { OpenCodeClient, OpenCodeEvent } from "@opencode-ai/client"
+import type { Service } from "@opencode-ai/client/effect"
 import { testRender } from "@opentui/solid"
 import { onMount } from "solid-js"
 import { ProjectProvider, useProject } from "../../../src/context/project"
@@ -53,7 +54,7 @@ function update(version: string): OpenCodeEvent {
 }
 
 async function mount(
-  reconnect?: (attempt: number) => Promise<{ api: OpenCodeClient }>,
+  reconnect?: (onStatus: (status: Service.Status) => void, signal: AbortSignal) => Promise<{ api: OpenCodeClient }>,
   log?: LogSink,
 ) {
   const events = createEventStream()
@@ -194,8 +195,8 @@ describe("useEvent", () => {
     const replacementEvents = createEventStream()
     const replacementCalls = createFetch(undefined, replacementEvents)
     const replacement = { api: createApi(replacementCalls.fetch) }
-    const { app, events, client, seen } = await mount(async (attempt) => {
-      attempts.push(attempt)
+    const { app, events, client, seen } = await mount(async () => {
+      attempts.push(attempts.length + 1)
       return replacement
     })
 
@@ -245,5 +246,66 @@ describe("useEvent", () => {
     } finally {
       app.renderer.destroy()
     }
+  })
+
+  test("reports service status while endpoint resolution is pending", async () => {
+    const replacementEvents = createEventStream()
+    const replacement = { api: createApi(createFetch(undefined, replacementEvents).fetch) }
+    let report!: (status: Service.Status) => void
+    let resolve!: (value: typeof replacement) => void
+    const endpoint = new Promise<typeof replacement>((done) => {
+      resolve = done
+    })
+    const { app, events, client } = await mount(async (onStatus) => {
+      report = onStatus
+      onStatus({ type: "starting", version: "2.0.0" })
+      return endpoint
+    })
+
+    try {
+      await wait(() => client.connection.status() === "connected")
+      events.disconnect()
+      await wait(
+        () => client.connection.status() === "reconnecting" && client.connection.service()?.type === "starting",
+      )
+      expect(client.connection.service()).toEqual({ type: "starting", version: "2.0.0" })
+
+      report({ type: "failed", message: "Could not open the database.", action: "Check the service logs." })
+      await wait(() => client.connection.service()?.type === "failed")
+      expect(client.connection.service()).toEqual({
+        type: "failed",
+        message: "Could not open the database.",
+        action: "Check the service logs.",
+      })
+
+      resolve(replacement)
+      await wait(() => client.connection.status() === "connected")
+      expect(client.connection.service()).toBeUndefined()
+    } finally {
+      app.renderer.destroy()
+    }
+  })
+
+  test("cancels pending endpoint resolution on cleanup", async () => {
+    let aborted = false
+    const { app, events, client } = await mount(
+      (_onStatus, signal) =>
+        new Promise((_, reject) => {
+          signal.addEventListener(
+            "abort",
+            () => {
+              aborted = true
+              reject(signal.reason)
+            },
+            { once: true },
+          )
+        }),
+    )
+
+    await wait(() => client.connection.status() === "connected")
+    events.disconnect()
+    await wait(() => client.connection.status() === "reconnecting")
+    app.renderer.destroy()
+    await wait(() => aborted)
   })
 })

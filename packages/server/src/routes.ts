@@ -120,6 +120,5 @@ function driveEnabled() {
   return !!process.env.OPENCODE_DRIVE
 }
 
-export const routes = createRoutes()
-
-export const webHandler = () => HttpRouter.toWebHandler(routes.pipe(Layer.provide(HttpServer.layerServices)))
+export const webHandler = () =>
+  HttpRouter.toWebHandler(createRoutes().pipe(Layer.provide(HttpServer.layerServices)))

@@ -16,7 +16,7 @@ export namespace ProcessLock {
 
   export class SystemError extends Schema.TaggedErrorClass<SystemError>()("ProcessLockSystemError", {
     file: Schema.String,
-    operation: Schema.String,
+    operation: Schema.Literals(["open", "acquire"]),
     code: Schema.String,
   }) {
     override get message() {
@@ -97,12 +97,15 @@ function lockDarwin(fd: number): Result {
     flock: { args: ["i32", "i32"], returns: "i32" },
     __error: { args: [], returns: "ptr" },
   })
-  const result = library.symbols.flock(fd, LOCK_EX | LOCK_NB)
-  const code = result === 0 ? 0 : errorCode(library.symbols.__error())
-  library.close()
-  if (result === 0) return { acquired: true }
-  if (code === DARWIN_EWOULDBLOCK) return { acquired: false, held: true }
-  return { acquired: false, held: false, code }
+  try {
+    const result = library.symbols.flock(fd, LOCK_EX | LOCK_NB)
+    const code = result === 0 ? 0 : errorCode(library.symbols.__error())
+    if (result === 0) return { acquired: true }
+    if (code === DARWIN_EWOULDBLOCK) return { acquired: false, held: true }
+    return { acquired: false, held: false, code }
+  } finally {
+    library.close()
+  }
 }
 
 function lockLinux(fd: number): Result {
@@ -111,12 +114,15 @@ function lockLinux(fd: number): Result {
     flock: { args: ["i32", "i32"], returns: "i32" },
     __errno_location: { args: [], returns: "ptr" },
   })
-  const result = library.symbols.flock(fd, LOCK_EX | LOCK_NB)
-  const code = result === 0 ? 0 : errorCode(library.symbols.__errno_location())
-  library.close()
-  if (result === 0) return { acquired: true }
-  if (code === LINUX_EWOULDBLOCK) return { acquired: false, held: true }
-  return { acquired: false, held: false, code }
+  try {
+    const result = library.symbols.flock(fd, LOCK_EX | LOCK_NB)
+    const code = result === 0 ? 0 : errorCode(library.symbols.__errno_location())
+    if (result === 0) return { acquired: true }
+    if (code === LINUX_EWOULDBLOCK) return { acquired: false, held: true }
+    return { acquired: false, held: false, code }
+  } finally {
+    library.close()
+  }
 }
 
 function errorCode(pointer: Pointer | null) {

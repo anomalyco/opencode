@@ -16,7 +16,7 @@ export type Args = {
 
 export type Resolved = {
   readonly endpoint: Service.Endpoint
-  readonly reconnect?: (attempt: number) => Promise<Service.Endpoint>
+  readonly reconnect?: (onStatus: (status: Service.Status) => void, signal: AbortSignal) => Promise<Service.Endpoint>
   readonly reload?: () => Promise<void>
 }
 
@@ -27,9 +27,7 @@ export const resolve = Effect.fn("cli.server.resolve")(function* (args: Args) {
     const password = yield* Env.password
     const endpoint = {
       url: args.server,
-      auth: password
-        ? { type: "basic" as const, username: "opencode", password: Redacted.value(password) }
-        : undefined,
+      auth: password ? { type: "basic" as const, username: "opencode", password: Redacted.value(password) } : undefined,
     } satisfies Service.Endpoint
     const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) })
     const health = yield* Effect.tryPromise({
@@ -51,19 +49,14 @@ export const resolve = Effect.fn("cli.server.resolve")(function* (args: Args) {
   const reconnectOptions = { ...options, version: undefined }
   return {
     endpoint,
-    reconnect: (attempt) =>
-      Effect.runPromise(
-        Effect.gen(function* () {
-          if (attempt > 3) return yield* Service.start(reconnectOptions)
-          const endpoint = yield* Service.discover(reconnectOptions)
-          if (endpoint !== undefined) return endpoint
-          return yield* Effect.fail(new Error("Background server is unavailable"))
-        }).pipe(Effect.provide(NodeFileSystem.layer)),
-      ),
+    reconnect: (onStatus, signal) =>
+      Effect.runPromise(Service.start({ ...reconnectOptions, onStatus }).pipe(Effect.provide(NodeFileSystem.layer)), {
+        signal,
+      }),
     reload: () =>
       Effect.runPromise(
         Effect.gen(function* () {
-          yield* Service.stop(options)
+          yield* Service.stop(options, { targetVersion: options.version })
           yield* Service.start(options)
         }).pipe(Effect.provide(NodeFileSystem.layer)),
       ),
@@ -80,7 +73,8 @@ const resolveManaged = Effect.fnUntraced(function* (
   const compatible = yield* Service.discover(options)
   if (compatible !== undefined) return compatible
   const existing = yield* Service.discover({ ...options, version: undefined })
-  if (existing !== undefined) return yield* Effect.fail(new Error("Background server version does not match this client"))
+  if (existing !== undefined)
+    return yield* Effect.fail(new Error("Background server version does not match this client"))
   return yield* Service.start(options)
 })
 

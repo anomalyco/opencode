@@ -60,13 +60,15 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
             ? Redacted.value(environmentPassword)
             : randomBytes(32).toString("base64url")
       if (!password) return yield* Effect.fail(new Error("Missing server password"))
+      const instanceID = randomUUID()
       const address = yield* start({
         hostname: options.hostname ?? config.hostname ?? "127.0.0.1",
         port: Option.fromNullishOr(options.port ?? config.port),
         password,
-        restartContinuity: options.mode === "service",
+        instanceID,
+        service:
+          serviceOptions === undefined ? undefined : { onListen: (address) => register(address, password, instanceID) },
       }).pipe(Effect.provide(Logger.layer([], { mergeWithExisting: false })))
-      if (serviceOptions !== undefined) yield* register(address, password)
       const url = HttpServer.formatAddress(address)
       console.log(options.mode === "stdio" ? JSON.stringify({ url }) : `server listening on ${url}`)
       if (options.mode === "default" && !environmentPassword) console.log(`server password ${password}`)
@@ -81,10 +83,9 @@ const infoJson = Schema.fromJsonString(Service.Info)
 const encodeInfo = Schema.encodeEffect(infoJson)
 const decodeInfo = Schema.decodeUnknownEffect(infoJson)
 
-const register = Effect.fnUntraced(function* (address: HttpServer.Address, password: string) {
+const register = Effect.fnUntraced(function* (address: HttpServer.Address, password: string, id: string) {
   const fs = yield* FileSystem.FileSystem
   const options = yield* ServiceConfig.options()
-  const id = randomUUID()
   const temp = options.file + "." + id + ".tmp"
   yield* fs.makeDirectory(path.dirname(options.file), { recursive: true })
   const info = {
