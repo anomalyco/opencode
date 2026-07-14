@@ -1,6 +1,6 @@
 import { dlopen, read, type Pointer } from "bun:ffi"
 import { closeSync, existsSync, mkdirSync, openSync } from "node:fs"
-import { connect, createServer, type Server } from "node:net"
+import { connect, createServer, type Server, type Socket } from "node:net"
 import path from "node:path"
 import { Effect, Schema } from "effect"
 import { Hash } from "./hash"
@@ -133,12 +133,13 @@ function errorCode(pointer: Pointer | null) {
 function acquireWindows(file: string) {
   return Effect.callback<Server, ProcessLock.LockError>((resume) => {
     const server = createServer()
+    let probe: Socket | undefined
     const pipe = `\\\\.\\pipe\\opencode-process-lock-${Hash.sha256(path.resolve(file).toLowerCase())}`
     const onError = (cause: NodeJS.ErrnoException) => {
       server.off("listening", onListening)
-      const probe = connect(pipe)
+      probe = connect(pipe)
       const onProbeError = () => {
-        probe.off("connect", onConnect)
+        probe?.off("connect", onConnect)
         resume(
           Effect.fail(
             new ProcessLock.SystemError({
@@ -150,8 +151,8 @@ function acquireWindows(file: string) {
         )
       }
       const onConnect = () => {
-        probe.off("error", onProbeError)
-        probe.destroy()
+        probe?.off("error", onProbeError)
+        probe?.destroy()
         resume(Effect.fail(new ProcessLock.HeldError({ file })))
       }
       probe.once("connect", onConnect)
@@ -165,7 +166,10 @@ function acquireWindows(file: string) {
     server.once("listening", onListening)
     server.on("connection", (socket) => socket.destroy())
     server.listen(pipe)
-    return Effect.sync(() => server.close())
+    return Effect.sync(() => {
+      probe?.destroy()
+      server.close()
+    })
   })
 }
 

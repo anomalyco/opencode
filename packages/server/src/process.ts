@@ -98,17 +98,32 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(options: 
 function listen(options: { readonly hostname: string; readonly port: Option.Option<number> }) {
   if (Option.isSome(options.port)) return bind(options.hostname, options.port.value)
   const next = (port: number): ReturnType<typeof bind> =>
-    bind(options.hostname, port).pipe(Effect.catch((error) => (port === 65_535 ? Effect.fail(error) : next(port + 1))))
+    bind(options.hostname, port).pipe(
+      Effect.catch((error) => (port < 65_535 && addressInUse(error) ? next(port + 1) : Effect.fail(error))),
+    )
   return next(4096)
 }
 
 function bind(hostname: string, port: number) {
-  const server = createServer()
   return Effect.gen(function* () {
-    const http = yield* NodeHttpServer.make(() => server, { port, host: hostname })
-    yield* Effect.addFinalizer(() => Effect.sync(() => server.closeAllConnections()))
-    return { http, server }
+    const parentScope = yield* Scope.Scope
+    const serverScope = yield* Scope.fork(parentScope)
+    const server = createServer()
+    return yield* Effect.gen(function* () {
+      const http = yield* NodeHttpServer.make(() => server, { port, host: hostname })
+      yield* Effect.addFinalizer(() => Effect.sync(() => server.closeAllConnections()))
+      return { http, server }
+    }).pipe(
+      Effect.provideService(Scope.Scope, serverScope),
+      Effect.onError((cause) => Scope.close(serverScope, Exit.failCause(cause))),
+    )
   })
+}
+
+function addressInUse(error: unknown) {
+  if (typeof error !== "object" || error === null || !("cause" in error)) return false
+  const cause = error.cause
+  return typeof cause === "object" && cause !== null && "code" in cause && cause.code === "EADDRINUSE"
 }
 
 function dispatch(

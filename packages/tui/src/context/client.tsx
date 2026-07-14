@@ -3,6 +3,7 @@ import type { Service } from "@opencode-ai/client/effect"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { createSignal, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
+import { errorMessage } from "../util/error"
 import { createSimpleContext } from "./helper"
 import { useLog } from "./log"
 
@@ -104,7 +105,7 @@ export const { use: useClient, provider: ClientProvider } = createSimpleContext(
           if (abort.signal.aborted || controller.signal.aborted) return
           if (connectedAt !== undefined && Date.now() - connectedAt >= 1_000) attempt = 0
           attempt += 1
-          const message = error instanceof Error ? error.message : String(error)
+          const message = errorMessage(error)
           record("disconnected", attempt, message)
           log.info("event stream disconnected", {
             attempt,
@@ -119,7 +120,7 @@ export const { use: useClient, provider: ClientProvider } = createSimpleContext(
               if (!controller.signal.aborted)
                 log.info("server resolution failed", {
                   attempt,
-                  error: error instanceof Error ? error.message : String(error),
+                  error: errorMessage(error),
                 })
             })
             if (abort.signal.aborted || controller.signal.aborted) return
