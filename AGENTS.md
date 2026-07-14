@@ -285,3 +285,5 @@ irm https://github.com/ivanfernadezm99/opencode/releases/latest/download/install
 | v1.0.1 | Backup automático de engram.db antes de reinstalar |
 | v1.0.2 | Auto-install de git, node, npm vía winget en Windows frescas |
 | v1.0.3 | Soporte mirror Nextcloud + script de sync (`-UseMirror`) |
+| v1.0.4 | Sin rate limit de GitHub API (usa HTTP redirect en vez de api.github.com) |
+| v1.0.5 | Auto-fallback a Nextcloud cuando GitHub no responde |
