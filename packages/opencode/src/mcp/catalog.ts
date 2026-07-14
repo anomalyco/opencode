@@ -11,6 +11,33 @@ import { Effect } from "effect"
 const DEFAULT_TIMEOUT = 30_000
 const MAX_LIST_PAGES = 1_000
 
+function sanitizeMCPSchemaForOpenAI(schema: JSONSchema7): JSONSchema7 {
+  const result: JSONSchema7 = { ...schema }
+  if (result.properties) {
+    const cleanedProperties: Record<string, any> = {}
+    for (const [key, prop] of Object.entries(result.properties)) {
+      if (typeof prop !== "object" || prop === null) {
+        cleanedProperties[key] = prop
+        continue
+      }
+      let cleaned: any = { ...prop }
+      if (Array.isArray(cleaned.anyOf)) {
+        const nonNullTypes = cleaned.anyOf.filter(
+          (anyOf: any) => anyOf.type !== "null"
+        )
+        if (nonNullTypes.length === 1) {
+          cleaned = { ...cleaned, ...nonNullTypes[0] }
+          delete cleaned.anyOf
+        }
+      }
+      delete cleaned.default
+      cleanedProperties[key] = cleaned
+    }
+    result.properties = cleanedProperties
+  }
+  return result
+}
+
 const TolerantListToolsResultSchema = ListToolsResultSchema.extend({
   tools: ToolSchema.omit({ outputSchema: true }).array(),
 })
@@ -40,16 +67,18 @@ export function defs(client: Client, timeout?: number) {
 }
 
 export function convertTool(mcpTool: MCPToolDef, client: Client, timeout?: number): Tool {
+  const rawSchema = mcpTool.inputSchema as JSONSchema7
   const inputSchema: JSONSchema7 = {
-    ...(mcpTool.inputSchema as JSONSchema7),
+    ...rawSchema,
     type: "object",
-    properties: (mcpTool.inputSchema.properties ?? {}) as JSONSchema7["properties"],
+    properties: (rawSchema.properties ?? {}) as JSONSchema7["properties"],
     additionalProperties: false,
   }
+  const sanitizedSchema = sanitizeMCPSchemaForOpenAI(inputSchema)
 
   return dynamicTool({
     description: mcpTool.description ?? "",
-    inputSchema: jsonSchema(inputSchema),
+    inputSchema: jsonSchema(sanitizedSchema),
     execute: async (args: unknown, options) => {
       const cleanArgs = Object.fromEntries(
         Object.entries((args || {}) as Record<string, unknown>).filter(
