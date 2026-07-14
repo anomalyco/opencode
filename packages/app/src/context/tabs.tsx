@@ -11,6 +11,7 @@ import { SessionTabsRemovedDetail } from "@/components/titlebar-session-events"
 import { sessionHref } from "@/utils/session-route"
 import { createTabMemory } from "./tab-memory"
 import { nextTabAfterClose, pushClosedTab, removeClosedTabs, takeClosedTab, type ClosedTab } from "./closed-tabs"
+import { createDraftPromptSession, type PromptModel } from "./prompt-state"
 
 export type SessionTab = {
   type: "session"
@@ -207,15 +208,17 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
         if (!tab || tab.type !== "draft") throw new Error(`Draft not found: ${draftID}`)
         return tab
       },
-      newDraft(draft: Omit<DraftTab, "type" | "draftID">, prompt?: string) {
+      newDraft(draft: Omit<DraftTab, "type" | "draftID">, prompt?: string, model?: PromptModel) {
         const draftID = uuid()
+        const tab = { type: "draft" as const, draftID, ...draft }
+        memory.ensure(tabKey(tab), "prompt", () => createDraftPromptSession(draftID, { prompt, model }))
         void startTransition(() => {
           setStore(
             produce((tabs) => {
-              tabs.push({ type: "draft", draftID, ...draft })
+              tabs.push(tab)
             }),
           )
-          navigate(prompt ? `${draftHref(draftID)}&prompt=${encodeURIComponent(prompt)}` : draftHref(draftID))
+          navigate(draftHref(draftID))
         })
       },
       updateDraft(draftID: string, draft: Partial<Omit<DraftTab, "type" | "draftID">>) {
@@ -372,6 +375,9 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       },
       state<T>(tab: Tab, name: string, init: () => T) {
         return memory.ensure(tabKey(tab), name, init)
+      },
+      stateValue<T>(tab: Tab, name: string) {
+        return memory.get<T>(tabKey(tab), name)
       },
     }
 

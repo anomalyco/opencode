@@ -19,6 +19,7 @@ import { selectionFromLines, type SelectedLineRange, useFile } from "@/context/f
 import {
   ContentPart,
   DEFAULT_PROMPT,
+  isCommentItem,
   isPromptEqual,
   Prompt,
   usePrompt,
@@ -36,6 +37,8 @@ import { Icon } from "@opencode-ai/ui/icon"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
+import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
+import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
 import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
@@ -630,7 +633,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const isImeComposing = (event: KeyboardEvent) => event.isComposing || composing() || event.keyCode === 229
 
   const handleBlur = () => {
-    savedCursor = currentCursor()
+    const cursor = currentCursor()
+    savedCursor = cursor
+    if (cursor !== null && cursor !== prompt.cursor()) prompt.set(prompt.current(), cursor)
     closePopover()
     setComposing(false)
   }
@@ -1333,6 +1338,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       onQueue: props.onQueue,
       onAbort: props.onAbort,
       onSubmit: props.onSubmit,
+      model: props.controls.model.selection,
     })
 
   const handleKeyDown = (event: KeyboardEvent) => {
@@ -1623,7 +1629,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 )}
               />
               <PromptContextItems
-                items={contextItems()}
+                items={contextItems().filter((item) => !isCommentItem(item))}
                 active={(item) => {
                   const active = comments.active()
                   return !!item.commentID && item.commentID === active?.id && item.path === active?.file
@@ -1633,6 +1639,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   if (item.commentID) comments.remove(item.path, item.commentID)
                   prompt.context.remove(item.key)
                 }}
+                newLayoutDesigns={props.controls.newLayoutDesigns}
                 t={(key) => language.t(key as Parameters<typeof language.t>[0])}
               />
               <PromptImageAttachments
@@ -1642,6 +1649,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 }
                 onRemove={removeAttachment}
                 removeLabel={language.t("prompt.attachment.remove")}
+                newLayoutDesigns={props.controls.newLayoutDesigns}
+                comments={contextItems().filter(isCommentItem)}
+                commentActive={(item) => {
+                  const active = comments.active()
+                  return !!item.commentID && item.commentID === active?.id && item.path === active?.file
+                }}
+                onOpenComment={openComment}
+                onRemoveComment={(item) => {
+                  if (item.commentID) comments.remove(item.path, item.commentID)
+                  prompt.context.remove(item.key)
+                }}
               />
               <div
                 class="relative min-h-[52px]"
@@ -1704,22 +1722,19 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   >
                     <MenuV2 gutter={6} modal={false} placement="top-start">
                       <MenuV2.Trigger
-                        as={IconButton}
+                        as={IconButtonV2}
                         data-action="prompt-attach"
                         type="button"
-                        icon="plus"
-                        variant="ghost"
-                        class="size-7 rounded-md p-[6px] text-v2-icon-icon-muted"
+                        icon={<IconV2 name="plus" />}
+                        variant="ghost-muted"
+                        size="large"
                         style={buttons()}
                         disabled={store.mode !== "normal"}
                         tabIndex={store.mode === "normal" ? undefined : -1}
                         aria-label={language.t("prompt.menu.addImagesAndFiles")}
                       />
                       <MenuV2.Portal>
-                        <MenuV2.Content
-                          class="[&_[data-slot=menu-v2-item-shortcut]]:w-5 [&_[data-slot=menu-v2-item-shortcut]]:justify-center"
-                          style={{ "min-width": "180px" }}
-                        >
+                        <MenuV2.Content style={{ "min-width": "180px" }}>
                           <MenuV2.Item onSelect={pick} shortcut={command.keybind("file.attach")}>
                             {language.t("prompt.menu.imagesAndFiles")}
                           </MenuV2.Item>
@@ -1852,6 +1867,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 if (item.commentID) comments.remove(item.path, item.commentID)
                 prompt.context.remove(item.key)
               }}
+              newLayoutDesigns={props.controls.newLayoutDesigns}
               t={(key) => language.t(key as Parameters<typeof language.t>[0])}
             />
             <PromptImageAttachments
@@ -1861,6 +1877,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               }
               onRemove={removeAttachment}
               removeLabel={language.t("prompt.attachment.remove")}
+              newLayoutDesigns={props.controls.newLayoutDesigns}
             />
             <div
               class="relative"
@@ -2186,10 +2203,7 @@ type ComposerModelControlState = {
 
 function ComposerAgentControl(props: { state: ComposerAgentControlState }) {
   return (
-    <div class="relative">
-      <div class="pointer-events-none absolute left-2 top-1/2 z-10 flex size-4 -translate-y-1/2 items-center justify-center text-v2-icon-icon-muted">
-        <Icon name="sliders" size="small" />
-      </div>
+    <div>
       <TooltipV2
         placement="top"
         gutter={4}
@@ -2200,17 +2214,32 @@ function ComposerAgentControl(props: { state: ComposerAgentControlState }) {
           </>
         }
       >
-        <Select
-          size="normal"
-          options={props.state.options}
-          current={props.state.current}
-          onSelect={props.state.onSelect}
-          class="max-w-[175px] justify-start text-v2-text-text-faint [&_[data-component=icon]]:text-v2-icon-icon-muted"
-          valueClass="truncate pl-5 text-[13px] font-[440] leading-5 text-v2-text-text-faint"
-          triggerStyle={props.state.style}
-          triggerProps={{ "data-action": "prompt-agent" }}
-          variant="ghost"
-        />
+        <MenuV2 gutter={6} modal={false} placement="top-start">
+          <MenuV2.Trigger
+            as={ButtonV2}
+            data-action="prompt-agent"
+            variant="ghost-muted"
+            size="normal"
+            class="max-w-[175px] justify-start ![font-weight:440]"
+            style={props.state.style}
+          >
+            <span class="truncate capitalize leading-5">{props.state.current}</span>
+            <span class="-ml-0.5 -mr-1 flex shrink-0">
+              <Icon name="chevron-down" size="small" />
+            </span>
+          </MenuV2.Trigger>
+          <MenuV2.Portal>
+            <MenuV2.Content>
+              <MenuV2.RadioGroup value={props.state.current} onChange={props.state.onSelect}>
+                {props.state.options.map((value) => (
+                  <MenuV2.RadioItem value={value} class="capitalize">
+                    {value}
+                  </MenuV2.RadioItem>
+                ))}
+              </MenuV2.RadioGroup>
+            </MenuV2.Content>
+          </MenuV2.Portal>
+        </MenuV2>
       </TooltipV2>
     </div>
   )
@@ -2341,7 +2370,7 @@ function ModelControlContent(props: { state: ComposerModelControlState; v2?: boo
           />
         )}
       </Show>
-      <span class="truncate">{props.state.modelName}</span>
+      <span class="truncate leading-4">{props.state.modelName}</span>
       <span class={props.v2 ? "-ml-0.5 -mr-1 flex shrink-0" : "-ml-1 shrink-0 flex size-fit"}>
         <Icon name="chevron-down" size="small" class="text-v2-icon-icon-muted" />
       </span>
