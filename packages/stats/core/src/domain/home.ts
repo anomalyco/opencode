@@ -94,10 +94,15 @@ export type StatsModelComparisonEntry = {
   tokenShare: number
   tokenChange: number
   totals: StatsModelData["totals"]
+  usage: ModelUsagePoint[]
+}
+export type StatsModelComparisonInput = {
+  provider: string
+  model: string
 }
 export type StatsModelComparisonData = {
   updatedAt: string | null
-  models: [StatsModelComparisonEntry | null, StatsModelComparisonEntry | null]
+  models: (StatsModelComparisonEntry | null)[]
 }
 export type StatsHomeData = {
   updatedAt: string | null
@@ -289,26 +294,34 @@ function dateValue(value: unknown) {
   return value instanceof Date ? value : new Date(stringValue(value))
 }
 
-export const getStatsModelComparisonData: (
-  firstProvider: string,
-  firstModel: string,
-  secondProvider: string,
-  secondModel: string,
-) => Effect.Effect<StatsModelComparisonData, DatabaseError, ModelStatRepo> = Effect.fn("StatsModelComparison.getData")(
-  function* (firstProvider, firstModel, secondProvider, secondModel) {
+export const getStatsModelsComparisonData: (
+  models: readonly StatsModelComparisonInput[],
+) => Effect.Effect<StatsModelComparisonData, DatabaseError, ModelStatRepo> = Effect.fn("StatsModelsComparison.getData")(
+  function* (models) {
     const modelStats = yield* ModelStatRepo
     const rows = yield* modelStats.listDaily()
-    const first = toComparisonEntry(buildStatsModelData(firstModel, rows, [], firstProvider))
-    const second = toComparisonEntry(buildStatsModelData(secondModel, rows, [], secondProvider))
-    const latest = [first?.updatedAt, second?.updatedAt]
+    const entries = models.map((model) => toComparisonEntry(buildStatsModelData(model.model, rows, [], model.provider)))
+    const latest = entries
+      .map((model) => model?.updatedAt)
       .flatMap((value) => (value ? [dateTime(value)] : []))
       .toSorted((a, b) => b - a)[0]
     return {
       updatedAt: latest === undefined ? null : new Date(latest).toISOString(),
-      models: [first, second],
+      models: entries,
     }
   },
 )
+
+export const getStatsModelComparisonData = (
+  firstProvider: string,
+  firstModel: string,
+  secondProvider: string,
+  secondModel: string,
+) =>
+  getStatsModelsComparisonData([
+    { provider: firstProvider, model: firstModel },
+    { provider: secondProvider, model: secondModel },
+  ])
 
 function buildStatsHomeData(
   modelRows: ModelStatMetric[],
@@ -501,6 +514,7 @@ function toComparisonEntry(data: StatsModelData | null): StatsModelComparisonEnt
     tokenShare: data.tokenShare,
     tokenChange: data.tokenChange,
     totals: data.totals,
+    usage: data.usage,
   }
 }
 
