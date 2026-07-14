@@ -28,12 +28,18 @@ import {
   formatCatalogLabName,
   getModelCatalog,
   type ModelCatalog,
-  type ModelCatalogCost,
   type ModelCatalogEntry,
 } from "../model-catalog"
 import { SectionHeading } from "../section-heading"
 import { runStatsEffect } from "../../stats-runtime"
 import { setStatsPageCacheHeaders } from "../stats-cache"
+import {
+  ComparisonCardsSection,
+  modelRefFromCatalog,
+  uniqueComparisonPairs,
+  type ComparisonModelRef,
+} from "../compare-cards"
+import { BreadcrumbSelect } from "../breadcrumb-select"
 import {
   applyThemePreference,
   Footer,
@@ -190,6 +196,11 @@ export default function StatsModel() {
                 <ModelEfficiencySection data={stats() ?? null} catalog={catalogEntry() ?? null} />
                 <ModelGeoBreakdownSection data={stats()?.country ?? emptyCountryRecord()} />
                 <ModelPeersSection data={stats() ?? null} />
+                <ComparisonCardsSection
+                  pairs={modelComparisonPairs(catalog(), catalogEntry() ?? null, stats() ?? null)}
+                  title="Compare This Model"
+                  description="Other models to compare with this one."
+                />
               </>
             </Show>
           </Show>
@@ -198,6 +209,7 @@ export default function StatsModel() {
           themePreference={themePreference()}
           onThemePreferenceChange={updateThemePreference}
           links={modelFooterLinks()}
+          bridge={{ href: "#model-comparison", label: "MODEL COMPARISONS" }}
         />
       </div>
     </main>
@@ -283,61 +295,46 @@ function ModelHero(props: {
         <Show
           when={labs().length > 0}
           fallback={
-            <span data-slot="model-hero-crumb" data-current="true">
+            <span data-slot="model-hero-crumb" data-menu="true">
               <span>{props.labName}</span>
               <ChevronDownIcon />
             </span>
           }
         >
-          <details data-component="model-hero-menu">
-            <summary data-slot="model-hero-crumb" data-current="true">
-              <span>{props.labName}</span>
-              <ChevronDownIcon />
-            </summary>
-            <div data-slot="model-hero-options">
-              <For each={labs()}>
-                {(lab) => (
-                  <a
-                    data-slot="model-hero-option"
-                    data-current={lab.id === providerSlug(labId()) ? "true" : undefined}
-                    href={language.route(`${import.meta.env.BASE_URL}${lab.id}`)}
-                  >
-                    {lab.name}
-                  </a>
-                )}
-              </For>
-            </div>
-          </details>
+          <BreadcrumbSelect
+            ariaLabel="Choose a lab"
+            label={props.labName}
+            options={labs().map((lab) => ({
+              href: language.route(`${import.meta.env.BASE_URL}${lab.id}`),
+              label: lab.name,
+              value: lab.id,
+            }))}
+            value={providerSlug(labId())}
+            variant="model"
+          />
         </Show>
         <span data-slot="model-hero-separator">/</span>
         <Show
           when={labModels().length > 0}
           fallback={
-            <span data-slot="model-hero-crumb" data-current="true" aria-current="page">
+            <span data-slot="model-hero-crumb" data-menu="true" data-current="true" aria-current="page">
               <span>{modelName()}</span>
               <ChevronDownIcon />
             </span>
           }
         >
-          <details data-component="model-hero-menu">
-            <summary data-slot="model-hero-crumb" data-current="true" aria-current="page">
-              <span>{modelName()}</span>
-              <ChevronDownIcon />
-            </summary>
-            <div data-slot="model-hero-options">
-              <For each={labModels()}>
-                {(model) => (
-                  <a
-                    data-slot="model-hero-option"
-                    data-current={model.id === props.catalog?.id ? "true" : undefined}
-                    href={language.route(`${import.meta.env.BASE_URL}${model.id}`)}
-                  >
-                    {model.name}
-                  </a>
-                )}
-              </For>
-            </div>
-          </details>
+          <BreadcrumbSelect
+            ariaLabel="Choose a model"
+            current
+            label={modelName()}
+            options={labModels().map((model) => ({
+              href: language.route(`${import.meta.env.BASE_URL}${model.id}`),
+              label: model.name,
+              value: model.id,
+            }))}
+            value={props.catalog?.id ?? ""}
+            variant="model"
+          />
         </Show>
       </nav>
       <div data-slot="model-hero-title-row">
@@ -421,7 +418,7 @@ function ModelHeroSparkline(props: { data: StatsModelData }) {
 function ChevronDownIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none">
-      <path d="M4.75 6.25L8 9.5L11.25 6.25" stroke="currentColor" stroke-width="1.5" />
+      <path d="M5 6.5L8 9.5L11 6.5" stroke="currentColor" />
     </svg>
   )
 }
@@ -881,35 +878,32 @@ function ModelEfficiencySection(props: { data: StatsModelData | null; catalog: M
         }
       >
         {(data) => (
-          <div data-component="model-metric-grid" data-variant="dense">
-            <MetricCard
-              label={i18n.t("model.cost")}
-              value={formatMoney(data().totals.cost)}
-              detail={i18n.t("model.totalSpend")}
-            />
-            <MetricCard
-              label={i18n.t("model.costPerMillion")}
-              value={
-                props.catalog?.cost ? formatCatalogPrice(props.catalog.cost) : formatMoney(data().totals.costPerMillion)
-              }
-              detail={props.catalog?.cost ? i18n.t("model.inputOutput") : i18n.t("model.observedTokens")}
-            />
-            <MetricCard
-              label={i18n.t("model.costSession")}
-              value={formatSessionCost(data().totals.costPerSession)}
-              detail={i18n.t("model.average")}
-            />
-            <MetricCard
-              label={i18n.t("model.tokensSession")}
-              value={formatTokens(data().totals.tokensPerSession)}
-              detail={i18n.t("model.average")}
-            />
-            <MetricCard
-              label={i18n.t("model.cacheRatio")}
-              value={formatPercent(data().totals.cacheRatio)}
-              detail={i18n.t("model.inputTokens")}
-            />
-          </div>
+          <>
+            <div data-slot="model-efficiency-pattern" aria-hidden="true" />
+            <div data-component="model-efficiency-grid">
+              <MetricCard label={i18n.t("model.totalSpendLabel")} value={formatMoney(data().totals.cost)} />
+              <MetricCard
+                label={i18n.t("model.costInput")}
+                value={formatCatalogUnitPrice(props.catalog?.cost?.input)}
+              />
+              <MetricCard
+                label={i18n.t("model.costOutput")}
+                value={formatCatalogUnitPrice(props.catalog?.cost?.output)}
+              />
+              <MetricCard
+                label={i18n.t("model.averageCostSession")}
+                value={formatSessionCost(data().totals.costPerSession)}
+              />
+              <MetricCard
+                label={i18n.t("model.averageTokensSession")}
+                value={formatTokens(data().totals.tokensPerSession)}
+              />
+              <MetricCard
+                label={i18n.t("model.cacheRatio")}
+                value={`${formatPercent(data().totals.cacheRatio)} ${i18n.t("model.inputTokens")}`}
+              />
+            </div>
+          </>
         )}
       </Show>
     </section>
@@ -1129,12 +1123,12 @@ function ModelPeersSection(props: { data: StatsModelData | null }) {
   )
 }
 
-function MetricCard(props: { label: string; value: string; detail: string; state?: "positive" | "negative" }) {
+function MetricCard(props: { label: string; value: string; detail?: string; state?: "positive" | "negative" }) {
   return (
     <article data-component="model-metric" data-state={props.state}>
       <span>{props.label}</span>
       <strong>{props.value}</strong>
-      <p>{props.detail}</p>
+      <Show when={props.detail}>{(detail) => <p>{detail()}</p>}</Show>
     </article>
   )
 }
@@ -1147,10 +1141,16 @@ function PeerRow(props: { peer: ModelPeerEntry; active: boolean }) {
         href={language.route(`${import.meta.env.BASE_URL}${providerSlug(props.peer.provider)}/${props.peer.slug}`)}
         data-active={props.active ? "true" : undefined}
       >
-        <span>{String(props.peer.rank).padStart(2, "0")}</span>
-        <ProviderIcon aria-hidden="true" id={getProviderIconId(props.peer.author)} />
-        <strong>{props.peer.model}</strong>
-        <em>{props.peer.author}</em>
+        <span data-slot="model-peer-rank" aria-label={props.active ? `Rank ${props.peer.rank}` : undefined}>
+          <Show when={!props.active}>{String(props.peer.rank).padStart(2, "0")}</Show>
+        </span>
+        <span data-slot="model-peer-avatar">
+          <ProviderIcon aria-hidden="true" id={getProviderIconId(props.peer.author)} />
+        </span>
+        <span data-slot="model-peer-copy">
+          <strong>{props.peer.model}</strong>
+          <em>{props.peer.author}</em>
+        </span>
         <b>{formatTokens(props.peer.tokens)}</b>
       </a>
     </li>
@@ -1168,6 +1168,55 @@ function ModelEmptyState(props: { title: string; description: string; compact?: 
       <p>{props.description}</p>
     </div>
   )
+}
+
+function modelComparisonPairs(
+  catalog: ModelCatalog | undefined,
+  catalogEntry: ModelCatalogEntry | null,
+  data: StatsModelData | null,
+) {
+  const current = modelComparisonRef(catalogEntry, data)
+  if (!current) return []
+  const peerPairs = (data?.peers ?? [])
+    .filter((peer) => peer.model !== data?.model)
+    .slice(0, 3)
+    .map((peer) => ({
+      first: current,
+      second: {
+        name: peer.model,
+        lab: peer.provider,
+        slug: peer.slug,
+        labName: peer.author,
+        metric: `#${peer.rank} / ${formatTokens(peer.tokens)}`,
+      },
+      detail: "Usage peer",
+    }))
+  const catalogPairs = (
+    catalogEntry && catalog ? (catalog.labs.find((lab) => lab.id === catalogEntry.lab)?.models ?? []) : []
+  )
+    .filter((model) => model.id !== catalogEntry?.id)
+    .slice(0, 3)
+    .map((model) => ({
+      first: current,
+      second: modelRefFromCatalog(model),
+      detail: "Same lab pair",
+    }))
+  return uniqueComparisonPairs([...peerPairs, ...catalogPairs])
+}
+
+function modelComparisonRef(
+  catalogEntry: ModelCatalogEntry | null,
+  data: StatsModelData | null,
+): ComparisonModelRef | undefined {
+  if (catalogEntry) return modelRefFromCatalog(catalogEntry)
+  if (!data) return undefined
+  return {
+    name: data.model,
+    lab: data.provider,
+    slug: data.slug,
+    labName: data.author,
+    metric: `#${data.rank}`,
+  }
 }
 
 function getProviderIconId(author: string) {
@@ -1517,8 +1566,9 @@ function formatMoney(value: number) {
   return `$${value.toFixed(value >= 10 ? 0 : 2)}`
 }
 
-function formatCatalogPrice(value: ModelCatalogCost) {
-  return `${formatModelPrice(value.input)} / ${formatModelPrice(value.output)}`
+function formatCatalogUnitPrice(value: number | undefined) {
+  if (value === undefined) return "-"
+  return `${formatModelPrice(value)} / 1M`
 }
 
 function formatModelPrice(value: number) {

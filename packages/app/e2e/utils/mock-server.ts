@@ -22,6 +22,7 @@ export interface MockServerConfig {
   questions?: unknown[] | (() => unknown[])
   fileList?: (path: string) => unknown | Promise<unknown>
   fileContent?: (path: string) => unknown | Promise<unknown>
+  findFiles?: (input: { query: string; dirs?: string; limit?: number }) => unknown
   sessionStatus?: unknown
 }
 
@@ -55,6 +56,11 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     const path = url.pathname
     if (path === "/global/event" || path === "/event") return sse(route, config.events?.(), config.eventRetry)
     if (path === "/global/health") return json(route, { healthy: true })
+    if (path === "/api/session")
+      return json(route, {
+        data: config.sessions.map((session) => v2Session(session, config.directory)),
+        cursor: {},
+      })
     if (path === "/experimental/capabilities") return json(route, { backgroundSubagents: false })
     if (path === "/permission")
       return json(route, typeof config.permissions === "function" ? config.permissions() : (config.permissions ?? []))
@@ -66,6 +72,15 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
       return json(route, await config.fileList(url.searchParams.get("path") ?? ""))
     if (path === "/file/content" && config.fileContent)
       return json(route, await config.fileContent(url.searchParams.get("path") ?? ""))
+    if (path === "/find/file" && config.findFiles)
+      return json(
+        route,
+        await config.findFiles({
+          query: url.searchParams.get("query") ?? "",
+          dirs: url.searchParams.get("dirs") ?? undefined,
+          limit: url.searchParams.has("limit") ? Number(url.searchParams.get("limit")) : undefined,
+        }),
+      )
     if (path === "/api/reference")
       return json(route, {
         location: {
@@ -120,6 +135,30 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     if (url.port === targetPort && targetPort !== appPort) return json(route, {})
     return route.fallback()
   })
+}
+
+function v2Session(session: { id: string } & Record<string, unknown>, fallbackDirectory: string) {
+  const time = session.time && typeof session.time === "object" ? session.time : {}
+  return {
+    id: session.id,
+    parentID: session.parentID,
+    projectID: session.projectID ?? "project",
+    cost: session.cost ?? 0,
+    tokens: session.tokens ?? { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    time: {
+      created: "created" in time && typeof time.created === "number" ? time.created : 0,
+      updated: "updated" in time && typeof time.updated === "number" ? time.updated : 0,
+      ...(session.time && typeof session.time === "object" && "archived" in session.time
+        ? { archived: session.time.archived }
+        : {}),
+    },
+    title: session.title ?? session.id,
+    location: {
+      directory: typeof session.directory === "string" ? session.directory : fallbackDirectory,
+      ...(typeof session.workspaceID === "string" ? { workspaceID: session.workspaceID } : {}),
+    },
+    ...(typeof session.path === "string" ? { subpath: session.path } : {}),
+  }
 }
 
 function json(route: Route, body: unknown, headers?: Record<string, string>, status = 200) {

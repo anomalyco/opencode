@@ -20,6 +20,11 @@
   height: 100%;
   overflow-y: auto;
   scrollbar-width: none;
+  user-select: none;
+}
+
+.settings-v2-panel :is(input, textarea, [contenteditable="true"]) {
+  user-select: text;
 }
 
 .settings-v2-panel::-webkit-scrollbar {
@@ -181,6 +186,7 @@
   flex-direction: column;
   gap: 8px;
   padding: 4px 0 4px 4px;
+  user-select: none;
 }
 
 .settings-v2-nav-footer > span {

@@ -35,12 +35,12 @@ import { usePlatform } from "@/context/platform"
 import { DateTime } from "luxon"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useDirectoryPicker } from "@/components/directory-picker"
-import { useSettingsCommand } from "@/components/settings-dialog"
+import { useSettingsDialog } from "@/components/settings-dialog"
 import { DialogSelectServer, useServerManagementController } from "@/components/dialog-select-server"
 import { DialogServerV2 } from "@/components/settings-v2/dialog-server-v2"
 import { ServerConnection, serverName, useServer } from "@/context/server"
 import { sessionHasOpenTab, useTabs } from "@/context/tabs"
-import { useServerSync, type ServerSync } from "@/context/server-sync"
+import { useServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
 import { useNotification } from "@/context/notification"
 import {
@@ -50,7 +50,6 @@ import {
   getProjectAvatarSource,
   homeProjectDirectories,
   projectForSession,
-  sortedRootSessions,
   toggleHomeProjectSelection,
 } from "@/pages/layout/helpers"
 import { SessionTabAvatar } from "@/pages/layout/session-tab-avatar"
@@ -68,6 +67,12 @@ import { preloadMarkdown } from "@opencode-ai/session-ui/markdown-cache"
 import { archiveHomeSession } from "./home-session-archive"
 import { shouldOpenSessionInBackground } from "./home-session-open"
 import { showToast } from "@/utils/toast"
+import { fileManagerApp } from "@/utils/file-manager"
+import {
+  loadHomeSessionIndex,
+  retainHomeSessions,
+  type HomeSessionEvents,
+} from "@/context/global-sync/home-session-index"
 
 const HOME_SESSION_LIMIT = 64
 const HOME_SESSION_HEADER_STICKY_TOP = 12
@@ -105,22 +110,24 @@ const HOME_SEARCH_RESULT_META =
 let pendingHomeNavigation: { server: ServerConnection.Key; href: string } | undefined
 
 function buildHomeSessionRecords(input: {
-  sync: Pick<ServerSync, "child">
+  sessions: () => Session[]
   projectDirectories: () => string[]
   projects: () => LocalProject[]
   projectByID: () => Map<string, LocalProject>
 }) {
-  return [
-    ...new Map(
-      input
-        .projectDirectories()
-        .flatMap((directory) => sortedRootSessions(input.sync.child(directory, { bootstrap: false })[0], Date.now()))
-        .map((session) => [`${pathKey(session.directory)}:${session.id}`, session] as const),
-    ).values(),
-  ]
+  const directories = new Set(input.projectDirectories().map(pathKey))
+  const sessions = input.sessions().filter((session) => directories.has(pathKey(session.directory)))
+  return [...new Map(sessions.map((session) => [session.id, session] as const)).values()]
     .sort((a, b) => (b.time.updated ?? b.time.created) - (a.time.updated ?? a.time.created))
     .flatMap((session) => {
-      const project = projectForSession(session, input.projects(), input.projectByID())
+      const directory = pathKey(session.directory)
+      const project =
+        input
+          .projects()
+          .find(
+            (item) =>
+              pathKey(item.worktree) === directory || item.sandboxes?.some((sandbox) => pathKey(sandbox) === directory),
+          ) ?? projectForSession(session, input.projects(), input.projectByID())
       if (!project) return []
       return {
         session,
@@ -239,10 +246,11 @@ function useHomeSessionHeaderOpacity(groups: () => HomeSessionGroup[]) {
   return { setViewport, setContentRef, setHeaderRef, update, titleOpacity }
 }
 
-// Cmd+click on macOS (Ctrl+click elsewhere) opens a session tab in the
-// background without navigating, matching browser conventions.
+// Middle-click or Cmd+click on macOS (Ctrl+click elsewhere) opens a session
+// tab in the background without navigating, matching browser conventions.
 function isBackgroundOpen(event: MouseEvent) {
   return shouldOpenSessionInBackground({
+    button: event.button,
     mac: typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform),
     meta: event.metaKey,
     ctrl: event.ctrlKey,
@@ -267,7 +275,7 @@ export function NewHome() {
   const command = useCommand()
   const notification = useNotification()
   const marked = useMarked()
-  const openSettings = useSettingsCommand()
+  const openSettings = useSettingsDialog()
   let focusSessionSearch: (() => void) | undefined
   const [state, setState] = createStore({
     search: "",
@@ -284,6 +292,7 @@ export function NewHome() {
     return global.ensureServerCtx(conn)
   })
   const focusedSync = () => focusedServerCtx()?.sync ?? sync()
+  const homeSessions = () => focusedSync().homeSessions
   const projects = createMemo(() => focusedServerCtx()?.projects.list() ?? layout.projects.list())
   const recentlyClosed = createMemo(
     () => focusedServerCtx()?.projects.recentlyClosed() ?? layout.projects.recentlyClosed(),
@@ -316,24 +325,47 @@ export function NewHome() {
     }
     return language.t("home.sessions.search.placeholder")
   })
+  const sessionEventLoad = useQuery(() => ({
+    queryKey: homeSessions().eventsKey,
+    queryFn: async (): Promise<HomeSessionEvents> => ({ sequence: 0, entries: [] }),
+    initialData: { sequence: 0, entries: [] } satisfies HomeSessionEvents,
+    enabled: false,
+  }))
   const sessionLoad = useQuery(() => ({
-    queryKey: ["home", "sessions", selection().server, ...projectDirectories()] as const,
-    queryFn: async () => {
-      await Promise.all(
-        projectDirectories().map((directory) =>
-          focusedSync().project.loadSessions(directory, { limit: HOME_SESSION_LIMIT }),
-        ),
+    queryKey: homeSessions().indexKey,
+    enabled: !!focusedServerCtx(),
+    queryFn: async ({ signal }) => {
+      const ctx = focusedServerCtx()
+      if (!ctx) return { sessions: [], eventSequence: 0 }
+      const cache = homeSessions()
+      const eventSequence = cache.eventSequence()
+      const index = await loadHomeSessionIndex(
+        (input, options) => ctx.sdk.client.v2.session.list(input, options),
+        eventSequence,
+        signal,
       )
-      return null
+      cache.complete(eventSequence)
+      return index
     },
+    retry: false,
+    staleTime: 30_000,
+    refetchOnMount: true,
+    refetchOnReconnect: true,
   }))
 
   const projectByID = createMemo(
     () => new Map(projects().flatMap((project) => (project.id ? [[project.id, project] as const] : []))),
   )
+  const indexedSessions = createMemo(() =>
+    retainHomeSessions(
+      homeSessions().sessions(sessionLoad.data, sessionEventLoad.data),
+      HOME_SESSION_LIMIT,
+      Date.now(),
+    ),
+  )
   const allRecords = createMemo(() =>
     buildHomeSessionRecords({
-      sync: focusedSync(),
+      sessions: indexedSessions,
       projectDirectories,
       projects,
       projectByID,
@@ -361,8 +393,7 @@ export function NewHome() {
         prefetched.add(key)
         createRoot((dispose) => {
           try {
-            const directory = ctx.sync.ensureDirSyncContext(record.session.directory)
-            void directory.session
+            void ctx.sync.session
               .sync(record.session.id)
               .then(() => {
                 return Promise.all(
@@ -464,8 +495,8 @@ export function NewHome() {
   }
 
   function editProject(conn: ServerConnection.Any, project: LocalProject) {
-    void import("@/components/dialog-edit-project").then((x) => {
-      dialog.show(() => <x.DialogEditProject server={conn} project={project} />)
+    void import("@/components/dialog-edit-project-v2").then((x) => {
+      void dialog.show(() => <x.DialogEditProjectV2 server={conn} project={project} />)
     })
   }
 
@@ -482,7 +513,13 @@ export function NewHome() {
   }
 
   function openSession(session: Session, options?: OpenSessionOptions) {
-    const project = projectForSession(session, projects(), projectByID())
+    const directoryKey = pathKey(session.directory)
+    const project =
+      projects().find(
+        (item) =>
+          pathKey(item.worktree) === directoryKey ||
+          item.sandboxes?.some((sandbox) => pathKey(sandbox) === directoryKey),
+      ) ?? projectForSession(session, projects(), projectByID())
     const conn = focusedServer()
     if (!conn) return
     const directory = project?.worktree ?? session.directory
@@ -1030,8 +1067,24 @@ function HomeProjectRow(props: {
   language: ReturnType<typeof useLanguage>
 }) {
   const global = useGlobal()
+  const platform = usePlatform()
   const serverUnreachable = () => global.servers.health[ServerConnection.key(props.server)]?.healthy === false
   const [state, setState] = createStore({ menuOpen: false })
+  const canRevealInFileManager = () =>
+    platform.platform === "desktop" && !!platform.openPath && ServerConnection.local(props.server)
+  const fileManagerActionLabel = () =>
+    props.language.t(
+      fileManagerApp(platform.platform === "desktop" ? (platform.os ?? "unknown") : "unknown").actionLabel,
+    )
+  const revealInFileManager = () => {
+    if (!platform.openPath) return
+    platform.openPath(props.project.worktree).catch((err: unknown) =>
+      showToast({
+        title: props.language.t("common.requestFailed"),
+        description: errorMessage(err, props.language.t("common.requestFailed")),
+      }),
+    )
+  }
   return (
     <div class="group/project relative flex h-7 min-w-0 items-center rounded-[6px]">
       <button
@@ -1073,6 +1126,9 @@ function HomeProjectRow(props: {
               <MenuV2.Item onSelect={() => props.editProject(props.server, props.project)}>
                 {props.language.t("dialog.project.edit.title")}
               </MenuV2.Item>
+              <Show when={canRevealInFileManager()}>
+                <MenuV2.Item onSelect={revealInFileManager}>{fileManagerActionLabel()}</MenuV2.Item>
+              </Show>
               <MenuV2.Item
                 disabled={props.unseenCount === 0}
                 onSelect={() => props.clearNotifications(props.server, props.project)}
@@ -1366,7 +1422,15 @@ function HomeSessionSearchResultRow(props: {
         group: !!showProjectName(),
       }}
       onMouseEnter={() => props.onHighlight()}
+      onMouseDown={(event) => {
+        if (event.button === 1) event.preventDefault()
+      }}
       onClick={(event) => props.onSelect(props.record.session, { background: isBackgroundOpen(event) })}
+      onAuxClick={(event) => {
+        if (!isBackgroundOpen(event)) return
+        event.preventDefault()
+        props.onSelect(props.record.session, { background: true })
+      }}
     >
       <HomeSessionLeading
         project={props.record.project}
@@ -1426,7 +1490,15 @@ function HomeSessionRow(props: {
         type="button"
         data-component="home-session-row"
         class={`${HOME_ROW} h-10 min-w-0 flex-1 gap-2 py-3 pl-3 pr-10`}
+        onMouseDown={(event) => {
+          if (event.button === 1) event.preventDefault()
+        }}
         onClick={(event) => props.openSession(props.record.session, { background: isBackgroundOpen(event) })}
+        onAuxClick={(event) => {
+          if (!isBackgroundOpen(event)) return
+          event.preventDefault()
+          props.openSession(props.record.session, { background: true })
+        }}
       >
         <HomeSessionLeading
           project={props.record.project}
