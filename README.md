@@ -37,14 +37,15 @@ The CLI script name is `kancode`; `opencode` remains an alias/shim when installe
 
 ### Config compatibility
 
-KanCode keeps OpenCode configs working:
+KanCode keeps OpenCode configs working in projects; user/global scope is KanCode-only:
 
 | Kind | Preference |
 | --- | --- |
-| Config files | Prefer `kancode.json` / `kancode.jsonc`; else `opencode.json` / `opencode.jsonc` (first existing wins per directory; do not merge both names in the same dir) |
+| Project config files | Prefer `kancode.json` / `kancode.jsonc`; else `opencode.json` / `opencode.jsonc` (first existing wins per directory; do not merge both names in the same dir) |
 | Project dirs | Load both `.kancode/` and `.opencode/`; `.kancode` wins on conflicting keys |
+| User scope (XDG/global, `~/.kancode`) | KanCode only: `kancode.json(c)` and `.kancode/` — do **not** read `opencode.json` or `~/.opencode` |
 | Env flags | Honor `OPENCODE_*`; `KANCODE_*` aliases map to the same flags (`KANCODE_*` wins when both set) |
-| XDG / data dirs | Prefer nonempty `kancode` paths; else fall back to existing `opencode` dirs |
+| XDG / data dirs | Config path is always `…/kancode`; data/cache/state/tmp prefer nonempty `kancode`, else fall back to existing `opencode` dirs |
 
 Issues and feedback: [puetsua/kancode](https://github.com/puetsua/kancode/issues).
 
@@ -54,7 +55,7 @@ Upstream OpenCode docs still describe shared features: [opencode.ai/docs](https:
 
 KanCode includes two built-in agents you can switch between with the `Tab` key.
 
-- **build** - Default, full-access agent for development work
+- **default** - Default, full-access agent for development work
 - **plan** - Read-only agent for analysis and code exploration
   - Denies file edits by default
   - Asks permission before running bash commands

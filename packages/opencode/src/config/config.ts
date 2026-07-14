@@ -137,7 +137,8 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Co
 export const use = serviceUse(Service)
 
 function globalConfigFile() {
-  const candidates = [...ConfigPaths.CONFIG_FILE_CANDIDATES, "config.json"].map((file) =>
+  // User-scope: KanCode filenames only (+ legacy config.json). No opencode.json fallback.
+  const candidates = [...ConfigPaths.USER_CONFIG_FILE_CANDIDATES, "config.json"].map((file) =>
     path.join(Global.Path.config, file),
   )
   for (const file of candidates) {
@@ -256,7 +257,7 @@ const layer = Layer.effect(
         }
       }
       result = mergeConfig(result, yield* loadFile(path.join(Global.Path.config, "config.json"), env))
-      const preferred = ConfigPaths.preferredConfigFile(Global.Path.config)
+      const preferred = ConfigPaths.preferredUserConfigFile(Global.Path.config)
       if (preferred) result = mergeConfig(result, yield* loadFile(preferred, env))
 
       const legacy = path.join(Global.Path.config, "config")

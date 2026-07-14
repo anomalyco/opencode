@@ -156,7 +156,7 @@ Static `deny` still short-circuits before modules (V2 already short-circuits con
 
 ### 10. Config dual-read
 
-**Decision:** `permission` / `permissions` / `permission_modules` load through existing config merge (kancode preferred filenames, `.kancode` wins over `.opencode`). Env JSON override (`KANCODE_PERMISSION` / `OPENCODE_PERMISSION`) continues to merge into `permission`; optional later env for module options is an open question — not required for v1.
+**Decision:** `permission` / `permissions` / `permission_modules` load through existing config merge (project: kancode preferred filenames, `.kancode` wins over `.opencode`; user scope: KanCode-only — no `.opencode` / `opencode.json` fallback). Env JSON override (`KANCODE_PERMISSION` / `OPENCODE_PERMISSION`) continues to merge into `permission`; optional later env for module options is an open question — not required for v1.
 
 ## Risks / Trade-offs
 

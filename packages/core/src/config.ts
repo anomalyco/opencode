@@ -139,8 +139,10 @@ const layer = Layer.effect(
     const global = yield* Global.Service
     const location = yield* Location.Service
     const policy = yield* Policy.Service
-    // Prefer KanCode filenames; fall back to OpenCode. First existing wins per directory.
+    // Prefer KanCode filenames; fall back to OpenCode (project scope only).
     const names = ["kancode.jsonc", "kancode.json", "opencode.jsonc", "opencode.json"] as const
+    // User-scope (global/XDG): KanCode filenames only — no opencode.json fallback.
+    const userNames = ["kancode.jsonc", "kancode.json"] as const
     // Discover `.opencode` before `.kancode` so KanCode wins on merge conflict.
     const projectDirs = [".opencode", ".kancode"] as const
     const decodeOptions = { errors: "all", onExcessProperty: "ignore", propertyOrder: "original" } as const
@@ -169,15 +171,15 @@ const layer = Layer.effect(
       return new Document({ type: "document", path: filepath, info })
     })
 
-    const loadPreferred = Effect.fnUntraced(function* (directory: string) {
-      for (const file of names) {
+    const loadPreferred = Effect.fnUntraced(function* (directory: string, candidates: readonly string[] = names) {
+      for (const file of candidates) {
         const config = yield* loadFile(path.join(directory, file))
         if (config) return config
       }
     })
 
-    const loadDirectory = Effect.fnUntraced(function* (directory: AbsolutePath) {
-      const preferred = yield* loadPreferred(directory)
+    const loadDirectory = Effect.fnUntraced(function* (directory: AbsolutePath, candidates?: readonly string[]) {
+      const preferred = yield* loadPreferred(directory, candidates)
       return [...(preferred ? [preferred] : []), new Directory({ type: "directory", path: directory })]
     })
 
@@ -221,11 +223,14 @@ const layer = Layer.effect(
       seenDirs.add(dir)
       directDirs.push(dir)
     }
-    const direct = yield* Effect.forEach(directDirs.toReversed(), loadPreferred).pipe(
+    const direct = yield* Effect.forEach(directDirs.toReversed(), (dir) => loadPreferred(dir)).pipe(
       Effect.orDie,
       Effect.map((configs) => configs.filter((config): config is Document => config !== undefined)),
     )
-    const supplementary = yield* Effect.forEach(directories, loadDirectory).pipe(Effect.orDie)
+    // Global/XDG is user scope (KanCode names only); project `.opencode`/`.kancode` dual-read.
+    const supplementary = yield* Effect.forEach(directories, (directory, index) =>
+      loadDirectory(directory, index === 0 ? userNames : names),
+    ).pipe(Effect.orDie)
     // Apply general settings first and more specific settings last:
     // global config, project files, then project-dir files (`.opencode` then `.kancode`).
     const configs = [...(supplementary[0] ?? []), ...direct, ...supplementary.slice(1).flat()]

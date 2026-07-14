@@ -47,5 +47,5 @@ Non-goals / not in this change:
 - `packages/opencode` — V1 `Permission.ask` / `fromConfig`, agent merge, tool ask wiring
 - `packages/plugin` — replace unused `permission.ask` hook with a permission-module registration API
 - `packages/tui` / CLI — surface classifier pending/audit optionally; keep existing `auto` mode separate
-- Config files: `kancode.json(c)` / `opencode.json(c)` dual-read; env override story for module options TBD in design
+- Config files: project `kancode.json(c)` / `opencode.json(c)` dual-read; user scope KanCode-only; env override story for module options TBD in design
 - Docs / skill copy that describe permission as only allow/ask/deny

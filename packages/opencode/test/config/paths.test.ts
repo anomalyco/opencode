@@ -17,18 +17,17 @@ describe("ConfigPaths writable helpers", () => {
     return dir
   }
 
-  test("resolveWritableConfigFile prefers existing kancode.json", async () => {
+  test("resolveWritableConfigFile user scope prefers kancode.json and ignores opencode.json", async () => {
     const dir = await tmp()
     await Bun.write(path.join(dir, "opencode.json"), "{}")
+    expect(ConfigPaths.resolveWritableConfigFile(dir)).toBe(path.join(dir, "kancode.json"))
     await Bun.write(path.join(dir, "kancode.json"), "{}")
     expect(ConfigPaths.resolveWritableConfigFile(dir)).toBe(path.join(dir, "kancode.json"))
   })
 
-  test("resolveWritableConfigFile falls back to opencode.json then defaults to kancode.json", async () => {
+  test("resolveWritableConfigFile user scope defaults to kancode.json", async () => {
     const dir = await tmp()
     expect(ConfigPaths.resolveWritableConfigFile(dir)).toBe(path.join(dir, "kancode.json"))
-    await Bun.write(path.join(dir, "opencode.json"), "{}")
-    expect(ConfigPaths.resolveWritableConfigFile(dir)).toBe(path.join(dir, "opencode.json"))
   })
 
   test("resolveWritableConfigFile project scope checks .kancode then .opencode", async () => {
@@ -46,6 +45,12 @@ describe("ConfigPaths writable helpers", () => {
     )
   })
 
+  test("resolveWritableConfigFile project scope falls back to opencode.json at root", async () => {
+    const dir = await tmp()
+    await Bun.write(path.join(dir, "opencode.json"), "{}")
+    expect(ConfigPaths.resolveWritableConfigFile(dir, { project: true })).toBe(path.join(dir, "opencode.json"))
+  })
+
   test("resolveWritableProjectDir prefers .kancode, reuses .opencode, else creates .kancode", async () => {
     const empty = await tmp()
     expect(ConfigPaths.resolveWritableProjectDir(empty)).toBe(path.join(empty, ".kancode"))
@@ -58,5 +63,13 @@ describe("ConfigPaths writable helpers", () => {
     await fs.mkdir(path.join(both, ".opencode"))
     await fs.mkdir(path.join(both, ".kancode"))
     expect(ConfigPaths.resolveWritableProjectDir(both)).toBe(path.join(both, ".kancode"))
+  })
+
+  test("preferredUserConfigFile ignores opencode.json", async () => {
+    const dir = await tmp()
+    await Bun.write(path.join(dir, "opencode.json"), "{}")
+    expect(ConfigPaths.preferredUserConfigFile(dir)).toBeUndefined()
+    await Bun.write(path.join(dir, "kancode.json"), "{}")
+    expect(ConfigPaths.preferredUserConfigFile(dir)).toBe(path.join(dir, "kancode.json"))
   })
 })

@@ -16,8 +16,8 @@ import { testEffect } from "../lib/effect"
 const it = testEffect(LayerNode.compile(LayerNode.group([Config.node, FSUtil.node])))
 const winIt = process.platform === "win32" ? it.instance : it.instance.skip
 
-const globalConfigFiles = ["opencode.json", "opencode.jsonc", "tui.json", "tui.jsonc"].map((file) =>
-  path.join(Global.Path.config, file),
+const globalConfigFiles = ["kancode.json", "kancode.jsonc", "opencode.json", "opencode.jsonc", "tui.json", "tui.jsonc"].map(
+  (file) => path.join(Global.Path.config, file),
 )
 
 const cleanState = Effect.gen(function* () {
@@ -91,7 +91,7 @@ it.instance("keeps server and tui plugin merge semantics aligned", () =>
       const local = path.join(test.directory, ".opencode")
       yield* fs.makeDirectory(local, { recursive: true })
 
-      yield* fs.writeJson(path.join(Global.Path.config, "opencode.json"), {
+      yield* fs.writeJson(path.join(Global.Path.config, "kancode.json"), {
         plugin: [["shared-plugin@1.0.0", { source: "global" }], "global-only@1.0.0"],
       })
       yield* fs.writeJson(path.join(Global.Path.config, "tui.json"), {

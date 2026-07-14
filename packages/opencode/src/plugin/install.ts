@@ -31,7 +31,7 @@ export type PatchDeps = {
   readText: (file: string) => Promise<string>
   write: (file: string, text: string) => Promise<void>
   exists: (file: string) => Promise<boolean>
-  files: (dir: string, name: "opencode" | "tui") => string[]
+  files: (dir: string, name: "kancode" | "opencode" | "tui") => string[]
 }
 
 export type PatchInput = {
@@ -337,13 +337,22 @@ function patchDir(input: PatchInput) {
   return path.join(root, ".opencode")
 }
 
-function patchName(kind: Kind): "opencode" | "tui" {
-  if (kind === "server") return "opencode"
-  return "tui"
+function patchName(kind: Kind, global?: boolean): "kancode" | "opencode" | "tui" {
+  if (kind === "tui") return "tui"
+  // User/global scope: KanCode filenames only. Project `.opencode` may keep opencode.jsonc.
+  if (global) return "kancode"
+  return "opencode"
 }
 
-async function patchOne(dir: string, target: Target, spec: string, force: boolean, dep: PatchDeps): Promise<PatchOne> {
-  const name = patchName(target.kind)
+async function patchOne(
+  dir: string,
+  target: Target,
+  spec: string,
+  force: boolean,
+  dep: PatchDeps,
+  global?: boolean,
+): Promise<PatchOne> {
+  const name = patchName(target.kind, global)
   await using _ = await Flock.acquire(`plug-config:${Filesystem.resolve(path.join(dir, name))}`)
 
   const files = dep.files(dir, name)
@@ -422,7 +431,7 @@ export async function patchPluginConfig(input: PatchInput, dep: PatchDeps = defa
   const dir = patchDir(input)
   const items: PatchItem[] = []
   for (const target of input.targets) {
-    const hit = await patchOne(dir, target, input.spec, Boolean(input.force), dep)
+    const hit = await patchOne(dir, target, input.spec, Boolean(input.force), dep, input.global)
     if (!hit.ok) {
       return {
         ...hit,

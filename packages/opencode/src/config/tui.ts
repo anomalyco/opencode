@@ -168,8 +168,8 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
       acc.plugin_origins = plugins
     })
 
-  // Every config dir we may read from: global config dir, any `.opencode` /
-  // `.kancode` folders between cwd and home, and OPENCODE_CONFIG_DIR / KANCODE_CONFIG_DIR.
+  // Every config dir we may read from: global config dir, project `.opencode` /
+  // `.kancode` folders, home `.kancode` only, and OPENCODE_CONFIG_DIR / KANCODE_CONFIG_DIR.
   const directories = yield* ConfigPaths.directories(ctx.directory)
   yield* Effect.promise(() => migrateTuiConfig({ directories, cwd: ctx.directory }))
 

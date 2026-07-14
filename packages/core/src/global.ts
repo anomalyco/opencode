@@ -8,7 +8,7 @@ import { Flock } from "./util/flock"
 import { Flag, envAlias } from "./flag/flag"
 import { makeGlobalNode } from "./effect/app-node"
 
-/** Prefer nonempty kancode XDG dir; else fall back to legacy opencode. */
+/** Prefer nonempty kancode XDG dir; else fall back to legacy opencode (data/cache/state/tmp). */
 function pickAppDir(base: string) {
   const preferred = path.join(base, "kancode")
   const legacy = path.join(base, "opencode")
@@ -25,7 +25,8 @@ function pickAppDir(base: string) {
 
 const data = pickAppDir(xdgData!)
 const cache = pickAppDir(xdgCache!)
-const config = pickAppDir(xdgConfig!)
+// User-scope config XDG: KanCode only — never fall back to ~/.config/opencode.
+const config = path.join(xdgConfig!, "kancode")
 const state = pickAppDir(xdgState!)
 const tmp = (() => {
   const preferred = path.join(os.tmpdir(), "kancode")

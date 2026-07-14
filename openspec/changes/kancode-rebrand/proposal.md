@@ -6,9 +6,10 @@ This fork is already named KanCode (`puetsua/kancode`), but most user-facing sur
 
 - Rebrand user-facing display name, TUI title, CLI help/script name, agent identity prompts, ACP agent name, READMEs, and bug-report URLs to **KanCode** / `kancode` / `puetsua/kancode`
 - Prefer binary name `kancode`; keep `opencode` as a shim/alias for muscle memory
-- Dual-read config: prefer `kancode.json` / `kancode.jsonc` when present, else `opencode.json` / `opencode.jsonc`; discover both `.kancode/` and `.opencode/` with kancode winning on conflict
+- Project dual-read config: prefer `kancode.json` / `kancode.jsonc` when present, else `opencode.json` / `opencode.jsonc`; discover both `.kancode/` and `.opencode/` with kancode winning on conflict
+- User scope (XDG/global, `~/.kancode`): KanCode only — no `.opencode` / `opencode.json` fallback
 - Honor existing `OPENCODE_*` env flags; add `KANCODE_*` aliases that map to the same flags (KANCODE wins when both set)
-- XDG/data dirs: prefer `kancode` paths; fall back to existing `opencode` dirs so sessions/config are not lost
+- XDG: config path always `kancode`; data/cache/state/tmp prefer `kancode`, fall back to `opencode` so sessions are not lost
 - Soften or remove clear upstream SaaS upsell (OpenCode Go / zen marketing copy); point docs/issues at this fork
 - Document precedence in OpenSpec + AGENTS/README
 - Keep LICENSE attribution intact

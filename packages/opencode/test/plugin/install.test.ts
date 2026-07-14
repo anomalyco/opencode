@@ -366,7 +366,7 @@ describe("plugin.install.task", () => {
     const ok = await run(ctx(tmp.path))
     expect(ok).toBe(true)
 
-    expect(await Filesystem.exists(path.join(global, "opencode.jsonc"))).toBe(true)
+    expect(await Filesystem.exists(path.join(global, "kancode.jsonc"))).toBe(true)
     expect(await Filesystem.exists(path.join(tmp.path, ".opencode", "opencode.jsonc"))).toBe(false)
   })
 

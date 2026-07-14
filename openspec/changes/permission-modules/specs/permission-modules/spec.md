@@ -18,14 +18,14 @@ The system SHALL accept registered permission module IDs as V1 permission action
 
 ### Requirement: Top-Level Permission Modules Config
 
-The system SHALL load per-module options from a top-level `permission_modules` map in config (dual-read aware with `kancode.json(c)` / `opencode.json(c)` and `.kancode` / `.opencode` precedence). Module options MUST NOT be nested inside V1 pattern-map objects.
+The system SHALL load per-module options from a top-level `permission_modules` map in config (project dual-read aware with `kancode.json(c)` / `opencode.json(c)` and `.kancode` / `.opencode` precedence; user scope remains KanCode-only). Module options MUST NOT be nested inside V1 pattern-map objects.
 
 #### Scenario: Module options loaded from kancode.json
 - **WHEN** `kancode.json` contains `permission_modules.cruise_control.model` set to a provider/model ref
 - **THEN** the `cruise_control` module receives that model configuration at decision time
 
-#### Scenario: Dual-read prefers kancode file
-- **WHEN** both `kancode.json` and `opencode.json` exist in the same directory and only one defines `permission_modules`
+#### Scenario: Project dual-read prefers kancode file
+- **WHEN** both `kancode.json` and `opencode.json` exist in the same project directory and only one defines `permission_modules`
 - **THEN** config loading follows existing KanCode filename preference (KanCode file wins; do not merge both files from the same directory)
 
 ### Requirement: Permission Module Registry

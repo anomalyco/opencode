@@ -149,11 +149,11 @@ afterEach(async () => {
 const writeManagedSettingsEffect = (settings: object, filename?: string) =>
   FSUtil.use.writeWithDirs(path.join(managedConfigDir, filename ?? "opencode.json"), JSON.stringify(settings))
 
-async function writeConfig(dir: string, config: object, name = "opencode.json") {
+async function writeConfig(dir: string, config: object, name = "kancode.json") {
   await Filesystem.write(path.join(dir, name), JSON.stringify(config))
 }
 
-const writeConfigEffect = (dir: string, config: object, name = "opencode.json") =>
+const writeConfigEffect = (dir: string, config: object, name = "kancode.json") =>
   FSUtil.use.writeWithDirs(path.join(dir, name), JSON.stringify(config))
 
 const withInstanceDir = <A, E, R>(dir: string, effect: Effect.Effect<A, E, R>) =>
@@ -313,7 +313,7 @@ it.effect("creates global jsonc config with schema when no global configs exist"
     Effect.gen(function* () {
       yield* Config.use.get().pipe(provideInstanceEffect(dir))
 
-      const content = yield* FSUtil.use.readFileString(path.join(dir, "opencode.jsonc"))
+      const content = yield* FSUtil.use.readFileString(path.join(dir, "kancode.json"))
       expect(content).toContain('"$schema": "https://opencode.ai/config.json"')
     }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
   ),
@@ -329,7 +329,7 @@ it.effect("does not create global config when OPENCODE_CONFIG_DIR is set", () =>
         Effect.gen(function* () {
           yield* Config.use.get().pipe(provideInstanceEffect(dir))
 
-          expect(yield* FSUtil.use.existsSafe(path.join(dir, "opencode.jsonc"))).toBe(false)
+          expect(yield* FSUtil.use.existsSafe(path.join(dir, "kancode.json"))).toBe(false)
         }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
       ),
     )
@@ -376,18 +376,18 @@ it.effect("updates global config and omits empty shell key in json", () =>
     Effect.gen(function* () {
       yield* Config.use.updateGlobal({ shell: "" })
 
-      const writtenConfig = yield* FSUtil.use.readJson(path.join(dir, "opencode.json"))
+      const writtenConfig = yield* FSUtil.use.readJson(path.join(dir, "kancode.json"))
       expect(writtenConfig).not.toHaveProperty("shell")
     }),
   ),
 )
 
 it.effect("updates global config and omits empty shell key in jsonc", () =>
-  withGlobalConfig({ config: { shell: "bash", model: "test/model" }, name: "opencode.jsonc" }, ({ dir }) =>
+  withGlobalConfig({ config: { shell: "bash", model: "test/model" }, name: "kancode.jsonc" }, ({ dir }) =>
     Effect.gen(function* () {
       yield* Config.use.updateGlobal({ shell: "" })
 
-      const file = path.join(dir, "opencode.jsonc")
+      const file = path.join(dir, "kancode.jsonc")
       const writtenConfig = yield* FSUtil.use.readFileString(file)
       const parsed = ConfigParse.schema(ConfigV1.Info, ConfigParse.jsonc(writtenConfig, file), file)
       expect(writtenConfig).not.toContain('"shell"')
@@ -479,10 +479,14 @@ it.instance("jsonc overrides json in the same directory", () =>
       },
       "opencode.jsonc",
     )
-    yield* writeConfigEffect(test.directory, {
-      $schema: "https://opencode.ai/config.json",
-      model: "override",
-    })
+    yield* writeConfigEffect(
+      test.directory,
+      {
+        $schema: "https://opencode.ai/config.json",
+        model: "override",
+      },
+      "opencode.json",
+    )
     const config = yield* Config.use.get()
     expect(config.model).toBe("base")
     expect(config.username).toBe("base")
@@ -1359,25 +1363,30 @@ test("config parser preserves permission order while rejecting unknown top-level
 it.instance("project config can override MCP server enabled status", () =>
   Effect.gen(function* () {
     const test = yield* TestInstance
-    // Simulates a base config (like from remote .well-known) with disabled MCP.
-    yield* writeConfigEffect(test.directory, {
-      $schema: "https://opencode.ai/config.json",
-      mcp: {
-        jira: {
-          type: "remote",
-          url: "https://jira.example.com/mcp",
-          enabled: false,
-        },
-        wiki: {
-          type: "remote",
-          url: "https://wiki.example.com/mcp",
-          enabled: false,
-        },
-      },
-    })
-    // Project config enables just jira.
+    // Base layer (project root).
     yield* writeConfigEffect(
       test.directory,
+      {
+        $schema: "https://opencode.ai/config.json",
+        mcp: {
+          jira: {
+            type: "remote",
+            url: "https://jira.example.com/mcp",
+            enabled: false,
+          },
+          wiki: {
+            type: "remote",
+            url: "https://wiki.example.com/mcp",
+            enabled: false,
+          },
+        },
+      },
+      "opencode.json",
+    )
+    // Higher-precedence local `.opencode` layer enables just jira.
+    yield* FSUtil.use.ensureDir(path.join(test.directory, ".opencode"))
+    yield* writeConfigEffect(
+      path.join(test.directory, ".opencode"),
       {
         $schema: "https://opencode.ai/config.json",
         mcp: {
@@ -1408,21 +1417,26 @@ it.instance("project config can override MCP server enabled status", () =>
 it.instance("MCP config deep merges preserving base config properties", () =>
   Effect.gen(function* () {
     const test = yield* TestInstance
-    yield* writeConfigEffect(test.directory, {
-      $schema: "https://opencode.ai/config.json",
-      mcp: {
-        myserver: {
-          type: "remote",
-          url: "https://myserver.example.com/mcp",
-          enabled: false,
-          headers: {
-            "X-Custom-Header": "value",
+    yield* writeConfigEffect(
+      test.directory,
+      {
+        $schema: "https://opencode.ai/config.json",
+        mcp: {
+          myserver: {
+            type: "remote",
+            url: "https://myserver.example.com/mcp",
+            enabled: false,
+            headers: {
+              "X-Custom-Header": "value",
+            },
           },
         },
       },
-    })
+      "opencode.json",
+    )
+    yield* FSUtil.use.ensureDir(path.join(test.directory, ".opencode"))
     yield* writeConfigEffect(
-      test.directory,
+      path.join(test.directory, ".opencode"),
       {
         $schema: "https://opencode.ai/config.json",
         mcp: {
