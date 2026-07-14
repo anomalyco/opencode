@@ -283,6 +283,7 @@ export const dict = {
   "mcp.auth.clickToAuthenticate": "클릭하여 인증",
   "mcp.status.disabled": "비활성화됨",
   "dialog.fork.empty": "분기할 메시지 없음",
+  "dialog.fork.full": "Full session",
   "dialog.directory.search.placeholder": "폴더 검색",
   "dialog.directory.empty": "폴더 없음",
   "dialog.directory.action.selectFile": "파일 선택",

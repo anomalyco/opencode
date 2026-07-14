@@ -297,6 +297,7 @@ export const dict = {
   "mcp.auth.clickToAuthenticate": "Cliquez pour vous authentifier",
   "mcp.status.disabled": "désactivé",
   "dialog.fork.empty": "Aucun message à partir duquel bifurquer",
+  "dialog.fork.full": "Full session",
   "dialog.directory.search.placeholder": "Rechercher des dossiers",
   "dialog.directory.empty": "Aucun dossier trouvé",
   "dialog.directory.action.selectFile": "Sélectionner le fichier",
