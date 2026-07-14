@@ -8,6 +8,7 @@ import { ConfigAgentV1 } from "./agent"
 import { ConfigAttachmentV1 } from "./attachment"
 import { ConfigContextV1 } from "./context"
 import { ConfigCommandV1 } from "./command"
+import { ConfigDiagramsV1 } from "./diagrams"
 import { ConfigFormatterV1 } from "./formatter"
 import { ConfigLayoutV1 } from "./layout"
 import { ConfigLSPV1 } from "./lsp"
@@ -171,6 +172,9 @@ export const Info = Schema.Struct({
       }),
     }),
   ),
+  diagrams: Schema.optional(ConfigDiagramsV1.Info).annotate({
+    description: "Mermaid diagram rendering configuration",
+  }),
   experimental: Schema.optional(
     Schema.Struct({
       disable_paste_summary: Schema.optional(Schema.Boolean),
