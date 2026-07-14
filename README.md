@@ -131,7 +131,7 @@ Configure team execution via `opencode.json`:
 ```
 
 #### Mermaid Diagram Support
-When enabled, the model is instructed to generate diagrams using Mermaid syntax inside ` ```mermaid ` code blocks.
+When enabled, the model is instructed to generate diagrams using Mermaid syntax inside ` ```mermaid ` code blocks. Diagrams are extracted, rendered to SVG, and emitted as `session.diagram.rendered` events for UI consumption. Mermaid blocks are replaced in the text with a `[Mermaid diagram generated]` marker.
 
 ```json
 {
