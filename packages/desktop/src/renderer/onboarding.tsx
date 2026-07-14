@@ -4,7 +4,7 @@ import {
   useSettings,
   useTabs,
 } from "@opencode-ai/app"
-import { onMount, startTransition } from "solid-js"
+import { onMount } from "solid-js"
 
 export function DesktopFirstLaunchOnboarding(props: { initialUrl: string; onLoaded: () => void }) {
   const server = useServer()
@@ -48,9 +48,7 @@ export function DesktopFirstLaunchOnboarding(props: { initialUrl: string; onLoad
       console.info("[desktop-onboarding] starting first launch draft", { directory })
       server.projects.open(directory)
       server.projects.touch(directory)
-      await startTransition(() => {
-        tabs.newDraft({ server: server.key, directory })
-      })
+      await tabs.newDraft({ server: server.key, directory })
     } catch (error) {
       console.error("[desktop-onboarding] first launch onboarding failed", error)
     }

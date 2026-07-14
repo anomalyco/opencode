@@ -212,7 +212,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
         const draftID = uuid()
         const tab = { type: "draft" as const, draftID, ...draft }
         memory.ensure(tabKey(tab), "prompt", () => createDraftPromptSession(draftID, { prompt, model }))
-        void startTransition(() => {
+        return startTransition(() => {
           setStore(
             produce((tabs) => {
               tabs.push(tab)
