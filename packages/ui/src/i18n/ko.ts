@@ -125,6 +125,7 @@ export const dict = {
   "ui.common.close": "닫기",
   "ui.common.next": "다음",
   "ui.common.submit": "제출",
+  "ui.common.showMore": "더 보기",
 
   "ui.permission.deny": "거부",
   "ui.permission.allowAlways": "항상 허용",

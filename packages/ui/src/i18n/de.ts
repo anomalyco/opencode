@@ -155,6 +155,7 @@ export const dict = {
   "ui.common.close": "Schließen",
   "ui.common.next": "Weiter",
   "ui.common.submit": "Absenden",
+  "ui.common.showMore": "Mehr anzeigen",
 
   "ui.permission.deny": "Verweigern",
   "ui.permission.allowAlways": "Immer erlauben",
