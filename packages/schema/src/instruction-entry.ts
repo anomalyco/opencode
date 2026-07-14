@@ -18,3 +18,15 @@ export const Info = Schema.Struct({
   value: Schema.Json.annotate({ description: "JSON value attached to the session's instructions" }),
 }).annotate({ identifier: "InstructionEntry.Info" })
 export interface Info extends Schema.Schema.Type<typeof Info> {}
+
+export const MaxValueBytes = 8 * 1024
+
+export class ValueTooLargeError extends Schema.TaggedErrorClass<ValueTooLargeError>()(
+  "InstructionEntryValueTooLargeError",
+  {
+    actualBytes: Schema.Int,
+    maxBytes: Schema.Int,
+    message: Schema.String,
+  },
+  { httpApiStatus: 413 },
+) {}

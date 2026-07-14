@@ -1,0 +1,6 @@
+.source
+.tanstack
+.wrangler
+dist
+node_modules
+worker-configuration.d.ts

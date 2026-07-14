@@ -74,14 +74,16 @@ const layer = Layer.effect(
             description: reference.description,
           }))
           .toSorted((a, b) => a.name.localeCompare(b.name))
-        if (available.length === 0) return Instructions.empty
-        return Instructions.make({
+        return Instructions.make<ReadonlyArray<typeof Summary.Type>>({
           key: Instructions.Key.make("core/reference-guidance"),
           codec: Schema.toCodecJson(Schema.Array(Summary)),
-          load: Effect.succeed(available),
-          baseline: render,
-          update,
-          removed: () => "Project reference guidance is no longer available. Do not use previously listed references.",
+          read: Effect.succeed(available.length === 0 ? Instructions.removed : available),
+          render: {
+            initial: render,
+            changed: update,
+            removed: () =>
+              "Project reference guidance is no longer available. Do not use previously listed references.",
+          },
         })
       }),
     })

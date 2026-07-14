@@ -2,7 +2,6 @@ import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { HttpRecorder } from "@opencode-ai/http-recorder"
-import { HttpRecorderInternal } from "@opencode-ai/http-recorder/internal"
 import { describe, expect, test } from "bun:test"
 import { tool, type ModelMessage, type JSONValue } from "ai"
 import { Effect, Layer, Option, Schema, Stream } from "effect"
@@ -50,9 +49,11 @@ type RecordedScenario = {
   readonly recordAuth?: () => Auth.Info | undefined
   readonly replayAuth?: Auth.Info
   readonly stableID?: string
+  // @ts-expect-error dead V1 fixture uses the removed pre-normalized ModelsDev provider type.
   readonly config: (model: ModelsDev.Provider["models"][string]) => Partial<ConfigV1.Info>
 }
 
+// @ts-expect-error dead V1 fixture uses the removed pre-normalized ModelsDev provider type.
 const cloneModel = (model: ModelsDev.Provider["models"][string]) => {
   const cloned = structuredClone(model)
   const { experimental, ...rest } = cloned
@@ -95,6 +96,7 @@ const providerConfig = (input: {
   readonly env: string[]
   readonly npm: string
   readonly api: string
+  // @ts-expect-error dead V1 fixture uses the removed pre-normalized ModelsDev provider type.
   readonly model: ModelsDev.Provider["models"][string]
   readonly options: Record<string, unknown>
 }): Partial<ConfigV1.Info> => ({
@@ -224,7 +226,7 @@ function isSelected(scenario: RecordedScenario) {
 const canRun = (scenario: RecordedScenario) =>
   shouldRecord
     ? scenario.canRecord()
-    : HttpRecorderInternal.hasCassetteSync(scenario.cassette, { directory: FIXTURES_DIR })
+    : HttpRecorder.hasCassetteSync(scenario.cassette, { directory: FIXTURES_DIR })
 
 const recordError = (scenario: RecordedScenario) =>
   scenario.id === "openai-oauth"
@@ -255,6 +257,7 @@ async function loadFixture(providerID: string, modelID: string) {
   return model
 }
 
+// @ts-expect-error dead V1 fixture uses the removed pre-normalized ModelsDev provider type.
 const modelsFixture = Filesystem.readJson<Record<string, ModelsDev.Provider>>(
   path.join(import.meta.dir, "../tool/fixtures/models-api.json"),
 )
@@ -272,14 +275,11 @@ function recordedNativeLLMLayer(scenario: RecordedScenario) {
     url: (url: string) => url.replace(/\/proxy\/connections\/[^/]+\/v1/, "/proxy/connections/{connection}/v1"),
     body: redactRecordedBody,
   }
-  const recordedHttp = shouldRecord
-    ? HttpRecorderInternal.cassetteLayer(scenario.cassette, {
-        directory: FIXTURES_DIR,
-        mode: "record",
-        metadata,
-        redactor: HttpRecorderInternal.Redactor.make(redact),
-      })
-    : HttpRecorder.http(scenario.cassette, { directory: FIXTURES_DIR, metadata, redact })
+  if (shouldRecord) {
+    if (process.env.CI !== undefined) throw new Error("Unset CI before recording HTTP cassettes")
+    HttpRecorder.removeCassetteSync(scenario.cassette, { directory: FIXTURES_DIR })
+  }
+  const recordedHttp = HttpRecorder.layerFetch(scenario.cassette, { directory: FIXTURES_DIR, metadata, redact })
   return AppNodeBuilder.build(LayerNode.group([Provider.node, LLM.node]), [
     [LayerNodePlatform.requestExecutor, RequestExecutor.layer.pipe(Layer.provide(recordedHttp))],
     [RuntimeFlags.node, RuntimeFlags.layer({ experimentalNativeLlm: true })],
@@ -287,6 +287,7 @@ function recordedNativeLLMLayer(scenario: RecordedScenario) {
   ])
 }
 
+// @ts-expect-error dead V1 fixture uses the removed pre-normalized ModelsDev provider type.
 const writeConfig = (directory: string, scenario: RecordedScenario, model: ModelsDev.Provider["models"][string]) =>
   Effect.promise(() =>
     Bun.write(

@@ -31,7 +31,6 @@ import { Skill } from "./skill.js"
 import { SessionCompactionEvent } from "./session-compaction-event.js"
 import { SessionEvent } from "./session-event.js"
 import { SessionStatusEvent } from "./session-status-event.js"
-import { SessionTodo } from "./session-todo.js"
 import { SessionV1 } from "./session-v1.js"
 import { TuiEvent } from "./tui-event.js"
 import { VcsEvent } from "./vcs-event.js"
@@ -73,7 +72,6 @@ const featureDefinitions = Event.inventory(
 export const ServerDefinitions = Event.inventory(
   ...foundationDefinitions,
   ...featureDefinitions,
-  ...SessionTodo.Event.Definitions,
   // Current events the TUI consumes from the public stream.
   ...SessionStatusEvent.Definitions,
   ...TuiEvent.Definitions,
@@ -97,7 +95,6 @@ export const Definitions = Event.inventory(
   ...sessionV1LiveDefinitions,
   ...InstallationEvent.Definitions,
   ...featureDefinitions,
-  ...SessionTodo.Event.Definitions,
   ...LspEvent.Definitions,
   ...PermissionV1.Event.Definitions,
   ...TuiEvent.Definitions,

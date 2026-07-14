@@ -83,6 +83,7 @@ const layer = Layer.effect(
     const events = yield* EventV2.Service
 
     const state = State.create<Data, Draft>({
+      name: "skill",
       initial: () => ({ sources: [] }),
       draft: (draft) => ({
         source: (source) => {
@@ -91,6 +92,7 @@ const layer = Layer.effect(
         },
         list: () => draft.sources as Source[],
       }),
+      finalize: () => events.publish(Event.Updated, {}).pipe(Effect.asVoid),
     })
 
     const load = Effect.fn("SkillV2.load")(function* (source: Source) {

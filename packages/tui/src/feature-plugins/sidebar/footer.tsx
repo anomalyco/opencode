@@ -3,29 +3,28 @@ import type { BuiltinTuiPlugin } from "../builtins"
 import { createMemo, Show } from "solid-js"
 import { abbreviateHome } from "../../runtime"
 import { useTuiPaths } from "../../context/runtime"
+import { FilePath } from "../../ui/file-path"
+import { useConfig } from "../../config"
 
 const id = "internal:sidebar-footer"
 
 function View(props: { api: TuiPluginApi; directory: string }) {
   const paths = useTuiPaths()
+  const config = useConfig()
   const theme = () => props.api.theme.current
   const has = createMemo(() =>
     props.api.state.provider.some(
       (item) => item.id !== "opencode" || Object.values(item.models).some((model) => model.cost?.input !== 0),
     ),
   )
-  const done = createMemo(() => props.api.kv.get("dismissed_getting_started", false))
+  const done = createMemo(() => !(config.data.hints?.onboarding ?? true))
   const show = createMemo(() => !has() && !done())
-  const path = createMemo(() => {
-    const out = abbreviateHome(props.directory, paths.home)
+  const location = createMemo(() => {
     const branch = props.directory === props.api.state.path.directory ? props.api.state.vcs?.branch : undefined
-    const text = branch ? out + ":" + branch : out
-    const list = text.split("/")
-    return {
-      parent: list.slice(0, -1).join("/"),
-      name: list.at(-1) ?? "",
-    }
+    return { path: abbreviateHome(props.directory, paths.home), branch }
   })
+  const suffix = createMemo(() => (location().branch ? `:${location().branch}` : ""))
+  const suffixWidth = createMemo(() => Math.min(Bun.stringWidth(suffix()), 36))
 
   return (
     <box gap={1}>
@@ -47,7 +46,16 @@ function View(props: { api: TuiPluginApi; directory: string }) {
               <text fg={theme().text}>
                 <b>Getting started</b>
               </text>
-              <text fg={theme().textMuted} onMouseDown={() => props.api.kv.set("dismissed_getting_started", true)}>
+              <text
+                fg={theme().textMuted}
+                onMouseDown={() =>
+                  void config
+                    .update((draft) => {
+                      draft.hints = { ...draft.hints, onboarding: false }
+                    })
+                    .catch(() => {})
+                }
+              >
                 ✕
               </text>
             </box>
@@ -62,10 +70,19 @@ function View(props: { api: TuiPluginApi; directory: string }) {
           </box>
         </box>
       </Show>
-      <text>
-        <span style={{ fg: theme().textMuted }}>{path().parent}/</span>
-        <span style={{ fg: theme().text }}>{path().name}</span>
-      </text>
+      <box flexDirection="row" minWidth={0}>
+        <FilePath
+          value={location().path}
+          maxWidth={Math.max(2, 38 - suffixWidth())}
+          fg={theme().textMuted}
+          basenameFg={theme().text}
+        />
+        <Show when={suffix()}>
+          <text width={suffixWidth()} wrapMode="none" truncate fg={theme().textMuted}>
+            {suffix()}
+          </text>
+        </Show>
+      </box>
       <text fg={theme().textMuted}>
         <span style={{ fg: theme().success }}>•</span> <b>Open</b>
         <span style={{ fg: theme().text }}>

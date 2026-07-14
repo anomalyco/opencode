@@ -1,4 +1,5 @@
 import { Schema } from "effect"
+import { Agent } from "@opencode-ai/schema/agent"
 import { SessionMessage } from "./message"
 import { SessionSchema } from "./schema"
 import { SessionError } from "@opencode-ai/schema/session-error"
@@ -9,6 +10,15 @@ export class MessageDecodeError extends Schema.TaggedErrorClass<MessageDecodeErr
 }) {
   override get message() {
     return `Failed to decode message ${this.messageID} in session ${this.sessionID}`
+  }
+}
+
+export class AgentNotFoundError extends Schema.TaggedErrorClass<AgentNotFoundError>()("Session.AgentNotFoundError", {
+  sessionID: SessionSchema.ID,
+  agent: Agent.ID,
+}) {
+  override get message() {
+    return `Agent not found: "${this.agent}"`
   }
 }
 

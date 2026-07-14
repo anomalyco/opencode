@@ -11,15 +11,19 @@ import { migrations } from "@opencode-ai/core/database/migration.gen"
 import sessionUsageMigration from "@opencode-ai/core/database/migration/20260510033149_session_usage"
 import normalizeStoragePathsMigration from "@opencode-ai/core/database/migration/20260601010001_normalize_storage_paths"
 import sessionMessageProjectionOrderMigration from "@opencode-ai/core/database/migration/20260603040000_session_message_projection_order"
-import eventSourcedSessionInputMigration from "@opencode-ai/core/database/migration/20260604172448_event_sourced_session_input"
+import eventSourcedSessionPendingMigration from "@opencode-ai/core/database/migration/20260604172448_event_sourced_session_input"
 import contextEpochAgentMigration from "@opencode-ai/core/database/migration/20260605042240_add_context_epoch_agent"
 import simplifyIntegrationCredentialsMigration from "@opencode-ai/core/database/migration/20260611192811_lush_chimera"
-import simplifySessionInputMigration from "@opencode-ai/core/database/migration/20260622202450_simplify_session_input"
+import simplifySessionPendingMigration from "@opencode-ai/core/database/migration/20260622202450_simplify_session_input"
 import resetSessionEventsMigration from "@opencode-ai/core/database/migration/20260703200000_reset_v2_session_events"
 import durableSessionInboxMigration from "@opencode-ai/core/database/migration/20260707010146_durable_session_inbox"
 import migratePrelaunchV2StateMigration from "@opencode-ai/core/database/migration/20260707120000_migrate_prelaunch_v2_state"
+import genericSessionPendingMigration from "@opencode-ai/core/database/migration/20260709013000_generic_session_input"
+import sessionPendingTableMigration from "@opencode-ai/core/database/migration/20260709190621_session_pending_table"
 import renameInstructionsMigration from "@opencode-ai/core/database/migration/20260705180000_rename_instructions"
 import addSessionForkMigration from "@opencode-ai/core/database/migration/20260706223930_add-session-fork"
+import timeSuspendedMigration from "@opencode-ai/core/database/migration/20260709163752_time_suspended"
+import instructionSyncMigration from "@opencode-ai/core/database/migration/20260710025429_instruction_sync"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
@@ -350,30 +354,32 @@ describe("DatabaseMigration", () => {
         })
         expect(
           yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'session_input'`),
-        ).toEqual({ name: "session_input" })
+        ).toBeUndefined()
+        expect(
+          yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'session_pending'`),
+        ).toEqual({ name: "session_pending" })
         expect(
           yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'instruction_checkpoint'`),
-        ).toEqual({ name: "instruction_checkpoint" })
-        expect(
-          yield* db.get(
-            sql`SELECT name FROM pragma_table_info('instruction_checkpoint') WHERE name IN ('agent', 'replacement_seq', 'revision')`,
-          ),
         ).toBeUndefined()
+        expect(
+          yield* db.all(
+            sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('instruction_blob', 'instruction_state') ORDER BY name`,
+          ),
+        ).toEqual([{ name: "instruction_blob" }, { name: "instruction_state" }])
         expect(yield* db.get(sql`SELECT count(*) as count FROM migration`)).toEqual({ count: migrations.length })
         expect(
           yield* db.all(
-            sql`SELECT name FROM sqlite_master WHERE type = 'index' AND name IN ('event_aggregate_seq_idx', 'event_aggregate_type_seq_idx', 'session_input_session_pending_seq_idx', 'session_input_session_pending_delivery_seq_idx', 'session_input_session_pending_type_delivery_seq_idx', 'session_input_session_pending_compaction_idx', 'session_input_session_admitted_seq_idx', 'session_input_session_promoted_seq_idx', 'session_message_session_idx', 'session_message_session_type_idx', 'session_message_session_seq_idx', 'session_message_session_type_seq_idx', 'session_message_session_time_created_id_idx') ORDER BY name`,
+            sql`SELECT name FROM sqlite_master WHERE type = 'index' AND name IN ('event_aggregate_seq_idx', 'event_aggregate_type_seq_idx', 'session_input_session_pending_seq_idx', 'session_input_session_pending_delivery_seq_idx', 'session_input_session_pending_type_delivery_seq_idx', 'session_input_session_pending_compaction_idx', 'session_input_session_admitted_seq_idx', 'session_input_session_promoted_seq_idx', 'session_pending_session_delivery_seq_idx', 'session_pending_session_compaction_idx', 'session_pending_session_admitted_seq_idx', 'session_message_session_idx', 'session_message_session_type_idx', 'session_message_session_seq_idx', 'session_message_session_type_seq_idx', 'session_message_session_time_created_id_idx') ORDER BY name`,
           ),
         ).toEqual([
           { name: "event_aggregate_seq_idx" },
           { name: "event_aggregate_type_seq_idx" },
-          { name: "session_input_session_admitted_seq_idx" },
-          { name: "session_input_session_pending_compaction_idx" },
-          { name: "session_input_session_pending_type_delivery_seq_idx" },
-          { name: "session_input_session_promoted_seq_idx" },
           { name: "session_message_session_seq_idx" },
           { name: "session_message_session_time_created_id_idx" },
           { name: "session_message_session_type_seq_idx" },
+          { name: "session_pending_session_admitted_seq_idx" },
+          { name: "session_pending_session_compaction_idx" },
+          { name: "session_pending_session_delivery_seq_idx" },
         ])
       }),
     )
@@ -444,6 +450,28 @@ describe("DatabaseMigration", () => {
     )
   })
 
+  test("does not infer restart continuation from historical shutdown events", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`CREATE TABLE session (id text PRIMARY KEY)`)
+        yield* db.run(
+          sql`CREATE TABLE event (aggregate_id text NOT NULL, seq integer NOT NULL, type text NOT NULL, data text NOT NULL)`,
+        )
+        yield* db.run(sql`INSERT INTO session VALUES ('ses_shutdown')`)
+        yield* db.run(
+          sql`INSERT INTO event VALUES ('ses_shutdown', 0, 'session.execution.interrupted.1', '{"reason":"shutdown"}')`,
+        )
+
+        yield* DatabaseMigration.applyOnly(db, [timeSuspendedMigration])
+
+        expect(yield* db.get(sql`SELECT time_suspended FROM session WHERE id = 'ses_shutdown'`)).toEqual({
+          time_suspended: null,
+        })
+      }),
+    )
+  })
+
   test("renames instruction state without losing rows or durable updates", async () => {
     await run(
       Effect.gen(function* () {
@@ -476,6 +504,91 @@ describe("DatabaseMigration", () => {
           baseline_seq: 7,
         })
         expect(yield* db.get(sql`SELECT type FROM event`)).toEqual({ type: "session.instructions.updated.1" })
+      }),
+    )
+  })
+
+  test("deletes pre-beta instruction events and projected System messages", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`CREATE TABLE session (id text PRIMARY KEY, fork_session_id text)`)
+        yield* db.run(
+          sql`CREATE TABLE instruction_entry (session_id text NOT NULL, key text NOT NULL, value text NOT NULL, time_created integer NOT NULL, time_updated integer NOT NULL, PRIMARY KEY(session_id, key))`,
+        )
+        yield* db.run(sql`CREATE TABLE instruction_checkpoint (session_id text PRIMARY KEY)`)
+        yield* db.run(sql`CREATE TABLE event_sequence (aggregate_id text PRIMARY KEY, seq integer NOT NULL)`)
+        yield* db.run(
+          sql`CREATE TABLE event (id text PRIMARY KEY, aggregate_id text NOT NULL, seq integer NOT NULL, type text NOT NULL, data text NOT NULL)`,
+        )
+        yield* db.run(sql`CREATE TABLE session_message (id text PRIMARY KEY, type text NOT NULL)`)
+        yield* db.run(sql`INSERT INTO session VALUES ('ses_test', NULL)`)
+        yield* db.run(
+          sql`INSERT INTO event VALUES ('evt_instruction', 'ses_test', 0, 'session.instructions.updated.1', '{"sessionID":"ses_test","text":"changed"}')`,
+        )
+        yield* db.run(
+          sql`INSERT INTO event VALUES ('evt_other', 'ses_test', 1, 'session.synthetic.1', '{"sessionID":"ses_test","text":"keep"}')`,
+        )
+        yield* db.run(
+          sql`INSERT INTO session_message VALUES ('msg_instruction', 'system'), ('msg_other', 'system'), ('msg_user', 'user')`,
+        )
+        yield* db.run(sql`INSERT INTO instruction_entry VALUES ('ses_test', 'plan', '"ready"', 1, 2)`)
+
+        yield* DatabaseMigration.applyOnly(db, [instructionSyncMigration])
+
+        expect(yield* db.all(sql`SELECT id, type FROM event`)).toEqual([
+          { id: "evt_other", type: "session.synthetic.1" },
+        ])
+        expect(yield* db.all(sql`SELECT id, type FROM session_message ORDER BY id`)).toEqual([
+          { id: "msg_user", type: "user" },
+        ])
+        expect(yield* db.get(sql`SELECT * FROM instruction_entry`)).toEqual({
+          session_id: "ses_test",
+          key: "plan",
+          value: '"ready"',
+          removed: 0,
+          time_created: 1,
+          time_updated: 2,
+        })
+        expect(
+          yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'instruction_checkpoint'`),
+        ).toBeUndefined()
+      }),
+    )
+  })
+
+  test("records the authoritative parent sequence on existing forks", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`CREATE TABLE session (id text PRIMARY KEY, fork_session_id text)`)
+        yield* db.run(
+          sql`CREATE TABLE instruction_entry (session_id text NOT NULL, key text NOT NULL, value text NOT NULL, time_created integer NOT NULL, time_updated integer NOT NULL, PRIMARY KEY(session_id, key))`,
+        )
+        yield* db.run(sql`CREATE TABLE instruction_checkpoint (session_id text PRIMARY KEY)`)
+        yield* db.run(sql`CREATE TABLE session_message (id text PRIMARY KEY, type text NOT NULL)`)
+        yield* db.run(sql`CREATE TABLE event_sequence (aggregate_id text PRIMARY KEY, seq integer NOT NULL)`)
+        yield* db.run(
+          sql`CREATE TABLE event (id text PRIMARY KEY, aggregate_id text NOT NULL, seq integer NOT NULL, type text NOT NULL, data text NOT NULL)`,
+        )
+        yield* db.run(sql`INSERT INTO session VALUES ('ses_child', 'ses_parent')`)
+        yield* db.run(sql`INSERT INTO event_sequence VALUES ('ses_child', 8)`)
+        yield* db.run(
+          sql`INSERT INTO event VALUES ('evt_fork', 'ses_child', 0, 'session.forked.1', '{"sessionID":"ses_child","parentID":"ses_parent"}')`,
+        )
+        yield* db.run(
+          sql`INSERT INTO event VALUES ('evt_instruction', 'ses_child', 5, 'session.instructions.updated.1', '{"sessionID":"ses_child","text":"changed"}')`,
+        )
+        yield* db.run(sql`INSERT INTO event VALUES ('evt_input', 'ses_child', 6, 'session.input.admitted.1', '{}')`)
+
+        yield* DatabaseMigration.applyOnly(db, [instructionSyncMigration])
+
+        expect(yield* db.get(sql`SELECT fork_seq FROM session`)).toEqual({ fork_seq: 4 })
+        expect(yield* db.get(sql`SELECT type, data FROM event WHERE seq = 0`)).toEqual({
+          type: "session.forked.2",
+          data: '{"sessionID":"ses_child","parentID":"ses_parent","parentSeq":4}',
+        })
+        expect(yield* db.get(sql`SELECT id FROM event WHERE id = 'evt_instruction'`)).toBeUndefined()
       }),
     )
   })
@@ -544,7 +657,7 @@ describe("DatabaseMigration", () => {
           sql`INSERT INTO session_input (id, session_id, prompt, delivery, time_created) VALUES ('msg_pending', 'session', '{}', 'steer', 1)`,
         )
 
-        yield* DatabaseMigration.applyOnly(db, [eventSourcedSessionInputMigration])
+        yield* DatabaseMigration.applyOnly(db, [eventSourcedSessionPendingMigration])
 
         expect(yield* db.all(sql`SELECT id, workspace_id FROM session`)).toEqual([
           { id: "session", workspace_id: null },
@@ -607,18 +720,23 @@ describe("DatabaseMigration", () => {
           sql`INSERT INTO event (id, aggregate_id, seq, type, data, created) VALUES ('event', 'session', 9, 'session.updated.1', '{}', 1)`,
         )
         yield* db.run(
-          sql`INSERT INTO session_input (id, session_id, type, prompt, delivery, admitted_seq, time_created) VALUES ('input', 'session', 'prompt', '{}', 'steer', 9, 1)`,
+          sql`INSERT INTO session_pending (id, session_id, type, data, delivery, admitted_seq, time_created) VALUES ('input', 'session', 'user', '{}', 'steer', 9, 1)`,
         )
         yield* db.run(
           sql`INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data) VALUES ('projected', 'session', 'user', 9, 1, 1, '{}')`,
         )
+        yield* db.run(sql`CREATE TABLE session_context_epoch (session_id text PRIMARY KEY)`)
+        // The partial compaction index embeds the qualified table name, so it
+        // must drop before the historical rename dance and recreate after.
+        yield* db.run(sql`DROP INDEX session_pending_session_compaction_idx`)
+        yield* db.run(sql`ALTER TABLE session_pending RENAME TO session_input`)
+        yield* db.run(sql`DELETE FROM migration WHERE id = ${simplifySessionPendingMigration.id}`)
+        yield* DatabaseMigration.applyOnly(db, [simplifySessionPendingMigration])
+        yield* db.run(sql`DROP TABLE session_context_epoch`)
+        yield* db.run(sql`ALTER TABLE session_input RENAME TO session_pending`)
         yield* db.run(
-          sql`INSERT INTO instruction_checkpoint (session_id, baseline, snapshot, baseline_seq) VALUES ('session', 'baseline', '{}', 9)`,
+          sql`CREATE UNIQUE INDEX session_pending_session_compaction_idx ON session_pending (session_id) WHERE "session_pending"."type" = 'compaction'`,
         )
-        yield* db.run(sql`ALTER TABLE instruction_checkpoint RENAME TO session_context_epoch`)
-        yield* db.run(sql`DELETE FROM migration WHERE id = ${simplifySessionInputMigration.id}`)
-        yield* DatabaseMigration.applyOnly(db, [simplifySessionInputMigration])
-        yield* db.run(sql`ALTER TABLE session_context_epoch RENAME TO instruction_checkpoint`)
 
         const database = Layer.succeed(Database.Service, { db })
         yield* EventV2.Service.use((service) =>
@@ -648,9 +766,9 @@ describe("DatabaseMigration", () => {
               (SELECT COUNT(*) FROM message WHERE id = 'message') AS messages,
               (SELECT COUNT(*) FROM part WHERE id = 'part') AS parts,
               (SELECT COUNT(*) FROM workspace) AS workspaces,
-              (SELECT COUNT(*) FROM session_input) AS sessionInputs,
+              (SELECT COUNT(*) FROM session_pending) AS sessionInputs,
               (SELECT COUNT(*) FROM session_message) AS sessionMessages,
-              (SELECT COUNT(*) FROM instruction_checkpoint) AS instructionCheckpoints,
+              (SELECT COUNT(*) FROM instruction_state) AS instructionStates,
               (SELECT seq FROM event_sequence WHERE aggregate_id = 'session') AS seq,
               (SELECT type FROM event WHERE aggregate_id = 'session') AS eventType
           `),
@@ -662,7 +780,7 @@ describe("DatabaseMigration", () => {
           workspaces: 0,
           sessionInputs: 0,
           sessionMessages: 0,
-          instructionCheckpoints: 0,
+          instructionStates: 0,
           seq: 0,
           eventType: "session.updated.1",
         })
@@ -696,6 +814,97 @@ describe("DatabaseMigration", () => {
             admitted_seq: 4,
             promoted_seq: null,
           },
+        ])
+      }),
+    )
+  })
+
+  test("migrates prompt inbox rows and lifecycle events to generic user input", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`CREATE TABLE session (id text PRIMARY KEY)`)
+        yield* db.run(sql`INSERT INTO session (id) VALUES ('session')`)
+        yield* db.run(
+          sql`CREATE TABLE session_input (id text PRIMARY KEY, session_id text NOT NULL, type text NOT NULL, prompt text, delivery text, admitted_seq integer NOT NULL, promoted_seq integer, time_created integer NOT NULL)`,
+        )
+        yield* db.run(
+          sql`INSERT INTO session_input (id, session_id, type, prompt, delivery, admitted_seq, promoted_seq, time_created) VALUES ('input', 'session', 'prompt', '{"text":"hello"}', 'queue', 4, NULL, 1)`,
+        )
+        yield* db.run(
+          sql`INSERT INTO session_input (id, session_id, type, prompt, delivery, admitted_seq, promoted_seq, time_created) VALUES ('empty', 'session', 'prompt', NULL, 'steer', 6, NULL, 2)`,
+        )
+        yield* db.run(
+          sql`CREATE TABLE event (id text PRIMARY KEY, aggregate_id text NOT NULL, seq integer NOT NULL, created integer NOT NULL, type text NOT NULL, data text NOT NULL)`,
+        )
+        yield* db.run(
+          sql`INSERT INTO event (id, aggregate_id, seq, created, type, data) VALUES ('admitted', 'session', 4, 1, 'session.prompt.admitted.1', '{"sessionID":"session","inputID":"input","prompt":{"text":"hello"},"delivery":"queue"}')`,
+        )
+        yield* db.run(
+          sql`INSERT INTO event (id, aggregate_id, seq, created, type, data) VALUES ('promoted', 'session', 5, 2, 'session.prompt.promoted.1', '{"sessionID":"session","inputID":"input"}')`,
+        )
+        yield* db.run(
+          sql`INSERT INTO event (id, aggregate_id, seq, created, type, data) VALUES ('empty-admitted', 'session', 6, 2, 'session.prompt.admitted.1', '{"sessionID":"session","inputID":"empty","prompt":null,"delivery":"steer"}')`,
+        )
+        yield* db.run(
+          sql`INSERT INTO event (id, aggregate_id, seq, created, type, data) VALUES ('empty-promoted', 'session', 7, 2, 'session.prompt.promoted.1', '{"sessionID":"session","inputID":"empty"}')`,
+        )
+
+        yield* DatabaseMigration.applyOnly(db, [genericSessionPendingMigration])
+
+        expect(yield* db.all(sql`SELECT id, type, data, delivery FROM session_input ORDER BY admitted_seq`)).toEqual([
+          { id: "input", type: "user", data: '{"text":"hello"}', delivery: "queue" },
+        ])
+        expect(yield* db.all(sql`SELECT type, data FROM event ORDER BY seq`)).toEqual([
+          {
+            type: "session.input.admitted.1",
+            data: '{"sessionID":"session","inputID":"input","input":{"type":"user","data":{"text":"hello"},"delivery":"queue"}}',
+          },
+          {
+            type: "session.input.promoted.1",
+            data: '{"sessionID":"session","inputID":"input"}',
+          },
+        ])
+      }),
+    )
+  })
+
+  test("replaces the durable inbox with the empty session_pending table", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`CREATE TABLE session (id text PRIMARY KEY)`)
+        yield* db.run(sql`INSERT INTO session (id) VALUES ('session')`)
+        yield* db.run(
+          sql`CREATE TABLE session_input (id text PRIMARY KEY, session_id text NOT NULL REFERENCES session(id) ON DELETE CASCADE, type text NOT NULL, data text NOT NULL, delivery text, admitted_seq integer NOT NULL, promoted_seq integer, time_created integer NOT NULL)`,
+        )
+        // Interim v2 builds shipped differing index sets on real databases;
+        // dropping the table removes whatever variant exists.
+        yield* db.run(
+          sql`CREATE INDEX session_input_session_pending_type_delivery_seq_idx ON session_input (session_id, promoted_seq, type, delivery, admitted_seq)`,
+        )
+        yield* db.run(
+          sql`INSERT INTO session_input (id, session_id, type, data, delivery, admitted_seq, promoted_seq, time_created) VALUES ('pending', 'session', 'user', '{"text":"hello"}', 'steer', 4, NULL, 1)`,
+        )
+
+        yield* DatabaseMigration.applyOnly(db, [sessionPendingTableMigration])
+
+        expect(
+          yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'session_input'`),
+        ).toBeUndefined()
+        expect(yield* db.all(sql`SELECT id FROM session_pending`)).toEqual([])
+        expect(
+          (yield* db.all<{ name: string }>(sql`PRAGMA table_info(session_pending)`)).map((column) => column.name),
+        ).toEqual(["id", "session_id", "type", "data", "delivery", "admitted_seq", "time_created"])
+        expect(
+          (yield* db.all<{ name: string; unique: number }>(sql`PRAGMA index_list(session_pending)`))
+            .filter((index) => index.name.startsWith("session_"))
+            .map((index) => ({ name: index.name, unique: index.unique }))
+            .sort((a, b) => a.name.localeCompare(b.name)),
+        ).toEqual([
+          { name: "session_pending_session_admitted_seq_idx", unique: 1 },
+          { name: "session_pending_session_compaction_idx", unique: 1 },
+          { name: "session_pending_session_delivery_seq_idx", unique: 0 },
         ])
       }),
     )

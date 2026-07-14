@@ -15,15 +15,15 @@ import path from "path"
 import { fileURLToPath } from "url"
 import { useLocal } from "../../context/local"
 import { Flag } from "@opencode-ai/core/flag/flag"
-import { tint, useTheme } from "../../context/theme"
+import { useTheme } from "../../context/theme"
+import { tint } from "../../theme/color"
 import { EmptyBorder, SplitBorder } from "../../ui/border"
 import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
 import { useClipboard } from "../../context/clipboard"
 import { Spinner } from "../spinner"
-import { useSDK } from "../../context/sdk"
+import { useClient } from "../../context/client"
 import { useRoute } from "../../context/route"
 import { useProject } from "../../context/project"
-import { useSync } from "../../context/sync"
 import { useEvent } from "../../context/event"
 import { editorSelectionKey, useEditorContext, type EditorSelection } from "../../context/editor"
 import { normalizePromptContent, openEditor } from "../../editor"
@@ -37,7 +37,6 @@ import { usePromptStash } from "../../prompt/stash"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
-import type { SessionInfo, UserMessage } from "@opencode-ai/sdk/v2"
 import { Locale } from "../../util/locale"
 import { errorMessage } from "../../util/error"
 import { createColors, createFrames } from "../../ui/spinner"
@@ -45,19 +44,16 @@ import { useDialog } from "../../ui/dialog"
 import { DialogIntegration } from "../dialog-integration"
 import { useConnected } from "../use-connected"
 import { useToast } from "../../ui/toast"
-import { useKV } from "../../context/kv"
 import { createFadeIn } from "../../util/signal"
 import { DialogSkill } from "../dialog-skill"
-import { DialogWorkspaceUnavailable } from "../dialog-workspace-unavailable"
 import { useArgs } from "../../context/args"
 import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useLeaderActive, useOpencodeKeymap } from "../../keymap"
-import { useTuiConfig } from "../../config"
-import { usePromptWorkspace } from "./workspace"
+import { useConfig } from "../../config"
 import { usePromptMove } from "./move"
 import { readLocalAttachment } from "./local-attachment"
 import { useData } from "../../context/data"
 import { useLocation } from "../../context/location"
-import { lastAssistantWithUsage } from "../../util/session"
+import { contextUsage } from "../../util/session"
 
 registerOpencodeSpinner()
 
@@ -152,14 +148,13 @@ export function Prompt(props: PromptProps) {
   const paths = useTuiPaths()
   const terminalEnvironment = useTuiTerminalEnvironment()
   const clipboard = useClipboard()
-  const sdk = useSDK()
+  const client = useClient()
   const editor = useEditorContext()
   const route = useRoute()
   const project = useProject()
-  const sync = useSync()
   const data = useData()
   const currentLocation = useLocation()
-  const tuiConfig = useTuiConfig()
+  const config = useConfig().data
   const dialog = useDialog()
   const toast = useToast()
   const status = createMemo(() => data.session.status(props.sessionID ?? ""))
@@ -177,15 +172,15 @@ export function Prompt(props: PromptProps) {
   const keymap = useOpencodeKeymap()
   const agentShortcut = useCommandShortcut("agent.cycle")
   const paletteShortcut = useCommandShortcut("command.palette.show")
+  const liveWorkShortcut = useCommandShortcut("session.child.first")
   const renderer = useRenderer()
   const exit = useExit()
   const dimensions = useTerminalDimensions()
   const { theme, syntax } = useTheme()
-  const kv = useKV()
-  const animationsEnabled = createMemo(() => kv.get("animations_enabled", true))
+  const animationsEnabled = createMemo(() => config.animations ?? true)
   const list = createMemo(() => props.placeholders?.normal ?? [])
   const shell = createMemo(() => props.placeholders?.shell ?? [])
-  const fileContextEnabled = createMemo(() => kv.get("file_context_enabled", true))
+  const fileContextEnabled = createMemo(() => config.prompt?.editor ?? true)
   const [dismissedEditorSelectionKey, setDismissedEditorSelectionKey] = createSignal<string>()
   const editorContext = createMemo(() => {
     const selection = fileContextEnabled() ? editor.selection() : undefined
@@ -218,7 +213,6 @@ export function Prompt(props: PromptProps) {
   })
   const editorContextLabelState = createMemo(() => editor.labelState())
   const [auto, setAuto] = createSignal<AutocompleteRef>()
-  const workspace = usePromptWorkspace(props.sessionID)
   const move = usePromptMove({
     projectID: () => (props.sessionID ? data.session.get(props.sessionID)?.projectID : undefined) ?? project.project(),
     sessionID: () => props.sessionID,
@@ -268,32 +262,24 @@ export function Prompt(props: PromptProps) {
     if (!props.disabled) input.cursorColor = theme.text
   })
 
-  const lastUserMessage = createMemo(() => {
-    if (!props.sessionID) return undefined
-    const messages = sync.data.message[props.sessionID]
-    if (!messages) return undefined
-    return messages.findLast((m): m is UserMessage => m.role === "user")
-  })
-
   const usage = createMemo(() => {
     if (!props.sessionID) return
     const session = data.session.get(props.sessionID)
     if (!session) return
-    const last = lastAssistantWithUsage(data.session.message.list(props.sessionID), session.revert?.messageID)
-    if (!last) return
-
-    const tokens =
-      last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
-    if (tokens <= 0) return
-
-    const model = data.location
-      .model.list(session.location)
-      ?.find((model) => model.providerID === last.model.providerID && model.id === last.model.id)
-    const pct = model?.limit.context ? `${Math.round((tokens / model.limit.context) * 100)}%` : undefined
-    const cost = session.cost
+    const cost = data.session.cost(props.sessionID)
+    const formattedCost = cost > 0 ? money.format(cost) : undefined
+    const context = contextUsage(
+      data.session.message.list(props.sessionID),
+      data.location.model.list(session.location),
+      session.revert?.messageID,
+    )
     return {
-      context: pct ? `${Locale.number(tokens)} (${pct})` : Locale.number(tokens),
-      cost: cost > 0 ? money.format(cost) : undefined,
+      context: context
+        ? context.percent === undefined
+          ? Locale.number(context.tokens)
+          : `${Locale.number(context.tokens)} (${context.percent}%)`
+        : undefined,
+      cost: formattedCost,
     }
   })
 
@@ -435,7 +421,7 @@ export function Prompt(props: PromptProps) {
           }, 5000)
 
           if (store.interrupt >= 2) {
-            void sdk.api.session.interrupt({
+            void client.api.session.interrupt({
               sessionID: props.sessionID,
             })
             setStore("interrupt", 0)
@@ -454,7 +440,7 @@ export function Prompt(props: PromptProps) {
           if (!input.focused) return
           if (!props.sessionID) return
 
-          void sdk.api.session.background({
+          void client.api.session.background({
             sessionID: props.sessionID,
           })
           dialog.clear()
@@ -530,17 +516,6 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
-        title: "Warp",
-        desc: "Change the workspace for the session",
-        name: "workspace.set",
-        category: "Session",
-        enabled: Flag.OPENCODE_EXPERIMENTAL_WORKSPACES,
-        slashName: "warp",
-        run: () => {
-          workspace.open()
-        },
-      },
-      {
         title: "Move session",
         desc: "Move to another project dir",
         name: "session.move",
@@ -562,7 +537,7 @@ export function Prompt(props: PromptProps) {
 
   useBindings(() => ({
     mode: OPENCODE_BASE_MODE,
-    bindings: tuiConfig.keybinds.gather("prompt.palette", [
+    bindings: config.keybinds.gather("prompt.palette", [
       "prompt.submit",
       "prompt.editor",
       "prompt.editor_context.clear",
@@ -572,7 +547,6 @@ export function Prompt(props: PromptProps) {
       "prompt.skills",
       "session.interrupt",
       "session.background",
-      "workspace.set",
       "session.move",
     ]),
   }))
@@ -629,7 +603,7 @@ export function Prompt(props: PromptProps) {
 
   createEffect(() => {
     if (!input || input.isDestroyed) return
-    if (props.visible === false || dialog.stack.length > 0) {
+    if (props.visible === false || props.disabled || dialog.stack.length > 0) {
       if (input.focused) input.blur()
       return
     }
@@ -804,7 +778,7 @@ export function Prompt(props: PromptProps) {
     return {
       target: inputTarget,
       enabled: inputTarget() !== undefined && !props.disabled,
-      bindings: tuiConfig.keybinds.get("prompt.paste"),
+      bindings: config.keybinds.get("prompt.paste"),
     }
   })
 
@@ -812,7 +786,7 @@ export function Prompt(props: PromptProps) {
     return {
       target: inputTarget,
       enabled: inputTarget() !== undefined && !props.disabled && store.prompt.text !== "",
-      bindings: tuiConfig.keybinds.get("prompt.clear"),
+      bindings: config.keybinds.get("prompt.clear"),
     }
   })
 
@@ -864,6 +838,7 @@ export function Prompt(props: PromptProps) {
 
   useBindings(() => {
     return {
+      priority: 1,
       target: inputTarget,
       enabled: (() => {
         cursorVersion()
@@ -876,8 +851,12 @@ export function Prompt(props: PromptProps) {
           category: "Prompt",
           run() {
             if (input.cursorOffset !== 0) {
-              if (input.scrollY + input.visualCursor.visualRow === 0) input.cursorOffset = 0
-              return false
+              if (input.scrollY + input.visualCursor.visualRow === 0) {
+                input.cursorOffset = 0
+                return
+              }
+              input.moveCursorUp()
+              return
             }
 
             const item = history.move(-1, input.plainText)
@@ -890,12 +869,13 @@ export function Prompt(props: PromptProps) {
           },
         },
       ],
-      bindings: tuiConfig.keybinds.get("prompt.history.previous"),
+      bindings: config.keybinds.get("prompt.history.previous"),
     }
   })
 
   useBindings(() => {
     return {
+      priority: 1,
       target: inputTarget,
       enabled: (() => {
         cursorVersion()
@@ -911,9 +891,12 @@ export function Prompt(props: PromptProps) {
               if (
                 input.scrollY + input.visualCursor.visualRow ===
                 Math.max(0, input.editorView.getTotalVirtualLineCount() - 1)
-              )
+              ) {
                 input.cursorOffset = input.plainText.length
-              return false
+                return
+              }
+              input.moveCursorDown()
+              return
             }
 
             const item = history.move(1, input.plainText)
@@ -926,7 +909,7 @@ export function Prompt(props: PromptProps) {
           },
         },
       ],
-      bindings: tuiConfig.keybinds.get("prompt.history.next"),
+      bindings: config.keybinds.get("prompt.history.next"),
     }
   })
 
@@ -948,8 +931,6 @@ export function Prompt(props: PromptProps) {
   }
 
   async function submitInner() {
-    workspace.clearNotice()
-
     // IME: double-defer may fire before onContentChange flushes the last
     // composed character (e.g. Korean hangul) to the store, so read
     // plainText directly and sync before any downstream reads.
@@ -958,7 +939,7 @@ export function Prompt(props: PromptProps) {
       syncExtmarksWithPromptParts()
     }
     if (props.disabled) return false
-    if (workspace.creating() || move.creating()) return false
+    if (move.creating()) return false
     if (auto()?.visible) return false
     if (!store.prompt.text) return false
     const trimmed = store.prompt.text.trim()
@@ -974,39 +955,19 @@ export function Prompt(props: PromptProps) {
       return false
     }
 
-    const workspaceSession = props.sessionID ? sync.session.get(props.sessionID) : undefined
-    const workspaceID = workspaceSession?.workspaceID
-    const workspaceStatus = workspaceID ? (project.workspace.status(workspaceID) ?? "error") : undefined
-    if (props.sessionID && workspaceID && workspaceStatus !== "connected") {
-      dialog.replace(() => (
-        <DialogWorkspaceUnavailable
-          onRestore={() => {
-            workspace.open()
-            return false
-          }}
-        />
-      ))
-      return false
-    }
-
     const variant = local.model.variant.current()
     let sessionID = props.sessionID
     let session = sessionID ? data.session.get(sessionID) : undefined
     let finishMoveProgress = false
     if (sessionID == null) {
-      const selectedWorkspace = workspace.selection()
-      const workspaceID = selectedWorkspace?.type === "existing" ? selectedWorkspace.workspaceID : undefined
-
       const directory = await move.getDirectory()
       if (move.pending() && !directory) return false
       finishMoveProgress = Boolean(move.progress())
       const location = data.location.default()
 
-      const created = await sdk.api.session
+      const created = await client.api.session
         .create({
-          location: directory
-            ? { directory, workspaceID }
-            : { directory: location.directory, workspaceID: workspaceID ?? location.workspaceID },
+          location: directory ? { directory } : location,
           agent: agent.id,
           model: {
             providerID: selectedModel.providerID,
@@ -1027,8 +988,7 @@ export function Prompt(props: PromptProps) {
       }
 
       sessionID = created.id
-      // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- generated client output is readonly; prompt state still uses legacy mutable session types.
-      session = structuredClone(created) as SessionInfo
+      session = created
     }
 
     const inputText = expandTrackedPastedText(
@@ -1045,26 +1005,11 @@ export function Prompt(props: PromptProps) {
     // Capture mode before it gets reset
     const currentMode = store.mode
     const editorSelection = editorContext()
-    const editorParts =
-      editorSelection && editor.labelState() === "pending"
-        ? [
-            {
-              type: "text" as const,
-              text: formatEditorContext(editorSelection),
-              synthetic: true,
-              metadata: {
-                kind: "editor_context",
-                source: editorSelection.source ?? "editor",
-                filePath: editorSelection.filePath,
-                ranges: editorSelection.ranges,
-              },
-            },
-          ]
-        : []
+    const pendingEditorSelection = editorSelection && editor.labelState() === "pending" ? editorSelection : undefined
 
     if (store.mode === "shell") {
       move.startSubmit()
-      void sdk.client.v2.session.shell({
+      void client.api.session.shell({
         sessionID,
         command: inputText,
       })
@@ -1083,7 +1028,7 @@ export function Prompt(props: PromptProps) {
       const restOfInput = firstLineEnd === -1 ? "" : inputText.slice(firstLineEnd + 1)
       const args = firstLineArgs.join(" ") + (restOfInput ? "\n" + restOfInput : "")
 
-      void sdk.api.session
+      void client.api.session
         .command({
           sessionID,
           command: command.slice(1),
@@ -1103,7 +1048,7 @@ export function Prompt(props: PromptProps) {
       )
     ) {
       move.startSubmit()
-      void sdk.api.session.skill({
+      void client.api.session.skill({
         sessionID,
         skill: inputText.split("\n")[0].split(" ")[0].slice(1),
       })
@@ -1114,20 +1059,20 @@ export function Prompt(props: PromptProps) {
         session = data.session.get(sessionID)
       }
       if (session?.agent !== agent.id) {
-        await sdk.api.session.switchAgent({ sessionID, agent: agent.id })
+        await client.api.session.switchAgent({ sessionID, agent: agent.id })
       }
       if (
         session?.model?.providerID !== selectedModel.providerID ||
         session.model.id !== selectedModel.modelID ||
         session.model.variant !== variant
       ) {
-        await sdk.api.session.switchModel({
+        await client.api.session.switchModel({
           sessionID,
           model: { providerID: selectedModel.providerID, id: selectedModel.modelID, variant },
         })
       }
       if (session?.revert) {
-        const error = await sdk.api.session.revert.commit({ sessionID }).then(
+        const error = await client.api.session.revert.commit({ sessionID }).then(
           () => undefined,
           (error) => error,
         )
@@ -1136,14 +1081,29 @@ export function Prompt(props: PromptProps) {
           return false
         }
       }
-      const error = await sdk.api.session
+      if (pendingEditorSelection) {
+        // Keep editor context hidden while admitting it before the corresponding user prompt.
+        const error = await client.api.session
+          .synthetic({
+            sessionID,
+            text: formatEditorContext(pendingEditorSelection),
+            resume: false,
+          })
+          .then(
+            () => undefined,
+            (error) => error,
+          )
+        if (error) {
+          toast.show({ title: "Failed to send editor context", message: errorMessage(error), variant: "error" })
+          return false
+        }
+      }
+      const error = await client.api.session
         .prompt({
           sessionID,
-          prompt: {
-            text: [...editorParts.map((part) => part.text), inputText].filter(Boolean).join("\n\n"),
-            files: store.prompt.files,
-            agents: store.prompt.agents,
-          },
+          text: inputText,
+          files: store.prompt.files,
+          agents: store.prompt.agents,
         })
         .then(
           () => undefined,
@@ -1153,7 +1113,7 @@ export function Prompt(props: PromptProps) {
         toast.show({ title: "Failed to send prompt", message: errorMessage(error), variant: "error" })
         return false
       }
-      if (editorParts.length > 0) editor.markSelectionSent()
+      if (pendingEditorSelection) editor.markSelectionSent()
     }
     history.append({
       ...store.prompt,
@@ -1166,7 +1126,7 @@ export function Prompt(props: PromptProps) {
 
     // temporary hack to make sure the message is sent
     if (!props.sessionID) {
-      if (editorParts.length > 0) editor.preserveSelectionFromNewSession()
+      if (pendingEditorSelection) editor.preserveSelectionFromNewSession()
       setTimeout(() => {
         route.navigate({
           type: "session",
@@ -1230,7 +1190,7 @@ export function Prompt(props: PromptProps) {
     const lineCount = (pastedContent.match(/\n/g)?.length ?? 0) + 1
     if (
       (lineCount >= 3 || pastedContent.length > 150) &&
-      kv.get("paste_summary_enabled", !sync.data.config.experimental?.disable_paste_summary)
+      config.prompt?.paste !== "full"
     ) {
       pasteText(pastedContent, `[Pasted ~${lineCount} lines]`)
       return
@@ -1340,7 +1300,7 @@ export function Prompt(props: PromptProps) {
   const spinnerDef = createMemo(() => {
     const agent =
       status() === "running"
-        ? (local.agent.list().find((agent) => agent.id === lastUserMessage()?.agent) ?? local.agent.current())
+        ? local.agent.current()
         : local.agent.current()
     const color = agent ? local.agent.color(agent.id) : theme.border
     return {
@@ -1360,7 +1320,7 @@ export function Prompt(props: PromptProps) {
       }),
     }
   })
-  const maxHeight = createMemo(() => tuiConfig.prompt?.max_height ?? Math.max(6, Math.floor(dimensions().height / 3)))
+  const maxHeight = createMemo(() => Math.max(6, Math.floor(dimensions().height / 3)))
   const moveLabelWidth = createMemo(() => Math.max(12, Math.min(44, dimensions().width - 48)))
 
   return (
@@ -1452,7 +1412,10 @@ export function Prompt(props: PromptProps) {
                   input.cursorColor = theme.text
                 }, 0)
               }}
-              onMouseDown={(r: MouseEvent) => r.target?.focus()}
+              onMouseDown={(r: MouseEvent) => {
+                if (props.disabled) return
+                r.target?.focus()
+              }}
               focusedBackgroundColor={theme.backgroundElement}
               cursorColor={props.disabled ? theme.backgroundElement : theme.text}
               syntaxStyle={syntax()}
@@ -1531,7 +1494,7 @@ export function Prompt(props: PromptProps) {
             <Match when={status() === "running"}>
               <box flexDirection="row" gap={1} flexGrow={1} justifyContent="flex-start">
                 <box marginLeft={1}>
-                  <Show when={kv.get("animations_enabled", true)} fallback={<text fg={theme.textMuted}>[⋯]</text>}>
+                  <Show when={config.animations ?? true} fallback={<text fg={theme.textMuted}>[⋯]</text>}>
                     <spinner color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
                   </Show>
                 </box>
@@ -1542,41 +1505,6 @@ export function Prompt(props: PromptProps) {
                   </span>
                 </text>
               </box>
-            </Match>
-            <Match when={workspace.notice()}>
-              {(notice) => (
-                <box paddingLeft={3}>
-                  <text fg={theme.accent}>{notice()}</text>
-                </box>
-              )}
-            </Match>
-            <Match when={workspace.label()}>
-              {(label) => (
-                <box paddingLeft={3} flexDirection="row" gap={1}>
-                  <Show when={workspace.creating()}>
-                    <Spinner color={theme.accent} />
-                  </Show>
-                  <text fg={workspace.creating() ? theme.accent : theme.text}>
-                    {(() => {
-                      const item = label()
-                      if (item.type === "new") {
-                        if (workspace.creating())
-                          return `Creating ${item.workspaceType}${".".repeat(workspace.creatingDots())}`
-                        return (
-                          <>
-                            Workspace <span style={{ fg: theme.textMuted }}>(new {item.workspaceType})</span>
-                          </>
-                        )
-                      }
-                      return (
-                        <>
-                          Workspace <span style={{ fg: theme.textMuted }}>{item.workspaceName}</span>
-                        </>
-                      )
-                    })()}
-                  </text>
-                </box>
-              )}
             </Match>
             <Match when={move.progress()}>
               {(progress) => (
@@ -1606,6 +1534,9 @@ export function Prompt(props: PromptProps) {
                 <Switch>
                   <Match when={liveWorkStatusVisible() || statusItems().length > 0}>
                     <text fg={theme.textMuted} wrapMode="none">
+                      <Show when={liveWorkStatusVisible() && liveWorkShortcut()}>
+                        {(shortcut) => <span style={{ fg: theme.text }}>{shortcut()} </span>}
+                      </Show>
                       <Show when={subagentStatusLabel()}>
                         {(label) => <span style={{ fg: theme.textMuted }}>{label()}</span>}
                       </Show>

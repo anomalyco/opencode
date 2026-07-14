@@ -4,9 +4,9 @@ import { createMemo, createResource, createSignal, onMount, Show } from "solid-j
 import path from "path"
 import { DialogSelect, type DialogSelectOption } from "../ui/dialog-select"
 import { useDialog } from "../ui/dialog"
-import { useSDK } from "../context/sdk"
+import { useClient } from "../context/client"
 import { useTheme } from "../context/theme"
-import { useSync } from "../context/sync"
+import { useData } from "../context/data"
 import { abbreviateHome } from "../runtime"
 import { useTuiPaths } from "../context/runtime"
 import { Locale } from "../util/locale"
@@ -17,7 +17,7 @@ import { useCommandShortcut } from "../keymap"
 import { useProject } from "../context/project"
 import { Spinner } from "./spinner"
 import { DialogWorkspaceFileChanges } from "./dialog-workspace-file-changes"
-import type { ProjectDirectoriesOutput } from "@opencode-ai/client/promise"
+import type { ProjectDirectoriesOutput } from "@opencode-ai/client"
 import { useRoute } from "../context/route"
 import { DialogProjectCopyName } from "./dialog-project-copy-name"
 
@@ -35,10 +35,10 @@ type DialogMoveSessionProps = {
 
 export function DialogMoveSession(props: DialogMoveSessionProps) {
   const dialog = useDialog()
-  const sdk = useSDK()
+  const client = useClient()
   const dimensions = useTerminalDimensions()
   const { theme } = useTheme()
-  const sync = useSync()
+  const sessionData = useData()
   const projectContext = useProject()
   const route = useRoute()
   const toast = useToast()
@@ -63,7 +63,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
   const [loadedProject] = createResource(
     () => (projectContext.project() === undefined ? props.projectID : undefined),
     (projectID) =>
-      sdk.api.project
+      client.api.project
         .current({ location: { directory: projectContext.instance.directory() || paths.cwd } })
         .then((project) => (project.id === projectID ? project.directory : undefined))
         .catch(() => undefined),
@@ -78,11 +78,11 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
     async (projectID, info): Promise<ReadonlyArray<ProjectDirectory> | undefined> => {
       try {
         const location = { directory: projectContext.instance.directory() || paths.cwd }
-        await sdk.api.projectCopy.refresh({
+        await client.api.projectCopy.refresh({
           projectID,
           location,
         })
-        const directories = await sdk.api.project.directories({
+        const directories = await client.api.project.directories({
           projectID,
           location,
         })
@@ -132,9 +132,13 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
     })
     if (roots.length === 0) return [{ title: "No project directories found", value: undefined }]
 
-    const subdirectories = sync.data.session
-      .filter((session) => session.projectID === props.projectID && session.path && ![".", "/"].includes(session.path))
-      .map((session) => session.directory)
+    const subdirectories = sessionData.session
+      .list()
+      .filter(
+        (session) =>
+          session.projectID === props.projectID && session.subpath && ![".", "/"].includes(session.subpath),
+      )
+      .map((session) => session.location.directory)
       .filter((directory) => !roots.some((root) => root.directory === directory))
       .filter((directory, index, directories) => directories.indexOf(directory) === index)
       .map((location) => ({
@@ -228,7 +232,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
     setToDelete(undefined)
     setRemoving(selected.directory)
     setWorking(true)
-    const error = await sdk.api.projectCopy
+    const error = await client.api.projectCopy
       .remove({
         projectID: props.projectID,
         location: { directory: projectContext.instance.directory() || paths.cwd },
@@ -243,7 +247,9 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
       setRemoving(undefined)
       setWorking(false)
       if (isRecord(error) && isRecord(error.data) && error.data.forceRequired === true) {
-        const status = await sdk.client.vcs.status({ directory: selected.directory }).catch(() => undefined)
+        const status = await client.api.vcs
+          .status({ location: { directory: selected.directory } })
+          .catch(() => undefined)
         const choice = await DialogWorkspaceFileChanges.show(dialog, status?.data ?? [], {
           title: "Delete working copy?",
           message: "This working copy has file changes. Do you want to delete it anyway?",
@@ -253,7 +259,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
           return
         }
         reopen(selected.directory)
-        const forcedError = await sdk.api.projectCopy
+        const forcedError = await client.api.projectCopy
           .remove({
             projectID: props.projectID,
             location: { directory: projectContext.instance.directory() || paths.cwd },
@@ -341,6 +347,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
                 {
                   command: "dialog.move_session.new",
                   title: "new",
+                  selection: "none",
                   onTrigger: () => void create(),
                 },
                 {
@@ -356,6 +363,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
                 {
                   command: "dialog.move_session.refresh",
                   title: "refresh",
+                  selection: "none",
                   onTrigger: () => void refetch(),
                 },
               ]

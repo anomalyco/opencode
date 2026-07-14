@@ -11,6 +11,7 @@ import { Skill } from "@opencode-ai/schema/skill"
 
 const Plugin = await import("../src/v2/effect/index")
 const PromisePlugin = await import("../src/v2/promise/index")
+const TuiPlugin = await import("../src/v2/tui/index")
 
 test.each([
   ["effect", Plugin],
@@ -32,10 +33,14 @@ test.each([
     "Credential",
     "Integration",
     "Model",
+    "Plugin",
     "Provider",
     "Reference",
     "Skill",
-    ...(name === "effect" ? ["Tool"] : []),
-    "define",
   ])
+})
+
+test("tui entrypoint exposes the V2 plugin definition", () => {
+  const plugin = TuiPlugin.Plugin.define({ id: "demo", setup() {} })
+  expect(plugin.id).toBe("demo")
 })

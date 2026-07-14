@@ -14,7 +14,13 @@ const build = await Bun.build({
 })
 if (!build.success) throw new AggregateError(build.logs, "Failed to build @opencode-ai/http-recorder")
 
-const publicFiles = new Set(["index.js", "index.d.ts", "effect.d.ts", "socket.d.ts", "types.d.ts"])
 await Promise.all(
-  (await readdir("dist")).filter((file) => !publicFiles.has(file)).map((file) => rm(`dist/${file}`, { force: true })),
+  (await readdir("dist", { recursive: true }))
+    .filter((file) => file.endsWith(".d.ts") && file !== "index.d.ts" && file !== "api.d.ts")
+    .map((file) => rm(`dist/${file}`)),
 )
+
+for (const file of ["dist/index.d.ts", "dist/api.d.ts"]) {
+  if ((await Bun.file(file).text()).includes(["import", "("].join("")))
+    throw new Error(`${file} contains dynamic import syntax`)
+}

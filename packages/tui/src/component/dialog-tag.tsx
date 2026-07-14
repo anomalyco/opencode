@@ -2,11 +2,11 @@ import { createMemo, createResource } from "solid-js"
 import { DialogSelect } from "../ui/dialog-select"
 import { useDialog } from "../ui/dialog"
 import { useProject } from "../context/project"
-import { useSDK } from "../context/sdk"
+import { useClient } from "../context/client"
 import { createStore } from "solid-js/store"
 
 export function DialogTag(props: { onSelect?: (value: string) => void }) {
-  const sdk = useSDK()
+  const client = useClient()
   const dialog = useDialog()
   const project = useProject()
 
@@ -17,7 +17,7 @@ export function DialogTag(props: { onSelect?: (value: string) => void }) {
   const [files] = createResource(
     () => [store.filter],
     async () => {
-      const result = await sdk.api.file
+      const result = await client.api.file
         .find({
           query: store.filter,
           type: "file",

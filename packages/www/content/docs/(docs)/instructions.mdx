@@ -1,0 +1,128 @@
+---
+title: "Instructions"
+description: ""
+---
+
+Instructions are privileged context that guide an agent throughout a session.
+V2 combines built-in context, discovered `AGENTS.md` files, and dynamic sources
+such as skill, reference, MCP, and session context. It stores source values as
+durable deltas, then renders initial instructions and chronological updates when
+assembling each model request.
+
+## AGENTS.md
+
+Use `AGENTS.md` for persistent guidance such as build commands, architecture,
+code conventions, and verification requirements. Commit project files so the
+whole team receives the same instructions.
+
+V2 loads:
+
+1. The global file at `$XDG_CONFIG_HOME/opencode/AGENTS.md`, normally
+   `~/.config/opencode/AGENTS.md`.
+2. Every `AGENTS.md` from the current Location up to and including the project
+   root.
+
+For example, when the Location is `packages/web`, OpenCode can load all three
+project files below:
+
+```text
+my-project/
+├── AGENTS.md
+└── packages/
+    ├── AGENTS.md
+    └── web/
+        └── AGENTS.md
+```
+
+The files are combined rather than selecting a single winner. They are rendered
+in this order: global, then project files from the Location toward the project
+root. OpenCode does not resolve conflicts between their contents, so keep broad
+guidance global and put scoped guidance in the relevant project directory.
+
+If the Location is outside the project root, only the global file is loaded.
+Setting `OPENCODE_DISABLE_PROJECT_CONFIG=1` also skips project `AGENTS.md`
+discovery but does not disable the global file.
+
+<Note>
+  Current V2 discovery only recognizes `AGENTS.md`. The `CLAUDE.md` fallback
+  and related precedence described by older OpenCode documentation do not apply.
+</Note>
+
+### Nested instructions
+
+An `AGENTS.md` below the Location is not part of the initial upward scan. When
+the read tool successfully reads a file or lists a directory, OpenCode discovers
+`AGENTS.md` files from that target upward to, but not including, the Location.
+It adds newly discovered files to the session in nearest-first order.
+
+Each nested file is injected once per session and recorded in durable session
+history. Reading the same area again does not inject it again. Consequently,
+editing an already injected nested `AGENTS.md` does not replace its earlier
+session entry automatically; start a new session if the updated text must apply
+immediately.
+
+## Config entries
+
+The V2 config schema accepts an `instructions` array of strings:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": [
+    "CONTRIBUTING.md",
+    "docs/guidelines/*.md",
+    "https://example.com/shared-instructions.md"
+  ]
+}
+```
+
+Configuration is loaded from global through project-local files. If more than
+one config defines `instructions`, the highest-precedence, closest config's
+entire array is selected; arrays are not merged.
+
+<Warning>
+  V2 currently parses and retains this field but does not resolve its entries
+  into instruction sources. Local files, glob patterns, and HTTP or HTTPS URLs
+  in `instructions` therefore do not reach the model yet. Use `AGENTS.md` for
+  active V2 instructions. URL fetching and timeout behavior documented for V1
+  are not supported by the current V2 implementation.
+</Warning>
+
+See [Config](/docs/config) for config locations and general precedence.
+
+## Ordering
+
+The selected agent or provider system prompt is sent first. OpenCode then sends
+the session's initial instructions, composed in this order:
+
+1. Built-in environment and date context.
+2. Ambient `AGENTS.md` discovery.
+3. Available skill, reference, and MCP guidance.
+4. Session-specific instruction entries supplied through the API.
+
+These sources are combined; ordering is not an override mechanism. Nested
+`AGENTS.md` files discovered by reads are chronological session entries rather
+than part of the initial instructions.
+
+## Changes
+
+Before promoting pending input, V2 compares live instruction sources with the
+latest admitted source values:
+
+- A new or changed ambient `AGENTS.md` aggregate is announced as a system update
+  that replaces the previous ambient aggregate.
+- Removing all ambient files announces that the previous ambient instructions
+  no longer apply.
+- A temporary read or discovery failure preserves the session's last known
+  instructions instead of treating them as deleted. If no instruction epoch
+  exists yet, pending input waits until every source is available.
+- Completed conversation compaction advances the instruction epoch, making the
+  currently admitted values initial without rereading sources or authoring an
+  instruction event.
+- Moving a session or committing a revert clears the instruction fold. The next
+  safe boundary requires one complete source read before promoting input.
+
+The durable event stores changed source keys and value hashes, not rendered
+prose. During request assembly, OpenCode renders the epoch's initial values and
+interleaves later changes as chronological System messages. Clients see changed
+keys but never the privileged value bodies.

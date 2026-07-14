@@ -1,0 +1,160 @@
+---
+title: "Intro"
+description: "Get started with OpenCode."
+---
+
+<Warning>
+  These docs are for the beta version of OpenCode, which will become OpenCode 2.0. The beta is still changing: we may
+  wipe your data, things may break, and APIs, configuration, and plugin APIs may change.
+</Warning>
+
+## Install
+
+<Note>The curl install script is not available in beta.</Note>
+
+You can also install it with the following package managers.
+
+<Tabs>
+  <Tab title="npm">
+    ```bash
+    npm install -g @opencode-ai/cli@next
+    ```
+  </Tab>
+  <Tab title="bun">
+    ```bash
+    bun install -g @opencode-ai/cli@next
+    ```
+  </Tab>
+  <Tab title="pnpm">
+    ```bash
+    pnpm install -g @opencode-ai/cli@next
+    ```
+  </Tab>
+  <Tab title="Yarn">
+    ```bash
+    yarn global add @opencode-ai/cli@next
+    ```
+  </Tab>
+</Tabs>
+
+<Note>During beta, the binary is called `opencode2`.</Note>
+
+### Homebrew
+
+Homebrew installation is not available in beta.
+
+### Arch Linux
+
+Arch Linux installation is not available in beta.
+
+### Windows
+
+<Tip>
+  For the best experience on Windows, install [Windows Subsystem for Linux
+  (WSL)](https://learn.microsoft.com/windows/wsl/install), open your Linux distribution, and use one of the beta package
+  manager commands above.
+</Tip>
+
+<Tabs>
+  <Tab title="chocolatey">
+    Chocolatey installation is not available in beta.
+  </Tab>
+  <Tab title="scoop">
+    Scoop installation is not available in beta.
+  </Tab>
+  <Tab title="mise">
+    Mise installation is not available in beta.
+  </Tab>
+  <Tab title="docker">
+    Docker installation is not available in beta.
+  </Tab>
+</Tabs>
+
+Standalone binaries are not available in beta.
+
+---
+
+#### Prerequisites
+
+To use OpenCode in your terminal, you'll need:
+
+1. A modern terminal emulator like:
+   - [Ghostty](https://ghostty.org), Linux and macOS
+   - [WezTerm](https://wezterm.org), cross-platform
+   - [Alacritty](https://alacritty.org), cross-platform
+   - [Kitty](https://sw.kovidgoyal.net/kitty/), Linux and macOS
+2. API keys for the LLM providers you want to use.
+
+---
+
+## Connect
+
+With OpenCode you can use any LLM provider by configuring its API key.
+
+Run `/connect` in the TUI and select your provider.
+
+```text
+/connect
+```
+
+If you'd like easy access to all the best coding models you can try out
+[OpenCode Console](https://console.opencode.ai).
+
+You can also try [OpenCode Go](https://opencode.ai/go) a $10/month subscription
+plan that grants you access to the best open source models.
+
+Use `/models` to browse the providers and models available to your project. See [Providers](/docs/providers) for connection and
+configuration details.
+
+---
+
+## Usage
+
+You are now ready to use OpenCode in your project. Here are a few common workflows.
+
+### Ask questions
+
+Ask OpenCode to explain your codebase.
+
+<Tip>Use `@` to fuzzy search for files in the project.</Tip>
+
+```text
+How is authentication handled in @packages/functions/src/api/index.ts
+```
+
+### Add features
+
+Ask OpenCode to add a feature by describing the desired behavior and providing relevant context.
+
+```text
+When a user deletes a note, flag it as deleted in the database.
+Create a screen that shows recently deleted notes.
+From this screen, the user can restore a note or permanently delete it.
+```
+
+<Tip>Give OpenCode plenty of context and examples.</Tip>
+
+### Undo changes
+
+Use `/undo` when a change isn't what you wanted.
+
+```text
+/undo
+```
+
+OpenCode stages a conversation revert and restores your original message so you can revise it. In a Git repository, it
+also restores file changes when snapshots were captured successfully. Run `/undo` multiple times to move the conversation
+boundary back, or use `/redo` to restore the staged conversation and files. See [Undo](/docs/snapshots) for
+limitations and safety details.
+
+```text
+/redo
+```
+
+---
+
+## Customize
+
+Make OpenCode your own by [picking a theme](https://opencode.ai/docs/themes), [customizing
+keybinds](https://opencode.ai/docs/keybinds), [configuring formatters](/docs/formatters), [creating commands](/docs/commands), or
+editing the [OpenCode config](/docs/config).

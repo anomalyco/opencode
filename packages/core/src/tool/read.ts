@@ -102,7 +102,7 @@ export const Plugin = {
                   const resolved = yield* fs.resolve(target.canonical)
                   const root = yield* fs.resolve(location.directory)
                   // up() searches its stop directory, so the Location-root AGENTS.md (already
-                  // supplied by the core/instructions baseline) is dropped by the dirname filter.
+                  // supplied by core initial instructions) is dropped by the dirname filter.
                   const discovered = yield* fs.up({
                     targets: [FILENAME],
                     start: type === "directory" ? resolved : dirname(resolved),
@@ -139,6 +139,7 @@ export const Plugin = {
               )
             },
           }),
+          { codemode: false },
         ),
       )
       .pipe(Effect.orDie)

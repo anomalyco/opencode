@@ -1,0 +1,108 @@
+---
+title: "Undo"
+description: ""
+---
+
+OpenCode snapshots let the default interactive TUI roll back conversation history and related file changes. They are a
+convenience for revising recent work, not a replacement for Git commits or backups.
+
+## Configuration
+
+Snapshots are enabled by default. Set `snapshots` to `false` in your [configuration](/docs/config#snapshots) to stop capturing
+filesystem state:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "snapshots": false
+}
+```
+
+Filesystem snapshots require a Git repository. With snapshots disabled, unavailable, or missing, undo can still stage a
+conversation rollback, but it has no captured file state to restore. Disabling snapshots does not delete snapshots that
+were already stored.
+
+## What is captured
+
+For each model step, OpenCode attempts to capture the worktree immediately before the model call and after a cleanly
+completed step. It records the paths changed between those two points on the assistant message.
+
+Snapshots use a separate internal Git object database in the OpenCode data directory. They do not create commits, move
+branches, or intentionally modify your repository's Git index. Capture is limited to the session's active directory, which
+may be a subdirectory of the repository.
+
+Within that directory, snapshots include tracked files and untracked files that are not ignored by Git. An individual
+untracked file larger than 2 MiB is excluded. Ignored files, files outside the active directory, and changes to Git
+metadata are not captured.
+
+During undo, OpenCode does not check out an entire tree. It restores only paths attributed to cleanly completed assistant
+steps after the selected conversation boundary. Each path is restored to its state before the first affected step.
+
+## Undo
+
+Wait for the session to become idle, then run:
+
+```text
+/undo
+```
+
+The TUI finds the latest non-empty user message and stages a revert at that message:
+
+- The selected user message and every later message are hidden, but not deleted yet.
+- The selected message's text, attachments, and agent mentions are placed in the composer for revision.
+- Captured files changed by the affected assistant steps are restored to their earlier contents. Files created by those
+  steps are removed when they did not exist in the earlier snapshot.
+- A summary shows the staged message count and restored paths.
+
+Running `/undo` again moves the staged boundary to an earlier user message. OpenCode keeps the filesystem state from
+immediately before the first undo as the redo baseline, so repeated undos form one wider staged revert rather than a redo
+stack.
+
+<Warning>
+  Sending a new prompt while an undo is staged commits the revert. The hidden message range is removed from the active
+  session history, the currently reverted files are kept, and redo is no longer available.
+</Warning>
+
+## Redo
+
+While a revert is staged, run:
+
+```text
+/redo
+```
+
+Redo clears the staged boundary, makes the hidden messages visible again, and restores affected files to their exact state
+immediately before the first undo. It does not rerun the model. After multiple undos, one redo restores the whole staged
+range; there is no step-by-step redo stack.
+
+## Revert a message
+
+The TUI's **Message Actions** menu also provides **Revert**. It stages the selected message as the conversation boundary
+and uses the same file restoration and redo behavior, but it does not copy that message into the composer.
+
+For a conversation-and-files rollback, select a user message. If an assistant message is selected, that message is hidden,
+but only file changes attributed to later assistant steps are restored; the selected assistant message's own file changes
+are not included.
+
+## Limitations and safety
+
+- Capture is best effort. A failed capture is logged and the model step continues, so conversation rollback may have no
+  matching file rollback.
+- Interrupted or failed steps do not receive a completed end snapshot. File changes made before the failure may remain.
+- Shell commands can change databases, services, processes, network resources, Git state, ignored build output, or files
+  outside the active directory. Undo and redo do not reverse those side effects.
+- Undo overwrites the current contents of affected paths with older contents. Redo likewise overwrites those paths with
+  the pre-undo state, including edits made after running undo.
+- Other processes can edit the worktree between capture and restore. The server rejects revert operations while the
+  session is actively running, but it cannot protect against external editors or commands.
+- Snapshot objects can contain complete contents of tracked and non-ignored untracked files. They are stored locally in
+  the OpenCode data directory; do not treat snapshots as secret-free metadata.
+- Undo is not secure erasure. Committing a revert removes messages from the active projection, not from durable session
+  history or existing snapshot storage.
+
+Review the staged file summary and your Git diff before continuing. Commit or back up important work independently before
+using undo on a dirty worktree.
+
+<Note>
+  `/undo` and `/redo` are interactive TUI commands. The non-interactive `run` command does not provide them.
+</Note>

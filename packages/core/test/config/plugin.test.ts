@@ -63,6 +63,32 @@ describe("PluginSupervisor config", () => {
     ),
   )
 
+  it.live("disables configured plugins by exported ID", () => {
+    const plugin = path.join(import.meta.dir, "../plugin/fixtures/config-promise-plugin.ts")
+    return withLocation(
+      { plugins: [plugin, "-config-promise-plugin"] },
+      Effect.gen(function* () {
+        yield* ready()
+        const plugins = yield* PluginV2.Service
+        const agents = yield* AgentV2.Service
+        expect((yield* plugins.list()).map((item) => String(item.id))).not.toContain("config-promise-plugin")
+        expect(yield* agents.get(AgentV2.ID.make("configured"))).toBeUndefined()
+      }),
+    )
+  })
+
+  it.live("does not disable configured plugins by package target", () => {
+    const plugin = path.join(import.meta.dir, "../plugin/fixtures/config-promise-plugin.ts")
+    return withLocation(
+      { plugins: [plugin, `-${plugin}`] },
+      Effect.gen(function* () {
+        yield* ready()
+        const plugins = yield* PluginV2.Service
+        expect((yield* plugins.list()).map((item) => String(item.id))).toContain("config-promise-plugin")
+      }),
+    )
+  })
+
   it.live("loads configured Effect plugins with options", () =>
     withLocation(
       {
@@ -108,7 +134,7 @@ describe("PluginSupervisor config", () => {
     ),
   )
 
-  it.live("loads auto-discovered plugin files and packages", () =>
+  it.live("loads auto-discovered plugin files", () =>
     withLocation(
       undefined,
       Effect.gen(function* () {
@@ -116,9 +142,6 @@ describe("PluginSupervisor config", () => {
         const agents = yield* AgentV2.Service
         expect(yield* agents.get(AgentV2.ID.make("directory"))).toMatchObject({
           description: "Loaded from plugin directory",
-        })
-        expect(yield* agents.get(AgentV2.ID.make("folder"))).toMatchObject({
-          description: "Loaded from plugin folder",
         })
       }),
       true,
@@ -169,7 +192,6 @@ describe("PluginSupervisor config", () => {
         yield* ready()
         const agents = yield* AgentV2.Service
         expect(yield* agents.get(AgentV2.ID.make("directory"))).toBeUndefined()
-        expect(yield* agents.get(AgentV2.ID.make("folder"))).toBeUndefined()
       }),
       true,
     ),
@@ -229,7 +251,7 @@ describe("PluginSupervisor config", () => {
 
 const ready = Effect.fnUntraced(function* () {
   const supervisor = yield* PluginSupervisor.Service
-  yield* supervisor.ready
+  yield* supervisor.flush
 })
 
 function withLocation<A, E, R>(

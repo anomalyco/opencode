@@ -146,7 +146,6 @@ import type {
   ProjectUpdateErrors,
   ProjectUpdateResponses,
   PromptAgentAttachment,
-  PromptInput,
   PromptInputFileAttachment,
   ProviderAuthErrors,
   ProviderAuthResponses,
@@ -220,8 +219,6 @@ import type {
   SessionStatusResponses,
   SessionSummarizeErrors,
   SessionSummarizeResponses,
-  SessionTodoErrors,
-  SessionTodoResponses,
   SessionUnrevertErrors,
   SessionUnrevertResponses,
   SessionUnshareErrors,
@@ -362,6 +359,8 @@ import type {
   V2QuestionRequestListResponses,
   V2ReferenceListErrors,
   V2ReferenceListResponses,
+  V2ServerGetErrors,
+  V2ServerGetResponses,
   V2SessionActiveErrors,
   V2SessionActiveResponses,
   V2SessionBackgroundErrors,
@@ -406,6 +405,8 @@ import type {
   V2SessionMessageResponses,
   V2SessionMoveErrors,
   V2SessionMoveResponses,
+  V2SessionPendingListErrors,
+  V2SessionPendingListResponses,
   V2SessionPermissionCreateErrors,
   V2SessionPermissionCreateResponses,
   V2SessionPermissionGetErrors,
@@ -3711,38 +3712,6 @@ export class Session2 extends HeyApiClient {
   }
 
   /**
-   * Get session todos
-   *
-   * Retrieve the todo list associated with a specific session, showing tasks and action items.
-   */
-  public todo<ThrowOnError extends boolean = false>(
-    parameters: {
-      sessionID: string
-      directory?: string
-      workspace?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "sessionID" },
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).get<SessionTodoResponses, SessionTodoErrors, ThrowOnError>({
-      url: "/session/{sessionID}/todo",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
    * Get message diff
    *
    * Get the file changes (diff) that resulted from a specific user message in the session.
@@ -5113,6 +5082,20 @@ export class Health extends HeyApiClient {
   }
 }
 
+export class Server extends HeyApiClient {
+  /**
+   * Get server information
+   *
+   * Return the URLs that can be used to connect to this server.
+   */
+  public get<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<V2ServerGetResponses, V2ServerGetErrors, ThrowOnError>({
+      url: "/api/server",
+      ...options,
+    })
+  }
+}
+
 export class Location extends HeyApiClient {
   /**
    * Get location
@@ -5264,6 +5247,31 @@ export class Revert extends HeyApiClient {
       ThrowOnError
     >({
       url: "/api/session/{sessionID}/revert/commit",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Pending extends HeyApiClient {
+  /**
+   * List pending session work
+   *
+   * List durable admitted session work not yet visible in projected history, ordered by admission. Includes unpromoted user and synthetic inputs and unhandled compaction barriers. The runner owns consumption; items disappear once promoted or handled.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "sessionID" }] }])
+    return (options?.client ?? this.client).get<
+      V2SessionPendingListResponses,
+      V2SessionPendingListErrors,
+      ThrowOnError
+    >({
+      url: "/api/session/{sessionID}/pending",
       ...options,
       ...params,
     })
@@ -6149,7 +6157,12 @@ export class Session3 extends HeyApiClient {
     parameters: {
       sessionID: string
       id?: string | null
-      prompt?: PromptInput
+      text?: string
+      files?: Array<PromptInputFileAttachment>
+      agents?: Array<PromptAgentAttachment>
+      metadata?: {
+        [key: string]: unknown
+      }
       delivery?: "steer" | "queue" | null
       resume?: boolean | null
     },
@@ -6162,7 +6175,10 @@ export class Session3 extends HeyApiClient {
           args: [
             { in: "path", key: "sessionID" },
             { in: "body", key: "id" },
-            { in: "body", key: "prompt" },
+            { in: "body", key: "text" },
+            { in: "body", key: "files" },
+            { in: "body", key: "agents" },
+            { in: "body", key: "metadata" },
             { in: "body", key: "delivery" },
             { in: "body", key: "resume" },
           ],
@@ -6274,16 +6290,18 @@ export class Session3 extends HeyApiClient {
   /**
    * Add synthetic message
    *
-   * Append a synthetic message to a session and resume execution.
+   * Durably admit synthetic session input and schedule execution unless resume is false.
    */
   public synthetic<ThrowOnError extends boolean = false>(
     parameters: {
       sessionID: string
+      id?: string | null
       text?: string
       description?: string | null
       metadata?: {
         [key: string]: unknown
       }
+      delivery?: "steer" | "queue" | null
       resume?: boolean | null
     },
     options?: Options<never, ThrowOnError>,
@@ -6294,9 +6312,11 @@ export class Session3 extends HeyApiClient {
         {
           args: [
             { in: "path", key: "sessionID" },
+            { in: "body", key: "id" },
             { in: "body", key: "text" },
             { in: "body", key: "description" },
             { in: "body", key: "metadata" },
+            { in: "body", key: "delivery" },
             { in: "body", key: "resume" },
           ],
         },
@@ -6529,6 +6549,11 @@ export class Session3 extends HeyApiClient {
   private _revert?: Revert
   get revert(): Revert {
     return (this._revert ??= new Revert({ client: this.client }))
+  }
+
+  private _pending?: Pending
+  get pending(): Pending {
+    return (this._pending ??= new Pending({ client: this.client }))
   }
 
   private _instructions?: Instructions
@@ -8257,6 +8282,11 @@ export class V2 extends HeyApiClient {
   private _health?: Health
   get health(): Health {
     return (this._health ??= new Health({ client: this.client }))
+  }
+
+  private _server?: Server
+  get server(): Server {
+    return (this._server ??= new Server({ client: this.client }))
   }
 
   private _location?: Location

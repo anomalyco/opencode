@@ -36,20 +36,24 @@ export namespace EffectFlock {
 
   export type LockError = LockTimeoutError | LockCompromisedError
 
+  export interface Options {
+    readonly staleMs?: number
+    readonly timeoutMs?: number
+  }
+
   // ---------------------------------------------------------------------------
-  // Timing (baked in — no caller ever overrides these)
+  // Timing defaults
   // ---------------------------------------------------------------------------
 
-  const STALE_MS = 60_000
-  const TIMEOUT_MS = 5 * 60_000
+  const DEFAULT_STALE_MS = 60_000
+  const DEFAULT_TIMEOUT_MS = 5 * 60_000
   const BASE_DELAY_MS = 100
   const MAX_DELAY_MS = 2_000
-  const HEARTBEAT_MS = Math.max(100, Math.floor(STALE_MS / 3))
 
-  const retrySchedule = Schedule.exponential(BASE_DELAY_MS, 1.7).pipe(
-    Schedule.either(Schedule.spaced(MAX_DELAY_MS)),
+  const retrySchedule = (timeoutMs: number) => Schedule.exponential(BASE_DELAY_MS, 1.7).pipe(
+    Schedule.either(Schedule.spaced(Math.min(MAX_DELAY_MS, Math.max(BASE_DELAY_MS, Math.floor(timeoutMs / 10))))),
     Schedule.jittered,
-    Schedule.while((meta) => meta.elapsed < TIMEOUT_MS),
+    Schedule.while((meta) => meta.elapsed < timeoutMs),
   )
 
   // ---------------------------------------------------------------------------
@@ -73,7 +77,7 @@ export namespace EffectFlock {
   // ---------------------------------------------------------------------------
 
   export interface Interface {
-    readonly acquire: (key: string, dir?: string) => Effect.Effect<void, LockError, Scope.Scope>
+    readonly acquire: (key: string, dir?: string, options?: Options) => Effect.Effect<void, LockError, Scope.Scope>
     readonly withLock: {
       (key: string, dir?: string): <A, E, R>(body: Effect.Effect<A, E, R>) => Effect.Effect<A, E | LockError, R>
       <A, E, R>(body: Effect.Effect<A, E, R>, key: string, dir?: string): Effect.Effect<A, E | LockError, R>
@@ -135,9 +139,9 @@ export namespace EffectFlock {
           ),
         )
 
-      const cleanStaleBreaker = Effect.fnUntraced(function* (breakerPath: string) {
+      const cleanStaleBreaker = Effect.fnUntraced(function* (breakerPath: string, staleMs: number) {
         const bs = yield* safeStat(breakerPath)
-        if (bs && wall() - mtimeMs(bs) > STALE_MS) yield* forceRemove(breakerPath)
+        if (bs && wall() - mtimeMs(bs) > staleMs) yield* forceRemove(breakerPath)
         return false
       })
 
@@ -147,26 +151,31 @@ export namespace EffectFlock {
         ensuredDirs.add(dir)
       })
 
-      const isStale = Effect.fnUntraced(function* (lockDir: string, heartbeatPath: string, metaPath: string) {
+      const isStale = Effect.fnUntraced(function* (
+        lockDir: string,
+        heartbeatPath: string,
+        metaPath: string,
+        staleMs: number,
+      ) {
         const now = wall()
 
         const hb = yield* safeStat(heartbeatPath)
-        if (hb) return now - mtimeMs(hb) > STALE_MS
+        if (hb) return now - mtimeMs(hb) > staleMs
 
         const meta = yield* safeStat(metaPath)
-        if (meta) return now - mtimeMs(meta) > STALE_MS
+        if (meta) return now - mtimeMs(meta) > staleMs
 
         const dir = yield* safeStat(lockDir)
         if (!dir) return false
 
-        return now - mtimeMs(dir) > STALE_MS
+        return now - mtimeMs(dir) > staleMs
       })
 
       // -- single lock attempt --
 
       type Handle = { token: string; metaPath: string; heartbeatPath: string; lockDir: string }
 
-      const tryAcquireLockDir = (lockDir: string, key: string) =>
+      const tryAcquireLockDir = (lockDir: string, key: string, staleMs: number) =>
         Effect.gen(function* () {
           const token = randomUUID()
           const metaPath = path.join(lockDir, "meta.json")
@@ -176,7 +185,7 @@ export namespace EffectFlock {
           const created = yield* atomicMkdir(lockDir)
 
           if (!created) {
-            if (!(yield* isStale(lockDir, heartbeatPath, metaPath))) return yield* new NotAcquired()
+            if (!(yield* isStale(lockDir, heartbeatPath, metaPath, staleMs))) return yield* new NotAcquired()
 
             // Stale — race for breaker ownership
             const breakerPath = lockDir + ".breaker"
@@ -185,7 +194,7 @@ export namespace EffectFlock {
               Effect.as(true),
               Effect.catchIf(
                 (e) => e.reason._tag === "AlreadyExists",
-                () => cleanStaleBreaker(breakerPath),
+                () => cleanStaleBreaker(breakerPath, staleMs),
               ),
               Effect.catchIf(isPathGone, () => Effect.succeed(false)),
               Effect.orDie,
@@ -195,7 +204,7 @@ export namespace EffectFlock {
 
             // We own the breaker — double-check staleness, nuke, recreate
             const recreated = yield* Effect.gen(function* () {
-              if (!(yield* isStale(lockDir, heartbeatPath, metaPath))) return false
+              if (!(yield* isStale(lockDir, heartbeatPath, metaPath, staleMs))) return false
               yield* forceRemove(lockDir)
               return yield* atomicMkdir(lockDir)
             }).pipe(Effect.ensuring(forceRemove(breakerPath)))
@@ -218,13 +227,21 @@ export namespace EffectFlock {
 
       // -- retry wrapper (preserves Handle type) --
 
-      const acquireHandle = (lockfile: string, key: string): Effect.Effect<Handle, LockError> =>
-        tryAcquireLockDir(lockfile, key).pipe(
+      const acquireHandle = (
+        lockfile: string,
+        key: string,
+        options: { staleMs: number; timeoutMs: number },
+      ): Effect.Effect<Handle, LockError> =>
+        tryAcquireLockDir(lockfile, key, options.staleMs).pipe(
           Effect.retry({
             while: (err) => err._tag === "NotAcquired",
-            schedule: retrySchedule,
+            schedule: retrySchedule(options.timeoutMs),
           }),
           Effect.catchTag("NotAcquired", () => Effect.fail(new LockTimeoutError({ key }))),
+          Effect.timeoutOrElse({
+            duration: options.timeoutMs,
+            orElse: () => Effect.fail(new LockTimeoutError({ key })),
+          }),
         )
 
       // -- release --
@@ -250,19 +267,27 @@ export namespace EffectFlock {
 
       // -- build service --
 
-      const acquire = Effect.fn("EffectFlock.acquire")(function* (key: string, dir?: string) {
+      const acquire = Effect.fn("EffectFlock.acquire")(function* (key: string, dir?: string, options: Options = {}) {
         const lockDir = dir ?? lockRoot
+        const staleMs = options.staleMs ?? DEFAULT_STALE_MS
+        const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
         yield* ensureDir(lockDir)
 
         const lockfile = path.join(lockDir, Hash.fast(key) + ".lock")
 
         // acquireRelease: acquire is uninterruptible, release is guaranteed
-        const handle = yield* Effect.acquireRelease(acquireHandle(lockfile, key), (handle) => release(handle))
+        const handle = yield* Effect.acquireRelease(acquireHandle(lockfile, key, { staleMs, timeoutMs }), (handle) =>
+          release(handle),
+        )
 
         // Heartbeat fiber — scoped, so it's interrupted before release runs
         yield* fs
           .utimes(handle.heartbeatPath, new Date(), new Date())
-          .pipe(Effect.ignore, Effect.repeat(Schedule.spaced(HEARTBEAT_MS)), Effect.forkScoped)
+          .pipe(
+            Effect.ignore,
+            Effect.repeat(Schedule.spaced(Math.max(100, Math.floor(staleMs / 3)))),
+            Effect.forkScoped,
+          )
       })
 
       const withLock: Interface["withLock"] = Function.dual(

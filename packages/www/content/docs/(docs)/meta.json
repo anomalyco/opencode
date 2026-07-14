@@ -1,0 +1,28 @@
+{
+  "title": "Docs",
+  "description": "Use and configure OpenCode.",
+  "root": true,
+  "pages": [
+    "---Get started---",
+    "index",
+    "migrate-v1",
+    "config",
+    "troubleshooting",
+    "---Configure---",
+    "providers",
+    "models",
+    "agents",
+    "permissions",
+    "sharing",
+    "snapshots",
+    "commands",
+    "skills",
+    "instructions",
+    "mcp-servers",
+    "attachments",
+    "compaction",
+    "formatters",
+    "lsp",
+    "references"
+  ]
+}

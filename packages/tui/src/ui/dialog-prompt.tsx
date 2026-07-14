@@ -3,7 +3,7 @@ import { useTheme } from "../context/theme"
 import { useDialog, type DialogContext } from "./dialog"
 import { Show, createEffect, createSignal, onMount, type JSX } from "solid-js"
 import { Spinner } from "../component/spinner"
-import { useTuiConfig } from "../config"
+import { useConfig } from "../config"
 import { useBindings, useCommandShortcut } from "../keymap"
 
 export type DialogPromptProps = {
@@ -20,7 +20,7 @@ export type DialogPromptProps = {
 export function DialogPrompt(props: DialogPromptProps) {
   const dialog = useDialog()
   const { theme } = useTheme()
-  const tuiConfig = useTuiConfig()
+  const config = useConfig().data
   const submitShortcut = useCommandShortcut("dialog.prompt.submit")
   const [textareaTarget, setTextareaTarget] = createSignal<TextareaRenderable>()
   let textarea: TextareaRenderable
@@ -43,7 +43,7 @@ export function DialogPrompt(props: DialogPromptProps) {
         run: confirm,
       },
     ],
-    bindings: tuiConfig.keybinds.gather("dialog.prompt", ["dialog.prompt.submit"]),
+    bindings: config.keybinds.gather("dialog.prompt", ["dialog.prompt.submit"]),
   }))
 
   onMount(() => {

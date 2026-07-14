@@ -3,7 +3,7 @@ import { createStore } from "solid-js/store"
 import { TextAttributes, RGBA, ScrollBoxRenderable } from "@opentui/core"
 import { useRoute, useRouteData } from "../../../context/route"
 import { useData } from "../../../context/data"
-import { useSDK } from "../../../context/sdk"
+import { useClient } from "../../../context/client"
 import { useTheme, selectedForeground } from "../../../context/theme"
 import { Locale } from "../../../util/locale"
 import { useBindings, useCommandShortcut } from "../../../keymap"
@@ -20,7 +20,7 @@ interface SubagentEntry {
 export function SubagentsTab(props: { sessionID: string }) {
   const route = useRouteData("session")
   const data = useData()
-  const sdk = useSDK()
+  const client = useClient()
   const { theme } = useTheme()
   const fg = selectedForeground(theme)
   const navigate = useRoute().navigate
@@ -183,7 +183,7 @@ export function SubagentsTab(props: { sessionID: string }) {
         run() {
           const entry = selectedEntry()
           if (!entry || entry.status !== "running") return
-          void sdk.api.session.interrupt({ sessionID: entry.sessionID })
+          void client.api.session.interrupt({ sessionID: entry.sessionID })
         },
       },
     ],

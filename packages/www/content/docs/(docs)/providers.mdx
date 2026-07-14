@@ -1,0 +1,204 @@
+---
+title: "Providers"
+description: ""
+---
+
+OpenCode builds its provider and model catalog from [Models.dev](https://models.dev), then applies the `providers`
+overlays from your [configuration](/docs/config). A provider needs both a usable runtime package and, when required, an
+active connection.
+
+## Connect a provider
+
+Run `/connect` in the TUI, choose an integration, and complete one of the methods it offers:
+
+```text
+/connect
+```
+
+An integration may support an API key, OAuth, environment variables, or a combination of them. API keys and OAuth
+tokens entered through `/connect` are stored by the OpenCode service in its database. Run `/connect` again to replace
+or remove a stored credential.
+
+Providers from Models.dev also declare their standard environment variables. A non-empty declared variable is exposed
+as an environment connection automatically, so common providers usually need no config:
+
+```bash
+export ANTHROPIC_API_KEY="your-key"
+```
+
+For a custom provider, `env` declares the variables that can supply its key:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "acme": {
+      "env": ["ACME_API_KEY"]
+    }
+  }
+}
+```
+
+When several credential sources exist, OpenCode uses the stored credential first, then the first non-empty variable in
+`env`, then `settings.apiKey`. Use config substitution instead of committing a literal key:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "acme": {
+      "settings": {
+        "apiKey": "{env:ACME_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+<Warning>Do not commit API keys or authorization headers to your repository.</Warning>
+
+## Configure
+
+The `providers` object is keyed by provider ID. Each provider accepts these fields:
+
+| Field | Purpose |
+| --- | --- |
+| `name` | Display name. |
+| `env` | Ordered environment variable names that provide a connection. |
+| `package` | Runtime provider package. |
+| `settings` | JSON settings passed to the runtime package, such as `baseURL`. |
+| `headers` | String-valued HTTP headers added to requests. |
+| `body` | JSON fields merged into request bodies. |
+| `models` | Models to add or override, keyed by catalog model ID. |
+
+Configuration files are applied from lowest to highest precedence. `settings` and `body` are deep-merged. Headers are
+merged case-insensitively. At request time, provider values are inherited by the model, model values override them, and
+the selected variant is applied last.
+
+### Endpoint
+
+Override `settings.baseURL` to send an existing provider through a proxy or compatible endpoint. Its existing package,
+models, and connection continue to apply:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "anthropic": {
+      "settings": {
+        "baseURL": "https://llm-proxy.example.com/anthropic"
+      }
+    }
+  }
+}
+```
+
+`settings` is package-specific. A field only has an effect when the selected package supports it.
+
+### Headers and body
+
+Headers and body fields can be set at provider, model, or variant scope:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openai": {
+      "headers": {
+        "X-Gateway-Tenant": "engineering"
+      },
+      "body": {
+        "metadata": {
+          "application": "opencode"
+        }
+      },
+      "models": {
+        "gpt-5.2": {
+          "headers": {
+            "X-Model-Policy": "coding"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+These are request overlays, not a generic authentication scheme. Prefer `/connect`, `env`, or `settings.apiKey` for
+provider credentials unless the endpoint explicitly requires a custom header.
+
+### Provider packages
+
+For an OpenAI-compatible service, use the V2 native compatible package. The model map is explicit because a custom
+provider has no Models.dev catalog entries:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "acme/qwen3-coder",
+  "providers": {
+    "acme": {
+      "name": "Acme Gateway",
+      "env": ["ACME_API_KEY"],
+      "package": "@opencode-ai/llm/providers/openai-compatible",
+      "settings": {
+        "baseURL": "https://llm.acme.example/v1"
+      },
+      "models": {
+        "qwen3-coder": {
+          "name": "Qwen 3 Coder",
+          "capabilities": {
+            "tools": true,
+            "input": ["text"],
+            "output": ["text"]
+          },
+          "limit": {
+            "context": 131072,
+            "output": 32768
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+Omit `env` for an endpoint that does not require authentication. The native compatible package requires
+`settings.baseURL` and uses bearer authentication when a key is available.
+
+The `package` field supports two runtime contracts:
+
+| Form | Contract |
+| --- | --- |
+| `"@opencode-ai/llm/providers/openai-compatible"` | A V2 native package exporting `model(modelID, settings)`. An npm specifier or absolute `file://` URL may use the same contract. |
+| `"aisdk:@ai-sdk/openai-compatible"` | An AI SDK provider package. The `aisdk:` prefix is required. |
+
+Native packages receive the merged `settings` plus the resolved `apiKey`, `headers`, `body`, and `limits`. AI SDK
+packages receive their merged provider options. Use a package's own documentation for accepted settings; OpenCode does
+not validate package-specific keys.
+
+`package` may also be set on one model to override the provider package for that model.
+
+### Models
+
+Add a model under a provider's `models` map. The object key is the model ID used in OpenCode; `modelID` is the ID sent to
+the provider:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "openai/coding",
+  "providers": {
+    "openai": {
+      "models": {
+        "coding": {
+          "modelID": "gpt-5.2",
+          "name": "GPT-5.2 Coding"
+        }
+      }
+    }
+  }
+}
+```
+
+See [Models](/docs/models) for model selection, defaults, capabilities, limits, costs, and variants.

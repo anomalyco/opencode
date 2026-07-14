@@ -52,6 +52,7 @@ const icons = {
   "magnifying-glass-menu": `<path d="M2.08325 10.0002H4.58325M2.08325 5.41683H5.41659M2.08325 14.5835H5.41659M16.4583 13.9585L18.7499 16.2502M17.9166 10.0002C17.9166 12.9917 15.4915 15.4168 12.4999 15.4168C9.50838 15.4168 7.08325 12.9917 7.08325 10.0002C7.08325 7.00862 9.50838 4.5835 12.4999 4.5835C15.4915 4.5835 17.9166 7.00862 17.9166 10.0002Z" stroke="currentColor" stroke-linecap="square"/>`,
   "window-cursor": `<path d="M17.9166 10.4167V3.75H2.08325V17.0833H10.4166M17.9166 13.5897L11.6666 11.6667L13.5897 17.9167L15.032 15.0321L17.9166 13.5897Z" stroke="currentColor" stroke-width="1.07143" stroke-linecap="square"/><path d="M5.00024 6.125C5.29925 6.12518 5.54126 6.36795 5.54126 6.66699C5.54108 6.96589 5.29914 7.20783 5.00024 7.20801C4.7012 7.20801 4.45843 6.966 4.45825 6.66699C4.45825 6.36784 4.70109 6.125 5.00024 6.125ZM7.91626 6.125C8.21541 6.125 8.45825 6.36784 8.45825 6.66699C8.45808 6.966 8.21531 7.20801 7.91626 7.20801C7.61736 7.20783 7.37542 6.96589 7.37524 6.66699C7.37524 6.36795 7.61726 6.12518 7.91626 6.125ZM10.8333 6.125C11.1324 6.125 11.3752 6.36784 11.3752 6.66699C11.3751 6.966 11.1323 7.20801 10.8333 7.20801C10.5342 7.20801 10.2914 6.966 10.2913 6.66699C10.2913 6.36784 10.5341 6.125 10.8333 6.125Z" fill="currentColor" stroke="currentColor" stroke-width="0.25" stroke-linecap="square"/>`,
   task: `<path d="M9.99992 2.0835V17.9168M7.08325 3.75016H2.08325V16.2502H7.08325M12.9166 16.2502H17.9166V3.75016H12.9166" stroke="currentColor" stroke-linecap="square"/>`,
+  subagent: `<path d="M4.5 5C4.5 4.72386 4.72386 4.5 5 4.5H11C11.2761 4.5 11.5 4.72386 11.5 5V11C11.5 11.2761 11.2761 11.5 11 11.5H5C4.72386 11.5 4.5 11.2761 4.5 11V5Z" fill="currentColor"/><path d="M13.5 2C13.7761 2 14 2.22386 14 2.5V13.5C14 13.7761 13.7761 14 13.5 14H2.5C2.22386 14 2 13.7761 2 13.5V2.5C2 2.22386 2.22386 2 2.5 2H13.5ZM3 13H13V3H3V13Z" fill="currentColor"/>`,
   stop: `<rect x="5" y="5" width="10" height="10" fill="currentColor"/>`,
   status: `<path d="M2 10V18H18V10M2 10V2H18V10M2 10H18M5 6H9M5 14H9" stroke="currentColor"/>`,
   "status-active": `<path d="M18 2H2V10H18V2Z" fill="currentColor" fill-opacity="0.1"/>
@@ -110,7 +111,7 @@ const symbol = (name: keyof typeof icons) => `opencode-icon-${name}`
 let spriteInserted = false
 
 function viewBox(name: keyof typeof icons) {
-  return name === "magnifying-glass" || name === "arrow-undo-down" ? "0 0 16 16" : "0 0 20 20"
+  return name === "magnifying-glass" || name === "arrow-undo-down" || name === "subagent" ? "0 0 16 16" : "0 0 20 20"
 }
 
 function ensureSprite() {

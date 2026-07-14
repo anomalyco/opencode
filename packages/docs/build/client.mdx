@@ -1,0 +1,145 @@
+---
+title: "Client"
+description: "Connect an application to the OpenCode HTTP API."
+---
+
+`@opencode-ai/client` is the generated TypeScript client for the OpenCode HTTP
+API. Use it when your application connects to an OpenCode server over the
+network. Its types and methods are generated from the same contract as the
+[API reference](/api).
+
+<Warning>
+  The V2 API and client are beta. Method names, inputs, and outputs may change
+  before the stable release.
+</Warning>
+
+## Install
+
+```sh
+bun add @opencode-ai/client@next
+```
+
+## Create a client
+
+Create a client with the server URL, then call methods grouped by API resource:
+
+```ts
+import { OpenCode } from "@opencode-ai/client"
+
+const client = OpenCode.make({
+  baseUrl: "http://localhost:4096",
+})
+
+const session = await client.session.create({
+  location: { directory: "/workspace" },
+})
+
+await client.session.prompt({
+  sessionID: session.id,
+  text: "Review the current changes",
+})
+```
+
+## Headers and requests
+
+Pass default authentication or application headers to `OpenCode.make` with
+`headers`. You can also supply a custom `fetch` implementation. Each operation
+accepts request options as its final argument for an `AbortSignal` or
+per-request headers.
+
+```ts
+const client = OpenCode.make({
+  baseUrl: "https://opencode.example.com",
+  headers: {
+    authorization: `Bearer ${process.env.OPENCODE_TOKEN}`,
+  },
+})
+
+await client.session.list(undefined, {
+  signal: AbortSignal.timeout(10_000),
+})
+```
+
+## Stream events
+
+Streaming endpoints return async iterables:
+
+```ts
+for await (const event of client.event.subscribe()) {
+  console.log(event.type)
+}
+```
+
+## Effect
+
+OpenCode provides a first-class Effect client through the
+`@opencode-ai/client/effect` entrypoint. It returns typed Effects and Streams
+and decodes responses into OpenCode schema values.
+
+```sh
+bun add @opencode-ai/client@next effect
+```
+
+### Create a client
+
+```ts
+import { AbsolutePath, Location, OpenCode } from "@opencode-ai/client/effect"
+import { Effect } from "effect"
+import { FetchHttpClient } from "effect/unstable/http"
+
+const program = Effect.gen(function* () {
+  const client = yield* OpenCode.make({ baseUrl: "http://localhost:4096" })
+  const session = yield* client.session.create({
+    location: Location.Ref.make({
+      directory: AbsolutePath.make("/workspace"),
+    }),
+  })
+
+  return yield* client.session.get({ sessionID: session.id })
+})
+
+const session = await Effect.runPromise(
+  program.pipe(Effect.provide(FetchHttpClient.layer)),
+)
+```
+
+Streaming operations, including `client.event.subscribe()` and
+`client.session.log(...)`, return Effect `Stream` values.
+
+### Service
+
+`Service` discovers and manages the local OpenCode background service from a
+Node application:
+
+- `Service.discover()` returns a healthy registered endpoint without starting
+  a process.
+- `Service.start()` reuses a compatible service or starts one when needed.
+- `Service.stop()` stops the registered service.
+- `Service.headers(endpoint)` creates the authentication headers for a client.
+
+```sh
+bun add @effect/platform-node
+```
+
+```ts
+import { NodeFileSystem } from "@effect/platform-node"
+import { OpenCode, Service } from "@opencode-ai/client/effect"
+import { Effect } from "effect"
+import { FetchHttpClient } from "effect/unstable/http"
+
+const program = Effect.gen(function* () {
+  const endpoint = yield* Service.start()
+  const client = yield* OpenCode.make({
+    baseUrl: endpoint.url,
+    headers: Service.headers(endpoint),
+  })
+  return yield* client.health.get()
+})
+
+const health = await Effect.runPromise(
+  program.pipe(
+    Effect.provide(FetchHttpClient.layer),
+    Effect.provide(NodeFileSystem.layer),
+  ),
+)
+```

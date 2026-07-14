@@ -1,11 +1,11 @@
 import { EOL } from "node:os"
 import { Effect } from "effect"
 import {
-  createOpencodeClient,
+  OpenCode,
   type IntegrationAttemptStatus,
   type IntegrationOAuthMethod,
-  type OpencodeClient,
-} from "@opencode-ai/sdk/v2/client"
+  type OpenCodeClient,
+} from "@opencode-ai/client"
 import { Commands } from "../../commands"
 import { Runtime } from "../../../framework/runtime"
 import { Service } from "@opencode-ai/client/effect"
@@ -19,8 +19,8 @@ export default Runtime.handler(
   Effect.fn("cli.mcp.auth")(function* (input) {
     const options = yield* ServiceConfig.options()
     const found = yield* Service.discover(options)
-    const transport = found ?? (yield* Service.start(options))
-    const client = createOpencodeClient({ baseUrl: transport.url, headers: transport.headers })
+    const endpoint = found ?? (yield* Service.start(options))
+    const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) })
 
     const integration = yield* resolveIntegration(client, input.name, location)
     if (!integration)
@@ -32,10 +32,9 @@ export default Runtime.handler(
       return yield* Effect.fail(new Error(`MCP server "${input.name}" is not an OAuth-capable remote server`))
 
     const started = yield* Effect.promise(() =>
-      client.v2.integration.connect.oauth({ integrationID: integration.id, methodID: method.id, inputs: {}, location }),
+      client.integration.connect.oauth({ integrationID: integration.id, methodID: method.id, inputs: {}, location }),
     )
-    const attempt = started.data?.data
-    if (!attempt) return yield* Effect.fail(new Error(started.error?.message ?? "Failed to start OAuth attempt"))
+    const attempt = started.data
     if (attempt.mode === "code")
       return yield* Effect.fail(new Error("This server requires manual code entry, which the CLI does not support"))
 
@@ -52,13 +51,14 @@ export default Runtime.handler(
 )
 
 const poll = (
-  client: OpencodeClient,
+  client: OpenCodeClient,
   attemptID: string,
 ): Effect.Effect<Exclude<IntegrationAttemptStatus, { status: "pending" }>> =>
   Effect.gen(function* () {
-    const response = yield* Effect.promise(() => client.v2.integration.attempt.status({ attemptID, location }))
-    const status = response.data?.data
-    if (!status || status.status === "pending") {
+    const status = yield* Effect.promise(() => client.integration.attempt.status({ attemptID, location })).pipe(
+      Effect.map((result) => result.data),
+    )
+    if (status.status === "pending") {
       yield* Effect.sleep("1 second")
       return yield* poll(client, attemptID)
     }

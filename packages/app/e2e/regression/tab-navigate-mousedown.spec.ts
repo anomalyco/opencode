@@ -63,7 +63,7 @@ async function mockServer(page: Page) {
     if (byId) return json(route, byId)
     if (/^\/session\/[^/]+$/.test(url.pathname)) return json(route, { name: "NotFoundError" }, 404)
     if (/^\/session\/[^/]+\/message$/.test(url.pathname)) return json(route, [])
-    if (/^\/session\/[^/]+\/(children|todo|diff)$/.test(url.pathname)) return json(route, [])
+    if (/^\/session\/[^/]+\/(children|diff)$/.test(url.pathname)) return json(route, [])
     if (["/skill", "/command", "/lsp", "/formatter", "/permission", "/question", "/vcs/diff"].includes(url.pathname))
       return json(route, [])
     if (["/global/config", "/config", "/provider/auth", "/mcp", "/session/status"].includes(url.pathname))

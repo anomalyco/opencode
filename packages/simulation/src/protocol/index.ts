@@ -65,6 +65,7 @@ export namespace Frontend {
     Schema.Struct({ type: Schema.Literal("ui.arrow"), direction: Schema.Literals(["up", "down", "left", "right"]) }),
     Schema.Struct({ type: Schema.Literal("ui.focus"), target: Schema.Number }),
     Schema.Struct({ type: Schema.Literal("ui.click"), target: Schema.Number, x: Schema.Number, y: Schema.Number }),
+    Schema.Struct({ type: Schema.Literal("ui.resize"), cols: Schema.Number, rows: Schema.Number }),
   ])
   export type Action = Schema.Schema.Type<typeof Action>
 
@@ -94,14 +95,20 @@ export namespace Frontend {
   export const Screenshot = Schema.String
   export type Screenshot = Schema.Schema.Type<typeof Screenshot>
 
-  export const StartRecord = Schema.Struct({ recording: Schema.Literal(true) })
-  export interface StartRecord extends Schema.Schema.Type<typeof StartRecord> {}
+  export const RecordingFinish = Schema.String
+  export type RecordingFinish = Schema.Schema.Type<typeof RecordingFinish>
 
-  export const EndRecord = Schema.String
-  export type EndRecord = Schema.Schema.Type<typeof EndRecord>
+  export const Matches = Schema.Boolean
+  export type Matches = Schema.Schema.Type<typeof Matches>
+
+  export const ScreenshotParams = Schema.Struct({ name: Schema.optional(Schema.String) })
+  export interface ScreenshotParams extends Schema.Schema.Type<typeof ScreenshotParams> {}
 
   export const TypeParams = Schema.Struct({ text: Schema.String })
   export interface TypeParams extends Schema.Schema.Type<typeof TypeParams> {}
+
+  export const MatchesParams = Schema.Struct({ text: Schema.String })
+  export interface MatchesParams extends Schema.Schema.Type<typeof MatchesParams> {}
 
   export const PressParams = Schema.Struct({ key: Schema.String, modifiers: Schema.optional(KeyModifiers) })
   export interface PressParams extends Schema.Schema.Type<typeof PressParams> {}
@@ -115,26 +122,29 @@ export namespace Frontend {
   export const ClickParams = Schema.Struct({ target: Schema.Number, x: Schema.Number, y: Schema.Number })
   export interface ClickParams extends Schema.Schema.Type<typeof ClickParams> {}
 
+  export const ResizeParams = Schema.Struct({ cols: Schema.Number, rows: Schema.Number })
+  export interface ResizeParams extends Schema.Schema.Type<typeof ResizeParams> {}
+
   export const Request = Schema.Union([
     Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("ui.type"), params: TypeParams }),
     Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("ui.press"), params: PressParams }),
     Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("ui.arrow"), params: ArrowParams }),
     Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("ui.focus"), params: FocusParams }),
     Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("ui.click"), params: ClickParams }),
+    Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("ui.resize"), params: ResizeParams }),
+    Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("ui.matches"), params: MatchesParams }),
     Schema.Struct({
       ...JsonRpc.RequestFields,
-      method: Schema.Literals([
-        "ui.enter",
-        "ui.screenshot",
-        "ui.state",
-        "ui.start-record",
-        "ui.end-record",
-      ]),
+      method: Schema.Literal("ui.screenshot"),
+      params: Schema.optional(ScreenshotParams),
+    }),
+    Schema.Struct({
+      ...JsonRpc.RequestFields,
+      method: Schema.Literals(["ui.enter", "ui.state", "ui.recording.finish"]),
     }),
   ])
   export type Request = Schema.Schema.Type<typeof Request>
   export const decodeRequest = Schema.decodeUnknownSync(Request)
-
 }
 
 export namespace Backend {
@@ -189,7 +199,6 @@ export namespace Backend {
     matched: Schema.Boolean,
   })
   export interface NetworkLogEntry extends Schema.Schema.Type<typeof NetworkLogEntry> {}
-
 }
 
 export * as SimulationProtocol from "./index"

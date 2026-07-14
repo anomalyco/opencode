@@ -20,7 +20,7 @@ export const ModelHandler = HttpApiBuilder.group(Api, "server.model", (handlers)
         "model.default",
         Effect.fn(function* () {
           const plugins = yield* PluginSupervisor.Service
-          yield* plugins.ready.pipe(
+          yield* plugins.flush.pipe(
             Effect.timeoutOrElse({
               duration: "5 seconds",
               orElse: () =>

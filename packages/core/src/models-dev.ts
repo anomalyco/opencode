@@ -12,130 +12,285 @@ import { InstallationChannel, InstallationVersion } from "./installation/version
 import { EventV2 } from "./event"
 import { makeGlobalNode } from "./effect/app-node"
 import { httpClient } from "./effect/app-node-platform"
+import { ModelV2 } from "./model"
+import { ProviderV2 } from "./provider"
 
 export const CatalogModelStatus = Schema.Literals(["alpha", "beta", "deprecated"])
 export type CatalogModelStatus = typeof CatalogModelStatus.Type
 
 const USER_AGENT = `opencode/${InstallationChannel}/${InstallationVersion}/${Flag.OPENCODE_CLIENT}`
 
-const CostTier = Schema.Struct({
-  input: Money.USDPerMillionTokens,
-  output: Money.USDPerMillionTokens,
-  cache_read: Schema.optional(Money.USDPerMillionTokens),
-  cache_write: Schema.optional(Money.USDPerMillionTokens),
-  tier: Schema.Struct({
-    type: Schema.Literal("context"),
-    size: Schema.Finite,
-  }),
-})
+type Cost = {
+  readonly input: Money.USDPerMillionTokens
+  readonly output: Money.USDPerMillionTokens
+  readonly cache_read?: Money.USDPerMillionTokens
+  readonly cache_write?: Money.USDPerMillionTokens
+  readonly tiers?: readonly (Cost & { readonly tier: { readonly type: "context"; readonly size: number } })[]
+  readonly context_over_200k?: Omit<Cost, "tiers" | "context_over_200k">
+}
 
-const Cost = Schema.Struct({
-  input: Money.USDPerMillionTokens,
-  output: Money.USDPerMillionTokens,
-  cache_read: Schema.optional(Money.USDPerMillionTokens),
-  cache_write: Schema.optional(Money.USDPerMillionTokens),
-  tiers: Schema.optional(Schema.Array(CostTier)),
-  context_over_200k: Schema.optional(
-    Schema.Struct({
-      input: Money.USDPerMillionTokens,
-      output: Money.USDPerMillionTokens,
-      cache_read: Schema.optional(Money.USDPerMillionTokens),
-      cache_write: Schema.optional(Money.USDPerMillionTokens),
-    }),
-  ),
-})
+type ReasoningOption =
+  | { readonly type: "effort"; readonly values: readonly (string | null)[] }
+  | { readonly type: "toggle" }
+  | { readonly type: "budget_tokens"; readonly min?: number; readonly max?: number }
 
-const ReasoningOption = Schema.Union([
-  Schema.Struct({
-    type: Schema.Literal("effort"),
-    values: Schema.Array(Schema.Union([Schema.String, Schema.Null])),
-  }),
-  Schema.Struct({
-    type: Schema.Literal("toggle"),
-  }),
-  Schema.Struct({
-    type: Schema.Literal("budget_tokens"),
-    min: Schema.optional(Schema.Finite),
-    max: Schema.optional(Schema.Finite),
-  }),
-])
+type Modality = "text" | "audio" | "image" | "video" | "pdf"
 
-export const Model = Schema.Struct({
-  id: Schema.String,
-  name: Schema.String,
-  family: Schema.optional(Schema.String),
-  release_date: Schema.String,
-  attachment: Schema.Boolean,
-  reasoning: Schema.Boolean,
-  reasoning_options: Schema.optional(Schema.Array(ReasoningOption)),
-  temperature: Schema.optional(Schema.Boolean),
-  tool_call: Schema.Boolean,
-  interleaved: Schema.optional(
-    Schema.Union([
-      Schema.Literal(true),
-      Schema.Struct({
-        field: Schema.Literals(["reasoning", "reasoning_content", "reasoning_details"]),
-      }),
-    ]),
-  ),
-  cost: Schema.optional(Cost),
-  limit: Schema.Struct({
-    context: Schema.Finite,
-    input: Schema.optional(Schema.Finite),
-    output: Schema.Finite,
-  }),
-  modalities: Schema.optional(
-    Schema.Struct({
-      input: Schema.Array(Schema.Literals(["text", "audio", "image", "video", "pdf"])),
-      output: Schema.Array(Schema.Literals(["text", "audio", "image", "video", "pdf"])),
-    }),
-  ),
-  experimental: Schema.optional(
-    Schema.Struct({
-      modes: Schema.optional(
-        Schema.Record(
-          Schema.String,
-          Schema.Struct({
-            cost: Schema.optional(Cost),
-            provider: Schema.optional(
-              Schema.Struct({
-                body: Schema.optional(Schema.Record(Schema.String, Schema.MutableJson)),
-                headers: Schema.optional(Schema.Record(Schema.String, Schema.String)),
-              }),
-            ),
+type SourceModel = {
+  readonly id: string
+  readonly name: string
+  readonly family?: string
+  readonly release_date: string
+  readonly attachment: boolean
+  readonly reasoning: boolean
+  readonly reasoning_options?: readonly ReasoningOption[]
+  readonly temperature?: boolean
+  readonly tool_call: boolean
+  readonly interleaved?: true | { readonly field: "reasoning" | "reasoning_content" | "reasoning_details" }
+  readonly cost?: Cost
+  readonly limit: { readonly context: number; readonly input?: number; readonly output: number }
+  readonly modalities?: { readonly input: readonly Modality[]; readonly output: readonly Modality[] }
+  readonly experimental?: {
+    readonly modes?: Readonly<
+      Record<
+        string,
+        {
+          readonly cost?: Cost
+          readonly provider?: { readonly body?: ProviderV2.Settings; readonly headers?: Readonly<Record<string, string>> }
+        }
+      >
+    >
+  }
+  readonly status?: CatalogModelStatus
+  readonly provider?: { readonly npm?: string; readonly api?: string }
+}
+
+type SourceProvider = {
+  readonly api?: string
+  readonly name: string
+  readonly env: readonly string[]
+  readonly id: string
+  readonly npm?: string
+  readonly models: Readonly<Record<string, SourceModel>>
+}
+
+export type Snapshot = {
+  readonly info: ProviderV2.Info
+  readonly models: readonly ModelV2.Info[]
+  readonly environment: readonly string[]
+}
+
+function normalize(input: Record<string, SourceProvider>): readonly Snapshot[] {
+  const providers: Snapshot[] = []
+  for (const item of Object.values(input)) {
+    const providerID = ProviderV2.ID.make(item.id)
+    const info = {
+      id: providerID,
+      name: item.name,
+      package: item.npm ? ProviderV2.aisdk(item.npm) : "",
+      ...(item.api ? { settings: { baseURL: item.api } } : {}),
+    } satisfies ProviderV2.Info
+    const models: ModelV2.Info[] = []
+    for (const model of Object.values(item.models)) {
+      const baseCost = cost(model.cost)
+      const variants = reasoningVariants(item, model)
+      const id = ModelV2.ID.make(model.id)
+      models.push(modelInfo(providerID, id, model, { cost: baseCost, variants }))
+      for (const [mode, options] of Object.entries(model.experimental?.modes ?? {})) {
+        const modeID = ModelV2.ID.make(`${model.id}-${mode}`)
+        models.push(
+          modelInfo(providerID, modeID, model, {
+            name: modeName(model, mode),
+            cost: mergeCost(baseCost, options.cost),
+            request: options.provider,
+            variants,
           }),
-        ),
-      ),
-    }),
-  ),
-  status: Schema.optional(CatalogModelStatus),
-  provider: Schema.optional(
-    Schema.Struct({ npm: Schema.optional(Schema.String), api: Schema.optional(Schema.String) }),
-  ),
-})
-export type Model = Schema.Schema.Type<typeof Model>
+        )
+      }
+    }
+    providers.push({ info, models, environment: [...item.env] })
+  }
+  return providers
+}
 
-export const Provider = Schema.Struct({
-  api: Schema.optional(Schema.String),
-  name: Schema.String,
-  env: Schema.Array(Schema.String),
-  id: Schema.String,
-  npm: Schema.optional(Schema.String),
-  models: Schema.Record(Schema.String, Model),
-})
+function released(date: string) {
+  const time = Date.parse(date)
+  return Number.isFinite(time) ? time : 0
+}
 
-export type Provider = Schema.Schema.Type<typeof Provider>
+function cost(input: SourceModel["cost"]): ModelV2.Info["cost"] {
+  const base = {
+    input: input?.input ?? Money.USDPerMillionTokens.zero,
+    output: input?.output ?? Money.USDPerMillionTokens.zero,
+    cache: {
+      read: input?.cache_read ?? Money.USDPerMillionTokens.zero,
+      write: input?.cache_write ?? Money.USDPerMillionTokens.zero,
+    },
+  }
+  return [
+    base,
+    ...(input?.tiers?.map((item) => ({
+      tier: item.tier,
+      input: item.input,
+      output: item.output,
+      cache: {
+        read: item.cache_read ?? Money.USDPerMillionTokens.zero,
+        write: item.cache_write ?? Money.USDPerMillionTokens.zero,
+      },
+    })) ?? []),
+    ...(input?.context_over_200k
+      ? [
+          {
+            tier: { type: "context" as const, size: 200_000 },
+            input: input.context_over_200k.input,
+            output: input.context_over_200k.output,
+            cache: {
+              read: input.context_over_200k.cache_read ?? Money.USDPerMillionTokens.zero,
+              write: input.context_over_200k.cache_write ?? Money.USDPerMillionTokens.zero,
+            },
+          },
+        ]
+      : []),
+  ]
+}
 
-const Providers = Schema.Record(Schema.String, Provider)
-const decodeProviders = Schema.decodeUnknownEffect(Schema.fromJsonString(Providers))
-const decodeProvidersUnknown = Schema.decodeUnknownEffect(Providers)
+function mergeCost(base: ModelV2.Info["cost"], override: SourceModel["cost"] | undefined) {
+  if (!override) return base
+  const next = cost(override)
+  const [baseDefault, ...baseTiers] = base
+  const [nextDefault, ...nextTiers] = next
+  const tierKey = (item: ModelV2.Info["cost"][number]) => `${item.tier?.type ?? "base"}:${item.tier?.size ?? 0}`
+  const merge = (left: ModelV2.Info["cost"][number], right: ModelV2.Info["cost"][number]) => ({
+    ...left,
+    ...right,
+    tier: right.tier ?? left.tier,
+    cache: { ...left.cache, ...right.cache },
+  })
+  const tiers = new Map(baseTiers.map((item) => [tierKey(item), item]))
+  for (const item of nextTiers) {
+    const current = tiers.get(tierKey(item))
+    tiers.set(tierKey(item), current ? merge(current, item) : item)
+  }
+  return [
+    merge(
+      baseDefault ?? {
+        input: Money.USDPerMillionTokens.zero,
+        output: Money.USDPerMillionTokens.zero,
+        cache: { read: Money.USDPerMillionTokens.zero, write: Money.USDPerMillionTokens.zero },
+      },
+      nextDefault,
+    ),
+    ...tiers.values(),
+  ]
+}
+
+const OPENAI_INCLUDE_ENCRYPTED_REASONING = ["reasoning.encrypted_content"]
+
+function reasoningVariants(provider: SourceProvider, model: SourceModel): NonNullable<ModelV2.Info["variants"]> {
+  const npm = model.provider?.npm ?? provider.npm
+  const options = model.reasoning_options ?? []
+  const effort = options.find((option) => option.type === "effort")
+  if (effort?.type === "effort") {
+    return effort.values.flatMap((value) => {
+      const raw: unknown = value
+      const id = raw === null ? "none" : typeof raw === "string" ? raw : undefined
+      if (id === undefined) return []
+      const settings = settingsForEffort(npm, id)
+      return settings ? [{ id: ModelV2.VariantID.make(id), settings }] : []
+    })
+  }
+  const budget = options.find((option) => option.type === "budget_tokens")
+  if (budget?.type === "budget_tokens") return budgetVariants(npm, budget)
+  return []
+}
+
+function settingsForEffort(npm: string | undefined, effort: string): ProviderV2.Settings | undefined {
+  if (npm === "@openrouter/ai-sdk-provider") return { reasoning: { effort } }
+  if (npm === "@ai-sdk/anthropic" || npm === "@ai-sdk/google-vertex/anthropic")
+    return { thinking: { type: "adaptive", display: "summarized" }, effort }
+  if (npm === "@ai-sdk/google" || npm === "@ai-sdk/google-vertex")
+    return { thinkingConfig: { includeThoughts: true, thinkingLevel: effort } }
+  if (npm === "@ai-sdk/azure") return { reasoningEffort: effort }
+  if (npm === "@ai-sdk/openai")
+    return { reasoningEffort: effort, reasoningSummary: "auto", include: OPENAI_INCLUDE_ENCRYPTED_REASONING }
+  if (npm === "@ai-sdk/openai-compatible") return { reasoningEffort: effort }
+}
+
+function budgetVariants(
+  npm: string | undefined,
+  option: Extract<NonNullable<SourceModel["reasoning_options"]>[number], { type: "budget_tokens" }>,
+): NonNullable<ModelV2.Info["variants"]> {
+  const max = option.max
+  const high =
+    option.max === undefined
+      ? Math.max(option.min ?? 0, 16_000)
+      : Math.min(Math.max(option.min ?? 0, 16_000), option.max)
+  return [
+    { id: "high", budget: high },
+    ...(max === undefined || max === high ? [] : [{ id: "max", budget: max }]),
+  ].flatMap((item) => {
+    const settings = settingsForBudget(npm, item.budget)
+    return settings ? [{ id: ModelV2.VariantID.make(item.id), settings }] : []
+  })
+}
+
+function settingsForBudget(npm: string | undefined, budget: number): ProviderV2.Settings | undefined {
+  if (npm === "@openrouter/ai-sdk-provider") return { reasoning: { max_tokens: budget } }
+  if (npm === "@ai-sdk/anthropic" || npm === "@ai-sdk/google-vertex/anthropic")
+    return { thinking: { type: "enabled", budgetTokens: budget } }
+  if (npm === "@ai-sdk/google" || npm === "@ai-sdk/google-vertex")
+    return { thinkingConfig: { includeThoughts: true, thinkingBudget: budget } }
+}
+
+function modeName(model: SourceModel, mode: string) {
+  return `${model.name} ${mode.charAt(0).toUpperCase()}${mode.slice(1)}`
+}
+
+function modelInfo(
+  providerID: ProviderV2.ID,
+  id: ModelV2.ID,
+  model: SourceModel,
+  input: {
+    readonly name?: string
+    readonly cost?: ModelV2.Info["cost"]
+    readonly request?: NonNullable<NonNullable<SourceModel["experimental"]>["modes"]>[string]["provider"]
+    readonly variants?: NonNullable<ModelV2.Info["variants"]>
+  } = {},
+): ModelV2.Info {
+  return {
+    id,
+    modelID: ModelV2.ID.make(model.id),
+    providerID,
+    name: input.name ?? model.name,
+    family: model.family ? ModelV2.Family.make(model.family) : undefined,
+    package: model.provider?.npm ? ProviderV2.aisdk(model.provider.npm) : undefined,
+    settings: model.provider?.api ? { baseURL: model.provider.api } : undefined,
+    capabilities: {
+      tools: model.tool_call,
+      input: [...(model.modalities?.input ?? [])],
+      output: [...(model.modalities?.output ?? [])],
+    },
+    variants: [...(input.variants ?? [])],
+    time: { released: released(model.release_date) },
+    cost: (input.cost ?? cost(model.cost)).map((item) => ({
+      ...item,
+      tier: item.tier && { ...item.tier },
+      cache: { ...item.cache },
+    })),
+    status: model.status ?? "active",
+    enabled: true,
+    limit: { context: model.limit.context, input: model.limit.input, output: model.limit.output },
+    headers: input.request?.headers ? { ...input.request.headers } : undefined,
+    body: input.request?.body ? { ...input.request.body } : undefined,
+  }
+}
 
 export const Event = ModelsDev.Event
 
-declare const OPENCODE_MODELS_DEV: Record<string, Provider> | undefined
+declare const OPENCODE_MODELS_DEV: Record<string, SourceProvider> | undefined
 
 export interface Interface {
-  readonly get: () => Effect.Effect<Record<string, Provider>>
+  readonly get: () => Effect.Effect<readonly Snapshot[]>
   readonly refresh: (force?: boolean) => Effect.Effect<void>
 }
 
@@ -181,7 +336,7 @@ const layer = Layer.effect(
     })
 
     const loadFromDisk = fs.readJson(Flag.OPENCODE_MODELS_PATH ?? filepath).pipe(
-      Effect.flatMap(decodeProvidersUnknown),
+      Effect.map((input) => input as Record<string, SourceProvider>),
       Effect.catch((error) => {
         if (
           Flag.OPENCODE_MODELS_PATH === undefined &&
@@ -196,13 +351,6 @@ const layer = Layer.effect(
 
     const loadSnapshot = Effect.sync(() =>
       typeof OPENCODE_MODELS_DEV === "undefined" ? undefined : OPENCODE_MODELS_DEV,
-    ).pipe(
-      Effect.flatMap((snapshot) =>
-        snapshot === undefined ? Effect.succeed(undefined) : decodeProvidersUnknown(snapshot),
-      ),
-      Effect.catch((cause) =>
-        Effect.logWarning("bundled models snapshot failed schema decode", { cause }).pipe(Effect.as(undefined)),
-      ),
     )
 
     const fetchAndWrite = Effect.fn("ModelsDev.fetchAndWrite")(function* () {
@@ -222,10 +370,10 @@ const layer = Layer.effect(
 
     const populate = Effect.gen(function* () {
       const fromDisk = yield* loadFromDisk
-      if (fromDisk) return fromDisk
-      const snapshot = yield* loadSnapshot
-      if (snapshot) return snapshot
-      if (Flag.OPENCODE_DISABLE_MODELS_FETCH) return {}
+      if (fromDisk) return normalize(fromDisk)
+      const bundled = yield* loadSnapshot
+      if (bundled) return normalize(bundled)
+      if (Flag.OPENCODE_DISABLE_MODELS_FETCH) return []
       // Flock is cross-process: concurrent opencode CLIs can race on this cache file.
       const text = yield* Effect.scoped(
         Effect.gen(function* () {
@@ -233,12 +381,12 @@ const layer = Layer.effect(
           return yield* fetchAndWrite()
         }),
       )
-      return yield* decodeProviders(text)
+      return normalize(JSON.parse(text) as Record<string, SourceProvider>)
     }).pipe(Effect.withSpan("ModelsDev.populate"), Effect.orDie)
 
     const [cachedGet, invalidate] = yield* Effect.cachedInvalidateWithTTL(populate, Duration.infinity)
 
-    const get = (): Effect.Effect<Record<string, Provider>> => cachedGet
+    const get = (): Effect.Effect<readonly Snapshot[]> => cachedGet
 
     const refresh = Effect.fn("ModelsDev.refresh")(function* (force = false) {
       if (!force && (yield* fresh())) return

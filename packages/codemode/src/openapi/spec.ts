@@ -23,8 +23,7 @@ const asArray = (value: unknown): ReadonlyArray<unknown> => (Array.isArray(value
 export const nonEmptyString = (value: unknown): string | undefined =>
   typeof value === "string" && value !== "" ? value : undefined
 
-// Guards record lookups keyed by spec- or model-controlled names against
-// prototype-inherited values (e.g. a parameter named `toString`).
+// Spec- and model-controlled keys must not resolve inherited properties.
 export const own = <T>(record: Readonly<Record<string, T>>, key: string): T | undefined =>
   Object.hasOwn(record, key) ? record[key] : undefined
 
@@ -78,7 +77,9 @@ const isBinaryMediaType = (document: Document, mediaType: string, value: unknown
   return isRecord(schema) && schema.format === "binary"
 }
 
-const jsonContent = (content: Record<string, unknown>): { readonly mediaType: string; readonly schema: unknown } | undefined => {
+const jsonContent = (
+  content: Record<string, unknown>,
+): { readonly mediaType: string; readonly schema: unknown } | undefined => {
   const entry = Object.entries(content).find(([mediaType]) => isJsonMediaType(mediaType))
   return entry !== undefined && isRecord(entry[1]) ? { mediaType: entry[0], schema: entry[1].schema } : undefined
 }
@@ -104,7 +105,7 @@ const operationParameters = (
   pathItem: Record<string, unknown>,
   operation: Record<string, unknown>,
 ): Parsed<ReadonlyArray<PlannedField>> => {
-  // Operation-level parameters override path-level ones sharing (location, name).
+  // OpenAPI operation parameters override path parameters with the same location and name.
   const declared = new Map<
     string,
     { readonly name: string; readonly location: string; readonly parameter: Record<string, unknown> }
@@ -344,7 +345,7 @@ export const operationOutput = (
   if (outcomes.length === 0) return { ok: true, value: undefined }
   return {
     ok: true,
-    value: withDefinitions(outcomes.length === 1 ? outcomes[0] ?? {} : { anyOf: outcomes }, definitions),
+    value: withDefinitions(outcomes.length === 1 ? (outcomes[0] ?? {}) : { anyOf: outcomes }, definitions),
   }
 }
 
@@ -380,7 +381,9 @@ export const operationPath = (
   namespaces: ReadonlySet<string>,
 ): ReadonlyArray<string> => {
   const raw = nonEmptyString(operation.operationId)
-  const segments = (raw === undefined ? [fallbackOperationId(method, path)] : raw.split(".")).map(sanitizeOperationSegment)
+  const segments = (raw === undefined ? [fallbackOperationId(method, path)] : raw.split(".")).map(
+    sanitizeOperationSegment,
+  )
   if (isOperationPathAvailable(segments, used, namespaces)) return segments
   const conflict = segments.slice(0, -1).findIndex((_, index) => used.has(segments.slice(0, index + 1).join(".")))
   if (conflict >= 0 && conflict + 1 < segments.length) {

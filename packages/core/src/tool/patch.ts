@@ -191,22 +191,10 @@ export const Plugin = {
             }),
             "edit",
           ),
+          { codemode: false },
         ),
       )
       .pipe(Effect.orDie)
-
-    yield* ctx.session.hook("request", (event) =>
-      Effect.sync(() => {
-        const usePatch =
-          event.model.providerID.toLowerCase() === "openai" || event.model.id.toLowerCase().includes("gpt")
-        if (usePatch) {
-          delete event.tools.edit
-          delete event.tools.write
-          return
-        }
-        delete event.tools.patch
-      }),
-    )
   }),
 }
 

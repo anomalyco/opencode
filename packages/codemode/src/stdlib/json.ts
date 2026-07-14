@@ -6,10 +6,7 @@ import {
 } from "../interpreter/model.js"
 import { copyIn, copyOut } from "../tool-runtime.js"
 
-export const jsonStatics = new Set(["stringify", "parse"])
-
 export const invokeJsonMethod = (name: string, args: Array<unknown>, node: AstNode): unknown => {
-  if (!jsonStatics.has(name)) throw new InterpreterRuntimeError(`JSON.${name} is not available in CodeMode.`, node)
   switch (name) {
     case "stringify": {
       const replacer = args[1]

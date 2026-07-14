@@ -1,0 +1,163 @@
+---
+title: "Commands"
+description: ""
+---
+
+Custom commands turn a named prompt template into a slash command. Type the
+command in the TUI, followed by any arguments:
+
+```text
+/review src/auth
+```
+
+## Configure with Markdown
+
+OpenCode discovers `.md` command files in `commands/` directories:
+
+```text
+~/.config/opencode/commands/       # Global
+.opencode/commands/                # Project
+```
+
+Files may be nested; for example, `.opencode/commands/team/review.md` defines
+`/team/review`. Files with other extensions, including `.mdx`, are not
+discovered.
+
+```md title=".opencode/commands/review.md"
+---
+description: Review code for correctness and missing tests
+agent: plan
+model: anthropic/claude-sonnet-4-5#high
+---
+
+Review $ARGUMENTS. Report bugs first, then missing tests.
+```
+
+The file body, with surrounding whitespace removed, is the command template.
+JSON and Markdown commands share one registry. Project definitions take
+precedence over global definitions, and a later definition can override a
+built-in or earlier command with the same name. Changes are reloaded
+automatically.
+
+Run it with:
+
+```text
+/review src/auth
+```
+
+## Configure with JSON
+
+Add commands under the `commands` key in any OpenCode JSON or JSONC
+[configuration file](/docs/config). Each entry's key is the command name and
+`template` is required.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "commands": {
+    "review": {
+      "description": "Review code for correctness and missing tests",
+      "template": "Review $ARGUMENTS. Report bugs first, then missing tests.",
+      "agent": "plan",
+      "model": "anthropic/claude-sonnet-4-5#high"
+    }
+  }
+}
+```
+
+## Fields
+
+| Field | Required | Behavior |
+| --- | --- | --- |
+| `template` | JSON only | Prompt template. In a Markdown command, the file body supplies it. |
+| `description` | No | Text shown with the command in autocomplete. |
+| `agent` | No | Agent selected before the prompt runs. |
+| `model` | No | Model override in `provider/model` or `provider/model#variant` format. |
+| `subtask` | No | Accepted as a boolean, but currently has no execution effect in V2. |
+
+The four optional fields can be used in JSON or YAML frontmatter. Do not put
+`template` in frontmatter because the Markdown body always supplies it.
+
+## Arguments
+
+Use `$ARGUMENTS` for the complete argument string:
+
+```md title=".opencode/commands/component.md"
+---
+description: Create a component
+---
+
+Create a typed React component named $ARGUMENTS.
+```
+
+```text
+/component Button
+```
+
+Use `$1`, `$2`, and higher numbers for parsed positional arguments. Single and
+double quotes group text containing spaces and are removed during parsing.
+
+```md title=".opencode/commands/check.md"
+---
+description: Check one area with a specific focus
+---
+
+Check $1. Focus on $2.
+```
+
+```text
+/check src/auth "error handling and missing tests"
+```
+
+The highest-numbered positional placeholder present in the template consumes
+that argument and all remaining arguments. For example, if a template contains
+only `$1`, then `$1` receives the full parsed argument list. Missing positions
+become empty strings.
+
+If a template contains neither positional placeholders nor `$ARGUMENTS`,
+OpenCode appends non-empty arguments to the template after a blank line.
+
+## Shell interpolation
+
+Wrap a shell command in `!` followed by backticks to insert its output before
+the prompt is submitted:
+
+```md title=".opencode/commands/review-diff.md"
+---
+description: Review the current diff
+---
+
+Review this diff:
+
+!`git diff --stat && git diff`
+```
+
+OpenCode runs each interpolation with the configured shell in the active
+project location and inserts its combined output into the template. Argument
+interpolation happens first, so avoid placing untrusted arguments inside shell
+interpolations.
+
+<Warning>
+  Shell interpolations run when the command is evaluated, outside the agent's
+  tool permission flow. Only use commands from sources you trust.
+</Warning>
+
+No other template interpolation is performed. In particular, an `@path`
+written into a stored template remains ordinary prompt text; V2 does not
+automatically attach that file.
+
+## Agent, model, and execution
+
+Running a command evaluates its arguments and shell blocks, submits the result
+as a durable user prompt in the current session, and schedules normal model
+execution.
+
+If `agent` is set, it overrides the agent selected when the command was
+invoked and becomes the session's active agent. If `model` is set, it overrides
+the model. Otherwise, a model configured on the command's agent takes
+precedence over the model selected at invocation.
+
+Although `subtask` is accepted in JSON and frontmatter, V2 currently ignores
+it: commands run in the current session and do not create a child session.
+Selecting an agent whose mode is `subagent` also does not turn the command into
+a subtask.

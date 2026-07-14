@@ -29,13 +29,14 @@ Leaves own resolution, permission, and side-effect ordering. Translate only expe
 ## Registration
 
 Built-ins and plugin tools register through `Tools.Service.register({ [name]: tool })`. Registrations may provide a
-group, which flattens direct model names to `<group>_<tool>`, and may be deferred from direct model exposure.
+group, which flattens direct model names to `<group>_<tool>`, and default into CodeMode (`codemode` defaults true;
+`codemode: false` keeps the tool on the provider's native tool list).
 
 Registrations are scoped:
 
 - The latest active same-placement registration wins.
 - Closing any registration removes only that registration and reveals the next active one.
-- An invocation captures the effective tool once settlement starts.
+- Each model request captures the effective tools it advertises; later registration changes affect later requests.
 
 `ToolRegistry.Service` is Location-scoped. Do not make the registry process-global or construct a separate application-tool service for each Location.
 

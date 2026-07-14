@@ -2,8 +2,6 @@ import { describe, expect } from "bun:test"
 import { Cause, DateTime, Deferred, Effect, Exit, Fiber, Layer, Option, Ref, Schema, Stream } from "effect"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Event } from "@opencode-ai/schema/event"
-import { EventManifest } from "@opencode-ai/schema/event-manifest"
-import { McpEvent } from "@opencode-ai/schema/mcp-event"
 import { Session } from "@opencode-ai/schema/session"
 import { SessionEvent } from "@opencode-ai/schema/session-event"
 import { SessionV1 } from "@opencode-ai/schema/session-v1"
@@ -53,6 +51,17 @@ const SyncSent = EventV2.durable({
     messageID: Schema.String,
     text: Schema.String,
   },
+})
+
+const VersionedMessageV1 = EventV2.durable({
+  type: "test.versioned",
+  durable: { version: 1, aggregate: "id" },
+  schema: { id: Schema.String },
+})
+const VersionedMessageV2 = EventV2.durable({
+  type: "test.versioned",
+  durable: { version: 2, aggregate: "id" },
+  schema: { id: Schema.String },
 })
 
 const GlobalMessage = EventV2.ephemeral({
@@ -349,51 +358,6 @@ describe("EventV2", () => {
       if (!event.durable) throw new Error("Expected durable event metadata")
 
       expect(observed).toEqual([{ id: event.id, seq: event.durable.seq }])
-    }),
-  )
-
-  it.effect("ends only an overflowing bounded subscriber without blocking other listeners", () =>
-    Effect.gen(function* () {
-      const events = yield* EventV2.Service
-      const consuming = yield* Deferred.make<void>()
-      const release = yield* Deferred.make<void>()
-      const slowStream = yield* EventV2.liveBounded(events, { capacity: 1 })
-      const fastStream = yield* EventV2.liveBounded(events, { capacity: 8 })
-      const slow = yield* slowStream.pipe(
-        Stream.runForEach(() => Deferred.succeed(consuming, undefined).pipe(Effect.andThen(Deferred.await(release)))),
-        Effect.forkScoped,
-      )
-      const fast = yield* fastStream.pipe(Stream.take(4), Stream.runCollect, Effect.forkScoped)
-
-      yield* events.publish(Message, { text: "one" })
-      yield* Deferred.await(consuming)
-      yield* events.publish(Message, { text: "two" })
-      yield* events.publish(Message, { text: "overflow" })
-      const last = yield* events.publish(Message, { text: "still delivered" })
-      yield* Deferred.succeed(release, undefined)
-
-      const slowExit = yield* Fiber.await(slow)
-      expect(Exit.findErrorOption(slowExit).pipe(Option.getOrUndefined)).toBeInstanceOf(EventV2.SubscriberOverflowError)
-      expect(Array.from(yield* Fiber.join(fast))).toEqual([
-        expect.objectContaining({ data: { text: "one" } }),
-        expect.objectContaining({ data: { text: "two" } }),
-        expect.objectContaining({ data: { text: "overflow" } }),
-        last,
-      ])
-    }),
-  )
-
-  it.effect("filters internal events before they enter a bounded server stream", () =>
-    Effect.gen(function* () {
-      const events = yield* EventV2.Service
-      const stream = yield* EventV2.liveBounded(events, { capacity: 1, accept: EventManifest.isServer })
-      const received = yield* stream.pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
-
-      yield* events.publish(McpEvent.ToolsChanged, { server: "one" })
-      yield* events.publish(McpEvent.ToolsChanged, { server: "two" })
-      const published = yield* events.publish(McpEvent.StatusChanged, { server: "example" })
-
-      expect(Array.from(yield* Fiber.join(received))).toEqual([published])
     }),
   )
 
@@ -722,13 +686,32 @@ describe("EventV2", () => {
       yield* events.replay({
         id: EventV2.ID.create(),
         created: DateTime.makeUnsafe(0),
-        type: EventV2.versionedType(SessionEvent.InstructionsUpdated.type, 1),
+        type: EventV2.versionedType(SessionEvent.InstructionsUpdated.type, 2),
         seq: 0,
         aggregateID,
-        data: { sessionID: aggregateID, text: "context" },
+        data: { sessionID: aggregateID, delta: { "core/context": "0".repeat(64) } },
       })
 
       expect(received[0]?.created).toEqual(DateTime.makeUnsafe(0))
+    }),
+  )
+
+  it.effect("dispatches durable projectors by exact event version", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const aggregateID = Session.ID.create()
+      const received = new Array<typeof VersionedMessageV2.Type>()
+      yield* events.project(VersionedMessageV2, (event) =>
+        Effect.sync(() => {
+          received.push(event)
+        }),
+      )
+
+      yield* events.publish(VersionedMessageV1, { id: aggregateID })
+      yield* events.publish(VersionedMessageV2, { id: aggregateID })
+
+      expect(received).toHaveLength(1)
+      expect(received[0]?.durable.version).toBe(EventV2.Version.make(2))
     }),
   )
 

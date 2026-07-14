@@ -1,11 +1,6 @@
 import { Effect, Schema } from "effect"
-import { executeWithLimits } from "./interpreter/runtime.js"
-import {
-  type HostTools,
-  type Services,
-  type ToolDescription,
-  ToolRuntime,
-} from "./tool-runtime.js"
+import { executeWithLimits } from "./interpreter/execute.js"
+import { type HostTools, type Services, type ToolDescription, ToolRuntime } from "./tool-runtime.js"
 import type { Definition } from "./tool.js"
 
 /** A tool call admitted during an execution. */
@@ -13,11 +8,17 @@ export type { ToolCall, ToolCallEnded, ToolCallHooks, ToolCallStarted, ToolDescr
 
 /** Resource budgets enforced independently during each CodeMode program execution. */
 export type ExecutionLimits = {
-  /** Maximum wall-clock execution time in milliseconds. No default: absent means no timeout. */
+  /**
+   * Wall-clock milliseconds before interruption. Result delivery waits for tool cleanup.
+   * No default: absent means no timeout.
+   */
   readonly timeoutMs?: number
   /** Maximum number of tool calls admitted by the runtime. No default: absent means unlimited. */
   readonly maxToolCalls?: number
-  /** Maximum UTF-8 bytes of model-facing output. No default: absent means no truncation. */
+  /**
+   * Maximum UTF-8 bytes retained from the result and logs. Warnings have a separate equal budget;
+   * truncation notices and host formatting are additional.
+   */
   readonly maxOutputBytes?: number
 }
 
@@ -75,8 +76,9 @@ export const DiagnosticKind = Schema.Literals([
   "TimeoutExceeded",
   "ToolFailure",
   "ExecutionFailure",
+  "Truncated",
 ])
-/** Stable categories produced by program, schema, tool, and limit failures. */
+/** Stable categories produced by program, schema, tool, limit, and truncation diagnostics. */
 export type DiagnosticKind = typeof DiagnosticKind.Type
 
 export const Diagnostic = Schema.Struct({
@@ -92,6 +94,7 @@ const ToolCallSchema = Schema.Struct({ name: Schema.String })
 export const Success = Schema.Struct({
   ok: Schema.Literal(true),
   value: Schema.Json,
+  warnings: Schema.optionalKey(Schema.Array(Diagnostic)),
   logs: Schema.optionalKey(Schema.Array(Schema.String)),
   truncated: Schema.optionalKey(Schema.Boolean),
   toolCalls: Schema.Array(ToolCallSchema),
@@ -121,11 +124,7 @@ export type Runtime<R = never> = {
   readonly execute: (code: string) => Effect.Effect<Result, never, R>
 }
 
-const validateLimit = <Value extends number | undefined>(
-  name: keyof ExecutionLimits,
-  value: Value,
-  minimum: number,
-): Value => {
+const validateLimit = (name: keyof ExecutionLimits, value: number | undefined, minimum: number): number | undefined => {
   if (value !== undefined && (!Number.isSafeInteger(value) || value < minimum)) {
     throw new RangeError(`${name} must be a safe integer greater than or equal to ${minimum}.`)
   }
@@ -143,7 +142,6 @@ export const execute = <const Tools extends Record<string, unknown>>(
   options: ExecuteOptions<Tools>,
 ): Effect.Effect<Result, never, Services<Tools>> => {
   const tools = (options.tools ?? {}) as HostTools<Services<Tools>>
-  ToolRuntime.assertValidTools(tools)
   return executeWithLimits(options, resolveExecutionLimits(options.limits), ToolRuntime.searchIndex(tools))
 }
 
@@ -152,7 +150,6 @@ export const make = <const Tools extends Record<string, unknown> = {}>(
   options: Options<Tools> = {} as Options<Tools>,
 ): Runtime<Services<Tools>> => {
   const tools = (options.tools ?? {}) as HostTools<Services<Tools>>
-  ToolRuntime.assertValidTools(tools)
   const limits = resolveExecutionLimits(options.limits)
   const prepared = ToolRuntime.prepare(tools, options.discovery?.catalogBudget)
 

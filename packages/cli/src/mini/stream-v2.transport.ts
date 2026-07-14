@@ -1,14 +1,15 @@
-import type { EventSubscribeOutput, OpenCodeClient } from "@opencode-ai/client/promise"
 import type {
-  PermissionRequest,
-  QuestionRequest,
-  SessionMessageInfo,
+  EventSubscribeOutput,
+  OpenCodeClient,
+  PermissionV2Request,
+  QuestionV2Request,
   SessionMessageAssistantTool,
-} from "@opencode-ai/sdk/v2"
+  SessionMessageInfo,
+} from "@opencode-ai/client/promise"
 import { Event } from "@opencode-ai/schema/event"
 import { blockerStatus, pickBlockerView } from "./session-data"
 import { writeSessionOutput } from "./stream"
-import { createSubagentTracker, legacyTool, toolCommit } from "./stream-v2.subagent"
+import { createSubagentTracker, miniTool, toolCommit } from "./stream-v2.subagent"
 import type {
   FooterApi,
   FooterView,
@@ -87,8 +88,6 @@ type ShellWait = {
 }
 
 type RunV2Event = EventSubscribeOutput
-type PermissionV2Request = Extract<RunV2Event, { type: "permission.v2.asked" }>["data"]
-type QuestionV2Request = Extract<RunV2Event, { type: "question.v2.asked" }>["data"]
 type PromptFilePart = Extract<RunPromptPart, { type: "file" }>
 
 type ToolState = {
@@ -101,8 +100,8 @@ type ToolState = {
 }
 
 type State = {
-  permissions: PermissionRequest[]
-  questions: QuestionRequest[]
+  permissions: PermissionV2Request[]
+  questions: QuestionV2Request[]
   view: FooterView
   messageIDs: Set<string>
   text: Map<string, string>
@@ -136,27 +135,6 @@ export function formatUnknownError(error: unknown): string {
     if (typeof tag === "string" && tag.trim()) return tag
   }
   return "unknown error"
-}
-
-function permission(request: PermissionV2Request): PermissionRequest {
-  return {
-    id: request.id,
-    sessionID: request.sessionID,
-    permission: request.action,
-    patterns: [...request.resources],
-    metadata: request.metadata ?? {},
-    always: [...(request.save ?? [])],
-    tool: request.source?.type === "tool" ? request.source : undefined,
-  }
-}
-
-function question(request: QuestionV2Request): QuestionRequest {
-  return {
-    id: request.id,
-    sessionID: request.sessionID,
-    questions: request.questions.map((item) => ({ ...item, options: item.options.map((option) => ({ ...option })) })),
-    tool: request.tool,
-  }
 }
 
 function sessionID(event: RunV2Event) {
@@ -229,8 +207,7 @@ function streamPartKey(messageID: string, partID: string) {
   return `${messageID}\u0000${partID}`
 }
 
-// Matches the commit shapes the legacy session-data reducer produced for direct
-// shell calls: one "start" commit rendering `$ command` and one "progress"
+// Direct shell calls use one "start" commit rendering `$ command` and one "progress"
 // commit rendering the merged output (see toolEntryBody in tool.ts).
 function shellCommit(
   callID: string,
@@ -384,7 +361,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
   }
 
   const renderTool = (messageID: string, item: SessionMessageAssistantTool) => {
-    const part = legacyTool({
+    const part = miniTool({
       sessionID: input.sessionID,
       messageID,
       tool: item,
@@ -536,8 +513,8 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     ])
     const projected = structuredClone(messages.data).toReversed() as SessionMessageInfo[]
     for (const message of projected) renderMessage(message, next.render, next.reuseVisibleWait)
-    state.permissions = permissions.map(permission)
-    state.questions = questions.map(question)
+    state.permissions = permissions
+    state.questions = questions
     syncBlockers()
     await subagents.hydrate({ messages: [...projected], active })
     const running = input.sessionID in active
@@ -562,7 +539,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     }
     input.trace?.write("recv.event", event)
     subagents.main(event)
-    if (event.type === "session.prompt.promoted") {
+    if (event.type === "session.input.promoted") {
       if (state.wait?.messageID === event.data.inputID) state.wait.promoted = true
       state.messageIDs.add(event.data.inputID)
       write([], { phase: "running", status: "waiting for assistant" })
@@ -770,7 +747,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       return
     }
     if (event.type === "permission.v2.asked") {
-      if (!state.permissions.some((item) => item.id === event.data.id)) state.permissions.push(permission(event.data))
+      if (!state.permissions.some((item) => item.id === event.data.id)) state.permissions.push(event.data)
       syncBlockers()
       return
     }
@@ -780,7 +757,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       return
     }
     if (event.type === "question.v2.asked") {
-      if (!state.questions.some((item) => item.id === event.data.id)) state.questions.push(question(event.data))
+      if (!state.questions.some((item) => item.id === event.data.id)) state.questions.push(event.data)
       syncBlockers()
       return
     }
@@ -1052,11 +1029,9 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
             {
               sessionID: input.sessionID,
               id: messageID,
-              prompt: {
-                text: [next.prompt.text, ...prepared.flatMap((file) => (file.text ? [file.text] : []))].join("\n\n"),
-                files: attachments.length ? attachments : undefined,
-                agents: agents.length ? agents : undefined,
-              },
+              text: [next.prompt.text, ...prepared.flatMap((file) => (file.text ? [file.text] : []))].join("\n\n"),
+              files: attachments.length ? attachments : undefined,
+              agents: agents.length ? agents : undefined,
               delivery: "steer",
             },
             { signal: next.signal },

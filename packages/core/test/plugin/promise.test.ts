@@ -1,9 +1,12 @@
 import { describe, expect } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { PluginPromise } from "@opencode-ai/core/plugin/promise"
+import { SessionV2 } from "@opencode-ai/core/session"
+import { SessionMessage } from "@opencode-ai/core/session/message"
+import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { Plugin } from "@opencode-ai/plugin/v2"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
@@ -91,6 +94,69 @@ describe("fromPromise", () => {
       yield* adapted.effect(host)
 
       expect(yield* agents.get(AgentV2.ID.make("temp"))).toBeUndefined()
+    }),
+  )
+
+  it.effect("runs the setup cleanup when the plugin scope closes", () =>
+    Effect.gen(function* () {
+      const plugin = yield* PluginV2.Service
+      const host = yield* PluginHost.make(plugin)
+      const events: string[] = []
+      const promisePlugin = Plugin.define({
+        id: "promise-cleanup",
+        setup: async () => {
+          events.push("setup")
+          return async () => {
+            await Promise.resolve()
+            events.push("cleanup")
+          }
+        },
+      })
+
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          yield* PluginPromise.fromPromise(promisePlugin).effect(host)
+          expect(events).toEqual(["setup"])
+        }),
+      )
+
+      expect(events).toEqual(["setup", "cleanup"])
+    }),
+  )
+
+  it.effect("constructs plain Promise tool declarations in the host", () =>
+    Effect.gen(function* () {
+      const plugins = yield* PluginV2.Service
+      const registry = yield* ToolRegistry.Service
+      const host = yield* PluginHost.make(plugins)
+      const promisePlugin = Plugin.define({
+        id: "promise-tool",
+        setup: async (ctx) => {
+          await ctx.tool.transform((tools) => {
+            tools.add({
+              name: "hello",
+              options: { codemode: false },
+              description: "Hello",
+              input: Schema.Struct({ name: Schema.String }),
+              output: Schema.String,
+              execute: async ({ name }) => `Hello, ${name}!`,
+            })
+          })
+        },
+      })
+
+      yield* PluginPromise.fromPromise(promisePlugin).effect(host)
+
+      const materialized = yield* registry.materialize()
+      expect(materialized.definitions).toContainEqual(expect.objectContaining({ name: "hello", description: "Hello" }))
+      expect(
+        yield* materialized.settle({
+          sessionID: SessionV2.ID.make("ses_promise_tool"),
+          agent: AgentV2.ID.make("build"),
+          assistantMessageID: SessionMessage.ID.make("msg_promise_tool"),
+          call: { type: "tool-call", id: "call_promise_tool", name: "hello", input: { name: "world" } },
+        }),
+      ).toMatchObject({ result: { type: "text", value: "Hello, world!" } })
     }),
   )
 })

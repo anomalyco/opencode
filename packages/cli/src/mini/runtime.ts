@@ -547,7 +547,6 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
       footer,
       sessionID: state.sessionID,
       thinking: input.thinking,
-      limits: () => state.limits,
     })
   }
 

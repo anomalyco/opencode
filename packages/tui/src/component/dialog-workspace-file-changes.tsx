@@ -1,11 +1,11 @@
 import { TextAttributes } from "@opentui/core"
-import { useKeyboard } from "@opentui/solid"
-import type { VcsFileStatus } from "@opencode-ai/sdk/v2"
+import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
+import type { VcsFileStatus } from "@opencode-ai/client"
 import { createMemo, For } from "solid-js"
 import { createStore } from "solid-js/store"
-import { Locale } from "../util/locale"
+import { FilePath } from "../ui/file-path"
 import { useTheme } from "../context/theme"
-import { useTuiConfig } from "../config"
+import { useConfig } from "../config"
 import { useDialog, type DialogContext } from "../ui/dialog"
 import { getScrollAcceleration } from "../util/scroll"
 
@@ -32,11 +32,14 @@ export function DialogWorkspaceFileChanges(props: {
 }) {
   const dialog = useDialog()
   const { theme } = useTheme()
-  const tuiConfig = useTuiConfig()
-  const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
+  const config = useConfig().data
+  const dimensions = useTerminalDimensions()
+  const scrollAcceleration = createMemo(() => getScrollAcceleration(config))
   const [store, setStore] = createStore({ active: "yes" as WorkspaceFileChangesChoice })
   const height = createMemo(() => Math.min(props.files.length, 8))
-  const fileNameWidth = createMemo(() => 48 - Math.max(Math.max(7, ...props.files.map(changeCountWidth)) - 7, 0))
+  const fileNameWidth = createMemo(
+    () => Math.max(2, Math.min(60, dimensions().width - 2) - 6 - Math.max(7, ...props.files.map(changeCountWidth))),
+  )
 
   function confirm() {
     props.onSelect(store.active)
@@ -93,9 +96,7 @@ export function DialogWorkspaceFileChanges(props: {
                 <box width={2} flexShrink={0}>
                   <text fg={theme.textMuted}>{statusLabel(item.status)}</text>
                 </box>
-                <text fg={theme.textMuted} wrapMode="none">
-                  {Locale.truncateLeft(item.file, fileNameWidth())}
-                </text>
+                <FilePath value={item.file} maxWidth={fileNameWidth()} fg={theme.textMuted} />
               </box>
               <box flexDirection="row" gap={1} minWidth={7} flexShrink={0} justifyContent="flex-end">
                 <text>

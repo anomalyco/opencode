@@ -36,23 +36,19 @@ type CollectedFiles = {
   readonly files: Array<typeof ExecuteFile.Type>
 }
 
-export interface Registration {
-  readonly identity: object
+interface Registration {
   readonly tool: AnyTool
   readonly name: string
   readonly group?: string
 }
 
-export const create = (options: {
-  readonly registrations: ReadonlyMap<string, Registration>
-  readonly current: (name: string) => Registration | undefined
-}) => {
+export const create = (registrations: ReadonlyMap<string, Registration>) => {
   const runtime = (
     invoke: (name: string, registration: Registration, input: unknown) => Effect.Effect<unknown, unknown>,
     hooks?: CodeMode.ToolCallHooks,
   ) => {
     const tools: Record<string, Tool.Definition<never> | Record<string, Tool.Definition<never>>> = {}
-    for (const [name, registration] of options.registrations) {
+    for (const [name, registration] of registrations) {
       const child = definition(name, registration.tool)
       const value = Tool.make({
         description: child.description,
@@ -62,16 +58,16 @@ export const create = (options: {
       })
       if (registration.group === undefined) {
         const path = registration.name
-        if (Object.hasOwn(tools, path)) throw new TypeError(`Deferred tool namespace conflict: ${path}`)
+        if (Object.hasOwn(tools, path)) throw new TypeError(`CodeMode tool namespace conflict: ${path}`)
         tools[path] = value
         continue
       }
       const path = registration.name
       const namespace = registration.group
       const group = tools[namespace]
-      if (group && Tool.isDefinition(group)) throw new TypeError(`Deferred tool namespace conflict: ${namespace}`)
+      if (group && Tool.isDefinition(group)) throw new TypeError(`CodeMode tool namespace conflict: ${namespace}`)
       if (group) {
-        if (Object.hasOwn(group, path)) throw new TypeError(`Deferred tool namespace conflict: ${namespace}.${path}`)
+        if (Object.hasOwn(group, path)) throw new TypeError(`CodeMode tool namespace conflict: ${namespace}.${path}`)
         group[path] = value
         continue
       }
@@ -115,11 +111,8 @@ export const create = (options: {
           (name, registration, input) =>
             Effect.gen(function* () {
               const index = yield* Ref.getAndUpdate(callIndex, (index) => index + 1)
-              const current = options.current(name)
-              if (!current || current.identity !== registration.identity)
-                return yield* Effect.fail(toolError(`Stale tool call: ${name}`))
               const output = yield* settle(
-                current.tool,
+                registration.tool,
                 { type: "tool-call", id: context.toolCallID, name, input },
                 {
                   sessionID: context.sessionID,
@@ -176,9 +169,12 @@ function formatResult(result: CodeMode.Result) {
     : [result.error.message, ...(result.error.suggestions ?? []).filter((hint) => !result.error.message.includes(hint))]
         .join("\n")
         .trim()
-  if (!result.logs || result.logs.length === 0) return output
-  const logs = `Logs:\n${result.logs.join("\n")}`
-  return output === "" ? logs : `${output}\n\n${logs}`
+  const warnings =
+    result.ok && result.warnings && result.warnings.length > 0
+      ? `Warnings:\n${result.warnings.map((item) => `- [${item.kind}] ${item.message}`).join("\n")}`
+      : undefined
+  const logs = result.logs && result.logs.length > 0 ? `Logs:\n${result.logs.join("\n")}` : undefined
+  return [output, warnings, logs].filter((part) => part !== undefined && part !== "").join("\n\n")
 }
 
 function formatValue(value: CodeMode.DataValue) {

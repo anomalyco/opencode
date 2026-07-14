@@ -1,0 +1,576 @@
+---
+title: "Migrate from V1"
+description: "Move from OpenCode V1 to the OpenCode 2.0 beta."
+---
+
+## Breaking changes
+
+V2 has three intentional breaking changes:
+
+- [Plugins](#plugins) use a new plugin API.
+- The [server API and clients](#server-api-and-clients) have new contracts.
+- [TUI configuration](#tui-configuration) moves from layered `tui.json(c)` files to one global `cli.json` file (auto migrated).
+
+All other functionality is intended to remain compatible with V1.
+
+Existing server config files, agent definitions, command definitions, skills, and other files in `.opencode/` should
+continue to work without changes. If one of these stops working in V2, treat it as a beta compatibility bug rather than
+an expected migration requirement.
+
+<Tip>
+  Run `/report` if existing V1 functionality does not work in V2. The report skill collects diagnostics and helps you file
+  a compatibility issue.
+</Tip>
+
+<Warning>
+  OpenCode 2.0 is in beta. Beta data may be wiped, features may break unintentionally, and the server and plugin APIs may
+  continue to change.
+</Warning>
+
+During the beta, OpenCode V1 and V2 use different executable names. You can keep using `opencode` for V1 while trying V2
+with `opencode2`.
+
+## Install the beta
+
+Install the beta from the `next` distribution tag:
+
+```bash
+npm install -g @opencode-ai/cli@next
+```
+
+Start it in your project with:
+
+```bash
+opencode2
+```
+
+## Configuration
+
+This section covers both JSON/JSONC configuration and file-based definitions under `.opencode/`.
+
+### Use your existing configuration
+
+V2 reads existing global and project configuration from the same locations as V1:
+
+```text
+~/.config/opencode/opencode.json(c)
+<project>/opencode.json(c)
+<project>/.opencode/opencode.json(c)
+```
+
+V2 reads these same locations. It detects V1-shaped configuration and translates it in memory without rewriting the
+source file. Existing V1 configuration is intended to keep working, so you do not need to convert it to try or adopt V2.
+
+### Ask OpenCode to migrate
+
+The V1 config format remains supported. The native V2 format is optional and makes several settings more explicit and
+ergonomic.
+
+The recommended migration path is to ask OpenCode to update the configuration for you:
+
+```text
+Migrate my OpenCode configuration, including file-based definitions, from the V1 format to the native V2 format.
+Preserve its behavior and all unrelated settings.
+```
+
+OpenCode can inspect the complete file, apply the relevant changes below, and avoid rewriting settings that do not need to
+change. Do not mix V1 and V2 field names manually in one file.
+
+### Sharing
+
+The deprecated V1 `autoshare` boolean becomes the explicit `share` policy:
+
+```jsonc
+// V1
+{ "autoshare": true }
+
+// V2
+{ "share": "auto" }
+```
+
+Use `"manual"`, `"auto"`, or `"disabled"`. If the V1 file already uses `share`, no change is needed.
+
+### Permissions and tools
+
+V1 groups permission effects by tool. V2 uses one ordered `permissions` array, making precedence and exceptions explicit:
+
+```jsonc
+// V1
+{
+  "permission": {
+    "bash": {
+      "git push *": "ask"
+    },
+    "edit": "allow"
+  },
+  "tools": {
+    "websearch": false
+  }
+}
+
+// V2
+{
+  "permissions": [
+    { "action": "shell", "resource": "git push *", "effect": "ask" },
+    { "action": "edit", "resource": "*", "effect": "allow" },
+    { "action": "websearch", "resource": "*", "effect": "deny" }
+  ]
+}
+```
+
+Permission actions also changed: `bash` is now `shell`, `task` is now `subagent`, and `write` and `patch` are now `edit`.
+See [Permissions](/permissions) for the ordered V2 rule format.
+
+### Agents and modes
+
+The singular `agent` and deprecated `mode` maps become `agents`. Agent fields become more consistent with the rest of the
+V2 config:
+
+```jsonc
+// V1
+{
+  "agent": {
+    "reviewer": {
+      "prompt": "Review for correctness and missing tests.",
+      "model": "anthropic/claude-sonnet-4-5",
+      "variant": "high",
+      "disable": false,
+      "permission": {
+        "edit": "deny"
+      }
+    }
+  }
+}
+
+// V2
+{
+  "agents": {
+    "reviewer": {
+      "system": "Review for correctness and missing tests.",
+      "model": "anthropic/claude-sonnet-4-5#high",
+      "disabled": false,
+      "permissions": [
+        { "action": "edit", "resource": "*", "effect": "deny" }
+      ]
+    }
+  }
+}
+```
+
+`prompt` becomes `system`, `disable` becomes `disabled`, and a separate `variant` joins the model reference after `#`.
+`temperature`, `top_p`, and provider-specific `options` move under `request.body`. `maxSteps` becomes `steps`. Entries from
+the old `mode` map become primary agents.
+
+### Snapshots
+
+Rename the singular `snapshot` field to `snapshots`. Its boolean value does not change:
+
+```jsonc
+// V1
+{ "snapshot": false }
+
+// V2
+{ "snapshots": false }
+```
+
+### Attachments
+
+Rename the singular `attachment` object to `attachments`. Nested image settings keep the same names:
+
+```jsonc
+// V1
+{ "attachment": { "image": { "auto_resize": true } } }
+
+// V2
+{ "attachments": { "image": { "auto_resize": true } } }
+```
+
+### MCP servers
+
+V2 groups servers under `mcp.servers`, replaces `enabled` with the inverse `disabled`, and separates timeout purposes:
+
+```jsonc
+// V1
+{
+  "mcp": {
+    "playwright": {
+      "type": "local",
+      "command": ["npx", "@playwright/mcp"],
+      "enabled": true,
+      "timeout": 30000
+    }
+  }
+}
+
+// V2
+{
+  "mcp": {
+    "servers": {
+      "playwright": {
+        "type": "local",
+        "command": ["npx", "@playwright/mcp"],
+        "disabled": false,
+        "timeout": {
+          "catalog": 30000,
+          "execution": 30000
+        }
+      }
+    }
+  }
+}
+```
+
+Remote OAuth fields use snake case: `clientId` becomes `client_id`, `clientSecret` becomes `client_secret`,
+`callbackPort` becomes `callback_port`, and `redirectUri` becomes `redirect_uri`. The V1 `experimental.mcp_timeout` value
+also becomes the default `mcp.timeout.catalog` and `mcp.timeout.execution` values. See [MCP servers](/mcp-servers).
+
+### Compaction
+
+V2 groups the retained-context token budget under `keep` and gives the reserve a clearer name:
+
+```jsonc
+// V1
+{
+  "compaction": {
+    "preserve_recent_tokens": 8000,
+    "reserved": 20000
+  }
+}
+
+// V2
+{
+  "compaction": {
+    "keep": {
+      "tokens": 8000
+    },
+    "buffer": 20000
+  }
+}
+```
+
+`auto` and `prune` keep their names. V2 has no native `tail_turns` field; recent context is retained by token budget instead.
+See [Compaction](/compaction).
+
+### Skills
+
+V1 separates extra skill paths and URLs. V2 combines both into one ordered array:
+
+```jsonc
+// V1
+{
+  "skills": {
+    "paths": ["./team-skills"],
+    "urls": ["https://example.com/skills/"]
+  }
+}
+
+// V2
+{
+  "skills": ["./team-skills", "https://example.com/skills/"]
+}
+```
+
+Existing skill files and automatic `.opencode/skills/` discovery do not change. See [Skills](/skills).
+
+### Commands
+
+Rename the singular `command` map to `commands`. Join a separate model `variant` to the model reference:
+
+```jsonc
+// V1
+{
+  "command": {
+    "review": {
+      "template": "Review the current changes.",
+      "model": "anthropic/claude-sonnet-4-5",
+      "variant": "high"
+    }
+  }
+}
+
+// V2
+{
+  "commands": {
+    "review": {
+      "template": "Review the current changes.",
+      "model": "anthropic/claude-sonnet-4-5#high"
+    }
+  }
+}
+```
+
+`template`, `description`, `agent`, and `subtask` keep their names. Existing Markdown command definitions remain supported.
+See [Commands](/commands).
+
+### References
+
+Rename the deprecated singular `reference` map to `references`:
+
+```jsonc
+// V1
+{ "reference": { "docs": "../docs" } }
+
+// V2
+{ "references": { "docs": "../docs" } }
+```
+
+V1 already accepts `references`, so no change is needed when the file uses it. Reference entries keep the
+same shapes. See [References](/references).
+
+### Providers
+
+Rename the singular `provider` map to `providers`. V2 separates the runtime package, endpoint, and request settings:
+
+```jsonc
+// V1
+{
+  "provider": {
+    "acme": {
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://llm.example.com/v1",
+      "options": {
+        "apiKey": "{env:ACME_API_KEY}"
+      }
+    }
+  }
+}
+
+// V2
+{
+  "providers": {
+    "acme": {
+      "package": "aisdk:@ai-sdk/openai-compatible",
+      "settings": {
+        "baseURL": "https://llm.example.com/v1",
+        "apiKey": "{env:ACME_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+V1 `npm` becomes `package`, and AI SDK packages receive the `aisdk:` prefix. `api` becomes `settings.baseURL`. Provider
+`options` are separated into `settings`, `headers`, and `body` according to their request role. See [Providers](/providers).
+
+### Models and variants
+
+Models remain nested under their provider, but several model fields become more explicit:
+
+- `id` becomes `modelID`.
+- `tool_call` and `modalities` become `capabilities.tools`, `capabilities.input`, and `capabilities.output`.
+- A `status` of `"deprecated"` becomes `disabled: true`.
+- Cache costs move from `cache_read` and `cache_write` to `cache.read` and `cache.write`.
+- Provider-specific `options` become `settings`.
+- A V1 variants object becomes a V2 array with an `id` on each entry.
+
+```jsonc
+// V1
+{
+  "variants": {
+    "high": {
+      "reasoningEffort": "high"
+    }
+  }
+}
+
+// V2
+{
+  "variants": [
+    {
+      "id": "high",
+      "settings": {
+        "reasoningEffort": "high"
+      }
+    }
+  ]
+}
+```
+
+See [Models](/models) for the complete native model shape.
+
+### Fields without native equivalents
+
+Most fields that keep the same shape, including `shell`, `model`, `default_agent`, `autoupdate`, `watcher`, `formatter`,
+`lsp`, `instructions`, `enterprise`, and `tool_output`, require no migration.
+
+These V1 fields do not have one-to-one native V2 config fields:
+
+- `logLevel`: use `OPENCODE_LOG_LEVEL` when starting OpenCode.
+- `server`: use the V2 service and explicit server options; the server API is an intentional breaking change.
+- `layout`: remove it; V1 already treated it as deprecated and always used stretch layout.
+- `enabled_providers` and `disabled_providers`: there is no native provider allowlist or denylist field yet.
+- `small_model`: V2 selects models for internal maintenance agents without a separate top-level field.
+- `compaction.tail_turns`: V2 uses `compaction.keep.tokens` instead.
+
+If your V1 configuration relies on a field without a native equivalent, keep using the supported V1 format rather than
+forcing a manual conversion. Run `/report` if V2 does not preserve the behavior you rely on.
+
+### Agent files
+
+V1 agent files may use `agent/`, `agents/`, `mode/`, or `modes/`. V2 still discovers all four directories. The preferred
+V2 location is:
+
+```text
+.opencode/agents/<name>.md
+```
+
+Files under a V1 `mode/` or `modes/` directory represent primary agents. When moving one into `agents/`, add
+`mode: primary` to its frontmatter. Files under `agent/` can move to `agents/` without changing their path-derived ID.
+
+When converting the frontmatter to native V2 fields:
+
+- Keep the Markdown body as the agent's system instructions.
+- Rename `prompt` to `system` when it appears in JSON configuration; file bodies do not need a `system` field.
+- Rename `disable` to `disabled` and `permission` to `permissions`.
+- Join `model` and `variant` as `provider/model#variant`.
+- Move `temperature`, `top_p`, and provider-specific options under `request.body`.
+
+V2 translates legacy agent frontmatter automatically, so these edits are optional. See [Agents](/agents).
+
+### Command files
+
+V1 command files may use `command/` or `commands/`. V2 discovers both. The preferred location is:
+
+```text
+.opencode/commands/<name>.md
+```
+
+Move files from `command/` to the same relative path under `commands/` to preserve command names. The Markdown body remains
+the command template, and `description`, `agent`, and `subtask` frontmatter keep the same names. If frontmatter has separate
+`model` and `variant` fields, append the variant to the model and remove `variant`:
+
+```yaml
+# V1
+model: anthropic/claude-sonnet-4-5
+variant: high
+
+# V2
+model: anthropic/claude-sonnet-4-5#high
+```
+
+See [Commands](/commands).
+
+### Skill files
+
+V2 discovers skills from both `.opencode/skill/` and `.opencode/skills/`. The preferred layout is:
+
+```text
+.opencode/skills/<skill-id>/SKILL.md
+```
+
+Move the complete skill directory, not only `SKILL.md`, so relative scripts, references, and other supporting files remain
+available. Keep the directory name stable to preserve the skill ID. Existing skill frontmatter and Markdown bodies do not
+require a V2 rewrite. See [Skills](/skills).
+
+### Instruction files
+
+Existing `AGENTS.md` files stay in place. V2 discovers the global `~/.config/opencode/AGENTS.md` and project `AGENTS.md`
+files from the current directory up to the project root.
+
+If a V1 setup relied on a `CLAUDE.md` fallback, move that guidance into the applicable `AGENTS.md`. V2 currently only
+discovers `AGENTS.md`; because non-API V1 behavior is intended to remain compatible, also run `/report` with the affected
+project details. See [Instructions](/instructions).
+
+## TUI configuration
+
+V1 loaded `tui.json(c)` from the global config directory and from project directories discovered while walking up from
+the current directory. V2 instead stores CLI and TUI settings in one global file:
+
+```text
+~/.config/opencode/cli.json
+```
+
+The CLI owns this file. The background service does not load it, and V2 does not discover or merge project-local
+`tui.json(c)` or `cli.json` files.
+
+The native V2 format groups related settings. For example:
+
+```jsonc
+// V1: ~/.config/opencode/tui.json
+{
+  "theme": "tokyonight",
+  "scroll_speed": 2,
+  "scroll_acceleration": {
+    "enabled": true
+  }
+}
+
+// V2: ~/.config/opencode/cli.json
+{
+  "theme": {
+    "name": "tokyonight"
+  },
+  "scroll": {
+    "speed": 2,
+    "acceleration": true
+  }
+}
+```
+
+V2 migrates the global TUI configuration automatically. On the first CLI or TUI startup, when `cli.json` does not already
+exist, it:
+
+- Reads `~/.config/opencode/tui.json`.
+- Reads persisted TUI preferences from the legacy `kv.json` state file.
+- Converts supported settings to the native grouped format and writes `~/.config/opencode/cli.json`.
+- Leaves the V1 files unchanged so V1 can continue using them.
+
+Migration runs only while `cli.json` is absent. Once that file exists, V2 treats it as the source of truth and does not
+continually synchronize later changes from `tui.json` or `kv.json`. If you created `cli.json` before starting V2, merge any
+V1 settings you still need into it manually.
+
+Project-local V1 TUI configuration is not migrated because V2 has no project-local CLI configuration. Move settings you
+still want into the global `cli.json`; when multiple projects used different values for the same setting, choose the
+global behavior you want V2 to use.
+
+## Plugins
+
+Rename `plugin` to `plugins`. Replace a package-and-options tuple with an object:
+
+```jsonc
+// V1
+{
+  "plugin": [
+    "opencode-example-plugin",
+    ["./plugin/local.ts", { "enabled": true }]
+  ]
+}
+
+// V2
+{
+  "plugins": [
+    "opencode-example-plugin",
+    {
+      "package": "./plugin/local.ts",
+      "options": { "enabled": true }
+    }
+  ]
+}
+```
+
+V2 discovers local plugins from both `.opencode/plugin/` and `.opencode/plugins/`; use `.opencode/plugins/` for V2 files.
+Moving a file between these directories does not migrate its implementation.
+
+<Warning>V1 plugins will not work in V2.</Warning>
+
+The config entry can be translated automatically, but plugin implementation code must be ported to the new API. The V2
+plugin API is still being finalized during beta, and detailed plugin migration guidance will be published when it is
+ready.
+
+Once the V2 plugin API is finalized, OpenCode should be able to migrate the majority of V1 plugins while keeping related
+local modules and dependencies together. See the current beta [Plugins guide](/build/plugins).
+
+## Server API and clients
+
+OpenCode 2 has a revised, more ergonomic server API and a new set of clients. Integrations that call the V1 server API
+must migrate to the V2 API.
+
+Use the `@opencode-ai/client` package to access the new clients. The server API and clients are still being finalized
+during beta, so their contracts may continue to change. See the generated [API reference](/api) for the current endpoints,
+request types, and responses.
+
+## Verify your setup
+
+Start `opencode2` in a project and verify your model, provider credentials, agents, permissions, MCP servers, and plugins
+before relying on the beta for regular work. Keep your V1 setup until you have confirmed the V2 behavior you need, and do
+not point V1 at configuration that you have converted to the native V2 shape.

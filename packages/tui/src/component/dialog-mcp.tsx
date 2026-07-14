@@ -5,11 +5,11 @@ import { DialogSelect } from "../ui/dialog-select"
 import { useDialog } from "../ui/dialog"
 import { useTheme, type Theme } from "../context/theme"
 import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core"
-import type { McpServer } from "@opencode-ai/sdk/v2"
+import type { McpServer } from "@opencode-ai/client"
 import { useClipboard } from "../context/clipboard"
 import { useToast } from "../ui/toast"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
-import { useTuiConfig } from "../config"
+import { useConfig } from "../config"
 import { getScrollAcceleration } from "../util/scroll"
 import { useBindings } from "../keymap"
 
@@ -45,7 +45,7 @@ export function DialogMcp() {
 
   const servers = createMemo(() =>
     pipe(
-      data.location.mcp.list() ?? [],
+      data.location.mcp.server.list() ?? [],
       sortBy(
         (server) => statusMeta(server.status, theme).rank,
         (server) => server.name,
@@ -92,7 +92,7 @@ export function DialogMcp() {
         when={detail()}
         fallback={
           <DialogSelect
-            title="MCPs"
+            title="MCP servers"
             options={options()}
             current={focused()}
             preserveSelection
@@ -118,7 +118,7 @@ function DialogMcpError(props: { server: McpServer; onBack: () => void }) {
   const toast = useToast()
   const { theme } = useTheme()
   const dimensions = useTerminalDimensions()
-  const tuiConfig = useTuiConfig()
+  const config = useConfig().data
   const [copied, setCopied] = createSignal(false)
   const error = () => statusMeta(props.server.status, theme).error ?? "Unknown MCP connection error"
   const height = createMemo(() => Math.max(3, Math.floor(dimensions().height / 2) - 5))
@@ -152,7 +152,7 @@ function DialogMcpError(props: { server: McpServer; onBack: () => void }) {
     <box paddingLeft={4} paddingRight={4} paddingBottom={1} gap={1}>
       <box flexDirection="row" justifyContent="space-between">
         <text attributes={TextAttributes.BOLD} fg={theme.text}>
-          MCP / {props.server.name}
+          MCP server: {props.server.name}
         </text>
         <text fg={theme.textMuted} onMouseUp={props.onBack}>
           esc back
@@ -164,7 +164,7 @@ function DialogMcpError(props: { server: McpServer; onBack: () => void }) {
           ref={(element: ScrollBoxRenderable) => (scroll = element)}
           height={height()}
           scrollbarOptions={{ visible: false }}
-          scrollAcceleration={getScrollAcceleration(tuiConfig)}
+          scrollAcceleration={getScrollAcceleration(config)}
         >
           <text fg={theme.text} wrapMode="word">
             {error()}

@@ -5,7 +5,7 @@ import { useDialog } from "../ui/dialog"
 import { useTheme } from "../context/theme"
 import { errorMessage } from "../util/error"
 import { useData } from "../context/data"
-import type { LocationRef } from "@opencode-ai/sdk/v2"
+import type { LocationRef } from "@opencode-ai/client"
 
 export type DialogSkillProps = {
   location?: LocationRef
@@ -46,7 +46,6 @@ export function DialogSkill(props: DialogSkillProps) {
       title: skill.name.padEnd(maxWidth),
       description: skill.description?.replace(/\s+/g, " ").trim(),
       value: skill.id,
-      category: "Skills",
       onSelect: () => {
         props.onSelect(skill.id)
         dialog.clear()
@@ -57,7 +56,6 @@ export function DialogSkill(props: DialogSkillProps) {
   return (
     <DialogSelect
       title="Skills"
-      placeholder="Search skills..."
       options={options()}
       renderFilter={!showError()}
       locked={showError()}

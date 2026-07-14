@@ -12,7 +12,6 @@ const openAI = OpenAI.configure({
 })
 const openAIChat = openAI.chat("gpt-4o-mini")
 const openAIResponses = openAI.responses("gpt-5.5")
-const openAIResponsesWebSocket = openAI.responsesWebSocket("gpt-4.1-mini")
 const anthropic = Anthropic.configure({
   apiKey: process.env.ANTHROPIC_API_KEY ?? "fixture",
 })
@@ -88,14 +87,6 @@ describeRecordedGoldenScenarios([
       { id: "tool-loop", temperature: false },
       { id: "image-tool-result", temperature: false, maxTokens: 40 },
     ],
-  },
-  {
-    name: "OpenAI Responses WebSocket gpt-4.1-mini",
-    prefix: "openai-responses-websocket",
-    model: openAIResponsesWebSocket,
-    transport: "websocket",
-    requires: ["OPENAI_API_KEY"],
-    scenarios: ["tool-loop"],
   },
   {
     name: "Anthropic Haiku 4.5",

@@ -15,29 +15,34 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const location = yield* Location.Service
-    const environment = [
-      "<env>",
-      `  Working directory: ${location.directory}`,
-      `  Workspace root folder: ${location.project.directory}`,
-      `  Is directory a git repo: ${location.vcs?.type === "git" ? "yes" : "no"}`,
-      `  Platform: ${process.platform}`,
-      "</env>",
-    ].join("\n")
     const instructions = Instructions.combine([
       Instructions.make({
         key: Instructions.Key.make("core/environment"),
         codec: Schema.toCodecJson(Schema.String),
-        load: Effect.succeed(environment),
-        baseline: (environment) =>
-          ["Here is some useful information about the environment you are running in:", environment].join("\n"),
-        update: (_previous, environment) => ["The environment you are running in is now:", environment].join("\n"),
+        read: Effect.sync(() =>
+          [
+            "<env>",
+            `  Working directory: ${location.directory}`,
+            `  Workspace root folder: ${location.project.directory}`,
+            `  Is directory a git repo: ${location.vcs?.type === "git" ? "yes" : "no"}`,
+            `  Platform: ${process.platform}`,
+            "</env>",
+          ].join("\n"),
+        ),
+        render: {
+          initial: (environment) =>
+            ["Here is some useful information about the environment you are running in:", environment].join("\n"),
+          changed: (_previous, environment) => ["The environment you are running in is now:", environment].join("\n"),
+        },
       }),
       Instructions.make({
         key: Instructions.Key.make("core/date"),
         codec: Schema.toCodecJson(Schema.String),
-        load: DateTime.nowAsDate.pipe(Effect.map((date) => date.toDateString())),
-        baseline: (date) => `Today's date: ${date}`,
-        update: (_previous, date) => `Today's date is now: ${date}`,
+        read: DateTime.nowAsDate.pipe(Effect.map((date) => date.toDateString())),
+        render: {
+          initial: (date) => `Today's date: ${date}`,
+          changed: (_previous, date) => `Today's date is now: ${date}`,
+        },
       }),
     ])
 

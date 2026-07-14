@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import path from "node:path"
-import { mergeInteractiveInput, mergeNonInteractiveInput, pickRunModel } from "../src/mini"
+import { mergeInteractiveInput, mergeNonInteractiveInput, parseRunModel, pickRunModel } from "../src/mini"
 
 async function cli(args: string[]) {
   const child = Bun.spawn([process.execPath, "run", "src/index.ts", ...args], {
@@ -39,6 +39,12 @@ describe("mini command", () => {
     ).toEqual({ providerID: "session-provider", modelID: "session-model" })
   })
 
+  test("parses model variants from the model reference", () => {
+    expect(JSON.stringify(parseRunModel("openrouter/openai/gpt-5#high"))).toBe(
+      JSON.stringify({ model: { providerID: "openrouter", modelID: "openai/gpt-5" }, variant: "high" }),
+    )
+  })
+
   test("is registered in the preview CLI", async () => {
     const result = await cli(["--help"])
 
@@ -52,6 +58,7 @@ describe("mini command", () => {
 
     expect(result.exitCode).toBe(0)
     expect(result.stdout).toContain("--server string")
+    expect(result.stdout).not.toContain("--variant")
     expect(result.stdout).not.toContain("--attach")
     expect(result.stdout).not.toContain("--command")
   })
@@ -71,6 +78,8 @@ describe("mini command", () => {
         const url = new URL(request.url)
         if (url.pathname === "/api/health")
           return Response.json({ healthy: true, version: InstallationVersion, pid: process.pid })
+        if (url.pathname === "/api/location")
+          return Response.json({ directory: process.cwd(), project: { id: "global", directory: process.cwd() } })
         if (url.pathname === "/api/model") {
           modelRequests++
           return Response.json({
@@ -87,8 +96,6 @@ describe("mini command", () => {
         "run",
         "--server",
         server.url.toString(),
-        "--dir",
-        process.cwd(),
         "--model",
         "definitely/missing",
         "hi",
@@ -104,7 +111,8 @@ describe("mini command", () => {
   test("reports pre-admission errors as JSON", async () => {
     const server = Bun.serve({
       port: 0,
-      fetch() {
+      fetch(request) {
+        if (new URL(request.url).pathname === "/api/session") return new Response("boom", { status: 500 })
         return Response.json({ healthy: true, version: "incompatible", pid: process.pid })
       },
     })
@@ -116,7 +124,7 @@ describe("mini command", () => {
       expect(JSON.parse(result.stdout)).toMatchObject({
         type: "error",
         sessionID: "",
-        error: { type: "unknown", message: "Failed to resolve server directory" },
+        error: { type: "unknown", message: "UnexpectedStatus" },
       })
     } finally {
       server.stop(true)

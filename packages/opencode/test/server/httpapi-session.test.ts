@@ -26,7 +26,7 @@ import { SessionPaths } from "../../src/server/routes/instance/httpapi/groups/se
 import { Session } from "@/session/session"
 import { MessageID, PartID, SessionID, type SessionID as SessionIDType } from "../../src/session/schema"
 import { Database } from "@opencode-ai/core/database/database"
-import { SessionInputTable, SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
+import { SessionPendingTable, SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { Agent } from "@opencode-ai/schema/agent"
 import { ModelV2 } from "@opencode-ai/core/model"
@@ -272,10 +272,6 @@ describe("session HttpApi", () => {
         expect(children.status).toBe(404)
         expect(yield* responseJson(children)).toEqual(missingSessionBody)
 
-        const todo = yield* request(pathFor(SessionPaths.todo, { sessionID: missingSession }), { headers })
-        expect(todo.status).toBe(404)
-        expect(yield* responseJson(todo)).toEqual(missingSessionBody)
-
         const messages = yield* request(pathFor(SessionPaths.messages, { sessionID: missingSession }), { headers })
         expect(messages.status).toBe(404)
         expect(yield* responseJson(messages)).toEqual(missingSessionBody)
@@ -343,10 +339,6 @@ describe("session HttpApi", () => {
             headers,
           })).map((item) => item.id),
         ).toEqual([child.id])
-
-        expect(
-          yield* requestJson<unknown[]>(pathFor(SessionPaths.todo, { sessionID: parent.id }), { headers }),
-        ).toEqual([])
 
         expect(
           yield* requestJson<unknown[]>(pathFor(SessionPaths.diff, { sessionID: parent.id }), { headers }),
@@ -574,18 +566,18 @@ describe("session HttpApi", () => {
           request(`/api/session/${session.id}/prompt`, {
             method: "POST",
             headers: { ...headers, "content-type": "application/json" },
-            body: JSON.stringify({ id: "msg_http_prompt", prompt: { text: "hello" }, resume: false }),
+            body: JSON.stringify({ id: "msg_http_prompt", text: "hello", resume: false }),
           })
         const first = yield* recordPrompt()
         const retried = yield* recordPrompt()
-        type PromptBody = { id: string; prompt: { text: string }; delivery: string; promotedSeq?: number }
+        type PromptBody = { id: string; data: { text: string }; delivery: string }
         const firstBody = yield* json<{ data: PromptBody }>(first)
         const retriedBody = yield* json<{ data: PromptBody }>(retried)
         expect(first.status).toBe(200)
         expect(retried.status).toBe(200)
         expect(retriedBody).toEqual(firstBody)
         expect(firstBody).toMatchObject({
-          data: { id: "msg_http_prompt", prompt: { text: "hello" }, delivery: "steer" },
+          data: { id: "msg_http_prompt", data: { text: "hello" }, delivery: "steer" },
         })
 
         const messages = yield* requestJson<{ data: PromptBody[] }>(`/api/session/${session.id}/message`, {
@@ -595,8 +587,8 @@ describe("session HttpApi", () => {
         const admitted = yield* Database.Service.use(({ db }) =>
           db
             .select()
-            .from(SessionInputTable)
-            .where(eq(SessionInputTable.id, SessionMessage.ID.make("msg_http_prompt")))
+            .from(SessionPendingTable)
+            .where(eq(SessionPendingTable.id, SessionMessage.ID.make("msg_http_prompt")))
             .get()
             .pipe(Effect.orDie),
         )
@@ -604,12 +596,11 @@ describe("session HttpApi", () => {
           id: "msg_http_prompt",
           session_id: session.id,
           delivery: "steer",
-          promoted_seq: null,
         })
         const conflict = yield* request(`/api/session/${session.id}/prompt`, {
           method: "POST",
           headers: { ...headers, "content-type": "application/json" },
-          body: JSON.stringify({ id: "msg_http_prompt", prompt: { text: "goodbye" } }),
+          body: JSON.stringify({ id: "msg_http_prompt", text: "goodbye" }),
         })
         expect(conflict.status).toBe(409)
         expect(yield* responseJson(conflict)).toEqual({
@@ -622,7 +613,7 @@ describe("session HttpApi", () => {
         const wake = yield* request(`/api/session/${session.id}/prompt`, {
           method: "POST",
           headers: { ...headers, "content-type": "application/json" },
-          body: JSON.stringify({ id: wakeID, prompt: { text: "hello again" } }),
+          body: JSON.stringify({ id: wakeID, text: "hello again" }),
         })
         expect(wake.status).toBe(200)
         const message = yield* pollWithTimeout(

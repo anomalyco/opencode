@@ -13,7 +13,7 @@
 //
 // Custom answers: if a question has custom=true, an extra "Type your own
 // answer" option appears. Selecting it enters editing mode with a text field.
-import type { QuestionInfo, QuestionRequest } from "@opencode-ai/sdk/v2"
+import type { QuestionV2Info, QuestionV2Request } from "@opencode-ai/client/promise"
 import type { QuestionReject, QuestionReply } from "./types"
 
 export type QuestionBodyState = {
@@ -51,23 +51,23 @@ export function questionSync(state: QuestionBodyState, requestID: string): Quest
   return createQuestionBodyState(requestID)
 }
 
-export function questionSingle(request: QuestionRequest): boolean {
+export function questionSingle(request: QuestionV2Request): boolean {
   return request.questions.length === 1 && request.questions[0]?.multiple !== true
 }
 
-export function questionTabs(request: QuestionRequest): number {
+export function questionTabs(request: QuestionV2Request): number {
   return questionSingle(request) ? 1 : request.questions.length + 1
 }
 
-export function questionConfirm(request: QuestionRequest, state: QuestionBodyState): boolean {
+export function questionConfirm(request: QuestionV2Request, state: QuestionBodyState): boolean {
   return !questionSingle(request) && state.tab === request.questions.length
 }
 
-export function questionInfo(request: QuestionRequest, state: QuestionBodyState): QuestionInfo | undefined {
+export function questionInfo(request: QuestionV2Request, state: QuestionBodyState): QuestionV2Info | undefined {
   return request.questions[state.tab]
 }
 
-export function questionCustom(request: QuestionRequest, state: QuestionBodyState): boolean {
+export function questionCustom(request: QuestionV2Request, state: QuestionBodyState): boolean {
   return questionInfo(request, state)?.custom !== false
 }
 
@@ -84,7 +84,7 @@ export function questionPicked(state: QuestionBodyState): boolean {
   return state.answers[state.tab]?.includes(value) ?? false
 }
 
-export function questionOther(request: QuestionRequest, state: QuestionBodyState): boolean {
+export function questionOther(request: QuestionV2Request, state: QuestionBodyState): boolean {
   const info = questionInfo(request, state)
   if (!info || info.custom === false) {
     return false
@@ -93,7 +93,7 @@ export function questionOther(request: QuestionRequest, state: QuestionBodyState
   return state.selected === info.options.length
 }
 
-export function questionTotal(request: QuestionRequest, state: QuestionBodyState): number {
+export function questionTotal(request: QuestionV2Request, state: QuestionBodyState): number {
   const info = questionInfo(request, state)
   if (!info) {
     return 0
@@ -156,7 +156,7 @@ export function questionStoreCustom(state: QuestionBodyState, tab: number, text:
 
 function questionPick(
   state: QuestionBodyState,
-  request: QuestionRequest,
+  request: QuestionV2Request,
   answer: string,
   custom = false,
 ): QuestionStep {
@@ -204,7 +204,7 @@ function questionToggle(state: QuestionBodyState, answer: string): QuestionBodyS
   return storeAnswers(state, state.tab, list)
 }
 
-export function questionMove(state: QuestionBodyState, request: QuestionRequest, dir: -1 | 1): QuestionBodyState {
+export function questionMove(state: QuestionBodyState, request: QuestionV2Request, dir: -1 | 1): QuestionBodyState {
   const total = questionTotal(request, state)
   if (total === 0) {
     return state
@@ -216,7 +216,7 @@ export function questionMove(state: QuestionBodyState, request: QuestionRequest,
   }
 }
 
-export function questionSelect(state: QuestionBodyState, request: QuestionRequest): QuestionStep {
+export function questionSelect(state: QuestionBodyState, request: QuestionV2Request): QuestionStep {
   const info = questionInfo(request, state)
   if (!info) {
     return { state }
@@ -255,7 +255,7 @@ export function questionSelect(state: QuestionBodyState, request: QuestionReques
   return questionPick(state, request, option.label)
 }
 
-export function questionSave(state: QuestionBodyState, request: QuestionRequest): QuestionStep {
+export function questionSave(state: QuestionBodyState, request: QuestionV2Request): QuestionStep {
   const info = questionInfo(request, state)
   if (!info) {
     return { state }
@@ -305,20 +305,20 @@ export function questionSave(state: QuestionBodyState, request: QuestionRequest)
   return questionPick(state, request, value, true)
 }
 
-export function questionSubmit(request: QuestionRequest, state: QuestionBodyState): QuestionReply {
+export function questionSubmit(request: QuestionV2Request, state: QuestionBodyState): QuestionReply {
   return {
     requestID: request.id,
     answers: questionAnswers(state, request.questions.length),
   }
 }
 
-export function questionReject(request: QuestionRequest): QuestionReject {
+export function questionReject(request: QuestionV2Request): QuestionReject {
   return {
     requestID: request.id,
   }
 }
 
-export function questionHint(request: QuestionRequest, state: QuestionBodyState): string {
+export function questionHint(request: QuestionV2Request, state: QuestionBodyState): string {
   if (state.submitting) {
     return "Waiting for question event..."
   }

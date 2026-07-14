@@ -5,8 +5,9 @@ import { Catalog } from "@opencode-ai/core/catalog"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
-import { GithubCopilotPlugin } from "@opencode-ai/core/plugin/provider/github-copilot"
+import { copilotFetch, GithubCopilotPlugin } from "@opencode-ai/core/plugin/provider/github-copilot"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { Integration } from "@opencode-ai/core/integration"
 import type { LanguageModelV3 } from "@ai-sdk/provider"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
@@ -39,6 +40,46 @@ function fakeSelectorSdk(calls: string[]) {
 }
 
 describe("GithubCopilotPlugin", () => {
+  it.effect("registers GitHub Copilot device OAuth", () =>
+    Effect.gen(function* () {
+      yield* addPlugin()
+      expect((yield* (yield* Integration.Service).get(Integration.ID.make("github-copilot")))?.methods).toContainEqual({
+        id: Integration.MethodID.make("device"),
+        type: "oauth",
+        label: "Login with GitHub Copilot",
+        prompts: expect.any(Array),
+      })
+    }),
+  )
+
+  it.live("adds Copilot authentication and request metadata headers", () =>
+    Effect.gen(function* () {
+      const requests: Headers[] = []
+      const send = copilotFetch(
+        "token",
+        async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+          requests.push(new Headers(init?.headers))
+          return Response.json({ ok: true })
+        },
+        false,
+      )
+      yield* Effect.promise(() =>
+        send("https://api.githubcopilot.com/chat/completions", {
+          method: "POST",
+          headers: { "x-api-key": "old" },
+          body: JSON.stringify({
+            messages: [{ role: "user", content: [{ type: "image_url", image_url: { url: "data:image/png" } }] }],
+          }),
+        }),
+      )
+      expect(requests[0]?.get("authorization")).toBe("Bearer token")
+      expect(requests[0]?.has("x-api-key")).toBe(false)
+      expect(requests[0]?.get("x-initiator")).toBe("user")
+      expect(requests[0]?.get("copilot-vision-request")).toBe("true")
+      expect(requests[0]?.get("x-github-api-version")).toBe("2026-06-01")
+    }),
+  )
+
   it.effect("creates the bundled Copilot SDK for the GitHub Copilot package", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service

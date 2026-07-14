@@ -1,0 +1,85 @@
+@import "tailwindcss";
+@import "fumadocs-ui/css/neutral.css";
+@import "fumadocs-ui/css/preset.css";
+
+:root {
+  --site-background: #f7f7f5;
+  --site-foreground: #171717;
+  --site-border: #d8d8d2;
+  --site-accent: #3b7dd8;
+  --fd-layout-width: 90rem;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+}
+
+/* Fumadocs 16.11 stretches top layout tabs across the main grid row. */
+#nd-docs-layout > div:has(> a[href="/docs/build"], > a[href="/docs/api"]) {
+  align-self: start;
+  height: 3rem;
+}
+
+.home {
+  min-height: 100vh;
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: 1.5rem;
+  padding: clamp(1.5rem, 7vw, 7rem);
+  color: var(--site-foreground);
+  background: var(--site-background);
+}
+
+.home-kicker,
+.home-copy,
+.home h1 {
+  margin: 0;
+}
+
+.home-kicker {
+  font:
+    600 0.75rem/1.2 ui-monospace,
+    monospace;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.home h1 {
+  max-width: 13ch;
+  font:
+    500 clamp(3rem, 9vw, 8rem) / 0.92 ui-monospace,
+    monospace;
+  letter-spacing: -0.07em;
+}
+
+.home-copy {
+  max-width: 42rem;
+  font:
+    400 clamp(1rem, 2vw, 1.25rem) / 1.5 ui-monospace,
+    monospace;
+}
+
+.home-link {
+  display: inline-block;
+  padding: 0.8rem 1rem;
+  color: var(--site-background);
+  background: var(--site-foreground);
+  font:
+    500 0.875rem/1 ui-monospace,
+    monospace;
+  text-decoration: none;
+}
+
+.home-link:hover {
+  background: var(--site-accent);
+}

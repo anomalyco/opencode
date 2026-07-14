@@ -7,13 +7,17 @@
 //
 // Data flow through the system:
 //
-//   SDK events → session-data reducer → StreamCommit[] + FooterOutput
+//   V2 events / demo actions → StreamCommit[] + FooterOutput
 //     → stream.ts bridges to footer API
 //       → footer.ts queues commits and patches the footer view
 //         → OpenTUI split-footer renderer writes to terminal
-import type { OpenCodeClient, ReferenceListOutput } from "@opencode-ai/client/promise"
-import type { FilePart, PermissionRequest, QuestionRequest, ToolPart } from "@opencode-ai/sdk/v2"
-import type { TuiConfig } from "@opencode-ai/tui/config"
+import type {
+  OpenCodeClient,
+  PermissionV2Request,
+  QuestionV2Request,
+  ReferenceListOutput,
+} from "@opencode-ai/client/promise"
+import type { TuiConfig } from "@opencode-ai/tui/config/v1"
 
 export type RunFilePart = {
   type: "file"
@@ -30,7 +34,11 @@ export type RunPromptPart =
       url: string
       filename?: string
       mime?: string
-      source?: FilePart["source"]
+      source?: {
+        type: string
+        text: { start: number; end: number; value: string }
+        [key: string]: unknown
+      }
     }
   | { type: "agent"; name: string; source?: { start: number; end: number; value: string } }
 
@@ -199,15 +207,6 @@ export type ToolTaskSnapshot = {
   tail: string
 }
 
-export type ToolTodoSnapshot = {
-  kind: "todo"
-  items: Array<{
-    status: string
-    content: string
-  }>
-  tail: string
-}
-
 export type ToolQuestionSnapshot = {
   kind: "question"
   items: Array<{
@@ -217,12 +216,42 @@ export type ToolQuestionSnapshot = {
   tail: string
 }
 
-export type ToolSnapshot =
-  | ToolCodeSnapshot
-  | ToolDiffSnapshot
-  | ToolTaskSnapshot
-  | ToolTodoSnapshot
-  | ToolQuestionSnapshot
+export type ToolSnapshot = ToolCodeSnapshot | ToolDiffSnapshot | ToolTaskSnapshot | ToolQuestionSnapshot
+
+export type MiniToolState =
+  | { status: "pending"; input: Record<string, unknown>; raw?: string }
+  | {
+      status: "running"
+      input: Record<string, unknown>
+      title?: string
+      metadata?: Record<string, unknown>
+      time: { start: number }
+    }
+  | {
+      status: "completed"
+      input: Record<string, unknown>
+      output: string
+      title?: string
+      metadata?: Record<string, unknown>
+      time: { start: number; end: number }
+    }
+  | {
+      status: "error"
+      input: Record<string, unknown>
+      error: string
+      metadata?: Record<string, unknown>
+      time: { start: number; end: number }
+    }
+
+export type MiniToolPart = {
+  id: string
+  sessionID: string
+  messageID: string
+  type?: "tool"
+  callID: string
+  tool: string
+  state: MiniToolState
+}
 
 export type EntryLayout = "inline" | "block"
 
@@ -234,13 +263,13 @@ export type RunEntryBody =
   | { type: "structured"; snapshot: ToolSnapshot }
 
 // Which interactive surface the footer is showing. Only one view is active at
-// a time. The reducer drives transitions: when a permission arrives the view
+// a time. The transport drives transitions: when a permission arrives the view
 // switches to "permission", and when the permission resolves it falls back to
 // "prompt".
 export type FooterView =
   | { type: "prompt" }
-  | { type: "permission"; request: PermissionRequest }
-  | { type: "question"; request: QuestionRequest }
+  | { type: "permission"; request: PermissionV2Request }
+  | { type: "question"; request: QuestionV2Request }
 
 export type FooterPromptRoute =
   | { type: "composer" }
@@ -273,11 +302,11 @@ export type FooterSubagentDetail = {
 export type FooterSubagentState = {
   tabs: FooterSubagentTab[]
   details: Record<string, FooterSubagentDetail>
-  permissions: PermissionRequest[]
-  questions: QuestionRequest[]
+  permissions: PermissionV2Request[]
+  questions: QuestionV2Request[]
 }
 
-// The reducer emits this alongside scrollback commits so the footer can update in the same frame.
+// The transport emits this alongside scrollback commits so the footer can update in the same frame.
 export type FooterOutput = {
   patch?: FooterPatch
   view?: FooterView
@@ -371,8 +400,8 @@ export type StreamSource = "assistant" | "reasoning" | "tool" | "system"
 
 export type StreamToolState = "running" | "completed" | "error"
 
-// A single append-only commit to scrollback. The session-data reducer produces
-// these from SDK events, and RunFooter.append() queues them for the next
+// A single append-only commit to scrollback. The transport produces these from
+// V2 events, and RunFooter.append() queues them for the next
 // microtask flush. Once flushed, they become immutable terminal scrollback
 // rows -- they cannot be rewritten.
 export type StreamCommit = {
@@ -384,7 +413,7 @@ export type StreamCommit = {
   messageID?: string
   partID?: string
   tool?: string
-  part?: ToolPart
+  part?: MiniToolPart
   interrupted?: boolean
   toolState?: StreamToolState
   toolError?: string

@@ -104,11 +104,8 @@ function summaryDiff(value: SummaryDiffInput): value is SummaryDiff {
   )
 }
 
-const hidden = new Set(["todowrite"])
-
 function partState(part: PartType, showReasoningSummaries: boolean) {
   if (part.type === "tool") {
-    if (hidden.has(part.tool)) return
     if (part.tool === "question" && (part.state.status === "pending" || part.state.status === "running")) return
     return "visible" as const
   }
@@ -448,8 +445,10 @@ export function SessionTurn(
                 >
                   <div data-slot="session-turn-diffs-header">
                     <span data-slot="session-turn-diffs-label">
-                      {edited()} {i18n.t("ui.sessionTurn.diffs.changed")}{" "}
-                      {i18n.t(edited() === 1 ? "ui.common.file.one" : "ui.common.file.other")}
+                      {i18n.t(
+                        edited() === 1 ? "ui.sessionTurn.diffs.changed.one" : "ui.sessionTurn.diffs.changed.other",
+                        { count: String(edited()) },
+                      )}
                     </span>
                     <DiffChanges changes={diffs()} />
                     <Show when={overflow() > 0}>

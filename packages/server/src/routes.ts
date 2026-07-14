@@ -11,10 +11,9 @@ import { PtyTicket } from "@opencode-ai/core/pty/ticket"
 import { MoveSession } from "@opencode-ai/core/control-plane/move-session"
 import { Project } from "@opencode-ai/core/project"
 import { SessionV2 } from "@opencode-ai/core/session"
-import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { Job } from "@opencode-ai/core/job"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
-import { SessionExecutionLocal } from "@opencode-ai/core/session/execution/local"
+import { SessionRestart } from "@opencode-ai/core/session/execution/restart"
 import { PluginRuntime } from "@opencode-ai/core/plugin/runtime"
 import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
@@ -30,6 +29,7 @@ import { PtyEnvironment } from "./pty-environment"
 import { layer } from "./location"
 import { formLocationLayer } from "./middleware/form-location"
 import { sessionLocationLayer } from "./middleware/session-location"
+import { ServerInfo } from "./server-info"
 
 const applicationServices = LayerNode.group([
   Database.node,
@@ -48,13 +48,15 @@ const applicationServices = LayerNode.group([
   Credential.node,
   PtyEnvironment.node,
   LocationServiceMap.node,
+  SessionRestart.node,
 ])
 
-export function createRoutes(password?: string) {
+export function createRoutes(password?: string, serviceURLs: () => ReadonlyArray<string> = () => []) {
   return makeRoutes(
     password
       ? ServerAuth.Config.configLayer({ username: "opencode", password: Option.some(password) })
       : ServerAuth.Config.layer,
+    serviceURLs,
   )
 }
 
@@ -62,10 +64,12 @@ export function createEmbeddedRoutes() {
   return makeRoutes(ServerAuth.Config.configLayer({ username: "opencode", password: Option.none() }))
 }
 
-function makeRoutes<AuthError, AuthServices>(auth: Layer.Layer<ServerAuth.Config, AuthError, AuthServices>) {
+function makeRoutes<AuthError, AuthServices>(
+  auth: Layer.Layer<ServerAuth.Config, AuthError, AuthServices>,
+  serviceURLs: () => ReadonlyArray<string> = () => [],
+) {
   const pluginRuntimeCell = PluginRuntime.makeCell()
   const replacements: LayerNode.Replacements = [
-    [SessionExecution.node, SessionExecutionLocal.node],
     [PluginRuntime.node, PluginRuntime.layerWithCell(pluginRuntimeCell)],
     [PluginRuntime.providerNode, PluginRuntime.providerNodeWithCell(pluginRuntimeCell)],
   ]
@@ -87,7 +91,10 @@ function makeRoutes<AuthError, AuthServices>(auth: Layer.Layer<ServerAuth.Config
   return serviceLayer.pipe(
     Layer.flatMap((context) => {
       const services = Layer.succeedContext(context)
-      const requestServices = Layer.succeedContext(Context.pick(PermissionSaved.Service, Project.Service)(context))
+      const requestServices = Layer.merge(
+        Layer.succeedContext(Context.pick(PermissionSaved.Service, Project.Service)(context)),
+        ServerInfo.layer(serviceURLs),
+      )
       return HttpApiBuilder.layer(Api, { openapiPath: "/openapi.json" }).pipe(
         Layer.provide(handlers.pipe(Layer.provide(services))),
         Layer.provide(formLocationLayer),

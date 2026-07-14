@@ -28,66 +28,113 @@ const layer = AppNodeBuilder.build(LayerNode.group([Catalog.node, Integration.no
 const it = testEffect(layer)
 
 describe("ModelsDevPlugin", () => {
-  it.effect("projects models.dev modes as separate models instead of variants", () =>
+  it.effect("projects normalized models.dev snapshots into the catalog", () =>
     Effect.gen(function* () {
       const integrations = yield* Integration.Service
       const catalog = yield* Catalog.Service
+      const providerID = ProviderV2.ID.make("acme")
+      const modelID = ModelV2.ID.make("gpt-5.4")
       const models = ModelsDev.Service.of({
         get: () =>
-          Effect.succeed({
-            acme: {
-              id: "acme",
-              name: "Acme",
-              env: [],
-              npm: "@ai-sdk/openai-compatible",
-              api: "https://api.acme.test/v1",
-              models: {
-                "gpt-5.4": {
-                  id: "gpt-5.4",
+          Effect.succeed([
+            {
+              info: {
+                id: providerID,
+                name: "Acme",
+                package: ProviderV2.aisdk("@ai-sdk/openai-compatible"),
+                settings: { baseURL: "https://api.acme.test/v1" },
+              },
+              environment: [],
+              models: [
+                {
+                  id: modelID,
+                  modelID,
+                  providerID,
                   name: "GPT-5.4",
-                  family: "gpt",
-                  release_date: "2026-01-01",
-                  attachment: false,
-                  reasoning: true,
-                  temperature: true,
-                  tool_call: true,
-                  cost: {
-                    input: Money.USDPerMillionTokens.make(2.5),
-                    output: Money.USDPerMillionTokens.make(15),
-                    tiers: [
-                      {
-                        tier: { type: "context", size: 272_000 },
-                        input: Money.USDPerMillionTokens.make(3),
-                        output: Money.USDPerMillionTokens.make(18),
-                        cache_read: Money.USDPerMillionTokens.make(0.25),
+                  family: ModelV2.Family.make("gpt"),
+                  capabilities: { tools: true, input: [], output: [] },
+                  variants: [],
+                  time: { released: Date.parse("2026-01-01") },
+                  cost: [
+                    {
+                      input: Money.USDPerMillionTokens.make(2.5),
+                      output: Money.USDPerMillionTokens.make(15),
+                      cache: {
+                        read: Money.USDPerMillionTokens.zero,
+                        write: Money.USDPerMillionTokens.zero,
                       },
-                    ],
-                    context_over_200k: {
+                    },
+                    {
+                      tier: { type: "context", size: 272_000 },
+                      input: Money.USDPerMillionTokens.make(3),
+                      output: Money.USDPerMillionTokens.make(18),
+                      cache: {
+                        read: Money.USDPerMillionTokens.make(0.25),
+                        write: Money.USDPerMillionTokens.zero,
+                      },
+                    },
+                    {
+                      tier: { type: "context", size: 200_000 },
                       input: Money.USDPerMillionTokens.make(5),
                       output: Money.USDPerMillionTokens.make(22.5),
-                      cache_read: Money.USDPerMillionTokens.make(0.5),
-                    },
-                  },
-                  limit: { context: 1_050_000, input: 922_000, output: 128_000 },
-                  experimental: {
-                    modes: {
-                      fast: {
-                        cost: {
-                          input: Money.USDPerMillionTokens.make(5),
-                          output: Money.USDPerMillionTokens.make(30),
-                          cache_read: Money.USDPerMillionTokens.make(0.5),
-                        },
-                        provider: {
-                          headers: { "x-mode": "fast" },
-                          body: { service_tier: "priority" },
-                        },
+                      cache: {
+                        read: Money.USDPerMillionTokens.make(0.5),
+                        write: Money.USDPerMillionTokens.zero,
                       },
                     },
-                  },
+                  ],
+                  status: "active",
+                  enabled: true,
+                  limit: { context: 1_050_000, input: 922_000, output: 128_000 },
                 },
-              },
+                {
+                  id: ModelV2.ID.make("gpt-5.4-fast"),
+                  modelID,
+                  providerID,
+                  name: "GPT-5.4 Fast",
+                  family: ModelV2.Family.make("gpt"),
+                  package: ProviderV2.aisdk("@ai-sdk/openai-compatible"),
+                  settings: { baseURL: "https://api.acme.test/v1" },
+                  headers: { "x-mode": "fast" },
+                  body: { service_tier: "priority" },
+                  capabilities: { tools: true, input: [], output: [] },
+                  variants: [],
+                  time: { released: Date.parse("2026-01-01") },
+                  cost: [
+                    {
+                      input: Money.USDPerMillionTokens.make(5),
+                      output: Money.USDPerMillionTokens.make(30),
+                      cache: {
+                        read: Money.USDPerMillionTokens.make(0.5),
+                        write: Money.USDPerMillionTokens.zero,
+                      },
+                    },
+                    {
+                      tier: { type: "context", size: 272_000 },
+                      input: Money.USDPerMillionTokens.make(3),
+                      output: Money.USDPerMillionTokens.make(18),
+                      cache: {
+                        read: Money.USDPerMillionTokens.make(0.25),
+                        write: Money.USDPerMillionTokens.zero,
+                      },
+                    },
+                    {
+                      tier: { type: "context", size: 200_000 },
+                      input: Money.USDPerMillionTokens.make(5),
+                      output: Money.USDPerMillionTokens.make(22.5),
+                      cache: {
+                        read: Money.USDPerMillionTokens.make(0.5),
+                        write: Money.USDPerMillionTokens.zero,
+                      },
+                    },
+                  ],
+                  status: "active",
+                  enabled: true,
+                  limit: { context: 1_050_000, input: 922_000, output: 128_000 },
+                },
+              ],
             },
-          } satisfies Record<string, ModelsDev.Provider>),
+          ] satisfies readonly ModelsDev.Snapshot[]),
         refresh: () => Effect.void,
       })
 
@@ -98,12 +145,11 @@ describe("ModelsDevPlugin", () => {
         }),
       ).pipe(Effect.provideService(ModelsDev.Service, models))
 
-      const providerID = ProviderV2.ID.make("acme")
       const base = yield* catalog.model.get(providerID, ModelV2.ID.make("gpt-5.4"))
       const fast = yield* catalog.model.get(providerID, ModelV2.ID.make("gpt-5.4-fast"))
 
       expect(base?.variants).toEqual([])
-      expect(base?.body).toEqual({})
+      expect(base?.body).toBeUndefined()
       expect(fast).toMatchObject({
         id: "gpt-5.4-fast",
         modelID: "gpt-5.4",
@@ -168,7 +214,7 @@ describe("ModelsDevPlugin", () => {
             }),
           )
           expect(yield* integrations.list()).toEqual([
-            new Integration.Info({
+            Integration.Info.make({
               id: Integration.ID.make("acme"),
               name: "Acme",
               methods: [

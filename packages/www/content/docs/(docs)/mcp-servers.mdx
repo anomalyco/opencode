@@ -1,0 +1,262 @@
+---
+title: "MCP servers"
+description: ""
+---
+
+OpenCode can connect to [Model Context Protocol](https://modelcontextprotocol.io/) servers and make their tools, prompts, and instructions available to agents. MCP tools consume model context, so enable only the servers you need.
+
+## Configure servers
+
+Define each server by a unique name under `mcp.servers` in your [OpenCode configuration](/docs/config). V2 does not place server names directly under `mcp`.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "my-server": {
+        "type": "local",
+        "command": ["npx", "-y", "example-mcp-server"]
+      }
+    }
+  }
+}
+```
+
+Servers connect automatically unless `disabled` is `true`. There is no V2 `enabled` field.
+
+```jsonc
+{
+  "mcp": {
+    "servers": {
+      "my-server": {
+        "type": "local",
+        "command": ["npx", "-y", "example-mcp-server"],
+        "disabled": true
+      }
+    }
+  }
+}
+```
+
+As with other configuration, a server in a higher-precedence project config replaces a server with the same name from a lower-precedence config. Use different names when you need separate connections or accounts.
+
+## Local servers
+
+A local server is a command that OpenCode starts using the MCP stdio transport.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "everything": {
+        "type": "local",
+        "command": [
+          "npx",
+          "-y",
+          "@modelcontextprotocol/server-everything"
+        ],
+        "cwd": ".",
+        "environment": {
+          "LOG_LEVEL": "info",
+          "MCP_API_KEY": "{env:MCP_API_KEY}"
+        }
+      }
+    }
+  }
+}
+```
+
+| Field | Required | Description |
+| --- | --- | --- |
+| `type` | Yes | Must be `"local"`. |
+| `command` | Yes | Executable followed by its arguments. |
+| `cwd` | No | Process working directory. Relative paths resolve from the workspace directory; the workspace is the default. |
+| `environment` | No | String environment variables added to the inherited OpenCode process environment. |
+| `disabled` | No | Set to `true` to prevent the server from connecting. Defaults to `false`. |
+| `timeout` | No | Per-server timeout overrides. |
+
+Use `{env:NAME}` to substitute an environment variable while loading config. Shell expressions such as `$NAME` are not expanded in JSON strings.
+
+## Remote servers
+
+A remote server uses the MCP Streamable HTTP transport. Its `url` must be a valid absolute URL.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "context7": {
+        "type": "remote",
+        "url": "https://mcp.context7.com/mcp",
+        "oauth": false,
+        "headers": {
+          "CONTEXT7_API_KEY": "{env:CONTEXT7_API_KEY}"
+        }
+      }
+    }
+  }
+}
+```
+
+| Field | Required | Description |
+| --- | --- | --- |
+| `type` | Yes | Must be `"remote"`. |
+| `url` | Yes | Streamable HTTP endpoint. |
+| `headers` | No | String HTTP headers sent to the MCP endpoint. |
+| `oauth` | No | OAuth client settings, or `false` to disable OAuth support. |
+| `disabled` | No | Set to `true` to prevent the server from connecting. Defaults to `false`. |
+| `timeout` | No | Per-server timeout overrides. |
+
+Use `oauth: false` for a server that exclusively uses an API key or another header-based credential.
+
+## OAuth
+
+OAuth support is enabled for remote servers unless `oauth` is `false`. OpenCode discovers the authorization server, uses PKCE, refreshes tokens, and attempts dynamic client registration when the server supports it. OAuth credentials are stored outside project configuration.
+
+For a server that supports dynamic client registration, only the remote server is required:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "sentry": {
+        "type": "remote",
+        "url": "https://mcp.sentry.dev/mcp"
+      }
+    }
+  }
+}
+```
+
+When the server reports that it needs authentication, run `/connect` in the TUI:
+
+```text
+/connect
+```
+
+Select the MCP server under **Services**, then complete the browser authorization flow.
+
+You can also authenticate from the command line:
+
+```bash
+opencode2 mcp auth sentry
+```
+
+The CLI command prints the authorization URL and waits for the redirect to OpenCode's loopback callback server.
+
+If the provider issued client credentials, configure them using V2's snake_case field names:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "company-tools": {
+        "type": "remote",
+        "url": "https://mcp.example.com/mcp",
+        "oauth": {
+          "client_id": "{env:MCP_CLIENT_ID}",
+          "client_secret": "{env:MCP_CLIENT_SECRET}",
+          "scope": "tools:read tools:execute",
+          "callback_port": 19876,
+          "redirect_uri": "http://127.0.0.1:19876/callback"
+        }
+      }
+    }
+  }
+}
+```
+
+| OAuth field | Description |
+| --- | --- |
+| `client_id` | Pre-registered OAuth client ID. If omitted, OpenCode attempts dynamic client registration. |
+| `client_secret` | Client secret for a pre-registered client. |
+| `scope` | Space-delimited scopes to request. |
+| `callback_port` | Local callback port, from `1` through `65535`. An available ephemeral port is used by default. |
+| `redirect_uri` | Pre-registered loopback redirect URI. Its path and port must reach the local callback listener. |
+
+Remove stored credentials with:
+
+```bash
+opencode2 mcp logout sentry
+```
+
+## Timeouts
+
+Timeouts are positive integer milliseconds. Configure defaults under `mcp.timeout`; a server's `timeout` fields override matching defaults.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "timeout": {
+      "startup": 45000,
+      "catalog": 30000,
+      "execution": 600000
+    },
+    "servers": {
+      "slow-tools": {
+        "type": "remote",
+        "url": "https://mcp.example.com/mcp",
+        "timeout": {
+          "catalog": 60000
+        }
+      }
+    }
+  }
+}
+```
+
+| Timeout | Default | Applies to |
+| --- | --- | --- |
+| `startup` | 30 seconds | Establishing the transport and initializing the server. |
+| `catalog` | 30 seconds | Listing tools, prompts, resources, and resource templates. |
+| `execution` | 12 hours | Calling tools, getting prompts, and reading resources. |
+
+## Names and permissions
+
+OpenCode combines the server name and MCP tool name as `<server>_<tool>`. Characters other than letters, numbers, `_`, and `-` are replaced with `_`; for example, server `context 7` and tool `resolve.library/id` become `context_7_resolve_library_id`. MCP prompts appear as slash commands named `<server>:<prompt>` using the same normalization.
+
+Choose short server names that remain unique after normalization. Under the default Code Mode, MCP tools are grouped by the normalized server name.
+
+Use permission actions to hide or deny a server's tools without stopping its connection:
+
+```jsonc
+{
+  "permissions": [
+    {
+      "action": "context7_*",
+      "resource": "*",
+      "effect": "deny"
+    }
+  ]
+}
+```
+
+## CLI commands
+
+V2 provides these MCP management commands:
+
+```bash
+# Add a local server to the project config
+opencode2 mcp add everything --env LOG_LEVEL=info -- npx -y @modelcontextprotocol/server-everything
+
+# Add a remote server to the project config
+opencode2 mcp add context7 --url https://mcp.context7.com/mcp --header 'CONTEXT7_API_KEY={env:CONTEXT7_API_KEY}'
+
+# Add to the global config instead
+opencode2 mcp add context7 --global --url https://mcp.context7.com/mcp
+
+# List configured servers and connection status
+opencode2 mcp list
+
+# Authenticate or remove OAuth credentials
+opencode2 mcp auth context7
+opencode2 mcp logout context7
+```
+
+`mcp add` accepts either `--url` for a remote server or a command after `--` for a local server, not both. Use `--header NAME=VALUE` only with remote servers and `--env NAME=VALUE` only with local servers. Edit the config directly for OAuth, timeout, working-directory, or enablement settings.

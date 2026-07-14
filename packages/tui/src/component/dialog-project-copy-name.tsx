@@ -1,7 +1,7 @@
 import { InputRenderable, TextAttributes } from "@opentui/core"
 import { Slug } from "@opencode-ai/core/util/slug"
 import { createSignal, onMount } from "solid-js"
-import { useTuiConfig } from "../config"
+import { useConfig } from "../config"
 import { useTheme } from "../context/theme"
 import { useBindings, useCommandShortcut } from "../keymap"
 import { useDialog, type DialogContext } from "../ui/dialog"
@@ -9,7 +9,7 @@ import { useDialog, type DialogContext } from "../ui/dialog"
 export function DialogProjectCopyName(props: { onConfirm: (name: string) => void }) {
   const dialog = useDialog()
   const { theme } = useTheme()
-  const tuiConfig = useTuiConfig()
+  const config = useConfig().data
   const generateShortcut = useCommandShortcut("dialog.project_copy.generate")
   const [inputTarget, setInputTarget] = createSignal<InputRenderable>()
   let input: InputRenderable
@@ -35,7 +35,7 @@ export function DialogProjectCopyName(props: { onConfirm: (name: string) => void
         run: generate,
       },
     ],
-    bindings: tuiConfig.keybinds.get("dialog.project_copy.generate"),
+    bindings: config.keybinds.get("dialog.project_copy.generate"),
   }))
 
   onMount(() => {

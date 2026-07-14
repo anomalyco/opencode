@@ -17,11 +17,10 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
-import { PromptInput } from "@opencode-ai/schema/prompt-input"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
-import { SessionInput } from "@opencode-ai/core/session/input"
+import { SessionPending } from "@opencode-ai/core/session/pending"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
@@ -193,14 +192,12 @@ describe("SessionV2.create", () => {
       const parent = yield* session.create({ location, title: "Parent" })
       const admitted = yield* session.prompt({
         sessionID: parent.id,
-        prompt: PromptInput.Prompt.make({ text: "First" }),
+        text: "First",
         resume: false,
       })
-      yield* SessionInput.promoteSteers(db, events, parent.id)
-      yield* events.publish(SessionEvent.Synthetic, {
-        sessionID: parent.id,
-        text: "parent note",
-      })
+      yield* SessionPending.promoteSteers(db, events, parent.id)
+      yield* session.synthetic({ sessionID: parent.id, text: "parent note", resume: false })
+      yield* SessionPending.promoteSteers(db, events, parent.id)
 
       const forked = yield* session.fork({ sessionID: parent.id })
       const parentContext = yield* session.context(parent.id)
@@ -220,24 +217,28 @@ describe("SessionV2.create", () => {
         durable: { seq: 0 },
         data: { sessionID: forked.id, parentID: parent.id },
       })
-      expect(yield* SessionInput.find(db, forkContext[0].id)).toMatchObject({
-        sessionID: forked.id,
-        prompt: { text: "First" },
-        promotedSeq: 2,
-      })
+      expect(yield* SessionPending.find(db, forkContext[0].id)).toBeUndefined()
+      expect(yield* SessionPending.find(db, forkContext[1].id)).toBeUndefined()
+      // Fork-copied messages have no admitted event in the fork aggregate, so
+      // reusing their IDs as prompt IDs is conflicting reuse, not a retry.
+      expect(
+        yield* session
+          .prompt({ id: forkContext[0].id, sessionID: forked.id, text: "First", resume: false })
+          .pipe(Effect.flip),
+      ).toMatchObject({ _tag: "Session.PromptConflictError", messageID: forkContext[0].id })
 
       yield* session.prompt({
         sessionID: parent.id,
-        prompt: PromptInput.Prompt.make({ text: "Parent changed" }),
+        text: "Parent changed",
         resume: false,
       })
-      yield* SessionInput.promoteSteers(db, events, parent.id)
+      yield* SessionPending.promoteSteers(db, events, parent.id)
       yield* session.prompt({
         sessionID: forked.id,
-        prompt: PromptInput.Prompt.make({ text: "Child continues" }),
+        text: "Child continues",
         resume: false,
       })
-      yield* SessionInput.promoteSteers(db, events, forked.id)
+      yield* SessionPending.promoteSteers(db, events, forked.id)
 
       expect((yield* session.context(parent.id)).map((message) => message.type)).toEqual(["user", "synthetic", "user"])
       expect((yield* session.context(forked.id)).map((message) => message.type)).toEqual(["user", "synthetic", "user"])
@@ -246,8 +247,8 @@ describe("SessionV2.create", () => {
         Array.from(yield* Stream.runCollect(logEvents(session, forked.id))).map(
           (event): number | undefined => event.durable?.seq,
         ),
-      ).toEqual([0, 4, 5])
-      expect(yield* SessionInput.find(db, admitted.id)).toMatchObject({ sessionID: parent.id })
+      ).toEqual([0, 5, 6])
+      expect(yield* SessionPending.find(db, admitted.id)).toBeUndefined()
     }),
   )
 
@@ -259,16 +260,16 @@ describe("SessionV2.create", () => {
       const parent = yield* session.create({ location })
       const first = yield* session.prompt({
         sessionID: parent.id,
-        prompt: PromptInput.Prompt.make({ text: "First" }),
+        text: "First",
         resume: false,
       })
-      yield* SessionInput.promoteSteers(db, events, parent.id)
+      yield* SessionPending.promoteSteers(db, events, parent.id)
       const second = yield* session.prompt({
         sessionID: parent.id,
-        prompt: PromptInput.Prompt.make({ text: "Second" }),
+        text: "Second",
         resume: false,
       })
-      yield* SessionInput.promoteSteers(db, events, parent.id)
+      yield* SessionPending.promoteSteers(db, events, parent.id)
       const assistantMessageID = SessionMessage.ID.create()
       const model = ModelV2.Ref.make({ id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") })
       yield* events.publish(SessionEvent.Step.Started, {
@@ -410,16 +411,20 @@ describe("SessionV2.create", () => {
       const created = yield* session.create({ location })
       yield* session.prompt({
         sessionID: created.id,
-        prompt: PromptInput.Prompt.make({ text: "Hello" }),
+        text: "Hello",
         resume: false,
       })
-      yield* SessionInput.promoteSteers(db, events, created.id)
+      yield* SessionPending.promoteSteers(db, events, created.id)
 
       expect(
         Array.from(yield* logEvents(session, created.id, true).pipe(Stream.take(2), Stream.runCollect)),
       ).toMatchObject([
-        { durable: { seq: 1 }, type: "session.prompt.admitted", data: { prompt: { text: "Hello" } } },
-        { durable: { seq: 2 }, type: "session.prompt.promoted" },
+        {
+          durable: { seq: 1 },
+          type: "session.input.admitted",
+          data: { input: { type: "user", data: { text: "Hello" }, delivery: "steer" } },
+        },
+        { durable: { seq: 2 }, type: "session.input.promoted" },
       ])
     }),
   )
@@ -432,10 +437,10 @@ describe("SessionV2.create", () => {
       const created = yield* session.create({ id: SessionV2.ID.make("ses_fresh_target_replay"), location })
       const admitted = yield* session.prompt({
         sessionID: created.id,
-        prompt: PromptInput.Prompt.make({ text: "Replay lifecycle" }),
+        text: "Replay lifecycle",
         resume: false,
       })
-      yield* SessionInput.promoteSteers(sourceDb, sourceEvents, created.id)
+      yield* SessionPending.promoteSteers(sourceDb, sourceEvents, created.id)
       const serialized = (yield* sourceDb
         .select()
         .from(EventTable)
@@ -473,24 +478,18 @@ describe("SessionV2.create", () => {
 
         expect(yield* store.get(created.id)).toBeUndefined()
         expect(yield* events.replayAll(serialized.slice(0, 2))).toBe(created.id)
-        expect(yield* SessionInput.find(db, admitted.id)).toMatchObject({
+        expect(yield* SessionPending.find(db, admitted.id)).toMatchObject({
           id: admitted.id,
           sessionID: created.id,
-          prompt: { text: "Replay lifecycle" },
+          type: "user",
+          data: { text: "Replay lifecycle" },
           delivery: "steer",
           admittedSeq: 1,
         })
         expect(yield* store.context(created.id)).toEqual([])
 
         expect(yield* events.replayAll(serialized.slice(2))).toBe(created.id)
-        expect(yield* SessionInput.find(db, admitted.id)).toMatchObject({
-          id: admitted.id,
-          sessionID: created.id,
-          prompt: { text: "Replay lifecycle" },
-          delivery: "steer",
-          admittedSeq: 1,
-          promotedSeq: 2,
-        })
+        expect(yield* SessionPending.find(db, admitted.id)).toBeUndefined()
         expect(yield* store.context(created.id)).toMatchObject([
           { id: admitted.id, type: "user", text: "Replay lifecycle" },
         ])
@@ -504,8 +503,8 @@ describe("SessionV2.create", () => {
             .pipe(Effect.orDie)).map((event) => [event.seq, event.type]),
         ).toEqual([
           [0, EventV2.versionedType(SessionV1.Event.Created.type, 1)],
-          [1, EventV2.versionedType(SessionEvent.PromptAdmitted.type, 1)],
-          [2, EventV2.versionedType(SessionEvent.PromptPromoted.type, 1)],
+          [1, EventV2.versionedType(SessionEvent.InputAdmitted.type, 1)],
+          [2, EventV2.versionedType(SessionEvent.InputPromoted.type, 1)],
         ])
       }).pipe(Effect.provide(Layer.fresh(targetLayer)))
     }),

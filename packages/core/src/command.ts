@@ -61,6 +61,7 @@ const layer = Layer.effect(
     const config = yield* Config.Service
     const location = yield* Location.Service
     const state = State.create<Data, Draft>({
+      name: "command",
       initial: () => ({ commands: new Map() }),
       draft: (draft) => ({
         list: () => Array.from(draft.commands.values()) as Info[],

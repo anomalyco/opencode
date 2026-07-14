@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import type { TuiPlugin, TuiPluginApi, TuiRouteCurrent } from "@opencode-ai/plugin/tui"
-import type { FileDiffInfo, SnapshotFileDiff, VcsFileDiff } from "@opencode-ai/sdk/v2"
+import type { FileDiffInfo } from "@opencode-ai/client"
 import {
   TextAttributes,
   type BorderSides,
@@ -11,6 +11,7 @@ import {
 import { LANGUAGE_EXTENSIONS } from "../../util/filetype"
 import { useBindings, useCommandShortcut } from "../../keymap"
 import { useTheme } from "../../context/theme"
+import { useClient } from "../../context/client"
 import { useTerminalDimensions } from "@opentui/solid"
 import path from "path"
 import { createEffect, createMemo, createResource, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js"
@@ -18,6 +19,7 @@ import { DiffViewerFileTree } from "./diff-viewer-file-tree"
 import { Panel, PanelGroup, Separator } from "./diff-viewer-ui"
 import { DialogSelect } from "../../ui/dialog-select"
 import { getScrollAcceleration } from "../../util/scroll"
+import { useConfig } from "../../config"
 import {
   allExpandedFileTreeDirectories,
   buildFileTree,
@@ -40,10 +42,7 @@ const MIN_SPLIT_WIDTH = 100
 const FILE_TREE_WIDTH = 32
 const PLAIN_TEXT_FILETYPE = "opencode-plain-text"
 const VCS_DIFF_CONTEXT_LINES = 12
-const KV_SHOW_FILE_TREE = "diff_viewer_show_file_tree"
-const KV_SINGLE_PATCH = "diff_viewer_single_patch"
-const KV_VIEW = "diff_viewer_view"
-type DiffMode = "git" | "branch" | "last-turn"
+type DiffMode = "working" | "branch"
 type DiffViewerFocus = "patches" | "files"
 type DiffView = "split" | "unified"
 type SelectedHunk = { readonly fileIndex: number; readonly hunkIndex: number; readonly scrollTop: number }
@@ -56,20 +55,14 @@ type DiffFile = {
   readonly status: "added" | "deleted" | "modified"
 }
 
-const normalizeDiffs = (diffs: readonly (VcsFileDiff | FileDiffInfo | SnapshotFileDiff)[]): DiffFile[] =>
-  diffs.flatMap((item) =>
-    item.file
-      ? [
-          {
-            file: item.file,
-            patch: item.patch,
-            additions: item.additions,
-            deletions: item.deletions,
-            status: item.status ?? "modified",
-          } satisfies DiffFile,
-        ]
-      : [],
-  )
+const normalizeDiffs = (diffs: readonly FileDiffInfo[]): DiffFile[] =>
+  diffs.map((item) => ({
+    file: item.file,
+    patch: item.patch,
+    additions: item.additions,
+    deletions: item.deletions,
+    status: item.status,
+  }))
 
 function filetype(input?: string) {
   if (!input) return "none"
@@ -83,13 +76,14 @@ function storedView(value: unknown): DiffView | undefined {
 }
 
 function diffSourceLabel(mode: DiffMode) {
-  if (mode === "last-turn") return "last turn"
   if (mode === "branch") return "main branch"
   return "working tree"
 }
 
 function DiffViewer(props: { api: TuiPluginApi }) {
   const dimensions = useTerminalDimensions()
+  const client = useClient()
+  const config = useConfig()
   const themeState = useTheme()
   const theme = () => props.api.theme.current
   const params = () =>
@@ -97,52 +91,42 @@ function DiffViewer(props: { api: TuiPluginApi }) {
       | {
           mode?: DiffMode
           sessionID?: string
-          messageID?: string
           returnRoute?: TuiRouteCurrent
         }
       | undefined
-  const mode = () => params()?.mode ?? "git"
+  const mode = () => params()?.mode ?? "working"
   const diffInput = createMemo(() => {
     const sessionID = params()?.sessionID
     return {
       mode: mode(),
       sessionID,
-      messageID: params()?.messageID,
       directory: sessionID ? props.api.state.session.get(sessionID)?.directory : undefined,
     }
   })
   const [diff] = createResource(diffInput, async (input) => {
-    if (input.mode === "last-turn") {
-      const sessionID = input.sessionID
-      if (!sessionID) return []
-      const result = await props.api.client.session.diff(
-        { sessionID, messageID: input.messageID },
-        { throwOnError: true },
-      )
-      return normalizeDiffs(result.data ?? [])
-    }
-
-    const result = await props.api.client.vcs.diff(
-      { directory: input.directory, mode: input.mode, context: VCS_DIFF_CONTEXT_LINES },
-      { throwOnError: true },
+    const result = await client.api.vcs.diff(
+      {
+        location: input.directory ? { directory: input.directory } : undefined,
+        mode: input.mode,
+        context: VCS_DIFF_CONTEXT_LINES,
+      },
     )
     return normalizeDiffs(result.data ?? [])
   })
   const files = createMemo(() => diff() ?? [])
   const [focus, setFocus] = createSignal<DiffViewerFocus>("patches")
-  const [fileTreeEnabled, setFileTreeEnabled] = createSignal(
-    props.api.kv.get<boolean>(KV_SHOW_FILE_TREE, true) !== false,
-  )
+  const [fileTreeEnabled, setFileTreeEnabled] = createSignal(config.data.diffs?.tree ?? true)
   const showFileTree = createMemo(() => showDiffViewerFileTree(fileTreeEnabled(), files().length))
-  const [singlePatch, setSinglePatch] = createSignal(props.api.kv.get<boolean>(KV_SINGLE_PATCH, false) === true)
+  const [singlePatch, setSinglePatch] = createSignal(config.data.diffs?.single ?? false)
   const patchPaneWidth = createMemo(() => dimensions().width - (showFileTree() ? 33 : 0) - 4)
   const patchLeftBorder = createMemo<BorderSides[]>(() => (showFileTree() ? ["left"] : []))
   const splitAvailable = createMemo(() => patchPaneWidth() >= MIN_SPLIT_WIDTH)
   const defaultView = createMemo(() => {
-    if (props.api.tuiConfig.diff_style === "stacked") return "unified"
+    if (props.api.tuiConfig.diffs?.view === "unified") return "unified"
+    if (props.api.tuiConfig.diffs?.view === "split") return "split"
     return splitAvailable() ? "split" : "unified"
   })
-  const [viewOverride, setViewOverride] = createSignal<DiffView | undefined>(storedView(props.api.kv.get(KV_VIEW)))
+  const [viewOverride, setViewOverride] = createSignal<DiffView | undefined>(storedView(config.data.diffs?.view))
   const view = createMemo(() => (splitAvailable() ? (viewOverride() ?? defaultView()) : "unified"))
   const fileTree = createMemo(() => buildFileTree(files()))
   const [expandedFileNodes, setExpandedFileNodes] = createSignal<ReadonlySet<number>>(new Set())
@@ -617,23 +601,33 @@ function DiffViewer(props: { api: TuiPluginApi }) {
       name: "diff.toggle_file_tree",
       title: "Toggle diff viewer file tree",
       category: "VCS",
+      hidden: true,
       run() {
         const next = !fileTreeEnabled()
         if (!next) setFocus("patches")
         setFileTreeEnabled(next)
-        props.api.kv.set(KV_SHOW_FILE_TREE, next)
+        void config
+          .update((draft) => {
+            draft.diffs = { ...draft.diffs, tree: next }
+          })
+          .catch(() => {})
       },
     },
     {
       name: "diff.single_patch",
       title: "Toggle single patch view",
       category: "VCS",
+      hidden: true,
       run() {
         setSelectedHunk(undefined)
         if (!singlePatch()) {
           ensureHighlightedPatchFile()
           setSinglePatch(true)
-          props.api.kv.set(KV_SINGLE_PATCH, true)
+          void config
+            .update((draft) => {
+              draft.diffs = { ...draft.diffs, single: true }
+            })
+            .catch(() => {})
           scrollSinglePatchToTop()
           return
         }
@@ -647,7 +641,11 @@ function DiffViewer(props: { api: TuiPluginApi }) {
           )
         if (fileIndex !== undefined) selectPatchFile(fileIndex)
         setSinglePatch(false)
-        props.api.kv.set(KV_SINGLE_PATCH, false)
+        void config
+          .update((draft) => {
+            draft.diffs = { ...draft.diffs, single: false }
+          })
+          .catch(() => {})
         if (fileIndex !== undefined) scrollToPatchFileIndexAfterRender(fileIndex)
       },
     },
@@ -663,12 +661,17 @@ function DiffViewer(props: { api: TuiPluginApi }) {
       name: "diff.toggle_view",
       title: "Toggle diff viewer split or unified view",
       category: "VCS",
+      hidden: true,
       run() {
         if (!splitAvailable()) return
         setSelectedHunk(undefined)
         const next = view() === "split" ? "unified" : "split"
         setViewOverride(next)
-        props.api.kv.set(KV_VIEW, next)
+        void config
+          .update((draft) => {
+            draft.diffs = { ...draft.diffs, view: next }
+          })
+          .catch(() => {})
       },
     },
     {
@@ -682,26 +685,16 @@ function DiffViewer(props: { api: TuiPluginApi }) {
   ]
 
   const switchDiffOptions = createMemo(() => {
-    const vcs = props.api.state.vcs
     return [
       {
         title: "Working tree",
-        value: "git" as const,
+        value: "working" as const,
         description: "Show current git changes",
       },
-      ...(vcs?.branch && vcs.default_branch && vcs.branch !== vcs.default_branch
-        ? [
-            {
-              title: "Main branch",
-              value: "branch" as const,
-              description: "Show changes compared to main branch",
-            },
-          ]
-        : []),
       {
-        title: "Last turn",
-        value: "last-turn" as const,
-        description: "Show changes from the last assistant turn",
+        title: "Main branch",
+        value: "branch" as const,
+        description: "Show changes compared to main branch",
       },
     ]
   })
@@ -720,7 +713,6 @@ function DiffViewer(props: { api: TuiPluginApi }) {
             props.api.route.navigate(ROUTE, {
               mode: option.value,
               sessionID: params()?.sessionID,
-              messageID: params()?.messageID,
               returnRoute: params()?.returnRoute,
             })
           },
@@ -989,7 +981,7 @@ function DiffViewerHelpDialog() {
     {
       shortcut: useCommandShortcut("diff.switch_source"),
       action: "Switch source",
-      description: "Choose working tree, main branch, or last-turn changes",
+      description: "Choose working tree or main branch changes",
     },
     {
       shortcut: useCommandShortcut("diff.toggle_view"),
@@ -1060,7 +1052,7 @@ const tui: TuiPlugin = async (api) => {
         namespace: "palette",
         run() {
           api.route.navigate(ROUTE, {
-            mode: "git",
+            mode: "working",
             sessionID: "params" in api.route.current ? api.route.current.params?.sessionID : undefined,
             returnRoute: api.route.current,
           })

@@ -28,7 +28,7 @@ import { SessionV2 } from "@opencode-ai/core/session"
 import { McpTool } from "@opencode-ai/core/tool/mcp"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
-import { Deferred, Effect, Exit, Fiber, Layer, Stream } from "effect"
+import { Deferred, Effect, Exit, Fiber, Layer, Schema, Stream } from "effect"
 import { testEffect } from "./lib/effect"
 import { location } from "./fixture/location"
 import { settleTool, toolDefinitions, toolIdentity, waitForTool } from "./lib/tool"
@@ -47,7 +47,9 @@ type ResourceTemplatePage = {
   nextCursor?: string
 }
 
-function resourceServer(input: { resources?: boolean; listChanged?: boolean } = {}) {
+function resourceServer(
+  input: { resources?: boolean; listChanged?: boolean; emptyElicitation?: boolean; urlElicitation?: boolean } = {},
+) {
   return Effect.acquireRelease(
     Effect.promise(async () => {
       const state = {
@@ -71,7 +73,42 @@ function resourceServer(input: { resources?: boolean; listChanged?: boolean } = 
           },
         },
       )
-      protocol.setRequestHandler(ListToolsRequestSchema, () => Promise.resolve({ tools: [] }))
+      protocol.setRequestHandler(ListToolsRequestSchema, () =>
+        Promise.resolve({
+          tools: input.emptyElicitation
+            ? [{ name: "empty-elicitation", inputSchema: { type: "object" as const, properties: {} } }]
+            : input.urlElicitation
+              ? [{ name: "url-elicitation", inputSchema: { type: "object" as const, properties: {} } }]
+              : [],
+        }),
+      )
+      if (input.emptyElicitation) {
+        protocol.setRequestHandler(CallToolRequestSchema, async () => {
+          const result = await protocol.elicitInput({
+            mode: "form",
+            message: "Confirm",
+            requestedSchema: { type: "object", properties: {} },
+          })
+          return {
+            content: [{ type: "text", text: JSON.stringify(result) }],
+            structuredContent: result,
+          }
+        })
+      }
+      if (input.urlElicitation) {
+        protocol.setRequestHandler(CallToolRequestSchema, async () => {
+          const result = await protocol.elicitInput({
+            mode: "url",
+            message: "Authorize access",
+            url: "https://example.com/authorize",
+            elicitationId: "elicitation-test",
+          })
+          return {
+            content: [{ type: "text", text: JSON.stringify(result) }],
+            structuredContent: result,
+          }
+        })
+      }
       if (input.resources !== false) {
         protocol.setRequestHandler(ListResourcesRequestSchema, (request) => {
           state.resourceLists += 1
@@ -98,6 +135,7 @@ function resourceServer(input: { resources?: boolean; listChanged?: boolean } = 
         state,
         url: http.url.toString(),
         sendResourceListChanged: () => protocol.sendResourceListChanged(),
+        completeElicitation: () => protocol.createElicitationCompletionNotifier("elicitation-test")(),
         close: async () => {
           await protocol.close().catch(() => {})
           await http.stop(true)
@@ -108,10 +146,11 @@ function resourceServer(input: { resources?: boolean; listChanged?: boolean } = 
   )
 }
 
-function resourceMcpLayer(url: string) {
+function resourceMcpLayer(url: string, onFormCreated?: (form: Form.Info) => Effect.Effect<void>) {
   const directory = AbsolutePath.make(import.meta.dir)
   const unusedIntegration = () => Effect.die("unused integration service")
   return MCP.layer.pipe(
+    Layer.provideMerge(Form.layer),
     Layer.provide(
       Layer.mergeAll(
         Layer.succeed(
@@ -133,14 +172,16 @@ function resourceMcpLayer(url: string) {
         Layer.succeed(Location.Service, Location.Service.of(location({ directory }))),
         Layer.mock(EventV2.Service, {
           subscribe: () => Stream.never,
-          publish: (definition, data) =>
-            Effect.succeed({
+          publish: (definition, data) => {
+            const event = {
               id: EventV2.ID.create(),
               type: definition.type,
               data,
-            } as EventV2.Payload<typeof definition>),
+            } as EventV2.Payload<typeof definition>
+            if (event.type !== Form.Event.Created.type || !onFormCreated) return Effect.succeed(event)
+            return onFormCreated(Schema.decodeUnknownSync(Form.Event.Created.data)(data).form).pipe(Effect.as(event))
+          },
         }),
-        Layer.mock(Form.Service, {}),
         Layer.mock(Integration.Service, {
           connection: {
             active: unusedIntegration,
@@ -485,6 +526,53 @@ test("skips MCP resource requests when the capability is absent", async () => {
           resources: 0,
           templates: 0,
         })
+      }),
+    ),
+  )
+})
+
+test("accepts empty MCP elicitations without creating forms", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const server = yield* resourceServer({ resources: false, emptyElicitation: true })
+        const result = yield* Effect.gen(function* () {
+          const service = yield* MCP.Service
+          const forms = yield* Form.Service
+          const result = yield* service.callTool({ server: "resources", name: "empty-elicitation" })
+          expect(yield* forms.list()).toEqual([])
+          return result
+        }).pipe(Effect.provide(resourceMcpLayer(server.url)))
+
+        expect(result.structured).toEqual({ action: "accept", content: {} })
+      }),
+    ),
+  )
+})
+
+test("acknowledges completed MCP URL elicitations without returning internal content", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const server = yield* resourceServer({ resources: false, urlElicitation: true })
+        const created = yield* Deferred.make<Form.Info>()
+        const result = yield* Effect.gen(function* () {
+          const service = yield* MCP.Service
+          const forms = yield* Form.Service
+          const call = yield* service.callTool({ server: "resources", name: "url-elicitation" }).pipe(Effect.forkScoped)
+
+          const form = yield* Deferred.await(created)
+          expect(form.fields).toEqual([{ key: "elicitation", type: "external", url: "https://example.com/authorize" }])
+
+          yield* Effect.promise(server.completeElicitation)
+          const result = yield* Fiber.join(call)
+          expect(yield* forms.state(form.id)).toEqual({ status: "answered", answer: { elicitation: true } })
+          return result
+        }).pipe(
+          Effect.provide(resourceMcpLayer(server.url, (form) => Deferred.succeed(created, form).pipe(Effect.asVoid))),
+        )
+
+        expect(result.structured).toEqual({ action: "accept" })
       }),
     ),
   )

@@ -5,29 +5,22 @@ import { Catalog } from "./catalog"
 import { CommandV2 } from "./command"
 import { Config } from "./config"
 import { LayerNode } from "./effect/layer-node"
-import { makeLocationNode, Node } from "./effect/app-node"
-import { httpClient } from "./effect/app-node-platform"
+import { Node } from "./effect/app-node"
 import { EventV2 } from "./event"
 import { FileMutation } from "./file-mutation"
 import { FileSystem } from "./filesystem"
 import { FileSystemSearch } from "./filesystem/search"
-import { FSUtil } from "./fs-util"
 import { Generate } from "./generate"
 import { Form } from "./form"
-import { Global } from "./global"
-import { LocationWatcher } from "./filesystem/location-watcher"
 import { Image } from "./image"
+import { LocationWatcher } from "./filesystem/location-watcher"
 import { Integration } from "./integration"
 import { Location } from "./location"
 import { LocationMutation } from "./location-mutation"
 import { LocationServiceMap } from "./location-service-map"
 import { MCP } from "./mcp/index"
-import { ModelsDev } from "./models-dev"
-import { Npm } from "./npm"
 import { PermissionV2 } from "./permission"
 import { PluginV2 } from "./plugin"
-import { PluginRuntime } from "./plugin/runtime"
-import { SdkPlugins } from "./plugin/sdk"
 import { PluginSupervisor } from "./plugin/supervisor"
 import { ProjectCopy } from "./project/copy"
 import { Pty } from "./pty"
@@ -35,12 +28,10 @@ import { QuestionV2 } from "./question"
 import { Shell } from "./shell"
 import { Reference } from "./reference"
 import { ReferenceGuidance } from "./reference/guidance"
-import { Ripgrep } from "./ripgrep"
 import { SessionRunnerLLM } from "./session/runner/llm"
 import { SessionRunnerModel } from "./session/runner/model"
 import { SessionCompaction } from "./session/compaction"
 import { SessionTitle } from "./session/title"
-import { SessionTodo } from "./session/todo"
 import { SkillV2 } from "./skill"
 import { SkillGuidance } from "./skill/guidance"
 import { Snapshot } from "./snapshot"
@@ -51,48 +42,10 @@ import { SessionInstructions } from "./session/instructions"
 import { McpTool } from "./tool/mcp"
 import { ReadToolFileSystem } from "./tool/read-filesystem"
 import { ToolRegistry } from "./tool/registry"
-import { WebSearchTool } from "./tool/websearch"
 import { ToolOutputStore } from "./tool-output-store"
 import { Vcs } from "./vcs"
 
 export { LocationServiceMap } from "./location-service-map"
-
-const pluginSupervisorNode = makeLocationNode({
-  service: PluginSupervisor.Service,
-  layer: PluginSupervisor.layer,
-  deps: [
-    PluginV2.node,
-    SdkPlugins.node,
-    AgentV2.node,
-    Catalog.node,
-    CommandV2.node,
-    Config.node,
-    EventV2.node,
-    FileMutation.node,
-    FileSystem.node,
-    FSUtil.node,
-    Global.node,
-    httpClient,
-    Image.node,
-    Integration.node,
-    Location.node,
-    LocationMutation.node,
-    ModelsDev.node,
-    Npm.node,
-    PermissionV2.node,
-    PluginRuntime.node,
-    Form.node,
-    ReadToolFileSystem.node,
-    Reference.node,
-    Ripgrep.node,
-    SessionInstructions.node,
-    SessionTodo.node,
-    Shell.node,
-    SkillV2.node,
-    ToolRegistry.toolsNode,
-    WebSearchTool.configNode,
-  ],
-})
 
 const locationServiceNodes = [
   Location.node,
@@ -104,7 +57,7 @@ const locationServiceNodes = [
   Catalog.node,
   AISDK.node,
   PluginV2.node,
-  pluginSupervisorNode,
+  PluginSupervisor.node,
   ProjectCopy.node,
   ProjectCopy.refreshNode,
   FileSystemSearch.node,
@@ -124,7 +77,6 @@ const locationServiceNodes = [
   Image.node,
   SkillGuidance.node,
   ReferenceGuidance.node,
-  SessionTodo.node,
   InstructionEntry.node,
   Form.node,
   QuestionV2.node,

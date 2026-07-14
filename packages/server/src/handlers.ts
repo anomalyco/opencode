@@ -13,6 +13,7 @@ import { EventHandler } from "./handlers/event"
 import { AgentHandler } from "./handlers/agent"
 import { PluginHandler } from "./handlers/plugin"
 import { HealthHandler } from "./handlers/health"
+import { ServerHandler } from "./handlers/server"
 import { DebugHandler } from "./handlers/debug"
 import { PtyHandler } from "./handlers/pty"
 import { ShellHandler } from "./handlers/shell"
@@ -25,9 +26,11 @@ import { CredentialHandler } from "./handlers/credential"
 import { ProjectHandler } from "./handlers/project"
 import { ProjectCopyHandler } from "./handlers/project-copy"
 import { VcsHandler } from "./handlers/vcs"
+import { EventFeed } from "./event-feed"
 
 export const handlers = Layer.mergeAll(
   HealthHandler,
+  ServerHandler,
   DebugHandler,
   LocationHandler,
   AgentHandler,
@@ -46,7 +49,7 @@ export const handlers = Layer.mergeAll(
   FileSystemHandler,
   CommandHandler,
   SkillHandler,
-  EventHandler,
+  EventHandler.pipe(Layer.provide(EventFeed.layer)),
   PtyHandler,
   ShellHandler,
   QuestionHandler,

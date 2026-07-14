@@ -4,6 +4,7 @@ import type { Plugin } from "@opencode-ai/plugin/v2/effect/plugin"
 import { Context, Effect, Layer } from "effect"
 import { makeGlobalNode } from "../effect/app-node"
 import { EventV2 } from "../event"
+import type { PluginV2 } from "../plugin"
 
 export const Updated = EventV2.ephemeral({ type: "sdk.plugin.updated", schema: {} })
 
@@ -20,7 +21,7 @@ export const Updated = EventV2.ephemeral({ type: "sdk.plugin.updated", schema: {
  */
 export interface Interface {
   readonly register: (plugin: Plugin) => Effect.Effect<void>
-  readonly all: () => readonly Plugin[]
+  readonly all: () => readonly PluginV2.Versioned[]
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SdkPlugins") {}
@@ -29,11 +30,12 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const events = yield* EventV2.Service
-    const plugins = new Map<string, Plugin>()
+    const plugins = new Map<string, PluginV2.Versioned>()
+    let revision = 0
     return Service.of({
       register: (plugin) =>
         Effect.sync(() => {
-          plugins.set(plugin.id, plugin)
+          plugins.set(plugin.id, { ...plugin, version: String(++revision) })
         }).pipe(Effect.andThen(events.publish(Updated, {})), Effect.asVoid),
       all: () => [...plugins.values()],
     })

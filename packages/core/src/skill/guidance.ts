@@ -3,7 +3,6 @@ export * as SkillGuidance from "./guidance"
 import { makeLocationNode } from "../effect/app-node"
 import { Context, Effect, Layer, Schema } from "effect"
 import { AgentV2 } from "../agent"
-import { PermissionV2 } from "../permission"
 import { SkillV2 } from "../skill"
 import { Instructions } from "../instructions/index"
 
@@ -73,8 +72,6 @@ const layer = Layer.effect(
         const agent = selection.info
         if (!agent) return Instructions.empty
         const permitted = SkillV2.available(yield* skills.list(), agent)
-        if (permitted.length === 0 && PermissionV2.evaluate("skill", "*", agent.permissions).effect === "deny")
-          return Instructions.empty
         const available = permitted
           .flatMap((skill) =>
             skill.description === undefined || skill.autoinvoke === false
@@ -82,13 +79,15 @@ const layer = Layer.effect(
               : [{ id: skill.id, name: skill.name, description: skill.description }],
           )
           .toSorted((a, b) => a.id.localeCompare(b.id))
-        return Instructions.make({
+        return Instructions.make<ReadonlyArray<Summary>>({
           key: Instructions.Key.make("core/skill-guidance"),
           codec: Schema.toCodecJson(Schema.Array(Summary)),
-          load: Effect.succeed(available),
-          baseline: render,
-          update,
-          removed: () => "Skill guidance is no longer available. Do not use any previously listed skill.",
+          read: Effect.succeed(available.length === 0 ? Instructions.removed : available),
+          render: {
+            initial: render,
+            changed: update,
+            removed: () => "Skill guidance is no longer available. Do not use any previously listed skill.",
+          },
         })
       }),
     })

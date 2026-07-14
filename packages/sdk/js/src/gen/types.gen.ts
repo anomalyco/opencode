@@ -493,33 +493,6 @@ export type EventFileEdited = {
   }
 }
 
-export type Todo = {
-  /**
-   * Brief description of the task
-   */
-  content: string
-  /**
-   * Current status of the task: pending, in_progress, completed, cancelled
-   */
-  status: string
-  /**
-   * Priority level of the task: high, medium, low
-   */
-  priority: string
-  /**
-   * Unique identifier for the todo item
-   */
-  id: string
-}
-
-export type EventTodoUpdated = {
-  type: "todo.updated"
-  properties: {
-    sessionID: string
-    todos: Array<Todo>
-  }
-}
-
 export type EventCommandExecuted = {
   type: "command.executed"
   properties: {
@@ -717,7 +690,6 @@ export type Event =
   | EventSessionIdle
   | EventSessionCompacted
   | EventFileEdited
-  | EventTodoUpdated
   | EventCommandExecuted
   | EventSessionCreated
   | EventSessionUpdated
@@ -2271,42 +2243,6 @@ export type SessionChildrenResponses = {
 }
 
 export type SessionChildrenResponse = SessionChildrenResponses[keyof SessionChildrenResponses]
-
-export type SessionTodoData = {
-  body?: never
-  path: {
-    /**
-     * Session ID
-     */
-    id: string
-  }
-  query?: {
-    directory?: string
-  }
-  url: "/session/{id}/todo"
-}
-
-export type SessionTodoErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-  /**
-   * Not found
-   */
-  404: NotFoundError
-}
-
-export type SessionTodoError = SessionTodoErrors[keyof SessionTodoErrors]
-
-export type SessionTodoResponses = {
-  /**
-   * Todo list
-   */
-  200: Array<Todo>
-}
-
-export type SessionTodoResponse = SessionTodoResponses[keyof SessionTodoResponses]
 
 export type SessionInitData = {
   body?: {

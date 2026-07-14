@@ -5,7 +5,13 @@ import { testRender, useRenderer } from "@opentui/solid"
 import { expect, test } from "bun:test"
 import { onCleanup } from "solid-js"
 import { TuiKeybind } from "../src/config/keybind"
-import { getOpencodeModeStack, OPENCODE_BASE_MODE, OpencodeKeymapProvider, registerOpencodeKeymap } from "../src/keymap"
+import {
+  formatKeySequence,
+  getOpencodeModeStack,
+  OPENCODE_BASE_MODE,
+  OpencodeKeymapProvider,
+  registerOpencodeKeymap,
+} from "../src/keymap"
 
 function createResolvedKeymapConfig(input: TuiKeybind.KeybindOverrides = {}) {
   const keybinds = TuiKeybind.parse(input)
@@ -57,6 +63,47 @@ test("legacy page key aliases compile as page keys", async () => {
     expect(sequences).toEqual({
       up: [["pageup"]],
       down: [["pagedown"]],
+    })
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("formats navigation keys as arrows", async () => {
+  const shortcuts: Record<string, string> = {}
+
+  function Harness() {
+    const renderer = useRenderer()
+    const keymap = createDefaultOpenTuiKeymap(renderer)
+    const config = createResolvedKeymapConfig()
+    const offKeymap = registerOpencodeKeymap(keymap, renderer, config)
+    const commands = ["session.parent", "session.child.first", "session.child.previous", "session.child.next"]
+    const offLayer = keymap.registerLayer({
+      bindings: config.keybinds.gather("test.arrows", commands),
+    })
+    const bindings = keymap.getCommandBindings({ visibility: "registered", commands })
+    commands.forEach((command) => {
+      shortcuts[command] = formatKeySequence(bindings.get(command)?.[0]?.sequence, config)
+    })
+    onCleanup(() => {
+      offLayer()
+      offKeymap()
+    })
+
+    return (
+      <OpencodeKeymapProvider keymap={keymap}>
+        <box />
+      </OpencodeKeymapProvider>
+    )
+  }
+
+  const app = await testRender(() => <Harness />)
+  try {
+    expect(shortcuts).toEqual({
+      "session.parent": "↑",
+      "session.child.first": "↓",
+      "session.child.previous": "←",
+      "session.child.next": "→",
     })
   } finally {
     app.renderer.destroy()

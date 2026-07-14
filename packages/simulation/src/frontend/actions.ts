@@ -1,7 +1,7 @@
-import { mkdtemp } from "node:fs/promises"
+import { mkdir } from "node:fs/promises"
 import { tmpdir } from "node:os"
-import { join } from "node:path"
-import type { CapturedFrame, CliRenderer, Renderable } from "@opentui/core"
+import { extname, join, resolve } from "node:path"
+import type { CliRenderer, Renderable } from "@opentui/core"
 import { createMockKeys, createMockMouse, type MockInput, type MockMouse } from "@opentui/core/testing"
 import type { SimulationProtocol } from "../protocol"
 import { SimulationRenderer } from "./renderer"
@@ -14,6 +14,7 @@ export interface Harness {
   readonly renderer: CliRenderer
   readonly mockInput: MockInput
   readonly mockMouse: MockMouse
+  readonly resize: (cols: number, rows: number) => void
   readonly renderOnce: () => Promise<void>
   readonly screen: () => string
 }
@@ -61,15 +62,20 @@ export function createHarness(renderer: CliRenderer): Harness {
     renderer,
     mockInput: setup?.mockInput ?? createMockKeys(renderer),
     mockMouse: setup?.mockMouse ?? createMockMouse(renderer),
+    resize: setup?.resize ?? ((cols, rows) => renderer.resize(cols, rows)),
     renderOnce:
       setup?.renderOnce ??
       (async () => {
         renderer.requestRender()
         await renderer.idle()
       }),
-    screen:
-      setup?.captureCharFrame ??
-      (() => decoder.decode((Reflect.get(renderer, "currentRenderBuffer") as RenderBuffer).getRealCharBytes(true))),
+    // captureCharFrame follows the test renderer's output sink. Recording
+    // redirects that sink to the timeline, so read the live render buffer
+    // instead; it is also the source used by screenshots.
+    screen: () =>
+      decoder.decode(
+        (Reflect.get(renderer, "currentRenderBuffer") as RenderBuffer).getRealCharBytes(),
+      ),
   }
 }
 
@@ -104,64 +110,28 @@ export function state(harness: Harness) {
   }
 }
 
-export async function screenshot(harness: Harness) {
+export function matches(harness: Pick<Harness, "screen">, text: string) {
+  return harness.screen().includes(text)
+}
+
+export async function screenshot(harness: Harness, name?: string) {
   await harness.renderOnce()
   const image = SimulationPng.screenshot(harness.renderer)
-  const path = join(await mkdtemp(join(tmpdir(), "opencode-drive-")), "screenshot.png")
+  const filename = name ?? `screenshot-${crypto.randomUUID()}`
+  if (
+    !filename ||
+    filename.includes("/") ||
+    filename.includes("\\") ||
+    extname(filename)
+  )
+    throw new Error("screenshot name must not contain a path or extension")
+  const directory = resolve(
+    process.env.OPENCODE_DRIVE_MEDIA_DIR ??
+      join(tmpdir(), "opencode-drive", "output"),
+  )
+  await mkdir(directory, { recursive: true })
+  const path = join(directory, `${filename}.png`)
   await Bun.write(path, image.data)
-  return path
-}
-
-export function frame(harness: Harness): CapturedFrame {
-  const buffer = harness.renderer.currentRenderBuffer
-  return {
-    cols: buffer.width,
-    rows: buffer.height,
-    cursor: [0, 0],
-    lines: buffer.getSpanLines().map((line) => ({
-      spans: line.spans.map((span) => ({
-        text: span.text,
-        fg: span.fg,
-        bg: span.bg,
-        attributes: span.attributes,
-        width: span.width,
-      })),
-    })),
-  }
-}
-
-export async function video(frames: CapturedFrame[]) {
-  const directory = await mkdtemp(join(tmpdir(), "opencode-drive-recording-"))
-  await Promise.all(
-    frames.map((frame, index) =>
-      Bun.write(
-        join(directory, `frame-${index.toString().padStart(6, "0")}.png`),
-        SimulationPng.screenshotFrame(frame).data,
-      ),
-    ),
-  )
-  const path = join(directory, "recording.mp4")
-  const process = Bun.spawn(
-    [
-      "ffmpeg",
-      "-loglevel",
-      "error",
-      "-framerate",
-      "10",
-      "-i",
-      join(directory, "frame-%06d.png"),
-      "-c:v",
-      "libx264",
-      "-pix_fmt",
-      "yuv420p",
-      "-movflags",
-      "+faststart",
-      "-y",
-      path,
-    ],
-    { stderr: "pipe" },
-  )
-  if ((await process.exited) !== 0) throw new Error(`ffmpeg failed: ${await new Response(process.stderr).text()}`)
   return path
 }
 
@@ -180,10 +150,19 @@ export async function execute(harness: Harness, action: Action) {
       harness.mockInput.pressArrow(action.direction)
       break
     case "ui.focus":
-      all(harness.renderer.root).find((item) => item.num === action.target)?.focus()
+      all(harness.renderer.root)
+        .find((item) => item.num === action.target)
+        ?.focus()
       break
     case "ui.click":
       await harness.mockMouse.click(action.x, action.y)
+      break
+    case "ui.resize":
+      if (!Number.isSafeInteger(action.cols) || action.cols <= 0 || !Number.isSafeInteger(action.rows) || action.rows <= 0) {
+        throw new Error("resize cols and rows must be positive integers")
+      }
+      harness.resize(action.cols, action.rows)
+      SimulationRenderer.recordResize(harness.renderer, action.cols, action.rows)
       break
   }
   await harness.renderOnce()

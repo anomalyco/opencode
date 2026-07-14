@@ -838,13 +838,18 @@ const scenarios: Scenario[] = [
     .at((ctx) => ({
       path: route("/api/session/{sessionID}/form", { sessionID: ctx.state.id }),
       headers: ctx.headers(),
-      body: { mode: "url", url: "https://example.com/form" },
+      body: {
+        title: "External form",
+        fields: [{ key: "authorization", type: "external", url: "https://example.com/form" }],
+      },
     }))
     .json(200, (body) => {
       object(body)
       object(body.data)
       check(typeof body.data.id === "string", "form create should return an ID")
-      check(body.data.mode === "url", "form create should preserve URL mode")
+      array(body.data.fields)
+      object(body.data.fields[0])
+      check(body.data.fields[0].type === "external", "form create should preserve the external field")
     }),
   http.protected
     .get("/api/session/{sessionID}/form/{formID}", "v2.session.form.get")
@@ -1082,6 +1087,14 @@ const scenarios: Scenario[] = [
       headers: ctx.headers(),
     }))
     .json(404, object, "status"),
+  http.protected
+    .get("/api/session/{sessionID}/pending", "v2.session.pending.list")
+    .seeded((ctx) => ctx.session({ title: "Pending list owner" }))
+    .at((ctx) => ({
+      path: route("/api/session/{sessionID}/pending", { sessionID: ctx.state.id }),
+      headers: ctx.headers(),
+    }))
+    .json(200, data(array)),
   http.protected
     .post("/api/session/{sessionID}/revert/stage", "v2.session.revert.stage")
     .at((ctx) => ({
@@ -1325,23 +1338,6 @@ const scenarios: Scenario[] = [
         body.some((item) => isRecord(item) && item.id === ctx.state.child.id && item.parentID === ctx.state.parent.id),
         "children should include seeded child",
       )
-    }),
-  http.protected
-    .get("/session/{sessionID}/todo", "session.todo")
-    .seeded((ctx) =>
-      Effect.gen(function* () {
-        const session = yield* ctx.session({ title: "Todo session" })
-        const todos = [{ content: "cover session todo", status: "pending" as const, priority: "high" as const }]
-        yield* ctx.todos(session.id, todos)
-        return { session, todos }
-      }),
-    )
-    .at((ctx) => ({
-      path: route("/session/{sessionID}/todo", { sessionID: ctx.state.session.id }),
-      headers: ctx.headers(),
-    }))
-    .json(200, (body, ctx) => {
-      check(stable(body) === stable(ctx.state.todos), "todos should match seeded state")
     }),
   http.protected
     .get("/session/{sessionID}/diff", "session.diff")

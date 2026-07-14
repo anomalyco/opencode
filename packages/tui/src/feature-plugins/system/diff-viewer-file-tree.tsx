@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 import type { ColorInput, RGBA, ScrollBoxRenderable } from "@opentui/core"
 import { Locale } from "../../util/locale"
-import { tint } from "../../context/theme"
+import { tint } from "../../theme/color"
 import { createEffect, createMemo, For, Match, Switch } from "solid-js"
 import { buildFileTree, flattenFileTree, type FileTreeItem, type FileTreeRow } from "./diff-viewer-file-tree-utils"
 import { Panel } from "./diff-viewer-ui"

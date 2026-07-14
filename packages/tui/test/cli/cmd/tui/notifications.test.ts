@@ -1,13 +1,19 @@
 import { describe, expect, test } from "bun:test"
 import Notifications from "../../../../src/feature-plugins/system/notifications"
-import type { PermissionRequest, QuestionRequest, Session, V2Event } from "@opencode-ai/sdk/v2"
-import type { TuiAttentionNotifyInput } from "@opencode-ai/plugin/tui"
+import type { OpenCodeEvent, PermissionAsked, QuestionAsked } from "@opencode-ai/client"
+import type { TuiAttentionNotifyInput, TuiPluginApi } from "@opencode-ai/plugin/tui"
 import { createTuiPluginApi } from "../../../fixture/tui-plugin"
+
+type Session = NonNullable<ReturnType<TuiPluginApi["state"]["session"]["get"]>>
 
 async function setup() {
   const notifications: TuiAttentionNotifyInput[] = []
-  const handlers = new Map<V2Event["type"], ((event: V2Event) => void)[]>()
-  const session = (id: string, title: string, parentID?: string): Session => ({
+  const handlers = new Map<OpenCodeEvent["type"], ((event: OpenCodeEvent) => void)[]>()
+  const session = (
+    id: string,
+    title: string,
+    parentID?: string,
+  ): Session => ({
     id,
     title,
     slug: id,
@@ -33,9 +39,12 @@ async function setup() {
         },
       },
       event: {
-        on: <Type extends V2Event["type"]>(type: Type, handler: (event: Extract<V2Event, { type: Type }>) => void) => {
+        on: <Type extends OpenCodeEvent["type"]>(
+          type: Type,
+          handler: (event: Extract<OpenCodeEvent, { type: Type }>) => void,
+        ) => {
           const list = handlers.get(type) ?? []
-          const wrapped = handler as (event: V2Event) => void
+          const wrapped = handler as (event: OpenCodeEvent) => void
           list.push(wrapped)
           handlers.set(type, list)
           return () => {
@@ -59,13 +68,13 @@ async function setup() {
 
   return {
     notifications,
-    emit(event: V2Event) {
+    emit(event: OpenCodeEvent) {
       for (const handler of handlers.get(event.type) ?? []) handler(event)
     },
   }
 }
 
-function question(id: string, sessionID = "session"): QuestionRequest {
+function question(id: string, sessionID = "session"): QuestionAsked["data"] {
   return {
     id,
     sessionID,
@@ -73,16 +82,16 @@ function question(id: string, sessionID = "session"): QuestionRequest {
   }
 }
 
-function form(id: string, sessionID = "session"): Extract<V2Event, { type: "form.created" }>["data"]["form"] {
+function form(id: string, sessionID = "session"): Extract<OpenCodeEvent, { type: "form.created" }>["data"]["form"] {
   return {
     id,
     sessionID,
-    mode: "form",
-    fields: [],
+    title: "Input requested",
+    fields: [{ key: "authorization", type: "external", url: "https://example.com" }],
   }
 }
 
-function permission(id: string, sessionID = "session"): PermissionRequest {
+function permission(id: string, sessionID = "session"): PermissionAsked["data"] {
   return {
     id,
     sessionID,
@@ -97,7 +106,7 @@ function durable(sessionID: string): { aggregateID: string; seq: number; version
   return { aggregateID: sessionID, seq: 0, version: 1 }
 }
 
-function executionStarted(id: string, sessionID = "session"): V2Event {
+function executionStarted(id: string, sessionID = "session"): OpenCodeEvent {
   return {
     id,
     created: 0,
@@ -107,7 +116,7 @@ function executionStarted(id: string, sessionID = "session"): V2Event {
   }
 }
 
-function executionSucceeded(id: string, sessionID = "session"): V2Event {
+function executionSucceeded(id: string, sessionID = "session"): OpenCodeEvent {
   return {
     id,
     created: 0,
@@ -117,7 +126,7 @@ function executionSucceeded(id: string, sessionID = "session"): V2Event {
   }
 }
 
-function executionFailed(id: string, sessionID = "session"): V2Event {
+function executionFailed(id: string, sessionID = "session"): OpenCodeEvent {
   return {
     id,
     created: 0,
@@ -138,10 +147,20 @@ const questionNotification: TuiAttentionNotifyInput = {
 }
 
 const formNotification: TuiAttentionNotifyInput = {
-  title: "Demo session",
+  title: "Input requested",
   message: "Input needs response",
   notification: { when: "blurred" },
   sound: { name: "question", when: "always" },
+}
+
+const titledFormNotification: TuiAttentionNotifyInput = {
+  ...formNotification,
+  title: "Confirm deployment",
+}
+
+const globalFormNotification: TuiAttentionNotifyInput = {
+  ...formNotification,
+  title: "demo-mcp is requesting input",
 }
 
 const permissionNotification: TuiAttentionNotifyInput = {
@@ -155,19 +174,29 @@ describe("internal notifications TUI plugin", () => {
   test("notifies for form, question, and permission requests with blurred notifications and always-on sounds", async () => {
     const harness = await setup()
 
-    harness.emit({ id: "event-1", created: 0, type: "form.created", data: { form: form("form-1") } })
+    harness.emit({
+      id: "event-1",
+      created: 0,
+      type: "form.created",
+      data: { form: { ...form("form-1"), title: "Confirm deployment" } },
+    })
     harness.emit({ id: "event-2", created: 0, type: "question.asked", data: question("question-1") })
     harness.emit({ id: "event-3", created: 0, type: "permission.asked", data: permission("permission-1") })
 
-    expect(harness.notifications).toEqual([formNotification, questionNotification, permissionNotification])
+    expect(harness.notifications).toEqual([titledFormNotification, questionNotification, permissionNotification])
   })
 
-  test("ignores global forms until the TUI can render them", async () => {
+  test("notifies for global forms once the TUI can render them", async () => {
     const harness = await setup()
 
-    harness.emit({ id: "event-1", created: 0, type: "form.created", data: { form: form("form-1", "global") } })
+    harness.emit({
+      id: "event-1",
+      created: 0,
+      type: "form.created",
+      data: { form: { ...form("form-1", "global"), title: "demo-mcp is requesting input" } },
+    })
 
-    expect(harness.notifications).toEqual([])
+    expect(harness.notifications).toEqual([globalFormNotification])
   })
 
   test("dedupes pending forms, questions, and permissions until they are resolved", async () => {
@@ -243,14 +272,14 @@ describe("internal notifications TUI plugin", () => {
       id: "event-1",
       created: 0,
       type: "form.created",
-      data: { form: form("form-1", "subagent") },
+      data: { form: { ...form("form-1", "subagent"), title: "Questions" } },
     })
     harness.emit(executionStarted("event-2", "subagent"))
     harness.emit(executionSucceeded("event-3", "subagent"))
 
     expect(harness.notifications).toEqual([
       {
-        title: "Subagent session",
+        title: "Questions",
         message: "Input needs response",
         notification: false,
         sound: { name: "question", when: "always" },

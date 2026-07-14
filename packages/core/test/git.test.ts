@@ -13,6 +13,26 @@ import { testEffect } from "./lib/effect"
 const it = testEffect(LayerNode.compile(Git.node))
 
 describe("Git", () => {
+  it.live("discovers repository metadata without a work tree", () =>
+    Effect.gen(function* () {
+      const root = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+      )
+      yield* Effect.promise(async () => {
+        await initRepo(root.path)
+        await $`git config core.bare true`.cwd(root.path).quiet()
+      })
+      const directory = AbsolutePath.make(yield* Effect.promise(() => fs.realpath(root.path)))
+      const git = yield* Git.Service
+      const repository = yield* git.repo.discover(directory)
+
+      expect(repository?.worktree).toBe(directory)
+      expect(repository?.gitDirectory).toBe(AbsolutePath.make(path.join(directory, ".git")))
+      expect(repository?.commonDirectory).toBe(repository?.gitDirectory)
+    }),
+  )
+
   it.live("clones a remote and reads checkout metadata", () =>
     withRemote((fixture) =>
       Effect.gen(function* () {

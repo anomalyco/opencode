@@ -7,7 +7,8 @@ import {
 } from "@opentui/core"
 import { extend, useRenderer } from "@opentui/solid"
 import { onCleanup, onMount } from "solid-js"
-import { tint, useTheme } from "../context/theme"
+import { useTheme } from "../context/theme"
+import { tint } from "../theme/color"
 import { GoUpsellArtPainter } from "./bg-pulse-render"
 
 type GoUpsellArtOptions = RenderableOptions<FrameBufferRenderable> & {

@@ -25,7 +25,10 @@ export interface EntryPoint {
 }
 
 export interface Interface {
-  readonly add: (pkg: string) => Effect.Effect<EntryPoint, InstallFailedError | EffectFlock.LockError>
+  readonly add: (
+    pkg: string,
+    options?: { readonly subpaths?: readonly string[] },
+  ) => Effect.Effect<EntryPoint, InstallFailedError | EffectFlock.LockError>
   readonly install: (
     dir: string,
     input?: {
@@ -47,13 +50,18 @@ export function sanitize(pkg: string) {
   return Array.from(pkg, (char) => (illegal.has(char) || char.charCodeAt(0) < 32 ? "_" : char)).join("")
 }
 
-const resolveEntryPoint = (name: string, dir: string): EntryPoint => {
-  let entrypoint: string | undefined
-  try {
-    entrypoint = typeof Bun !== "undefined" ? import.meta.resolve(name, dir) : import.meta.resolve(dir)
-  } catch {
-    entrypoint = undefined
-  }
+const resolveEntryPoint = (name: string, dir: string, subpaths: readonly string[] = [""]): EntryPoint => {
+  const entrypoint = subpaths
+    .map((subpath) => {
+      try {
+        return typeof Bun !== "undefined"
+          ? import.meta.resolve([name, subpath].filter(Boolean).join("/"), dir)
+          : import.meta.resolve(dir)
+      } catch {
+        return undefined
+      }
+    })
+    .find((entrypoint) => entrypoint !== undefined)
   return {
     directory: dir,
     entrypoint,
@@ -112,7 +120,7 @@ const layer = Layer.effect(
         }),
       )
 
-    const add = Effect.fn("Npm.add")(function* (pkg: string) {
+    const add = Effect.fn("Npm.add")(function* (pkg: string, options?: { readonly subpaths?: readonly string[] }) {
       const dir = directory(pkg)
       const name = (() => {
         try {
@@ -123,17 +131,17 @@ const layer = Layer.effect(
       })()
 
       if (yield* afs.existsSafe(path.join(dir, "node_modules", name))) {
-        return resolveEntryPoint(name, path.join(dir, "node_modules", name))
+        return resolveEntryPoint(name, path.join(dir, "node_modules", name), options?.subpaths)
       }
 
       const tree = yield* reify({ dir, add: [pkg] })
       const first = tree.edgesOut.values().next().value?.to
       if (!first) {
-        const result = resolveEntryPoint(name, path.join(dir, "node_modules", name))
+        const result = resolveEntryPoint(name, path.join(dir, "node_modules", name), options?.subpaths)
         if (result.entrypoint) return result
         return yield* new InstallFailedError({ add: [pkg], dir })
       }
-      return resolveEntryPoint(first.name, first.path)
+      return resolveEntryPoint(first.name, first.path, options?.subpaths)
     }, Effect.scoped)
 
     const install: Interface["install"] = Effect.fn("Npm.install")(function* (dir, input) {

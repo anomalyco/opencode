@@ -8,7 +8,7 @@ import {
   useKeymapSelector,
   useOpencodeKeymap,
 } from "../keymap"
-import { useTuiConfig } from "../config"
+import { useConfig } from "../config"
 
 type PaletteCommandEntry = ReturnType<OpenTuiKeymap["getCommandEntries"]>[number]
 
@@ -24,7 +24,7 @@ function isSuggestedPaletteCommand(entry: PaletteCommandEntry) {
 }
 
 export function CommandPaletteDialog() {
-  const config = useTuiConfig()
+  const config = useConfig().data
   const keymap = useOpencodeKeymap()
   const entries = useKeymapSelector((keymap: OpenTuiKeymap) => {
     const query = {

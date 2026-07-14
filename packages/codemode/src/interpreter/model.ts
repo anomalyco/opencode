@@ -1,5 +1,5 @@
 import type { SafeObject } from "../tool-runtime.js"
-import type { SandboxURL } from "../values.js"
+import type { CodeModePromise, CodeModeURL } from "../values.js"
 
 export type SourcePosition = {
   line: number
@@ -35,7 +35,7 @@ export type StatementResult =
   | { kind: "continue" }
 
 export type MemberReference = {
-  target: SafeObject | Array<unknown> | SandboxURL
+  target: SafeObject | Array<unknown> | CodeModeURL
   key: string | number
 }
 
@@ -61,10 +61,23 @@ export class ComputedValue {
 
 export class PromiseNamespace {}
 
-export type PromiseMethodName = "all" | "allSettled" | "race" | "resolve" | "reject"
+export type PromiseMethodName = "all" | "allSettled" | "race" | "any" | "resolve" | "reject"
 
 export class PromiseMethodReference {
   constructor(readonly name: PromiseMethodName) {}
+}
+
+export type PromiseInstanceMethodName = "then" | "catch" | "finally"
+
+export class PromiseInstanceMethodReference {
+  constructor(
+    readonly promise: CodeModePromise,
+    readonly name: PromiseInstanceMethodName,
+  ) {}
+}
+
+export class PromiseCapabilityFunction {
+  constructor(readonly settle: (value: unknown) => void) {}
 }
 
 export type GlobalNamespaceName =
@@ -99,6 +112,8 @@ export class UriFunction {
   constructor(readonly name: "encodeURI" | "encodeURIComponent" | "decodeURI" | "decodeURIComponent") {}
 }
 
+export class SearchFunction {}
+
 export class ProgramThrow {
   constructor(readonly value: unknown) {}
 }
@@ -122,11 +137,11 @@ export type DiagnosticKind =
 export const OptionalShortCircuit: unique symbol = Symbol("codemode.optional-short-circuit")
 
 export const supportedSyntaxMessage =
-  "Supported orchestration syntax: tools.* calls (they return promises - resolve them with await), data literals, destructuring, optional chaining, template literals, conditionals, switch, loops (incl. for...of and for...in over object/array/tools keys), arrow functions, spread, try/catch, array methods (map/filter/find/findIndex/some/every/reduce/flatMap/forEach/sort/slice/concat/indexOf/lastIndexOf/at/flat/reverse/includes/join), string methods (incl. match/matchAll/replace/split with regular expressions), Date/RegExp/Map/Set/URL/URLSearchParams, URI encoding helpers, Object/Math/JSON helpers, captured console.log/warn/error/dir/table, and Promise.all/allSettled/race/resolve/reject over arrays mixing promises and plain values for parallel tool calls (promise chaining with .then/.catch is not supported - use await with try/catch)."
+  "Supported orchestration syntax: tools.* calls (they return promises - resolve them with await), data literals, destructuring, optional chaining, template literals, conditionals, switch, loops (incl. for...of and for...in over object/array/tools keys), arrow functions, spread, try/catch, array methods (map/filter/find/findIndex/some/every/reduce/flatMap/forEach/sort/slice/concat/indexOf/lastIndexOf/at/flat/reverse/includes/join), string methods (incl. match/matchAll/replace/split with regular expressions), Date/RegExp/Map/Set/URL/URLSearchParams, URI encoding helpers, Object/Math/JSON helpers, captured console.log/warn/error/dir/table, Promise.all/allSettled/race/any/resolve/reject over arrays mixing promises and plain values for parallel tool calls, promise chaining with .then/.catch/.finally, and new Promise((resolve, reject) => ...) construction."
 
 export class InterpreterRuntimeError extends Error {
   readonly node?: AstNode
-  errorName: string = "Error"
+  errorName = "Error"
 
   constructor(
     message: string,

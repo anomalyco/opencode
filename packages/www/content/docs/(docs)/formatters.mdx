@@ -1,0 +1,93 @@
+---
+title: "Formatters"
+description: ""
+---
+
+OpenCode V2 accepts formatter configuration, but it does not yet include a
+formatter runtime. File writes and edits are not automatically formatted.
+
+<Warning>
+  V2 currently has no built-in formatters. The built-in formatter list and
+  automatic post-edit formatting documented for V1 do not apply to V2.
+</Warning>
+
+## Configuration
+
+The `formatter` field accepts a boolean or an object keyed by formatter name:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {
+    "prettier": {
+      "disabled": false,
+      "command": ["prettier", "--write", "$FILE"],
+      "environment": {
+        "NODE_ENV": "development"
+      },
+      "extensions": [".js", ".jsx", ".ts", ".tsx"]
+    }
+  }
+}
+```
+
+This example is valid V2 configuration, but V2 does not currently execute the
+command.
+
+Each named formatter entry supports these optional fields:
+
+| Field | Type | Current V2 behavior |
+| --- | --- | --- |
+| `disabled` | `boolean` | Accepted, but there is no runtime formatter to enable or disable. |
+| `command` | `string[]` | Accepted as an argument array, but not executed. |
+| `environment` | `Record<string, string>` | Accepts string environment variable names and values, but they are not applied. |
+| `extensions` | `string[]` | Accepted without extension-specific validation, but files are not matched against it. |
+
+All entry fields are optional. The schema therefore also accepts an empty entry
+such as `"prettier": {}`.
+
+## Enable and disable
+
+The schema accepts all of the following forms:
+
+```jsonc
+// Omit `formatter`, or use false, when formatting is not requested.
+{
+  "formatter": false
+}
+```
+
+```jsonc
+// Reserved for enabling all built-ins once a V2 runtime provides them.
+{
+  "formatter": true
+}
+```
+
+```jsonc
+// Configure named entries or mark one as disabled.
+{
+  "formatter": {
+    "prettier": { "disabled": true },
+    "custom": {
+      "command": ["custom-fmt", "$FILE"],
+      "extensions": [".foo"]
+    }
+  }
+}
+```
+
+At present, omitted, `false`, `true`, and object forms have the same runtime
+result: V2 runs no formatter. `disabled` is retained as configuration data but
+does not control an executable formatter.
+
+## Commands and placeholders
+
+`command` is an array of strings, not a shell command string. `$FILE` is the V1
+file-path placeholder and is often retained in migrated configuration. V2 does
+not currently substitute `$FILE` or define another formatter placeholder.
+
+Likewise, V2 does not currently use `extensions` to select commands, merge
+`environment` into a child process, discover formatter executables or project
+configuration, or run multiple matching formatters. These behaviors will only
+be available after a V2 formatter runtime is implemented.

@@ -11,7 +11,7 @@ import {
   TuiConfigProvider,
   type Info as TuiConfigInfo,
   useTuiConfig,
-} from "../src/config"
+} from "../src/config/v1"
 
 const decodeInfo = Schema.decodeUnknownSync(Info)
 const decodePlugin = Schema.decodeUnknownSync(PluginSpec)
@@ -84,6 +84,12 @@ test("resolves a session move keybind", () => {
   const config = resolve({ keybinds: { session_move: "ctrl+o" } }, { terminalSuspend: true })
 
   expect(config.keybinds.get("session.move")).toMatchObject([{ key: "ctrl+o" }])
+})
+
+test("opens the subagent picker with down", () => {
+  const config = resolve({}, { terminalSuspend: true })
+
+  expect(config.keybinds.get("session.child.first")).toMatchObject([{ key: "down,<leader>down" }])
 })
 
 test("disables suspend and assigns ctrl+z to undo when unsupported", () => {

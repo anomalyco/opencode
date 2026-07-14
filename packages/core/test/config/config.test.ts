@@ -44,7 +44,7 @@ function testLayer(
   )
   return AppNodeBuilder.build(LayerNode.group([Config.node, EventV2.node]), [
     [Location.node, locationLayer],
-    [Global.node, Global.layerWith({ config: globalDirectory })],
+    [Global.node, Global.layerWith({ config: globalDirectory, home: path.join(globalDirectory, "home") })],
     ...(watcher ? ([[Watcher.node, watcher]] as const) : []),
   ])
 }
@@ -112,6 +112,7 @@ describe("Config", () => {
           info: new Config.Info({ model: selection("openrouter/openai/gpt-5") }),
         }),
         new Config.Directory({ type: "directory", path: AbsolutePath.make("/skills") }),
+        new Config.AgentsDirectory({ type: "agents", path: AbsolutePath.make("/agents") }),
         new Config.Document({ type: "document", info: new Config.Info({}) }),
         new Config.Document({
           type: "document",
@@ -249,6 +250,43 @@ describe("Config", () => {
             new Config.Directory({ type: "directory", path: AbsolutePath.make(path.join(tmp.path, "global")) }),
           ])
         }).pipe(Effect.provide(testLayer(tmp.path))),
+      ),
+    ),
+  )
+
+  it.live("does not watch ecosystem config roots", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Promise.all([
+              fs.mkdir(path.join(tmp.path, ".claude", "skills"), { recursive: true }),
+              fs.mkdir(path.join(tmp.path, ".agents"), { recursive: true }),
+            ]),
+          )
+          const targets: Watcher.WatchInput[] = []
+          const watcher = Layer.succeed(
+            Watcher.Service,
+            Watcher.Service.of({
+              subscribe: (input) => {
+                targets.push(input)
+                return Stream.never
+              },
+            }),
+          )
+
+          return yield* Effect.gen(function* () {
+            const config = yield* Config.Service
+            yield* config.entries()
+
+            expect(targets).toEqual([
+              { type: "directory", path: AbsolutePath.make(path.join(tmp.path, "global")) },
+            ])
+          }).pipe(Effect.provide(testLayer(tmp.path, undefined, undefined, undefined, watcher)))
+        }),
       ),
     ),
   )
@@ -838,7 +876,7 @@ describe("Config", () => {
     ),
   )
 
-  it.live("loads global, ancestor, and .opencode configuration up to the project boundary", () =>
+  it.live("loads global and ancestor configuration across the project boundary", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
@@ -848,11 +886,19 @@ describe("Config", () => {
         const root = path.join(tmp.path, "repo")
         const parent = path.join(root, "packages")
         const directory = path.join(parent, "app")
+        const globalAgents = path.join(global, "home", ".agents")
+        const globalClaude = path.join(global, "home", ".claude")
         return Effect.gen(function* () {
           yield* Effect.promise(async () => {
             await fs.mkdir(global, { recursive: true })
+            await fs.mkdir(globalAgents, { recursive: true })
+            await fs.mkdir(globalClaude, { recursive: true })
             await fs.mkdir(directory, { recursive: true })
+            await fs.mkdir(path.join(root, ".agents"), { recursive: true })
+            await fs.mkdir(path.join(root, ".claude"), { recursive: true })
             await fs.mkdir(path.join(root, ".opencode"), { recursive: true })
+            await fs.mkdir(path.join(directory, ".agents"), { recursive: true })
+            await fs.mkdir(path.join(directory, ".claude"), { recursive: true })
             await fs.mkdir(path.join(directory, ".opencode"), { recursive: true })
             await Promise.all([
               fs.writeFile(path.join(tmp.path, "opencode.json"), JSON.stringify({ $schema: "outside" })),
@@ -878,8 +924,19 @@ describe("Config", () => {
               AbsolutePath.make(path.join(root, ".opencode")),
               AbsolutePath.make(path.join(directory, ".opencode")),
             ])
+            expect(entries.filter((entry) => entry.type === "agents").map((entry) => entry.path)).toEqual([
+              AbsolutePath.make(globalAgents),
+              AbsolutePath.make(path.join(directory, ".agents")),
+              AbsolutePath.make(path.join(root, ".agents")),
+            ])
+            expect(entries.filter((entry) => entry.type === "claude").map((entry) => entry.path)).toEqual([
+              AbsolutePath.make(globalClaude),
+              AbsolutePath.make(path.join(directory, ".claude")),
+              AbsolutePath.make(path.join(root, ".claude")),
+            ])
             expect(documents.map((document) => document.info.$schema)).toEqual([
               "global",
+              "outside",
               "root",
               "parent",
               "directory",
@@ -887,11 +944,22 @@ describe("Config", () => {
               "directory-dot",
             ])
             expect(entries.map((entry) => (entry.type === "document" ? entry.info.$schema : entry.path))).toEqual([
+              AbsolutePath.make(globalClaude),
+              AbsolutePath.make(path.join(directory, ".claude")),
+              AbsolutePath.make(path.join(root, ".claude")),
+              AbsolutePath.make(globalAgents),
+              AbsolutePath.make(path.join(directory, ".agents")),
+              AbsolutePath.make(path.join(root, ".agents")),
               "global",
               AbsolutePath.make(global),
+              "outside",
+              AbsolutePath.make(path.join(tmp.path, "opencode.json")),
               "root",
+              AbsolutePath.make(path.join(root, "opencode.json")),
               "parent",
+              AbsolutePath.make(path.join(parent, "opencode.jsonc")),
               "directory",
+              AbsolutePath.make(path.join(directory, "opencode.json")),
               "root-dot",
               AbsolutePath.make(path.join(root, ".opencode")),
               "directory-dot",

@@ -1,6 +1,6 @@
 export * as SessionProjector from "./projector"
 
-import { and, asc, desc, eq, gt, gte, inArray, lt, or, sql } from "drizzle-orm"
+import { and, asc, desc, eq, gt, gte, inArray, lt, sql } from "drizzle-orm"
 import { DateTime, Effect, Layer, Schema, Stream } from "effect"
 import { Database } from "../database/database"
 import { EventV2 } from "../event"
@@ -11,24 +11,20 @@ import { SessionV1 } from "../v1/session"
 import { WorkspaceTable } from "../control-plane/workspace.sql"
 import { SessionMessage } from "./message"
 import { SessionMessageUpdater } from "./message-updater"
-import { SessionInput } from "./input"
+import { SessionPending } from "./pending"
 import { WorkspaceV2 } from "../workspace"
-import { InstructionCheckpoint } from "./instruction-checkpoint"
-import {
-  MessageTable,
-  PartTable,
-  InstructionCheckpointTable,
-  SessionInputTable,
-  SessionMessageTable,
-  SessionTable,
-} from "./sql"
+import { InstructionState } from "./instruction-state"
+import { MessageTable, PartTable, SessionPendingTable, SessionMessageTable, SessionTable } from "./sql"
 import type { DeepMutable } from "../schema"
 import { Slug } from "../util/slug"
 import { Money } from "@opencode-ai/schema/money"
 
 type DatabaseService = Database.Interface["db"]
 type CurrentDurableEvent = Extract<SessionEvent.Event, { readonly durable: object }>
-type MessageEvent = Exclude<CurrentDurableEvent, typeof SessionEvent.Forked.Type | typeof SessionEvent.Deleted.Type>
+type MessageEvent = Exclude<
+  CurrentDurableEvent,
+  typeof SessionEvent.Forked.Type | typeof SessionEvent.Deleted.Type | typeof SessionEvent.InstructionsUpdated.Type
+>
 
 const decodeMessage = Schema.decodeUnknownSync(SessionMessage.Info)
 const encodeMessage = Schema.encodeSync(SessionMessage.Info)
@@ -212,6 +208,7 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
       parent_id: null,
       fork_session_id: event.data.parentID,
       fork_message_id: event.data.from,
+      fork_seq: event.data.parentSeq,
       project_id: parent.project_id,
       workspace_id: parent.workspace_id,
       slug: Slug.create(),
@@ -235,23 +232,6 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
     .get()
     .pipe(Effect.orDie)
   if (!stored) return yield* Effect.die(new SessionAlreadyProjected())
-
-  // The fork inherits the parent's transcript, so it inherits the context
-  // checkpoint that transcript was built against: copied message seqs keep
-  // folding at the same baseline horizon.
-  const checkpoint = yield* db
-    .select()
-    .from(InstructionCheckpointTable)
-    .where(eq(InstructionCheckpointTable.session_id, event.data.parentID))
-    .get()
-    .pipe(Effect.orDie)
-  if (checkpoint) {
-    yield* db
-      .insert(InstructionCheckpointTable)
-      .values({ ...checkpoint, session_id: event.data.sessionID })
-      .run()
-      .pipe(Effect.orDie)
-  }
 
   let cursor = -1
   while (copiedSeq !== undefined) {
@@ -293,36 +273,35 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
       .run()
       .pipe(Effect.orDie)
 
-    const inputRows = yield* db
+    const pendingRows = yield* db
       .select()
-      .from(SessionInputTable)
+      .from(SessionPendingTable)
       .where(
         and(
-          eq(SessionInputTable.session_id, event.data.parentID),
+          eq(SessionPendingTable.session_id, event.data.parentID),
           inArray(
-            SessionInputTable.id,
+            SessionPendingTable.id,
             rows.map((row) => row.id),
           ),
         ),
       )
       .all()
       .pipe(Effect.orDie)
-    if (inputRows.length > 0) {
+    if (pendingRows.length > 0) {
       yield* db
-        .insert(SessionInputTable)
+        .insert(SessionPendingTable)
         .values(
-          inputRows.flatMap((row) => {
+          pendingRows.flatMap((row) => {
             const id = idMap.get(row.id)
-            return id && row.type === "prompt"
+            return id && row.type !== "compaction"
               ? [
                   {
                     id,
                     session_id: event.data.sessionID,
-                    type: "prompt" as const,
-                    prompt: row.prompt,
+                    type: row.type,
+                    data: row.data,
                     delivery: row.delivery,
                     admitted_seq: row.admitted_seq,
-                    promoted_seq: row.promoted_seq,
                     time_created: row.time_created,
                   },
                 ]
@@ -335,7 +314,8 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
 
     cursor = rows.at(-1)!.seq
   }
-  if (copiedSeq !== undefined) yield* EventV2.reserveSequence(db, event.data.sessionID, copiedSeq)
+  yield* EventV2.reserveSequence(db, event.data.sessionID, event.data.parentSeq)
+  yield* InstructionState.rebuild(db, event.data.sessionID)
 })
 
 function run(db: DatabaseService, event: MessageEvent) {
@@ -523,7 +503,7 @@ const layer = Layer.effectDiscard(
           .where(eq(SessionTable.id, event.data.sessionID))
           .run()
           .pipe(Effect.orDie)
-        yield* InstructionCheckpoint.reset(db, event.data.sessionID)
+        yield* InstructionState.reset(db, event.data.sessionID)
       }),
     )
     yield* events.project(SessionV1.Event.Deleted, (event) =>
@@ -629,36 +609,47 @@ const layer = Layer.effectDiscard(
         .pipe(Effect.orDie),
     )
     yield* events.project(SessionEvent.Forked, (event) => projectFork(db, event))
-    yield* events.project(SessionEvent.PromptPromoted, (event) =>
+    yield* events.project(SessionEvent.InputPromoted, (event) =>
       Effect.gen(function* () {
         if (event.durable === undefined)
           return yield* Effect.die(new Error("Durable Session event is missing aggregate sequence"))
-        const input = yield* SessionInput.projectPromptPromoted(db, {
+        const input = yield* SessionPending.projectPromoted(db, {
           id: event.data.inputID,
           sessionID: event.data.sessionID,
-          promotedSeq: event.durable.seq,
         })
-        yield* insertMessage(db, event, {
-          id: input.id,
-          type: "user",
-          metadata: event.metadata,
-          text: input.prompt.text,
-          files: input.prompt.files,
-          agents: input.prompt.agents,
-          time: { created: event.created },
-        })
+        yield* insertMessage(
+          db,
+          event,
+          input.type === "user"
+            ? {
+                id: input.id,
+                type: "user",
+                metadata: input.data.metadata,
+                text: input.data.text,
+                files: input.data.files,
+                agents: input.data.agents,
+                time: { created: event.created },
+              }
+            : {
+                id: input.id,
+                type: "synthetic",
+                text: input.data.text,
+                description: input.data.description,
+                metadata: input.data.metadata,
+                time: { created: event.created },
+              },
+        )
       }),
     )
-    yield* events.project(SessionEvent.PromptAdmitted, (event) =>
+    yield* events.project(SessionEvent.InputAdmitted, (event) =>
       Effect.gen(function* () {
         if (event.durable === undefined)
           return yield* Effect.die(new Error("Durable Session event is missing aggregate sequence"))
-        yield* SessionInput.projectAdmitted(db, {
+        yield* SessionPending.projectAdmitted(db, {
           admittedSeq: event.durable.seq,
           id: event.data.inputID,
           sessionID: event.data.sessionID,
-          prompt: event.data.prompt,
-          delivery: event.data.delivery,
+          input: event.data.input,
           timeCreated: event.created,
         })
       }),
@@ -667,7 +658,7 @@ const layer = Layer.effectDiscard(
       Effect.gen(function* () {
         if (event.durable === undefined)
           return yield* Effect.die(new Error("Durable Session event is missing aggregate sequence"))
-        yield* SessionInput.projectCompactionAdmitted(db, {
+        yield* SessionPending.projectCompactionAdmitted(db, {
           admittedSeq: event.durable.seq,
           id: event.data.inputID,
           sessionID: event.data.sessionID,
@@ -678,7 +669,9 @@ const layer = Layer.effectDiscard(
     yield* events.project(SessionEvent.Execution.Succeeded, (event) => run(db, event))
     yield* events.project(SessionEvent.Execution.Failed, (event) => run(db, event))
     yield* events.project(SessionEvent.Execution.Interrupted, (event) => run(db, event))
-    yield* events.project(SessionEvent.InstructionsUpdated, (event) => run(db, event))
+    yield* events.project(SessionEvent.InstructionsUpdated, (event) =>
+      InstructionState.apply(db, event.data.sessionID, event.durable.seq, event.data.delta),
+    )
     yield* events.project(SessionEvent.Synthetic, (event) => run(db, event))
     yield* events.project(SessionEvent.Skill.Activated, (event) => run(db, event))
     yield* events.project(SessionEvent.Shell.Started, (event) => run(db, event))
@@ -712,13 +705,11 @@ const layer = Layer.effectDiscard(
     yield* events.project(SessionEvent.Compaction.Ended, (event) =>
       Effect.gen(function* () {
         yield* run(db, event)
+        yield* InstructionState.advanceEpoch(db, event.data.sessionID, event.durable.seq)
         if (event.durable === undefined)
           return yield* Effect.die(new Error("Durable Session event is missing aggregate sequence"))
         if (event.data.reason === "manual")
-          yield* SessionInput.settleCompaction(db, {
-            sessionID: event.data.sessionID,
-            handledSeq: event.durable.seq,
-          })
+          yield* SessionPending.settleCompaction(db, { sessionID: event.data.sessionID })
       }),
     )
     yield* events.project(SessionEvent.Compaction.Failed, (event) =>
@@ -727,10 +718,7 @@ const layer = Layer.effectDiscard(
         if (event.durable === undefined)
           return yield* Effect.die(new Error("Durable Session event is missing aggregate sequence"))
         if (event.data.reason === "manual")
-          yield* SessionInput.settleCompaction(db, {
-            sessionID: event.data.sessionID,
-            handledSeq: event.durable.seq,
-          })
+          yield* SessionPending.settleCompaction(db, { sessionID: event.data.sessionID })
       }),
     )
     yield* events.project(SessionEvent.RevertEvent.Staged, (event) =>
@@ -774,11 +762,11 @@ const layer = Layer.effectDiscard(
           .run()
           .pipe(Effect.orDie)
         yield* db
-          .delete(SessionInputTable)
+          .delete(SessionPendingTable)
           .where(
             and(
-              eq(SessionInputTable.session_id, event.data.sessionID),
-              or(gte(SessionInputTable.admitted_seq, boundary.seq), gte(SessionInputTable.promoted_seq, boundary.seq)),
+              eq(SessionPendingTable.session_id, event.data.sessionID),
+              gte(SessionPendingTable.admitted_seq, boundary.seq),
             ),
           )
           .run()
@@ -789,7 +777,7 @@ const layer = Layer.effectDiscard(
           .where(eq(SessionTable.id, event.data.sessionID))
           .run()
           .pipe(Effect.orDie)
-        yield* InstructionCheckpoint.reset(db, event.data.sessionID)
+        yield* InstructionState.reset(db, event.data.sessionID)
       }),
     )
     yield* events.subscribe([SessionEvent.Step.Ended, SessionEvent.Step.Failed]).pipe(

@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { DateTime, Effect, Layer, Schema } from "effect"
+import { DateTime, Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { Money } from "@opencode-ai/schema/money"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -16,16 +16,18 @@ import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
+import { SessionPending } from "@opencode-ai/core/session/pending"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { PluginRuntime } from "@opencode-ai/core/plugin/runtime"
+import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { SubagentTool } from "@opencode-ai/core/tool/subagent"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
-import { executeTool, settleTool, testModel, toolIdentity, waitForTool } from "./lib/tool"
+import { executeTool, settleTool, toolIdentity, waitForTool } from "./lib/tool"
 
 const childText = "child final response"
 const childModel = ModelV2.Ref.make({ id: ModelV2.ID.make("child"), providerID: ProviderV2.ID.make("test") })
@@ -106,6 +108,7 @@ const it = testEffect(layer)
 const withSubagent = (location: Location.Ref) =>
   Effect.gen(function* () {
     const locations = yield* LocationServiceMap.Service
+    yield* PluginSupervisor.Service.use((supervisor) => supervisor.flush).pipe(Effect.provide(locations.get(location)))
     yield* AgentV2.Service.use((agents) =>
       agents.transform((draft) => {
         // The caller identity used by executeTool; subagent permission asserts against it.
@@ -143,9 +146,7 @@ describe("SubagentTool", () => {
           const locations = yield* LocationServiceMap.Service
           const registry = yield* ToolRegistry.Service.pipe(Effect.provide(locations.get(parent.location)))
           yield* waitForTool(registry, SubagentTool.name)
-          expect((yield* registry.materialize({ model: testModel })).definitions.map((tool) => tool.name)).toContain(
-            SubagentTool.name,
-          )
+          expect((yield* registry.materialize()).definitions.map((tool) => tool.name)).toContain(SubagentTool.name)
           expect(
             yield* executeTool(registry, {
               sessionID: parent.id,
@@ -261,6 +262,13 @@ describe("SubagentTool", () => {
           const locations = yield* LocationServiceMap.Service
           const registry = yield* ToolRegistry.Service.pipe(Effect.provide(locations.get(parent.location)))
           yield* waitForTool(registry, SubagentTool.name)
+          const events = yield* EventV2.Service
+          const admitted = yield* events.subscribe(SessionEvent.InputAdmitted).pipe(
+            Stream.filter((event) => event.data.sessionID === parent.id && event.data.input.type === "synthetic"),
+            Stream.take(1),
+            Stream.runCollect,
+            Effect.forkScoped({ startImmediately: true }),
+          )
 
           const settled = yield* settleTool(registry, {
             sessionID: parent.id,
@@ -273,9 +281,24 @@ describe("SubagentTool", () => {
             },
           })
           const childID = outputSessionID(settled.output?.structured)
-          expect(settled.output?.structured).toMatchObject({ status: "running" })
+          expect(settled.output?.structured).toMatchObject({
+            status: "running",
+            output: expect.stringContaining(`id: ${childID}`),
+          })
 
-          yield* Effect.yieldNow
+          const admission = Array.from(yield* Fiber.join(admitted))[0]
+          expect(admission?.data.input.data.text).toContain(`<subagent id="${childID}" state="completed"`)
+          expect(admission?.data.input.data).toMatchObject({
+            description: "background review",
+            metadata: {
+              source: "subagent",
+              childID,
+              agent: "reviewer",
+              state: "completed",
+            },
+          })
+          const database = yield* Database.Service
+          yield* SessionPending.promoteSteers(database.db, events, parent.id)
           const synthetic = (yield* sessions.context(parent.id)).filter((message) => message.type === "synthetic")
           expect(synthetic).toHaveLength(1)
           expect(synthetic[0]?.text).toContain(`<subagent id="${childID}" state="completed"`)

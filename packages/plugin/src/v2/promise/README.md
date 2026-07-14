@@ -25,6 +25,15 @@ export default Plugin.define({
 ```
 
 Plugin setup registers hooks imperatively through each domain's `hook` method.
+It may return a synchronous or asynchronous cleanup function. OpenCode awaits
+the cleanup when the plugin is unloaded or replaced:
+
+```ts
+setup: async (ctx) => {
+  const timer = setInterval(refresh, 60_000)
+  return () => clearInterval(timer)
+}
+```
 
 Configuration supplied for the plugin is available as `ctx.options`.
 
@@ -85,20 +94,20 @@ await ctx.session.hook("request", (event) => {
 })
 ```
 
-Promise tools use the same schemas and registration model as Effect tools, with async executors:
+Promise tools use plain object declarations with async executors:
 
 ```ts
 import { Schema } from "effect"
-import { Tool } from "@opencode-ai/plugin/v2/tool"
 
-const echo = Tool.make({
-  description: "Echo text",
-  input: Schema.Struct({ text: Schema.String }),
-  output: Schema.Struct({ text: Schema.String }),
-  execute: async ({ text }) => ({ text }),
+await ctx.tool.transform((tools) => {
+  tools.add({
+    name: "echo",
+    description: "Echo text",
+    input: Schema.Struct({ text: Schema.String }),
+    output: Schema.Struct({ text: Schema.String }),
+    execute: async ({ text }) => ({ text }),
+  })
 })
-
-await ctx.tool.transform((tools) => tools.add("echo", echo))
 ```
 
 ## Reloading A Domain

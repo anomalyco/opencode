@@ -53,6 +53,7 @@ export const inherit = Effect.fnUntraced(function* () {
 })
 
 export interface Options<State, DraftApi> {
+  readonly name?: string
   /** Creates the base value for initial state and every scoped-transform reload. */
   readonly initial: () => State
   /** Wraps mutable state in a domain-specific draft API. */
@@ -89,7 +90,10 @@ export function create<State, DraftApi>(options: Options<State, DraftApi>): Inte
   const materialize = Effect.fnUntraced(function* () {
     const next = options.initial()
     const api = options.draft(next)
-    for (const transform of transforms) yield* apply(transform.run, api).pipe(Effect.withSpan("State.reload.update"))
+    for (const transform of transforms)
+      yield* apply(transform.run, api).pipe(
+        Effect.withSpan("State.reload.update", { attributes: { state: options.name ?? "anonymous" } }),
+      )
     yield* commit(next)
   })
 
@@ -98,6 +102,7 @@ export function create<State, DraftApi>(options: Options<State, DraftApi>): Inte
   const result: Interface<State, DraftApi> = {
     get: () => state,
     transform: Effect.fn("State.transform")(function* (update) {
+      yield* Effect.annotateCurrentSpan("state", options.name ?? "anonymous")
       const scope = yield* Scope.Scope
       return yield* Effect.uninterruptible(
         Effect.gen(function* () {

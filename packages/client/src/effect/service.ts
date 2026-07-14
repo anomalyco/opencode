@@ -11,9 +11,13 @@ import { join } from "node:path"
 // is all a client needs to connect. The daemon's own configuration (port,
 // persisted password) is CLI-owned and never read here.
 
-export type Transport = {
+export type Endpoint = {
   readonly url: string
-  readonly headers?: RequestInit["headers"]
+  readonly auth?: {
+    readonly type: "basic"
+    readonly username: string
+    readonly password: string
+  }
 }
 
 export type Options = {
@@ -28,10 +32,19 @@ export type Options = {
   readonly command?: ReadonlyArray<string>
 }
 
+export type StartReason = "missing" | "version-mismatch"
+
+export type StartOptions = Options & {
+  // Called once when start() decides it must spawn: either no service was
+  // found, or a healthy service with a different version is being replaced.
+  // `existing` carries the registration of the service being replaced.
+  readonly onStart?: (reason: StartReason, existing?: Info) => void
+}
+
 // Read-only lookup: registration file plus health check and version gate.
 // Never spawns; escalation to start() is the caller's policy.
 export const discover = Effect.fn("service.discover")(function* (options: Options = {}) {
-  return (yield* discoverLocal(options))?.transport
+  return (yield* discoverLocal(options))?.endpoint
 })
 
 const discoverLocal = Effect.fnUntraced(function* (options: Options) {
@@ -43,11 +56,14 @@ const discoverLocal = Effect.fnUntraced(function* (options: Options) {
 
 // Idempotent ensure-running: reuses a healthy compatible server, replaces a
 // version-mismatched one, and otherwise spawns the service command detached.
-export const start = Effect.fn("service.start")(function* (options: Options = {}) {
+export const start = Effect.fn("service.start")(function* (options: StartOptions = {}) {
   const compatible = yield* discover(options)
   if (compatible !== undefined) return compatible
-  const mismatched = yield* find(options)
-  if (mismatched !== undefined) yield* kill(mismatched.info, options).pipe(Effect.ignore)
+  const existing = yield* find(options)
+  if (existing?.version !== undefined && (options.version === undefined || existing.version === options.version))
+    return existing.endpoint
+  yield* Effect.sync(() => options.onStart?.(existing === undefined ? "missing" : "version-mismatch", existing?.info))
+  if (existing !== undefined) yield* kill(existing.info, options).pipe(Effect.ignore)
 
   const [command, ...args] = options.command ?? ["opencode", "serve", "--service"]
   if (command === undefined) return yield* Effect.fail(new Error("Missing service command"))
@@ -72,7 +88,7 @@ export const start = Effect.fn("service.start")(function* (options: Options = {}
             child.kill("SIGTERM")
           }),
     ),
-    Effect.map((found) => found.transport),
+    Effect.map((found) => found.endpoint),
     Effect.tapError(() => Effect.try({ try: () => child.kill("SIGTERM"), catch: () => undefined }).pipe(Effect.ignore)),
     Effect.mapError(() => new Error("Failed to start server")),
   )
@@ -90,8 +106,9 @@ function fallback() {
   return join(state, "opencode", "service.json")
 }
 
-function auth(password: string): RequestInit["headers"] {
-  return { authorization: "Basic " + btoa("opencode:" + password) }
+export function headers(endpoint: Endpoint): RequestInit["headers"] {
+  if (endpoint.auth === undefined) return undefined
+  return { authorization: "Basic " + btoa(endpoint.auth.username + ":" + endpoint.auth.password) }
 }
 
 export const Info = Schema.Struct({
@@ -120,14 +137,21 @@ const read = Effect.fnUntraced(function* (file?: string) {
 
 type LocalService = {
   readonly info: Info
-  readonly transport: Transport
+  readonly endpoint: Endpoint
+  readonly version?: string
 }
 
 const probe = Effect.fnUntraced(function* (info: Info, version?: string, allowLegacy = false) {
-  const headers = info.password === undefined ? undefined : auth(info.password)
+  const endpoint = {
+    url: info.url,
+    auth:
+      info.password === undefined
+        ? undefined
+        : { type: "basic" as const, username: "opencode", password: info.password },
+  } satisfies Endpoint
   const response = yield* Effect.tryPromise(() =>
     fetch(new URL("/api/health", info.url), {
-      headers,
+      headers: headers(endpoint),
       signal: AbortSignal.timeout(2_000),
     }),
   ).pipe(Effect.option, Effect.map(Option.getOrUndefined))
@@ -138,7 +162,7 @@ const probe = Effect.fnUntraced(function* (info: Info, version?: string, allowLe
     if (health.value.pid !== info.pid) return undefined
     if (info.version !== undefined && health.value.version !== info.version) return undefined
     if (version !== undefined && health.value.version !== version) return undefined
-    return { info, transport: { url: info.url, headers } } satisfies LocalService
+    return { info, endpoint, version: health.value.version } satisfies LocalService
   }
   if (
     !allowLegacy ||
@@ -146,7 +170,7 @@ const probe = Effect.fnUntraced(function* (info: Info, version?: string, allowLe
     (typeof body === "object" && body !== null && ("version" in body || "pid" in body))
   )
     return undefined
-  return { info, transport: { url: info.url, headers } } satisfies LocalService
+  return { info, endpoint } satisfies LocalService
 })
 
 // Health-checked lookup without the version gate: lifecycle operations must be

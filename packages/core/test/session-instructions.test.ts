@@ -34,7 +34,7 @@ import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { tempLocationLayer } from "./fixture/location"
 import { makeLocationNode } from "@opencode-ai/core/effect/app-node"
 import { testEffect } from "./lib/effect"
-import { registerToolPlugin, settleTool, testModel } from "./lib/tool"
+import { registerToolPlugin, settleTool } from "./lib/tool"
 
 const readToolNode = makeLocationNode({
   name: "test/read-tool-plugin",
@@ -162,7 +162,7 @@ describe("SessionInstructions", () => {
       const sessionID = (yield* session.create({ location: Location.Ref.make({ directory: dir }) })).id
 
       // A read deep under sub/ discovers deep and sub AGENTS.md, walking up to but
-      // excluding the Location root (already supplied by the core/instructions baseline).
+      // excluding the Location root (already supplied by core initial instructions).
       yield* settleTool(registry, readCall(sessionID, "call-deep", "sub/deep/file.txt"))
 
       const firstInjected = yield* synthetics(sessionID)
@@ -235,7 +235,7 @@ describe("SessionInstructions", () => {
         const sessionID = (yield* session.create({ location: Location.Ref.make({ directory: dir }) })).id
 
         // Listing packages/foo/ discovers its own AGENTS.md, walking up to but excluding
-        // the Location root (already supplied by the core/instructions baseline).
+        // the Location root (already supplied by core initial instructions).
         yield* settleTool(registry, readCall(sessionID, "call-list", "packages/foo"))
 
         const firstInjected = yield* synthetics(sessionID)

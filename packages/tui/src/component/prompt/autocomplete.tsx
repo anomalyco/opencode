@@ -7,12 +7,11 @@ import { createMemo, createResource, createEffect, onMount, onCleanup, Index, Sh
 import { createStore } from "solid-js/store"
 import { useEditorContext } from "../../context/editor"
 import { useProject } from "../../context/project"
-import { useSDK } from "../../context/sdk"
-import { useSync } from "../../context/sync"
+import { useClient } from "../../context/client"
 import { useData } from "../../context/data"
 import { getScrollAcceleration } from "../../util/scroll"
 import { useTuiPaths } from "../../context/runtime"
-import { useTuiConfig } from "../../config"
+import { useConfig } from "../../config"
 import { useLocation } from "../../context/location"
 import { useTheme, selectedForeground } from "../../context/theme"
 import { SplitBorder } from "../../ui/border"
@@ -22,7 +21,7 @@ import type { PromptInfo, PromptPartRef } from "../../prompt/history"
 import { useFrecency } from "../../prompt/frecency"
 import { useBindings, useCommandSlashes, useOpencodeModeStack } from "../../keymap"
 import { displayCharAt, mentionTriggerIndex } from "../../prompt/display"
-import type { FileSystemEntry } from "@opencode-ai/sdk/v2"
+import type { FileSystemEntry } from "@opencode-ai/client"
 
 function removeLineRange(input: string) {
   const hashIndex = input.lastIndexOf("#")
@@ -85,8 +84,7 @@ export function Autocomplete(props: {
   promptPartTypeId: () => number
 }) {
   const editor = useEditorContext()
-  const sdk = useSDK()
-  const sync = useSync()
+  const client = useClient()
   const data = useData()
   const project = useProject()
   const slashes = useCommandSlashes()
@@ -94,7 +92,7 @@ export function Autocomplete(props: {
   const { theme } = useTheme()
   const dimensions = useTerminalDimensions()
   const frecency = useFrecency()
-  const tuiConfig = useTuiConfig()
+  const config = useConfig().data
   const paths = useTuiPaths()
   const location = useLocation()
   const [store, setStore] = createStore({
@@ -285,7 +283,7 @@ export function Autocomplete(props: {
   })
 
   function normalizeMentionPath(filePath: string) {
-    const baseDir = location()?.directory || sync.path.directory || paths.cwd
+    const baseDir = location()?.directory || project.instance.directory() || paths.cwd
     const absolute = path.resolve(filePath)
     const relative = path.relative(baseDir, absolute)
 
@@ -317,7 +315,7 @@ export function Autocomplete(props: {
       if (referenceMatch()) return []
       const { lineRange, baseQuery } = extractLineRange(input.query ?? "")
 
-      const result = await sdk.api.file
+      const result = await client.api.file
         .find({
           query: baseQuery,
           limit: 20,
@@ -363,7 +361,7 @@ export function Autocomplete(props: {
     const options: AutocompleteOption[] = []
     const width = props.anchor().width - 4
 
-    for (const res of Object.values(sync.data.mcp_resource)) {
+    for (const res of data.location.mcp.resource.list(location()) ?? []) {
       options.push({
         display: Locale.truncateMiddle(res.name, width),
         // Match the name only; matching the URI caused unrelated fuzzy hits.
@@ -630,7 +628,7 @@ export function Autocomplete(props: {
         },
       },
     ],
-    bindings: tuiConfig.keybinds.gather("prompt.autocomplete", [
+    bindings: config.keybinds.gather("prompt.autocomplete", [
       "prompt.autocomplete.prev",
       "prompt.autocomplete.next",
       "prompt.autocomplete.hide",
@@ -716,7 +714,7 @@ export function Autocomplete(props: {
   })
 
   let scroll: ScrollBoxRenderable
-  const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
+  const scrollAcceleration = createMemo(() => getScrollAcceleration(config))
 
   return (
     <box

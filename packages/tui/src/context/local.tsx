@@ -1,12 +1,11 @@
 import { createStore } from "solid-js/store"
 import { createSimpleContext } from "./helper"
 import { batch, createEffect, createMemo } from "solid-js"
-import { useSync } from "./sync"
 import { useEvent } from "./event"
 import path from "path"
 import { useTuiPaths } from "./runtime"
 import { useArgs } from "./args"
-import { useSDK } from "./sdk"
+import { useClient } from "./client"
 import { RGBA } from "@opentui/core"
 import { readJson, writeJsonAtomic } from "../util/persistence"
 import { useTheme } from "./theme"
@@ -52,9 +51,8 @@ export function recentModels(
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
   init: () => {
-    const sync = useSync()
     const data = useData()
-    const sdk = useSDK()
+    const client = useClient()
     const toast = useToast()
     const theme = useTheme().theme
     const route = useRoute()
@@ -202,16 +200,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       const fallbackModel = createMemo(() => {
         if (args.model) {
           const { providerID, modelID } = parseModel(args.model)
-          if (isModelValid({ providerID, modelID })) {
-            return {
-              providerID,
-              modelID,
-            }
-          }
-        }
-
-        if (sync.data.config.model) {
-          const { providerID, modelID } = parseModel(sync.data.config.model)
           if (isModelValid({ providerID, modelID })) {
             return {
               providerID,
@@ -453,7 +441,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         })
 
       const slots = createMemo(() => {
-        const existing = new Set(sync.data.session.filter((x) => x.parentID === undefined).map((x) => x.id))
+        const existing = new Set(data.session.list().filter((x) => x.parentID === undefined).map((x) => x.id))
         return sessionStore.pinned.filter((id) => existing.has(id)).slice(0, 9)
       })
 
@@ -505,23 +493,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
     const session = createSession()
 
-    const mcp = {
-      isEnabled(name: string) {
-        const status = sync.data.mcp[name]
-        return status?.status === "connected"
-      },
-      async toggle(name: string) {
-        const status = sync.data.mcp[name]
-        if (status?.status === "connected") {
-          // Disable: disconnect the MCP
-          await sdk.client.mcp.disconnect({ name })
-        } else {
-          // Enable/Retry: connect the MCP (handles disabled, failed, and other states)
-          await sdk.client.mcp.connect({ name })
-        }
-      },
-    }
-
     createEffect(() => {
       const value = agent.current()
       if (!value?.model) return
@@ -536,7 +507,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const result = {
       model,
       agent,
-      mcp,
       session,
       permission,
     }

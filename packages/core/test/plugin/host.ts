@@ -83,9 +83,6 @@ export function host(overrides: Overrides = {}): PluginContext {
       prompt: () => Effect.die("unused session.prompt"),
       command: () => Effect.die("unused session.command"),
       interrupt: () => Effect.die("unused session.interrupt"),
-      // Plugins register session hooks during setup, so a bare host accepts the
-      // registration; the callback only runs when a test triggers the request pipeline.
-      hook: () => Effect.succeed({ dispose: Effect.void }),
     },
   }
 }

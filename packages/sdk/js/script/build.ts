@@ -62,7 +62,7 @@ if (schemas) {
   visit({ ...document, components: { ...document.components, schemas: undefined } })
   for (const name of Object.keys(schemas)) {
     if (
-      /^(SessionAgentSelected|SessionModelSelected|SessionMoved|SessionRenamed|SessionForked|SessionPromptPromoted|SessionPromptAdmitted|SessionExecutionStarted|SessionExecutionSucceeded|SessionExecutionFailed|SessionExecutionInterrupted|SessionInstructionsUpdated|SessionSynthetic|SessionSkillActivated|SessionShellStarted|SessionShellEnded|SessionStepStarted|SessionStepEnded|SessionStepFailed|SessionTextStarted|SessionTextDelta|SessionTextEnded|SessionToolInputStarted|SessionToolInputDelta|SessionToolInputEnded|SessionToolCalled|SessionToolProgress|SessionToolSuccess|SessionToolFailed|SessionRetryScheduled|SessionCompactionStarted|SessionCompactionDelta|SessionCompactionEnded|SessionRevertStaged|SessionRevertCleared|SessionRevertCommitted)\d+$/.test(
+      /^(SessionAgentSelected|SessionModelSelected|SessionMoved|SessionRenamed|SessionForked|SessionInputPromoted|SessionInputAdmitted|SessionExecutionStarted|SessionExecutionSucceeded|SessionExecutionFailed|SessionExecutionInterrupted|SessionInstructionsUpdated|SessionSynthetic|SessionSkillActivated|SessionShellStarted|SessionShellEnded|SessionStepStarted|SessionStepEnded|SessionStepFailed|SessionTextStarted|SessionTextDelta|SessionTextEnded|SessionToolInputStarted|SessionToolInputDelta|SessionToolInputEnded|SessionToolCalled|SessionToolProgress|SessionToolSuccess|SessionToolFailed|SessionRetryScheduled|SessionCompactionStarted|SessionCompactionDelta|SessionCompactionEnded|SessionRevertStaged|SessionRevertCleared|SessionRevertCommitted)\d+$/.test(
         name,
       ) &&
       !reachable.has(name)
@@ -102,7 +102,7 @@ await createClient({
 const generatedTypesPath = "./src/v2/gen/types.gen.ts"
 const generatedTypes = await Bun.file(generatedTypesPath).text()
 if (
-  /export type (SessionAgentSelected|SessionModelSelected|SessionMoved|SessionRenamed|SessionForked|SessionPromptPromoted|SessionPromptAdmitted|SessionExecutionStarted|SessionExecutionSucceeded|SessionExecutionFailed|SessionExecutionInterrupted|SessionInstructionsUpdated|SessionSynthetic|SessionSkillActivated|SessionShellStarted|SessionShellEnded|SessionStepStarted|SessionStepEnded|SessionStepFailed|SessionTextStarted|SessionTextDelta|SessionTextEnded|SessionToolInputStarted|SessionToolInputDelta|SessionToolInputEnded|SessionToolCalled|SessionToolProgress|SessionToolSuccess|SessionToolFailed|SessionRetryScheduled|SessionCompactionStarted|SessionCompactionDelta|SessionCompactionEnded|SessionRevertStaged|SessionRevertCleared|SessionRevertCommitted)\d+ =/.test(
+  /export type (SessionAgentSelected|SessionModelSelected|SessionMoved|SessionRenamed|SessionForked|SessionInputPromoted|SessionInputAdmitted|SessionExecutionStarted|SessionExecutionSucceeded|SessionExecutionFailed|SessionExecutionInterrupted|SessionInstructionsUpdated|SessionSynthetic|SessionSkillActivated|SessionShellStarted|SessionShellEnded|SessionStepStarted|SessionStepEnded|SessionStepFailed|SessionTextStarted|SessionTextDelta|SessionTextEnded|SessionToolInputStarted|SessionToolInputDelta|SessionToolInputEnded|SessionToolCalled|SessionToolProgress|SessionToolSuccess|SessionToolFailed|SessionRetryScheduled|SessionCompactionStarted|SessionCompactionDelta|SessionCompactionEnded|SessionRevertStaged|SessionRevertCleared|SessionRevertCommitted)\d+ =/.test(
     generatedTypes,
   )
 ) {

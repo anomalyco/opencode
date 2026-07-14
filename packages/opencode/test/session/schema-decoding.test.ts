@@ -6,7 +6,6 @@ import { SessionPrompt } from "../../src/session/prompt"
 import { SessionRevert } from "../../src/session/revert"
 import { SessionStatus } from "../../src/session/status"
 import { SessionSummary } from "../../src/session/summary"
-import { Todo } from "../../src/session/todo"
 import { SessionID, MessageID, PartID } from "../../src/session/schema"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { WorkspaceV2 } from "@opencode-ai/core/workspace"
@@ -249,15 +248,6 @@ describe("SessionStatus.Info", () => {
 
   test("rejects unknown type", () => {
     expect(() => decode({ type: "bogus" })).toThrow()
-  })
-})
-
-describe("Todo.Info", () => {
-  const decode = decodeUnknown(Todo.Info)
-
-  test("three-field round-trip", () => {
-    const input = Todo.Info.make({ content: "do a thing", status: "pending", priority: "high" })
-    expect(decode(input)).toEqual(input)
   })
 })
 

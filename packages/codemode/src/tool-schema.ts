@@ -5,13 +5,8 @@ const isEffectSchema = (schema: SchemaType): schema is Schema.Decoder<unknown> &
 
 const renderLiteral = (value: unknown): string => JSON.stringify(value) ?? "unknown"
 
-/**
- * Bare TypeScript identifier - usable unquoted as an object key (and, in the tool runtime,
- * with dot access as a tool-path segment). Anything else must be quoted/bracketed.
- */
 export const identifierSegment = /^[A-Za-z_$][A-Za-z0-9_$]*$/
 
-/** Renders a property name as a valid TS object key: bare when an identifier, quoted otherwise. */
 const renderKey = (name: string): string => (identifierSegment.test(name) ? name : JSON.stringify(name))
 
 const effectNumberSentinel = (schema: JsonSchema) =>
@@ -23,20 +18,14 @@ const effectNumberSentinel = (schema: JsonSchema) =>
 const intersection = (members: ReadonlyArray<string>): string => {
   const concrete = members.filter((member) => member !== "unknown")
   if (concrete.length === 0) return "unknown"
-  if (concrete.length === 1) return concrete[0] ?? "unknown"
+  if (concrete.length === 1) return concrete[0]
   return concrete.map((member) => (member.includes(" | ") ? `(${member})` : member)).join(" & ")
 }
 
-/**
- * Recursion ceiling for schema rendering. Object, array, and union recursion all increment
- * depth, so this bounds every recursion path - pathological or structurally cyclic schemas
- * degrade to `unknown` instead of overflowing the stack (rendering must never throw).
- */
 const MAX_RENDER_DEPTH = 8
 
 type RenderContext = {
   readonly definitions: Readonly<Record<string, JsonSchema>>
-  /** Indented, JSDoc-annotated multiline rendering (search results); compact single line otherwise. */
   readonly pretty: boolean
 }
 
@@ -64,10 +53,6 @@ const hasUnresolvedRef = (
   ].some((item) => hasUnresolvedRef(item, definitions, seen, nextVisited))
 }
 
-/**
- * Schema constraints a TypeScript type cannot express natively but a model benefits from,
- * surfaced as JSDoc tags (`@deprecated`, `@default`, `@format`, `@minItems`, `@maxItems`).
- */
 const docTags = (schema: JsonSchema): Array<string> => {
   const tags: Array<string> = []
   if (schema.deprecated === true) tags.push("@deprecated")
@@ -75,9 +60,7 @@ const docTags = (schema: JsonSchema): Array<string> => {
     try {
       const rendered = JSON.stringify(schema.default)
       if (rendered !== undefined) tags.push(`@default ${rendered}`)
-    } catch {
-      // unserializable default: skip rather than emit a broken tag
-    }
+    } catch {}
   }
   if (typeof schema.format === "string") tags.push(`@format ${schema.format}`)
   if (typeof schema.minItems === "number") tags.push(`@minItems ${schema.minItems}`)
@@ -85,13 +68,7 @@ const docTags = (schema: JsonSchema): Array<string> => {
   return tags
 }
 
-/**
- * Format a schema `description` plus `tags` as a JSDoc comment at the given indent,
- * preserving multi-line text (a single line stays `/** ... *\/`; multiple lines become a
- * `*`-prefixed block). `*\/` is neutralized so nothing can close the comment early, and
- * blank leading/trailing lines are trimmed. Returns "" (else a trailing newline) so
- * callers can prepend it directly to the field line.
- */
+// Neutralize `*\/` so model-provided schema text cannot terminate generated documentation.
 const jsdoc = (description: string | undefined, tags: ReadonlyArray<string>, pad: string): string => {
   const lines = [...(description === undefined ? [] : description.split("\n")), ...tags].map((line) =>
     line.replaceAll("*/", "* /").replace(/\s+$/, ""),
@@ -128,17 +105,11 @@ const renderSchema = (
   if (schema.enum) return schema.enum.map(renderLiteral).join(" | ")
   const alternatives = schema.anyOf ?? schema.oneOf
   if (alternatives) {
-    // Effect's number schema emits `anyOf: [{ type: "number" }, { const: "NaN" },
-    // { const: "Infinity" }, { const: "-Infinity" }]`. Collapse only that artifact;
-    // real JSON Schema unions such as `string | number` or `number | null` must keep
-    // every branch.
     if (
       alternatives.some((item) => item.type === "number") &&
       alternatives.every((item) => item.type === "number" || effectNumberSentinel(item))
     )
       return "number"
-    // An empty Schema.Struct({}) emits `anyOf: [{ type: "object" }, { type: "array" }]`
-    // (no properties/items); render the bare shape as {} instead of `{} | Array<unknown>`.
     if (
       alternatives.length === 2 &&
       alternatives[0]?.type === "object" &&
@@ -183,7 +154,6 @@ const renderSchema = (
       return fields.length === 0 ? "{}" : `{ ${fields.join("; ")} }`
     }
 
-    // Pretty: an indented block, each described field preceded by its JSDoc comment.
     if (properties.length === 0 && indexType === undefined) return "{}"
     const pad = "  ".repeat(depth + 1)
     const lines = properties.map(
@@ -208,7 +178,6 @@ export const toTypeScript = (schema: Schema.Top, decoded = false, pretty = false
   }
 }
 
-/** Renders a raw JSON Schema document as a TypeScript type string. */
 export const jsonSchemaToTypeScript = (schema: JsonSchema, pretty = false): string => {
   try {
     return renderSchema(schema, { definitions: { ...(schema.definitions ?? {}), ...(schema.$defs ?? {}) }, pretty })
@@ -217,20 +186,12 @@ export const jsonSchemaToTypeScript = (schema: JsonSchema, pretty = false): stri
   }
 }
 
-/** One input property of a tool, extracted best-effort from its input schema. */
 export type InputProperty = {
   readonly name: string
   readonly description: string | undefined
   readonly required: boolean
 }
 
-/**
- * The property names, descriptions, and required flags of a tool's input schema - the raw
- * material for search text. Best-effort: Effect Schemas go through their
- * JSON Schema document (the same emission signature rendering uses); JSON Schemas are read
- * directly, resolving a trivial top-level `$ref` into `$defs`/`definitions` when present.
- * Anything unresolvable yields `[]` (search falls back to path + description).
- */
 export const inputProperties = <R>(definition: Definition<R>): Array<InputProperty> => {
   try {
     const document = isEffectSchema(definition.input)
@@ -262,20 +223,11 @@ export const inputProperties = <R>(definition: Definition<R>): Array<InputProper
   }
 }
 
-/**
- * The model-visible TypeScript type of a tool's input. `pretty` renders an indented
- * multiline block with schema descriptions and constraints as JSDoc comments on the
- * fields; the default stays the compact single-line form.
- */
 export const inputTypeScript = <R>(definition: Definition<R>, pretty = false): string =>
   isEffectSchema(definition.input)
     ? toTypeScript(definition.input, false, pretty)
     : jsonSchemaToTypeScript(definition.input, pretty)
 
-/**
- * The model-visible TypeScript type of a tool's result; tools without an output schema
- * return `unknown`. `pretty` renders the JSDoc-annotated multiline form, as for inputs.
- */
 export const outputTypeScript = <R>(definition: Definition<R>, pretty = false): string =>
   definition.output === undefined
     ? "unknown"
@@ -283,18 +235,9 @@ export const outputTypeScript = <R>(definition: Definition<R>, pretty = false): 
       ? toTypeScript(definition.output, true, pretty)
       : jsonSchemaToTypeScript(definition.output, pretty)
 
-/**
- * Decodes tool input before `run` is invoked. Effect Schemas validate (throwing on failure);
- * JSON-Schema-described inputs pass through unvalidated (render-only).
- */
 export const decodeInput = <R>(definition: Definition<R>, value: unknown): unknown =>
   isEffectSchema(definition.input) ? Schema.decodeUnknownSync(definition.input)(value) : value
 
-/**
- * Decodes a tool result before it is exposed to the program. Effect Schemas validate and
- * transform (throwing on failure); JSON Schema outputs and tools without an output schema pass
- * the host value through unchanged.
- */
 export const decodeOutput = <R>(definition: Definition<R>, value: unknown): unknown =>
   definition.output !== undefined && isEffectSchema(definition.output)
     ? Schema.decodeUnknownSync(definition.output)(value)

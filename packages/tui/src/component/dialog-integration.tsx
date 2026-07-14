@@ -1,10 +1,14 @@
 import { TextAttributes } from "@opentui/core"
-import type { IntegrationConnectOauthOutput } from "@opencode-ai/client/promise"
-import type { ConnectionInfo, IntegrationInfo, IntegrationOAuthMethod } from "@opencode-ai/sdk/v2"
+import type {
+  ConnectionInfo,
+  IntegrationConnectOauthOutput,
+  IntegrationInfo,
+  IntegrationOAuthMethod,
+} from "@opencode-ai/client"
 import { createMemo, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { useClipboard } from "../context/clipboard"
 import { useData } from "../context/data"
-import { useSDK } from "../context/sdk"
+import { useClient } from "../context/client"
 import { useTheme } from "../context/theme"
 import { useBindings } from "../keymap"
 import { useDialog } from "../ui/dialog"
@@ -98,7 +102,7 @@ function manageConnections(
 ) {
   dialog.replace(() => {
     const data = useData()
-    const sdk = useSDK()
+    const client = useClient()
     const toast = useToast()
     return (
       <DialogSelect
@@ -117,7 +121,7 @@ function manageConnections(
             title: `Disconnect ${connection.label}`,
             value: connection.id,
             onSelect: () => {
-              void sdk.api.credential
+              void client.api.credential
                 .remove({ credentialID: connection.id, location: location(data) })
                 .then(() => disconnected(integration.name, data, dialog, toast))
                 .catch(toast.error)
@@ -168,7 +172,7 @@ function KeyMethod(props: {
 }) {
   const data = useData()
   const dialog = useDialog()
-  const sdk = useSDK()
+  const client = useClient()
   const toast = useToast()
   const { theme } = useTheme()
   const [error, setError] = createSignal<string>()
@@ -179,7 +183,7 @@ function KeyMethod(props: {
       placeholder="API key"
       onConfirm={(key) => {
         if (!key) return
-        void sdk.api.integration
+        void client.api.integration
           .connect.key({
             integrationID: props.integration.id,
             location: location(data),
@@ -214,11 +218,11 @@ function OAuthStarting(props: {
 }) {
   const data = useData()
   const dialog = useDialog()
-  const sdk = useSDK()
+  const client = useClient()
   const toast = useToast()
 
   onMount(() => {
-    void sdk.api.integration
+    void client.api.integration
       .connect.oauth({
         integrationID: props.integration.id,
         location: location(data),
@@ -263,7 +267,7 @@ function OAuthAuto(props: {
 }) {
   const data = useData()
   const dialog = useDialog()
-  const sdk = useSDK()
+  const client = useClient()
   const toast = useToast()
   const clipboard = useClipboard()
   let timer: ReturnType<typeof setTimeout> | undefined
@@ -287,7 +291,7 @@ function OAuthAuto(props: {
   }))
 
   const poll = () => {
-    void sdk.api.integration
+    void client.api.integration
       .attempt.status({ attemptID: props.attempt.attemptID, location: location(data) })
       .then((result) => {
         const status = result.data
@@ -314,7 +318,7 @@ function OAuthAuto(props: {
   onCleanup(() => {
     if (timer) clearTimeout(timer)
     if (settled) return
-    void sdk.api.integration.attempt.cancel({ attemptID: props.attempt.attemptID, location: location(data) })
+    void client.api.integration.attempt.cancel({ attemptID: props.attempt.attemptID, location: location(data) })
   })
 
   return (
@@ -336,7 +340,7 @@ function OAuthCode(props: {
 }) {
   const data = useData()
   const dialog = useDialog()
-  const sdk = useSDK()
+  const client = useClient()
   const toast = useToast()
   const { theme } = useTheme()
   const [error, setError] = createSignal<string>()
@@ -344,7 +348,7 @@ function OAuthCode(props: {
 
   onCleanup(() => {
     if (settled) return
-    void sdk.api.integration.attempt.cancel({ attemptID: props.attempt.attemptID, location: location(data) })
+    void client.api.integration.attempt.cancel({ attemptID: props.attempt.attemptID, location: location(data) })
   })
 
   return (
@@ -353,7 +357,7 @@ function OAuthCode(props: {
       placeholder="Authorization code"
       onConfirm={(code) => {
         if (!code) return
-        void sdk.api.integration
+        void client.api.integration
           .attempt.complete({ attemptID: props.attempt.attemptID, location: location(data), code })
           .then(() => {
             settled = true

@@ -116,7 +116,6 @@ it.instance("explore agent denies edit and write", () =>
     expect(explore?.mode).toBe("subagent")
     expect(evalPerm(explore, "edit")).toBe("deny")
     expect(evalPerm(explore, "write")).toBe("deny")
-    expect(evalPerm(explore, "todowrite")).toBe("deny")
   }),
 )
 
@@ -158,16 +157,6 @@ it.instance(
       },
     },
   },
-)
-
-it.instance("general agent denies todo tools", () =>
-  Effect.gen(function* () {
-    const general = yield* load((svc) => svc.get("general"))
-    expect(general).toBeDefined()
-    expect(general?.mode).toBe("subagent")
-    expect(general?.hidden).toBeUndefined()
-    expect(evalPerm(general, "todowrite")).toBe("deny")
-  }),
 )
 
 it.instance("compaction agent denies all permissions", () =>

@@ -296,6 +296,7 @@ export function emitPromise(
   contract: Contract,
   options?: {
     readonly outputTypes?: Readonly<Record<string, { readonly name: string; readonly import: string }>>
+    readonly mutableOutputs?: boolean
   },
 ): Output {
   const groups = contract.groups
@@ -305,10 +306,10 @@ export function emitPromise(
   return {
     operations: promiseOperations(groups),
     files: [
-      { path: "types.ts", content: renderPromiseTypes(groups, options?.outputTypes) },
+      { path: "types.ts", content: renderPromiseTypes(groups, options?.outputTypes, options?.mutableOutputs ?? false) },
       {
         path: "client-error.ts",
-        content: `export type ClientErrorReason = "Transport" | "UnexpectedStatus" | "UnsupportedContentType" | "MalformedResponse"\n\nexport class ClientError extends Error {\n  override readonly name = "ClientError"\n  constructor(readonly reason: ClientErrorReason, options?: ErrorOptions) {\n    super(reason, options)\n  }\n}\n`,
+        content: `export type ClientErrorReason = "Transport" | "UnexpectedStatus" | "UnsupportedContentType" | "MalformedResponse" | "SseEventTooLarge"\n\nexport class ClientError extends Error {\n  override readonly name = "ClientError"\n  constructor(readonly reason: ClientErrorReason, options?: ErrorOptions) {\n    super(reason, options)\n  }\n}\n`,
       },
       {
         path: "client.ts",
@@ -568,6 +569,7 @@ function renderImportedProjection(groups: ReadonlyArray<Group>, endpoints: Reado
 function renderPromiseTypes(
   groups: ReadonlyArray<Group>,
   outputTypes?: Readonly<Record<string, { readonly name: string; readonly import: string }>>,
+  mutableOutputs = false,
 ) {
   const types = new Map<SchemaAST.AST, string>()
   const typeOf = (schema: Schema.Top, decoded = false) => {
@@ -577,6 +579,17 @@ function renderPromiseTypes(
     const type = structuralType(projected)
     types.set(projected.ast, type)
     return type
+  }
+  const outputMarkers = new Map<SchemaAST.AST, string>()
+  const outputSchemas: Array<Schema.Top> = []
+  const outputTypeOf = (schema: Schema.Top) => {
+    const projected = Schema.toEncoded(schema)
+    const cached = outputMarkers.get(projected.ast)
+    if (cached !== undefined) return cached
+    const marker = `__PROMISE_TYPE_${outputSchemas.length}__`
+    outputSchemas.push(projected)
+    outputMarkers.set(projected.ast, marker)
+    return marker
   }
   const errors = new Map(
     groups.flatMap((group) =>
@@ -616,7 +629,7 @@ function renderPromiseTypes(
         const successSchema = endpoint.successes[0]
         const success =
           outputTypes?.[clientOperationKey(group, endpoint)]?.name ??
-          typeOf(
+          outputTypeOf(
             isStreamSchema(successSchema) && successSchema._tag === "StreamSse"
               ? successSchema.sseMode === "data"
                 ? streamEncodedDataSchema(successSchema)
@@ -630,11 +643,32 @@ function renderPromiseTypes(
       }),
     )
     .join("\n\n")
-  const json = operations.includes("JsonValue")
-    ? "export type JsonValue = null | boolean | number | string | ReadonlyArray<JsonValue> | { readonly [key: string]: JsonValue }"
+  const reservedNames = new Set([
+    "ClientError",
+    "JsonValue",
+    ...errors.keys(),
+    ...groups.flatMap((group) =>
+      group.endpoints.flatMap((endpoint) => {
+        const prefix = promiseTypePrefix(group.identifier, endpoint.clientPath)
+        return [`${prefix}Input`, `${prefix}Output`]
+      }),
+    ),
+    ...Object.values(outputTypes ?? {}).map((output) => output.name),
+  ])
+  const rendered = structuralTypes(outputSchemas, mutableOutputs, reservedNames)
+  const resolve = (source: string) =>
+    rendered.types.reduce((result, type, index) => result.replaceAll(`__PROMISE_TYPE_${index}__`, type), source)
+  const resolvedErrors = errorTypes.map(resolve)
+  const resolvedOperations = resolve(operations)
+  const json = [...rendered.definitions, ...resolvedErrors, resolvedOperations].some((type) => type.includes("JsonValue"))
+    ? `export type JsonValue = null | boolean | number | string | ${mutableOutputs ? "Array<JsonValue> | { [key: string]: JsonValue }" : "ReadonlyArray<JsonValue> | { readonly [key: string]: JsonValue }"}`
     : ""
   const imports = [...new Set(Object.values(outputTypes ?? {}).map((override) => override.import))]
-  return [...imports, json, ...errorTypes, operations].filter(Boolean).join("\n\n")
+  return [...imports, json, ...rendered.definitions, ...resolvedErrors, resolvedOperations].filter(Boolean).join("\n\n")
+}
+
+function mutableType(type: string) {
+  return type.replaceAll("ReadonlyArray<", "Array<").replaceAll(/\breadonly\s+/g, "")
 }
 
 function renderPromiseClient(groups: ReadonlyArray<Group>) {
@@ -688,7 +722,7 @@ function renderPromiseClient(groups: ReadonlyArray<Group>) {
     if (group.endpoints[0]?.topLevel) return fields
     return `${JSON.stringify(group.identifier)}: { ${fields} }`
   })
-  return `import type { ${imports.join(", ")} } from "./types"\nimport { ClientError } from "./client-error"\n\nexport interface ClientOptions {\n  readonly baseUrl: string\n  readonly fetch?: typeof globalThis.fetch\n  readonly headers?: HeadersInit\n}\n\nexport interface RequestOptions {\n  readonly signal?: AbortSignal\n  readonly headers?: HeadersInit\n}\n\ninterface RequestDescriptor {\n  readonly method: string\n  readonly path: string\n  readonly query?: Record<string, unknown>\n  readonly headers?: Record<string, unknown>\n  readonly body?: unknown\n  readonly successStatus: number\n  readonly declaredStatuses: ReadonlyArray<number>\n  readonly empty: boolean\n}\n\nexport function make(options: ClientOptions) {\n  const fetch = options.fetch ?? globalThis.fetch\n\n  const prepare = (descriptor: RequestDescriptor, requestOptions?: RequestOptions) => {\n    const url = new URL(descriptor.path, options.baseUrl)\n    for (const [key, value] of Object.entries(descriptor.query ?? {})) appendQuery(url.searchParams, key, value)\n    const headers = new Headers(options.headers)\n    for (const [key, value] of Object.entries(descriptor.headers ?? {})) {\n      if (value !== undefined && value !== null) headers.set(key, String(value))\n    }\n    for (const [key, value] of new Headers(requestOptions?.headers)) headers.set(key, value)\n    if (descriptor.body !== undefined && !headers.has("content-type")) headers.set("content-type", "application/json")\n    return {\n      url,\n      init: {\n        method: descriptor.method,\n        signal: requestOptions?.signal,\n        headers,\n        body: descriptor.body === undefined ? undefined : JSON.stringify(descriptor.body),\n      } satisfies RequestInit,\n    }\n  }\n\n  const execute = async (descriptor: RequestDescriptor, requestOptions?: RequestOptions) => {\n    try {\n      const prepared = prepare(descriptor, requestOptions)\n      return await fetch(prepared.url, prepared.init)\n    } catch (cause) {\n      throw new ClientError("Transport", { cause })\n    }\n  }\n\n  const responseError = async (response: Response, descriptor: RequestDescriptor): Promise<never> => {\n    if (descriptor.declaredStatuses.includes(response.status)) throw await json(response)\n    try {\n      await response.body?.cancel()\n    } catch {}\n    throw new ClientError("UnexpectedStatus", { cause: { status: response.status } })\n  }\n\n  const request = async <A>(descriptor: RequestDescriptor, requestOptions?: RequestOptions): Promise<A> => {\n    const response = await execute(descriptor, requestOptions)\n    if (response.status !== descriptor.successStatus) return responseError(response, descriptor)\n    if (descriptor.empty) {\n      try {\n        await response.body?.cancel()\n      } catch {}\n      return undefined as A\n    }\n    return await json(response) as A\n  }\n\n  const sse = <A>(descriptor: RequestDescriptor, requestOptions?: RequestOptions): AsyncIterable<A> => ({\n    async *[Symbol.asyncIterator]() {\n      const response = await execute(descriptor, requestOptions)\n      if (response.status !== descriptor.successStatus) await responseError(response, descriptor)\n      if (!isContentType(response, "text/event-stream")) {\n        try {\n          await response.body?.cancel()\n        } catch {}\n        throw new ClientError("UnsupportedContentType")\n      }\n      if (response.body === null) throw new ClientError("MalformedResponse")\n      const reader = response.body.getReader()\n      const decoder = new TextDecoder()\n      let buffer = ""\n      try {\n        while (true) {\n          let next: ReadableStreamReadResult<Uint8Array>\n          try {\n            next = await reader.read()\n          } catch (cause) {\n            throw new ClientError("Transport", { cause })\n          }\n          buffer += decoder.decode(next.value, { stream: !next.done })\n          if (buffer.length > 1_048_576) throw new ClientError("MalformedResponse")\n          const trailingCarriageReturn = !next.done && buffer.endsWith("\\r")\n          if (trailingCarriageReturn) buffer = buffer.slice(0, -1)\n          buffer = buffer.replaceAll("\\r\\n", "\\n").replaceAll("\\r", "\\n")\n          if (trailingCarriageReturn) buffer += "\\r"\n          if (next.done && buffer !== "") buffer += "\\n\\n"\n          let boundary = buffer.indexOf("\\n\\n")\n          while (boundary >= 0) {\n            const block = buffer.slice(0, boundary)\n            buffer = buffer.slice(boundary + 2)\n            const data = block.split("\\n").flatMap((line) => line.startsWith("data:") ? [line.slice(5).trimStart()] : []).join("\\n")\n            if (data !== "") {\n              try {\n                yield JSON.parse(data) as A\n              } catch (cause) {\n                throw new ClientError("MalformedResponse", { cause })\n              }\n            }\n            boundary = buffer.indexOf("\\n\\n")\n          }\n          if (next.done) return\n        }\n      } finally {\n        try {\n          await reader.cancel()\n        } catch {}\n        reader.releaseLock()\n      }\n    },\n  })\n\n  return { ${fields.join(", ")} }\n}\n\nfunction appendQuery(params: URLSearchParams, key: string, value: unknown): void {\n  if (value === undefined) return\n  if (value === null) {\n    params.append(key, "null")\n    return\n  }\n  if (Array.isArray(value)) {\n    for (const item of value) appendQuery(params, key, item)\n    return\n  }\n  if (typeof value === "object") {\n    for (const [child, item] of Object.entries(value)) appendQuery(params, \`\${key}[\${child}]\`, item)\n    return\n  }\n  params.append(key, String(value))\n}\n\nasync function json(response: Response): Promise<unknown> {\n  if (!isContentType(response, "application/json") && !response.headers.get("content-type")?.includes("+json")) {\n    try {\n      await response.body?.cancel()\n    } catch {}\n    throw new ClientError("UnsupportedContentType")\n  }\n  let text: string\n  try {\n    text = await response.text()\n  } catch (cause) {\n    throw new ClientError("Transport", { cause })\n  }\n  if (text === "") throw new ClientError("MalformedResponse")\n  try {\n    return JSON.parse(text)\n  } catch (cause) {\n    throw new ClientError("MalformedResponse", { cause })\n  }\n}\n\nfunction isContentType(response: Response, expected: string) {\n  return response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase() === expected\n}\n`
+  return `import type { ${imports.join(", ")} } from "./types"\nimport { ClientError } from "./client-error"\n\nexport interface ClientOptions {\n  readonly baseUrl: string\n  readonly fetch?: typeof globalThis.fetch\n  readonly headers?: RequestInit["headers"]\n}\n\nexport interface RequestOptions {\n  readonly signal?: AbortSignal\n  readonly headers?: RequestInit["headers"]\n}\n\ninterface RequestDescriptor {\n  readonly method: string\n  readonly path: string\n  readonly query?: Record<string, unknown>\n  readonly headers?: Record<string, unknown>\n  readonly body?: unknown\n  readonly successStatus: number\n  readonly declaredStatuses: ReadonlyArray<number>\n  readonly empty: boolean\n}\n\nconst maxSseEventBytes = 16 * 1024 * 1024\n\nexport function make(options: ClientOptions) {\n  const fetch = options.fetch ?? globalThis.fetch\n\n  const prepare = (descriptor: RequestDescriptor, requestOptions?: RequestOptions) => {\n    const url = new URL(descriptor.path, options.baseUrl)\n    for (const [key, value] of Object.entries(descriptor.query ?? {})) appendQuery(url.searchParams, key, value)\n    const headers = new Headers(options.headers)\n    for (const [key, value] of Object.entries(descriptor.headers ?? {})) {\n      if (value !== undefined && value !== null) headers.set(key, String(value))\n    }\n    for (const [key, value] of new Headers(requestOptions?.headers)) headers.set(key, value)\n    if (descriptor.body !== undefined && !headers.has("content-type")) headers.set("content-type", "application/json")\n    return {\n      url,\n      init: {\n        method: descriptor.method,\n        signal: requestOptions?.signal,\n        headers,\n        body: descriptor.body === undefined ? undefined : JSON.stringify(descriptor.body),\n      } satisfies RequestInit,\n    }\n  }\n\n  const execute = async (descriptor: RequestDescriptor, requestOptions?: RequestOptions) => {\n    try {\n      const prepared = prepare(descriptor, requestOptions)\n      return await fetch(prepared.url, prepared.init)\n    } catch (cause) {\n      throw new ClientError("Transport", { cause })\n    }\n  }\n\n  const responseError = async (response: Response, descriptor: RequestDescriptor): Promise<never> => {\n    if (descriptor.declaredStatuses.includes(response.status)) throw await json(response)\n    try {\n      await response.body?.cancel()\n    } catch {}\n    throw new ClientError("UnexpectedStatus", { cause: { status: response.status } })\n  }\n\n  const request = async <A>(descriptor: RequestDescriptor, requestOptions?: RequestOptions): Promise<A> => {\n    const response = await execute(descriptor, requestOptions)\n    if (response.status !== descriptor.successStatus) return responseError(response, descriptor)\n    if (descriptor.empty) {\n      try {\n        await response.body?.cancel()\n      } catch {}\n      return undefined as A\n    }\n    return await json(response) as A\n  }\n\n  const sse = <A>(descriptor: RequestDescriptor, requestOptions?: RequestOptions): AsyncIterable<A> => ({\n    async *[Symbol.asyncIterator]() {\n      const response = await execute(descriptor, requestOptions)\n      if (response.status !== descriptor.successStatus) await responseError(response, descriptor)\n      if (!isContentType(response, "text/event-stream")) {\n        try {\n          await response.body?.cancel()\n        } catch {}\n        throw new ClientError("UnsupportedContentType")\n      }\n      if (response.body === null) throw new ClientError("MalformedResponse")\n      const reader = response.body.getReader()\n      const decoder = new TextDecoder()\n      let buffer = ""\n      try {\n        while (true) {\n          let next: ReadableStreamReadResult<Uint8Array>\n          try {\n            next = await reader.read()\n          } catch (cause) {\n            throw new ClientError("Transport", { cause })\n          }\n          buffer += decoder.decode(next.value, { stream: !next.done })\n          if (buffer.length > maxSseEventBytes) throw new ClientError("SseEventTooLarge")\n          const trailingCarriageReturn = !next.done && buffer.endsWith("\\r")\n          if (trailingCarriageReturn) buffer = buffer.slice(0, -1)\n          buffer = buffer.replaceAll("\\r\\n", "\\n").replaceAll("\\r", "\\n")\n          if (trailingCarriageReturn) buffer += "\\r"\n          if (next.done && buffer !== "") buffer += "\\n\\n"\n          let boundary = buffer.indexOf("\\n\\n")\n          while (boundary >= 0) {\n            const block = buffer.slice(0, boundary)\n            buffer = buffer.slice(boundary + 2)\n            const data = block.split("\\n").flatMap((line) => line.startsWith("data:") ? [line.slice(5).trimStart()] : []).join("\\n")\n            if (data !== "") {\n              try {\n                yield JSON.parse(data) as A\n              } catch (cause) {\n                throw new ClientError("MalformedResponse", { cause })\n              }\n            }\n            boundary = buffer.indexOf("\\n\\n")\n          }\n          if (next.done) return\n        }\n      } finally {\n        try {\n          await reader.cancel()\n        } catch {}\n        reader.releaseLock()\n      }\n    },\n  })\n\n  return { ${fields.join(", ")} }\n}\n\nfunction appendQuery(params: URLSearchParams, key: string, value: unknown): void {\n  if (value === undefined) return\n  if (value === null) {\n    params.append(key, "null")\n    return\n  }\n  if (Array.isArray(value)) {\n    for (const item of value) appendQuery(params, key, item)\n    return\n  }\n  if (typeof value === "object") {\n    for (const [child, item] of Object.entries(value)) appendQuery(params, \`\${key}[\${child}]\`, item)\n    return\n  }\n  params.append(key, String(value))\n}\n\nasync function json(response: Response): Promise<unknown> {\n  if (!isContentType(response, "application/json") && !response.headers.get("content-type")?.includes("+json")) {\n    try {\n      await response.body?.cancel()\n    } catch {}\n    throw new ClientError("UnsupportedContentType")\n  }\n  let text: string\n  try {\n    text = await response.text()\n  } catch (cause) {\n    throw new ClientError("Transport", { cause })\n  }\n  if (text === "") throw new ClientError("MalformedResponse")\n  try {\n    return JSON.parse(text)\n  } catch (cause) {\n    throw new ClientError("MalformedResponse", { cause })\n  }\n}\n\nfunction isContentType(response: Response, expected: string) {\n  return response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase() === expected\n}\n`
 }
 
 function promiseTypePrefix(group: string, path: ReadonlyArray<string>) {
@@ -761,6 +795,52 @@ function identifierPart(value: string) {
     .filter(Boolean)
     .map((part) => `${part[0]?.toUpperCase() ?? ""}${part.slice(1)}`)
     .join("")
+}
+
+function structuralTypes(schemas: ReadonlyArray<Schema.Top>, mutable: boolean, reservedNames: ReadonlySet<string>) {
+  if (schemas.length === 0) return { types: [], definitions: [] }
+  const document = SchemaRepresentation.toCodeDocument(
+    SchemaRepresentation.fromASTs(schemas.map((schema) => schema.ast) as [SchemaAST.AST, ...Array<SchemaAST.AST>]),
+  )
+  if (
+    document.artifacts.some(
+      (artifact) =>
+        artifact._tag !== "Import" || artifact.importDeclaration !== 'import type * as Brand from "effect/Brand"',
+    ) ||
+    Object.keys(document.references.recursives).length > 0
+  ) {
+    throw new GenerationError({ reason: "Referenced Promise types are not implemented" })
+  }
+  const names = new Map<string, string>()
+  const usedNames = new Set(reservedNames)
+  for (const reference of document.references.nonRecursives) {
+    const seed = identifierPart(reference.$ref)
+    const name = uniqueTypeName(seed, usedNames)
+    names.set(reference.$ref, name)
+    usedNames.add(name)
+  }
+  const render = (type: string) => {
+    for (const [reference, name] of names) {
+      const pattern = `(?<![A-Za-z0-9_$.'"])${reference.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![A-Za-z0-9_$.'"])`
+      type = type.replace(new RegExp(pattern, "g"), name)
+    }
+    const output = type
+      .replaceAll(/ & Brand\.Brand<"[^"]+">/g, "")
+      .replaceAll("Schema.Json", "JsonValue")
+      .replaceAll(/(?<!["'])\bunknown\b(?!["'])/g, "any")
+    return mutable ? mutableType(output) : output
+  }
+  return {
+    types: document.codes.map((code) => render(code.Type)),
+    definitions: document.references.nonRecursives.map(
+      (reference) => `export type ${names.get(reference.$ref)} = ${render(reference.code.Type)}`,
+    ),
+  }
+}
+
+function uniqueTypeName(seed: string, used: ReadonlySet<string>, suffix = 1): string {
+  const name = suffix === 1 ? seed : `${seed}${suffix}`
+  return used.has(name) ? uniqueTypeName(seed, used, suffix + 1) : name
 }
 
 function structuralType(schema: Schema.Top) {

@@ -123,6 +123,7 @@ type ServerEntry = {
 // MCP elicitations are Location-scoped, not Session-scoped: the server cannot attribute them to a
 // persisted session row, so their forms are owned by this opaque sentinel session identifier.
 const GLOBAL_ELICITATION_SESSION_ID = "global"
+const URL_ELICITATION_FIELD_KEY = "elicitation"
 
 export interface Interface {
   readonly servers: () => Effect.Effect<ServerInfo[]>
@@ -311,8 +312,7 @@ export const layer = Layer.effect(
                   elicitationID: input.params.elicitationId,
                   message: input.params.message,
                 },
-                mode: "url",
-                url: input.params.url,
+                fields: [{ key: URL_ELICITATION_FIELD_KEY, type: "external", url: input.params.url }],
               })
               .pipe(
                 Effect.raceFirst(waitForAbort(input.signal)),
@@ -325,15 +325,16 @@ export const layer = Layer.effect(
               )
           }
           const params = input.params
+          const [field, ...fields] = Object.entries(params.requestedSchema.properties).map(([key, property]) =>
+            toElicitationField(key, property, params.requestedSchema.required?.includes(key) === true),
+          )
+          if (!field) return { action: "accept", content: {} }
           return yield* forms
             .ask({
               sessionID: GLOBAL_ELICITATION_SESSION_ID,
               title: `${input.server} is requesting input`,
               metadata: { kind: "mcp-elicitation", server: input.server, message: params.message },
-              mode: "form",
-              fields: Object.entries(params.requestedSchema.properties).map(([key, property]) =>
-                toElicitationField(key, property, params.requestedSchema.required?.includes(key) === true),
-              ),
+              fields: [field, ...fields],
             })
             .pipe(
               Effect.raceFirst(waitForAbort(input.signal)),
@@ -355,7 +356,7 @@ export const layer = Layer.effect(
         Effect.gen(function* () {
           const formID = urlElicitations.get(input.server + "\u0000" + input.elicitationID)
           if (!formID) return
-          yield* forms.reply({ id: formID, answer: {} }).pipe(Effect.ignore)
+          yield* forms.reply({ id: formID, answer: { [URL_ELICITATION_FIELD_KEY]: true } }).pipe(Effect.ignore)
         }),
     } satisfies MCPClient.ElicitationHandler
 

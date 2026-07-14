@@ -26,6 +26,22 @@ describe("CodeMode host failure boundary", () => {
     })
   })
 
+  test("does not rewrite explicit safe tool failures", async () => {
+    const result = await run(
+      Tool.make({
+        description: "Fail safely",
+        input: Schema.Struct({}),
+        output: Schema.String,
+        run: () => Effect.fail(toolError("File not found: /tmp/report.json")),
+      }),
+    )
+
+    expect(result.ok ? undefined : result.error).toStrictEqual({
+      kind: "ToolFailure",
+      message: "File not found: /tmp/report.json",
+    })
+  })
+
   test("sanitizes unknown host failures and defects", async () => {
     for (const failure of [
       Effect.fail(new UnsafeHostError({ reason: "Authorization: Bearer typed-secret" })),
@@ -260,7 +276,7 @@ describe("CodeMode console capture", () => {
     expect(result.logs).toStrictEqual(["NaN", "Infinity -Infinity", '{"ratio":NaN,"bounds":[Infinity]}'])
   })
 
-  test("renders sandbox values nested inside logged containers", async () => {
+  test("renders CodeMode values nested inside logged containers", async () => {
     const result = await Effect.runPromise(
       CodeMode.execute({
         code: `
@@ -295,7 +311,7 @@ describe("CodeMode console capture", () => {
     expect(result.logs).toStrictEqual(['{"box":Map(1) [["self",[Circular]]]}', '{"fn":[CodeMode reference],"ok":1}'])
   })
 
-  test("console.table renders sandbox value cells", async () => {
+  test("console.table renders CodeMode value cells", async () => {
     const result = await Effect.runPromise(
       CodeMode.execute({
         code: `
@@ -506,6 +522,26 @@ describe("CodeMode public contract", () => {
     expect(Schema.decodeUnknownSync(CodeMode.Result)(JSON.parse(JSON.stringify(reusable)))).toStrictEqual(reusable)
   })
 
+  test("a reused execution Effect starts from a clean slate", async () => {
+    const echo = Tool.make({
+      description: "echo",
+      input: Schema.Struct({}),
+      output: Schema.Number,
+      run: () => Effect.succeed(1),
+    })
+    const effect = CodeMode.execute({
+      tools: { host: { echo } },
+      code: `console.log("hi"); return await tools.host.echo({})`,
+      limits: { maxToolCalls: 1 },
+    })
+    const first = await Effect.runPromise(effect)
+    const second = await Effect.runPromise(effect)
+    // Per-execution state (tool-call budget and audit list, logs, timeout bookkeeping) must
+    // bind at run time, so the second run neither exhausts the budget nor leaks run 1's logs.
+    expect(first).toStrictEqual(second)
+    expect(second).toStrictEqual({ ok: true, value: 1, logs: ["hi"], toolCalls: [{ name: "host.echo" }] })
+  })
+
   test("inlines a COMPLETE small catalog and keeps search registered but unadvertised", async () => {
     const runtime = CodeMode.make({ tools })
     expect(runtime.catalog()).toStrictEqual([
@@ -521,11 +557,11 @@ describe("CodeMode public contract", () => {
       "  - tools.orders.lookup(input: {\n  id: string,\n}): Promise<{\n  id: string,\n  status: string,\n}> // Look up an order by ID",
     )
     // A fully inlined catalog does not advertise search in the instructions...
-    expect(runtime.instructions()).not.toMatch(/\$codemode/)
+    expect(runtime.instructions()).not.toContain("search(")
 
-    // ...but the search tool stays registered, so a speculative call still works with the
+    // ...but the search built-in stays available, so a speculative call still works with the
     // same signature as the inline catalog.
-    const result = await Effect.runPromise(runtime.execute(`return await tools.$codemode.search({ query: "order" })`))
+    const result = await Effect.runPromise(runtime.execute(`return search({ query: "order" })`))
     expect(result.ok).toBe(true)
     if (result.ok) {
       expect(result.value).toStrictEqual({
@@ -563,9 +599,7 @@ describe("CodeMode public contract", () => {
       'tools.context7["resolve-library-id"](input: {\n  libraryName: string,\n}): Promise<string>',
     )
 
-    const search = await Effect.runPromise(
-      runtime.execute(`return await tools.$codemode.search({ query: "resolve library id" })`),
-    )
+    const search = await Effect.runPromise(runtime.execute(`return search({ query: "resolve library id" })`))
     expect(search.ok).toBe(true)
     if (search.ok) {
       expect(search.value).toStrictEqual({
@@ -588,7 +622,7 @@ describe("CodeMode public contract", () => {
     if (call.ok) expect(call.value).toBe("/resolved/TypeScript")
 
     const exact = await Effect.runPromise(
-      runtime.execute(`return await tools.$codemode.search({ query: 'tools.context7["resolve-library-id"]' })`),
+      runtime.execute(`return search({ query: 'tools.context7["resolve-library-id"]' })`),
     )
     expect(exact.ok).toBe(true)
     if (exact.ok) expect(exact.value).toMatchObject({ remaining: 0, next: null })
@@ -612,7 +646,7 @@ describe("CodeMode public contract", () => {
     expect(instructions).toContain("Do not infer or normalize tool names")
     expect(instructions).toContain("bracket notation and quotes are part of the path")
     expect(instructions).toContain("surrounding agent tools are not available")
-    expect(instructions).toContain("Only Code Mode tools listed here and internal runtime tools")
+    expect(instructions).toContain("Only Code Mode tools listed here are available")
     // Placeholders use generic namespace/tool/field names only - no fabricated real tools
     // and no real catalog tools cherry-picked into example lines.
     expect(instructions).toContain("`const result = await tools.<namespace>.<tool>(input)`")
@@ -631,15 +665,11 @@ describe("CodeMode public contract", () => {
     // PARTIAL: the workflow starts with search (with query-style guidance that is clearly
     // a query string, never a tool name) and the browse-namespace rule appears.
     expect(partial).toContain(
-      '1. If needed, discover tools: `return await tools.$codemode.search({ query: "<intent + key nouns>" })`.',
+      '1. If needed, discover tools with the built-in search function: `return search({ query: "<intent + key nouns>" })`.',
     )
     expect(partial).toContain("In the next execution, copy a returned path exactly")
-    expect(partial).toContain(
-      "Only Code Mode tools listed here or returned by `tools.$codemode.search` and internal runtime tools",
-    )
-    expect(partial).toContain(
-      '- Browse one namespace: `await tools.$codemode.search({ query: "", namespace: "<name>" })`.',
-    )
+    expect(partial).toContain("Only Code Mode tools listed here or returned by the built-in `search` function")
+    expect(partial).toContain('- Browse one namespace: `search({ query: "", namespace: "<name>" })`.')
     expect(partial).toContain("repeat the same search with `offset: next.offset`")
     expect(partial).toContain("  limit?: number,\n  offset?: number,")
     expect(partial).not.toContain("total_count")
@@ -652,9 +682,11 @@ describe("CodeMode public contract", () => {
     expect(instructions).toContain("not a general-purpose runtime")
     expect(instructions).not.toContain("Standard modern JavaScript works")
     expect(instructions).not.toContain("TypeScript type annotations")
-    for (const missing of ["Modules/imports", "classes", "generators", "fetch", "promise chaining"]) {
+    for (const missing of ["Modules/imports", "classes", "generators", "fetch"]) {
       expect(instructions).toContain(missing)
     }
+    expect(instructions).not.toContain("new Promise(...) are unavailable")
+    expect(instructions).not.toContain("promise chaining")
     expect(instructions).toContain("URL, URLSearchParams, and URI encoding helpers")
     expect(instructions).not.toContain("host globals")
     expect(instructions).toContain("Use Code Mode tools for external operations")
@@ -674,7 +706,7 @@ describe("CodeMode public contract", () => {
     expect(instructions).toContain("## Available tools")
     expect(instructions).not.toContain("## Workflow")
     expect(instructions).not.toContain("## Rules")
-    expect(instructions).not.toMatch(/\$codemode/)
+    expect(instructions).not.toContain("search(")
   })
 
   test("uses one ranked search returning complete definitions for large catalogs", async () => {
@@ -694,17 +726,15 @@ describe("CodeMode public contract", () => {
       tools: { thread: { uploadFile: upload, generateImage: generate }, orders: { lookup } },
       discovery: { catalogBudget: 0 },
     })
-    expect(runtime.instructions()).toContain(
-      "Available tools (PARTIAL - 0 of 3 shown; find the rest with tools.$codemode.search)",
-    )
+    expect(runtime.instructions()).toContain("Available tools (PARTIAL - 0 of 3 shown; find the rest with search(...))")
     expect(runtime.instructions()).toContain("- thread (2 tools, none shown)")
     expect(runtime.instructions()).toContain("- orders (1 tool, none shown)")
-    expect(runtime.instructions()).toMatch(/\$codemode\.search/)
+    expect(runtime.instructions()).toContain("Search returns complete callable signatures:\n- search(input: {")
     expect(runtime.instructions()).not.toMatch(/tools\.thread\.uploadFile\(input/)
 
     const result = await Effect.runPromise(
       runtime.execute(`
-      return await tools.$codemode.search({
+      return search({
         query: "send message attachment upload file to current Discord thread",
         limit: 2
       })
@@ -728,14 +758,14 @@ describe("CodeMode public contract", () => {
       remaining: 0,
       next: null,
     })
-    expect(result.toolCalls).toStrictEqual([{ name: "$codemode.search" }])
+    expect(result.toolCalls).toStrictEqual([{ name: "search" }])
 
     const variants = await Effect.runPromise(
       runtime.execute(`
-      return await Promise.all([
-        tools.$codemode.search({ query: "file" }),
-        tools.$codemode.search({ query: "image" })
-      ])
+      return [
+        search({ query: "file" }),
+        search({ query: "image" })
+      ]
     `),
     )
     expect(variants.ok).toBe(true)
@@ -747,12 +777,35 @@ describe("CodeMode public contract", () => {
         "tools.thread.generateImage",
       )
     }
+  })
 
-    const removed = await Effect.runPromise(
-      runtime.execute(`return await tools.$codemode.describe({ path: "thread.uploadFile" })`),
-    )
-    expect(removed.ok).toBe(false)
-    if (!removed.ok) expect(removed.error.kind).toBe("UnknownTool")
+  test("search is a counted tool call: it burns maxToolCalls and fires the hooks", async () => {
+    const started: Array<string> = []
+    const ended: Array<string> = []
+    const limited = CodeMode.make({
+      tools,
+      limits: { maxToolCalls: 1 },
+      onToolCallStart: (call) => Effect.sync(() => void started.push(call.name)),
+      onToolCallEnd: (call) => Effect.sync(() => void ended.push(`${call.name}:${call.outcome}`)),
+    })
+    const result = await Effect.runPromise(limited.execute(`search({}); return search({})`))
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.error.kind).toBe("ToolCallLimitExceeded")
+    expect(started).toEqual(["search"])
+    expect(ended).toEqual(["search:success"])
+  })
+
+  test("search is an opaque, shadowable global like other built-ins", async () => {
+    const runtime = CodeMode.make({ tools })
+    expect(await Effect.runPromise(runtime.execute(`return typeof search`))).toMatchObject({ value: "function" })
+    // A program-level declaration shadows the global, as JS module scope does.
+    const shadowed = await Effect.runPromise(runtime.execute(`const search = () => "local"; return search()`))
+    expect(shadowed.ok).toBe(true)
+    if (shadowed.ok) expect(shadowed.value).toBe("local")
+    // The reference itself cannot cross the data boundary.
+    const escaped = await Effect.runPromise(runtime.execute(`return { search }`))
+    expect(escaped.ok).toBe(false)
+    if (!escaped.ok) expect(escaped.error.kind).toBe("InvalidDataValue")
   })
 
   test("search defaults to 10 results and resolves exact tool paths", async () => {
@@ -769,7 +822,7 @@ describe("CodeMode public contract", () => {
       },
     })
 
-    const browse = await Effect.runPromise(runtime.execute(`return await tools.$codemode.search({})`))
+    const browse = await Effect.runPromise(runtime.execute(`return search({})`))
     expect(browse.ok).toBe(true)
     if (browse.ok) {
       const value = browse.value as {
@@ -783,9 +836,7 @@ describe("CodeMode public contract", () => {
     }
 
     for (const query of ["many.tool13", "tools.many.tool13"]) {
-      const exact = await Effect.runPromise(
-        runtime.execute(`return await tools.$codemode.search({ query: ${JSON.stringify(query)} })`),
-      )
+      const exact = await Effect.runPromise(runtime.execute(`return search({ query: ${JSON.stringify(query)} })`))
       expect(exact.ok).toBe(true)
       if (exact.ok) {
         expect(exact.value).toStrictEqual({
@@ -819,9 +870,7 @@ describe("CodeMode public contract", () => {
     })
 
     // Empty query + namespace browses just that namespace, alphabetical by path.
-    const browse = await Effect.runPromise(
-      runtime.execute(`return await tools.$codemode.search({ query: "", namespace: "github" })`),
-    )
+    const browse = await Effect.runPromise(runtime.execute(`return search({ query: "", namespace: "github" })`))
     expect(browse.ok).toBe(true)
     if (browse.ok) {
       const value = browse.value as { items: Array<{ path: string }>; remaining: number }
@@ -833,9 +882,7 @@ describe("CodeMode public contract", () => {
     }
 
     // A query + namespace ranks within that namespace only.
-    const scoped = await Effect.runPromise(
-      runtime.execute(`return await tools.$codemode.search({ query: "issues", namespace: "linear" })`),
-    )
+    const scoped = await Effect.runPromise(runtime.execute(`return search({ query: "issues", namespace: "linear" })`))
     expect(scoped.ok).toBe(true)
     if (scoped.ok) {
       const value = scoped.value as { items: Array<{ path: string }>; remaining: number }
@@ -843,9 +890,7 @@ describe("CodeMode public contract", () => {
       expect(value.items[0]?.path).toBe("tools.linear.list_issues")
     }
 
-    const invalid = await Effect.runPromise(
-      runtime.execute(`return await tools.$codemode.search({ query: "issues", namespace: 7 })`),
-    )
+    const invalid = await Effect.runPromise(runtime.execute(`return search({ query: "issues", namespace: 7 })`))
     expect(invalid.ok).toBe(false)
     if (!invalid.ok) expect(invalid.error.kind).toBe("InvalidToolInput")
   })
@@ -870,9 +915,7 @@ describe("CodeMode public contract", () => {
 
     // "attachment" appears in neither path nor description - only in the input schema's
     // property names, which the searchable text includes.
-    const byParameter = await Effect.runPromise(
-      runtime.execute(`return await tools.$codemode.search({ query: "attachment" })`),
-    )
+    const byParameter = await Effect.runPromise(runtime.execute(`return search({ query: "attachment" })`))
     expect(byParameter.ok).toBe(true)
     if (byParameter.ok) {
       const value = byParameter.value as { items: Array<{ path: string }>; remaining: number }
@@ -881,9 +924,7 @@ describe("CodeMode public contract", () => {
     }
 
     // Substring matching: a partial word ("docum") still hits the description.
-    const bySubstring = await Effect.runPromise(
-      runtime.execute(`return await tools.$codemode.search({ query: "docum" })`),
-    )
+    const bySubstring = await Effect.runPromise(runtime.execute(`return search({ query: "docum" })`))
     expect(bySubstring.ok).toBe(true)
     if (bySubstring.ok) {
       const value = bySubstring.value as { items: Array<{ path: string }>; remaining: number }
@@ -910,9 +951,7 @@ describe("CodeMode public contract", () => {
     })
 
     // "issues" still finds the singular-only tool (term OR singular(term) per field)...
-    const plural = await Effect.runPromise(
-      runtime.execute(`return await tools.$codemode.search({ query: "issues", namespace: "tracker" })`),
-    )
+    const plural = await Effect.runPromise(runtime.execute(`return search({ query: "issues", namespace: "tracker" })`))
     expect(plural.ok).toBe(true)
     if (plural.ok) {
       const value = plural.value as { items: Array<{ path: string }>; remaining: number }
@@ -921,7 +960,7 @@ describe("CodeMode public contract", () => {
     }
 
     // ...while a true "issues" path match still outranks the singular-only description match.
-    const ranked = await Effect.runPromise(runtime.execute(`return await tools.$codemode.search({ query: "issues" })`))
+    const ranked = await Effect.runPromise(runtime.execute(`return search({ query: "issues" })`))
     expect(ranked.ok).toBe(true)
     if (ranked.ok) {
       const value = ranked.value as { items: Array<{ path: string }>; remaining: number }
@@ -948,7 +987,7 @@ describe("CodeMode public contract", () => {
         alpha: { beta: simple("Middle"), aardvark: simple("First") },
       },
     })
-    const browse = await Effect.runPromise(runtime.execute(`return await tools.$codemode.search({})`))
+    const browse = await Effect.runPromise(runtime.execute(`return search({})`))
     expect(browse.ok).toBe(true)
     if (browse.ok) {
       const value = browse.value as { items: Array<{ path: string }>; remaining: number; next: unknown }
@@ -961,9 +1000,7 @@ describe("CodeMode public contract", () => {
       expect(value.next).toBeNull()
     }
 
-    const middle = await Effect.runPromise(
-      runtime.execute(`return await tools.$codemode.search({ limit: 1, offset: 1 })`),
-    )
+    const middle = await Effect.runPromise(runtime.execute(`return search({ limit: 1, offset: 1 })`))
     expect(middle.ok).toBe(true)
     if (middle.ok) {
       expect(middle.value).toMatchObject({
@@ -973,9 +1010,7 @@ describe("CodeMode public contract", () => {
       })
     }
 
-    const exhausted = await Effect.runPromise(
-      runtime.execute(`return await tools.$codemode.search({ limit: 1, offset: 3 })`),
-    )
+    const exhausted = await Effect.runPromise(runtime.execute(`return search({ limit: 1, offset: 3 })`))
     expect(exhausted.ok).toBe(true)
     if (exhausted.ok) expect(exhausted.value).toStrictEqual({ items: [], remaining: 0, next: null })
   })
@@ -1006,16 +1041,14 @@ describe("CodeMode public contract", () => {
     })
 
     const instructions = runtime.instructions()
-    expect(instructions).toContain(
-      "Available tools (PARTIAL - 2 of 3 shown; find the rest with tools.$codemode.search)",
-    )
+    expect(instructions).toContain("Available tools (PARTIAL - 2 of 3 shown; find the rest with search(...))")
     expect(instructions).toContain("- alpha (2 tools, 1 shown)")
     expect(instructions).toContain("  - tools.alpha.cheap(input: {\n  q: string,\n}): Promise<string> // Cheap")
     expect(instructions).not.toContain("tools.alpha.expensive(")
     // Fully shown namespaces read cleanly (no "shown" annotation).
     expect(instructions).toContain("- beta (1 tool)")
     expect(instructions).toContain("  - tools.beta.cheap(input: {\n  q: string,\n}): Promise<string> // Cheap")
-    expect(instructions).toMatch(/\$codemode\.search/)
+    expect(instructions).toContain("Search returns complete callable signatures:\n- search(input: {")
   })
 
   test("charges inline JSDoc against the catalog token budget", () => {
@@ -1036,9 +1069,7 @@ describe("CodeMode public contract", () => {
     })
 
     expect(runtime.catalog()[0]?.signature).toContain("/** A detailed identifier description.")
-    expect(runtime.instructions()).toContain(
-      "Available tools (PARTIAL - 0 of 1 shown; find the rest with tools.$codemode.search)",
-    )
+    expect(runtime.instructions()).toContain("Available tools (PARTIAL - 0 of 1 shown; find the rest with search(...))")
     expect(runtime.instructions()).not.toContain("tools.records.lookup(input:")
   })
 
@@ -1116,7 +1147,7 @@ describe("CodeMode public contract", () => {
       CodeMode.make({
         tools,
         discovery: { catalogBudget: 0 },
-      }).execute(`return await tools.$codemode.search({ query: "order", limit: 0.5 })`),
+      }).execute(`return search({ query: "order", limit: 0.5 })`),
     )
     expect(result.ok).toBe(false)
     if (result.ok) return
@@ -1124,9 +1155,7 @@ describe("CodeMode public contract", () => {
 
     for (const offset of [-1, 0.5, Number.MAX_SAFE_INTEGER + 1, "1"]) {
       const invalidOffset = await Effect.runPromise(
-        CodeMode.make({ tools }).execute(
-          `return await tools.$codemode.search({ query: "order", offset: ${JSON.stringify(offset)} })`,
-        ),
+        CodeMode.make({ tools }).execute(`return search({ query: "order", offset: ${JSON.stringify(offset)} })`),
       )
       expect(invalidOffset.ok).toBe(false)
       if (!invalidOffset.ok) expect(invalidOffset.error.kind).toBe("InvalidToolInput")
@@ -1176,9 +1205,5 @@ describe("CodeMode public contract", () => {
       expect(result.error.message).toContain("timed out after 200ms")
     }
     expect(elapsedMs).toBeLessThan(3_000)
-  })
-
-  test("reserves the discovery namespace", () => {
-    expect(() => CodeMode.make({ tools: { $codemode: { lookup } } })).toThrow(/reserved for CodeMode discovery tools/)
   })
 })

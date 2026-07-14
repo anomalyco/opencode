@@ -15,10 +15,6 @@ export const pack = async () => {
   }
 
   for (const [key, value] of Object.entries(pkg.exports)) {
-    if (key === "./internal") {
-      delete pkg.exports[key]
-      continue
-    }
     if (typeof value !== "string") continue
     const file = value.replace("./src/", "./dist/").replace(/\.ts$/, "")
     pkg.exports[key] = { import: `${file}.js`, types: `${file}.d.ts` }
@@ -29,6 +25,16 @@ export const pack = async () => {
     return fileURLToPath(new URL(`../opencode-ai-http-recorder-${pkg.version}.tgz`, import.meta.url))
   } finally {
     await Bun.write("package.json", original)
+  }
+}
+
+export const withPackedArchive = async <A>(use: (archive: string) => Promise<A>) => {
+  const archive = await pack()
+  try {
+    return await use(archive)
+  } finally {
+    const file = Bun.file(archive)
+    if (await file.exists()) await file.delete()
   }
 }
 

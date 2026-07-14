@@ -29,7 +29,7 @@ describe("Reference", () => {
       yield* references.transform((editor) => editor.add("docs", source)).pipe(Scope.provide(scope))
 
       expect(yield* references.list()).toEqual([
-        new Reference.Info({ name: "docs", path, description: "Use for API documentation", hidden: true, source }),
+        Reference.Info.make({ name: "docs", path, description: "Use for API documentation", hidden: true, source }),
       ])
 
       yield* Scope.close(scope, Exit.void)
@@ -45,7 +45,7 @@ describe("Reference", () => {
       yield* references.transform((editor) => editor.add("sdk", source))
 
       expect(yield* references.list()).toEqual([
-        new Reference.Info({
+        Reference.Info.make({
           name: "sdk",
           path: AbsolutePath.make(Repository.cachePath(Global.Path.repos, repository)),
           source,
@@ -66,7 +66,7 @@ describe("Reference", () => {
       yield* references.transform((editor) => editor.add("sdk", source))
 
       expect(yield* references.list()).toEqual([
-        new Reference.Info({
+        Reference.Info.make({
           name: "sdk",
           path: AbsolutePath.make(Repository.cachePath(Global.Path.repos, repository)),
           description: "Use for SDK implementation details",

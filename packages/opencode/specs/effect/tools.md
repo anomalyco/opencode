@@ -50,7 +50,6 @@ These exported tool definitions currently use `Tool.define(...)` in `src/tool`:
 - [x] `read.ts`
 - [x] `skill.ts`
 - [x] `task.ts`
-- [x] `todo.ts`
 - [x] `webfetch.ts`
 - [x] `websearch.ts`
 - [x] `write.ts`

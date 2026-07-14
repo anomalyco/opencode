@@ -5,7 +5,7 @@ import { McpEvent } from "@opencode-ai/schema/mcp-event"
 import { Effect, Exit, type JsonSchema, Layer, Scope, Semaphore, Stream } from "effect"
 import { makeLocationNode } from "../effect/app-node"
 import { EventV2 } from "../event"
-import { Flag } from "../flag/flag"
+
 import { MCP } from "../mcp"
 import { PermissionV2 } from "../permission"
 import { Tool } from "./tool"
@@ -107,7 +107,7 @@ export const layer = Layer.effectDiscard(
         const next = yield* Scope.fork(scope)
         yield* Effect.forEach(
           groups,
-          ([group, record]) => tools.register(record, { group, deferred: Flag.CODEMODE_ENABLED }),
+          ([group, record]) => tools.register(record, { group }),
           {
             discard: true,
           },

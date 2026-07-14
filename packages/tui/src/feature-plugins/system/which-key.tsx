@@ -22,8 +22,6 @@ const command = {
 } as const
 
 const LAYER_PRIORITY = 900
-const KV_LAYOUT = "which_key_layout"
-const KV_PENDING_PREVIEW = "which_key_pending_preview"
 const toggleCommands = [command.toggle, command.toggleLayout, command.togglePending] as const
 const scrollCommands = [
   command.scrollUp,
@@ -531,8 +529,8 @@ function WhichKeyPanel(props: {
 
 const tui: TuiPlugin = async (api) => {
   const [pinned, setPinned] = createSignal(false)
-  const [mode, setMode] = createSignal(layout(api.kv.get(KV_LAYOUT, "dock")))
-  const [pendingPreview, setPendingPreview] = createSignal(api.kv.get(KV_PENDING_PREVIEW, false))
+  const [mode, setMode] = createSignal(layout("dock"))
+  const [pendingPreview, setPendingPreview] = createSignal(false)
 
   api.keymap.registerLayer({
     priority: LAYER_PRIORITY,
@@ -554,7 +552,6 @@ const tui: TuiPlugin = async (api) => {
         run() {
           setMode((value) => {
             const next = value === "dock" ? "overlay" : "dock"
-            api.kv.set(KV_LAYOUT, next)
             return next
           })
         },
@@ -566,7 +563,6 @@ const tui: TuiPlugin = async (api) => {
         category: "System",
         run() {
           setPendingPreview((value) => {
-            api.kv.set(KV_PENDING_PREVIEW, !value)
             return !value
           })
         },

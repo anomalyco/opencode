@@ -496,7 +496,7 @@ describe("HttpApiCodegen.generate", () => {
     expect(types).not.toContain("Brand")
   })
 
-  test("inlines non-recursive references in Promise wire types", () => {
+  test("retains non-recursive references in Promise wire types", () => {
     const Referenced = Schema.Struct({ value: Schema.String }).annotate({ identifier: "Referenced" })
     const output = emitPromise(
       compileContract(
@@ -508,12 +508,30 @@ describe("HttpApiCodegen.generate", () => {
       ),
     )
 
-    expect(output.files.find((file) => file.path === "types.ts")?.content).toContain(
-      'export type SessionGetOutput = ({ readonly "data": ({ readonly "value": string }) })["data"]',
-    )
+    const types = output.files.find((file) => file.path === "types.ts")?.content
+    expect(types).toContain('export type Referenced = { readonly "value": string }')
+    expect(types).toContain('export type SessionGetOutput = ({ readonly "data": Referenced })["data"]')
   })
 
-  test("expands Promise references only at identifier boundaries", () => {
+  test("emits mutable Promise outputs without restricting inputs", () => {
+    const output = emitPromise(
+      compileContract(
+        api(
+          HttpApiEndpoint.post("create", "/session", {
+            payload: Schema.Struct({ values: Schema.Array(Schema.String) }),
+            success: Schema.Struct({ data: Schema.Array(Schema.Struct({ values: Schema.Array(Schema.String) })) }),
+          }),
+        ),
+      ),
+      { mutableOutputs: true },
+    )
+    const types = output.files.find((file) => file.path === "types.ts")?.content
+
+    expect(types).toContain('readonly "values": ReadonlyArray<string>')
+    expect(types).toContain('export type SessionCreateOutput = ({ "data": Array<{ "values": Array<string> }> })["data"]')
+  })
+
+  test("retains distinct Promise references at identifier boundaries", () => {
     const Session = Schema.Struct({ name: Schema.Literal("Session"), id: Schema.String }).annotate({
       identifier: "Session",
     })
@@ -528,9 +546,24 @@ describe("HttpApiCodegen.generate", () => {
       ),
     )
 
-    expect(output.files.find((file) => file.path === "types.ts")?.content).toContain(
-      'readonly "session": ({ readonly "name": "Session", readonly "id": string })',
+    const types = output.files.find((file) => file.path === "types.ts")?.content
+    expect(types).toContain('export type Session = { readonly "name": "Session", readonly "id": string }')
+    expect(types).toContain("export type SessionID = string")
+    expect(types).toContain('readonly "session": Session, readonly "sessionID": SessionID')
+  })
+
+  test("disambiguates flattened Promise reference names", () => {
+    const First = Schema.String.annotate({ identifier: "ExampleName" })
+    const Second = Schema.String.annotate({ identifier: "Example_Name" })
+    const output = emitPromise(
+      compileContract(
+        api(HttpApiEndpoint.get("get", "/session", { success: Schema.Struct({ first: First, second: Second }) })),
+      ),
     )
+    const types = output.files.find((file) => file.path === "types.ts")?.content
+
+    expect(types).toContain("export type ExampleName = string")
+    expect(types).toContain("export type ExampleName2 = string")
   })
 
   test("emits Effect Json schemas as standalone Promise types", () => {
@@ -1062,6 +1095,27 @@ describe("HttpApiCodegen.generate", () => {
     )
 
     expect(output.operations[0]?.success).toBe("stream")
+  })
+
+  test("emits opaque Promise SSE fields as any", () => {
+    const output = emitPromise(
+      compileContract(
+        api(
+          HttpApiEndpoint.get("subscribe", "/event", {
+            success: HttpApiSchema.StreamSse({
+              data: Schema.Struct({
+                metadata: Schema.Record(Schema.String, Schema.Unknown),
+                label: Schema.Literal("unknown"),
+              }),
+            }),
+          }),
+        ),
+      ),
+    )
+    const types = output.files.find((file) => file.path === "types.ts")?.content
+
+    expect(types).toContain('readonly "metadata": { readonly [x: string]: any }')
+    expect(types).toContain('readonly "label": "unknown"')
   })
 
   test("preserves annotated stream response statuses", () => {

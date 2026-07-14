@@ -1,0 +1,7 @@
+{
+  "title": "Build",
+  "description": "Extend and embed OpenCode.",
+  "root": true,
+  "defaultOpen": true,
+  "pages": ["index", "plugins", "client", "sdk"]
+}

@@ -1,15 +1,19 @@
-import { Effect, Option, Redacted } from "effect"
+import { Effect, Option } from "effect"
 import { Commands } from "../commands"
-import { Env } from "../../env"
 import { Runtime } from "../../framework/runtime"
+import { Server } from "../../services/server"
 
 export default Runtime.handler(Commands.commands.run, (input) =>
   Effect.gen(function* () {
     const { runNonInteractive } = yield* Effect.promise(() => import("../../mini"))
-    const password = yield* Env.password
     const separator = process.argv.indexOf("--", 2)
+    const server = yield* Server.resolve({
+      server: Option.getOrUndefined(input.server),
+      standalone: input.standalone,
+    })
     yield* Effect.promise(() =>
       runNonInteractive({
+        server,
         message: [...input.message, ...(separator === -1 ? [] : process.argv.slice(separator + 1))],
         continue: input.continue,
         session: Option.getOrUndefined(input.session),
@@ -19,12 +23,8 @@ export default Runtime.handler(Commands.commands.run, (input) =>
         format: input.format,
         file: [...input.file],
         title: Option.getOrUndefined(input.title),
-        server: Option.getOrUndefined(input.server),
-        password: password ? Redacted.value(password) : undefined,
-        directory: Option.getOrUndefined(input.dir),
-        variant: Option.getOrUndefined(input.variant),
         thinking: input.thinking,
-        dangerouslySkipPermissions: input.auto || input.yolo || input.dangerouslySkipPermissions,
+        auto: input.auto || input.yolo,
       }),
     )
   }),

@@ -14,7 +14,7 @@ import {
 } from "@opentui/keymap/extras"
 import { KeymapProvider, useKeymap, useKeymapSelector, useBindings } from "@opentui/keymap/solid"
 import { createMemo, type Accessor } from "solid-js"
-import { useTuiConfig } from "./config"
+import { useConfig } from "./config"
 import { TuiKeybind } from "./config/keybind"
 
 export const LEADER_TOKEN = "leader"
@@ -42,7 +42,7 @@ type BindingLookup = {
   gather(name: string, commands: readonly string[]): readonly Binding<Renderable, KeyEvent>[]
 }
 type FormatConfig = { keybinds: BindingLookup }
-type ResolvedKeymapConfig = FormatConfig & { leader_timeout: number }
+type ResolvedKeymapConfig = FormatConfig & ({ leader: { timeout: number } } | { leader_timeout: number })
 
 const modeStacks = new WeakMap<OpenTuiKeymap, OpencodeModeStack>()
 
@@ -193,6 +193,10 @@ function formatOptions(config: FormatConfig) {
       [LEADER_TOKEN]: leaderDisplay(config),
     },
     keyNameAliases: {
+      up: "↑",
+      down: "↓",
+      left: "←",
+      right: "→",
       pageup: "pgup",
       pagedown: "pgdn",
       delete: "del",
@@ -221,7 +225,7 @@ export function registerOpencodeKeymap(keymap: OpenTuiKeymap, renderer: CliRende
     ? registerTimedLeader(keymap, {
         trigger: leader,
         name: LEADER_TOKEN,
-        timeoutMs: config.leader_timeout,
+        timeoutMs: "leader" in config ? config.leader.timeout : config.leader_timeout,
       })
     : () => {}
   const offEscape = registerEscapeClearsPendingSequence(keymap)
@@ -248,7 +252,7 @@ export function useLeaderActive(): Accessor<boolean> {
 }
 
 export function useCommandShortcut(command: string): Accessor<string> {
-  const config = useTuiConfig()
+  const config = useConfig().data
   return useKeymapSelector((keymap: OpenTuiKeymap) =>
     formatKeySequence(
       keymap.getCommandBindings({ visibility: "registered", commands: [command] }).get(command)?.[0]?.sequence,

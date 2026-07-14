@@ -12,7 +12,7 @@ const server = resolve(import.meta.dir, "../../server")
 
 describe("public import boundaries", () => {
   test("isolates each public entrypoint", async () => {
-    const root = await bundleInputs("@opencode-ai/client/promise", "browser")
+    const root = await bundleInputs("@opencode-ai/client", "browser")
 
     expect(within(root, effect)).toEqual([])
     expect(within(root, schema)).toEqual([])

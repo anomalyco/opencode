@@ -1,6 +1,6 @@
 ---
 title: "Config"
-description: "Configure OpenCode."
+description: ""
 ---
 
 <Tip>
@@ -44,8 +44,12 @@ Project-specific configuration can use either form:
 ```
 
 When OpenCode starts, it searches for configuration files from the current
-directory upward to the project root. The files are merged, and configuration
-closer to the current directory takes precedence.
+directory upward to the project root. It merges direct `opencode.json(c)` files
+from the project root toward the current directory, then does the same for
+files inside `.opencode` directories. A `.opencode` config therefore overrides
+every direct config, even when the direct config is closer to the current
+directory. Avoid mixing the two forms across one project hierarchy unless this
+precedence is intentional.
 
 For example, consider a monorepo with OpenCode started from
 `/home/user/projects/acme/packages/web`:
@@ -67,9 +71,9 @@ OpenCode applies these files from lowest to highest precedence:
 2. `/home/user/projects/acme/opencode.json`
 3. `/home/user/projects/acme/packages/web/opencode.json`
 
-Settings in the package config override matching settings from the repository
-config, which override matching settings from the global config. Settings that
-do not conflict are preserved from every file.
+In this direct-config example, the package config overrides matching settings
+from the repository config, which overrides matching settings from the global
+config. Settings that do not conflict are preserved from every file.
 
 ## Schema
 
@@ -100,16 +104,16 @@ Set the shell used by the terminal and shell tools.
 
 ### Model
 
-Set the default model in `provider/model` format. Add `#variant` to select a
-specific model variant.
+Set the default model in `provider/model` format. The root default currently
+does not retain a `#variant`; select variants in the TUI or on an agent or command.
 
 ```jsonc
 {
-  "model": "anthropic/claude-sonnet-4-5#high"
+  "model": "anthropic/claude-sonnet-4-5"
 }
 ```
 
-See the [models guide](https://opencode.ai/docs/models/) for model selection
+See the [models guide](/models) for model selection
 and local models.
 
 ### Default agent
@@ -122,13 +126,15 @@ Choose the primary agent used when a session does not select one explicitly.
 }
 ```
 
-See the [agents guide](https://opencode.ai/docs/agents/) for built-in and custom
+See the [agents guide](/agents) for built-in and custom
 agents.
 
 ### Autoupdate
 
-Control automatic updates. Set this to `false` to disable updates or `"notify"`
-to receive update notifications.
+Control automatic updates from the global config. Set this to `false` to
+disable updates. The current beta treats `true` and `"notify"` identically and
+automatically installs compatible non-major updates; project-level values are
+ignored.
 
 ```jsonc
 {
@@ -138,8 +144,8 @@ to receive update notifications.
 
 ### Sharing
 
-Control whether sessions can be shared manually, shared automatically, or not
-shared at all.
+Set the intended session sharing policy. V2 accepts this field, but session
+sharing is not implemented yet.
 
 ```jsonc
 {
@@ -147,11 +153,12 @@ shared at all.
 }
 ```
 
-See the [sharing guide](https://opencode.ai/docs/share/) for more details.
+See the [sharing guide](/sharing) for more details.
 
 ### Username
 
-Set the username displayed in conversations.
+Set a username for future display behavior. V2 accepts this field but does not
+currently display it in conversations.
 
 ```jsonc
 {
@@ -168,7 +175,7 @@ matching resource.
 {
   "permissions": [
     {
-      "action": "bash",
+      "action": "shell",
       "resource": "git push *",
       "effect": "ask"
     }
@@ -176,8 +183,7 @@ matching resource.
 }
 ```
 
-See the [permissions guide](https://opencode.ai/docs/permissions/) for rule
-matching and available actions.
+See the [permissions guide](/permissions) for rule matching and available actions.
 
 ### Agents
 
@@ -199,18 +205,19 @@ instructions, mode, and permissions.
 }
 ```
 
-See the [agents guide](https://opencode.ai/docs/agents/) for all agent options
-and file-based agents.
+See the [agents guide](/agents) for all agent options and file-based agents.
 
 ### Snapshots
 
-Enable or disable the snapshots used by undo and revert behavior.
+Enable or disable filesystem snapshots used by undo and revert behavior.
 
 ```jsonc
 {
   "snapshots": false
 }
 ```
+
+See the [snapshots guide](/snapshots) for undo and redo behavior.
 
 ### Watcher
 
@@ -226,8 +233,8 @@ Ignore files and directories that should not trigger filesystem updates.
 
 ### Formatter
 
-Enable built-in formatters, disable formatting entirely, or configure formatter
-commands by name.
+Define formatter settings for compatibility and future use. V2 accepts this
+field, but it does not run formatters yet.
 
 ```jsonc
 {
@@ -240,12 +247,12 @@ commands by name.
 }
 ```
 
-See the [formatters guide](https://opencode.ai/docs/formatters/) for built-in
-formatters and custom commands.
+See the [formatters guide](/formatters) for accepted fields and current limitations.
 
 ### LSP
 
-Enable built-in language servers, disable them, or configure servers by name.
+Define language server settings for compatibility and future use. V2 accepts
+this field, but it does not start language servers yet.
 
 ```jsonc
 {
@@ -258,12 +265,12 @@ Enable built-in language servers, disable them, or configure servers by name.
 }
 ```
 
-See the [LSP guide](https://opencode.ai/docs/lsp/) for language server setup.
+See the [LSP guide](/lsp) for accepted fields and current limitations.
 
 ### Attachments
 
-Control how oversized image attachments are resized or rejected before they are
-sent to a model.
+Control how oversized images loaded by the `read` tool are resized or rejected
+before they are sent to a model.
 
 ```jsonc
 {
@@ -277,6 +284,8 @@ sent to a model.
   }
 }
 ```
+
+See the [attachments guide](/attachments) for image processing and limits.
 
 ### Tool output
 
@@ -309,8 +318,7 @@ be overridden by an individual server.
 }
 ```
 
-See the [MCP guide](https://opencode.ai/docs/mcp-servers/) for remote servers,
-OAuth, environment variables, and timeouts.
+See the [MCP guide](/mcp-servers) for remote servers, OAuth, environment variables, and timeouts.
 
 ### Compaction
 
@@ -328,6 +336,8 @@ Control automatic context compaction and how much recent context it preserves.
 }
 ```
 
+See the [compaction guide](/compaction) for automatic context management.
+
 ### Skills
 
 Add directories or URLs that OpenCode should search for agent skills.
@@ -338,8 +348,7 @@ Add directories or URLs that OpenCode should search for agent skills.
 }
 ```
 
-See the [skills guide](https://opencode.ai/docs/skills/) for skill structure and
-automatic discovery under `.opencode/skills/`.
+See the [skills guide](/skills) for skill structure and automatic discovery under `.opencode/skills/`.
 
 ### Commands
 
@@ -356,12 +365,12 @@ Define reusable slash commands as named prompt templates.
 }
 ```
 
-See the [commands guide](https://opencode.ai/docs/commands/) for arguments,
-models, agents, and file-based commands.
+See the [commands guide](/commands) for arguments, models, agents, and file-based commands.
 
 ### Instructions
 
-Load additional instruction files, globs, or URLs into the agent's context.
+Declare additional instruction files, globs, or URLs. V2 accepts this field,
+but does not load these entries yet; use `AGENTS.md` for active instructions.
 
 ```jsonc
 {
@@ -369,8 +378,7 @@ Load additional instruction files, globs, or URLs into the agent's context.
 }
 ```
 
-See the [rules guide](https://opencode.ai/docs/rules/) for project instructions
-and `AGENTS.md`.
+See the [instructions guide](/instructions) for project instructions and `AGENTS.md`.
 
 ### References
 
@@ -392,8 +400,7 @@ context.
 }
 ```
 
-See the [references guide](https://opencode.ai/docs/references/) for shorthand,
-visibility, and path resolution.
+See the [references guide](/references) for shorthand, visibility, and path resolution.
 
 ### Plugins
 
@@ -414,7 +421,7 @@ accepts options.
 }
 ```
 
-See the [plugins guide](/plugins) for plugin development and configuration.
+See the [plugins guide](/build/plugins) for plugin development and configuration.
 
 ### Providers
 
@@ -440,5 +447,4 @@ headers, and model variants.
 }
 ```
 
-See the [providers guide](https://opencode.ai/docs/providers/) for credentials,
-custom endpoints, provider packages, and model configuration.
+See the [providers guide](/providers) for credentials, custom endpoints, provider packages, and model configuration.

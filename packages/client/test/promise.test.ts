@@ -6,6 +6,7 @@ test("exposes every standard HTTP API group", () => {
 
   expect(Object.keys(client)).toEqual([
     "health",
+    "server",
     "location",
     "agent",
     "plugin",
@@ -43,6 +44,21 @@ test("exposes every standard HTTP API group", () => {
   expect(Object.keys(client.pty)).toEqual(["list", "create", "get", "update", "remove"])
   expect(Object.keys(client.shell)).toEqual(["list", "create", "get", "timeout", "output", "remove"])
   expect(Object.keys(client.project)).toEqual(["list", "current", "directories"])
+})
+
+test("server.get uses the public HTTP contract", async () => {
+  let request: Request | undefined
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async (input) => {
+      request = input instanceof Request ? input : new Request(input)
+      return Response.json({ urls: ["http://192.168.1.10:4096"] })
+    },
+  })
+
+  expect(await client.server.get()).toEqual({ urls: ["http://192.168.1.10:4096"] })
+  expect(request?.method).toBe("GET")
+  expect(request?.url).toBe("http://localhost:3000/api/server")
 })
 
 test("MCP resource catalog uses the public HTTP contract", async () => {
@@ -211,6 +227,34 @@ test("session instructions methods use the public HTTP contract", async () => {
   ])
 })
 
+test("session.pending.list uses the public HTTP contract", async () => {
+  const requests: Array<{ method: string; url: string }> = []
+  const pending = [
+    {
+      admittedSeq: 3,
+      id: "msg_pending",
+      sessionID: "ses_test",
+      timeCreated: 1_717_171_717_000,
+      type: "user",
+      data: { text: "Fix the failing tests" },
+      delivery: "steer",
+    },
+  ]
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      requests.push({ method: request.method, url: request.url })
+      return Response.json({ data: pending })
+    },
+  })
+
+  const result = await client.session.pending.list({ sessionID: "ses_test" })
+
+  expect(result).toEqual(pending)
+  expect(requests).toEqual([{ method: "GET", url: "http://localhost:3000/api/session/ses_test/pending" }])
+})
+
 test("event.subscribe exposes the Promise event stream wire projection", async () => {
   const client = OpenCode.make({
     baseUrl: "http://localhost:3000",
@@ -240,6 +284,43 @@ test("event.subscribe terminates on malformed Promise SSE data", async () => {
   })
 })
 
+test("event.subscribe accepts a fragmented SSE event below the size limit", async () => {
+  const event = { id: "evt_large", type: "test.large", data: { output: "x".repeat(12 * 1024 * 1024) } }
+  const encoded = new TextEncoder().encode(`data: ${JSON.stringify(event)}\n\n`)
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async () =>
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            for (let offset = 0; offset < encoded.length; offset += 64 * 1024) {
+              controller.enqueue(encoded.slice(offset, offset + 64 * 1024))
+            }
+            controller.close()
+          },
+        }),
+        { headers: { "content-type": "text/event-stream" } },
+      ),
+  })
+
+  await expect(client.event.subscribe()[Symbol.asyncIterator]().next()).resolves.toEqual({ done: false, value: event })
+})
+
+test("event.subscribe rejects an SSE event above the size limit", async () => {
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async () =>
+      new Response(`data: ${JSON.stringify({ output: "x".repeat(16 * 1024 * 1024) })}`, {
+        headers: { "content-type": "text/event-stream" },
+      }),
+  })
+
+  await expect(client.event.subscribe()[Symbol.asyncIterator]().next()).rejects.toMatchObject({
+    name: "ClientError",
+    reason: "SseEventTooLarge",
+  })
+})
+
 test("session methods use the public HTTP contract", async () => {
   const requests: Array<{ url: string; init?: RequestInit }> = []
   const client = OpenCode.make({
@@ -258,6 +339,7 @@ test("session methods use the public HTTP contract", async () => {
         })
       }
       if (url.includes("/prompt")) return Response.json(admission)
+      if (url.includes("/synthetic")) return Response.json(syntheticAdmission)
       if (url.endsWith("/compact")) return Response.json(compactionAdmission)
       if (url.includes("/context")) return Response.json({ data: [] })
       if (url.includes("/message/")) return Response.json({ data: modelSwitchedMessage })
@@ -278,7 +360,13 @@ test("session methods use the public HTTP contract", async () => {
   })
   const admitted = await client.session.prompt({
     sessionID: "ses_test",
-    prompt: { text: "Hello" },
+    text: "Hello",
+    resume: false,
+  })
+  const synthetic = await client.session.synthetic({
+    sessionID: "ses_test",
+    text: "Completed",
+    delivery: "queue",
     resume: false,
   })
   await client.session.compact({ sessionID: "ses_test" })
@@ -293,6 +381,7 @@ test("session methods use the public HTTP contract", async () => {
   expect(active).toEqual({ ses_test: { type: "running" } })
   expect(created.id).toBe("ses_test")
   expect(admitted.id).toBe("msg_test")
+  expect(synthetic).toMatchObject({ type: "synthetic", data: { text: "Completed" }, delivery: "queue" })
   expect(context).toEqual([])
   expect(log).toEqual([modelSwitchedEvent, synced])
   expect(message).toEqual(modelSwitchedMessage)
@@ -303,6 +392,7 @@ test("session methods use the public HTTP contract", async () => {
     ["POST", "http://localhost:3000/api/session/ses_test/agent"],
     ["POST", "http://localhost:3000/api/session/ses_test/model"],
     ["POST", "http://localhost:3000/api/session/ses_test/prompt"],
+    ["POST", "http://localhost:3000/api/session/ses_test/synthetic"],
     ["POST", "http://localhost:3000/api/session/ses_test/compact"],
     ["POST", "http://localhost:3000/api/session/ses_test/wait"],
     ["GET", "http://localhost:3000/api/session/ses_test/context"],
@@ -313,7 +403,14 @@ test("session methods use the public HTTP contract", async () => {
   const body = requests.find((request) => request.url.endsWith("/api/session/ses_test/prompt"))?.init?.body
   if (typeof body !== "string") throw new Error("Expected JSON request body")
   expect(JSON.parse(body)).toEqual({
-    prompt: { text: "Hello" },
+    text: "Hello",
+    resume: false,
+  })
+  const syntheticBody = requests.find((request) => request.url.endsWith("/synthetic"))?.init?.body
+  if (typeof syntheticBody !== "string") throw new Error("Expected JSON synthetic request body")
+  expect(JSON.parse(syntheticBody)).toEqual({
+    text: "Completed",
+    delivery: "queue",
     resume: false,
   })
 })
@@ -376,8 +473,21 @@ const admission = {
     admittedSeq: 0,
     id: "msg_test",
     sessionID: "ses_test",
-    prompt: { text: "Hello" },
+    type: "user",
+    data: { text: "Hello" },
     delivery: "steer",
+    timeCreated: 1_717_171_717_000,
+  },
+}
+
+const syntheticAdmission = {
+  data: {
+    admittedSeq: 1,
+    id: "msg_synthetic",
+    sessionID: "ses_test",
+    type: "synthetic",
+    data: { text: "Completed" },
+    delivery: "queue",
     timeCreated: 1_717_171_717_000,
   },
 }

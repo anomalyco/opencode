@@ -24,6 +24,7 @@ import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { Icon } from "@opencode-ai/ui/v2/icon"
 import { Tag as TagV2 } from "@opencode-ai/ui/v2/badge-v2"
 import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
+import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { ModelTooltip } from "./model-tooltip"
 import { useLanguage } from "@/context/language"
 import { decode64 } from "@/utils/base64"
@@ -92,6 +93,7 @@ const ModelList: Component<{
           class="w-full"
           placement="right-start"
           gutter={12}
+          openDelay={0}
           value={<ModelTooltip model={item} latest={item.latest} free={isFree(item.provider.id, item.cost)} />}
         >
           {node}
@@ -446,26 +448,41 @@ export function ModelSelectorPopoverV2(props: {
                       <MenuV2.RadioGroup value={current()}>
                         <For each={group.items}>
                           {(item) => (
-                            <MenuV2.RadioItem
-                              value={modelKey(item)}
-                              data-option-key={modelKey(item)}
-                              data-selected-model={current() === modelKey(item) ? true : undefined}
-                              class="scroll-my-6"
-                              classList={{ "!bg-v2-overlay-simple-overlay-hover": store.active === modelKey(item) }}
-                              onMouseEnter={() => {
-                                setStore("active", modelKey(item))
-                                setTimeout(() => searchRef?.focus())
-                              }}
-                              onSelect={() => selectModel(item)}
+                            <TooltipV2
+                              class="w-full"
+                              placement="right-start"
+                              gutter={6}
+                              openDelay={0}
+                              value={
+                                <ModelTooltip
+                                  model={item}
+                                  latest={item.latest}
+                                  free={isFree(item.provider.id, item.cost)}
+                                  v2
+                                />
+                              }
                             >
-                              <span class="min-w-0 truncate">{item.name}</span>
-                              <Show when={isFree(item.provider.id, item.cost)}>
-                                <TagV2 class="shrink-0">{language.t("model.tag.free")}</TagV2>
-                              </Show>
-                              <Show when={item.latest}>
-                                <TagV2 class="shrink-0">{language.t("model.tag.latest")}</TagV2>
-                              </Show>
-                            </MenuV2.RadioItem>
+                              <MenuV2.RadioItem
+                                value={modelKey(item)}
+                                data-option-key={modelKey(item)}
+                                data-selected-model={current() === modelKey(item) ? true : undefined}
+                                class="scroll-my-6 w-full"
+                                classList={{ "!bg-v2-overlay-simple-overlay-hover": store.active === modelKey(item) }}
+                                onMouseEnter={() => {
+                                  setStore("active", modelKey(item))
+                                  setTimeout(() => searchRef?.focus())
+                                }}
+                                onSelect={() => selectModel(item)}
+                              >
+                                <span class="min-w-0 truncate leading-5">{item.name}</span>
+                                <Show when={isFree(item.provider.id, item.cost)}>
+                                  <TagV2 class="shrink-0">{language.t("model.tag.free")}</TagV2>
+                                </Show>
+                                <Show when={item.latest}>
+                                  <TagV2 class="shrink-0">{language.t("model.tag.latest")}</TagV2>
+                                </Show>
+                              </MenuV2.RadioItem>
+                            </TooltipV2>
                           )}
                         </For>
                       </MenuV2.RadioGroup>

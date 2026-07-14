@@ -1,0 +1,75 @@
+---
+title: "SDK"
+description: "Embed an OpenCode host in an Effect application."
+---
+
+`@opencode-ai/sdk-next` is the Effect-native SDK for applications that need to
+host OpenCode in-process. Unlike the [network client](/docs/build/client), it assembles the
+OpenCode server and routes API calls through its HTTP router in memory. It opens
+no HTTP listener and adds no network hop between the client and server.
+
+<Warning>
+  The V2 SDK is beta and currently private to the OpenCode workspace. It is not
+  published for external installation yet, and its package name and API may
+  change before release.
+</Warning>
+
+## Create a host
+
+`OpenCode.create()` creates a scoped host. Closing its Effect Scope releases
+the router, location services, fibers, and scoped plugin registrations.
+
+```ts
+import {
+  AbsolutePath,
+  Location,
+  OpenCode,
+} from "@opencode-ai/sdk-next"
+import { Effect } from "effect"
+
+const program = Effect.scoped(
+  Effect.gen(function* () {
+    const opencode = yield* OpenCode.create()
+    const session = yield* opencode.sessions.create({
+      location: Location.Ref.make({
+        directory: AbsolutePath.make("/workspace"),
+      }),
+    })
+
+    return yield* opencode.sessions.get({ sessionID: session.id })
+  }),
+)
+
+const session = await Effect.runPromise(program)
+```
+
+The embedded host uses the same routes, middleware, codecs, errors, and schema
+values as `@opencode-ai/client/effect`. It exposes the full generated client and
+adds the convenience aliases `sessions` and `events` for the session and event
+groups.
+
+## Use as a service
+
+Use `OpenCode.layer` when the host should be provided through Effect dependency
+injection:
+
+```ts
+import { OpenCode } from "@opencode-ai/sdk-next"
+import { Effect } from "effect"
+
+const program = Effect.gen(function* () {
+  const opencode = yield* OpenCode.Service
+  return yield* opencode.sessions.active()
+})
+
+const active = await Effect.runPromise(
+  program.pipe(Effect.provide(OpenCode.layer)),
+)
+```
+
+## Register plugins
+
+Call `opencode.plugin(...)` to register an embedded V2 plugin. Embedded plugins
+use the same discovery and location-scoped activation path as configured
+plugins. The SDK also exports `Tool` for plugin-defined tools. See the
+[Plugins guide](/docs/build/plugins) for the plugin shape and available hooks.

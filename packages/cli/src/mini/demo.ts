@@ -1,7 +1,7 @@
 // Demo mode for testing direct interactive mode without a real SDK.
 //
-// Enabled with `--demo`. Intercepts prompt submissions and generates synthetic
-// SDK events that feed through the real reducer and footer pipeline. This
+// Enabled with `--demo`. Intercepts prompt submissions and drives the same
+// presentation commits and footer actions as the live transport. This
 // lets you test scrollback formatting, permission UI, question UI, and tool
 // snapshots without making actual model calls. Pass a demo slash command as
 // the initial interactive message to trigger a preview immediately.
@@ -10,15 +10,23 @@
 //   /permission [kind] → triggers a permission request variant
 //   /question [kind]   → triggers a question request variant
 //   /fmt <kind>   → emits a specific tool/text type (text, reasoning, bash,
-//                   write, edit, patch, task, todo, question, error, mix)
+//                   write, edit, patch, task, question, error, mix)
 //
 // Demo mode also handles permission and question replies locally, completing
 // or failing the synthetic tool parts as appropriate.
 import path from "path"
-import type { Event, ToolPart } from "@opencode-ai/sdk/v2"
-import { createSessionData, reduceSessionData, type SessionData } from "./session-data"
+import type { PermissionV2Request, QuestionV2Request } from "@opencode-ai/client/promise"
 import { writeSessionOutput } from "./stream"
-import type { FooterApi, PermissionReply, QuestionReject, QuestionReply, RunPrompt, StreamCommit } from "./types"
+import { toolCommit } from "./stream-v2.subagent"
+import type {
+  FooterApi,
+  MiniToolPart,
+  PermissionReply,
+  QuestionReject,
+  QuestionReply,
+  RunPrompt,
+  StreamCommit,
+} from "./types"
 
 const KINDS = [
   "markdown",
@@ -30,7 +38,6 @@ const KINDS = [
   "edit",
   "patch",
   "task",
-  "todo",
   "question",
   "error",
   "mix",
@@ -125,7 +132,7 @@ type Permit = {
   ref: Ref
   permission: string
   patterns: string[]
-  metadata?: Record<string, unknown>
+  metadata?: PermissionV2Request["metadata"]
   always: string[]
   done: Perm["done"]
 }
@@ -133,9 +140,7 @@ type Permit = {
 type State = {
   id: string
   thinking: boolean
-  data: SessionData
   footer: FooterApi
-  limits: () => Record<string, number>
   msg: number
   part: number
   call: number
@@ -143,12 +148,12 @@ type State = {
   ask: number
   perms: Map<string, Perm>
   asks: Map<string, Ask>
+  started: Set<string>
 }
 
 type Input = {
   sessionID: string
   thinking: boolean
-  limits: () => Record<string, number>
   footer: FooterApi
 }
 
@@ -256,185 +261,69 @@ function take(state: State, key: "msg" | "part" | "call" | "perm" | "ask", prefi
   return `demo_${prefix}_${state[key]}`
 }
 
-function feed(state: State, event: Event): void {
-  const out = reduceSessionData({
-    data: state.data,
-    event,
-    sessionID: state.id,
-    thinking: state.thinking,
-    limits: state.limits(),
-  })
-  state.data = out.data
+function present(state: State, commits: StreamCommit[], view?: QuestionV2Request | PermissionV2Request): void {
   writeSessionOutput(
+    { footer: state.footer },
     {
-      footer: state.footer,
+      commits,
+      footer: view
+        ? {
+            view: "action" in view ? { type: "permission", request: view } : { type: "question", request: view },
+            patch: { status: "action" in view ? "awaiting permission" : "awaiting answer" },
+          }
+        : undefined,
     },
-    out,
+  )
+}
+
+function clearBlocker(state: State): void {
+  writeSessionOutput(
+    { footer: state.footer },
+    { commits: [], footer: { view: { type: "prompt" }, patch: { status: "" } } },
   )
 }
 
 function open(state: State): string {
-  const id = take(state, "msg", "msg")
-  feed(state, {
-    type: "message.updated",
-    properties: {
-      sessionID: state.id,
-      info: {
-        id,
-        sessionID: state.id,
-        role: "assistant",
-        time: {
-          created: Date.now(),
-        },
-        parentID: `user_${id}`,
-        modelID: "demo",
-        providerID: "demo",
-        mode: "demo",
-        agent: "demo",
-        path: {
-          cwd: process.cwd(),
-          root: process.cwd(),
-        },
-        cost: 0.001,
-        tokens: {
-          input: 120,
-          output: 320,
-          reasoning: 80,
-          cache: {
-            read: 0,
-            write: 0,
-          },
-        },
-      },
-    },
-  } as Event)
-  return id
+  return take(state, "msg", "msg")
 }
 
 async function emitText(state: State, body: string, signal?: AbortSignal): Promise<void> {
   const msg = open(state)
   const part = take(state, "part", "part")
-  const start = Date.now()
-
-  feed(state, {
-    type: "message.part.updated",
-    properties: {
-      sessionID: state.id,
-      time: Date.now(),
-      part: {
-        id: part,
-        sessionID: state.id,
-        messageID: msg,
-        type: "text",
-        text: "",
-        time: {
-          start,
-        },
-      },
-    },
-  } as Event)
-
-  let next = ""
   for (const item of split(body)) {
     if (signal?.aborted) {
       return
     }
 
-    next += item
-    feed(state, {
-      type: "message.part.delta",
-      properties: {
-        sessionID: state.id,
-        messageID: msg,
-        partID: part,
-        field: "text",
-        delta: item,
-      },
-    } as Event)
+    present(state, [{ kind: "assistant", source: "assistant", text: item, phase: "progress", messageID: msg, partID: part }])
     await wait(45, signal)
   }
-
-  feed(state, {
-    type: "message.part.updated",
-    properties: {
-      sessionID: state.id,
-      time: Date.now(),
-      part: {
-        id: part,
-        sessionID: state.id,
-        messageID: msg,
-        type: "text",
-        text: next,
-        time: {
-          start,
-          end: Date.now(),
-        },
-      },
-    },
-  } as Event)
 }
 
 async function emitReasoning(state: State, body: string, signal?: AbortSignal): Promise<void> {
   const msg = open(state)
   const part = take(state, "part", "part")
-  const start = Date.now()
-
-  feed(state, {
-    type: "message.part.updated",
-    properties: {
-      sessionID: state.id,
-      time: Date.now(),
-      part: {
-        id: part,
-        sessionID: state.id,
-        messageID: msg,
-        type: "reasoning",
-        text: "",
-        time: {
-          start,
-        },
-      },
-    },
-  } as Event)
-
-  let next = ""
+  let first = true
   for (const item of split(body)) {
     if (signal?.aborted) {
       return
     }
 
-    next += item
-    feed(state, {
-      type: "message.part.delta",
-      properties: {
-        sessionID: state.id,
-        messageID: msg,
-        partID: part,
-        field: "text",
-        delta: item,
-      },
-    } as Event)
+    if (state.thinking) {
+      present(state, [
+        {
+          kind: "reasoning",
+          source: "reasoning",
+          text: first ? `Thinking: ${item.replace(/\[REDACTED\]/g, "")}` : item.replace(/\[REDACTED\]/g, ""),
+          phase: "progress",
+          messageID: msg,
+          partID: part,
+        },
+      ])
+      first = false
+    }
     await wait(45, signal)
   }
-
-  feed(state, {
-    type: "message.part.updated",
-    properties: {
-      sessionID: state.id,
-      time: Date.now(),
-      part: {
-        id: part,
-        sessionID: state.id,
-        messageID: msg,
-        type: "reasoning",
-        text: next,
-        time: {
-          start,
-          end: Date.now(),
-        },
-      },
-    },
-  } as Event)
 }
 
 function make(state: State, tool: string, input: Record<string, unknown>): Ref {
@@ -449,29 +338,23 @@ function make(state: State, tool: string, input: Record<string, unknown>): Ref {
 }
 
 function startTool(state: State, ref: Ref, metadata: Record<string, unknown> = {}): void {
-  feed(state, {
-    type: "message.part.updated",
-    properties: {
-      sessionID: state.id,
-      time: Date.now(),
-      part: {
-        id: ref.part,
-        sessionID: state.id,
-        messageID: ref.msg,
-        type: "tool",
-        callID: ref.call,
-        tool: ref.tool,
-        state: {
-          status: "running",
-          input: ref.input,
-          metadata,
-          time: {
-            start: ref.start,
-          },
+  state.started.add(ref.part)
+  present(
+    state,
+    [
+      toolCommit(
+        {
+          id: ref.part,
+          sessionID: state.id,
+          messageID: ref.msg,
+          callID: ref.call,
+          tool: ref.tool,
+          state: { status: "running", input: ref.input, metadata, time: { start: ref.start } },
         },
-      },
-    },
-  } as Event)
+        "start",
+      ),
+    ],
+  )
 }
 
 function askPermission(state: State, item: Permit): void {
@@ -483,21 +366,15 @@ function askPermission(state: State, item: Permit): void {
     done: item.done,
   })
 
-  feed(state, {
-    type: "permission.asked",
-    properties: {
-      id,
-      sessionID: state.id,
-      permission: item.permission,
-      patterns: item.patterns,
-      metadata: item.metadata ?? {},
-      always: item.always,
-      tool: {
-        messageID: item.ref.msg,
-        callID: item.ref.call,
-      },
-    },
-  } as Event)
+  present(state, [], {
+    id,
+    sessionID: state.id,
+    action: item.permission,
+    resources: item.patterns,
+    metadata: item.metadata ?? {},
+    save: item.always,
+    source: { type: "tool", messageID: item.ref.msg, callID: item.ref.call },
+  })
 }
 
 function doneTool(
@@ -509,77 +386,53 @@ function doneTool(
     metadata?: Record<string, unknown>
   },
 ): void {
-  feed(state, {
-    type: "message.part.updated",
-    properties: {
-      sessionID: state.id,
-      time: Date.now(),
-      part: {
-        id: ref.part,
-        sessionID: state.id,
-        messageID: ref.msg,
-        type: "tool",
-        callID: ref.call,
-        tool: ref.tool,
-        state: {
-          status: "completed",
-          input: ref.input,
-          output: output.output,
-          title: output.title,
-          metadata: output.metadata ?? {},
-          time: {
-            start: ref.start,
-            end: Date.now(),
-          },
-        },
-      },
+  if (!state.started.has(ref.part)) startTool(state, ref)
+  const part: MiniToolPart = {
+    id: ref.part,
+    sessionID: state.id,
+    messageID: ref.msg,
+    callID: ref.call,
+    tool: ref.tool,
+    state: {
+      status: "completed",
+      input: ref.input,
+      output: output.output,
+      title: output.title,
+      metadata: output.metadata ?? {},
+      time: { start: ref.start, end: Date.now() },
     },
-  } as Event)
+  }
+  present(state, [toolCommit(part, output.output ? "progress" : "final")])
 }
 
 function failTool(state: State, ref: Ref, error: string): void {
-  feed(state, {
-    type: "message.part.updated",
-    properties: {
-      sessionID: state.id,
-      time: Date.now(),
-      part: {
-        id: ref.part,
-        sessionID: state.id,
-        messageID: ref.msg,
-        type: "tool",
-        callID: ref.call,
-        tool: ref.tool,
-        state: {
-          status: "error",
-          input: ref.input,
-          error,
-          metadata: {},
-          time: {
-            start: ref.start,
-            end: Date.now(),
+  if (!state.started.has(ref.part)) startTool(state, ref)
+  present(
+    state,
+    [
+      toolCommit(
+        {
+          id: ref.part,
+          sessionID: state.id,
+          messageID: ref.msg,
+          callID: ref.call,
+          tool: ref.tool,
+          state: {
+            status: "error",
+            input: ref.input,
+            error,
+            metadata: {},
+            time: { start: ref.start, end: Date.now() },
           },
         },
-      },
-    },
-  } as Event)
+        "final",
+      ),
+    ],
+  )
 }
 
 function emitError(state: State, text: string): void {
-  const event = {
-    id: `session.error:${state.id}:${Date.now()}`,
-    type: "session.error",
-    properties: {
-      sessionID: state.id,
-      error: {
-        name: "UnknownError",
-        data: {
-          message: text,
-        },
-      },
-    },
-  } satisfies Event
-  feed(state, event)
+  present(state, [{ kind: "error", source: "system", text, phase: "start" }])
 }
 
 async function emitBash(state: State, signal?: AbortSignal): Promise<void> {
@@ -686,7 +539,7 @@ function emitTask(state: State): void {
         start: Date.now(),
       },
     },
-  } satisfies ToolPart
+  } satisfies MiniToolPart
   showSubagent(state, {
     sessionID: "sub_demo_1",
     partID: ref.part,
@@ -730,30 +583,6 @@ function emitTask(state: State): void {
         partID: "sub_demo_text_1",
       },
     ],
-  })
-}
-
-function emitTodo(state: State): void {
-  const ref = make(state, "todowrite", {
-    todos: [
-      {
-        content: "Trigger permission UI",
-        status: "completed",
-      },
-      {
-        content: "Trigger question UI",
-        status: "in_progress",
-      },
-      {
-        content: "Tune tool formatting",
-        status: "pending",
-      },
-    ],
-  })
-  doneTool(state, ref, {
-    title: "todowrite",
-    output: "",
-    metadata: {},
   })
 }
 
@@ -952,7 +781,6 @@ function emitQuestion(state: State, kind: QuestionKind = "multi"): void {
           options: [
             { label: "Diff", description: "Show an edit diff in the footer" },
             { label: "Task", description: "Show a structured task summary" },
-            { label: "Todo", description: "Show a todo snapshot" },
             { label: "Error", description: "Show an error transcript row" },
           ],
           multiple: true,
@@ -992,7 +820,6 @@ function emitQuestion(state: State, kind: QuestionKind = "multi"): void {
         options: [
           { label: "Diff", description: "Emit edit diff" },
           { label: "Task", description: "Emit task card" },
-          { label: "Todo", description: "Emit todo card" },
         ],
         multiple: true,
         custom: true,
@@ -1006,18 +833,12 @@ function emitQuestion(state: State, kind: QuestionKind = "multi"): void {
   const id = take(state, "ask", "ask")
   state.asks.set(id, { ref })
 
-  feed(state, {
-    type: "question.asked",
-    properties: {
-      id,
-      sessionID: state.id,
-      questions,
-      tool: {
-        messageID: ref.msg,
-        callID: ref.call,
-      },
-    },
-  } as Event)
+  present(state, [], {
+    id,
+    sessionID: state.id,
+    questions,
+    tool: { messageID: ref.msg, callID: ref.call },
+  })
 }
 
 async function emitFmt(state: State, kind: string, body: string, signal?: AbortSignal): Promise<boolean> {
@@ -1066,11 +887,6 @@ async function emitFmt(state: State, kind: string, body: string, signal?: AbortS
     return true
   }
 
-  if (kind === "todo") {
-    emitTodo(state)
-    return true
-  }
-
   if (kind === "question") {
     emitQuestionTool(state)
     return true
@@ -1091,7 +907,6 @@ async function emitFmt(state: State, kind: string, body: string, signal?: AbortS
     emitEdit(state)
     emitPatch(state)
     emitTask(state)
-    emitTodo(state)
     emitQuestionTool(state)
     emitError(state, "demo mixed scenario error")
     return true
@@ -1122,9 +937,7 @@ export function createRunDemo(input: Input) {
   const state: State = {
     id: input.sessionID,
     thinking: input.thinking,
-    data: createSessionData(),
     footer: input.footer,
-    limits: input.limits,
     msg: 0,
     part: 0,
     call: 0,
@@ -1132,6 +945,7 @@ export function createRunDemo(input: Input) {
     ask: 0,
     perms: new Map(),
     asks: new Map(),
+    started: new Set(),
   }
 
   const start = async (): Promise<void> => {
@@ -1199,16 +1013,7 @@ export function createRunDemo(input: Input) {
     }
 
     state.perms.delete(input.requestID)
-    const event = {
-      id: `permission.replied:${input.requestID}:${Date.now()}`,
-      type: "permission.replied",
-      properties: {
-        sessionID: state.id,
-        requestID: input.requestID,
-        reply: input.reply,
-      },
-    } satisfies Event
-    feed(state, event)
+    clearBlocker(state)
 
     if (input.reply === "reject") {
       failTool(state, item.ref, input.message || "permission rejected")
@@ -1226,16 +1031,7 @@ export function createRunDemo(input: Input) {
     }
 
     state.asks.delete(input.requestID)
-    const event = {
-      id: `question.replied:${input.requestID}:${Date.now()}`,
-      type: "question.replied",
-      properties: {
-        sessionID: state.id,
-        requestID: input.requestID,
-        answers: input.answers,
-      },
-    } satisfies Event
-    feed(state, event)
+    clearBlocker(state)
     doneTool(state, ask.ref, {
       title: "question",
       output: "",
@@ -1253,13 +1049,7 @@ export function createRunDemo(input: Input) {
     }
 
     state.asks.delete(input.requestID)
-    feed(state, {
-      type: "question.rejected",
-      properties: {
-        sessionID: state.id,
-        requestID: input.requestID,
-      },
-    } as Event)
+    clearBlocker(state)
     failTool(state, ask.ref, "question rejected")
     return true
   }

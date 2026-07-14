@@ -4,24 +4,45 @@ import { createMemo, Match, Show, Switch } from "solid-js"
 import { abbreviateHome } from "../../runtime"
 import { useTuiPaths } from "../../context/runtime"
 import { useHomeSessionDestination } from "../../routes/home/session-destination"
+import { FilePath } from "../../ui/file-path"
+import { useTerminalDimensions } from "@opentui/solid"
 
 const id = "internal:home-footer"
 
-function Directory(props: { api: TuiPluginApi }) {
+function Directory(props: { api: TuiPluginApi; maxWidth: number }) {
   const theme = () => props.api.theme.current
   const destination = useHomeSessionDestination()
   const paths = useTuiPaths()
   const dir = createMemo(() => {
     const selected = destination?.destination()
     if (!selected || selected.type === "new") return
-    const out = abbreviateHome(selected.directory, paths.home)
     const branch =
       selected.directory === (props.api.state.path.directory || paths.cwd) ? props.api.state.vcs?.branch : undefined
-    if (branch) return out + ":" + branch
-    return out
+    return { path: abbreviateHome(selected.directory, paths.home), branch }
   })
 
-  return <Show when={dir()}>{(value) => <text fg={theme().textMuted}>{value()}</text>}</Show>
+  return (
+    <Show when={dir()}>
+      {(value) => {
+        const suffix = () => (value().branch ? `:${value().branch}` : "")
+        const suffixWidth = () => Math.min(Bun.stringWidth(suffix()), Math.max(0, props.maxWidth - 2))
+        return (
+          <box flexDirection="row" minWidth={0}>
+            <FilePath
+              value={value().path}
+              maxWidth={Math.max(2, props.maxWidth - suffixWidth())}
+              fg={theme().textMuted}
+            />
+            <Show when={suffix()}>
+              <text width={suffixWidth()} wrapMode="none" truncate fg={theme().textMuted}>
+                {suffix()}
+              </text>
+            </Show>
+          </box>
+        )
+      }}
+    </Show>
+  )
 }
 
 function Mcp(props: { api: TuiPluginApi }) {
@@ -62,6 +83,16 @@ function Version(props: { api: TuiPluginApi }) {
 }
 
 function View(props: { api: TuiPluginApi }) {
+  const dimensions = useTerminalDimensions()
+  const mcpWidth = createMemo(() => {
+    const list = props.api.state.mcp()
+    if (list.length === 0) return 0
+    const count = list.filter((item) => item.status === "connected").length
+    return Bun.stringWidth(`⊙ ${count} MCP /status`) + 2
+  })
+  const directoryWidth = createMemo(() =>
+    Math.max(2, dimensions().width - 8 - Bun.stringWidth(props.api.app.version) - mcpWidth()),
+  )
   return (
     <box
       width="100%"
@@ -73,7 +104,7 @@ function View(props: { api: TuiPluginApi }) {
       flexShrink={0}
       gap={2}
     >
-      <Directory api={props.api} />
+      <Directory api={props.api} maxWidth={directoryWidth()} />
       <Mcp api={props.api} />
       <box flexGrow={1} />
       <Version api={props.api} />

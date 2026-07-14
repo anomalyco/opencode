@@ -1,8 +1,8 @@
 import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { BuiltinTuiPlugin } from "../builtins"
-import { createMemo } from "solid-js"
+import { createMemo, Show } from "solid-js"
 import { useData } from "../../context/data"
-import { lastAssistantWithUsage } from "../../util/session"
+import { contextUsage } from "../../util/session"
 
 const id = "internal:sidebar-context"
 
@@ -16,35 +16,25 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
   const theme = () => props.api.theme.current
   const msg = createMemo(() => data.session.message.list(props.session_id))
   const session = createMemo(() => data.session.get(props.session_id))
-  const cost = createMemo(() => session()?.cost ?? 0)
+  const cost = createMemo(() => data.session.cost(props.session_id))
 
-  const state = createMemo(() => {
-    const last = lastAssistantWithUsage(msg(), session()?.revert?.messageID)
-    if (!last) {
-      return {
-        tokens: 0,
-        percent: null,
-      }
-    }
-
-    const tokens =
-      last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
-    const model = data.location
-      .model.list(session()?.location)
-      ?.find((model) => model.providerID === last.model.providerID && model.id === last.model.id)
-    return {
-      tokens,
-      percent: model?.limit.context ? Math.round((tokens / model.limit.context) * 100) : null,
-    }
-  })
+  const state = createMemo(() => contextUsage(msg(), data.location.model.list(session()?.location), session()?.revert?.messageID))
 
   return (
     <box>
       <text fg={theme().text}>
         <b>Context</b>
       </text>
-      <text fg={theme().textMuted}>{state().tokens.toLocaleString()} tokens</text>
-      <text fg={theme().textMuted}>{state().percent ?? 0}% used</text>
+      <Show when={state()} fallback={<text fg={theme().textMuted}>Not measured</text>}>
+        {(value) => (
+          <>
+            <text fg={theme().textMuted}>{value().tokens.toLocaleString()} tokens</text>
+            <Show when={value().percent !== undefined}>
+              <text fg={theme().textMuted}>{value().percent}% used</text>
+            </Show>
+          </>
+        )}
+      </Show>
       <text fg={theme().textMuted}>{money.format(cost())} spent</text>
     </box>
   )

@@ -14,7 +14,7 @@
 import type { TextareaRenderable } from "@opentui/core"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import { For, Match, Show, Switch, createEffect, createMemo, createSignal } from "solid-js"
-import type { PermissionRequest } from "@opencode-ai/sdk/v2"
+import type { PermissionV2Request } from "@opencode-ai/client/promise"
 import {
   createPermissionBodyState,
   permissionAlwaysLines,
@@ -130,7 +130,7 @@ export function RejectField(props: {
 }
 
 export function RunPermissionBody(props: {
-  request: PermissionRequest
+  request: PermissionV2Request
   theme: RunFooterTheme
   block: RunBlockTheme
   diffStyle?: RunDiffStyle
@@ -142,7 +142,7 @@ export function RunPermissionBody(props: {
   const ft = createMemo(() => toolFiletype(info().file))
   const narrow = createMemo(() => footerWidthPolicy(dims().width).dialog.narrow)
   const opts = createMemo(() =>
-    permissionOptions(state().stage).filter((option) => option !== "always" || props.request.always.length > 0),
+    permissionOptions(state().stage).filter((option) => option !== "always" || (props.request.save?.length ?? 0) > 0),
   )
   const busy = createMemo(() => state().submitting)
   const title = createMemo(() => {

@@ -17,8 +17,18 @@ export const Plugin = define({
     const location = yield* Location.Service
     const loaded = { entries: yield* config.entries() }
     yield* ctx.skill.transform((draft) => {
+      const claude = loaded.entries.flatMap((entry) => (entry.type === "claude" ? [entry.path] : []))
+      const agents = loaded.entries.flatMap((entry) => (entry.type === "agents" ? [entry.path] : []))
       const directories = loaded.entries.flatMap((entry) => (entry.type === "directory" ? [entry.path] : []))
       const items = loaded.entries.flatMap((entry) => (entry.type === "document" ? (entry.info.skills ?? []) : []))
+      for (const directory of [...claude, ...agents]) {
+        draft.source(
+          SkillV2.DirectorySource.make({
+            type: "directory",
+            path: AbsolutePath.make(path.join(directory, "skills")),
+          }),
+        )
+      }
       for (const directory of directories) {
         draft.source(
           SkillV2.DirectorySource.make({ type: "directory", path: AbsolutePath.make(path.join(directory, "skill")) }),

@@ -1,0 +1,11 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "..",
+    "noEmit": true,
+    "declaration": false,
+    "module": "preserve",
+    "moduleResolution": "bundler"
+  },
+  "include": ["../src", "."]
+}

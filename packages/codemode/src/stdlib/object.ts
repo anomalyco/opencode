@@ -1,18 +1,16 @@
 import { type AstNode, InterpreterRuntimeError } from "../interpreter/model.js"
 import { isBlockedMember } from "../tool-runtime.js"
-import { isSandboxValue, SandboxMap, SandboxPromise, SandboxSet, SandboxURLSearchParams } from "../values.js"
+import { isCodeModeValue, CodeModeMap, CodeModePromise, CodeModeSet, CodeModeURLSearchParams } from "../values.js"
 import { boundedData, coerceToString } from "./value.js"
 
-export const objectStatics = new Set(["keys", "values", "entries", "hasOwn", "assign", "fromEntries"])
 export const objectMethodsPreservingIdentity = new Set(["assign", "values", "entries", "fromEntries"])
 
 export const invokeObjectMethod = (name: string, args: Array<unknown>, node: AstNode): unknown => {
-  if (!objectStatics.has(name)) throw new InterpreterRuntimeError(`Object.${name} is not available in CodeMode.`, node)
   const requireObject = (): Record<string, unknown> => {
     const input = args[0]
     if (Array.isArray(input)) return input as unknown as Record<string, unknown>
-    if (isSandboxValue(input)) return {}
-    if (input instanceof SandboxPromise) {
+    if (isCodeModeValue(input)) return {}
+    if (input instanceof CodeModePromise) {
       throw new InterpreterRuntimeError(
         `Object.${name} received an un-awaited Promise; await it before inspecting the result.`,
         node,
@@ -48,33 +46,31 @@ export const invokeObjectMethod = (name: string, args: Array<unknown>, node: Ast
       return Object.hasOwn(requireObject(), String(args[1]))
     case "assign": {
       const target = args[0]
-      if (target === null || typeof target !== "object" || Array.isArray(target) || isSandboxValue(target)) {
+      if (target === null || typeof target !== "object" || Array.isArray(target) || isCodeModeValue(target)) {
         throw new InterpreterRuntimeError("Object.assign expects a data object target.", node)
       }
       const out = target as Record<string, unknown>
       for (const source of args.slice(1)) {
-        if (source === null || source === undefined) continue
-        const value = source
-        if (isSandboxValue(value)) continue
-        if (value === null || typeof value !== "object" || Array.isArray(value)) {
+        if (source === null || source === undefined || isCodeModeValue(source)) continue
+        if (typeof source !== "object" || Array.isArray(source)) {
           throw new InterpreterRuntimeError("Object.assign expects data objects.", node)
         }
-        for (const [key, item] of Object.entries(value)) guardedSet(out, key, item)
+        for (const [key, item] of Object.entries(source)) guardedSet(out, key, item)
       }
       return out
     }
     case "fromEntries": {
-      if (args[0] instanceof SandboxMap) {
+      if (args[0] instanceof CodeModeMap) {
         const out: Record<string, unknown> = Object.create(null)
         for (const [key, item] of args[0].map.entries()) addEntry(out, key, item)
         return out
       }
-      if (args[0] instanceof SandboxURLSearchParams) {
+      if (args[0] instanceof CodeModeURLSearchParams) {
         const out: Record<string, unknown> = Object.create(null)
         for (const [key, value] of args[0].params.entries()) guardedSet(out, key, value)
         return out
       }
-      const pairs = args[0] instanceof SandboxSet ? Array.from(args[0].set.values()) : args[0]
+      const pairs = args[0] instanceof CodeModeSet ? Array.from(args[0].set.values()) : args[0]
       if (!Array.isArray(pairs)) {
         boundedData(args[0], "Object.fromEntries input")
         throw new InterpreterRuntimeError("Object.fromEntries expects an array of [key, value] pairs.", node)
@@ -82,7 +78,7 @@ export const invokeObjectMethod = (name: string, args: Array<unknown>, node: Ast
       const out: Record<string, unknown> = Object.create(null)
       for (const pair of pairs) {
         const validated = boundedData(pair, "Object.fromEntries entry")
-        if (validated === null || typeof validated !== "object" || isSandboxValue(validated))
+        if (validated === null || typeof validated !== "object" || isCodeModeValue(validated))
           throw new InterpreterRuntimeError("Object.fromEntries expects [key, value] entry objects.", node)
         const entry = pair as Record<string, unknown>
         addEntry(out, entry[0], entry[1])

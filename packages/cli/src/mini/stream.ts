@@ -1,10 +1,10 @@
-// Thin bridge between reducer output and the footer API.
+// Thin bridge between transport output and the footer API.
 //
-// The reducers produce StreamCommit[] and an optional FooterOutput (patch +
+// Transports produce StreamCommit[] and an optional FooterOutput (patch +
 // view + subagent state). This module forwards them to footer.append() and
 // footer.event() respectively, adding trace writes along the way. It also
 // defaults status updates to phase "running" if the caller didn't set a
-// phase -- a convenience so reducer code doesn't have to repeat that.
+// phase -- a convenience so transport code doesn't have to repeat that.
 import type { FooterApi, FooterOutput, FooterPatch, FooterSubagentState, StreamCommit } from "./types"
 
 type Trace = {
@@ -103,9 +103,9 @@ export function traceSubagentState(state: FooterSubagentState) {
     permissions: state.permissions.map((item) => ({
       id: item.id,
       sessionID: item.sessionID,
-      permission: item.permission,
-      patterns: item.patterns,
-      tool: item.tool,
+      action: item.action,
+      resources: item.resources,
+      source: item.source,
       metadata: item.metadata
         ? {
             keys: Object.keys(item.metadata),
@@ -137,7 +137,7 @@ export function traceFooterOutput(footer?: FooterOutput) {
   }
 }
 
-// Forwards reducer output to the footer: commits go to scrollback, patches update the status bar.
+// Forwards transport output to the footer: commits go to scrollback, patches update the status bar.
 export function writeSessionOutput(input: OutputInput, out: StreamOutput): void {
   for (const commit of out.commits) {
     input.trace?.write("ui.commit", commit)

@@ -6,7 +6,12 @@ import { SplitBorder } from "../../ui/border"
 import { Locale } from "../../util/locale"
 import { useTerminalDimensions } from "@opentui/solid"
 import { useCommandShortcut, useOpencodeKeymap } from "../../keymap"
-import { lastAssistantWithUsage } from "../../util/session"
+import { contextUsage } from "../../util/session"
+
+const money = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+})
 
 export function SubagentFooter() {
   const route = useRouteData("session")
@@ -23,26 +28,21 @@ export function SubagentFooter() {
   const usage = createMemo(() => {
     const current = session()
     if (!current) return
-    const last = lastAssistantWithUsage(data.session.message.list(route.sessionID), current.revert?.messageID)
-    if (!last) return
-    const tokens =
-      last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
-    if (tokens <= 0) return
-
-    const model = data.location
-      .model.list(current.location)
-      ?.find((model) => model.providerID === last.model.providerID && model.id === last.model.id)
-    const pct = model?.limit.context ? `${Math.round((tokens / model.limit.context) * 100)}%` : undefined
     const cost = current.cost
-
-    const money = new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-    })
+    const formattedCost = cost > 0 ? money.format(cost) : undefined
+    const context = contextUsage(
+      data.session.message.list(route.sessionID),
+      data.location.model.list(current.location),
+      current.revert?.messageID,
+    )
 
     return {
-      context: pct ? `${Locale.number(tokens)} (${pct})` : Locale.number(tokens),
-      cost: cost > 0 ? money.format(cost) : undefined,
+      context: context
+        ? context.percent === undefined
+          ? Locale.number(context.tokens)
+          : `${Locale.number(context.tokens)} (${context.percent}%)`
+        : undefined,
+      cost: formattedCost,
     }
   })
 

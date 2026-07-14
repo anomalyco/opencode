@@ -1,6 +1,6 @@
 export * as EventV2 from "./event"
 
-import { Cause, Context, DateTime, Effect, Layer, Option, PubSub, Queue, Schema, Stream } from "effect"
+import { Cause, Context, DateTime, Effect, Layer, Option, PubSub, Schema, Stream } from "effect"
 import { Event } from "@opencode-ai/schema/event"
 import type { Data, Definition, Payload } from "@opencode-ai/schema/event"
 import type { EventLog } from "@opencode-ai/schema/event-log"
@@ -89,11 +89,6 @@ const decodeSerializedEvent = (event: SerializedEvent): Payload => {
   }
 }
 
-export class SubscriberOverflowError extends Schema.TaggedErrorClass<SubscriberOverflowError>()(
-  "EventV2.SubscriberOverflow",
-  { capacity: Schema.Int },
-) {}
-
 export const versionedType = Event.versionedType
 export const durable = Event.durable
 export const ephemeral = Event.ephemeral
@@ -137,7 +132,8 @@ export interface Interface {
   ) => Effect.Effect<Payload<D>>
   readonly subscribe: Subscribe
   /**
-   * Durable, ordered, gap-free per-aggregate log read. `follow: false`
+   * Durable, ordered per-aggregate log read. Forked aggregates may reserve an
+   * inherited prefix before their first child-authored event. `follow: false`
    * completes at the end of the log; `follow: true` replays then transitions
    * to live. Both modes emit one `Synced` marker at the captured replay
    * watermark.
@@ -166,27 +162,6 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Event") {}
 
-export const liveBounded = (
-  events: Interface,
-  options: { readonly capacity: number; readonly accept?: (event: Payload) => boolean },
-) =>
-  Effect.gen(function* () {
-    const queue = yield* Queue.dropping<Payload, SubscriberOverflowError>(options.capacity)
-    const unsubscribe = yield* events.listen((event) =>
-      options.accept && !options.accept(event)
-        ? Effect.void
-        : Queue.offer(queue, event).pipe(
-            Effect.flatMap((accepted) =>
-              accepted
-                ? Effect.void
-                : Queue.fail(queue, new SubscriberOverflowError({ capacity: options.capacity })).pipe(Effect.asVoid),
-            ),
-          ),
-    )
-    yield* Effect.addFinalizer(() => unsubscribe.pipe(Effect.andThen(Queue.shutdown(queue)), Effect.asVoid))
-    return Stream.fromQueue(queue)
-  })
-
 export interface LayerOptions {
   readonly beforeAggregateRead?: (aggregateID: string) => Effect.Effect<void>
   /** Maximum durable rows read per page while replaying or tailing an aggregate log. */
@@ -203,7 +178,6 @@ export const layerWith = (options?: LayerOptions) =>
         typed: new Map<string, PubSub.PubSub<Payload>>(),
       }
       const projectors = new Map<string, Subscriber[]>()
-      // TODO: Bind durable projectors to exact type+version before supporting incompatible historical payloads.
       const listeners = new Array<Subscriber>()
       const { db } = yield* Database.Service
       const logReadPageSize = options?.logReadPageSize ?? 512
@@ -260,7 +234,7 @@ export const layerWith = (options?: LayerOptions) =>
                   }),
                 )
               }
-              const list = projectors.get(event.type) ?? []
+              const list = projectors.get(versionedType(definition.type, durable.version)) ?? []
               return yield* Effect.uninterruptible(
                 Effect.gen(function* () {
                   const committed = yield* db
@@ -515,18 +489,6 @@ export const layerWith = (options?: LayerOptions) =>
               }),
             )
           }
-          const start = events[0]?.seq ?? 0
-          for (const [index, event] of events.entries()) {
-            const seq = start + index
-            if (event.seq !== seq) {
-              yield* Effect.die(
-                new InvalidDurableEventError({
-                  type: event.type,
-                  message: `Replay sequence mismatch at index ${index}: expected ${seq}, got ${event.seq}`,
-                }),
-              )
-            }
-          }
           for (const event of events) {
             yield* replay(event, options)
           }
@@ -727,9 +689,10 @@ export const layerWith = (options?: LayerOptions) =>
 
       const project = <D extends Definition>(definition: D, projector: Subscriber<D>): Effect.Effect<void> =>
         Effect.sync(() => {
-          const list = projectors.get(definition.type) ?? []
+          const key = definition.durable ? versionedType(definition.type, definition.durable.version) : definition.type
+          const list = projectors.get(key) ?? []
           list.push((event) => projector(event as Payload<D>))
-          projectors.set(definition.type, list)
+          projectors.set(key, list)
         })
 
       return Service.of({

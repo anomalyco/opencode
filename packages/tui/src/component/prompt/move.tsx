@@ -3,7 +3,7 @@ import path from "path"
 import { useTuiPaths } from "../../context/runtime"
 import { errorMessage } from "../../util/error"
 import { useDialog } from "../../ui/dialog"
-import { useSDK } from "../../context/sdk"
+import { useClient } from "../../context/client"
 import { useToast } from "../../ui/toast"
 import { DialogMoveSession, type MoveSessionSelection } from "../dialog-move-session"
 import { DialogWorkspaceFileChanges } from "../dialog-workspace-file-changes"
@@ -17,7 +17,7 @@ function moveReminderText(directory: string) {
 
 export function usePromptMove(input: { projectID: () => string | undefined; sessionID: () => string | undefined }) {
   const dialog = useDialog()
-  const sdk = useSDK()
+  const client = useClient()
   const toast = useToast()
   const homeDestination = useHomeSessionDestination()
   const project = useProject()
@@ -33,7 +33,7 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
     setCreating(true)
     setProgress("Creating copy")
     try {
-      const result = await sdk.api.projectCopy.create({
+      const result = await client.api.projectCopy.create({
         projectID,
         location: { directory: project.instance.directory() || paths.cwd },
         strategy: "git_worktree",
@@ -44,7 +44,7 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
       if (!directory) throw new Error("No project copy directory returned")
 
       // Call a location-based route to make sure it's bootstrapped before moving on.
-      await sdk.api.location.get({ location: { directory } })
+      await client.api.location.get({ location: { directory } })
 
       setProgress("Creating session")
       return directory
@@ -98,7 +98,9 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
 
   async function moveExistingSession(sessionID: string, selection: MoveSessionSelection) {
     const session = await resolveSession(sessionID)
-    const status = await sdk.client.vcs.status({ directory: session?.location.directory }).catch(() => undefined)
+    const status = await client.api.vcs
+      .status({ location: session?.location.directory ? { directory: session.location.directory } : undefined })
+      .catch(() => undefined)
     const choice = status?.data?.length ? await DialogWorkspaceFileChanges.show(dialog, status.data) : "no"
     if (!choice) return
     dialog.clear()
@@ -110,8 +112,8 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
     }
     setProgress("Moving session")
     try {
-      await sdk.api.session.move({ sessionID, destination: { directory }, moveChanges: choice === "yes" })
-      await sdk.api.session
+      await client.api.session.move({ sessionID, destination: { directory }, moveChanges: choice === "yes" })
+      await client.api.session
         .synthetic({ sessionID, text: moveReminderText(directory), resume: false })
         .catch(() => undefined)
       dialog.clear()
@@ -129,7 +131,7 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
     if (projectID) return projectID
     const sessionID = input.sessionID()
     if (sessionID) return (await resolveSession(sessionID))?.projectID
-    return sdk.api.project
+    return client.api.project
       .current({ location: { directory: project.instance.directory() || paths.cwd } })
       .then((project) => project.id)
       .catch(() => undefined)

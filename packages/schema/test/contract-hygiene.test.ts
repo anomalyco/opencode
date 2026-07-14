@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { DateTime, Schema } from "effect"
 import { Agent } from "../src/agent.js"
 import { FileSystem } from "../src/filesystem.js"
+import { Form } from "../src/form.js"
 import { Mcp } from "../src/mcp.js"
 import { Model } from "../src/model.js"
 import { Project } from "../src/project.js"
@@ -10,13 +11,12 @@ import { Pty } from "../src/pty.js"
 import { Question } from "../src/question.js"
 import { Session } from "../src/session.js"
 import { SessionMessage } from "../src/session-message.js"
-import { SessionInput } from "../src/session-input.js"
+import { SessionPending } from "../src/session-pending.js"
 import { FileDiff } from "../src/file-diff.js"
 import { Money } from "../src/money.js"
 import { Skill } from "../src/skill.js"
 import { Shell } from "../src/shell.js"
 import { PersistedRevert } from "../src/session-revert.js"
-import { SessionTodo } from "../src/session-todo.js"
 import { optional } from "../src/schema.js"
 
 describe("contract hygiene", () => {
@@ -39,6 +39,40 @@ describe("contract hygiene", () => {
     expect(Schema.decodeUnknownSync(Value)({ value: "1" })).toEqual({ value: 1 })
     expect(Schema.encodeSync(Value)({ value: 1 })).toEqual({ value: "1" })
     expect(Schema.encodeSync(Value)({ value: undefined })).toEqual({})
+    expect(
+      Schema.encodeSync(SessionPending.SyntheticData)({
+        text: "completed",
+        description: undefined,
+        metadata: undefined,
+      }),
+    ).toEqual({ text: "completed" })
+  })
+
+  test("forms require at least one field", () => {
+    expect(() =>
+      Schema.decodeUnknownSync(Form.Info)({
+        id: Form.ID.create(),
+        sessionID: "global",
+        title: "Empty form",
+        fields: [],
+      }),
+    ).toThrow()
+    expect(
+      Schema.decodeUnknownSync(Form.Info)({
+        id: Form.ID.create(),
+        sessionID: "global",
+        title: "External form",
+        fields: [{ key: "authorization", type: "external", url: "https://example.com" }],
+      }).fields,
+    ).toHaveLength(1)
+    expect(() =>
+      Schema.decodeUnknownSync(Form.Info)({
+        id: Form.ID.create(),
+        sessionID: "global",
+        title: "External form",
+        fields: [{ type: "external", url: "https://example.com" }],
+      }),
+    ).toThrow()
   })
 
   test("model defaults and provider overlays preserve public invariants", () => {
@@ -54,15 +88,6 @@ describe("contract hygiene", () => {
     ).toThrow()
   })
 
-  test("todo status and priority preserve arbitrary strings", () => {
-    const decode = Schema.decodeUnknownSync(SessionTodo.Info)
-    expect(decode({ content: "ship", status: "waiting", priority: "urgent" })).toEqual({
-      content: "ship",
-      status: "waiting",
-      priority: "urgent",
-    })
-  })
-
   test("current ID constructors expose create", () => {
     expect(Question.ID.create()).toStartWith("que_")
     expect(Pty.ID.create()).toStartWith("pty_")
@@ -72,6 +97,10 @@ describe("contract hygiene", () => {
     const identifiers = [
       Agent.Color,
       FileSystem.Submatch,
+      Form.Field,
+      Form.Fields,
+      Form.Info,
+      Form.ExternalField,
       Mcp.Resource,
       Mcp.ResourceTemplate,
       Mcp.ResourceCatalog,
@@ -92,6 +121,10 @@ describe("contract hygiene", () => {
       Pty.Info,
       Session.ListAnchor,
       Session.Revert,
+      SessionPending.UserData,
+      SessionPending.SyntheticData,
+      SessionPending.User,
+      SessionPending.Synthetic,
     ].map((schema) => schema.ast.annotations?.identifier)
 
     expect(identifiers.every((identifier) => typeof identifier === "string")).toBe(true)
@@ -133,7 +166,7 @@ describe("contract hygiene", () => {
 
   test("reviewed session contracts use their canonical current shapes", () => {
     expect(SessionMessage.Info.ast.annotations?.identifier).toBe("Session.Message.Info")
-    expect(SessionInput.Info.ast.annotations?.identifier).toBe("SessionInput.Info")
+    expect(SessionPending.Info.ast.annotations?.identifier).toBe("SessionPending.Info")
     expect(Money.USD).not.toBe(Money.USDPerMillionTokens)
     expect(
       FileDiff.Info.make({ file: "src/index.ts", patch: "@@", additions: 1, deletions: 0, status: "modified" }),

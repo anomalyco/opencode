@@ -1,29 +1,22 @@
-export * as Tool from "./tool.js"
-
-import { Tool } from "../effect/tool.js"
-import type { ToolOutput, ToolResultValue } from "@opencode-ai/llm"
+import type { Tool } from "../effect/tool.js"
 import type { Agent } from "@opencode-ai/schema/agent"
 import type { Session } from "@opencode-ai/schema/session"
 import type { SessionMessage } from "@opencode-ai/schema/session-message"
-import { Effect, type JsonSchema, type Schema } from "effect"
+import type { JsonSchema, Schema } from "effect"
 import type { Hooks, Transform } from "./registration.js"
 
 export type Context = Tool.Context
 export type SchemaType<A> = Tool.SchemaType<A>
-export type Definition<Input extends SchemaType<any>, Output extends SchemaType<any>> = Tool.Definition<Input, Output>
-export type AnyTool = Tool.AnyTool
-export const Failure = Tool.Failure
-export type Failure = Tool.Failure
-export const RegistrationError = Tool.RegistrationError
-export type RegistrationError = Tool.RegistrationError
 export type Content = Tool.Content
 export type DynamicOutput = Tool.DynamicOutput
 
-type Config<
+export type Definition<
   Input extends SchemaType<any>,
   Output extends SchemaType<any>,
   Structured extends SchemaType<any> = Output,
 > = {
+  readonly name: string
+  readonly options?: RegisterOptions
   readonly description: string
   readonly input: Input
   readonly output: Output
@@ -42,32 +35,16 @@ type Config<
   }) => ReadonlyArray<Content>
 }
 
-type DynamicConfig = {
+export type DynamicDefinition = {
+  readonly name: string
+  readonly options?: RegisterOptions
   readonly description: string
   readonly jsonSchema: JsonSchema.JsonSchema
   readonly outputSchema?: JsonSchema.JsonSchema
   readonly execute: (input: unknown, context: Context) => Promise<DynamicOutput>
 }
 
-export function make<
-  Input extends SchemaType<any>,
-  Output extends SchemaType<any>,
-  Structured extends SchemaType<any> = Output,
->(config: Config<Input, Output, Structured>): Definition<Input, Structured>
-export function make(config: DynamicConfig): AnyTool
-export function make(config: Config<any, any, any> | DynamicConfig): AnyTool {
-  if ("jsonSchema" in config)
-    return Tool.make({
-      ...config,
-      execute: (input, context) => Effect.promise(() => config.execute(input, context)),
-    })
-  return Tool.make({
-    ...config,
-    execute: (input, context) => Effect.promise(() => config.execute(input, context)),
-  })
-}
-
-export const withPermission = Tool.withPermission
+export type AnyTool = Definition<any, any, any> | DynamicDefinition
 
 export interface ToolExecuteBeforeEvent {
   readonly tool: string
@@ -85,18 +62,24 @@ export interface ToolExecuteAfterEvent {
   readonly assistantMessageID: SessionMessage.ID
   readonly toolCallID: string
   readonly input: unknown
-  result: ToolResultValue
-  output?: ToolOutput
+  result: Tool.ToolExecuteAfterEvent["result"]
+  output?: Tool.ToolExecuteAfterEvent["output"]
   outputPaths?: ReadonlyArray<string>
 }
 
 export interface RegisterOptions {
   readonly group?: string
-  readonly deferred?: boolean
+  /** Defaults to true. False exposes the tool directly to the provider. */
+  readonly codemode?: boolean
 }
 
 export interface ToolDraft {
-  add(name: string, tool: AnyTool, options?: RegisterOptions): void
+  add<
+    Input extends SchemaType<any>,
+    Output extends SchemaType<any>,
+    Structured extends SchemaType<any> = Output,
+  >(tool: Definition<Input, Output, Structured>): void
+  add(tool: DynamicDefinition): void
 }
 
 export interface ToolHooks {

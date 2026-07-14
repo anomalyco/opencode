@@ -3,7 +3,6 @@ export * as ToolRegistry from "./registry"
 import { ToolOutput, type ToolCall, type ToolDefinition, type ToolResultValue } from "@opencode-ai/llm"
 import { Context, Effect, Layer, Scope } from "effect"
 import type { AgentV2 } from "../agent"
-import { Flag } from "../flag/flag"
 import { PermissionV2 } from "../permission"
 import { SessionMessage } from "../session/message"
 import { SessionSchema } from "../session/schema"
@@ -25,17 +24,12 @@ export type ExecuteInput = {
 }
 
 export interface Interface {
-  readonly materialize: (input: MaterializeInput) => Effect.Effect<Materialization>
+  readonly materialize: (permissions?: PermissionV2.Ruleset) => Effect.Effect<Materialization>
   /** Internal registration capability exposed publicly only through Tools.Service. */
   readonly register: (
     tools: Readonly<Record<string, AnyTool>>,
     options?: Tools.RegisterOptions,
   ) => Effect.Effect<void, RegistrationError, Scope.Scope>
-}
-
-export interface MaterializeInput {
-  readonly model: { readonly id: string; readonly provider: string }
-  readonly permissions?: PermissionV2.Ruleset
 }
 
 export interface Materialization {
@@ -58,11 +52,10 @@ const registryLayer = Layer.effect(
     const resources = yield* ToolOutputStore.Service
     const toolHooks = yield* ToolHooks.Service
     type Registration = {
-      readonly identity: object
       readonly tool: AnyTool
       readonly name: string
       readonly group?: string
-      readonly deferred: boolean
+      readonly codemode: boolean
     }
     const local = new Map<string, Array<{ readonly token: object; readonly registration: Registration }>>()
 
@@ -134,23 +127,12 @@ const registryLayer = Layer.effect(
       }
     })
 
-    const settleWith = Effect.fn("ToolRegistry.settle")(function* (input: ExecuteInput, advertised: object) {
-      const registration = local.get(input.call.name)?.at(-1)?.registration
-      if (!registration || registration.identity !== advertised) {
-        const message = `Stale tool call: ${input.call.name}`
-        return {
-          result: { type: "error" as const, value: message },
-          error: { type: "tool.stale" as const, message },
-        }
-      }
-      return yield* settleTool(input, registration.tool)
-    })
-
     return Service.of({
       register: Effect.fn("ToolRegistry.register")(function* (tools, options) {
         const entries = registrationEntries(tools, options?.group)
         if (entries.length === 0) return
-        const reserved = options?.deferred ? undefined : entries.find((entry) => entry.key === "execute")
+        const codemode = options?.codemode ?? true
+        const reserved = codemode ? undefined : entries.find((entry) => entry.key === "execute")
         if (reserved)
           return yield* Effect.fail(
             new RegistrationError({ name: reserved.key, message: 'Tool name "execute" is reserved for CodeMode' }),
@@ -164,11 +146,10 @@ const registryLayer = Layer.effect(
                 {
                   token,
                   registration: {
-                    identity: {},
                     tool: entry.tool,
                     name: entry.name,
                     group: entry.group,
-                    deferred: options?.deferred ?? false,
+                    codemode,
                   },
                 },
               ])
@@ -185,28 +166,19 @@ const registryLayer = Layer.effect(
           }),
         )
       }),
-      materialize: Effect.fn("ToolRegistry.materialize")(function* (input) {
-        const registrations = new Map<string, Registration>()
+      materialize: Effect.fn("ToolRegistry.materialize")(function* (permissions) {
+        const direct = new Map<string, Registration>()
+        const codemode = new Map<string, Registration>()
+        const rules = permissions ?? []
         for (const [name, entries] of local) {
           const registration = entries.at(-1)?.registration
-          if (registration) registrations.set(name, registration)
+          if (!registration) continue
+          if (whollyDisabled(permission(registration.tool, name), rules)) continue
+          if (registration.codemode) codemode.set(name, registration)
+          else direct.set(name, registration)
         }
-        for (const [name, registration] of registrations) {
-          if (
-            (registration.deferred && !Flag.CODEMODE_ENABLED) ||
-            whollyDisabled(permission(registration.tool, name), input.permissions ?? [])
-          )
-            registrations.delete(name)
-        }
-        const direct = new Map(Array.from(registrations).filter(([, registration]) => !registration.deferred))
-        const deferred = new Map(Array.from(registrations).filter(([, registration]) => registration.deferred))
         const execute =
-          deferred.size > 0 && !whollyDisabled("execute", input.permissions ?? [])
-            ? ExecuteTool.create({
-                registrations: deferred,
-                current: (name) => local.get(name)?.at(-1)?.registration,
-              })
-            : undefined
+          codemode.size > 0 && !whollyDisabled("execute", rules) ? ExecuteTool.create(codemode) : undefined
         return {
           definitions: [
             ...Array.from(direct, ([name, registration]) => definition(name, registration.tool)),
@@ -215,7 +187,7 @@ const registryLayer = Layer.effect(
           settle: (input) => {
             if (input.call.name === "execute" && execute) return settleTool(input, execute)
             const registration = direct.get(input.call.name)
-            if (registration) return settleWith(input, registration.identity)
+            if (registration) return settleTool(input, registration.tool)
             return Effect.succeed({
               result: { type: "error", value: `Unknown tool: ${input.call.name}` },
               error: { type: "tool.unknown", message: `Unknown tool: ${input.call.name}` },

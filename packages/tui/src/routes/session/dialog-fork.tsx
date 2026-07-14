@@ -1,7 +1,8 @@
 import { createMemo, createSignal, onMount, Show } from "solid-js"
+import { unwrap } from "solid-js/store"
 import { useData } from "../../context/data"
 import { useRoute } from "../../context/route"
-import { useSDK } from "../../context/sdk"
+import { useClient } from "../../context/client"
 import { Spinner } from "../../component/spinner"
 import { DialogSelect, type DialogSelectOption } from "../../ui/dialog-select"
 import { useDialog } from "../../ui/dialog"
@@ -12,14 +13,14 @@ import { Locale } from "../../util/locale"
 export function DialogFork(props: { sessionID: string; messageID?: string; onMove?: (messageID?: string) => void }) {
   const data = useData()
   const dialog = useDialog()
-  const sdk = useSDK()
+  const client = useClient()
   const route = useRoute()
   const toast = useToast()
   const [pending, setPending] = createSignal(false)
 
   const fork = async (messageID?: string) => {
     setPending(true)
-    const result = await sdk.api.session.fork({ sessionID: props.sessionID, messageID }).catch((error) => {
+    const result = await client.api.session.fork({ sessionID: props.sessionID, messageID }).catch((error) => {
       toast.show({ message: errorMessage(error), variant: "error", duration: 5000 })
       return undefined
     })
@@ -38,7 +39,7 @@ export function DialogFork(props: { sessionID: string; messageID?: string; onMov
                 description: file.description,
                 mention: file.mention,
               })),
-              agents: structuredClone(message.agents ?? []),
+              agents: structuredClone(unwrap(message.agents ?? [])),
               pasted: [],
             }
           : undefined,

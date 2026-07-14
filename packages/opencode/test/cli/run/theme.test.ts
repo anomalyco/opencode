@@ -67,9 +67,7 @@ test("returns syntax styles and indexed splash colors", async () => {
 
   try {
     expect(theme.block.syntax).toBeDefined()
-    expect(theme.block.subtleSyntax).toBeDefined()
     expect([...theme.block.syntax!.getAllStyles()].length).toBeGreaterThan(0)
-    expect([...theme.block.subtleSyntax!.getAllStyles()].length).toBeGreaterThan(0)
     expectIndexed(theme.splash.left)
     expectIndexed(theme.splash.right)
     expectIndexed(theme.splash.leftShadow)
@@ -82,7 +80,6 @@ test("returns syntax styles and indexed splash colors", async () => {
     expect(expectRgba(theme.footer.statusAccent).toInts()).not.toEqual(expectRgba(theme.footer.status).toInts())
   } finally {
     theme.block.syntax?.destroy()
-    theme.block.subtleSyntax?.destroy()
   }
 })
 
@@ -103,7 +100,6 @@ test("keeps footer surfaces exact while scrollback stays palette matched", async
     expectIndexed(theme.block.warning)
   } finally {
     theme.block.syntax?.destroy()
-    theme.block.subtleSyntax?.destroy()
   }
 })
 
@@ -119,9 +115,7 @@ test("uses refreshed background brightness when cached renderer mode is stale", 
     expect(expectRgba(stale.footer.surface).toInts()).toEqual(expectRgba(light.footer.surface).toInts())
   } finally {
     stale.block.syntax?.destroy()
-    stale.block.subtleSyntax?.destroy()
     light.block.syntax?.destroy()
-    light.block.subtleSyntax?.destroy()
   }
 })
 
@@ -138,9 +132,7 @@ test("keeps renderer mode when refreshed default background is unavailable", asy
     expect(expectRgba(light.footer.surface).toInts()).not.toEqual(expectRgba(dark.footer.surface).toInts())
   } finally {
     light.block.syntax?.destroy()
-    light.block.subtleSyntax?.destroy()
     dark.block.syntax?.destroy()
-    dark.block.subtleSyntax?.destroy()
   }
 })
 

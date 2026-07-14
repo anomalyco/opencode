@@ -1,6 +1,7 @@
 import { RGBA, TextAttributes } from "@opentui/core"
 import { For, type JSX } from "solid-js"
-import { tint, useTheme } from "../context/theme"
+import { useTheme } from "../context/theme"
+import { tint } from "../theme/color"
 import { logo } from "../logo"
 
 export function Logo() {

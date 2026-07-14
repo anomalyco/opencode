@@ -1,5 +1,34 @@
 # V2 Schema Changelog
 
+Status: **Historical pre-release compatibility ledger.** Older entries retain the names and behavior that were accurate when written; current contracts live in Protocol, Schema, Core, and the indexed specifications.
+
+## 2026-07-10: Replace Instruction Checkpoints With Value Deltas
+
+- Replace rendered `session.instructions.updated.1` prose with `session.instructions.updated.2 { delta }`, where values are SHA-256 hashes and the literal `"removed"` means removal.
+- Add the global `instruction_blob` content-addressed value store and rebuildable per-Session `instruction_state` fold cache. Drop `instruction_checkpoint` and its stored baseline, snapshot, and baseline sequence.
+- Add an authoritative parent event sequence to `session.forked.2` so forks derive instruction values from the selected parent prefix rather than copying the parent's latest state.
+- Keep removed API entries as hidden source tombstones so the next safe boundary can admit and render a revocation. Reject API entry JSON larger than 8KB with a typed HTTP 413 error.
+- Render initial instructions and chronological updates from stored values during request assembly. Instruction update prose is no longer a `session_message` row or compaction input; clients display changed keys from the durable delta.
+
+Compatibility:
+
+- Delete pre-beta `session.instructions.updated.1` events and their event-derived System rows instead of carrying a legacy event schema. The next safe boundary establishes one complete v2 delta.
+- Existing forks are assigned the sequence reserved by their original projection and their durable event is rewritten to v2 with that cutoff.
+- Blob GC is intentionally deferred. A future sync/export boundary must hydrate referenced blobs on the wire and re-hash them on ingestion.
+
+## 2026-07-09: Make Session Input Storage Pending-Only And Rename It To Session Pending
+
+- Rename the `SessionInput` schema namespace to `SessionPending` and the `session_input` table to `session_pending`.
+- Make the table pending-only: promotion consumes the user or synthetic row in the same event transaction that projects the message, and compaction settlement deletes the barrier row. Drop the `promoted_seq` column and the retained `promotedSeq`/`handledSeq` wire fields.
+- Add `GET /api/session/:sessionID/pending` (`v2.session.pending.list`) returning durable admitted work not yet visible in projected history, ordered by admission.
+- Reconcile exact retry of an already-promoted input against the projected `session_message` row plus the durable `session.input.admitted` event instead of a retained row. A projected message without an admitted event in the aggregate (for example fork-copied history) is conflicting reuse. Reusing a settled compaction ID admits a fresh barrier instead of reconciling; the worst case is one redundant compaction on a retried request.
+
+Compatibility:
+
+- `20260709190621_session_pending_table` drops `session_input` (including consumed ledger rows, any in-flight pending work, and whatever historical index variant the database carried) and creates the empty `session_pending` table. V2 storage is beta; no compatibility or data retention is attempted.
+- Durable event names and payloads are unchanged; `session.input.admitted` still records the full admitted message including delivery.
+- Promise, Effect, and legacy JavaScript SDK surfaces are regenerated; `SessionInput*` generated schema names become `SessionPending*` while event-derived names keep their `session.input.*` vocabulary.
+
 ## 2026-07-05: Rename Session Context Contracts To Instructions
 
 - Rename the System Context algebra to `Instructions`, API-managed `SessionContextEntry` records to `InstructionEntry`, and the session-owned context checkpoint to `InstructionCheckpoint`.
@@ -134,9 +163,7 @@ Compatibility:
 - Preserve full durable history; compaction changes only the active model representation.
 - Defer provider-overflow recovery, explicit manual compaction, and deterministic old tool-result pruning.
 
-Record V2 database, durable-event, projected-message, HTTP, and generated SDK schema changes here. Each entry states why the contract changed and whether consumers or stored data need compatibility handling. Commit messages for schema-affecting changes should include the same summary.
-
-This document covers meaningful contract changes introduced on the `feat/opencode-embedded-api` branch since its divergence from `origin/dev`. Mechanical file moves and internal refactors are omitted unless they changed stored data, replay behavior, public HTTP or SDK shapes, or model-facing tool contracts.
+The entries below record meaningful contract changes from the pre-release V2 rebuild. Mechanical file moves and internal refactors were omitted unless they changed stored data, replay behavior, public HTTP or SDK shapes, or model-facing tool contracts.
 
 ## 2026-06-04 Event-Sourced Session Input Cutover
 
@@ -384,7 +411,7 @@ Change:
 - Add Location-scoped pending permission requests with `once`, `always`, and `reject` replies.
 - Attach optional originating tool message and call IDs.
 - Preserve authored ordered rules and saved approvals as separate inputs to evaluation.
-- Establish action and resource conventions for `read`, `glob`, `grep`, `edit`, `external_directory`, `bash`, `todowrite`, and `webfetch` approvals.
+- Establish action and resource conventions for `read`, `glob`, `grep`, `edit`, `external_directory`, `bash`, and `webfetch` approvals.
 
 Reason:
 
@@ -580,37 +607,15 @@ Compatibility:
 - These are additive experimental V2 contracts.
 - No database migration is required because pending questions are intentionally in-memory Location state.
 
-## 2026-06-03: Core-Owned Todo Update Event
-
-Affected schema:
-
-- Core-owned `SessionTodo.Info`.
-- Global `todo.updated` event registration.
-
-Change:
-
-- Register the todo update event from Core session-todo ownership and expose the existing todo item shape to the Core V2 tool.
-
-Reason:
-
-- Embedded V2 `todowrite` execution needs Core-owned persistence and update publication without importing legacy application orchestration.
-
-Compatibility:
-
-- The todo table and public todo update event shape are preserved.
-- No database migration is required.
-
 ## 2026-06-03: Added Core V2 Tool Schemas
 
 Affected schema:
 
-- New `todowrite` tool parameters and success payload.
 - New `question` tool parameters and success payload.
 - New `webfetch` tool parameters and success payload.
 
 Change:
 
-- Add a todo replacement-list tool using `SessionTodo.Info` items.
 - Add a question tool using ordered `QuestionV2.Prompt` values and ordered answer arrays.
 - Add an HTTP(S) fetch tool with explicit `text`, `markdown`, and `html` formats, bounded timeout input, and optional managed output resource metadata.
 
@@ -914,7 +919,7 @@ Change:
 - Request Context Epoch replacement after an agent switch, dynamically re-observe the effective agent during retries, and fence first-epoch creation against the authoritative effective agent.
 - Fence existing-epoch replacement against the authoritative effective agent and block cross-agent provider turns while replacement context is unavailable.
 - Group the System Context algebra, registry, and built-ins under `system-context/`; keep source producers and Context Epoch persistence with their owning Skill, instruction, and Session modules; rename projected conversation selection to Session History.
-- Add the canonical V1-to-V2 runtime-context parity checklist to `specs/v2/session.md`.
+- Add the then-current V1-to-V2 runtime-context parity checklist to `specs/v2/session.md` (later removed with the completed migration plan).
 
 Compatibility:
 

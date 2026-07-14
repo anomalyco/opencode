@@ -4,8 +4,7 @@ import { createTestRenderer } from "@opentui/core/testing"
 import { Effect } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Global } from "@opencode-ai/core/global"
-import { createTuiResolvedConfig } from "./fixture/tui-runtime"
-import { createApi, createClient, createEventStream, createFetch, directory, json } from "./fixture/tui-sdk"
+import { createEventStream, createFetch, directory, json } from "./fixture/tui-client"
 
 test("SIGHUP clears title and disposes scoped resources once", async () => {
   const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
@@ -20,6 +19,7 @@ test("SIGHUP clears title and disposes scoped resources once", async () => {
   const listeners = new Set(process.listeners("SIGHUP"))
   const events = createEventStream()
   const calls = createFetch(undefined, events)
+  const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
   let started!: () => void
   const ready = new Promise<void>((resolve) => {
     started = resolve
@@ -30,10 +30,10 @@ test("SIGHUP clears title and disposes scoped resources once", async () => {
     const { run } = await import("../src/app")
     const task = Effect.runPromise(
       run({
-        client: createClient(calls.fetch),
-        api: createApi(calls.fetch),
-        config: createTuiResolvedConfig({ plugin_enabled: {} }),
+        server: { endpoint: { url: server.url.toString() } },
+        config: { get: async () => ({}), update: async () => ({}) },
         args: {},
+        log: () => {},
         pluginHost: {
           async start() {
             started()
@@ -54,6 +54,7 @@ test("SIGHUP clears title and disposes scoped resources once", async () => {
     expect(process.listeners("SIGHUP").every((listener) => listeners.has(listener))).toBe(true)
   } finally {
     if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+    await server.stop()
     mock.restore()
   }
 })
@@ -78,22 +79,26 @@ test("session lifecycle updates the terminal title and prints the epilogue after
   }
   const events = createEventStream()
   const calls = createFetch((url) => {
+    const session = {
+      id: "dummy",
+      title: "Demo session",
+      projectID: "project",
+      location: { directory },
+      cost: 0,
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      time: { created: 0, updated: 0 },
+    }
     if (url.pathname === "/api/session")
       return json({
-        data: [
-          {
-            id: "dummy",
-            title: "Demo session",
-            projectID: "project",
-            location: { directory },
-            cost: 0,
-            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-            time: { created: 0, updated: 0 },
-          },
-        ],
+        data: [session],
         cursor: {},
       })
+    if (url.pathname === "/api/session/dummy") return json({ data: session })
+    if (url.pathname === "/api/session/dummy/message") return json({ data: [], cursor: {} })
+    if (url.pathname === "/api/session/dummy/pending") return json({ data: [] })
+    if (url.pathname === "/api/session/dummy/permission") return json({ data: [] })
   }, events)
+  const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
   const originalWrite = process.stdout.write.bind(process.stdout)
   let stdout = ""
   let api: TuiPluginApi | undefined
@@ -111,10 +116,10 @@ test("session lifecycle updates the terminal title and prints the epilogue after
     const { run } = await import("../src/app")
     const task = Effect.runPromise(
       run({
-        client: createClient(calls.fetch),
-        api: createApi(calls.fetch),
-        config: createTuiResolvedConfig({ plugin_enabled: {} }),
+        server: { endpoint: { url: server.url.toString() } },
+        config: { get: async () => ({}), update: async () => ({}) },
         args: { sessionID: "dummy" },
+        log: () => {},
         pluginHost: {
           async start(input) {
             api = input.api
@@ -143,6 +148,7 @@ test("session lifecycle updates the terminal title and prints the epilogue after
   } finally {
     process.stdout.write = originalWrite
     if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+    await server.stop()
     mock.restore()
   }
 })

@@ -6,11 +6,7 @@ function syntax(style?: SyntaxStyle): SyntaxStyle {
   return style ?? SyntaxStyle.fromTheme([])
 }
 
-export function entrySyntax(commit: StreamCommit, theme: RunTheme): SyntaxStyle {
-  if (commit.kind === "reasoning") {
-    return syntax(theme.block.subtleSyntax ?? theme.block.syntax)
-  }
-
+export function entrySyntax(theme: RunTheme): SyntaxStyle {
   return syntax(theme.block.syntax)
 }
 

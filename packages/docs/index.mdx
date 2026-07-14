@@ -3,30 +3,10 @@ title: "Intro"
 description: "Get started with OpenCode."
 ---
 
-[**OpenCode**](https://opencode.ai) is an open source AI coding agent. It's available as a terminal-based interface or
-desktop app.
-
-<img
-  src="https://raw.githubusercontent.com/anomalyco/opencode/dev/packages/web/src/assets/lander/screenshot.png"
-  alt="OpenCode TUI with the opencode theme"
-/>
-
-Let's get started.
-
----
-
-#### Prerequisites
-
-To use OpenCode in your terminal, you'll need:
-
-1. A modern terminal emulator like:
-   - [Ghostty](https://ghostty.org), Linux and macOS
-   - [WezTerm](https://wezterm.org), cross-platform
-   - [Alacritty](https://alacritty.org), cross-platform
-   - [Kitty](https://sw.kovidgoyal.net/kitty/), Linux and macOS
-2. API keys for the LLM providers you want to use.
-
----
+<Warning>
+  These docs are for the beta version of OpenCode, which will become OpenCode 2.0. The beta is still changing: we may
+  wipe your data, things may break, and APIs, configuration, and plugin APIs may change.
+</Warning>
 
 ## Install
 
@@ -57,7 +37,7 @@ You can also install it with the following package managers.
   </Tab>
 </Tabs>
 
-<Note>During beta, the executable is named `opencode2`.</Note>
+<Note>During beta, the binary is called `opencode2`.</Note>
 
 ### Homebrew
 
@@ -70,9 +50,9 @@ Arch Linux installation is not available in beta.
 ### Windows
 
 <Tip>
-  For the best experience on Windows, use [Windows Subsystem for Linux
-  (WSL)](https://opencode.ai/docs/windows-wsl). It provides better performance and full compatibility with OpenCode's
-  features.
+  For the best experience on Windows, install [Windows Subsystem for Linux
+  (WSL)](https://learn.microsoft.com/windows/wsl/install), open your Linux distribution, and use one of the beta package
+  manager commands above.
 </Tip>
 
 <Tabs>
@@ -94,6 +74,19 @@ Standalone binaries are not available in beta.
 
 ---
 
+#### Prerequisites
+
+To use OpenCode in your terminal, you'll need:
+
+1. A modern terminal emulator like:
+   - [Ghostty](https://ghostty.org), Linux and macOS
+   - [WezTerm](https://wezterm.org), cross-platform
+   - [Alacritty](https://alacritty.org), cross-platform
+   - [Kitty](https://sw.kovidgoyal.net/kitty/), Linux and macOS
+2. API keys for the LLM providers you want to use.
+
+---
+
 ## Connect
 
 With OpenCode you can use any LLM provider by configuring its API key.
@@ -110,7 +103,8 @@ If you'd like easy access to all the best coding models you can try out
 You can also try [OpenCode Go](https://opencode.ai/go) a $10/month subscription
 plan that grants you access to the best open source models.
 
-See the current [provider directory](https://opencode.ai/docs/providers#directory).
+Use `/models` to browse the providers and models available to your project. See [Providers](/providers) for connection and
+configuration details.
 
 ---
 
@@ -148,8 +142,10 @@ Use `/undo` when a change isn't what you wanted.
 /undo
 ```
 
-OpenCode reverts the changes and restores your original message so you can revise it. Run `/undo` multiple times to undo
-multiple changes, or use `/redo` to reapply them.
+OpenCode stages a conversation revert and restores your original message so you can revise it. In a Git repository, it
+also restores file changes when snapshots were captured successfully. Run `/undo` multiple times to move the conversation
+boundary back, or use `/redo` to restore the staged conversation and files. See [Undo](/snapshots) for
+limitations and safety details.
 
 ```text
 /redo
@@ -160,5 +156,5 @@ multiple changes, or use `/redo` to reapply them.
 ## Customize
 
 Make OpenCode your own by [picking a theme](https://opencode.ai/docs/themes), [customizing
-keybinds](https://opencode.ai/docs/keybinds), [configuring formatters](https://opencode.ai/docs/formatters), [creating
-commands](https://opencode.ai/docs/commands), or editing the [OpenCode config](https://opencode.ai/docs/config).
+keybinds](https://opencode.ai/docs/keybinds), [configuring formatters](/formatters), [creating commands](/commands), or
+editing the [OpenCode config](/config).

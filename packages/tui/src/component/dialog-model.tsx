@@ -132,6 +132,7 @@ export function DialogModel(props: { providerID?: string }) {
         {
           command: "model.dialog.provider",
           title: connected() ? "Connect integration" : "View all integrations",
+          selection: "none",
           onTrigger() {
             dialog.replace(() => (
               <DialogIntegration
@@ -154,6 +155,7 @@ export function DialogModel(props: { providerID?: string }) {
       skipFilter={true}
       title={title()}
       current={local.model.current()}
+      focusCurrent={false}
     />
   )
 }

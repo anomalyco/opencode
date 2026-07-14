@@ -1,0 +1,6 @@
+{
+  "title": "API",
+  "description": "Use the OpenCode HTTP API.",
+  "root": true,
+  "pages": ["index"]
+}

@@ -1,0 +1,168 @@
+---
+title: "Attachments"
+description: ""
+---
+
+OpenCode can add local context to a prompt as text or image media. Current V2
+sessions make these attachment types visible to the model:
+
+| Input | Model receives |
+| --- | --- |
+| UTF-8 text file | The filename and decoded text |
+| Directory | A non-recursive listing of its immediate files and directories |
+| PNG, JPEG, GIF, or WebP | Image media |
+
+SVG files are treated as text, not image media. PDF, AVIF, BMP, audio, video,
+and other binary prompt attachments are not currently included in the model
+request. Some clients may let you select a PDF, but V2 does not yet make that
+PDF visible to the model.
+
+<Warning>
+  Use a model that supports image input before attaching an image. OpenCode
+  passes supported image media to the selected provider, but the provider and
+  model still enforce their own formats, dimensions, file counts, and size
+  limits. A text-only model may reject the request.
+</Warning>
+
+## Add attachments
+
+### TUI
+
+Type `@` followed by a filename and select the result to attach a project file.
+This is the preferred way to add source code and other text files:
+
+```text
+Explain the error handling in @src/server.ts
+```
+
+Paste an image from the clipboard with the configured paste key, `Ctrl+V` by
+default. You can also drag a supported image into a terminal that exposes the
+dropped file path to the TUI. The TUI reads PNG, JPEG, GIF, and WebP as image
+attachments; a dropped SVG is inserted as text.
+
+### Desktop and web
+
+Use **Attach file**, paste, or drag and drop. Attach UTF-8 text or a PNG, JPEG,
+GIF, or WebP image. The desktop file picker limits one selection to 20 MiB in
+total; the server also applies the per-attachment limit described below.
+
+### CLI
+
+Pass `--file` or `-f` to `opencode2 run`. Repeat the flag for multiple files:
+
+```bash
+opencode2 run -f src/server.ts -f screenshot.png "Explain the failure"
+```
+
+The run command accepts at most 100 file flags and reads at most 10 MiB per
+file. Use it for text files and the four supported image formats; other binary
+files do not become model context.
+
+### API
+
+The V2 prompt and command payloads accept a `files` array. Each item requires a
+`uri` and can include `name` and `description`:
+
+```bash
+opencode2 api post /api/session/ses_example/prompt --data '{
+  "text": "Review this file",
+  "files": [
+    {
+      "uri": "file:///home/me/project/src/server.ts",
+      "name": "server.ts",
+      "description": "Request handler"
+    }
+  ]
+}'
+```
+
+Use an absolute `file:` URL for a file available to the server, or an inline
+data URL:
+
+```json
+{
+  "text": "What is wrong with this layout?",
+  "files": [
+    {
+      "uri": "data:image/png;base64,<base64-data>",
+      "name": "layout.png"
+    }
+  ]
+}
+```
+
+HTTP and HTTPS attachment URLs are not supported. OpenCode materializes each
+attachment before admitting the prompt and rejects invalid URLs, unreadable
+paths, non-files other than directories, and attachments over 20 MiB decoded.
+For a text `file:` URL, optional positive `start` and `end` query parameters
+select one-based lines:
+
+```text
+file:///home/me/project/src/server.ts?start=20&end=60
+```
+
+The server infers the media type from the bytes. A supplied filename or data
+URL media type does not make an unsupported binary format model-visible.
+
+## Configure image processing
+
+Configure image normalization in `opencode.json` or `opencode.jsonc`:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "attachments": {
+    "image": {
+      "auto_resize": true,
+      "max_width": 2000,
+      "max_height": 2000,
+      "max_base64_bytes": 5242880
+    }
+  }
+}
+```
+
+All fields are optional:
+
+| Field | Default | Behavior |
+| --- | ---: | --- |
+| `auto_resize` | `true` | Resize an image that exceeds any configured limit. If `false`, reject it. |
+| `max_width` | `2000` | Maximum width in pixels. Must be a positive integer. |
+| `max_height` | `2000` | Maximum height in pixels. Must be a positive integer. |
+| `max_base64_bytes` | `5242880` | Maximum byte length of the Base64-encoded image string. Must be a positive integer. |
+
+<Note>
+  In the current V2 runtime, these settings apply to image media produced by
+  the built-in `read` tool. Images attached directly through the TUI, desktop,
+  web, CLI, or API bypass this normalization. Resize direct attachments before
+  adding them if the provider requires smaller media.
+</Note>
+
+The `read` tool recognizes PNG, JPEG, GIF, and WebP by their contents and will
+ingest at most 20 MiB of source image bytes. It decodes the image and compares
+its width, height, and encoded Base64 length with all three configured limits.
+
+When `auto_resize` is `true`, OpenCode preserves the aspect ratio, scales the
+image down to the dimension limits, and tries progressively smaller PNG and
+JPEG encodings until the Base64 limit is met. The resulting media type can
+therefore change to PNG or JPEG. If no encoding fits, the tool call fails.
+
+When `auto_resize` is `false`, exceeding any limit fails the tool call without
+modifying the image. An image that cannot be decoded also fails. If the image
+resizer cannot be loaded, the `read` tool returns the
+original image instead, so these settings are processing limits rather than an
+upload or security boundary.
+
+## Limits and provider behavior
+
+- Direct prompt attachments are limited to 20 MiB decoded per item by the V2
+  server. Client-specific limits can be lower.
+- `max_base64_bytes` counts the encoded Base64 characters in bytes, not the
+  decoded file size and not the complete `data:` URL.
+- Text attachments are inserted into the prompt as text and do not require a
+  multimodal model. Large text read through the `read` tool has separate
+  paging and truncation limits.
+- Image attachments use provider-native image input. Provider errors can still
+  occur when OpenCode's limits pass but the selected model's limits do not.
+- PDFs and other unsupported binary prompt attachments should be converted to
+  text or supported images before attaching them.

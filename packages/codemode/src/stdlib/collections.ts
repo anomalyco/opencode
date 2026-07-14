@@ -43,9 +43,9 @@ export const setMethods = new Set(["add", "has", "delete", "clear", "forEach", "
 export const spreadItems = (value: unknown): Array<unknown> | undefined => {
   if (Array.isArray(value)) return value
   if (typeof value === "string") return Array.from(value)
-  if (value instanceof SandboxMap) return Array.from(value.map.entries(), ([key, item]) => [key, item])
-  if (value instanceof SandboxSet) return Array.from(value.set.values())
-  if (value instanceof SandboxURLSearchParams) return Array.from(value.params.entries(), ([key, item]) => [key, item])
+  if (value instanceof CodeModeMap) return Array.from(value.map.entries(), ([key, item]) => [key, item])
+  if (value instanceof CodeModeSet) return Array.from(value.set.values())
+  if (value instanceof CodeModeURLSearchParams) return Array.from(value.params.entries(), ([key, item]) => [key, item])
   return undefined
 }
-import { SandboxMap, SandboxSet, SandboxURLSearchParams } from "../values.js"
+import { CodeModeMap, CodeModeSet, CodeModeURLSearchParams } from "../values.js"

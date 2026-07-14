@@ -75,6 +75,62 @@
         "summary": "Check server health"
       }
     },
+    "/api/server": {
+      "get": {
+        "tags": [
+          "server"
+        ],
+        "operationId": "v2.server.get",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "urls": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "urls"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Return the URLs that can be used to connect to this server.",
+        "summary": "Get server information"
+      }
+    },
     "/api/location": {
       "get": {
         "tags": [
@@ -18676,6 +18732,7 @@
         "required": [
           "id",
           "sessionID",
+          "title",
           "mode",
           "fields"
         ],
@@ -18714,6 +18771,7 @@
         "required": [
           "id",
           "sessionID",
+          "title",
           "mode",
           "url"
         ],
@@ -18791,6 +18849,7 @@
           }
         },
         "required": [
+          "title",
           "mode"
         ],
         "additionalProperties": false
@@ -24584,6 +24643,7 @@
         "required": [
           "id",
           "sessionID",
+          "title",
           "mode",
           "fields"
         ],
@@ -24622,6 +24682,7 @@
         "required": [
           "id",
           "sessionID",
+          "title",
           "mode",
           "url"
         ],
@@ -24832,88 +24893,6 @@
             "required": [
               "id",
               "sessionID"
-            ],
-            "additionalProperties": false
-          }
-        },
-        "required": [
-          "id",
-          "created",
-          "type",
-          "data"
-        ],
-        "additionalProperties": false
-      },
-      "Todo": {
-        "type": "object",
-        "properties": {
-          "content": {
-            "type": "string",
-            "description": "Brief description of the task"
-          },
-          "status": {
-            "type": "string",
-            "description": "Current status of the task: pending, in_progress, completed, cancelled"
-          },
-          "priority": {
-            "type": "string",
-            "description": "Priority level of the task: high, medium, low"
-          }
-        },
-        "required": [
-          "content",
-          "status",
-          "priority"
-        ],
-        "additionalProperties": false
-      },
-      "todo.updated": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "allOf": [
-              {
-                "pattern": "^evt_"
-              }
-            ]
-          },
-          "created": {
-            "type": "number"
-          },
-          "metadata": {
-            "type": "object"
-          },
-          "type": {
-            "type": "string",
-            "enum": [
-              "todo.updated"
-            ]
-          },
-          "location": {
-            "$ref": "#/components/schemas/Location.Ref"
-          },
-          "data": {
-            "type": "object",
-            "properties": {
-              "sessionID": {
-                "type": "string",
-                "allOf": [
-                  {
-                    "pattern": "^ses"
-                  }
-                ]
-              },
-              "todos": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/Todo"
-                }
-              }
-            },
-            "required": [
-              "sessionID",
-              "todos"
             ],
             "additionalProperties": false
           }
@@ -26476,9 +26455,6 @@
             "$ref": "#/components/schemas/form.cancelled"
           },
           {
-            "$ref": "#/components/schemas/todo.updated"
-          },
-          {
             "$ref": "#/components/schemas/session.status"
           },
           {
@@ -27071,6 +27047,9 @@
   "tags": [
     {
       "name": "health"
+    },
+    {
+      "name": "server"
     },
     {
       "name": "location"

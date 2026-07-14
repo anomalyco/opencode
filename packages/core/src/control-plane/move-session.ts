@@ -8,6 +8,7 @@ import { Location } from "../location"
 import { ProjectV2 } from "../project"
 import { SessionV2 } from "../session"
 import { SessionEvent } from "../session/event"
+import { SessionExecution } from "../session/execution"
 import { SessionSchema } from "../session/schema"
 import { SessionStore } from "../session/store"
 import { AbsolutePath, RelativePath } from "../schema"
@@ -73,6 +74,7 @@ const layer = Layer.effect(
     const events = yield* EventV2.Service
     const project = yield* ProjectV2.Service
     const sessions = yield* SessionStore.Service
+    const execution = yield* SessionExecution.Service
 
     const moveSession = Effect.fn("MoveSession.moveSession")(function* (input: Input) {
       const current = yield* sessions.get(input.sessionID)
@@ -85,6 +87,12 @@ const layer = Layer.effect(
       if (current.projectID !== destination.id) {
         return yield* new DestinationProjectMismatchError({ expected: current.projectID, actual: destination.id })
       }
+
+      // A move must not race active execution: a mid-drain relocation would let
+      // the source Location dispatch a request assembled under stale instructions
+      // and history. Serialize like removal does — stop the drain, then move.
+      yield* execution.interrupt(input.sessionID)
+      yield* execution.awaitIdle(input.sessionID)
 
       const moveChanges = input.moveChanges && source.directory !== destination.directory
       const sourceRepository = moveChanges ? yield* git.repo.discover(current.location.directory) : undefined
@@ -143,5 +151,5 @@ const layer = Layer.effect(
 export const node = makeGlobalNode({
   service: Service,
   layer,
-  deps: [Git.node, EventV2.node, ProjectV2.node, SessionStore.node],
+  deps: [Git.node, EventV2.node, ProjectV2.node, SessionStore.node, SessionExecution.node],
 })

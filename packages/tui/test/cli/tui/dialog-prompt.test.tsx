@@ -26,20 +26,17 @@ async function mountPrompt(input: {
 }) {
   const state = path.join(input.root, "state")
   await mkdir(state, { recursive: true })
-  await Bun.write(path.join(state, "kv.json"), "{}")
 
   const [
     { DialogProvider },
     { DialogPrompt },
-    { KVProvider },
     { ThemeProvider },
-    { TuiConfigProvider },
+    { ConfigProvider },
     { ToastProvider },
     { OpencodeKeymapProvider, registerOpencodeKeymap },
   ] = await Promise.all([
     import("../../../src/ui/dialog"),
     import("../../../src/ui/dialog-prompt"),
-    import("../../../src/context/kv"),
     import("../../../src/context/theme"),
     import("../../../src/config"),
     import("../../../src/ui/toast"),
@@ -51,7 +48,7 @@ async function mountPrompt(input: {
     const keymap = createDefaultOpenTuiKeymap(renderer)
     const resolvedConfig = createTuiResolvedConfig({
       keybinds: input.keybinds,
-      leader_timeout: 1000,
+      leader: { timeout: 1000 },
     })
     const off = registerOpencodeKeymap(keymap, renderer, resolvedConfig)
     onCleanup(off)
@@ -66,17 +63,15 @@ async function mountPrompt(input: {
         }}
       >
         <OpencodeKeymapProvider keymap={keymap}>
-          <TuiConfigProvider config={resolvedConfig}>
-            <KVProvider>
-              <ThemeProvider mode="dark">
-                <ToastProvider>
-                  <DialogProvider>
-                    <DialogPrompt title="Rename Session" value="draft" onConfirm={input.onConfirm} />
-                  </DialogProvider>
-                </ToastProvider>
-              </ThemeProvider>
-            </KVProvider>
-          </TuiConfigProvider>
+          <ConfigProvider config={resolvedConfig}>
+            <ThemeProvider mode="dark">
+              <ToastProvider>
+                <DialogProvider>
+                  <DialogPrompt title="Rename Session" value="draft" onConfirm={input.onConfirm} />
+                </DialogProvider>
+              </ToastProvider>
+            </ThemeProvider>
+          </ConfigProvider>
         </OpencodeKeymapProvider>
       </TestTuiContexts>
     )

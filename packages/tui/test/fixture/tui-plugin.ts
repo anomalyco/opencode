@@ -11,7 +11,6 @@ type Opts = {
 }
 
 export function createTuiPluginApi(opts: Opts = {}) {
-  const values = new Map<string, unknown>()
   const color = RGBA.fromInts(200, 200, 200)
   const dialog = { clear() {}, replace() {}, setSize() {}, size: "medium" as const, depth: 0, open: false }
   return {
@@ -19,15 +18,6 @@ export function createTuiPluginApi(opts: Opts = {}) {
     client: opts.client,
     event: opts.event,
     keymap: opts.keymap,
-    kv: {
-      get(name: string, fallback?: unknown) {
-        return values.has(name) ? values.get(name) : fallback
-      },
-      set(name: string, value: unknown) {
-        values.set(name, value)
-      },
-      ready: true,
-    },
     state: { session: { get: () => undefined, ...opts.state?.session } },
     theme: { current: new Proxy({}, { get: () => color }) },
     tuiConfig: createTuiResolvedConfig(),

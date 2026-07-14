@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@opencode-ai/www",
+  "version": "1.17.18",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev --host 0.0.0.0 --port 3000",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "pretypecheck": "fumadocs-mdx",
+    "typecheck": "tsgo --noEmit"
+  },
+  "dependencies": {
+    "@cloudflare/vite-plugin": "1.44.0",
+    "@tailwindcss/vite": "4.3.2",
+    "@tanstack/react-router": "1.170.17",
+    "@tanstack/react-start": "1.168.27",
+    "@tanstack/router-plugin": "1.168.19",
+    "fumadocs-core": "16.11.1",
+    "fumadocs-mdx": "15.1.0",
+    "fumadocs-ui": "16.11.1",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "tailwindcss": "4.3.2",
+    "vite": "8.1.4"
+  },
+  "devDependencies": {
+    "@types/mdx": "2.0.14",
+    "@types/node": "catalog:",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "@typescript/native-preview": "catalog:",
+    "@vitejs/plugin-react": "6.0.3",
+    "typescript": "catalog:",
+    "wrangler": "4.110.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

@@ -1,7 +1,6 @@
 export * as McpGuidance from "./guidance"
 
 import { makeLocationNode } from "../effect/app-node"
-import { Flag } from "../flag/flag"
 import { Context, Effect, Layer, Schema } from "effect"
 import { AgentV2 } from "../agent"
 import { PermissionV2 } from "../permission"
@@ -18,11 +17,7 @@ type Summary = typeof Summary.Type
 const entries = (servers: ReadonlyArray<Summary>) =>
   servers.flatMap((server) => [
     `  <server name="${server.server}">`,
-    ...(Flag.CODEMODE_ENABLED
-      ? [
-          `    Use tools from this server through \`execute\` under \`tools[${JSON.stringify(McpTool.group(server.server))}]\`.`,
-        ]
-      : []),
+    `    Use tools from this server through \`execute\` under \`tools[${JSON.stringify(McpTool.group(server.server))}]\`.`,
     ...server.instructions.split("\n").map((line) => `    ${line}`),
     "  </server>",
   ])
@@ -70,8 +65,19 @@ export const layer = Layer.effect(
       load: Effect.fn("McpGuidance.load")(function* (selection) {
         const agent = selection.info
         if (!agent) return Instructions.empty
-        if (Flag.CODEMODE_ENABLED && PermissionV2.evaluate("execute", "*", agent.permissions).effect === "deny")
-          return Instructions.empty
+        const source = (value: ReadonlyArray<Summary> | Instructions.Removed) =>
+          Instructions.make<ReadonlyArray<Summary>>({
+            key: Instructions.Key.make("core/mcp-guidance"),
+            codec: Schema.toCodecJson(Schema.Array(Summary)),
+            read: Effect.succeed(value),
+            render: {
+              initial: render,
+              changed: update,
+              removed: () => "MCP server instructions are no longer available.",
+            },
+          })
+        if (PermissionV2.evaluate("execute", "*", agent.permissions).effect === "deny")
+          return source(Instructions.removed)
         const [instructions, tools] = yield* Effect.all([mcp.instructions(), mcp.tools()], {
           concurrency: "unbounded",
         })
@@ -79,24 +85,14 @@ export const layer = Layer.effect(
         const visible = instructions
           .filter((item) => {
             const owned = tools.filter((tool) => tool.server === item.server)
-            return (
-              (!Flag.CODEMODE_ENABLED && owned.length === 0) ||
-              owned.some(
-                (tool) =>
-                  PermissionV2.evaluate(McpTool.name(tool.server, tool.name), "*", agent.permissions).effect !== "deny",
-              )
+            return owned.some(
+              (tool) =>
+                PermissionV2.evaluate(McpTool.name(tool.server, tool.name), "*", agent.permissions).effect !== "deny",
             )
           })
           .map((item) => ({ server: item.server, instructions: item.instructions }))
-        if (visible.length === 0) return Instructions.empty
-        return Instructions.make({
-          key: Instructions.Key.make("core/mcp-guidance"),
-          codec: Schema.toCodecJson(Schema.Array(Summary)),
-          load: Effect.succeed(visible),
-          baseline: render,
-          update,
-          removed: () => "MCP server instructions are no longer available.",
-        })
+          .toSorted((a, b) => a.server.localeCompare(b.server))
+        return source(visible.length === 0 ? Instructions.removed : visible)
       }),
     })
   }),

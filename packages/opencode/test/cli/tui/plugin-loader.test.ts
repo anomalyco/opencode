@@ -220,7 +220,6 @@ export default {
     api.kv.set(options.kv_key, "stored")
     const kv_after = api.kv.get(options.kv_key, "missing")
     const diff = api.state.session.diff(options.session_id)
-    const todo = api.state.session.todo(options.session_id)
     const lsp = api.state.lsp()
     const mcp = api.state.mcp()
     const depth_before = api.ui.dialog.depth
@@ -263,8 +262,6 @@ export default {
         kv_ready: api.kv.ready,
         diff_count: diff.length,
         diff_file: diff[0]?.file,
-        todo_count: todo.length,
-        todo_first: todo[0]?.content,
         lsp_count: lsp.length,
         mcp_count: mcp.length,
         mcp_first: mcp[0]?.name,
@@ -512,10 +509,6 @@ export default {
             diff(sessionID) {
               if (sessionID !== "ses_test") return []
               return [{ file: "src/app.ts", additions: 3, deletions: 1 }]
-            },
-            todo(sessionID) {
-              if (sessionID !== "ses_test") return []
-              return [{ content: "ship it", status: "pending" }]
             },
           },
           lsp() {
@@ -867,8 +860,6 @@ describe("tui.plugin.loader", () => {
     expect(data.local.kv_ready).toBe(true)
     expect(data.local.diff_count).toBe(1)
     expect(data.local.diff_file).toBe("src/app.ts")
-    expect(data.local.todo_count).toBe(1)
-    expect(data.local.todo_first).toBe("ship it")
     expect(data.local.lsp_count).toBe(1)
     expect(data.local.mcp_count).toBe(1)
     expect(data.local.mcp_first).toBe("github")

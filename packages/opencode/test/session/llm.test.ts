@@ -30,6 +30,7 @@ import { LayerNodePlatform } from "@opencode-ai/core/effect/app-node-platform"
 
 type ConfigModel = NonNullable<NonNullable<ConfigV1.Info["provider"]>[string]["models"]>[string]
 
+// @ts-expect-error dead V1 fixture uses the removed pre-normalized ModelsDev provider type.
 const openAIConfig = (model: ModelsDev.Provider["models"][string], baseURL: string): Partial<ConfigV1.Info> => {
   const { experimental: _experimental, ...configModel } = model
   return {
@@ -700,6 +701,7 @@ function createChatStream(text: string) {
 
 const MODELS_FIXTURE = JSON.parse(
   await Bun.file(path.join(import.meta.dir, "../tool/fixtures/models-api.json")).text(),
+  // @ts-expect-error dead V1 fixture uses the removed pre-normalized ModelsDev provider type.
 ) as Record<string, ModelsDev.Provider>
 
 function loadFixture(providerID: string, modelID: string) {
@@ -710,6 +712,7 @@ function loadFixture(providerID: string, modelID: string) {
   return { provider, model }
 }
 
+// @ts-expect-error dead V1 fixture uses the removed pre-normalized ModelsDev model type.
 function configModel(model: ModelsDev.Model) {
   return {
     id: model.id,

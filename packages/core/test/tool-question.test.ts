@@ -18,6 +18,15 @@ let captured: Form.CreateInput | undefined
 let reject = false
 let deny = false
 const capturedInput = () => captured
+const questionInput = {
+  questions: [
+    {
+      question: "Continue?",
+      header: "Continue",
+      options: [{ label: "Yes", description: "Continue" }],
+    },
+  ],
+}
 const permission = Layer.succeed(
   PermissionV2.Service,
   PermissionV2.Service.of({
@@ -79,7 +88,7 @@ const it = testEffect(
 )
 
 describe("QuestionTool", () => {
-  it.effect("omits a denied built-in question and terminally settles a stale call", () =>
+  it.effect("omits a catalog-denied question and enforces its leaf permission", () =>
     Effect.gen(function* () {
       captured = undefined
       deny = true
@@ -90,7 +99,7 @@ describe("QuestionTool", () => {
         yield* settleTool(registry, {
           sessionID,
           ...toolIdentity,
-          call: { type: "tool-call", id: "call-question-denied", name: "question", input: { questions: [] } },
+          call: { type: "tool-call", id: "call-question-denied", name: "question", input: questionInput },
         }),
       ).toEqual({
         result: { type: "error", value: "Permission denied: question" },
@@ -156,8 +165,8 @@ describe("QuestionTool", () => {
       expect(assertions).toMatchObject([{ sessionID, action: "question", resources: ["*"] }])
       expect(capturedInput()).toEqual({
         sessionID,
+        title: "Questions",
         metadata: { kind: "question", tool: { messageID: toolIdentity.assistantMessageID, callID: "call-question" } },
-        mode: "form",
         fields: [
           {
             key: "q0",
@@ -198,13 +207,22 @@ describe("QuestionTool", () => {
       yield* executeTool(registryService, {
         sessionID,
         ...toolIdentity,
-        call: { type: "tool-call", id: "call-question", name: "question", input: { questions: [] } },
+        call: { type: "tool-call", id: "call-question", name: "question", input: questionInput },
       })
       expect(capturedInput()).toEqual({
         sessionID,
+        title: "Questions",
         metadata: { kind: "question", tool: { messageID: toolIdentity.assistantMessageID, callID: "call-question" } },
-        mode: "form",
-        fields: [],
+        fields: [
+          {
+            key: "q0",
+            title: "Continue",
+            description: "Continue?",
+            options: [{ value: "Yes", label: "Yes", description: "Continue" }],
+            custom: true,
+            type: "string",
+          },
+        ],
       })
     }),
   )
@@ -218,7 +236,7 @@ describe("QuestionTool", () => {
       const fiber = yield* executeTool(registryService, {
         sessionID,
         ...toolIdentity,
-        call: { type: "tool-call", id: "call-question", name: "question", input: { questions: [] } },
+        call: { type: "tool-call", id: "call-question", name: "question", input: questionInput },
       }).pipe(Effect.forkScoped)
 
       const exit = yield* Fiber.await(fiber)

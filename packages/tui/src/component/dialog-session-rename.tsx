@@ -1,12 +1,12 @@
 import { DialogPrompt } from "../ui/dialog-prompt"
 import { type DialogContext, useDialog } from "../ui/dialog"
-import { useSDK } from "../context/sdk"
+import { useClient } from "../context/client"
 import { useToast } from "../ui/toast"
 import { errorMessage } from "../util/error"
 
 export function DialogSessionRename(props: { sessionID: string; currentTitle?: string }) {
   const dialog = useDialog()
-  const sdk = useSDK()
+  const client = useClient()
   const toast = useToast()
 
   return (
@@ -17,7 +17,7 @@ export function DialogSessionRename(props: { sessionID: string; currentTitle?: s
       onConfirm={(value) => {
         const title = value.trim()
         if (!title) return
-        void sdk.api.session
+        void client.api.session
           .rename({ sessionID: props.sessionID, title })
           .then(() => dialog.clear())
           .catch((error) =>

@@ -1,0 +1,153 @@
+---
+title: "Compaction"
+description: ""
+---
+
+Compaction replaces the active model context from an older part of a session
+with a generated checkpoint. The checkpoint contains a structured summary and
+a serialized tail of recent context, so the agent can continue with more room
+in the model's context window.
+
+Compaction is lossy, but it does not delete the earlier durable session
+messages. After a successful compaction, V2 builds model requests from the
+latest completed checkpoint and the messages that follow it.
+
+## Automatic compaction
+
+Automatic compaction is enabled by default. Before a model call, V2 estimates
+the size of the final system prompt, messages, and advertised tools. It starts
+compaction when:
+
+```text
+estimated tokens > context limit - max(requested output tokens, buffer)
+```
+
+The estimate is approximate: V2 JSON-serializes the request and assumes four
+characters per token. When compaction succeeds, V2 rebuilds the request from
+the new checkpoint and retries the step without promoting the input again.
+
+V2 also recognizes provider errors classified as context overflow. If an
+overflow occurs before the provider produces assistant output or other retry
+evidence, V2 can compact and retry that step once. This recovery is attempted
+even when `auto` is `false`; `auto` controls only the preflight size check. A
+second overflow after recovery is returned as an error.
+
+## Manual compaction
+
+In the TUI, run:
+
+```text
+/compact
+```
+
+`/summarize` is an alias. The default keybind is `<leader>c`, configured as
+`session_compact`.
+
+A manual request is durably admitted and wakes the session runner. It can
+compact short histories that would not trigger automatic compaction. If the
+session is busy, compaction runs at the next safe drain boundary before later
+steered or queued prompts are promoted. Repeated requests while one is pending
+coalesce into that pending request. Whether compaction completes or fails, the
+barrier is then settled so later prompts can proceed.
+
+The CLI has no separate `compact` subcommand. Use the TUI command or the server
+API. For example:
+
+```bash
+opencode2 api v2.session.compact \
+  --param sessionID=ses_example \
+  --data '{}'
+```
+
+The equivalent raw request is:
+
+```bash
+opencode2 api post /api/session/ses_example/compact --data '{}'
+```
+
+`POST /api/session/:sessionID/compact` returns the admitted compaction input;
+it does not wait for summary generation. Clients can call
+`client.session.compact({ sessionID })` and then wait for the session or follow
+the `session.compaction.*` events. Supplying an optional message `id` makes an
+exact retry idempotent, but reusing an ID owned by another record returns a
+conflict.
+
+## Configuration
+
+Add `compaction` to any [OpenCode configuration file](/docs/config):
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "compaction": {
+    "auto": true,
+    "prune": false,
+    "keep": {
+      "tokens": 8000
+    },
+    "buffer": 20000
+  }
+}
+```
+
+| Field | Default | V2 behavior |
+| --- | ---: | --- |
+| `auto` | `true` | Runs the preflight context-size check. It does not disable manual compaction or one-shot provider-overflow recovery. |
+| `prune` | None | Accepted by the V2 schema, but currently has no runtime effect. V2 does not prune old tool outputs in place. |
+| `keep.tokens` | `8000` | Approximate number of tokens from the newest serialized conversation context to retain beside the summary. |
+| `buffer` | `20000` | Token reserve used by the automatic threshold. The requested model output allowance wins when it is larger. |
+
+`keep.tokens` and `buffer` accept non-negative integers. Larger `keep.tokens`
+preserves more recent detail but leaves less room for future work. Larger
+`buffer` triggers preflight compaction earlier.
+
+## Checkpoint contents
+
+V2 uses the session's selected or default model to generate the summary, with
+tools disabled and at most 4096 output tokens. The summary records the
+objective, important details, completed and active work, blockers, next moves,
+and relevant files.
+
+The newest serialized context up to `keep.tokens` is retained separately. This
+is not a byte-for-byte transcript: tool output is limited to 2000 characters,
+and file or media attachments become textual descriptors rather than embedded
+data. On later compactions, V2 updates the previous summary and carries forward
+its retained recent context before selecting a new tail.
+
+The completed compaction is presented to the model as historical conversation
+context, explicitly not as new instructions. Running and failed compactions are
+not included in model context.
+
+## Compaction advances the instruction epoch
+
+Conversation compaction and instruction synchronization are separate. Before
+promoting pending input, V2 compares live instruction sources with the latest
+admitted values. Ordinary changes become durable value deltas; their
+model-facing System messages are derived during request assembly rather than
+persisted.
+
+Completed compaction advances the instruction epoch at the exact ended-event
+sequence and makes the currently admitted values initial. It does not reread
+sources or publish an instruction event. Session movement and committed revert
+clear the instruction fold so the next safe boundary requires one complete
+source read. See [Instructions](/docs/instructions) for source ordering and update
+behavior.
+
+## Current limitations
+
+- `prune` is reserved configuration; V1-style in-place tool-output pruning is
+  not implemented in V2.
+- Compaction requires a resolvable model with a positive catalog context limit.
+  There is no separate compaction-model setting or fallback model.
+- Summary generation can fail if the summary prompt itself cannot fit beside
+  its output allowance, the model returns no summary, or the provider fails.
+- Automatic and overflow compaction need older conversation context that can be
+  replaced. A provider overflow can still surface when there is no compressible
+  head or fixed instructions and tool schemas dominate the request.
+- Overflow recovery retries only once per step. Token estimation is heuristic,
+  so it cannot prevent every provider-specific overflow.
+- Earlier durable messages remain stored even though they are no longer in the
+  active model context.
+
+V1 used additional tail-turn and pruning behavior. Those V1 details are only
+migration context; the settings and behavior on this page describe V2.

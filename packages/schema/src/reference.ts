@@ -30,10 +30,11 @@ export const Source = Schema.Union([LocalSource, GitSource])
   .annotate({ identifier: "Reference.Source" })
 export type Source = typeof Source.Type
 
-export class Info extends Schema.Class<Info>("Reference.Info")({
+export const Info = Schema.Struct({
   name: Schema.String,
   path: AbsolutePath,
   description: Schema.String.pipe(optional),
   hidden: Schema.Boolean.pipe(optional),
   source: Source,
-}) {}
+}).annotate({ identifier: "Reference.Info" })
+export interface Info extends Schema.Schema.Type<typeof Info> {}

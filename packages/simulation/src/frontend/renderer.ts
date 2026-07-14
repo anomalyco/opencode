@@ -1,26 +1,65 @@
 import type { CliRenderer, CliRendererConfig } from "@opentui/core"
 import { createTestRenderer, type TestRendererSetup } from "@opentui/core/testing"
+import { Timeline } from "../recording"
 
 const setups = new WeakMap<CliRenderer, TestRendererSetup>()
+const recordings = new WeakMap<CliRenderer, Timeline>()
 
 /**
- * Creates the headless simulation renderer: a real CliRenderer backed by an
- * in-memory screen buffer instead of a terminal. The TestRendererSetup is
- * kept module-side (keyed by renderer) so the harness can use the supported
- * testing APIs without app code carrying it around.
+ * Creates a headless renderer with optional recording: a real CliRenderer
+ * backed by an in-memory screen buffer. The TestRendererSetup is kept
+ * module-side so the harness can use supported testing APIs without app
+ * code carrying it around.
  */
-export async function create(options: CliRendererConfig): Promise<CliRenderer> {
+export interface Viewport {
+  readonly cols: number
+  readonly rows: number
+}
+
+export async function create(options: CliRendererConfig, path?: string, viewport?: Viewport): Promise<CliRenderer> {
+  const cols = viewport?.cols ?? 100
+  const rows = viewport?.rows ?? 40
+  if (!path) {
+    const setup = await createTestRenderer({
+      ...options,
+      width: cols,
+      height: rows,
+    })
+    setups.set(setup.renderer, setup)
+    return setup.renderer
+  }
+  const recording = await Timeline.create(path, cols, rows)
   const setup = await createTestRenderer({
     ...options,
-    width: 100,
-    height: 40,
+    width: cols,
+    height: rows,
+    stdout: recording as unknown as NodeJS.WriteStream,
+    bufferedOutput: "stdout",
+    onDestroy: () => {
+      void recording.finish().catch((error) => process.stderr.write(`Failed to finish UI recording: ${error}\n`))
+      options.onDestroy?.()
+    },
+  }).catch(async (error) => {
+    await recording.finish().catch(() => undefined)
+    throw error
   })
   setups.set(setup.renderer, setup)
+  recordings.set(setup.renderer, recording)
   return setup.renderer
+}
+
+export function recordResize(renderer: CliRenderer, cols: number, rows: number) {
+  recordings.get(renderer)?.resize(cols, rows)
 }
 
 export function setupFor(renderer: CliRenderer): TestRendererSetup | undefined {
   return setups.get(renderer)
+}
+
+export function finish(renderer: CliRenderer) {
+  const recording = recordings.get(renderer)
+  if (!recording) throw new Error("UI recording is not available")
+  return recording.finish()
 }
 
 export * as SimulationRenderer from "./renderer"

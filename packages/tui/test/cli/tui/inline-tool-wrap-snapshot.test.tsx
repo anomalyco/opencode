@@ -2,16 +2,12 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { For } from "solid-js"
 import { testRender, type JSX } from "@opentui/solid"
 import {
-  formatCompletedSubagentDetail,
   formatSubagentRetry,
-  formatSubagentTitle,
-  formatSubagentToolcalls,
   InlineToolRow,
   parseApplyPatchFiles,
   parseDiagnostics,
   parseQuestionAnswers,
   parseQuestions,
-  parseTodos,
   toolDisplay,
 } from "../../../src/routes/session"
 
@@ -102,7 +98,16 @@ function ReminderAlignmentFixture() {
   )
 }
 
+function TrailingStatusFixture() {
+  return (
+    <InlineToolRow icon=":" complete={true} pending="" status={<text flexShrink={0}> Background </text>}>
+      Explore Subagent — Inspect renderer status styling
+    </InlineToolRow>
+  )
+}
+
 async function renderFrame(component: () => JSX.Element, options: { width: number; height: number }) {
+  testSetup?.renderer.destroy()
   testSetup = await testRender(component, options)
   await testSetup.renderOnce()
   await testSetup.renderOnce()
@@ -145,6 +150,15 @@ describe("TUI inline tool wrapping", () => {
     )
   })
 
+  test("wraps a trailing status as one padded item", async () => {
+    expect(await renderFrame(() => <TrailingStatusFixture />, { width: 70, height: 2 })).toBe(
+      "   : Explore Subagent — Inspect renderer status styling  Background",
+    )
+    expect(await renderFrame(() => <TrailingStatusFixture />, { width: 62, height: 2 })).toBe(
+      "   : Explore Subagent — Inspect renderer status styling\n      Background",
+    )
+  })
+
   test("filters malformed nested tool wire data", () => {
     expect(
       parseApplyPatchFiles([
@@ -162,9 +176,6 @@ describe("TUI inline tool wrapping", () => {
         deletions: 0,
         movePath: undefined,
       },
-    ])
-    expect(parseTodos([null, { status: "pending" }, { status: "pending", content: "Safe" }])).toEqual([
-      { status: "pending", content: "Safe" },
     ])
     expect(parseQuestions([{}, { question: 1 }, { question: "Continue?" }])).toEqual([{ question: "Continue?" }])
     expect(parseQuestionAnswers([null, ["yes", 1], "no"])).toEqual([[], ["yes"], []])
@@ -186,20 +197,6 @@ describe("TUI inline tool wrapping", () => {
     ).toEqual([{ message: "valid", range: { start: { line: 2, character: 3 } } }])
   })
 
-  test("formats completed subagent toolcall details", () => {
-    expect(formatCompletedSubagentDetail(0, "501ms")).toBe("501ms")
-    expect(formatCompletedSubagentDetail(1, "501ms")).toBe("1 toolcall · 501ms")
-    expect(formatCompletedSubagentDetail(2, "501ms")).toBe("2 toolcalls · 501ms")
-    expect(formatSubagentToolcalls(0)).toBe("0 toolcalls")
-  })
-
-  test("keeps background state attached to the subagent identity", () => {
-    expect(formatSubagentTitle("Explore", "Inspect renderer", false)).toBe("Explore Subagent — Inspect renderer")
-    expect(formatSubagentTitle("Explore", "Inspect renderer", true)).toBe(
-      "Explore Subagent — Inspect renderer [background]",
-    )
-  })
-
   test("keeps retry status ahead of wrapping messages", () => {
     expect(formatSubagentRetry(2, "Rate limited by provider")).toBe("Retrying (attempt 2) · Rate limited by provider")
   })
@@ -211,5 +208,4 @@ describe("TUI inline tool wrapping", () => {
   test("snapshots expanded tool errors under the tool text", async () => {
     expect(await renderFrame(() => <Fixture errorExpanded />, { width: 72, height: 12 })).toMatchSnapshot()
   })
-
 })

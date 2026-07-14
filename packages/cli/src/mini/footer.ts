@@ -627,7 +627,6 @@ export class RunFooter implements FooterApi {
 
     this.themes.splice(index, 1)
     theme.block.syntax?.destroy()
-    theme.block.subtleSyntax?.destroy()
   }
 
   public close(): void {
@@ -1023,7 +1022,6 @@ export class RunFooter implements FooterApi {
     void resolveRunTheme(this.renderer).then((theme) => {
       if (this.isGone) {
         theme.block.syntax?.destroy()
-        theme.block.subtleSyntax?.destroy()
         return
       }
 

@@ -6,10 +6,10 @@ import { Location } from "@opencode-ai/core/location"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Global } from "@opencode-ai/core/global"
 import { AbsolutePath } from "@opencode-ai/core/schema"
-import { Instructions } from "@opencode-ai/core/instructions"
 import { InstructionBuiltIns } from "@opencode-ai/core/instructions/builtins"
 import { location } from "../fixture/location"
 import { testEffect } from "../lib/effect"
+import { readInitial, readUpdate } from "../lib/instructions"
 
 const directory = AbsolutePath.make(FSUtil.resolve("/repo/packages/core"))
 const projectDirectory = AbsolutePath.make(FSUtil.resolve("/repo"))
@@ -36,7 +36,7 @@ describe("InstructionBuiltIns", () => {
     Effect.gen(function* () {
       yield* TestClock.setTime(timestamp)
       const context = yield* InstructionBuiltIns.Service
-      const initialized = yield* Instructions.initialize(yield* context.load())
+      const initialized = yield* readInitial(yield* context.load())
 
       expect(initialized.text).toBe(
         [
@@ -54,19 +54,16 @@ describe("InstructionBuiltIns", () => {
     }),
   )
 
-  it.effect("reconciles the date without repeating unchanged environment instructions", () =>
+  it.effect("updates the date without repeating unchanged environment instructions", () =>
     Effect.gen(function* () {
       yield* TestClock.setTime(timestamp)
       const context = yield* InstructionBuiltIns.Service
-      const initialized = yield* Instructions.initialize(yield* context.load())
+      const initialized = yield* readInitial(yield* context.load())
 
       yield* TestClock.setTime(timestamp + 24 * 60 * 60 * 1000)
-      const refreshed = yield* Instructions.reconcile(yield* context.load(), initialized.applied)
+      const refreshed = yield* readUpdate(yield* context.load(), initialized)
 
-      expect(refreshed).toMatchObject({
-        _tag: "Updated",
-        text: `Today's date is now: ${localDate(timestamp + 24 * 60 * 60 * 1000)}`,
-      })
+      expect(refreshed.text).toBe(`Today's date is now: ${localDate(timestamp + 24 * 60 * 60 * 1000)}`)
     }),
   )
 
@@ -74,10 +71,10 @@ describe("InstructionBuiltIns", () => {
     Effect.gen(function* () {
       yield* TestClock.setTime(timestamp)
       const context = yield* InstructionBuiltIns.Service
-      const initialized = yield* Instructions.initialize(yield* context.load())
+      const initialized = yield* readInitial(yield* context.load())
 
       yield* TestClock.setTime(timestamp + 60 * 60 * 1000)
-      expect(yield* Instructions.reconcile(yield* context.load(), initialized.applied)).toEqual({ _tag: "Unchanged" })
+      expect((yield* readUpdate(yield* context.load(), initialized)).changed).toBe(false)
     }),
   )
 })

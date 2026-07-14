@@ -132,6 +132,8 @@ export const Plugin = {
           return runtime.session.synthetic({
             sessionID,
             text: `<shell id="${callID}" state="${state}" command="${command}">\n${text}\n</shell>`,
+            description: command,
+            metadata: { source: "shell", state },
           })
         }),
         Effect.forkIn(scope, { startImmediately: true }),
@@ -276,6 +278,7 @@ export const Plugin = {
                 ),
               ),
           }),
+          { codemode: false },
         ),
       )
       .pipe(Effect.orDie)

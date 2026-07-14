@@ -778,19 +778,26 @@ export function createPromptState(input: PromptInput): PromptState {
     if (!area || area.isDestroyed) return false
 
     const endOffset = Bun.stringWidth(area.plainText)
-    if (dir === -1 && area.visualCursor.visualRow === 0) {
-      area.cursorOffset = 0
+    if (dir === -1) {
+      if (area.cursorOffset === 0) return false
+      if (area.visualCursor.visualRow === 0) {
+        area.cursorOffset = 0
+        return
+      }
+      area.moveCursorUp()
+      return
     }
 
     const end =
       typeof area.height === "number" && Number.isFinite(area.height) && area.height > 0
         ? area.height - 1
         : Math.max(0, (area.virtualLineCount ?? 1) - 1)
-    if (dir === 1 && area.visualCursor.visualRow === end) {
+    if (area.cursorOffset === endOffset) return false
+    if (area.visualCursor.visualRow === end) {
       area.cursorOffset = endOffset
+      return
     }
-
-    return false
+    area.moveCursorDown()
   }
 
   const requestExit = () => {
@@ -1037,6 +1044,7 @@ export function createPromptState(input: PromptInput): PromptState {
   }))
 
   useBindings(() => ({
+    priority: 1,
     mode: OPENCODE_BASE_MODE,
     enabled: input.prompt() && !visible(),
     commands: [

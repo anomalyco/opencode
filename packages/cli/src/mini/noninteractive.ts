@@ -1,8 +1,8 @@
 import type { EventSubscribeOutput, OpenCodeClient } from "@opencode-ai/client/promise"
-import type { ReasoningPart, StepFinishPart, StepStartPart, TextPart, ToolPart } from "@opencode-ai/sdk/v2"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { EOL } from "node:os"
 import { UI } from "./ui"
+import type { MiniToolPart } from "./types"
 
 type Model = {
   providerID: string
@@ -25,11 +25,11 @@ type Input = {
   variant?: string
   thinking: boolean
   format: "default" | "json"
-  dangerouslySkipPermissions: boolean
+  auto: boolean
   /** True when the client is attached to a shared server rather than an exclusive in-process one. */
   attached: boolean
-  renderTool: (part: ToolPart) => Promise<void>
-  renderToolError: (part: ToolPart) => Promise<void>
+  renderTool: (part: MiniToolPart) => Promise<void>
+  renderToolError: (part: MiniToolPart) => Promise<void>
 }
 
 type StartedPart = {
@@ -77,7 +77,7 @@ export async function runNonInteractivePrompt(input: Input) {
     return true
   }
 
-  const writeText = (part: TextPart, timestamp: number) => {
+  const writeText = (part: { text: string; [key: string]: unknown }, timestamp: number) => {
     if (emit("text", timestamp, { part })) return
     const text = part.text.trim()
     if (!text) return
@@ -91,7 +91,7 @@ export async function runNonInteractivePrompt(input: Input) {
   }
 
   const replyPermission = async (request: { id: string; action: string; resources: ReadonlyArray<string> }) => {
-    if (!input.dangerouslySkipPermissions) {
+    if (!input.auto) {
       permissionRejected = true
       UI.println(
         UI.Style.TEXT_WARNING_BOLD + "!",
@@ -103,10 +103,10 @@ export async function runNonInteractivePrompt(input: Input) {
       .reply({
         sessionID: input.sessionID,
         requestID: request.id,
-        reply: input.dangerouslySkipPermissions ? "once" : "reject",
+        reply: input.auto ? "once" : "reject",
       })
       .catch(() => {})
-    if (!input.dangerouslySkipPermissions) {
+    if (!input.auto) {
       await input.client.session.interrupt({ sessionID: input.sessionID }).catch(() => {})
     }
   }
@@ -153,7 +153,7 @@ export async function runNonInteractivePrompt(input: Input) {
       if (!("sessionID" in event.data) || event.data.sessionID !== input.sessionID) continue
       const time = toMillis("created" in event ? event.created : undefined)
 
-      if (event.type === "session.prompt.promoted") {
+      if (event.type === "session.input.promoted") {
         if (event.data.inputID === messageID) {
           promoted = true
           continue
@@ -169,7 +169,7 @@ export async function runNonInteractivePrompt(input: Input) {
       if (!promoted) continue
 
       if (event.type === "session.step.started") {
-        const part: StepStartPart = {
+        const part = {
           id: partID(event.id),
           sessionID: input.sessionID,
           messageID: event.data.assistantMessageID,
@@ -191,7 +191,7 @@ export async function runNonInteractivePrompt(input: Input) {
       if (event.type === "session.text.ended") {
         const started = starts.get("text")
         starts.delete("text")
-        const part: TextPart = {
+        const part = {
           id: started?.id ?? partID(event.id),
           sessionID: input.sessionID,
           messageID: event.data.assistantMessageID,
@@ -210,7 +210,7 @@ export async function runNonInteractivePrompt(input: Input) {
       if (event.type === "session.reasoning.ended" && input.thinking) {
         const started = starts.get("reasoning")
         starts.delete("reasoning")
-        const part: ReasoningPart = {
+        const part = {
           id: started?.id ?? partID(event.id),
           sessionID: input.sessionID,
           messageID: event.data.assistantMessageID,
@@ -263,7 +263,7 @@ export async function runNonInteractivePrompt(input: Input) {
       }
       if (event.type === "session.tool.success") {
         const current = tools.get(event.data.callID) ?? fallbackTool(event)
-        const part: ToolPart = {
+        const part: MiniToolPart = {
           id: current.id,
           sessionID: input.sessionID,
           messageID: event.data.assistantMessageID,
@@ -296,7 +296,7 @@ export async function runNonInteractivePrompt(input: Input) {
       if (event.type === "session.tool.failed") {
         const current = tools.get(event.data.callID) ?? fallbackTool(event)
         const error = event.data.error.message
-        const part: ToolPart = {
+        const part: MiniToolPart = {
           id: current.id,
           sessionID: input.sessionID,
           messageID: event.data.assistantMessageID,
@@ -325,7 +325,7 @@ export async function runNonInteractivePrompt(input: Input) {
       }
 
       if (event.type === "session.step.ended") {
-        const part: StepFinishPart = {
+        const part = {
           id: partID(event.id),
           sessionID: input.sessionID,
           messageID: event.data.assistantMessageID,
@@ -409,10 +409,8 @@ export async function runNonInteractivePrompt(input: Input) {
         {
           sessionID: input.sessionID,
           id: messageID,
-          prompt: {
-            text: [input.message, ...prepared.flatMap((file) => (file.text ? [file.text] : []))].join("\n\n"),
-            files: prepared.flatMap((file) => (file.attachment ? [file.attachment] : [])),
-          },
+          text: [input.message, ...prepared.flatMap((file) => (file.text ? [file.text] : []))].join("\n\n"),
+          files: prepared.flatMap((file) => (file.attachment ? [file.attachment] : [])),
           delivery: "steer",
         },
         { signal: admission.signal },

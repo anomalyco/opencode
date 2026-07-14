@@ -1,0 +1,450 @@
+---
+title: "Config"
+description: ""
+---
+
+<Tip>
+  You shouldn't have to configure OpenCode manually. Ask OpenCode to update its configuration for you.
+</Tip>
+
+## Format
+
+OpenCode supports both **JSON** and **JSONC** (JSON with Comments) configuration files.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "openai/gpt-5.2-custom",
+  "providers": {
+    "openai": {
+      "models": {
+        "gpt-5.2-custom": {
+          "modelID": "gpt-5.2",
+          "name": "GPT-5.2 Custom"
+        }
+      }
+    }
+  }
+}
+```
+
+## Locations
+
+OpenCode loads global configuration from:
+
+```text
+~/.config/opencode/opencode.json(c)
+```
+
+Project-specific configuration can use either form:
+
+```text
+/home/user/projects/my-app/opencode.json(c)
+/home/user/projects/my-app/.opencode/opencode.json(c)
+```
+
+When OpenCode starts, it searches for configuration files from the current
+directory upward to the project root. It merges direct `opencode.json(c)` files
+from the project root toward the current directory, then does the same for
+files inside `.opencode` directories. A `.opencode` config therefore overrides
+every direct config, even when the direct config is closer to the current
+directory. Avoid mixing the two forms across one project hierarchy unless this
+precedence is intentional.
+
+For example, consider a monorepo with OpenCode started from
+`/home/user/projects/acme/packages/web`:
+
+```text
+~/.config/opencode/opencode.json
+
+/home/user/projects/acme/
+├── opencode.json
+└── packages/
+    └── web/
+        ├── opencode.json
+        └── src/
+```
+
+OpenCode applies these files from lowest to highest precedence:
+
+1. `~/.config/opencode/opencode.json`
+2. `/home/user/projects/acme/opencode.json`
+3. `/home/user/projects/acme/packages/web/opencode.json`
+
+In this direct-config example, the package config overrides matching settings
+from the repository config, which overrides matching settings from the global
+config. Settings that do not conflict are preserved from every file.
+
+## Schema
+
+The complete OpenCode configuration schema is available at
+[opencode.ai/config.json](https://opencode.ai/config.json).
+
+Add the `$schema` field to your configuration file to enable validation and
+autocomplete in editors that support JSON Schema:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json"
+}
+```
+
+Use the schema as the source of truth for available fields, accepted values,
+and nested configuration shapes.
+
+### Shell
+
+Set the shell used by the terminal and shell tools.
+
+```jsonc
+{
+  "shell": "/bin/zsh"
+}
+```
+
+### Model
+
+Set the default model in `provider/model` format. The root default currently
+does not retain a `#variant`; select variants in the TUI or on an agent or command.
+
+```jsonc
+{
+  "model": "anthropic/claude-sonnet-4-5"
+}
+```
+
+See the [models guide](/docs/models) for model selection
+and local models.
+
+### Default agent
+
+Choose the primary agent used when a session does not select one explicitly.
+
+```jsonc
+{
+  "default_agent": "build"
+}
+```
+
+See the [agents guide](/docs/agents) for built-in and custom
+agents.
+
+### Autoupdate
+
+Control automatic updates from the global config. Set this to `false` to
+disable updates. The current beta treats `true` and `"notify"` identically and
+automatically installs compatible non-major updates; project-level values are
+ignored.
+
+```jsonc
+{
+  "autoupdate": false
+}
+```
+
+### Sharing
+
+Set the intended session sharing policy. V2 accepts this field, but session
+sharing is not implemented yet.
+
+```jsonc
+{
+  "share": "manual"
+}
+```
+
+See the [sharing guide](/docs/sharing) for more details.
+
+### Username
+
+Set a username for future display behavior. V2 accepts this field but does not
+currently display it in conversations.
+
+```jsonc
+{
+  "username": "alice"
+}
+```
+
+### Permissions
+
+Define ordered rules that allow, deny, or ask before an agent uses a tool on a
+matching resource.
+
+```jsonc
+{
+  "permissions": [
+    {
+      "action": "shell",
+      "resource": "git push *",
+      "effect": "ask"
+    }
+  ]
+}
+```
+
+See the [permissions guide](/docs/permissions) for rule matching and available actions.
+
+### Agents
+
+Override built-in agents or define specialized agents with their own model,
+instructions, mode, and permissions.
+
+```jsonc
+{
+  "agents": {
+    "reviewer": {
+      "description": "Review changes without editing files",
+      "mode": "subagent",
+      "system": "Focus on correctness, security, and missing tests.",
+      "permissions": [
+        { "action": "edit", "resource": "*", "effect": "deny" }
+      ]
+    }
+  }
+}
+```
+
+See the [agents guide](/docs/agents) for all agent options and file-based agents.
+
+### Snapshots
+
+Enable or disable filesystem snapshots used by undo and revert behavior.
+
+```jsonc
+{
+  "snapshots": false
+}
+```
+
+See the [snapshots guide](/docs/snapshots) for undo and redo behavior.
+
+### Watcher
+
+Ignore files and directories that should not trigger filesystem updates.
+
+```jsonc
+{
+  "watcher": {
+    "ignore": ["dist/**", "coverage/**"]
+  }
+}
+```
+
+### Formatter
+
+Define formatter settings for compatibility and future use. V2 accepts this
+field, but it does not run formatters yet.
+
+```jsonc
+{
+  "formatter": {
+    "prettier": {
+      "command": ["bunx", "prettier", "--write", "$FILE"],
+      "extensions": [".js", ".ts", ".tsx"]
+    }
+  }
+}
+```
+
+See the [formatters guide](/docs/formatters) for accepted fields and current limitations.
+
+### LSP
+
+Define language server settings for compatibility and future use. V2 accepts
+this field, but it does not start language servers yet.
+
+```jsonc
+{
+  "lsp": {
+    "typescript": {
+      "command": ["typescript-language-server", "--stdio"],
+      "extensions": [".ts", ".tsx"]
+    }
+  }
+}
+```
+
+See the [LSP guide](/docs/lsp) for accepted fields and current limitations.
+
+### Attachments
+
+Control how oversized images loaded by the `read` tool are resized or rejected
+before they are sent to a model.
+
+```jsonc
+{
+  "attachments": {
+    "image": {
+      "auto_resize": true,
+      "max_width": 2000,
+      "max_height": 2000,
+      "max_base64_bytes": 5242880
+    }
+  }
+}
+```
+
+See the [attachments guide](/docs/attachments) for image processing and limits.
+
+### Tool output
+
+Set the maximum number of lines and bytes retained from a tool result.
+
+```jsonc
+{
+  "tool_output": {
+    "max_lines": 2000,
+    "max_bytes": 51200
+  }
+}
+```
+
+### MCP
+
+Configure local and remote Model Context Protocol servers. Global timeouts can
+be overridden by an individual server.
+
+```jsonc
+{
+  "mcp": {
+    "servers": {
+      "playwright": {
+        "type": "local",
+        "command": ["bunx", "@playwright/mcp"]
+      }
+    }
+  }
+}
+```
+
+See the [MCP guide](/docs/mcp-servers) for remote servers, OAuth, environment variables, and timeouts.
+
+### Compaction
+
+Control automatic context compaction and how much recent context it preserves.
+
+```jsonc
+{
+  "compaction": {
+    "auto": true,
+    "keep": {
+      "tokens": 8000
+    },
+    "buffer": 20000
+  }
+}
+```
+
+See the [compaction guide](/docs/compaction) for automatic context management.
+
+### Skills
+
+Add directories or URLs that OpenCode should search for agent skills.
+
+```jsonc
+{
+  "skills": ["./team-skills", "https://example.com/.well-known/skills/"]
+}
+```
+
+See the [skills guide](/docs/skills) for skill structure and automatic discovery under `.opencode/skills/`.
+
+### Commands
+
+Define reusable slash commands as named prompt templates.
+
+```jsonc
+{
+  "commands": {
+    "review": {
+      "description": "Review the current changes",
+      "template": "Review the current diff for correctness and missing tests."
+    }
+  }
+}
+```
+
+See the [commands guide](/docs/commands) for arguments, models, agents, and file-based commands.
+
+### Instructions
+
+Declare additional instruction files, globs, or URLs. V2 accepts this field,
+but does not load these entries yet; use `AGENTS.md` for active instructions.
+
+```jsonc
+{
+  "instructions": ["CONTRIBUTING.md", "docs/guidelines/*.md"]
+}
+```
+
+See the [instructions guide](/docs/instructions) for project instructions and `AGENTS.md`.
+
+### References
+
+Make local directories or Git repositories available as named supporting
+context.
+
+```jsonc
+{
+  "references": {
+    "docs": {
+      "path": "../product-docs",
+      "description": "Product behavior and terminology"
+    },
+    "effect": {
+      "repository": "Effect-TS/effect",
+      "branch": "main"
+    }
+  }
+}
+```
+
+See the [references guide](/docs/references) for shorthand, visibility, and path resolution.
+
+### Plugins
+
+Load plugins from packages or local files. Use the object form when a plugin
+accepts options.
+
+```jsonc
+{
+  "plugins": [
+    "opencode-example-plugin",
+    {
+      "package": "./plugins/local.ts",
+      "options": {
+        "enabled": true
+      }
+    }
+  ]
+}
+```
+
+See the [plugins guide](/docs/build/plugins) for plugin development and configuration.
+
+### Providers
+
+Configure providers and add or override their models, request settings,
+headers, and model variants.
+
+```jsonc
+{
+  "providers": {
+    "openai": {
+      "models": {
+        "gpt-5.2-custom": {
+          "modelID": "gpt-5.2",
+          "name": "GPT-5.2 Custom",
+          "limit": {
+            "context": 200000,
+            "output": 32000
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+See the [providers guide](/docs/providers) for credentials, custom endpoints, provider packages, and model configuration.

@@ -5,12 +5,19 @@ import { TextAttributes, type CapturedFrame, type CliRenderer, type RGBA } from 
 const CellWidth = 10
 const CellHeight = 20
 const FontSize = 16
-const FontFamily = "OpenCode Screenshot"
+const FontFamily = "OpenCode Mono"
 
-GlobalFonts.registerFromPath(
-  fileURLToPath(new URL("../../../ui/src/assets/fonts/JetBrainsMonoNerdFontMono-Regular.woff2", import.meta.url)),
-  FontFamily,
-)
+for (const file of [
+  "adwaita-mono-latin-400-normal.woff2",
+  "adwaita-mono-latin-700-normal.woff2",
+  "adwaita-mono-latin-400-italic.woff2",
+  "adwaita-mono-latin-700-italic.woff2",
+]) {
+  GlobalFonts.registerFromPath(
+    fileURLToPath(import.meta.resolve(`@fontsource/adwaita-mono/files/${file}`)),
+    FontFamily,
+  )
+}
 
 export function screenshot(renderer: CliRenderer) {
   return screenshotFrame({

@@ -1,16 +1,22 @@
-import type { V2Event } from "@opencode-ai/sdk/v2"
+import type { OpenCodeEvent } from "@opencode-ai/client"
 import type { TuiAttentionSoundName, TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { BuiltinTuiPlugin } from "../builtins"
 
 const id = "internal:notifications"
 
-type SessionError = Extract<V2Event, { type: "session.error" }>["data"]["error"]
+type SessionError = Extract<OpenCodeEvent, { type: "session.error" }>["data"]["error"]
 
-function notify(api: TuiPluginApi, sessionID: string | undefined, message: string, sound: TuiAttentionSoundName) {
+function notify(
+  api: TuiPluginApi,
+  sessionID: string | undefined,
+  message: string,
+  sound: TuiAttentionSoundName,
+  title?: string,
+) {
   const session = sessionID ? api.state.session.get(sessionID) : undefined
   const isSubagent = session?.parentID !== undefined
   void api.attention.notify({
-    title: session?.title,
+    title: title ?? session?.title,
     message,
     notification: isSubagent ? false : { when: "blurred" },
     sound: { name: sound, when: "always" },
@@ -34,10 +40,15 @@ const tui: TuiPlugin = async (api) => {
   const permissions = new Set<string>()
 
   api.event.on("form.created", (event) => {
-    if (event.data.form.sessionID === "global") return
     if (forms.has(event.data.form.id)) return
     forms.add(event.data.form.id)
-    notify(api, event.data.form.sessionID, "Input needs response", "question")
+    notify(
+      api,
+      event.data.form.sessionID,
+      "Input needs response",
+      "question",
+      event.data.form.title,
+    )
   })
 
   api.event.on("form.replied", (event) => {

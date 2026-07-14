@@ -1,6 +1,6 @@
 import { EOL } from "node:os"
 import { Effect } from "effect"
-import { createOpencodeClient, type McpServer } from "@opencode-ai/sdk/v2/client"
+import { OpenCode, type McpServer } from "@opencode-ai/client"
 import { Commands } from "../../commands"
 import { Runtime } from "../../../framework/runtime"
 import { Service } from "@opencode-ai/client/effect"
@@ -11,10 +11,10 @@ export default Runtime.handler(
   Effect.fn("cli.mcp.list")(function* () {
     const options = yield* ServiceConfig.options()
     const found = yield* Service.discover(options)
-    const transport = found ?? (yield* Service.start(options))
-    const client = createOpencodeClient({ baseUrl: transport.url, headers: transport.headers })
-    const response = yield* Effect.promise(() => client.v2.mcp.list({ location: { directory: process.cwd() } }))
-    const servers = (response.data?.data ?? []).toSorted((a, b) => a.name.localeCompare(b.name))
+    const endpoint = found ?? (yield* Service.start(options))
+    const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) })
+    const response = yield* Effect.promise(() => client.mcp.list({ location: { directory: process.cwd() } }))
+    const servers = response.data.toSorted((a, b) => a.name.localeCompare(b.name))
     if (servers.length === 0) {
       process.stdout.write("No MCP servers configured" + EOL)
       return

@@ -42,6 +42,7 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
       const all = yield* ModelsDev.Service.use((s) => s.get())
       const disabled = new Set(config.disabled_providers ?? [])
       const enabled = config.enabled_providers ? new Set(config.enabled_providers) : undefined
+      // @ts-expect-error dead V1 expects a provider-keyed record, not normalized ModelsDev snapshots.
       const filtered: Record<string, (typeof all)[string]> = {}
       for (const [key, value] of Object.entries(all)) {
         if ((enabled ? enabled.has(key) : true) && !disabled.has(key)) filtered[key] = value

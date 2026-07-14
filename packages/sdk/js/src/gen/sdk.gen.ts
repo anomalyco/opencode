@@ -62,9 +62,6 @@ import type {
   SessionChildrenData,
   SessionChildrenResponses,
   SessionChildrenErrors,
-  SessionTodoData,
-  SessionTodoResponses,
-  SessionTodoErrors,
   SessionInitData,
   SessionInitResponses,
   SessionInitErrors,
@@ -503,16 +500,6 @@ class Session extends _HeyApiClient {
   public children<ThrowOnError extends boolean = false>(options: Options<SessionChildrenData, ThrowOnError>) {
     return (options.client ?? this._client).get<SessionChildrenResponses, SessionChildrenErrors, ThrowOnError>({
       url: "/session/{id}/children",
-      ...options,
-    })
-  }
-
-  /**
-   * Get the todo list for a session
-   */
-  public todo<ThrowOnError extends boolean = false>(options: Options<SessionTodoData, ThrowOnError>) {
-    return (options.client ?? this._client).get<SessionTodoResponses, SessionTodoErrors, ThrowOnError>({
-      url: "/session/{id}/todo",
       ...options,
     })
   }

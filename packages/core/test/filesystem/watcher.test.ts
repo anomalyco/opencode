@@ -185,35 +185,33 @@ describeWatcher("LocationWatcher", () => {
     ),
   )
 
-  it.live("watches non-git roots", () =>
+  it.live("skips non-git roots", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
         const fs = yield* FSUtil.Service
         const file = path.join(directory, "plain.txt")
-        yield* ready(directory)
-        expect(yield* nextUpdate((event) => event.file === file, fs.writeFileString(file, "plain"))).toEqual({
-          file,
-          event: "add",
-        })
+        yield* noUpdate((event) => event.file === file, fs.writeFileString(file, "plain"))
       }),
     ),
   )
 
   it.live("ignores dependency, VCS, and build directories at any depth", () =>
-    withTmp((directory) =>
-      Effect.gen(function* () {
-        const afs = yield* FSUtil.Service
-        yield* ready(directory)
-        const roots = ["node_modules", ".git", "dist"].map((name) => path.join(directory, "nested", name))
-        const files = roots.map((root) => path.join(root, "package", "index.js"))
-        yield* noUpdate(
-          (event) => roots.some((root) => event.file === root || event.file.startsWith(`${root}${path.sep}`)),
-          Effect.forEach(files, (file) => afs.writeWithDirs(file, "ignored"), {
-            concurrency: "unbounded",
-            discard: true,
-          }),
-        )
-      }),
+    withTmp(
+      (directory) =>
+        Effect.gen(function* () {
+          const afs = yield* FSUtil.Service
+          yield* ready(directory)
+          const roots = ["node_modules", ".git", "dist"].map((name) => path.join(directory, "nested", name))
+          const files = roots.map((root) => path.join(root, "package", "index.js"))
+          yield* noUpdate(
+            (event) => roots.some((root) => event.file === root || event.file.startsWith(`${root}${path.sep}`)),
+            Effect.forEach(files, (file) => afs.writeWithDirs(file, "ignored"), {
+              concurrency: "unbounded",
+              discard: true,
+            }),
+          )
+        }),
+      { git: true },
     ),
   )
 
@@ -225,7 +223,10 @@ describeWatcher("LocationWatcher", () => {
         Effect.promise(() => tmpdir()),
         (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
       )
-      yield* ready(tmp.path).pipe(provide(tmp.path), Effect.scoped)
+      yield* ready(tmp.path).pipe(
+        provide(tmp.path, { type: "git", store: AbsolutePath.make(path.join(tmp.path, ".git")) }),
+        Effect.scoped,
+      )
       const file = path.join(tmp.path, "after-dispose.txt")
       yield* noUpdate((event) => event.file === file, fs.writeFileString(file, "gone")).pipe(
         Effect.provideService(EventV2.Service, events),

@@ -1,14 +1,13 @@
 import type { TuiDialogSelectOption, TuiPluginApi, TuiSlotProps } from "@opencode-ai/plugin/tui"
-import type { TuiConfig } from "../config"
+import type { Config } from "../config"
 import type { useEvent } from "../context/event"
 import type { useRoute } from "../context/route"
-import type { useSDK } from "../context/sdk"
-import type { useSync } from "../context/sync"
+import type { useClient } from "../context/client"
 import type { useData } from "../context/data"
+import type { useProject } from "../context/project"
 import type { useTheme } from "../context/theme"
 import { Dialog as DialogUI, type useDialog } from "../ui/dialog"
 import type { useOpencodeKeymap } from "../keymap"
-import type { useKV } from "../context/kv"
 import { DialogAlert } from "../ui/dialog-alert"
 import { DialogConfirm } from "../ui/dialog-confirm"
 import { DialogPrompt } from "../ui/dialog-prompt"
@@ -23,15 +22,14 @@ export { createPluginRoutes, createTuiApi } from "./api"
 
 type Input = {
   version: string
-  tuiConfig: TuiConfig.Resolved
+  tuiConfig: Config.Resolved
   dialog: ReturnType<typeof useDialog>
   keymap: ReturnType<typeof useOpencodeKeymap>
-  kv: ReturnType<typeof useKV>
   route: ReturnType<typeof useRoute>
   routes: PluginRoutes
   event: ReturnType<typeof useEvent>
-  sdk: ReturnType<typeof useSDK>
-  sync: ReturnType<typeof useSync>
+  client: ReturnType<typeof useClient>
+  project: ReturnType<typeof useProject>
   data: ReturnType<typeof useData>
   theme: ReturnType<typeof useTheme>
   toast: ReturnType<typeof useToast>
@@ -97,69 +95,66 @@ function mapOptionCb<Value>(cb?: (item: TuiDialogSelectOption<Value>) => void) {
   return (item: SelectOption<Value>) => cb(pickOption(item))
 }
 
-function stateApi(sync: ReturnType<typeof useSync>, data: ReturnType<typeof useData>): TuiPluginApi["state"] {
+function stateApi(project: ReturnType<typeof useProject>, data: ReturnType<typeof useData>): TuiPluginApi["state"] {
   return {
     get ready() {
-      return sync.ready
+      return true
     },
     get config() {
-      return sync.data.config
+      return {}
     },
     get provider() {
-      return sync.data.provider
+      return []
     },
     get path() {
-      return sync.path
+      return project.instance.path()
     },
     get vcs() {
-      if (!sync.data.vcs) return
-      return {
-        branch: sync.data.vcs.branch,
-        default_branch: sync.data.vcs.default_branch,
-      }
+      return undefined
     },
     session: {
       count() {
-        return sync.data.session.length
+        return data.session.list().length
       },
-      get(sessionID) {
-        return sync.session.get(sessionID)
+      get(_sessionID) {
+        return undefined
       },
-      diff(sessionID) {
-        return (sync.data.session_diff[sessionID] ?? []).flatMap((item) =>
-          item.file === undefined ? [] : [{ ...item, file: item.file }],
-        )
+      diff(_sessionID) {
+        return []
       },
-      todo(sessionID) {
-        return sync.data.todo[sessionID] ?? []
-      },
-      messages(sessionID) {
-        return sync.data.message[sessionID] ?? []
+      messages(_sessionID) {
+        return []
       },
       status(sessionID) {
         return data.session.status(sessionID) === "running" ? { type: "busy" } : { type: "idle" }
       },
-      permission(sessionID) {
-        return sync.data.permission[sessionID] ?? []
+      permission(_sessionID) {
+        return []
       },
-      question(sessionID) {
-        return sync.data.question[sessionID] ?? []
+      question(_sessionID) {
+        return []
       },
     },
-    part(messageID) {
-      return sync.data.part[messageID] ?? []
+    part(_messageID) {
+      return []
     },
     lsp() {
-      return sync.data.lsp.map((item) => ({ id: item.id, root: item.root, status: item.status }))
+      return []
     },
     mcp() {
-      return Object.entries(sync.data.mcp)
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([name, item]) => ({
-          name,
-          status: item.status,
-          error: item.status === "failed" ? item.error : undefined,
-        }))
+      return (data.location.mcp.server.list() ?? [])
+        .toSorted((a, b) => a.name.localeCompare(b.name))
+        .flatMap((item) =>
+          item.status.status === "pending"
+            ? []
+            : [
+                {
+                  name: item.name,
+                  status: item.status.status,
+                  error: item.status.status === "failed" ? item.status.error : undefined,
+                },
+              ],
+        )
     },
   }
 }
@@ -171,6 +166,15 @@ function appApi(version: string): TuiPluginApi["app"] {
     },
   }
 }
+
+const unsupportedClient = new Proxy(
+  {},
+  {
+    get() {
+      throw new Error("The legacy plugin client is not supported in V2")
+    },
+  },
+) as TuiPluginApi["client"]
 
 export function createTuiApiAdapters(input: Input): Omit<TuiPluginApi, "lifecycle"> {
   return {
@@ -289,20 +293,15 @@ export function createTuiApiAdapters(input: Input): Omit<TuiPluginApi, "lifecycl
       return input.tuiConfig
     },
     kv: {
-      get(key, fallback) {
-        return input.kv.get(key, fallback)
+      get(_key, fallback) {
+        if (fallback === undefined) throw new Error("Persistent TUI KV storage is not supported")
+        return fallback
       },
-      set(key, value) {
-        input.kv.set(key, value)
-      },
-      get ready() {
-        return input.kv.ready
-      },
+      set() {},
+      ready: true,
     },
-    state: stateApi(input.sync, input.data),
-    get client() {
-      return input.sdk.client
-    },
+    state: stateApi(input.project, input.data),
+    client: unsupportedClient,
     event: input.event,
     renderer: input.renderer,
     slots: {

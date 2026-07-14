@@ -6,7 +6,7 @@
 // history ring. All are async because they read config or hit the SDK, but
 // none block each other.
 import { Context, Effect, Layer } from "effect"
-import { resolve } from "@opencode-ai/tui/config"
+import { resolve } from "@opencode-ai/tui/config/v1"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { makeGlobalNode } from "@opencode-ai/core/effect/app-node"
 import { makeRuntime } from "@opencode-ai/core/effect/runtime"

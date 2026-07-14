@@ -152,7 +152,6 @@ opencode sunucusu aşağıdaki API'leri sunar.
 | `DELETE` | `/session/:id`                           | Bir oturumu ve tüm verilerini sil           | `boolean` döndürür                                                                   |
 | `PATCH`  | `/session/:id`                           | Oturum özelliklerini güncelle               | gövde: `{ title? }`, <a href={typesUrl}><code>Session</code></a> döndürür            |
 | `GET`    | `/session/:id/children`                  | Bir oturumun alt oturumlarını al            | <a href={typesUrl}><code>Session[]</code></a> döndürür                               |
-| `GET`    | `/session/:id/todo`                      | Bir oturum için yapılacaklar listesini al   | <a href={typesUrl}><code>Todo[]</code></a> döndürür                                  |
 | `POST`   | `/session/:id/init`                      | Uygulamayı analiz et ve `AGENTS.md` oluştur | gövde: `{ messageID, providerID, modelID }`, `boolean` döndürür                      |
 | `POST`   | `/session/:id/fork`                      | Mevcut bir oturumu bir mesajda çatalla      | gövde: `{ messageID? }`, <a href={typesUrl}><code>Session</code></a> döndürür        |
 | `POST`   | `/session/:id/abort`                     | Çalışan bir oturumu iptal et                | `boolean` döndürür                                                                   |

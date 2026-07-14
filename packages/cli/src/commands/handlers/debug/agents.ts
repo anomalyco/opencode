@@ -1,6 +1,6 @@
 import { EOL } from "os"
 import { Effect } from "effect"
-import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
+import { OpenCode } from "@opencode-ai/client"
 import { Commands } from "../../commands"
 import { Runtime } from "../../../framework/runtime"
 import { Service } from "@opencode-ai/client/effect"
@@ -11,12 +11,12 @@ export default Runtime.handler(
   Effect.fn("cli.debug.agents")(function* () {
     const options = yield* ServiceConfig.options()
     const found = yield* Service.discover(options)
-    const transport = found ?? (yield* Service.start(options))
-    const client = createOpencodeClient({ baseUrl: transport.url, headers: transport.headers })
-    const response = yield* Effect.promise(() => client.v2.agent.list({ location: { directory: process.cwd() } }))
+    const endpoint = found ?? (yield* Service.start(options))
+    const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) })
+    const response = yield* Effect.promise(() => client.agent.list({ location: { directory: process.cwd() } }))
     process.stdout.write(
       JSON.stringify(
-        response.data?.data.toSorted((a, b) => a.id.localeCompare(b.id)),
+        response.data.toSorted((a, b) => a.id.localeCompare(b.id)),
         null,
         2,
       ) + EOL,

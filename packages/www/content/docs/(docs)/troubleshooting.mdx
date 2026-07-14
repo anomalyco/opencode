@@ -1,0 +1,177 @@
+---
+title: "Troubleshooting"
+description: "Diagnose OpenCode startup, server, and session issues."
+---
+
+<Tip>
+  You can ask OpenCode to debug itself. Describe the problem and ask it to use this troubleshooting page; it can read the
+  steps below, inspect its service and logs, and help identify the issue.
+</Tip>
+
+OpenCode runs as two processes: the TUI is a client, while a background server owns sessions, plugins, permissions, and
+other application state. Start by determining whether an issue is in the client, the shared server, or a specific project.
+
+## Check the background service
+
+Show the current server status:
+
+```bash
+opencode2 service status
+```
+
+Verify that its API is healthy:
+
+```bash
+opencode2 api get /api/health
+```
+
+If the service is stuck or unhealthy, restart it:
+
+```bash
+opencode2 service restart
+```
+
+From inside the TUI, run `/reload` to restart the managed service and reconnect:
+
+```text
+/reload
+```
+
+You can also stop and start it explicitly:
+
+```bash
+opencode2 service stop
+opencode2 service start
+```
+
+<Note>
+  OpenCode normally discovers or starts the shared background service automatically. The service commands are only needed
+  when diagnosing its lifecycle.
+</Note>
+
+## Run an isolated session
+
+Use standalone mode to run the TUI with a private server that exits with it:
+
+```bash
+opencode2 --standalone
+```
+
+If an issue disappears in standalone mode, it is likely related to the shared background service rather than the TUI or
+project itself.
+
+## Inspect the API
+
+The `api` command uses the same discovery and authentication flow as the TUI. It accepts either an HTTP method and path or
+an OpenAPI operation ID.
+
+See the [API reference](/docs/api) for all endpoints and operation IDs.
+
+Pass a JSON request body with `--data` or `-d`, and add headers with `--header` or `-H`.
+
+<Warning>
+  Running `opencode2 api` may start the background service when no compatible healthy service is available.
+</Warning>
+
+## Read logs
+
+Installed builds write logs to:
+
+```text
+~/.local/share/opencode/log/opencode.log
+```
+
+Follow the log while reproducing the problem:
+
+```bash
+tail -f ~/.local/share/opencode/log/opencode.log
+```
+
+Each line includes a process `run` ID and a `role` field. Use `role=cli` for TUI and command startup, and `role=server` for
+session, provider, plugin, permission, and tool activity.
+
+```bash
+grep 'role=cli' ~/.local/share/opencode/log/opencode.log
+grep 'role=server' ~/.local/share/opencode/log/opencode.log
+grep 'run=8fc3b1d5' ~/.local/share/opencode/log/opencode.log
+```
+
+Increase verbosity for one reproduction:
+
+```bash
+OPENCODE_LOG_LEVEL=DEBUG opencode2
+```
+
+## Service files
+
+The shared server registers itself at:
+
+```text
+~/.local/state/opencode/service.json
+```
+
+Its private service configuration is stored separately at:
+
+```text
+~/.config/opencode/service.json
+```
+
+The database normally lives at:
+
+```text
+~/.local/share/opencode/opencode-next.db
+```
+
+`OPENCODE_DB` can override the database location.
+
+<Warning>
+  Do not delete or edit service files or the database while troubleshooting. Use the service commands to manage the daemon,
+  and make a backup before inspecting persistent data with external tools.
+</Warning>
+
+## Explicit servers
+
+When connecting with `--server`, set `OPENCODE_PASSWORD` if the server requires authentication:
+
+```bash
+OPENCODE_PASSWORD=secret opencode2 --server http://127.0.0.1:4096
+```
+
+The CLI checks the server before opening the TUI and reports whether it is unreachable, requires a password, or rejected
+the supplied password.
+
+## Report an issue
+
+Include the following when reporting a reproducible problem:
+
+- Output from `opencode2 --version`
+- Output from `opencode2 service status`
+- The smallest sequence of steps that reproduces the issue
+- Whether the issue also occurs with `opencode2 --standalone`
+- Relevant log lines, including their `run` and `role` fields
+
+Remove API keys, authorization headers, prompts, file contents, and other sensitive data before sharing logs.
+
+## Local development
+
+When working from the OpenCode repository, run V2 commands from the repository root:
+
+```bash
+bun dev
+```
+
+The local development channel keeps its logs, SQLite database, and service registration separate from installed builds:
+
+```text
+~/.local/share/opencode/log/opencode-local.log
+~/.local/share/opencode/opencode-local.db
+~/.local/state/opencode/service-local.json
+```
+
+Use the same diagnostics through the package development command:
+
+```bash
+bun dev service status
+bun dev service restart
+bun dev api get /api/health
+```

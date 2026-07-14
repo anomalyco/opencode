@@ -23,8 +23,8 @@ export type Event =
   | EventSessionRenamed
   | EventSessionUsageUpdated
   | EventSessionForked
-  | EventSessionPromptPromoted
-  | EventSessionPromptAdmitted
+  | EventSessionInputPromoted
+  | EventSessionInputAdmitted
   | EventSessionExecutionStarted
   | EventSessionExecutionSucceeded
   | EventSessionExecutionFailed
@@ -87,7 +87,6 @@ export type Event =
   | EventFormCreated
   | EventFormReplied
   | EventFormCancelled
-  | EventTodoUpdated
   | EventLspUpdated
   | EventPermissionAsked
   | EventPermissionReplied
@@ -599,12 +598,6 @@ export type Part =
   | RetryPart
   | CompactionPart
 
-export type Prompt = {
-  text: string
-  files?: Array<PromptFileAttachment>
-  agents?: Array<PromptAgentAttachment>
-}
-
 export type Shell = {
   id: string
   status: "running" | "exited" | "timeout" | "killed"
@@ -632,21 +625,6 @@ export type Pty = {
   status: "running" | "exited"
   pid: number
   exitCode?: number
-}
-
-export type Todo = {
-  /**
-   * Brief description of the task
-   */
-  content: string
-  /**
-   * Current status of the task: pending, in_progress, completed, cancelled
-   */
-  status: string
-  /**
-   * Priority level of the task: high, medium, low
-   */
-  priority: string
 }
 
 export type SessionStatus =
@@ -851,12 +829,13 @@ export type GlobalEvent = {
         properties: {
           sessionID: string
           parentID: string
+          parentSeq: number
           from?: string
         }
       }
     | {
         id: string
-        type: "session.prompt.promoted"
+        type: "session.input.promoted"
         properties: {
           sessionID: string
           inputID: string
@@ -864,12 +843,11 @@ export type GlobalEvent = {
       }
     | {
         id: string
-        type: "session.prompt.admitted"
+        type: "session.input.admitted"
         properties: {
           sessionID: string
           inputID: string
-          prompt: Prompt
-          delivery: "steer" | "queue"
+          input: SessionPendingMessage
         }
       }
     | {
@@ -907,7 +885,9 @@ export type GlobalEvent = {
         type: "session.instructions.updated"
         properties: {
           sessionID: string
-          text: string
+          delta: {
+            [key: string]: string | "removed"
+          }
         }
       }
     | {
@@ -1431,7 +1411,7 @@ export type GlobalEvent = {
         id: string
         type: "form.created"
         properties: {
-          form: FormFormInfo | FormUrlInfo
+          form: FormInfo
         }
       }
     | {
@@ -1449,14 +1429,6 @@ export type GlobalEvent = {
         properties: {
           id: string
           sessionID: string
-        }
-      }
-    | {
-        id: string
-        type: "todo.updated"
-        properties: {
-          sessionID: string
-          todos: Array<Todo>
         }
       }
     | {
@@ -1720,8 +1692,8 @@ export type GlobalEvent = {
     | SyncEventSessionMoved
     | SyncEventSessionRenamed
     | SyncEventSessionForked
-    | SyncEventSessionPromptPromoted
-    | SyncEventSessionPromptAdmitted
+    | SyncEventSessionInputPromoted
+    | SyncEventSessionInputAdmitted
     | SyncEventSessionExecutionStarted
     | SyncEventSessionExecutionSucceeded
     | SyncEventSessionExecutionFailed
@@ -1789,7 +1761,6 @@ export type PermissionConfig =
       bash?: PermissionRuleConfig
       task?: PermissionRuleConfig
       external_directory?: PermissionRuleConfig
-      todowrite?: PermissionActionConfig
       question?: PermissionActionConfig
       webfetch?: PermissionActionConfig
       websearch?: PermissionActionConfig
@@ -2876,12 +2847,6 @@ export type MessageNotFoundError = {
   message: string
 }
 
-export type PromptInput = {
-  text: string
-  files?: Array<PromptInputFileAttachment>
-  agents?: Array<PromptAgentAttachment>
-}
-
 export type ConflictError = {
   _tag: "ConflictError"
   message: string
@@ -2916,6 +2881,13 @@ export type UnknownError1 = {
   _tag: "UnknownError"
   message: string
   ref?: string
+}
+
+export type InstructionEntryValueTooLargeError = {
+  _tag: "InstructionEntryValueTooLargeError"
+  actualBytes: number
+  maxBytes: number
+  message: string
 }
 
 export type Shell1 = {
@@ -3058,8 +3030,8 @@ export type V2Event =
   | SessionRenamed
   | SessionUsageUpdated
   | SessionForked
-  | SessionPromptPromoted
-  | SessionPromptAdmitted
+  | SessionInputPromoted
+  | SessionInputAdmitted
   | SessionExecutionStarted
   | SessionExecutionSucceeded
   | SessionExecutionFailed
@@ -3122,7 +3094,6 @@ export type V2Event =
   | FormCreated
   | FormReplied
   | FormCancelled
-  | TodoUpdated
   | LspUpdated
   | PermissionAsked
   | PermissionReplied
@@ -3391,6 +3362,37 @@ export type PromptAgentAttachment = {
   mention?: PromptMention
 }
 
+export type SessionPendingUserData = {
+  text: string
+  files?: Array<PromptFileAttachment>
+  agents?: Array<PromptAgentAttachment>
+  metadata?: {
+    [key: string]: unknown
+  }
+}
+
+export type SessionPendingUserMessage = {
+  type: "user"
+  data: SessionPendingUserData
+  delivery: "steer" | "queue"
+}
+
+export type SessionPendingSyntheticData = {
+  text: string
+  description?: string
+  metadata?: {
+    [key: string]: unknown
+  }
+}
+
+export type SessionPendingSyntheticMessage = {
+  type: "synthetic"
+  data: SessionPendingSyntheticData
+  delivery: "steer" | "queue"
+}
+
+export type SessionPendingMessage = SessionPendingUserMessage | SessionPendingSyntheticMessage
+
 export type SessionStructuredError = {
   type: string
   message: string
@@ -3553,22 +3555,30 @@ export type FormMultiselectField = {
   default?: Array<string>
 }
 
-export type FormFormInfo = {
-  id: string
-  sessionID: string
+export type FormExternalField = {
+  key: string
+  type: "external"
+  url: string
   title?: string
-  metadata?: FormMetadata
-  mode: "form"
-  fields: Array<FormStringField | FormNumberField | FormIntegerField | FormBooleanField | FormMultiselectField>
+  description?: string
 }
 
-export type FormUrlInfo = {
+export type FormField =
+  | FormStringField
+  | FormNumberField
+  | FormIntegerField
+  | FormBooleanField
+  | FormMultiselectField
+  | FormExternalField
+
+export type FormFields = Array<FormField>
+
+export type FormInfo = {
   id: string
   sessionID: string
-  title?: string
+  title: string
   metadata?: FormMetadata
-  mode: "url"
-  url: string
+  fields: FormFields
 }
 
 export type FormValue =
@@ -3787,23 +3797,24 @@ export type SyncEventSessionForked = {
   type: "sync"
   id: string
   syncEvent: {
-    type: "session.forked.1"
+    type: "session.forked.2"
     id: string
     seq: number
     aggregateID: string
     data: {
       sessionID: string
       parentID: string
+      parentSeq: number
       from?: string
     }
   }
 }
 
-export type SyncEventSessionPromptPromoted = {
+export type SyncEventSessionInputPromoted = {
   type: "sync"
   id: string
   syncEvent: {
-    type: "session.prompt.promoted.1"
+    type: "session.input.promoted.1"
     id: string
     seq: number
     aggregateID: string
@@ -3814,19 +3825,18 @@ export type SyncEventSessionPromptPromoted = {
   }
 }
 
-export type SyncEventSessionPromptAdmitted = {
+export type SyncEventSessionInputAdmitted = {
   type: "sync"
   id: string
   syncEvent: {
-    type: "session.prompt.admitted.1"
+    type: "session.input.admitted.1"
     id: string
     seq: number
     aggregateID: string
     data: {
       sessionID: string
       inputID: string
-      prompt: Prompt
-      delivery: "steer" | "queue"
+      input: SessionPendingMessage
     }
   }
 }
@@ -3893,13 +3903,15 @@ export type SyncEventSessionInstructionsUpdated = {
   type: "sync"
   id: string
   syncEvent: {
-    type: "session.instructions.updated.1"
+    type: "session.instructions.updated.2"
     id: string
     seq: number
     aggregateID: string
     data: {
       sessionID: string
-      text: string
+      delta: {
+        [key: string]: string | "removed"
+      }
     }
   }
 }
@@ -4459,23 +4471,32 @@ export type PromptInputFileAttachment = {
   mention?: PromptMention
 }
 
-export type SessionInputAdmitted = {
+export type SessionPendingUser = {
   admittedSeq: number
   id: string
   sessionID: string
-  prompt: Prompt
-  delivery: "steer" | "queue"
   timeCreated: number
-  promotedSeq?: number
+  type: "user"
+  data: SessionPendingUserData
+  delivery: "steer" | "queue"
 }
 
-export type SessionInputCompaction = {
-  type: "compaction"
+export type SessionPendingSynthetic = {
   admittedSeq: number
   id: string
   sessionID: string
   timeCreated: number
-  handledSeq?: number
+  type: "synthetic"
+  data: SessionPendingSyntheticData
+  delivery: "steer" | "queue"
+}
+
+export type SessionPendingCompaction = {
+  admittedSeq: number
+  id: string
+  sessionID: string
+  timeCreated: number
+  type: "compaction"
 }
 
 export type SessionMessageAgentSelected = {
@@ -4744,6 +4765,8 @@ export type SessionMessageInfo =
   | SessionMessageAssistant
   | SessionMessageCompaction
 
+export type SessionPendingInfo = SessionPendingUser | SessionPendingSynthetic | SessionPendingCompaction
+
 export type InstructionEntryKey = string
 
 export type InstructionEntryInfo = {
@@ -4856,23 +4879,24 @@ export type SessionForked = {
   durable: {
     aggregateID: string
     seq: number
-    version: 1
+    version: 2
   }
   location?: LocationRef
   data: {
     sessionID: string
     parentID: string
+    parentSeq: number
     from?: string
   }
 }
 
-export type SessionPromptPromoted = {
+export type SessionInputPromoted = {
   id: string
   created: number
   metadata?: {
     [key: string]: unknown
   }
-  type: "session.prompt.promoted"
+  type: "session.input.promoted"
   durable: {
     aggregateID: string
     seq: number
@@ -4885,13 +4909,13 @@ export type SessionPromptPromoted = {
   }
 }
 
-export type SessionPromptAdmitted = {
+export type SessionInputAdmitted = {
   id: string
   created: number
   metadata?: {
     [key: string]: unknown
   }
-  type: "session.prompt.admitted"
+  type: "session.input.admitted"
   durable: {
     aggregateID: string
     seq: number
@@ -4901,8 +4925,7 @@ export type SessionPromptAdmitted = {
   data: {
     sessionID: string
     inputID: string
-    prompt: Prompt
-    delivery: "steer" | "queue"
+    input: SessionPendingMessage
   }
 }
 
@@ -4990,12 +5013,14 @@ export type SessionInstructionsUpdated = {
   durable: {
     aggregateID: string
     seq: number
-    version: 1
+    version: 2
   }
   location?: LocationRef
   data: {
     sessionID: string
-    text: string
+    delta: {
+      [key: string]: string | "removed"
+    }
   }
 }
 
@@ -5548,8 +5573,8 @@ export type SessionEventDurable =
   | SessionRenamed
   | SessionDeleted
   | SessionForked
-  | SessionPromptPromoted
-  | SessionPromptAdmitted
+  | SessionInputPromoted
+  | SessionInputAdmitted
   | SessionExecutionStarted
   | SessionExecutionSucceeded
   | SessionExecutionFailed
@@ -5832,11 +5857,9 @@ export type ProjectCurrent = {
 
 export type FormCreatePayload = {
   id?: string
-  title?: string
+  title: string
   metadata?: FormMetadata
-  mode: "form" | "url"
-  fields?: Array<FormStringField | FormNumberField | FormIntegerField | FormBooleanField | FormMultiselectField>
-  url?: string
+  fields: FormFields
 }
 
 export type FormState =
@@ -6557,7 +6580,7 @@ export type FormCreated = {
   type: "form.created"
   location?: LocationRef
   data: {
-    form: FormFormInfo | FormUrlInfo
+    form: FormInfo
   }
 }
 
@@ -6589,20 +6612,6 @@ export type FormCancelled = {
   data: {
     id: string
     sessionID: string
-  }
-}
-
-export type TodoUpdated = {
-  id: string
-  created: number
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "todo.updated"
-  location?: LocationRef
-  data: {
-    sessionID: string
-    todos: Array<Todo>
   }
 }
 
@@ -7178,27 +7187,27 @@ export type EventSessionForked = {
   properties: {
     sessionID: string
     parentID: string
+    parentSeq: number
     from?: string
   }
 }
 
-export type EventSessionPromptPromoted = {
+export type EventSessionInputPromoted = {
   id: string
-  type: "session.prompt.promoted"
+  type: "session.input.promoted"
   properties: {
     sessionID: string
     inputID: string
   }
 }
 
-export type EventSessionPromptAdmitted = {
+export type EventSessionInputAdmitted = {
   id: string
-  type: "session.prompt.admitted"
+  type: "session.input.admitted"
   properties: {
     sessionID: string
     inputID: string
-    prompt: Prompt
-    delivery: "steer" | "queue"
+    input: SessionPendingMessage
   }
 }
 
@@ -7241,7 +7250,9 @@ export type EventSessionInstructionsUpdated = {
   type: "session.instructions.updated"
   properties: {
     sessionID: string
-    text: string
+    delta: {
+      [key: string]: string | "removed"
+    }
   }
 }
 
@@ -7844,7 +7855,7 @@ export type EventFormCreated = {
   id: string
   type: "form.created"
   properties: {
-    form: FormFormInfo | FormUrlInfo
+    form: FormInfo
   }
 }
 
@@ -7864,15 +7875,6 @@ export type EventFormCancelled = {
   properties: {
     id: string
     sessionID: string
-  }
-}
-
-export type EventTodoUpdated = {
-  id: string
-  type: "todo.updated"
-  properties: {
-    sessionID: string
-    todos: Array<Todo>
   }
 }
 
@@ -8644,8 +8646,8 @@ export type V2EventV2 =
   | SessionUsageUpdatedV2
   | SessionDeletedV2
   | SessionForkedV2
-  | SessionPromptPromotedV2
-  | SessionPromptAdmittedV2
+  | SessionInputPromotedV2
+  | SessionInputAdmittedV2
   | SessionExecutionStartedV2
   | SessionExecutionSucceededV2
   | SessionExecutionFailedV2
@@ -8703,7 +8705,6 @@ export type V2EventV2 =
   | FormCreatedV2
   | FormRepliedV2
   | FormCancelledV2
-  | TodoUpdatedV2
   | SessionStatusV22
   | SessionIdleV2
   | TuiPromptAppendV2
@@ -8801,23 +8802,32 @@ export type SessionInfoV2 = {
 
 export type PromptBase64V2 = string
 
-export type SessionInputAdmittedV2 = {
+export type SessionPendingUserV2 = {
   admittedSeq: number
   id: string
   sessionID: string
-  prompt: Prompt
-  delivery: "steer" | "queue"
   timeCreated: number
-  promotedSeq?: number
+  type: "user"
+  data: SessionPendingUserData
+  delivery: "steer" | "queue"
 }
 
-export type SessionInputCompactionV2 = {
-  type: "compaction"
+export type SessionPendingSyntheticV2 = {
   admittedSeq: number
   id: string
   sessionID: string
   timeCreated: number
-  handledSeq?: number
+  type: "synthetic"
+  data: SessionPendingSyntheticData
+  delivery: "steer" | "queue"
+}
+
+export type SessionPendingCompactionV2 = {
+  admittedSeq: number
+  id: string
+  sessionID: string
+  timeCreated: number
+  type: "compaction"
 }
 
 export type SessionMessageAgentSelectedV2 = {
@@ -9105,23 +9115,24 @@ export type SessionForkedV2 = {
   durable: {
     aggregateID: string
     seq: number
-    version: 1
+    version: 2
   }
   location?: LocationRefV2
   data: {
     sessionID: string
     parentID: string
+    parentSeq: number
     from?: string
   }
 }
 
-export type SessionPromptPromotedV2 = {
+export type SessionInputPromotedV2 = {
   id: string
   created: number
   metadata?: {
     [key: string]: unknown
   }
-  type: "session.prompt.promoted"
+  type: "session.input.promoted"
   durable: {
     aggregateID: string
     seq: number
@@ -9134,13 +9145,42 @@ export type SessionPromptPromotedV2 = {
   }
 }
 
-export type SessionPromptAdmittedV2 = {
+export type SessionPendingUserData1 = {
+  text: string
+  files?: Array<PromptFileAttachment>
+  agents?: Array<PromptAgentAttachment>
+  metadata?: {
+    [key: string]: unknown
+  }
+}
+
+export type SessionPendingUserMessageV2 = {
+  type: "user"
+  data: SessionPendingUserData1
+  delivery: "steer" | "queue"
+}
+
+export type SessionPendingSyntheticData1 = {
+  text: string
+  description?: string
+  metadata?: {
+    [key: string]: unknown
+  }
+}
+
+export type SessionPendingSyntheticMessageV2 = {
+  type: "synthetic"
+  data: SessionPendingSyntheticData1
+  delivery: "steer" | "queue"
+}
+
+export type SessionInputAdmittedV2 = {
   id: string
   created: number
   metadata?: {
     [key: string]: unknown
   }
-  type: "session.prompt.admitted"
+  type: "session.input.admitted"
   durable: {
     aggregateID: string
     seq: number
@@ -9150,8 +9190,7 @@ export type SessionPromptAdmittedV2 = {
   data: {
     sessionID: string
     inputID: string
-    prompt: Prompt
-    delivery: "steer" | "queue"
+    input: SessionPendingMessage
   }
 }
 
@@ -9239,12 +9278,14 @@ export type SessionInstructionsUpdatedV2 = {
   durable: {
     aggregateID: string
     seq: number
-    version: 1
+    version: 2
   }
   location?: LocationRefV2
   data: {
     sessionID: string
-    text: string
+    delta: {
+      [key: string]: string | "removed"
+    }
   }
 }
 
@@ -9875,33 +9916,21 @@ export type FormMultiselectFieldV2 = {
   default?: Array<string>
 }
 
-export type FormFormInfoV2 = {
-  id: string
-  sessionID: string
-  title?: string
-  metadata?: FormMetadata
-  mode: "form"
-  fields: Array<FormStringFieldV2 | FormNumberField | FormIntegerField | FormBooleanField | FormMultiselectFieldV2>
-}
+export type FormFieldsV2 = [FormField, FormField]
 
-export type FormUrlInfoV2 = {
+export type FormInfoV2 = {
   id: string
   sessionID: string
-  title?: string
+  title: string
   metadata?: FormMetadata
-  mode: "url"
-  url: string
+  fields: FormFieldsV2
 }
 
 export type FormCreatePayloadV2 = {
   id?: string | null
-  title?: string
+  title: string
   metadata?: FormMetadata
-  mode: "form" | "url"
-  fields?: Array<
-    FormStringFieldV2 | FormNumberField | FormIntegerField | FormBooleanField | FormMultiselectFieldV2
-  > | null
-  url?: string | null
+  fields: FormFieldsV2
 }
 
 export type FormValueV2 =
@@ -10610,22 +10639,22 @@ export type FormMultiselectField1 = {
   default?: Array<string>
 }
 
-export type FormFormInfo1 = {
-  id: string
-  sessionID: string
-  title?: string
-  metadata?: FormMetadata1
-  mode: "form"
-  fields: Array<FormStringField1 | FormNumberField1 | FormIntegerField1 | FormBooleanField1 | FormMultiselectField1>
-}
+export type FormField1 =
+  | FormStringField1
+  | FormNumberField1
+  | FormIntegerField1
+  | FormBooleanField1
+  | FormMultiselectField1
+  | FormExternalField
 
-export type FormUrlInfo1 = {
+export type FormFields1 = [FormField1, FormField1]
+
+export type FormInfo1 = {
   id: string
   sessionID: string
-  title?: string
+  title: string
   metadata?: FormMetadata1
-  mode: "url"
-  url: string
+  fields: FormFields1
 }
 
 export type FormCreatedV2 = {
@@ -10637,7 +10666,7 @@ export type FormCreatedV2 = {
   type: "form.created"
   location?: LocationRefV2
   data: {
-    form: FormFormInfo1 | FormUrlInfo1
+    form: FormInfo1
   }
 }
 
@@ -10671,20 +10700,6 @@ export type FormCancelledV2 = {
   data: {
     id: string
     sessionID: string
-  }
-}
-
-export type TodoUpdatedV2 = {
-  id: string
-  created: number
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "todo.updated"
-  location?: LocationRefV2
-  data: {
-    sessionID: string
-    todos: Array<Todo>
   }
 }
 
@@ -13581,40 +13596,6 @@ export type SessionChildrenResponses = {
 
 export type SessionChildrenResponse = SessionChildrenResponses[keyof SessionChildrenResponses]
 
-export type SessionTodoData = {
-  body?: never
-  path: {
-    sessionID: string
-  }
-  query?: {
-    directory?: string
-    workspace?: string
-  }
-  url: "/session/{sessionID}/todo"
-}
-
-export type SessionTodoErrors = {
-  /**
-   * BadRequest | InvalidRequestError
-   */
-  400: EffectHttpApiErrorBadRequest | InvalidRequestError
-  /**
-   * NotFoundError
-   */
-  404: NotFoundError
-}
-
-export type SessionTodoError = SessionTodoErrors[keyof SessionTodoErrors]
-
-export type SessionTodoResponses = {
-  /**
-   * Todo list
-   */
-  200: Array<Todo>
-}
-
-export type SessionTodoResponse = SessionTodoResponses[keyof SessionTodoResponses]
-
 export type SessionDiffData = {
   body?: never
   path: {
@@ -15154,6 +15135,37 @@ export type V2HealthGetResponses = {
 
 export type V2HealthGetResponse = V2HealthGetResponses[keyof V2HealthGetResponses]
 
+export type V2ServerGetData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/api/server"
+}
+
+export type V2ServerGetErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestErrorV2
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+}
+
+export type V2ServerGetError = V2ServerGetErrors[keyof V2ServerGetErrors]
+
+export type V2ServerGetResponses = {
+  /**
+   * Success
+   */
+  200: {
+    urls: Array<string>
+  }
+}
+
+export type V2ServerGetResponse = V2ServerGetResponses[keyof V2ServerGetResponses]
+
 export type V2LocationGetData = {
   body?: never
   path?: never
@@ -15641,7 +15653,12 @@ export type V2SessionMoveResponse = V2SessionMoveResponses[keyof V2SessionMoveRe
 export type V2SessionPromptData = {
   body: {
     id?: string | null
-    prompt: PromptInput
+    text: string
+    files?: Array<PromptInputFileAttachment>
+    agents?: Array<PromptAgentAttachment>
+    metadata?: {
+      [key: string]: unknown
+    }
     delivery?: "steer" | "queue" | null
     resume?: boolean | null
   }
@@ -15678,7 +15695,7 @@ export type V2SessionPromptResponses = {
    * Success
    */
   200: {
-    data: SessionInputAdmittedV2
+    data: SessionPendingUserV2
   }
 }
 
@@ -15733,7 +15750,7 @@ export type V2SessionCommandResponses = {
    * Success
    */
   200: {
-    data: SessionInputAdmittedV2
+    data: SessionPendingUserV2
   }
 }
 
@@ -15780,11 +15797,13 @@ export type V2SessionSkillResponse = V2SessionSkillResponses[keyof V2SessionSkil
 
 export type V2SessionSyntheticData = {
   body: {
+    id?: string | null
     text: string
     description?: string | null
     metadata?: {
       [key: string]: unknown
     }
+    delivery?: "steer" | "queue" | null
     resume?: boolean | null
   }
   path: {
@@ -15807,15 +15826,21 @@ export type V2SessionSyntheticErrors = {
    * SessionNotFoundError
    */
   404: SessionNotFoundError
+  /**
+   * ConflictError
+   */
+  409: ConflictErrorV2
 }
 
 export type V2SessionSyntheticError = V2SessionSyntheticErrors[keyof V2SessionSyntheticErrors]
 
 export type V2SessionSyntheticResponses = {
   /**
-   * <No Content>
+   * Success
    */
-  204: void
+  200: {
+    data: SessionPendingSyntheticV2
+  }
 }
 
 export type V2SessionSyntheticResponse = V2SessionSyntheticResponses[keyof V2SessionSyntheticResponses]
@@ -15895,7 +15920,7 @@ export type V2SessionCompactResponses = {
    * Success
    */
   200: {
-    data: SessionInputCompactionV2
+    data: SessionPendingCompactionV2
   }
 }
 
@@ -16111,6 +16136,43 @@ export type V2SessionContextResponses = {
 
 export type V2SessionContextResponse = V2SessionContextResponses[keyof V2SessionContextResponses]
 
+export type V2SessionPendingListData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: never
+  url: "/api/session/{sessionID}/pending"
+}
+
+export type V2SessionPendingListErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestErrorV2
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * SessionNotFoundError
+   */
+  404: SessionNotFoundError
+}
+
+export type V2SessionPendingListError = V2SessionPendingListErrors[keyof V2SessionPendingListErrors]
+
+export type V2SessionPendingListResponses = {
+  /**
+   * Success
+   */
+  200: {
+    data: Array<SessionPendingInfo>
+  }
+}
+
+export type V2SessionPendingListResponse = V2SessionPendingListResponses[keyof V2SessionPendingListResponses]
+
 export type V2SessionInstructionsEntryListData = {
   body?: never
   path: {
@@ -16213,6 +16275,10 @@ export type V2SessionInstructionsEntryPutErrors = {
    * SessionNotFoundError
    */
   404: SessionNotFoundError
+  /**
+   * InstructionEntryValueTooLargeError
+   */
+  413: InstructionEntryValueTooLargeError
 }
 
 export type V2SessionInstructionsEntryPutError =
@@ -17194,7 +17260,7 @@ export type V2FormRequestListResponses = {
    */
   200: {
     location: LocationInfoV2
-    data: Array<FormFormInfoV2 | FormUrlInfoV2>
+    data: Array<FormInfoV2>
   }
 }
 
@@ -17231,7 +17297,7 @@ export type V2SessionFormListResponses = {
    * Success
    */
   200: {
-    data: Array<FormFormInfoV2 | FormUrlInfoV2>
+    data: Array<FormInfoV2>
   }
 }
 
@@ -17272,7 +17338,7 @@ export type V2SessionFormCreateResponses = {
    * Success
    */
   200: {
-    data: FormFormInfoV2 | FormUrlInfoV2
+    data: FormInfoV2
   }
 }
 
@@ -17310,7 +17376,7 @@ export type V2SessionFormGetResponses = {
    * Success
    */
   200: {
-    data: FormFormInfoV2 | FormUrlInfoV2
+    data: FormInfoV2
   }
 }
 

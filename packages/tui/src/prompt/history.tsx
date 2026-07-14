@@ -1,7 +1,7 @@
 import path from "path"
 import { onMount } from "solid-js"
 import { createStore, produce, unwrap } from "solid-js/store"
-import type { SessionPromptInput } from "@opencode-ai/client/promise"
+import type { SessionPromptInput } from "@opencode-ai/client"
 import type { Types } from "effect"
 import { createSimpleContext } from "../context/helper"
 import { useTuiPaths } from "../context/runtime"
@@ -16,7 +16,7 @@ export type PastedText = {
   }
 }
 
-export type PromptInfo = Types.DeepMutable<SessionPromptInput["prompt"]> & {
+export type PromptInfo = Types.DeepMutable<Pick<SessionPromptInput, "text" | "files" | "agents">> & {
   pasted: PastedText[]
   mode?: "normal" | "shell"
 }
@@ -82,16 +82,11 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
         const current = store.history.at(store.index)
         if (!current) return undefined
         if (current.text !== input && input.length) return
-        setStore(
-          produce((draft) => {
-            const next = store.index + direction
-            if (Math.abs(next) > store.history.length) return
-            if (next > 0) return
-            draft.index = next
-          }),
-        )
-        if (store.index === 0) return emptyPrompt()
-        return store.history.at(store.index)
+        const next = store.index + direction
+        if (Math.abs(next) > store.history.length || next > 0) return
+        setStore("index", next)
+        if (next === 0) return emptyPrompt()
+        return store.history.at(next)
       },
       append(item: PromptInfo) {
         const entry = structuredClone(unwrap(item))

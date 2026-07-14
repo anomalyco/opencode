@@ -10,7 +10,12 @@ function ok<T>(data: T) {
 }
 
 function form(id: string, sessionID: string): FormInfo {
-  return { id, sessionID, mode: "form", fields: [] }
+  return {
+    id,
+    sessionID,
+    title: "Input requested",
+    fields: [{ key: "authorization", type: "external", url: "https://example.com/form" }],
+  }
 }
 
 function formCreated(info: FormInfo): V2Event {
@@ -21,7 +26,7 @@ function prompted(inputID: string): V2Event {
   return {
     id: "evt_prompted",
     created: 0,
-    type: "session.prompt.promoted",
+    type: "session.input.promoted",
     durable: { aggregateID: "ses_1", seq: 0, version: 1 },
     data: { sessionID: "ses_1", inputID },
   }
@@ -84,7 +89,7 @@ async function run(input: { turn: (inputID: string) => V2Event[]; pendingForms?:
     files: [],
     thinking: false,
     format: "default",
-    dangerouslySkipPermissions: false,
+    auto: false,
     attached: input.attached ?? false,
     renderTool: () => Promise.resolve(),
     renderToolError: () => Promise.resolve(),

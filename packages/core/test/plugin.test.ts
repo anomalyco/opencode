@@ -12,12 +12,13 @@ import { SessionMessage } from "@opencode-ai/core/session/message"
 import { Tool } from "@opencode-ai/core/tool/tool"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { testEffect } from "./lib/effect"
-import { testModel } from "./lib/tool"
 import { PluginTestLayer } from "./plugin/fixture"
 
 const it = testEffect(PluginTestLayer)
 
 class Secret extends Context.Service<Secret, string>()("@opencode/test/PluginSecret") {}
+
+const versioned = <R>(plugin: EffectPlugin.Plugin<R>, version = "1") => ({ ...plugin, version })
 
 describe("PluginV2", () => {
   it.live("exposes public events through the plugin context", () =>
@@ -38,15 +39,18 @@ describe("PluginV2", () => {
     }),
   )
 
-  it.effect("skips identical generations and replaces changed plugin versions", () =>
+  it.effect("replaces plugins by ID and version", () =>
     Effect.gen(function* () {
       const plugins = yield* PluginV2.Service
       const agents = yield* AgentV2.Service
       const events = yield* EventV2.Service
       let description = "first"
-      const updated = yield* events
-        .subscribe(Plugin.Event.Updated)
-        .pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
+      let updates = 0
+      const unsubscribe = yield* events.listen((event) =>
+        Effect.sync(() => {
+          if (event.type === Plugin.Event.Updated.type) updates++
+        }),
+      )
 
       const managed = () =>
         EffectPlugin.define({
@@ -61,34 +65,37 @@ describe("PluginV2", () => {
               .pipe(Effect.asVoid),
         })
 
-      yield* plugins.activate([{ plugin: managed() }])
+      yield* plugins.activate([versioned(managed(), "1")])
 
       expect((yield* agents.get(AgentV2.ID.make("configured")))?.description).toBe("first")
 
       description = "second"
-      yield* plugins.activate([{ plugin: managed() }])
-      expect((yield* agents.get(AgentV2.ID.make("configured")))?.description).toBe("first")
-
-      yield* plugins.activate([{ plugin: managed(), version: "next" }])
+      yield* plugins.activate([versioned(managed(), "2")])
       expect((yield* agents.get(AgentV2.ID.make("configured")))?.description).toBe("second")
-      expect(yield* Fiber.join(updated)).toHaveLength(2)
+
+      description = "third"
+      yield* plugins.activate([versioned(managed(), "2")])
+      expect(updates).toBe(2)
+      expect((yield* agents.get(AgentV2.ID.make("configured")))?.description).toBe("second")
 
       yield* plugins.activate([])
       expect(yield* agents.get(AgentV2.ID.make("configured"))).toBeUndefined()
+      expect(updates).toBe(3)
+      yield* unsubscribe
     }),
   )
 
-  it.effect("rejects duplicate IDs before replacing the active generation", () =>
+  it.effect("rejects duplicate IDs before replacing active plugins", () =>
     Effect.gen(function* () {
       const plugins = yield* PluginV2.Service
       const active = Plugin.ID.make("active")
       const duplicate = "duplicate"
-      yield* plugins.activate([{ plugin: { id: active, effect: () => Effect.void } }])
+      yield* plugins.activate([{ id: active, version: "1", effect: () => Effect.void }])
 
       const result = yield* plugins
         .activate([
-          { plugin: { id: duplicate, effect: () => Effect.void } },
-          { plugin: { id: duplicate, effect: () => Effect.void } },
+          { id: duplicate, version: "1", effect: () => Effect.void },
+          { id: duplicate, version: "1", effect: () => Effect.void },
         ])
         .pipe(Effect.exit)
 
@@ -121,16 +128,81 @@ describe("PluginV2", () => {
         },
       })
 
-      yield* plugins.activate([{ plugin: good }, { plugin: bad }])
+      yield* plugins.activate([versioned(good), versioned(bad)])
       expect(yield* plugins.list()).toEqual([{ id: Plugin.ID.make("good") }])
       expect((yield* agents.get(AgentV2.ID.make("configured")))?.description).toBe("loaded")
 
       fail = false
-      yield* plugins.activate([{ plugin: good }, { plugin: bad }])
-      expect(yield* plugins.list()).toEqual([
-        { id: Plugin.ID.make("good") },
-        { id: Plugin.ID.make("bad") },
-      ])
+      yield* plugins.activate([versioned(good), versioned(bad, "2")])
+      expect(yield* plugins.list()).toEqual([{ id: Plugin.ID.make("good") }, { id: Plugin.ID.make("bad") }])
+    }),
+  )
+
+  it.effect("restores the previous plugin when its replacement fails", () =>
+    Effect.gen(function* () {
+      const plugins = yield* PluginV2.Service
+      const agents = yield* AgentV2.Service
+      const previous = EffectPlugin.define({
+        id: "managed",
+        effect: (ctx) =>
+          ctx.agent
+            .transform((agents) =>
+              agents.update("configured", (agent) => {
+                agent.description = "previous"
+              }),
+            )
+            .pipe(Effect.asVoid),
+      })
+      const replacement = EffectPlugin.define({
+        id: "managed",
+        effect: (ctx) =>
+          Effect.gen(function* () {
+            yield* ctx.agent.transform((agents) =>
+              agents.update("configured", (agent) => {
+                agent.description = "replacement"
+              }),
+            )
+            return yield* Effect.die(new Error("replacement failed"))
+          }),
+      })
+
+      yield* plugins.activate([versioned(previous)])
+      yield* plugins.activate([versioned(replacement, "2")])
+
+      expect(yield* plugins.list()).toEqual([{ id: Plugin.ID.make("managed") }])
+      expect((yield* agents.get(AgentV2.ID.make("configured")))?.description).toBe("previous")
+    }),
+  )
+
+  it.effect("deactivates a plugin when replacement and restoration fail", () =>
+    Effect.gen(function* () {
+      const plugins = yield* PluginV2.Service
+      const agents = yield* AgentV2.Service
+      let loads = 0
+      const previous = EffectPlugin.define({
+        id: "managed",
+        effect: (ctx) => {
+          loads++
+          if (loads > 1) return Effect.die(new Error("restoration failed"))
+          return ctx.agent
+            .transform((agents) =>
+              agents.update("configured", (agent) => {
+                agent.description = "previous"
+              }),
+            )
+            .pipe(Effect.asVoid)
+        },
+      })
+      const replacement = EffectPlugin.define({
+        id: "managed",
+        effect: () => Effect.die(new Error("replacement failed")),
+      })
+
+      yield* plugins.activate([versioned(previous)])
+      yield* plugins.activate([versioned(replacement, "2")])
+
+      expect(yield* plugins.list()).toEqual([])
+      expect(yield* agents.get(AgentV2.ID.make("configured"))).toBeUndefined()
     }),
   )
 
@@ -140,10 +212,9 @@ describe("PluginV2", () => {
       const closed: string[] = []
       yield* plugins.activate(
         ["first", "second"].map((id) => ({
-          plugin: {
-            id,
-            effect: () => Effect.addFinalizer(() => Effect.sync(() => closed.push(id))),
-          },
+          id,
+          version: "1",
+          effect: () => Effect.addFinalizer(() => Effect.sync(() => closed.push(id))),
         })),
       )
 
@@ -166,7 +237,7 @@ describe("PluginV2", () => {
           ),
       })
 
-      yield* plugins.activate([{ plugin }]).pipe(Effect.provideService(Secret, "secret"))
+      yield* plugins.activate([versioned(plugin)]).pipe(Effect.provideService(Secret, "secret"))
 
       expect(visible).toBe(false)
     }),
@@ -189,24 +260,21 @@ describe("PluginV2", () => {
                   output: Schema.Struct({ ok: Schema.Boolean }),
                   execute: () => Effect.succeed({ ok: true }),
                 }),
+                { codemode: false },
               ),
             )
             .pipe(Effect.orDie),
       })
 
-      yield* plugins.activate([{ plugin }])
-      expect((yield* registry.materialize({ model: testModel })).definitions.map((tool) => tool.name)).toContain(
-        "plugin_tool",
-      )
+      yield* plugins.activate([versioned(plugin)])
+      expect((yield* registry.materialize()).definitions.map((tool) => tool.name)).toContain("plugin_tool")
 
       yield* plugins.activate([])
-      expect((yield* registry.materialize({ model: testModel })).definitions.map((tool) => tool.name)).not.toContain(
-        "plugin_tool",
-      )
+      expect((yield* registry.materialize()).definitions.map((tool) => tool.name)).not.toContain("plugin_tool")
     }),
   )
 
-  it.effect("groups tool names and defers registrations from direct exposure", () =>
+  it.effect("groups tool names and routes codemode registrations through execute", () =>
     Effect.gen(function* () {
       const plugins = yield* PluginV2.Service
       const registry = yield* ToolRegistry.Service
@@ -222,16 +290,16 @@ describe("PluginV2", () => {
         effect: (ctx) =>
           ctx.tool
             .transform((draft) => {
-              draft.add("plain", tool("Plain"))
-              draft.add("look/up", tool("Lookup"), { group: "context 7" })
-              draft.add("search", tool("Search"), { group: "context 7", deferred: true })
+              draft.add("plain", tool("Plain"), { codemode: false })
+              draft.add("look/up", tool("Lookup"), { group: "context 7", codemode: false })
+              draft.add("search", tool("Search"), { group: "context 7" })
             })
             .pipe(Effect.orDie),
       })
 
-      yield* plugins.activate([{ plugin }])
+      yield* plugins.activate([versioned(plugin)])
 
-      expect((yield* registry.materialize({ model: testModel })).definitions.map((tool) => tool.name)).toEqual([
+      expect((yield* registry.materialize()).definitions.map((tool) => tool.name)).toEqual([
         "plain",
         "context_7_look_up",
         "execute",
@@ -263,6 +331,7 @@ describe("PluginV2", () => {
                     output: Schema.Struct({ text: Schema.String }),
                     execute: ({ text }) => Effect.sync(() => executed.push({ text })).pipe(Effect.as({ text })),
                   }),
+                  { codemode: false },
                 ),
               )
               .pipe(Effect.orDie)
@@ -288,9 +357,9 @@ describe("PluginV2", () => {
           }),
       })
 
-      yield* plugins.activate([{ plugin }])
+      yield* plugins.activate([versioned(plugin)])
 
-      const materialized = yield* registry.materialize({ model: testModel })
+      const materialized = yield* registry.materialize()
       const settlement = yield* materialized.settle({
         sessionID: SessionV2.ID.make("ses_hooks"),
         agent: AgentV2.ID.make("build"),

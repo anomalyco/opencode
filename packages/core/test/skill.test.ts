@@ -54,6 +54,23 @@ function waitForSkillUpdate() {
 }
 
 describe("SkillV2", () => {
+  it.live("publishes updates when skill sources change", () =>
+    Effect.gen(function* () {
+      const skill = yield* SkillV2.Service
+
+      yield* Effect.acquireUseRelease(
+        waitForSkillUpdate(),
+        ({ deferred }) =>
+          skill
+            .transform((editor) =>
+              editor.source({ type: "directory", path: AbsolutePath.make("/tmp/opencode-skills") }),
+            )
+            .pipe(Effect.andThen(Deferred.await(deferred)), Effect.timeout("1 second")),
+        ({ fiber }) => Fiber.interrupt(fiber),
+      )
+    }),
+  )
+
   it.live("registers sources and resolves later source precedence", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),

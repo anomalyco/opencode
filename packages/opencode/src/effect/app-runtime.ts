@@ -20,7 +20,6 @@ import { Skill } from "@/skill"
 import { Discovery } from "@/skill/discovery"
 import { Question } from "@/question"
 import { Permission } from "@/permission"
-import { Todo } from "@/session/todo"
 import { Session } from "@/session/session"
 import { SessionStatus } from "@/session/status"
 import { SessionRunState } from "@/session/run-state"
@@ -75,7 +74,6 @@ export const AppLayer = AppNodeBuilderV1.build(
     Discovery.node,
     Question.node,
     Permission.node,
-    Todo.node,
     Session.node,
     SessionProjector.node,
     SessionStatus.node,
