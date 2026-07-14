@@ -2,17 +2,18 @@ import { parse } from "acorn"
 import { Cause, Effect, Scope } from "effect"
 import { DiagnosticCategory, ModuleKind, ScriptTarget, flattenDiagnosticMessageText, transpileModule } from "typescript"
 import type { DataValue, Diagnostic, ExecuteOptions, ResolvedExecutionLimits, Result } from "../codemode.js"
-import { copyIn, copyOut, ToolRuntime, type HostTools, type Services } from "../tool-runtime.js"
+import { copyIn, copyOut, ToolRuntime, type Services } from "../tool-runtime.js"
+import type { Tools } from "../tools.js"
 import { normalizeError } from "./errors.js"
 import { InterpreterRuntimeError, isRecord, type ProgramNode } from "./model.js"
 import { PromiseRuntime } from "./promises.js"
 import { Interpreter } from "./runtime.js"
 
-export const executeWithLimits = <const Tools extends Record<string, unknown>>(
-  options: ExecuteOptions<Tools>,
+export const executeWithLimits = <const Provided extends Record<string, unknown>>(
+  options: ExecuteOptions<Provided>,
   limits: ResolvedExecutionLimits,
   searchIndex: ToolRuntime.DiscoveryPlan["searchIndex"],
-): Effect.Effect<Result, never, Services<Tools>> => {
+): Effect.Effect<Result, never, Services<Provided>> => {
   if (options.code.trim().length === 0) {
     return Effect.succeed({
       ok: false,
@@ -24,7 +25,7 @@ export const executeWithLimits = <const Tools extends Record<string, unknown>>(
   // Allocate execution state inside suspension so reused Effects never share it.
   return Effect.suspend(() => {
     const tools = ToolRuntime.make(
-      (options.tools ?? {}) as HostTools<Services<Tools>>,
+      (options.tools ?? {}) as Tools<Services<Provided>>,
       limits.maxToolCalls,
       searchIndex,
       {
@@ -35,15 +36,21 @@ export const executeWithLimits = <const Tools extends Record<string, unknown>>(
     const logs: Array<string> = []
     const logged = () => (logs.length > 0 ? { logs: [...logs] } : {})
     // Set only after copy-out so timeouts cannot report invalid values as completed.
-    let returned: { value: DataValue; promises: PromiseRuntime<Services<Tools>> } | undefined
+    let returned: { value: DataValue; promises: PromiseRuntime<Services<Provided>> } | undefined
 
     const base = Effect.acquireUseRelease(
       Scope.make("parallel"),
       (scope) =>
         Effect.gen(function* () {
           const program = parseProgram(options.code)
-          const promises = new PromiseRuntime<Services<Tools>>(scope)
-          const interpreter = new Interpreter<Services<Tools>>(tools.invoke, tools.search, tools.keys, promises, logs)
+          const promises = new PromiseRuntime<Services<Provided>>(scope)
+          const interpreter = new Interpreter<Services<Provided>>(
+            tools.invoke,
+            tools.search,
+            tools.keys,
+            promises,
+            logs,
+          )
           const value = yield* interpreter.run(program)
           const result = copyOut(copyIn(value, "Execution result"), true) as DataValue
           returned = { value: result, promises }

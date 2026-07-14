@@ -61,7 +61,7 @@ export type Skipped = {
 export type Tools = { [name: string]: Definition<HttpClient.HttpClient> | Tools }
 
 export type Result = {
-  /** Tool subtree; the host places it under a key in its `tools` tree. */
+  /** Namespaced tools; the host places them under a key in its `tools` object. */
   readonly tools: Tools
   readonly skipped: ReadonlyArray<Skipped>
 }
