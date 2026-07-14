@@ -137,13 +137,13 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Co
 export const use = serviceUse(Service)
 
 function globalConfigFile() {
-  const candidates = ["opencode.jsonc", "opencode.json", "config.json"].map((file) =>
+  const candidates = [...ConfigPaths.CONFIG_FILE_CANDIDATES, "config.json"].map((file) =>
     path.join(Global.Path.config, file),
   )
   for (const file of candidates) {
     if (existsSync(file)) return file
   }
-  return candidates[0]
+  return path.join(Global.Path.config, "kancode.json")
 }
 
 function patchJsonc(input: string, patch: unknown, path: string[] = []): string {
@@ -256,8 +256,8 @@ const layer = Layer.effect(
         }
       }
       result = mergeConfig(result, yield* loadFile(path.join(Global.Path.config, "config.json"), env))
-      result = mergeConfig(result, yield* loadFile(path.join(Global.Path.config, "opencode.json"), env))
-      result = mergeConfig(result, yield* loadFile(path.join(Global.Path.config, "opencode.jsonc"), env))
+      const preferred = ConfigPaths.preferredConfigFile(Global.Path.config)
+      if (preferred) result = mergeConfig(result, yield* loadFile(preferred, env))
 
       const legacy = path.join(Global.Path.config, "config")
       if (existsSync(legacy)) {
@@ -404,7 +404,7 @@ const layer = Layer.effect(
         }
 
         if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
-          for (const file of yield* ConfigPaths.files("opencode", ctx.directory, ctx.worktree).pipe(Effect.orDie)) {
+          for (const file of yield* ConfigPaths.configFiles(ctx.directory, ctx.worktree).pipe(Effect.orDie)) {
             yield* merge(file, yield* loadFile(file, authEnv), "local")
           }
         }
@@ -422,9 +422,9 @@ const layer = Layer.effect(
         const deps: Fiber.Fiber<void>[] = []
 
         for (const dir of directories) {
-          if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
-            for (const file of ["opencode.json", "opencode.jsonc"]) {
-              const source = path.join(dir, file)
+          if (ConfigPaths.isProjectConfigDir(dir)) {
+            const source = ConfigPaths.preferredConfigFile(dir)
+            if (source) {
               yield* Effect.logDebug(`loading config from ${source}`)
               yield* merge(source, yield* loadFile(source, authEnv))
               result.agent ??= {}
@@ -465,9 +465,10 @@ const layer = Layer.effect(
           yield* mergePluginOrigins(dir, list)
         }
 
-        if (process.env.OPENCODE_CONFIG_CONTENT) {
+        const configContent = Flag.OPENCODE_CONFIG_CONTENT
+        if (configContent) {
           const source = "OPENCODE_CONFIG_CONTENT"
-          const next = yield* loadConfig(process.env.OPENCODE_CONFIG_CONTENT, {
+          const next = yield* loadConfig(configContent, {
             dir: ctx.directory,
             source,
           })
@@ -515,10 +516,8 @@ const layer = Layer.effect(
 
         const managedDir = ConfigManaged.managedConfigDir()
         if (existsSync(managedDir)) {
-          for (const file of ["opencode.json", "opencode.jsonc"]) {
-            const source = path.join(managedDir, file)
-            yield* merge(source, yield* loadFile(source), "global")
-          }
+          const source = ConfigPaths.preferredConfigFile(managedDir)
+          if (source) yield* merge(source, yield* loadFile(source), "global")
         }
 
         // macOS managed preferences (.mobileconfig deployed via MDM) override everything

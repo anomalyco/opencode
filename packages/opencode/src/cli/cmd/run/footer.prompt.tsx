@@ -417,7 +417,7 @@ export function createPromptState(input: PromptInput): PromptState {
         description: "compose in your external editor",
       } satisfies SlashOption,
       { kind: "slash", name: "new", display: "/new", description: "start a new session" } satisfies SlashOption,
-      { kind: "slash", name: "exit", display: "/exit", description: "close OpenCode" } satisfies SlashOption,
+      { kind: "slash", name: "exit", display: "/exit", description: "close KanCode" } satisfies SlashOption,
     ]
     const hidden = new Set(builtins.map((item) => item.name))
     const showSkillMenu = !shell() && skillCommands().length > 0 && !hasSkillsCommand()

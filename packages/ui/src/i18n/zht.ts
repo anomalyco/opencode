@@ -75,7 +75,7 @@ export const dict = {
   "ui.sessionTurn.error.addCredits": "新增點數",
 
   "dialog.usageExceeded.freeTier.title": "已達免費額度上限",
-  "dialog.usageExceeded.freeTier.description": "訂閱 OpenCode Go，可靠地使用最佳開源模型，每月 $5 起。",
+  "dialog.usageExceeded.freeTier.description": "已達供應商免費用量上限。請切換模型／供應商，或檢查你的 API 方案。",
   "dialog.usageExceeded.freeTier.actionLabel": "訂閱",
   "dialog.usageExceeded.accountRateLimit.title": "已達 Go 額度上限",
   "dialog.usageExceeded.accountRateLimit.description":

@@ -22,8 +22,8 @@ interface MigrateInput {
 }
 
 /**
- * Migrates tui-specific keys (theme, keybinds, tui) from opencode.json files
- * into dedicated tui.json files. Migration is performed per-directory and
+ * Migrates tui-specific keys (theme, keybinds, tui) from kancode/opencode.json
+ * files into dedicated tui.json files. Migration is performed per-directory and
  * skips only locations where a tui.json already exists.
  */
 export async function migrateTuiConfig(input: MigrateInput) {
@@ -114,11 +114,11 @@ async function backupAndStripLegacy(file: string, source: string) {
 
 async function opencodeFiles(input: { directories: string[]; cwd: string }) {
   const files = [
-    ...ConfigPaths.fileInDirectory(Global.Path.config, "opencode"),
-    ...(await Filesystem.findUp(["opencode.json", "opencode.jsonc"], input.cwd, undefined, { rootFirst: true })),
+    ...ConfigPaths.appConfigFilesInDirectory(Global.Path.config),
+    ...(await Filesystem.findUp([...ConfigPaths.CONFIG_FILE_CANDIDATES], input.cwd, undefined, { rootFirst: true })),
   ]
   for (const dir of unique(input.directories)) {
-    files.push(...ConfigPaths.fileInDirectory(dir, "opencode"))
+    files.push(...ConfigPaths.appConfigFilesInDirectory(dir))
   }
   if (Flag.OPENCODE_CONFIG) files.push(Flag.OPENCODE_CONFIG)
 

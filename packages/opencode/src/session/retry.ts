@@ -7,8 +7,8 @@ import { isRecord } from "@/util/record"
 
 export type Err = ReturnType<NamedError["toObject"]>
 
-export const GO_UPSELL_MESSAGE = "Free usage exceeded, subscribe to Go"
-export const GO_UPSELL_URL = "https://opencode.ai/go"
+export const GO_UPSELL_MESSAGE = "Free usage exceeded"
+export const GO_UPSELL_URL = "https://github.com/puetsua/kancode"
 export type RetryReason = "free_tier_limit" | "account_rate_limit" | (string & {})
 
 export type Retryable = {
@@ -80,15 +80,14 @@ export function retryable(error: Err, provider: string) {
           reason: "free_tier_limit",
           provider,
           title: "Free limit reached",
-          message: "Subscribe to OpenCode Go for reliable access to the best open-source models, starting at $5/month.",
-          label: "subscribe",
+          message: "This provider's free usage limit was reached. Switch models or providers, or check your API plan.",
+          label: "docs",
           link: GO_UPSELL_URL,
         },
       }
     }
     if (error.data.responseBody?.includes("GoUsageLimitError")) {
       const body = parseJSON(error.data.responseBody)
-      const workspace = str(body?.metadata?.workspace)
       const limitName = str(body?.metadata?.limitName)
       const retryAfter = num(error.data.responseHeaders?.["retry-after"])
       const resetIn = iife(() => {
@@ -104,17 +103,17 @@ export function retryable(error: Err, provider: string) {
         return minutes > 0 ? unit(minutes, "minute") : "less than a minute"
       })
 
-      const message = `${limitName ? `${limitName} usage limit` : "Usage limit"} reached. It will reset in ${resetIn}. To continue using this model now, enable usage from your available balance`
+      const message = `${limitName ? `${limitName} usage limit` : "Usage limit"} reached. It will reset in ${resetIn}. Try another model or provider, or wait for the limit to reset.`
 
-      const link = `https://opencode.ai/workspace/${workspace}/go`
+      const link = GO_UPSELL_URL
       return {
         message: `${message} - ${link}`,
         action: {
           reason: "account_rate_limit",
           provider,
-          title: "Go limit reached",
+          title: "Usage limit reached",
           message,
-          label: "open settings",
+          label: "docs",
           link,
         },
       }

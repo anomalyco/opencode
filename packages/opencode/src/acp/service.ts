@@ -92,17 +92,17 @@ export function make(input: {
   const initialize = Effect.fn("ACP.initialize")(function* (params: InitializeRequest) {
     const started = performance.now()
     const authMethod: AuthMethod = {
-      description: "Run `opencode auth login` in the terminal",
-      name: "Login with opencode",
+      description: "Run `kancode auth login` in the terminal",
+      name: "Login with kancode",
       id: AuthMethodID,
     }
 
     if (params.clientCapabilities?._meta?.["terminal-auth"] === true) {
       authMethod._meta = {
         "terminal-auth": {
-          command: "opencode",
+          command: "kancode",
           args: ["auth", "login"],
-          label: "OpenCode Login",
+          label: "KanCode Login",
         },
       }
     }
@@ -128,7 +128,7 @@ export function make(input: {
       },
       authMethods: [authMethod],
       agentInfo: {
-        name: "OpenCode",
+        name: "KanCode",
         version: InstallationVersion,
       },
     }
@@ -866,7 +866,7 @@ const promptResponse = Effect.fn("ACP.promptResponse")(function* (
 
 function promptErrorMessage(error: AssistantError) {
   if ("message" in error.data && typeof error.data.message === "string") return error.data.message
-  return "OpenCode prompt failed"
+  return "KanCode prompt failed"
 }
 
 function sendUsageUpdate(
@@ -1059,7 +1059,7 @@ function fromUnknownError(error: unknown, service?: string): Error {
   if (isAuthRequired(error)) {
     return new ACPError.AuthRequiredError({ providerId: findProviderID(error) })
   }
-  return new ACPError.ServiceFailureError({ safeMessage: "OpenCode service failure", service })
+  return new ACPError.ServiceFailureError({ safeMessage: "KanCode service failure", service })
 }
 
 function isACPError(error: unknown): error is Error {

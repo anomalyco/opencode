@@ -4,10 +4,11 @@ import { existsSync } from "fs"
 import os from "os"
 import path from "path"
 import { Process } from "@/util/process"
+import { envAlias } from "@opencode-ai/core/flag/flag"
 
 const MANAGED_PLIST_DOMAIN = "ai.opencode.managed"
 
-// Keys injected by macOS/MDM into the managed plist that are not OpenCode config
+// Keys injected by macOS/MDM into the managed plist that are not app config
 const PLIST_META = new Set([
   "PayloadDisplayName",
   "PayloadIdentifier",
@@ -18,18 +19,33 @@ const PLIST_META = new Set([
 ])
 
 function systemManagedConfigDir(): string {
-  switch (process.platform) {
-    case "darwin":
-      return "/Library/Application Support/opencode"
-    case "win32":
-      return path.join(process.env.ProgramData || "C:\\ProgramData", "opencode")
-    default:
-      return "/etc/opencode"
-  }
+  const kancode = (() => {
+    switch (process.platform) {
+      case "darwin":
+        return "/Library/Application Support/kancode"
+      case "win32":
+        return path.join(process.env.ProgramData || "C:\\ProgramData", "kancode")
+      default:
+        return "/etc/kancode"
+    }
+  })()
+  const opencode = (() => {
+    switch (process.platform) {
+      case "darwin":
+        return "/Library/Application Support/opencode"
+      case "win32":
+        return path.join(process.env.ProgramData || "C:\\ProgramData", "opencode")
+      default:
+        return "/etc/opencode"
+    }
+  })()
+  if (existsSync(kancode)) return kancode
+  if (existsSync(opencode)) return opencode
+  return kancode
 }
 
 export function managedConfigDir() {
-  return process.env.OPENCODE_TEST_MANAGED_CONFIG_DIR || systemManagedConfigDir()
+  return envAlias("TEST_MANAGED_CONFIG_DIR") || systemManagedConfigDir()
 }
 
 export function parseManagedPlist(json: string): string {

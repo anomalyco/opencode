@@ -3,9 +3,16 @@ schema: spec-driven
 # Injected into every OpenSpec artifact prompt.
 # Keep this aligned with the live TUI/CLI monorepo (post non-TUI prune).
 context: |
-  Product: kancode — TUI/CLI-focused OpenCode fork (AI coding agent).
+  Product: KanCode (kancode) — TUI/CLI-focused OpenCode fork (AI coding agent).
   Primary UX: terminal TUI via `bun dev` (packages/opencode → packages/tui).
   Package manager / runtime: Bun monorepo (packageManager bun@1.3.14).
+
+  Branding / compatibility (see openspec change kancode-rebrand / branding-compat):
+  - User-facing name is KanCode; binary prefers `kancode` with `opencode` alias.
+  - Config: prefer kancode.json(c) else opencode.json(c); dual-read .kancode/ and .opencode/ (.kancode wins).
+  - Env: OPENCODE_* still honored; KANCODE_* aliases win when both set.
+  - XDG: prefer nonempty kancode paths, else fall back to opencode.
+  - Do not rename @opencode-ai/* packages, packages/opencode, or provider id "opencode".
 
   In-scope packages (workspace):
   - opencode (app entry / bin), tui, cli, ui

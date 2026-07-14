@@ -16,6 +16,7 @@
     "dev:temporary": "bun run --conditions=browser ./src/temporary.ts"
   },
   "bin": {
+    "kancode": "./bin/opencode",
     "opencode": "./bin/opencode"
   },
   "exports": {

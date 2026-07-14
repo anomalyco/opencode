@@ -5,6 +5,8 @@
 - Use `main` or `origin/main` for diffs against the default branch.
 - This fork is TUI/CLI-focused. Do not assume web app, desktop, or console packages (`packages/app`, `packages/desktop`, `packages/web`, `packages/console`) still exist.
 - Spec-driven planning uses OpenSpec (`openspec/`). Keep day-to-day coding rules here; OpenSpec `openspec/config.yaml` summarizes product scope for planning prompts. Cursor slash commands live under `.cursor/commands/` (`/opsx:*`).
+- Product display name is **KanCode** (`kancode`). Keep `@opencode-ai/*` package names, `packages/opencode`, Effect service IDs, and the provider id `"opencode"` (OpenCode Zen) unchanged unless an explicit change renames them.
+- Config compatibility: prefer `kancode.json(c)` over `opencode.json(c)` per directory; discover both `.kancode/` and `.opencode/` (`.kancode` wins on conflict); honor `OPENCODE_*` env flags and `KANCODE_*` aliases (`KANCODE_*` wins); prefer nonempty `kancode` XDG/data dirs else fall back to `opencode`.
 
 ## Branch Names
 

@@ -1,9 +1,9 @@
 <p align="center">
   <a href="https://github.com/puetsua/kancode">
-    <strong>kancode</strong>
+    <strong>KanCode</strong>
   </a>
 </p>
-<p align="center">The open source AI coding agent (TUI / CLI).</p>
+<p align="center">The open source AI coding agent (TUI / CLI). Fork of OpenCode with dual-read config compatibility.</p>
 
 <p align="center">
   <a href="README.md">English</a> |
@@ -25,7 +25,7 @@ bun install
 bun dev
 ```
 
-`bun dev` starts the OpenCode TUI. To run it against another directory:
+`bun dev` starts the KanCode TUI. To run it against another directory:
 
 ```bash
 bun dev <directory>
@@ -33,10 +33,26 @@ bun dev <directory>
 bun dev .
 ```
 
+The CLI script name is `kancode`; `opencode` remains an alias/shim when installed as a package bin.
+
+### Config compatibility
+
+KanCode keeps OpenCode configs working:
+
+| Kind | Preference |
+| --- | --- |
+| Config files | Prefer `kancode.json` / `kancode.jsonc`; else `opencode.json` / `opencode.jsonc` (first existing wins per directory; do not merge both names in the same dir) |
+| Project dirs | Load both `.kancode/` and `.opencode/`; `.kancode` wins on conflicting keys |
+| Env flags | Honor `OPENCODE_*`; `KANCODE_*` aliases map to the same flags (`KANCODE_*` wins when both set) |
+| XDG / data dirs | Prefer nonempty `kancode` paths; else fall back to existing `opencode` dirs |
+
+Issues and feedback: [puetsua/kancode](https://github.com/puetsua/kancode/issues).
+
+Upstream OpenCode docs still describe shared features: [opencode.ai/docs](https://opencode.ai/docs).
 
 ### Agents
 
-OpenCode includes two built-in agents you can switch between with the `Tab` key.
+KanCode includes two built-in agents you can switch between with the `Tab` key.
 
 - **build** - Default, full-access agent for development work
 - **plan** - Read-only agent for analysis and code exploration
@@ -47,9 +63,8 @@ OpenCode includes two built-in agents you can switch between with the `Tab` key.
 Also included is a **general** subagent for complex searches and multistep tasks.
 This is used internally and can be invoked using `@general` in messages.
 
-Learn more about [agents](https://opencode.ai/docs/agents).
+Learn more about [agents](https://opencode.ai/docs/agents) (upstream docs).
 
 ### Documentation
 
-For more info on how to configure OpenCode, see the [docs](https://opencode.ai/docs).
-
+For shared configuration details, see the upstream [OpenCode docs](https://opencode.ai/docs). For this fork, prefer the README and `AGENTS.md` in the repo.
