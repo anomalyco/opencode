@@ -48,7 +48,7 @@ export function DesktopFirstLaunchOnboarding(props: { initialUrl: string; onLoad
       console.info("[desktop-onboarding] starting first launch draft", { directory })
       server.projects.open(directory)
       server.projects.touch(directory)
-      await tabs.newDraft({ server: server.key, directory })
+      tabs.select(await tabs.newDraft({ server: server.key, directory }))
     } catch (error) {
       console.error("[desktop-onboarding] first launch onboarding failed", error)
     }
