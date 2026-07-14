@@ -68,7 +68,7 @@ it.effect("projects request settings, headers, and body overlays", () =>
   }),
 )
 
-it.effect("converts pro reasoning mode only at the OpenAI AI SDK boundary", () =>
+it.effect("maps pro reasoning bodies to AI SDK provider options", () =>
   Effect.gen(function* () {
     const aisdk = yield* AISDK.Service
     let body: unknown

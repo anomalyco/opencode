@@ -363,7 +363,6 @@ function requestSettings(settings: Readonly<Record<string, unknown>> | undefined
 
 function mapBodyToProviderOptions(model: ModelV2.Info) {
   const settings = requestSettings(model.settings)
-  if (ProviderV2.packageName(model.package) !== "@ai-sdk/openai") return { settings, body: model.body }
   if (!Schema.is(Schema.Struct({ mode: Schema.Literal("pro") }))(model.body?.reasoning))
     return { settings, body: model.body }
   const body = { ...model.body }
