@@ -1136,12 +1136,12 @@ function SessionReasoningGroupView(props: {
           >
             <Show
               when={props.completed}
-              fallback={<Spinner color={theme.warning}>{latest() ? `Thinking: ${latest()}` : "Thinking"}</Spinner>}
+              fallback={<Spinner color={theme.textMuted}>{latest() ? `Thinking: ${latest()}` : "Thinking"}</Spinner>}
             >
               <Show
                 when={expanded()}
                 fallback={
-                  <text fg={theme.warning} wrapMode="none">
+                  <text fg={theme.textMuted} wrapMode="none">
                     + Thought
                     <Show when={latest()}>: {latest()}</Show>
                     <Show when={parts().length > 1}> · {parts().length} steps</Show>
@@ -1149,7 +1149,7 @@ function SessionReasoningGroupView(props: {
                   </text>
                 }
               >
-                <text fg={theme.warning} wrapMode="none">
+                <text fg={theme.textMuted} wrapMode="none">
                   - Thought
                   <Show when={parts().length > 1}> · {parts().length} steps</Show>
                   <Show when={duration()}> · {Locale.duration(duration())}</Show>
@@ -1164,8 +1164,8 @@ function SessionReasoningGroupView(props: {
                 const summary = createMemo(() => reasoningSummary(content()))
                 const markdown = createMemo(() => {
                   if (!summary().title) return content()
-                  if (!summary().body) return `**${summary().title}**`
-                  return `**${summary().title}** · ${summary().body}`
+                  if (!summary().body) return summary().title ?? ""
+                  return `${summary().title} · ${summary().body}`
                 })
                 return (
                   <box marginTop={1}>
