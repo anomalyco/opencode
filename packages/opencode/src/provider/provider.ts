@@ -659,12 +659,11 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           })
         },
         async discoverModels(): Promise<Record<string, Model>> {
-          if (!apiKey) {
+          if (!token) {
             return {}
           }
 
           try {
-            const token = apiKey
             const getHeaders = (): Record<string, string> =>
               auth?.type === "api" ? { "PRIVATE-TOKEN": token } : { Authorization: `Bearer ${token}` }
 
