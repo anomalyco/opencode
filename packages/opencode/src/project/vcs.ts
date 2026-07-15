@@ -430,11 +430,15 @@ const layer: Layer.Layer<Service, never, Git.Service | EventV2Bridge.Service> = 
         const ctx = yield* InstanceState.context
         if (ctx.project.vcs !== "git") return false
         const list = yield* git.run(["stash", "list"], { cwd: ctx.directory })
-        const ref = list
+        const entry = list
           .text()
           .split(/\r?\n/)
-          .find((line) => line.includes(input.message))
-          ?.split(":")[0]
+          .find((line) => {
+            const parts = line.split(": ")
+            const message = parts.slice(2).join(": ")
+            return message === input.message
+          })
+        const ref = entry?.split(":")[0]
         if (!ref) return false
         yield* git.run(["stash", "pop", ref], { cwd: ctx.directory })
         return true
