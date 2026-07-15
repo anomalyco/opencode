@@ -224,6 +224,7 @@ export const dict = {
   "prompt.placeholder.simple": "何でも聞いてください...",
   "prompt.placeholder.summarizeComments": "コメントを要約…",
   "prompt.placeholder.summarizeComment": "コメントを要約…",
+  "prompt.placeholder.newDesign": "Ask anything, / for commands, @ for context...",
   "prompt.mode.shell": "シェル",
   "prompt.mode.normal": "プロンプト",
   "prompt.mode.shell.exit": "escで終了",

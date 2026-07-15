@@ -247,6 +247,7 @@ export const dict = {
   "prompt.placeholder.simple": "Bir şeyler sorun...",
   "prompt.placeholder.summarizeComments": "Yorumları özetle…",
   "prompt.placeholder.summarizeComment": "Yorumu özetle…",
+  "prompt.placeholder.newDesign": "Ask anything, / for commands, @ for context...",
   "prompt.mode.shell": "Kabuk",
   "prompt.mode.normal": "Komut",
   "prompt.mode.shell.exit": "çıkmak için esc",

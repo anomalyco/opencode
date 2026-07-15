@@ -230,6 +230,7 @@ export const dict = {
   "prompt.placeholder.simple": "Fragen Sie alles...",
   "prompt.placeholder.summarizeComments": "Kommentare zusammenfassen…",
   "prompt.placeholder.summarizeComment": "Kommentar zusammenfassen…",
+  "prompt.placeholder.newDesign": "Ask anything, / for commands, @ for context...",
   "prompt.mode.shell": "Shell",
   "prompt.mode.normal": "Prompt",
   "prompt.mode.shell.exit": "esc zum Verlassen",

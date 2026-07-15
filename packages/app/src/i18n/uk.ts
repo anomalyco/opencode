@@ -244,6 +244,7 @@ export const dict = {
   "prompt.placeholder.simple": "Запитайте що завгодно...",
   "prompt.placeholder.summarizeComments": "Підсумувати коментарі…",
   "prompt.placeholder.summarizeComment": "Підсумувати коментар…",
+  "prompt.placeholder.newDesign": "Ask anything, / for commands, @ for context...",
   "prompt.mode.shell": "Команда",
   "prompt.mode.normal": "Запит",
   "prompt.mode.shell.exit": "esc для виходу",
