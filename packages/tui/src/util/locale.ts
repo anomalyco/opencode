@@ -4,6 +4,7 @@ export function titlecase(str: string) {
 
 /** Display label for known agent ids (id stays lowercase; UI may camel-case). */
 export function agentLabel(name: string) {
+  if (name === "cruisecontrol") return "CruiseControl"
   return titlecase(name)
 }
 

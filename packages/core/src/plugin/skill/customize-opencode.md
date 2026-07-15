@@ -276,15 +276,21 @@ file, `disable: true` in frontmatter.
 
 ### Built-in agents
 
-opencode ships with `default`, `plan`, `general`, `explore`. Hidden internal agents:
+opencode ships with `default`, `plan`, `cruisecontrol`, `general`, `explore`. Hidden internal agents:
 `compaction`, `title`, `summary`. To override a built-in's fields, define the
 same key in `agent: { <name>: { ... } }`. The legacy agent id `build` aliases to `default`.
 
-For smart tool auto-gating, use the built-in permission module `cruise_control`
-(not an agent): set permission actions to `"cruise_control"` and configure
-`permission_modules.cruise_control.model` (for example `opencode/deepseek-v4-flash`
-or `ollama_cloud/kimi-k2.7-code`). Plugins may register additional modules via
-`permission.registerModule({ id, decide })` (for example `puetsua_permit`).
+`cruisecontrol` is the CruiseControl builtin agent (autonomous execution). Its default
+tool permissions use the `cruise_control` classifier module (`"*": "cruise_control"`).
+It uses normal chat model resolution (global/default) — do not conflate the agent id
+with the permission-module id.
+
+For smart tool auto-gating (including CruiseControl's defaults), use the built-in
+permission module `cruise_control`: set permission actions to `"cruise_control"` and
+configure `permission_modules.cruise_control.model` (for example
+`opencode/deepseek-v4-flash` or `ollama_cloud/kimi-k2.7-code`). Plugins may register
+additional modules via `permission.registerModule({ id, decide })` (for example
+`puetsua_permit`).
 
 ## Commands
 
