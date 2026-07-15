@@ -56,6 +56,7 @@ import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionReminders } from "./reminders"
 import { SessionTools } from "./tools"
 import { LLMEvent } from "@opencode-ai/llm"
+import { ToolLoop } from "@opencode-ai/core/session/tool-loop"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -97,6 +98,43 @@ function isOrphanedInterruptedTool(part: SessionV1.ToolPart) {
   // cleanup() marks abandoned tool_use blocks this way after retries/aborts.
   // They are not pending work and must not trigger an assistant-prefill request.
   return part.state.status === "error" && part.state.metadata?.interrupted === true
+}
+
+function toolLoopObservations(messages: SessionV1.WithParts[]) {
+  const result: ToolLoop.Observation[] = []
+  const chronological = messages.toSorted((a, b) => a.info.id.localeCompare(b.info.id))
+  for (const message of chronological) {
+    if (message.info.role === "user") {
+      const synthetic = message.parts.every((part) => "synthetic" in part && part.synthetic)
+      const compaction = message.parts.some((part) => part.type === "compaction")
+      if (!synthetic && !compaction) result.push({ type: "reset" })
+      continue
+    }
+    if (message.info.role !== "assistant") continue
+    for (const part of message.parts.toSorted((a, b) => a.id.localeCompare(b.id))) {
+      if (part.type !== "tool") continue
+      if (part.state.status === "completed") {
+        result.push({
+          type: "tool",
+          tool: part.tool,
+          outcome: {
+            type: "success",
+            values: [part.state.output],
+            files: part.state.attachments?.length,
+          },
+        })
+        continue
+      }
+      if (part.state.status === "error" && !isOrphanedInterruptedTool(part)) {
+        result.push({
+          type: "tool",
+          tool: part.tool,
+          outcome: { type: "error", message: part.state.error },
+        })
+      }
+    }
+  }
+  return result
 }
 
 export interface Interface {
@@ -1126,6 +1164,28 @@ const layer = Layer.effect(
               })
             }
             yield* Effect.logInfo("exiting loop", { "session.id": sessionID })
+            break
+          }
+
+          if (
+            lastAssistantMsg?.info.role === "assistant" &&
+            lastAssistantMsg.info.error?.name === "UnknownError" &&
+            lastAssistantMsg.info.error.data.ref === ToolLoop.REF &&
+            lastUser.id < lastAssistantMsg.info.id
+          ) {
+            break
+          }
+
+          const detection = ToolLoop.detect(toolLoopObservations(msgs))
+          if (detection && lastAssistantMsg?.info.role === "assistant") {
+            const error = new NamedError.Unknown({
+              message: ToolLoop.message(detection),
+              ref: ToolLoop.REF,
+            }).toObject()
+            lastAssistantMsg.info.error = error
+            lastAssistantMsg.info.time.completed ??= Date.now()
+            yield* sessions.updateMessage(lastAssistantMsg.info)
+            yield* events.publish(Session.Event.Error, { sessionID, error })
             break
           }
 

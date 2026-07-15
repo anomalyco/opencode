@@ -29,8 +29,10 @@ import { SessionCompaction } from "../compaction"
 import { SessionEvent } from "../event"
 import { SessionHistory } from "../history"
 import { SessionInput } from "../input"
+import { SessionMessage } from "../message"
 import { SessionSchema } from "../schema"
 import { SessionStore } from "../store"
+import { ToolLoop } from "../tool-loop"
 import { type RunError, Service } from "./index"
 import { SessionRunnerModel } from "./model"
 import { createLLMEventPublisher } from "./publish-llm-event"
@@ -89,6 +91,46 @@ import { llmClient } from "../../effect/app-node-platform"
  * provider turn. Registry definitions are advertised, local tool calls are settled durably, and an
  * explicit loop starts the next provider turn after local settlement. Configured agent step limits bound the loop.
  */
+
+const toolLoopObservations = (messages: ReadonlyArray<SessionMessage.Message>) => {
+  const result: ToolLoop.Observation[] = []
+  for (const message of messages) {
+    if (message.type === "user") {
+      result.push({ type: "reset" })
+      continue
+    }
+    if (message.type !== "assistant") continue
+    for (const part of message.content) {
+      if (part.type !== "tool") continue
+      if (part.state.status === "completed") {
+        result.push({
+          type: "tool",
+          tool: part.name,
+          outcome: {
+            type: "success",
+            values: [
+              part.state.structured,
+              ...part.state.content.flatMap((content) => (content.type === "text" ? [content.text] : [])),
+            ],
+            files:
+              (part.state.attachments?.length ?? 0) +
+              (part.state.outputPaths?.length ?? 0) +
+              part.state.content.filter((content) => content.type === "file").length,
+          },
+        })
+        continue
+      }
+      if (part.state.status === "error") {
+        result.push({
+          type: "tool",
+          tool: part.name,
+          outcome: { type: "error", message: part.state.error.message },
+        })
+      }
+    }
+  }
+  return result
+}
 
 const layer = Layer.effect(
   Service,
@@ -196,9 +238,28 @@ const layer = Layer.effect(
       }
       const system =
         initialized ?? (yield* SessionContextEpoch.prepare(db, events, loadSystemContext(agent), session.id))
-      const model = yield* models.resolve(session)
       const entries = yield* SessionHistory.entriesForRunner(db, session.id, system.baselineSeq)
       const context = entries.map((entry) => entry.message)
+      const latest = context.at(-1)
+      if (latest?.type === "assistant" && ToolLoop.stopped(latest.error?.message)) {
+        return { needsContinuation: false, step: currentStep }
+      }
+      const model = yield* models.resolve(session)
+      const publication = {
+        sessionID: session.id,
+        agent: agent.id,
+        model: {
+          id: ModelV2.ID.make(model.id),
+          providerID: ProviderV2.ID.make(model.provider),
+          ...(session.model?.variant === undefined ? {} : { variant: session.model.variant }),
+        },
+      }
+      const detection = ToolLoop.detect(toolLoopObservations(context))
+      if (detection) {
+        const publisher = createLLMEventPublisher(events, publication)
+        yield* publisher.failAssistant(ToolLoop.message(detection))
+        return { needsContinuation: false, step: currentStep }
+      }
       const isLastStep = agent.info?.steps !== undefined && currentStep >= agent.info.steps
       const toolMaterialization = isLastStep ? undefined : yield* tools.materialize(agent.info?.permissions)
       const promptCacheKey = /^ses_[0-9a-f]{64}$/.test(session.id) ? session.id.slice(4) : session.id
@@ -216,13 +277,7 @@ const layer = Layer.effect(
         return yield* Effect.die(continueAfterCompaction(currentStep))
       const startSnapshot = yield* snapshots.capture()
       const publisher = createLLMEventPublisher(events, {
-        sessionID: session.id,
-        agent: agent.id,
-        model: {
-          id: ModelV2.ID.make(model.id),
-          providerID: ProviderV2.ID.make(model.provider),
-          ...(session.model?.variant === undefined ? {} : { variant: session.model.variant }),
-        },
+        ...publication,
         snapshot: startSnapshot,
       })
       const withPublication = Semaphore.makeUnsafe(1).withPermit

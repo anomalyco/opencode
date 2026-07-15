@@ -1463,6 +1463,84 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("stops before a fourth provider turn after repeated empty tool results", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const applicationTools = yield* ApplicationTools.Service
+      yield* applicationTools.register({
+        empty_search: Tool.make({
+          description: "Search for resources",
+          input: Schema.Struct({ prefix: Schema.String }),
+          output: Schema.Array(Schema.String),
+          execute: () => Effect.succeed([]),
+        }),
+      })
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Find the missing resource" }), resume: false })
+
+      requests.length = 0
+      responses = [
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.toolCall({ id: "call-empty-1", name: "empty_search", input: { prefix: "m" } }),
+          LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
+          LLMEvent.finish({ reason: "tool-calls" }),
+        ],
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.toolCall({ id: "call-empty-2", name: "empty_search", input: { prefix: "m3" } }),
+          LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
+          LLMEvent.finish({ reason: "tool-calls" }),
+        ],
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.toolCall({ id: "call-empty-3", name: "empty_search", input: { prefix: "m365" } }),
+          LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
+          LLMEvent.finish({ reason: "tool-calls" }),
+        ],
+        fragmentFixture("text", "text-unreachable", ["Still searching"]).completeEvents,
+      ]
+
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(3)
+      const context = yield* session.context(sessionID)
+      expect(
+        context.flatMap((message) =>
+          message.type === "assistant"
+            ? message.content.flatMap((part) =>
+                part.type === "tool" && part.name === "empty_search" ? [part.state.input] : [],
+              )
+            : [],
+        ),
+      ).toEqual([{ prefix: "m" }, { prefix: "m3" }, { prefix: "m365" }])
+      expect(context.at(-1)).toMatchObject({
+        type: "assistant",
+        finish: "error",
+        error: {
+          type: "unknown",
+          message: expect.stringContaining("No matching result was found"),
+        },
+      })
+
+      yield* replaySessionProjection(sessionID)
+      expect((yield* session.context(sessionID)).at(-1)).toMatchObject({
+        type: "assistant",
+        finish: "error",
+        error: {
+          type: "unknown",
+          message: expect.stringContaining("No matching result was found"),
+        },
+      })
+
+      yield* session.resume(sessionID)
+      expect(requests).toHaveLength(3)
+      expect(
+        (yield* session.context(sessionID)).filter((message) => message.type === "assistant" && message.error),
+      ).toHaveLength(1)
+    }),
+  )
+
   it.effect("reloads a model switch before a tool-driven continuation turn", () =>
     Effect.gen(function* () {
       yield* setup

@@ -109,14 +109,20 @@ function errorTool(parts: SessionV1.Part[]) {
   return part?.state.status === "error" ? (part as ErrorToolPart) : undefined
 }
 
-function makeMcp(instructions: MCP.ServerInstructions[] = []) {
+type PromptLayerInput = {
+  mcpInstructions?: MCP.ServerInstructions[]
+  mcpTools?: Record<string, MCP.McpTool>
+  processor?: "blocking"
+}
+
+function makeMcp(instructions: MCP.ServerInstructions[] = [], tools: Record<string, MCP.McpTool> = {}) {
   return Layer.succeed(
     MCP.Service,
     MCP.Service.of({
       status: () => Effect.succeed({}),
       clients: () => Effect.succeed({}),
       instructions: () => Effect.succeed(instructions),
-      tools: () => Effect.succeed({}),
+      tools: () => Effect.succeed(tools),
       prompts: () => Effect.succeed({}),
       resources: () => Effect.succeed({}),
       resourceTemplates: () => Effect.succeed({}),
@@ -208,11 +214,11 @@ const promptRoot = LayerNode.group([
   RuntimeFlags.node,
 ])
 
-function makePrompt(input?: { mcpInstructions?: MCP.ServerInstructions[]; processor?: "blocking" }) {
+function makePrompt(input?: PromptLayerInput) {
   const replacements = [
     [SessionSummary.node, summary],
     [LSP.node, lsp],
-    [MCP.node, makeMcp(input?.mcpInstructions)],
+    [MCP.node, makeMcp(input?.mcpInstructions, input?.mcpTools)],
     [RuntimeFlags.node, runtimeFlags],
   ] as const
   if (input?.processor === "blocking") {
@@ -221,12 +227,12 @@ function makePrompt(input?: { mcpInstructions?: MCP.ServerInstructions[]; proces
   return LayerNode.compile(promptRoot, replacements)
 }
 
-function makeHttp(input?: { mcpInstructions?: MCP.ServerInstructions[]; processor?: "blocking" }) {
+function makeHttp(input?: PromptLayerInput) {
   const root = LayerNode.group([promptRoot, testLLMServerNode])
   const replacements = [
     [SessionSummary.node, summary],
     [LSP.node, lsp],
-    [MCP.node, makeMcp(input?.mcpInstructions)],
+    [MCP.node, makeMcp(input?.mcpInstructions, input?.mcpTools)],
     [RuntimeFlags.node, runtimeFlags],
   ] as const
   if (input?.processor === "blocking") {
@@ -235,7 +241,7 @@ function makeHttp(input?: { mcpInstructions?: MCP.ServerInstructions[]; processo
   return LayerNode.compile(root, replacements)
 }
 
-function makeHttpNoLLMServer(input?: { mcpInstructions?: MCP.ServerInstructions[]; processor?: "blocking" }) {
+function makeHttpNoLLMServer(input?: PromptLayerInput) {
   return makePrompt(input)
 }
 
@@ -251,6 +257,26 @@ const withMcpInstructions = testEffect(
         tools: ["guide-server_lookup"],
       },
     ],
+  }),
+)
+const withEmptyMcpSearch = testEffect(
+  makeHttp({
+    mcpTools: {
+      gumps_mcp_resource_list: {
+        def: {
+          name: "resource_list",
+          description: "List matching MCP resources",
+          inputSchema: {
+            type: "object",
+            properties: { prefix: { type: "string" } },
+            required: ["prefix"],
+          },
+        } as MCP.McpTool["def"],
+        client: {
+          callTool: async () => ({ content: [] }),
+        } as unknown as MCP.McpTool["client"],
+      },
+    },
   }),
 )
 const unix = process.platform !== "win32" ? it.instance : it.instance.skip
@@ -807,6 +833,66 @@ it.instance("loop continues when finish is tool-calls", () =>
       expect(result.parts.some((part) => part.type === "text" && part.text === "second")).toBe(true)
       expect(result.info.finish).toBe("stop")
     }
+  }),
+)
+
+withEmptyMcpSearch.instance("loop stops after repeated empty MCP results with varied inputs", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const session = yield* sessions.create({
+      title: "Missing MCP resource",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    })
+    yield* prompt.prompt({
+      sessionID: session.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "find m365-inbox" }],
+    })
+    yield* llm.tool("gumps_mcp_resource_list", { prefix: "m" })
+    yield* llm.tool("gumps_mcp_resource_list", { prefix: "m3" })
+    yield* llm.tool("gumps_mcp_resource_list", { prefix: "m365" })
+    yield* llm.text("unreachable")
+
+    const result = yield* prompt.loop({ sessionID: session.id })
+
+    expect(yield* llm.calls).toBe(3)
+    expect(yield* llm.pending).toBe(1)
+    expect(result.info).toMatchObject({
+      role: "assistant",
+      error: {
+        name: "UnknownError",
+        data: {
+          ref: "tool_loop_no_progress",
+          message: expect.stringContaining("No matching resource was found"),
+        },
+      },
+    })
+    const history = yield* sessions.messages({ sessionID: session.id })
+    const calls = history
+      .toSorted((a, b) => a.info.id.localeCompare(b.info.id))
+      .flatMap((message) => message.parts)
+      .filter((part): part is SessionV1.ToolPart => part.type === "tool" && part.tool === "gumps_mcp_resource_list")
+    expect(calls.map((part) => part.state.input)).toEqual([{ prefix: "m" }, { prefix: "m3" }, { prefix: "m365" }])
+    expect(calls.map((part) => part.state.status)).toEqual(["completed", "completed", "completed"])
+
+    const resumed = yield* prompt.loop({ sessionID: session.id })
+    expect(resumed.info.id).toBe(result.info.id)
+    expect(yield* llm.calls).toBe(3)
+    expect(yield* llm.pending).toBe(1)
+
+    yield* prompt.prompt({
+      sessionID: session.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "stop searching and summarize" }],
+    })
+    const recovered = yield* prompt.loop({ sessionID: session.id })
+    expect(yield* llm.calls).toBe(4)
+    expect(yield* llm.pending).toBe(0)
+    expect(recovered.parts).toContainEqual(expect.objectContaining({ type: "text", text: "unreachable" }))
   }),
 )
 

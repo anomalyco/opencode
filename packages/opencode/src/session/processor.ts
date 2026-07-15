@@ -25,8 +25,8 @@ import { isRecord } from "@/util/record"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Database } from "@opencode-ai/core/database/database"
 import { Usage, type LLMEvent } from "@opencode-ai/llm"
+import { ToolLoop } from "@opencode-ai/core/session/tool-loop"
 
-const DOOM_LOOP_THRESHOLD = 3
 export type Result = "compact" | "stop" | "continue"
 
 export interface Handle {
@@ -353,10 +353,10 @@ const layer = Layer.effect(
             const parts = yield* MessageV2.parts(ctx.assistantMessage.id).pipe(
               Effect.provideService(Database.Service, database),
             )
-            const recentParts = parts.slice(-DOOM_LOOP_THRESHOLD)
+            const recentParts = parts.slice(-ToolLoop.THRESHOLD)
 
             if (
-              recentParts.length !== DOOM_LOOP_THRESHOLD ||
+              recentParts.length !== ToolLoop.THRESHOLD ||
               !recentParts.every(
                 (part) =>
                   part.type === "tool" &&
