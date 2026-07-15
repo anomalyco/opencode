@@ -1,3 +1,4 @@
+import { Glob } from "@opencode-ai/core/util/glob"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import path from "path"
 import { InstanceState } from "@/effect/instance-state"
@@ -140,12 +141,25 @@ const layer = Layer.effect(
           source: "skill",
           get template() {
             if (!dir) return item.content
-            return [
+            const files = Glob.scanSync("**/*", { cwd: dir, include: "file", dot: true })
+              .filter((f) => f !== "SKILL.md")
+              .slice(0, 10)
+            const sections = [
               item.content,
               "",
               `Base directory for this skill: ${dir}`,
               "Relative paths in this skill (e.g., scripts/, references/) are relative to this base directory.",
-            ].join("\n")
+            ]
+            if (files.length > 0) {
+              sections.push(
+                "Note: file list is sampled.",
+                "",
+                "<skill_files>",
+                ...files.map((f) => `<file>${path.resolve(dir, f)}</file>`),
+                "</skill_files>",
+              )
+            }
+            return sections.join("\n")
           },
           hints: [],
         }
