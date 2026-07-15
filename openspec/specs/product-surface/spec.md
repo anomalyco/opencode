@@ -2,17 +2,17 @@
 
 ## Purpose
 
-Define the supported product surfaces for this TUI/CLI-focused OpenCode fork after non-TUI packages and platforms were pruned.
+Define the supported product surfaces for this TUI/CLI-focused KanCode fork after non-TUI packages and platforms were pruned.
 
 ## Requirements
 
 ### Requirement: TUI and CLI Are the Primary Product Surfaces
 
-The product SHALL be delivered as a terminal user interface (TUI) and related CLI entrypoints. Interactive development SHALL start with `bun dev` from the repo root (or equivalent package scripts under `packages/opencode`), which launches the OpenCode TUI.
+The product SHALL be delivered as a terminal user interface (TUI) and related CLI entrypoints under the KanCode product name. Interactive development SHALL start with `bun dev` from the repo root (or equivalent package scripts under `packages/opencode`), which launches the KanCode TUI.
 
 #### Scenario: Local development starts the TUI
 - **WHEN** a developer runs `bun dev` from the repository root
-- **THEN** the OpenCode TUI starts for interactive use
+- **THEN** the KanCode TUI starts for interactive use
 - **AND** the developer MAY pass a target directory (for example `bun dev .`)
 
 ### Requirement: Web App Desktop and Console Surfaces Are Out of Scope
