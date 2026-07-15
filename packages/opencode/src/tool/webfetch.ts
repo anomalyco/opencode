@@ -7,6 +7,10 @@ import DESCRIPTION from "./webfetch.txt"
 import { isImageAttachment } from "@/util/media"
 
 const MAX_RESPONSE_SIZE = 5 * 1024 * 1024 // 5MB
+
+export function originPattern(url: string): string | undefined {
+  return URL.canParse(url) ? new URL(url).origin + "/*" : undefined
+}
 const DEFAULT_TIMEOUT = 30 * 1000 // 30 seconds
 const MAX_TIMEOUT = 120 * 1000 // 2 minutes
 
@@ -36,7 +40,7 @@ export const WebFetchTool = Tool.define(
             throw new Error("URL must start with http:// or https://")
           }
 
-          const origin = URL.canParse(params.url) ? new URL(params.url).origin + "/*" : undefined
+          const origin = originPattern(params.url)
           yield* ctx.ask({
             permission: "webfetch",
             patterns: [params.url],

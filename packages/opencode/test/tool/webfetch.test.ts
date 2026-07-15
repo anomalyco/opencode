@@ -1,11 +1,11 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, it as baseIt } from "bun:test"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { httpClient } from "@opencode-ai/core/effect/app-node-platform"
 import { Effect, Layer } from "effect"
 import { FetchHttpClient, HttpClient } from "effect/unstable/http"
 import { Agent } from "../../src/agent/agent"
 import { Truncate } from "@/tool/truncate"
-import { WebFetchTool } from "../../src/tool/webfetch"
+import { WebFetchTool, originPattern } from "../../src/tool/webfetch"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { Tool } from "@/tool/tool"
 import { testEffect } from "../lib/effect"
@@ -41,6 +41,32 @@ const exec = Effect.fn("WebFetchToolTest.exec")(function* (args: Tool.InferParam
   const info = yield* WebFetchTool
   const tool = yield* info.init()
   return yield* tool.execute(args, ctx)
+})
+
+describe("originPattern", () => {
+  baseIt("returns origin with /* wildcard for valid https URL", () => {
+    expect(originPattern("https://github.com/anomalyco/opencode/issues/123")).toBe("https://github.com/*")
+  })
+
+  baseIt("returns origin with /* wildcard for valid http URL", () => {
+    expect(originPattern("http://example.com/page.html")).toBe("http://example.com/*")
+  })
+
+  baseIt("handles subdomains", () => {
+    expect(originPattern("https://docs.example.com/path/file")).toBe("https://docs.example.com/*")
+  })
+
+  baseIt("handles URLs with port", () => {
+    expect(originPattern("https://localhost:8080/test")).toBe("https://localhost:8080/*")
+  })
+
+  baseIt("returns undefined for invalid URL", () => {
+    expect(originPattern("not-a-url")).toBeUndefined()
+  })
+
+  baseIt("returns undefined for empty string", () => {
+    expect(originPattern("")).toBeUndefined()
+  })
 })
 
 describe("tool.webfetch", () => {
