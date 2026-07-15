@@ -538,6 +538,21 @@ This setting applies across all interfaces: TUI, CLI (`opencode run`), desktop a
 
 ---
 
+### Subagent depth
+
+You can control how deeply subagents can invoke other subagents using the `subagent_depth` option.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "subagent_depth": 2
+}
+```
+
+The default is `1`, which allows primary agents to launch subagents but prevents those subagents from launching additional subagents. Set it to `2` to allow one additional level of nested subagents, or `0` to prevent all subagent launches.
+
+---
+
 ### Sharing
 
 You can configure the [share](/docs/share) feature through the `share` option.

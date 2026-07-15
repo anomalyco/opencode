@@ -159,10 +159,10 @@ it.instance(
     const providers = yield* list
     expect(providers[ProviderV2.ID.anthropic]).toBeDefined()
     const models = Object.keys(providers[ProviderV2.ID.anthropic].models)
-    expect(models).toContain("claude-sonnet-4-20250514")
+    expect(models).toContain("claude-sonnet-4-6")
     expect(models.length).toBe(1)
   }),
-  { config: { provider: { anthropic: { whitelist: ["claude-sonnet-4-20250514"] } } } },
+  { config: { provider: { anthropic: { whitelist: ["claude-sonnet-4-6"] } } } },
 )
 
 it.instance(
@@ -301,10 +301,10 @@ it.instance("getModel returns model for valid provider/model", () =>
   Effect.gen(function* () {
     yield* setProcessEnv("ANTHROPIC_API_KEY", "test-api-key")
     const provider = yield* Provider.Service
-    const model = yield* provider.getModel(ProviderV2.ID.anthropic, ModelV2.ID.make("claude-sonnet-4-20250514"))
+    const model = yield* provider.getModel(ProviderV2.ID.anthropic, ModelV2.ID.make("claude-sonnet-4-6"))
     expect(model).toBeDefined()
     expect(String(model.providerID)).toBe("anthropic")
-    expect(String(model.id)).toBe("claude-sonnet-4-20250514")
+    expect(String(model.id)).toBe("claude-sonnet-4-6")
     const language = yield* provider.getLanguage(model)
     expect(language).toBeDefined()
   }),
@@ -435,7 +435,7 @@ it.instance(
   "model options are merged from existing model",
   Effect.gen(function* () {
     const providers = yield* list
-    const model = providers[ProviderV2.ID.anthropic].models["claude-sonnet-4-20250514"]
+    const model = providers[ProviderV2.ID.anthropic].models["claude-sonnet-4-6"]
     expect(model.options.customOption).toBe("custom-value")
   }),
   {
@@ -443,7 +443,7 @@ it.instance(
       provider: {
         anthropic: {
           options: { apiKey: "test-api-key" },
-          models: { "claude-sonnet-4-20250514": { options: { customOption: "custom-value" } } },
+          models: { "claude-sonnet-4-6": { options: { customOption: "custom-value" } } },
         },
       },
     },
@@ -549,7 +549,7 @@ it.instance(
   Effect.gen(function* () {
     yield* set("ANTHROPIC_API_KEY", "test-api-key")
     const providers = yield* list
-    const model = providers[ProviderV2.ID.anthropic].models["claude-sonnet-4-20250514"]
+    const model = providers[ProviderV2.ID.anthropic].models["claude-sonnet-4-6"]
     expect(model.name).toBe("Custom Name for Sonnet")
     expect(model.capabilities.toolcall).toBe(true)
     expect(model.capabilities.attachment).toBe(true)
@@ -557,7 +557,46 @@ it.instance(
   }),
   {
     config: {
-      provider: { anthropic: { models: { "claude-sonnet-4-20250514": { name: "Custom Name for Sonnet" } } } },
+      provider: { anthropic: { models: { "claude-sonnet-4-6": { name: "Custom Name for Sonnet" } } } },
+    },
+  },
+)
+
+it.instance(
+  "model config preserves explicitly empty models.dev variants",
+  Effect.gen(function* () {
+    yield* set("OPENAI_API_KEY", "test-api-key")
+    const providers = yield* list
+    const model = providers[ProviderV2.ID.openai].models["custom-gpt-chat"]
+    expect(model.name).toBe("Custom GPT Chat")
+    expect(model.variants).toEqual({})
+  }),
+  {
+    config: {
+      provider: {
+        openai: { models: { "custom-gpt-chat": { id: "gpt-5-chat-latest", name: "Custom GPT Chat" } } },
+      },
+    },
+  },
+)
+
+it.instance(
+  "model config regenerates variants when overriding the provider package",
+  Effect.gen(function* () {
+    yield* set("ANTHROPIC_API_KEY", "test-api-key")
+    const providers = yield* list
+    const model = providers[ProviderV2.ID.anthropic].models["claude-sonnet-4-6"]
+    expect(model.variants?.low).toEqual({ reasoningEffort: "low" })
+    expect(model.variants?.max).toBeUndefined()
+  }),
+  {
+    config: {
+      provider: {
+        anthropic: {
+          npm: "@ai-sdk/openai-compatible",
+          models: { "claude-sonnet-4-6": { name: "Claude via OpenAI" } },
+        },
+      },
     },
   },
 )
@@ -590,16 +629,16 @@ it.instance(
     const providers = yield* list
     expect(providers[ProviderV2.ID.anthropic]).toBeDefined()
     const models = Object.keys(providers[ProviderV2.ID.anthropic].models)
-    expect(models).toContain("claude-sonnet-4-20250514")
-    expect(models).not.toContain("claude-opus-4-20250514")
+    expect(models).toContain("claude-sonnet-4-6")
+    expect(models).not.toContain("claude-opus-4-6")
     expect(models.length).toBe(1)
   }),
   {
     config: {
       provider: {
         anthropic: {
-          whitelist: ["claude-sonnet-4-20250514", "claude-opus-4-20250514"],
-          blacklist: ["claude-opus-4-20250514"],
+          whitelist: ["claude-sonnet-4-6", "claude-opus-4-6"],
+          blacklist: ["claude-opus-4-6"],
         },
       },
     },
@@ -773,9 +812,9 @@ it.instance(
     const model = yield* Provider.use.getSmallModel(ProviderV2.ID.anthropic)
     expect(model).toBeDefined()
     expect(String(model?.providerID)).toBe("anthropic")
-    expect(String(model?.id)).toBe("claude-sonnet-4-20250514")
+    expect(String(model?.id)).toBe("claude-sonnet-4-6")
   }),
-  { config: { small_model: "anthropic/claude-sonnet-4-20250514" } },
+  { config: { small_model: "anthropic/claude-sonnet-4-6" } },
 )
 
 it.instance(
@@ -1094,8 +1133,8 @@ it.instance(
 it.instance("getModel returns consistent results", () =>
   Effect.gen(function* () {
     yield* set("ANTHROPIC_API_KEY", "test-api-key")
-    const model1 = yield* Provider.use.getModel(ProviderV2.ID.anthropic, ModelV2.ID.make("claude-sonnet-4-20250514"))
-    const model2 = yield* Provider.use.getModel(ProviderV2.ID.anthropic, ModelV2.ID.make("claude-sonnet-4-20250514"))
+    const model1 = yield* Provider.use.getModel(ProviderV2.ID.anthropic, ModelV2.ID.make("claude-sonnet-4-6"))
+    const model2 = yield* Provider.use.getModel(ProviderV2.ID.anthropic, ModelV2.ID.make("claude-sonnet-4-6"))
     expect(model1.providerID).toEqual(model2.providerID)
     expect(model1.id).toEqual(model2.id)
     expect(model1).toEqual(model2)
@@ -1337,16 +1376,17 @@ it.instance(
   },
 )
 
-test("mode cost preserves over-200k pricing from base model", () => {
+test("mode options and cost are derived from the base model", () => {
   const provider = {
     id: "openai",
     name: "OpenAI",
     env: [],
+    npm: "@ai-sdk/openai",
     api: "https://api.openai.com/v1",
     models: {
-      "gpt-5.4": {
-        id: "gpt-5.4",
-        name: "GPT-5.4",
+      "gpt-5.6-sol": {
+        id: "gpt-5.6-sol",
+        name: "GPT-5.6 Sol",
         family: "gpt",
         release_date: "2026-03-05",
         attachment: true,
@@ -1382,18 +1422,29 @@ test("mode cost preserves over-200k pricing from base model", () => {
                 },
               },
             },
+            pro: {
+              provider: {
+                body: {
+                  reasoning: { mode: "pro" },
+                  service_tier: "priority",
+                },
+              },
+            },
           },
         },
       },
     },
   } as unknown as ModelsDev.Provider
 
-  const model = Provider.fromModelsDevProvider(provider).models["gpt-5.4-fast"]
+  const model = Provider.fromModelsDevProvider(provider).models["gpt-5.6-sol-fast"]
   expect(model.cost.input).toEqual(5)
   expect(model.cost.output).toEqual(30)
   expect(model.cost.cache.read).toEqual(0.5)
   expect(model.cost.cache.write).toEqual(0)
   expect(model.options["serviceTier"]).toEqual("priority")
+  const pro = Provider.fromModelsDevProvider(provider).models["gpt-5.6-sol-pro"]
+  expect(pro.api.id).toEqual("gpt-5.6-sol")
+  expect(pro.options).toEqual({ reasoningMode: "pro", serviceTier: "priority" })
   expect(model.cost.experimentalOver200K).toEqual({
     input: 5,
     output: 22.5,
@@ -1424,6 +1475,62 @@ test("models.dev normalization fills required response fields", () => {
   expect(model.capabilities.attachment).toBe(false)
   expect(model.capabilities.toolcall).toBe(true)
   expect(model.release_date).toBe("")
+})
+
+test("models.dev reasoning options replace generated variants and unsupported options fall back", () => {
+  const provider = {
+    id: "reasoning",
+    name: "Reasoning",
+    env: [],
+    npm: "@ai-sdk/openai",
+    models: {
+      explicit: {
+        id: "gpt-5.4",
+        name: "Explicit",
+        reasoning: true,
+        reasoning_options: [{ type: "effort", values: ["low"] }],
+        limit: { context: 128_000, output: 64_000 },
+      },
+      empty: {
+        id: "gpt-5.4",
+        name: "Empty",
+        reasoning: true,
+        reasoning_options: [],
+        limit: { context: 128_000, output: 64_000 },
+      },
+      fallback: {
+        id: "gpt-5.4",
+        name: "Fallback",
+        reasoning: true,
+        reasoning_options: [{ type: "toggle" }],
+        limit: { context: 128_000, output: 64_000 },
+      },
+      override: {
+        id: "gemini-3-pro",
+        name: "Override",
+        reasoning: true,
+        reasoning_options: [{ type: "effort", values: ["high"] }],
+        provider: { npm: "@ai-sdk/google" },
+        limit: { context: 128_000, output: 64_000 },
+        experimental: { modes: { fast: {} } },
+      },
+    },
+  } as unknown as ModelsDev.Provider
+
+  const models = Provider.fromModelsDevProvider(provider).models
+  expect(models.explicit.variants).toEqual({
+    low: {
+      reasoningEffort: "low",
+      reasoningSummary: "auto",
+      include: ["reasoning.encrypted_content"],
+    },
+  })
+  expect(models.empty.variants).toEqual({})
+  expect(Object.keys(models.fallback.variants ?? {})).toEqual(["none", "low", "medium", "high", "xhigh"])
+  expect(models.override.variants).toEqual({
+    high: { thinkingConfig: { includeThoughts: true, thinkingLevel: "high" } },
+  })
+  expect(models["gemini-3-pro-fast"].variants).toEqual(models.override.variants)
 })
 
 test("public provider info omits invalid models", () => {
@@ -1457,7 +1564,7 @@ it.instance("model variants are generated for reasoning models", () =>
     yield* set("ANTHROPIC_API_KEY", "test-api-key")
     const providers = yield* list
     // Claude sonnet 4 has reasoning capability
-    const model = providers[ProviderV2.ID.anthropic].models["claude-sonnet-4-20250514"]
+    const model = providers[ProviderV2.ID.anthropic].models["claude-sonnet-4-6"]
     expect(model.capabilities.reasoning).toBe(true)
     expect(model.variants).toBeDefined()
     expect(Object.keys(model.variants!).length).toBeGreaterThan(0)
@@ -1469,7 +1576,7 @@ it.instance(
   Effect.gen(function* () {
     yield* set("ANTHROPIC_API_KEY", "test-api-key")
     const providers = yield* list
-    const model = providers[ProviderV2.ID.anthropic].models["claude-sonnet-4-20250514"]
+    const model = providers[ProviderV2.ID.anthropic].models["claude-sonnet-4-6"]
     expect(model.variants).toBeDefined()
     expect(model.variants!["high"]).toBeUndefined()
     // max variant should still exist
@@ -1479,7 +1586,7 @@ it.instance(
     config: {
       provider: {
         anthropic: {
-          models: { "claude-sonnet-4-20250514": { variants: { high: { disabled: true } } } },
+          models: { "claude-sonnet-4-6": { variants: { high: { disabled: true } } } },
         },
       },
     },
@@ -1491,7 +1598,7 @@ it.instance(
   Effect.gen(function* () {
     yield* set("ANTHROPIC_API_KEY", "test-api-key")
     const providers = yield* list
-    const model = providers[ProviderV2.ID.anthropic].models["claude-sonnet-4-20250514"]
+    const model = providers[ProviderV2.ID.anthropic].models["claude-sonnet-4-6"]
     expect(model.variants!["high"]).toBeDefined()
     expect(model.variants!["high"].thinking.budgetTokens).toBe(20000)
   }),
@@ -1500,7 +1607,7 @@ it.instance(
       provider: {
         anthropic: {
           models: {
-            "claude-sonnet-4-20250514": {
+            "claude-sonnet-4-6": {
               variants: { high: { thinking: { type: "enabled", budgetTokens: 20000 } } },
             },
           },
@@ -1515,7 +1622,7 @@ it.instance(
   Effect.gen(function* () {
     yield* set("ANTHROPIC_API_KEY", "test-api-key")
     const providers = yield* list
-    const model = providers[ProviderV2.ID.anthropic].models["claude-sonnet-4-20250514"]
+    const model = providers[ProviderV2.ID.anthropic].models["claude-sonnet-4-6"]
     expect(model.variants!["max"]).toBeDefined()
     expect(model.variants!["max"].disabled).toBeUndefined()
     expect(model.variants!["max"].customField).toBe("test")
@@ -1525,7 +1632,7 @@ it.instance(
       provider: {
         anthropic: {
           models: {
-            "claude-sonnet-4-20250514": {
+            "claude-sonnet-4-6": {
               variants: { max: { disabled: false, customField: "test" } },
             },
           },
@@ -1540,7 +1647,7 @@ it.instance(
   Effect.gen(function* () {
     yield* set("ANTHROPIC_API_KEY", "test-api-key")
     const providers = yield* list
-    const model = providers[ProviderV2.ID.anthropic].models["claude-sonnet-4-20250514"]
+    const model = providers[ProviderV2.ID.anthropic].models["claude-sonnet-4-6"]
     expect(model.variants).toBeDefined()
     expect(Object.keys(model.variants!).length).toBe(0)
   }),
@@ -1549,8 +1656,13 @@ it.instance(
       provider: {
         anthropic: {
           models: {
-            "claude-sonnet-4-20250514": {
-              variants: { high: { disabled: true }, max: { disabled: true } },
+            "claude-sonnet-4-6": {
+              variants: {
+                low: { disabled: true },
+                medium: { disabled: true },
+                high: { disabled: true },
+                max: { disabled: true },
+              },
             },
           },
         },
@@ -1564,7 +1676,7 @@ it.instance(
   Effect.gen(function* () {
     yield* set("ANTHROPIC_API_KEY", "test-api-key")
     const providers = yield* list
-    const model = providers[ProviderV2.ID.anthropic].models["claude-sonnet-4-20250514"]
+    const model = providers[ProviderV2.ID.anthropic].models["claude-sonnet-4-6"]
     expect(model.variants!["high"]).toBeDefined()
     // Should have both the generated thinking config and the custom option
     expect(model.variants!["high"].thinking).toBeDefined()
@@ -1575,7 +1687,7 @@ it.instance(
       provider: {
         anthropic: {
           models: {
-            "claude-sonnet-4-20250514": { variants: { high: { extraOption: "custom-value" } } },
+            "claude-sonnet-4-6": { variants: { high: { extraOption: "custom-value" } } },
           },
         },
       },

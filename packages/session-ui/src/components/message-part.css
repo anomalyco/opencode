@@ -57,8 +57,20 @@
     }
 
     &[data-type="image"] {
-      width: 48px;
-      height: 48px;
+      position: relative;
+      width: 58px;
+      height: 46px;
+      border: none;
+
+      /* inset box-shadows do not paint over <img> content, so the hairline is an overlay */
+      &::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        box-shadow: inset 0 0 0 0.5px var(--v2-border-border-base);
+        pointer-events: none;
+      }
     }
 
     &[data-type="file"] {
@@ -119,10 +131,6 @@
     display: flex;
     flex-direction: column;
     align-items: flex-end;
-  }
-
-  [data-slot="user-message-attachments"] + [data-slot="user-message-body"] {
-    margin-top: 8px;
   }
 
   [data-slot="user-message-text"] {
@@ -1312,9 +1320,62 @@
   }
 }
 
+body[data-new-layout] [data-component="user-message"] {
+  font-weight: 440;
+
+  [data-slot="user-message-text"] {
+    background: var(--v2-background-bg-layer-01);
+  }
+
+  [data-slot="user-message-comments"] {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    width: min(320px, 82%);
+    margin-left: auto;
+
+    &[data-bounded] {
+      width: 318px;
+      max-width: 100%;
+      margin-top: 8px;
+    }
+
+    [data-component="tooltip-v2-trigger"] {
+      width: 100%;
+    }
+
+    [data-component="button-v2"] {
+      font-family: var(--v2-font-family-sans, "Inter", sans-serif);
+      font-weight: 530;
+      font-variation-settings:
+        "wght" 530,
+        "slnt" 0;
+    }
+  }
+
+  [data-slot="user-message-body"] + [data-slot="user-message-attachments"],
+  [data-slot="user-message-comments"] + [data-slot="user-message-attachments"] {
+    margin-top: 8px;
+  }
+
+  [data-slot="user-message-text"][data-comments] {
+    width: 342px;
+    padding-bottom: 12px;
+  }
+}
+
+[data-color-scheme="light"] body[data-new-layout] [data-component="user-message"] [data-slot="user-message-text"] {
+  background: var(--v2-background-bg-layer-02);
+}
+
 body:not([data-new-layout]) {
   [data-component="user-message"] {
     color: var(--text-strong);
+
+    [data-slot="user-message-attachments"] + [data-slot="user-message-body"] {
+      margin-top: 8px;
+    }
 
     [data-slot="user-message-attachment"] {
       background: var(--surface-weak);
@@ -1322,6 +1383,16 @@ body:not([data-new-layout]) {
 
       &:hover {
         border-color: var(--border-strong-base);
+      }
+
+      &[data-type="image"] {
+        width: 48px;
+        height: 48px;
+        border: 1px solid var(--border-weak-base);
+
+        &::after {
+          content: none;
+        }
       }
     }
 
