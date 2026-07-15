@@ -22,6 +22,7 @@ import type { Provider } from "@/provider/provider"
 import { Question } from "@/question"
 import { errorMessage } from "@/util/error"
 import { isRecord } from "@/util/record"
+import { Token } from "@/util/token"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Database } from "@opencode-ai/core/database/database"
 import { Usage, type LLMEvent } from "@opencode-ai/llm"
@@ -410,6 +411,24 @@ const layer = Layer.effect(
               attachments: attachments.length ? attachments : undefined,
             }
             yield* completeToolCall(value.id, output)
+            // Check overflow after large tool outputs to catch context growth early.
+            // Without this, overflow is only detected at step-finish, which can be
+            // too late if a large tool result pushes context past the limit.
+            const outputTokens = Token.estimate(output.output)
+            if (
+              outputTokens > 0 &&
+              !ctx.assistantMessage.summary &&
+              isOverflow({
+                cfg: yield* config.get(),
+                tokens: {
+                  ...ctx.assistantMessage.tokens,
+                  input: ctx.assistantMessage.tokens.input + outputTokens,
+                },
+                model: ctx.model,
+              })
+            ) {
+              ctx.needsCompaction = true
+            }
             return
           }
 
