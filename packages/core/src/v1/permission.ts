@@ -22,7 +22,19 @@ export class DeniedError extends Schema.TaggedErrorClass<DeniedError>()("Permiss
   ruleset: Schema.Any,
 }) {
   override get message() {
-    return `The user has specified a rule which prevents you from using this specific tool call. Here are some of the relevant rules ${JSON.stringify(this.ruleset)}`
+    const rules = this.ruleset
+    const cruise =
+      Array.isArray(rules) &&
+      rules.some((rule) => {
+        if (!rule || typeof rule !== "object") return false
+        if ("action" in rule && rule.action === "cruise_control") return true
+        if ("module" in rule && rule.module === "cruise_control") return true
+        return false
+      })
+    if (cruise) {
+      return `Tool execution is being blocked by a permission rule (cruise_control). Configure permission_modules.cruise_control.model in kancode.json (e.g. opencode/deepseek-v4-flash), or adjust permission rules. Relevant rules: ${JSON.stringify(rules)}`
+    }
+    return `Tool execution is being blocked by a permission rule. Relevant rules: ${JSON.stringify(this.ruleset)}`
   }
 }
 

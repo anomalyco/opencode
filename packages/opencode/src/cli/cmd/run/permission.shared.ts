@@ -92,19 +92,20 @@ export function permissionOptions(stage: PermissionStage): PermissionOption[] {
 export function permissionInfo(request: PermissionRequest): PermissionInfo {
   const pats = patterns(request)
   const input = data(request)
-  const info = toolPermissionInfo(request.permission, input, dict(request.metadata), pats)
+  const meta = dict(request.metadata)
+  const warning = typeof meta.warning === "string" && meta.warning ? [meta.warning] : []
+  const info = toolPermissionInfo(request.permission, input, meta, pats)
   if (info) {
-    return info
+    return warning.length ? { ...info, lines: [...info.lines, ...warning] } : info
   }
 
   if (request.permission === "external_directory") {
-    const meta = dict(request.metadata)
     const raw = text(meta.parentDir) || text(meta.filepath) || pats[0] || ""
     const dir = raw.includes("*") ? raw.slice(0, raw.indexOf("*")).replace(/[\\/]+$/, "") : raw
     return {
       icon: "←",
       title: `Access external directory ${toolPath(dir, { home: true })}`,
-      lines: pats.map((item) => `- ${item}`),
+      lines: [...pats.map((item) => `- ${item}`), ...warning],
     }
   }
 
@@ -112,14 +113,14 @@ export function permissionInfo(request: PermissionRequest): PermissionInfo {
     return {
       icon: "⟳",
       title: "Continue after repeated failures",
-      lines: ["This keeps the session running despite repeated failures."],
+      lines: ["This keeps the session running despite repeated failures.", ...warning],
     }
   }
 
   return {
     icon: "⚙",
     title: `Call tool ${request.permission}`,
-    lines: [`Tool: ${request.permission}`],
+    lines: [`Tool: ${request.permission}`, ...warning],
   }
 }
 

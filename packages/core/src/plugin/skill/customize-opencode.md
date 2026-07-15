@@ -288,9 +288,22 @@ with the permission-module id.
 For smart tool auto-gating (including CruiseControl's defaults), use the built-in
 permission module `cruise_control`: set permission actions to `"cruise_control"` and
 configure `permission_modules.cruise_control.model` (for example
-`opencode/deepseek-v4-flash` or `ollama_cloud/kimi-k2.7-code`). Plugins may register
-additional modules via `permission.registerModule({ id, decide })` (for example
-`puetsua_permit`).
+`opencode/deepseek-v4-flash` or `ollama_cloud/kimi-k2.7-code`). If the model is unset,
+KanCode asks you to approve the tool and shows a warning to configure the model —
+it does not hard-deny. Example:
+
+```json
+{
+  "permission_modules": {
+    "cruise_control": {
+      "model": "opencode/deepseek-v4-flash"
+    }
+  }
+}
+```
+
+Plugins may register additional modules via `permission.registerModule({ id, decide })`
+(for example `puetsua_permit`).
 
 ## Commands
 

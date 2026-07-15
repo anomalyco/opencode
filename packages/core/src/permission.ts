@@ -172,11 +172,11 @@ const layer = Layer.effect(
       if (moduleIDs.size > 0) {
         const modules = yield* EffectRuntime.serviceOption(PermissionModule.Service)
         if (Option.isNone(modules)) {
-          yield* EffectRuntime.logError("permission module service unavailable; denying", {
+          yield* EffectRuntime.logError("permission module service unavailable; asking human", {
             modules: [...moduleIDs],
             permission: input.action,
           })
-          return { effect: "deny" as const, rules: all }
+          return { effect: "ask" as const, rules: all }
         }
         for (const moduleID of moduleIDs) {
           const decision = yield* modules.value.decide({

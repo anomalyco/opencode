@@ -23,13 +23,14 @@ export const Options = Schema.Struct({
     description: "Provider/model ref used to classify tool permissions, e.g. opencode/deepseek-v4-flash",
   }),
   fallback: Fallback.pipe(optional).annotate({
-    description: "Outcome when classification fails or is uncertain (default: deny)",
+    description: "Outcome when classification fails or times out (default: ask)",
   }),
   timeout_ms: Schema.Number.pipe(optional).annotate({
     description: "Classifier deadline in milliseconds (default: 8000)",
   }),
   allowlist: Schema.Array(Schema.String).pipe(optional).annotate({
-    description: "Permission keys the module may auto-allow; empty means no auto-allow",
+    description:
+      "Permission keys the module may auto-allow; omit for built-in defaults, use [] to disable auto-allow",
   }),
   never_auto: Schema.Array(Schema.String).pipe(optional).annotate({
     description: "Permission keys that must never resolve to allow from the module",

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { Effect, Exit, Fiber, Layer } from "effect"
 import { PermissionModule as PermissionModuleSchema } from "@opencode-ai/schema/permission-module"
 import { Permission } from "../../src/permission"
-import { PermissionModule, applySafety, runClassifier } from "../../src/permission/module"
+import { PermissionModule, applySafety, runClassifier, MISSING_MODEL_MESSAGE } from "../../src/permission/module"
 import { EventV2Bridge } from "../../src/event-v2-bridge"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { InstanceBootstrap } from "../../src/project/bootstrap"
@@ -13,6 +13,9 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { ConfigPermissionV1 } from "@opencode-ai/core/v1/config/permission"
 import { ConfigMigrateV1 } from "@opencode-ai/core/v1/config/migrate"
+import { Config } from "../../src/config/config"
+import { Provider } from "../../src/provider/provider"
+import { TestConfig } from "../fixture/config"
 
 const noopBootstrap = Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void }))
 
@@ -175,6 +178,67 @@ itAsk.instance("cruise_control ask publishes pending request", () =>
   }),
 )
 
+const missingModelEnv = AppNodeBuilder.build(
+  LayerNode.group([
+    Permission.node,
+    PermissionModule.node,
+    EventV2Bridge.node,
+    CrossSpawnSpawner.node,
+    InstanceStore.node,
+  ]),
+  [
+    [InstanceStore.bootstrapNode, noopBootstrap],
+    [Config.node, TestConfig.layer()],
+    [Provider.node, Layer.mock(Provider.Service, {})],
+  ],
+)
+
+const itMissingModel = testEffect(missingModelEnv)
+
+itMissingModel.instance("missing cruise_control model asks with configure warning", () =>
+  Effect.gen(function* () {
+    const modules = yield* PermissionModule.Service
+    expect(
+      yield* modules.decide({
+        moduleID: PermissionModuleSchema.CRUISE_CONTROL,
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: {},
+      }),
+    ).toBe("ask")
+
+    const permission = yield* Permission.Service
+    const fiber = yield* permission
+      .ask({
+        sessionID: SessionID.make("ses_module_missing_model"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: {},
+        always: ["ls"],
+        ruleset: Permission.fromConfig({ "*": PermissionModuleSchema.CRUISE_CONTROL }),
+      })
+      .pipe(Effect.forkChild)
+
+    const pending = yield* Effect.gen(function* () {
+      while (true) {
+        const list = yield* permission.list()
+        if (list.length === 1) return list
+        yield* Effect.sleep("10 millis")
+      }
+    }).pipe(
+      Effect.timeoutOrElse({
+        duration: "1 second",
+        orElse: () => Effect.fail(new Error("timed out waiting for pending ask")),
+      }),
+    )
+
+    expect(pending[0]?.permission).toBe("bash")
+    expect(pending[0]?.metadata?.warning).toBe(MISSING_MODEL_MESSAGE)
+    yield* permission.reply({ requestID: pending[0]!.id, reply: "once" })
+    yield* Fiber.join(fiber)
+  }),
+)
+
 describe("classifier contract", () => {
   test("valid allow passes allowlist safety", () => {
     expect(
@@ -185,8 +249,16 @@ describe("classifier contract", () => {
     ).toBe("allow")
   })
 
-  test("valid allow without allowlist falls back", () => {
-    expect(applySafety("allow", "bash", { fallback: "ask", allowlist: [] })).toBe("ask")
+  test("valid allow without allowlist asks instead of denying", () => {
+    expect(applySafety("allow", "bash", { fallback: "deny", allowlist: [] })).toBe("ask")
+  })
+
+  test("omitted allowlist uses defaults and can auto-allow bash", () => {
+    expect(applySafety("allow", "bash", { fallback: "deny" })).toBe("allow")
+  })
+
+  test("never_auto escalates allow to ask", () => {
+    expect(applySafety("allow", "external_directory", { allowlist: ["external_directory"] })).toBe("ask")
   })
 
   test("valid allow from classifier", async () => {
@@ -226,5 +298,18 @@ describe("classifier contract", () => {
       }),
     )
     expect(decision).toBe("deny")
+  })
+
+  test("timeout defaults to ask when fallback unset", async () => {
+    const decision = await Effect.runPromise(
+      runClassifier({
+        permission: "bash",
+        patterns: ["ls"],
+        opts: { allowlist: ["bash"], timeout_ms: 20 },
+        classify: Effect.sleep("1 second").pipe(Effect.as({ decision: "allow" as const, reason: "late" })),
+        modelRef: "opencode/deepseek-v4-flash",
+      }),
+    )
+    expect(decision).toBe("ask")
   })
 })

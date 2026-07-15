@@ -7,7 +7,9 @@ import * as Option from "effect/Option"
 import os from "os"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { EventV2Bridge } from "@/event-v2-bridge"
-import { PermissionModule } from "@/permission/module"
+import { PermissionModule, MISSING_MODEL_MESSAGE } from "@/permission/module"
+import { PermissionModule as PermissionModuleSchema } from "@opencode-ai/schema/permission-module"
+import { Config } from "@/config/config"
 
 export const Event = PermissionV1.Event
 
@@ -71,6 +73,7 @@ const layer = Layer.effect(
       const { ruleset, ...request } = input
       let needsAsk = false
       const moduleIDs = new Set<string>()
+      let metadata = request.metadata
 
       for (const pattern of request.patterns) {
         const rule = evaluate(request.permission, pattern, ruleset, approved)
@@ -91,29 +94,52 @@ const layer = Layer.effect(
       if (moduleIDs.size > 0) {
         const modules = yield* Effect.serviceOption(PermissionModule.Service)
         if (Option.isNone(modules)) {
-          yield* Effect.logError("permission module service unavailable; denying", {
+          yield* Effect.logError("permission module service unavailable; asking human", {
             modules: [...moduleIDs],
             permission: request.permission,
           })
-          return yield* new PermissionV1.DeniedError({
-            ruleset: ruleset.filter((rule) => Wildcard.match(request.permission, rule.permission)),
-          })
-        }
-
-        const module = modules.value
-        for (const moduleID of moduleIDs) {
-          const decision = yield* module.decide({
-            moduleID,
-            permission: request.permission,
-            patterns: request.patterns,
-            metadata: request.metadata,
-          })
-          if (decision === "deny") {
-            return yield* new PermissionV1.DeniedError({
-              ruleset: ruleset.filter((rule) => Wildcard.match(request.permission, rule.permission)),
-            })
+          needsAsk = true
+          metadata = {
+            ...metadata,
+            warning:
+              "Permission module service unavailable; approve manually or restart KanCode. If using cruise_control, also set permission_modules.cruise_control.model.",
           }
-          if (decision === "ask") needsAsk = true
+        } else {
+          const module = modules.value
+          for (const moduleID of moduleIDs) {
+            const decision = yield* module.decide({
+              moduleID,
+              permission: request.permission,
+              patterns: request.patterns,
+              metadata: request.metadata,
+            })
+            if (decision === "deny") {
+              return yield* new PermissionV1.DeniedError({
+                ruleset: ruleset.filter((rule) => Wildcard.match(request.permission, rule.permission)),
+              })
+            }
+            if (decision === "ask") {
+              needsAsk = true
+              if (moduleID === PermissionModuleSchema.CRUISE_CONTROL) {
+                const config = yield* Effect.serviceOption(Config.Service)
+                if (Option.isSome(config)) {
+                  const cfg = yield* config.value.get()
+                  const modelRef = cfg.permission_modules?.[PermissionModuleSchema.CRUISE_CONTROL]?.model?.trim()
+                  if (!modelRef) {
+                    metadata = {
+                      ...metadata,
+                      warning: MISSING_MODEL_MESSAGE,
+                    }
+                  }
+                } else {
+                  metadata = {
+                    ...metadata,
+                    warning: MISSING_MODEL_MESSAGE,
+                  }
+                }
+              }
+            }
+          }
         }
       }
 
@@ -125,7 +151,7 @@ const layer = Layer.effect(
         sessionID: request.sessionID,
         permission: request.permission,
         patterns: request.patterns,
-        metadata: request.metadata,
+        metadata,
         always: request.always,
         tool: request.tool,
       }
