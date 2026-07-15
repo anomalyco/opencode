@@ -143,3 +143,79 @@ which ships with Windows 10/11 and is the minimum supported version (`#Requires
 All string-keyed hash tables use plain string literals. The installer avoids
 syntax that would require PowerShell 6+ (`ForEach-Object -Parallel`, ternary
 operators, `||`/`&&` pipeline chain operators).
+
+---
+
+## 6. Desktop App Install (`-Desktop` Flag)
+
+When the `-Desktop` switch is passed, the installer adds an extra phase after
+the standard CLI installation to set up the Electron desktop app:
+
+### Flow
+
+```
+Main (with -Desktop)
+  ├── Run all 7 standard phases (CLI install)
+  ├── 8. Download NSIS installer
+  │     ├── opencode-desktop-win-x64.exe from GitHub or Nextcloud mirror
+  │     └── Small-file guard (> 1000 bytes)
+  ├── 9. Run NSIS installer silently
+  │     └── opencode-desktop-win-x64.exe /S
+  └── 10. Create desktop shortcut
+        ├── Sets working directory to %LOCALAPPDATA%\opencode\bin\
+        └── Targets opencode.exe for CLI-quick-launch
+```
+
+### NSIS installer
+
+The `opencode-desktop-win-x64.exe` is a Nullsoft Scriptable Install System
+package (~122 MB) that installs the Electron desktop app bundle. It runs
+completely silently (`/S`) when invoked by the installer.
+
+### Shortcut creation
+
+After the NSIS install completes, the installer creates a desktop shortcut:
+- **Name**: `OpenCode.lnk`
+- **Target**: `%LOCALAPPDATA%\opencode\bin\opencode.exe`
+- **Working directory**: `%LOCALAPPDATA%\opencode\bin\`
+
+If the shortcut already exists (re-install), it is overwritten silently.
+
+---
+
+## 7. `install.bat` — Double-click Wrapper
+
+`install.bat` is a lightweight batch file (398 B) that provides double-click
+installation without needing to open PowerShell manually.
+
+### How it works
+
+```
+install.bat
+  ├── Check if install.ps1 exists locally
+  │     ├── YES → run it with powershell -ExecutionPolicy Bypass -File
+  │     └── NO  → download from GitHub, then run
+  ├── Auto-detect -Desktop mode
+  │     ├── If script name ends in -desktop (install-desktop.bat) → pass -Desktop
+  │     └── If install-desktop.ps1 exists next to it → pass -Desktop
+  └── Exit with the PowerShell process exit code
+```
+
+### Supported filenames
+
+| Filename | Behavior |
+|----------|----------|
+| `install.bat` | CLI-only install |
+| `install-desktop.bat` | CLI + Desktop install (auto `-Desktop`) |
+
+### `uninstall.bat`
+
+Same pattern as `install.bat` — downloads `uninstall.ps1` if missing, then
+executes it. Supports `-RemoveEngram` passthrough.
+
+### No-local-files guarantee
+
+Neither `.bat` ships the `.ps1` in the repository. They always download it on
+first run, ensuring the user always gets the latest installer logic without
+needing to update the batch file. On subsequent runs the cached `.ps1` is used
+unless deleted.

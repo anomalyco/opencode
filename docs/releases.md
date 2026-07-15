@@ -32,6 +32,7 @@ gh release create vX.Y.Z \
 | `install.bat` | 398 B | Wrapper para doble-click (invoca `install.ps1` con `-ExecutionPolicy Bypass`) |
 | `opencode_X.Y.Z_windows_amd64.zip` | ~55 MB | Binario CLI compilado para Windows x64 |
 | `uninstall.ps1` | ~6 KB | Desinstalador: limpia binarios, config, PATH, accesos directos. Backup automático de Engram antes de borrar. |
+| `opencode-desktop-win-x64.exe` | ~122 MB | NSIS desktop app installer |
 
 ---
 
@@ -51,7 +52,7 @@ gh release create vX.Y.Z \
 | v1.0.9 | Fix: mirror Nextcloud usa WebDAV + auth, timeout de descarga 300s. Probado en Windows real |
 | v1.0.10 | Auto-clean orphaned shortcuts: remove broken `OpenCode*.lnk` from Desktop, Start Menu, and Taskbar on install |
 | v1.0.11 | Create desktop shortcut after install |
-| v1.0.12 | Add `uninstall.ps1` for complete system cleanup (binaries, config, PATH, shortcuts) |
+| v1.0.12 | Full Windows desktop app (`-Desktop` flag), NSIS installer (`opencode-desktop-win-x64.exe`), `install.bat` wrapper that downloads `install.ps1` on demand, `uninstall.bat` wrapper that downloads `uninstall.ps1`, UTF-8 BOM fix for PS 5.1, desktop shortcut creation after install, complete uninstaller for binaries/config/PATH/shortcuts |
 
 ---
 

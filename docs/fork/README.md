@@ -18,9 +18,31 @@ Instalación en un paso en Windows: opencode + gentle-ai + skills + Engram. Cero
 
 ## Instalación
 
+### CLI + Desktop App
+
 ```powershell
+# CLI only
 irm https://github.com/ivanfernadezm99/opencode/releases/latest/download/install.ps1 | iex
+
+# CLI + Desktop app (descarga e instala el NSIS installer)
+irm https://github.com/ivanfernadezm99/opencode/releases/latest/download/install.ps1 | iex -Desktop
 ```
+
+### Doble-click (sin PowerShell)
+
+`install.bat` — descarga `install.ps1` automáticamente si no está presente localmente y lo ejecuta. Si `install.bat` se llama `install-desktop.bat`, o si existe `install-desktop.ps1` al lado, pasa `-Desktop` automáticamente.
+
+### Desinstalación
+
+```powershell
+# Desde PowerShell (preserva Engram)
+irm https://github.com/ivanfernadezm99/opencode/releases/latest/download/uninstall.ps1 | iex
+
+# Doble-click
+uninstall.bat
+```
+
+Ambos `.bat` wrappers (`install.bat`, `uninstall.bat`) descargan el `.ps1` correspondiente de GitHub si no existe localmente, lo que permite funcionar sin descarga previa.
 
 ## Documentación
 

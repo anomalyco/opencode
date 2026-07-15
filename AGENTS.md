@@ -164,6 +164,4 @@ const table = sqliteTable("session", {
 - Keep EventV2 replay owner claims separate from clustered Session execution ownership.
 - Keep the System Context algebra, registry, and built-ins in `src/system-context`; keep Context Source producers with their observed domains, and keep Session History selection plus Context Epoch persistence Session-owned.
 
-## Fork: gentle-opencode
-
-Este fork se distribuye con gentle-ai integrado. Ver [docs/fork/README.md](docs/fork/README.md).
+## Fork: gentle-opencode — Ver [docs/fork/README.md](docs/fork/README.md).
