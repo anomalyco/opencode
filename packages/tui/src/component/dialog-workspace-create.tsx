@@ -242,7 +242,7 @@ export function DialogWorkspaceSelect(props: {
       await project.sync().catch(() => undefined)
       route.navigate({ type: "home" })
     }
-    await project.workspace.sync()
+    await project.workspace.sync().catch(() => undefined)
     await project.sync().catch(() => undefined)
     setRemoving(undefined)
   }
