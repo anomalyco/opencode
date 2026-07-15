@@ -17,6 +17,7 @@ Implementation checklist:
 - [x] Add OpenTUI UI state extraction for screen, focus, elements, and generated actions.
 - [x] Add OpenTUI UI action execution for typing, keys, enter, arrows, focus, and click.
 - [x] Add reusable JSON-RPC WebSocket server at the manifest's UI endpoint.
+- [x] Add `simulation.handshake` protocol, role, identity, version, and capability negotiation to both control endpoints.
 - [x] Expose `ui.state`, `ui.action`, `ui.render`.
 - [x] Expose `trace.list`, `trace.clear`, `trace.export`.
 - [x] Wire visible V1/full-TUI renderer path through the same action protocol.

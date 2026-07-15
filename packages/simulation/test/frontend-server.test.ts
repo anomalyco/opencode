@@ -19,6 +19,30 @@ test("scopes the frontend control server and reports malformed JSON", async () =
           Queue.offerUnsafe(messages, JSON.parse(String(event.data)))
         })
 
+        socket.send(
+          JSON.stringify({
+            jsonrpc: "2.0",
+            id: 0,
+            method: "simulation.handshake",
+            params: {
+              client: { name: "test", version: "test" },
+              expectedRole: "ui",
+              offeredVersions: [1],
+              requiredCapabilities: ["ui.state"],
+              optionalCapabilities: [],
+            },
+          }),
+        )
+        expect(yield* Queue.take(messages)).toMatchObject({
+          id: 0,
+          result: {
+            protocolVersion: 1,
+            role: "ui",
+            server: { name: "opencode", version: expect.any(String) },
+            capabilities: expect.arrayContaining(["ui.state", "ui.capture"]),
+          },
+        })
+
         socket.send(JSON.stringify({ jsonrpc: "2.0", id: 1, method: "ui.state" }))
         expect(yield* Queue.take(messages)).toMatchObject({
           id: 1,

@@ -7,6 +7,30 @@ import { availableEndpoint, connect } from "./fixture/websocket"
 test("streams a Drive-controlled provider response and removes the finished invocation", async () => {
   await runProvider((provider, socket, messages) =>
     Effect.gen(function* () {
+      socket.send(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: 0,
+          method: "simulation.handshake",
+          params: {
+            client: { name: "test", version: "test" },
+            expectedRole: "backend",
+            offeredVersions: [1],
+            requiredCapabilities: ["llm.attach", "llm.request"],
+            optionalCapabilities: [],
+          },
+        }),
+      )
+      expect(yield* Queue.take(messages)).toMatchObject({
+        id: 0,
+        result: {
+          protocolVersion: 1,
+          role: "backend",
+          server: { name: "opencode", version: expect.any(String) },
+          capabilities: expect.arrayContaining(["llm.attach", "llm.request"]),
+        },
+      })
+
       socket.send("{")
       expect(yield* Queue.take(messages)).toMatchObject({ id: null, error: { code: -32000 } })
       yield* attach(socket, messages)

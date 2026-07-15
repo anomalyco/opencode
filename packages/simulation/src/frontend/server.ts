@@ -1,3 +1,4 @@
+import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { Effect } from "effect"
 import { SimulationControlServer } from "../control-server"
 import { SimulationProtocol } from "../protocol"
@@ -6,6 +7,15 @@ import { SimulationRenderer } from "./renderer"
 
 function handle(harness: Harness, request: SimulationProtocol.Frontend.Request) {
   switch (request.method) {
+    case "simulation.handshake":
+      return SimulationProtocol.Handshake.dispatch(
+        {
+          role: "ui",
+          server: { name: "opencode", version: InstallationVersion },
+          capabilities: SimulationProtocol.Frontend.Capabilities,
+        },
+        request.params,
+      )
     case "ui.capture":
       return SimulationActions.capture(harness)
     case "ui.screenshot":

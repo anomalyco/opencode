@@ -48,7 +48,134 @@ export namespace JsonRpc {
   }
 }
 
+export namespace Handshake {
+  export const ProtocolVersion = Schema.Literal(1)
+  export type ProtocolVersion = Schema.Schema.Type<typeof ProtocolVersion>
+
+  export const Capability = Schema.String
+  export type Capability = Schema.Schema.Type<typeof Capability>
+
+  export const EndpointRole = Schema.Literals(["ui", "backend"])
+  export type EndpointRole = Schema.Schema.Type<typeof EndpointRole>
+
+  export const Identity = Schema.Struct({
+    name: Schema.String,
+    version: Schema.String,
+  })
+  export interface Identity extends Schema.Schema.Type<typeof Identity> {}
+
+  export const Params = Schema.Struct({
+    client: Identity,
+    expectedRole: EndpointRole,
+    offeredVersions: Schema.Array(Schema.Number),
+    requiredCapabilities: Schema.Array(Capability),
+    optionalCapabilities: Schema.Array(Capability),
+  })
+  export interface Params extends Schema.Schema.Type<typeof Params> {}
+
+  export const Response = Schema.Struct({
+    protocolVersion: ProtocolVersion,
+    role: EndpointRole,
+    server: Identity,
+    capabilities: Schema.Array(Capability),
+  })
+  export interface Response extends Schema.Schema.Type<typeof Response> {}
+
+  export const Request = Schema.Struct({
+    ...JsonRpc.RequestFields,
+    method: Schema.Literal("simulation.handshake"),
+    params: Params,
+  })
+  export interface Request extends Schema.Schema.Type<typeof Request> {}
+
+  export interface DispatchAction {
+    readonly role: EndpointRole
+    readonly server: Identity
+    readonly capabilities: ReadonlyArray<Capability>
+  }
+
+  export class RoleMismatchError extends Schema.TaggedErrorClass<RoleMismatchError>()(
+    "SimulationHandshake.RoleMismatchError",
+    {
+      expected: EndpointRole,
+      actual: EndpointRole,
+      message: Schema.String,
+    },
+  ) {}
+
+  export class UnsupportedProtocolError extends Schema.TaggedErrorClass<UnsupportedProtocolError>()(
+    "SimulationHandshake.UnsupportedProtocolError",
+    {
+      offered: Schema.Array(Schema.Number),
+      supported: Schema.Array(ProtocolVersion),
+      message: Schema.String,
+    },
+  ) {}
+
+  export class MissingCapabilityError extends Schema.TaggedErrorClass<MissingCapabilityError>()(
+    "SimulationHandshake.MissingCapabilityError",
+    {
+      missing: Schema.Array(Capability),
+      message: Schema.String,
+    },
+  ) {}
+
+  export function dispatch(action: DispatchAction, params: Params) {
+    return Effect.gen(function* () {
+      if (params.expectedRole !== action.role) {
+        return yield* Effect.fail(
+          new RoleMismatchError({
+            expected: params.expectedRole,
+            actual: action.role,
+            message: `Expected simulation endpoint role ${params.expectedRole}, received ${action.role}`,
+          }),
+        )
+      }
+      if (!params.offeredVersions.includes(1)) {
+        return yield* Effect.fail(
+          new UnsupportedProtocolError({
+            offered: params.offeredVersions,
+            supported: [1],
+            message: "No mutually supported simulation protocol version",
+          }),
+        )
+      }
+      const installed = new Set(action.capabilities)
+      const missing = params.requiredCapabilities.filter((capability) => !installed.has(capability))
+      if (missing.length > 0) {
+        return yield* Effect.fail(
+          new MissingCapabilityError({
+            missing,
+            message: `Simulation endpoint is missing required capabilities: ${missing.join(", ")}`,
+          }),
+        )
+      }
+      return {
+        protocolVersion: 1,
+        role: action.role,
+        server: action.server,
+        capabilities: Array.from(installed),
+      } satisfies Response
+    })
+  }
+}
+
 export namespace Frontend {
+  export const Capabilities = [
+    "ui.type",
+    "ui.press",
+    "ui.enter",
+    "ui.arrow",
+    "ui.focus",
+    "ui.click",
+    "ui.resize",
+    "ui.matches",
+    "ui.screenshot",
+    "ui.state",
+    "ui.capture",
+    "ui.recording.finish",
+  ] as const satisfies ReadonlyArray<Handshake.Capability>
+
   export const KeyModifiers = Schema.Struct({
     ctrl: Schema.optional(Schema.Boolean),
     shift: Schema.optional(Schema.Boolean),
@@ -149,6 +276,7 @@ export namespace Frontend {
   export interface ResizeParams extends Schema.Schema.Type<typeof ResizeParams> {}
 
   export const Request = Schema.Union([
+    Handshake.Request,
     Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("ui.type"), params: TypeParams }),
     Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("ui.press"), params: PressParams }),
     Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("ui.arrow"), params: ArrowParams }),
@@ -173,6 +301,15 @@ export namespace Frontend {
 }
 
 export namespace Backend {
+  export const Capabilities = [
+    "llm.attach",
+    "llm.chunk",
+    "llm.finish",
+    "llm.disconnect",
+    "llm.pending",
+    "llm.request",
+  ] as const satisfies ReadonlyArray<Handshake.Capability>
+
   export const Item = Schema.Union([
     Schema.Struct({ type: Schema.Literal("textDelta"), text: Schema.String }),
     Schema.Struct({ type: Schema.Literal("reasoningDelta"), text: Schema.String }),
@@ -203,6 +340,7 @@ export namespace Backend {
   export interface DisconnectParams extends Schema.Schema.Type<typeof DisconnectParams> {}
 
   export const Request = Schema.Union([
+    Handshake.Request,
     Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("llm.chunk"), params: ChunkParams }),
     Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("llm.finish"), params: FinishParams }),
     Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("llm.disconnect"), params: DisconnectParams }),

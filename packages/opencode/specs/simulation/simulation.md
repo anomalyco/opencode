@@ -69,6 +69,7 @@ This is important because the frontend has direct access to the renderer, screen
 Protocol:
 
 - JSON-RPC 2.0 over WebSocket.
+- Clients negotiate protocol version, endpoint role, and capabilities with `simulation.handshake` before using endpoint methods.
 - Loopback only.
 - `OPENCODE_DRIVE` names a manifest in the opencode-drive registry, or is `1` for the unnamed default endpoints.
 - The manifest supplies exact loopback `ui` and `backend` WebSocket endpoints.
@@ -76,6 +77,42 @@ Protocol:
 - External drivers connect to both WebSockets when they need UI and backend controls.
 
 The app should not send JSON-RPC requests back to the driver in the first milestone. The driver sends requests; the app responds and emits notifications/events as useful.
+
+The canonical handshake request is:
+
+```ts
+{
+  jsonrpc: "2.0"
+  id: string | number | null
+  method: "simulation.handshake"
+  params: {
+    client: {
+      name: string
+      version: string
+    }
+    expectedRole: "ui" | "backend"
+    offeredVersions: Array<number>
+    requiredCapabilities: Array<string>
+    optionalCapabilities: Array<string>
+  }
+}
+```
+
+The response result is:
+
+```ts
+{
+  protocolVersion: 1
+  role: "ui" | "backend"
+  server: {
+    name: string
+    version: string
+  }
+  capabilities: Array<string>
+}
+```
+
+Capabilities are open strings. Each endpoint advertises only methods and notifications it actually implements. A role mismatch, no supported offered protocol version, or a missing required capability fails the request; unsupported optional capabilities do not.
 
 Initial method groups:
 

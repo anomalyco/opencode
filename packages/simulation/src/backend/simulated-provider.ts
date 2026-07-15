@@ -1,3 +1,4 @@
+import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { Cause, Context, Effect, Fiber, FiberSet, Layer, PubSub, Queue, Ref, Schema, Semaphore, Stream } from "effect"
 import { SimulationControlServer } from "../control-server"
 import { SimulationProtocol } from "../protocol"
@@ -211,6 +212,15 @@ function handle(
   request: SimulationProtocol.Backend.Request,
 ) {
   switch (request.method) {
+    case "simulation.handshake":
+      return SimulationProtocol.Handshake.dispatch(
+        {
+          role: "backend",
+          server: { name: "opencode", version: InstallationVersion },
+          capabilities: SimulationProtocol.Backend.Capabilities,
+        },
+        request.params,
+      )
     case "llm.attach":
       return controllerLock.withPermit(
         Effect.gen(function* () {
