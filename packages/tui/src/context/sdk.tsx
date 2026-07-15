@@ -94,7 +94,10 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
 
           // Start syncing workspaces, it's important to do this after
           // we've started listening to events
-          await sdk.sync.start().catch(() => {})
+          await Promise.race([
+            sdk.sync.start(),
+            new Promise((_, reject) => setTimeout(() => reject(new Error("sync.start timeout")), 10_000)),
+          ]).catch(() => {})
 
           for await (const event of events.stream) {
             if (ctrl.signal.aborted) break
@@ -120,7 +123,10 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
 
         // Start syncing workspaces, it's important to do this after
         // we've started listening to events
-        await sdk.sync.start().catch(() => {})
+        await Promise.race([
+          sdk.sync.start(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("sync.start timeout")), 10_000)),
+        ]).catch(() => {})
       } else {
         startSSE()
       }
