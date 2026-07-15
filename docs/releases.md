@@ -31,7 +31,7 @@ gh release create vX.Y.Z \
 | `install.ps1` | ~17 KB | Instalador PowerShell (detecta prerequisitos, usa winget si faltan) |
 | `install.bat` | 398 B | Wrapper para doble-click (invoca `install.ps1` con `-ExecutionPolicy Bypass`) |
 | `opencode_X.Y.Z_windows_amd64.zip` | ~55 MB | Binario CLI compilado para Windows x64 |
-| `uninstall.ps1` | ~6 KB | Desinstalador PowerShell (limpia binarios, config, PATH, accesos directos) |
+| `uninstall.ps1` | ~6 KB | Desinstalador: limpia binarios, config, PATH, accesos directos. Backup automático de Engram antes de borrar. |
 
 ---
 
@@ -58,5 +58,32 @@ gh release create vX.Y.Z \
 ## Quick Links
 
 - **GitHub Releases**: <https://github.com/ivanfernadezm99/opencode/releases>
-- **Nextcloud mirror** (descarga pública): <https://enlaceschacocloud.duckdns.org/s/ojAcbHDQBTX97oD>
+- **Nextcloud mirror**: <https://enlaceschacocloud.duckdns.org/s/ojAcbHDQBTX97oD>
 - **Sync script**: `./scripts/sync-to-nextcloud.sh`
+
+---
+
+## Uninstaller
+
+El `uninstall.ps1` deja la máquina completamente limpia:
+
+| Componente | Acción |
+|---|---|
+| `%LOCALAPPDATA%\opencode\` | Borrado |
+| `%LOCALAPPDATA%\gentle-ai\` | Borrado |
+| `~\.config\opencode\` | Borrado |
+| `%APPDATA%\ai.opencode.desktop.dev\` | Borrado |
+| Accesos directos | Borrados |
+| PATH entries | Limpiados |
+| `~\.engram\engram.db` | **Backup automático** antes de borrar (solo con `-RemoveEngram`) |
+
+```powershell
+# Instalar
+irm https://github.com/ivanfernadezm99/opencode/releases/latest/download/install.ps1 | iex
+
+# Desinstalar (preserva Engram)
+irm https://github.com/ivanfernadezm99/opencode/releases/latest/download/uninstall.ps1 | iex
+
+# Desinstalar TODO incluido Engram (con backup)
+.\uninstall.ps1 -RemoveEngram
+```
