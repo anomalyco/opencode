@@ -42,7 +42,7 @@ export const DEFAULT_ALLOWLIST = [
 ] as const
 
 export const MISSING_MODEL_MESSAGE =
-  "cruise_control classifier model is unset. Use /cruise-control-model or set permission_modules.cruise_control.model in kancode.json (e.g. opencode/deepseek-v4-flash or ollama_cloud/kimi-k2.7-code), then retry."
+  "cruise_control model unset. Run /cruise-control-model, then retry."
 
 const SYSTEM = `You are KanCode cruise_control, a permission classifier.
 Decide whether a pending tool permission should be allowed, denied, or escalated to the human (ask).

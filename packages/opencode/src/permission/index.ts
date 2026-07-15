@@ -102,7 +102,7 @@ const layer = Layer.effect(
           metadata = {
             ...metadata,
             warning:
-              "Permission module service unavailable; approve manually or restart KanCode. If using cruise_control, also set permission_modules.cruise_control.model.",
+              "Permission module service unavailable; approve manually or restart KanCode. If using cruise_control, run /cruise-control-model.",
           }
         } else {
           const module = modules.value

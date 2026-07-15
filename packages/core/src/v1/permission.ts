@@ -32,7 +32,7 @@ export class DeniedError extends Schema.TaggedErrorClass<DeniedError>()("Permiss
         return false
       })
     if (cruise) {
-      return `Tool execution is being blocked by a permission rule (cruise_control). Configure permission_modules.cruise_control.model in kancode.json (e.g. opencode/deepseek-v4-flash), or adjust permission rules. Relevant rules: ${JSON.stringify(rules)}`
+      return `Tool execution is being blocked by a permission rule (cruise_control). Run /cruise-control-model or adjust permission rules. Relevant rules: ${JSON.stringify(rules)}`
     }
     return `Tool execution is being blocked by a permission rule. Relevant rules: ${JSON.stringify(this.ruleset)}`
   }
