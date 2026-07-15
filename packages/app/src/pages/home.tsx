@@ -5,6 +5,7 @@ import {
   createMemo,
   createResource,
   createRoot,
+  createSignal,
   For,
   Match,
   on,
@@ -287,6 +288,8 @@ export function NewHome() {
   const openSettings = useSettingsCommand()
   let focusSessionSearch: (() => void) | undefined
   let sessionViewport: HTMLDivElement | undefined
+  const [sessionThumbTrack, setSessionThumbTrack] = createSignal<HTMLDivElement>()
+  const [sessionHoverTarget, setSessionHoverTarget] = createSignal<HTMLElement>()
   const [state, setState] = createStore({
     search: "",
     searchFocused: false,
@@ -589,6 +592,8 @@ export function NewHome() {
     <div class="rounded-[10px] shadow-[var(--v2-elevation-raised)] m-2 min-h-0 overflow-hidden bg-v2-background-bg-base self-stretch flex-1">
       <ScrollView
         class="h-full [container-type:size]"
+        thumbContainer={sessionThumbTrack}
+        thumbHoverTarget={sessionHoverTarget}
         viewportRef={(el) => {
           sessionViewport = el
           sessionHeaderOpacity.setViewport(el)
@@ -638,6 +643,7 @@ export function NewHome() {
           />
 
           <section
+            ref={setSessionHoverTarget}
             class="min-h-0 min-w-0 flex-1 flex flex-col"
             aria-label={language.t("sidebar.project.recentSessions")}
           >
@@ -673,6 +679,14 @@ export function NewHome() {
                   </ButtonV2>
                 </div>
               </Show>
+            </div>
+            {/* Sticky chrome for the portaled session scrollbar — matches old sessions ScrollView bounds */}
+            <div class="pointer-events-none sticky top-[84px] z-40 h-0 -mr-3 lg:top-[108px]">
+              <div
+                ref={setSessionThumbTrack}
+                data-component="home-session-scroll-track"
+                class="relative ml-auto h-[calc(100cqh-84px)] w-3 lg:h-[calc(100cqh-108px)]"
+              />
             </div>
             <div class="-mr-3 min-h-[calc(100cqh-72px)] lg:min-h-[calc(100cqh-96px)]">
               <Show

@@ -27,6 +27,7 @@
   transition: opacity 200ms ease;
   cursor: default;
   user-select: none;
+  pointer-events: auto;
   opacity: 0;
 }
 
