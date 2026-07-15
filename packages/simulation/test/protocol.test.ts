@@ -50,6 +50,33 @@ describe("simulation.handshake", () => {
     })
   })
 
+  test("rejects invalid version and capability declarations", () => {
+    const request = {
+      jsonrpc: "2.0" as const,
+      id: 1,
+      method: "simulation.handshake" as const,
+      params,
+    }
+    expect(() =>
+      Frontend.decodeRequest({
+        ...request,
+        params: { ...params, offeredVersions: [] },
+      }),
+    ).toThrow()
+    expect(() =>
+      Frontend.decodeRequest({
+        ...request,
+        params: { ...params, requiredCapabilities: ["ui.state", "ui.state"] },
+      }),
+    ).toThrow()
+    expect(() =>
+      Frontend.decodeRequest({
+        ...request,
+        params: { ...params, optionalCapabilities: [""] },
+      }),
+    ).toThrow()
+  })
+
   test("selects the protocol and advertises only installed capabilities", async () => {
     await expect(Effect.runPromise(Handshake.dispatch(ui, params))).resolves.toEqual({
       protocolVersion: 1,

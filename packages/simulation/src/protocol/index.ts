@@ -52,24 +52,26 @@ export namespace Handshake {
   export const ProtocolVersion = Schema.Literal(1)
   export type ProtocolVersion = Schema.Schema.Type<typeof ProtocolVersion>
 
-  export const Capability = Schema.String
+  export const Capability = Schema.NonEmptyString
   export type Capability = Schema.Schema.Type<typeof Capability>
 
   export const EndpointRole = Schema.Literals(["ui", "backend"])
   export type EndpointRole = Schema.Schema.Type<typeof EndpointRole>
 
   export const Identity = Schema.Struct({
-    name: Schema.String,
-    version: Schema.String,
+    name: Schema.NonEmptyString,
+    version: Schema.NonEmptyString,
   })
   export interface Identity extends Schema.Schema.Type<typeof Identity> {}
 
   export const Params = Schema.Struct({
     client: Identity,
     expectedRole: EndpointRole,
-    offeredVersions: Schema.Array(Schema.Number),
-    requiredCapabilities: Schema.Array(Capability),
-    optionalCapabilities: Schema.Array(Capability),
+    offeredVersions: Schema.Array(
+      Schema.Int.check(Schema.isGreaterThan(0)),
+    ).check(Schema.isMinLength(1), Schema.isUnique()),
+    requiredCapabilities: Schema.Array(Capability).check(Schema.isUnique()),
+    optionalCapabilities: Schema.Array(Capability).check(Schema.isUnique()),
   })
   export interface Params extends Schema.Schema.Type<typeof Params> {}
 
