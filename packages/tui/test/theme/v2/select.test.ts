@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
-import type { HueDefinition, ThemeDefinition, ThemeFile } from "./index"
-import { selectTheme, selectThemeMode } from "./select"
+import type { HueDefinition, ThemeDefinition, ThemeFile } from "../../../src/theme/v2"
+import { selectTheme, selectThemeMode } from "../../../src/theme/v2/select"
 
 const hue = {} as HueDefinition
 const light = { hue, color: { text: { default: "#111111", subdued: "#222222" } } } satisfies ThemeDefinition

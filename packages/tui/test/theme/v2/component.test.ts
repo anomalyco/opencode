@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test"
 import { createSignal } from "solid-js"
-import { createComponentTheme } from "./component"
-import { DEFAULT_THEME } from "./defaults"
-import { resolveTheme } from "./resolve"
-import { selectTheme } from "./select"
-import type { ContextKey } from "./index"
+import { createComponentTheme } from "../../../src/theme/v2/component"
+import { DEFAULT_THEME } from "../../../src/theme/v2/defaults"
+import { resolveTheme } from "../../../src/theme/v2/resolve"
+import { selectTheme } from "../../../src/theme/v2/select"
+import type { ContextKey } from "../../../src/theme/v2"
 
 test("provides reactive property, variant, state, and context accessors", () => {
   const [resolved, setResolved] = createSignal(resolveTheme(selectTheme(DEFAULT_THEME, "light")))

@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test"
 import { RGBA } from "@opentui/core"
-import { DEFAULT_THEME } from "./defaults"
-import type { ThemeDefinition } from "./index"
-import { resolveTheme, resolveThemeFile } from "./resolve"
-import { selectTheme } from "./select"
+import { DEFAULT_THEME } from "../../../src/theme/v2/defaults"
+import type { ThemeDefinition } from "../../../src/theme/v2"
+import { resolveTheme, resolveThemeFile } from "../../../src/theme/v2/resolve"
+import { selectTheme } from "../../../src/theme/v2/select"
 
 const light = selectTheme(DEFAULT_THEME, "light")
 const dark = selectTheme(DEFAULT_THEME, "dark")

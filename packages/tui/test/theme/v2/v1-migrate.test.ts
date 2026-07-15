@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
-import { DEFAULT_THEMES, resolveTheme as resolveV1, selectedForeground } from "../index"
-import { resolveThemeFile } from "./resolve"
-import { migrateV1 } from "./v1-migrate"
+import { DEFAULT_THEMES, resolveTheme as resolveV1, selectedForeground } from "../../../src/theme"
+import { resolveThemeFile } from "../../../src/theme/v2/resolve"
+import { migrateV1 } from "../../../src/theme/v2/v1-migrate"
 
 test("migrates resolved V1 modes into literal V2 tokens", () => {
   const migrated = migrateV1(DEFAULT_THEMES.opencode)
