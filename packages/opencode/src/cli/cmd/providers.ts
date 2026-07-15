@@ -477,6 +477,16 @@ export const ProvidersLoginCommand = effectCmd({
       )
     }
 
+    if (provider === "privatemode-ai") {
+      yield* Prompt.log.info(
+        "Privatemode requires the privatemode-proxy running locally first (default http://localhost:8080/v1) - " +
+          "this key alone will not work.\n" +
+          "Start it, e.g.: docker run -p 8080:8080 ghcr.io/edgelesssys/privatemode/privatemode-proxy:latest --apiKey <your-key>\n" +
+          "If you start the proxy with --apiKey, the key below is not used by the proxy - any value works.\n" +
+          "Details: https://docs.privatemode.ai/api/proxy-configuration/",
+      )
+    }
+
     const key = yield* Prompt.password({
       message: "Enter your API key",
       validate: (x) => (x && x.length > 0 ? undefined : "Required"),
