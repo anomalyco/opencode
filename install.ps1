@@ -297,6 +297,59 @@ function Add-ToUserPath {
     }
 }
 
+# --- Orphaned Shortcut Cleanup ---------------------------------------------
+
+function Clear-OrphanedShortcuts {
+    <#
+    .SYNOPSIS
+        Remove orphaned OpenCode and oneinfo shortcuts whose target no longer exists.
+    #>
+    $WScriptShell = $null
+    try {
+        $WScriptShell = New-Object -ComObject WScript.Shell
+    } catch {
+        Write-Warn "Cannot create WScript.Shell COM object — skipping shortcut cleanup"
+        return
+    }
+
+    $locations = @(
+        @{ Path = "$env:USERPROFILE\Desktop";                                                    Label = "User Desktop" }
+        @{ Path = "$env:PUBLIC\Desktop";                                                          Label = "Public Desktop" }
+        @{ Path = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs";                            Label = "Start Menu" }
+        @{ Path = "$env:APPDATA\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar";    Label = "Taskbar" }
+    )
+
+    $cleaned = 0
+    foreach ($loc in $locations) {
+        if (-not (Test-Path $loc.Path)) { continue }
+
+        $shortcuts = Get-ChildItem -Path $loc.Path -Filter "*.lnk" -Recurse -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -like "*OpenCode*" -or $_.Name -like "*oneinfo*" }
+
+        foreach ($sc in $shortcuts) {
+            try {
+                $shellLink = $WScriptShell.CreateShortcut($sc.FullName)
+                $target = $shellLink.TargetPath
+            } catch {
+                continue
+            }
+
+            $isOrphan = [string]::IsNullOrWhiteSpace($target) -or (-not (Test-Path $target))
+            if (-not $isOrphan) { continue }
+
+            Remove-Item -Path $sc.FullName -Force -ErrorAction SilentlyContinue
+            Write-Info "Cleaned orphaned shortcut: $($sc.Name)"
+            $cleaned++
+        }
+    }
+
+    if ($cleaned -gt 0) {
+        Write-Success "Removed $cleaned orphaned shortcut(s)"
+    } else {
+        Write-Info "No orphaned shortcuts found"
+    }
+}
+
 # --- Main -------------------------------------------------------------------
 
 function Main {
@@ -311,6 +364,11 @@ function Main {
     if ($Channel -eq "nightly") { $Channel = "beta" }
 
     Show-Banner
+
+    # --- Orphaned Shortcut Cleanup ------------------------------------------
+
+    Write-Step "Cleaning orphaned shortcuts"
+    Clear-OrphanedShortcuts
 
     # --- Version detection --------------------------------------------------
 
