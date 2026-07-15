@@ -1,5 +1,5 @@
 import yargs from "yargs"
-import { hideBin } from "yargs/helpers"
+
 import { RunCommand } from "./cli/cmd/run"
 import { GenerateCommand } from "./cli/cmd/generate"
 import { ConsoleCommand } from "./cli/cmd/account"
@@ -30,8 +30,6 @@ import { errorMessage } from "./util/error"
 import { PluginCommand } from "./cli/cmd/plug"
 import { Heap } from "./cli/heap"
 
-const args = hideBin(process.argv)
-
 function show(out: string) {
   const text = out.trimStart()
   if (!text.startsWith("opencode ")) {
@@ -42,7 +40,7 @@ function show(out: string) {
   process.stderr.write(out)
 }
 
-const cli = yargs(args)
+const cli = yargs()
   .parserConfiguration({ "populate--": true })
   .scriptName("opencode")
   .wrap(100)
@@ -116,15 +114,7 @@ const cli = yargs(args)
   .strict()
 
 try {
-  if (args.includes("-h") || args.includes("--help")) {
-    await cli.parse(args, (err: Error | undefined, _argv: unknown, out: string) => {
-      if (err) throw err
-      if (!out) return
-      show(out)
-    })
-  } else {
-    await cli.parse()
-  }
+  await cli.parse()
 } catch (e) {
   const formatted = FormatError(e)
   if (formatted) UI.error(formatted)

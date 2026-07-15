@@ -5,10 +5,32 @@ import util from "node:util"
 
 const execFilePromise = util.promisify(execFile)
 
-const exists = (path: string) =>
-  access(path)
-    .then(() => true)
-    .catch(() => false)
+const existsCache = new Map<string, boolean>()
+
+const exists = (path: string) => {
+  const cached = existsCache.get(path)
+  if (cached !== undefined) return cached
+  return access(path).then(() => {
+    existsCache.set(path, true)
+    return true
+  }).catch(() => {
+    existsCache.set(path, false)
+    return false
+  })
+}
+
+setInterval(() => existsCache.clear(), 30_000).unref()
+
+const resolveCache = new Map<string, { value: string | null; until: number }>()
+const CACHE_TTL = 30_000
+
+async function cachedResolve(appName: string): Promise<string | null> {
+  const cached = resolveCache.get(appName)
+  if (cached && cached.until > Date.now()) return cached.value
+  const result = await resolveWindowsAppPath(appName)
+  resolveCache.set(appName, { value: result, until: Date.now() + CACHE_TTL })
+  return result
+}
 
 export function checkAppExists(appName: string) {
   if (process.platform === "win32") return true
@@ -16,9 +38,9 @@ export function checkAppExists(appName: string) {
   return checkMacosApp(appName)
 }
 
-export function resolveAppPath(appName: string) {
+export async function resolveAppPath(appName: string) {
   if (process.platform !== "win32") return appName
-  return resolveWindowsAppPath(appName)
+  return cachedResolve(appName)
 }
 
 async function checkMacosApp(appName: string) {

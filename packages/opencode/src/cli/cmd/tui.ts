@@ -49,11 +49,22 @@ function createEventSource(client: RpcClient): EventSource {
   }
 }
 
+let cachedTarget: string | undefined
+
 async function target() {
-  if (typeof OPENCODE_WORKER_PATH !== "undefined") return OPENCODE_WORKER_PATH
+  if (cachedTarget) return cachedTarget
+  if (typeof OPENCODE_WORKER_PATH !== "undefined") {
+    cachedTarget = OPENCODE_WORKER_PATH
+    return cachedTarget
+  }
   const dist = new URL("./cli/tui/worker.js", import.meta.url)
-  if (await Filesystem.exists(fileURLToPath(dist))) return dist
-  return new URL("../tui/worker.ts", import.meta.url)
+  if (await Filesystem.exists(fileURLToPath(dist))) {
+    cachedTarget = dist.href
+    return cachedTarget
+  }
+  const ts = new URL("../tui/worker.ts", import.meta.url)
+  cachedTarget = ts.href
+  return cachedTarget
 }
 
 async function input(value?: string) {
@@ -150,11 +161,10 @@ export const TuiThreadCommand = cmd({
     const noReplay = args.replay === false || args.noReplay === true
 
     if (args.mini) {
-      const network = ["--port", "--hostname", "--mdns", "--no-mdns", "--mdns-domain", "--cors"].find((option) =>
-        process.argv.some((arg) => arg === option || arg.startsWith(option + "=")),
-      )
-      if (network) {
-        UI.error(`${network} cannot be used with --mini`)
+      const networkArg = hasArg("--port") || hasArg("--hostname") || hasArg("--mdns") ||
+        hasArg("--no-mdns") || hasArg("--mdns-domain") || hasArg("--cors")
+      if (networkArg) {
+        UI.error("network options cannot be used with --mini")
         process.exitCode = 1
         return
       }
@@ -208,9 +218,7 @@ export const TuiThreadCommand = cmd({
       const cwd = Filesystem.resolve(process.cwd())
 
       const worker = new Worker(file, {
-        env: Object.fromEntries(
-          Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
-        ),
+        env: process.env as Record<string, string>,
       })
       const client = Rpc.client<typeof rpc>(worker)
       const reload = () => {

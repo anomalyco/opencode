@@ -47,7 +47,7 @@ describe("checkServerHealth", () => {
       if (!timeout) Reflect.deleteProperty(AbortSignal, "timeout")
     })
 
-    expect(timeoutMs).toBe(30_000)
+    expect(timeoutMs).toBe(5_000)
   })
 
   test("returns unhealthy when request fails", async () => {

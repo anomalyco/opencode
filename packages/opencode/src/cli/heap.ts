@@ -5,7 +5,7 @@ import { Global } from "@opencode-ai/core/global"
 const MINUTE = 60_000
 const LIMIT = 2 * 1024 * 1024 * 1024
 
-let timer: Timer | undefined
+let timer: ReturnType<typeof setInterval> | undefined
 let lock = false
 let armed = true
 
@@ -39,7 +39,7 @@ export function start() {
   timer = setInterval(() => {
     void run()
   }, MINUTE)
-  timer.unref?.()
+  timer.unref()
 }
 
 export * as Heap from "./heap"

@@ -24,7 +24,9 @@ const layer = Layer.effect(
       const shell = (cmd: string[]) =>
         Effect.promise<string>(async () => {
           const proc = Bun.spawn(cmd, { cwd, stdio: ["ignore", "pipe", "pipe"] })
-          return await new Response(proc.stdout).text()
+          const stdout = await new Response(proc.stdout).text()
+          await new Response(proc.stderr).text()
+          return stdout
         })
 
       const [staged, status, recentCommits] = yield* Effect.all(

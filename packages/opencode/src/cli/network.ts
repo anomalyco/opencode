@@ -48,9 +48,13 @@ function hasBooleanArg(name: string) {
   )
 }
 
+let cachedArgs: string[] | undefined
+
 function networkArgs() {
+  if (cachedArgs) return cachedArgs
   const separator = process.argv.indexOf("--")
-  return process.argv.slice(2, separator === -1 ? undefined : separator)
+  cachedArgs = process.argv.slice(2, separator === -1 ? undefined : separator)
+  return cachedArgs
 }
 
 export const resolveNetworkOptions = Effect.fn("Cli.resolveNetworkOptions")(function* (args: NetworkOptions) {

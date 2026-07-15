@@ -95,7 +95,8 @@ const layer = Layer.effect(
           }).pipe(
             Effect.flatMap((proc) =>
               Effect.promise<{ stdout: string; stderr: string; exitCode: number }>(async () => {
-                const [stdout, stderr] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()])
+                const stdout = await new Response(proc.stdout).text()
+                const stderr = await new Response(proc.stderr).text()
                 const exitCode = await proc.exited
                 return { stdout, stderr, exitCode }
               })
@@ -213,6 +214,8 @@ const layer = Layer.effect(
               cwd: ctx.worktree,
               stdio: ["ignore", "pipe", "pipe"],
             })
+            await new Response(proc.stdout).text()
+            await new Response(proc.stderr).text()
             await proc.exited
           }).pipe(Effect.ignore)
         }

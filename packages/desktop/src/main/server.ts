@@ -41,10 +41,11 @@ export function setDefaultServerUrl(url: string | null) {
   getStore().delete(DEFAULT_SERVER_URL_KEY)
 }
 
-export function preferAppEnv(userDataPath: string) {
+export async function preferAppEnv(userDataPath: string) {
   const shell = process.platform === "win32" ? null : getUserShell()
+  const shellEnv = shell ? await loadShellEnv(shell, getLogger()) : null
   Object.assign(process.env, {
-    ...(shell ? loadShellEnv(shell, getLogger()) : null),
+    ...shellEnv,
     OPENCODE_EXPERIMENTAL_ICON_DISCOVERY: "true",
     OPENCODE_EXPERIMENTAL_FILEWATCHER: "true",
     OPENCODE_CLIENT: "desktop",
@@ -148,12 +149,14 @@ export async function spawnLocalServer(
     })
 
     const ready = async () => {
+      let interval = 100
       while (true) {
-        await new Promise((resolve) => setTimeout(resolve, 100))
         if (await checkHealth(url, password)) {
           healthy = true
           return
         }
+        interval = Math.min(interval * 2, 2000)
+        await new Promise((resolve) => setTimeout(resolve, interval))
       }
     }
 
@@ -179,6 +182,69 @@ export async function spawnLocalServer(
     },
     health: { wait },
   }
+}
+
+const RESTART_DELAY_MS = 1_000
+const MAX_RESTART_ATTEMPTS = 5
+const RESTART_WINDOW_MS = 60_000
+
+export function createRestartableServer(
+  hostname: string,
+  port: number,
+  password: string,
+  userDataPath: string,
+  options: Omit<SpawnLocalServerOptions, "userDataPath">,
+) {
+  let currentListener: SidecarListener | null = null
+  let currentHealth: HealthCheck | null = null
+  let stopped = false
+  let restarts: number[] = []
+
+  const canRestart = () => {
+    if (stopped) return false
+    const now = Date.now()
+    restarts = restarts.filter((t) => now - t < RESTART_WINDOW_MS)
+    return restarts.length < MAX_RESTART_ATTEMPTS
+  }
+
+  const spawn = async () => {
+    if (stopped) return
+    const { listener, health } = await spawnLocalServer(hostname, port, password, {
+      ...options,
+      userDataPath,
+      onExit: (code) => {
+        options.onExit?.(code)
+        if (stopped) return
+        restarts.push(Date.now())
+        if (!canRestart()) {
+          options.onStderr?.(`sidecar crashed ${restarts.length} times in 60s, giving up`)
+          return
+        }
+        currentListener = null
+        currentHealth = null
+        setTimeout(() => {
+          spawn().catch((e) => options.onStderr?.(`sidecar restart failed: ${e.message}`))
+        }, RESTART_DELAY_MS)
+      },
+    })
+    currentListener = listener
+    currentHealth = health
+  }
+
+  const start = async () => {
+    await spawn()
+    return {
+      listener: {
+        stop: async () => {
+          stopped = true
+          await currentListener?.stop()
+        },
+      },
+      health: currentHealth!,
+    }
+  }
+
+  return start()
 }
 
 export async function checkHealth(url: string, password?: string | null): Promise<boolean> {

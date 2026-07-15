@@ -13,13 +13,14 @@ interface CheckServerHealthOptions {
   retryDelayMs?: number
 }
 
-const defaultTimeoutMs = 30_000
-const defaultRetryCount = 2
-const defaultRetryDelayMs = 100
-const cacheMs = 750
+const defaultTimeoutMs = 5_000
+const defaultRetryCount = 0
+const defaultRetryDelayMs = 0
+const successCacheMs = 2_000
+const failureCacheMs = 0
 const healthCache = new Map<
   string,
-  { at: number; done: boolean; fetch: typeof globalThis.fetch; promise: Promise<ServerHealth> }
+  { at: number; done: boolean; success: boolean; fetch: typeof globalThis.fetch; promise: Promise<ServerHealth> }
 >()
 
 function cacheKey(server: ServerConnection.HttpBase) {
@@ -94,7 +95,7 @@ export async function checkServerHealth(
   return attempt(0).finally(() => timeout?.clear?.())
 }
 
-const pollMs = 10_000
+const pollMs = 5_000
 
 export function useCheckServerHealth() {
   const platform = usePlatform()
@@ -104,14 +105,18 @@ export function useCheckServerHealth() {
     const key = cacheKey(http)
     const hit = healthCache.get(key)
     const now = Date.now()
+    const cacheMs = hit?.success ? successCacheMs : failureCacheMs
     if (hit && hit.fetch === fetcher && (!hit.done || now - hit.at < cacheMs)) return hit.promise
-    const promise = checkServerHealth(http, fetcher).finally(() => {
+    const promise = checkServerHealth(http, fetcher).then((r) => {
       const next = healthCache.get(key)
-      if (!next || next.promise !== promise) return
-      next.done = true
-      next.at = Date.now()
+      if (next && next.promise === promise) {
+        next.done = true
+        next.at = Date.now()
+        next.success = r.healthy
+      }
+      return r
     })
-    healthCache.set(key, { at: now, done: false, fetch: fetcher, promise })
+    healthCache.set(key, { at: now, done: false, success: false, fetch: fetcher, promise })
     return promise
   }
 }

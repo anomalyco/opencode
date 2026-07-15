@@ -87,7 +87,9 @@ export function registerIpcHandlers(deps: Deps) {
       const store = getStore(name)
       const value = store.get(key)
       if (value === undefined || value === null) return null
-      return typeof value === "string" ? value : JSON.stringify(value)
+      if (typeof value === "string") return value
+      if (typeof value === "number" || typeof value === "boolean") return String(value)
+      return JSON.stringify(value)
     } catch {
       return null
     }

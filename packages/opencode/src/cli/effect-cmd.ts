@@ -84,13 +84,17 @@ export const effectCmd = <Args, A>(opts: EffectCmdOpts<Args, A>) =>
       const { InstanceStore } = await import("@/project/instance-store")
       const { InstanceRef } = await import("@/effect/instance-ref")
       const directory = opts.directory?.(args) ?? process.cwd()
-      const { store, ctx } = await AppRuntime.runPromise(
-        InstanceStore.Service.use((store) => store.load({ directory }).pipe(Effect.map((ctx) => ({ store, ctx })))),
+
+      await AppRuntime.runPromise(
+        InstanceStore.Service.use((store) =>
+          Effect.gen(function* () {
+            const ctx = yield* store.load({ directory })
+            return yield* opts.handler(args).pipe(
+              Effect.provideService(InstanceRef, ctx),
+              Effect.ensuring(store.dispose(ctx)),
+            )
+          }),
+        ),
       )
-      try {
-        await AppRuntime.runPromise(opts.handler(args).pipe(Effect.provideService(InstanceRef, ctx)))
-      } finally {
-        await AppRuntime.runPromise(store.dispose(ctx))
-      }
     },
   })

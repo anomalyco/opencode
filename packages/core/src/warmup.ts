@@ -1,5 +1,6 @@
 export * as ContextWarmup from "./warmup"
 
+import { spawnSync } from "child_process"
 import path from "path"
 import { statSync, readFileSync } from "fs"
 
@@ -26,9 +27,9 @@ const resolveLocal = (spec: string, fromFile: string, root: string): string | un
 
 const runGitCochange = (root: string, targetName: string): Array<{ file: string; score: number }> => {
   try {
-    const result = Bun.spawnSync(["git", "log", "--all", "--name-only", "--pretty=format:", "--diff-filter=AMRC", "--since=6 months", "--max-count=500"], { cwd: root })
-    if (result.exitCode !== 0) return []
-    const lines = result.stdout.toString().split("\n").filter(Boolean)
+    const result = spawnSync("git", ["log", "--all", "--name-only", "--pretty=format:", "--diff-filter=AMRC", "--since=6 months", "--max-count=500"], { cwd: root, maxBuffer: 10 * 1024 * 1024, timeout: 30000 })
+    if (result.status !== 0) return []
+    const lines = (result.stdout ?? "").toString().split("\n").filter(Boolean)
     const counts = new Map<string, number>()
     let filesInCommit: string[] = []
     for (const line of lines) {

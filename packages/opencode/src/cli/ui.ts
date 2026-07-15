@@ -1,4 +1,5 @@
 import { EOL } from "os"
+import * as readline from "readline"
 import { Schema } from "effect"
 import { logo as glyphs } from "./logo"
 
@@ -103,16 +104,17 @@ export function logo(pad?: string) {
   return result.join("").trimEnd()
 }
 
+let rl: readline.Interface | undefined
+
+process.once("exit", () => rl?.close())
+
 export async function input(prompt: string): Promise<string> {
-  const readline = require("readline")
-  const rl = readline.createInterface({
+  rl ??= readline.createInterface({
     input: process.stdin,
     output: process.stdout,
   })
-
   return new Promise((resolve) => {
-    rl.question(prompt, (answer: string) => {
-      rl.close()
+    rl!.question(prompt, (answer: string) => {
       resolve(answer.trim())
     })
   })

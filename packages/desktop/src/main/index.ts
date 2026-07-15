@@ -21,10 +21,11 @@ import { parseMarkdown } from "./markdown"
 import { createMenu } from "./menu"
 import { finishFirstLaunchOnboarding, isFirstLaunchOnboardingPending } from "./onboarding"
 import {
+  checkHealth,
+  createRestartableServer,
   getDefaultServerUrl,
   preferAppEnv,
   setDefaultServerUrl,
-  spawnLocalServer,
   type SidecarListener,
 } from "./server"
 import { setupAutoUpdater, showUpdaterDialog } from "./updater"
@@ -191,7 +192,7 @@ const main = Effect.gen(function* () {
     return
   }
 
-  preferAppEnv(app.getPath("userData"))
+  yield* Effect.promise(() => preferAppEnv(app.getPath("userData")))
 
   app.on("second-instance", (_event: Event, argv: string[]) => {
     const urls = argv.filter((arg: string) => arg.startsWith("opencode://"))
@@ -293,9 +294,7 @@ const main = Effect.gen(function* () {
   })
   registerWslIpcHandlers(wslServers)
   void updater.start()
-  const updateTimer = setInterval(() => void updater.check(), 10 * 60 * 1000)
-  updateTimer.unref()
-  app.once("will-quit", () => clearInterval(updateTimer))
+  setInterval(() => void updater.check(), 10 * 60 * 1000).unref()
   yield* Effect.promise(() => startNetLog()).pipe(
     Effect.catch((error) =>
       Effect.sync(() => {
@@ -339,8 +338,7 @@ const main = Effect.gen(function* () {
 
     logger.log("spawning sidecar", { url })
     const { listener, health } = yield* Effect.promise(() =>
-      spawnLocalServer(hostname, port, password, {
-        userDataPath: app.getPath("userData"),
+      createRestartableServer(hostname, port, password, app.getPath("userData"), {
         onStdout: (message) => writeLog("server", "stdout", { message }),
         onStderr: (message) => writeLog("server", "stderr", { message }, "warn"),
         onExit: (code) => writeLog("utility", "sidecar exited", { code }, "warn"),
@@ -365,6 +363,18 @@ const main = Effect.gen(function* () {
         }),
       ),
     )
+
+    const healthTimer = setInterval(async () => {
+      try {
+        const healthy = await checkHealth(url, password)
+        logger.log("sidecar health check", { healthy, url })
+      } catch (error) {
+        logger.warn("sidecar health check failed", { url, error: String(error) })
+      }
+    }, 30_000)
+    healthTimer.unref()
+
+    app.once("will-quit", () => clearInterval(healthTimer))
 
     logger.log("loading task finished")
   }).pipe(forwardInitializationFailure(serverReady), Effect.forkChild)

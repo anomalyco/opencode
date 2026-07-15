@@ -300,104 +300,37 @@ function loadWindow(win: BrowserWindow, html: string) {
 }
 
 function wireWindowRecovery(win: BrowserWindow, name: string) {
-  let showing = false
+  const showing: { current: boolean } = { current: false }
   const sampler = createUnresponsiveSampler(win, name)
 
-  const handle = async (button: string | undefined, wait: boolean) => {
-    if (button === "Export Logs") {
-      const sampling = sampler.stopAndFlush()
-      await exportDebugLogs().catch((error) => writeLog("main", "failed to export debug logs", { error }, "error"))
-      if (wait && sampling) sampler.start()
-      return true
-    }
-    if (button === "Relaunch") {
-      sampler.stopAndFlush()
-      relaunchHandler()
-      return false
-    }
-    if (button === "Quit") {
-      sampler.stopAndFlush()
-      app.quit()
-    }
-    return false
-  }
-
-  const show = async (message: string, detail: string, wait: boolean) => {
-    if (showing || win.isDestroyed()) return
-    showing = true
-    try {
-      while (!win.isDestroyed()) {
-        const buttons = wait ? ["Relaunch", "Export Logs", "Keep Waiting"] : ["Relaunch", "Export Logs", "Quit"]
-        const result = await dialog.showMessageBox(win, {
-          type: "warning",
-          buttons,
-          defaultId: 0,
-          cancelId: 2,
-          message,
-          detail,
-        })
-        if (await handle(buttons[result.response], wait)) continue
-        return
-      }
-    } finally {
-      showing = false
-    }
-  }
-
-  const failed = (
-    event: string,
-    errorCode: number,
-    errorDescription: string,
-    validatedURL: string,
-    isMainFrame: boolean,
-  ) => {
-    writeLog(
-      "window",
-      "renderer load failed",
-      {
-        window: name,
-        event,
-        errorCode,
-        errorDescription,
-        validatedURL,
-        currentURL: win.webContents.getURL(),
-        isMainFrame,
-      },
-      "error",
-    )
+  const onLoadFail = (event: string) => (_event: unknown, errorCode: number, errorDescription: string, validatedURL: string, isMainFrame: boolean) => {
+    writeLog("window", "renderer load failed", {
+      window: name,
+      event,
+      errorCode,
+      errorDescription,
+      validatedURL,
+      currentURL: win.webContents.getURL(),
+      isMainFrame,
+    }, "error")
 
     if (!isMainFrame || errorCode === -3) return
-    void show(
-      "OpenCode failed to load",
-      [`Window: ${name}`, `URL: ${validatedURL}`, `Error: ${errorCode} ${errorDescription}`].join("\n"),
-      false,
-    )
+    void showRecoveryDialog(win, sampler, showing, "OpenCode failed to load", [`Window: ${name}`, `URL: ${validatedURL}`, `Error: ${errorCode} ${errorDescription}`].join("\n"), false)
   }
 
-  win.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
-    failed("did-fail-load", errorCode, errorDescription, validatedURL, isMainFrame)
-  })
-  win.webContents.on("did-fail-provisional-load", (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
-    failed("did-fail-provisional-load", errorCode, errorDescription, validatedURL, isMainFrame)
-  })
+  const failLoad = onLoadFail("did-fail-load")
+  const failProvisional = onLoadFail("did-fail-provisional-load")
+  win.webContents.on("did-fail-load", failLoad)
+  win.webContents.on("did-fail-provisional-load", failProvisional)
   win.webContents.on("render-process-gone", (_event, details) => {
     sampler.stopAndFlush()
-    writeLog(
-      "window",
-      "renderer process gone",
-      { window: name, currentURL: win.webContents.getURL(), details },
-      "error",
-    )
-    void show(
-      "OpenCode window terminated unexpectedly",
-      [`Window: ${name}`, `Reason: ${details.reason}`, `Code: ${details.exitCode ?? "<unknown>"}`].join("\n"),
-      false,
-    )
+    writeLog("window", "renderer process gone", { window: name, currentURL: win.webContents.getURL(), details }, "error")
+    void showRecoveryDialog(win, sampler, showing, "OpenCode window terminated unexpectedly", [`Window: ${name}`, `Reason: ${details.reason}`, `Code: ${details.exitCode ?? "<unknown>"}`].join("\n"), false)
   })
   win.on("unresponsive", () => {
     writeLog("window", "renderer unresponsive", { window: name, currentURL: win.webContents.getURL() }, "error")
     sampler.start()
-    void show("OpenCode is not responding", "You can relaunch the app, open the logs, or keep waiting.", true)
+    void showRecoveryDialog(win, sampler, showing, "OpenCode is not responding", "You can relaunch the app, open the logs, or keep waiting.", true)
   })
   win.on("responsive", () => {
     writeLog("window", "renderer responsive", { window: name, currentURL: win.webContents.getURL() }, "error")
@@ -411,6 +344,58 @@ function wireWindowRecovery(win: BrowserWindow, name: string) {
   win.webContents.on("preload-error", (_event, preloadPath, error) => {
     writeLog("preload", "preload error", { window: name, preloadPath, error }, "error")
   })
+}
+
+async function showRecoveryDialog(
+  win: BrowserWindow,
+  sampler: ReturnType<typeof createUnresponsiveSampler>,
+  showing: { current: boolean },
+  message: string,
+  detail: string,
+  wait: boolean,
+) {
+  if (showing.current || win.isDestroyed()) return
+  showing.current = true
+  try {
+    while (!win.isDestroyed()) {
+      const buttons = wait ? ["Relaunch", "Export Logs", "Keep Waiting"] : ["Relaunch", "Export Logs", "Quit"]
+      const result = await dialog.showMessageBox(win, {
+        type: "warning",
+        buttons,
+        defaultId: 0,
+        cancelId: 2,
+        message,
+        detail,
+      })
+      if (await handleRecoveryButton(sampler, buttons[result.response], wait)) continue
+      return
+    }
+  } finally {
+    showing.current = false
+  }
+}
+
+async function handleRecoveryButton(
+  sampler: ReturnType<typeof createUnresponsiveSampler>,
+  button: string | undefined,
+  wait: boolean,
+) {
+  if (button === "Export Logs") {
+    const sampling = sampler.stopAndFlush()
+    await exportDebugLogs().catch((error) => writeLog("main", "failed to export debug logs", { error }, "error"))
+    if (wait && sampling) sampler.start()
+    return true
+  }
+  if (button === "Relaunch") {
+    sampler.stopAndFlush()
+    relaunchHandler()
+    return false
+  }
+  if (button === "Quit") {
+    sampler.stopAndFlush()
+    app.quit()
+  }
+  return false
 }
 
 function addDocumentPolicy(response: Response, file: string) {

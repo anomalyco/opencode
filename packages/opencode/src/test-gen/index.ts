@@ -58,13 +58,14 @@ const layer = Layer.effect(
         cwd: root,
         stdio: ["ignore", "pipe", "pipe"],
       })
-      const [stdout, stderr] = yield* Effect.promise(async () => {
+      const [stdout, stderr, exitCode] = yield* Effect.promise(async () => {
         const out = await new Response(proc.stdout).text()
         const err = await new Response(proc.stderr).text()
-        return [out, err] as const
+        const code = await proc.exited
+        return [out, err, code] as const
       })
       const output = stdout + stderr
-      const passed = !output.includes("FAIL") && !output.includes("fail") && proc.exitCode === 0
+      const passed = !output.includes("FAIL") && !output.includes("fail") && exitCode === 0
       return { filePath, framework, passed, output }
     })
 

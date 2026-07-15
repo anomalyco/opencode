@@ -3,7 +3,8 @@ import "./init-projectors"
 import { NodeHttpServer } from "@effect/platform-node"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { ConfigProvider, Context, Effect, Exit, Layer, Scope } from "effect"
-import { HttpRouter, HttpServer } from "effect/unstable/http"
+import { HttpMiddleware, HttpRouter, HttpServer, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
+import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { OpenApi } from "effect/unstable/httpapi"
 import { createServer } from "node:http"
 import { MDNS } from "./mdns"
@@ -97,9 +98,21 @@ const listenEffect: (opts: ListenOptions) => Effect.Effect<EffectListener, unkno
   },
 )
 
+const healthCheckMiddleware: HttpMiddleware.HttpMiddleware = (effect) =>
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest
+    if (request.method === "GET" && request.url === "/global/health") {
+      return HttpServerResponse.text(
+        JSON.stringify({ healthy: true, version: InstallationVersion }),
+        { contentType: "application/json" },
+      )
+    }
+    return yield* disposeMiddleware(effect)
+  })
+
 function listenerLayer(opts: ListenOptions, port: number) {
   return HttpRouter.serve(HttpApiApp.createRoutes(opts), {
-    middleware: disposeMiddleware,
+    middleware: healthCheckMiddleware,
     disableLogger: true,
     disableListenLog: true,
   }).pipe(

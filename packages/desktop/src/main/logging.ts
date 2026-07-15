@@ -1,7 +1,8 @@
 import { MainLogger } from "electron-log"
 import log from "electron-log/main.js"
 import { app, crashReporter, netLog, shell } from "electron"
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs"
+import { readdir, rm, stat } from "node:fs/promises"
 import { ZipWriter, BlobWriter, BlobReader } from "@zip.js/zip.js"
 import { dirname, join } from "node:path"
 import { homedir } from "node:os"
@@ -119,15 +120,28 @@ function cleanup() {
   const dir = root || dirname(log.transports.file.getFile().path)
   const cutoff = Date.now() - MAX_LOG_AGE_DAYS * 24 * 60 * 60 * 1000
 
-  for (const entry of readdirSync(dir)) {
-    const file = join(dir, entry)
+  Promise.resolve().then(async () => {
+    let entries
     try {
-      const info = statSync(file)
-      if (info.mtimeMs < cutoff) rmSync(file, { recursive: true, force: true })
+      entries = await readdir(dir)
     } catch {
-      continue
+      return
     }
-  }
+
+    await Promise.all(
+      entries.map(async (entry) => {
+        const file = join(dir, entry)
+        try {
+          const info = await stat(file)
+          if (info.mtimeMs < cutoff) await rm(file, { recursive: true, force: true })
+        } catch {
+          // ignore
+        }
+      }),
+    )
+  }).catch(() => {
+    // ignore cleanup errors
+  })
 }
 
 function manifest() {

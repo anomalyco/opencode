@@ -13,9 +13,13 @@ import { disposeAllInstancesAndEmitGlobalDisposed } from "@/server/global-lifecy
 
 Heap.start()
 
-const onUnhandledRejection = (_error: unknown) => {}
+const onUnhandledRejection = (error: unknown) => {
+  console.error("[worker] unhandled rejection:", error)
+}
 
-const onUncaughtException = (_error: Error) => {}
+const onUncaughtException = (error: Error) => {
+  console.error("[worker] uncaught exception:", error)
+}
 
 process.on("unhandledRejection", onUnhandledRejection)
 process.on("uncaughtException", onUncaughtException)

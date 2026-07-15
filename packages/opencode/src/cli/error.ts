@@ -33,25 +33,9 @@ function configIssues(input: Record<string, unknown>): ConfigIssue[] {
 }
 
 export function FormatError(input: unknown): string | undefined {
-  if (input instanceof Error && isRecord(input.cause) && "body" in input.cause) {
-    const formatted = FormatError(input.cause.body)
-    if (formatted) return formatted
-  }
-
   // CliError: domain failure surfaced from an effectCmd handler via fail("...")
   if (isTaggedError(input, "CliError")) {
     if (typeof input.exitCode === "number") process.exitCode = input.exitCode
-    return stringField(input, "message") ?? ""
-  }
-
-  // MCPFailed: { name: string }
-  if (NamedError.hasName(input, "MCPFailed")) {
-    const data = isRecord(input) && isRecord(input.data) ? stringField(input.data, "name") : undefined
-    return `MCP server "${data}" failed. Note, opencode does not support MCP authentication yet.`
-  }
-
-  // AccountServiceError, AccountTransportError: TaggedErrorClass
-  if (isTaggedError(input, "AccountServiceError") || isTaggedError(input, "AccountTransportError")) {
     return stringField(input, "message") ?? ""
   }
 
@@ -69,10 +53,16 @@ export function FormatError(input: unknown): string | undefined {
     ].join("\n")
   }
 
-  // ProviderInitError: { providerID: string }
-  const providerInit = configData(input, "ProviderInitError")
-  if (providerInit) {
-    return `Failed to initialize provider "${stringField(providerInit, "providerID")}". Check credentials and configuration.`
+  // ConfigInvalidError: { path?: string, message?: string, issues?: Array<{ message: string, path: string[] }> }
+  const configInvalid = configData(input, "ConfigInvalidError")
+  if (configInvalid) {
+    const path = stringField(configInvalid, "path")
+    const message = stringField(configInvalid, "message")
+    const issues = configIssues(configInvalid)
+    return [
+      `Configuration is invalid${path && path !== "config" ? ` at ${path}` : ""}` + (message ? `: ${message}` : ""),
+      ...issues.map((issue) => "↳ " + issue.message + " " + issue.path.join(".")),
+    ].join("\n")
   }
 
   // ConfigJsonError: { path: string, message?: string }
@@ -106,22 +96,34 @@ export function FormatError(input: unknown): string | undefined {
     ].join("\n")
   }
 
-  // ConfigInvalidError: { path?: string, message?: string, issues?: Array<{ message: string, path: string[] }> }
-  const configInvalid = configData(input, "ConfigInvalidError")
-  if (configInvalid) {
-    const path = stringField(configInvalid, "path")
-    const message = stringField(configInvalid, "message")
-    const issues = configIssues(configInvalid)
-    return [
-      `Configuration is invalid${path && path !== "config" ? ` at ${path}` : ""}` + (message ? `: ${message}` : ""),
-      ...issues.map((issue) => "↳ " + issue.message + " " + issue.path.join(".")),
-    ].join("\n")
+  // ProviderInitError: { providerID: string }
+  const providerInit = configData(input, "ProviderInitError")
+  if (providerInit) {
+    return `Failed to initialize provider "${stringField(providerInit, "providerID")}". Check credentials and configuration.`
+  }
+
+  // AccountServiceError, AccountTransportError: TaggedErrorClass
+  if (isTaggedError(input, "AccountServiceError") || isTaggedError(input, "AccountTransportError")) {
+    return stringField(input, "message") ?? ""
+  }
+
+  // MCPFailed: { name: string }
+  if (NamedError.hasName(input, "MCPFailed")) {
+    const data = isRecord(input) && isRecord(input.data) ? stringField(input.data, "name") : undefined
+    return `MCP server "${data}" failed. Note, opencode does not support MCP authentication yet.`
   }
 
   // UICancelledError: user cancelled an interactive CLI prompt
   if (isTaggedError(input, "UICancelledError") || NamedError.hasName(input, "UICancelledError")) {
     return ""
   }
+
+  // Fallback: recurse into Error cause
+  if (input instanceof Error && isRecord(input.cause) && "body" in input.cause) {
+    const formatted = FormatError(input.cause.body)
+    if (formatted) return formatted
+  }
+
   return undefined
 }
 
