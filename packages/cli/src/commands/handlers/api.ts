@@ -3,7 +3,7 @@ import { Effect, Option } from "effect"
 import { Commands } from "../commands"
 import { Runtime } from "../../framework/runtime"
 import { Service } from "@opencode-ai/client/effect"
-import { Server } from "../../services/server"
+import { ServerConnection } from "../../services/server-connection"
 
 const methods = new Set(["delete", "get", "head", "options", "patch", "post", "put"])
 
@@ -18,7 +18,7 @@ type OpenApi = {
 export default Runtime.handler(
   Commands.commands.api,
   Effect.fn("cli.api")(function* (input) {
-    const server = yield* Server.resolve({
+    const server = yield* ServerConnection.resolve({
       server: Option.getOrUndefined(input.server),
       standalone: input.standalone,
       mismatch: "ignore",
@@ -62,11 +62,7 @@ export function rawRequest(input: readonly string[]) {
   return { method: input[0].toUpperCase(), path: input[1] }
 }
 
-function resolveRequest(
-  endpoint: Service.Endpoint,
-  input: readonly string[],
-  params: Record<string, string>,
-) {
+function resolveRequest(endpoint: Service.Endpoint, input: readonly string[], params: Record<string, string>) {
   const raw = rawRequest(input)
   if (raw) return Effect.succeed(raw)
   if (input.length !== 1) return Effect.fail(new Error("Expected an operation name or an HTTP method and path"))

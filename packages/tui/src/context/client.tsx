@@ -27,7 +27,7 @@ export const { use: useClient, provider: ClientProvider } = createSimpleContext(
   init: (props: {
     api: OpenCodeClient
     reconnect?: (onStatus: (status: Service.Status) => void, signal: AbortSignal) => Promise<{ api: OpenCodeClient }>
-    // Stops and starts the managed service; present only in service mode.
+    // Stops and replaces the managed service; present only in service mode.
     restart?: () => Promise<void>
   }) => {
     const log = useLog({ component: "client" })

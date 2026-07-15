@@ -4,8 +4,8 @@ description: "Diagnose OpenCode startup, server, and session issues."
 ---
 
 <Tip>
-  You can ask OpenCode to debug itself. Describe the problem and ask it to use this troubleshooting page; it can read the
-  steps below, inspect its service and logs, and help identify the issue.
+  You can ask OpenCode to debug itself. Describe the problem and ask it to use this troubleshooting page; it can read
+  the steps below, inspect its service and logs, and help identify the issue.
 </Tip>
 
 OpenCode runs as two processes: the TUI is a client, while a background server owns sessions, plugins, permissions, and
@@ -31,10 +31,10 @@ If the service is stuck or unhealthy, restart it:
 opencode2 service restart
 ```
 
-From inside the TUI, run `/reload` to restart the managed service and reconnect:
+From inside the TUI, run `/restart` to restart the managed service and reconnect:
 
 ```text
-/reload
+/restart
 ```
 
 You can also stop and start it explicitly:
@@ -45,8 +45,8 @@ opencode2 service start
 ```
 
 <Note>
-  OpenCode normally discovers or starts the shared background service automatically. The service commands are only needed
-  when diagnosing its lifecycle.
+  OpenCode normally discovers or starts the shared background service automatically. The service commands are only
+  needed when diagnosing its lifecycle.
 </Note>
 
 ## Run an isolated session
@@ -125,8 +125,8 @@ The database normally lives at:
 `OPENCODE_DB` can override the database location.
 
 <Warning>
-  Do not delete or edit service files or the database while troubleshooting. Use the service commands to manage the daemon,
-  and make a backup before inspecting persistent data with external tools.
+  Do not delete or edit service files or the database while troubleshooting. Use the service commands to manage the
+  daemon, and make a backup before inspecting persistent data with external tools.
 </Warning>
 
 ## Explicit servers

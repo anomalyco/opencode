@@ -5,7 +5,7 @@ import { Commands } from "../commands"
 import { Runtime } from "../../framework/runtime"
 import { Config } from "../../config"
 import { Effect, FileSystem, Option } from "effect"
-import { Server } from "../../services/server"
+import { ServerConnection } from "../../services/server-connection"
 import { Updater } from "../../services/updater"
 import { UpdatePreflight } from "../../services/update-preflight"
 import { Npm } from "@opencode-ai/core/npm"
@@ -18,7 +18,7 @@ export default Runtime.handler(Commands, (input) =>
     yield* updater.check().pipe(Effect.forkScoped)
     const preflight = UpdatePreflight.make()
     yield* Effect.addFinalizer(() => Effect.promise(() => preflight.close()))
-    const server = yield* Server.resolve({
+    const server = yield* ServerConnection.resolve({
       server: Option.getOrUndefined(input.server),
       standalone: input.standalone,
       onStart: (reason, existing) => {
@@ -40,13 +40,16 @@ export default Runtime.handler(Commands, (input) =>
     const context = yield* Effect.context<FileSystem.FileSystem>()
     const runFork = Effect.runForkWith(context)
     const runPromise = Effect.runPromiseWith(context)
-    const reconnect = server.reconnect
-    const restart = server.restart
+    const service = server.service
     yield* run({
       server: {
         endpoint: server.endpoint,
-        reconnect: reconnect ? (onStatus, signal) => runPromise(reconnect(onStatus), { signal }) : undefined,
-        restart: restart ? () => runPromise(restart) : undefined,
+        service: service
+          ? {
+              reconnect: (onStatus, signal) => runPromise(service.reconnect(onStatus), { signal }),
+              restart: () => runPromise(service.restart()),
+            }
+          : undefined,
       },
       args: { continue: input.continue, sessionID: Option.getOrUndefined(input.session) },
       config: {

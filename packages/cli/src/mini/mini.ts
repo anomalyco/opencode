@@ -1,12 +1,12 @@
 import { Service } from "@opencode-ai/client/effect"
 import { OpenCode, type OpenCodeClient } from "@opencode-ai/client/promise"
-import { Server } from "../services/server"
+import { ServerConnection } from "../services/server-connection"
 import { waitForCatalogReady } from "./catalog.shared"
 import { INTERACTIVE_INPUT_ERROR, resolveInteractiveStdin } from "./runtime.stdin"
 import type { RunInput, RunTuiConfig } from "./types"
 
 export type MiniCommandInput = {
-  server: Server.Resolved
+  server: ServerConnection.Resolved
   continue?: boolean
   session?: string
   fork?: boolean
@@ -38,10 +38,7 @@ export async function runMini(input: MiniCommandInput) {
       return agentTask
     }
     const resolveSession = async () => {
-      const [agent, selected] = await Promise.all([
-        resolveAgent(),
-        selectSession(sdk, directory, input),
-      ])
+      const [agent, selected] = await Promise.all([resolveAgent(), selectSession(sdk, directory, input)])
       const readyModel =
         model ?? (selected?.model ? { providerID: selected.model.providerID, modelID: selected.model.id } : undefined)
       if (readyModel) await waitForCatalogReady({ sdk, directory, model: readyModel })

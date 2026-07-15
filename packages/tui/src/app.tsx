@@ -118,6 +118,7 @@ const appBindingCommands = [
   "provider.connect",
   "opencode.status",
   "server.pair",
+  "service.restart",
   "opencode.debug",
   "theme.switch",
   "theme.switch_mode",
@@ -138,8 +139,10 @@ const appBindingCommands = [
 export type TuiInput = {
   server: {
     endpoint: Service.Endpoint
-    reconnect?: (onStatus: (status: Service.Status) => void, signal: AbortSignal) => Promise<Service.Endpoint>
-    restart?: () => Promise<void>
+    service?: {
+      reconnect: (onStatus: (status: Service.Status) => void, signal: AbortSignal) => Promise<Service.Endpoint>
+      restart: () => Promise<void>
+    }
   }
   args: Args
   config: Config.Interface
@@ -183,7 +186,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
     Effect.catch(() => Effect.tryPromise(() => api.location.get()).pipe(Effect.map((response) => response.directory))),
   )
   const handoff = input.terminalHandoff ? yield* Effect.promise(input.terminalHandoff) : undefined
-  const reconnectEndpoint = input.server.reconnect
+  const reconnectEndpoint = input.server.service?.reconnect
   const reconnect = reconnectEndpoint
     ? async (onStatus: (status: Service.Status) => void, signal: AbortSignal) => {
         const endpoint = await reconnectEndpoint(onStatus, signal)
@@ -327,7 +330,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                           <ClientProvider
                                             api={api}
                                             reconnect={reconnect}
-                                            restart={input.server.restart}
+                                            restart={input.server.service?.restart}
                                           >
                                             <PermissionProvider>
                                               <DataProvider>
@@ -764,18 +767,18 @@ function App(props: { pair?: DialogPairCredentials }) {
       ...(client.restart
         ? [
             {
-              name: "server.reload",
-              title: "Restart server",
-              slash: { name: "reload" },
+              name: "service.restart",
+              title: "Restart service",
+              slash: { name: "restart" },
               run: async () => {
                 const restart = client.restart
                 if (!restart) return
                 dialog.clear()
-                toast.show({ variant: "info", message: "Restarting server...", duration: 30000 })
+                toast.show({ variant: "info", message: "Restarting service...", duration: 30000 })
                 // restart resolves once the replacement service is healthy; the
                 // event stream reattaches through the reconnect loop.
                 await restart()
-                  .then(() => toast.show({ variant: "success", message: "Server restarted" }))
+                  .then(() => toast.show({ variant: "success", message: "Service restarted" }))
                   .catch(toast.error)
               },
               category: "System",

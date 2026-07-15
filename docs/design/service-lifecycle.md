@@ -30,6 +30,32 @@ This proposal does not introduce a supervisor process, warm candidate server,
 protocol negotiation, idle background restart, or general execution-recovery
 framework.
 
+## Architecture at a Glance
+
+```mermaid
+flowchart LR
+  CLIENT[client Effect Service] --> CONNECTION[CLI ServerConnection]
+  CONFIG[CLI ServiceConfig] --> CONNECTION
+  CONFIG --> DAEMON[CLI server-process daemon]
+  CONNECTION -->|Effects| SEAM[CLI runPromiseWith seam]
+  SEAM -->|Promises| TUI[TUI and Solid reconnect loop]
+  CLIENT -->|start or stop| DAEMON
+  TUI -->|HTTP and events| HTTP[server HTTP transport]
+  DAEMON --> HTTP
+  HTTP --> CORE[core application behavior]
+```
+
+| Owner                                            | Responsibility                                                                                      |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
+| `packages/client/src/effect/service.ts`          | Effect-native discovery, start, and stop lifecycle operations                                       |
+| `packages/cli/src/services/service-config.ts`    | CLI registration path, installed version, and daemon command                                        |
+| `packages/cli/src/services/server-connection.ts` | Resolve an endpoint and, only for the shared service, grouped reconnect and restart Effects         |
+| `packages/cli/src/server-process.ts`             | Daemon election, registration, and server process boot                                              |
+| `packages/server/src/process.ts`                 | HTTP lifecycle shell and application transport                                                      |
+| `packages/core`                                  | Application behavior behind the transport                                                           |
+| CLI default handler                              | Convert lifecycle Effects with the outer `FileSystem` context and pass grouped Promise capabilities |
+| `packages/tui` Solid client context              | Own event-stream reconnect, endpoint replacement, status, and user-triggered restart UI             |
+
 ## Implementation Status
 
 | Area                      | State                                                                 |
