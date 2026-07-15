@@ -200,6 +200,7 @@ const TIPS: Tip[] = [
   (shortcuts) => press(shortcuts.sessionInterrupt(), "to stop the AI mid-response"),
   "Switch to {highlight}Plan{/highlight} agent for suggestions without making changes",
   "Switch to {highlight}CruiseControl{/highlight} for autonomous careful execution (classifier model: {highlight}permission_modules.cruise_control.model{/highlight})",
+  "Use {highlight}/cruise-control-model{/highlight} or set {highlight}permission_modules.cruise_control.model{/highlight} for the Cruise Control classifier",
   "Use {highlight}@agent-name{/highlight} in prompts to invoke specialized subagents",
   (shortcuts) => {
     const items = [

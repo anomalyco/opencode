@@ -40,6 +40,7 @@ import { LocationProvider } from "./context/location"
 import { LocalProvider, useLocal } from "./context/local"
 import { PermissionProvider } from "./context/permission"
 import { DialogModel } from "./component/dialog-model"
+import { createPermissionModuleCommands } from "./permission/module-commands"
 import { useConnected } from "./component/use-connected"
 import { DialogMcp } from "./component/dialog-mcp"
 import { DialogStatus } from "./component/dialog-status"
@@ -106,6 +107,7 @@ const appGlobalBindingCommands = [
 const appBindingCommands = [
   "command.palette.show",
   "session.title.model",
+  "permission.cruise_control.model",
   "model.list",
   "model.cycle_recent",
   "model.cycle_recent_reverse",
@@ -557,8 +559,13 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     if (workspace?.type !== "worktree" || !workspace.directory) return
     return workspace
   })
+  const permissionModuleCommands = createMemo(() =>
+    createPermissionModuleCommands({ dialog, toast, sdk, sync }),
+  )
+
   const appCommands = createMemo(() =>
     [
+      ...permissionModuleCommands(),
       {
         name: COMMAND_PALETTE_COMMAND,
         title: "Show command palette",
