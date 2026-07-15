@@ -6,8 +6,8 @@ import { Auth, LLMClient } from "../../src/route"
 import * as OpenAICompatible from "../../src/providers/openai-compatible"
 import * as OpenAICompatibleChat from "../../src/protocols/openai-compatible-chat"
 import { it } from "../lib/effect"
-import { dynamicResponse } from "../lib/http"
-import { sseEvents } from "../lib/sse"
+import { dynamicResponse, fixedResponse } from "../lib/http"
+import { sseEvents, sseRaw } from "../lib/sse"
 
 const Json = Schema.fromJsonString(Schema.Unknown)
 const decodeJson = Schema.decodeUnknownSync(Json)
@@ -232,6 +232,31 @@ describe("OpenAI-compatible Chat route", () => {
 
       expect(response.text).toBe("Hello!")
       expect(response.usage).toMatchObject({ inputTokens: 5, outputTokens: 2, totalTokens: 7 })
+      expect(response.events.at(-1)).toMatchObject({ type: "finish", reason: "stop" })
+    }),
+  )
+
+  it.effect("ignores named SSE events", () =>
+    Effect.gen(function* () {
+      const body = sseRaw(
+        `event: hermes.tool.progress\ndata: ${JSON.stringify({
+          tool: "terminal",
+          toolCallId: "call_1",
+          status: "running",
+        })}`,
+        `event: message\ndata: ${JSON.stringify(deltaChunk({ role: "assistant", content: "Hello" }))}`,
+        `event: hermes.tool.progress\ndata: ${JSON.stringify({
+          tool: "terminal",
+          toolCallId: "call_1",
+          status: "completed",
+        })}`,
+        `data: ${JSON.stringify(deltaChunk({}, "stop"))}`,
+        "data: [DONE]",
+      )
+
+      const response = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.text).toBe("Hello")
       expect(response.events.at(-1)).toMatchObject({ type: "finish", reason: "stop" })
     }),
   )

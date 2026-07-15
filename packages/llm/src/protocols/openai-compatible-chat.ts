@@ -19,7 +19,7 @@ export const route = Route.make({
   providerMetadataKey: "openai",
   protocol: OpenAIChat.protocol,
   endpoint: Endpoint.path("/chat/completions"),
-  framing: Framing.sse,
+  framing: Framing.sseMessages,
 })
 
 export * as OpenAICompatibleChat from "./openai-compatible-chat"
