@@ -141,6 +141,7 @@ const appBindingCommands = [
   "variant.cycle",
   "variant.list",
   "provider.connect",
+  "opencode.settings",
   "opencode.status",
   "server.pair",
   "service.restart",
@@ -159,6 +160,7 @@ const appBindingCommands = [
   "app.toggle.file_context",
   "app.toggle.diffwrap",
   "app.toggle.paste_summary",
+  "permission.mode",
 ] as const
 
 export type TuiInput = {
