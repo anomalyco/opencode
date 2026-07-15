@@ -2,11 +2,6 @@ import { describe, expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
 import { CodeMode, Tool } from "../src/index.js"
 
-// Dots in supplied tool names are namespace separators: { "issues.list": tool } exposes
-// the same canonical path as { issues: { list: tool } }, so every advertised dotted path
-// is executable. A canonical path can be both a callable tool and a namespace, and the
-// last definition supplied for a canonical path wins.
-
 const echo = (description: string, result: string) =>
   Tool.make({
     description,
@@ -31,9 +26,10 @@ describe("dotted tool names", () => {
   const runtime = CodeMode.make({ tools: { api: { "issues.list": echo("List issues", "listed") } } })
 
   test("a dotted name becomes nested namespaces in the catalog", () => {
-    expect(runtime.catalog()).toHaveLength(1)
-    expect(runtime.catalog()[0]?.path).toBe("api.issues.list")
-    expect(runtime.catalog()[0]?.signature).toStartWith("tools.api.issues.list(input:")
+    const catalog = runtime.catalog()
+    expect(catalog).toHaveLength(1)
+    expect(catalog[0]?.path).toBe("api.issues.list")
+    expect(catalog[0]?.signature).toStartWith("tools.api.issues.list(input:")
     expect(runtime.instructions()).toContain("tools.api.issues.list(input:")
   })
 
@@ -51,6 +47,7 @@ describe("dotted tool names", () => {
       ["issues"],
       ["list"],
     ])
+    expect(await value(runtime, `return Object.keys(tools["api.issues"])`)).toEqual(["list"])
   })
 
   test("a top-level dotted name nests from the root", async () => {
@@ -68,7 +65,7 @@ describe("callable namespaces", () => {
   test("a path can hold a tool and child tools at once", async () => {
     expect(await value(runtime, `return await tools.issues({})`)).toBe("all")
     expect(await value(runtime, `return await tools.issues.list({})`)).toBe("list")
-    expect(runtime.catalog()?.map((tool) => tool.path)).toEqual(["issues", "issues.list"])
+    expect(runtime.catalog().map((tool) => tool.path)).toEqual(["issues", "issues.list"])
   })
 
   test("a callable namespace enumerates its children", async () => {
@@ -99,6 +96,48 @@ describe("callable namespaces", () => {
   })
 })
 
+describe("blocked member names on tool paths", () => {
+  const runtime = CodeMode.make({
+    tools: {
+      prototype: echo("Prototype tool", "proto"),
+      "issues.constructor": echo("Constructor tool", "ctor"),
+      nested: { ["__proto__"]: echo("Proto tool", "dunder") },
+    },
+  })
+
+  test("tools may use blocked member names because path segments never touch real properties", async () => {
+    expect(runtime.catalog().map((tool) => tool.path)).toEqual(["prototype", "issues.constructor", "nested.__proto__"])
+    expect(await value(runtime, `return await tools.prototype({})`)).toBe("proto")
+    expect(await value(runtime, `return await tools.issues.constructor({})`)).toBe("ctor")
+    expect(await value(runtime, `return await tools["issues.constructor"]({})`)).toBe("ctor")
+    expect(await value(runtime, `return await tools.nested.__proto__({})`)).toBe("dunder")
+    expect(await value(runtime, `return Object.keys(tools.issues)`)).toEqual(["constructor"])
+  })
+
+  test("a literal __proto__ key cannot poison a namespace into a fake definition", async () => {
+    // The quoted "__proto__" key sets the group's prototype in host JS; the sibling must survive.
+    const poisoned = CodeMode.make({
+      tools: { ns: { "__proto__": echo("Hidden", "hidden"), real: echo("Real tool", "real") } },
+    })
+    expect(poisoned.catalog().map((tool) => tool.path)).toEqual(["ns.real"])
+    expect(await value(poisoned, `return await tools.ns.real({})`)).toBe("real")
+  })
+
+  test("blocked member access on data values stays blocked", async () => {
+    const diagnostic = await failure(runtime, `const x = {}; return x.constructor`)
+    expect(diagnostic.message).toContain("constructor")
+    expect(Object.keys(Object.prototype)).toEqual([])
+  })
+})
+
+describe("empty segments", () => {
+  test("tool names with empty segments are rejected at make", () => {
+    for (const name of ["", "a..b", "trail.", ".lead"]) {
+      expect(() => CodeMode.make({ tools: { [name]: echo("Bad", "bad") } })).toThrow("empty segment")
+    }
+  })
+})
+
 describe("canonical path collisions", () => {
   test("the last definition supplied for a canonical path wins", async () => {
     const runtime = CodeMode.make({
@@ -118,7 +157,7 @@ describe("canonical path collisions", () => {
       },
     })
     // Catalog order follows first appearance of each canonical path.
-    expect(runtime.catalog()?.map((tool) => tool.path)).toEqual(["issues.list", "issues.get", "issues.close"])
+    expect(runtime.catalog().map((tool) => tool.path)).toEqual(["issues.list", "issues.get", "issues.close"])
     expect(await value(runtime, `return await tools.issues.list({})`)).toBe("second")
     expect(await value(runtime, `return await tools.issues.get({})`)).toBe("got")
     expect(await value(runtime, `return await tools.issues.close({})`)).toBe("closed")

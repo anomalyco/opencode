@@ -130,6 +130,9 @@ const runHost = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, Tool
     }),
   )
 
+// Blocked-member checks guard plain-object property access on data values. Tool path
+// segments are exempt: they are Map keys and inert strings, and must never be used to
+// index a non-Map object.
 const blockedMemberNames = new Set(["__proto__", "constructor", "prototype"])
 
 export const isBlockedMember = (name: string): boolean => blockedMemberNames.has(name)
@@ -275,9 +278,7 @@ export const copyOut = (value: unknown, undefinedAsNull = false): unknown => {
 }
 
 // Dots in supplied tool names are namespace separators: { "issues.list": tool } and
-// { issues: { list: tool } } expose the same canonical path, so every advertised dotted
-// path is executable. A node may be both a callable tool and a namespace; the last
-// definition supplied for a canonical path wins.
+// { issues: { list: tool } } yield the same canonical path, and the last definition wins.
 type ToolNode<R> = {
   definition?: Definition<R>
   readonly children: Map<string, ToolNode<R>>
@@ -289,6 +290,7 @@ const toolTrie = <R>(tools: Tools<R>): ToolNode<R> => {
     for (const [name, value] of Object.entries(group)) {
       let current = node
       for (const segment of name.split(".")) {
+        if (segment === "") throw new TypeError(`Tool name '${name}' contains an empty segment.`)
         const child = current.children.get(segment) ?? { children: new Map() }
         current.children.set(segment, child)
         current = child
@@ -301,8 +303,7 @@ const toolTrie = <R>(tools: Tools<R>): ToolNode<R> => {
   return root
 }
 
-// Property access may still spell a canonical path with dotted segments, e.g.
-// tools.api["issues.list"]; normalize before walking the trie.
+// Bracket access may spell a canonical path with dotted segments: tools.api["issues.list"].
 const canonicalSegments = (path: ReadonlyArray<string>): ReadonlyArray<string> =>
   path.flatMap((segment) => segment.split("."))
 
@@ -585,38 +586,31 @@ export const prepare = <R>(tools: Tools<R>, catalogBudget = defaultCatalogBudget
   }
 }
 
+const lookup = <R>(root: ToolNode<R>, segments: ReadonlyArray<string>): ToolNode<R> | undefined =>
+  segments.reduce<ToolNode<R> | undefined>((node, segment) => node?.children.get(segment), root)
+
 const namespaceKeys = <R>(root: ToolNode<R>, path: ReadonlyArray<string>): ReadonlyArray<string> => {
   const segments = canonicalSegments(path)
-  let node = root
-  for (const segment of segments) {
-    const child = isBlockedMember(segment) ? undefined : node.children.get(segment)
-    if (child === undefined) {
-      throw new ToolRuntimeError("UnknownTool", `Unknown tool namespace '${segments.join(".")}'.`, [
-        "Object.keys(tools) lists the available namespaces; search({ query }) finds described tools.",
-      ])
-    }
-    node = child
+  const node = lookup(root, segments)
+  if (node === undefined) {
+    throw new ToolRuntimeError("UnknownTool", `Unknown tool namespace '${segments.join(".")}'.`, [
+      "Object.keys(tools) lists the available namespaces; search({ query }) finds described tools.",
+    ])
   }
   return Array.from(node.children.keys())
 }
 
 const resolve = <R>(root: ToolNode<R>, path: ReadonlyArray<string>): Definition<R> => {
   const segments = canonicalSegments(path)
-  let node = root
-  for (const segment of segments) {
-    const child = isBlockedMember(segment) ? undefined : node.children.get(segment)
-    if (child === undefined) {
-      throw new ToolRuntimeError("UnknownTool", `Unknown tool '${segments.join(".")}'.`, [
-        "Use search({ query }) to find available described tools.",
-      ])
-    }
-    node = child
+  const node = lookup(root, segments)
+  if (node === undefined) {
+    throw new ToolRuntimeError("UnknownTool", `Unknown tool '${segments.join(".")}'.`, [
+      "Use search({ query }) to find available described tools.",
+    ])
   }
-
   if (node.definition === undefined) {
     throw new ToolRuntimeError("UnknownTool", `Tool '${segments.join(".")}' is not callable.`)
   }
-
   return node.definition
 }
 

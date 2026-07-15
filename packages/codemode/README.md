@@ -78,7 +78,10 @@ Descriptions and schemas are model-visible contract; keep authorization in `run`
 Dots in tool names are namespace separators: `{ "issues.list": tool }` exposes `tools.issues.list(...)`, exactly like
 `{ issues: { list: tool } }`. One canonical path may be both a callable tool and a namespace, and the last definition
 supplied for a canonical path wins. Other non-identifier characters stay literal and render with bracket notation,
-e.g. `tools.context7["resolve-library-id"](...)`.
+e.g. `tools.context7["resolve-library-id"](...)`. Names may use `constructor`, `prototype`, or `__proto__` — path
+segments never touch real object properties — but names with empty segments (`""`, `"a..b"`) throw at construction.
+Note that a literal `"__proto__"` key sets the prototype in the host's own object literal before CodeMode sees it;
+spell it computed (`["__proto__"]`) or dotted (`"ns.__proto__"`).
 
 ### `CodeMode.execute` and `CodeMode.make`
 

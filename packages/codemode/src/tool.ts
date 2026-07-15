@@ -50,8 +50,14 @@ export type Options<I extends SchemaType, O extends SchemaType | undefined, R = 
   readonly run: (input: InputType<I>) => Effect.Effect<ResultType<O>, unknown, R>
 }
 
+// Object.hasOwn in addition to `in`: a namespace whose prototype was reassigned by a
+// literal "__proto__" tool name must not be misclassified as a Definition.
 export const isDefinition = <R = never>(value: unknown): value is Definition<R> =>
-  typeof value === "object" && value !== null && "_tag" in value && value._tag === "CodeModeTool"
+  typeof value === "object" &&
+  value !== null &&
+  "_tag" in value &&
+  Object.hasOwn(value, "_tag") &&
+  value._tag === "CodeModeTool"
 
 /**
  * Defines one schema-described tool available to a CodeMode program through `tools.*`.

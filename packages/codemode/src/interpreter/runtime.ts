@@ -1759,8 +1759,10 @@ export class Interpreter<R> {
           : self.toPropertyKey(yield* self.evaluateExpression(propertyNode), propertyNode)
 
       if (objectValue instanceof ToolReference) {
-        if (typeof key !== "string" || isBlockedMember(key)) {
-          throw new InterpreterRuntimeError("Tool paths must use safe string property names.", propertyNode)
+        // Blocked member names are allowed here: tool path segments are inert Map keys,
+        // never plain-object property accesses.
+        if (typeof key !== "string") {
+          throw new InterpreterRuntimeError("Tool paths must use string property names.", propertyNode)
         }
         return new ToolReference([...objectValue.path, key])
       }

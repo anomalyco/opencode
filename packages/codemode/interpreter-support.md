@@ -168,7 +168,8 @@ ultimate source of truth.
 - [ ] `Object.is`; runtime and tool-reference identity semantics need to be defined first.
 - [ ] `Object.groupBy`.
 - [ ] Object creation, descriptors, freezing/sealing, prototype APIs, and reflection APIs.
-- [ ] A final policy for legal data/tool keys named `__proto__`, `constructor`, or `prototype`.
+- [ ] A final policy for legal data keys named `__proto__`, `constructor`, or `prototype` (tool path segments
+      already allow them; see known semantic gaps).
 
 ## Arrays
 
@@ -315,8 +316,9 @@ These are actionable implementation items. Check them off only when behavior and
 - [x] Canonicalize dotted tool names into namespace paths so every advertised dotted path is executable, one
       canonical path can be both a callable tool and a namespace, and the last definition supplied for a canonical
       path wins.
-- [ ] Guarantee tool paths containing blocked segments (`constructor`, `prototype`, `__proto__`) are either
-      executable or never advertised.
+- [x] Allow blocked member names (`constructor`, `prototype`, `__proto__`) as tool path segments: segments are Map
+      keys and inert strings, never plain-object property accesses, so every advertised path is executable. Blocked
+      member access on data values stays rejected. Tool names with empty segments are rejected at construction.
 - [ ] Define safe outbound handling for non-finite numbers and `undefined` so invalid values cannot silently become
       `null` in render-only or OpenAPI tool calls.
 - [ ] Make regular-expression execution genuinely timeout-safe, or narrow the timeout guarantee explicitly.
