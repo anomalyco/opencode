@@ -103,7 +103,7 @@ function wrapSSE(res: Response, ms: number, ctl: AbortController) {
 }
 
 function prepareOptions(model: ModelV2.Info, pkg: string) {
-  const projected = mapBodyToProviderOptions(model)
+  const projected = mapBodyToProviderOptions(model, pkg)
   const options: Record<string, any> = {
     name: model.providerID,
     ...(model.settings ?? {}),
@@ -265,7 +265,7 @@ export const locationLayer = Layer.effect(
             cause: new Error(`Unsupported package ${model.package}`),
           })
 
-        const packageName = ProviderV2.packageName(model.package) ?? ""
+        const packageName = ProviderV2.packageName(model.package)
         const options = prepareOptions(model, packageName)
         const sdkKey = cacheKey({
           providerID: model.providerID,
@@ -301,8 +301,8 @@ export const locationLayer = Layer.effect(
 export const defaultLayer = locationLayer
 
 function modelFromLanguage(info: ModelV2.Info, language: LanguageModelV3) {
-  const packageName = ProviderV2.packageName(info.package)
-  const projected = mapBodyToProviderOptions(info)
+  const packageName = ProviderV2.packageName(info.package!)
+  const projected = mapBodyToProviderOptions(info, packageName)
   const optionKey = providerOptionKey(packageName, info.providerID)
   const providerOptions = (() => {
     if (projected.settings === undefined) return
@@ -311,7 +311,7 @@ function modelFromLanguage(info: ModelV2.Info, language: LanguageModelV3) {
     return { [optionKey]: projected.settings }
   })()
   const route: AnyRoute = {
-    id: `ai-sdk:${ProviderV2.packageName(info.package) ?? "unknown"}`,
+    id: `ai-sdk:${packageName}`,
     provider: ProviderID.make(info.providerID),
     providerMetadataKey: optionKey,
     protocol: "ai-sdk",
@@ -389,13 +389,11 @@ function requestSettings(settings: Readonly<Record<string, unknown>> | undefined
   return Object.keys(result).length === 0 ? undefined : result
 }
 
-function mapBodyToProviderOptions(model: ModelV2.Info) {
+function mapBodyToProviderOptions(model: ModelV2.Info, packageName: string) {
   const settings = requestSettings(model.settings)
   const pro = Schema.is(Schema.Struct({ mode: Schema.Literal("pro") }))(model.body?.reasoning)
   const forceReasoning =
-    ["@ai-sdk/openai", "@ai-sdk/azure", "@ai-sdk/amazon-bedrock/mantle"].includes(
-      ProviderV2.packageName(model.package) ?? "",
-    ) &&
+    ["@ai-sdk/openai", "@ai-sdk/azure", "@ai-sdk/amazon-bedrock/mantle"].includes(packageName) &&
     (pro || settings?.reasoningEffort !== undefined || settings?.reasoningSummary !== undefined)
   const normalized = forceReasoning ? ProviderV2.mergeOverlay(settings, { forceReasoning: true }) : settings
   if (!pro) return { settings: normalized, body: model.body }

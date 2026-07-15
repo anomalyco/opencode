@@ -11,9 +11,12 @@ export const ID = Provider.ID
 export type ID = typeof ID.Type
 
 export const AISDK_PREFIX = "aisdk:"
-export const isAISDK = (value: string | undefined) => value?.startsWith(AISDK_PREFIX) ?? false
+export const isAISDK = (value: string | undefined): value is string => value?.startsWith(AISDK_PREFIX) ?? false
 export const aisdk = (value: string) => (isAISDK(value) ? value : `${AISDK_PREFIX}${value}`)
-export const packageName = (value: string | undefined) => {
+export function packageName(value: string): string
+export function packageName(value: undefined): undefined
+export function packageName(value: string | undefined): string | undefined
+export function packageName(value: string | undefined) {
   if (value === undefined || !isAISDK(value)) return value
   return value.slice(AISDK_PREFIX.length)
 }
