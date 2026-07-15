@@ -102,10 +102,15 @@ export const dict = {
   "temp.logoDarkAlt": "opencode logo dark",
 
   "home.banner.badge": "New",
-  "home.banner.text": "Desktop app available in beta",
-  "home.banner.platforms": "on macOS, Windows, and Linux",
+  "home.banner.text": "Introducing tabs for desktop.",
+  "home.banner.platforms": "Available on macOS, Windows, and Linux",
   "home.banner.downloadNow": "Download now",
   "home.banner.downloadBetaNow": "Download the desktop beta now",
+
+  "home.promo.title": "Introducing Tabs for Desktop",
+  "home.promo.body": "Organize your work and active sessions with tabs.",
+  "home.promo.cta": "Download the latest to get started.",
+  "home.promo.close": "Dismiss desktop app announcement",
 
   "home.hero.title": "The open source AI coding agent",
   "home.hero.subtitle.a": "Free models included or connect any model from any provider,",
@@ -703,11 +708,11 @@ export const dict = {
 
   "download.title": "OpenCode | Download",
   "download.meta.description": "Download OpenCode for macOS, Windows, and Linux",
-  "download.hero.title": "Download OpenCode",
+  "download.hero.title": "Download OpenCode Desktop",
   "download.hero.subtitle": "Available in Beta for macOS, Windows, and Linux",
   "download.hero.button": "Download for {{os}}",
   "download.section.terminal": "OpenCode Terminal",
-  "download.section.desktop": "OpenCode Desktop (Beta)",
+  "download.section.desktop": "OpenCode Desktop",
   "download.section.extensions": "OpenCode Extensions",
   "download.section.integrations": "OpenCode Integrations",
   "download.action.download": "Download",

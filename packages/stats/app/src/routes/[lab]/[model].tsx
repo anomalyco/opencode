@@ -200,6 +200,7 @@ export default function StatsModel() {
                   pairs={modelComparisonPairs(catalog(), catalogEntry() ?? null, stats() ?? null)}
                   title="Compare This Model"
                   description="Other models to compare with this one."
+                  variant="featured"
                 />
               </>
             </Show>
