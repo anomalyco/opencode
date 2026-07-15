@@ -191,7 +191,7 @@ export function RunFooterView(props: RunFooterViewProps) {
   const subagentShortcut = () => shortcut("session.child.first")
   const queuedShortcut = () => shortcut("session.queued_prompts")
   const backgroundShortcut = () => shortcut("session.background")
-  const subagentInterruptShortcut = () => shortcut("subagent.interrupt")
+  const subagentInterruptShortcut = () => shortcut("composer.subagent.interrupt")
   const interrupt = () => shortcut("session.interrupt")
   const variantCycle = () => monoShortcut(shortcuts.all("variant.cycle") ?? "", props.mono)
   const clearShortcut = () => shortcut("prompt.clear")
@@ -610,10 +610,9 @@ export function RunFooterView(props: RunFooterViewProps) {
     priority: 1,
     commands: [
       {
-        id: "subagent.interrupt",
+        id: "composer.subagent.interrupt",
         title: "Interrupt subagent",
         group: "Session",
-        bind: "ctrl+d",
         run: () => {
           const current = selectedTab()
           if (current?.status !== "running") {

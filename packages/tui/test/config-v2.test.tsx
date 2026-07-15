@@ -6,14 +6,14 @@ import { resolve, ConfigProvider, Info, useConfig, type Interface } from "../src
 import { settings } from "../src/component/dialog-config"
 import { TuiKeybind } from "../src/config/keybind"
 
-test("validates mini replay settings", () => {
-  const decode = Schema.decodeUnknownSync(Info)
+const decodeInfo = Schema.decodeUnknownSync(Info)
 
-  expect(decode({ mini: { replay: false, replay_limit: 50 } })).toEqual({
+test("validates mini replay settings", () => {
+  expect(decodeInfo({ mini: { replay: false, replay_limit: 50 } })).toEqual({
     mini: { replay: false, replay_limit: 50 },
   })
-  expect(() => decode({ mini: { replay_limit: 0 } })).toThrow()
-  expect(() => decode({ mini: { replay_limit: 1.5 } })).toThrow()
+  expect(() => decodeInfo({ mini: { replay_limit: 0 } })).toThrow()
+  expect(() => decodeInfo({ mini: { replay_limit: 1.5 } })).toThrow()
 })
 
 test("validates the session tabs setting", () => {
@@ -71,6 +71,67 @@ test("uses command IDs as keybind keys", () => {
       .filter((key) => key !== "leader")
       .every((key) => key.includes(".")),
   ).toBe(true)
+})
+
+test("accepts every v2-only named command ID", () => {
+  const commands = [
+    "server.pair",
+    "session.toggle.exploration_grouping",
+    "composer.subagent.up",
+    "composer.subagent.down",
+    "composer.subagent.select",
+    "composer.subagent.interrupt",
+    "composer.shell.up",
+    "composer.shell.down",
+    "composer.shell.kill",
+    "diff.down",
+    "diff.up",
+    "diff.page.down",
+    "diff.page.up",
+    "diff.mark_reviewed",
+    "opencode.settings",
+    "service.restart",
+    "permission.mode",
+    "session.cd",
+    "app.scrap",
+  ]
+  const config = resolve(
+    decodeInfo({ keybinds: Object.fromEntries(commands.map((command) => [command, "ctrl+alt+z"])) }),
+    { terminalSuspend: true },
+  )
+
+  commands.forEach((command) => expect(config.keybinds.get(command)).toMatchObject([{ key: "ctrl+alt+z" }]))
+})
+
+test("centralizes named command defaults and honors explicit none", () => {
+  const defaults = {
+    "composer.subagent.up": "up",
+    "composer.subagent.down": "down",
+    "composer.subagent.select": "return",
+    "composer.subagent.interrupt": "ctrl+d",
+    "composer.shell.up": "up",
+    "composer.shell.down": "down",
+    "composer.shell.kill": "ctrl+d",
+    "diff.down": "j,down",
+    "diff.up": "k,up",
+    "diff.page.down": "pagedown,ctrl+f",
+    "diff.page.up": "pageup,ctrl+b",
+    "diff.mark_reviewed": "m",
+  }
+  const config = resolve({}, { terminalSuspend: true })
+  Object.entries(defaults).forEach(([command, key]) =>
+    expect(config.keybinds.get(command)).toMatchObject([{ key }]),
+  )
+
+  const disabled = resolve(
+    decodeInfo({ keybinds: Object.fromEntries(Object.keys(defaults).map((command) => [command, "none"])) }),
+    { terminalSuspend: true },
+  )
+  Object.keys(defaults).forEach((command) => expect(disabled.keybinds.get(command)).toEqual([]))
+})
+
+test("rejects orphaned keybind definitions", () => {
+  expect(decodeInfo({ keybinds: { "app.heap_snapshot": "ctrl+h" } })).toEqual({ keybinds: {} })
 })
 
 test("provides config and its host interface", async () => {

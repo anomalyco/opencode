@@ -2,6 +2,7 @@ import { NodeFileSystem } from "@effect/platform-node"
 import { Global } from "@opencode-ai/util/global"
 import { Effect } from "effect"
 import { expect, test } from "bun:test"
+import { parse } from "jsonc-parser"
 import path from "path"
 import { Config } from "../src/config"
 
@@ -24,6 +25,7 @@ test("migrates tui and kv config into cli.json", async () => {
       keybinds: {
         leader: "ctrl+o",
         app_exit: "ctrl+q",
+        app_heap_snapshot: "ctrl+h",
         input_paste: { key: "ctrl+v", preventDefault: false },
         session_delete: false,
         "dialog.select.next": "ctrl+n",
@@ -86,12 +88,12 @@ test("migrates tui and kv config into cli.json", async () => {
       terminal: { title: false },
       prompt: { editor: false, paste: "full" },
       session: { sidebar: "hide", scrollbar: true, thinking: "show", grouping: "none" },
+      hints: { onboarding: false },
       animations: false,
       mouse: false,
     })
     expect(config).not.toHaveProperty("skipped_version")
     expect(config).not.toHaveProperty("which_key")
-    expect(config).not.toHaveProperty("hints")
     expect((await Bun.file(path.join(directory, "cli.json")).json()).keybinds).toEqual({
       leader: "ctrl+o",
       "app.exit": "ctrl+q",
@@ -120,7 +122,9 @@ test("migrates before the first update and does not remigrate afterward", async 
           draft.animations = false
           draft.mouse = false
         })
-        yield* Effect.promise(() => Bun.write(path.join(directory, "tui.json"), JSON.stringify({ theme: "changed" })))
+        yield* Effect.promise(() =>
+          Bun.write(path.join(directory, "tui.json"), JSON.stringify({ theme: "changed" })),
+        )
         return yield* service.get()
       }),
     )
@@ -159,9 +163,89 @@ test("preserves legacy cursor settings", async () => {
   }
 })
 
+test("migrates legacy keybind names in an existing cli.json", async () => {
+  const directory = await Bun.$`mktemp -d`.text().then((value) => value.trim())
+  const file = path.join(directory, "cli.json")
+  await Bun.write(
+    file,
+    `{
+  // Preserve this comment
+  "keybinds": {
+    // Session list shortcut
+    "session_list": "ctrl+l",
+    "app_heap_snapshot": "ctrl+h",
+    // Legacy delete shortcut
+    "session_delete": "ctrl+d",
+    // Canonical delete shortcut
+    "session.delete": "ctrl+x",
+    "app.heap_snapshot": "ctrl+shift+h"
+  }
+}
+`,
+  )
+
+  try {
+    const config = await run(
+      directory,
+      Effect.gen(function* () {
+        const service = yield* Config.Service
+        return yield* service.get()
+      }),
+    )
+
+    expect(config.keybinds).toEqual({
+      "session.list": "ctrl+l",
+      "session.delete": "ctrl+x",
+    })
+    const text = await Bun.file(file).text()
+    expect(text).toContain("// Preserve this comment")
+    expect(text).toContain("// Session list shortcut")
+    expect(text).toContain("// Legacy delete shortcut")
+    expect(text).toContain("// Canonical delete shortcut")
+    expect(parse(text).keybinds).toEqual({
+      "session.list": "ctrl+l",
+      "session.delete": "ctrl+x",
+    })
+  } finally {
+    await Bun.$`rm -rf ${directory}`
+  }
+})
+
+test("removes a sole orphaned keybind with a trailing comma", async () => {
+  const directory = await Bun.$`mktemp -d`.text().then((value) => value.trim())
+  const file = path.join(directory, "cli.json")
+  await Bun.write(
+    file,
+    `{
+  "keybinds": {
+    // Removed v2 command
+    "app.heap_snapshot": "ctrl+h",
+  },
+}
+`,
+  )
+
+  try {
+    const config = await run(
+      directory,
+      Effect.gen(function* () {
+        const service = yield* Config.Service
+        return yield* service.get()
+      }),
+    )
+
+    expect(config.keybinds).toEqual({})
+    const text = await Bun.file(file).text()
+    expect(text).toContain("// Removed v2 command")
+    expect(parse(text).keybinds).toEqual({})
+  } finally {
+    await Bun.$`rm -rf ${directory}`
+  }
+})
+
 test("updates a config draft while preserving JSONC comments", async () => {
   const directory = await Bun.$`mktemp -d`.text().then((value) => value.trim())
-  await Bun.write(path.join(directory, "cli.json"), '{\n  // Keep this comment\n  "animations": true\n}\n')
+  await Bun.write(path.join(directory, "cli.json"), "{\n  // Keep this comment\n  \"animations\": true\n}\n")
 
   try {
     const config = await run(

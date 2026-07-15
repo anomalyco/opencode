@@ -8,7 +8,7 @@ import { RunFooterView } from "../../src/mini/footer.view"
 import { RUN_THEME_FALLBACK } from "../../src/mini/theme"
 import type { FooterState, FooterSubagentState, FooterView } from "../../src/mini/types"
 
-test("down opens subagents from an empty prompt", async () => {
+test("subagent keybinds use v2 config", async () => {
   const [state] = createSignal<FooterState>({
     phase: "idle",
     status: "",
@@ -34,9 +34,17 @@ test("down opens subagents from an empty prompt", async () => {
     forms: [],
   })
   const config = resolve(
-    { keybinds: { editor_open: "none", session_queued_prompts: "none" } },
+    {
+      keybinds: {
+        "prompt.editor": "none",
+        "session.queued_prompts": "none",
+        "composer.subagent.interrupt": "ctrl+i",
+      },
+    },
     { terminalSuspend: true },
   )
+  const interrupted: string[] = []
+
   function Harness() {
     return (
       <Keymap.Provider config={config}>
@@ -82,6 +90,7 @@ test("down opens subagents from an empty prompt", async () => {
           onLayout={() => {}}
           onStatus={() => {}}
           onMiniSettingChange={() => {}}
+          onSubagentInterrupt={(sessionID) => interrupted.push(sessionID)}
         />
       </Keymap.Provider>
     )
@@ -94,6 +103,11 @@ test("down opens subagents from an empty prompt", async () => {
     app.mockInput.pressArrow("down")
     await app.renderOnce()
     expect(app.captureCharFrame()).toContain("Select subagent")
+    app.mockInput.pressEnter()
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("ctrl+i")
+    app.mockInput.pressKey("i", { ctrl: true })
+    expect(interrupted).toEqual(["subagent-1"])
   } finally {
     app.renderer.currentFocusedRenderable?.blur()
     app.renderer.currentFocusedEditor?.blur()

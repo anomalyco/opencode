@@ -2,13 +2,22 @@ export * as ConfigMigration from "./migrate"
 
 import { TuiConfigV1 } from "@opencode-ai/tui/config/v1"
 import { TuiKeybind } from "@opencode-ai/tui/config/v1/keybind"
+import { Definitions } from "@opencode-ai/tui/config/keybind"
 import { Effect, FileSystem, Option, Schema } from "effect"
-import { parse, type ParseError } from "jsonc-parser"
+import {
+  createScanner,
+  findNodeAtLocation,
+  parse,
+  parseTree,
+  type Node,
+  type ParseError,
+} from "jsonc-parser"
 import path from "path"
 import type { Info } from "./schema"
 
 const decodeV1 = Schema.decodeUnknownOption(TuiConfigV1.Info)
 const decodeRecord = Schema.decodeUnknownOption(Schema.Record(Schema.String, Schema.Any))
+const LegacyKeybindTargets = new Set<string>(Object.values(TuiKeybind.CommandMap))
 
 export const run = Effect.fn("cli.config.migrate")(function* (input: {
   readonly file: string
@@ -16,7 +25,36 @@ export const run = Effect.fn("cli.config.migrate")(function* (input: {
   readonly state: string
 }) {
   const fs = yield* FileSystem.FileSystem
-  if (yield* fs.exists(input.file).pipe(Effect.orElseSucceed(() => false))) return
+  if (yield* fs.exists(input.file).pipe(Effect.orElseSucceed(() => false))) {
+    const text = yield* fs.readFileString(input.file)
+    const errors: ParseError[] = []
+    const value: any = parse(text, errors, { allowTrailingComma: true })
+    if (errors.length) return
+    const config = Option.getOrUndefined(decodeRecord(value))
+    if (config === undefined) return
+    const keybinds = Option.getOrUndefined(decodeRecord(config.keybinds))
+    if (keybinds === undefined) return
+    const updated = Object.keys(keybinds).reduce((text, name) => {
+      const target =
+        TuiKeybind.CommandMap[name as keyof typeof TuiKeybind.CommandMap] ??
+        (LegacyKeybindTargets.has(name) ? name : undefined)
+      if (target === undefined) return text
+      if (target === name && target in Definitions) return text
+      const tree = parseTree(text)
+      if (tree === undefined) return text
+      const property = findNodeAtLocation(tree, ["keybinds", name])?.parent
+      if (property === undefined) return text
+      if (!(target in Definitions) || (target !== name && target in keybinds)) return removeProperty(text, property)
+      const key = property.children?.[0]
+      if (key === undefined) return text
+      return text.slice(0, key.offset) + JSON.stringify(target) + text.slice(key.offset + key.length)
+    }, text)
+    if (updated === text) return
+    const temp = input.file + ".tmp"
+    yield* fs.writeFileString(temp, updated, { mode: 0o600 })
+    yield* fs.rename(temp, input.file)
+    return
+  }
 
   const legacyValue = yield* readJson(path.join(input.config, "tui.json"))
   const legacy = Option.getOrUndefined(decodeV1(legacyValue))
@@ -37,6 +75,37 @@ export const run = Effect.fn("cli.config.migrate")(function* (input: {
   })
 })
 
+function removeProperty(text: string, property: Node) {
+  const properties = property.parent?.children ?? []
+  const index = properties.indexOf(property)
+  const end = property.offset + property.length
+  const next = properties[index + 1]
+  if (next) {
+    const comma = findComma(text, end, next.offset)
+    if (comma !== undefined) return text.slice(0, property.offset) + text.slice(comma + 1)
+  }
+  const previous = properties[index - 1]
+  if (previous) {
+    const comma = findComma(text, previous.offset + previous.length, property.offset)
+    if (comma !== undefined)
+      return text.slice(0, comma) + text.slice(comma + 1, property.offset) + text.slice(end)
+  }
+  const comma = findComma(text, end, (property.parent?.offset ?? 0) + (property.parent?.length ?? 0))
+  if (comma !== undefined) return text.slice(0, property.offset) + text.slice(comma + 1)
+  return text.slice(0, property.offset) + text.slice(end)
+}
+
+function findComma(text: string, start: number, end: number) {
+  const scanner = createScanner(text, false)
+  scanner.setPosition(start)
+  while (true) {
+    scanner.scan()
+    const offset = scanner.getTokenOffset()
+    if (scanner.getTokenLength() === 0 || offset >= end) return
+    if (text[offset] === ",") return offset
+  }
+}
+
 export function migrateV1(legacy: TuiConfigV1.Info | undefined, kv: Record<string, any>): Info {
   const plugins = [
     ...(legacy?.plugin?.map((plugin) =>
@@ -54,10 +123,11 @@ export function migrateV1(legacy: TuiConfigV1.Info | undefined, kv: Record<strin
     legacy?.keybinds === undefined
       ? undefined
       : Object.fromEntries(
-          Object.entries(legacy.keybinds).map(([name, value]) => [
-            TuiKeybind.CommandMap[name as keyof typeof TuiKeybind.CommandMap] ?? name,
-            value,
-          ]),
+          Object.entries(legacy.keybinds).flatMap(([name, value]) => {
+            const target = TuiKeybind.CommandMap[name as keyof typeof TuiKeybind.CommandMap] ?? name
+            if (!(target in Definitions)) return []
+            return [[target, value]]
+          }),
         )
 
   return {

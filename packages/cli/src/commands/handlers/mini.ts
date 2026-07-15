@@ -1,8 +1,8 @@
 import { Context, Effect, FileSystem, Option } from "effect"
 import { Commands } from "../commands"
+import { Config } from "../../config"
 import { Runtime } from "../../framework/runtime"
 import { ServerConnection } from "../../services/server-connection"
-import { Config } from "../../config"
 import { resolve } from "@opencode-ai/tui/config"
 import { Global } from "@opencode-ai/util/global"
 
