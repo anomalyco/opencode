@@ -31,7 +31,7 @@ import type { WorkspaceAdapter } from "@/control-plane/types"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { InstallationChannel } from "@opencode-ai/core/installation/version"
-import { PermissionModule } from "@/permission/module"
+import { PermissionModule } from "@opencode-ai/core/permission/module"
 import * as Option from "effect/Option"
 
 type State = {
