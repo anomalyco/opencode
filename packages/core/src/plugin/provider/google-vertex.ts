@@ -24,8 +24,13 @@ function resolveLocation(options: Record<string, any>) {
   )
 }
 
+// "global", "us", and "eu" are multi-region locations that resolve via the
+// bare aiplatform.googleapis.com host; only single-region locations (e.g.
+// "us-central1") use a location-prefixed host.
+const VERTEX_MULTI_REGIONS = new Set(["global", "us", "eu"])
+
 function vertexEndpoint(location: string) {
-  if (location === "global") return "aiplatform.googleapis.com"
+  if (VERTEX_MULTI_REGIONS.has(location)) return "aiplatform.googleapis.com"
   return `${location}-aiplatform.googleapis.com`
 }
 

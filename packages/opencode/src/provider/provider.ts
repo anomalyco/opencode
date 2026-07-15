@@ -98,6 +98,16 @@ function googleVertexAnthropicBaseURL(project: string | undefined, location: str
   return `https://aiplatform.${location}.rep.googleapis.com/v1/projects/${project}/locations/${location}/publishers/anthropic/models`
 }
 
+// "global", "us", and "eu" are multi-region locations that resolve via the
+// bare aiplatform.googleapis.com host; only single-region locations (e.g.
+// "us-central1") use a location-prefixed host.
+const VERTEX_MULTI_REGIONS = new Set(["global", "us", "eu"])
+
+function googleVertexEndpoint(location: string) {
+  if (VERTEX_MULTI_REGIONS.has(location)) return "aiplatform.googleapis.com"
+  return `${location}-aiplatform.googleapis.com`
+}
+
 type BundledSDK = {
   languageModel(modelId: string): LanguageModelV3
   chat?: (modelId: string) => LanguageModelV3
@@ -517,7 +527,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       return {
         autoload: true,
         vars(_options: Record<string, any>) {
-          const endpoint = location === "global" ? "aiplatform.googleapis.com" : `${location}-aiplatform.googleapis.com`
+          const endpoint = googleVertexEndpoint(location)
           return {
             ...(project && { GOOGLE_VERTEX_PROJECT: project }),
             GOOGLE_VERTEX_LOCATION: location,

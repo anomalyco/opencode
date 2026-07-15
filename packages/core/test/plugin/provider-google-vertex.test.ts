@@ -231,7 +231,7 @@ describe("GoogleVertexPlugin", () => {
     ),
   )
 
-  it.effect("keeps OpenAI-compatible Vertex endpoint templates regional for eu", () =>
+  it.effect("keeps OpenAI-compatible Vertex endpoint templates multi-region for eu", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
       yield* catalog.transform((catalog) =>
@@ -250,7 +250,31 @@ describe("GoogleVertexPlugin", () => {
       expect(provider.api).toEqual({
         type: "aisdk",
         package: "@ai-sdk/openai-compatible",
-        url: "https://eu-aiplatform.googleapis.com/v1/projects/config-project/locations/eu",
+        url: "https://aiplatform.googleapis.com/v1/projects/config-project/locations/eu",
+      })
+    }),
+  )
+
+  it.effect("keeps OpenAI-compatible Vertex endpoint templates multi-region for us", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      yield* catalog.transform((catalog) =>
+        catalog.provider.update(ProviderV2.ID.make("google-vertex"), (provider) => {
+          provider.api = {
+            type: "aisdk",
+            package: "@ai-sdk/openai-compatible",
+            url: "https://${GOOGLE_VERTEX_ENDPOINT}/v1/projects/${GOOGLE_VERTEX_PROJECT}/locations/${GOOGLE_VERTEX_LOCATION}",
+          }
+          provider.request.body.project = "config-project"
+          provider.request.body.location = "us"
+        }),
+      )
+      yield* addPlugin()
+      const provider = required(yield* catalog.provider.get(ProviderV2.ID.make("google-vertex")))
+      expect(provider.api).toEqual({
+        type: "aisdk",
+        package: "@ai-sdk/openai-compatible",
+        url: "https://aiplatform.googleapis.com/v1/projects/config-project/locations/us",
       })
     }),
   )
