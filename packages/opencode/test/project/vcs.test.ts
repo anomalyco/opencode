@@ -40,6 +40,8 @@ const write = Effect.fn("VcsTest.write")(function* (file: string, content: strin
   yield* FSUtil.Service.use((fs) => fs.writeWithDirs(file, content))
 })
 
+const readString = (file: string) => Effect.promise(() => Bun.file(file).text())
+
 const remove = Effect.fn("VcsTest.remove")(function* (file: string) {
   yield* FSUtil.Service.use((fs) => fs.remove(file))
 })
@@ -208,6 +210,75 @@ describe("Vcs diff", () => {
       expect(branch).toBe("feature/test")
       expect(base).toBe("main")
     }),
+  )
+
+  it.instance(
+    "stash and stashPop round-trips correctly",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        yield* write(path.join(test.directory, "file.txt"), "original\n")
+        yield* git(test.directory, ["add", "."])
+        yield* git(test.directory, ["commit", "--no-gpg-sign", "-m", "add file"])
+        yield* write(path.join(test.directory, "file.txt"), "stashed\n")
+
+        const vcs = yield* init()
+        yield* vcs.stash({ message: "my-work-in-progress" })
+
+        const content = yield* readString(path.join(test.directory, "file.txt"))
+        expect(content).toBe("original\n")
+
+        const popped = yield* vcs.stashPop({ message: "my-work-in-progress" })
+        expect(popped).toBe(true)
+
+        const restored = yield* readString(path.join(test.directory, "file.txt"))
+        expect(restored).toBe("stashed\n")
+      }),
+    { git: true },
+  )
+
+  it.instance(
+    "stashPop uses exact message match, not substring",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        yield* git(test.directory, ["branch", "-M", "main"])
+        yield* write(path.join(test.directory, "file.txt"), "base\n")
+        yield* git(test.directory, ["add", "."])
+        yield* git(test.directory, ["commit", "--no-gpg-sign", "-m", "base commit"])
+
+        yield* write(path.join(test.directory, "file.txt"), "fix-bug\n")
+        const vcs = yield* init()
+        yield* vcs.stash({ message: "fix-bug" })
+
+        yield* write(path.join(test.directory, "file.txt"), "fix\n")
+        yield* vcs.stash({ message: "fix" })
+
+        const popped = yield* vcs.stashPop({ message: "fix" })
+        expect(popped).toBe(true)
+
+        const restored = yield* readString(path.join(test.directory, "file.txt"))
+        expect(restored).toBe("fix\n")
+      }),
+    { git: true },
+  )
+
+  it.instance(
+    "stashPop returns false when no stash matches",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        yield* write(path.join(test.directory, "file.txt"), "original\n")
+        yield* git(test.directory, ["add", "."])
+        yield* git(test.directory, ["commit", "--no-gpg-sign", "-m", "add file"])
+        yield* write(path.join(test.directory, "file.txt"), "changed\n")
+
+        const vcs = yield* init()
+        yield* vcs.stash({ message: "my-work" })
+        const popped = yield* vcs.stashPop({ message: "nonexistent" })
+        expect(popped).toBe(false)
+      }),
+    { git: true },
   )
 
   it.instance(

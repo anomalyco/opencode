@@ -278,10 +278,13 @@ export function Session() {
 
   createEffect(() => {
     const sessionID = route.sessionID
+    let cancelled = false
+    onCleanup(() => { cancelled = true })
     void (async () => {
       const previousWorkspace = untrack(() => project.workspace.current())
       const result = await sdk.client.session.get({ sessionID }, { throwOnError: true })
       if (!result.data) {
+        if (cancelled) return
         toast.show({
           message: `Session not found: ${sessionID}`,
           variant: "error",
@@ -292,6 +295,7 @@ export function Session() {
       }
 
       if (result.data.workspaceID !== previousWorkspace) {
+        if (cancelled) return
         project.workspace.set(result.data.workspaceID)
         const targetWorkspace = result.data.workspaceID
           ? project.workspace.get(result.data.workspaceID)
@@ -299,17 +303,17 @@ export function Session() {
         if (targetWorkspace?.branch) {
           sync.set("vcs", { branch: targetWorkspace.branch })
         }
+        if (cancelled) return
         await sdk.client.vcs.get({ workspace: result.data.workspaceID ?? undefined }).then((x) => sync.set("vcs", x.data)).catch(() => undefined)
 
-        // Sync all the data for this workspace. Note that this
-        // workspace may not exist anymore which is why this is not
-        // fatal. If it doesn't we still want to show the session
-        // (which will be non-interactive)
+        if (cancelled) return
         try {
           await sync.bootstrap({ fatal: false })
         } catch {}
       }
+      if (cancelled) return
       editor.reconnect(result.data.directory)
+      if (cancelled) return
       await sync.session.sync(sessionID)
       if (route.sessionID === sessionID && scroll) scroll.scrollBy(100_000)
     })().catch((error) => {
