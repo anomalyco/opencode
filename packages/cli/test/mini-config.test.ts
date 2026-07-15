@@ -1,0 +1,67 @@
+import { NodeFileSystem } from "@effect/platform-node"
+import { Global } from "@opencode-ai/core/global"
+import { Effect, Option } from "effect"
+import { expect, mock, test } from "bun:test"
+import { Config } from "../src/config"
+import type { RunTuiConfig } from "../src/mini/types"
+
+test("mini handler passes resolved CLI keybinds to the runtime", async () => {
+  let received: RunTuiConfig | Promise<RunTuiConfig> | undefined
+  const mini = await import("../src/mini")
+  mock.module("../src/mini", () => ({
+    ...mini,
+    validateMiniTerminal() {},
+    runMini(input: { tuiConfig?: RunTuiConfig | Promise<RunTuiConfig> }) {
+      received = input.tuiConfig
+      return Promise.resolve()
+    },
+  }))
+  const server = await import("../src/services/server")
+  mock.module("../src/services/server", () => ({
+    ...server,
+    Server: {
+      ...server.Server,
+      resolve: () => Effect.succeed({ endpoint: { url: "http://127.0.0.1" } }),
+    },
+  }))
+  const handler = (await import("../src/commands/handlers/mini")).default
+
+  try {
+    await Effect.runPromise(
+      handler({
+        server: Option.none(),
+        standalone: false,
+        continue: false,
+        session: Option.none(),
+        fork: false,
+        replay: true,
+        replayLimit: Option.none(),
+        model: Option.none(),
+        agent: Option.none(),
+        prompt: Option.none(),
+        demo: false,
+      }).pipe(
+        Effect.provideService(
+          Config.Service,
+          Config.Service.of({
+            path: "/tmp/cli.json",
+            get: () => Effect.succeed({
+              keybinds: { "composer.subagent.interrupt": "ctrl+i" },
+              leader: { timeout: 321 },
+            }),
+            update: () => Effect.fail(new Error("not used")),
+          }),
+        ),
+        Effect.provide(Global.layerWith({ config: "/tmp", state: "/tmp" })),
+        Effect.provide(NodeFileSystem.layer),
+        Effect.scoped,
+      ),
+    )
+
+    const config = await received
+    expect(config?.leader_timeout).toBe(321)
+    expect(config?.keybinds.get("composer.subagent.interrupt")).toMatchObject([{ key: "ctrl+i" }])
+  } finally {
+    mock.restore()
+  }
+})

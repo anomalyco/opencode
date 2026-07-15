@@ -103,7 +103,7 @@ test("accepts every v2-only named command ID", () => {
   commands.forEach((command) => expect(config.keybinds.get(command)).toMatchObject([{ key: "ctrl+alt+z" }]))
 })
 
-test("centralizes named command defaults and honors explicit none", () => {
+test("centralizes named command defaults and resolves explicit none", () => {
   const defaults = {
     "composer.subagent.up": "up",
     "composer.subagent.down": "down",
@@ -132,6 +132,19 @@ test("centralizes named command defaults and honors explicit none", () => {
 
 test("rejects orphaned keybind definitions", () => {
   expect(decodeInfo({ keybinds: { "app.heap_snapshot": "ctrl+h" } })).toEqual({ keybinds: {} })
+})
+
+test("uses ctrl+z for input undo when terminal suspend is unavailable", () => {
+  const config = resolve({}, { terminalSuspend: false })
+  expect(config.keybinds.has("terminal.suspend")).toBe(false)
+  expect(config.keybinds.get("input.undo")).toMatchObject([{ key: "ctrl+z,ctrl+-,super+z" }])
+
+  const overridden = resolve(
+    { keybinds: { "terminal.suspend": "ctrl+s", "input.undo": "ctrl+u" } },
+    { terminalSuspend: false },
+  )
+  expect(overridden.keybinds.has("terminal.suspend")).toBe(false)
+  expect(overridden.keybinds.get("input.undo")).toMatchObject([{ key: "ctrl+u" }])
 })
 
 test("provides config and its host interface", async () => {

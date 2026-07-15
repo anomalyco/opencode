@@ -8,7 +8,7 @@ import { RunFooterView } from "../../src/mini/footer.view"
 import { RUN_THEME_FALLBACK } from "../../src/mini/theme"
 import type { FooterState, FooterSubagentState, FooterView } from "../../src/mini/types"
 
-test("subagent keybinds use v2 config", async () => {
+test("configured subagent key updates its hint and action", async () => {
   const [state] = createSignal<FooterState>({
     phase: "idle",
     status: "",
