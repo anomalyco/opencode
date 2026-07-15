@@ -7,7 +7,7 @@
     </picture>
   </a>
 </p>
-<p align="center">The open source AI coding agent.</p>
+<p align="center">The open source AI coding agent — extended fork with enhanced capabilities.</p>
 <p align="center">
   <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
   <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
@@ -99,8 +99,11 @@ XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
 
 ### Features
 
-#### Smart Auto-Context
-OpenCode automatically determines relevant files based on your query and adds them to the session context. Configure via `opencode.json`:
+OpenCode (xuviga fork) extends the base OpenCode with the following capabilities:
+
+#### 🔍 Smart Auto-Context
+
+Automatically determines relevant files based on your query and adds them to the session context. Uses a file rank analyzer that scores files by relevance. Configure via `opencode.json`:
 
 ```json
 {
@@ -112,14 +115,13 @@ OpenCode automatically determines relevant files based on your query and adds th
 }
 ```
 
-#### Multi-Agent Teams
-Run multiple agents in parallel, pipeline, or supervisor mode with the `/team` command:
+#### 👥 Multi-Agent Teams
 
-- **parallel**: All agents work simultaneously on the same task
-- **pipeline**: Each agent receives the previous agent's output as context
-- **supervisor**: A coordinating agent delegates work and synthesizes results
+The `/team` command launches multiple agents in three modes:
 
-Configure team execution via `opencode.json`:
+- **parallel** — all agents work simultaneously on the same task
+- **pipeline** — each agent receives the previous agent's output as context
+- **supervisor** — a coordinating agent delegates work and synthesizes results
 
 ```json
 {
@@ -130,8 +132,9 @@ Configure team execution via `opencode.json`:
 }
 ```
 
-#### Mermaid Diagram Support
-When enabled, the model is instructed to generate diagrams using Mermaid syntax inside ` ```mermaid ` code blocks. Diagrams are extracted, rendered to SVG, and emitted as `session.diagram.rendered` events for UI consumption. Mermaid blocks are replaced in the text with a `[Mermaid diagram generated]` marker.
+#### 📊 Mermaid Diagram Support
+
+When enabled, the model is instructed to generate diagrams using Mermaid syntax inside ` ```mermaid ` code blocks. Diagrams are extracted, rendered to SVG, and emitted for UI consumption. Mermaid blocks are replaced in the text with a `[Mermaid diagram generated]` marker. The UI provides a download button for `.mmd` files.
 
 ```json
 {
@@ -142,47 +145,37 @@ When enabled, the model is instructed to generate diagrams using Mermaid syntax 
 }
 ```
 
-#### Auto-Fix
-After each LLM turn, OpenCode can automatically run linters and report errors to the model for iterative fixing.
+#### 🔧 Auto-Fix
+
+After each LLM turn, automatically runs linters and TypeScript checks, reporting errors back to the model for iterative fixing. Supports tsc, biome, eslint, oxlint.
 
 ```json
 {
   "autoFix": {
     "enabled": true,
     "maxIterations": 3,
-    "tools": ["biome", "tsc"]
+    "tools": ["tsc", "biome"]
   }
 }
 ```
 
-#### Meta-Cognition Layer
-OpenCode adds a lightweight planning and verification step around each LLM turn. Before the main model responds, a fast model analyzes the request, identifies risks, and determines the approach. After each step, the results are verified for correctness. The plan is injected into the system context so the main model starts with a clear strategy.
+#### 🧠 Meta-Cognition Layer
 
-- **Plan**: A fast LLM (Haiku / 4o-mini) analyzes the user request before the main turn, identifying intent, affected files, risks, and approach
-- **Verify**: After each step settlement, changes are reviewed for issues, regressions, and side effects
-- **Reflect**: At the end of a session drain, insights are extracted and stored for future reference
+OpenCode adds a lightweight planning and verification layer around each LLM step:
 
-#### Predictive Context Warmup
-Before each prompt, OpenCode predicts which files will be needed by analyzing three signals in parallel:
+- **Plan**: A fast LLM (Haiku / 4o-mini) analyzes the user request before the main turn, identifying intent, affected files, risks, and approach. The plan is injected into the system context so the main model starts with a clear strategy.
+- **Verify**: After each step settlement, changes are reviewed for regressions, side effects, and correctness.
+- **Reflect**: At the end of a session drain, insights are extracted and stored in a durable knowledge store for future sessions.
 
-- **Import graph**: Direct and transitive TypeScript/JavaScript imports from the current file
-- **Git co-change patterns**: `git log --all --name-only --since=6 months` identifies files frequently modified together
+**Predictive Context Warmup** — before each prompt, a predictor analyzes three signals in parallel:
+
+- **Import graph**: Direct and transitive TypeScript/JavaScript imports from the current file, resolved via the TypeScript Compiler API
+- **Git co-change patterns**: Files frequently modified together over the last 6 months (`git log --all --name-only --since=6 months`)
 - **Session recency**: Files recently referenced in the current session
 
 Predicted files are presented to the planner for inclusion in the system context, reducing the need for the agent to discover relevant files through tool calls.
 
-#### Cross-Session Knowledge Graph
-Insights and decisions from previous sessions are persisted in a durable knowledge store and automatically loaded into new sessions as system context. When a reflection step extracts architectural facts, patterns, constraints, or user preferences, they are recorded and surfaced in subsequent sessions.
-
-```json
-{
-  "sessionKnowledge": {
-    "enabled": true
-  }
-}
-```
-
-Knowledge facts are rendered as a `<session-knowledge>` block in the system prompt:
+**Cross-Session Knowledge Graph** — insights and decisions from previous sessions are persisted in a durable knowledge store and automatically loaded into new sessions as a `<session-knowledge>` block:
 
 ```
 <session-knowledge>
@@ -192,30 +185,56 @@ Knowledge facts are rendered as a `<session-knowledge>` block in the system prom
 </session-knowledge>
 ```
 
-#### Auto-Debugger
-When a tool execution fails, OpenCode automatically analyzes the error using a fast LLM, identifies the root cause, and surfaces a suggested fix. The analysis is passed to the verification step for inclusion in the next continuation turn.
+```json
+{
+  "sessionKnowledge": {
+    "enabled": true
+  }
+}
+```
 
-- Supports any tool failure (bash, edit, write, glob, grep, etc.)
-- Extracts relevant context from error output, tool input, and recent changes
-- Produces structured diagnosis: root cause, relevant file, suggested fix, confidence level
+**Auto-Debugger** — when a tool execution fails, automatically analyzes the error using a fast LLM:
 
-#### Self-Profiling Agent
-A background profiler tracks development patterns across sessions and surfaces actionable insights when patterns emerge.
+- Determines root cause, relevant file, and suggested fix
+- Works with any tool failure (bash, edit, write, glob, grep, etc.)
+- Produces structured diagnosis for the verification step
+
+**Self-Profiling Agent** — a background profiler tracks development patterns across sessions:
 
 - **Edit heatmap**: Files changed more than 5 times are flagged as potential refactoring candidates
 - **Error frequency**: Repeated errors (3+) are flagged for root-cause investigation
-- All metrics are stored in the session knowledge store and exposed through the system context as `<profile-insights>` blocks
+- Metrics are stored in the session knowledge store and exposed through the system context as `<profile-insights>` blocks
 
-#### Diff-Aware Dependency Tracking
-When files are modified, OpenCode automatically searches for all usages of changed exports across the codebase using ripgrep. The dependency report is included in the verification prompt so the model can check that callers, test files, and reverse dependencies remain correct.
+**Diff-Aware Dependency Tracking** — when files are modified, automatically searches for all usages of changed exports across the codebase using ripgrep. The dependency report is included in the verification step so the model can check that callers, test files, and reverse dependencies remain correct.
 
-- Finds callers, test files, and reverse dependencies of changed names
-- Results are passed to the verification step for automated review
+#### 🎯 Built-in Commands
 
-#### Built-in Commands
-- **`/test`** — Generate and run tests for the current file
+- **`/test`** — Generate and run tests for the current file with auto-detection of the testing framework
 - **`/commit`** — Generate a Conventional Commits message from staged changes
 - **`/team`** — Run a multi-agent team with configurable mode
+
+Test configuration:
+
+```json
+{
+  "testing": {
+    "enabled": true,
+    "framework": "vitest",
+    "testCommand": "bun test"
+  }
+}
+```
+
+Git configuration:
+
+```json
+{
+  "git": {
+    "autoStage": false,
+    "conventional": true
+  }
+}
+```
 
 ### Agents
 
@@ -234,8 +253,7 @@ Learn more about [agents](https://opencode.ai/docs/agents).
 
 ### Documentation
 
-For more info on how to configure OpenCode, [**head over to our docs**](https://opencode.ai/docs).  
-See [`examples/opencode.example.jsonc`](./examples/opencode.example.jsonc) for a complete configuration example with all new features.
+For more info on how to configure OpenCode, [**head over to our docs**](https://opencode.ai/docs).
 
 ### Contributing
 
