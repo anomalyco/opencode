@@ -312,7 +312,11 @@ ultimate source of truth.
 These are actionable implementation items. Check them off only when behavior and direct tests land.
 
 - [x] Return real promises from `Promise.all`, `Promise.allSettled`, and `Promise.race`.
-- [ ] Guarantee every advertised tool path is executable, including dotted and blocked path segments.
+- [x] Canonicalize dotted tool names into namespace paths so every advertised dotted path is executable, one
+      canonical path can be both a callable tool and a namespace, and the last definition supplied for a canonical
+      path wins.
+- [ ] Guarantee tool paths containing blocked segments (`constructor`, `prototype`, `__proto__`) are either
+      executable or never advertised.
 - [ ] Define safe outbound handling for non-finite numbers and `undefined` so invalid values cannot silently become
       `null` in render-only or OpenAPI tool calls.
 - [ ] Make regular-expression execution genuinely timeout-safe, or narrow the timeout guarantee explicitly.

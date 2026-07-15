@@ -274,15 +274,45 @@ export const copyOut = (value: unknown, undefinedAsNull = false): unknown => {
   return value
 }
 
+// Dots in supplied tool names are namespace separators: { "issues.list": tool } and
+// { issues: { list: tool } } expose the same canonical path, so every advertised dotted
+// path is executable. A node may be both a callable tool and a namespace; the last
+// definition supplied for a canonical path wins.
+type ToolNode<R> = {
+  definition?: Definition<R>
+  readonly children: Map<string, ToolNode<R>>
+}
+
+const toolTrie = <R>(tools: Tools<R>): ToolNode<R> => {
+  const root: ToolNode<R> = { children: new Map() }
+  const insert = (node: ToolNode<R>, group: Tools<R>): void => {
+    for (const [name, value] of Object.entries(group)) {
+      let current = node
+      for (const segment of name.split(".")) {
+        const child = current.children.get(segment) ?? { children: new Map() }
+        current.children.set(segment, child)
+        current = child
+      }
+      if (isDefinition(value)) current.definition = value
+      else insert(current, value)
+    }
+  }
+  insert(root, tools)
+  return root
+}
+
+// Property access may still spell a canonical path with dotted segments, e.g.
+// tools.api["issues.list"]; normalize before walking the trie.
+const canonicalSegments = (path: ReadonlyArray<string>): ReadonlyArray<string> =>
+  path.flatMap((segment) => segment.split("."))
+
 const definitions = <R>(
-  tools: Tools<R>,
+  node: ToolNode<R>,
   path: ReadonlyArray<string> = [],
-): Array<{ path: string; definition: Definition<R> }> =>
-  Object.entries(tools).flatMap(([name, value]) => {
-    const next = [...path, name]
-    if (isDefinition(value)) return [{ path: next.join("."), definition: value }]
-    return definitions(value, next)
-  })
+): Array<{ path: string; definition: Definition<R> }> => [
+  ...(node.definition === undefined ? [] : [{ path: path.join("."), definition: node.definition }]),
+  ...Array.from(node.children, ([name, child]) => definitions(child, [...path, name])).flat(),
+]
 
 const describeDefinition = <R>(path: string, definition: Definition<R>): ToolDescription => ({
   path,
@@ -291,7 +321,7 @@ const describeDefinition = <R>(path: string, definition: Definition<R>): ToolDes
 })
 
 const visibleDefinitions = <R>(tools: Tools<R>) =>
-  definitions(tools).map(({ path, definition }) => ({
+  definitions(toolTrie(tools)).map(({ path, definition }) => ({
     path,
     definition,
     description: describeDefinition(path, definition),
@@ -555,37 +585,39 @@ export const prepare = <R>(tools: Tools<R>, catalogBudget = defaultCatalogBudget
   }
 }
 
-const namespaceKeys = <R>(tools: Tools<R>, path: ReadonlyArray<string>): ReadonlyArray<string> => {
-  let value: Definition<R> | Tools<R> = tools
-  for (const segment of path) {
-    if (isBlockedMember(segment) || isDefinition(value) || !Object.hasOwn(value, segment)) {
-      throw new ToolRuntimeError("UnknownTool", `Unknown tool namespace '${path.join(".")}'.`, [
+const namespaceKeys = <R>(root: ToolNode<R>, path: ReadonlyArray<string>): ReadonlyArray<string> => {
+  const segments = canonicalSegments(path)
+  let node = root
+  for (const segment of segments) {
+    const child = isBlockedMember(segment) ? undefined : node.children.get(segment)
+    if (child === undefined) {
+      throw new ToolRuntimeError("UnknownTool", `Unknown tool namespace '${segments.join(".")}'.`, [
         "Object.keys(tools) lists the available namespaces; search({ query }) finds described tools.",
       ])
     }
-    value = value[segment] as Definition<R> | Tools<R>
+    node = child
   }
-  if (isDefinition(value)) return []
-  return Object.keys(value)
+  return Array.from(node.children.keys())
 }
 
-const resolve = <R>(tools: Tools<R>, path: ReadonlyArray<string>): Definition<R> => {
-  let value: Definition<R> | Tools<R> = tools
-
-  for (const segment of path) {
-    if (isBlockedMember(segment) || isDefinition(value) || !Object.hasOwn(value, segment)) {
-      throw new ToolRuntimeError("UnknownTool", `Unknown tool '${path.join(".")}'.`, [
+const resolve = <R>(root: ToolNode<R>, path: ReadonlyArray<string>): Definition<R> => {
+  const segments = canonicalSegments(path)
+  let node = root
+  for (const segment of segments) {
+    const child = isBlockedMember(segment) ? undefined : node.children.get(segment)
+    if (child === undefined) {
+      throw new ToolRuntimeError("UnknownTool", `Unknown tool '${segments.join(".")}'.`, [
         "Use search({ query }) to find available described tools.",
       ])
     }
-    value = value[segment] as Definition<R> | Tools<R>
+    node = child
   }
 
-  if (!isDefinition(value)) {
-    throw new ToolRuntimeError("UnknownTool", `Tool '${path.join(".")}' is not callable.`)
+  if (node.definition === undefined) {
+    throw new ToolRuntimeError("UnknownTool", `Tool '${segments.join(".")}' is not callable.`)
   }
 
-  return value
+  return node.definition
 }
 
 export type ToolRuntime<R = never> = {
@@ -603,6 +635,7 @@ export const make = <R>(
   hooks?: ToolCallHooks<R>,
 ): ToolRuntime<R> => {
   const calls: Array<ToolCall> = []
+  const root = toolTrie(tools)
   const searchTool = makeSearchTool(searchIndex)
 
   // End hooks observe settled success or failure; interruption emits neither outcome.
@@ -670,7 +703,7 @@ export const make = <R>(
   return {
     root: new ToolReference([]),
     calls,
-    keys: (path) => namespaceKeys(tools, path),
+    keys: (path) => namespaceKeys(root, path),
     search: (args) =>
       Effect.suspend(() =>
         invokeDefinition(
@@ -681,9 +714,9 @@ export const make = <R>(
       ),
     invoke: (path, args) =>
       Effect.gen(function* () {
-        const name = path.join(".")
+        const name = canonicalSegments(path).join(".")
         const externalArgs = args.map((arg) => copyOut(copyIn(arg, `Arguments for tool '${name}'`)))
-        const tool = resolve(tools, path)
+        const tool = resolve(root, path)
         return yield* invokeDefinition(name, tool, externalArgs)
       }),
   }
