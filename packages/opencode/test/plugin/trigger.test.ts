@@ -41,7 +41,7 @@ function withProject<A, E, R>(source: string, self: Effect.Effect<A, E, R>) {
             path.join(test.directory, "opencode.json"),
             JSON.stringify(
               {
-                $schema: "https://opencode.ai/config.json",
+                $schema: "https://raw.githubusercontent.com/puetsua/kancode/main/schemas/kancode.schema.json",
                 plugin: [pathToFileURL(file).href],
               },
               null,

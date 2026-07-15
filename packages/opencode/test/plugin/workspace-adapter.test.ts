@@ -74,7 +74,7 @@ describe("plugin.workspace", () => {
           path.join(dir, "opencode.json"),
           JSON.stringify(
             {
-              $schema: "https://opencode.ai/config.json",
+              $schema: "https://raw.githubusercontent.com/puetsua/kancode/main/schemas/kancode.schema.json",
               plugin: [pathToFileURL(file).href],
             },
             null,
