@@ -1,2 +1,2 @@
-packages/core/migration/**/snapshot.json linguist-generated
-packages/core/src/database/migration.gen.ts linguist-generated
+# PowerShell scripts must be CRLF on Windows — PS 5.1 chokes on LF-only files
+*.ps1 text eol=crlf
