@@ -73,7 +73,7 @@ type SourceProvider = {
   readonly name: string
   readonly env: readonly string[]
   readonly id: string
-  readonly npm?: string
+  readonly npm: string
   readonly models: Readonly<Record<string, SourceModel>>
 }
 
@@ -90,7 +90,7 @@ function normalize(input: Record<string, SourceProvider>): readonly Snapshot[] {
     const info = {
       id: providerID,
       name: item.name,
-      package: item.npm ? ProviderV2.aisdk(item.npm) : "",
+      package: ProviderV2.aisdk(item.npm),
       ...(item.api ? { settings: { baseURL: item.api } } : {}),
     } satisfies ProviderV2.Info
     const models: ModelV2.Info[] = []
@@ -219,7 +219,7 @@ function reasoningVariants(provider: SourceProvider, model: SourceModel): NonNul
   return [...new Map(variants.map((variant) => [variant.id, variant])).values()]
 }
 
-function settingsForEffort(npm: string | undefined, modelID: string, effort: string): ProviderV2.Settings | undefined {
+function settingsForEffort(npm: string, modelID: string, effort: string): ProviderV2.Settings | undefined {
   if (npm === "@openrouter/ai-sdk-provider") return { reasoning: { effort } }
   if (npm === "@ai-sdk/anthropic" || npm === "@ai-sdk/google-vertex/anthropic") {
     if (["opus-4-5", "opus-4.5"].some((value) => modelID.includes(value))) return { effort }
@@ -282,13 +282,13 @@ function settingsForEffort(npm: string | undefined, modelID: string, effort: str
       "@ai-sdk/togetherai",
       "venice-ai-sdk-provider",
       "ai-gateway-provider",
-    ].includes(npm ?? "")
+    ].includes(npm)
   )
     return { reasoningEffort: effort }
 }
 
 function budgetVariants(
-  npm: string | undefined,
+  npm: string,
   model: SourceModel,
   option: Extract<NonNullable<SourceModel["reasoning_options"]>[number], { type: "budget_tokens" }>,
 ): NonNullable<ModelV2.Info["variants"]> {
@@ -304,7 +304,7 @@ function budgetVariants(
   })
 }
 
-function toggleVariants(npm: string | undefined, modelID: string): NonNullable<ModelV2.Info["variants"]> {
+function toggleVariants(npm: string, modelID: string): NonNullable<ModelV2.Info["variants"]> {
   if (npm === "@ai-sdk/gateway") {
     const upstream = gatewayPackage(modelID)
     if (upstream) return toggleVariants(upstream, modelID)
@@ -441,7 +441,7 @@ function toggleVariants(npm: string | undefined, modelID: string): NonNullable<M
   return []
 }
 
-function settingsForBudget(npm: string | undefined, modelID: string, budget: number): ProviderV2.Settings | undefined {
+function settingsForBudget(npm: string, modelID: string, budget: number): ProviderV2.Settings | undefined {
   if (npm === "@openrouter/ai-sdk-provider") return { reasoning: { max_tokens: budget } }
   if (npm === "@ai-sdk/anthropic" || npm === "@ai-sdk/google-vertex/anthropic")
     return { thinking: { type: "enabled", budgetTokens: budget } }
