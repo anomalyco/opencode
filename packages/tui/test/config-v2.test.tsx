@@ -4,6 +4,7 @@ import { expect, test } from "bun:test"
 import { Schema } from "effect"
 import { resolve, ConfigProvider, Info, useConfig, type Interface } from "../src/config"
 import { settings } from "../src/component/dialog-config"
+import { TuiKeybind } from "../src/config/keybind"
 
 test("validates mini replay settings", () => {
   const decode = Schema.decodeUnknownSync(Info)
@@ -58,6 +59,18 @@ test("shows resolved tab defaults in settings", () => {
 
 test("shows the new session location default in settings", () => {
   expect(settings.find((setting) => setting.path.join(".") === "session.new_location")?.default).toBe("launch")
+})
+
+test("uses command IDs as keybind keys", () => {
+  const config = resolve({ keybinds: { "session.list": "ctrl+l" } }, { terminalSuspend: true })
+
+  expect(config.keybinds.get("session.list")).toMatchObject([{ key: "ctrl+l" }])
+  expect(TuiKeybind.unknownKeys({ session_list: "ctrl+l" })).toEqual(["session_list"])
+  expect(
+    Object.keys(TuiKeybind.Definitions)
+      .filter((key) => key !== "leader")
+      .every((key) => key.includes(".")),
+  ).toBe(true)
 })
 
 test("provides config and its host interface", async () => {

@@ -87,8 +87,8 @@ test("dialog prompt submit wins when return is also input newline", async () => 
   const prompt = await mountPrompt({
     root: tmp.path,
     keybinds: {
-      input_submit: "super+return",
-      input_newline: "return,shift+return,alt+return,ctrl+j",
+      "input.submit": "super+return",
+      "input.newline": "return,shift+return,alt+return,ctrl+j",
     },
     onConfirm: (value) => confirmed.push(value),
   })
@@ -113,7 +113,7 @@ test("dialog prompt submit can be rebound separately from input submit", async (
   const prompt = await mountPrompt({
     root: tmp.path,
     keybinds: {
-      input_submit: "return",
+      "input.submit": "return",
       "dialog.prompt.submit": "ctrl+y",
     },
     onConfirm: (value) => confirmed.push(value),

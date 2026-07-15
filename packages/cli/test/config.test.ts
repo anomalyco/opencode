@@ -21,7 +21,13 @@ test("migrates tui and kv config into cli.json", async () => {
     path.join(directory, "tui.json"),
     JSON.stringify({
       theme: "legacy",
-      keybinds: { leader: "ctrl+o" },
+      keybinds: {
+        leader: "ctrl+o",
+        app_exit: "ctrl+q",
+        input_paste: { key: "ctrl+v", preventDefault: false },
+        session_delete: false,
+        "dialog.select.next": "ctrl+n",
+      },
       plugin: [["example", { mode: "safe" }]],
       plugin_enabled: { disabled: false },
       leader_timeout: 500,
@@ -65,7 +71,13 @@ test("migrates tui and kv config into cli.json", async () => {
 
     expect(config).toMatchObject({
       theme: { name: "legacy", mode: "light" },
-      keybinds: { leader: "ctrl+o" },
+      keybinds: {
+        leader: "ctrl+o",
+        "app.exit": "ctrl+q",
+        "prompt.paste": { key: "ctrl+v", preventDefault: false },
+        "session.delete": false,
+        "dialog.select.next": "ctrl+n",
+      },
       plugins: [{ package: "example", options: { mode: "safe" } }, "-disabled"],
       leader: { timeout: 500 },
       scroll: { speed: 2, acceleration: true },
@@ -80,7 +92,13 @@ test("migrates tui and kv config into cli.json", async () => {
     expect(config).not.toHaveProperty("skipped_version")
     expect(config).not.toHaveProperty("which_key")
     expect(config).not.toHaveProperty("hints")
-    expect((await Bun.file(path.join(directory, "cli.json")).json()).keybinds).toEqual({ leader: "ctrl+o" })
+    expect((await Bun.file(path.join(directory, "cli.json")).json()).keybinds).toEqual({
+      leader: "ctrl+o",
+      "app.exit": "ctrl+q",
+      "prompt.paste": { key: "ctrl+v", preventDefault: false },
+      "session.delete": false,
+      "dialog.select.next": "ctrl+n",
+    })
     expect(await Bun.file(path.join(directory, "cli.json")).exists()).toBe(true)
     expect(await Bun.file(path.join(directory, "tui.json")).exists()).toBe(true)
     expect(await Bun.file(path.join(directory, "kv.json")).exists()).toBe(true)
