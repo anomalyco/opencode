@@ -110,15 +110,15 @@ export function usePromptWorkspace(sessionID?: string) {
       sessionID,
       copyChanges: false,
     })
-    if (warped) {
-      showNotice(workspace.name)
-      if (hasStashed && stashMsg) {
-        const popped = await sdk.client.vcs.stashPop({ message: stashMsg, workspace: sourceWorkspaceID }).catch(() => undefined)
-        if (!popped?.data) {
-          toast.show({ title: "Warp", message: "Failed to restore stashed changes", variant: "error" })
-        } else {
-          toast.show({ title: "Warp", message: "Uncommitted changes restored", variant: "success" })
-        }
+    if (warped) showNotice(workspace.name)
+    if (hasStashed && stashMsg) {
+      const popped = await sdk.client.vcs.stashPop({ message: stashMsg, workspace: sourceWorkspaceID }).catch(() => undefined)
+      if (!popped?.data) {
+        toast.show({ title: "Warp", message: "Failed to restore stashed changes", variant: "error" })
+      } else if (!warped) {
+        toast.show({ title: "Warp", message: "Warp failed; uncommitted changes restored", variant: "info" })
+      } else {
+        toast.show({ title: "Warp", message: "Uncommitted changes restored", variant: "success" })
       }
     }
   }
