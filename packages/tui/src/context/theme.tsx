@@ -62,12 +62,9 @@ export {
   allThemes,
   generateSyntax,
   hasTheme,
-  isTheme,
-  resolveTheme,
   selectedForeground,
   upsertTheme,
   type Theme,
-  type ThemeJson,
 } from "../theme"
 
 const THEME_REFRESH_DELAYS = [250, 1000] as const
