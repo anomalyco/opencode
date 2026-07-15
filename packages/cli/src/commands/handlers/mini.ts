@@ -11,7 +11,7 @@ export default Runtime.handler(Commands.commands.mini, (input) =>
     const server = yield* ServerConnection.resolve({ server: serverURL, standalone: input.standalone })
     yield* Effect.promise(() =>
       runMini({
-        endpoint: server.endpoint,
+        server,
         continue: input.continue,
         session: Option.getOrUndefined(input.session),
         fork: input.fork,

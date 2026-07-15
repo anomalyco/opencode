@@ -13,7 +13,7 @@ export default Runtime.handler(Commands.commands.run, (input) =>
     })
     yield* Effect.promise(() =>
       runNonInteractive({
-        endpoint: server.endpoint,
+        server,
         message: [...input.message, ...(separator === -1 ? [] : process.argv.slice(separator + 1))],
         continue: input.continue,
         session: Option.getOrUndefined(input.session),
