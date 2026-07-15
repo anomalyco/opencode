@@ -40,6 +40,16 @@ export class ApiVcsApplyError extends Schema.ErrorClass<ApiVcsApplyError>("VcsAp
   { httpApiStatus: 400 },
 ) {}
 
+export class ApiVcsStashError extends Schema.ErrorClass<ApiVcsStashError>("VcsStashError")(
+  {
+    name: Schema.Literal("VcsStashError"),
+    data: Schema.Struct({
+      message: Schema.String,
+    }),
+  },
+  { httpApiStatus: 400 },
+) {}
+
 export const InstancePaths = {
   dispose: "/instance/dispose",
   path: "/path",
@@ -142,6 +152,7 @@ export const InstanceApi = HttpApi.make("instance")
           query: WorkspaceRoutingQuery,
           payload: Vcs.StashInput,
           success: described(HttpApiSchema.NoContent, "Changes stashed"),
+          error: ApiVcsStashError,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "vcs.stash",
@@ -153,6 +164,7 @@ export const InstanceApi = HttpApi.make("instance")
           query: WorkspaceRoutingQuery,
           payload: Vcs.StashInput,
           success: described(Schema.Boolean, "Stash popped"),
+          error: ApiVcsStashError,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "vcs.stashPop",
