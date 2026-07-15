@@ -388,7 +388,7 @@ describe("ReadTool", () => {
         type: "content",
         value: [
           { type: "text", text: "Image read successfully" },
-          { type: "text", text: "[1 image omitted: could not be resized below the image size limit.]" },
+          { type: "text", text: "[1 image omitted: could not be decoded.]" },
         ],
       })
     }),

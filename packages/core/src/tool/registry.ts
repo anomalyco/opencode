@@ -62,39 +62,40 @@ const registryLayer = Layer.effect(
 
     // Generic model-output image bounding: every tool's media content settles through
     // here, so individual tools do not add their own resize calls. A missing resizer
-    // keeps the original image; an image that cannot fit the configured limits is
-    // dropped and replaced with a note, mirroring V1 settlement behavior.
-    const normalizeImages = Effect.fn("ToolRegistry.normalizeImages")(function* (output: ToolOutput) {
-      const content = yield* Effect.forEach(output.content, (item) => {
+    // keeps the original image; an undecodable or unresizable image is dropped and
+    // reported in a per-reason note, mirroring V1 settlement behavior.
+    type NormalizedItem = ToolOutput["content"][number] | "decode" | "size"
+    const normalizeImages = Effect.fn("ToolRegistry.normalizeImages")(function* (content: ToolOutput["content"]) {
+      const normalized = yield* Effect.forEach(content, (item): Effect.Effect<NormalizedItem> => {
         if (item.type !== "file" || !item.mime.startsWith("image/")) return Effect.succeed(item)
-        const base64 = /^data:[^;,]*;base64,(.*)$/s.exec(item.uri)?.[1]
+        // RFC 2397 permits parameters between the mime and ";base64".
+        const base64 = /^data:[^,]*;base64,(.*)$/s.exec(item.uri)?.[1]
         if (base64 === undefined) return Effect.succeed(item)
         const resource = item.name ?? `${item.mime} tool output`
         return image
           .normalize(resource, { uri: resource, content: base64, encoding: "base64", mime: item.mime })
           .pipe(
-            Effect.map((normalized) => ({
+            Effect.map((result) => ({
               ...item,
-              uri: `data:${normalized.mime};base64,${normalized.content}`,
-              mime: normalized.mime,
+              uri: `data:${result.mime};base64,${result.content}`,
+              mime: result.mime,
             })),
             Effect.catchTag("Image.ResizerUnavailableError", () => Effect.succeed(item)),
-            Effect.catch(() => Effect.succeed(undefined)),
+            // String markers stand in for dropped items and become the notes below.
+            Effect.catchTag("Image.DecodeError", () => Effect.succeed("decode" as const)),
+            Effect.catchTag("Image.SizeError", () => Effect.succeed("size" as const)),
           )
       })
-      const kept = content.filter((item) => item !== undefined)
-      const omitted = content.length - kept.length
-      if (omitted === 0) return { structured: output.structured, content: kept }
-      return {
-        structured: output.structured,
-        content: [
-          ...kept,
-          {
-            type: "text" as const,
-            text: `[${omitted} image${omitted === 1 ? "" : "s"} omitted: could not be resized below the image size limit.]`,
-          },
-        ],
+      const note = (reason: "decode" | "size", text: string) => {
+        const count = normalized.filter((item) => item === reason).length
+        if (count === 0) return []
+        return [{ type: "text" as const, text: `[${count} image${count === 1 ? "" : "s"} omitted: ${text}]` }]
       }
+      return [
+        ...normalized.filter((item) => typeof item !== "string"),
+        ...note("decode", "could not be decoded."),
+        ...note("size", "could not be resized below the image size limit."),
+      ]
     })
     type Registration = {
       readonly tool: AnyTool
@@ -123,10 +124,13 @@ const registryLayer = Layer.effect(
           agent: input.agent,
           messageID: input.messageID,
           callID: input.call.id,
-          progress: (update) =>
-            input.progress?.({
-              structured: update.structured,
-              content: (update.content ?? []).map((part) =>
+          progress: (update) => {
+            const progress = input.progress
+            if (!progress) return Effect.void
+            // Progress content is published durably and lowered to providers when a
+            // call errors mid-progress, so it needs the same image bounding as output.
+            return normalizeImages(
+              (update.content ?? []).map((part) =>
                 part.type === "text"
                   ? { type: "text" as const, text: part.text }
                   : {
@@ -136,7 +140,8 @@ const registryLayer = Layer.effect(
                       name: part.name,
                     },
               ),
-            }) ?? Effect.void,
+            ).pipe(Effect.flatMap((content) => progress({ structured: update.structured, content })))
+          },
         },
       ).pipe(
         Effect.map((output) => ({ output })),
@@ -154,7 +159,7 @@ const registryLayer = Layer.effect(
         const bounded = yield* resources.bound({
           sessionID: input.sessionID,
           callID: input.call.id,
-          output: yield* normalizeImages(pending.output),
+          output: { structured: pending.output.structured, content: yield* normalizeImages(pending.output.content) },
         })
         const result = ToolOutput.toResultValue(bounded.output)
         settlement =
