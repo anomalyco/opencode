@@ -2727,27 +2727,36 @@ function ApplyPatch(props: ToolProps) {
                 }}
                 part={props.part}
               >
-                <box paddingLeft={1}>
-                  <diff
-                    diff={file.patch}
-                    view={view()}
-                    filetype={filetype(file.relativePath)}
-                    syntaxStyle={syntax()}
-                    showLineNumbers={true}
-                    width="100%"
-                    wrapMode={ctx.diffWrapMode()}
-                    fg={theme.text}
-                    addedBg={theme.diffAddedBg}
-                    removedBg={theme.diffRemovedBg}
-                    contextBg={theme.diffContextBg}
-                    addedSignColor={theme.diffHighlightAdded}
-                    removedSignColor={theme.diffHighlightRemoved}
-                    lineNumberFg={theme.diffLineNumber}
-                    lineNumberBg={theme.diffContextBg}
-                    addedLineNumberBg={theme.diffAddedLineNumberBg}
-                    removedLineNumberBg={theme.diffRemovedLineNumberBg}
-                  />
-                </box>
+                <Show
+                  when={file.type !== "delete"}
+                  fallback={
+                    <text fg={theme.diffRemoved}>
+                      -{file.deletions} line{file.deletions !== 1 ? "s" : ""}
+                    </text>
+                  }
+                >
+                  <box paddingLeft={1}>
+                    <diff
+                      diff={file.patch}
+                      view={view()}
+                      filetype={filetype(file.relativePath)}
+                      syntaxStyle={syntax()}
+                      showLineNumbers={true}
+                      width="100%"
+                      wrapMode={ctx.diffWrapMode()}
+                      fg={theme.text}
+                      addedBg={theme.diffAddedBg}
+                      removedBg={theme.diffRemovedBg}
+                      contextBg={theme.diffContextBg}
+                      addedSignColor={theme.diffHighlightAdded}
+                      removedSignColor={theme.diffHighlightRemoved}
+                      lineNumberFg={theme.diffLineNumber}
+                      lineNumberBg={theme.diffContextBg}
+                      addedLineNumberBg={theme.diffAddedLineNumberBg}
+                      removedLineNumberBg={theme.diffRemovedLineNumberBg}
+                    />
+                  </box>
+                </Show>
               </BlockTool>
             )}
           </For>
