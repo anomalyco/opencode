@@ -28,6 +28,8 @@ import { Command } from "../command"
 import { pathToFileURL, fileURLToPath } from "url"
 import { Config } from "@/config/config"
 import { ContextAnalyzer } from "@/context/analyzer"
+import { Orchestrator } from "@/orchestrator"
+import { AutoFix, type LintResult } from "@/auto-fix"
 import { ConfigMarkdown } from "@/config/markdown"
 import { SessionSummary } from "./summary"
 import { NamedError } from "@opencode-ai/core/util/error"
@@ -142,6 +144,7 @@ const layer = Layer.effect(
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
     const database = yield* Database.Service
+    const orchestrator = yield* Orchestrator.Service
     const { db } = database
     const ops = Effect.fn("SessionPrompt.ops")(function* () {
       return {
@@ -1083,7 +1086,7 @@ const layer = Layer.effect(
       throw new Error("Impossible")
     })
 
-    const runLoop: (sessionID: SessionID) => Effect.Effect<SessionV1.WithParts> = Effect.fn("SessionPrompt.run")(
+    const runLoop = Effect.fn("SessionPrompt.run")(
       function* (sessionID: SessionID) {
         const ctx = yield* InstanceState.context
         let structured: unknown
@@ -1366,26 +1369,27 @@ const layer = Layer.effect(
         yield* Effect.gen(function* () {
           const info = yield* config.get()
           if (!info.autoFix?.enabled) return
-          const ctx = yield* InstanceState.context
-          const proc = Bun.spawn(["bun", "typecheck"], {
-            cwd: ctx.worktree,
-            stdio: ["ignore", "pipe", "pipe"],
-          })
-          const stderr = yield* Effect.promise(() => new Response(proc.stderr).text())
-          const errorCount = stderr.split("\n").filter((l) => l.includes("error TS")).length
-          if (errorCount > 0) {
-            yield* events.publish(TuiEvent.ToastShow, {
-              message: `[auto-fix] tsc: ${errorCount} error(s)`,
-              variant: "warning",
-              duration: 5000,
-            }).pipe(Effect.ignore)
-          }
-        }).pipe(Effect.ignore)
+
+          const autoFix = yield* AutoFix.Service
+          const results = yield* autoFix.run([]).pipe(Effect.catchCause(() => Effect.succeed([] as LintResult[])))
+
+          if (results.length === 0) return
+
+          const errors = results.filter((r) => r.errorCount > 0)
+          if (errors.length === 0) return
+
+          const summary = errors.map((r) => `${r.tool}: ${r.errorCount} error(s)`).join(", ")
+          yield* events.publish(TuiEvent.ToastShow, {
+            message: `[auto-fix] ${summary}`,
+            variant: "warning",
+            duration: 5000,
+          }).pipe(Effect.ignore)
+        }).pipe(Effect.catchDefect((defect: unknown) => Effect.logError("auto-fix post-turn defect", { defect })))
 
         yield* compaction.prune({ sessionID }).pipe(Effect.ignore, Effect.forkIn(scope))
         return yield* lastAssistant(sessionID)
       },
-    )
+    ) as (sessionID: SessionID) => Effect.Effect<SessionV1.WithParts>
 
     const loop: (input: LoopInput) => Effect.Effect<SessionV1.WithParts> = Effect.fn("SessionPrompt.loop")(function* (
       input: LoopInput,
@@ -1439,6 +1443,52 @@ const layer = Layer.effect(
 
       if (placeholders.length === 0 && !usesArgumentsPlaceholder && input.arguments.trim()) {
         template = template + "\n\n" + input.arguments
+      }
+
+      if (input.command === "team") {
+        const args = input.arguments.trim()
+        const modeMatch = args.match(/\b(parallel|pipeline|supervisor)\b/i)
+        let agents: string[] = []
+        let mode: "parallel" | "pipeline" | "supervisor" | undefined
+        let promptText = args
+
+        if (modeMatch) {
+          mode = modeMatch[1].toLowerCase() as "parallel" | "pipeline" | "supervisor"
+          const beforeMode = args.slice(0, modeMatch.index).trim()
+          const afterMode = args.slice(modeMatch.index! + modeMatch[0].length).trim()
+
+          if (beforeMode.includes(",")) {
+            agents = beforeMode.split(",").map((s) => s.trim()).filter(Boolean)
+            promptText = afterMode || args
+          } else {
+            const words = beforeMode.split(/\s+/).filter(Boolean)
+            if (words.length > 0) {
+              agents = words
+              promptText = afterMode || args
+            }
+          }
+        } else {
+          if (args.includes(",")) {
+            const parts = args.split(",")
+            agents = parts.map((s) => s.trim()).filter(Boolean)
+            promptText = ""
+          } else {
+            const words = args.split(/\s+/).filter(Boolean)
+            if (words.length >= 1) {
+              agents = [words[0]]
+              promptText = words.slice(1).join(" ")
+            }
+          }
+        }
+
+        if (agents.length > 0) {
+          const teamPrompt = yield* orchestrator.createTeamPrompt({
+            agents,
+            mode: mode as any,
+            prompt: promptText || "Execute the following task as a team. Coordinate, delegate work, and synthesize results.",
+          }).pipe(Effect.catch(() => Effect.succeed(template)))
+          template = teamPrompt
+        }
       }
 
       const shellMatches = ConfigMarkdown.shell(template)
@@ -1672,6 +1722,8 @@ export const node = LayerNode.make({
     EventV2Bridge.node,
     RuntimeFlags.node,
     Database.node,
+    Orchestrator.node,
+    AutoFix.node,
   ],
 })
 

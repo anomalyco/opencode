@@ -72,10 +72,11 @@ async function code(text: string, language: string | undefined, key: string, com
       const { default: mermaid } = await import("mermaid")
       mermaid.initialize({ startOnLoad: false, theme: "default" })
       const { svg } = await mermaid.render("md" + String(Math.random()).slice(2, 10), text)
-      return { language: "mermaid", generation: 0, stable: [[svg, ""] as MarkdownToken], unstable: [] }
+      const sourceText = String(text)
+      return { language: "mermaid", generation: 0, stable: [[svg, sourceText] as MarkdownToken], unstable: [] }
     } catch (error) {
       console.error("Mermaid render failed", error)
-      return { language: "mermaid", generation: 0, stable: [[text, ""] as MarkdownToken], unstable: [] }
+      return { language: "mermaid", generation: 0, stable: [[text, String(text)] as MarkdownToken], unstable: [] }
     }
   }
   const name = language && language in bundledLanguages ? language : "text"
@@ -604,17 +605,27 @@ function updateBlock(container: HTMLDivElement, index: number, block: RenderedBl
   })
 }
 
-function createMermaidHTML(source: string) {
+function createMermaidHTML(svgHtml: string, sourceText: string) {
   const container = document.createElement("div")
   container.setAttribute("data-component", "mermaid-diagram")
   container.style.cssText = "cursor:pointer;overflow-x:auto;margin:0.5em 0"
-  container.innerHTML = source
+  container.innerHTML = svgHtml
   const downloadBtn = document.createElement("button")
   downloadBtn.textContent = "⬇ .mmd"
   downloadBtn.style.cssText =
     "position:absolute;top:4px;right:4px;font-size:11px;padding:2px 6px;border-radius:4px;border:1px solid var(--border-base,#ccc);background:var(--surface-base,#fff);cursor:pointer;opacity:0;transition:opacity 0.15s"
   container.style.position = "relative"
   container.appendChild(downloadBtn)
+  downloadBtn.addEventListener("click", (e) => {
+    e.stopPropagation()
+    const blob = new Blob([sourceText], { type: "text/plain" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = "diagram.mmd"
+    a.click()
+    URL.revokeObjectURL(url)
+  })
   container.addEventListener("mouseenter", () => (downloadBtn.style.opacity = "1"))
   container.addEventListener("mouseleave", () => (downloadBtn.style.opacity = "0"))
   return container
@@ -626,12 +637,13 @@ function updateCodeBlock(
   block: Extract<RenderedBlock, { mode: "code" }>,
   labels: CopyLabels,
 ) {
-  if (block.language === "mermaid") {
+    if (block.language === "mermaid") {
     const svgHtml = block.stable[0]?.[0] ?? ""
+    const sourceText = block.stable[0]?.[1] ?? ""
     if (svgHtml.startsWith("<svg")) {
       const existing = current instanceof HTMLDivElement && current.dataset.markdownKey === block.key ? current : undefined
       if (existing && existing.dataset.markdownComplete === (block.complete ? "true" : "false") && existing.dataset.markdownHash === block.hash) return
-      const wrapper = createMermaidHTML(svgHtml)
+      const wrapper = createMermaidHTML(svgHtml, sourceText)
       const div = document.createElement("div")
       div.dataset.markdownBlock = ""
       div.dataset.markdownKey = block.key

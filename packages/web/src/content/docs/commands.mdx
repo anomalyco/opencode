@@ -321,3 +321,33 @@ Custom commands can override built-in commands.
 :::
 
 If you define a custom command with the same name, it will override the built-in command.
+
+---
+
+### `/test` — Generate and Run Tests
+
+Analyzes the current file, generates tests using the detected or configured framework, writes them to the appropriate test file, and runs them.
+
+**Arguments**: Optional test-specific arguments
+
+**Configuration**: See [Testing Configuration](/docs/config#testing-configuration)
+
+---
+
+### `/commit` — Generate Commit Messages
+
+Examines staged changes and generates a Conventional Commits-style message based on the project's git configuration.
+
+**Arguments**: Optional commit message context
+
+**Configuration**: See [Git Configuration](/docs/config#git-configuration)
+
+---
+
+### `/team` — Multi-Agent Team Execution
+
+Coordinates multiple agents to work on a complex task using parallel, pipeline, or supervisor mode. Parses arguments in the format: `agent1,agent2 mode prompt`.
+
+**Arguments**: `agents` (comma-separated), `mode` (`parallel|pipeline|supervisor`), and the task prompt
+
+**Configuration**: See [Multi-Agent Teams](/docs/config#multi-agent-teams)

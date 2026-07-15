@@ -6,12 +6,14 @@ $ARGUMENTS
 
 ### Instructions
 
-1. Identify the testing framework used by this project (check package.json for vitest, jest, mocha, etc.)
-2. Analyze the source code's exports, classes, and functions
-3. Generate comprehensive tests following the project's existing test patterns
-4. Write tests to the appropriate test file (same directory in __tests__/ or with .test.ts suffix)
-5. Run the tests and report results
-6. If tests fail, fix the issues and retry (up to 2 iterations)
+1. Check if a testing framework is configured in the project settings. If configured, use that framework.
+2. If no framework is configured, identify the testing framework used by this project (check package.json for vitest, jest, mocha, bun, etc.)
+3. Analyze the source code's exports, classes, and functions
+4. Generate comprehensive tests following the project's existing test patterns
+5. Write tests to the appropriate test file (same directory in __tests__/ or with .test.ts suffix)
+6. Run the tests using the configured test command, or auto-detect the correct command
+7. Report results: which tests were written, test results, and any issues found
+8. If tests fail, fix the issues and retry (up to configured max iterations, default 2)
 
 ### Output
 Report which tests were written, the test results, and any issues found.

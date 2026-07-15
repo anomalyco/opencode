@@ -155,6 +155,63 @@ After each LLM turn, OpenCode can automatically run linters and report errors to
 }
 ```
 
+#### Meta-Cognition Layer
+OpenCode adds a lightweight planning and verification step around each LLM turn. Before the main model responds, a fast model analyzes the request, identifies risks, and determines the approach. After each step, the results are verified for correctness. The plan is injected into the system context so the main model starts with a clear strategy.
+
+- **Plan**: A fast LLM (Haiku / 4o-mini) analyzes the user request before the main turn, identifying intent, affected files, risks, and approach
+- **Verify**: After each step settlement, changes are reviewed for issues, regressions, and side effects
+- **Reflect**: At the end of a session drain, insights are extracted and stored for future reference
+
+#### Predictive Context Warmup
+Before each prompt, OpenCode predicts which files will be needed by analyzing three signals in parallel:
+
+- **Import graph**: Direct and transitive TypeScript/JavaScript imports from the current file
+- **Git co-change patterns**: `git log --all --name-only --since=6 months` identifies files frequently modified together
+- **Session recency**: Files recently referenced in the current session
+
+Predicted files are presented to the planner for inclusion in the system context, reducing the need for the agent to discover relevant files through tool calls.
+
+#### Cross-Session Knowledge Graph
+Insights and decisions from previous sessions are persisted in a durable knowledge store and automatically loaded into new sessions as system context. When a reflection step extracts architectural facts, patterns, constraints, or user preferences, they are recorded and surfaced in subsequent sessions.
+
+```json
+{
+  "sessionKnowledge": {
+    "enabled": true
+  }
+}
+```
+
+Knowledge facts are rendered as a `<session-knowledge>` block in the system prompt:
+
+```
+<session-knowledge>
+[architecture] auth module uses JWT with refresh tokens stored in SQLite
+[pattern] all handlers follow Effect.fn('Domain.method')
+[constraint] requires Node >= 20
+</session-knowledge>
+```
+
+#### Auto-Debugger
+When a tool execution fails, OpenCode automatically analyzes the error using a fast LLM, identifies the root cause, and surfaces a suggested fix. The analysis is passed to the verification step for inclusion in the next continuation turn.
+
+- Supports any tool failure (bash, edit, write, glob, grep, etc.)
+- Extracts relevant context from error output, tool input, and recent changes
+- Produces structured diagnosis: root cause, relevant file, suggested fix, confidence level
+
+#### Self-Profiling Agent
+A background profiler tracks development patterns across sessions and surfaces actionable insights when patterns emerge.
+
+- **Edit heatmap**: Files changed more than 5 times are flagged as potential refactoring candidates
+- **Error frequency**: Repeated errors (3+) are flagged for root-cause investigation
+- All metrics are stored in the session knowledge store and exposed through the system context as `<profile-insights>` blocks
+
+#### Diff-Aware Dependency Tracking
+When files are modified, OpenCode automatically searches for all usages of changed exports across the codebase using ripgrep. The dependency report is included in the verification prompt so the model can check that callers, test files, and reverse dependencies remain correct.
+
+- Finds callers, test files, and reverse dependencies of changed names
+- Results are passed to the verification step for automated review
+
 #### Built-in Commands
 - **`/test`** — Generate and run tests for the current file
 - **`/commit`** — Generate a Conventional Commits message from staged changes

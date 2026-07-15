@@ -12,6 +12,7 @@ import { ProviderTransform } from "@/provider/transform"
 import PROMPT_GENERATE from "./generate.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
+import PROMPT_DIRECTOR from "../director/prompt/director.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 import { Permission } from "@/permission"
@@ -178,6 +179,26 @@ const layer = Layer.effect(
             ),
             mode: "primary",
             native: true,
+          },
+          director: {
+            name: "director",
+            description: "Director mode. Analyzes tasks, decomposes them, delegates to worker agents, reviews results, and synthesizes final output. Manages agent performance and quality.",
+            permission: Permission.merge(
+              defaults,
+              Permission.fromConfig({
+                edit: { "*": "deny" },
+                write: { "*": "deny" },
+                apply_patch: { "*": "deny" },
+                task: "allow",
+                question: "allow",
+                todowrite: "allow",
+              }),
+              user,
+            ),
+            options: {},
+            mode: "primary",
+            native: true,
+            prompt: PROMPT_DIRECTOR,
           },
           general: {
             name: "general",

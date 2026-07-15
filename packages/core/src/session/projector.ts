@@ -412,6 +412,9 @@ const layer = Layer.effectDiscard(
         .run()
         .pipe(Effect.orDie, Effect.asVoid),
     )
+    yield* events.project(SessionEvent.Cognition.Planned, (event) => run(db, event))
+    yield* events.project(SessionEvent.Cognition.Verified, (event) => run(db, event))
+    yield* events.project(SessionEvent.Cognition.Reflected, (event) => run(db, event))
     yield* events.project(SessionEvent.RevertEvent.Committed, (event) =>
       Effect.gen(function* () {
         const boundary = yield* db

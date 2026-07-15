@@ -1,21 +1,20 @@
 Generate a meaningful commit message based on staged changes and session context.
 
-Task: Review the git diff and generate a Conventional Commits-style message.
+Task: Review the git diff and generate a commit message following the project's commit conventions.
 
 ### Instructions
 
 1. First, check the changes with `git diff --staged` and `git status --porcelain`
-2. If no files are staged, ask the user if they want to stage all changes with `git add .`
+2. If no files are staged, ask the user if they want to stage all changes
 3. Check recent commit history for style reference: `git log --oneline -5`
-4. Generate a commit message in the format: `type(scope): description`
-
-Valid types: feat, fix, docs, style, refactor, test, chore, ci, perf
-
-Use the session context to understand what the changes relate to.
-
-5. Present the generated message to the user
-6. Wait for confirmation before executing: ask "[y] confirm, [e] edit, [n] cancel"
-7. If confirmed, run: `git commit -m "message"`
+4. Check the project's git configuration for preferred commit style:
+   - If conventional commits are enabled, use format: `type(scope): description`
+   - If conventional commits are disabled, use a clear and descriptive message
+5. If conventional commits are used, valid types are: feat, fix, docs, style, refactor, test, chore, ci, perf
+6. Use the session context to understand what the changes relate to
+7. Present the generated message to the user
+8. Wait for confirmation before executing: ask "[y] confirm, [e] edit, [n] cancel"
+9. If confirmed, execute the commit
 
 ### Output
 Show the proposed commit message and ask for user confirmation.

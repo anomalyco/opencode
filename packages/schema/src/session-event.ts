@@ -445,6 +445,57 @@ export namespace RevertEvent {
   })
 }
 
+export namespace Cognition {
+  export const Planned = Event.define({
+    type: "session.next.cognition.planned",
+    ...options,
+    schema: {
+      ...Base,
+      intent: Schema.String,
+      files: Schema.Array(Schema.String),
+      risks: Schema.Array(Schema.String),
+      approach: Schema.String,
+    },
+  })
+  export type Planned = typeof Planned.Type
+
+  export const Verified = Event.define({
+    type: "session.next.cognition.verified",
+    ...options,
+    schema: {
+      ...Base,
+      passed: Schema.Boolean,
+      issues: Schema.Array(
+        Schema.Struct({
+          type: Schema.String,
+          description: Schema.String,
+          file: Schema.String.pipe(Schema.optional),
+          severity: Schema.String,
+        }),
+      ),
+      summary: Schema.String,
+    },
+  })
+  export type Verified = typeof Verified.Type
+
+  export const Reflected = Event.define({
+    type: "session.next.cognition.reflected",
+    ...options,
+    schema: {
+      ...Base,
+      insights: Schema.Array(
+        Schema.Struct({
+          type: Schema.String,
+          content: Schema.String,
+          context: Schema.String.pipe(Schema.optional),
+        }),
+      ),
+      summary: Schema.String,
+    },
+  })
+  export type Reflected = typeof Reflected.Type
+}
+
 export const DurableDefinitions = Event.inventory(
   AgentSwitched,
   ModelSwitched,
@@ -474,6 +525,9 @@ export const DurableDefinitions = Event.inventory(
   RevertEvent.Staged,
   RevertEvent.Cleared,
   RevertEvent.Committed,
+  Cognition.Planned,
+  Cognition.Verified,
+  Cognition.Reflected,
 )
 
 export const Definitions = Event.inventory(
@@ -509,6 +563,9 @@ export const Definitions = Event.inventory(
   RevertEvent.Staged,
   RevertEvent.Cleared,
   RevertEvent.Committed,
+  Cognition.Planned,
+  Cognition.Verified,
+  Cognition.Reflected,
 )
 
 export const Durable = Schema.Union(DurableDefinitions, { mode: "oneOf" })

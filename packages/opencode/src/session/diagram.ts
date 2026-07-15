@@ -1,5 +1,6 @@
 export * as SessionDiagram from "./diagram"
 
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Context, Effect, Layer, Schema } from "effect"
 import { SessionID } from "./schema"
 import { EventV2 } from "@opencode-ai/core/event"
@@ -60,3 +61,5 @@ const layer = Layer.effect(
 )
 
 export { layer }
+
+export const node = LayerNode.make({ service: Service, layer, deps: [] })

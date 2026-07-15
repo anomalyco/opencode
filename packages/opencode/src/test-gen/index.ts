@@ -1,6 +1,7 @@
 export * as TestGen from "."
 
 import { Config } from "@/config/config"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Context, Effect, Layer } from "effect"
 import path from "path"
 import fs from "fs/promises"
@@ -72,3 +73,5 @@ const layer = Layer.effect(
 )
 
 export { layer }
+
+export const node = LayerNode.make({ service: Service, layer, deps: [Config.node] })

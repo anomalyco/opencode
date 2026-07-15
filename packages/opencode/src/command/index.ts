@@ -10,6 +10,7 @@ import { Skill } from "../skill"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
 import PROMPT_REVIEW from "./template/review.txt"
 import PROMPT_TEAM from "../orchestrator/template/team.txt"
+import PROMPT_DIRECTOR from "./template/director.txt"
 import PROMPT_TEST from "./template/test.txt"
 import PROMPT_COMMIT from "./template/commit.txt"
 import { LegacyEvent } from "@opencode-ai/schema/legacy-event"
@@ -50,6 +51,7 @@ export const Default = {
   INIT: "init",
   REVIEW: "review",
   TEAM: "team",
+  DIRECTOR: "director",
   TEST: "test",
   COMMIT: "commit",
 } as const
@@ -101,21 +103,46 @@ const layer = Layer.effect(
         },
         hints: hints(PROMPT_TEAM),
       }
+      const testingCfg = cfg.testing ?? {}
+      const testConfigHints = [
+        testingCfg.framework ? `Configured testing framework: ${testingCfg.framework}` : "",
+        testingCfg.testCommand ? `Configured test command: ${testingCfg.testCommand}` : "",
+        testingCfg.maxFixIterations != null ? `Max fix iterations: ${testingCfg.maxFixIterations}` : "",
+      ].filter(Boolean).join("\n")
+
       commands[Default.TEST] = {
         name: Default.TEST,
         description: "generate and run tests for the current file",
         source: "command",
         get template() {
-          return PROMPT_TEST
+          if (!testConfigHints) return PROMPT_TEST
+          return `### Project Test Configuration\n${testConfigHints}\n\n${PROMPT_TEST}`
         },
         hints: hints(PROMPT_TEST),
       }
+      commands[Default.DIRECTOR] = {
+        name: Default.DIRECTOR,
+        description: "delegate a complex task to the Director agent for analysis, decomposition, delegation, and review",
+        agent: "director",
+        source: "command",
+        get template() {
+          return PROMPT_DIRECTOR
+        },
+        hints: hints(PROMPT_DIRECTOR),
+      }
+      const gitCfg = cfg.git ?? {}
+      const gitConfigHints = [
+        gitCfg.conventional !== false ? "This project uses Conventional Commits format." : "This project does not enforce Conventional Commits.",
+        gitCfg.autoStage ? "Auto-staging is enabled." : "Auto-stage is disabled; let user decide.",
+      ].filter(Boolean).join("\n")
+
       commands[Default.COMMIT] = {
         name: Default.COMMIT,
         description: "generate a commit message from staged changes",
         source: "command",
         get template() {
-          return PROMPT_COMMIT
+          if (!gitConfigHints) return PROMPT_COMMIT
+          return `### Project Git Configuration\n${gitConfigHints}\n\n${PROMPT_COMMIT}`
         },
         hints: hints(PROMPT_COMMIT),
       }

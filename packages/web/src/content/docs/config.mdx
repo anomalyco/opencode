@@ -867,6 +867,134 @@ Experimental options are not stable. They may change or be removed without notic
 
 ---
 
+### Smart Auto-Context
+
+OpenCode can automatically find and add relevant files to the session context based on your query.
+
+```json
+{
+  "context": {
+    "autoAdd": true,
+    "maxFiles": 10,
+    "includeTests": true
+  }
+}
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `autoAdd` | boolean | `false` | Automatically add relevant files to context |
+| `maxFiles` | integer | `10` | Maximum number of files to auto-add |
+| `includeTests` | boolean | `true` | Include test files matching the current module |
+
+---
+
+### Multi-Agent Teams
+
+Configure how the `/team` command executes tasks using multiple agents.
+
+```json
+{
+  "multiAgent": {
+    "defaultMode": "parallel",
+    "maxAgents": 3
+  }
+}
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `multiAgent.defaultMode` | string | `"parallel"` | Default team mode: `parallel`, `pipeline`, or `supervisor` |
+| `multiAgent.maxAgents` | integer | `3` | Maximum number of agents in a team |
+
+---
+
+### Mermaid Diagrams
+
+Enable the model to generate diagrams using Mermaid syntax.
+
+```json
+{
+  "diagrams": {
+    "enabled": true,
+    "format": "svg"
+  }
+}
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `diagrams.enabled` | boolean | `false` | Enable mermaid diagram generation |
+| `diagrams.format` | string | `"svg"` | Output format for diagrams |
+
+---
+
+### Auto-Fix
+
+After each LLM turn, automatically run linters and type-checkers, reporting errors back to the model for iterative fixing.
+
+```json
+{
+  "autoFix": {
+    "enabled": true,
+    "maxIterations": 3,
+    "tools": ["tsc", "biome", "eslint"]
+  }
+}
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `autoFix.enabled` | boolean | `false` | Enable auto-fix after each turn |
+| `autoFix.maxIterations` | integer | `3` | Maximum fix iterations |
+| `autoFix.tools` | string[] | all available | Lint tools to run: `tsc`, `biome`, `eslint`, `oxlint` |
+
+---
+
+### Git Configuration
+
+Configure how the `/commit` command generates commit messages.
+
+```json
+{
+  "git": {
+    "autoStage": false,
+    "conventional": true
+  }
+}
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `git.autoStage` | boolean | `false` | Auto-stage all changes |
+| `git.conventional` | boolean | `true` | Use Conventional Commits format |
+
+---
+
+### Testing Configuration
+
+Configure how the `/test` command generates and runs tests.
+
+```json
+{
+  "testing": {
+    "enabled": true,
+    "framework": "vitest",
+    "testCommand": "bun test",
+    "maxFixIterations": 2
+  }
+}
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `testing.enabled` | boolean | `true` | Enable test command |
+| `testing.framework` | string | auto-detected | Testing framework: `vitest`, `jest`, `mocha`, `bun` |
+| `testing.testCommand` | string | auto-detected | Custom test command |
+| `testing.maxFixIterations` | integer | `2` | Max fix iterations when tests fail |
+
+---
+
 ## Variables
 
 You can use variable substitution in your config files to reference environment variables and file contents.

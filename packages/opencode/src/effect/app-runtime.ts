@@ -35,6 +35,9 @@ import { LSP } from "@/lsp/lsp"
 import { MCP } from "@/mcp"
 import { McpAuth } from "@/mcp/auth"
 import { Command } from "@/command"
+import { AutoFix } from "@/auto-fix"
+import { TestGen } from "@/test-gen"
+import { SessionDiagram } from "@/session/diagram"
 import { Orchestrator } from "@/orchestrator"
 import { Truncate } from "@/tool/truncate"
 import { ToolRegistry } from "@/tool/registry"
@@ -89,12 +92,15 @@ export const AppLayer = AppNodeBuilderV1.build(
     SessionRevert.node,
     SessionSummary.node,
     SessionPrompt.node,
+    SessionDiagram.node,
     Instruction.node,
     LLM.node,
     LSP.node,
     MCP.node,
     McpAuth.node,
     Command.node,
+    AutoFix.node,
+    TestGen.node,
     Orchestrator.node,
     Truncate.node,
     ToolRegistry.node,

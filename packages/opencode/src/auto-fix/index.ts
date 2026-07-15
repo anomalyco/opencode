@@ -3,11 +3,12 @@ export * as AutoFix from "."
 import { Config } from "@/config/config"
 import { InstanceState } from "@/effect/instance-state"
 import { Snapshot } from "@/snapshot"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Context, Effect, Layer } from "effect"
 import { existsSync } from "fs"
 import path from "path"
 
-export type LintTool = "tsc" | "biome"
+export type LintTool = "tsc" | "biome" | "eslint" | "oxlint"
 
 export type LintResult = {
   tool: string
@@ -35,7 +36,7 @@ export interface Interface {
     iterationCount: number
     fixed: boolean
     summary: string
-  }>
+  }, Error>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/AutoFix") {}
@@ -63,20 +64,43 @@ const layer = Layer.effect(
           available.push("biome")
         }
       }
+      if (!configured || configured.includes("eslint")) {
+        if (existsSync(path.join(ctx.worktree, ".eslintrc")) ||
+            existsSync(path.join(ctx.worktree, ".eslintrc.json")) ||
+            existsSync(path.join(ctx.worktree, ".eslintrc.js")) ||
+            existsSync(path.join(ctx.worktree, "eslint.config.js"))) {
+          available.push("eslint")
+        }
+      }
+      if (!configured || configured.includes("oxlint")) {
+        if (existsSync(path.join(ctx.worktree, "oxlintrc.json")) ||
+            existsSync(path.join(ctx.worktree, ".oxlintrc.json"))) {
+          available.push("oxlint")
+        }
+      }
       return available
     })
 
-    const runTool = (tool: LintTool): Effect.Effect<LintResult> =>
+    const runTool = (tool: LintTool): Effect.Effect<LintResult, Error> =>
       Effect.gen(function* () {
         const ctx = yield* InstanceState.context
         const cwd = ctx.worktree
         const shell = (cmd: string[]) =>
-          Effect.promise<{ stdout: string; stderr: string; exitCode: number }>(async () => {
-            const proc = Bun.spawn(cmd, { cwd, stdio: ["ignore", "pipe", "pipe"] })
-            const [stdout, stderr] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()])
-            const exitCode = await proc.exited
-            return { stdout, stderr, exitCode }
-          })
+          Effect.try({
+            try: () => {
+              const proc = Bun.spawn(cmd, { cwd, stdio: ["ignore", "pipe", "pipe"] })
+              return proc
+            },
+            catch: (error) => new Error(`Failed to spawn process: ${error}`),
+          }).pipe(
+            Effect.flatMap((proc) =>
+              Effect.promise<{ stdout: string; stderr: string; exitCode: number }>(async () => {
+                const [stdout, stderr] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()])
+                const exitCode = await proc.exited
+                return { stdout, stderr, exitCode }
+              })
+            ),
+          )
 
         if (tool === "tsc") {
           const { stderr } = yield* shell(["bun", "typecheck"])
@@ -93,6 +117,30 @@ const layer = Layer.effect(
             if (Array.isArray(json.diagnostics)) errorCount = json.diagnostics.length
           } catch {}
           return { tool: "biome", raw, fixable: errorCount > 0, errorCount }
+        }
+
+        if (tool === "eslint") {
+          const { stdout, stderr } = yield* shell(["npx", "eslint", "--format=json", "."])
+          const raw = stdout || stderr
+          let errorCount = 0
+          try {
+            const json = JSON.parse(stdout)
+            if (Array.isArray(json)) errorCount = json.reduce((sum, file) => sum + (file.errorCount ?? 0), 0)
+            else if (json.errorCount !== undefined) errorCount = json.errorCount
+          } catch {}
+          return { tool: "eslint", raw, fixable: errorCount > 0, errorCount }
+        }
+
+        if (tool === "oxlint") {
+          const { stdout, stderr } = yield* shell(["npx", "oxlint", "--format=json", "."])
+          const raw = stdout || stderr
+          let errorCount = 0
+          try {
+            const json = JSON.parse(stdout)
+            if (json.errorCount !== undefined) errorCount = json.errorCount
+            else if (json.numErrors !== undefined) errorCount = json.numErrors
+          } catch {}
+          return { tool: "oxlint", raw, fixable: errorCount > 0, errorCount }
         }
 
         return { tool, raw: "", fixable: false, errorCount: 0 }
@@ -159,10 +207,10 @@ const layer = Layer.effect(
 
         // First try biome --fix for auto-fixable errors
         if (tools.includes("biome")) {
-          const biomesult = yield* runTool("biome" as LintTool)
+          const ctx = yield* InstanceState.context
           yield* Effect.promise(async () => {
-            const proc = Bun.spawn(["npx", "@biomejs/biome", "check", "--apply", "."], {
-              cwd: process.cwd(),
+            const proc = Bun.spawn(["npx", "@biomejs/biome", "check", "--write", "."], {
+              cwd: ctx.worktree,
               stdio: ["ignore", "pipe", "pipe"],
             })
             await proc.exited
@@ -201,3 +249,5 @@ const layer = Layer.effect(
 )
 
 export { layer }
+
+export const node = LayerNode.make({ service: Service, layer, deps: [Config.node, Snapshot.node] })

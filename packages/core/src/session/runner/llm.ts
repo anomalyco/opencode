@@ -27,6 +27,7 @@ import { ToolOutputStore } from "../../tool-output-store"
 import { SessionContextEpoch } from "../context-epoch"
 import { SessionCompaction } from "../compaction"
 import { SessionEvent } from "../event"
+import { SessionMessage } from "../message"
 import { SessionHistory } from "../history"
 import { SessionInput } from "../input"
 import { SessionSchema } from "../schema"
@@ -39,6 +40,10 @@ import { MAX_STEPS_PROMPT } from "./max-steps"
 import { Snapshot } from "../../snapshot"
 import { makeLocationNode } from "../../effect/app-node"
 import { llmClient } from "../../effect/app-node-platform"
+import { MetaCognition } from "./meta"
+import { AutoDebug } from "./auto-debug"
+import { SessionProfiler } from "../profiler"
+import { ContextWarmup } from "../../warmup"
 
 /**
  * Runs one durable coding-agent Session until it settles.
@@ -105,6 +110,9 @@ const layer = Layer.effect(
     const referenceGuidance = yield* ReferenceGuidance.Service
     const config = yield* Config.Service
     const snapshots = yield* Snapshot.Service
+    const meta = yield* MetaCognition.Service
+    const autoDebug = yield* AutoDebug.Service
+    const profiler = yield* SessionProfiler.Service
     const db = (yield* Database.Service).db
     const compaction = SessionCompaction.make({ events, llm, config: yield* config.entries() })
     const getSession = Effect.fn("SessionRunner.getSession")(function* (sessionID: SessionSchema.ID) {
@@ -202,10 +210,32 @@ const layer = Layer.effect(
       const isLastStep = agent.info?.steps !== undefined && currentStep >= agent.info.steps
       const toolMaterialization = isLastStep ? undefined : yield* tools.materialize(agent.info?.permissions)
       const promptCacheKey = /^ses_[0-9a-f]{64}$/.test(session.id) ? session.id.slice(4) : session.id
+      const latestUserMessage = context
+        .filter((m): m is SessionMessage.User => m.type === "user")
+        .at(-1)
+      const predictedFiles = latestUserMessage && currentStep === 1 && promotion
+        ? ContextWarmup.predictWarmFiles(
+            location.directory,
+            location.project.directory,
+            [],
+            5,
+          )
+        : undefined
+      const planText: string | undefined = latestUserMessage && currentStep === 1 && promotion
+        ? yield* meta.plan({
+            sessionID: session.id,
+            userMessage: latestUserMessage.text,
+            context,
+            predictedFiles,
+          }).pipe(
+            Effect.map((p) => p ? `<plan>\nIntent: ${p.intent}\nFiles: ${p.files.map((f) => f.path).join(", ")}\n</plan>` : undefined),
+            Effect.catch(() => Effect.succeed(undefined)),
+          )
+        : undefined
       const request = LLM.request({
         model,
         providerOptions: { openai: { promptCacheKey } },
-        system: [agent.info?.system, system.baseline]
+        system: [agent.info?.system, system.baseline, planText]
           .filter((part): part is string => part !== undefined && part.length > 0)
           .map(SystemPart.make),
         messages: [...toLLMMessages(context, model), ...(isLastStep ? [Message.assistant(MAX_STEPS_PROMPT)] : [])],
@@ -314,8 +344,8 @@ const layer = Layer.effect(
             yield* withPublication(publisher.failUnsettledTools(`Tool execution failed: ${message}`))
           }
           const stepSettlement = publisher.stepSettlement()
+          const endSnapshot = stepSettlement ? yield* snapshots.capture() : undefined
           if (stepSettlement && !publisher.hasProviderError()) {
-            const endSnapshot = yield* snapshots.capture()
             const files =
               startSnapshot && endSnapshot
                 ? yield* snapshots
@@ -342,6 +372,32 @@ const layer = Layer.effect(
           if (stream._tag === "Failure") return yield* Effect.failCause(stream.cause)
           if (settled._tag === "Failure" && Cause.hasInterrupts(settled.cause))
             return yield* Effect.failCause(settled.cause)
+          if (stepSettlement && !publisher.hasProviderError()) {
+            const changedFiles: readonly string[] = startSnapshot && endSnapshot
+              ? yield* snapshots
+                  .files({ from: startSnapshot, to: endSnapshot })
+                  .pipe(Effect.catch(() => Effect.succeed([])))
+              : []
+            const settledFailure = settled._tag === "Failure" && !Cause.hasInterrupts(settled.cause)
+              ? Cause.squash(settled.cause)
+              : undefined
+            if (settledFailure) {
+              const errorMessage = settledFailure instanceof Error ? settledFailure.message : String(settledFailure)
+              yield* autoDebug.analyze({
+                sessionID: session.id,
+                toolName: "unknown",
+                toolInput: {},
+                errorMessage,
+                errorOutput: errorMessage,
+              }).pipe(Effect.catch(() => Effect.succeed(undefined)))
+            }
+            yield* meta.verify({
+              sessionID: session.id,
+              finishReason: stepSettlement.finish,
+              changes: changedFiles,
+              errors: settledFailure ? [String(settledFailure)] : [],
+            }).pipe(Effect.catch(() => Effect.succeed(undefined)))
+          }
           return { needsContinuation: !publisher.hasProviderError() && needsContinuation, step: currentStep }
         }),
       )
@@ -390,12 +446,22 @@ const layer = Layer.effect(
       yield* failInterruptedTools(input.sessionID)
       let promotion: SessionInput.Delivery | undefined = hasSteer ? "steer" : hasQueue ? "queue" : undefined
       let shouldRun = input.force || hasSteer || hasQueue
+      let totalSteps = 0
+      let finishedSuccessfully = true
+      const allErrors: string[] = []
       while (shouldRun) {
         let needsContinuation = true
         let step = 1
         while (needsContinuation) {
-          const result = yield* runTurn(input.sessionID, promotion, step)
+          const result = yield* runTurn(input.sessionID, promotion, step).pipe(
+            Effect.catch((error) => {
+              finishedSuccessfully = false
+              allErrors.push(String(error))
+              return Effect.succeed({ needsContinuation: false, step } as const)
+            }),
+          )
           needsContinuation = result.needsContinuation
+          totalSteps++
           step = result.step + 1
           promotion = "steer"
           if (!needsContinuation) needsContinuation = yield* SessionInput.hasPending(db, input.sessionID, "steer")
@@ -403,6 +469,20 @@ const layer = Layer.effect(
         shouldRun = yield* SessionInput.hasPending(db, input.sessionID, "queue")
         promotion = shouldRun ? "queue" : undefined
       }
+      yield* meta.reflect({
+        sessionID: input.sessionID,
+        steps: totalSteps,
+        finishedSuccessfully,
+        errors: allErrors,
+        changedFiles: [],
+      }).pipe(Effect.catch(() => Effect.succeed(undefined)))
+      yield* profiler.recordMetrics({
+        sessionID: input.sessionID,
+        steps: totalSteps,
+        filesChanged: [],
+        errors: allErrors,
+        finishedSuccessfully,
+      }).pipe(Effect.catch(() => Effect.void))
     })
 
     return Service.of({
@@ -420,6 +500,9 @@ export const node = makeLocationNode({
     AgentV2.node,
     ToolRegistry.node,
     SessionRunnerModel.node,
+    MetaCognition.node,
+    AutoDebug.node,
+    SessionProfiler.node,
     SessionStore.node,
     Location.node,
     SystemContextRegistry.node,

@@ -1,10 +1,22 @@
-You are coordinating a team of agents to complete the following task:
+You are coordinating a team of agents to complete a complex task.
+
+Task: Analyze the request, break it down, delegate to the right agents, and synthesize the final result.
 
 $ARGUMENTS
 
 ### Available Agents
-This project has the following agents configured for team work.
-
-### Execution
 Use the `task` tool to delegate work to individual agents. Each agent will receive a child session with its own context.
-After all agents complete, review their outputs and provide a consolidated summary.
+
+### Execution Modes
+Configure how the team works together based on the project's multi-agent configuration.
+
+### Instructions
+1. If a team configuration exists with named agents and a mode (parallel/pipeline/supervisor), follow that structure
+2. Use parallel mode for independent subtasks that can be done simultaneously
+3. Use pipeline mode when each step depends on the previous one
+4. Use supervisor mode for complex tasks requiring orchestration
+5. After all agents complete, review their outputs and provide a consolidated summary
+6. Reference the project's multi-agent settings (default mode, max agents) when organizing the team
+
+### Output
+Provide a consolidated summary of all work done and key results from each agent.

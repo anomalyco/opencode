@@ -5,6 +5,7 @@ import { DateTime, Effect, Layer, Schema } from "effect"
 import { Location } from "../location"
 import { SystemContext } from "./index"
 import { InstructionContext } from "../instruction-context"
+import { SessionKnowledge } from "../session/knowledge"
 import { SystemContextRegistry } from "./registry"
 import { FSUtil } from "../fs-util"
 import { Global } from "../global"
@@ -40,11 +41,30 @@ const builtIns = Layer.effectDiscard(
     ])
 
     yield* registry.register({ key: SystemContext.Key.make("core/builtins"), load: Effect.succeed(context) })
+
+    const knowledge = yield* SessionKnowledge.Service
+    yield* registry.register({
+      key: SystemContext.Key.make("session/knowledge-summary"),
+      load: Effect.gen(function* () {
+        const facts = yield* knowledge.queryByContext(location.project.directory)
+        if (facts.length === 0) return SystemContext.empty
+        const lines = facts.map((f) => `[${f.type}] ${f.content}`)
+        return SystemContext.combine([
+          SystemContext.make({
+            key: SystemContext.Key.make("session/knowledge-summary"),
+            codec: Schema.toCodecJson(Schema.String),
+            load: Effect.succeed(lines.join("\n")),
+            baseline: (text) => `<session-knowledge>\n${text}\n</session-knowledge>`,
+            update: (_prev, text) => `<session-knowledge>\n${text}\n</session-knowledge>`,
+          }),
+        ])
+      }),
+    })
   }),
 )
 
 export const node = makeLocationNode({
   name: "system-context-builtins",
   layer: builtIns,
-  deps: [Location.node, SystemContextRegistry.node, InstructionContext.node, FSUtil.node, Global.node],
+  deps: [Location.node, SystemContextRegistry.node, InstructionContext.node, FSUtil.node, Global.node, SessionKnowledge.node],
 })

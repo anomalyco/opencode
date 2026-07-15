@@ -527,12 +527,20 @@ const layer = Layer.effect(
               const mermaidBlocks = SessionDiagram.extractMermaidBlocks(ctx.currentText.text)
               if (mermaidBlocks.length > 0) {
                 ctx.currentText.text = SessionDiagram.textWithoutMermaid(ctx.currentText.text) ||
-                  `[Diagram: ${mermaidBlocks.length} mermaid diagram(s) generated]`
+                  `[Mermaid diagram generated]`
                 yield* Effect.forEach(mermaidBlocks, (block) =>
-                  events.publish(SessionDiagram.DiagramRendered, {
-                    sessionID: ctx.sessionID,
-                    source: block.source,
-                  }).pipe(Effect.ignore),
+                  Effect.all([
+                    events.publish(SessionDiagram.DiagramRendered, {
+                      sessionID: ctx.sessionID,
+                      source: block.source,
+                    }).pipe(Effect.ignore),
+                    Effect.serviceOption(SessionDiagram.Service).pipe(
+                      Effect.flatMap((option) => {
+                        if (option._tag === "None") return Effect.void
+                        return option.value.render(block.source).pipe(Effect.ignore)
+                      }),
+                    ),
+                  ]).pipe(Effect.ignore),
                 )
               }
             }
@@ -723,6 +731,7 @@ export const node = LayerNode.make({
     Plugin.node,
     SessionSummary.node,
     SessionStatus.node,
+    SessionDiagram.node,
     Image.node,
     EventV2Bridge.node,
     Database.node,

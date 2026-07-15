@@ -1,0 +1,7 @@
+Task for the Director agent:
+
+$ARGUMENTS
+
+The Director will analyze this task, break it into subtasks, delegate to the best worker agents, review their work, and synthesize the final result.
+
+Available worker agents: build (full tool access), explore (codebase research), general (general-purpose tasks).

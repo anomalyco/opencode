@@ -10,6 +10,7 @@ import { ConfigAutoFixV1 } from "./auto-fix"
 import { ConfigContextV1 } from "./context"
 import { ConfigCommandV1 } from "./command"
 import { ConfigDiagramsV1 } from "./diagrams"
+import { ConfigDirectorV1 } from "./director"
 import { ConfigFormatterV1 } from "./formatter"
 import { ConfigGitV1 } from "./git"
 import { ConfigLayoutV1 } from "./layout"
@@ -95,7 +96,11 @@ export const Info = Schema.Struct({
   }),
   mode: Schema.optional(
     Schema.StructWithRest(
-      Schema.Struct({ build: Schema.optional(ConfigAgentV1.Info), plan: Schema.optional(ConfigAgentV1.Info) }),
+      Schema.Struct({
+        build: Schema.optional(ConfigAgentV1.Info),
+        plan: Schema.optional(ConfigAgentV1.Info),
+        director: Schema.optional(ConfigAgentV1.Info),
+      }),
       [Schema.Record(Schema.String, ConfigAgentV1.Info)],
     ),
   ).annotate({ description: "@deprecated Use `agent` field instead." }),
@@ -104,6 +109,7 @@ export const Info = Schema.Struct({
       Schema.Struct({
         plan: Schema.optional(ConfigAgentV1.Info),
         build: Schema.optional(ConfigAgentV1.Info),
+        director: Schema.optional(ConfigAgentV1.Info),
         general: Schema.optional(ConfigAgentV1.Info),
         explore: Schema.optional(ConfigAgentV1.Info),
         title: Schema.optional(ConfigAgentV1.Info),
@@ -186,6 +192,9 @@ export const Info = Schema.Struct({
   ),
   diagrams: Schema.optional(ConfigDiagramsV1.Info).annotate({
     description: "Mermaid diagram rendering configuration",
+  }),
+  director: Schema.optional(ConfigDirectorV1.Info).annotate({
+    description: "Director agent mode configuration for multi-agent management",
   }),
   experimental: Schema.optional(
     Schema.Struct({
