@@ -633,6 +633,12 @@ export function RunSubagentSelectBody(props: {
       return
     }
 
+    if (event.name.toLowerCase() === "up" && menu.selected() === 0) {
+      event.preventDefault()
+      props.onClose()
+      return
+    }
+
     handleKey({ event, menu, field: () => field, setQuery, select, close: props.onClose })
   })
 
