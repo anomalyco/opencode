@@ -2,7 +2,13 @@ import { describe, expect, test } from "bun:test"
 import { Effect, Exit, Fiber, Layer } from "effect"
 import { PermissionModule as PermissionModuleSchema } from "@opencode-ai/schema/permission-module"
 import { Permission } from "../../src/permission"
-import { PermissionModule, applySafety, runClassifier, MISSING_MODEL_MESSAGE } from "../../src/permission/module"
+import {
+  PermissionModule,
+  applySafety,
+  parseClassifierResult,
+  runClassifier,
+  MISSING_MODEL_MESSAGE,
+} from "../../src/permission/module"
 import { EventV2Bridge } from "../../src/event-v2-bridge"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { InstanceBootstrap } from "../../src/project/bootstrap"
@@ -240,6 +246,21 @@ itMissingModel.instance("missing cruise_control model asks with configure warnin
 )
 
 describe("classifier contract", () => {
+  test("parseClassifierResult accepts missing reason and fences", () => {
+    expect(parseClassifierResult({ decision: "allow" })).toEqual({ decision: "allow", reason: "" })
+    expect(parseClassifierResult({ decision: "ALLOW", reason: "safe" })).toEqual({
+      decision: "allow",
+      reason: "safe",
+    })
+    expect(parseClassifierResult('```json\n{"decision":"deny","reason":"risky"}\n```')).toEqual({
+      decision: "deny",
+      reason: "risky",
+    })
+    expect(parseClassifierResult({ action: "ask" })).toEqual({ decision: "ask", reason: "" })
+    expect(parseClassifierResult({ decision: "maybe" })).toBeUndefined()
+    expect(parseClassifierResult("not json")).toBeUndefined()
+  })
+
   test("valid allow passes allowlist safety", () => {
     expect(
       applySafety("allow", "bash", {
