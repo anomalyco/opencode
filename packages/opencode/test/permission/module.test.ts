@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { Effect, Exit, Fiber, Layer } from "effect"
 import { PermissionModule as PermissionModuleSchema } from "@opencode-ai/schema/permission-module"
 import { Permission } from "../../src/permission"
-import { PermissionModule } from "../../src/permission/module"
+import { PermissionModule, applySafety, runClassifier } from "../../src/permission/module"
 import { EventV2Bridge } from "../../src/event-v2-bridge"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { InstanceBootstrap } from "../../src/project/bootstrap"
@@ -21,6 +21,9 @@ function stubModules(decide: (input: PermissionModule.DecideInput) => Effect.Eff
     PermissionModule.Service,
     PermissionModule.Service.of({
       decide,
+      register: () => Effect.void,
+      registerSync: () => undefined,
+      has: () => true,
     }),
   )
 }
@@ -171,3 +174,57 @@ itAsk.instance("cruise_control ask publishes pending request", () =>
     yield* Fiber.join(fiber)
   }),
 )
+
+describe("classifier contract", () => {
+  test("valid allow passes allowlist safety", () => {
+    expect(
+      applySafety("allow", "bash", {
+        fallback: "deny",
+        allowlist: ["bash"],
+      }),
+    ).toBe("allow")
+  })
+
+  test("valid allow without allowlist falls back", () => {
+    expect(applySafety("allow", "bash", { fallback: "ask", allowlist: [] })).toBe("ask")
+  })
+
+  test("valid allow from classifier", async () => {
+    const decision = await Effect.runPromise(
+      runClassifier({
+        permission: "bash",
+        patterns: ["ls"],
+        opts: { fallback: "deny", allowlist: ["bash"], timeout_ms: 1000 },
+        classify: Effect.succeed({ decision: "allow", reason: "safe read-only command" }),
+        modelRef: "opencode/deepseek-v4-flash",
+      }),
+    )
+    expect(decision).toBe("allow")
+  })
+
+  test("invalid classifier output uses fallback", async () => {
+    const decision = await Effect.runPromise(
+      runClassifier({
+        permission: "bash",
+        patterns: ["ls"],
+        opts: { fallback: "ask", allowlist: ["bash"], timeout_ms: 1000 },
+        classify: Effect.fail(new Error("invalid JSON")),
+        modelRef: "opencode/deepseek-v4-flash",
+      }),
+    )
+    expect(decision).toBe("ask")
+  })
+
+  test("timeout uses fallback and never allows", async () => {
+    const decision = await Effect.runPromise(
+      runClassifier({
+        permission: "bash",
+        patterns: ["ls"],
+        opts: { fallback: "deny", allowlist: ["bash"], timeout_ms: 20 },
+        classify: Effect.sleep("1 second").pipe(Effect.as({ decision: "allow" as const, reason: "late" })),
+        modelRef: "opencode/deepseek-v4-flash",
+      }),
+    )
+    expect(decision).toBe("deny")
+  })
+})

@@ -389,6 +389,9 @@ test("remaps fallback oauth model urls to the enterprise host", async () => {
     experimental_workspace: {
       register() {},
     },
+    permission: {
+      registerModule() {},
+    },
     serverUrl: new URL("https://example.com"),
     $: {} as never,
   })

@@ -4,7 +4,6 @@ import type {
   Project,
   Model,
   Provider,
-  Permission,
   UserMessage,
   Message,
   Part,
@@ -53,6 +52,19 @@ export type WorkspaceAdapter = {
   target(config: WorkspaceInfo): WorkspaceTarget | Promise<WorkspaceTarget>
 }
 
+export type PermissionModuleDecision = "allow" | "deny" | "ask"
+
+export type PermissionModuleDecideInput = {
+  permission: string
+  patterns: readonly string[]
+  metadata: Record<string, unknown>
+}
+
+export type PermissionModuleRegistration = {
+  id: string
+  decide: (input: PermissionModuleDecideInput) => Promise<PermissionModuleDecision>
+}
+
 export type PluginInput = {
   client: ReturnType<typeof createOpencodeClient>
   project: Project
@@ -60,6 +72,15 @@ export type PluginInput = {
   worktree: string
   experimental_workspace: {
     register(type: string, adapter: WorkspaceAdapter): void
+  }
+  /**
+   * Register a named permission classifier module for use as a V1 permission
+   * action / V2 `module` field (e.g. `puetsua_permit`). Built-in id
+   * `cruise_control` and reserved actions `allow` | `ask` | `deny` cannot be
+   * registered. Collisions fail plugin load.
+   */
+  permission: {
+    registerModule(module: PermissionModuleRegistration): void
   }
   serverUrl: URL
   $: BunShell
@@ -258,7 +279,6 @@ export interface Hooks {
     input: { sessionID: string; agent: string; model: Model; provider: ProviderContext; message: UserMessage },
     output: { headers: Record<string, string> },
   ) => Promise<void>
-  "permission.ask"?: (input: Permission, output: { status: "ask" | "deny" | "allow" }) => Promise<void>
   "command.execute.before"?: (
     input: { command: string; sessionID: string; arguments: string },
     output: { parts: Part[] },

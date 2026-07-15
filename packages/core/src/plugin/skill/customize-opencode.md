@@ -282,7 +282,9 @@ same key in `agent: { <name>: { ... } }`. The legacy agent id `build` aliases to
 
 For smart tool auto-gating, use the built-in permission module `cruise_control`
 (not an agent): set permission actions to `"cruise_control"` and configure
-`permission_modules.cruise_control.model` (for example `opencode/deepseek-v4-flash`).
+`permission_modules.cruise_control.model` (for example `opencode/deepseek-v4-flash`
+or `ollama_cloud/kimi-k2.7-code`). Plugins may register additional modules via
+`permission.registerModule({ id, decide })` (for example `puetsua_permit`).
 
 ## Commands
 
@@ -334,7 +336,14 @@ function, not a plain object literal, and the function returns an object
 ```ts
 import type { Plugin } from "@opencode-ai/plugin"
 
-export default (async ({ client, project, directory, $ }) => {
+export default (async ({ client, project, directory, $, permission }) => {
+  permission.registerModule({
+    id: "puetsua_permit",
+    decide: async ({ permission: key, patterns, metadata }) => {
+      // return "allow" | "deny" | "ask"
+      return "ask"
+    },
+  })
   return {
     config: (cfg) => {
       // cfg is the live merged config; mutate fields here.
@@ -355,13 +364,15 @@ Hook surface (mutate `output` in place; return `void`):
 - `tool.definition`
 - `command.execute.before`
 - `shell.env`
-- `permission.ask`
 - `experimental.chat.messages.transform`, `experimental.chat.system.transform`,
   `experimental.session.compacting`, `experimental.compaction.autocontinue`,
   `experimental.text.complete`
 
 Special object-shaped (not callbacks): `tool: { my_tool: { ... } }`,
 `auth: { ... }`, `provider: { ... }`.
+
+Registration APIs on `PluginInput` (not hooks): `experimental_workspace.register`,
+`permission.registerModule({ id, decide })` for custom permission classifier modules.
 
 ## MCP servers
 

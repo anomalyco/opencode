@@ -259,6 +259,9 @@ describe("plugin.codex", () => {
         experimental_workspace: {
           register() {},
         },
+        permission: {
+          registerModule() {},
+        },
         serverUrl: new URL("https://example.com"),
         $: {} as never,
       },

@@ -1,7 +1,7 @@
 export * as PermissionV2 from "./permission"
 
 import { makeLocationNode } from "./effect/app-node"
-import { Context, Deferred, Effect as EffectRuntime, Layer, Schema } from "effect"
+import { Context, Deferred, Effect as EffectRuntime, Layer, Option, Schema } from "effect"
 import { Permission } from "@opencode-ai/schema/permission"
 import { EventV2 } from "./event"
 import { Location } from "./location"
@@ -10,6 +10,7 @@ import { SessionV2 } from "./session"
 import { SessionStore } from "./session/store"
 import { Wildcard } from "./util/wildcard"
 import { PermissionSaved } from "./permission/saved"
+import { PermissionModule } from "./permission/module"
 
 export { Effect, Rule, Ruleset } from "@opencode-ai/schema/permission"
 const missingAgentPermissions: Permission.Ruleset = [{ action: "*", resource: "*", effect: "deny" }]
@@ -156,9 +157,40 @@ const layer = Layer.effect(
       const rules = yield* configured(input.sessionID, input.agent)
       if (denied(input, rules)) return { effect: "deny" as const, rules }
       const all = [...rules, ...(yield* savedRules())]
-      const effects = input.resources.map((resource) => evaluate(input.action, resource, all).effect)
-      const effect: Permission.Effect = effects.includes("deny") ? "deny" : effects.includes("ask") ? "ask" : "allow"
-      return { effect, rules: all }
+      const matched = input.resources.map((resource) => evaluate(input.action, resource, all))
+      if (matched.some((rule) => rule.effect === "deny")) return { effect: "deny" as const, rules: all }
+      if (matched.every((rule) => rule.effect === "allow")) return { effect: "allow" as const, rules: all }
+
+      let needsAsk = false
+      const moduleIDs = new Set<string>()
+      for (const rule of matched) {
+        if (rule.effect !== "ask") continue
+        if (rule.module) moduleIDs.add(rule.module)
+        else needsAsk = true
+      }
+
+      if (moduleIDs.size > 0) {
+        const modules = yield* EffectRuntime.serviceOption(PermissionModule.Service)
+        if (Option.isNone(modules)) {
+          yield* EffectRuntime.logError("permission module service unavailable; denying", {
+            modules: [...moduleIDs],
+            permission: input.action,
+          })
+          return { effect: "deny" as const, rules: all }
+        }
+        for (const moduleID of moduleIDs) {
+          const decision = yield* modules.value.decide({
+            moduleID,
+            permission: input.action,
+            patterns: input.resources,
+            metadata: input.metadata ?? {},
+          })
+          if (decision === "deny") return { effect: "deny" as const, rules: all }
+          if (decision === "ask") needsAsk = true
+        }
+      }
+
+      return { effect: needsAsk ? ("ask" as const) : ("allow" as const), rules: all }
     })
 
     function request(input: AssertInput): Request {

@@ -31,6 +31,8 @@ import type { WorkspaceAdapter } from "@/control-plane/types"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { InstallationChannel } from "@opencode-ai/core/installation/version"
+import { PermissionModule } from "@/permission/module"
+import * as Option from "effect/Option"
 
 type State = {
   hooks: Hooks[]
@@ -146,6 +148,7 @@ const layer = Layer.effect(
           ...(serverUrl ? {} : { fetch: async (...args) => Server.Default().app.fetch(...args) }),
         })
         const cfg = yield* config.get()
+        const modules = yield* Effect.serviceOption(PermissionModule.Service)
         const input: PluginInput = {
           client,
           project: ctx.project,
@@ -154,6 +157,24 @@ const layer = Layer.effect(
           experimental_workspace: {
             register(type: string, adapter: PluginWorkspaceAdapter) {
               registerAdapter(ctx.project.id, type, adapter as WorkspaceAdapter)
+            },
+          },
+          permission: {
+            registerModule(module) {
+              if (Option.isNone(modules)) {
+                throw new Error("permission module service unavailable; cannot register plugin permission modules")
+              }
+              modules.value.registerSync({
+                id: module.id,
+                decide: (input) =>
+                  Effect.promise(() =>
+                    module.decide({
+                      permission: input.permission,
+                      patterns: input.patterns,
+                      metadata: input.metadata,
+                    }),
+                  ),
+              })
             },
           },
           get serverUrl(): URL {

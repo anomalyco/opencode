@@ -7,6 +7,7 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Location } from "@opencode-ai/core/location"
 import { PermissionV2 } from "@opencode-ai/core/permission"
+import { PermissionModule } from "@opencode-ai/core/permission/module"
 import { PermissionTable } from "@opencode-ai/core/permission/sql"
 import { PermissionSaved } from "@opencode-ai/core/permission/saved"
 import { Project } from "@opencode-ai/core/project"
@@ -310,6 +311,84 @@ describe("PermissionV2", () => {
       yield* service.assert(assertion({ id: PermissionV2.ID.create("per_next"), resources: ["src/next.ts"] }))
       yield* saved.remove(id)
       expect(yield* saved.list()).toEqual([])
+    }),
+  )
+})
+
+describe("PermissionV2 modules", () => {
+  function moduleLayer(
+    decide: (input: PermissionModule.DecideInput) => Effect.Effect<PermissionModule.Decision>,
+  ) {
+    return Layer.succeed(
+      PermissionModule.Service,
+      PermissionModule.Service.of({
+        decide,
+        register: () => Effect.void,
+        registerSync: () => undefined,
+        has: () => true,
+      }),
+    )
+  }
+
+  const base = AppNodeBuilder.build(
+    LayerNode.group([
+      Database.node,
+      EventV2.node,
+      SessionStore.node,
+      PermissionSaved.node,
+      AgentV2.node,
+      PermissionV2.node,
+    ]),
+    [[Location.node, current]],
+  )
+
+  const itAllow = testEffect(Layer.mergeAll(base, moduleLayer(() => Effect.succeed("allow"))))
+  const itDeny = testEffect(Layer.mergeAll(base, moduleLayer(() => Effect.succeed("deny"))))
+  const itAsk = testEffect(Layer.mergeAll(base, moduleLayer(() => Effect.succeed("ask"))))
+
+  itAllow.effect("assert allows when ask+module returns allow", () =>
+    Effect.gen(function* () {
+      yield* setup([{ action: "bash", resource: "*", effect: "ask", module: "cruise_control" }])
+      const service = yield* PermissionV2.Service
+      yield* service.assert(assertion({ action: "bash", resources: ["ls"] }))
+      expect(yield* service.list()).toEqual([])
+    }),
+  )
+
+  itDeny.effect("assert blocks when ask+module returns deny", () =>
+    Effect.gen(function* () {
+      yield* setup([{ action: "bash", resource: "*", effect: "ask", module: "cruise_control" }])
+      const service = yield* PermissionV2.Service
+      const blocked = yield* service.assert(assertion({ action: "bash", resources: ["rm -rf /"] })).pipe(Effect.flip)
+      expect(blocked).toBeInstanceOf(PermissionV2.BlockedError)
+    }),
+  )
+
+  itAsk.effect("assert queues human ask when module returns ask", () =>
+    Effect.gen(function* () {
+      yield* setup([{ action: "bash", resource: "*", effect: "ask", module: "cruise_control" }])
+      const service = yield* PermissionV2.Service
+      const asked = yield* Deferred.make<PermissionV2.Request>()
+      const events = yield* EventV2.Service
+      const unsubscribe = yield* events.listen((event) =>
+        event.type === PermissionV2.Event.Asked.type
+          ? Deferred.succeed(asked, event.data as PermissionV2.Request).pipe(Effect.asVoid)
+          : Effect.void,
+      )
+      yield* Effect.addFinalizer(() => unsubscribe)
+      const fiber = yield* service.assert(assertion({ action: "bash", resources: ["npm install"] })).pipe(Effect.forkScoped)
+      const request = yield* Deferred.await(asked)
+      expect(request.action).toBe("bash")
+      yield* service.reply({ requestID: request.id, reply: "once" })
+      yield* Fiber.join(fiber)
+    }),
+  )
+
+  itAllow.effect("static allow ignores module field", () =>
+    Effect.gen(function* () {
+      yield* setup([{ action: "bash", resource: "*", effect: "allow", module: "cruise_control" }])
+      const service = yield* PermissionV2.Service
+      yield* service.assert(assertion({ action: "bash", resources: ["ls"] }))
     }),
   )
 })
