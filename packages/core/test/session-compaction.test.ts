@@ -18,6 +18,8 @@ import { SessionStore } from "@opencode-ai/core/session/store"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
+import { Flag } from "@opencode-ai/core/flag/flag"
+import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { DateTime, Effect, Fiber, Layer, Stream } from "effect"
 import { asc, eq } from "drizzle-orm"
@@ -104,6 +106,7 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
     const events = yield* EventV2.Service
     const store = yield* SessionStore.Service
     const sessionID = SessionV2.ID.make("ses_manual_compaction")
+    const parentID = SessionV2.ID.make("ses_manual_compaction_parent")
     const userMessage = {
       id: SessionMessage.ID.create(),
       type: "user" as const,
@@ -121,6 +124,7 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
       .values({
         id: sessionID,
         project_id: Project.ID.global,
+        parent_id: parentID,
         slug: "manual-compaction",
         directory: "/project",
         title: "Manual compaction",
@@ -151,6 +155,15 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
     expect(Array.from(yield* Fiber.join(delta)).map((event) => event.data.text)).toEqual(["manual summary"])
 
     expect(requests).toHaveLength(1)
+    expect(requests[0]?.http?.headers).toEqual({
+      "x-session-affinity": sessionID,
+      "X-Session-Id": sessionID,
+      "x-parent-session-id": parentID,
+      "User-Agent": `opencode/${InstallationVersion}`,
+      "x-opencode-project": Project.ID.global,
+      "x-opencode-session": sessionID,
+      "x-opencode-client": Flag.OPENCODE_CLIENT,
+    })
     expect(requests[0]?.generation).toBeUndefined()
     expect(JSON.stringify(requests[0]?.messages)).toContain("Manual compaction should include this short conversation.")
     expect(yield* store.context(sessionID)).toMatchObject([

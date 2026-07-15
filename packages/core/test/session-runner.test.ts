@@ -20,6 +20,7 @@ import { LayerNodePlatform } from "@opencode-ai/core/effect/app-node-platform"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Flag } from "@opencode-ai/core/flag/flag"
+import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { EventTable } from "@opencode-ai/core/event/sql"
 import { Project } from "@opencode-ai/core/project"
@@ -3086,10 +3087,32 @@ describe("SessionRunnerLLM", () => {
       yield* session.resume(sessionID)
 
       expect(requests[0]?.http?.headers).toEqual({
+        "x-session-affinity": sessionID,
+        "X-Session-Id": sessionID,
+        "User-Agent": `opencode/${InstallationVersion}`,
         "x-opencode-project": Project.ID.global,
         "x-opencode-session": sessionID,
         "x-opencode-client": Flag.OPENCODE_CLIENT,
       })
+    }),
+  )
+
+  it.effect("adds the parent session header to child model requests", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      const parentID = SessionV2.ID.make("ses_runner_parent")
+      const { db } = yield* Database.Service
+      yield* db
+        .update(SessionTable)
+        .set({ parent_id: parentID })
+        .where(eq(SessionTable.id, sessionID))
+        .run()
+        .pipe(Effect.orDie)
+      yield* admit(session, "Run child request")
+
+      yield* session.resume(sessionID)
+
+      expect(requests[0]?.http?.headers?.["x-parent-session-id"]).toBe(parentID)
     }),
   )
 

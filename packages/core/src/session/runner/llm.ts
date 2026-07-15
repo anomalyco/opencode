@@ -51,7 +51,7 @@ import { AgentNotFoundError, StepFailedError } from "../error"
 import { toSessionError } from "../to-session-error"
 import { SessionRunnerRetry } from "./retry"
 import { PluginSupervisor } from "../../plugin/supervisor"
-import { Flag } from "../../flag/flag"
+import { SessionModelHeaders } from "../model-headers"
 
 type StepTokens = {
   readonly input: number
@@ -187,7 +187,7 @@ const layer = Layer.effect(
       const providerMetadataKey = model.route.providerMetadataKey ?? model.provider
       const history = yield* SessionHistory.entriesForRunner(db, session.id, instructions)
       const context = history.entries.map((entry) => entry.message)
-      const compactionInput = { sessionID: session.id, messages: context, model }
+      const compactionInput = { session, messages: context, model }
       if (compaction.required(compactionInput) && !(yield* SessionPending.compaction(db, session.id))) {
         const compacted = yield* compaction.compact(compactionInput)
         if (compacted.status === "completed") return { _tag: "RestartAfterCompaction", step: currentStep } as const
@@ -199,11 +199,7 @@ const layer = Layer.effect(
       const request = LLM.request({
         model,
         http: {
-          headers: {
-            "x-opencode-project": session.projectID,
-            "x-opencode-session": session.id,
-            "x-opencode-client": Flag.OPENCODE_CLIENT,
-          },
+          headers: SessionModelHeaders.make(session),
         },
         providerOptions: { openai: { promptCacheKey } },
         system: [agentInfo.system ? agentInfo.system : SessionRunnerSystemPrompt.provider(model), history.initial]
@@ -341,7 +337,7 @@ const layer = Layer.effect(
             recoverOverflow &&
             !publisher.hasRetryEvidence() &&
             isContextOverflowFailure(overflowFailure ?? streamFailure) &&
-            (yield* restore(recoverOverflow({ sessionID: session.id, messages: context, model }))).status ===
+            (yield* restore(recoverOverflow({ session, messages: context, model }))).status ===
               "completed"
           )
             return { _tag: "RestartAfterOverflowCompaction", step: currentStep } as const
