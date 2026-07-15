@@ -32,17 +32,35 @@ framework.
 
 ## Architecture at a Glance
 
-```mermaid
-flowchart LR
-  CLIENT[client Effect Service] --> CONNECTION[CLI ServerConnection]
-  CONFIG[CLI ServiceConfig] --> CONNECTION
-  CONFIG --> DAEMON[CLI server-process daemon]
-  CONNECTION -->|Effects| SEAM[CLI runPromiseWith seam]
-  SEAM -->|Promises| TUI[TUI and Solid reconnect loop]
-  CLIENT -->|start or stop| DAEMON
-  TUI -->|HTTP and events| HTTP[server HTTP transport]
-  DAEMON --> HTTP
-  HTTP --> CORE[core application behavior]
+```text
+                       ╭───────────────────╮
+                       │ CLI ServiceConfig │
+                       ╰─────────┬─────────╯
+                                 │
+                                 ▼
+                     ╭──────────────────────╮
+                     │ CLI ServerConnection │
+                     ╰───────────┬──────────╯
+              ╭──────────────────╰───────────────────╮
+              ▼                                      ▼
+╭──────────────────────────╮            ╭─────────────────────────╮
+│ Client Service lifecycle │            │ CLI runPromiseWith seam │
+╰─────────────┬────────────╯            ╰─────────────┬───────────╯
+              ╰─────╮                                 │
+                    ▼                                 ▼
+     ╭────────────────────────────╮            ╭─────────────╮
+     │ Background service process │            │ TUI / Solid │
+     ╰──────────────┬─────────────╯            ╰──────┬──────╯
+                    │                                 │
+                    ╰────────────◀────────────────────╯
+                     ╭───────────────────────╮
+                     │ Server HTTP transport │
+                     ╰───────────┬───────────╯
+                                 │
+                                 ▼
+                       ╭──────────────────╮
+                       │ Core application │
+                       ╰──────────────────╯
 ```
 
 | Owner                                            | Responsibility                                                                                      |
@@ -190,19 +208,22 @@ This design gives each concept one authority.
 
 ## System Model
 
-```mermaid
-flowchart LR
-  TUI[Fresh or existing TUI]
-  REG[Registration file]
-  LOCK[Process-held OS service lock]
-  SHELL[Lifecycle shell]
-  APP[OpenCode application]
-
-  TUI -->|discover| REG
-  TUI -->|observe| SHELL
-  TUI -->|normal requests| APP
-  SHELL --> APP
-  LOCK -->|authorizes one owner| SHELL
+```text
+╭───────────────────────╮                              ╭──────────────────────────────╮
+│ Fresh or existing TUI │                              │ Process-held OS service lock │
+╰───────────┬───────────╯                              ╰───────────────┬──────────────╯
+            ╰─────┬ normal requests  observe ───────────────────────╮  │
+                  │ discover               │                        ├──╯ authorizes one owner
+                  ▼                        │                        ▼
+        ╭───────────────────╮              │               ╭─────────────────╮
+        │ Registration file │              │               │ Lifecycle shell │
+        ╰───────────────────╯              │               ╰────────┬────────╯
+                                           │                        │
+                                           ├────────────────────────╯
+                                           ▼
+                               ╭──────────────────────╮
+                               │ OpenCode application │
+                               ╰──────────────────────╯
 ```
 
 The lifecycle shell and application run in the same process. The distinction is
@@ -337,24 +358,39 @@ Windows, where Bun FFI is not available on every shipped architecture. It lives
 alongside the existing utility in `packages/core/src/util`. This primitive is
 the foundation of the design, so the delivery sequence spikes it first.
 
-```mermaid
-flowchart TD
-  A[Contender process starts]
-  B{Acquire service lock?}
-  C[Exit successfully]
-  D[Bind lifecycle shell]
-  E[Write registration]
-  F[Report starting]
-  G[Initialize application]
-  H[Report ready]
-  I[Serve until shutdown]
-
-  A --> B
-  B -->|No| C
-  B -->|Yes| D
-  D --> E --> F --> G
-  G -->|Success| H --> I
-  G -->|Failure| J[Report failed and stay bound]
+```text
+Contender           Lock            Lifecycle              Application
+    │                 │                 │                       │
+    ├─ try acquire ───▶                 │                       │
+    │                 │                 │                       │
+ ╭─ alt: lock held ────────────────────────────────────────────────╮
+ │  │                 │                 │                       │  │
+ │  ◀─ busy ──────────┤                 │                       │  │
+ │  │                 │                 │                       │  │
+ │  ├─────────╮       │                 │                       │  │
+ │  │ exit    │       │                 │                       │  │
+ │  ◀─────────╯       │                 │                       │  │
+ │  │                 │                 │                       │  │
+ ├─ else: lock acquired ───────────────────────────────────────────┤
+ │  │                 │                 │                       │  │
+ │  ◀─ owner ─────────┤                 │                       │  │
+ │  │                 │                 │                       │  │
+ │  ├─ bind, register, starting ────────▶                       │  │
+ │  │                 │                 │                       │  │
+ │  ├─ initialize ──────────────────────────────────────────────▶  │
+ │  │                 │                 │                       │  │
+ │╭─ alt: boot succeeds ──────────────────────────────────────────╮│
+ ││ │                 │                 │                       │ ││
+ ││ │                 │                 ◀─ ready ───────────────┤ ││
+ ││ │                 │                 │                       │ ││
+ │├─ else: boot fails ────────────────────────────────────────────┤│
+ ││ │                 │                 │                       │ ││
+ ││ │                 │                 ◀─ failed, stay bound ──┤ ││
+ ││ │                 │                 │                       │ ││
+ │╰───────────────────────────────────────────────────────────────╯│
+ │  │                 │                 │                       │  │
+ ╰─────────────────────────────────────────────────────────────────╯
+    │                 │                 │                       │
 ```
 
 Lock acquisition by a contender is nonblocking or tightly bounded. A loser
