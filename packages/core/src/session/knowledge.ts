@@ -1,6 +1,6 @@
 export * as SessionKnowledge from "./knowledge"
 
-import { and, eq, gt, gte, like, or, sql } from "drizzle-orm"
+import { and, eq, gt, gte, like, lt, or, sql } from "drizzle-orm"
 import { Context, DateTime, Effect, Layer, Schema } from "effect"
 import { Database } from "../database/database"
 import { makeLocationNode } from "../effect/app-node"
@@ -128,7 +128,7 @@ const layer = Layer.effect(
         const now = Date.now()
         yield* db
           .delete(SessionKnowledgeTable)
-          .where(and(gt(SessionKnowledgeTable.ttl, 0), gt(SessionKnowledgeTable.ttl, now)))
+          .where(and(gt(SessionKnowledgeTable.ttl, 0), lt(SessionKnowledgeTable.ttl, now)))
           .run()
           .pipe(Effect.orDie)
       }),

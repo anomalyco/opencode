@@ -1,6 +1,6 @@
 export * as SessionProfiler from "./profiler"
 
-import { Context, DateTime, Effect, Layer, Schema } from "effect"
+import { Context, Effect, Layer, Schema } from "effect"
 import { makeLocationNode } from "../effect/app-node"
 import { SessionKnowledge } from "./knowledge"
 
