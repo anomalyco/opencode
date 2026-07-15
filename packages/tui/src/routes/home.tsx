@@ -69,22 +69,20 @@ export function Home() {
 
   return (
     <HomeSessionDestinationProvider>
-      <box flexGrow={1} alignItems="center" paddingLeft={2} paddingRight={2}>
-        <box flexGrow={1} minHeight={0} />
-        <box height={4} minHeight={0} flexShrink={1} />
-        <box flexShrink={0}>
-          <pluginRuntime.Slot name="home_logo" mode="replace">
-            <Logo />
-          </pluginRuntime.Slot>
+      <box flexGrow={1} alignItems="center" paddingLeft={2} paddingRight={2} flexDirection="column">
+        <box flexGrow={1} minHeight={0} width="100%" alignItems="center" justifyContent="center" flexDirection="column">
+          <box flexShrink={0}>
+            <pluginRuntime.Slot name="home_logo" mode="replace">
+              <Logo />
+            </pluginRuntime.Slot>
+          </box>
+          <pluginRuntime.Slot name="home_bottom" />
         </box>
-        <box height={1} minHeight={0} flexShrink={1} />
-        <box width="100%" maxWidth={promptMaxWidth()} zIndex={1000} paddingTop={1} flexShrink={0}>
+        <box width="100%" maxWidth={promptMaxWidth()} zIndex={1000} paddingBottom={1} flexShrink={0}>
           <pluginRuntime.Slot name="home_prompt" mode="replace" ref={bind}>
             <Prompt ref={bind} right={<pluginRuntime.Slot name="home_prompt_right" />} placeholders={placeholder} />
           </pluginRuntime.Slot>
         </box>
-        <pluginRuntime.Slot name="home_bottom" />
-        <box flexGrow={1} minHeight={0} />
         <Toast />
       </box>
       <box width="100%" flexShrink={0}>
