@@ -13,8 +13,20 @@ export const ID = Schema.String.check(Schema.isStartsWith("per")).pipe(
 )
 export type ID = typeof ID.Type
 
-export const Action = Schema.Literals(["allow", "deny", "ask"]).annotate({ identifier: "PermissionAction" })
+export const Action = Schema.String.check(Schema.isNonEmpty()).annotate({
+  identifier: "PermissionAction",
+  description: "Static allow|deny|ask, or a registered permission module id such as cruise_control",
+})
 export type Action = typeof Action.Type
+
+export const StaticAction = Schema.Literals(["allow", "deny", "ask"]).annotate({
+  identifier: "PermissionStaticAction",
+})
+export type StaticAction = typeof StaticAction.Type
+
+export function isStaticAction(action: string): action is StaticAction {
+  return action === "allow" || action === "deny" || action === "ask"
+}
 
 export const Rule = Schema.Struct({ permission: Schema.String, pattern: Schema.String, action: Action }).annotate({
   identifier: "PermissionRule",

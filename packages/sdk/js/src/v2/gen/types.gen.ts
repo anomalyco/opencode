@@ -157,7 +157,7 @@ export type SnapshotFileDiff = {
   status?: "added" | "deleted" | "modified"
 }
 
-export type PermissionAction = "allow" | "deny" | "ask"
+export type PermissionAction = string
 
 export type PermissionRule = {
   permission: string
@@ -1654,7 +1654,7 @@ export type ServerConfig = {
   cors?: Array<string>
 }
 
-export type PermissionActionConfig = "ask" | "allow" | "deny"
+export type PermissionActionConfig = string
 
 export type PermissionObjectConfig = {
   [key: string]: PermissionActionConfig

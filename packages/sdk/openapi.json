@@ -15718,7 +15718,8 @@
       },
       "PermissionAction": {
         "type": "string",
-        "enum": ["allow", "deny", "ask"]
+        "minLength": 1,
+        "description": "Static allow|deny|ask, or a registered permission module id such as cruise_control"
       },
       "PermissionRule": {
         "type": "object",
@@ -20562,7 +20563,8 @@
       },
       "PermissionActionConfig": {
         "type": "string",
-        "enum": ["ask", "allow", "deny"]
+        "minLength": 1,
+        "description": "ask | allow | deny | permission module id (e.g. cruise_control)"
       },
       "PermissionObjectConfig": {
         "type": "object",

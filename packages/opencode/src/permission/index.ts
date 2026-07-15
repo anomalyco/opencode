@@ -3,9 +3,11 @@ import { ConfigPermissionV1 } from "@opencode-ai/core/v1/config/permission"
 import { InstanceState } from "@/effect/instance-state"
 import { Wildcard } from "@opencode-ai/core/util/wildcard"
 import { Deferred, Effect, Layer, Context } from "effect"
+import * as Option from "effect/Option"
 import os from "os"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { EventV2Bridge } from "@/event-v2-bridge"
+import { PermissionModule } from "@/permission/module"
 
 export const Event = PermissionV1.Event
 
@@ -68,6 +70,7 @@ const layer = Layer.effect(
       const { approved, pending } = yield* InstanceState.get(state)
       const { ruleset, ...request } = input
       let needsAsk = false
+      const moduleIDs = new Set<string>()
 
       for (const pattern of request.patterns) {
         const rule = evaluate(request.permission, pattern, ruleset, approved)
@@ -78,7 +81,40 @@ const layer = Layer.effect(
           })
         }
         if (rule.action === "allow") continue
-        needsAsk = true
+        if (PermissionV1.isStaticAction(rule.action)) {
+          needsAsk = true
+          continue
+        }
+        moduleIDs.add(rule.action)
+      }
+
+      if (moduleIDs.size > 0) {
+        const modules = yield* Effect.serviceOption(PermissionModule.Service)
+        if (Option.isNone(modules)) {
+          yield* Effect.logError("permission module service unavailable; denying", {
+            modules: [...moduleIDs],
+            permission: request.permission,
+          })
+          return yield* new PermissionV1.DeniedError({
+            ruleset: ruleset.filter((rule) => Wildcard.match(request.permission, rule.permission)),
+          })
+        }
+
+        const module = modules.value
+        for (const moduleID of moduleIDs) {
+          const decision = yield* module.decide({
+            moduleID,
+            permission: request.permission,
+            patterns: request.patterns,
+            metadata: request.metadata,
+          })
+          if (decision === "deny") {
+            return yield* new PermissionV1.DeniedError({
+              ruleset: ruleset.filter((rule) => Wildcard.match(request.permission, rule.permission)),
+            })
+          }
+          if (decision === "ask") needsAsk = true
+        }
       }
 
       if (!needsAsk) return

@@ -2,8 +2,20 @@ export * as ConfigPermissionV1 from "./permission"
 
 import { Schema, SchemaGetter } from "effect"
 
-export const Action = Schema.Literals(["ask", "allow", "deny"]).annotate({ identifier: "PermissionActionConfig" })
+export const Action = Schema.String.check(Schema.isNonEmpty()).annotate({
+  identifier: "PermissionActionConfig",
+  description: "ask | allow | deny | permission module id (e.g. cruise_control)",
+})
 export type Action = Schema.Schema.Type<typeof Action>
+
+export const StaticAction = Schema.Literals(["ask", "allow", "deny"]).annotate({
+  identifier: "PermissionStaticActionConfig",
+})
+export type StaticAction = Schema.Schema.Type<typeof StaticAction>
+
+export function isStaticAction(action: string): action is StaticAction {
+  return action === "ask" || action === "allow" || action === "deny"
+}
 
 export const Object = Schema.Record(Schema.String, Action).annotate({ identifier: "PermissionObjectConfig" })
 export type Object = Schema.Schema.Type<typeof Object>

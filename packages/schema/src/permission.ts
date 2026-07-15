@@ -59,6 +59,7 @@ export const Rule = Schema.Struct({
   action: Schema.String,
   resource: Schema.String,
   effect: Effect,
+  module: Schema.String.pipe(optional),
 }).annotate({ identifier: "PermissionV2.Rule" })
 
 export const Ruleset = Schema.Array(Rule).annotate({ identifier: "PermissionV2.Ruleset" })

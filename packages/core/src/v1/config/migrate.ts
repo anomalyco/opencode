@@ -43,6 +43,7 @@ export function migrate(info: typeof ConfigV1.Info.Type) {
     enterprise: info.enterprise,
     username: info.username,
     permissions: permissions(info.permission, info.tools),
+    permission_modules: info.permission_modules,
     agents: agents(info),
     snapshots: info.snapshot,
     watcher: info.watcher,
@@ -72,9 +73,12 @@ export function migrate(info: typeof ConfigV1.Info.Type) {
 }
 
 function permissions(info?: ConfigPermissionV1.Info, tools?: Readonly<Record<string, boolean>>) {
-  const rules: Array<{ action: string; resource: string; effect: ConfigPermissionV1.Action }> = Object.entries(
-    tools ?? {},
-  ).map(([action, enabled]) => ({
+  const rules: Array<{
+    action: string
+    resource: string
+    effect: ConfigPermissionV1.StaticAction
+    module?: string
+  }> = Object.entries(tools ?? {}).map(([action, enabled]) => ({
     action: normalizeAction(action),
     resource: "*",
     effect: enabled ? ("allow" as const) : ("deny" as const),
@@ -82,12 +86,19 @@ function permissions(info?: ConfigPermissionV1.Info, tools?: Readonly<Record<str
   for (const [action, rule] of Object.entries(info ?? {})) {
     if (!rule) continue
     if (typeof rule === "string") {
-      rules.push({ action, resource: "*", effect: rule })
+      rules.push(toRule(action, "*", rule))
       continue
     }
-    rules.push(...Object.entries(rule).map(([resource, effect]) => ({ action, resource, effect })))
+    rules.push(...Object.entries(rule).map(([resource, effect]) => toRule(action, resource, effect)))
   }
   return rules.length ? rules : undefined
+}
+
+function toRule(action: string, resource: string, effect: string) {
+  if (ConfigPermissionV1.isStaticAction(effect)) {
+    return { action, resource, effect }
+  }
+  return { action, resource, effect: "ask" as const, module: effect }
 }
 
 function normalizeAction(action: string) {
