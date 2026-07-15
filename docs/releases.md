@@ -31,6 +31,7 @@ gh release create vX.Y.Z \
 | `install.ps1` | ~17 KB | Instalador PowerShell (detecta prerequisitos, usa winget si faltan) |
 | `install.bat` | 398 B | Wrapper para doble-click (invoca `install.ps1` con `-ExecutionPolicy Bypass`) |
 | `opencode_X.Y.Z_windows_amd64.zip` | ~55 MB | Binario CLI compilado para Windows x64 |
+| `uninstall.ps1` | ~6 KB | Desinstalador PowerShell (limpia binarios, config, PATH, accesos directos) |
 
 ---
 
@@ -49,6 +50,8 @@ gh release create vX.Y.Z \
 | v1.0.8 | Fix: detección de prerequisitos sin crashear (usa Get-Command, no ejecuta binarios) |
 | v1.0.9 | Fix: mirror Nextcloud usa WebDAV + auth, timeout de descarga 300s. Probado en Windows real |
 | v1.0.10 | Auto-clean orphaned shortcuts: remove broken `OpenCode*.lnk` from Desktop, Start Menu, and Taskbar on install |
+| v1.0.11 | Create desktop shortcut after install |
+| v1.0.12 | Add `uninstall.ps1` for complete system cleanup (binaries, config, PATH, shortcuts) |
 
 ---
 
