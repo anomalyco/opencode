@@ -32,8 +32,6 @@ const triggerClass =
 const showPopover = () => true
 
 export function HelpButton() {
-  if (import.meta.env.VITE_OPENCODE_CHANNEL !== "dev") return null
-
   const platform = usePlatform()
 
   return (
