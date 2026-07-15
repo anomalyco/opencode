@@ -20,6 +20,7 @@ import { LSP } from "@/lsp/lsp"
 import { MCP } from "@/mcp"
 import { McpAuth } from "@/mcp/auth"
 import { Permission } from "@/permission"
+import { PermissionModule } from "@/permission/module"
 import { Plugin } from "@/plugin"
 import { PluginPtyEnvironment } from "@/plugin/pty-environment"
 import { InstanceStore } from "@/project/instance-store"
@@ -230,6 +231,7 @@ const app = LayerNode.group([
   Discovery.node,
   Question.node,
   Permission.node,
+  PermissionModule.node,
   PermissionSaved.node,
   Todo.node,
   Session.node,
