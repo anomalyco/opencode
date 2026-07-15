@@ -24,10 +24,27 @@ import { errorMessage } from "@/util/error"
 import { isRecord } from "@/util/record"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Database } from "@opencode-ai/core/database/database"
+import { Hash } from "@opencode-ai/core/util/hash"
 import { Usage, type LLMEvent } from "@opencode-ai/llm"
 
 const DOOM_LOOP_THRESHOLD = 3
+const DOOM_LOOP_PAGE_SIZE = 50
 export type Result = "compact" | "stop" | "continue"
+
+function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`
+  if (isRecord(value)) {
+    return `{${Object.keys(value)
+      .sort()
+      .flatMap((key) => {
+        const item = value[key]
+        if (item === undefined || typeof item === "function" || typeof item === "symbol") return []
+        return [`${JSON.stringify(key)}:${stableStringify(item)}`]
+      })
+      .join(",")}}`
+  }
+  return JSON.stringify(value) ?? "null"
+}
 
 export interface Handle {
   readonly message: SessionV1.Assistant
@@ -44,6 +61,9 @@ export interface Handle {
       attachments?: SessionV1.FilePart[]
     },
   ) => Effect.Effect<void>
+  readonly guardToolCall: (
+    input: { id: string; name: string; input: Record<string, unknown> },
+  ) => Effect.Effect<void, unknown>
   readonly process: (streamInput: LLM.StreamInput) => Effect.Effect<Result>
 }
 
@@ -72,6 +92,7 @@ interface ProcessorContext extends Input {
   needsCompaction: boolean
   currentText: SessionV1.TextPart | undefined
   reasoningMap: Record<string, SessionV1.ReasoningPart>
+  preflightedToolCalls: Set<string>
 }
 
 type StreamEvent = LLMEvent
@@ -111,6 +132,7 @@ const layer = Layer.effect(
         needsCompaction: false,
         currentText: undefined,
         reasoningMap: {},
+        preflightedToolCalls: new Set(),
       }
       let aborted = false
 
@@ -252,7 +274,129 @@ const layer = Layer.effect(
         return { call: ctx.toolcalls[input.id], part }
       })
 
+      const startToolCall = Effect.fn("SessionProcessor.startToolCall")(function* (input: {
+        id: string
+        name: string
+        value: Record<string, unknown>
+        providerExecuted?: boolean
+        providerMetadata?: Record<string, unknown>
+      }) {
+        yield* ensureToolCall({ id: input.id, name: input.name, providerExecuted: input.providerExecuted })
+        yield* updateToolCall(input.id, (match) => ({
+          ...match,
+          tool: input.name,
+          state:
+            match.state.status === "running"
+              ? { ...match.state, input: input.value }
+              : {
+                  status: "running",
+                  input: input.value,
+                  time: { start: Date.now() },
+                },
+          metadata: match.metadata?.providerExecuted
+            ? { ...input.providerMetadata, providerExecuted: true }
+            : input.providerMetadata,
+        }))
+      })
+
       const isFilePart = (value: unknown): value is SessionV1.FilePart => Schema.is(SessionV1.FilePart)(value)
+
+      const recentToolOutcomes = Effect.fn("SessionProcessor.recentToolOutcomes")(function* (tool: string) {
+        const result: SessionV1.ToolPart[] = []
+        let before: string | undefined
+
+        while (result.length < DOOM_LOOP_THRESHOLD) {
+          const page = yield* MessageV2.page({
+            sessionID: ctx.sessionID,
+            limit: DOOM_LOOP_PAGE_SIZE,
+            before,
+          }).pipe(Effect.provideService(Database.Service, database))
+
+          for (let messageIndex = page.items.length - 1; messageIndex >= 0; messageIndex--) {
+            const message = page.items[messageIndex]
+            if (!message) continue
+            if (message.info.role === "user" && message.info.id === ctx.assistantMessage.parentID) return result
+            if (message.info.role !== "assistant" || message.info.parentID !== ctx.assistantMessage.parentID) continue
+
+            for (let partIndex = message.parts.length - 1; partIndex >= 0; partIndex--) {
+              const part = message.parts[partIndex]
+              if (
+                part?.type === "tool" &&
+                part.tool === tool &&
+                (part.state.status === "completed" || part.state.status === "error")
+              ) {
+                result.push(part)
+                if (result.length === DOOM_LOOP_THRESHOLD) return result
+              }
+            }
+          }
+
+          if (!page.more || !page.cursor) return result
+          before = page.cursor
+        }
+
+        return result
+      })
+
+      const doomLoopPatterns = Effect.fn("SessionProcessor.doomLoopPatterns")(function* (input: {
+        name: string
+        value: Record<string, unknown>
+      }) {
+        const parts = yield* MessageV2.parts(ctx.assistantMessage.id).pipe(
+          Effect.provideService(Database.Service, database),
+        )
+        const recentParts = parts.slice(-DOOM_LOOP_THRESHOLD)
+        const sameInput =
+          recentParts.length === DOOM_LOOP_THRESHOLD &&
+          recentParts.every(
+            (part) =>
+              part.type === "tool" &&
+              part.tool === input.name &&
+              part.state.status !== "pending" &&
+              JSON.stringify(part.state.input) === JSON.stringify(input.value),
+          )
+
+        const outcomes = yield* recentToolOutcomes(input.name)
+        const fingerprints = outcomes.map((part) => {
+          const replay = MessageV2.toolReplay(part, ctx.model)
+          return replay ? Hash.sha256(stableStringify(replay)) : undefined
+        })
+        const outcomePattern =
+          fingerprints.length === DOOM_LOOP_THRESHOLD &&
+          fingerprints.every((fingerprint) => fingerprint !== undefined && fingerprint === fingerprints[0])
+            ? `doom-loop/${ctx.sessionID}/${ctx.assistantMessage.parentID}/${input.name}/${fingerprints[0]}`
+            : undefined
+
+        return [...new Set([...(sameInput ? [input.name] : []), ...(outcomePattern ? [outcomePattern] : [])])]
+      })
+
+      const askDoomLoop = Effect.fn("SessionProcessor.askDoomLoop")(function* (input: {
+        name: string
+        value: Record<string, unknown>
+      }) {
+        const patterns = yield* doomLoopPatterns(input)
+        if (patterns.length === 0) return
+        const agent = yield* agents.get(ctx.assistantMessage.agent)
+        yield* permission.ask({
+          permission: "doom_loop",
+          patterns,
+          sessionID: ctx.assistantMessage.sessionID,
+          metadata: { tool: input.name, input: input.value },
+          always: patterns,
+          ruleset: agent.permission,
+        })
+      })
+
+      const guardToolCall = Effect.fn("SessionProcessor.guardToolCall")(function* (input: {
+        id: string
+        name: string
+        input: Record<string, unknown>
+      }) {
+        if (ctx.preflightedToolCalls.has(input.id)) return
+        yield* startToolCall({ id: input.id, name: input.name, value: input.input })
+        ctx.preflightedToolCalls.add(input.id)
+        yield* askDoomLoop({ name: input.name, value: input.input })
+      })
 
       const toolResultOutput = (
         value: Extract<StreamEvent, { type: "tool-result" }>,
@@ -271,7 +415,11 @@ const layer = Layer.effect(
           title: value.name,
           metadata: value.result.type === "json" && isRecord(value.result.value) ? value.result.value : {},
           output:
-            typeof value.result.value === "string" ? value.result.value : (JSON.stringify(value.result.value) ?? ""),
+            value.result.type === "json"
+              ? stableStringify(value.result.value)
+              : typeof value.result.value === "string"
+                ? value.result.value
+                : (JSON.stringify(value.result.value) ?? ""),
         }
       }
 
@@ -332,51 +480,16 @@ const layer = Layer.effect(
             if (ctx.assistantMessage.summary) {
               throw new Error(`Tool call not allowed while generating summary: ${value.name}`)
             }
-            yield* ensureToolCall(value)
             const input = isRecord(value.input) ? value.input : { value: value.input }
-            yield* updateToolCall(value.id, (match) => ({
-              ...match,
-              tool: value.name,
-              state:
-                match.state.status === "running"
-                  ? { ...match.state, input }
-                  : {
-                      status: "running",
-                      input,
-                      time: { start: Date.now() },
-                    },
-              metadata: match.metadata?.providerExecuted
-                ? { ...value.providerMetadata, providerExecuted: true }
-                : value.providerMetadata,
-            }))
-
-            const parts = yield* MessageV2.parts(ctx.assistantMessage.id).pipe(
-              Effect.provideService(Database.Service, database),
-            )
-            const recentParts = parts.slice(-DOOM_LOOP_THRESHOLD)
-
-            if (
-              recentParts.length !== DOOM_LOOP_THRESHOLD ||
-              !recentParts.every(
-                (part) =>
-                  part.type === "tool" &&
-                  part.tool === value.name &&
-                  part.state.status !== "pending" &&
-                  JSON.stringify(part.state.input) === JSON.stringify(input),
-              )
-            ) {
-              return
-            }
-
-            const agent = yield* agents.get(ctx.assistantMessage.agent)
-            yield* permission.ask({
-              permission: "doom_loop",
-              patterns: [value.name],
-              sessionID: ctx.assistantMessage.sessionID,
-              metadata: { tool: value.name, input },
-              always: [value.name],
-              ruleset: agent.permission,
+            yield* startToolCall({
+              id: value.id,
+              name: value.name,
+              value: input,
+              providerExecuted: value.providerExecuted,
+              providerMetadata: value.providerMetadata,
             })
+            if (ctx.preflightedToolCalls.has(value.id)) return
+            yield* askDoomLoop({ name: value.name, value: input })
             return
           }
 
@@ -688,6 +801,7 @@ const layer = Layer.effect(
         },
         updateToolCall,
         completeToolCall,
+        guardToolCall,
         process,
       } satisfies Handle
     })

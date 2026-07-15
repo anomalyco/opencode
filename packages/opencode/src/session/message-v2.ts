@@ -46,10 +46,68 @@ interface FetchDecompressionError extends Error {
 export const SYNTHETIC_ATTACHMENT_PROMPT = "Attached media from tool result:"
 export { isMedia }
 
+type ToolReplayAttachment = {
+  mime: string
+  url: string
+  filename?: string
+}
+
+export type ToolReplay =
+  | {
+      type: "completed"
+      output: string | { text: string; attachments: Array<Pick<ToolReplayAttachment, "mime" | "url">> }
+      media: ToolReplayAttachment[]
+    }
+  | { type: "error"; state: "output-available"; output: string }
+  | { type: "error"; state: "output-error"; errorText: string }
+
 function truncateToolOutput(text: string, maxChars?: number) {
   if (!maxChars || text.length <= maxChars) return text
   const omitted = text.length - maxChars
   return `${text.slice(0, maxChars)}\n[Tool output truncated for compaction: omitted ${omitted} chars]`
+}
+
+function supportsMediaInToolResult(model: Provider.Model, attachment: { mime: string }) {
+  if (model.api.npm === "@ai-sdk/anthropic") return true
+  if (model.api.npm === "@ai-sdk/openai") return true
+  if (model.api.npm === "@ai-sdk/amazon-bedrock/mantle") return true
+  if (model.api.npm === "@ai-sdk/amazon-bedrock") return attachment.mime.startsWith("image/")
+  if (model.api.npm === "@ai-sdk/xai") return attachment.mime.startsWith("image/")
+  if (model.api.npm === "@ai-sdk/google-vertex/anthropic") return true
+  if (model.api.npm === "@ai-sdk/google") {
+    const id = model.api.id.toLowerCase()
+    return id.includes("gemini-3") && !id.includes("gemini-2")
+  }
+  return false
+}
+
+export function toolReplay(
+  part: SessionV1.ToolPart,
+  model: Provider.Model,
+  options?: { stripMedia?: boolean; toolOutputMaxChars?: number },
+): ToolReplay | undefined {
+  if (part.state.status === "completed") {
+    const outputText = part.state.time.compacted
+      ? "[Old tool result content cleared]"
+      : truncateToolOutput(part.state.output, options?.toolOutputMaxChars)
+    const attachments = part.state.time.compacted || options?.stripMedia ? [] : (part.state.attachments ?? [])
+    const media = attachments
+      .filter((attachment) => isMedia(attachment.mime) && !supportsMediaInToolResult(model, attachment))
+      .map((attachment) => ({ mime: attachment.mime, url: attachment.url, filename: attachment.filename }))
+    const supported = attachments
+      .filter((attachment) => !isMedia(attachment.mime) || supportsMediaInToolResult(model, attachment))
+      .map((attachment) => ({ mime: attachment.mime, url: attachment.url }))
+    return {
+      type: "completed",
+      output: supported.length > 0 ? { text: outputText, attachments: supported } : outputText,
+      media,
+    }
+  }
+
+  if (part.state.status !== "error") return
+  const output = part.state.metadata?.interrupted === true ? part.state.metadata.output : undefined
+  if (typeof output === "string") return { type: "error", state: "output-available", output }
+  return { type: "error", state: "output-error", errorText: part.state.error }
 }
 
 export const Event = {
@@ -135,29 +193,6 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
 ) {
   const result: UIMessage[] = []
   const toolNames = new Set<string>()
-  // Track media from tool results that need to be injected as user messages
-  // for providers that don't support that media type in tool results.
-  //
-  // OpenAI-compatible APIs only support string content in tool results, so we need
-  // to extract media and inject as user messages. Some SDKs only support a subset
-  // of media in tool results; e.g. Bedrock supports images but not PDFs there.
-  //
-  // Only apply this workaround if the model actually supports that media input -
-  // otherwise unsupportedParts() will turn it into a user-visible error.
-  const supportsMediaInToolResult = (attachment: { mime: string }) => {
-    if (model.api.npm === "@ai-sdk/anthropic") return true
-    if (model.api.npm === "@ai-sdk/openai") return true
-    if (model.api.npm === "@ai-sdk/amazon-bedrock/mantle") return true
-    if (model.api.npm === "@ai-sdk/amazon-bedrock") return attachment.mime.startsWith("image/")
-    if (model.api.npm === "@ai-sdk/xai") return attachment.mime.startsWith("image/")
-    if (model.api.npm === "@ai-sdk/google-vertex/anthropic") return true
-    if (model.api.npm === "@ai-sdk/google") {
-      const id = model.api.id.toLowerCase()
-      return id.includes("gemini-3") && !id.includes("gemini-2")
-    }
-    return false
-  }
-
   const toModelOutput = (options: { toolCallId: string; input: unknown; output: unknown }) => {
     const output = options.output
     if (typeof output === "string") {
@@ -290,47 +325,30 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
         if (part.type === "tool") {
           toolNames.add(part.tool)
           if (part.state.status === "completed") {
-            const outputText = part.state.time.compacted
-              ? "[Old tool result content cleared]"
-              : truncateToolOutput(part.state.output, options?.toolOutputMaxChars)
-            const attachments = part.state.time.compacted || options?.stripMedia ? [] : (part.state.attachments ?? [])
-
-            // For providers that don't support media in tool results, extract media files
-            // (images, PDFs) to be sent as a separate user message
-            const mediaAttachments = attachments.filter((a) => isMedia(a.mime))
-            const extractedMedia = mediaAttachments.filter((a) => !supportsMediaInToolResult(a))
-            if (extractedMedia.length > 0) {
-              media.push(...extractedMedia)
-            }
-            const finalAttachments = attachments.filter((a) => !isMedia(a.mime) || supportsMediaInToolResult(a))
-
-            const output =
-              finalAttachments.length > 0
-                ? {
-                    text: outputText,
-                    attachments: finalAttachments,
-                  }
-                : outputText
+            const replay = toolReplay(part, model, options)
+            if (!replay || replay.type !== "completed") continue
+            media.push(...replay.media)
 
             assistantMessage.parts.push({
               type: ("tool-" + part.tool) as `tool-${string}`,
               state: "output-available",
               toolCallId: part.callID,
               input: part.state.input,
-              output,
+              output: replay.output,
               ...(part.metadata?.providerExecuted ? { providerExecuted: true } : {}),
               ...(differentModel ? {} : { callProviderMetadata: providerMeta(part.metadata) }),
             })
           }
           if (part.state.status === "error") {
-            const output = part.state.metadata?.interrupted === true ? part.state.metadata.output : undefined
-            if (typeof output === "string") {
+            const replay = toolReplay(part, model, options)
+            if (!replay || replay.type !== "error") continue
+            if (replay.state === "output-available") {
               assistantMessage.parts.push({
                 type: ("tool-" + part.tool) as `tool-${string}`,
                 state: "output-available",
                 toolCallId: part.callID,
                 input: part.state.input,
-                output,
+                output: replay.output,
                 ...(part.metadata?.providerExecuted ? { providerExecuted: true } : {}),
                 ...(differentModel ? {} : { callProviderMetadata: providerMeta(part.metadata) }),
               })
@@ -340,7 +358,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
                 state: "output-error",
                 toolCallId: part.callID,
                 input: part.state.input,
-                errorText: part.state.error,
+                errorText: replay.errorText,
                 ...(part.metadata?.providerExecuted ? { providerExecuted: true } : {}),
                 ...(differentModel ? {} : { callProviderMetadata: providerMeta(part.metadata) }),
               })

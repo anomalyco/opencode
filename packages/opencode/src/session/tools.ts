@@ -42,7 +42,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   agent: Agent.Info
   model: Provider.Model
   session: Session.Info
-  processor: Pick<SessionProcessor.Handle, "message" | "updateToolCall" | "completeToolCall">
+  processor: Pick<SessionProcessor.Handle, "message" | "updateToolCall" | "completeToolCall" | "guardToolCall">
   bypassAgentCheck: boolean
   messages: SessionV1.WithParts[]
   promptOps: TaskPromptOps
@@ -55,6 +55,32 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   const mcp = yield* MCP.Service
   const truncate = yield* Truncate.Service
   const flags = yield* RuntimeFlags.Service
+
+  const guardToolCalls = (items: Record<string, AITool>) =>
+    Object.fromEntries(
+      Object.entries(items).map(([name, item]) => {
+        if (!item.execute) return [name, item]
+        const execute = item.execute
+        return [
+          name,
+          {
+            ...item,
+            execute: async (args, options) => {
+              await run.promise(
+                input.processor
+                  .guardToolCall({
+                    id: options.toolCallId,
+                    name,
+                    input: toRecord(args),
+                  })
+                  .pipe(Effect.orDie),
+              )
+              return execute(args, options)
+            },
+          },
+        ]
+      }),
+    ) as Record<string, AITool>
 
   const context = (args: Record<string, unknown>, options: ToolExecutionOptions): Tool.Context => ({
     sessionID: input.session.id,
@@ -385,7 +411,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
     })
   }
 
-  if (flags.experimentalCodeMode) return tools
+  if (flags.experimentalCodeMode) return guardToolCalls(tools)
 
   for (const [key, entry] of Object.entries(yield* mcp.tools())) {
     const item = McpCatalog.convertTool(entry.def, entry.client, entry.timeout)
@@ -489,7 +515,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
     tools[key] = item
   }
 
-  return tools
+  return guardToolCalls(tools)
 })
 
 function toRecord(value: unknown) {

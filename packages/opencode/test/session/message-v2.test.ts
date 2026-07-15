@@ -112,6 +112,75 @@ function basePart(messageID: string, id: string) {
 }
 
 describe("session.message-v2.toModelMessage", () => {
+  test("projects completed, compacted, attachment, and error tool replay consistently", () => {
+    const messageID = "m-assistant"
+    const attachment = {
+      ...basePart(messageID, "file-1"),
+      type: "file" as const,
+      mime: "image/png",
+      filename: "attachment.png",
+      url: "data:image/png;base64,Zm9v",
+    }
+    const completed = {
+      ...basePart(messageID, "tool-completed"),
+      type: "tool" as const,
+      callID: "call-completed",
+      tool: "lookup",
+      state: {
+        status: "completed" as const,
+        input: {},
+        output: "same result",
+        title: "lookup",
+        metadata: {},
+        time: { start: 0, end: 1 },
+        attachments: [attachment],
+      },
+    } satisfies SessionV1.ToolPart
+    const compacted = {
+      ...completed,
+      id: PartID.make("prt_tool_compacted"),
+      state: { ...completed.state, time: { start: 0, end: 1, compacted: 1 } },
+    } satisfies SessionV1.ToolPart
+    const interrupted = {
+      ...basePart(messageID, "tool-error"),
+      type: "tool" as const,
+      callID: "call-error",
+      tool: "lookup",
+      state: {
+        status: "error" as const,
+        input: {},
+        error: "Tool execution aborted",
+        metadata: { interrupted: true, output: "partial result" },
+        time: { start: 0, end: 1 },
+      },
+    } satisfies SessionV1.ToolPart
+    const compatible = {
+      ...model,
+      api: { ...model.api, npm: "@ai-sdk/openai-compatible" },
+    } as Provider.Model
+
+    expect(MessageV2.toolReplay(completed, model)).toEqual({
+      type: "completed",
+      output: { text: "same result", attachments: [{ mime: "image/png", url: attachment.url }] },
+      media: [],
+    })
+    expect(MessageV2.toolReplay(completed, compatible)).toEqual({
+      type: "completed",
+      output: "same result",
+      media: [{ mime: "image/png", url: attachment.url, filename: "attachment.png" }],
+    })
+    expect(MessageV2.toolReplay(compacted, model)).toEqual({
+      type: "completed",
+      output: "[Old tool result content cleared]",
+      media: [],
+    })
+    expect(MessageV2.toolReplay(interrupted, model)).toEqual({
+      type: "error",
+      state: "output-available",
+      output: "partial result",
+    })
+  })
+
   test("filters out messages with no parts", async () => {
     const input: SessionV1.WithParts[] = [
       {

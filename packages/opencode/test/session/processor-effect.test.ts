@@ -7,7 +7,7 @@ import { tool } from "ai"
 import { Cause, Effect, Exit, Fiber, Layer, Stream } from "effect"
 import path from "path"
 import z from "zod"
-import type { Agent } from "../../src/agent/agent"
+import { Agent } from "../../src/agent/agent"
 import { Provider } from "@/provider/provider"
 
 import { Session } from "@/session/session"
@@ -17,6 +17,7 @@ import { SessionProcessor } from "../../src/session/processor"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
 import { SessionSummary } from "../../src/session/summary"
+import { Permission } from "../../src/permission"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { provideTmpdirInstance, provideTmpdirServer } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
@@ -105,7 +106,7 @@ function defer<T>() {
 
 const waitFor = <A>(check: Effect.Effect<A | undefined>, message: string) =>
   Effect.gen(function* () {
-    const stop = Date.now() + 500
+    const stop = Date.now() + 2_000
     while (Date.now() < stop) {
       const value = yield* check
       if (value !== undefined) return value
@@ -167,6 +168,8 @@ const assistant = Effect.fn("TestSession.assistant")(function* (
 
 const root = LayerNode.group([
   SessionProcessor.node,
+  Agent.node,
+  Permission.node,
   Session.node,
   SessionProjector.node,
   Provider.node,
@@ -226,6 +229,56 @@ const fragmentFailureLLM = Layer.succeed(
 const fragmentFailureEnv = LayerNode.compile(root, [...replacements, [LLM.node, fragmentFailureLLM]])
 const itFragmentFailure = testEffect(fragmentFailureEnv)
 
+const outcomeGateLLM = Layer.succeed(
+  LLM.Service,
+  LLM.Service.of({
+    stream: () =>
+      Stream.make(
+        LLMEvent.toolInputStart({ id: "call-next", name: "lookup" }),
+        LLMEvent.toolInputEnd({ id: "call-next", name: "lookup" }),
+        LLMEvent.toolCall({ id: "call-next", name: "lookup", input: { query: "next" }, providerExecuted: true }),
+        LLMEvent.toolResult({
+          id: "call-next",
+          name: "lookup",
+          result: { type: "text", value: "NO_PROGRESS" },
+          providerExecuted: true,
+        }),
+        LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+        LLMEvent.finish({ reason: "stop" }),
+      ),
+  }),
+)
+const outcomeGateEnv = LayerNode.compile(root, [...replacements, [LLM.node, outcomeGateLLM]])
+const itOutcomeGate = testEffect(outcomeGateEnv)
+
+function toolResultLLM(result: { type: "json"; value: unknown } | { type: "text"; value: string }) {
+  return Layer.succeed(
+    LLM.Service,
+    LLM.Service.of({
+      stream: () =>
+        Stream.make(
+          LLMEvent.toolInputStart({ id: "call-result", name: "lookup" }),
+          LLMEvent.toolInputEnd({ id: "call-result", name: "lookup" }),
+          LLMEvent.toolCall({ id: "call-result", name: "lookup", input: {}, providerExecuted: true }),
+          LLMEvent.toolResult({ id: "call-result", name: "lookup", result, providerExecuted: true }),
+          LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+          LLMEvent.finish({ reason: "stop" }),
+        ),
+    }),
+  )
+}
+
+const typedJsonResultEnv = LayerNode.compile(root, [
+  ...replacements,
+  [LLM.node, toolResultLLM({ type: "json", value: { b: 2, a: 1 } })],
+])
+const plainJsonTextResultEnv = LayerNode.compile(root, [
+  ...replacements,
+  [LLM.node, toolResultLLM({ type: "text", value: '{"b":2,"a":1}' })],
+])
+const itTypedJsonResult = testEffect(typedJsonResultEnv)
+const itPlainJsonTextResult = testEffect(plainJsonTextResultEnv)
+
 const boot = Effect.fn("test.boot")(function* () {
   const processors = yield* SessionProcessor.Service
   const session = yield* Session.Service
@@ -233,9 +286,298 @@ const boot = Effect.fn("test.boot")(function* () {
   return { processors, session, provider }
 })
 
+const completeTool = Effect.fn("TestSession.completeTool")(function* (input: {
+  sessionID: SessionID
+  parentID: MessageID
+  tool?: string
+  output: string
+  input?: Record<string, unknown>
+  attachments?: SessionV1.FilePart[]
+  error?: string
+  interruptedOutput?: string
+  compacted?: number
+}) {
+  const session = yield* Session.Service
+  const msg = yield* assistant(input.sessionID, input.parentID, "/tmp")
+  const end = Date.now()
+  yield* session.updatePart({
+    id: PartID.ascending(),
+    messageID: msg.id,
+    sessionID: input.sessionID,
+    type: "tool",
+    callID: `call-${msg.id}`,
+    tool: input.tool ?? "lookup",
+    state: input.error
+      ? {
+          status: "error",
+          input: input.input ?? {},
+          error: input.error,
+          metadata: input.interruptedOutput ? { interrupted: true, output: input.interruptedOutput } : {},
+          time: { start: end - 1, end },
+        }
+      : {
+          status: "completed",
+          input: input.input ?? {},
+          output: input.output,
+          metadata: {},
+          title: input.tool ?? "lookup",
+          time: { start: end - 1, end, ...(input.compacted ? { compacted: input.compacted } : {}) },
+          attachments: input.attachments,
+        },
+  } satisfies SessionV1.ToolPart)
+  return msg
+})
+
+const processorInput = (parent: SessionV1.User, sessionID: SessionID, model: Provider.Model): LLM.StreamInput => ({
+  user: {
+    id: parent.id,
+    sessionID,
+    role: "user",
+    time: parent.time,
+    agent: parent.agent,
+    model: { providerID: ref.providerID, modelID: ref.modelID },
+  } satisfies SessionV1.User,
+  sessionID,
+  model,
+  agent: agent(),
+  system: [],
+  messages: [{ role: "user", content: "lookup" }],
+  tools: {},
+})
+
+const pendingDoomLoop = Effect.fn("TestSession.pendingDoomLoop")(function* () {
+  const permission = yield* Permission.Service
+  return yield* waitFor(
+    Effect.gen(function* () {
+      const request = (yield* permission.list()).find((item) => item.permission === "doom_loop")
+      return request
+    }),
+    "timed out waiting for doom loop permission",
+  )
+})
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
+
+itOutcomeGate.live("session.processor guards the fourth replay-equivalent outcome across persisted turns", () =>
+  provideTmpdirInstance(
+    () =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+        const permission = yield* Permission.Service
+        const status = yield* SessionStatus.Service
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "look this up")
+        const model = yield* provider.getModel(ref.providerID, ref.modelID)
+
+        // Inputs differ, but the model-visible terminal result is unchanged.
+        yield* completeTool({ sessionID: chat.id, parentID: parent.id, input: { query: "one" }, output: "NO_PROGRESS" })
+        yield* completeTool({ sessionID: chat.id, parentID: parent.id, tool: "other", output: "unrelated" })
+        yield* completeTool({ sessionID: chat.id, parentID: parent.id, input: { query: "two" }, output: "NO_PROGRESS" })
+        yield* completeTool({ sessionID: chat.id, parentID: parent.id, input: { query: "three" }, output: "NO_PROGRESS" })
+
+        // A fresh processor reads the durable tool parts through MessageV2.page().
+        const next = yield* assistant(chat.id, parent.id, "/tmp")
+        const handle = yield* processors.create({ assistantMessage: next, sessionID: chat.id, model })
+        const run = yield* handle.process(processorInput(parent, chat.id, model)).pipe(Effect.forkChild)
+        const request = yield* pendingDoomLoop()
+
+        expect(request.patterns).toHaveLength(1)
+        expect(request.patterns[0]).toStartWith(`doom-loop/${chat.id}/${parent.id}/lookup/`)
+        expect(request.always).toEqual(request.patterns)
+
+        yield* permission.reply({ requestID: request.id, reply: "reject" })
+        const exit = yield* Fiber.await(run)
+        expect(Exit.isSuccess(exit)).toBe(true)
+        expect((yield* status.get(chat.id)).type).toBe("idle")
+      }),
+    { config: cfg },
+  ),
+)
+
+itOutcomeGate.live("session.processor resets the replay outcome streak and retains same-input protection", () =>
+  provideTmpdirInstance(
+    () =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+        const permission = yield* Permission.Service
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "look this up")
+        const model = yield* provider.getModel(ref.providerID, ref.modelID)
+
+        yield* completeTool({ sessionID: chat.id, parentID: parent.id, input: { query: "one" }, output: "NO_PROGRESS" })
+        yield* completeTool({ sessionID: chat.id, parentID: parent.id, input: { query: "two" }, output: "NO_PROGRESS" })
+        yield* completeTool({ sessionID: chat.id, parentID: parent.id, input: { query: "three" }, output: "PROGRESS" })
+
+        const reset = yield* assistant(chat.id, parent.id, "/tmp")
+        const resetHandle = yield* processors.create({ assistantMessage: reset, sessionID: chat.id, model })
+        expect(yield* resetHandle.process(processorInput(parent, chat.id, model))).toBe("continue")
+        expect(yield* permission.list()).toEqual([])
+
+        // The pre-existing same-input guard is still evaluated independently.
+        const sameInput = yield* assistant(chat.id, parent.id, "/tmp")
+        for (const output of ["first", "second"]) {
+          yield* session.updatePart({
+            id: PartID.ascending(),
+            messageID: sameInput.id,
+            sessionID: chat.id,
+            type: "tool",
+            callID: `same-${output}`,
+            tool: "lookup",
+            state: {
+              status: "completed",
+              input: { query: "next" },
+              output,
+              metadata: {},
+              title: "lookup",
+              time: { start: Date.now() - 1, end: Date.now() },
+            },
+          } satisfies SessionV1.ToolPart)
+        }
+        const sameInputHandle = yield* processors.create({ assistantMessage: sameInput, sessionID: chat.id, model })
+        const run = yield* sameInputHandle.process(processorInput(parent, chat.id, model)).pipe(Effect.forkChild)
+        const request = yield* pendingDoomLoop()
+
+        expect(request.patterns).toEqual(["lookup"])
+        expect(request.always).toEqual(["lookup"])
+        yield* permission.reply({ requestID: request.id, reply: "reject" })
+        expect(Exit.isSuccess(yield* Fiber.await(run))).toBe(true)
+      }),
+    { config: cfg },
+  ),
+)
+
+itOutcomeGate.live("session.processor bounds Always approvals to one outcome, root user, tool, and session", () =>
+  provideTmpdirInstance(
+    () =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+        const permission = yield* Permission.Service
+        const model = yield* provider.getModel(ref.providerID, ref.modelID)
+        const chat = yield* session.create({})
+        const root = yield* user(chat.id, "first root")
+
+        const proposal = Effect.fn("TestSession.outcomeProposal")(function* (
+          parent: SessionV1.User,
+          tool: string,
+          output: string,
+        ) {
+          const msg = yield* assistant(chat.id, parent.id, "/tmp")
+          const handle = yield* processors.create({ assistantMessage: msg, sessionID: chat.id, model })
+          const run = yield* handle
+            .guardToolCall({ id: `proposal-${msg.id}`, name: tool, input: { output } })
+            .pipe(Effect.forkChild)
+          return { handle, run, request: yield* pendingDoomLoop() }
+        })
+
+        for (const query of ["one", "two", "three"]) {
+          yield* completeTool({ sessionID: chat.id, parentID: root.id, input: { query }, output: "A" })
+        }
+        const a = yield* proposal(root, "lookup", "A")
+        const patternA = a.request.patterns[0]
+        expect(a.request.always).toEqual([patternA])
+        yield* permission.reply({ requestID: a.request.id, reply: "always" })
+        expect(Exit.isSuccess(yield* Fiber.await(a.run))).toBe(true)
+        yield* a.handle.completeToolCall(`proposal-${a.handle.message.id}`, {
+          title: "lookup",
+          metadata: {},
+          output: "B",
+        })
+
+        for (const query of ["four", "five"]) {
+          yield* completeTool({ sessionID: chat.id, parentID: root.id, input: { query }, output: "B" })
+        }
+        const b = yield* proposal(root, "lookup", "B")
+        const patternB = b.request.patterns[0]
+        expect(patternB).not.toBe(patternA)
+        expect(patternB).toStartWith(`doom-loop/${chat.id}/${root.id}/lookup/`)
+        expect(b.request.always).toEqual([patternB])
+        yield* permission.reply({ requestID: b.request.id, reply: "reject" })
+        yield* Fiber.await(b.run)
+
+        const nextRoot = yield* user(chat.id, "second root")
+        for (const query of ["one", "two", "three"]) {
+          yield* completeTool({ sessionID: chat.id, parentID: nextRoot.id, input: { query }, output: "A" })
+        }
+        const nextRootProposal = yield* proposal(nextRoot, "lookup", "A")
+        expect(nextRootProposal.request.patterns[0]).not.toBe(patternA)
+        expect(nextRootProposal.request.always).toEqual(nextRootProposal.request.patterns)
+        yield* permission.reply({ requestID: nextRootProposal.request.id, reply: "reject" })
+        yield* Fiber.await(nextRootProposal.run)
+
+        for (const query of ["one", "two", "three"]) {
+          yield* completeTool({ sessionID: chat.id, parentID: root.id, tool: "other", input: { query }, output: "A" })
+        }
+        const other = yield* proposal(root, "other", "A")
+        expect(other.request.patterns[0]).not.toBe(patternA)
+        expect(other.request.patterns[0]).toStartWith(`doom-loop/${chat.id}/${root.id}/other/`)
+        yield* permission.reply({ requestID: other.request.id, reply: "reject" })
+        yield* Fiber.await(other.run)
+
+        const secondSession = yield* session.create({})
+        const secondSessionRoot = yield* user(secondSession.id, "other session")
+        for (const query of ["one", "two", "three"]) {
+          yield* completeTool({ sessionID: secondSession.id, parentID: secondSessionRoot.id, input: { query }, output: "A" })
+        }
+        const msg = yield* assistant(secondSession.id, secondSessionRoot.id, "/tmp")
+        const secondSessionHandle = yield* processors.create({ assistantMessage: msg, sessionID: secondSession.id, model })
+        const run = yield* secondSessionHandle
+          .guardToolCall({ id: `proposal-${msg.id}`, name: "lookup", input: {} })
+          .pipe(Effect.forkChild)
+        const otherSession = yield* pendingDoomLoop()
+        expect(otherSession.patterns[0]).not.toBe(patternA)
+        expect(otherSession.patterns[0]).toStartWith(`doom-loop/${secondSession.id}/${secondSessionRoot.id}/lookup/`)
+        yield* permission.reply({ requestID: otherSession.id, reply: "reject" })
+        yield* Fiber.await(run)
+      }),
+    { config: cfg },
+  ),
+)
+
+itTypedJsonResult.live("session.processor stably persists explicit JSON tool results", () =>
+  provideTmpdirInstance(
+    () =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "result")
+        const model = yield* provider.getModel(ref.providerID, ref.modelID)
+        const msg = yield* assistant(chat.id, parent.id, "/tmp")
+        const handle = yield* processors.create({ assistantMessage: msg, sessionID: chat.id, model })
+
+        expect(yield* handle.process(processorInput(parent, chat.id, model))).toBe("continue")
+        const call = (yield* MessageV2.parts(msg.id)).find(
+          (part): part is SessionV1.ToolPart => part.type === "tool",
+        )
+        expect(call?.state.status).toBe("completed")
+        if (call?.state.status === "completed") expect(call.state.output).toBe('{"a":1,"b":2}')
+      }),
+    { config: cfg },
+  ),
+)
+
+itPlainJsonTextResult.live("session.processor preserves JSON-looking text results byte-for-byte", () =>
+  provideTmpdirInstance(
+    () =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "result")
+        const model = yield* provider.getModel(ref.providerID, ref.modelID)
+        const msg = yield* assistant(chat.id, parent.id, "/tmp")
+        const handle = yield* processors.create({ assistantMessage: msg, sessionID: chat.id, model })
+
+        expect(yield* handle.process(processorInput(parent, chat.id, model))).toBe("continue")
+        const call = (yield* MessageV2.parts(msg.id)).find(
+          (part): part is SessionV1.ToolPart => part.type === "tool",
+        )
+        expect(call?.state.status).toBe("completed")
+        if (call?.state.status === "completed") expect(call.state.output).toBe('{"b":2,"a":1}')
+      }),
+    { config: cfg },
+  ),
+)
 
 it.live("session.processor effect tests capture llm input cleanly", () =>
   provideTmpdirServer(

@@ -109,14 +109,14 @@ function errorTool(parts: SessionV1.Part[]) {
   return part?.state.status === "error" ? (part as ErrorToolPart) : undefined
 }
 
-function makeMcp(instructions: MCP.ServerInstructions[] = []) {
+function makeMcp(input?: { instructions?: MCP.ServerInstructions[]; tools?: Record<string, MCP.McpTool> }) {
   return Layer.succeed(
     MCP.Service,
     MCP.Service.of({
       status: () => Effect.succeed({}),
       clients: () => Effect.succeed({}),
-      instructions: () => Effect.succeed(instructions),
-      tools: () => Effect.succeed({}),
+      instructions: () => Effect.succeed(input?.instructions ?? []),
+      tools: () => Effect.succeed(input?.tools ?? {}),
       prompts: () => Effect.succeed({}),
       resources: () => Effect.succeed({}),
       resourceTemplates: () => Effect.succeed({}),
@@ -208,11 +208,15 @@ const promptRoot = LayerNode.group([
   RuntimeFlags.node,
 ])
 
-function makePrompt(input?: { mcpInstructions?: MCP.ServerInstructions[]; processor?: "blocking" }) {
+function makePrompt(input?: {
+  mcpInstructions?: MCP.ServerInstructions[]
+  mcpTools?: Record<string, MCP.McpTool>
+  processor?: "blocking"
+}) {
   const replacements = [
     [SessionSummary.node, summary],
     [LSP.node, lsp],
-    [MCP.node, makeMcp(input?.mcpInstructions)],
+    [MCP.node, makeMcp({ instructions: input?.mcpInstructions, tools: input?.mcpTools })],
     [RuntimeFlags.node, runtimeFlags],
   ] as const
   if (input?.processor === "blocking") {
@@ -221,12 +225,16 @@ function makePrompt(input?: { mcpInstructions?: MCP.ServerInstructions[]; proces
   return LayerNode.compile(promptRoot, replacements)
 }
 
-function makeHttp(input?: { mcpInstructions?: MCP.ServerInstructions[]; processor?: "blocking" }) {
+function makeHttp(input?: {
+  mcpInstructions?: MCP.ServerInstructions[]
+  mcpTools?: Record<string, MCP.McpTool>
+  processor?: "blocking"
+}) {
   const root = LayerNode.group([promptRoot, testLLMServerNode])
   const replacements = [
     [SessionSummary.node, summary],
     [LSP.node, lsp],
-    [MCP.node, makeMcp(input?.mcpInstructions)],
+    [MCP.node, makeMcp({ instructions: input?.mcpInstructions, tools: input?.mcpTools })],
     [RuntimeFlags.node, runtimeFlags],
   ] as const
   if (input?.processor === "blocking") {
@@ -235,13 +243,42 @@ function makeHttp(input?: { mcpInstructions?: MCP.ServerInstructions[]; processo
   return LayerNode.compile(root, replacements)
 }
 
-function makeHttpNoLLMServer(input?: { mcpInstructions?: MCP.ServerInstructions[]; processor?: "blocking" }) {
+function makeHttpNoLLMServer(input?: {
+  mcpInstructions?: MCP.ServerInstructions[]
+  mcpTools?: Record<string, MCP.McpTool>
+  processor?: "blocking"
+}) {
   return makePrompt(input)
 }
 
 const it = testEffect(makeHttp())
 const noLLMServer = testEffect(makeHttpNoLLMServer())
 const raceNoLLMServer = testEffect(makeHttpNoLLMServer({ processor: "blocking" }))
+const opaqueMcpCalls: string[] = []
+const opaqueMcpTools: Record<string, MCP.McpTool> = {
+  opaque_opaque_lookup: {
+    // This fixture deliberately exposes no annotations or guard-specific configuration.
+    def: {
+      name: "opaque_lookup",
+      description: "Look up a value.",
+      inputSchema: {
+        type: "object",
+        properties: { query: { type: "string" } },
+        required: ["query"],
+      },
+    },
+    client: {
+      callTool: async (request: { arguments?: Record<string, unknown> }) => {
+        const query = typeof request.arguments?.query === "string" ? request.arguments.query : ""
+        opaqueMcpCalls.push(query)
+        return {
+          content: [{ type: "text" as const, text: query === "break" ? "PROGRESS" : "NO_PROGRESS" }],
+        }
+      },
+    } as unknown as MCP.McpTool["client"],
+  },
+}
+const opaqueMcp = testEffect(makeHttp({ mcpTools: opaqueMcpTools }))
 const withMcpInstructions = testEffect(
   makeHttp({
     mcpInstructions: [
@@ -320,6 +357,16 @@ const useServerConfig = Effect.fn("test.useServerConfig")(function* (config: (ur
   const llm = yield* TestLLMServer
   yield* writeConfig(dir, config(llm.url))
   return { dir, llm }
+})
+
+const waitForDoomLoop = Effect.fn("test.waitForDoomLoop")(function* () {
+  const permission = yield* Permission.Service
+  return yield* pollWithTimeout(
+    Effect.gen(function* () {
+      return (yield* permission.list()).find((item) => item.permission === "doom_loop")
+    }),
+    "timed out waiting for doom loop permission",
+  )
 })
 
 // Wait for a session's runner to enter a busy state. SessionStatus is flipped
@@ -808,6 +855,88 @@ it.instance("loop continues when finish is tool-calls", () =>
       expect(result.info.finish).toBe("stop")
     }
   }),
+)
+
+opaqueMcp.instance(
+  "opaque MCP repeated outcomes hold the fourth changed-input call and deny returns idle",
+  () =>
+    Effect.gen(function* () {
+      opaqueMcpCalls.length = 0
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const permission = yield* Permission.Service
+      const status = yield* SessionStatus.Service
+      const chat = yield* sessions.create({
+        permission: [{ permission: "opaque_opaque_lookup", pattern: "*", action: "allow" }],
+      })
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "try opaque lookups" }],
+      })
+
+      yield* llm.tool("opaque_opaque_lookup", { query: "one" })
+      yield* llm.tool("opaque_opaque_lookup", { query: "two" })
+      yield* llm.tool("opaque_opaque_lookup", { query: "three" })
+      yield* llm.tool("opaque_opaque_lookup", { query: "four" })
+
+      const run = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+      yield* awaitWithTimeout(llm.wait(4), "timed out waiting for held fourth opaque MCP proposal", "10 seconds")
+      const request = yield* waitForDoomLoop()
+
+      expect(opaqueMcpCalls).toEqual(["one", "two", "three"])
+      expect(request.patterns).toHaveLength(1)
+      expect(request.patterns[0]).toStartWith("doom-loop/")
+      expect(request.always).toEqual(request.patterns)
+
+      yield* permission.reply({ requestID: request.id, reply: "reject" })
+      expect(Exit.isSuccess(yield* Fiber.await(run))).toBe(true)
+      expect(opaqueMcpCalls).toEqual(["one", "two", "three"])
+      expect((yield* status.get(chat.id)).type).toBe("idle")
+    }),
+  { config: cfg },
+  20_000,
+)
+
+opaqueMcp.instance(
+  "opaque MCP once allows a changed result and the next call does not prompt",
+  () =>
+    Effect.gen(function* () {
+      opaqueMcpCalls.length = 0
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const permission = yield* Permission.Service
+      const chat = yield* sessions.create({
+        permission: [{ permission: "opaque_opaque_lookup", pattern: "*", action: "allow" }],
+      })
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "try opaque lookups" }],
+      })
+
+      yield* llm.tool("opaque_opaque_lookup", { query: "one" })
+      yield* llm.tool("opaque_opaque_lookup", { query: "two" })
+      yield* llm.tool("opaque_opaque_lookup", { query: "three" })
+      yield* llm.tool("opaque_opaque_lookup", { query: "break" })
+      yield* llm.tool("opaque_opaque_lookup", { query: "after" })
+      yield* llm.text("done")
+
+      const run = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+      yield* awaitWithTimeout(llm.wait(4), "timed out waiting for held fourth opaque MCP proposal", "10 seconds")
+      const request = yield* waitForDoomLoop()
+      yield* permission.reply({ requestID: request.id, reply: "once" })
+
+      expect(Exit.isSuccess(yield* Fiber.await(run))).toBe(true)
+      expect(opaqueMcpCalls).toEqual(["one", "two", "three", "break", "after"])
+      expect(yield* permission.list()).toEqual([])
+    }),
+  { config: cfg },
+  20_000,
 )
 
 it.instance("glob tool keeps instance context during prompt runs", () =>

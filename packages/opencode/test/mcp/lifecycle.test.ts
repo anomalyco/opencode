@@ -23,6 +23,7 @@ import { pollWithTimeout, testEffect } from "../lib/effect"
 
 const it = testEffect(LayerNode.compile(MCP.node))
 const stdioFixture = path.join(import.meta.dir, "../fixture/mcp-lifecycle-stdio.ts")
+const noProgressFixture = path.join(import.meta.dir, "../fixture/mcp-no-progress-stdio.ts")
 
 type Page<T> = { items: T[]; nextCursor?: string }
 
@@ -214,6 +215,24 @@ it.instance(
       )
     }),
   { init: (directory) => Effect.promise(() => Bun.$`mkdir -p ${path.join(directory, "plugins/sub")}`.quiet()) },
+)
+
+it.instance("local opaque MCP tools execute without annotations", () =>
+  Effect.gen(function* () {
+    const mcp = yield* MCP.Service
+    yield* mcp.add("opaque", {
+      type: "local",
+      command: [process.execPath, noProgressFixture],
+    })
+
+    const tool = (yield* mcp.tools()).opaque_opaque_lookup
+    expect(tool?.def.description).toBe("Look up a value.")
+    const result = yield* Effect.promise(() =>
+      tool?.client.callTool({ name: "opaque_lookup", arguments: { query: "changed-input" } }) ??
+        Promise.reject(new Error("opaque tool missing")),
+    )
+    expect(result?.content).toEqual([{ type: "text", text: "NO_PROGRESS" }])
+  }),
 )
 
 it.instance("tools() reuses cached definitions until a protocol notification", () =>
