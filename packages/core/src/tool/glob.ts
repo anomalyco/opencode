@@ -20,7 +20,7 @@ export const Input = Schema.Struct({
     description: "Relative directory to search. Defaults to the active Location.",
   }),
   limit: FileSystem.GlobInput.fields.limit.annotate({
-    description: "Maximum results to return",
+    description: `Maximum results to return (default: ${FileSystem.DEFAULT_SEARCH_LIMIT})`,
   }),
 })
 
@@ -86,7 +86,7 @@ export const Plugin = {
                   .glob({
                     cwd,
                     pattern: input.pattern,
-                    limit: input.limit ?? Number.MAX_SAFE_INTEGER,
+                    limit: input.limit ?? FileSystem.DEFAULT_SEARCH_LIMIT,
                   })
                   .pipe(
                     Effect.map((result) =>

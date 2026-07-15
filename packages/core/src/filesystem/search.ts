@@ -56,7 +56,7 @@ export const ripgrepLayer = Layer.effect(
             .glob({
               cwd,
               pattern: input.pattern,
-              limit: input.limit ?? Number.MAX_SAFE_INTEGER,
+              limit: input.limit ?? FileSystem.DEFAULT_SEARCH_LIMIT,
             })
             .pipe(
               Effect.map((result) =>
@@ -81,7 +81,7 @@ export const ripgrepLayer = Layer.effect(
               pattern: input.pattern,
               file: info.type === "File" ? path.basename(target) : undefined,
               include: input.include,
-              limit: input.limit ?? Number.MAX_SAFE_INTEGER,
+              limit: input.limit ?? FileSystem.DEFAULT_SEARCH_LIMIT,
             })
             .pipe(
               Effect.map((result) =>
@@ -150,7 +150,7 @@ export const fffLayer = Layer.effect(
           const prefix = input.path?.replaceAll("\\", "/").replace(/\/$/, "")
           const found = result.value.glob(prefix ? `${prefix}/${input.pattern}` : input.pattern, {
             pageIndex: 0,
-            pageSize: input.limit,
+            pageSize: input.limit ?? FileSystem.DEFAULT_SEARCH_LIMIT,
           })
           if (!found.ok) throw found.error
           return found.value.items.map((item) =>
@@ -167,7 +167,7 @@ export const fffLayer = Layer.effect(
             [prefix ? `${prefix}/**` : undefined, input.include, input.pattern]
               .filter((value) => value !== undefined)
               .join(" "),
-            { mode: "regex", pageSize: input.limit, timeBudgetMs: 1_500 },
+            { mode: "regex", pageSize: input.limit ?? FileSystem.DEFAULT_SEARCH_LIMIT, timeBudgetMs: 1_500 },
           )
           if (!found.ok) throw found.error
           return found.value.items.map((match) => {

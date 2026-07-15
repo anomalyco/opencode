@@ -31,6 +31,8 @@ export type ListInput = typeof ListInput.Type
 
 export { FindInput }
 
+export const DEFAULT_SEARCH_LIMIT = 100
+
 export class GlobInput extends Schema.Class<GlobInput>("FileSystem.GlobInput")({
   pattern: Schema.String,
   path: RelativePath.pipe(Schema.optional),

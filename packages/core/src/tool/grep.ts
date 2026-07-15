@@ -25,7 +25,7 @@ export const Input = Schema.Struct({
     description: 'File glob to include in the search (for example, "*.js" or "*.{ts,tsx}")',
   }),
   limit: FileSystem.GrepInput.fields.limit.annotate({
-    description: "Maximum matches to return",
+    description: `Maximum matches to return (default: ${FileSystem.DEFAULT_SEARCH_LIMIT})`,
   }),
 })
 
@@ -106,7 +106,7 @@ export const Plugin = {
                     pattern: input.pattern,
                     file: info?.type === "File" ? path.basename(target) : undefined,
                     include: input.include,
-                    limit: input.limit ?? Number.MAX_SAFE_INTEGER,
+                    limit: input.limit ?? FileSystem.DEFAULT_SEARCH_LIMIT,
                   })
                   .pipe(
                     Effect.map((result) =>
