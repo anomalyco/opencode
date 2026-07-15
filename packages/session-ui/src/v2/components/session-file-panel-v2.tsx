@@ -3,14 +3,13 @@ import "./session-review-v2.css"
 
 export function SessionFilePanelV2(props: {
   sidebar?: JSX.Element
-  sidebarOpen?: boolean
   toolbar: boolean
   toolbarStart?: JSX.Element
   toolbarEnd?: JSX.Element
   children?: JSX.Element
 }) {
   return (
-    <div data-component="session-review-v2" data-sidebar={props.sidebarOpen === false ? "closed" : "open"}>
+    <div data-component="session-review-v2">
       <div data-slot="session-review-v2-body">
         {props.sidebar}
         <div data-slot="session-review-v2-preview">

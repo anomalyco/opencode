@@ -5,7 +5,6 @@ import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
 import { Icon } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
-import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import type { SessionReviewDiffStyle } from "../../components/session-review"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
@@ -302,56 +301,12 @@ export function SessionReviewV2(props: SessionReviewV2Props) {
           </TooltipV2>
         </SegmentedControlV2>
       </Show>
-      <div data-slot="session-review-v2-toolbar-overflow">
-        <MenuV2 gutter={4} modal={false} placement="bottom-end">
-          <MenuV2.Trigger
-            as={IconButtonV2}
-            variant="ghost-muted"
-            size="large"
-            icon={<Icon name="outline-dots" />}
-            aria-label={i18n.t("ui.sessionReviewV2.moreOptions")}
-          />
-          <MenuV2.Portal>
-            <MenuV2.Content>
-              <Show when={props.onDiffStyleChange}>
-                <MenuV2.Group>
-                  <MenuV2.GroupLabel>{i18n.t("ui.sessionReviewV2.layout")}</MenuV2.GroupLabel>
-                  <MenuV2.RadioGroup
-                    value={props.diffStyle}
-                    onChange={(value) => {
-                      if (value !== "unified" && value !== "split") return
-                      props.onDiffStyleChange?.(value)
-                    }}
-                  >
-                    <MenuV2.RadioItem value="unified">{i18n.t("ui.sessionReview.diffStyle.unified")}</MenuV2.RadioItem>
-                    <MenuV2.RadioItem value="split">{i18n.t("ui.sessionReview.diffStyle.split")}</MenuV2.RadioItem>
-                  </MenuV2.RadioGroup>
-                </MenuV2.Group>
-                <MenuV2.Separator />
-              </Show>
-              <MenuV2.Group>
-                <MenuV2.RadioGroup
-                  value={props.expandMode}
-                  onChange={(value) => {
-                    if (value !== "expand" && value !== "collapse") return
-                    props.onExpandModeChange(value)
-                  }}
-                >
-                  <MenuV2.RadioItem value="expand">{i18n.t("ui.sessionReviewV2.showAllLines")}</MenuV2.RadioItem>
-                  <MenuV2.RadioItem value="collapse">{i18n.t("ui.sessionReviewV2.hideNonDiffLines")}</MenuV2.RadioItem>
-                </MenuV2.RadioGroup>
-              </MenuV2.Group>
-            </MenuV2.Content>
-          </MenuV2.Portal>
-        </MenuV2>
-      </div>
     </>
   )
 
   return (
     <SessionFilePanelV2
       sidebar={props.sidebar}
-      sidebarOpen={props.sidebarOpen}
       toolbar={props.hasDiffs}
       toolbarStart={toolbarStart()}
       toolbarEnd={toolbarEnd()}

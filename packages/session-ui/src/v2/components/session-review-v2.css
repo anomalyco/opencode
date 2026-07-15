@@ -153,42 +153,12 @@
   padding-left: 8px;
   flex-shrink: 0;
   border-bottom: 1px solid var(--border-weaker-base, var(--v2-border-border-weak));
-  container-type: inline-size;
-  container-name: session-review-v2-toolbar;
 }
 
 [data-component="session-review-v2"] [data-slot="session-review-v2-toolbar-group"] {
   display: flex;
   align-items: center;
   gap: 0px;
-}
-
-[data-slot="session-review-v2-toolbar-overflow"] {
-  display: none;
-}
-
-@container session-review-v2-toolbar (max-width: 269px) {
-  [data-component="session-review-v2"][data-sidebar="open"]
-    [data-slot="segmented-control-v2"].session-review-v2-segmented-control {
-    display: none;
-  }
-
-  [data-component="session-review-v2"][data-sidebar="open"] [data-slot="session-review-v2-toolbar-overflow"] {
-    display: flex;
-    align-items: center;
-  }
-}
-
-@container session-review-v2-toolbar (max-width: 399px) {
-  [data-component="session-review-v2"][data-sidebar="closed"]
-    [data-slot="segmented-control-v2"].session-review-v2-segmented-control {
-    display: none;
-  }
-
-  [data-component="session-review-v2"][data-sidebar="closed"] [data-slot="session-review-v2-toolbar-overflow"] {
-    display: flex;
-    align-items: center;
-  }
 }
 
 [data-component="session-review-v2"] .session-review-v2-toolbar-group--start {
