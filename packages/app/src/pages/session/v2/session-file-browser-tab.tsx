@@ -109,6 +109,7 @@ export function SessionFileBrowserTab(props: {
           filterExpanded={query().length > 0 && files().length > 0}
           width={props.state.sidebarWidth()}
           onWidthChange={props.state.resizeSidebar}
+          onCollapse={props.state.toggleSidebar}
         >
           <Show
             when={query()}
