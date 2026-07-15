@@ -912,6 +912,101 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("serializes overlapping reasoning summary parts", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(
+        LLM.updateRequest(request, { providerOptions: { openai: { store: false } } }),
+      ).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              {
+                type: "response.output_item.added",
+                item: { type: "reasoning", id: "rs_1", encrypted_content: null },
+              },
+              { type: "response.reasoning_summary_part.added", item_id: "rs_1", summary_index: 0 },
+              { type: "response.reasoning_summary_text.delta", item_id: "rs_1", summary_index: 0, delta: "First" },
+              { type: "response.reasoning_summary_part.added", item_id: "rs_1", summary_index: 1 },
+              { type: "response.reasoning_summary_text.delta", item_id: "rs_1", summary_index: 1, delta: "Second" },
+              {
+                type: "response.output_item.added",
+                item: { type: "reasoning", id: "rs_2", encrypted_content: "encrypted-2" },
+              },
+              { type: "response.reasoning_summary_part.added", item_id: "rs_2", summary_index: 0 },
+              { type: "response.reasoning_summary_text.delta", item_id: "rs_2", summary_index: 0, delta: "Third" },
+              { type: "response.output_text.delta", item_id: "msg_1", delta: "Hello" },
+              {
+                type: "response.output_item.done",
+                item: { type: "reasoning", id: "rs_1", encrypted_content: "encrypted-1-final" },
+              },
+              // Late reuse of a completed provider ID must create a distinct block.
+              { type: "response.reasoning_summary_text.delta", item_id: "rs_1", summary_index: 0, delta: "Late" },
+              { type: "response.reasoning_summary_part.done", item_id: "rs_2", summary_index: 0 },
+              {
+                type: "response.output_item.done",
+                item: { type: "reasoning", id: "rs_2", encrypted_content: "encrypted-2-final" },
+              },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.events.filter((event) => event.type.startsWith("reasoning-"))).toEqual([
+        {
+          type: "reasoning-start",
+          id: "rs_1:0",
+          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: null } },
+        },
+        { type: "reasoning-delta", id: "rs_1:0", text: "First" },
+        {
+          type: "reasoning-end",
+          id: "rs_1:0",
+          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-1-final" } },
+        },
+        {
+          type: "reasoning-start",
+          id: "rs_1:1",
+          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: null } },
+        },
+        { type: "reasoning-delta", id: "rs_1:1", text: "Second" },
+        {
+          type: "reasoning-end",
+          id: "rs_1:1",
+          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-1-final" } },
+        },
+        {
+          type: "reasoning-start",
+          id: "rs_2:0",
+          providerMetadata: { openai: { itemId: "rs_2", reasoningEncryptedContent: "encrypted-2" } },
+        },
+        { type: "reasoning-delta", id: "rs_2:0", text: "Third" },
+        {
+          type: "reasoning-end",
+          id: "rs_2:0",
+          providerMetadata: { openai: { itemId: "rs_2", reasoningEncryptedContent: "encrypted-2-final" } },
+        },
+        {
+          type: "reasoning-start",
+          id: "rs_1:0#1",
+          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-1-final" } },
+        },
+        { type: "reasoning-delta", id: "rs_1:0#1", text: "Late" },
+        { type: "reasoning-end", id: "rs_1:0#1" },
+      ])
+      expect(response.message.content.map((part) => [part.type, "text" in part ? part.text : undefined])).toEqual([
+        ["reasoning", "First"],
+        ["reasoning", "Second"],
+        ["reasoning", "Third"],
+        ["text", "Hello"],
+        ["reasoning", "Late"],
+      ])
+      expect(response.message.content[4]).toMatchObject({
+        providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-1-final" } },
+      })
+    }),
+  )
+
   it.effect("closes reasoning summary parts when storage is not disabled", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(

@@ -240,6 +240,7 @@ interface ParserState {
   readonly hasFunctionCall: boolean
   readonly lifecycle: Lifecycle.State
   readonly reasoningItems: Readonly<Record<string, ReasoningStreamItem>>
+  readonly reasoningOutput: ReasoningOutputState
   readonly store: boolean | undefined
 }
 
@@ -251,6 +252,15 @@ interface ReasoningStreamItem {
   // strings, but typing the map as `Record<number, ...>` documents intent
   // and matches the wire field.
   readonly summaryParts: Readonly<Record<number, ReasoningSummaryStatus>>
+}
+
+type ReasoningEvent = Extract<LLMEvent, { readonly type: "reasoning-start" | "reasoning-delta" | "reasoning-end" }>
+
+interface ReasoningOutputState {
+  readonly active: { readonly input: string; readonly output: string } | undefined
+  readonly metadata: Readonly<Record<string, ProviderMetadata>>
+  readonly pending: ReadonlyArray<LLMEvent>
+  readonly seen: Readonly<Record<string, number>>
 }
 
 const invalid = ProviderShared.invalidRequest
@@ -606,6 +616,80 @@ type StepResult = readonly [ParserState, ReadonlyArray<LLMEvent>]
 
 const NO_EVENTS: StepResult["1"] = []
 
+const isReasoningEvent = (event: LLMEvent): event is ReasoningEvent =>
+  event.type === "reasoning-start" || event.type === "reasoning-delta" || event.type === "reasoning-end"
+
+const renameReasoningEvent = (
+  event: ReasoningEvent,
+  id: string,
+  value: ProviderMetadata | undefined = event.providerMetadata,
+): ReasoningEvent => {
+  if (event.id === id && event.providerMetadata === value) return event
+  const providerMetadata = value === undefined ? {} : { providerMetadata: value }
+  if (event.type === "reasoning-start") return LLMEvent.reasoningStart({ id, ...providerMetadata })
+  if (event.type === "reasoning-delta") return LLMEvent.reasoningDelta({ id, text: event.text, ...providerMetadata })
+  return LLMEvent.reasoningEnd({ id, ...providerMetadata })
+}
+
+// Session events represent reasoning as non-overlapping blocks. Hold a new
+// block until the active one receives its final provider metadata and ends.
+const serializeReasoning = (state: ParserState, events: ReadonlyArray<LLMEvent>): StepResult => {
+  let active = state.reasoningOutput.active
+  const metadata = { ...state.reasoningOutput.metadata }
+  const pending = [...state.reasoningOutput.pending, ...events]
+  const seen = { ...state.reasoningOutput.seen }
+  const output: LLMEvent[] = []
+
+  const emit = (index: number) => {
+    const event = pending.splice(index, 1)[0]
+    if (!event) return
+    if (!isReasoningEvent(event)) {
+      output.push(event)
+      return
+    }
+    if (event.providerMetadata !== undefined) metadata[event.id] = event.providerMetadata
+    if (event.type === "reasoning-start") {
+      const count = seen[event.id] ?? 0
+      // Reused provider IDs must not merge a later block into earlier response content.
+      const id = count === 0 ? event.id : `${event.id}#${count}`
+      seen[event.id] = count + 1
+      active = { input: event.id, output: id }
+      output.push(
+        renameReasoningEvent(event, id, event.providerMetadata ?? (count > 0 ? metadata[event.id] : undefined)),
+      )
+      return
+    }
+    if (active?.input !== event.id) return
+    output.push(renameReasoningEvent(event, active.output))
+    if (event.type === "reasoning-end") active = undefined
+  }
+
+  while (pending.length > 0) {
+    const event = pending[0]
+    if (active === undefined) {
+      if (isReasoningEvent(event) && event.type !== "reasoning-start") {
+        pending.shift()
+        continue
+      }
+      emit(0)
+      continue
+    }
+    if (!isReasoningEvent(event) || event.id === active.input) {
+      emit(0)
+      continue
+    }
+    // Only the active block may bypass a queued start; all other events retain provider order.
+    const input = active.input
+    const index = pending.findIndex(
+      (event) => isReasoningEvent(event) && event.id === input && event.type !== "reasoning-start",
+    )
+    if (index < 0) break
+    emit(index)
+  }
+
+  return [{ ...state, reasoningOutput: { active, metadata, pending, seen } }, output]
+}
+
 // `response.completed` / `response.incomplete` are clean finishes that emit a
 // `finish` event; `response.failed` is a hard failure. All three end the stream,
 // so keep this set aligned with `step` and the protocol's terminal predicate.
@@ -917,7 +1001,7 @@ const providerError = (event: OpenAIResponsesEvent, fallback: string) => {
   })
 }
 
-const step = (state: ParserState, event: OpenAIResponsesEvent) => {
+const parse = (state: ParserState, event: OpenAIResponsesEvent) => {
   if (event.type === "response.output_text.delta") return Effect.succeed(onOutputTextDelta(state, event))
   if (event.type === "response.output_text.done") return Effect.succeed(onOutputTextDone(state, event))
   if (
@@ -946,6 +1030,11 @@ const step = (state: ParserState, event: OpenAIResponsesEvent) => {
   return Effect.succeed<StepResult>([state, NO_EVENTS])
 }
 
+const step = Effect.fn("OpenAIResponses.step")(function* (state: ParserState, event: OpenAIResponsesEvent) {
+  const result = yield* parse(state, event)
+  return serializeReasoning(result[0], result[1])
+})
+
 // =============================================================================
 // Protocol And OpenAI Route
 // =============================================================================
@@ -967,6 +1056,7 @@ export const protocol = Protocol.make({
       tools: ToolStream.empty<string>(),
       lifecycle: Lifecycle.initial(),
       reasoningItems: {},
+      reasoningOutput: { active: undefined, metadata: {}, pending: [], seen: {} },
       store: OpenAIOptions.store(request),
     }),
     step,
