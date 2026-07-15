@@ -198,6 +198,7 @@ export const buildPrompt = (input: { readonly previousSummary?: string; readonly
       ? `Update the anchored summary below using the conversation history above.\nPreserve still-true details, remove stale details, and merge in the new facts.\n<previous-summary>\n${input.previousSummary}\n</previous-summary>`
       : "Create a new anchored summary from the conversation history.",
     SUMMARY_TEMPLATE,
+    "The following is the conversation history:",
     ...input.context,
   ].join("\n\n")
 
