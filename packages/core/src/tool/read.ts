@@ -6,7 +6,6 @@ import { ToolFailure } from "@opencode-ai/ai"
 import { Effect, Schema } from "effect"
 import { FileSystem } from "../filesystem"
 import { FSUtil } from "../fs-util"
-import { Image } from "../image"
 import { Location } from "../location"
 import { LocationMutation } from "../location-mutation"
 import { PermissionV2 } from "../permission"
@@ -35,7 +34,6 @@ export const Plugin = {
   effect: Effect.fn("ReadTool.Plugin")(function* (ctx: PluginContext) {
     const reader = yield* ReadToolFileSystem.Service
     const mutation = yield* LocationMutation.Service
-    const image = yield* Image.Service
     const permission = yield* PermissionV2.Service
     const sessionInstructions = yield* SessionInstructions.Service
     const fs = yield* FSUtil.Service
@@ -50,6 +48,12 @@ export const Plugin = {
               "Read a text file or supported image, page through a large UTF-8 text file by line offset, or list a directory page. Relative paths resolve from the current location; absolute paths inside it are accepted, while external absolute paths require external_directory approval.",
             input: Input,
             output: Output,
+            structured: Schema.toEncoded(Output),
+            // Image base64 reaches the model through content items (normalized generically
+            // at tool settlement); persisting a second copy in structured would store the
+            // original unresized bytes in the message row.
+            toStructuredOutput: ({ output }) =>
+              "encoding" in output && output.encoding === "base64" ? { ...output, content: "" } : output,
             toModelOutput: ({ input, output }) => {
               if (!("encoding" in output) || output.encoding !== "base64" || !SUPPORTED_IMAGE_MIMES.has(output.mime))
                 return []
@@ -117,21 +121,14 @@ export const Plugin = {
                   Effect.catch(() => Effect.void),
                   Effect.catchDefect(() => Effect.void),
                 )
-                if ("encoding" in content && content.encoding === "base64" && SUPPORTED_IMAGE_MIMES.has(content.mime)) {
-                  return yield* image
-                    .normalize(resource, { ...content, encoding: "base64" })
-                    .pipe(Effect.catchTag("Image.ResizerUnavailableError", () => Effect.succeed(content)))
-                }
-                if ("encoding" in content && content.encoding === "base64")
+                if ("encoding" in content && content.encoding === "base64" && !SUPPORTED_IMAGE_MIMES.has(content.mime))
                   return yield* Effect.fail(new ReadToolFileSystem.BinaryFileError({ resource }))
                 return content
               }).pipe(
                 Effect.mapError((error) => {
                   const message =
                     error instanceof ReadToolFileSystem.BinaryFileError ||
-                    error instanceof ReadToolFileSystem.MediaIngestLimitError ||
-                    error instanceof Image.DecodeError ||
-                    error instanceof Image.SizeError
+                    error instanceof ReadToolFileSystem.MediaIngestLimitError
                       ? error.message
                       : `Unable to read ${input.path}`
                   return new ToolFailure({ message, error })
