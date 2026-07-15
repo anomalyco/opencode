@@ -197,7 +197,7 @@ function reasoningVariants(provider: SourceProvider, model: SourceModel): NonNul
   const toggle = options.some((option) => option.type === "toggle")
   const effort = options.find((option) => option.type === "effort")
   if (effort?.type === "effort") {
-    const off = toggle ? toggleVariants(npm).filter((variant) => variant.id === "none") : []
+    const off = toggle ? toggleVariants(npm, model.id).filter((variant) => variant.id === "none") : []
     const variants = [
       ...off,
       ...effort.values.flatMap((value) => {
@@ -213,7 +213,7 @@ function reasoningVariants(provider: SourceProvider, model: SourceModel): NonNul
   }
   const budget = options.find((option) => option.type === "budget_tokens")
   const variants = [
-    ...(toggle ? toggleVariants(npm).filter((variant) => budget === undefined || variant.id === "none") : []),
+    ...(toggle ? toggleVariants(npm, model.id).filter((variant) => budget === undefined || variant.id === "none") : []),
     ...(budget?.type === "budget_tokens" ? budgetVariants(npm, model, budget) : []),
   ]
   return [...new Map(variants.map((variant) => [variant.id, variant])).values()]
@@ -244,8 +244,8 @@ function settingsForEffort(npm: string | undefined, modelID: string, effort: str
     return { reasoningConfig: { type: "enabled", maxReasoningEffort: effort } }
   }
   if (npm === "@ai-sdk/gateway") {
-    if (modelID.includes("anthropic")) return { thinking: { type: "adaptive", display: "summarized" }, effort }
-    if (modelID.includes("google")) return { thinkingConfig: { includeThoughts: true, thinkingLevel: effort } }
+    const upstream = gatewayPackage(modelID)
+    if (upstream) return settingsForEffort(upstream, modelID, effort)
     return { reasoningEffort: effort }
   }
   if (npm === "@ai-sdk/github-copilot") {
@@ -257,7 +257,18 @@ function settingsForEffort(npm: string | undefined, modelID: string, effort: str
     return { reasoningEffort: effort, reasoningSummary: "auto", include: OPENAI_INCLUDE_ENCRYPTED_REASONING }
   if (npm === "@jerome-benoit/sap-ai-provider-v2") {
     if (modelID.includes("anthropic"))
-      return { modelParams: { thinking: { type: "adaptive", display: "summarized" }, output_config: { effort } } }
+      return {
+        modelParams: {
+          additionalModelRequestFields: {
+            thinking: { type: "adaptive", ...(anthropicOmitsThinking(modelID) ? { display: "summarized" } : {}) },
+            output_config: { effort },
+          },
+        },
+      }
+    if (modelID.includes("gemini"))
+      return { modelParams: { thinkingConfig: { includeThoughts: true, thinkingLevel: effort } } }
+    if (modelID.includes("amazon--nova"))
+      return { modelParams: { additionalModelRequestFields: { output_config: { effort } } } }
     return { modelParams: { reasoning_effort: effort } }
   }
   if (
@@ -293,8 +304,22 @@ function budgetVariants(
   })
 }
 
-function toggleVariants(npm: string | undefined): NonNullable<ModelV2.Info["variants"]> {
-  if (npm === "@ai-sdk/gateway" || npm === "@openrouter/ai-sdk-provider")
+function toggleVariants(npm: string | undefined, modelID: string): NonNullable<ModelV2.Info["variants"]> {
+  if (npm === "@ai-sdk/gateway") {
+    const upstream = gatewayPackage(modelID)
+    if (upstream) return toggleVariants(upstream, modelID)
+    return [
+      {
+        id: ModelV2.VariantID.make("none"),
+        settings: { gateway: { reasoning: { enabled: false } } },
+      },
+      {
+        id: ModelV2.VariantID.make("thinking"),
+        settings: { gateway: { reasoning: { enabled: true } } },
+      },
+    ]
+  }
+  if (npm === "@openrouter/ai-sdk-provider")
     return [
       { id: ModelV2.VariantID.make("none"), settings: { reasoning: { enabled: false } } },
       { id: ModelV2.VariantID.make("thinking"), settings: { reasoning: { enabled: true } } },
@@ -302,8 +327,50 @@ function toggleVariants(npm: string | undefined): NonNullable<ModelV2.Info["vari
   if (npm === "@ai-sdk/anthropic" || npm === "@ai-sdk/google-vertex/anthropic")
     return [
       { id: ModelV2.VariantID.make("none"), settings: { thinking: { type: "disabled" } } },
-      { id: ModelV2.VariantID.make("thinking"), settings: { thinking: { type: "adaptive" } } },
+      {
+        id: ModelV2.VariantID.make("thinking"),
+        settings: {
+          thinking: { type: "adaptive", ...(anthropicOmitsThinking(modelID) ? { display: "summarized" } : {}) },
+        },
+      },
     ]
+  if (npm === "@ai-sdk/google" || npm === "@ai-sdk/google-vertex")
+    return [
+      {
+        id: ModelV2.VariantID.make("none"),
+        settings: { thinkingConfig: { includeThoughts: false, thinkingBudget: 0 } },
+      },
+      {
+        id: ModelV2.VariantID.make("thinking"),
+        settings: { thinkingConfig: { includeThoughts: true, thinkingBudget: -1 } },
+      },
+    ]
+  if (npm === "@ai-sdk/amazon-bedrock") {
+    const anthropic = modelID.includes("anthropic")
+    return [
+      {
+        id: ModelV2.VariantID.make("none"),
+        settings: {
+          additionalModelRequestFields: anthropic
+            ? { thinking: { type: "disabled" } }
+            : { reasoningConfig: { type: "disabled" } },
+        },
+      },
+      {
+        id: ModelV2.VariantID.make("thinking"),
+        settings: {
+          additionalModelRequestFields: anthropic
+            ? {
+                thinking: {
+                  type: "adaptive",
+                  ...(anthropicOmitsThinking(modelID) ? { display: "summarized" } : {}),
+                },
+              }
+            : { reasoningConfig: { type: "enabled" } },
+        },
+      },
+    ]
+  }
   if (npm === "@ai-sdk/alibaba")
     return [
       { id: ModelV2.VariantID.make("none"), settings: { enableThinking: false } },
@@ -314,6 +381,63 @@ function toggleVariants(npm: string | undefined): NonNullable<ModelV2.Info["vari
       { id: ModelV2.VariantID.make("none"), settings: { thinking: { type: "disabled" } } },
       { id: ModelV2.VariantID.make("thinking"), settings: { thinking: { type: "enabled" } } },
     ]
+  if (npm === "@jerome-benoit/sap-ai-provider-v2") {
+    if (modelID.includes("gemini"))
+      return [
+        {
+          id: ModelV2.VariantID.make("none"),
+          settings: { modelParams: { thinkingConfig: { includeThoughts: false, thinkingBudget: 0 } } },
+        },
+        {
+          id: ModelV2.VariantID.make("thinking"),
+          settings: { modelParams: { thinkingConfig: { includeThoughts: true, thinkingBudget: -1 } } },
+        },
+      ]
+    if (modelID.includes("cohere"))
+      return [
+        {
+          id: ModelV2.VariantID.make("none"),
+          settings: { modelParams: { thinking: { type: "disabled" } } },
+        },
+        {
+          id: ModelV2.VariantID.make("thinking"),
+          settings: { modelParams: { thinking: { type: "enabled" } } },
+        },
+      ]
+    if (modelID.includes("amazon--nova"))
+      return [
+        {
+          id: ModelV2.VariantID.make("none"),
+          settings: { modelParams: { additionalModelRequestFields: { thinking: { type: "disabled" } } } },
+        },
+        {
+          id: ModelV2.VariantID.make("thinking"),
+          settings: { modelParams: { additionalModelRequestFields: { thinking: { type: "enabled" } } } },
+        },
+      ]
+    if (modelID.includes("anthropic"))
+      return [
+        {
+          id: ModelV2.VariantID.make("none"),
+          settings: {
+            modelParams: { additionalModelRequestFields: { thinking: { type: "disabled" } } },
+          },
+        },
+        {
+          id: ModelV2.VariantID.make("thinking"),
+          settings: {
+            modelParams: {
+              additionalModelRequestFields: {
+                thinking: {
+                  type: "adaptive",
+                  ...(anthropicOmitsThinking(modelID) ? { display: "summarized" } : {}),
+                },
+              },
+            },
+          },
+        },
+      ]
+  }
   return []
 }
 
@@ -325,17 +449,32 @@ function settingsForBudget(npm: string | undefined, modelID: string, budget: num
     return { thinkingConfig: { includeThoughts: true, thinkingBudget: budget } }
   if (npm === "@ai-sdk/amazon-bedrock") return { reasoningConfig: { type: "enabled", budgetTokens: budget } }
   if (npm === "@ai-sdk/gateway") {
-    if (modelID.includes("anthropic")) return { thinking: { type: "enabled", budgetTokens: budget } }
-    if (modelID.includes("google")) return { thinkingConfig: { includeThoughts: true, thinkingBudget: budget } }
-    return
+    const upstream = gatewayPackage(modelID)
+    return upstream ? settingsForBudget(upstream, modelID, budget) : { gateway: { reasoning: { max_tokens: budget } } }
   }
   if (npm === "@ai-sdk/cohere") return { thinking: { type: "enabled", tokenBudget: budget } }
   if (npm === "@ai-sdk/alibaba") return { enableThinking: true, thinkingBudget: budget }
   if (npm === "@jerome-benoit/sap-ai-provider-v2") {
-    if (modelID.includes("anthropic")) return { modelParams: { thinking: { type: "enabled", budget_tokens: budget } } }
+    if (modelID.includes("anthropic"))
+      return {
+        modelParams: {
+          additionalModelRequestFields: { thinking: { type: "enabled", budget_tokens: budget } },
+        },
+      }
     if (modelID.includes("gemini"))
       return { modelParams: { thinkingConfig: { includeThoughts: true, thinkingBudget: budget } } }
+    if (modelID.includes("cohere")) return { modelParams: { thinking: { type: "enabled", token_budget: budget } } }
   }
+}
+
+function gatewayPackage(modelID: string) {
+  const separator = modelID.indexOf("/")
+  if (separator <= 0) return
+  const prefix = modelID.slice(0, separator)
+  if (prefix === "anthropic") return "@ai-sdk/anthropic"
+  if (prefix === "google") return "@ai-sdk/google"
+  if (prefix === "amazon") return "@ai-sdk/amazon-bedrock"
+  if (prefix === "alibaba") return "@ai-sdk/alibaba"
 }
 
 function anthropicAdaptive(modelID: string) {

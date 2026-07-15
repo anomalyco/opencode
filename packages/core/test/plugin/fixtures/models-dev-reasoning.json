@@ -116,9 +116,31 @@
     "env": ["AI_GATEWAY_API_KEY"],
     "npm": "@ai-sdk/gateway",
     "models": {
-      "gateway-toggle": {
-        "id": "gateway-toggle",
-        "name": "Gateway Toggle",
+      "alibaba/qwen-toggle": {
+        "id": "alibaba/qwen-toggle",
+        "name": "Gateway Alibaba Toggle",
+        "release_date": "2026-01-01",
+        "attachment": false,
+        "reasoning": true,
+        "reasoning_options": [{ "type": "toggle" }, { "type": "budget_tokens", "max": 16000 }],
+        "temperature": true,
+        "tool_call": true,
+        "limit": { "context": 128000, "output": 20000 }
+      },
+      "amazon/nova-2-lite": {
+        "id": "amazon/nova-2-lite",
+        "name": "Gateway Nova 2 Lite",
+        "release_date": "2026-01-01",
+        "attachment": false,
+        "reasoning": true,
+        "reasoning_options": [{ "type": "toggle" }, { "type": "effort", "values": ["low", "high"] }],
+        "temperature": true,
+        "tool_call": true,
+        "limit": { "context": 128000, "output": 20000 }
+      },
+      "deepseek/deepseek-toggle": {
+        "id": "deepseek/deepseek-toggle",
+        "name": "Gateway DeepSeek Toggle",
         "release_date": "2026-01-01",
         "attachment": false,
         "reasoning": true,
@@ -142,6 +164,130 @@
         "attachment": false,
         "reasoning": true,
         "reasoning_options": [{ "type": "toggle" }],
+        "temperature": true,
+        "tool_call": true,
+        "limit": { "context": 128000, "output": 20000 }
+      }
+    }
+  },
+  "google": {
+    "id": "google",
+    "name": "Google",
+    "env": ["GOOGLE_GENERATIVE_AI_API_KEY"],
+    "npm": "@ai-sdk/google",
+    "models": {
+      "gemini-2.5-flash": {
+        "id": "gemini-2.5-flash",
+        "name": "Gemini 2.5 Flash",
+        "release_date": "2026-01-01",
+        "attachment": false,
+        "reasoning": true,
+        "reasoning_options": [{ "type": "toggle" }, { "type": "budget_tokens", "min": 0, "max": 16000 }],
+        "temperature": true,
+        "tool_call": true,
+        "limit": { "context": 128000, "output": 20000 }
+      }
+    }
+  },
+  "google-vertex": {
+    "id": "google-vertex",
+    "name": "Google Vertex",
+    "env": ["GOOGLE_VERTEX_PROJECT"],
+    "npm": "@ai-sdk/google-vertex",
+    "models": {
+      "gemini-2.5-flash-lite": {
+        "id": "gemini-2.5-flash-lite",
+        "name": "Gemini 2.5 Flash Lite",
+        "release_date": "2026-01-01",
+        "attachment": false,
+        "reasoning": true,
+        "reasoning_options": [{ "type": "toggle" }, { "type": "budget_tokens", "min": 512, "max": 16000 }],
+        "temperature": true,
+        "tool_call": true,
+        "limit": { "context": 128000, "output": 20000 }
+      }
+    }
+  },
+  "amazon-bedrock": {
+    "id": "amazon-bedrock",
+    "name": "Amazon Bedrock",
+    "env": ["AWS_ACCESS_KEY_ID"],
+    "npm": "@ai-sdk/amazon-bedrock",
+    "models": {
+      "amazon.nova-2-lite-v1:0": {
+        "id": "amazon.nova-2-lite-v1:0",
+        "name": "Nova 2 Lite",
+        "release_date": "2026-01-01",
+        "attachment": false,
+        "reasoning": true,
+        "reasoning_options": [{ "type": "toggle" }, { "type": "effort", "values": ["low", "high"] }],
+        "temperature": true,
+        "tool_call": true,
+        "limit": { "context": 128000, "output": 20000 }
+      }
+    }
+  },
+  "sap-ai-core": {
+    "id": "sap-ai-core",
+    "name": "SAP AI Core",
+    "env": ["AICORE_SERVICE_KEY"],
+    "npm": "@jerome-benoit/sap-ai-provider-v2",
+    "models": {
+      "gemini-2.5-flash": {
+        "id": "gemini-2.5-flash",
+        "name": "Gemini 2.5 Flash",
+        "release_date": "2026-01-01",
+        "attachment": false,
+        "reasoning": true,
+        "reasoning_options": [{ "type": "toggle" }, { "type": "budget_tokens", "min": 0, "max": 16000 }],
+        "temperature": true,
+        "tool_call": true,
+        "limit": { "context": 128000, "output": 20000 }
+      },
+      "amazon--nova-lite": {
+        "id": "amazon--nova-lite",
+        "name": "Nova Lite",
+        "release_date": "2026-01-01",
+        "attachment": false,
+        "reasoning": true,
+        "reasoning_options": [{ "type": "toggle" }, { "type": "effort", "values": ["low", "high"] }],
+        "temperature": true,
+        "tool_call": true,
+        "limit": { "context": 128000, "output": 20000 }
+      },
+      "cohere--command-a-reasoning": {
+        "id": "cohere--command-a-reasoning",
+        "name": "Command A Reasoning",
+        "release_date": "2026-01-01",
+        "attachment": false,
+        "reasoning": true,
+        "reasoning_options": [
+          { "type": "toggle" },
+          { "type": "effort", "values": ["low", "high"] },
+          { "type": "budget_tokens", "min": 1 }
+        ],
+        "temperature": true,
+        "tool_call": true,
+        "limit": { "context": 128000, "output": 20000 }
+      },
+      "anthropic--claude-4.7-opus": {
+        "id": "anthropic--claude-4.7-opus",
+        "name": "Claude 4.7 Opus",
+        "release_date": "2026-01-01",
+        "attachment": false,
+        "reasoning": true,
+        "reasoning_options": [{ "type": "effort", "values": ["low"] }],
+        "temperature": true,
+        "tool_call": true,
+        "limit": { "context": 128000, "output": 20000 }
+      },
+      "anthropic--claude-4-sonnet": {
+        "id": "anthropic--claude-4-sonnet",
+        "name": "Claude 4 Sonnet",
+        "release_date": "2026-01-01",
+        "attachment": false,
+        "reasoning": true,
+        "reasoning_options": [{ "type": "budget_tokens", "min": 1024, "max": 16000 }],
         "temperature": true,
         "tool_call": true,
         "limit": { "context": 128000, "output": 20000 }

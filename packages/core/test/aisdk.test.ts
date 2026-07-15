@@ -101,6 +101,7 @@ it.effect("maps package-specific AI SDK provider option keys", () =>
       ["@ai-sdk/github-copilot", "copilot"],
       ["@ai-sdk/amazon-bedrock/mantle", "openai"],
       ["@ai-sdk/openai-compatible", "test-provider"],
+      ["@jerome-benoit/sap-ai-provider-v2", "sap-ai"],
       ["ai-gateway-provider", "openaiCompatible"],
     ] as const
     for (const [packageName, key] of cases) {
@@ -110,6 +111,52 @@ it.effect("maps package-specific AI SDK provider option keys", () =>
       )
       expect(prepared.body.providerOptions).toEqual({ [key]: { reasoningEffort: "high" } })
     }
+  }),
+)
+
+it.effect("routes AI Gateway model options by upstream prefix", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = { languageModel: () => ({ provider: event.model.providerID }) }
+    })
+
+    const anthropic = yield* aisdk.model({
+      ...model("@ai-sdk/gateway", {
+        gateway: { order: ["anthropic"] },
+        thinking: { type: "adaptive" },
+      }),
+      modelID: ModelV2.ID.make("anthropic/claude-sonnet-5"),
+    })
+    const anthropicPrepared = yield* LLMClient.prepare<LanguageModelV3CallOptions>(
+      LLM.request({ model: anthropic, prompt: "Hello" }),
+    )
+    expect(anthropicPrepared.body.providerOptions).toEqual({
+      gateway: { order: ["anthropic"] },
+      anthropic: { thinking: { type: "adaptive" } },
+    })
+
+    const bedrock = yield* aisdk.model({
+      ...model("@ai-sdk/gateway", { reasoningConfig: { type: "enabled" } }),
+      modelID: ModelV2.ID.make("amazon/nova-2-lite"),
+    })
+    const bedrockPrepared = yield* LLMClient.prepare<LanguageModelV3CallOptions>(
+      LLM.request({ model: bedrock, prompt: "Hello" }),
+    )
+    expect(bedrockPrepared.body.providerOptions).toEqual({
+      bedrock: { reasoningConfig: { type: "enabled" } },
+    })
+
+    const fallback = yield* aisdk.model({
+      ...model("@ai-sdk/gateway", { gateway: { reasoning: { enabled: false } } }),
+      modelID: ModelV2.ID.make("deepseek/deepseek-v4"),
+    })
+    const fallbackPrepared = yield* LLMClient.prepare<LanguageModelV3CallOptions>(
+      LLM.request({ model: fallback, prompt: "Hello" }),
+    )
+    expect(fallbackPrepared.body.providerOptions).toEqual({
+      gateway: { reasoning: { enabled: false } },
+    })
   }),
 )
 

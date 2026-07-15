@@ -304,6 +304,12 @@ function modelFromLanguage(info: ModelV2.Info, language: LanguageModelV3) {
   const packageName = ProviderV2.packageName(info.package)
   const projected = mapBodyToProviderOptions(info)
   const optionKey = providerOptionKey(packageName, info.providerID)
+  const projectedProviderOptions = mapSettingsToProviderOptions(
+    packageName,
+    info.providerID,
+    info.modelID ?? info.id,
+    projected.settings,
+  )
   const route: AnyRoute = {
     id: `ai-sdk:${ProviderV2.packageName(info.package) ?? "unknown"}`,
     provider: ProviderID.make(info.providerID),
@@ -326,7 +332,7 @@ function modelFromLanguage(info: ModelV2.Info, language: LanguageModelV3) {
               headers: info.headers,
             },
       limits: { context: info.limit.context, output: info.limit.output },
-      providerOptions: projected.settings === undefined ? undefined : { [optionKey]: projected.settings },
+      providerOptions: projectedProviderOptions,
     },
     body: {
       schema: Schema.Unknown,
@@ -340,6 +346,31 @@ function modelFromLanguage(info: ModelV2.Info, language: LanguageModelV3) {
   return Model.make({ id: info.modelID ?? info.id, provider: info.providerID, route })
 }
 
+function mapSettingsToProviderOptions(
+  packageName: string | undefined,
+  providerID: ProviderV2.ID,
+  modelID: ModelV2.ID,
+  settings: Readonly<Record<string, unknown>> | undefined,
+) {
+  if (settings === undefined) return
+  if (packageName !== "@ai-sdk/gateway") return { [providerOptionKey(packageName, providerID)]: settings }
+
+  const gateway =
+    typeof settings.gateway === "object" && settings.gateway !== null && !Array.isArray(settings.gateway)
+      ? Object.fromEntries(Object.entries(settings.gateway))
+      : undefined
+  const model = Object.fromEntries(Object.entries(settings).filter(([key]) => key !== "gateway"))
+  if (Object.keys(model).length === 0) return gateway === undefined ? undefined : { gateway }
+
+  const separator = modelID.indexOf("/")
+  const prefix = separator > 0 ? modelID.slice(0, separator) : undefined
+  if (prefix)
+    return { ...(gateway === undefined ? {} : { gateway }), [prefix === "amazon" ? "bedrock" : prefix]: model }
+  if (typeof gateway === "object" && gateway !== null && !Array.isArray(gateway))
+    return { gateway: { ...gateway, ...model } }
+  return { gateway: model }
+}
+
 function providerOptionKey(packageName: string | undefined, providerID: ProviderV2.ID) {
   if (packageName === "@ai-sdk/google") return "google"
   if (packageName === "@ai-sdk/google-vertex") return "vertex"
@@ -348,6 +379,7 @@ function providerOptionKey(packageName: string | undefined, providerID: Provider
   if (packageName === "@ai-sdk/amazon-bedrock/mantle") return "openai"
   if (packageName === "@ai-sdk/azure") return "azure"
   if (packageName === "@ai-sdk/github-copilot") return "copilot"
+  if (packageName === "@jerome-benoit/sap-ai-provider-v2") return "sap-ai"
   if (packageName === "@ai-sdk/openai-compatible") return providerID.split(".")[0]
   if (packageName === "@openrouter/ai-sdk-provider") return "openrouter"
   if (packageName === "ai-gateway-provider") return "openaiCompatible"
