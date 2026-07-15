@@ -36,10 +36,11 @@ export const WebFetchTool = Tool.define(
             throw new Error("URL must start with http:// or https://")
           }
 
+          const origin = URL.canParse(params.url) ? new URL(params.url).origin + "/*" : undefined
           yield* ctx.ask({
             permission: "webfetch",
             patterns: [params.url],
-            always: ["*"],
+            always: origin ? [origin] : ["*"],
             metadata: {
               url: params.url,
               format: params.format,
