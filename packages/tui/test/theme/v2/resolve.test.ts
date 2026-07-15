@@ -14,32 +14,36 @@ test("resolves independent definitions and hue aliases", () => {
 
   expect(lightTheme.hue.accent).toBe(lightTheme.hue.blue)
   expect(lightTheme.hue.neutral).toBe(lightTheme.hue.gray)
-  expect(lightTheme.color.text.default).toBeInstanceOf(RGBA)
-  expect(darkTheme.color.background.default).toBeInstanceOf(RGBA)
-  expect(lightTheme.color.syntax.keyword).toBeInstanceOf(RGBA)
-  expect(lightTheme.color.text.action.primary.default).toBe(lightTheme.hue.neutral[100])
-  expect(lightTheme.contexts["@context:elevated"]?.color.background.action.primary.default).toBe(
+  expect(lightTheme.text.default).toBeInstanceOf(RGBA)
+  expect(darkTheme.background.default).toBeInstanceOf(RGBA)
+  expect(lightTheme.background.surface.offset).toBe(lightTheme.hue.neutral[200])
+  expect(lightTheme.background.surface.overlay).toBe(lightTheme.hue.neutral[300])
+  expect(lightTheme.syntax.keyword).toBeInstanceOf(RGBA)
+  expect(lightTheme.text.action.primary.default).toBe(lightTheme.hue.neutral[100])
+  expect(lightTheme.contexts["@context:elevated"]?.background.action.primary.default).toBe(
     lightTheme.hue.accent[500],
   )
-  expect(lightTheme.contexts["@context:elevated"]?.color.text.action.primary.default).toBe(
+  expect(lightTheme.contexts["@context:elevated"]?.background.default).toBe(lightTheme.background.surface.offset)
+  expect(lightTheme.contexts["@context:elevated"]?.text.action.primary.default).toBe(
     lightTheme.hue.neutral[100],
   )
-  expect(lightTheme.contexts["@context:overlay"]?.color.background.action.primary.default).toBe(
+  expect(lightTheme.contexts["@context:overlay"]?.background.action.primary.default).toBe(
     lightTheme.hue.accent[500],
   )
-  expect(lightTheme.contexts["@context:overlay"]?.color.text.action.primary.default).toBe(
+  expect(lightTheme.contexts["@context:overlay"]?.background.default).toBe(lightTheme.background.surface.overlay)
+  expect(lightTheme.contexts["@context:overlay"]?.text.action.primary.default).toBe(
     lightTheme.hue.neutral[100],
   )
-  expect(darkTheme.contexts["@context:elevated"]?.color.background.action.primary.default).toBe(
+  expect(darkTheme.contexts["@context:elevated"]?.background.action.primary.default).toBe(
     darkTheme.hue.accent[400],
   )
-  expect(darkTheme.contexts["@context:elevated"]?.color.text.action.primary.default).toBe(
+  expect(darkTheme.contexts["@context:elevated"]?.text.action.primary.default).toBe(
     darkTheme.hue.neutral[100],
   )
-  expect(darkTheme.contexts["@context:overlay"]?.color.background.action.primary.default).toBe(
+  expect(darkTheme.contexts["@context:overlay"]?.background.action.primary.default).toBe(
     darkTheme.hue.accent[400],
   )
-  expect(darkTheme.contexts["@context:overlay"]?.color.text.action.primary.default).toBe(
+  expect(darkTheme.contexts["@context:overlay"]?.text.action.primary.default).toBe(
     darkTheme.hue.neutral[900],
   )
 })
@@ -50,16 +54,16 @@ test("merges partial files with the selected OpenCode defaults", () => {
       version: 2,
       light: {
         hue: light.hue,
-        color: { text: { default: "#123456" } },
+        text: { default: "#123456" },
       },
       dark: { hue: dark.hue },
     },
     "light",
   )
 
-  expect(theme.color.text.default.toInts()).toEqual([18, 52, 86, 255])
-  expect(theme.color.text.subdued.toInts()).toEqual([18, 52, 86, 255])
-  expect(theme.color.background.action.destructive.pressed).toBeInstanceOf(RGBA)
+  expect(theme.text.default.toInts()).toEqual([18, 52, 86, 255])
+  expect(theme.text.subdued.toInts()).toEqual([18, 52, 86, 255])
+  expect(theme.background.action.destructive.pressed).toBeInstanceOf(RGBA)
 })
 
 test("expands user structural fallbacks before merging defaults", () => {
@@ -68,7 +72,7 @@ test("expands user structural fallbacks before merging defaults", () => {
       version: 2,
       light: {
         hue: light.hue,
-        color: { background: { action: { primary: { default: "#123456" } } } },
+        background: { action: { primary: { default: "#123456" } } },
       },
       dark: { hue: dark.hue },
     },
@@ -79,17 +83,17 @@ test("expands user structural fallbacks before merging defaults", () => {
       version: 2,
       light: {
         hue: light.hue,
-        color: { background: { action: { primary: { $pressed: "#654321" } } } },
+        background: { action: { primary: { $pressed: "#654321" } } },
       },
       dark: { hue: dark.hue },
     },
     "light",
   )
 
-  expect(expanded.color.background.action.primary.pressed.toInts()).toEqual([18, 52, 86, 255])
-  expect(isolatedState.color.background.action.primary.pressed.toInts()).toEqual([101, 67, 33, 255])
-  expect(isolatedState.color.background.action.primary.hovered.toInts()).toEqual(
-    resolveTheme(light).color.background.action.primary.hovered.toInts(),
+  expect(expanded.background.action.primary.pressed.toInts()).toEqual([18, 52, 86, 255])
+  expect(isolatedState.background.action.primary.pressed.toInts()).toEqual([101, 67, 33, 255])
+  expect(isolatedState.background.action.primary.focused.toInts()).toEqual(
+    resolveTheme(light).background.action.primary.focused.toInts(),
   )
 })
 
@@ -98,70 +102,89 @@ test("standalone themes skip OpenCode defaults and use the red core fallback", (
   const lightTheme = resolveThemeFile(file, "light")
   const darkTheme = resolveThemeFile(file, "dark")
 
-  expect(lightTheme.color.text.default.toInts()).toEqual([255, 0, 0, 255])
-  expect(lightTheme.color.background.default.toInts()).toEqual([255, 0, 0, 255])
-  expect(darkTheme.color.text.default.toInts()).toEqual([255, 0, 0, 255])
-  expect(darkTheme.color.background.default.toInts()).toEqual([255, 0, 0, 255])
+  expect(lightTheme.text.default.toInts()).toEqual([255, 0, 0, 255])
+  expect(lightTheme.background.default.toInts()).toEqual([255, 0, 0, 255])
+  expect(darkTheme.text.default.toInts()).toEqual([255, 0, 0, 255])
+  expect(darkTheme.background.default.toInts()).toEqual([255, 0, 0, 255])
 })
 
 test("uses defaults for the selected mode when it merges the other mode", () => {
   const theme = resolveThemeFile({ version: 2, light: { hue: light.hue }, dark: { mergeMode: true } }, "dark")
-  expect(theme.color.background.default.toInts()).toEqual(resolveTheme(dark).color.background.default.toInts())
+  expect(theme.background.default.toInts()).toEqual(resolveTheme(dark).background.default.toInts())
 })
 
 test("resolves matched action variants and states", () => {
   const theme = resolveTheme(light)
 
-  expect(theme.color.text.action.primary.pressed).toBeInstanceOf(RGBA)
-  expect(theme.color.background.action.primary.pressed).toBeInstanceOf(RGBA)
-  expect(theme.color.text.action.secondary.default).toBeInstanceOf(RGBA)
-  expect(theme.color.background.action.destructive.disabled).toBeInstanceOf(RGBA)
+  expect(theme.text.action.primary.pressed).toBeInstanceOf(RGBA)
+  expect(theme.background.action.primary.pressed).toBeInstanceOf(RGBA)
+  expect(theme.text.action.secondary.default).toBeInstanceOf(RGBA)
+  expect(theme.background.action.destructive.disabled).toBeInstanceOf(RGBA)
+})
+
+test("resolves transparent colors", () => {
+  const theme = resolveThemeFile({
+    version: 2,
+    light: { background: { formfield: { default: "transparent" } } },
+    dark: { background: { formfield: { default: "transparent" } } },
+  })
+  expect(theme.background.formfield.default.toInts()).toEqual([0, 0, 0, 0])
+})
+
+test("reports theme decoding failures as native errors", () => {
+  expect(() =>
+    resolveThemeFile(
+      {
+        version: 2,
+        light: { text: { default: "opaque" } },
+        dark: {},
+      } as never,
+      "light",
+      "custom",
+    ),
+  ).toThrow('Invalid theme: custom "opaque" is an invalid value')
 })
 
 test("context overrides rewire semantic references and apply state precedence", () => {
   const definition = override(light, {
-    color: {
-      text: {
-        default: "#111111",
-        action: {
-          primary: { default: "$color.text.default", $pressed: "#222222" },
-          secondary: { default: "$color.text.default" },
-        },
+    text: {
+      default: "#111111",
+      action: {
+        primary: { default: "$text.default", $pressed: "#222222" },
+        secondary: { default: "$text.default" },
       },
     },
     "@context:elevated": {
-      color: {
-        text: {
-          default: "#333333",
-          action: { primary: { default: "#444444", $selected: "#555555" } },
-        },
+      text: {
+        default: "#333333",
+        action: { primary: { default: "#444444", $focused: "#555555" } },
       },
     },
   })
   const theme = resolveTheme(definition)
   const overlay = theme.contexts["@context:elevated"]!
 
-  expect(overlay.color.text.default.toInts()).toEqual([51, 51, 51, 255])
-  expect(overlay.color.text.action.secondary.default.toInts()).toEqual([51, 51, 51, 255])
-  expect(overlay.color.text.action.primary.pressed.toInts()).toEqual([68, 68, 68, 255])
-  expect(overlay.color.text.action.primary.selected.toInts()).toEqual([85, 85, 85, 255])
+  expect(overlay.text.default.toInts()).toEqual([51, 51, 51, 255])
+  expect(overlay.text.action.secondary.default.toInts()).toEqual([51, 51, 51, 255])
+  expect(overlay.text.action.primary.pressed.toInts()).toEqual([68, 68, 68, 255])
+  expect(overlay.text.action.primary.focused.toInts()).toEqual([85, 85, 85, 255])
 })
 
 test("rejects missing, base, and contextual reference cycles", () => {
-  expect(() => resolveTheme(override(light, { color: { text: { default: "$missing.color" } } }))).toThrow(
-    'Theme reference "$missing.color" was not found',
+  expect(() => resolveTheme(override(light, { text: { default: "$missing" } }))).toThrow(
+    'Theme reference "$missing" was not found',
   )
   expect(() =>
     resolveTheme(
       override(light, {
-        color: { text: { default: "$color.text.subdued", subdued: "$color.text.default" } },
+        text: { default: "$text.subdued", subdued: "$text.default" },
       }),
     ),
   ).toThrow("Circular theme reference")
   expect(() =>
     resolveTheme(
       override(light, {
-        "@context:elevated": { color: { text: { default: "$color.text.default" } } },
+        "@context:elevated": { text: { default: "$text.default" } },
       }),
     ),
   ).toThrow("Circular theme reference")
@@ -179,9 +202,9 @@ test("validates complete hues, resolved groups, and hue-only syntax", () => {
   expect(() =>
     resolveTheme({
       ...light,
-      color: { ...light.color, syntax: { ...light.color?.syntax, keyword: "$color.text.default" } },
+      syntax: { ...light.syntax, keyword: "$text.default" },
     } as unknown as ThemeDefinition),
-  ).toThrow("$color.text.default")
+  ).toThrow("$text.default")
 })
 
 function override(base: ThemeDefinition, value: Partial<ThemeDefinition>) {

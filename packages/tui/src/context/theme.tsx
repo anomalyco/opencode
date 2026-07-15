@@ -13,10 +13,14 @@ import {
   setSystemTheme,
   subscribeThemes,
   upsertTheme,
+  type Theme,
   type ThemeJson,
 } from "../theme"
 import { generateSystem, terminalMode } from "../theme/system"
-import { createEffect, createMemo, onCleanup, onMount } from "solid-js"
+import { createComponentTheme, type ComponentTheme } from "../theme/v2/component"
+import { resolveThemeFile } from "../theme/v2/resolve"
+import { migrateV1 } from "../theme/v2/v1-migrate"
+import { createEffect, createMemo, onCleanup, onMount, type Accessor } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "./helper"
 import { useConfig } from "../config"
@@ -24,6 +28,9 @@ import { Global } from "@opencode-ai/core/global"
 import { Glob } from "@opencode-ai/core/util/glob"
 import { readFile } from "node:fs/promises"
 import path from "node:path"
+import { DevTools } from "../devtools"
+
+const themePerformance = DevTools.register({ id: "theme-performance", title: "Theme performance" })
 
 export type ThemeSource = Readonly<{
   discover(): Promise<Record<string, unknown>>
@@ -75,6 +82,24 @@ type State = {
   lock: "dark" | "light" | undefined
   active: string
   ready: boolean
+}
+
+type ContextName = "elevated" | "overlay"
+type ThemeService = {
+  theme: Theme
+  themeV2: ComponentTheme
+  contextual(context: ContextName): ThemeService
+  readonly selected: string
+  all: typeof allThemes
+  has: typeof hasTheme
+  syntax: Accessor<SyntaxStyle>
+  mode: Accessor<"dark" | "light">
+  locked: Accessor<boolean>
+  lock(): void
+  unlock(): void
+  setMode(mode?: "dark" | "light", persist?: boolean): void
+  set(theme: string): boolean
+  readonly ready: boolean
 }
 
 const [store, setStore] = createStore<State>({
@@ -141,6 +166,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
 
     onMount(() => {
       void Promise.allSettled([resolveSystemTheme(store.mode), syncCustomThemes()]).finally(() => {
+        valuesV2()
         setStore("ready", true)
       })
     })
@@ -149,6 +175,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     let systemThemeMode: "dark" | "light" | undefined
     let hasResolvedSystemTheme = false
     function resolveSystemTheme(mode: "dark" | "light" = store.mode) {
+      const started = performance.now()
       return renderer
         .getPalette({ size: 16 })
         .then((colors: TerminalColors) => {
@@ -172,6 +199,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
           setSystemTheme(undefined)
           if (store.active === "system") setStore("active", "opencode")
         })
+        .finally(() => themePerformance.set("Resolve system palette", duration(performance.now() - started)))
     }
 
     let systemRefreshRunning = false
@@ -257,23 +285,49 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       themeRefreshTimeouts.length = 0
     })
 
-    const values = createMemo(() => {
-      const active = store.themes[store.active]
-      if (active) return resolveTheme(active, store.mode)
-      return resolveTheme(store.themes.opencode, store.mode)
+    const source = createMemo(() => store.themes[store.active] ?? store.themes.opencode)
+    const sourceName = createMemo(() => (store.themes[store.active] ? store.active : "opencode"))
+    const values = createMemo(() => resolveTheme(source(), store.mode))
+    const valuesV2 = createMemo(() => {
+      const started = performance.now()
+      const file = migrateV1(source())
+      themePerformance.set("Convert V1 to V2", duration(performance.now() - started))
+      const resolveStarted = performance.now()
+      const result = resolveThemeFile(file, store.mode, sourceName())
+      themePerformance.set("Resolve final theme", duration(performance.now() - resolveStarted))
+      return result
     })
+    const themeV2 = createComponentTheme(valuesV2)
+    const contextsV2 = {
+      elevated: createComponentTheme(() => {
+        const theme = valuesV2().contexts["@context:elevated"]
+        if (!theme) throw new Error("Theme context is not defined: elevated")
+        return theme
+      }),
+      overlay: createComponentTheme(() => {
+        const theme = valuesV2().contexts["@context:overlay"]
+        if (!theme) throw new Error("Theme context is not defined: overlay")
+        return theme
+      }),
+    }
 
     createEffect(() => renderer.setBackgroundColor(values().background))
 
     const syntax = createSyntaxStyleMemo(() => generateSyntax(values()))
 
-    return {
-      theme: new Proxy(values(), {
-        get(_target, prop) {
-          // @ts-expect-error Properties are forwarded to the current reactive value.
-          return values()[prop]
-        },
-      }),
+    const theme = new Proxy(values(), {
+      get(_target, prop) {
+        // @ts-expect-error Properties are forwarded to the current reactive value.
+        return values()[prop]
+      },
+    })
+    function contextual(context: ContextName) {
+      return contextualServices[context]
+    }
+    const service: ThemeService = {
+      theme,
+      themeV2,
+      contextual,
       get selected() {
         return store.active
       },
@@ -299,8 +353,17 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
         return store.ready
       },
     }
+    const contextualServices = {
+      elevated: Object.assign(Object.create(service) as ThemeService, { themeV2: contextsV2.elevated }),
+      overlay: Object.assign(Object.create(service) as ThemeService, { themeV2: contextsV2.overlay }),
+    }
+    return service
   },
 })
+
+function duration(milliseconds: number) {
+  return `${milliseconds.toFixed(2)} ms`
+}
 
 export function createSyntaxStyleMemo(factory: () => SyntaxStyle) {
   const renderer = useRenderer()

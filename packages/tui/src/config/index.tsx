@@ -126,6 +126,11 @@ export const Info = Schema.Struct({
       onboarding: Schema.optional(Schema.Boolean).annotate({ description: "Show getting-started guidance" }),
     }),
   ).annotate({ description: "In-product guidance settings" }),
+  debug: Schema.optional(
+    Schema.Struct({
+      devtools: Schema.optional(Schema.Boolean).annotate({ description: "Show the DevTools sidebar" }),
+    }),
+  ).annotate({ description: "Debugging settings" }),
   animations: Schema.optional(Schema.Boolean).annotate({ description: "Enable interface animations" }),
   mouse: Schema.optional(Schema.Boolean).annotate({ description: "Enable terminal mouse capture" }),
 })

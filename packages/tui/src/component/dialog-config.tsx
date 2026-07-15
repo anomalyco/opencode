@@ -206,6 +206,14 @@ const settings: Setting[] = [
     values: [false, true],
     labels: ["off", "on"],
   },
+  {
+    title: "DevTools",
+    category: "Debug",
+    path: ["debug", "devtools"],
+    default: false,
+    values: [false, true],
+    labels: ["off", "on"],
+  },
 ]
 
 export function DialogConfig() {

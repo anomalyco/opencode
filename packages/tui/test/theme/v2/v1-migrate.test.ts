@@ -8,23 +8,46 @@ test("migrates resolved V1 modes into literal V2 tokens", () => {
   const legacy = resolveV1(DEFAULT_THEMES.opencode, "light")
   const resolved = resolveThemeFile(migrated, "light")
 
-  expect(migrated.standalone).toBeUndefined()
+  expect(migrated.standalone).toBeTrue()
   expect(migrated.light.hue?.accent).toBeObject()
   if (typeof migrated.light.hue?.accent !== "object") throw new Error("Expected a concrete accent scale")
-  expect(migrated.light.hue.accent[300]).toBe(hex(legacy.accent))
-  expect(migrated.light.color?.background?.default).toBe(hex(legacy.background))
-  expect(migrated.light.color?.background?.action?.primary?.default).toBe(hex(legacy.primary))
-  expect(migrated.light.color?.text?.action?.primary?.default).toBe(hex(selectedForeground(legacy, legacy.primary)))
-  expect(migrated.light.color?.scrollbar?.default).toBe(hex(legacy.borderActive))
-  expect(migrated.light.color?.diff?.lineNumber?.background?.removed).toBe(hex(legacy.diffRemovedLineNumberBg))
-  expect(migrated.light.color?.markdown?.emphasis).toBe(hex(legacy.markdownEmph))
-  expect(resolved.color.background.action.secondary.hovered.toInts()).toEqual(legacy.backgroundElement.toInts())
-  expect(resolved.color.background.feedback.error.default.toInts()).toEqual(legacy.background.toInts())
-  expect(resolved.contexts["@context:elevated"]?.color.background.default.toInts()).toEqual(
+  expect(migrated.light.hue.accent[500]).toBe(hex(legacy.secondary))
+  expect(migrated.light.background?.default).toBe(hex(legacy.background))
+  expect(migrated.light.background?.action?.primary?.default).toBe(hex(legacy.primary))
+  expect(migrated.light.text?.action?.primary?.default).toBe(hex(selectedForeground(legacy, legacy.primary)))
+  expect(migrated.light.scrollbar?.default).toBe(hex(legacy.borderActive))
+  expect(migrated.light.diff?.lineNumber?.background?.removed).toBe(hex(legacy.diffRemovedLineNumberBg))
+  expect(migrated.light.markdown?.emphasis).toBe(hex(legacy.markdownEmph))
+  expect(resolved.background.action.secondary.focused.toInts()).toEqual(legacy.backgroundElement.toInts())
+  expect(resolved.background.surface.offset.toInts()).toEqual(legacy.backgroundPanel.toInts())
+  expect(resolved.background.surface.overlay.toInts()).toEqual(legacy.backgroundMenu.toInts())
+  expect(resolved.background.formfield.selected.toInts()).toEqual(legacy.background.toInts())
+  expect(resolved.background.formfield.focused.toInts()).toEqual(legacy.background.toInts())
+  expect(resolved.text.formfield.default.toInts()).toEqual(legacy.text.toInts())
+  expect(resolved.text.formfield.selected.toInts()).toEqual(legacy.primary.toInts())
+  expect(resolved.text.formfield.focused.toInts()).toEqual(legacy.primary.toInts())
+  expect(resolved.hue.accent[500].toInts()).toEqual(legacy.secondary.toInts())
+  expect(resolved.hue.accent[300].r + resolved.hue.accent[300].g + resolved.hue.accent[300].b).toBeGreaterThan(
+    resolved.hue.accent[500].r + resolved.hue.accent[500].g + resolved.hue.accent[500].b,
+  )
+  expect(resolved.background.feedback.error.default.toInts()).toEqual(legacy.background.toInts())
+  expect(resolved.contexts["@context:elevated"]?.background.default.toInts()).toEqual(
     legacy.backgroundPanel.toInts(),
   )
-  expect(resolved.contexts["@context:overlay"]?.color.background.default.toInts()).toEqual(
+  expect(resolved.contexts["@context:elevated"]?.background.action.secondary.default.toInts()).toEqual(
+    legacy.backgroundPanel.toInts(),
+  )
+  expect(resolved.contexts["@context:elevated"]?.background.action.primary.default.toInts()).toEqual(
+    legacy.primary.toInts(),
+  )
+  expect(resolved.contexts["@context:elevated"]?.text.action.primary.default.toInts()).toEqual(
+    selectedForeground(legacy, legacy.primary).toInts(),
+  )
+  expect(resolved.contexts["@context:overlay"]?.background.default.toInts()).toEqual(
     legacy.backgroundMenu.toInts(),
+  )
+  expect(resolved.contexts["@context:overlay"]?.background.action.primary.default.toInts()).toEqual(
+    legacy.primary.toInts(),
   )
 })
 
@@ -35,8 +58,8 @@ test("preserves V1 selected foreground behavior on transparent backgrounds", () 
   delete source.theme.selectedListItemText
   const migrated = migrateV1(source)
 
-  expect(migrated.light.color?.text?.action?.primary?.default).toBe("#000000")
-  expect(migrated.dark.color?.text?.action?.primary?.default).toBe("#ffffff")
+  expect(migrated.light.text?.action?.primary?.default).toBe("#000000")
+  expect(migrated.dark.text?.action?.primary?.default).toBe("#ffffff")
 })
 
 test("retains V1 circular reference errors", () => {
@@ -50,8 +73,8 @@ test("retains V1 circular reference errors", () => {
 test("migrates every built-in V1 theme in both modes", () => {
   for (const source of Object.values(DEFAULT_THEMES)) {
     const migrated = migrateV1(source)
-    expect(resolveThemeFile(migrated, "light").color.text.default).toBeDefined()
-    expect(resolveThemeFile(migrated, "dark").color.text.default).toBeDefined()
+    expect(resolveThemeFile(migrated, "light").text.default).toBeDefined()
+    expect(resolveThemeFile(migrated, "dark").text.default).toBeDefined()
   }
 })
 

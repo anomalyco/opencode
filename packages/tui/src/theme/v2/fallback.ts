@@ -5,26 +5,28 @@ export function fallback(): ThemeTokensDefinition {
   const red = "#ff0000"
 
   return {
-    color: {
-      text: {
+    text: {
         default: red,
         action: Object.fromEntries(ActionVariant.literals.map((variant) => [variant, { default: red }])),
+        formfield: { default: red },
         feedback: Object.fromEntries(FeedbackKind.literals.map((kind) => [kind, { default: red }])),
-      },
-      background: {
+    },
+    background: {
         default: red,
+        surface: { offset: red, overlay: red },
         action: Object.fromEntries(ActionVariant.literals.map((variant) => [variant, { default: red }])),
+        formfield: { default: red },
         feedback: Object.fromEntries(FeedbackKind.literals.map((kind) => [kind, { default: red }])),
-      },
-      border: { default: red },
-      scrollbar: { default: red },
-      diff: {
+    },
+    border: { default: red },
+    scrollbar: { default: red },
+    diff: {
         text: { added: red, removed: red, context: red, hunkHeader: red },
         background: { added: red, removed: red, context: red },
         highlight: { added: red, removed: red },
         lineNumber: { text: red, background: { added: red, removed: red } },
-      },
-      syntax: {
+    },
+    syntax: {
         comment: red,
         keyword: red,
         function: red,
@@ -34,8 +36,8 @@ export function fallback(): ThemeTokensDefinition {
         type: red,
         operator: red,
         punctuation: red,
-      },
-      markdown: {
+    },
+    markdown: {
         text: red,
         heading: red,
         link: red,
@@ -50,7 +52,6 @@ export function fallback(): ThemeTokensDefinition {
         image: red,
         imageText: red,
         codeBlock: red,
-      },
     },
   }
 }

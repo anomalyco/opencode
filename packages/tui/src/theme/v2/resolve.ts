@@ -8,6 +8,7 @@ import {
   ActionVariant,
   BaseHue,
   FeedbackKind,
+  FormfieldState,
   HueAlias,
   HueStep,
   ThemeDefinition,
@@ -25,11 +26,33 @@ import type {
 } from "./index"
 import { selectTheme, selectThemeMode } from "./select"
 
-const decodeThemeDefinition = Schema.decodeUnknownSync(ThemeDefinition)
-const decodeThemeFile = Schema.decodeUnknownSync(ThemeFile)
+const decodeThemeDefinitionSchema = Schema.decodeUnknownSync(ThemeDefinition)
+const decodeThemeFileSchema = Schema.decodeUnknownSync(ThemeFile)
 
-export function resolveThemeFile(file: ThemeFile, mode?: "light" | "dark") {
-  const decoded = decodeThemeFile(file)
+function decodeThemeDefinition(input: unknown) {
+  try {
+    return decodeThemeDefinitionSchema(input)
+  } catch (error) {
+    throw themeDecodeError(error, "theme")
+  }
+}
+
+function decodeThemeFile(input: unknown, name: string) {
+  try {
+    return decodeThemeFileSchema(input)
+  } catch (error) {
+    throw themeDecodeError(error, name)
+  }
+}
+
+function themeDecodeError(error: unknown, name: string) {
+  const message = Schema.isSchemaError(error) ? error.message : String(error)
+  const value = /got ("[^"]*"|\S+)/.exec(message)?.[1] ?? "value"
+  return new Error(`Invalid theme: ${name} ${value} is an invalid value`, { cause: error })
+}
+
+export function resolveThemeFile(file: ThemeFile, mode?: "light" | "dark", name = "theme") {
+  const decoded = decodeThemeFile(file, name)
   const selected = selectThemeMode(decoded, mode)
   const definition = selected.expanded ? selected.theme : expandTheme(selected.theme)
   const defaults = expandTheme(selectTheme(DEFAULT_THEME, selected.mode))
@@ -63,24 +86,28 @@ function resolveExpandedTheme(definition: ThemeDefinition): ResolvedTheme {
 
 function tokens(definition: ThemeDefinition): ThemeTokensDefinition {
   return {
-    color: definition.color,
+    text: definition.text,
+    background: definition.background,
+    border: definition.border,
+    scrollbar: definition.scrollbar,
+    diff: definition.diff,
+    syntax: definition.syntax,
+    markdown: definition.markdown,
   }
 }
 
 function contextualize(base: ThemeTokensDefinition, override: ThemeTokensDefinition) {
   const result = mergeTheme(base, override)
-  const baseText = base.color?.text?.action
-  const contextText = override.color?.text?.action
-  const baseBackground = base.color?.background?.action
-  const contextBackground = override.color?.background?.action
-  const color = result["color"] as NonNullable<ThemeTokensDefinition["color"]>
+  const baseText = base.text?.action
+  const contextText = override.text?.action
+  const baseBackground = base.background?.action
+  const contextBackground = override.background?.action
+  const text = result["text"] as NonNullable<ThemeTokensDefinition["text"]>
+  const background = result["background"] as NonNullable<ThemeTokensDefinition["background"]>
   return {
     ...result,
-    color: {
-      ...color,
-      text: { ...color.text, action: contextualActions(baseText, contextText) },
-      background: { ...color.background, action: contextualActions(baseBackground, contextBackground) },
-    },
+    text: { ...text, action: contextualActions(baseText, contextText) },
+    background: { ...background, action: contextualActions(baseBackground, contextBackground) },
   } as ThemeTokensDefinition
 }
 
@@ -171,6 +198,7 @@ function createResolver(source: Record<string, unknown>) {
   }
 
   function resolveColor(value: string, path: string, stack: string[]) {
+    if (value === "transparent") return RGBA.fromInts(0, 0, 0, 0)
     if (isHex(value)) return RGBA.fromHex(value)
     if (!value.startsWith("$")) throw new Error(`Invalid color "${value}" at "${path}"`)
     const target = value.slice(1)
@@ -189,7 +217,7 @@ function createResolver(source: Record<string, unknown>) {
 function resolvedKey(key: string) {
   if (!key.startsWith("$")) return key
   const state = key.slice(1)
-  return (ActionState.literals as readonly string[]).includes(state) ? state : key
+  return ([...ActionState.literals, ...FormfieldState.literals] as readonly string[]).includes(state) ? state : key
 }
 
 function read(source: Record<string, unknown>, path: string) {

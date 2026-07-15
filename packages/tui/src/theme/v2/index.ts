@@ -4,6 +4,8 @@ export {
   ActionVariant,
   BaseHue,
   FeedbackKind,
+  FormfieldState,
+  type FormfieldStateKey,
   HueAlias,
   HueStep,
   MarkdownDefinition,
@@ -16,6 +18,7 @@ export {
   type BackgroundDefinition,
   type DiffDefinition,
   type FileThemeDefinition,
+  type FormfieldColorDefinition,
   type HueDefinition,
   type HueOverrideDefinition,
   type MergeModeDefinition,
@@ -26,5 +29,14 @@ export {
   type ThemeTokensDefinition,
 } from "./schema"
 
-export type { Hue, HueScale, ResolvedActionState, ResolvedTheme, ResolvedThemeView, StatefulColor } from "./types"
+export type {
+  FormfieldColor,
+  Hue,
+  HueScale,
+  ResolvedActionState,
+  ResolvedFormfieldState,
+  ResolvedTheme,
+  ResolvedThemeView,
+  StatefulColor,
+} from "./types"
 export { migrateV1 } from "./v1-migrate"

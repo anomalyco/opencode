@@ -3,8 +3,8 @@ import type { HueDefinition, ThemeDefinition, ThemeFile } from "../../../src/the
 import { selectTheme, selectThemeMode } from "../../../src/theme/v2/select"
 
 const hue = {} as HueDefinition
-const light = { hue, color: { text: { default: "#111111", subdued: "#222222" } } } satisfies ThemeDefinition
-const dark = { hue, color: { text: { default: "#eeeeee", subdued: "#dddddd" } } } satisfies ThemeDefinition
+const light = { hue, text: { default: "#111111", subdued: "#222222" } } satisfies ThemeDefinition
+const dark = { hue, text: { default: "#eeeeee", subdued: "#dddddd" } } satisfies ThemeDefinition
 
 test("requires and selects independent light and dark themes", () => {
   const file = { version: 2, light, dark } satisfies ThemeFile
@@ -18,13 +18,13 @@ test("merges an expanded mode override over the other mode", () => {
   const file = {
     version: 2,
     light,
-    dark: { mergeMode: true, color: { text: { default: "#ffffff" } } },
+    dark: { mergeMode: true, text: { default: "#ffffff" } },
   } satisfies ThemeFile
   const selected = selectTheme(file, "dark")
 
   expect(selected.hue).toBeDefined()
-  expect(selected.color?.text?.default).toBe("#ffffff")
-  expect(selected.color?.text?.subdued).toBe("$color.text.default")
+  expect(selected.text?.default).toBe("#ffffff")
+  expect(selected.text?.subdued).toBe("$text.default")
 })
 
 test("rejects mutual mode merging", () => {

@@ -54,7 +54,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const data = useData()
     const client = useClient()
     const toast = useToast()
-    const theme = useTheme().theme
+    const { theme, themeV2 } = useTheme()
     const route = useRoute()
     const paths = useTuiPaths()
     const args = useArgs()
@@ -84,7 +84,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         current: undefined as string | undefined,
       })
       const colors = createMemo(() => [
-        theme.secondary,
+        themeV2.hue().accent[500],
         theme.accent,
         theme.success,
         theme.warning,

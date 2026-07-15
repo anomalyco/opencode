@@ -12,9 +12,13 @@ export type HueAlias = Schema.Schema.Type<typeof HueAlias>
 export const ActionVariant = Schema.Literals(["primary", "secondary", "destructive"])
 export type ActionVariant = Schema.Schema.Type<typeof ActionVariant>
 
-export const ActionState = Schema.Literals(["hovered", "pressed", "selected", "focused", "disabled"])
+export const ActionState = Schema.Literals(["focused", "pressed", "disabled"])
 export type ActionState = Schema.Schema.Type<typeof ActionState>
 export type ActionStateKey = `$${ActionState}`
+
+export const FormfieldState = Schema.Literals(["focused", "pressed", "disabled", "selected"])
+export type FormfieldState = Schema.Schema.Type<typeof FormfieldState>
+export type FormfieldStateKey = `$${FormfieldState}`
 
 export const FeedbackKind = Schema.Literals(["error", "warning", "success", "info"])
 export type FeedbackKind = Schema.Schema.Type<typeof FeedbackKind>
@@ -24,7 +28,11 @@ export type Mode = Schema.Schema.Type<typeof Mode>
 
 const HexColor = Schema.String.check(Schema.isPattern(/^#(?:[\da-f]{3}|[\da-f]{4}|[\da-f]{6}|[\da-f]{8})$/i))
 
-const ColorValue = Schema.Union([HexColor, Schema.TemplateLiteral(["$", Schema.NonEmptyString])])
+const ColorValue = Schema.Union([
+  HexColor,
+  Schema.Literal("transparent"),
+  Schema.TemplateLiteral(["$", Schema.NonEmptyString]),
+])
 
 const HueName = Schema.Union([BaseHue, HueAlias])
 const HueColorValue = Schema.Union([HexColor, Schema.TemplateLiteral(["$hue.", HueName, ".", HueStep])])
@@ -65,13 +73,20 @@ export type HueOverrideDefinition = Schema.Schema.Type<typeof HueOverrideDefinit
 
 const StatefulColorDefinition = Schema.Struct({
   default: Schema.optional(ColorValue),
-  $hovered: Schema.optional(ColorValue),
-  $pressed: Schema.optional(ColorValue),
-  $selected: Schema.optional(ColorValue),
   $focused: Schema.optional(ColorValue),
+  $pressed: Schema.optional(ColorValue),
   $disabled: Schema.optional(ColorValue),
 })
 export type StatefulColorDefinition = Schema.Schema.Type<typeof StatefulColorDefinition>
+
+const FormfieldColorDefinition = Schema.Struct({
+  default: Schema.optional(ColorValue),
+  $focused: Schema.optional(ColorValue),
+  $pressed: Schema.optional(ColorValue),
+  $disabled: Schema.optional(ColorValue),
+  $selected: Schema.optional(ColorValue),
+})
+export type FormfieldColorDefinition = Schema.Schema.Type<typeof FormfieldColorDefinition>
 
 const ActionColorDefinition = Schema.Struct({
   primary: Schema.optional(StatefulColorDefinition),
@@ -92,6 +107,7 @@ const TextDefinition = Schema.Struct({
   default: Schema.optional(ColorValue),
   subdued: Schema.optional(ColorValue),
   action: Schema.optional(ActionColorDefinition),
+  formfield: Schema.optional(FormfieldColorDefinition),
   feedback: Schema.optional(
     Schema.Struct({
       error: Schema.optional(TextFeedbackDefinition),
@@ -105,7 +121,14 @@ export type TextDefinition = Schema.Schema.Type<typeof TextDefinition>
 
 const BackgroundDefinition = Schema.Struct({
   default: Schema.optional(ColorValue),
+  surface: Schema.optional(
+    Schema.Struct({
+      offset: Schema.optional(ColorValue),
+      overlay: Schema.optional(ColorValue),
+    }),
+  ),
   action: Schema.optional(ActionColorDefinition),
+  formfield: Schema.optional(FormfieldColorDefinition),
   feedback: Schema.optional(
     Schema.Struct({
       error: Schema.optional(BackgroundFeedbackDefinition),
@@ -163,17 +186,13 @@ const DiffDefinition = Schema.Struct({
 export type DiffDefinition = Schema.Schema.Type<typeof DiffDefinition>
 
 const ThemeTokensDefinition = Schema.Struct({
-  color: Schema.optional(
-    Schema.Struct({
-      text: Schema.optional(TextDefinition),
-      background: Schema.optional(BackgroundDefinition),
-      border: Schema.optional(Schema.Struct({ default: Schema.optional(ColorValue) })),
-      scrollbar: Schema.optional(Schema.Struct({ default: Schema.optional(ColorValue) })),
-      diff: Schema.optional(DiffDefinition),
-      syntax: Schema.optional(SyntaxDefinition),
-      markdown: Schema.optional(MarkdownDefinition),
-    }),
-  ),
+  text: Schema.optional(TextDefinition),
+  background: Schema.optional(BackgroundDefinition),
+  border: Schema.optional(Schema.Struct({ default: Schema.optional(ColorValue) })),
+  scrollbar: Schema.optional(Schema.Struct({ default: Schema.optional(ColorValue) })),
+  diff: Schema.optional(DiffDefinition),
+  syntax: Schema.optional(SyntaxDefinition),
+  markdown: Schema.optional(MarkdownDefinition),
 })
 export type ThemeTokensDefinition = Schema.Schema.Type<typeof ThemeTokensDefinition>
 

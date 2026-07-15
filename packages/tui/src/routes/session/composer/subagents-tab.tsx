@@ -4,7 +4,7 @@ import { TextAttributes, RGBA, ScrollBoxRenderable } from "@opentui/core"
 import { useRoute, useRouteData } from "../../../context/route"
 import { useData } from "../../../context/data"
 import { useClient } from "../../../context/client"
-import { useTheme, selectedForeground } from "../../../context/theme"
+import { useTheme } from "../../../context/theme"
 import { Locale } from "../../../util/locale"
 import { Keymap } from "../../../context/keymap"
 import { useComposerTab } from "./index"
@@ -21,8 +21,8 @@ export function SubagentsTab(props: { sessionID: string }) {
   const route = useRouteData("session")
   const data = useData()
   const client = useClient()
-  const { theme } = useTheme()
-  const fg = selectedForeground(theme)
+  const { themeV2 } = useTheme()
+  const fg = themeV2.text.action.primary("focused")
   const navigate = useRoute().navigate
   const composer = useComposerTab()
   const shortcuts = Keymap.useShortcuts()
@@ -200,7 +200,7 @@ export function SubagentsTab(props: { sessionID: string }) {
         maxHeight={5}
         ref={(r: ScrollBoxRenderable) => (scroll = r)}
       >
-        <Show when={entries().length > 0} fallback={<text fg={theme.textMuted}> No subagents</text>}>
+        <Show when={entries().length > 0} fallback={<text fg={themeV2.text.subdued()}> No subagents</text>}>
           <For each={entries()}>
             {(entry, index) => {
               const active = createMemo(() => index() === selected())
@@ -213,7 +213,7 @@ export function SubagentsTab(props: { sessionID: string }) {
                   flexDirection="row"
                   paddingLeft={1}
                   paddingRight={1}
-                  backgroundColor={active() ? theme.primary : RGBA.fromInts(0, 0, 0, 0)}
+                  backgroundColor={active() ? themeV2.background.action.primary() : RGBA.fromInts(0, 0, 0, 0)}
                   onMouseOver={() => setStore("selected", index())}
                   onMouseUp={() => {
                     setStore("selected", index())
@@ -222,7 +222,7 @@ export function SubagentsTab(props: { sessionID: string }) {
                 >
                   <box flexGrow={1} minWidth={0} flexDirection="row">
                     <text
-                      fg={active() ? fg : entry.current ? theme.primary : theme.text}
+                      fg={active() ? fg : entry.current ? themeV2.background.action.primary() : themeV2.text()}
                       attributes={active() ? TextAttributes.BOLD : undefined}
                       wrapMode="none"
                     >
@@ -230,7 +230,7 @@ export function SubagentsTab(props: { sessionID: string }) {
                     </text>
                   </box>
                   <Show when={status()}>
-                    <text fg={active() ? fg : theme.textMuted} wrapMode="none">
+                    <text fg={active() ? fg : themeV2.text.subdued()} wrapMode="none">
                       {status()}
                     </text>
                   </Show>

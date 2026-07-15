@@ -1,5 +1,6 @@
 import { RGBA } from "@opentui/core"
 import type { Theme, ThemeJson } from "../index"
+import { DEFAULT_THEME } from "./defaults"
 import type { ThemeFile } from "./index"
 
 type ThemeColor = Exclude<keyof Theme, "thinkingOpacity" | "_hasSelectedListItemText">
@@ -7,109 +8,141 @@ type ThemeColor = Exclude<keyof Theme, "thinkingOpacity" | "_hasSelectedListItem
 export function migrateV1(theme: ThemeJson): ThemeFile {
   return {
     version: 2,
-    light: migrateMode(resolveV1(theme, "light")),
-    dark: migrateMode(resolveV1(theme, "dark")),
+    standalone: true,
+    light: migrateMode(resolveV1(theme, "light"), "light"),
+    dark: migrateMode(resolveV1(theme, "dark"), "dark"),
   }
 }
 
-function migrateMode(theme: Theme): ThemeFile["light"] {
+function migrateMode(theme: Theme, mode: "light" | "dark"): ThemeFile["light"] {
   const color = (key: ThemeColor) => hex(theme[key])
   const selected = hex(selectedForeground(theme, theme.primary))
   const destructive = hex(selectedForeground(theme, theme.error))
 
   return {
-    hue: { accent: accentScale(theme.accent) },
-    color: {
-      text: {
+    hue: {
+      ...DEFAULT_THEME[mode].hue,
+      accent: hueScale(theme.secondary),
+    },
+    text: {
+      default: color("text"),
+      subdued: color("textMuted"),
+      action: {
+        primary: {
+          default: color("text"),
+          $disabled: color("textMuted"),
+          $focused: selected,
+        },
+        secondary: {
+          default: "$text.default",
+          $disabled: color("textMuted"),
+        },
+        destructive: { default: destructive, $disabled: color("textMuted") },
+      },
+      formfield: {
         default: color("text"),
-        subdued: color("textMuted"),
-        action: {
-          primary: { default: selected },
-          secondary: {
-            default: color("text"),
-            $hovered: color("text"),
-            $pressed: color("text"),
-            $selected: color("text"),
-            $focused: color("text"),
-            $disabled: color("textMuted"),
-          },
-          destructive: { default: destructive },
-        },
-        feedback: {
-          error: { default: color("error") },
-          warning: { default: color("warning") },
-          success: { default: color("success") },
-          info: { default: color("info") },
-        },
+        $focused: color("primary"),
+        $pressed: color("primary"),
+        $disabled: color("textMuted"),
+        $selected: color("primary"),
       },
-      background: {
-        default: color("background"),
-        action: {
-          primary: { default: color("primary") },
-          secondary: {
-            default: color("backgroundMenu"),
-            $hovered: color("backgroundElement"),
-            $pressed: color("backgroundElement"),
-            $selected: color("backgroundMenu"),
-            $focused: color("backgroundElement"),
-            $disabled: color("backgroundMenu"),
-          },
-          destructive: { default: color("error") },
-        },
-      },
-      border: { default: color("border") },
-      scrollbar: { default: color("borderActive") },
-      diff: {
-        text: {
-          added: color("diffAdded"),
-          removed: color("diffRemoved"),
-          context: color("diffContext"),
-          hunkHeader: color("diffHunkHeader"),
-        },
-        background: {
-          added: color("diffAddedBg"),
-          removed: color("diffRemovedBg"),
-          context: color("diffContextBg"),
-        },
-        highlight: { added: color("diffHighlightAdded"), removed: color("diffHighlightRemoved") },
-        lineNumber: {
-          text: color("diffLineNumber"),
-          background: {
-            added: color("diffAddedLineNumberBg"),
-            removed: color("diffRemovedLineNumberBg"),
-          },
-        },
-      },
-      syntax: {
-        comment: color("syntaxComment"),
-        keyword: color("syntaxKeyword"),
-        function: color("syntaxFunction"),
-        variable: color("syntaxVariable"),
-        string: color("syntaxString"),
-        number: color("syntaxNumber"),
-        type: color("syntaxType"),
-        operator: color("syntaxOperator"),
-        punctuation: color("syntaxPunctuation"),
-      },
-      markdown: {
-        text: color("markdownText"),
-        heading: color("markdownHeading"),
-        link: color("markdownLink"),
-        linkText: color("markdownLinkText"),
-        code: color("markdownCode"),
-        blockQuote: color("markdownBlockQuote"),
-        emphasis: color("markdownEmph"),
-        strong: color("markdownStrong"),
-        horizontalRule: color("markdownHorizontalRule"),
-        listItem: color("markdownListItem"),
-        listEnumeration: color("markdownListEnumeration"),
-        image: color("markdownImage"),
-        imageText: color("markdownImageText"),
-        codeBlock: color("markdownCodeBlock"),
+      feedback: {
+        error: { default: color("error") },
+        warning: { default: color("warning") },
+        success: { default: color("success") },
+        info: { default: color("info") },
       },
     },
-    "@context:elevated": { color: { background: { default: color("backgroundPanel") } } },
-    "@context:overlay": { color: { background: { default: color("backgroundMenu") } } },
+    background: {
+      default: color("background"),
+      surface: {
+        offset: color("backgroundPanel"),
+        overlay: color("backgroundMenu"),
+      },
+      action: {
+        primary: { default: color("background"), $focused: color("primary") },
+        secondary: {
+          default: "$background.default",
+          $focused: color("backgroundElement"),
+          $pressed: color("backgroundElement"),
+        },
+        destructive: { default: color("error") },
+      },
+      formfield: {
+        default: "$background.default",
+      },
+      feedback: {
+        error: { default: "$background.default" },
+        warning: { default: "$background.default" },
+        success: { default: "$background.default" },
+        info: { default: "$background.default" },
+      },
+    },
+    border: { default: color("border") },
+    scrollbar: { default: color("borderActive") },
+    diff: {
+      text: {
+        added: color("diffAdded"),
+        removed: color("diffRemoved"),
+        context: color("diffContext"),
+        hunkHeader: color("diffHunkHeader"),
+      },
+      background: {
+        added: color("diffAddedBg"),
+        removed: color("diffRemovedBg"),
+        context: color("diffContextBg"),
+      },
+      highlight: { added: color("diffHighlightAdded"), removed: color("diffHighlightRemoved") },
+      lineNumber: {
+        text: color("diffLineNumber"),
+        background: {
+          added: color("diffAddedLineNumberBg"),
+          removed: color("diffRemovedLineNumberBg"),
+        },
+      },
+    },
+    syntax: {
+      comment: color("syntaxComment"),
+      keyword: color("syntaxKeyword"),
+      function: color("syntaxFunction"),
+      variable: color("syntaxVariable"),
+      string: color("syntaxString"),
+      number: color("syntaxNumber"),
+      type: color("syntaxType"),
+      operator: color("syntaxOperator"),
+      punctuation: color("syntaxPunctuation"),
+    },
+    markdown: {
+      text: color("markdownText"),
+      heading: color("markdownHeading"),
+      link: color("markdownLink"),
+      linkText: color("markdownLinkText"),
+      code: color("markdownCode"),
+      blockQuote: color("markdownBlockQuote"),
+      emphasis: color("markdownEmph"),
+      strong: color("markdownStrong"),
+      horizontalRule: color("markdownHorizontalRule"),
+      listItem: color("markdownListItem"),
+      listEnumeration: color("markdownListEnumeration"),
+      image: color("markdownImage"),
+      imageText: color("markdownImageText"),
+      codeBlock: color("markdownCodeBlock"),
+    },
+    "@context:elevated": {
+      background: {
+        default: "$background.surface.offset",
+        action: {
+          primary: {
+            default: "$background.surface.offset",
+            $focused: color("primary"),
+          },
+          secondary: {
+            default: "$background.surface.offset",
+          },
+        },
+      },
+    },
+    "@context:overlay": { background: { default: "$background.surface.overlay" } },
   }
 }
 
@@ -159,17 +192,17 @@ function selectedForeground(theme: Theme, background: RGBA) {
     : RGBA.fromInts(255, 255, 255)
 }
 
-function accentScale(accent: RGBA) {
+function hueScale(color: RGBA) {
   return {
-    100: mix(accent, 255, 0.66),
-    200: mix(accent, 255, 0.33),
-    300: hex(accent),
-    400: mix(accent, 0, 0.1),
-    500: mix(accent, 0, 0.2),
-    600: mix(accent, 0, 0.3),
-    700: mix(accent, 0, 0.4),
-    800: mix(accent, 0, 0.5),
-    900: mix(accent, 0, 0.6),
+    100: mix(color, 255, 0.8),
+    200: mix(color, 255, 0.6),
+    300: mix(color, 255, 0.4),
+    400: mix(color, 255, 0.2),
+    500: hex(color),
+    600: mix(color, 0, 0.15),
+    700: mix(color, 0, 0.3),
+    800: mix(color, 0, 0.45),
+    900: mix(color, 0, 0.6),
   }
 }
 
@@ -195,8 +228,22 @@ function hexInts(r: number, g: number, b: number, a: number) {
 function ansi(code: number) {
   if (code < 16) {
     const colors = [
-      "#000000", "#800000", "#008000", "#808000", "#000080", "#800080", "#008080", "#c0c0c0",
-      "#808080", "#ff0000", "#00ff00", "#ffff00", "#0000ff", "#ff00ff", "#00ffff", "#ffffff",
+      "#000000",
+      "#800000",
+      "#008000",
+      "#808000",
+      "#000080",
+      "#800080",
+      "#008080",
+      "#c0c0c0",
+      "#808080",
+      "#ff0000",
+      "#00ff00",
+      "#ffff00",
+      "#0000ff",
+      "#ff00ff",
+      "#00ffff",
+      "#ffffff",
     ]
     return RGBA.fromHex(colors[code] ?? "#000000")
   }

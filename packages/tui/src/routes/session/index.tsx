@@ -108,7 +108,7 @@ export function Session() {
   const paths = useTuiPaths()
   const configState = useConfig()
   const config = configState.data
-  const { theme } = useTheme()
+  const { themeV2 } = useTheme()
   const promptRef = usePromptRef()
   const session = createMemo(() => data.session.get(route.sessionID))
   const messages = () => data.session.message.list(route.sessionID)
@@ -842,8 +842,8 @@ export function Session() {
                 paddingLeft: 1,
                 visible: showScrollbar(),
                 trackOptions: {
-                  backgroundColor: theme.backgroundElement,
-                  foregroundColor: theme.border,
+                  backgroundColor: themeV2.background.action.secondary("focused"),
+                  foregroundColor: themeV2.border(),
                 },
               }}
               stickyScroll={true}
@@ -987,7 +987,7 @@ function SessionRowView(props: { row: SessionRow; message: (messageID: string) =
 }
 
 function BackgroundToolHint(props: { messages: SessionMessageInfo[] }) {
-  const { theme } = useTheme()
+  const { themeV2 } = useTheme()
   const shortcut = useCommandShortcut("session.background")
   const visible = createMemo(() => {
     const current = props.messages.findLast(
@@ -1005,8 +1005,8 @@ function BackgroundToolHint(props: { messages: SessionMessageInfo[] }) {
     <Show when={visible() && shortcut()}>
       {(value) => (
         <box marginTop={1} paddingLeft={3} flexShrink={0}>
-          <text fg={theme.textMuted}>
-            Press <span style={{ fg: theme.text }}>{value()}</span> to move running work to the background
+          <text fg={themeV2.text.subdued()}>
+            Press <span style={{ fg: themeV2.text() }}>{value()}</span> to move running work to the background
           </text>
         </box>
       )}
@@ -1076,7 +1076,7 @@ function SessionReasoningGroupView(props: {
   message: (messageID: string) => SessionMessageInfo | undefined
 }) {
   const ctx = use()
-  const { theme, syntax } = useTheme()
+  const { themeV2, syntax } = useTheme()
   const renderer = useRenderer()
   const [expanded, setExpanded] = createSignal(false)
   const [hover, setHover] = createSignal(false)
@@ -1116,10 +1116,15 @@ function SessionReasoningGroupView(props: {
             icon={expanded() ? "-" : "+"}
             color={
               !props.completed
-                ? theme.text
+                ? themeV2.text()
                 : hover() || expanded()
-                  ? theme.warning
-                  : RGBA.fromValues(theme.warning.r, theme.warning.g, theme.warning.b, theme.thinkingOpacity)
+                  ? themeV2.text.feedback.warning()
+                  : RGBA.fromValues(
+                      themeV2.text.feedback.warning().r,
+                      themeV2.text.feedback.warning().g,
+                      themeV2.text.feedback.warning().b,
+                      0.6,
+                    )
             }
             complete={props.completed}
             pending={latest() ? `Thinking: ${latest()}` : "Thinking"}
@@ -1160,7 +1165,7 @@ function SessionReasoningGroupView(props: {
                         <box
                           border={["left"]}
                           customBorderChars={SplitBorder.customBorderChars}
-                          borderColor={theme.backgroundElement}
+                          borderColor={themeV2.background.action.secondary("focused")}
                           paddingLeft={1}
                         >
                           <code
@@ -1170,7 +1175,7 @@ function SessionReasoningGroupView(props: {
                             syntaxStyle={syntax()}
                             content={content()}
                             conceal={ctx.markdownMode() === "rendered"}
-                            fg={theme.textMuted}
+                            fg={themeV2.text.subdued()}
                           />
                         </box>
                       </box>
@@ -1192,7 +1197,7 @@ function SessionGroupView(props: {
   completed: boolean
   message: (messageID: string) => SessionMessageInfo | undefined
 }) {
-  const { theme } = useTheme()
+  const { themeV2 } = useTheme()
   const ctx = use()
   const renderer = useRenderer()
   const [expanded, setExpanded] = createSignal(false)
@@ -1228,7 +1233,7 @@ function SessionGroupView(props: {
         <Show when={grouped().length > 0}>
           <InlineToolRow
             icon={props.completed ? "→" : "✱"}
-            color={hover() ? theme.text : theme.textMuted}
+            color={hover() ? themeV2.text() : themeV2.text.subdued()}
             complete={props.completed}
             pending={label()}
             spinner={!props.completed}
@@ -1254,7 +1259,7 @@ function SessionGroupView(props: {
 function AssistantFooter(props: { message: SessionMessageAssistant }) {
   const ctx = use()
   const local = useLocal()
-  const { theme } = useTheme()
+  const { themeV2 } = useTheme().contextual("elevated")
   const model = createMemo(
     () =>
       ctx
@@ -1274,25 +1279,25 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
           paddingTop={1}
           paddingBottom={1}
           paddingLeft={2}
-          backgroundColor={theme.backgroundPanel}
+          backgroundColor={themeV2.background()}
           customBorderChars={SplitBorder.customBorderChars}
-          borderColor={theme.error}
+          borderColor={themeV2.text.feedback.error()}
         >
-          <text fg={theme.textMuted}>{errorMessage(props.message.error)}</text>
+          <text fg={themeV2.text.subdued()}>{errorMessage(props.message.error)}</text>
         </box>
       </Show>
       <AssistantRetry retry={props.message.retry} />
       <box paddingLeft={3} marginTop={props.message.error && !interrupted() ? 1 : 0}>
         <text>
-          <span style={{ fg: props.message.error ? theme.textMuted : local.agent.color(props.message.agent) }}>
+          <span style={{ fg: props.message.error ? themeV2.text.subdued() : local.agent.color(props.message.agent) }}>
             {Locale.titlecase(props.message.agent)}
           </span>
-          <span style={{ fg: theme.textMuted }}> · {model()}</span>
+          <span style={{ fg: themeV2.text.subdued() }}> · {model()}</span>
           <Show when={duration()}>
-            <span style={{ fg: theme.textMuted }}> · {Locale.duration(duration())}</span>
+            <span style={{ fg: themeV2.text.subdued() }}> · {Locale.duration(duration())}</span>
           </Show>
           <Show when={interrupted()}>
-            <span style={{ fg: theme.textMuted }}> · interrupted</span>
+            <span style={{ fg: themeV2.text.subdued() }}> · interrupted</span>
           </Show>
         </text>
       </box>
@@ -1302,7 +1307,7 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
 
 function SessionSwitchMessageV2(props: { message: SessionMessageInfo }) {
   const ctx = use()
-  const { theme } = useTheme()
+  const { themeV2 } = useTheme()
   const text = () => {
     if (props.message.type === "agent-switched") return `Switched agent to ${props.message.agent}`
     if (props.message.type === "model-switched")
@@ -1311,14 +1316,14 @@ function SessionSwitchMessageV2(props: { message: SessionMessageInfo }) {
   }
   return (
     <box paddingLeft={3}>
-      <text fg={theme.textMuted}>{text()}</text>
+      <text fg={themeV2.text.subdued()}>{text()}</text>
     </box>
   )
 }
 
 function SessionNoticeMessageV2(props: { message: SessionMessageInfo }) {
   const ctx = use()
-  const { theme } = useTheme()
+  const { themeV2 } = useTheme()
   const metadata = () => (props.message.type === "synthetic" ? props.message.metadata : undefined)
   const source = () => stringValue(metadata()?.source)
   const completion = () => source() === "subagent" || source() === "shell"
@@ -1339,15 +1344,15 @@ function SessionNoticeMessageV2(props: { message: SessionMessageInfo }) {
   const suffix = () =>
     Locale.truncateWidth(` · ${description()}`, Math.max(0, ctx.width - 3 - Bun.stringWidth(heading())))
   const color = () => {
-    if (state() === "error") return theme.error
-    if (state() === "cancelled") return theme.warning
-    return theme.info
+    if (state() === "error") return themeV2.text.feedback.error()
+    if (state() === "cancelled") return themeV2.text.feedback.warning()
+    return themeV2.text.feedback.info()
   }
   return (
     <Show
       when={completion()}
       fallback={
-        <InlineToolRow icon="◈" color={theme.textMuted} pending="Notice" complete={true}>
+        <InlineToolRow icon="◈" color={themeV2.text.subdued()} pending="Notice" complete={true}>
           {text()}
         </InlineToolRow>
       }
@@ -1355,7 +1360,7 @@ function SessionNoticeMessageV2(props: { message: SessionMessageInfo }) {
       <box marginLeft={3}>
         <text wrapMode="none">
           <span style={{ fg: color() }}>{heading()}</span>
-          <span style={{ fg: theme.textMuted }}>{suffix()}</span>
+          <span style={{ fg: themeV2.text.subdued() }}>{suffix()}</span>
         </text>
       </box>
     </Show>
@@ -1363,9 +1368,9 @@ function SessionNoticeMessageV2(props: { message: SessionMessageInfo }) {
 }
 
 function SessionSkillMessage(props: { message: Extract<SessionMessageInfo, { type: "skill" }> }) {
-  const { theme } = useTheme()
+  const { themeV2 } = useTheme()
   return (
-    <InlineToolRow icon="→" color={theme.textMuted} pending="Skill" complete={true}>
+    <InlineToolRow icon="→" color={themeV2.text.subdued()} pending="Skill" complete={true}>
       Skill {props.message.name}
     </InlineToolRow>
   )
@@ -1373,11 +1378,11 @@ function SessionSkillMessage(props: { message: Extract<SessionMessageInfo, { typ
 
 function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type: "compaction" }> }) {
   const ctx = use()
-  const { theme, syntax } = useTheme()
+  const { themeV2, syntax } = useTheme()
   const status = () => props.message.status
   const text = () => (props.message.status === "failed" ? props.message.error.message : props.message.summary)
   const content = createMemo(() => text().trim())
-  const color = () => (status() === "failed" ? theme.error : theme.textMuted)
+  const color = () => (status() === "failed" ? themeV2.text.feedback.error() : themeV2.text.subdued())
   return (
     <box>
       <box flexDirection="row" alignItems="center">
@@ -1406,8 +1411,8 @@ function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type:
             content={content()}
             tableOptions={{ style: "grid" }}
             conceal={ctx.markdownMode() === "rendered"}
-            fg={theme.markdownText}
-            bg={theme.background}
+            fg={themeV2.markdown()}
+            bg={themeV2.background()}
           />
         </box>
       </Show>
@@ -1416,15 +1421,15 @@ function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type:
 }
 
 function CompactionQueued() {
-  const { theme } = useTheme()
+  const { themeV2 } = useTheme()
   return (
     <box flexDirection="row" alignItems="center">
-      <box border={["top"]} borderColor={theme.border} flexGrow={1} />
+      <box border={["top"]} borderColor={themeV2.border()} flexGrow={1} />
       <box flexDirection="row" gap={1} paddingLeft={1} paddingRight={1}>
-        <text fg={theme.textMuted}>◇</text>
-        <text fg={theme.textMuted}>Compaction queued</text>
+        <text fg={themeV2.text.subdued()}>◇</text>
+        <text fg={themeV2.text.subdued()}>Compaction queued</text>
       </box>
-      <box border={["top"]} borderColor={theme.border} flexGrow={1} />
+      <box border={["top"]} borderColor={themeV2.border()} flexGrow={1} />
     </box>
   )
 }
@@ -1445,7 +1450,7 @@ function RevertMessage(props: {
   }>
 }) {
   const ctx = use()
-  const { theme } = useTheme()
+  const { themeV2 } = useTheme().contextual("elevated")
   const route = useRouteData("session")
   const client = useClient()
   const toast = useToast()
@@ -1470,15 +1475,15 @@ function RevertMessage(props: {
       marginTop={1}
       border={["left"]}
       customBorderChars={SplitBorder.customBorderChars}
-      borderColor={theme.backgroundPanel}
+      borderColor={themeV2.background()}
     >
       <box
         paddingTop={1}
         paddingBottom={1}
         paddingLeft={2}
-        backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
+        backgroundColor={hover() ? themeV2.background.action.secondary("focused") : themeV2.background()}
       >
-        <text fg={theme.textMuted}>
+        <text fg={themeV2.text.subdued()}>
           {props.count} message{props.count === 1 ? "" : "s"} reverted
         </text>
         <Show when={props.files.length > 0}>
@@ -1486,7 +1491,7 @@ function RevertMessage(props: {
             <For each={props.files}>
               {(file) => (
                 <box flexDirection="row" gap={1} flexShrink={0}>
-                  <text fg={theme.textMuted}>{statusLabel(file.status)}</text>
+                  <text fg={themeV2.text.subdued()}>{statusLabel(file.status)}</text>
                   <FilePath
                     value={file.file}
                     maxWidth={Math.max(
@@ -1496,21 +1501,21 @@ function RevertMessage(props: {
                         (file.additions > 0 ? Bun.stringWidth(`+${file.additions}`) + 1 : 0) -
                         (file.deletions > 0 ? Bun.stringWidth(`-${file.deletions}`) + 1 : 0),
                     )}
-                    fg={theme.text}
+                    fg={themeV2.text()}
                   />
                   <Show when={file.additions > 0}>
-                    <text fg={theme.diffAdded}>+{file.additions}</text>
+                    <text fg={themeV2.diff.text.added()}>+{file.additions}</text>
                   </Show>
                   <Show when={file.deletions > 0}>
-                    <text fg={theme.diffRemoved}>-{file.deletions}</text>
+                    <text fg={themeV2.diff.text.removed()}>-{file.deletions}</text>
                   </Show>
                 </box>
               )}
             </For>
           </box>
         </Show>
-        <text fg={theme.textMuted}>
-          <span style={{ fg: theme.text }}>{redoKey()}</span> or /redo to restore
+        <text fg={themeV2.text.subdued()}>
+          <span style={{ fg: themeV2.text() }}>{redoKey()}</span> or /redo to restore
         </text>
       </box>
     </box>
@@ -1518,7 +1523,7 @@ function RevertMessage(props: {
 }
 
 function ShellMessage(props: { message: Extract<SessionMessageInfo, { type: "shell" }> }) {
-  const { theme } = useTheme()
+  const { themeV2 } = useTheme().contextual("elevated")
   const output = createMemo(() => stripAnsi(props.message.output?.output.trim() ?? ""))
 
   return (
@@ -1528,13 +1533,13 @@ function ShellMessage(props: { message: Extract<SessionMessageInfo, { type: "she
       paddingBottom={1}
       paddingLeft={2}
       gap={1}
-      backgroundColor={theme.backgroundPanel}
+      backgroundColor={themeV2.background()}
       customBorderChars={SplitBorder.customBorderChars}
-      borderColor={theme.background}
+      borderColor={themeV2.background()}
     >
-      <text fg={theme.text}>$ {props.message.command}</text>
+      <text fg={themeV2.text()}>$ {props.message.command}</text>
       <Show when={output()}>
-        <text fg={theme.textMuted}>{output()}</text>
+        <text fg={themeV2.text.subdued()}>{output()}</text>
       </Show>
     </box>
   )
@@ -1545,7 +1550,7 @@ function UserMessage(props: { message: SessionMessageUser }) {
   const data = useData()
   const local = useLocal()
   const files = createMemo(() => props.message.files ?? [])
-  const { theme } = useTheme()
+  const { themeV2 } = useTheme().contextual("elevated")
   const [hover, setHover] = createSignal(false)
   const color = createMemo(() => local.agent.color(data.session.get(ctx.sessionID)?.agent ?? "build"))
   const queued = createMemo(
@@ -1560,7 +1565,7 @@ function UserMessage(props: { message: SessionMessageUser }) {
       <box
         id={props.message.id}
         border={["left"]}
-        borderColor={queued() ? theme.border : color()}
+        borderColor={queued() ? themeV2.border() : color()}
         customBorderChars={SplitBorder.customBorderChars}
       >
         <box
@@ -1583,19 +1588,27 @@ function UserMessage(props: { message: SessionMessageUser }) {
           paddingTop={1}
           paddingBottom={1}
           paddingLeft={2}
-          backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
+          backgroundColor={hover() ? themeV2.background.action.secondary("focused") : themeV2.background()}
           flexShrink={0}
         >
-          <text fg={theme.text}>{props.message.text}</text>
+          <text fg={themeV2.text()}>{props.message.text}</text>
           <Show when={files().length}>
             <box flexDirection="row" paddingTop={1} gap={1} flexWrap="wrap">
               <For each={files()}>
                 {(file) => {
                   const label = file.mime === "application/x-directory" ? "dir" : "file"
                   return (
-                    <text fg={theme.text}>
-                      <span style={{ bg: theme.secondary, fg: theme.background, bold: true }}>{` ${label} `}</span>
-                      <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}>
+                    <text fg={themeV2.text()}>
+                      <span
+                        style={{
+                          bg: themeV2.hue().accent[500],
+                          fg: themeV2.background(),
+                          bold: true,
+                        }}
+                      >
+                        {` ${label} `}
+                      </span>
+                      <span style={{ bg: themeV2.background.action.secondary("focused"), fg: themeV2.text.subdued() }}>
                         {" "}
                         {file.name ?? (file.source.type === "uri" ? file.source.uri : "attachment")}{" "}
                       </span>
@@ -1614,7 +1627,7 @@ function UserMessage(props: { message: SessionMessageUser }) {
 function AssistantMessage(props: { message: SessionMessageAssistant; last: boolean }) {
   const ctx = use()
   const local = useLocal()
-  const { theme } = useTheme()
+  const { themeV2 } = useTheme().contextual("elevated")
   const model = createMemo(
     () =>
       ctx
@@ -1700,11 +1713,11 @@ function AssistantMessage(props: { message: SessionMessageAssistant; last: boole
           paddingTop={1}
           paddingBottom={1}
           paddingLeft={2}
-          backgroundColor={theme.backgroundPanel}
+          backgroundColor={themeV2.background()}
           customBorderChars={SplitBorder.customBorderChars}
-          borderColor={theme.error}
+          borderColor={themeV2.text.feedback.error()}
         >
-          <text fg={theme.textMuted}>{errorMessage(props.message.error)}</text>
+          <text fg={themeV2.text.subdued()}>{errorMessage(props.message.error)}</text>
         </box>
       </Show>
       <AssistantRetry retry={props.message.retry} />
@@ -1712,12 +1725,12 @@ function AssistantMessage(props: { message: SessionMessageAssistant; last: boole
         <Match when={props.last || final() || props.message.error}>
           <box paddingLeft={3}>
             <text>
-              <span style={{ fg: props.message.error ? theme.textMuted : local.agent.color(props.message.agent) }}>
+              <span style={{ fg: props.message.error ? themeV2.text.subdued() : local.agent.color(props.message.agent) }}>
                 {Locale.titlecase(props.message.agent)}
               </span>
-              <span style={{ fg: theme.textMuted }}> · {model()}</span>
+              <span style={{ fg: themeV2.text.subdued() }}> · {model()}</span>
               <Show when={duration()}>
-                <span style={{ fg: theme.textMuted }}> · {Locale.duration(duration())}</span>
+                <span style={{ fg: themeV2.text.subdued() }}> · {Locale.duration(duration())}</span>
               </Show>
             </text>
           </box>
@@ -1728,12 +1741,12 @@ function AssistantMessage(props: { message: SessionMessageAssistant; last: boole
 }
 
 function AssistantRetry(props: { retry: SessionMessageAssistant["retry"] }) {
-  const { theme } = useTheme()
+  const { themeV2 } = useTheme()
   return (
     <Show when={props.retry}>
       {(retry) => (
         <box paddingLeft={3} marginTop={1}>
-          <text fg={theme.textMuted}>
+          <text fg={themeV2.text.subdued()}>
             Retry attempt {retry().attempt} scheduled: {retry().error.message} [{retry().error.type}]
           </text>
         </box>
@@ -1743,7 +1756,7 @@ function AssistantRetry(props: { retry: SessionMessageAssistant["retry"] }) {
 }
 
 function ExplorationSummary(props: { parts: SessionMessageAssistantTool[]; active: boolean }) {
-  const { theme } = useTheme()
+  const { themeV2 } = useTheme()
   const pathFormatter = usePathFormatter()
   const label = (part: SessionMessageAssistantTool) => {
     const input = typeof part.state.input === "string" ? {} : part.state.input
@@ -1756,7 +1769,7 @@ function ExplorationSummary(props: { parts: SessionMessageAssistantTool[]; activ
     <box flexDirection="column">
       <InlineToolRow
         icon="✱"
-        color={theme.textMuted}
+        color={themeV2.text.subdued()}
         complete={!props.active}
         pending="Exploring"
         spinner={props.active}
@@ -1766,7 +1779,7 @@ function ExplorationSummary(props: { parts: SessionMessageAssistantTool[]; activ
       <For each={props.parts}>
         {(part, index) => (
           <box paddingLeft={5}>
-            <text fg={part.state.status === "error" ? theme.error : theme.textMuted}>
+            <text fg={part.state.status === "error" ? themeV2.text.feedback.error() : themeV2.text.subdued()}>
               {index() === props.parts.length - 1 ? "└" : "├"} {label(part)}
             </text>
           </box>
@@ -1783,7 +1796,7 @@ function ReasoningPart(props: {
   part: SessionMessageAssistantReasoning
   message: SessionMessageAssistant
 }) {
-  const { theme, syntax } = useTheme()
+  const { themeV2, syntax } = useTheme()
   const ctx = use()
   // Collapsed by default in hide mode: a single line throughout, so the
   // layout never shifts. Click to open the full markdown block, click to close.
@@ -1811,7 +1824,7 @@ function ReasoningPart(props: {
         <box
           border={!inMinimal() || expanded() ? ["left"] : undefined}
           customBorderChars={SplitBorder.customBorderChars}
-          borderColor={theme.backgroundElement}
+          borderColor={themeV2.background.action.secondary("focused")}
           paddingLeft={!inMinimal() || expanded() ? 1 : 0}
         >
           <box onMouseUp={toggle}>
@@ -1829,7 +1842,7 @@ function ReasoningPart(props: {
             <box
               border={["left"]}
               customBorderChars={SplitBorder.customBorderChars}
-              borderColor={theme.backgroundElement}
+              borderColor={themeV2.background.action.secondary("focused")}
               paddingLeft={inMinimal() ? 3 : 1}
             >
               <code
@@ -1839,7 +1852,7 @@ function ReasoningPart(props: {
                 syntaxStyle={syntax()}
                 content={content()}
                 conceal={ctx.markdownMode() === "rendered"}
-                fg={theme.textMuted}
+                fg={themeV2.text.subdued()}
               />
             </box>
           </box>
@@ -1861,11 +1874,16 @@ function ReasoningHeader(props: {
   title: string | null
   duration?: string
 }) {
-  const { theme } = useTheme()
+  const { themeV2 } = useTheme()
   const fg = () =>
     props.open
-      ? RGBA.fromValues(theme.warning.r, theme.warning.g, theme.warning.b, theme.thinkingOpacity)
-      : theme.warning
+      ? RGBA.fromValues(
+          themeV2.text.feedback.warning().r,
+          themeV2.text.feedback.warning().g,
+          themeV2.text.feedback.warning().b,
+          0.6,
+        )
+      : themeV2.text.feedback.warning()
 
   return (
     <Switch>
@@ -1900,7 +1918,7 @@ function ReasoningHeader(props: {
 
 function TextPart(props: { last: boolean; part: SessionMessageAssistantText }) {
   const ctx = use()
-  const { theme, syntax } = useTheme()
+  const { themeV2, syntax } = useTheme()
   return (
     <Show when={props.part.text.trim()}>
       <box paddingLeft={3} flexShrink={0}>
@@ -1911,8 +1929,8 @@ function TextPart(props: { last: boolean; part: SessionMessageAssistantText }) {
           content={props.part.text.trim()}
           tableOptions={{ style: "grid" }}
           conceal={ctx.markdownMode() === "rendered"}
-          fg={theme.markdownText}
-          bg={theme.background}
+          fg={themeV2.markdown()}
+          bg={themeV2.background()}
         />
       </box>
     </Show>
@@ -2001,7 +2019,7 @@ type ToolProps = {
   part: SessionMessageAssistantTool
 }
 function GenericTool(props: ToolProps) {
-  const { theme, syntax } = useTheme()
+  const { themeV2, syntax } = useTheme()
   const output = createMemo(() => props.output?.trim() ?? "")
   const args = createMemo(() => JSON.stringify(props.input, null, 2))
   const [expanded, setExpanded] = createSignal(false)
@@ -2019,7 +2037,7 @@ function GenericTool(props: ToolProps) {
           <Show when={Object.keys(props.input).length > 0}>
             <box gap={1}>
               <text>
-                <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}> Input </span>
+                <span style={{ bg: themeV2.background.action.secondary("focused"), fg: themeV2.text.subdued() }}> Input </span>
               </text>
               <box paddingLeft={1}>
                 <code
@@ -2028,7 +2046,7 @@ function GenericTool(props: ToolProps) {
                   syntaxStyle={syntax()}
                   conceal={false}
                   drawUnstyledText={false}
-                  fg={theme.text}
+                  fg={themeV2.text()}
                 />
               </box>
             </box>
@@ -2037,10 +2055,10 @@ function GenericTool(props: ToolProps) {
             {(value) => (
               <box gap={1}>
                 <text>
-                  <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}> Output </span>
+                  <span style={{ bg: themeV2.background.action.secondary("focused"), fg: themeV2.text.subdued() }}> Output </span>
                 </text>
                 <box paddingLeft={1}>
-                  <text fg={theme.text} wrapMode="word">
+                  <text fg={themeV2.text()} wrapMode="word">
                     {value()}
                   </text>
                 </box>
@@ -2066,7 +2084,7 @@ function InlineTool(props: {
   part: SessionMessageAssistantTool
   onClick?: () => void
 }) {
-  const { theme } = useTheme()
+  const { themeV2 } = useTheme()
   const ctx = use()
   const data = useData()
   const renderer = useRenderer()
@@ -2092,10 +2110,10 @@ function InlineTool(props: {
   const clickable = createMemo(() => Boolean(props.onClick || failed()))
   const fg = createMemo(() => {
     if (props.color) return props.color
-    if (permission()) return theme.warning
-    if (failed()) return theme.error
-    if (hover() && props.onClick) return theme.text
-    return theme.textMuted
+    if (permission()) return themeV2.text.feedback.warning()
+    if (failed()) return themeV2.text.feedback.error()
+    if (hover() && props.onClick) return themeV2.text()
+    return themeV2.text.subdued()
   })
 
   return (
@@ -2103,7 +2121,7 @@ function InlineTool(props: {
       icon={props.icon}
       iconColor={props.iconColor}
       color={fg()}
-      errorColor={theme.error}
+      errorColor={themeV2.text.feedback.error()}
       failed={failed()}
       denied={Boolean(denied())}
       error={error()}
@@ -2225,9 +2243,9 @@ function InlineToolLabel(props: { color?: RGBA; denied?: boolean; status: JSX.El
 }
 
 function StatusBadge(props: { children: string }) {
-  const { theme } = useTheme()
+  const { themeV2 } = useTheme()
   return (
-    <text flexShrink={0} bg={theme.backgroundElement} fg={theme.textMuted}>
+    <text flexShrink={0} bg={themeV2.background.action.secondary("focused")} fg={themeV2.text.subdued()}>
       {" "}
       {props.children}{" "}
     </text>
@@ -2242,7 +2260,7 @@ function BlockTool(props: {
   part?: SessionMessageAssistantTool
   spinner?: boolean
 }) {
-  const { theme } = useTheme()
+  const { themeV2 } = useTheme().contextual("elevated")
   const ctx = use()
   const data = useData()
   const renderer = useRenderer()
@@ -2260,9 +2278,11 @@ function BlockTool(props: {
       paddingBottom={1}
       paddingLeft={2}
       gap={1}
-      backgroundColor={hover() ? theme.backgroundMenu : theme.backgroundPanel}
+      backgroundColor={
+        hover() ? themeV2.background.action.secondary() : themeV2.background()
+      }
       customBorderChars={SplitBorder.customBorderChars}
-      borderColor={theme.background}
+      borderColor={themeV2.background()}
       onMouseOver={() => props.onClick && setHover(true)}
       onMouseOut={() => setHover(false)}
       onMouseUp={() => {
@@ -2277,9 +2297,9 @@ function BlockTool(props: {
             {(title) => (
               <Show
                 when={props.spinner}
-                fallback={<text fg={permission() ? theme.warning : theme.textMuted}>{title()}</text>}
+                fallback={<text fg={permission() ? themeV2.text.feedback.warning() : themeV2.text.subdued()}>{title()}</text>}
               >
-                <Spinner color={permission() ? theme.warning : theme.textMuted}>{title().replace(/^# /, "")}</Spinner>
+                <Spinner color={permission() ? themeV2.text.feedback.warning() : themeV2.text.subdued()}>{title().replace(/^# /, "")}</Spinner>
               </Show>
             )}
           </Show>
@@ -2290,33 +2310,33 @@ function BlockTool(props: {
             <Show
               when={props.spinner}
               fallback={
-                <text flexShrink={0} fg={permission() ? theme.warning : theme.textMuted}>
+                <text flexShrink={0} fg={permission() ? themeV2.text.feedback.warning() : themeV2.text.subdued()}>
                   {path().label}
                 </text>
               }
             >
-              <Spinner color={permission() ? theme.warning : theme.textMuted}>
+              <Spinner color={permission() ? themeV2.text.feedback.warning() : themeV2.text.subdued()}>
                 {path().label.replace(/^# /, "")}
               </Spinner>
             </Show>
             <FilePath
               value={path().value}
               maxWidth={Math.max(2, ctx.width - 4 - Bun.stringWidth(path().label) - (props.spinner ? 2 : 0))}
-              fg={permission() ? theme.warning : theme.textMuted}
+              fg={permission() ? themeV2.text.feedback.warning() : themeV2.text.subdued()}
             />
           </box>
         )}
       </Show>
       {props.children}
       <Show when={error()}>
-        <text fg={theme.error}>{error()}</text>
+        <text fg={themeV2.text.feedback.error()}>{error()}</text>
       </Show>
     </box>
   )
 }
 
 function Shell(props: ToolProps) {
-  const { theme } = useTheme()
+  const { themeV2 } = useTheme()
   const ctx = use()
   const client = useClient()
   const data = useData()
@@ -2324,7 +2344,7 @@ function Shell(props: ToolProps) {
     const request = data.session.permission.list(ctx.sessionID)?.[0]
     return request?.source?.type === "tool" && request.source.callID === props.part.id
   })
-  const color = createMemo(() => (permission() ? theme.warning : theme.text))
+  const color = createMemo(() => (permission() ? themeV2.text.feedback.warning() : themeV2.text()))
   const shellID = createMemo(() => stringValue(props.metadata.shellID))
   const backgroundRunning = createMemo(() => {
     const id = shellID()
@@ -2386,7 +2406,7 @@ function Shell(props: ToolProps) {
             isRunning() || props.part.state.status === "streaming" ? (
               <Spinner color={color()}>Writing command...</Spinner>
             ) : (
-              <text fg={theme.textMuted}>Writing command...</text>
+              <text fg={themeV2.text.subdued()}>Writing command...</text>
             )
           }
         >
@@ -2394,14 +2414,14 @@ function Shell(props: ToolProps) {
             when={isRunning()}
             fallback={
               <text>
-                <span style={{ fg: theme.text }}>{limited().slice(0, input().length)}</span>
-                <span style={{ fg: theme.textMuted }}>{limited().slice(input().length)}</span>
+                <span style={{ fg: themeV2.text() }}>{limited().slice(0, input().length)}</span>
+                <span style={{ fg: themeV2.text.subdued() }}>{limited().slice(input().length)}</span>
               </text>
             }
           >
             <Spinner color={color()}>
-              <span style={{ fg: theme.text }}>{limited().slice(0, input().length)}</span>
-              <span style={{ fg: theme.textMuted }}>{limited().slice(input().length)}</span>
+              <span style={{ fg: themeV2.text() }}>{limited().slice(0, input().length)}</span>
+              <span style={{ fg: themeV2.text.subdued() }}>{limited().slice(input().length)}</span>
             </Spinner>
           </Show>
         </Show>
@@ -2414,7 +2434,7 @@ function Shell(props: ToolProps) {
 }
 
 function Write(props: ToolProps) {
-  const { theme, syntax } = useTheme()
+  const { themeV2, syntax } = useTheme()
   const pathFormatter = usePathFormatter()
   const code = createMemo(() => {
     return stringValue(props.input.content) ?? ""
@@ -2427,10 +2447,10 @@ function Write(props: ToolProps) {
           path={{ label: "# Wrote", value: pathFormatter.format(stringValue(props.input.path)) }}
           part={props.part}
         >
-          <line_number fg={theme.textMuted} minWidth={3} paddingRight={1}>
+          <line_number fg={themeV2.text.subdued()} minWidth={3} paddingRight={1}>
             <code
               conceal={false}
-              fg={theme.text}
+              fg={themeV2.text()}
               filetype={filetype(stringValue(props.input.path))}
               syntaxStyle={syntax()}
               content={code()}
@@ -2462,7 +2482,7 @@ function Glob(props: ToolProps) {
 }
 
 function Read(props: ToolProps) {
-  const { theme } = useTheme()
+  const { themeV2 } = useTheme()
   const pathFormatter = usePathFormatter()
   const isRunning = createMemo(() => props.part.state.status === "running")
   const loaded = createMemo(() => {
@@ -2485,7 +2505,7 @@ function Read(props: ToolProps) {
       <For each={loaded()}>
         {(filepath) => (
           <box paddingLeft={3}>
-            <text paddingLeft={3} fg={theme.textMuted}>
+            <text paddingLeft={3} fg={themeV2.text.subdued()}>
               ↳ Loaded {pathFormatter.format(filepath)}
             </text>
           </box>
@@ -2579,7 +2599,7 @@ function executeCalls(value: unknown): ExecuteCall[] {
 // The `execute` tool streams child tool calls through metadata, not a child session like Task.
 function Execute(props: ToolProps) {
   const ctx = use()
-  const { theme } = useTheme()
+  const { themeV2 } = useTheme()
   const isLoading = createMemo(() => props.part.state.status === "streaming" || props.part.state.status === "running")
   const calls = createMemo(() => executeCalls(props.metadata.toolCalls))
   const output = createMemo(() => stripAnsi(props.output?.trim() ?? ""))
@@ -2599,7 +2619,7 @@ function Execute(props: ToolProps) {
     <>
       <InlineTool
         icon={hasRuntimeError() ? "✗" : props.part.state.status === "completed" ? "✓" : "│"}
-        color={hasRuntimeError() ? theme.error : undefined}
+        color={hasRuntimeError() ? themeV2.text.feedback.error() : undefined}
         spinner={isLoading()}
         pending="execute"
         complete={true}
@@ -2611,7 +2631,7 @@ function Execute(props: ToolProps) {
         <box paddingLeft={3}>
           <For each={outputPreview().split("\n")}>
             {(line, index) => (
-              <text paddingLeft={3} fg={theme.error}>
+              <text paddingLeft={3} fg={themeV2.text.feedback.error()}>
                 {index() === 0 ? "↳ " : "  "}
                 {line}
               </text>
@@ -2625,7 +2645,7 @@ function Execute(props: ToolProps) {
 
 function Edit(props: ToolProps) {
   const ctx = use()
-  const { theme, syntax } = useTheme()
+  const { themeV2, syntax } = useTheme()
   const pathFormatter = usePathFormatter()
 
   const view = createMemo(() => {
@@ -2653,16 +2673,16 @@ function Edit(props: ToolProps) {
                 showLineNumbers={true}
                 width="100%"
                 wrapMode={ctx.diffWrapMode()}
-                fg={theme.text}
-                addedBg={theme.diffAddedBg}
-                removedBg={theme.diffRemovedBg}
-                contextBg={theme.diffContextBg}
-                addedSignColor={theme.diffHighlightAdded}
-                removedSignColor={theme.diffHighlightRemoved}
-                lineNumberFg={theme.diffLineNumber}
-                lineNumberBg={theme.diffContextBg}
-                addedLineNumberBg={theme.diffAddedLineNumberBg}
-                removedLineNumberBg={theme.diffRemovedLineNumberBg}
+                fg={themeV2.text()}
+                addedBg={themeV2.diff.background.added()}
+                removedBg={themeV2.diff.background.removed()}
+                contextBg={themeV2.diff.background.context()}
+                addedSignColor={themeV2.diff.highlight.added()}
+                removedSignColor={themeV2.diff.highlight.removed()}
+                lineNumberFg={themeV2.diff.lineNumber.text()}
+                lineNumberBg={themeV2.diff.background.context()}
+                addedLineNumberBg={themeV2.diff.lineNumber.background.added()}
+                removedLineNumberBg={themeV2.diff.lineNumber.background.removed()}
               />
             </box>
             <Diagnostics diagnostics={props.metadata.diagnostics} filePath={stringValue(props.input.path) ?? ""} />
@@ -2687,7 +2707,7 @@ function Edit(props: ToolProps) {
 
 function ApplyPatch(props: ToolProps) {
   const ctx = use()
-  const { theme, syntax } = useTheme()
+  const { themeV2, syntax } = useTheme()
   const pathFormatter = usePathFormatter()
   const files = createMemo(() => parseApplyPatchFiles(props.metadata.files))
   const targets = createMemo(() => {
@@ -2727,7 +2747,7 @@ function ApplyPatch(props: ToolProps) {
                 <Show
                   when={file.type !== "delete"}
                   fallback={
-                    <text fg={theme.diffRemoved}>
+                    <text fg={themeV2.diff.text.removed()}>
                       -{file.deletions} line{file.deletions !== 1 ? "s" : ""}
                     </text>
                   }
@@ -2741,16 +2761,16 @@ function ApplyPatch(props: ToolProps) {
                       showLineNumbers={true}
                       width="100%"
                       wrapMode={ctx.diffWrapMode()}
-                      fg={theme.text}
-                      addedBg={theme.diffAddedBg}
-                      removedBg={theme.diffRemovedBg}
-                      contextBg={theme.diffContextBg}
-                      addedSignColor={theme.diffHighlightAdded}
-                      removedSignColor={theme.diffHighlightRemoved}
-                      lineNumberFg={theme.diffLineNumber}
-                      lineNumberBg={theme.diffContextBg}
-                      addedLineNumberBg={theme.diffAddedLineNumberBg}
-                      removedLineNumberBg={theme.diffRemovedLineNumberBg}
+                      fg={themeV2.text()}
+                      addedBg={themeV2.diff.background.added()}
+                      removedBg={themeV2.diff.background.removed()}
+                      contextBg={themeV2.diff.background.context()}
+                      addedSignColor={themeV2.diff.highlight.added()}
+                      removedSignColor={themeV2.diff.highlight.removed()}
+                      lineNumberFg={themeV2.diff.lineNumber.text()}
+                      lineNumberBg={themeV2.diff.background.context()}
+                      addedLineNumberBg={themeV2.diff.lineNumber.background.added()}
+                      removedLineNumberBg={themeV2.diff.lineNumber.background.removed()}
                     />
                   </box>
                 </Show>
@@ -2773,7 +2793,7 @@ function ApplyPatch(props: ToolProps) {
                 <FilePath
                   value={file.resource}
                   maxWidth={Math.max(2, ctx.width - 3)}
-                  fg={file.type === "delete" ? theme.diffRemoved : theme.textMuted}
+                  fg={file.type === "delete" ? themeV2.diff.text.removed() : themeV2.text.subdued()}
                 />
               </BlockTool>
             )}
@@ -2802,7 +2822,7 @@ function ApplyPatch(props: ToolProps) {
 }
 
 function Question(props: ToolProps) {
-  const { theme } = useTheme()
+  const { themeV2 } = useTheme()
   const questions = createMemo(() => parseQuestions(props.input.questions))
   const answers = createMemo(() => parseQuestionAnswers(props.metadata.answers))
   const count = createMemo(() => questions().length)
@@ -2820,8 +2840,8 @@ function Question(props: ToolProps) {
             <For each={questions()}>
               {(q, i) => (
                 <box flexDirection="column">
-                  <text fg={theme.textMuted}>{q.question}</text>
-                  <text fg={theme.text}>{format(answers()?.[i()])}</text>
+                  <text fg={themeV2.text.subdued()}>{q.question}</text>
+                  <text fg={themeV2.text()}>{format(answers()?.[i()])}</text>
                 </box>
               )}
             </For>
@@ -2847,7 +2867,7 @@ function Skill(props: ToolProps) {
 }
 
 function Diagnostics(props: { diagnostics: unknown; filePath: string }) {
-  const { theme } = useTheme()
+  const { themeV2 } = useTheme()
   const terminalEnvironment = useTuiTerminalEnvironment()
   const errors = createMemo(() => {
     const normalized = normalizePath(
@@ -2862,7 +2882,7 @@ function Diagnostics(props: { diagnostics: unknown; filePath: string }) {
       <box>
         <For each={errors()}>
           {(diagnostic) => (
-            <text fg={theme.error}>
+            <text fg={themeV2.text.feedback.error()}>
               Error [{diagnostic.range.start.line + 1}:{diagnostic.range.start.character + 1}] {diagnostic.message}
             </text>
           )}

@@ -1,11 +1,12 @@
 import type {
   BackgroundDefinition,
+  FormfieldColorDefinition,
   ModeDefinition,
   StatefulColorDefinition,
   TextDefinition,
   ThemeTokensDefinition,
 } from "./index"
-import { ActionState } from "./schema"
+import { ActionState, FormfieldState } from "./schema"
 
 export function expandTheme<Definition extends ModeDefinition>(definition: Definition): Definition {
   return {
@@ -20,14 +21,10 @@ export function expandTheme<Definition extends ModeDefinition>(definition: Defin
 }
 
 export function expandTokens(definition: ThemeTokensDefinition): ThemeTokensDefinition {
-  if (!definition.color) return { ...definition }
   return {
     ...definition,
-    color: {
-      ...definition.color,
-      text: expandText(definition.color.text),
-      background: expandBackground(definition.color.background),
-    },
+    text: expandText(definition.text),
+    background: expandBackground(definition.background),
   }
 }
 
@@ -48,8 +45,9 @@ function expandText(definition: TextDefinition | undefined): TextDefinition | un
   if (!definition) return
   return {
     ...definition,
-    subdued: definition.subdued ?? (definition.default ? "$color.text.default" : undefined),
-    action: expandActions(definition.action, "color.text.action"),
+    subdued: definition.subdued ?? (definition.default ? "$text.default" : undefined),
+    action: expandActions(definition.action, "text.action"),
+    formfield: expandFormfield(definition.formfield, "text.formfield"),
     feedback: definition.feedback
       ? Object.fromEntries(
           Object.entries(definition.feedback).map(([kind, feedback]) => {
@@ -57,7 +55,7 @@ function expandText(definition: TextDefinition | undefined): TextDefinition | un
               kind,
               {
                 ...feedback,
-                subdued: feedback.subdued ?? (feedback.default ? `$color.text.feedback.${kind}.default` : undefined),
+                subdued: feedback.subdued ?? (feedback.default ? `$text.feedback.${kind}.default` : undefined),
               },
             ]
           }),
@@ -68,7 +66,21 @@ function expandText(definition: TextDefinition | undefined): TextDefinition | un
 
 function expandBackground(definition: BackgroundDefinition | undefined): BackgroundDefinition | undefined {
   if (!definition) return
-  return { ...definition, action: expandActions(definition.action, "color.background.action") }
+  return {
+    ...definition,
+    action: expandActions(definition.action, "background.action"),
+    formfield: expandFormfield(definition.formfield, "background.formfield"),
+  }
+}
+
+function expandFormfield(definition: FormfieldColorDefinition | undefined, path: string) {
+  if (!definition?.default) return definition
+  return {
+    ...definition,
+    ...Object.fromEntries(
+      FormfieldState.literals.map((state) => [`$${state}`, definition[`$${state}`] ?? `$${path}.default`]),
+    ),
+  }
 }
 
 function expandActions<Definition extends Partial<Record<string, StatefulColorDefinition>>>(

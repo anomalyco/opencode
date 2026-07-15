@@ -190,7 +190,7 @@ export function Prompt(props: PromptProps) {
   const renderer = useRenderer()
   const exit = useExit()
   const dimensions = useTerminalDimensions()
-  const { theme, syntax } = useTheme()
+  const { themeV2, syntax } = useTheme()
   const animationsEnabled = createMemo(() => config.animations ?? true)
   const list = createMemo(() => props.placeholders?.normal ?? [])
   const shell = createMemo(() => props.placeholders?.shell ?? [])
@@ -297,8 +297,8 @@ export function Prompt(props: PromptProps) {
 
   createEffect(() => {
     if (!input || input.isDestroyed) return
-    if (props.disabled) input.cursorColor = theme.backgroundElement
-    if (!props.disabled) input.cursorColor = theme.text
+    if (props.disabled) input.cursorColor = themeV2.background.surface.offset()
+    if (!props.disabled) input.cursorColor = themeV2.text()
   })
 
   const usage = createMemo(() => {
@@ -1306,10 +1306,10 @@ export function Prompt(props: PromptProps) {
   }
 
   const highlight = createMemo(() => {
-    if (leader()) return theme.border
-    if (store.mode === "shell") return theme.primary
+    if (leader()) return themeV2.border()
+    if (store.mode === "shell") return themeV2.background.action.primary()
     const agent = local.agent.current()
-    if (!agent) return theme.border
+    if (!agent) return themeV2.border()
     return local.agent.color(agent.id)
   })
 
@@ -1326,7 +1326,7 @@ export function Prompt(props: PromptProps) {
     () => !!local.agent.current() && store.mode === "normal" && showVariant(),
     animationsEnabled,
   )
-  const borderHighlight = createMemo(() => tint(theme.border, highlight(), agentMetaAlpha()))
+  const borderHighlight = createMemo(() => tint(themeV2.border(), highlight(), agentMetaAlpha()))
 
   const placeholderText = createMemo(() => {
     if (props.showPlaceholder === false) return undefined
@@ -1346,7 +1346,7 @@ export function Prompt(props: PromptProps) {
 
   const spinnerDef = createMemo(() => {
     const agent = status() === "running" ? local.agent.current() : local.agent.current()
-    const color = agent ? local.agent.color(agent.id) : theme.border
+    const color = agent ? local.agent.color(agent.id) : themeV2.border()
     return {
       frames: createFrames({
         color,
@@ -1383,16 +1383,16 @@ export function Prompt(props: PromptProps) {
             paddingRight={2}
             paddingTop={1}
             flexShrink={0}
-            backgroundColor={theme.backgroundElement}
+            backgroundColor={themeV2.background.action.secondary("focused")}
             flexGrow={1}
             width="100%"
           >
             <textarea
               width="100%"
               placeholder={placeholderText()}
-              placeholderColor={theme.textMuted}
-              textColor={leader() ? theme.textMuted : theme.text}
-              focusedTextColor={leader() ? theme.textMuted : theme.text}
+              placeholderColor={themeV2.text.subdued()}
+              textColor={leader() ? themeV2.text.subdued() : themeV2.text()}
+              focusedTextColor={leader() ? themeV2.text.subdued() : themeV2.text()}
               minHeight={1}
               maxHeight={maxHeight()}
               onContentChange={() => {
@@ -1452,15 +1452,17 @@ export function Prompt(props: PromptProps) {
                 setTimeout(() => {
                   // setTimeout is a workaround and needs to be addressed properly
                   if (!input || input.isDestroyed) return
-                  input.cursorColor = theme.text
+                  input.cursorColor = themeV2.text()
                 }, 0)
               }}
               onMouseDown={(r: MouseEvent) => {
                 if (props.disabled) return
                 r.target?.focus()
               }}
-              focusedBackgroundColor={theme.backgroundElement}
-              cursorColor={props.disabled ? theme.backgroundElement : theme.text}
+              focusedBackgroundColor={themeV2.background.action.secondary("focused")}
+              cursorColor={
+                props.disabled ? themeV2.background.surface.offset() : themeV2.text()
+              }
               syntaxStyle={syntax()}
             />
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1} justifyContent="space-between">
@@ -1472,22 +1474,32 @@ export function Prompt(props: PromptProps) {
                         {store.mode === "shell" ? "Shell" : Locale.titlecase(agent().id)}
                       </text>
                       <Show when={store.mode === "normal" && local.permission.mode === "auto"}>
-                        <text fg={fadeColor(theme.textMuted, agentMetaAlpha())}>auto</text>
+                        <text fg={fadeColor(themeV2.text.subdued(), agentMetaAlpha())}>auto</text>
                       </Show>
                       <Show when={store.mode === "normal"}>
                         <box flexDirection="row" gap={1}>
-                          <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>·</text>
+                          <text fg={fadeColor(themeV2.text.subdued(), modelMetaAlpha())}>·</text>
                           <text
                             flexShrink={0}
-                            fg={fadeColor(leader() ? theme.textMuted : theme.text, modelMetaAlpha())}
+                            fg={fadeColor(
+                              leader() ? themeV2.text.subdued() : themeV2.text(),
+                              modelMetaAlpha(),
+                            )}
                           >
                             {local.model.parsed().model}
                           </text>
-                          <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>{currentProviderLabel()}</text>
+                          <text fg={fadeColor(themeV2.text.subdued(), modelMetaAlpha())}>
+                            {currentProviderLabel()}
+                          </text>
                           <Show when={showVariant()}>
-                            <text fg={fadeColor(theme.textMuted, variantMetaAlpha())}>·</text>
+                            <text fg={fadeColor(themeV2.text.subdued(), variantMetaAlpha())}>·</text>
                             <text>
-                              <span style={{ fg: fadeColor(theme.warning, variantMetaAlpha()), bold: true }}>
+                              <span
+                                style={{
+                                  fg: fadeColor(themeV2.text.feedback.warning(), variantMetaAlpha()),
+                                  bold: true,
+                                }}
+                              >
                                 {local.model.variant.current()}
                               </span>
                             </text>
@@ -1512,15 +1524,15 @@ export function Prompt(props: PromptProps) {
           borderColor={borderHighlight()}
           customBorderChars={{
             ...EmptyBorder,
-            vertical: theme.backgroundElement.a !== 0 ? "╹" : " ",
+            vertical: themeV2.background.action.secondary("focused").a !== 0 ? "╹" : " ",
           }}
         >
           <box
             height={1}
             border={["bottom"]}
-            borderColor={theme.backgroundElement}
+            borderColor={themeV2.background.action.secondary("focused")}
             customBorderChars={
-              theme.backgroundElement.a !== 0
+              themeV2.background.action.secondary("focused").a !== 0
                 ? {
                     ...EmptyBorder,
                     horizontal: "▀",
@@ -1537,13 +1549,25 @@ export function Prompt(props: PromptProps) {
             <Match when={status() === "running"}>
               <box flexDirection="row" gap={1} flexGrow={1} justifyContent="flex-start">
                 <box marginLeft={1}>
-                  <Show when={config.animations ?? true} fallback={<text fg={theme.textMuted}>[⋯]</text>}>
+                  <Show
+                    when={config.animations ?? true}
+                    fallback={<text fg={themeV2.text.subdued()}>[⋯]</text>}
+                  >
                     <spinner color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
                   </Show>
                 </box>
-                <text fg={store.interrupt > 0 ? theme.primary : theme.text}>
+                <text
+                  fg={store.interrupt > 0 ? themeV2.background.action.primary() : themeV2.text()}
+                >
                   esc{" "}
-                  <span style={{ fg: store.interrupt > 0 ? theme.primary : theme.textMuted }}>
+                  <span
+                    style={{
+                      fg:
+                        store.interrupt > 0
+                          ? themeV2.background.action.primary()
+                          : themeV2.text.subdued(),
+                    }}
+                  >
                     {store.interrupt > 0 ? "again to interrupt" : "interrupt"}
                   </span>
                 </text>
@@ -1552,16 +1576,16 @@ export function Prompt(props: PromptProps) {
             <Match when={move.progress()}>
               {(progress) => (
                 <box paddingLeft={3}>
-                  <Spinner color={theme.accent}>
+                  <Spinner color={themeV2.hue().accent[300]}>
                     {progress()}
-                    <span style={{ fg: theme.textMuted }}>{".".repeat(move.creatingDots())}</span>
+                    <span style={{ fg: themeV2.text.subdued() }}>{".".repeat(move.creatingDots())}</span>
                   </Spinner>
                 </box>
               )}
             </Match>
             <Match when={move.pendingNew()}>
               <box paddingLeft={3}>
-                <text fg={theme.accent}>(new working copy)</text>
+                <text fg={themeV2.hue().accent[300]}>(new working copy)</text>
               </box>
             </Match>
             <Match when={true}>
@@ -1570,7 +1594,7 @@ export function Prompt(props: PromptProps) {
                 fallback={props.hint ?? <text />}
               >
                 {(location) => (
-                  <text fg={theme.textMuted} wrapMode="none" truncate flexGrow={1} flexShrink={1}>
+                  <text fg={themeV2.text.subdued()} wrapMode="none" truncate flexGrow={1} flexShrink={1}>
                     {location()}
                   </text>
                 )}
@@ -1580,47 +1604,55 @@ export function Prompt(props: PromptProps) {
           <box gap={2} flexDirection="row">
             <Show when={editorContextLabelState() !== "none" ? editorFileLabelDisplay() : undefined}>
               {(file) => (
-                <text fg={editorContextLabelState() === "pending" ? theme.secondary : theme.textMuted}>{file()}</text>
+                <text
+                  fg={
+                    editorContextLabelState() === "pending"
+                      ? themeV2.hue().accent[500]
+                      : themeV2.text.subdued()
+                  }
+                >
+                  {file()}
+                </text>
               )}
             </Show>
             <Switch>
               <Match when={store.mode === "normal"}>
                 <Switch>
                   <Match when={liveWorkStatusVisible() || statusItems().length > 0}>
-                    <text fg={theme.textMuted} wrapMode="none">
+                    <text fg={themeV2.text.subdued()} wrapMode="none">
                       <Show when={liveWorkStatusVisible() && liveWorkShortcut()}>
-                        {(shortcut) => <span style={{ fg: theme.text }}>{shortcut()} </span>}
+                        {(shortcut) => <span style={{ fg: themeV2.text() }}>{shortcut()} </span>}
                       </Show>
                       <Show when={subagentStatusLabel()}>
-                        {(label) => <span style={{ fg: theme.textMuted }}>{label()}</span>}
+                        {(label) => <span style={{ fg: themeV2.text.subdued() }}>{label()}</span>}
                       </Show>
                       <Show when={subagentStatusLabel() && shellStatusLabel()}>
-                        <span style={{ fg: theme.textMuted }}> · </span>
+                        <span style={{ fg: themeV2.text.subdued() }}> · </span>
                       </Show>
                       <Show when={shellStatusLabel()}>
-                        {(label) => <span style={{ fg: theme.textMuted }}>{label()}</span>}
+                        {(label) => <span style={{ fg: themeV2.text.subdued() }}>{label()}</span>}
                       </Show>
                       <Show when={liveWorkStatusVisible() && statusItems().length > 0}>
-                        <span style={{ fg: theme.textMuted }}> · </span>
+                        <span style={{ fg: themeV2.text.subdued() }}> · </span>
                       </Show>
                       <Show when={statusItems().length > 0}>
-                        <span style={{ fg: theme.textMuted }}>{statusItems().join(" · ")}</span>
+                        <span style={{ fg: themeV2.text.subdued() }}>{statusItems().join(" · ")}</span>
                       </Show>
                     </text>
                   </Match>
                   <Match when={true}>
-                    <text fg={theme.text}>
-                      {agentShortcut()} <span style={{ fg: theme.textMuted }}>agents</span>
+                    <text fg={themeV2.text()}>
+                      {agentShortcut()} <span style={{ fg: themeV2.text.subdued() }}>agents</span>
                     </text>
                   </Match>
                 </Switch>
-                <text fg={theme.text}>
-                  {paletteShortcut()} <span style={{ fg: theme.textMuted }}>commands</span>
+                <text fg={themeV2.text()}>
+                  {paletteShortcut()} <span style={{ fg: themeV2.text.subdued() }}>commands</span>
                 </text>
               </Match>
               <Match when={store.mode === "shell"}>
-                <text fg={theme.text}>
-                  esc <span style={{ fg: theme.textMuted }}>exit shell mode</span>
+                <text fg={themeV2.text()}>
+                  esc <span style={{ fg: themeV2.text.subdued() }}>exit shell mode</span>
                 </text>
               </Match>
             </Switch>

@@ -3,7 +3,7 @@ import { dirname } from "node:path"
 import { createMemo, For, Match, Show, Switch } from "solid-js"
 import { Portal, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import type { TextareaRenderable } from "@opentui/core"
-import { useTheme, selectedForeground } from "../../context/theme"
+import { useTheme } from "../../context/theme"
 import type { PermissionV2Request } from "@opencode-ai/client"
 import { useClient } from "../../context/client"
 import { SplitBorder } from "../../ui/border"
@@ -20,7 +20,7 @@ type PermissionStage = "permission" | "always" | "reject"
 
 function EditBody(props: { request: PermissionV2Request; patch?: string }) {
   const themeState = useTheme()
-  const theme = themeState.theme
+  const themeV2 = themeState.themeV2
   const syntax = themeState.syntax
   const config = useConfig().data
   const dimensions = useTerminalDimensions()
@@ -51,8 +51,8 @@ function EditBody(props: { request: PermissionV2Request; patch?: string }) {
           scrollAcceleration={scrollAcceleration()}
           verticalScrollbarOptions={{
             trackOptions: {
-              backgroundColor: theme.background,
-              foregroundColor: theme.borderActive,
+              backgroundColor: themeV2.background(),
+              foregroundColor: themeV2.scrollbar(),
             },
           }}
         >
@@ -64,16 +64,16 @@ function EditBody(props: { request: PermissionV2Request; patch?: string }) {
             showLineNumbers={true}
             width="100%"
             wrapMode="word"
-            fg={theme.text}
-            addedBg={theme.diffAddedBg}
-            removedBg={theme.diffRemovedBg}
-            contextBg={theme.diffContextBg}
-            addedSignColor={theme.diffHighlightAdded}
-            removedSignColor={theme.diffHighlightRemoved}
-            lineNumberFg={theme.diffLineNumber}
-            lineNumberBg={theme.diffContextBg}
-            addedLineNumberBg={theme.diffAddedLineNumberBg}
-            removedLineNumberBg={theme.diffRemovedLineNumberBg}
+            fg={themeV2.text()}
+            addedBg={themeV2.diff.background.added()}
+            removedBg={themeV2.diff.background.removed()}
+            contextBg={themeV2.diff.background.context()}
+            addedSignColor={themeV2.diff.highlight.added()}
+            removedSignColor={themeV2.diff.highlight.removed()}
+            lineNumberFg={themeV2.diff.lineNumber.text()}
+            lineNumberBg={themeV2.diff.background.context()}
+            addedLineNumberBg={themeV2.diff.lineNumber.background.added()}
+            removedLineNumberBg={themeV2.diff.lineNumber.background.removed()}
           />
         </scrollbox>
       </Show>
@@ -82,7 +82,7 @@ function EditBody(props: { request: PermissionV2Request; patch?: string }) {
           when={props.patch}
           fallback={
             <box paddingLeft={1}>
-              <text fg={theme.textMuted}>No diff provided</text>
+              <text fg={themeV2.text.subdued()}>No diff provided</text>
             </box>
           }
         >
@@ -92,8 +92,8 @@ function EditBody(props: { request: PermissionV2Request; patch?: string }) {
               scrollAcceleration={scrollAcceleration()}
               verticalScrollbarOptions={{
                 trackOptions: {
-                  backgroundColor: theme.background,
-                  foregroundColor: theme.borderActive,
+                  backgroundColor: themeV2.background(),
+                  foregroundColor: themeV2.scrollbar(),
                 },
               }}
             >
@@ -103,7 +103,7 @@ function EditBody(props: { request: PermissionV2Request; patch?: string }) {
                 streaming={true}
                 syntaxStyle={syntax()}
                 content={patch()}
-                fg={theme.textMuted}
+                fg={themeV2.text.subdued()}
               />
             </scrollbox>
           )}
@@ -114,20 +114,20 @@ function EditBody(props: { request: PermissionV2Request; patch?: string }) {
 }
 
 function TextBody(props: { title: string; description?: string; icon?: string }) {
-  const { theme } = useTheme()
+  const { themeV2 } = useTheme()
   return (
     <>
       <box flexDirection="row" gap={1} paddingLeft={1}>
         <Show when={props.icon}>
-          <text fg={theme.textMuted} flexShrink={0}>
+          <text fg={themeV2.text.subdued()} flexShrink={0}>
             {props.icon}
           </text>
         </Show>
-        <text fg={theme.textMuted}>{props.title}</text>
+        <text fg={themeV2.text.subdued()}>{props.title}</text>
       </box>
       <Show when={props.description}>
         <box paddingLeft={1}>
-          <text fg={theme.text}>{props.description}</text>
+          <text fg={themeV2.text()}>{props.description}</text>
         </box>
       </Show>
     </>
@@ -153,7 +153,7 @@ export function PermissionPrompt(props: { request: PermissionV2Request; director
     return {}
   })
 
-  const { theme } = useTheme()
+  const { themeV2 } = useTheme()
 
   return (
     <Switch>
@@ -167,11 +167,11 @@ export function PermissionPrompt(props: { request: PermissionV2Request; director
               </Match>
               <Match when={true}>
                 <box paddingLeft={1} gap={1}>
-                  <text fg={theme.textMuted}>This will allow the following patterns until OpenCode is restarted</text>
+                  <text fg={themeV2.text.subdued()}>This will allow the following patterns until OpenCode is restarted</text>
                   <box>
                     <For each={props.request.save ?? []}>
                       {(pattern) => (
-                        <text fg={theme.text}>
+                        <text fg={themeV2.text()}>
                           {"- "}
                           {pattern}
                         </text>
@@ -235,7 +235,7 @@ export function PermissionPrompt(props: { request: PermissionV2Request; director
                 body: (
                   <Show when={filePath}>
                     <box paddingLeft={1}>
-                      <text fg={theme.textMuted}>{"Path: " + pathFormatter.format(filePath)}</text>
+                      <text fg={themeV2.text.subdued()}>{"Path: " + pathFormatter.format(filePath)}</text>
                     </box>
                   </Show>
                 ),
@@ -250,7 +250,7 @@ export function PermissionPrompt(props: { request: PermissionV2Request; director
                 body: (
                   <Show when={pattern}>
                     <box paddingLeft={1}>
-                      <text fg={theme.textMuted}>{"Pattern: " + pattern}</text>
+                      <text fg={themeV2.text.subdued()}>{"Pattern: " + pattern}</text>
                     </box>
                   </Show>
                 ),
@@ -265,7 +265,7 @@ export function PermissionPrompt(props: { request: PermissionV2Request; director
                 body: (
                   <Show when={pattern}>
                     <box paddingLeft={1}>
-                      <text fg={theme.textMuted}>{"Pattern: " + pattern}</text>
+                      <text fg={themeV2.text.subdued()}>{"Pattern: " + pattern}</text>
                     </box>
                   </Show>
                 ),
@@ -281,7 +281,7 @@ export function PermissionPrompt(props: { request: PermissionV2Request; director
                 body: (
                   <Show when={dir}>
                     <box paddingLeft={1}>
-                      <text fg={theme.textMuted}>{"Path: " + pathFormatter.format(dir)}</text>
+                      <text fg={themeV2.text.subdued()}>{"Path: " + pathFormatter.format(dir)}</text>
                     </box>
                   </Show>
                 ),
@@ -294,7 +294,7 @@ export function PermissionPrompt(props: { request: PermissionV2Request; director
                 body: (
                   <Show when={command}>
                     <box paddingLeft={1}>
-                      <text fg={theme.text}>{"$ " + command}</text>
+                      <text fg={themeV2.text()}>{"$ " + command}</text>
                     </box>
                   </Show>
                 ),
@@ -315,7 +315,7 @@ export function PermissionPrompt(props: { request: PermissionV2Request; director
                 body: (
                   <Show when={desc}>
                     <box paddingLeft={1}>
-                      <text fg={theme.text}>{"◉ " + desc}</text>
+                      <text fg={themeV2.text()}>{"◉ " + desc}</text>
                     </box>
                   </Show>
                 ),
@@ -330,7 +330,7 @@ export function PermissionPrompt(props: { request: PermissionV2Request; director
                 body: (
                   <Show when={url}>
                     <box paddingLeft={1}>
-                      <text fg={theme.textMuted}>{"URL: " + url}</text>
+                      <text fg={themeV2.text.subdued()}>{"URL: " + url}</text>
                     </box>
                   </Show>
                 ),
@@ -345,7 +345,7 @@ export function PermissionPrompt(props: { request: PermissionV2Request; director
                 body: (
                   <Show when={query}>
                     <box paddingLeft={1}>
-                      <text fg={theme.textMuted}>{"Query: " + query}</text>
+                      <text fg={themeV2.text.subdued()}>{"Query: " + query}</text>
                     </box>
                   </Show>
                 ),
@@ -370,9 +370,9 @@ export function PermissionPrompt(props: { request: PermissionV2Request; director
                 body: (
                   <Show when={patterns.length > 0}>
                     <box paddingLeft={1} gap={1}>
-                      <text fg={theme.textMuted}>Patterns</text>
+                      <text fg={themeV2.text.subdued()}>Patterns</text>
                       <box>
-                        <For each={patterns}>{(p) => <text fg={theme.text}>{"- " + p}</text>}</For>
+                        <For each={patterns}>{(p) => <text fg={themeV2.text()}>{"- " + p}</text>}</For>
                       </box>
                     </box>
                   </Show>
@@ -386,7 +386,7 @@ export function PermissionPrompt(props: { request: PermissionV2Request; director
                 title: "Continue after repeated failures",
                 body: (
                   <box paddingLeft={1}>
-                    <text fg={theme.textMuted}>This keeps the session running despite repeated failures.</text>
+                    <text fg={themeV2.text.subdued()}>This keeps the session running despite repeated failures.</text>
                   </box>
                 ),
               }
@@ -397,7 +397,7 @@ export function PermissionPrompt(props: { request: PermissionV2Request; director
               title: `Call tool ${permission}`,
               body: (
                 <box paddingLeft={1}>
-                  <text fg={theme.textMuted}>{"Tool: " + permission}</text>
+                  <text fg={themeV2.text.subdued()}>{"Tool: " + permission}</text>
                 </box>
               ),
             }
@@ -408,15 +408,15 @@ export function PermissionPrompt(props: { request: PermissionV2Request; director
           const header = () => (
             <box flexDirection="column" gap={0}>
               <box flexDirection="row" gap={1} flexShrink={0}>
-                <text fg={theme.warning}>{"△"}</text>
-                <text fg={theme.text}>Permission required</text>
+                <text fg={themeV2.text.feedback.warning()}>{"△"}</text>
+                <text fg={themeV2.text()}>Permission required</text>
               </box>
               <Show when={current.title}>
                 <box flexDirection="row" gap={1} paddingLeft={2} flexShrink={0}>
-                  <text fg={theme.textMuted} flexShrink={0}>
+                  <text fg={themeV2.text.subdued()} flexShrink={0}>
                     {current.icon}
                   </text>
-                  <text fg={theme.text}>{current.title}</text>
+                  <text fg={themeV2.text()}>{current.title}</text>
                 </box>
               </Show>
             </box>
@@ -469,7 +469,7 @@ export function PermissionPrompt(props: { request: PermissionV2Request; director
 
 function RejectPrompt(props: { onConfirm: (message: string) => void; onCancel: () => void }) {
   let input: TextareaRenderable
-  const { theme } = useTheme()
+  const { themeV2 } = useTheme().contextual("elevated")
   const dimensions = useTerminalDimensions()
   const narrow = createMemo(() => dimensions().width < 80)
   Keymap.createLayer(() => ({
@@ -495,18 +495,18 @@ function RejectPrompt(props: { onConfirm: (message: string) => void; onCancel: (
 
   return (
     <box
-      backgroundColor={theme.backgroundPanel}
+      backgroundColor={themeV2.background()}
       border={["left"]}
-      borderColor={theme.error}
+      borderColor={themeV2.text.feedback.error()}
       customBorderChars={SplitBorder.customBorderChars}
     >
       <box gap={1} paddingLeft={1} paddingRight={3} paddingTop={1} paddingBottom={1}>
         <box flexDirection="row" gap={1} paddingLeft={1}>
-          <text fg={theme.error}>{"△"}</text>
-          <text fg={theme.text}>Reject permission</text>
+          <text fg={themeV2.text.feedback.error()}>{"△"}</text>
+          <text fg={themeV2.text()}>Reject permission</text>
         </box>
         <box paddingLeft={1}>
-          <text fg={theme.textMuted}>Tell OpenCode what to do differently</text>
+          <text fg={themeV2.text.subdued()}>Tell OpenCode what to do differently</text>
         </box>
       </box>
       <box
@@ -516,7 +516,7 @@ function RejectPrompt(props: { onConfirm: (message: string) => void; onCancel: (
         paddingLeft={2}
         paddingRight={3}
         paddingBottom={1}
-        backgroundColor={theme.backgroundElement}
+        backgroundColor={themeV2.background.action.secondary("focused")}
         justifyContent={narrow() ? "flex-start" : "space-between"}
         alignItems={narrow() ? "flex-start" : "center"}
         gap={1}
@@ -527,16 +527,16 @@ function RejectPrompt(props: { onConfirm: (message: string) => void; onCancel: (
             val.traits = { status: "REJECT" }
           }}
           focused
-          textColor={theme.text}
-          focusedTextColor={theme.text}
-          cursorColor={theme.primary}
+          textColor={themeV2.text()}
+          focusedTextColor={themeV2.text()}
+          cursorColor={themeV2.text()}
         />
         <box flexDirection="row" gap={2} flexShrink={0}>
-          <text fg={theme.text}>
-            enter <span style={{ fg: theme.textMuted }}>confirm</span>
+          <text fg={themeV2.text()}>
+            enter <span style={{ fg: themeV2.text.subdued() }}>confirm</span>
           </text>
-          <text fg={theme.text}>
-            esc <span style={{ fg: theme.textMuted }}>cancel</span>
+          <text fg={themeV2.text()}>
+            esc <span style={{ fg: themeV2.text.subdued() }}>cancel</span>
           </text>
         </box>
       </box>
@@ -553,7 +553,7 @@ function Prompt<const T extends Record<string, string>>(props: {
   fullscreen?: boolean
   onSelect: (option: keyof T) => void
 }) {
-  const { theme } = useTheme()
+  const { themeV2 } = useTheme().contextual("elevated")
   const dimensions = useTerminalDimensions()
   const keys = Object.keys(props.options) as (keyof T)[]
   const [store, setStore] = createStore({
@@ -654,9 +654,9 @@ function Prompt<const T extends Record<string, string>>(props: {
 
   const content = () => (
     <box
-      backgroundColor={theme.backgroundPanel}
+      backgroundColor={themeV2.background()}
       border={["left"]}
-      borderColor={theme.warning}
+      borderColor={themeV2.text.feedback.warning()}
       customBorderChars={SplitBorder.customBorderChars}
       {...(store.expanded
         ? { top: dimensions().height * -1 + 1, bottom: 1, left: 2, right: 2, position: "absolute" }
@@ -674,8 +674,8 @@ function Prompt<const T extends Record<string, string>>(props: {
           when={props.header}
           fallback={
             <box flexDirection="row" gap={1} paddingLeft={1} flexShrink={0}>
-              <text fg={theme.warning}>{"△"}</text>
-              <text fg={theme.text}>{props.title}</text>
+              <text fg={themeV2.text.feedback.warning()}>{"△"}</text>
+              <text fg={themeV2.text()}>{props.title}</text>
             </box>
           }
         >
@@ -693,7 +693,7 @@ function Prompt<const T extends Record<string, string>>(props: {
         paddingLeft={2}
         paddingRight={3}
         paddingBottom={1}
-        backgroundColor={theme.backgroundElement}
+        backgroundColor={themeV2.background.action.secondary("focused")}
         justifyContent={narrow() ? "flex-start" : "space-between"}
         alignItems={narrow() ? "flex-start" : "center"}
       >
@@ -703,14 +703,20 @@ function Prompt<const T extends Record<string, string>>(props: {
               <box
                 paddingLeft={1}
                 paddingRight={1}
-                backgroundColor={option === store.selected ? theme.warning : theme.backgroundMenu}
+                backgroundColor={themeV2.background.action.primary(
+                  option === store.selected ? "focused" : "default",
+                )}
                 onMouseOver={() => setStore("selected", option)}
                 onMouseUp={() => {
                   setStore("selected", option)
                   props.onSelect(option)
                 }}
               >
-                <text fg={option === store.selected ? selectedForeground(theme, theme.warning) : theme.textMuted}>
+                <text
+                  fg={themeV2.text.action.primary(
+                    option === store.selected ? "focused" : "default",
+                  )}
+                >
                   {props.options[option]}
                 </text>
               </box>
@@ -719,15 +725,15 @@ function Prompt<const T extends Record<string, string>>(props: {
         </box>
         <box flexDirection="row" gap={2} flexShrink={0}>
           <Show when={props.fullscreen}>
-            <text fg={theme.text}>
-              {shortcuts.get("permission.prompt.fullscreen")} <span style={{ fg: theme.textMuted }}>{hint()}</span>
+            <text fg={themeV2.text()}>
+              {shortcuts.get("permission.prompt.fullscreen")} <span style={{ fg: themeV2.text.subdued() }}>{hint()}</span>
             </text>
           </Show>
-          <text fg={theme.text}>
-            {"⇆"} <span style={{ fg: theme.textMuted }}>select</span>
+          <text fg={themeV2.text()}>
+            {"⇆"} <span style={{ fg: themeV2.text.subdued() }}>select</span>
           </text>
-          <text fg={theme.text}>
-            enter <span style={{ fg: theme.textMuted }}>confirm</span>
+          <text fg={themeV2.text()}>
+            enter <span style={{ fg: themeV2.text.subdued() }}>confirm</span>
           </text>
         </box>
       </box>

@@ -14,22 +14,27 @@ test("provides reactive property, variant, state, and context accessors", () => 
     return key ? resolved().contexts[key] ?? resolved() : resolved()
   })
 
-  expect(theme.color.text()).toBe(resolved().color.text.default)
-  expect(theme.color.text.subdued()).toBe(resolved().color.text.subdued)
-  expect(theme.color.text.action()).toBe(resolved().color.text.action.primary.default)
-  expect(theme.color.text.action.primary("pressed")).toBe(resolved().color.text.action.primary.pressed)
-  expect(theme.color.background.action.secondary("disabled")).toBe(
-    resolved().color.background.action.secondary.disabled,
+  expect(theme.text()).toBe(resolved().text.default)
+  expect(theme.text.subdued()).toBe(resolved().text.subdued)
+  expect(theme.text.action()).toBe(resolved().text.action.primary.default)
+  expect(theme.text.action.primary("pressed")).toBe(resolved().text.action.primary.pressed)
+  expect(theme.background.action.secondary("disabled")).toBe(
+    resolved().background.action.secondary.disabled,
   )
-  expect(theme.color.scrollbar()).toBe(resolved().color.scrollbar.default)
-  expect(theme.color.diff.text.added()).toBe(resolved().color.diff.text.added)
+  expect(theme.background.surface.offset()).toBe(resolved().background.surface.offset)
+  expect(theme.background.surface.overlay()).toBe(resolved().background.surface.overlay)
+  expect(theme.scrollbar()).toBe(resolved().scrollbar.default)
+  expect(theme.diff.text.added()).toBe(resolved().diff.text.added)
 
   setContext("@context:elevated")
-  expect(theme.color.text()).toBe(resolved().contexts["@context:elevated"]!.color.text.default)
-  expect(theme.color.background.action.primary("selected")).toBe(
-    resolved().contexts["@context:elevated"]!.color.background.action.primary.selected,
+  expect(theme.text()).toBe(resolved().contexts["@context:elevated"]!.text.default)
+  expect(theme.background.action.primary("focused")).toBe(
+    resolved().contexts["@context:elevated"]!.background.action.primary.focused,
+  )
+  expect(theme.background.formfield("selected")).toBe(
+    resolved().contexts["@context:elevated"]!.background.formfield.selected,
   )
 
   setResolved(resolveTheme(selectTheme(DEFAULT_THEME, "dark")))
-  expect(theme.color.text()).toBe(resolved().contexts["@context:elevated"]!.color.text.default)
+  expect(theme.text()).toBe(resolved().contexts["@context:elevated"]!.text.default)
 })

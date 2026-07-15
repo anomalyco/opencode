@@ -10,7 +10,7 @@ import { getScrollAcceleration } from "../../util/scroll"
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const pluginRuntime = usePluginRuntime()
   const data = useData()
-  const { theme } = useTheme()
+  const { themeV2 } = useTheme().contextual("elevated")
   const config = useConfig().data
   const session = createMemo(() => data.session.get(props.sessionID))
   const scrollAcceleration = createMemo(() => getScrollAcceleration(config))
@@ -18,7 +18,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   return (
     <Show when={session()}>
       <box
-        backgroundColor={theme.backgroundPanel}
+        backgroundColor={themeV2.background()}
         width={42}
         height="100%"
         paddingTop={1}
@@ -32,8 +32,8 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
           scrollAcceleration={scrollAcceleration()}
           verticalScrollbarOptions={{
             trackOptions: {
-              backgroundColor: theme.background,
-              foregroundColor: theme.borderActive,
+              backgroundColor: themeV2.background(),
+              foregroundColor: themeV2.scrollbar(),
             },
           }}
         >
@@ -45,11 +45,11 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
               title={session()!.title}
             >
               <box paddingRight={1}>
-                <text fg={theme.text}>
+                <text fg={themeV2.text()}>
                   <b>{session()!.title}</b>
                 </text>
                 <Show when={session()!.location.workspaceID}>
-                  <text fg={theme.textMuted}>{session()!.location.workspaceID}</text>
+                  <text fg={themeV2.text.subdued()}>{session()!.location.workspaceID}</text>
                 </Show>
               </box>
             </pluginRuntime.Slot>

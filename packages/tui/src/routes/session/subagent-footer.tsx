@@ -46,7 +46,7 @@ export function SubagentFooter() {
     }
   })
 
-  const { theme } = useTheme()
+  const { themeV2 } = useTheme().contextual("elevated")
   const keymap = Keymap.use()
   const shortcuts = Keymap.useShortcuts()
   const [hover, setHover] = createSignal<"parent" | "prev" | "next" | null>(null)
@@ -61,18 +61,18 @@ export function SubagentFooter() {
         paddingRight={1}
         {...SplitBorder}
         border={["left"]}
-        borderColor={theme.border}
+        borderColor={themeV2.border()}
         flexShrink={0}
-        backgroundColor={theme.backgroundPanel}
+        backgroundColor={themeV2.background()}
       >
         <box flexDirection="row" justifyContent="space-between" gap={1}>
           <box flexDirection="row" gap={1}>
-            <text fg={theme.text}>
+            <text fg={themeV2.text()}>
               <b>{subagentInfo()}</b>
             </text>
             <Show when={usage()}>
               {(item) => (
-                <text fg={theme.textMuted} wrapMode="none">
+                <text fg={themeV2.text.subdued()} wrapMode="none">
                   {[item().context, item().cost].filter(Boolean).join(" · ")}
                 </text>
               )}
@@ -83,30 +83,30 @@ export function SubagentFooter() {
               onMouseOver={() => setHover("parent")}
               onMouseOut={() => setHover(null)}
               onMouseUp={() => keymap.dispatch("session.parent")}
-              backgroundColor={hover() === "parent" ? theme.backgroundElement : theme.backgroundPanel}
+              backgroundColor={hover() === "parent" ? themeV2.background.action.secondary("focused") : themeV2.background()}
             >
-              <text fg={theme.text}>
-                Parent <span style={{ fg: theme.textMuted }}>{shortcuts.get("session.parent")}</span>
+              <text fg={themeV2.text()}>
+                Parent <span style={{ fg: themeV2.text.subdued() }}>{shortcuts.get("session.parent")}</span>
               </text>
             </box>
             <box
               onMouseOver={() => setHover("prev")}
               onMouseOut={() => setHover(null)}
               onMouseUp={() => keymap.dispatch("session.child.previous")}
-              backgroundColor={hover() === "prev" ? theme.backgroundElement : theme.backgroundPanel}
+              backgroundColor={hover() === "prev" ? themeV2.background.action.secondary("focused") : themeV2.background()}
             >
-              <text fg={theme.text}>
-                Prev <span style={{ fg: theme.textMuted }}>{shortcuts.get("session.child.previous")}</span>
+              <text fg={themeV2.text()}>
+                Prev <span style={{ fg: themeV2.text.subdued() }}>{shortcuts.get("session.child.previous")}</span>
               </text>
             </box>
             <box
               onMouseOver={() => setHover("next")}
               onMouseOut={() => setHover(null)}
               onMouseUp={() => keymap.dispatch("session.child.next")}
-              backgroundColor={hover() === "next" ? theme.backgroundElement : theme.backgroundPanel}
+              backgroundColor={hover() === "next" ? themeV2.background.action.secondary("focused") : themeV2.background()}
             >
-              <text fg={theme.text}>
-                Next <span style={{ fg: theme.textMuted }}>{shortcuts.get("session.child.next")}</span>
+              <text fg={themeV2.text()}>
+                Next <span style={{ fg: themeV2.text.subdued() }}>{shortcuts.get("session.child.next")}</span>
               </text>
             </box>
           </box>

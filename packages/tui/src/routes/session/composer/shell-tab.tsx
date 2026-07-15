@@ -4,7 +4,7 @@ import { TextAttributes, RGBA, ScrollBoxRenderable } from "@opentui/core"
 import { useData } from "../../../context/data"
 import { useLocation } from "../../../context/location"
 import { useClient } from "../../../context/client"
-import { useTheme, selectedForeground } from "../../../context/theme"
+import { useTheme } from "../../../context/theme"
 import { Keymap } from "../../../context/keymap"
 import { useComposerTab } from "./index"
 
@@ -12,8 +12,8 @@ export function ShellTab(props: { sessionID: string }) {
   const data = useData()
   const location = useLocation()
   const client = useClient()
-  const { theme } = useTheme()
-  const fg = selectedForeground(theme)
+  const { themeV2 } = useTheme()
+  const fg = themeV2.text.action.primary("focused")
   const composer = useComposerTab()
   const shortcuts = Keymap.useShortcuts()
 
@@ -96,8 +96,12 @@ export function ShellTab(props: { sessionID: string }) {
 
   return (
     <Show when={composer.active("shell")}>
-      <scrollbox scrollbarOptions={{ visible: false }} maxHeight={5} ref={(r: ScrollBoxRenderable) => (scroll = r)}>
-        <Show when={entries().length > 0} fallback={<text fg={theme.textMuted}> No shell commands</text>}>
+      <scrollbox
+        scrollbarOptions={{ visible: false }}
+        maxHeight={5}
+        ref={(r: ScrollBoxRenderable) => (scroll = r)}
+      >
+        <Show when={entries().length > 0} fallback={<text fg={themeV2.text.subdued()}> No shell commands</text>}>
           <For each={entries()}>
             {(shell, index) => {
               const active = createMemo(() => index() === store.selected)
@@ -106,11 +110,11 @@ export function ShellTab(props: { sessionID: string }) {
                   flexDirection="row"
                   paddingLeft={1}
                   paddingRight={1}
-                  backgroundColor={active() ? theme.primary : RGBA.fromInts(0, 0, 0, 0)}
+                  backgroundColor={active() ? themeV2.background.action.primary() : RGBA.fromInts(0, 0, 0, 0)}
                   onMouseOver={() => setStore("selected", index())}
                 >
                   <text
-                    fg={active() ? fg : theme.text}
+                    fg={active() ? fg : themeV2.text()}
                     attributes={active() ? TextAttributes.BOLD : undefined}
                     wrapMode="none"
                   >
