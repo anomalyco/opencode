@@ -115,7 +115,6 @@ describe("blocked member names on tool paths", () => {
   })
 
   test("a literal __proto__ key cannot poison a namespace into a fake definition", async () => {
-    // The quoted "__proto__" key sets the group's prototype in host JS; the sibling must survive.
     const poisoned = CodeMode.make({
       tools: { ns: { "__proto__": echo("Hidden", "hidden"), real: echo("Real tool", "real") } },
     })

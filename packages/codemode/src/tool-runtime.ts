@@ -130,9 +130,6 @@ const runHost = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, Tool
     }),
   )
 
-// Blocked-member checks guard plain-object property access on data values. Tool path
-// segments are exempt: they are Map keys and inert strings, and must never be used to
-// index a non-Map object.
 const blockedMemberNames = new Set(["__proto__", "constructor", "prototype"])
 
 export const isBlockedMember = (name: string): boolean => blockedMemberNames.has(name)
@@ -277,8 +274,7 @@ export const copyOut = (value: unknown, undefinedAsNull = false): unknown => {
   return value
 }
 
-// Dots in supplied tool names are namespace separators: { "issues.list": tool } and
-// { issues: { list: tool } } yield the same canonical path, and the last definition wins.
+// Dots in tool names are namespace separators; the last definition for a canonical path wins.
 type ToolNode<R> = {
   definition?: Definition<R>
   readonly children: Map<string, ToolNode<R>>
@@ -303,7 +299,6 @@ const toolTrie = <R>(tools: Tools<R>): ToolNode<R> => {
   return root
 }
 
-// Bracket access may spell a canonical path with dotted segments: tools.api["issues.list"].
 const canonicalSegments = (path: ReadonlyArray<string>): ReadonlyArray<string> =>
   path.flatMap((segment) => segment.split("."))
 
@@ -593,9 +588,7 @@ const namespaceKeys = <R>(root: ToolNode<R>, path: ReadonlyArray<string>): Reado
   const segments = canonicalSegments(path)
   const node = lookup(root, segments)
   if (node === undefined) {
-    throw new ToolRuntimeError("UnknownTool", `Unknown tool namespace '${segments.join(".")}'.`, [
-      "Object.keys(tools) lists the available namespaces; search({ query }) finds described tools.",
-    ])
+    throw new ToolRuntimeError("UnknownTool", `Unknown tool namespace '${segments.join(".")}'.`)
   }
   return Array.from(node.children.keys())
 }

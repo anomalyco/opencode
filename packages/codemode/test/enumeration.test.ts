@@ -56,11 +56,10 @@ describe("Object.keys over tool references", () => {
     expect(await value(`return typeof search`)).toBe("function")
   })
 
-  test("an unknown namespace is an UnknownTool error pointing at the discovery idioms", async () => {
+  test("an unknown namespace is an UnknownTool error", async () => {
     const failure = await error(`return Object.keys(tools.nonexistent)`)
     expect(failure.kind).toBe("UnknownTool")
     expect(failure.message).toContain("Unknown tool namespace 'nonexistent'")
-    expect(failure.suggestions?.join(" ")).toContain("Object.keys(tools)")
   })
 
   test("Object.values/entries on a tool reference explain the working idioms", async () => {
