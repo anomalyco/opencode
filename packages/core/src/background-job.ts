@@ -161,7 +161,9 @@ export const make = Effect.gen(function* () {
           ...(Exit.isFailure(exit) ? { error: errorText(Cause.squash(exit.cause)) } : {}),
         },
       }
-      return [{ info: snapshot(next), done: job.done, scope: job.scope }, new Map(jobs).set(id, next)]
+      const updated = new Map(jobs).set(id, next)
+      evictTerminal(updated)
+      return [{ info: snapshot(next), done: job.done, scope: job.scope }, updated]
     })
     if (result.info && result.done) yield* Deferred.succeed(result.done, result.info).pipe(Effect.ignore)
     if (result.scope) {
@@ -350,7 +352,9 @@ export const make = Effect.gen(function* () {
           completed_at,
         },
       }
-      return [{ info: snapshot(next), done: job.done, scope: job.scope }, new Map(jobs).set(id, next)]
+      const updated = new Map(jobs).set(id, next)
+      evictTerminal(updated)
+      return [{ info: snapshot(next), done: job.done, scope: job.scope }, updated]
     })
     if (result.info && result.done) yield* Deferred.succeed(result.done, result.info).pipe(Effect.ignore)
     if (result.scope) yield* Scope.close(result.scope, Exit.void)
@@ -359,6 +363,15 @@ export const make = Effect.gen(function* () {
 
   return Service.of({ list, get, start, extend, wait, waitForPromotion, promote, cancel })
 })
+
+function evictTerminal(updated: Map<string, Active>) {
+  if (updated.size <= 250) return
+  const terminal = [...updated.entries()]
+    .filter(([, j]) => j.info.status !== "running")
+    .sort((a, b) => (a[1].info.completed_at ?? 0) - (b[1].info.completed_at ?? 0))
+  const toRemove = terminal.slice(0, Math.max(0, terminal.length - 100))
+  for (const [k] of toRemove) updated.delete(k)
+}
 
 const layer = Layer.effect(Service, make)
 

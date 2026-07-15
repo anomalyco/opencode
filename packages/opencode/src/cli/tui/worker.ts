@@ -3,7 +3,7 @@ import { InstanceRuntime } from "@/project/instance-runtime"
 import { Rpc } from "@/util/rpc"
 import { upgrade } from "@/cli/upgrade"
 import { Config } from "@/config/config"
-import { GlobalBus } from "@/bus/global"
+import { GlobalBus, type GlobalEvent } from "@/bus/global"
 import { ServerAuth } from "@/server/auth"
 import { writeHeapSnapshot } from "node:v8"
 import { Heap } from "@/cli/heap"
@@ -21,9 +21,10 @@ process.on("unhandledRejection", onUnhandledRejection)
 process.on("uncaughtException", onUncaughtException)
 
 // Subscribe to global events and forward them via RPC
-GlobalBus.on("event", (event) => {
+const onGlobalEvent = (event: GlobalEvent) => {
   Rpc.emit("global.event", event)
-})
+}
+GlobalBus.on("event", onGlobalEvent)
 
 let server: Awaited<ReturnType<typeof Server.listen>> | undefined
 
@@ -72,6 +73,7 @@ export const rpc = {
   async shutdown() {
     await InstanceRuntime.disposeAllInstances()
     if (server) await server.stop(true)
+    GlobalBus.off("event", onGlobalEvent)
     process.off("unhandledRejection", onUnhandledRejection)
     process.off("uncaughtException", onUncaughtException)
   },

@@ -249,3 +249,4 @@ bun dev                  # TUI starten
 ### Letzte Änderungen
 
 - **2026-07-12**: `Process.stop()` in `util/process.ts` gefixt – SIGTERM → 5s Timeout → SIGKILL-Eskalation (bisher nur SIGTERM ohne Fallback). Gleicher Fix in SDK-Kopie `packages/sdk/js/src/process.ts`.
+- **2026-07-15**: Memory-Leak-Fix in `packages/core/src/background-job.ts` – `state.jobs` Map wuchs unbegrenzt (jeder Tool-Call = ein Eintrag). Eviction-Logik eingebaut: ab 250 Einträgen werden älteste terminale Jobs bis auf 100 reduziert. Ebenfalls GlobalBus-Listener-Cleanup in `packages/opencode/src/cli/tui/worker.ts`.
