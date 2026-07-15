@@ -4,7 +4,7 @@ import { define } from "@opencode-ai/plugin/v2/effect/plugin"
 import { Effect } from "effect"
 import { Catalog } from "../catalog"
 
-import PROMPT_DEFAULT from "../session/runner/prompt/default.txt"
+import PROMPT_DEFAULT from "../session/runner/prompt/base.txt"
 import PROMPT_ANTHROPIC from "./system-prompt/anthropic.txt"
 import PROMPT_CODEX from "./system-prompt/codex.txt"
 import PROMPT_GEMINI from "./system-prompt/gemini.txt"

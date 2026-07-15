@@ -13,7 +13,7 @@ import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 import { host } from "./host"
 import PROMPT_META from "../../src/plugin/system-prompt/meta.txt"
-import PROMPT_DEFAULT from "../../src/session/runner/prompt/default.txt"
+import PROMPT_DEFAULT from "../../src/session/runner/prompt/base.txt"
 
 const it = testEffect(PluginTestLayer)
 const fallback = PROMPT_DEFAULT

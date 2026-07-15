@@ -74,7 +74,7 @@ import { TestClock } from "effect/testing"
 import { asc, eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 import { host } from "./plugin/host"
-import PROMPT_DEFAULT from "../src/session/runner/prompt/default.txt"
+import PROMPT_DEFAULT from "../src/session/runner/prompt/base.txt"
 
 const requests: LLMRequest[] = []
 let response: LLMEvent[] = []
