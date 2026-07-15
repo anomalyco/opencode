@@ -118,7 +118,7 @@ export const WorktreeListCommand = effectCmd({
   }),
 })
 
-const resolveWorktreeName = Effect.fnUntraced(function* (svc: Worktree.Interface, name: string) {
+const resolveWorktreeTarget = Effect.fnUntraced(function* (svc: Worktree.Interface, name: string) {
   const list = yield* svc.list()
   const match = list.find((w) => w.name === name)
   if (!match) return name
@@ -136,7 +136,9 @@ export const WorktreeRemoveCommand = effectCmd({
     }),
   handler: Effect.fn("Cli.worktree.remove")(function* (args) {
     const svc = yield* Worktree.Service
-    const directory = yield* resolveWorktreeName(svc, args.name)
+    const directory = yield* resolveWorktreeTarget(svc, args.name).pipe(
+      Effect.catch((e) => fail(e.message)),
+    )
     yield* svc.remove({ directory }).pipe(
       Effect.catch((e) => fail(e.message)),
     )
@@ -155,7 +157,9 @@ export const WorktreeResetCommand = effectCmd({
     }),
   handler: Effect.fn("Cli.worktree.reset")(function* (args) {
     const svc = yield* Worktree.Service
-    const directory = yield* resolveWorktreeName(svc, args.name)
+    const directory = yield* resolveWorktreeTarget(svc, args.name).pipe(
+      Effect.catch((e) => fail(e.message)),
+    )
     yield* svc.reset({ directory }).pipe(
       Effect.catch((e) => fail(e.message)),
     )
