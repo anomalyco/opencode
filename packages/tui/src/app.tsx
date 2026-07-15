@@ -595,16 +595,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       },
       {
         name: "session.title.model",
-        title: (() => {
-          const titleAgent = sync.data.agent.find((agent) => agent.name === "title")
-          if (titleAgent?.model) {
-            return `Session title model (${titleAgent.model.providerID}/${titleAgent.model.modelID})`
-          }
-          if (sync.data.config.small_model) {
-            return `Session title model (${sync.data.config.small_model})`
-          }
-          return "Session title model"
-        })(),
+        title: "Session title model",
         category: "Session",
         slashName: "title-model",
         run: () => {
