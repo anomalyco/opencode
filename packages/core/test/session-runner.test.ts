@@ -777,11 +777,11 @@ const verifyPartialFlushOnInterruption = (kind: FragmentKind) =>
   })
 
 describe("SessionRunnerLLM", () => {
-  it.effect("applies AI request hooks without exposing unavailable tools", () =>
+  it.effect("applies session context hooks without exposing unavailable tools", () =>
     Effect.gen(function* () {
       const session = yield* setup
       const hooks = yield* PluginHooks.Service
-      yield* hooks.register("ai", "request", (event) =>
+      yield* hooks.register("session", "context", (event) =>
         Effect.sync(() => {
           event.system = [SystemPart.make("Hooked system")]
           event.messages = [Message.user("Hooked message")]

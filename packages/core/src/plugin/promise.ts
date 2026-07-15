@@ -63,10 +63,6 @@ export function fromPromise(plugin: Plugin) {
             transform: transform(host.agent),
             reload: () => run(host.agent.reload()),
           },
-          ai: {
-            hook: (name, callback) =>
-              register(host.ai.hook(name, (event) => Effect.promise(() => Promise.resolve(callback(event))))),
-          },
           aisdk: {
             hook: (name, callback) =>
               register(host.aisdk.hook(name, (event) => Effect.promise(() => Promise.resolve(callback(event))))),
@@ -166,6 +162,8 @@ export function fromPromise(plugin: Plugin) {
               register(host.tool.hook(name, (event) => Effect.promise(() => Promise.resolve(callback(event))))),
           },
           session: {
+            hook: (name, callback) =>
+              register(host.session.hook(name, (event) => Effect.promise(() => Promise.resolve(callback(event))))),
             create: (input) =>
               run(
                 host.session.create(

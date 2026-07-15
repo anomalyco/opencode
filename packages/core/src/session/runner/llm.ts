@@ -10,7 +10,7 @@ import {
   isContextOverflowFailure,
   type ProviderErrorEvent,
 } from "@opencode-ai/ai"
-import type { AIHooks } from "@opencode-ai/plugin/v2/effect/ai"
+import type { SessionHooks } from "@opencode-ai/plugin/v2/effect/session"
 import { SessionError } from "@opencode-ai/schema/session-error"
 import { Money } from "@opencode-ai/schema/money"
 import { Cause, Effect, Exit, Fiber, FiberSet, Layer, Option, Semaphore, Stream } from "effect"
@@ -216,7 +216,7 @@ const layer = Layer.effect(
         toolChoice: isLastStep ? "none" : undefined,
       })
       const availableTools = new Map(request.tools.map((tool) => [tool.name, tool]))
-      const requestEvent: AIHooks["request"] = {
+      const contextEvent: SessionHooks["context"] = {
         sessionID: session.id,
         agent: agent.id,
         model: resolved.ref,
@@ -228,11 +228,11 @@ const layer = Layer.effect(
       }
       // Plugins may reshape the draft but cannot advertise tools excluded by
       // permissions, registration state, or the selected agent's step limit.
-      yield* hooks.trigger("ai", "request", requestEvent)
+      yield* hooks.trigger("session", "context", contextEvent)
       const hookedRequest = LLM.updateRequest(request, {
-        system: requestEvent.system,
-        messages: requestEvent.messages,
-        tools: Object.entries(requestEvent.tools).flatMap(([name, tool]) => {
+        system: contextEvent.system,
+        messages: contextEvent.messages,
+        tools: Object.entries(contextEvent.tools).flatMap(([name, tool]) => {
           const registered = availableTools.get(name)
           if (!registered) return []
           return [{ ...registered, description: tool.description, inputSchema: tool.input }]

@@ -1,7 +1,6 @@
 import type { PluginApi } from "@opencode-ai/client/promise/api"
 import type { PluginOptions } from "../options.js"
 import type { AgentDomain } from "./agent.js"
-import type { AIDomain } from "./ai.js"
 import type { AISDKDomain } from "./aisdk.js"
 import type { CatalogDomain } from "./catalog.js"
 import type { CommandDomain } from "./command.js"
@@ -15,7 +14,6 @@ import type { ToolDomain } from "./tool.js"
 export interface Context {
   readonly options: PluginOptions
   readonly agent: AgentDomain
-  readonly ai: AIDomain
   readonly aisdk: AISDKDomain
   readonly catalog: CatalogDomain
   readonly command: CommandDomain

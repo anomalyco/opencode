@@ -196,7 +196,7 @@ export const Plugin = {
       )
       .pipe(Effect.orDie)
 
-    yield* ctx.ai.hook("request", (event) =>
+    yield* ctx.session.hook("context", (event) =>
       Effect.sync(() => {
         const usePatch =
           event.model.providerID.toLowerCase() === "openai" || event.model.id.toLowerCase().includes("gpt")

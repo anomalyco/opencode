@@ -1,15 +1,15 @@
 export * as PluginHooks from "./hooks"
 
-import type { AIHooks } from "@opencode-ai/plugin/v2/effect/ai"
 import type { AISDKHooks } from "@opencode-ai/plugin/v2/effect/aisdk"
+import type { SessionHooks } from "@opencode-ai/plugin/v2/effect/session"
 import type { ToolHooks } from "@opencode-ai/plugin/v2/effect/tool"
 import { Context, Effect, Layer, Scope } from "effect"
 import { makeLocationNode } from "../effect/app-node"
 import { State } from "../state"
 
 export interface Domains {
-  readonly ai: AIHooks
   readonly aisdk: AISDKHooks
+  readonly session: SessionHooks
   readonly tool: ToolHooks
 }
 

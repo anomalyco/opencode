@@ -80,9 +80,6 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
           })
         }),
     },
-    ai: {
-      hook: (name, callback) => hooks.register("ai", name, callback),
-    },
     aisdk: {
       hook: (name, callback) => {
         if (name === "sdk") {
@@ -370,6 +367,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
       },
     },
     session: {
+      hook: (name, callback) => hooks.register("session", name, callback),
       create: (input) =>
         runtime.session.create({
           id: input?.id,

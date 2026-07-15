@@ -8,7 +8,9 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import type { IntegrationEnvMethod, IntegrationKeyMethod, IntegrationOAuthMethod } from "@opencode-ai/sdk/v2/types"
 import { Effect, Stream } from "effect"
 
-type Overrides = Partial<Omit<PluginContext, "options">>
+type Overrides = Partial<Omit<PluginContext, "options" | "session">> & {
+  readonly session?: Partial<PluginContext["session"]>
+}
 
 export function host(overrides: Overrides = {}): PluginContext {
   return {
@@ -17,9 +19,6 @@ export function host(overrides: Overrides = {}): PluginContext {
       list: () => Effect.die("unused agent.list"),
       transform: () => Effect.die("unused agent.transform"),
       reload: () => Effect.die("unused agent.reload"),
-    },
-    ai: overrides.ai ?? {
-      hook: () => Effect.die("unused ai.hook"),
     },
     aisdk: overrides.aisdk ?? {
       hook: () => Effect.die("unused aisdk.hook"),
@@ -80,12 +79,13 @@ export function host(overrides: Overrides = {}): PluginContext {
       transform: () => Effect.die("unused tool.transform"),
       hook: () => Effect.die("unused tool.hook"),
     },
-    session: overrides.session ?? {
-      create: () => Effect.die("unused session.create"),
-      get: () => Effect.die("unused session.get"),
-      prompt: () => Effect.die("unused session.prompt"),
-      command: () => Effect.die("unused session.command"),
-      interrupt: () => Effect.die("unused session.interrupt"),
+    session: {
+      hook: overrides.session?.hook ?? (() => Effect.die("unused session.hook")),
+      create: overrides.session?.create ?? (() => Effect.die("unused session.create")),
+      get: overrides.session?.get ?? (() => Effect.die("unused session.get")),
+      prompt: overrides.session?.prompt ?? (() => Effect.die("unused session.prompt")),
+      command: overrides.session?.command ?? (() => Effect.die("unused session.command")),
+      interrupt: overrides.session?.interrupt ?? (() => Effect.die("unused session.interrupt")),
     },
   }
 }

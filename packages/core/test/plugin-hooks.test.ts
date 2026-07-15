@@ -12,17 +12,17 @@ const layer = PluginHooks.node.implementation as Layer.Layer<PluginHooks.Service
 const it = testEffect(layer)
 
 describe("PluginHooks", () => {
-  it.effect("registers scoped AI hooks and triggers them sequentially", () =>
+  it.effect("registers scoped session hooks and triggers them sequentially", () =>
     Effect.gen(function* () {
       const hooks = yield* PluginHooks.Service
       const seen: string[] = []
-      yield* hooks.register("ai", "request", (event) =>
+      yield* hooks.register("session", "context", (event) =>
         Effect.sync(() => {
           seen.push("first")
           event.system.push(SystemPart.make("second"))
         }),
       )
-      yield* hooks.register("ai", "request", (event) =>
+      yield* hooks.register("session", "context", (event) =>
         Effect.sync(() => {
           seen.push(event.system[1]?.text ?? "missing")
           event.messages = [Message.user("changed")]
@@ -37,7 +37,7 @@ describe("PluginHooks", () => {
         tools: {},
       }
 
-      expect(yield* hooks.trigger("ai", "request", event)).toBe(event)
+      expect(yield* hooks.trigger("session", "context", event)).toBe(event)
       expect(seen).toEqual(["first", "second"])
       expect(event.messages).toEqual([Message.user("changed")])
     }),
