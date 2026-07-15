@@ -495,6 +495,48 @@ describe("OpenAPI.fromSpec", () => {
     )
   })
 
+  test("preserves ordered exploded and deep-object query parameters", async () => {
+    const client = recordingClient(() => json({ ok: true }))
+    const tool = toolAt(
+      OpenAPI.fromSpec({
+        baseUrl,
+        spec: singleOperation({
+          parameters: [
+            { name: "tags", in: "query", style: "form", explode: true, schema: { type: "array" } },
+            { name: "filter", in: "query", style: "form", explode: true, schema: { type: "object" } },
+            { name: "location", in: "query", style: "deepObject", explode: true, schema: { type: "object" } },
+          ],
+        }),
+      }).tools,
+      "test",
+    )
+    if (!Tool.isDefinition(tool)) throw new Error("test was not generated")
+
+    await Effect.runPromise(
+      tool
+        .run({
+          tags: ["first value", "second&value"],
+          filter: { state: "open now", page: 2 },
+          location: { directory: "/tmp/a b", workspace: "work&1" },
+        })
+        .pipe(Effect.provide(client.layer)),
+    )
+
+    expect(client.requests[0]?.url).toBe(
+      `${baseUrl}/test?tags=first+value&tags=second%26value&state=open+now&page=2&location%5Bdirectory%5D=%2Ftmp%2Fa+b&location%5Bworkspace%5D=work%261`,
+    )
+    await expect(
+      Effect.runPromise(tool.run({ tags: [{}] }).pipe(Effect.provide(client.layer))),
+    ).rejects.toThrow("Parameter 'tags' contains an unsupported nested value.")
+    await expect(
+      Effect.runPromise(tool.run({ filter: { state: {} } }).pipe(Effect.provide(client.layer))),
+    ).rejects.toThrow("Query parameter 'filter' contains an unsupported nested value.")
+    await expect(
+      Effect.runPromise(tool.run({ location: { directory: [] } }).pipe(Effect.provide(client.layer))),
+    ).rejects.toThrow("Deep-object parameter 'location' contains an unsupported nested value.")
+    expect(client.requests).toHaveLength(1)
+  })
+
   test("skips unsupported parameter encodings and malformed security", () => {
     const result = OpenAPI.fromSpec({
       baseUrl,

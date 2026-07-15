@@ -68,14 +68,16 @@ const buildRequest = (
     }
 
     let request = HttpClientRequest.make(plan.operation.method as HttpMethod.HttpMethod)(url)
+    const query: Array<readonly [string, string]> = []
     for (const field of plan.fields) {
       if (field.location !== "query") continue
       const item = own(input, field.inputName)
       if (item === undefined) continue
-      const serialized = serializeQuery(request, field, item)
+      const serialized = serializeQuery(field, item)
       if (serialized instanceof ToolError) return yield* Effect.fail(serialized)
-      request = serialized
+      for (const parameter of serialized) query.push(parameter)
     }
+    if (query.length > 0) request = HttpClientRequest.appendUrlParams(request, query)
 
     request = HttpClientRequest.setHeaders(request, plan.headers)
     for (const field of plan.fields) {
@@ -246,40 +248,46 @@ const serializeSimple = (
 }
 
 const serializeQuery = (
-  request: HttpClientRequest.HttpClientRequest,
   field: Plan["fields"][number],
   value: unknown,
-): HttpClientRequest.HttpClientRequest | ToolError => {
+): ReadonlyArray<readonly [string, string]> | ToolError => {
   if (field.style === "deepObject") {
     if (!isRecord(value)) return toolError(`Deep-object parameter '${field.inputName}' must be an object.`)
-    return Object.entries(value).reduce<HttpClientRequest.HttpClientRequest | ToolError>((current, [name, item]) => {
-      if (current instanceof ToolError) return current
+    const parameters: Array<readonly [string, string]> = []
+    for (const [name, item] of Object.entries(value)) {
       if (item === undefined || (item !== null && typeof item === "object")) {
         return toolError(`Deep-object parameter '${field.inputName}' contains an unsupported nested value.`)
       }
-      return HttpClientRequest.appendUrlParam(current, `${field.name}[${name}]`, String(item))
-    }, request)
+      parameters.push([`${field.name}[${name}]`, String(item)])
+    }
+    return parameters
   }
   if (Array.isArray(value)) {
-    const rendered = serializeSimple(field, value, String)
-    if (rendered instanceof ToolError) return rendered
-    if (!field.explode) return HttpClientRequest.appendUrlParam(request, field.name, rendered)
-    if (value.some((item) => item === undefined || (item !== null && typeof item === "object"))) {
-      return toolError(`Query parameter '${field.inputName}' contains an unsupported nested value.`)
+    if (!field.explode) {
+      const rendered = serializeSimple(field, value, String)
+      return rendered instanceof ToolError ? rendered : [[field.name, rendered]]
     }
-    return value.reduce((current, item) => HttpClientRequest.appendUrlParam(current, field.name, String(item)), request)
+    const parameters: Array<readonly [string, string]> = []
+    for (const item of value) {
+      if (item !== null && typeof item !== "string" && typeof item !== "number" && typeof item !== "boolean") {
+        return toolError(`Parameter '${field.inputName}' contains an unsupported nested value.`)
+      }
+      parameters.push([field.name, String(item)])
+    }
+    return parameters
   }
   if (isRecord(value) && field.explode) {
-    return Object.entries(value).reduce<HttpClientRequest.HttpClientRequest | ToolError>((current, [name, item]) => {
-      if (current instanceof ToolError) return current
+    const parameters: Array<readonly [string, string]> = []
+    for (const [name, item] of Object.entries(value)) {
       if (item === undefined || (item !== null && typeof item === "object")) {
         return toolError(`Query parameter '${field.inputName}' contains an unsupported nested value.`)
       }
-      return HttpClientRequest.appendUrlParam(current, name, String(item))
-    }, request)
+      parameters.push([name, String(item)])
+    }
+    return parameters
   }
   const rendered = serializeSimple(field, value, String)
-  return rendered instanceof ToolError ? rendered : HttpClientRequest.appendUrlParam(request, field.name, rendered)
+  return rendered instanceof ToolError ? rendered : [[field.name, rendered]]
 }
 
 const readResponseBody = (
