@@ -135,9 +135,9 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
     const activeDirectory = createMemo(() => decode64(params.dir))
     const activeSession = createMemo(() => params.id)
 
-    const ensure = (key: ServerConnection.Key) => {
+    const ensure = (key: ServerConnection.Key): NotificationState => {
       const conn = global.servers.list().find((item) => ServerConnection.key(item) === key)
-      if (!conn) throw new Error(`Notification server not found: ${key}`)
+      if (!conn) return createNotReadyNotificationState()
       const ctx = global.ensureServerCtx(conn)
       const existing = states.get(ctx.sdk.scope)
       if (existing) return existing.state
@@ -200,6 +200,30 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
 })
 
 type NotificationState = ReturnType<typeof createServerNotificationState>
+
+function createNotReadyNotificationState(): NotificationState {
+  return {
+    ready: Object.assign(() => false, {
+      promise: Promise.resolve(false),
+    }),
+
+    session: {
+      all: () => [],
+      unseen: () => [],
+      unseenCount: () => 0,
+      unseenHasError: () => false,
+      markViewed: () => {},
+    },
+
+    project: {
+      all: () => [],
+      unseen: () => [],
+      unseenCount: () => 0,
+      unseenHasError: () => false,
+      markViewed: () => {},
+    },
+  }
+}
 
 function createServerNotificationState(input: {
   sdk: ServerSDK
