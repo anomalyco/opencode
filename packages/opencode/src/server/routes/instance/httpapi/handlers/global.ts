@@ -5,7 +5,7 @@ import { EventV2 } from "@opencode-ai/core/event"
 import { Installation } from "@/installation"
 import { disposeAllInstancesAndEmitGlobalDisposed } from "@/server/global-lifecycle"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
-import { Effect, Queue, Schema } from "effect"
+import { Effect, PubSub, Schema } from "effect"
 import * as Stream from "effect/Stream"
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
@@ -33,13 +33,19 @@ function parseBody(body: string) {
 function eventResponse() {
   return Effect.gen(function* () {
     yield* Effect.logInfo("global event connected")
-    const events = Stream.callback<GlobalBusEvent>((queue) => {
-      const handler = (event: GlobalBusEvent) => Queue.offerUnsafe(queue, event)
-      return Effect.acquireRelease(
-        Effect.sync(() => GlobalBus.on("event", handler)),
-        () => Effect.sync(() => GlobalBus.off("event", handler)),
-      )
-    })
+    // PubSub.publish goes through the Effect fiber scheduler; Queue.offerUnsafe
+    // via Stream.callback stalls under bwrap --unshare-pid (see #37128).
+    const pubsub = yield* PubSub.unbounded<GlobalBusEvent>()
+    const runtime = yield* Effect.runtime<never>()
+    // unbounded PubSub.publish completes synchronously — runSync avoids orphan fibers
+    const handler = (event: GlobalBusEvent) => {
+      runtime.runSync(PubSub.publish(pubsub, event))
+    }
+    yield* Effect.acquireRelease(
+      Effect.sync(() => GlobalBus.on("event", handler)),
+      () => Effect.sync(() => GlobalBus.off("event", handler)),
+    )
+    const events = Stream.fromPubSub(pubsub)
     const heartbeat = Stream.tick("10 seconds").pipe(
       Stream.drop(1),
       Stream.map(() => ({ payload: { id: EventV2.ID.create(), type: "server.heartbeat", properties: {} } })),
