@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import type { PartGroup } from "@opencode-ai/session-ui/message-part"
-import { reuseTimelineRows } from "./row-reconciliation"
-import { TimelineRow } from "./timeline-row"
+import { reuseTimelineRows } from "@opencode-ai/session-ui/v2/timeline-row-reconciliation-v2"
+import { TimelineRow } from "@opencode-ai/session-ui/v2/timeline-row-v2"
 
 const context = (key: string, partIDs: string[], userMessageID = "user-1") =>
   new TimelineRow.AssistantPart({

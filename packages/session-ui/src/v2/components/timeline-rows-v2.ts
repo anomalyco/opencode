@@ -1,9 +1,8 @@
-import { parseCommentNote, readCommentMetadata } from "@/utils/comment-note"
 import { AssistantMessage, Part, SessionStatus, SnapshotFileDiff, UserMessage } from "@opencode-ai/sdk/v2"
-import { groupParts, renderable, type PartGroup } from "@opencode-ai/session-ui/message-part"
-import { TimelineRow, type SummaryDiff } from "./timeline-row"
+import { groupParts, renderable, type PartGroup } from "../../components/message-part"
+import { TimelineRow, type SummaryDiff } from "./timeline-row-v2"
 
-export { TimelineRow, type SummaryDiff } from "./timeline-row"
+export { TimelineRow, type SummaryDiff } from "./timeline-row-v2"
 
 export type TimelineRowMap = {
   TurnGap: { userMessageID: string }
@@ -284,5 +283,34 @@ export namespace MessageComment {
           }
         : undefined,
     }
+  }
+}
+
+function readCommentMetadata(value: unknown) {
+  if (!value || typeof value !== "object") return
+  const metadata = (value as { opencodeComment?: unknown }).opencodeComment
+  if (!metadata || typeof metadata !== "object") return
+  const path = (metadata as { path?: unknown }).path
+  const comment = (metadata as { comment?: unknown }).comment
+  if (typeof path !== "string" || typeof comment !== "string") return
+  const selection = (metadata as { selection?: unknown }).selection
+  if (!selection || typeof selection !== "object") return { path, comment }
+  const startLine = Number((selection as { startLine?: unknown }).startLine)
+  const endLine = Number((selection as { endLine?: unknown }).endLine)
+  if (!Number.isFinite(startLine) || !Number.isFinite(endLine)) return { path, comment }
+  return { path, comment, selection: { startLine, endLine } }
+}
+
+function parseCommentNote(text: string) {
+  const match = text.match(
+    /^The user made the following comment regarding (this file|line (\d+)|lines (\d+) through (\d+)) of (.+?): ([\s\S]+)$/,
+  )
+  if (!match) return
+  const startLine = match[2] ? Number(match[2]) : match[3] ? Number(match[3]) : undefined
+  const endLine = match[2] ? Number(match[2]) : match[4] ? Number(match[4]) : undefined
+  return {
+    path: match[5],
+    comment: match[6],
+    selection: startLine === undefined || endLine === undefined ? undefined : { startLine, endLine },
   }
 }

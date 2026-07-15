@@ -18,7 +18,14 @@
     "./context/*": "./src/context/*.tsx",
     "./styles": "./src/styles/index.css",
     "./v2/*.css": "./src/v2/components/*.css",
-    "./v2/*": "./src/v2/components/*.tsx"
+    "./v2/*": "./src/v2/components/*.tsx",
+    "./v2/timeline-projection-v2": "./src/v2/components/timeline-projection-v2.ts",
+    "./v2/timeline-row-v2": "./src/v2/components/timeline-row-v2.ts",
+    "./v2/timeline-row-reconciliation-v2": "./src/v2/components/timeline-row-reconciliation-v2.ts",
+    "./v2/timeline-rows-v2": "./src/v2/components/timeline-rows-v2.ts",
+    "./v2/timeline-measure-v2": "./src/v2/components/timeline-measure-v2.ts",
+    "./v2/timeline-observe-element-offset-v2": "./src/v2/components/timeline-observe-element-offset-v2.ts",
+    "./v2/timeline-virtual-items-v2": "./src/v2/components/timeline-virtual-items-v2.ts"
   },
   "scripts": {
     "typecheck": "tsgo --noEmit",
@@ -47,6 +54,7 @@
     "@solid-primitives/resize-observer": "2.1.3",
     "@solidjs/meta": "catalog:",
     "@solidjs/router": "catalog:",
+    "@tanstack/solid-virtual": "catalog:",
     "diff": "catalog:",
     "dompurify": "3.3.1",
     "fuzzysort": "catalog:",

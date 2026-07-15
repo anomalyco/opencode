@@ -1,4 +1,4 @@
-import { TimelineRow } from "./timeline-row"
+import { TimelineRow } from "./timeline-row-v2"
 
 type ContextRow = Extract<TimelineRow.TimelineRow, { _tag: "AssistantPart" }>
 type PriorContext = { index: number; row: ContextRow }

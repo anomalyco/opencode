@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { scheduleConnectedMeasure } from "./measure"
+import { scheduleConnectedMeasure } from "@opencode-ai/session-ui/v2/timeline-measure-v2"
 
 test("does not measure an element detached before the frame", async () => {
   const element = document.createElement("div")

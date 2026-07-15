@@ -1,10 +1,10 @@
 import { Binary } from "@opencode-ai/core/util/binary"
 import type { AssistantMessage, Message, Part, SessionStatus, UserMessage } from "@opencode-ai/sdk/v2"
 import { createMemo, mapArray, type Accessor } from "solid-js"
-import { reuseTimelineRows } from "./row-reconciliation"
-import { Timeline, TimelineRow } from "./rows"
+import { reuseTimelineRows } from "./timeline-row-reconciliation-v2"
+import { Timeline, TimelineRow } from "./timeline-rows-v2"
 
-export { reuseTimelineRows } from "./row-reconciliation"
+export { reuseTimelineRows } from "./timeline-row-reconciliation-v2"
 
 const emptyAssistantMessages: AssistantMessage[] = []
 

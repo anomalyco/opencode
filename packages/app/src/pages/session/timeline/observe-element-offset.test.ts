@@ -1,6 +1,9 @@
 import { expect, test } from "bun:test"
 import { type Virtualizer } from "@tanstack/solid-virtual"
-import { mutationNodesContainElement, observeElementOffsetReconnectAware } from "./observe-element-offset"
+import {
+  mutationNodesContainElement,
+  observeElementOffsetReconnectAware,
+} from "@opencode-ai/session-ui/v2/timeline-observe-element-offset-v2"
 
 test("matches only the scroll element or an ancestor containing it", () => {
   const route = document.createElement("section")
