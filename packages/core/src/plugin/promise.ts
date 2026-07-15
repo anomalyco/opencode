@@ -59,6 +59,7 @@ export function fromPromise(plugin: Plugin) {
         const context2: Context = {
           options: host.options,
           agent: {
+            get: (id) => run(host.agent.get(id)),
             list: (input) => run(host.agent.list(input)),
             transform: transform(host.agent),
             reload: () => run(host.agent.reload()),
@@ -73,6 +74,7 @@ export function fromPromise(plugin: Plugin) {
               get: (input) => run(host.catalog.provider.get({ ...input, providerID: Provider.ID.make(input.providerID) })),
             },
             model: {
+              get: (providerID, modelID) => run(host.catalog.model.get(providerID, modelID)),
               list: (input) => run(host.catalog.model.list(input)),
               default: (input) =>
                 run(host.catalog.model.default(input)).then((result) => ({ ...result, data: result.data ?? null })),

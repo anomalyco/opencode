@@ -27,6 +27,11 @@ export interface CatalogDraft {
 }
 
 export interface CatalogDomain extends CatalogApi<unknown> {
+  readonly model: CatalogApi<unknown>["model"] & {
+    readonly get: (providerID: string, modelID: string) => Effect.Effect<ModelGetOutput | undefined>
+  }
   readonly transform: Transform<CatalogDraft>
   readonly reload: () => Effect.Effect<void>
 }
+
+type ModelGetOutput = Effect.Success<ReturnType<CatalogApi<unknown>["model"]["list"]>>["data"][number]

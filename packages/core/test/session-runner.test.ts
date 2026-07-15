@@ -73,7 +73,7 @@ import { Cause, DateTime, Deferred, Effect, Exit, Fiber, Layer, Schema, Scope, S
 import { TestClock } from "effect/testing"
 import { asc, eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
-import { host } from "./plugin/host"
+import { agentHost, catalogHost, host } from "./plugin/host"
 import PROMPT_DEFAULT from "../src/session/runner/prompt/base.txt"
 
 const requests: LLMRequest[] = []
@@ -474,8 +474,14 @@ const insertSession = (id: SessionV2.ID) =>
 
 const setup = Effect.gen(function* () {
   const { db } = yield* Database.Service
+  const agents = yield* AgentV2.Service
+  const catalog = yield* Catalog.Service
   const hooks = yield* PluginHooks.Service
-  const pluginHost = host({ session: { hook: (name, callback) => hooks.register("session", name, callback) } })
+  const pluginHost = host({
+    agent: agentHost(agents),
+    catalog: catalogHost(catalog),
+    session: { hook: (name, callback) => hooks.register("session", name, callback) },
+  })
   yield* Effect.forEach(SystemPromptPlugin.Plugins, (plugin) => plugin.effect(pluginHost), {
     discard: true,
   })
@@ -502,7 +508,6 @@ const setup = Effect.gen(function* () {
   toolExecutionsReady = 5
   activeToolExecutions = 0
   maxActiveToolExecutions = 0
-  const agents = yield* AgentV2.Service
   yield* agents.transform((draft) =>
     draft.update(AgentV2.ID.make("build"), (agent) => {
       agent.mode = "primary"

@@ -12,6 +12,9 @@ export interface AgentDraft {
 }
 
 export interface AgentDomain extends AgentApi<unknown> {
+  readonly get: (id: string) => Effect.Effect<AgentGetOutput | undefined>
   readonly transform: Transform<AgentDraft>
   readonly reload: () => Effect.Effect<void>
 }
+
+type AgentGetOutput = Effect.Success<ReturnType<AgentApi<unknown>["list"]>>["data"][number]

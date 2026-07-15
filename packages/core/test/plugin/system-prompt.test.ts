@@ -2,7 +2,9 @@ import { describe, expect, test } from "bun:test"
 import { SystemPart } from "@opencode-ai/ai"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { Catalog } from "@opencode-ai/core/catalog"
+import { PluginV2 } from "@opencode-ai/core/plugin"
 import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
+import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { SystemPromptPlugin } from "@opencode-ai/core/plugin/system-prompt"
 import { SessionV2 } from "@opencode-ai/core/session"
 import type { SessionHooks } from "@opencode-ai/plugin/v2/effect/session"
@@ -11,12 +13,15 @@ import { Provider } from "@opencode-ai/schema/provider"
 import { Effect } from "effect"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
-import { host } from "./host"
 import PROMPT_META from "../../src/plugin/system-prompt/meta.txt"
 import PROMPT_DEFAULT from "../../src/session/runner/prompt/base.txt"
 
 const it = testEffect(PluginTestLayer)
 const fallback = PROMPT_DEFAULT
+const makeHost = Effect.gen(function* () {
+  const plugins = yield* PluginV2.Service
+  return yield* PluginHost.make(plugins)
+})
 
 const context = (id: string, system = fallback): SessionHooks["context"] => ({
   sessionID: SessionV2.ID.make("ses_system_prompt"),
@@ -55,7 +60,7 @@ describe("SystemPromptPlugin", () => {
   it.effect("selects model-lab prompts through session context hooks", () =>
     Effect.gen(function* () {
       const hooks = yield* PluginHooks.Service
-      const pluginHost = host({ session: { hook: (name, callback) => hooks.register("session", name, callback) } })
+      const pluginHost = yield* makeHost
       yield* Effect.forEach(SystemPromptPlugin.Plugins, (plugin) => plugin.effect(pluginHost), {
         discard: true,
       })
@@ -87,8 +92,14 @@ describe("SystemPromptPlugin", () => {
 
   it.effect("preserves an explicit agent system prompt", () =>
     Effect.gen(function* () {
+      const agents = yield* AgentV2.Service
       const hooks = yield* PluginHooks.Service
-      const pluginHost = host({ session: { hook: (name, callback) => hooks.register("session", name, callback) } })
+      yield* agents.transform((draft) =>
+        draft.update(AgentV2.ID.make("build"), (agent) => {
+          agent.system = "Custom agent prompt"
+        }),
+      )
+      const pluginHost = yield* makeHost
       yield* Effect.forEach(SystemPromptPlugin.Plugins, (plugin) => plugin.effect(pluginHost), {
         discard: true,
       })
@@ -103,9 +114,8 @@ describe("SystemPromptPlugin", () => {
   it.effect("allows one model-lab prompt plugin to be enabled independently", () =>
     Effect.gen(function* () {
       const hooks = yield* PluginHooks.Service
-      yield* SystemPromptPlugin.GooglePlugin.effect(
-        host({ session: { hook: (name, callback) => hooks.register("session", name, callback) } }),
-      )
+      const pluginHost = yield* makeHost
+      yield* SystemPromptPlugin.GooglePlugin.effect(pluginHost)
       const gemini = context("gemini-2.5-pro")
       const claude = context("claude-sonnet-4")
 
@@ -121,6 +131,7 @@ describe("SystemPromptPlugin", () => {
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
       const hooks = yield* PluginHooks.Service
+      const pluginHost = yield* makeHost
       yield* catalog.transform((draft) => {
         draft.model.update(Provider.ID.make("test"), Model.ID.make("openai-alias"), (model) => {
           model.modelID = Model.ID.make("gpt-5")
@@ -133,9 +144,7 @@ describe("SystemPromptPlugin", () => {
           model.family = Model.Family.make("gpt-codex")
         })
       })
-      yield* SystemPromptPlugin.OpenAIPlugin.effect(
-        host({ session: { hook: (name, callback) => hooks.register("session", name, callback) } }),
-      )
+      yield* SystemPromptPlugin.OpenAIPlugin.effect(pluginHost)
       const physicalOpenAI = context("openai-alias")
       const physicalCustom = context("gpt-5-alias")
       const familyOpenAI = context("codex-family-alias")

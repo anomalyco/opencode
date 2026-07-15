@@ -16,6 +16,7 @@ export function host(overrides: Overrides = {}): PluginContext {
   return {
     options: {},
     agent: overrides.agent ?? {
+      get: () => Effect.die("unused agent.get"),
       list: () => Effect.die("unused agent.list"),
       transform: () => Effect.die("unused agent.transform"),
       reload: () => Effect.die("unused agent.reload"),
@@ -29,6 +30,7 @@ export function host(overrides: Overrides = {}): PluginContext {
         get: () => Effect.die("unused catalog.provider.get"),
       },
       model: {
+        get: () => Effect.die("unused catalog.model.get"),
         list: () => Effect.die("unused catalog.model.list"),
         default: () => Effect.die("unused catalog.model.default"),
       },
@@ -92,6 +94,7 @@ export function host(overrides: Overrides = {}): PluginContext {
 
 export function agentHost(agent: AgentV2.Interface): PluginContext["agent"] {
   return {
+    get: (id) => agent.get(AgentV2.ID.make(id)).pipe(Effect.map((value) => value && agentInfo(value))),
     list: () => Effect.die("unused agent.list"),
     reload: agent.reload,
     transform: (callback) =>
@@ -122,6 +125,10 @@ export function catalogHost(catalog: Catalog.Interface): PluginContext["catalog"
       get: () => Effect.die("unused catalog.provider.get"),
     },
     model: {
+      get: (providerID, modelID) =>
+        catalog.model
+          .get(ProviderV2.ID.make(providerID), ModelV2.ID.make(modelID))
+          .pipe(Effect.map((value) => value && modelInfo(value))),
       list: () => Effect.die("unused catalog.model.list"),
       default: () => Effect.die("unused catalog.model.default"),
     },
