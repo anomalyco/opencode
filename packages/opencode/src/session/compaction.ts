@@ -131,6 +131,7 @@ export interface Interface {
   readonly isOverflow: (input: {
     tokens: SessionV1.Assistant["tokens"]
     model: Provider.Model
+    pendingTokens?: number
   }) => Effect.Effect<boolean>
   readonly prune: (input: { sessionID: SessionID }) => Effect.Effect<void>
   readonly process: (input: {
@@ -168,10 +169,17 @@ const layer = Layer.effect(
     const isOverflow = Effect.fn("SessionCompaction.isOverflow")(function* (input: {
       tokens: SessionV1.Assistant["tokens"]
       model: Provider.Model
+      pendingTokens?: number
     }) {
+      const adjustedTokens = input.pendingTokens
+        ? {
+            ...input.tokens,
+            input: input.tokens.input + input.pendingTokens,
+          }
+        : input.tokens
       return overflow({
         cfg: yield* config.get(),
-        tokens: input.tokens,
+        tokens: adjustedTokens,
         model: input.model,
         outputTokenMax: flags.outputTokenMax,
       })
@@ -409,6 +417,13 @@ const layer = Layer.effect(
         }).toObject()
         processor.message.finish = "error"
         yield* session.updateMessage(processor.message)
+        // Even when compaction itself overflows, allow the session to continue
+        // if auto-compaction is enabled — the "Continue..." synthetic message
+        // lets the user see what happened and decide next steps.
+        if (input.auto) {
+          yield* events.publish(Event.Compacted, { sessionID: input.sessionID })
+          return "continue"
+        }
         return "stop"
       }
 
