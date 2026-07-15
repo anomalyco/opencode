@@ -237,6 +237,7 @@ export function SessionSidePanel(props: {
     return active !== "review" && active !== "context" && active !== "empty"
   })
   const openFileKeybind = createMemo(() => command.keybindParts("file.open"))
+  const closeTabKeybind = createMemo(() => command.keybindParts("tab.close"))
   const [store, setStore] = createStore({
     activeDraggable: undefined as string | undefined,
   })
@@ -570,9 +571,15 @@ export function SessionSidePanel(props: {
                               <Tabs.Trigger
                                 value="context"
                                 closeButton={
-                                  <TooltipKeybind
-                                    title={language.t("common.closeTab")}
-                                    keybind={command.keybind("tab.close")}
+                                  <TooltipV2
+                                    value={
+                                      <>
+                                        {language.t("common.closeTab")}
+                                        <Show when={closeTabKeybind().length > 0}>
+                                          <KeybindV2 keys={closeTabKeybind()} variant="neutral" />
+                                        </Show>
+                                      </>
+                                    }
                                     placement="bottom"
                                     gutter={10}
                                   >
@@ -583,7 +590,7 @@ export function SessionSidePanel(props: {
                                       onClick={() => tabs().close("context")}
                                       aria-label={language.t("common.closeTab")}
                                     />
-                                  </TooltipKeybind>
+                                  </TooltipV2>
                                 }
                                 hideCloseButton
                                 onMiddleClick={() => tabs().close("context")}
@@ -611,9 +618,15 @@ export function SessionSidePanel(props: {
                                   <Tabs.Trigger
                                     value={SESSION_OPEN_FILE_TAB}
                                     closeButton={
-                                      <TooltipKeybind
-                                        title={language.t("common.closeTab")}
-                                        keybind={command.keybind("tab.close")}
+                                      <TooltipV2
+                                        value={
+                                          <>
+                                            {language.t("common.closeTab")}
+                                            <Show when={closeTabKeybind().length > 0}>
+                                              <KeybindV2 keys={closeTabKeybind()} variant="neutral" />
+                                            </Show>
+                                          </>
+                                        }
                                         placement="bottom"
                                         gutter={10}
                                       >
@@ -624,7 +637,7 @@ export function SessionSidePanel(props: {
                                           onClick={() => tabs().close(SESSION_OPEN_FILE_TAB)}
                                           aria-label={language.t("common.closeTab")}
                                         />
-                                      </TooltipKeybind>
+                                      </TooltipV2>
                                     }
                                     hideCloseButton
                                     onMiddleClick={() => tabs().close(SESSION_OPEN_FILE_TAB)}

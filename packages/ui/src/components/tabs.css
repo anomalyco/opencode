@@ -723,7 +723,11 @@ body[data-new-layout] #review-panel [data-component="tabs"][data-variant="normal
     }
 
     &:has([data-slot="tabs-trigger-close-button"]) {
-      padding-right: 10px;
+      padding-right: 8px;
+
+      [data-slot="tabs-trigger-close-button"] {
+        margin-left: 2px;
+      }
     }
 
     &:has([data-selected]) {
