@@ -35,6 +35,7 @@ import path from "path"
 import { pathToFileURL } from "url"
 import { Effect, Layer, Context } from "effect"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
+import { NamedError } from "@opencode-ai/core/util/error"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Format } from "../format"
 import { InstanceState } from "@/effect/instance-state"
@@ -114,6 +115,7 @@ const layer = Layer.effect(
     const codeMode = flags.experimentalCodeMode ? yield* Effect.promise(() => import("./code-mode")) : undefined
     const codeModeTool = codeMode ? yield* codeMode.CodeModeTool : undefined
 
+    const events = yield* EventV2Bridge.Service
     const state = yield* InstanceState.make<State>(
       Effect.fn("ToolRegistry.state")(function* (ctx) {
         const custom: Tool.Def[] = []
@@ -187,10 +189,12 @@ const layer = Layer.effect(
           // Import it as `file://` so Node on Windows accepts the dynamic import.
           const mod = yield* Effect.promise(() => import(pathToFileURL(match).href)).pipe(
             Effect.catchDefect((defect) =>
-              Effect.logWarning("failed to load custom tool", {
-                tool: namespace,
-                file: match,
-                message: errorMessage(defect),
+              Effect.gen(function* () {
+                const message = errorMessage(defect)
+                yield* events.publish(Session.Event.Error, {
+                  error: new NamedError.Unknown({ message }).toObject(),
+                })
+                yield* Effect.logWarning("failed to load custom tool", { tool: namespace, file: match, message })
               }).pipe(Effect.as({})),
             ),
           )
