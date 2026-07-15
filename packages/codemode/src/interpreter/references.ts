@@ -36,7 +36,8 @@ export const isRuntimeReference = (value: unknown): boolean =>
 
 function* childValues(value: object): Generator<unknown> {
   if (Array.isArray(value)) {
-    for (let index = 0; index < value.length; index++) yield value[index]
+    const length = value.length
+    for (let index = 0; index < length; index++) yield value[index]
     return
   }
   yield* Object.values(value)
@@ -100,7 +101,7 @@ export const rejectCircularInsertion = (
       throw new InterpreterRuntimeError(`${label} contains a circular value.`, node, "InvalidDataValue")
     if (current === null || typeof current !== "object" || isRuntimeReference(current) || seen.has(current)) continue
     seen.add(current)
-    pending.push(childValues(current))
+    pending.push(Array.isArray(current) ? current[Symbol.iterator]() : childValues(current))
   }
 }
 
