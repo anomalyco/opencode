@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
     Gentle OpenCode -- Installer for Windows
@@ -308,7 +308,7 @@ function Clear-OrphanedShortcuts {
     try {
         $WScriptShell = New-Object -ComObject WScript.Shell
     } catch {
-        Write-Warn "Cannot create WScript.Shell COM object — skipping shortcut cleanup"
+        Write-Warn "Cannot create WScript.Shell COM object -- skipping shortcut cleanup"
         return
     }
 
@@ -402,7 +402,7 @@ function Main {
     if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
         $missing += "node"
     }
-    # npm is bundled with Node.js — check only if node is present but npm isn't
+    # npm is bundled with Node.js -- check only if node is present but npm isn't
     if ((Get-Command node -ErrorAction SilentlyContinue) -and -not (Get-Command npm -ErrorAction SilentlyContinue)) {
         $missing += "npm"
     }

@@ -1,7 +1,7 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
-    Gentle OpenCode — Uninstaller for Windows
+    Gentle OpenCode -- Uninstaller for Windows
     Removes everything installed by install.ps1
 
 .DESCRIPTION
@@ -21,7 +21,7 @@
 
 $ErrorActionPreference = "Stop"
 
-# ─── Configuration ─────────────────────────────────────────────────────────
+# --- Configuration ---------------------------------------------------------
 
 $OPENCODE_DIR  = Join-Path $env:LOCALAPPDATA "opencode"
 $GENTLE_DIR    = Join-Path $env:LOCALAPPDATA "gentle-ai"
@@ -32,7 +32,7 @@ $ENGRAM_DB     = Join-Path $env:USERPROFILE ".engram"
 $SHORTCUT_NAME = "OpenCode.lnk"
 $SHORTCUT_ALT  = "oneinfo dev.lnk"
 
-# ─── Helpers ───────────────────────────────────────────────────────────────
+# --- Helpers ---------------------------------------------------------------
 
 function Write-Step    { param($m) Write-Host "`n==> $m" -ForegroundColor Cyan }
 function Write-OK      { param($m) Write-Host "  [OK] $m" -ForegroundColor Green }
@@ -47,14 +47,14 @@ function Remove-IfExists {
             Remove-Item -Path $Path -Recurse -Force -ErrorAction Stop
             Write-OK "Removed: $Label"
         } catch {
-            Write-ERR "Failed: $Label — $_"
+            Write-ERR "Failed: $Label -- $_"
         }
     } else {
         Write-SKIP "Not found: $Label"
     }
 }
 
-# ─── Parameters ────────────────────────────────────────────────────────────
+# --- Parameters ------------------------------------------------------------
 # (wrapped in Main function for irm|iex compatibility)
 
 function Main {
@@ -64,7 +64,7 @@ function Main {
     )
 
     Write-Host ""
-    Write-Host "  Gentle OpenCode — Uninstaller" -ForegroundColor Cyan
+    Write-Host "  Gentle OpenCode -- Uninstaller" -ForegroundColor Cyan
     Write-Host ""
 
     # 1. Remove binaries
@@ -150,7 +150,7 @@ if ($RemoveEngram) {
     }
 }
 
-# ─── Done ──────────────────────────────────────────────────────────────────
+# --- Done ------------------------------------------------------------------
 
     Write-Host ""
     Write-Host "Uninstall complete." -ForegroundColor Green
