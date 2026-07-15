@@ -1,0 +1,321 @@
+---
+title: دستورها
+description: ایجاد دستورهای سفارشی برای کارهای تکراری.
+---
+
+دستورهای سفارشی به شما امکان می‌دهند درخواستی را مشخص کنید که هنگام اجرای آن دستور در TUI اجرا شود.
+
+```bash frame="none"
+/my-command
+```
+
+دستورهای سفارشی علاوه بر دستورهای داخلی مانند `/init`، `/undo`، `/redo`، `/share`، `/help` هستند. [بیشتر بدانید](/docs/tui#commands).
+
+---
+
+## ایجاد پرونده‌های دستور
+
+پرونده‌های markdown را در فهرست `commands/` ایجاد کنید تا دستورهای سفارشی را تعریف کنید.
+
+Create `.opencode/commands/test.md`:
+
+```md title=".opencode/commands/test.md"
+---
+description: Run tests with coverage
+agent: build
+model: anthropic/claude-3-5-sonnet-20241022
+---
+
+Run the full test suite with coverage report and show any failures.
+Focus on the failing tests and suggest fixes.
+```
+
+فرانترم ویژگی‌های دستور را تعریف می‌کند. محتوا به الگو تبدیل می‌شود.
+
+با تایپ `/` و سپس نام دستور، از آن استفاده کنید.
+
+```bash frame="none"
+"/test"
+```
+
+---
+
+## پیکربندی
+
+می‌توانید دستورهای سفارشی را از طریق پیکربندی OpenCode یا با ایجاد پرونده‌های markdown در فهرست `commands/` اضافه کنید.
+
+---
+
+### JSON
+
+گزینه `command` را در [پیکربندی](/docs/config) OpenCode خود استفاده کنید:
+
+```json title="opencode.jsonc" {4-12}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "command": {
+    // This becomes the name of the command
+    "test": {
+      // This is the prompt that will be sent to the LLM
+      "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
+      // This is shown as the description in the TUI
+      "description": "Run tests with coverage",
+      "agent": "build",
+      "model": "anthropic/claude-3-5-sonnet-20241022"
+    }
+  }
+}
+```
+
+اکنون می‌توانید این دستور را در TUI اجرا کنید:
+
+```bash frame="none"
+/test
+```
+
+---
+
+### Markdown
+
+همچنین می‌توانید دستورها را با استفاده از پرونده‌های markdown تعریف کنید. آن‌ها را در این مکان‌ها قرار دهید:
+
+- سراسری: `~/.config/opencode/commands/`
+- به‌ازای پروژه: `.opencode/commands/`
+
+```markdown title="~/.config/opencode/commands/test.md"
+---
+description: Run tests with coverage
+agent: build
+model: anthropic/claude-3-5-sonnet-20241022
+---
+
+Run the full test suite with coverage report and show any failures.
+Focus on the failing tests and suggest fixes.
+```
+
+نام پرونده markdown به نام دستور تبدیل می‌شود. به عنوان مثال، `test.md` به شما اجازه می‌دهد اجرا کنید:
+
+```bash frame="none"
+/test
+```
+
+---
+
+## پیکربندی درخواست
+
+درخواست‌های دستورهای سفارشی از چندین جایگزین‌کننده و نحو ویژه پشتیبانی می‌کنند.
+
+---
+
+### آرگومان‌ها
+
+آرگومان‌ها را با استفاده از جایگزین‌کننده `$ARGUMENTS` به دستورها پاس دهید.
+
+```md title=".opencode/commands/component.md"
+---
+description: Create a new component
+---
+
+Create a new React component named $ARGUMENTS with TypeScript support.
+Include proper typing and basic structure.
+```
+
+دستور را همراه با آرگومان‌ها اجرا کنید:
+
+```bash frame="none"
+/component Button
+```
+
+و `$ARGUMENTS` با `Button` جایگزین می‌شود.
+
+همچنین می‌توانید به آرگومان‌های فردی با استفاده از پارامترهای موقعیتی دسترسی داشته باشید:
+
+- `$1` - اولین آرگومان
+- `$2` - دومین آرگومان
+- `$3` - سومین آرگومان
+- و غیره...
+
+به عنوان مثال:
+
+```md title=".opencode/commands/create-file.md"
+---
+description: Create a new file with content
+---
+
+Create a file named $1 in the directory $2
+with the following content: $3
+```
+
+دستور را اجرا کنید:
+
+```bash frame="none"
+/create-file config.json src "{ \"key\": \"value\" }"
+```
+
+این موارد را جایگزین می‌کند:
+
+- `$1` با `config.json`
+- `$2` با `src`
+- `$3` با `{ "key": "value" }`
+
+---
+
+### خروجی شل
+
+از _!`command`_ برای تزریق خروجی [دستور bash](/docs/tui#bash-commands) به درخواست خود استفاده کنید.
+
+به عنوان مثال، برای ایجاد دستور سفارشی که پوشش تست را تحلیل می‌کند:
+
+```md title=".opencode/commands/analyze-coverage.md"
+---
+description: Analyze test coverage
+---
+
+Here are the current test results:
+!`npm test`
+
+Based on these results, suggest improvements to increase coverage.
+```
+
+یا برای بررسی تغییرات اخیر:
+
+```md title=".opencode/commands/review-changes.md"
+---
+description: Review recent changes
+---
+
+Recent git commits:
+!`git log --oneline -10`
+
+Review these changes and suggest any improvements.
+```
+
+دستورها در فهرست ریشه پروژه شما اجرا می‌شوند و خروجی آن‌ها بخشی از درخواست می‌شود.
+
+---
+
+### ارجاعات پرونده
+
+پرونده‌ها را در دستور خود با استفاده از `@` و سپس نام پرونده قرار دهید.
+
+```md title=".opencode/commands/review-component.md"
+---
+description: Review component
+---
+
+Review the component in @src/components/Button.tsx.
+Check for performance issues and suggest improvements.
+```
+
+محتوای پرونده به‌طور خودکار در درخواست گنجانده می‌شود.
+
+---
+
+## گزینه‌ها
+
+بیایید گزینه‌های پیکربندی را با جزئیات بررسی کنیم.
+
+---
+
+### الگو
+
+گزینه `template` درخواستی را که هنگام اجرای دستور به LLM ارسال می‌شود، تعریف می‌کند.
+
+```json title="opencode.json"
+{
+  "command": {
+    "test": {
+      "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes."
+    }
+  }
+}
+```
+
+این یک گزینه پیکربندی **ضروری** است.
+
+---
+
+### توضیحات
+
+از گزینه `description` برای ارائه توضیح مختصری از عملکرد دستور استفاده کنید.
+
+```json title="opencode.json"
+{
+  "command": {
+    "test": {
+      "description": "Run tests with coverage"
+    }
+  }
+}
+```
+
+این به عنوان توضیحات در TUI هنگام تایپ دستور نمایش داده می‌شود.
+
+---
+
+### عامل
+
+از پیکربندی `agent` برای مشخص کردن اختیاری اینکه کدام [عامل](/docs/agents) باید این دستور را اجرا کند، استفاده کنید.
+اگر این یک [زیرعامل](/docs/agents/#subagents) باشد، دستور به‌طور پیش‌فرض یک فراخوانی زیرعامل را شروع می‌کند.
+برای غیرفعال کردن این رفتار، `subtask` را روی `false` قرار دهید.
+
+```json title="opencode.json"
+{
+  "command": {
+    "review": {
+      "agent": "plan"
+    }
+  }
+}
+```
+
+این یک گزینه پیکربندی **اختیاری** است. اگر مشخص نشده باشد، پیش‌فرض عامل فعلی شما است.
+
+---
+
+### زیروظیفه
+
+از مقدار بولی `subtask` برای مجبور کردن دستور به شروع یک فراخوانی [زیرعامل](/docs/agents/#subagents) استفاده کنید.
+این مفید است اگر می‌خواهید دستور متن اصلی شما را آلوده نکند و **مجبور** می‌کند عامل به عنوان یک زیرعامل عمل کند، حتی اگر `mode` روی `primary` در پیکربندی [عامل](/docs/agents) تنظیم شده باشد.
+
+```json title="opencode.json"
+{
+  "command": {
+    "analyze": {
+      "subtask": true
+    }
+  }
+}
+```
+
+این یک گزینه پیکربندی **اختیاری** است.
+
+---
+
+### مدل
+
+از پیکربندی `model` برای لغو مدل پیش‌فرض این دستور استفاده کنید.
+
+```json title="opencode.json"
+{
+  "command": {
+    "analyze": {
+      "model": "anthropic/claude-3-5-sonnet-20241022"
+    }
+  }
+}
+```
+
+این یک گزینه پیکربندی **اختیاری** است.
+
+---
+
+## داخلی
+
+opencode شامل چندین دستور داخلی مانند `/init`، `/undo`، `/redo`، `/share`، `/help` است؛ [بیشتر بدانید](/docs/tui#commands).
+
+:::note
+دستورهای سفارشی می‌توانند دستورهای داخلی را لغو کنند.
+:::
+
+اگر دستور سفارشی با همان نام تعریف کنید، دستور داخلی را لغو می‌کند.

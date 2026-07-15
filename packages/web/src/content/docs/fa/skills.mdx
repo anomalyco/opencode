@@ -1,0 +1,222 @@
+---
+title: "مهارت‌های عامل"
+description: "تعریف رفتار قابل استفاده مجدد از طریق تعاریف SKILL.md"
+---
+
+مهارت‌های عامل به OpenCode اجازه می‌دهند دستورالعمل‌های قابل استفاده مجدد را از مخزن یا فهرست خانگی شما کشف کند.
+مهارت‌ها به‌صورت تحت‌الطلب از طریق ابزار داخلی `skill` بارگذاری می‌شوند — عامل‌ها مهارت‌های موجود را می‌بینند و می‌توانند محتوای کامل را هنگام نیاز بارگذاری کنند.
+
+---
+
+## قرار دادن پرونده‌ها
+
+برای هر نام مهارت یک فهرست بسازید و یک `SKILL.md` در داخل آن قرار دهید.
+OpenCode این مکان‌ها را جستجو می‌کند:
+
+- پیکربندی پروژه: `.opencode/skills/<name>/SKILL.md`
+- پیکربندی سراسری: `~/.config/opencode/skills/<name>/SKILL.md`
+- سازگار با Claude (پروژه): `.claude/skills/<name>/SKILL.md`
+- سازگار با Claude (سراسری): `~/.claude/skills/<name>/SKILL.md`
+- سازگار با agent (پروژه): `.agents/skills/<name>/SKILL.md`
+- سازگار با agent (سراسری): `~/.agents/skills/<name>/SKILL.md`
+
+---
+
+## درک کشف
+
+برای مسیرهای محلی پروژه، OpenCode از فهرست کاری فعلی شما تا رسیدن به درخت‌کاری git بالا می‌رود.
+در مسیر، هر `skills/*/SKILL.md` مطابق در `.opencode/` و هر `.claude/skills/*/SKILL.md` یا `.agents/skills/*/SKILL.md` مطابق را بارگذاری می‌کند.
+
+تعریف‌های سراسری نیز از `~/.config/opencode/skills/*/SKILL.md`، `~/.claude/skills/*/SKILL.md` و `~/.agents/skills/*/SKILL.md` بارگذاری می‌شوند.
+
+---
+
+## نوشتن فرانت‌متر
+
+هر `SKILL.md` باید با فرانت‌متر YAML شروع شود.
+تنها این فیلدها شناخته می‌شوند:
+
+- `name` (الزامی)
+- `description` (الزامی)
+- `license` (اختیاری)
+- `compatibility` (اختیاری)
+- `metadata` (اختیاری، نقشه رشته به رشته)
+
+فیلدهای فرانت‌متر ناشناخته نادیده گرفته می‌شوند.
+
+---
+
+## اعتبارسنجی نام‌ها
+
+`name` باید:
+
+- بین ۱ تا ۶۴ کاراکتر باشد
+- شامل حروف و اعداد کوچک با جداکننده‌های تک‌خط‌تیره باشد
+- با `-` شروع یا پایان نیابد
+- شامل `--` متوالی نباشد
+- با نام فهرستی که `SKILL.md` را دربر دارد مطابقت داشته باشد
+
+عبارت باقاعده معادل:
+
+```text
+^[a-z0-9]+(-[a-z0-9]+)*$
+```
+
+---
+
+## رعایت قوانین طول
+
+`description` باید ۱ تا ۱۰۲۴ کاراکتر باشد.
+آن را به اندازه‌ای مشخص نگه دارید که عامل بتواند به‌درستی انتخاب کند.
+
+---
+
+## استفاده از یک مثال
+
+یک `SKILL.md` مانند این در `.opencode/skills/git-release/` بسازید:
+
+```markdown
+---
+name: git-release
+description: Create consistent releases and changelogs
+license: MIT
+compatibility: opencode
+metadata:
+  audience: maintainers
+  workflow: github
+---
+
+## What I do
+
+- Draft release notes from merged PRs
+- Propose a version bump
+- Provide a copy-pasteable `gh release create` command
+
+## When to use me
+
+Use this when you are preparing a tagged release.
+Ask clarifying questions if the target versioning scheme is unclear.
+```
+
+---
+
+## شناختن توضیحات ابزار
+
+OpenCode مهارت‌های موجود را در توضیحات ابزار `skill` فهرست می‌کند.
+هر ورودی شامل نام مهارت و توضیحات آن است:
+
+```xml
+<available_skills>
+  <skill>
+    <name>git-release</name>
+    <description>Create consistent releases and changelogs</description>
+  </skill>
+</available_skills>
+```
+
+عامل با فراخوانی ابزار، یک مهارت را بارگذاری می‌کند:
+
+```
+skill({ name: "git-release" })
+```
+
+---
+
+## پیکربندی مجوزها
+
+کنترل کنید کدام مهارت‌ها برای عامل‌ها از طریق مجوزهای مبتنی بر الگو در `opencode.json` در دسترس باشند:
+
+```json
+{
+  "permission": {
+    "skill": {
+      "*": "allow",
+      "pr-review": "allow",
+      "internal-*": "deny",
+      "experimental-*": "ask"
+    }
+  }
+}
+```
+
+| مجوز   | رفتار                                      |
+| ------ | ----------------------------------------- |
+| `allow` | مهارت بلافاصله بارگذاری می‌شود            |
+| `deny`  | مهارت از عامل پنهان شده، دسترسی رد می‌شود |
+| `ask`   | پیش از بارگذاری از کاربر برای تأیید پرسش می‌شود |
+
+الگوها از کاراکترهای wildcard پشتیبانی می‌کنند: `internal-*` با `internal-docs`، `internal-tools` و غیره مطابقت دارد.
+
+---
+
+## لغو برای هر عامل
+
+به عامل‌های خاص مجوزهایی متفاوت از پیش‌فرض‌های سراسری بدهید.
+
+**برای عامل‌های سفارشی** (در فرانت‌متر عامل):
+
+```yaml
+---
+permission:
+  skill:
+    "documents-*": "allow"
+---
+```
+
+**برای عامل‌های داخلی** (در `opencode.json`):
+
+```json
+{
+  "agent": {
+    "plan": {
+      "permission": {
+        "skill": {
+          "internal-*": "allow"
+        }
+      }
+    }
+  }
+}
+```
+
+---
+
+## غیرفعال کردن ابزار مهارت
+
+مهارت‌ها را برای عامل‌هایی که نباید از آن‌ها استفاده کنند کاملاً غیرفعال کنید:
+
+**برای عامل‌های سفارشی**:
+
+```yaml
+---
+tools:
+  skill: false
+---
+```
+
+**برای عامل‌های داخلی**:
+
+```json
+{
+  "agent": {
+    "plan": {
+      "tools": {
+        "skill": false
+      }
+    }
+  }
+}
+```
+
+هنگامی که غیرفعال باشد، بخش `<available_skills>` کاملاً حذف می‌شود.
+
+---
+
+## رفع اشکال بارگذاری
+
+اگر مهارتی نمایش داده نشد:
+
+1. بررسی کنید `SKILL.md` با حروف بزرگ نوشته شده باشد
+2. بررسی کنید فرانت‌متر شامل `name` و `description` باشد
+3. اطمینان حاصل کنید نام مهارت‌ها در تمام مکان‌ها یکتا باشند
+4. مجوزها را بررسی کنید — مهارت‌های دارای `deny` از عامل‌ها پنهان می‌شوند

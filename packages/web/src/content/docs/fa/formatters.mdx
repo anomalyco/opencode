@@ -1,0 +1,143 @@
+---
+title: قالب‌دهنده‌ها
+description: OpenCode از قالب‌دهنده‌های اختصاصی زبان استفاده می‌کند.
+---
+
+OpenCode می‌تواند پرونده‌ها را پس از نوشته یا ویرایش شدن، با استفاده از قالب‌دهنده‌های اختصاصی زبان، قالب‌بندی کند. قالب‌دهنده‌ها به طور پیش‌فرض غیرفعال هستند؛ پیش از آنکه OpenCode آن‌ها را اجرا کند، باید آن‌ها را در پیکربندی خود فعال کنید.
+
+---
+
+## داخلی
+
+OpenCode با چندین قالب‌دهنده داخلی برای زبان‌ها و فریم‌ورک‌های محبوب همراه است. در ادامه فهرستی از قالب‌دهنده‌ها، پسوندهای پرونده پشتیبانی‌شده، و دستورات یا گزینه‌های پیکربندی مورد نیاز آن‌ها آورده شده است.
+
+| Formatter            | Extensions                                                                                               | Requirements                                                                                          |
+| -------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| air                  | .R                                                                                                       | `air` command available                                                                               |
+| biome                | .js, .jsx, .ts, .tsx, .html, .css, .md, .json, .yaml, and [more](https://biomejs.dev/)                   | `biome.json(c)` config file                                                                           |
+| cargofmt             | .rs                                                                                                      | `cargo fmt` command available                                                                         |
+| clang-format         | .c, .cpp, .h, .hpp, .ino, and [more](https://clang.llvm.org/docs/ClangFormat.html)                       | `.clang-format` config file                                                                           |
+| cljfmt               | .clj, .cljs, .cljc, .edn                                                                                 | `cljfmt` command available                                                                            |
+| dart                 | .dart                                                                                                    | `dart` command available                                                                              |
+| dfmt                 | .d                                                                                                       | `dfmt` command available                                                                              |
+| gleam                | .gleam                                                                                                   | `gleam` command available                                                                             |
+| gofmt                | .go                                                                                                      | `gofmt` command available                                                                             |
+| htmlbeautifier       | .erb, .html.erb                                                                                          | `htmlbeautifier` command available                                                                    |
+| ktlint               | .kt, .kts                                                                                                | `ktlint` command available                                                                           |
+| mix                  | .ex, .exs, .eex, .heex, .leex, .neex, .sface                                                             | `mix` command available                                                                               |
+| nixfmt               | .nix                                                                                                     | `nixfmt` command available                                                                            |
+| ocamlformat          | .ml, .mli                                                                                                | `ocamlformat` command available and `.ocamlformat` config file                                        |
+| ormolu               | .hs                                                                                                      | `ormolu` command available                                                                            |
+| oxfmt (Experimental) | .js, .jsx, .ts, .tsx                                                                                     | `oxfmt` dependency in `package.json` and an [experimental env variable flag](/docs/cli/#experimental) |
+| pint                 | .php                                                                                                     | `laravel/pint` dependency in `composer.json`                                                          |
+| prettier             | .js, .jsx, .ts, .tsx, .html, .css, .md, .json, .yaml, and [more](https://prettier.io/docs/en/index.html) | `prettier` dependency in `package.json`                                                               |
+| rubocop              | .rb, .rake, .gemspec, .ru                                                                                | `rubocop` command available                                                                           |
+| ruff                 | .py, .pyi                                                                                                | `ruff` command available with config                                                                  |
+| rustfmt              | .rs                                                                                                      | `rustfmt` command available                                                                           |
+| shfmt                | .sh, .bash                                                                                               | `shfmt` command available                                                                             |
+| standardrb           | .rb, .rake, .gemspec, .ru                                                                                | `standardrb` command available                                                                        |
+| terraform            | .tf, .tfvars                                                                                             | `terraform` command available                                                                         |
+| uv                   | .py, .pyi                                                                                                | `uv` command available                                                                                |
+| zig                  | .zig, .zon                                                                                               | `zig` command available                                                                               |
+
+هنگامی که قالب‌دهنده‌ها فعال باشند، OpenCode از `prettier` برای پرونده‌های مطابق استفاده می‌کند اگر پروژه شما `prettier` را در `package.json` داشته باشد.
+
+---
+
+## نحوه عملکرد
+
+هنگامی که OpenCode یک پرونده را می‌نویسد یا ویرایش می‌کند و قالب‌دهنده‌ها فعال هستند، این کارها را انجام می‌دهد:
+
+1. پسوند پرونده را در برابر تمام قالب‌دهنده‌های فعال بررسی می‌کند.
+2. دستور قالب‌دهنده مناسب را روی پرونده اجرا می‌کند.
+3. تغییرات قالب‌بندی را اعمال می‌کند.
+
+این فرایند در پس‌زمینه برای قالب‌دهنده‌های فعال انجام می‌شود.
+
+---
+
+## پیکربندی
+
+می‌توانید قالب‌دهنده‌ها را از طریق بخش `formatter` در پیکربندی OpenCode خود فعال و سفارشی کنید.
+
+برای فعال کردن تمام قالب‌دهنده‌های داخلی، `formatter` را روی `true` قرار دهید.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": true
+}
+```
+
+از یک شیء (object) استفاده کنید تا قالب‌دهنده‌های داخلی فعال بمانند، در حالی که بازنویسی‌ها یا قالب‌دهنده‌های سفارشی را پیکربندی می‌کنید.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {}
+}
+```
+
+هر پیکربندی قالب‌دهنده از موارد زیر پشتیبانی می‌کند:
+
+| Property      | Type     | Description                                                                                |
+| ------------- | -------- | ------------------------------------------------------------------------------------------ |
+| `disabled`    | boolean  | Set this to `true` to disable the formatter                                                |
+| `command`     | string[] | The command to run for formatting. Required for custom formatters; optional for built-ins. |
+| `environment` | object   | Environment variables to set when running the formatter                                    |
+| `extensions`  | string[] | File extensions this formatter should handle                                               |
+
+بیایید چند مثال را بررسی کنیم.
+
+---
+
+### غیرفعال کردن قالب‌دهنده‌ها
+
+اگر `formatter` حذف شود، تمام قالب‌دهنده‌ها غیرفعال هستند. برای غیرفعال کردن تمام قالب‌دهنده‌ها پس از آنکه پیکربندی دیگری آن‌ها را فعال کرد، `formatter` را روی `false` قرار دهید:
+
+```json title="opencode.json" {3}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": false
+}
+```
+
+برای غیرفعال کردن یک قالب‌دهنده **خاص**، `disabled` را روی `true` قرار دهید:
+
+```json title="opencode.json" {5}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {
+    "prettier": {
+      "disabled": true
+    }
+  }
+}
+```
+
+---
+
+### قالب‌دهنده‌های سفارشی
+
+می‌توانید قالب‌دهنده‌های داخلی را با گزینه‌هایی مانند `environment` یا `extensions` پیکربندی کنید. برای افزودن یک قالب‌دهنده سفارشی، یک `command` و `extensions` مشخص کنید:
+
+```json title="opencode.json" {4-14}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {
+    "prettier": {
+      "command": ["npx", "prettier", "--write", "$FILE"],
+      "environment": {
+        "NODE_ENV": "development"
+      },
+      "extensions": [".js", ".ts", ".jsx", ".tsx"]
+    },
+    "custom-markdown-formatter": {
+      "command": ["deno", "fmt", "$FILE"],
+      "extensions": [".md"]
+    }
+  }
+}
+```
+
+**جای‌نگهدار (placeholder) `$FILE`** در دستور با مسیر پرونده‌ای که در حال قالب‌بندی است جایگزین می‌شود.

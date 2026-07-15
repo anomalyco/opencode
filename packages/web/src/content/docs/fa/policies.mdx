@@ -1,0 +1,137 @@
+---
+title: سیاست‌ها
+description: کنترل کنید که OpenCode مجاز است از چه منابع پیکربندی‌شده‌ای استفاده کند.
+---
+
+سیاست‌ها کنترل می‌کنند که آیا OpenCode مجاز است یک عمل را روی یک منبع نام‌گذاری‌شده انجام دهد یا خیر. این ویژگی آزمایشی است و با آرایه `experimental.policies` در `opencode.json` پیکربندی می‌شود.
+
+سیاست‌ها مجزا از [مجوزها](/docs/permissions) هستند. مجوزها کنترل می‌کنند که ابزارها در طول یک نشست چه کارهایی می‌توانند انجام دهند، در حالی که سیاست‌ها کنترل می‌کنند که آیا OpenCode مجاز است از یک منبع مانند یک ارائه‌دهنده LLM استفاده کند یا خیر.
+
+---
+
+## پیکربندی
+
+هر دستور سیاست سه فیلد دارد:
+
+- `effect` - یا `"allow"` یا `"deny"`.
+- `action` - عملیاتی که کنترل می‌شود.
+- `resource` - شناسه منبع یا الگوی وایلدکارد (wildcard) که دستور روی آن اعمال می‌شود.
+
+برای مثال، رد استفاده از ارائه‌دهنده `openai`:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "policies": [
+      {
+        "effect": "deny",
+        "action": "provider.use",
+        "resource": "openai"
+      }
+    ]
+  }
+}
+```
+
+یک ارائه‌دهنده‌ای که توسط سیاست رد شده است، حتی اگر اعتبارنامه داشته باشد یا به غیر آن به درستی پیکربندی شده باشد، برای انتخاب مدل یا استفاده از مدل در دسترس نیست.
+
+---
+
+## سیاست‌های موجود
+
+OpenCode در حال حاضر از یک عمل سیاست پشتیبانی می‌کند:
+
+| Action         | Resource                      | Description                           |
+| -------------- | ----------------------------- | ------------------------------------- |
+| `provider.use` | Provider ID, such as `openai` | Allow or deny use of an LLM provider. |
+
+عمل‌های سیاست بیشتری ممکن است در آینده اضافه شوند.
+
+---
+
+## تطبیق
+
+فیلد `resource` از تطبیق وایلدکارد پشتیبانی می‌کند. از `*` برای تطبیق صفر یا چند کاراکتر و `?` برای تطبیق یک کاراکتر استفاده کنید.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "policies": [
+      {
+        "effect": "deny",
+        "action": "provider.use",
+        "resource": "company-*"
+      }
+    ]
+  }
+}
+```
+
+این کار ارائه‌دهندگانی مانند `company-us` و `company-eu` را رد می‌کند.
+
+---
+
+## ترتیب قواعد
+
+هنگامی که چندین دستور تطبیق می‌یابند، آخرین دستور تطبیق‌یافته برنده است. قواعد کلی را ابتدا و سپس استثناهای مشخص‌تر را بعد از آن‌ها قرار دهید.
+
+برای مثال، تنها Anthropic را مجاز کنید:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "policies": [
+      {
+        "effect": "deny",
+        "action": "provider.use",
+        "resource": "*"
+      },
+      {
+        "effect": "allow",
+        "action": "provider.use",
+        "resource": "anthropic"
+      }
+    ]
+  }
+}
+```
+
+اگر هیچ سیاستی با یک ارائه‌دهنده تطبیق نیابد، استفاده از ارائه‌دهنده به طور پیش‌فرض مجاز است.
+
+سیاست‌ها ممکن است هم در پیکربندی جهانی و هم در پیکربندی پروژه تنظیم شوند. اگر سیاست‌های هر دو مکان با یک ارائه‌دهنده یکسان تطبیق یابند، سیاست جهانی شما بر سیاست پروژه اولویت دارد. این جلوی آن را می‌گیرد که یک مخزن، ارائه‌دهنده‌ای را که شما به صورت جهانی رد کرده‌اید دوباره فعال کند.
+
+---
+
+## فهرست‌های ارائه‌دهنده
+
+هنگام کنترل دسترسی ارائه‌دهنده، به جای تنظیمات قدیمی‌تر `disabled_providers` و `enabled_providers` از سیاست‌ها استفاده کنید.
+
+برای جایگزینی `disabled_providers`:
+
+```json title="opencode.json"
+{
+  "experimental": {
+    "policies": [
+      { "effect": "deny", "action": "provider.use", "resource": "openai" },
+      { "effect": "deny", "action": "provider.use", "resource": "google" }
+    ]
+  }
+}
+```
+
+برای جایگزینی `enabled_providers`، ابتدا تمام ارائه‌دهندگان را رد کنید و سپس ارائه‌دهندگان انتخاب‌شده را بعد از آن مجاز کنید:
+
+```json title="opencode.json"
+{
+  "experimental": {
+    "policies": [
+      { "effect": "deny", "action": "provider.use", "resource": "*" },
+      { "effect": "allow", "action": "provider.use", "resource": "anthropic" },
+      { "effect": "allow", "action": "provider.use", "resource": "openai" }
+    ]
+  }
+}
+```

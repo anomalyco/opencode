@@ -1,0 +1,733 @@
+---
+title: CLI
+description: گزینه‌ها و دستورات OpenCode CLI.
+---
+
+import { Tabs, TabItem } from "@astrojs/starlight/components"
+
+OpenCode CLI به‌طور پیش‌فرض وقتی بدون هیچ آرگومانی اجرا شود، [TUI](/docs/tui) را آغاز می‌کند.
+
+```bash
+opencode
+```
+
+اما همچنین دستوراتی را می‌پذیرد که در این صفحه مستند شده‌اند. این به شما اجازه می‌دهد به‌صورت برنامه‌نویسی‌شده با OpenCode تعامل کنید.
+
+```bash
+opencode run "Explain how closures work in JavaScript"
+```
+
+---
+
+### tui
+
+رابط کاربری ترمینال OpenCode را آغاز کنید.
+
+```bash
+opencode [project]
+```
+
+#### Flags
+
+| Flag                                        | Short | Description                                                             |
+| ------------------------------------------- | ----- | ----------------------------------------------------------------------- |
+| <nobr><code>{"--continue"}</code></nobr>    | `-c`  | ادامهٔ آخرین نشست                                                       |
+| <nobr><code>{"--session"}</code></nobr>     | `-s`  | شناسهٔ نشست برای ادامه                                                  |
+| <nobr><code>{"--fork"}</code></nobr>        |       | انشعاب نشست هنگام ادامه (با `--continue` یا `--session` استفاده شود)    |
+| <nobr><code>{"--prompt"}</code></nobr>      |       | درخواست برای استفاده                                                     |
+| <nobr><code>{"--model"}</code></nobr>       | `-m`  | مدل برای استفاده به فرم provider/model                                  |
+| <nobr><code>{"--agent"}</code></nobr>       |       | عامل برای استفاده                                                       |
+| <nobr><code>{"--auto"}</code></nobr>        |       | تأیید خودکار مجوزهایی که صراحتاً رد نشده‌اند                            |
+| <nobr><code>{"--port"}</code></nobr>        |       | درگاه برای گوش دادن                                                     |
+| <nobr><code>{"--hostname"}</code></nobr>    |       | نام میزبان برای گوش دادن                                                |
+| <nobr><code>{"--mdns"}</code></nobr>        |       | فعال کردن کشف mDNS                                                      |
+| <nobr><code>{"--mdns-domain"}</code></nobr> |       | نام دامنهٔ سفارشی mDNS                                                  |
+| <nobr><code>{"--cors"}</code></nobr>        |       | مبدأ(های) مرورگر اضافی برای مجاز کردن CORS                              |
+
+---
+
+## دستورات
+
+OpenCode CLI همچنین دستورات زیر را دارد.
+
+---
+
+### agent
+
+مدیریت عامل‌ها برای OpenCode.
+
+```bash
+opencode agent [command]
+```
+
+---
+
+#### create
+
+یک عامل جدید با پیکربندی سفارشی ایجاد کنید.
+
+```bash
+opencode agent create
+```
+
+این دستور شما را در ایجاد یک عامل جدید با یک درخواست سیستمی سفارشی و پیکربندی مجوز راهنمایی می‌کند. هر چیزی که اجازه ندهید در frontmatter عاملِ تولیدشده رد می‌شود.
+
+#### Flags
+
+| Flag                                        | Short | Description                                                                                                                                                                                                                |
+| ------------------------------------------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| <nobr><code>{"--path"}</code></nobr>        |       | فهرستی برای نوشتن پروندهٔ عامل در آن (پیش‌فرض بر اساس درخواست، سراسری یا `.opencode/agent`)                                                                                                                               |
+| <nobr><code>{"--description"}</code></nobr> |       | اینکه عامل باید چه کند                                                                                                                                                                                                     |
+| <nobr><code>{"--mode"}</code></nobr>        |       | حالت عامل: `all`، `primary`، یا `subagent`                                                                                                                                                                                 |
+| <nobr><code>{"--permissions"}</code></nobr> |       | فهرست جداشده با ویرگول از مجوزهایی برای اجازه دادن (پیش‌فرض: همه). موجود: `bash`، `read`، `edit`، `glob`، `grep`، `webfetch`، `task`، `todowrite`، `websearch`، `lsp`، `skill`. هر چیزی که حذف شود رد می‌شود. نام مستعار: `--tools` |
+| <nobr><code>{"--model"}</code></nobr>       | `-m`  | مدل برای استفاده، به فرمت `provider/model`                                                                                                                                                                                 |
+
+عبور تمامِ `--path`، `--description`، `--mode`، و `--permissions` دستور را به‌صورت غیرتعاملی اجرا می‌کند.
+
+---
+
+#### list
+
+فهرست تمام عامل‌های موجود.
+
+```bash
+opencode agent list
+```
+
+---
+
+### attach
+
+یک ترمینال را به یک سرور بک‌اند OpenCode که از قبل در حال اجراست و از طریق دستورات `serve` یا `web` شروع شده است، متصل کنید.
+
+```bash
+opencode attach [url]
+```
+
+این امکان استفاده از TUI با یک بک‌اند OpenCode از راه دور را فراهم می‌کند. برای مثال:
+
+```bash
+# Start the backend server for web/mobile access
+opencode web --port 4096 --hostname 0.0.0.0
+
+# In another terminal, attach the TUI to the running backend
+opencode attach http://10.20.30.40:4096
+```
+
+#### Flags
+
+| Flag                                     | Short | Description                                                                |
+| ---------------------------------------- | ----- | -------------------------------------------------------------------------- |
+| <nobr><code>{"--dir"}</code></nobr>      |       | فهرست کاری برای شروع TUI در آن                                             |
+| <nobr><code>{"--continue"}</code></nobr> | `-c`  | ادامهٔ آخرین نشست                                                          |
+| <nobr><code>{"--session"}</code></nobr>  | `-s`  | شناسهٔ نشست برای ادامه                                                     |
+| <nobr><code>{"--fork"}</code></nobr>     |       | انشعاب نشست هنگام ادامه (با `--continue` یا `--session` استفاده شود)       |
+| <nobr><code>{"--password"}</code></nobr> | `-p`  | گذرواژهٔ احراز هویت پایه (پیش‌فرض `OPENCODE_SERVER_PASSWORD`)             |
+| <nobr><code>{"--username"}</code></nobr> | `-u`  | نام کاربری احراز هویت پایه (پیش‌فرض `OPENCODE_SERVER_USERNAME` یا `opencode`) |
+
+---
+
+### auth
+
+دستوری برای مدیریت اعتبارنامه‌ها و ورود برای ارائه‌دهنده‌ها.
+
+```bash
+opencode auth [command]
+```
+
+---
+
+#### login
+
+OpenCode توسط فهرست ارائه‌دهنده‌ها در [Models.dev](https://models.dev) تغذیه می‌شود، بنابراین می‌توانید از `opencode auth login` برای پیکربندی کلیدهای API برای هر ارائه‌دهنده‌ای که مایلید استفاده کنید استفاده کنید. این در `~/.local/share/opencode/auth.json` ذخیره می‌شود.
+
+```bash
+opencode auth login
+```
+
+وقتی OpenCode راه‌اندازی می‌شود، ارائه‌دهنده‌ها را از پروندهٔ اعتبارنامه‌ها بارگذاری می‌کند. و اگر هر کلیدی در محیط‌هایتان یا یک پروندهٔ `.env` در پروژه‌تان تعریف شده باشد.
+
+##### Flags
+
+| Flag                                     | Short | Description                                          |
+| ---------------------------------------- | ----- | ---------------------------------------------------- |
+| <nobr><code>{"--provider"}</code></nobr> | `-p`  | شناسه یا نام ارائه‌دهنده برای ورود                     |
+| <nobr><code>{"--method"}</code></nobr>   | `-m`  | برچسب روش ورود برای استفاده، رد کردن انتخاب روش      |
+
+---
+
+#### list
+
+فهرست تمام ارائه‌دهنده‌های احراز هویت‌شده همان‌طور که در پروندهٔ اعتبارنامه‌ها ذخیره شده است.
+
+```bash
+opencode auth list
+```
+
+یا نسخهٔ کوتاه آن.
+
+```bash
+opencode auth ls
+```
+
+---
+
+#### logout
+
+خروج شما از یک ارائه‌دهنده با پاک کردن آن از پروندهٔ اعتبارنامه‌ها.
+
+```bash
+opencode auth logout
+```
+
+---
+
+### github
+
+مدیریت عامل GitHub برای خودکارسازی مخزن.
+
+```bash
+opencode github [command]
+```
+
+---
+
+#### install
+
+عامل GitHub را در مخزن خود نصب کنید.
+
+```bash
+opencode github install
+```
+
+این گردش کار لازمِ GitHub Actions را راه‌اندازی می‌کند و شما را در فرایند پیکربندی راهنمایی می‌کند. [بیشتر بیاموزید](/docs/github).
+
+---
+
+#### run
+
+عامل GitHub را اجرا کنید. این معمولاً در GitHub Actions استفاده می‌شود.
+
+```bash
+opencode github run
+```
+
+##### Flags
+
+| Flag                                  | Description                            |
+| ------------------------------------- | -------------------------------------- |
+| <nobr><code>{"--event"}</code></nobr> | رخداد mock گیت‌هاب برای اجرای عامل     |
+| <nobr><code>{"--token"}</code></nobr> | توکن دسترسی شخصی گیت‌هاب               |
+
+---
+
+### mcp
+
+مدیریت سرورهای Model Context Protocol.
+
+```bash
+opencode mcp [command]
+```
+
+---
+
+#### add
+
+یک سرور MCP به پیکربندی خود اضافه کنید.
+
+```bash
+opencode mcp add
+```
+
+این دستور شما را در افزودن یک سرور MCP محلی یا از راه دور راهنمایی می‌کند.
+
+---
+
+#### list
+
+فهرست تمام سرورهای MCP پیکربندی‌شده و وضعیت اتصال آن‌ها.
+
+```bash
+opencode mcp list
+```
+
+یا از نسخهٔ کوتاه استفاده کنید.
+
+```bash
+opencode mcp ls
+```
+
+---
+
+#### auth
+
+احراز هویت با یک سرور MCP دارای OAuth.
+
+```bash
+opencode mcp auth [name]
+```
+
+اگر نام سرور را ارائه ندهید، از شما خواسته می‌شود از میان سرورهای توانا به OAuth انتخاب کنید.
+
+همچنین می‌توانید سرورهای توانا به OAuth و وضعیت احراز هویت آن‌ها را فهرست کنید.
+
+```bash
+opencode mcp auth list
+```
+
+یا از نسخهٔ کوتاه استفاده کنید.
+
+```bash
+opencode mcp auth ls
+```
+
+---
+
+#### logout
+
+حذف اعتبارنامه‌های OAuth برای یک سرور MCP.
+
+```bash
+opencode mcp logout [name]
+```
+
+---
+
+#### debug
+
+رفع اشکال مشکلات اتصال OAuth برای یک سرور MCP.
+
+```bash
+opencode mcp debug <name>
+```
+
+---
+
+### models
+
+فهرست تمام مدل‌های موجود از ارائه‌دهنده‌های پیکربندی‌شده.
+
+```bash
+opencode models [provider]
+```
+
+این دستور تمام مدل‌های موجود در میان ارائه‌دهنده‌های پیکربندی‌شده را به فرمت `provider/model` نمایش می‌دهد.
+
+این برای پیدا کردن نام دقیق مدل برای استفاده در [پیکربندی شما](/docs/config/) مفید است.
+
+می‌توانید اختیاری یک شناسهٔ ارائه‌دهنده عبور دهید تا مدل‌ها را بر اساس آن ارائه‌دهنده فیلتر کنید.
+
+```bash
+opencode models anthropic
+```
+
+#### Flags
+
+| Flag                                    | Description                                                  |
+| --------------------------------------- | ------------------------------------------------------------ |
+| <nobr><code>{"--refresh"}</code></nobr> | به‌روزرسانی حافظهٔ نهان مدل‌ها از models.dev                |
+| <nobr><code>{"--verbose"}</code></nobr> | استفاده از خروجی مدل پرگویاتر (شامل فراداده مثل هزینه‌ها)   |
+
+از پرچم `--refresh` برای به‌روزرسانی فهرست مدل ذخیره‌شده استفاده کنید. این وقتی مفید است که مدل‌های جدیدی به یک ارائه‌دهنده اضافه شده باشند و می‌خواهید آن‌ها را در OpenCode ببینید.
+
+```bash
+opencode models --refresh
+```
+
+---
+
+### run
+
+opencode را در حالت غیرتعاملی با عبور مستقیم یک درخواست اجرا کنید.
+
+```bash
+opencode run [message..]
+```
+
+این برای اسکریپت‌نویسی، خودکارسازی، یا وقتی که پاسخ سریعی بدون راه‌اندازی TUI کامل می‌خواهید مفید است. برای مثال.
+
+```bash "opencode run"
+opencode run Explain the use of context in Go
+```
+
+همچنین می‌توانید به یک نمونهٔ در حال اجرای `opencode serve` متصل شوید تا از زمان راه‌اندازی سرد سرور MCP در هر اجرا جلوگیری کنید:
+
+```bash
+# Start a headless server in one terminal
+opencode serve
+
+# In another terminal, run commands that attach to it
+opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
+```
+
+#### Flags
+
+| Flag                                     | Short | Description                                                                |
+| ---------------------------------------- | ----- | -------------------------------------------------------------------------- |
+| <nobr><code>{"--command"}</code></nobr>  |       | دستور برای اجرا، برای آرگومان‌ها از message استفاده کنید                  |
+| <nobr><code>{"--continue"}</code></nobr> | `-c`  | ادامهٔ آخرین نشست                                                          |
+| <nobr><code>{"--session"}</code></nobr>  | `-s`  | شناسهٔ نشست برای ادامه                                                     |
+| <nobr><code>{"--fork"}</code></nobr>     |       | انشعاب نشست هنگام ادامه (با `--continue` یا `--session` استفاده شود)       |
+| <nobr><code>{"--share"}</code></nobr>    |       | اشتراک‌گذاری نشست                                                          |
+| <nobr><code>{"--model"}</code></nobr>    | `-m`  | مدل برای استفاده به فرم provider/model                                     |
+| <nobr><code>{"--agent"}</code></nobr>    |       | عامل برای استفاده                                                         |
+| <nobr><code>{"--file"}</code></nobr>     | `-f`  | پرونده(ها) برای پیوست به پیام                                              |
+| <nobr><code>{"--format"}</code></nobr>   |       | فرمت: default (قالب‌بندی‌شده) یا json (رویدادهای خام JSON)                |
+| <nobr><code>{"--title"}</code></nobr>    |       | عنوان برای نشست (اگر مقداری داده نشود از درخواست کوتاه‌شده استفاده می‌کند) |
+| <nobr><code>{"--attach"}</code></nobr>   |       | اتصال به یک سرور opencode در حال اجرا (مثل http://localhost:4096)          |
+| <nobr><code>{"--password"}</code></nobr> | `-p`  | گذرواژهٔ احراز هویت پایه (پیش‌فرض `OPENCODE_SERVER_PASSWORD`)             |
+| <nobr><code>{"--username"}</code></nobr> | `-u`  | نام کاربری احراز هویت پایه (پیش‌فرض `OPENCODE_SERVER_USERNAME` یا `opencode`) |
+| <nobr><code>{"--dir"}</code></nobr>      |       | فهرست برای اجرا، یا مسیر روی سرور از راه دور هنگام اتصال                   |
+| <nobr><code>{"--port"}</code></nobr>     |       | درگاه برای سرور محلی (پیش‌فرض درگاه تصادفی)                                |
+| <nobr><code>{"--variant"}</code></nobr>  |       | گونهٔ مدل (تلاش استنتاجی ویژهٔ ارائه‌دهنده)                               |
+| <nobr><code>{"--thinking"}</code></nobr> |       | نمایش بلوک‌های تفکر                                                       |
+| <nobr><code>{"--auto"}</code></nobr>     |       | تأیید خودکار مجوزهایی که صراحتاً رد نشده‌اند                              |
+
+---
+
+### serve
+
+یک سرور بی‌سر OpenCode برای دسترسی API شروع کنید. مستندات [سرور](/docs/server) را برای رابط کامل HTTP بررسی کنید.
+
+```bash
+opencode serve
+```
+
+این یک سرور HTTP راه‌اندازی می‌کند که دسترسی API به قابلیت‌های opencode بدون رابط TUI فراهم می‌کند. `OPENCODE_SERVER_PASSWORD` را تنظیم کنید تا احراز هویت پایهٔ HTTP فعال شود (نام کاربری پیش‌فرض `opencode` است).
+
+#### Flags
+
+| Flag                                        | Description                                |
+| ------------------------------------------- | ------------------------------------------ |
+| <nobr><code>{"--port"}</code></nobr>        | درگاه برای گوش دادن                        |
+| <nobr><code>{"--hostname"}</code></nobr>    | نام میزبان برای گوش دادن                   |
+| <nobr><code>{"--mdns"}</code></nobr>        | فعال کردن کشف mDNS                         |
+| <nobr><code>{"--mdns-domain"}</code></nobr> | نام دامنهٔ سفارشی mDNS                     |
+| <nobr><code>{"--cors"}</code></nobr>        | مبدأ(های) مرورگر اضافی برای مجاز کردن CORS |
+
+---
+
+### session
+
+مدیریت نشست‌های OpenCode.
+
+```bash
+opencode session [command]
+```
+
+---
+
+#### list
+
+فهرست تمام نشست‌های OpenCode.
+
+```bash
+opencode session list
+```
+
+##### Flags
+
+| Flag                                      | Short | Description                          |
+| ----------------------------------------- | ----- | ------------------------------------ |
+| <nobr><code>{"--max-count"}</code></nobr> | `-n`  | محدود به N نشست اخیر                |
+| <nobr><code>{"--format"}</code></nobr>    |       | فرمت خروجی: table یا json (table)   |
+
+---
+
+#### delete
+
+حذف یک نشست OpenCode.
+
+```bash
+opencode session delete <sessionID>
+```
+
+---
+
+### stats
+
+نمایش آمار مصرف توکن و هزینه برای نشست‌های OpenCode شما.
+
+```bash
+opencode stats
+```
+
+#### Flags
+
+| Flag                                    | Description                                                                 |
+| --------------------------------------- | --------------------------------------------------------------------------- |
+| <nobr><code>{"--days"}</code></nobr>    | نمایش آمار برای N روز آخر (تمام زمان)                                       |
+| <nobr><code>{"--tools"}</code></nobr>   | تعداد ابزارهای نمایش‌داده‌شده (همه)                                         |
+| <nobr><code>{"--models"}</code></nobr>  | نمایش تفکیک مصرف مدل (پیش‌فرض پنهان). یک عدد عبور دهید تا N مورد بالا نمایش داده شود |
+| <nobr><code>{"--project"}</code></nobr> | فیلتر بر اساس پروژه (همهٔ پروژه‌ها، رشتهٔ خالی: پروژهٔ فعلی)               |
+
+---
+
+### export
+
+صدور داده‌های نشست به‌صورت JSON.
+
+```bash
+opencode export [sessionID]
+```
+
+اگر شناسهٔ نشست ارائه ندهید، از شما خواسته می‌شود از میان نشست‌های موجود انتخاب کنید.
+
+#### Flags
+
+| Flag                                     | Description                           |
+| ---------------------------------------- | ------------------------------------- |
+| <nobr><code>{"--sanitize"}</code></nobr> | حذف داده‌های حساسِ رونوشت/پرونده     |
+
+---
+
+### import
+
+وارد کردن داده‌های نشست از یک پروندهٔ JSON یا نشانی اشتراک‌گذاری OpenCode.
+
+```bash
+opencode import <file>
+```
+
+می‌توانید از یک پروندهٔ محلی یا یک نشانی اشتراک‌گذاری OpenCode وارد کنید.
+
+```bash
+opencode import session.json
+opencode import https://opncd.ai/s/abc123
+```
+
+---
+
+### web
+
+شروع یک سرور بی‌سر OpenCode با یک رابط وب.
+
+```bash
+opencode web
+```
+
+این یک سرور HTTP راه‌اندازی می‌کند و یک مرورگر وب باز می‌کند تا از طریق یک رابط وب به OpenCode دسترسی یابید. `OPENCODE_SERVER_PASSWORD` را تنظیم کنید تا احراز هویت پایهٔ HTTP فعال شود (نام کاربری پیش‌فرض `opencode` است).
+
+#### Flags
+
+| Flag                                        | Description                                |
+| ------------------------------------------- | ------------------------------------------ |
+| <nobr><code>{"--port"}</code></nobr>        | درگاه برای گوش دادن                        |
+| <nobr><code>{"--hostname"}</code></nobr>    | نام میزبان برای گوش دادن                   |
+| <nobr><code>{"--mdns"}</code></nobr>        | فعال کردن کشف mDNS                         |
+| <nobr><code>{"--mdns-domain"}</code></nobr> | نام دامنهٔ سفارشی mDNS                     |
+| <nobr><code>{"--cors"}</code></nobr>        | مبدأ(های) مرورگر اضافی برای مجاز کردن CORS |
+
+---
+
+### acp
+
+شروع یک سرور ACP (Agent Client Protocol).
+
+```bash
+opencode acp
+```
+
+این دستور یک سرور ACP راه‌اندازی می‌کند که از طریق stdin/stdout با استفاده از nd-JSON ارتباط برقرار می‌کند.
+
+#### Flags
+
+| Flag                                        | Description                                |
+| ------------------------------------------- | ------------------------------------------ |
+| <nobr><code>{"--cwd"}</code></nobr>         | فهرست کاری                                 |
+| <nobr><code>{"--port"}</code></nobr>        | درگاه برای گوش دادن                        |
+| <nobr><code>{"--hostname"}</code></nobr>    | نام میزبان برای گوش دادن                   |
+| <nobr><code>{"--mdns"}</code></nobr>        | فعال کردن کشف mDNS                         |
+| <nobr><code>{"--mdns-domain"}</code></nobr> | نام دامنهٔ سفارشی mDNS                     |
+| <nobr><code>{"--cors"}</code></nobr>        | مبدأ(های) مرورگر اضافی برای مجاز کردن CORS |
+
+---
+
+### plugin
+
+نصب یک افزونه و به‌روزرسانی پیکربندی شما.
+
+```bash
+opencode plugin <module>
+```
+
+یا از نام مستعار استفاده کنید.
+
+```bash
+opencode plug <module>
+```
+
+#### Flags
+
+| Flag                                   | Short | Description                     |
+| -------------------------------------- | ----- | ------------------------------- |
+| <nobr><code>{"--global"}</code></nobr> | `-g`  | نصب در پیکربندی سراسری          |
+| <nobr><code>{"--force"}</code></nobr>  | `-f`  | جایگزینی نسخهٔ موجود افزونه     |
+
+---
+
+### pr
+
+واکشی و چک‌اوتِ شاخهٔ یک PR گیت‌هاب، سپس اجرای OpenCode.
+
+```bash
+opencode pr <number>
+```
+
+---
+
+### db
+
+ابزارهای پایگاه داده.
+
+```bash
+opencode db [query]
+```
+
+#### Flags
+
+| Flag                                   | Description                    |
+| -------------------------------------- | ------------------------------ |
+| <nobr><code>{"--format"}</code></nobr> | فرمت خروجی: `json` یا `tsv`   |
+
+---
+
+#### path
+
+چاپ مسیر پایگاه داده.
+
+```bash
+opencode db path
+```
+
+---
+
+### debug
+
+ابزارهای اشکال‌زدایی و عیب‌یابی.
+
+```bash
+opencode debug [command]
+```
+
+---
+
+### uninstall
+
+حذف نصب OpenCode و حذف تمام پرونده‌های مرتبط.
+
+```bash
+opencode uninstall
+```
+
+#### Flags
+
+| Flag                                        | Short | Description                                 |
+| ------------------------------------------- | ----- | ------------------------------------------- |
+| <nobr><code>{"--keep-config"}</code></nobr> | `-c`  | نگه داشتن پرونده‌های پیکربندی              |
+| <nobr><code>{"--keep-data"}</code></nobr>   | `-d`  | نگه داشتن داده‌های نشست و نگاره‌ها         |
+| <nobr><code>{"--dry-run"}</code></nobr>     |       | نمایش آنچه حذف می‌شود بدون حذف واقعی        |
+| <nobr><code>{"--force"}</code></nobr>       | `-f`  | رد کردن درخواست‌های تأیید                  |
+
+---
+
+### upgrade
+
+opencode را به جدیدترین نسخه یا یک نسخهٔ مشخص به‌روزرسانی می‌کند.
+
+```bash
+opencode upgrade [target]
+```
+
+برای به‌روزرسانی به جدیدترین نسخه.
+
+```bash
+opencode upgrade
+```
+
+برای به‌روزرسانی به یک نسخهٔ مشخص.
+
+```bash
+opencode upgrade v0.1.48
+```
+
+#### Flags
+
+| Flag                                   | Short | Description                                                       |
+| -------------------------------------- | ----- | ----------------------------------------------------------------- |
+| <nobr><code>{"--method"}</code></nobr> | `-m`  | روش نصبی که استفاده شد؛ curl، npm، pnpm، bun، brew               |
+
+---
+
+## پرچم‌های سراسری
+
+opencode CLI پرچم‌های سراسری زیر را می‌پذیرد.
+
+| Flag                                       | Short | Description                          |
+| ------------------------------------------ | ----- | ------------------------------------ |
+| <nobr><code>{"--help"}</code></nobr>       | `-h`  | نمایش راهنما                        |
+| <nobr><code>{"--version"}</code></nobr>    | `-v`  | چاپ شمارهٔ نسخه                     |
+| <nobr><code>{"--print-logs"}</code></nobr> |       | چاپ لاگ‌ها در stderr                |
+| <nobr><code>{"--log-level"}</code></nobr>  |       | سطح لاگ (DEBUG، INFO، WARN، ERROR)  |
+| <nobr><code>{"--pure"}</code></nobr>       |       | اجرا بدون افزونه‌های خارجی          |
+
+---
+
+## متغیرهای محیطی
+
+OpenCode را می‌توان با استفاده از متغیرهای محیطی پیکربندی کرد.
+
+| Variable                              | Type    | Description                                       |
+| ------------------------------------- | ------- | ------------------------------------------------- |
+| `OPENCODE_AUTO_SHARE`                 | boolean | اشتراک‌گذاری خودکار نشست‌ها                      |
+| `OPENCODE_GIT_BASH_PATH`              | string  | مسیر اجرایی Git Bash در ویندوز                    |
+| `OPENCODE_CONFIG`                     | string  | مسیر پروندهٔ پیکربندی                            |
+| `OPENCODE_TUI_CONFIG`                 | string  | مسیر پروندهٔ پیکربندی TUI                        |
+| `OPENCODE_CONFIG_DIR`                 | string  | مسیر فهرست پیکربندی                              |
+| `OPENCODE_CONFIG_CONTENT`             | string  | محتوای درون‌خطی پیکربندی json                    |
+| `OPENCODE_DISABLE_AUTOUPDATE`         | boolean | غیرفعال کردن بررسی‌های به‌روزرسانی خودکار        |
+| `OPENCODE_DISABLE_PRUNE`              | boolean | غیرفعال کردن هرس داده‌های قدیمی                 |
+| `OPENCODE_DISABLE_TERMINAL_TITLE`     | boolean | غیرفعال کردن به‌روزرسانی‌های خودکار عنوان ترمینال |
+| `OPENCODE_PERMISSION`                 | string  | پیکربندی درون‌خطی مجوزهای json                   |
+| `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | boolean | غیرفعال کردن افزونه‌های پیش‌فرض                  |
+| `OPENCODE_DISABLE_LSP_DOWNLOAD`       | boolean | غیرفعال کردن بارگیری خودکار سرور LSP             |
+| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | boolean | فعال کردن مدل‌های آزمایشی                        |
+| `OPENCODE_DISABLE_AUTOCOMPACT`        | boolean | غیرفعال کردن فشرده‌سازی خودکار زمینه             |
+| `OPENCODE_DISABLE_CLAUDE_CODE`        | boolean | غیرفعال کردن خواندن از `.claude` (درخواست + مهارت‌ها) |
+| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | boolean | غیرفعال کردن خواندن `~/.claude/CLAUDE.md`        |
+| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | boolean | غیرفعال کردن بارگذاری `.claude/skills`          |
+| `OPENCODE_DISABLE_MODELS_FETCH`       | boolean | غیرفعال کردن واکشی مدل‌ها از منابع دوردست       |
+| `OPENCODE_DISABLE_MOUSE`              | boolean | غیرفعال کردن گرفتن موشی در TUI                  |
+| `OPENCODE_FAKE_VCS`                   | string  | ارائه‌دهندهٔ VCS جعلی برای مقاصد آزمایشی        |
+| `OPENCODE_CLIENT`                     | string  | شناسهٔ کلاینت (پیش‌فرض `cli`)                   |
+| `OPENCODE_ENABLE_EXA`                 | boolean | فعال کردن ابزارهای جستجوی وب Exa                |
+| `OPENCODE_SERVER_PASSWORD`            | string  | فعال کردن احراز هویت پایه برای `serve`/`web`    |
+| `OPENCODE_SERVER_USERNAME`            | string  | لغو نام کاربری احراز هویت پایه (پیش‌فرض `opencode`) |
+| `OPENCODE_MODELS_URL`                 | string  | نشانی سفارشی برای واکشی پیکربندی مدل‌ها         |
+
+---
+
+### آزمایشی
+
+این متغیرهای محیطی ویژگی‌های آزمایشی را فعال می‌کنند که ممکن است تغییر کنند یا حذف شوند.
+
+| Variable                                        | Type    | Description                             |
+| ----------------------------------------------- | ------- | --------------------------------------- |
+| `OPENCODE_EXPERIMENTAL`                         | boolean | فعال کردن پرچم چتری آزمایشی            |
+| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | فعال کردن کشف آیکون                    |
+| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | غیرفعال کردن کپی هنگام انتخاب در TUI   |
+| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | number  | زمان‌سپری پیش‌فرض برای دستورات bash به میلی‌ثانیه |
+| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | number  | حداکثر توکن‌های خروجی برای پاسخ‌های LLM |
+| `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | boolean | فعال کردن نگهبان پرونده برای کل فهرست  |
+| `OPENCODE_EXPERIMENTAL_OXFMT`                   | boolean | فعال کردن قالب‌بند oxfmt                |
+| `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | boolean | فعال کردن ابزار آزمایشی LSP            |
+| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolean | غیرفعال کردن نگهبان پرونده             |
+| `OPENCODE_EXPERIMENTAL_EXA`                     | boolean | فعال کردن ویژگی‌های آزمایشی Exa        |
+| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | boolean | فعال کردن TY LSP برای پرونده‌های پایتون |
+| `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | boolean | فعال کردن حالت plan                     |
+| `OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS`    | boolean | فعال کردن وظایف زیرعامل پس‌زمینه‌ای    |
+| `OPENCODE_EXPERIMENTAL_EVENT_SYSTEM`            | boolean | فعال کردن سیستم رویداد آزمایشی         |
+| `OPENCODE_EXPERIMENTAL_NATIVE_LLM`              | boolean | فعال کردن مسیر درخواست بومی LLM        |
+| `OPENCODE_EXPERIMENTAL_PARALLEL`                | boolean | فعال کردن اجرای موازی جستجوی وب        |
+| `OPENCODE_EXPERIMENTAL_SCOUT`                   | boolean | فعال کردن زیرعامل Scout                |
+| `OPENCODE_EXPERIMENTAL_WORKSPACES`              | boolean | فعال کردن پشتیبانی از فضای کاری        |

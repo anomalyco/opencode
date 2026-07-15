@@ -1,0 +1,463 @@
+---
+title: SDK
+description: کلاینت JS ایمن نسبت به نوع برای سرور opencode.
+---
+
+import config from "../../../../config.mjs"
+export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
+
+SDK JS/TS اوپن‌کد یک کلاینت ایمن نسبت به نوع برای تعامل با سرور ارائه می‌دهد.
+از آن برای ساخت ادغام‌ها و کنترل opencode به صورت برنامه‌نویسی استفاده کنید.
+
+[بیشتر بدانید](/docs/server) درباره نحوه کار سرور. برای مثال‌ها، [پروژه‌ها](/docs/ecosystem#projects) ساخته‌شده توسط جامعه را بررسی کنید.
+
+---
+
+## نصب
+
+نصب SDK از npm:
+
+```bash
+npm install @opencode-ai/sdk
+```
+
+---
+
+## ایجاد کلاینت
+
+ایجاد یک نمونه از opencode:
+
+```javascript
+import { createOpencode } from "@opencode-ai/sdk"
+
+const { client } = await createOpencode()
+```
+
+این هم سرور و هم کلاینت را شروع می‌کند.
+
+#### گزینه‌ها
+
+| گزینه       | نوع              | توضیحات                          | پیش‌فرض     |
+| ----------- | ---------------- | -------------------------------- | ----------- |
+| `hostname`  | `string`         | نام میزبان سرور                  | `127.0.0.1` |
+| `port`      | `number`         | درگاه سرور                       | `4096`      |
+| `signal`    | `AbortSignal`    | سیگنال لغو برای کنسل کردن        | `undefined` |
+| `timeout`   | `number`         | زمان انقضا به میلی‌ثانیه برای شروع سرور | `5000`      |
+| `config`    | `Config`         | شیء پیکربندی                    | `{}`        |
+
+---
+
+## پیکربندی
+
+می‌توانید یک شیء پیکربندی برای سفارشی کردن رفتار پاس دهید. نمونه همچنان `opencode.json` شما را می‌گیرد، اما می‌توانید پیکربندی را به‌صورت درون‌خطی لغو یا اضافه کنید:
+
+```javascript
+import { createOpencode } from "@opencode-ai/sdk"
+
+const opencode = await createOpencode({
+  hostname: "127.0.0.1",
+  port: 4096,
+  config: {
+    model: "anthropic/claude-3-5-sonnet-20241022",
+  },
+})
+
+console.log(`Server running at ${opencode.server.url}`)
+
+opencode.server.close()
+```
+
+## فقط کلاینت
+
+اگر قبلاً یک نمونه در حال اجرای opencode دارید، می‌توانید یک نمونه کلاینت برای اتصال به آن ایجاد کنید:
+
+```javascript
+import { createOpencodeClient } from "@opencode-ai/sdk"
+
+const client = createOpencodeClient({
+  baseUrl: "http://localhost:4096",
+})
+```
+
+#### گزینه‌ها
+
+| گزینه           | نوع       | توضیحات                                | پیش‌فرض                 |
+| --------------- | --------- | -------------------------------------- | ----------------------- |
+| `baseUrl`       | `string`  | URL سرور                               | `http://localhost:4096` |
+| `fetch`         | `function`| پیاده‌سازی fetch سفارشی                | `globalThis.fetch`      |
+| `parseAs`       | `string`  | روش تجزیه پاسخ                         | `auto`                  |
+| `responseStyle` | `string`  | سبک بازگشت: `data` یا `fields`         | `fields`                |
+| `throwOnError`  | `boolean` | پرتاب خطاها به جای بازگشت              | `false`                 |
+
+---
+
+## انواع
+
+SDK شامل تعاریف TypeScript برای تمام انواع API است. آن‌ها را مستقیماً وارد کنید:
+
+```typescript
+import type { Session, Message, Part } from "@opencode-ai/sdk"
+```
+
+تمام انواع از مشخصات OpenAPI سرور تولید شده‌اند و در <a href={typesUrl}>پرونده انواع</a> در دسترس هستند.
+
+---
+
+## خطاها
+
+SDK می‌تواند خطاهایی پرتاب کند که می‌توانید آن‌ها را بگیرید و مدیریت کنید:
+
+```typescript
+try {
+  await client.session.get({ path: { id: "invalid-id" } })
+} catch (error) {
+  console.error("Failed to get session:", (error as Error).message)
+}
+```
+
+---
+
+## خروجی ساختاریافته
+
+می‌توانید خروجی JSON ساختاریافته را از مدل با مشخص کردن یک `format` همراه با یک طرحواره JSON درخواست کنید. مدل از یک ابزار `StructuredOutput` برای بازگرداندن JSON تایید‌شده مطابق با طرحواره شما استفاده می‌کند.
+
+### کاربرد پایه
+
+```typescript
+const result = await client.session.prompt({
+  path: { id: sessionId },
+  body: {
+    parts: [{ type: "text", text: "Research Anthropic and provide company info" }],
+    format: {
+      type: "json_schema",
+      schema: {
+        type: "object",
+        properties: {
+          company: { type: "string", description: "Company name" },
+          founded: { type: "number", description: "Year founded" },
+          products: {
+            type: "array",
+            items: { type: "string" },
+            description: "Main products",
+          },
+        },
+        required: ["company", "founded"],
+      },
+    },
+  },
+})
+
+// Access the structured output
+console.log(result.data.info.structured_output)
+// { company: "Anthropic", founded: 2021, products: ["Claude", "Claude API"] }
+```
+
+### انواع قالب خروجی
+
+| نوع          | توضیحات                                                    |
+| ------------ | ---------------------------------------------------------- |
+| `text`       | پیش‌فرض. پاسخ متنی استاندارد (بدون خروجی ساختاریافته)     |
+| `json_schema`| بازگرداندن JSON تایید‌شده مطابق با طرحواره ارائه‌شده      |
+
+### قالب طرحواره JSON
+
+هنگام استفاده از `type: 'json_schema'`، موارد زیر را ارائه دهید:
+
+| فیلد         | نوع            | توضیحات                                                  |
+| ------------ | -------------- | -------------------------------------------------------- |
+| `type`       | `'json_schema'`| ضروری. حالت طرحواره JSON را مشخص می‌کند                  |
+| `schema`     | `object`       | ضروری. شیء JSON Schema که ساختار خروجی را تعریف می‌کند   |
+| `retryCount` | `number`       | اختیاری. تعداد تلاش‌های مجدد اعتبارسنجی (پیش‌فرض: 2)     |
+
+### مدیریت خطا
+
+اگر مدل پس از تمام تلاش‌ها نتواند خروجی ساختاریافته معتبر تولید کند، پاسخ شامل یک `StructuredOutputError` خواهد بود:
+
+```typescript
+if (result.data.info.error?.name === "StructuredOutputError") {
+  console.error("Failed to produce structured output:", result.data.info.error.message)
+  console.error("Attempts:", result.data.info.error.retries)
+}
+```
+
+### بهترین شیوه‌ها
+
+1. **ارائه توضیحات واضح** در ویژگی‌های طرحواره خود تا به مدل کمک کند چه داده‌ای را استخراج کند
+2. **استفاده از `required`** برای مشخص کردن اینکه کدام فیلدها باید حضور داشته باشند
+3. **تمرکز طرحواره‌ها** - طرحواره‌های تودرتو پیچیده ممکن است برای مدل سخت‌تر پر شوند
+4. **تنظیم `retryCount` مناسب** - برای طرحواره‌های پیچیده افزایش دهید، برای ساده‌ها کاهش دهید
+
+---
+
+## APIها
+
+SDK تمام APIهای سرور را از طریق یک کلاینت ایمن نسبت به نوع در معرض دسترس قرار می‌دهد.
+
+---
+
+### سراسری
+
+| متد                | توضیحات                       | پاسخ                                     |
+| ------------------ | ----------------------------- | ---------------------------------------- |
+| `global.health()`  | بررسی سلامت و نسخه سرور       | `{ healthy: true, version: string }`     |
+
+---
+
+#### مثال‌ها
+
+```javascript
+const health = await client.global.health()
+console.log(health.data.version)
+```
+
+---
+
+### برنامه
+
+| متد           | توضیحات                  | پاسخ                                                          |
+| ------------- | ------------------------ | ------------------------------------------------------------- |
+| `app.log()`   | نوشتن یک ورودی لاگ        | `boolean`                                                     |
+| `app.agents()`| فهرست تمام عامل‌های موجود | <a href={typesUrl}><code>Agent[]</code></a>                   |
+
+---
+
+#### مثال‌ها
+
+```javascript
+// Write a log entry
+await client.app.log({
+  body: {
+    service: "my-app",
+    level: "info",
+    message: "Operation completed",
+  },
+})
+
+// List available agents
+const agents = await client.app.agents()
+```
+
+---
+
+### پروژه
+
+| متد                 | توضیحات            | پاسخ                                                          |
+| ------------------- | ------------------ | ------------------------------------------------------------- |
+| `project.list()`    | فهرست تمام پروژه‌ها | <a href={typesUrl}><code>Project[]</code></a>                 |
+| `project.current()` | دریافت پروژه فعلی  | <a href={typesUrl}><code>Project</code></a>                   |
+
+---
+
+#### مثال‌ها
+
+```javascript
+// List all projects
+const projects = await client.project.list()
+
+// Get current project
+const currentProject = await client.project.current()
+```
+
+---
+
+### مسیر
+
+| متد        | توضیحات          | پاسخ                                                 |
+| ---------- | ---------------- | ---------------------------------------------------- |
+| `path.get()`| دریافت مسیر فعلی | <a href={typesUrl}><code>Path</code></a>             |
+
+---
+
+#### مثال‌ها
+
+```javascript
+// Get current path information
+const pathInfo = await client.path.get()
+```
+
+---
+
+### پیکربندی
+
+| متد                  | توضیحات                            | پاسخ                                                                                                |
+| -------------------- | ---------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `config.get()`       | دریافت اطلاعات پیکربندی            | <a href={typesUrl}><code>Config</code></a>                                                          |
+| `config.providers()` | فهرست ارائه‌دهندگان و مدل‌های پیش‌فرض | `{ providers: `<a href={typesUrl}><code>Provider[]</code></a>`, default: { [key: string]: string } }` |
+
+---
+
+#### مثال‌ها
+
+```javascript
+const config = await client.config.get()
+
+const { providers, default: defaults } = await client.config.providers()
+```
+
+---
+
+### نشست‌ها
+
+| متد                                                       | توضیحات                                  | یادداشت                                                                                                                                                                                                                  |
+| -------------------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `session.list()`                                         | فهرست نشست‌ها                            | باز می‌گرداند <a href={typesUrl}><code>Session[]</code></a>                                                                                                                                                               |
+| `session.get({ path })`                                  | دریافت نشست                              | باز می‌گرداند <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                |
+| `session.children({ path })`                             | فهرست نشست‌های فرزند                     | باز می‌گرداند <a href={typesUrl}><code>Session[]</code></a>                                                                                                                                                              |
+| `session.create({ body })`                               | ایجاد نشست                              | باز می‌گرداند <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                |
+| `session.delete({ path })`                               | حذف نشست                                | باز می‌گرداند `boolean`                                                                                                                                                                                                  |
+| `session.update({ path, body })`                         | به‌روزرسانی ویژگی‌های نشست              | باز می‌گرداند <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                |
+| `session.init({ path, body })`                           | تحلیل برنامه و ایجاد `AGENTS.md`        | باز می‌گرداند `boolean`                                                                                                                                                                                                  |
+| `session.abort({ path })`                                | لغو یک نشست در حال اجرا                 | باز می‌گرداند `boolean`                                                                                                                                                                                                  |
+| `session.share({ path })`                                | اشتراک‌گذاری نشست                       | باز می‌گرداند <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                |
+| `session.unshare({ path })`                              | لغو اشتراک‌گذاری نشست                   | باز می‌گرداند <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                |
+| `session.summarize({ path, body })`                      | خلاصه‌سازی نشست                         | باز می‌گرداند `boolean`                                                                                                                                                                                                  |
+| `session.messages({ path })`                             | فهرست پیام‌ها در یک نشست                | باز می‌گرداند `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}[]`                                                                                             |
+| `session.message({ path })`                              | دریافت جزئیات پیام                      | باز می‌گرداند `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                                                                                               |
+| `session.prompt({ path, body })`                         | ارسال پیام درخواست                      | `body.noReply: true` یک UserMessage (فقط متن) باز می‌گرداند. پیش‌فرض یک <a href={typesUrl}><code>AssistantMessage</code></a> با پاسخ AI باز می‌گرداند. از `body.outputFormat` برای [خروجی ساختاریافته](#structured-output) پشتیبانی می‌کند |
+| `session.command({ path, body })`                        | ارسال دستور به نشست                     | باز می‌گرداند `{ info: `<a href={typesUrl}><code>AssistantMessage</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                                                                                      |
+| `session.shell({ path, body })`                          | اجرای یک دستور شل                       | باز می‌گرداند <a href={typesUrl}><code>AssistantMessage</code></a>                                                                                                                                                       |
+| `session.revert({ path, body })`                         | بازگرداندن یک پیام                      | باز می‌گرداند <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                |
+| `session.unrevert({ path })`                             | بازیابی پیام‌های بازگردانده‌شده         | باز می‌گرداند <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                |
+| `postSessionByIdPermissionsByPermissionId({ path, body })`| پاسخ به یک درخواست مجوز                | باز می‌گرداند `boolean`                                                                                                                                                                                                  |
+
+---
+
+#### مثال‌ها
+
+```javascript
+// Create and manage sessions
+const session = await client.session.create({
+  body: { title: "My session" },
+})
+
+const sessions = await client.session.list()
+
+// Send a prompt message
+const result = await client.session.prompt({
+  path: { id: session.id },
+  body: {
+    model: { providerID: "anthropic", modelID: "claude-3-5-sonnet-20241022" },
+    parts: [{ type: "text", text: "Hello!" }],
+  },
+})
+
+// Inject context without triggering AI response (useful for plugins)
+await client.session.prompt({
+  path: { id: session.id },
+  body: {
+    noReply: true,
+    parts: [{ type: "text", text: "You are a helpful assistant." }],
+  },
+})
+```
+
+---
+
+### پرونده‌ها
+
+| متد                      | توضیحات                              | پاسخ                                                                                      |
+| ------------------------ | ------------------------------------ | ----------------------------------------------------------------------------------------- |
+| `find.text({ query })`   | جستجوی متن در پرونده‌ها              | آرایه‌ای از اشیاء تطبیق با `path`، `lines`، `line_number`، `absolute_offset`، `submatches` |
+| `find.files({ query })`  | یافتن پرونده‌ها و فهرست‌ها بر اساس نام | `string[]` (مسیرها)                                                                       |
+| `find.symbols({ query })`| یافتن نمادهای فضای کاری              | <a href={typesUrl}><code>Symbol[]</code></a>                                              |
+| `file.read({ query })`   | خواندن یک پرونده                     | `{ type: "raw" \| "patch", content: string }`                                            |
+| `file.status({ query? })`| دریافت وضعیت برای پرونده‌های ردیابی‌شده | <a href={typesUrl}><code>File[]</code></a>                                                |
+
+`find.files` از چند فیلد پرس‌وجوی اختیاری پشتیبانی می‌کند:
+
+- `type`: `"file"` یا `"directory"`
+- `directory`: لغو ریشه پروژه برای جستجو
+- `limit`: حداکثر نتایج (۱–۲۰۰)
+
+---
+
+#### مثال‌ها
+
+```javascript
+// Search and read files
+const textResults = await client.find.text({
+  query: { pattern: "function.*opencode" },
+})
+
+const files = await client.find.files({
+  query: { query: "*.ts", type: "file" },
+})
+
+const directories = await client.find.files({
+  query: { query: "packages", type: "directory", limit: 20 },
+})
+
+const content = await client.file.read({
+  query: { path: "src/index.ts" },
+})
+```
+
+---
+
+### TUI
+
+| متد                           | توضیحات                     | پاسخ    |
+| ----------------------------- | --------------------------- | ------- |
+| `tui.appendPrompt({ body })`  | افزودن متن به درخواست       | `boolean` |
+| `tui.openHelp()`              | باز کردن کادر راهنما        | `boolean` |
+| `tui.openSessions()`          | باز کردن انتخابگر نشست      | `boolean` |
+| `tui.openThemes()`            | باز کردن انتخابگر تم        | `boolean` |
+| `tui.openModels()`            | باز کردن انتخابگر مدل       | `boolean` |
+| `tui.submitPrompt()`          | ارسال درخواست فعلی          | `boolean` |
+| `tui.clearPrompt()`           | پاک کردن درخواست            | `boolean` |
+| `tui.executeCommand({ body })`| اجرای یک دستور              | `boolean` |
+| `tui.showToast({ body })`     | نمایش اعلان توست            | `boolean` |
+
+---
+
+#### مثال‌ها
+
+```javascript
+// Control TUI interface
+await client.tui.appendPrompt({
+  body: { text: "Add this to prompt" },
+})
+
+await client.tui.showToast({
+  body: { message: "Task completed", variant: "success" },
+})
+```
+
+---
+
+### احراز هویت
+
+| متد              | توضیحات                       | پاسخ    |
+| -----------------| ----------------------------- | ------- |
+| `auth.set({ ... })` | تنظیم اعتبارنامه‌های احراز هویت | `boolean` |
+
+---
+
+#### مثال‌ها
+
+```javascript
+await client.auth.set({
+  path: { id: "anthropic" },
+  body: { type: "api", key: "your-api-key" },
+})
+```
+
+---
+
+### رویدادها
+
+| متد                | توضیحات                     | پاسخ                    |
+| ------------------ | --------------------------- | ----------------------- |
+| `event.subscribe()`| جریان رویدادهای ارسالی سرور | جریان رویدادهای ارسالی سرور |
+
+---
+
+#### مثال‌ها
+
+```javascript
+// Listen to real-time events
+const events = await client.event.subscribe()
+for await (const event of events.stream) {
+  console.log("Event:", event.type, event.properties)
+}
+```

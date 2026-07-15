@@ -1,0 +1,2499 @@
+---
+title: ارائه‌دهندگان
+description: استفاده از هر ارائه‌دهنده LLM در OpenCode.
+---
+
+import config from "../../../../config.mjs"
+export const console = config.console
+
+OpenCode از [AI SDK](https://ai-sdk.dev/) و [Models.dev](https://models.dev) برای پشتیبانی از **۷۵+ ارائه‌دهنده LLM** استفاده می‌کند و اجرای مدل‌های محلی را نیز پشتیبانی می‌کند.
+
+برای افزودن یک ارائه‌دهنده باید:
+
+1. کلیدهای API مربوط به ارائه‌دهنده را با استفاده از دستور `/connect` اضافه کنید.
+2. ارائه‌دهنده را در پیکربندی OpenCode خود تنظیم کنید.
+
+---
+
+### اعتبارنامه‌ها
+
+هنگامی که کلیدهای API یک ارائه‌دهنده را با دستور `/connect` اضافه می‌کنید، آن‌ها در
+`~/.local/share/opencode/auth.json` ذخیره می‌شوند.
+
+---
+
+### پیکربندی
+
+می‌توانید ارائه‌دهنده‌ها را از طریق بخش `provider` در پیکربندی OpenCode
+خود سفارشی کنید.
+
+---
+
+#### نشانی پایه (Base URL)
+
+می‌توانید نشانی پایه (base URL) را برای هر ارائه‌دهنده با تنظیم گزینه `baseURL` سفارشی کنید. این کار زمانی مفید است که از سرویس‌های پروکسی یا نقاط پایانی (endpoint) سفارشی استفاده می‌کنید.
+
+```json title="opencode.json" {6}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "anthropic": {
+      "options": {
+        "baseURL": "https://api.anthropic.com/v1"
+      }
+    }
+  }
+}
+```
+
+---
+
+#### پنهان کردن مدل‌ها
+
+می‌توانید مدل‌های خاصی را از انتخاب‌گر `/models` برای یک ارائه‌دهنده با استفاده از گزینه `blacklist` پنهان کنید. این زمانی مفید است که یک ارائه‌دهنده مدل‌هایی را نمایش می‌دهد که نمی‌خواهید از آن‌ها استفاده یا انتخاب کنید.
+
+```json title="opencode.json" {6}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "anthropic": {
+      "blacklist": ["claude-opus-4-20250514"]
+    }
+  }
+}
+```
+
+گزینه معکوس `whitelist` تمام مدل‌ها را به جز موارد فهرست‌شده پنهان می‌کند.
+
+```json title="opencode.json" {6}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "anthropic": {
+      "whitelist": ["claude-sonnet-4-20250514"]
+    }
+  }
+}
+```
+
+هر دو گزینه یک آرایه از شناسه‌های مدل را می‌پذیرند — همان شناسه‌هایی که در انتخاب‌گر `/models` نمایش داده می‌شوند.
+
+- `blacklist` مدل‌های فهرست‌شده را از انتخاب‌گر حذف می‌کند.
+- `whitelist` فقط مدل‌های فهرست‌شده را نگه می‌دارد و بقیه را پنهان می‌کند.
+- می‌توانید آن‌ها را ترکیب کنید: `whitelist` مجموعه را محدود می‌کند، سپس `blacklist` موارد را از آن حذف می‌کند.
+
+---
+
+## OpenCode Zen
+
+OpenCode Zen فهرستی از مدل‌هایی است که توسط تیم OpenCode ارائه شده و
+آزمایش و تأیید شده است که با OpenCode به خوبی کار می‌کنند. [بیشتر بدانید](/docs/zen).
+
+:::tip
+اگر تازه‌کار هستید، توصیه می‌کنیم با OpenCode Zen شروع کنید.
+:::
+
+1. دستور `/connect` را در TUI اجرا کنید، گزینه `OpenCode Zen` را انتخاب کرده و به [opencode.ai/auth](https://opencode.ai/zen) بروید.
+
+   ```txt
+   /connect
+   ```
+
+2. وارد شوید، جزئیات صورت‌حساب خود را اضافه کنید و کلید API خود را کپی کنید.
+
+3. کلید API خود را جای‌گذاری کنید.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. دستور `/models` را در TUI اجرا کنید تا فهرست مدل‌هایی که توصیه می‌کنیم را ببینید.
+
+   ```txt
+   /models
+   ```
+
+این دقیقاً مانند هر ارائه‌دهنده دیگری در OpenCode عمل می‌کند و استفاده از آن کاملاً اختیاری است.
+
+---
+
+## OpenCode Go
+
+OpenCode Go یک طرح اشتراک کم‌هزینه است که دسترسی پایدار به مدل‌های متن‌باز کدنویسی محبوب ارائه‌شده توسط تیم OpenCode را فراهم می‌کند که
+آزمایش و تأیید شده‌اند با OpenCode به خوبی کار می‌کنند.
+
+1. دستور `/connect` را در TUI اجرا کنید، گزینه `OpenCode Go` را انتخاب کرده و به [opencode.ai/auth](https://opencode.ai/zen) بروید.
+
+   ```txt
+   /connect
+   ```
+
+2. وارد شوید، جزئیات صورت‌حساب خود را اضافه کنید و کلید API خود را کپی کنید.
+
+3. کلید API خود را جای‌گذاری کنید.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. دستور `/models` را در TUI اجرا کنید تا فهرست مدل‌هایی که توصیه می‌کنیم را ببینید.
+
+   ```txt
+   /models
+   ```
+
+این دقیقاً مانند هر ارائه‌دهنده دیگری در OpenCode عمل می‌کند و استفاده از آن کاملاً اختیاری است.
+
+---
+
+## فهرست
+
+بیایید برخی از ارائه‌دهنده‌ها را با جزئیات نگاه کنیم. اگر می‌خواهید ارائه‌دهنده‌ای را به
+فهرست اضافه کنید، آزادانه یک PR باز کنید.
+
+:::note
+ارائه‌دهنده‌ای را اینجا نمی‌بینید؟ یک PR ارسال کنید.
+:::
+
+---
+
+### 302.AI
+
+1. به [کنسول 302.AI](https://302.ai/) بروید، یک حساب کاربری ایجاد کنید و یک کلید API تولید کنید.
+
+2. دستور `/connect` را اجرا کنید و **302.AI** را جستجو کنید.
+
+   ```txt
+   /connect
+   ```
+
+3. کلید API 302.AI خود را وارد کنید.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. دستور `/models` را اجرا کنید تا یک مدل را انتخاب کنید.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Amazon Bedrock
+
+برای استفاده از Amazon Bedrock با OpenCode:
+
+1. به **فهرست مدل‌ها (Model catalog)** در کنسول Amazon Bedrock بروید و برای
+   مدل‌هایی که می‌خواهید درخواست دسترسی دهید.
+
+   :::tip
+   باید به مدل مورد نظر خود در Amazon Bedrock دسترسی داشته باشید.
+   :::
+
+2. **پیکربندی احراز هویت** را با استفاده از یکی از روش‌های زیر انجام دهید:
+
+   ***
+
+   #### متغیرهای محیطی (شروع سریع)
+
+   یکی از این متغیرهای محیطی را هنگام اجرای opencode تنظیم کنید:
+
+   ```bash
+   # Option 1: Using AWS access keys
+   AWS_ACCESS_KEY_ID=XXX AWS_SECRET_ACCESS_KEY=YYY opencode
+
+   # Option 2: Using named AWS profile
+   AWS_PROFILE=my-profile opencode
+
+   # Option 3: Using Bedrock bearer token
+   AWS_BEARER_TOKEN_BEDROCK=XXX opencode
+   ```
+
+   یا آن‌ها را به پروفایل bash خود اضافه کنید:
+
+   ```bash title="~/.bash_profile"
+   export AWS_PROFILE=my-dev-profile
+   export AWS_REGION=us-east-1
+   ```
+
+   ***
+
+   #### فایل پیکربندی (توصیه‌شده)
+
+   برای پیکربندی اختصاصی پروژه یا پایدار، از `opencode.json` استفاده کنید:
+
+   ```json title="opencode.json"
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "amazon-bedrock": {
+         "options": {
+           "region": "us-east-1",
+           "profile": "my-aws-profile"
+         }
+       }
+     }
+   }
+   ```
+
+   **گزینه‌های موجود:**
+   - `region` - ناحیه AWS (مثلاً `us-east-1`، `eu-west-1`)
+   - `profile` - پروفایل نام‌گذاری‌شده AWS از `~/.aws/credentials`
+   - `endpoint` - نشانی URL نقطه پایانی سفارشی برای نقاط پایانی VPC (نام مستعار برای گزینه عمومی `baseURL`)
+
+   :::tip
+   گزینه‌های فایل پیکربندی بر متغیرهای محیطی اولویت دارند.
+   :::
+
+   ***
+
+   #### پیشرفته: نقاط پایانی VPC
+
+   اگر از نقاط پایانی VPC برای Bedrock استفاده می‌کنید:
+
+   ```json title="opencode.json"
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "amazon-bedrock": {
+         "options": {
+           "region": "us-east-1",
+           "profile": "production",
+           "endpoint": "https://bedrock-runtime.us-east-1.vpce-xxxxx.amazonaws.com"
+         }
+       }
+     }
+   }
+   ```
+
+   :::note
+   گزینه `endpoint` یک نام مستعار برای گزینه عمومی `baseURL` است که از اصطلاحات اختصاصی AWS استفاده می‌کند. اگر هر دو `endpoint` و `baseURL` مشخص شوند، `endpoint` اولویت دارد.
+   :::
+
+   ***
+
+   #### روش‌های احراز هویت
+   - **`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`**: یک کاربر IAM ایجاد کنید و کلیدهای دسترسی را در کنسول AWS تولید کنید
+   - **`AWS_PROFILE`**: از پروفایل‌های نام‌گذاری‌شده از `~/.aws/credentials` استفاده کنید. ابتدا با `aws configure --profile my-profile` یا `aws sso login` پیکربندی کنید
+   - **`AWS_BEARER_TOKEN_BEDROCK`**: کلیدهای API بلندمدت را از کنسول Amazon Bedrock تولید کنید
+   - **`AWS_WEB_IDENTITY_TOKEN_FILE` / `AWS_ROLE_ARN`**: برای EKS IRSA (نقش‌های IAM برای حساب‌های کاربری سرویس) یا سایر محیط‌های Kubernetes با فدراسیون OIDC. این متغیرهای محیطی به‌طور خودکار توسط Kubernetes هنگام استفاده از حاشیه‌نویسی‌های حساب کاربری سرویس تزریق می‌شوند.
+
+   ***
+
+   #### اولویت احراز هویت
+
+   Amazon Bedrock از اولویت احراز هویت زیر استفاده می‌کند:
+   1. **نشانه بیرر (Bearer Token)** - متغیر محیطی `AWS_BEARER_TOKEN_BEDROCK` یا نشانه از دستور `/connect`
+   2. **زنجیره اعتبارنامه AWS** - پروفایل، کلیدهای دسترسی، اعتبارنامه‌های اشتراکی، نقش‌های IAM، نشانه‌های هویت وب (EKS IRSA)، فراداده نمونه
+
+   :::note
+   وقتی یک نشانه بیرر تنظیم شود (از طریق `/connect` یا `AWS_BEARER_TOKEN_BEDROCK`)، بر تمام روش‌های اعتبارنامه AWS از جمله پروفایل‌های پیکربندی‌شده اولویت دارد.
+   :::
+
+3. دستور `/models` را اجرا کنید تا مدل مورد نظر خود را انتخاب کنید.
+
+   ```txt
+   /models
+   ```
+
+:::note
+برای پروفایل‌های استنتاج سفارشی، از نام مدل و ارائه‌دهنده در کلید استفاده کنید و ویژگی `id` را روی arn تنظیم کنید. این تضمین می‌کند که کش‌کردن به‌درستی انجام شود.
+:::
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "amazon-bedrock": {
+      // ...
+      "models": {
+        "anthropic-claude-sonnet-4.5": {
+          "id": "arn:aws:bedrock:us-east-1:xxx:application-inference-profile/yyy"
+        }
+      }
+    }
+  }
+}
+```
+
+---
+
+### Anthropic
+
+1. پس از ثبت‌نام، دستور `/connect` را اجرا کنید و Anthropic را انتخاب کنید.
+
+   ```txt
+   /connect
+   ```
+
+2. در اینجا می‌توانید گزینه **Claude Pro/Max** را انتخاب کنید و مرورگر شما
+   باز می‌شود و از شما می‌خواهد احراز هویت کنید.
+
+   ```txt
+   ┌ Select auth method
+   │
+   │ Manually enter API Key
+   └
+   ```
+
+3. اکنون تمام مدل‌های Anthropic باید هنگام استفاده از دستور `/models` در دسترس باشند.
+
+   ```txt
+   /models
+   ```
+
+:::info
+افزونه‌هایی وجود دارند که اجازه می‌دهند از مدل‌های Claude Pro/Max خود با
+OpenCode استفاده کنید. Anthropic صراحتاً این کار را ممنوع کرده است.
+
+نسخه‌های قبلی OpenCode همراه با این افزونه‌ها ارائه می‌شدند اما از نسخه ۱.۳.۰
+دیگر این‌طور نیست.
+
+سایر شرکت‌ها از آزادی انتخاب در ابزارهای توسعه‌دهندگان پشتیبانی می‌کنند - می‌توانید
+از اشتراک‌های زیر در OpenCode بدون هیچ تنظیماتی استفاده کنید:
+
+- ChatGPT Plus
+- Github Copilot
+- Gitlab Duo
+  :::
+
+---
+
+### Atomic Chat
+
+می‌توانید opencode را طوری پیکربندی کنید که از طریق [Atomic Chat](https://atomic.chat) از مدل‌های محلی استفاده کند؛ یک برنامه دسکتاپ که مدل‌های محلی LLM را پشت یک سرور API سازگار با OpenAI اجرا می‌کند (نقطه پایانی پیش‌فرض `http://127.0.0.1:1337/v1`).
+
+```json title="opencode.json" "atomic-chat" {5, 6, 8, 10-14}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "atomic-chat": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Atomic Chat (local)",
+      "options": {
+        "baseURL": "http://127.0.0.1:1337/v1"
+      },
+      "models": {
+        "<your-model-id>": {
+          "name": "<your-model-name>"
+        }
+      }
+    }
+  }
+}
+```
+
+در این مثال:
+
+- `atomic-chat` شناسه ارائه‌دهنده سفارشی است. این می‌تواند هر رشته‌ای که بخواهید باشد.
+- `npm` بسته‌ای را که برای این ارائه‌دهنده استفاده می‌شود مشخص می‌کند. در اینجا، `@ai-sdk/openai-compatible` برای هر API سازگار با OpenAI استفاده می‌شود.
+- `name` نام نمایشی ارائه‌دهنده در رابط کاربری است.
+- `options.baseURL` نقطه پایانی سرور محلی است. میزبان و درگاه را برای تطابق با تنظیمات Atomic Chat خود تغییر دهید.
+- `models` یک نقشه از شناسه‌های مدل به نام‌های نمایشی آن‌هاست. هر شناسه باید با `id` برگردانده‌شده توسط `GET /v1/models` مطابقت داشته باشد — برای فهرست کردن شناسه‌های در حال حاضر بارگذاری‌شده در Atomic Chat، دستور `curl http://127.0.0.1:1337/v1/models` را اجرا کنید.
+
+:::tip
+اگر فراخوانی ابزارها به خوبی کار نمی‌کند، مدل بارگذاری‌شده‌ای را انتخاب کنید که پشتیبانی قوی از فراخوانی ابزار دارد (برای مثال، یک گونه Qwen-Coder یا DeepSeek-Coder).
+:::
+
+---
+
+### Azure OpenAI
+
+:::note
+اگر با خطاهای «متأسفم، اما نمی‌توانم در آن درخواست کمک کنم» مواجه شدید، سعی کنید فیلتر محتوا را از **DefaultV2** به **Default** در منبع Azure خود تغییر دهید.
+:::
+
+1. به [پورتال Azure](https://portal.azure.com/) بروید و یک منبع **Azure OpenAI** ایجاد کنید. به موارد زیر نیاز دارید:
+   - **نام منبع (Resource name)**: این بخشی از نقطه پایانی API شما می‌شود (`https://RESOURCE_NAME.openai.azure.com/`)
+   - **کلید API**: یا `KEY 1` یا `KEY 2` از منبع شما
+
+2. به [Azure AI Foundry](https://ai.azure.com/) بروید و یک مدل مستقر کنید.
+
+   :::note
+   نام استقرار باید با نام مدل مطابقت داشته باشد تا opencode به‌درستی کار کند.
+   :::
+
+3. دستور `/connect` را اجرا کنید و **Azure** را جستجو کنید.
+
+   ```txt
+   /connect
+   ```
+
+4. کلید API خود را وارد کنید.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+5. نام منبع خود را به عنوان یک متغیر محیطی تنظیم کنید:
+
+   ```bash
+   AZURE_RESOURCE_NAME=XXX opencode
+   ```
+
+   یا آن را به پروفایل bash خود اضافه کنید:
+
+   ```bash title="~/.bash_profile"
+   export AZURE_RESOURCE_NAME=XXX
+   ```
+
+6. دستور `/models` را اجرا کنید تا مدل مستقر‌شده خود را انتخاب کنید.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Azure Cognitive Services
+
+1. به [پورتال Azure](https://portal.azure.com/) بروید و یک منبع **Azure OpenAI** ایجاد کنید. به موارد زیر نیاز دارید:
+   - **نام منبع (Resource name)**: این بخشی از نقطه پایانی API شما می‌شود (`https://AZURE_COGNITIVE_SERVICES_RESOURCE_NAME.cognitiveservices.azure.com/`)
+   - **کلید API**: یا `KEY 1` یا `KEY 2` از منبع شما
+
+2. به [Azure AI Foundry](https://ai.azure.com/) بروید و یک مدل مستقر کنید.
+
+   :::note
+   نام استقرار باید با نام مدل مطابقت داشته باشد تا opencode به‌درستی کار کند.
+   :::
+
+3. دستور `/connect` را اجرا کنید و **Azure Cognitive Services** را جستجو کنید.
+
+   ```txt
+   /connect
+   ```
+
+4. کلید API خود را وارد کنید.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+5. نام منبع خود را به عنوان یک متغیر محیطی تنظیم کنید:
+
+   ```bash
+   AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX opencode
+   ```
+
+   یا آن را به پروفایل bash خود اضافه کنید:
+
+   ```bash title="~/.bash_profile"
+   export AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX
+   ```
+
+6. دستور `/models` را اجرا کنید تا مدل مستقر‌شده خود را انتخاب کنید.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Baseten
+
+1. به [Baseten](https://app.baseten.co/) بروید، یک حساب کاربری ایجاد کنید و یک کلید API تولید کنید.
+
+2. دستور `/connect` را اجرا کنید و **Baseten** را جستجو کنید.
+
+   ```txt
+   /connect
+   ```
+
+3. کلید API Baseten خود را وارد کنید.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. دستور `/models` را اجرا کنید تا یک مدل را انتخاب کنید.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Cerebras
+
+1. به [کنسول Cerebras](https://inference.cerebras.ai/) بروید، یک حساب کاربری ایجاد کنید و یک کلید API تولید کنید.
+
+2. دستور `/connect` را اجرا کنید و **Cerebras** را جستجو کنید.
+
+   ```txt
+   /connect
+   ```
+
+3. کلید API Cerebras خود را وارد کنید.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. دستور `/models` را اجرا کنید تا مدلی مانند _Qwen 3 Coder 480B_ را انتخاب کنید.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Cloudflare AI Gateway
+
+Cloudflare AI Gateway به شما اجازه می‌دهد از مدل‌های OpenAI، Anthropic، Workers AI و غیره از طریق یک نقطه پایانی یکپارچه دسترسی داشته باشید. با [Unified Billing](https://developers.cloudflare.com/ai-gateway/features/unified-billing/) نیازی به کلیدهای API جداگانه برای هر ارائه‌دهنده ندارید.
+
+1. به [داشبورد Cloudflare](https://dash.cloudflare.com/) بروید، به **AI** > **AI Gateway** بروید و یک دروازه جدید ایجاد کنید. **شناسه حساب (Account ID)** و **شناسه دروازه (Gateway ID)** خود را یادداشت کنید.
+
+2. دستور `/connect` را اجرا کنید و **Cloudflare AI Gateway** را جستجو کنید.
+
+   ```txt
+   /connect
+   ```
+
+3. **شناسه حساب (Account ID)** خود را هنگام درخواست وارد کنید.
+
+   ```txt
+   ┌ Enter your Cloudflare Account ID
+   │
+   │
+   └ enter
+   ```
+
+4. **شناسه دروازه (Gateway ID)** خود را هنگام درخواست وارد کنید.
+
+   ```txt
+   ┌ Enter your Cloudflare AI Gateway ID
+   │
+   │
+   └ enter
+   ```
+
+5. **نشانه API Cloudflare (Cloudflare API token)** خود را وارد کنید.
+
+   ```txt
+   ┌ Gateway API token
+   │
+   │
+   └ enter
+   ```
+
+6. دستور `/models` را اجرا کنید تا یک مدل را انتخاب کنید.
+
+   ```txt
+   /models
+   ```
+
+   همچنین می‌توانید مدل‌ها را از طریق پیکربندی opencode خود اضافه کنید.
+
+   ```json title="opencode.json"
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "cloudflare-ai-gateway": {
+         "models": {
+           "openai/gpt-4o": {},
+           "anthropic/claude-sonnet-4": {}
+         }
+       }
+     }
+   }
+   ```
+
+   همچنین، می‌توانید به جای استفاده از `/connect`، متغیرهای محیطی را تنظیم کنید.
+
+   ```bash title="~/.bash_profile"
+   export CLOUDFLARE_ACCOUNT_ID=your-32-character-account-id
+   export CLOUDFLARE_GATEWAY_ID=your-gateway-id
+   export CLOUDFLARE_API_TOKEN=your-api-token
+   ```
+
+---
+
+### Cloudflare Workers AI
+
+Cloudflare Workers AI به شما اجازه می‌دهد مدل‌های هوش مصنوعی را مستقیماً از طریق REST API روی شبکه جهانی Cloudflare اجرا کنید، بدون نیاز به حساب‌های ارائه‌دهنده جداگانه برای مدل‌های پشتیبانی‌شده.
+
+1. به [داشبورد Cloudflare](https://dash.cloudflare.com/) بروید، به **Workers AI** بروید و **Use REST API** را برای دریافت **شناسه حساب (Account ID)** و ایجاد یک نشانه API انتخاب کنید.
+
+2. دستور `/connect` را اجرا کنید و **Cloudflare Workers AI** را جستجو کنید.
+
+   ```txt
+   /connect
+   ```
+
+3. **شناسه حساب (Account ID)** خود را هنگام درخواست وارد کنید.
+
+   ```txt
+   ┌ Enter your Cloudflare Account ID
+   │
+   │
+   └ enter
+   ```
+
+4. **کلید API Cloudflare (Cloudflare API key)** خود را وارد کنید.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+5. دستور `/models` را اجرا کنید تا یک مدل را انتخاب کنید.
+
+   ```txt
+   /models
+   ```
+
+   همچنین، می‌توانید به جای استفاده از `/connect`، متغیرهای محیطی را تنظیم کنید.
+
+   ```bash title="~/.bash_profile"
+   export CLOUDFLARE_ACCOUNT_ID=your-32-character-account-id
+   export CLOUDFLARE_API_KEY=your-api-token
+   ```
+
+---
+
+### Cortecs
+
+1. به [کنسول Cortecs](https://cortecs.ai/) بروید، یک حساب کاربری ایجاد کنید و یک کلید API تولید کنید.
+
+2. دستور `/connect` را اجرا کنید و **Cortecs** را جستجو کنید.
+
+   ```txt
+   /connect
+   ```
+
+3. کلید API Cortecs خود را وارد کنید.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. دستور `/models` را اجرا کنید تا مدلی مانند _Kimi K2 Instruct_ را انتخاب کنید.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### DeepSeek
+
+1. به [کنسول DeepSeek](https://platform.deepseek.com/) بروید، یک حساب کاربری ایجاد کنید و روی **Create new API key** کلیک کنید.
+
+2. دستور `/connect` را اجرا کنید و **DeepSeek** را جستجو کنید.
+
+   ```txt
+   /connect
+   ```
+
+3. کلید API DeepSeek خود را وارد کنید.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. دستور `/models` را اجرا کنید تا یک مدل DeepSeek مانند _DeepSeek V4 Pro_ را انتخاب کنید.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Deep Infra
+
+1. به [داشبورد Deep Infra](https://deepinfra.com/dash) بروید، یک حساب کاربری ایجاد کنید و یک کلید API تولید کنید.
+
+2. دستور `/connect` را اجرا کنید و **Deep Infra** را جستجو کنید.
+
+   ```txt
+   /connect
+   ```
+
+3. کلید API Deep Infra خود را وارد کنید.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. دستور `/models` را اجرا کنید تا یک مدل را انتخاب کنید.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### DigitalOcean
+
+[موتور استنتاج (Inference Engine)](https://docs.digitalocean.com/products/inference/) DigitalOcean دسترسی به مدل‌های متن‌باز مانند GPT-OSS، Llama، Qwen و DeepSeek، و همچنین [مسیریاب‌های استنتاج (Inference Routers)](https://docs.digitalocean.com/products/genai-platform/concepts/inference-routers/) سفارشی که هر درخواست را به ارزان‌ترین، سریع‌ترین یا مناسب‌ترین مدل برای یک کار مسیریابی می‌کنند، فراهم می‌کند.
+
+OpenCode از دو روش احراز هویت پشتیبانی می‌کند:
+
+- **OAuth (توصیه‌شده)** — وارد حساب DigitalOcean خود شوید؛ OpenCode از نشانه API DigitalOcean شما مستقیماً برای استنتاج استفاده می‌کند و مسیریاب‌های استنتاج شما را کشف می‌کند.
+- **کلید دسترسی مدل (Model Access Key)** — یک کلید موجود را از کنسول DigitalOcean جای‌گذاری کنید.
+
+#### OAuth (توصیه‌شده)
+
+1. دستور `/connect` را اجرا کنید و **DigitalOcean** را جستجو کنید.
+
+   ```txt
+   /connect
+   ```
+
+2. **Login with DigitalOcean** را انتخاب کنید.
+
+   ```txt
+   ┌ Select auth method
+   │
+   │ Login with DigitalOcean
+   │ Paste Model Access Key
+   └
+   ```
+
+3. مرورگر شما برای مجوز دادن به OpenCode باز می‌شود. وارد شوید و تأیید کنید.
+
+   :::note
+   OpenCode دامنه‌های OAuth `genai:read` و `inference:query` را درخواست می‌کند. نشانه API DigitalOcean شما مستقیماً برای استنتاج استفاده می‌شود — هیچ کلید دسترسی مدل جداگانه‌ای ایجاد نمی‌شود.
+   :::
+
+   :::note
+   مسیریاب‌های استنتاج فقط پس از OAuth در انتخاب‌گر مدل ظاهر می‌شوند. جای‌گذاری دستی یک کلید دسترسی مدل، مسیریاب‌ها را کشف نمی‌کند.
+   :::
+
+4. دستور `/models` را اجرا کنید. مسیریاب‌های استنتاج شما با فرمت `router:` در انتخاب مدل ظاهر می‌شوند.
+
+   ```txt
+   /models
+   ```
+
+5. برای برداشتن مسیریاب‌های استنتاج تازه ایجادشده، دوباره `/connect` را اجرا کنید و دوباره **DigitalOcean** را انتخاب کنید.
+
+#### استفاده از یک کلید دسترسی مدل
+
+اگر ترجیح می‌دهید مستقیماً یک کلید را جای‌گذاری کنید:
+
+1. به صفحه **Manage** در بخش Inference از [کنسول DigitalOcean](https://cloud.digitalocean.com/) بروید و یک کلید جدید ایجاد کنید.
+
+2. دستور `/connect` را اجرا کنید و **DigitalOcean**، سپس **Paste Model Access Key** را انتخاب کنید.
+
+   ```txt
+   ┌ Enter your DigitalOcean Model Access Key
+   │
+   │
+   └ enter
+   ```
+
+   :::note
+   مسیریاب‌های استنتاج با این روش به‌طور خودکار کشف نمی‌شوند. برای نمایش آن‌ها در انتخاب‌گر مدل، از طریق OAuth وارد شوید.
+   :::
+
+3. دستور `/models` را اجرا کنید تا یک مدل را انتخاب کنید.
+
+   ```txt
+   /models
+   ```
+
+#### متغیر محیطی
+
+همچنین، کلید دسترسی مدل خود را به عنوان یک متغیر محیطی تنظیم کنید.
+
+```bash frame="none"
+export DIGITALOCEAN_ACCESS_TOKEN=your-model-access-key
+```
+
+#### مسیریاب‌های استنتاج (Inference Routers)
+
+مسیریاب‌های استنتاج به شما اجازه می‌دهند یک سیاست مسیریابی در سراسر چندین مدل تعریف کنید — انتخاب ارزان‌ترین، سریع‌ترین یا مناسب‌ترین مدل به ازای هر درخواست بر اساس کار. پس از OAuth، OpenCode هر مسیریاب را به صورت `router:<router-name>` در انتخاب‌گر مدل نمایش می‌دهد.
+
+انتخاب یک مدل مسیریاب جایگزینی مستقیم برای هر مدل دیگری است — OpenCode درخواست شما را ارسال می‌کند و DigitalOcean بر اساس سیاست مسیریاب شما مدل زیربنایی را انتخاب می‌کند. درباره [مسیریاب‌های استنتاج](https://docs.digitalocean.com/products/inference/how-to/use-inference-router/) بیشتر بدانید.
+
+---
+
+### FrogBot
+
+1. به [داشبورد FrogBot](https://app.frogbot.ai/signup) بروید، یک حساب کاربری ایجاد کنید و یک کلید API تولید کنید.
+
+2. دستور `/connect` را اجرا کنید و **FrogBot** را جستجو کنید.
+
+   ```txt
+   /connect
+   ```
+
+3. کلید API FrogBot خود را وارد کنید.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. دستور `/models` را اجرا کنید تا یک مدل را انتخاب کنید.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Fireworks AI
+
+1. به [کنسول Fireworks AI](https://app.fireworks.ai/) بروید، یک حساب کاربری ایجاد کنید و روی **Create API Key** کلیک کنید.
+
+2. دستور `/connect` را اجرا کنید و **Fireworks AI** را جستجو کنید.
+
+   ```txt
+   /connect
+   ```
+
+3. کلید API Fireworks AI خود را وارد کنید.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. دستور `/models` را اجرا کنید تا مدلی مانند _Kimi K2 Instruct_ را انتخاب کنید.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### GitLab Duo
+
+:::caution[Experimental]
+پشتیبانی از GitLab Duo در OpenCode آزمایشی است. ویژگی‌ها، پیکربندی و
+رفتار ممکن است در انتشارهای آینده تغییر کند.
+:::
+
+OpenCode با [پلتفرم عامل GitLab Duo](https://docs.gitlab.com/user/duo_agent_platform/) ادغام می‌شود و
+گفتگوی عامل‌گونه مبتنی بر هوش مصنوعی با قابلیت‌های فراخوانی ابزار بومی ارائه می‌دهد.
+
+:::note[الزامات مجوز]
+پلتفرم عامل GitLab Duo به اشتراک **Premium** یا **Ultimate** GitLab
+نیاز دارد. این در GitLab.com و GitLab Self-Managed در دسترس است.
+برای الزامات کامل، به [پیش‌نیازهای پلتفرم عامل GitLab Duo](https://docs.gitlab.com/user/duo_agent_platform/#prerequisites)
+مراجعه کنید.
+:::
+
+1. دستور `/connect` را اجرا کنید و GitLab را انتخاب کنید.
+
+   ```txt
+   /connect
+   ```
+
+2. روش احراز هویت خود را انتخاب کنید:
+
+   ```txt
+   ┌ Select auth method
+   │
+   │ OAuth (Recommended)
+   │ Personal Access Token
+   └
+   ```
+
+   #### استفاده از OAuth (توصیه‌شده)
+
+   **OAuth** را انتخاب کنید و مرورگر شما برای مجوز باز می‌شود.
+
+   #### استفاده از توکن دسترسی شخصی (Personal Access Token)
+   1. به [تنظیمات کاربر GitLab > توکن‌های دسترسی](https://gitlab.com/-/user_settings/personal_access_tokens) بروید
+   2. روی **Add new token** کلیک کنید
+   3. نام: `OpenCode`، دامنه‌ها: `api`
+   4. توکن را کپی کنید (با `glpat-` شروع می‌شود)
+   5. آن را در ترمینال وارد کنید
+
+3. دستور `/models` را اجرا کنید تا مدل‌های موجود را ببینید.
+
+   ```txt
+   /models
+   ```
+
+   سه مدل مبتنی بر Claude در دسترس هستند:
+   - **duo-chat-haiku-4-5** (پیش‌فرض) - پاسخ‌های سریع برای کارهای سریع
+   - **duo-chat-sonnet-4-5** - عملکرد متعادل برای اکثر جریان‌های کاری
+   - **duo-chat-opus-4-5** - قدرتمندترین برای تحلیل پیچیده
+
+:::note
+همچنین می‌توانید متغیر محیطی 'GITLAB_TOKEN' را مشخص کنید اگر نمی‌خواهید
+توکن را در فضای ذخیره‌سازی احراز هویت opencode نگه دارید.
+:::
+
+##### GitLab میزبانی‌شده خودتان (Self-Hosted GitLab)
+
+:::note[یادداشت انطباق]
+OpenCode از یک مدل کوچک برای برخی کارهای هوش مصنوعی مانند تولید عنوان نشست استفاده می‌کند.
+به‌طور پیش‌فرض برای استفاده از gpt-5-nano پیکربندی شده است که توسط Zen میزبانی می‌شود. برای محدود کردن OpenCode
+به استفاده فقط از نمونه میزبانی‌شده توسط GitLab خودتان، موارد زیر را به فایل
+`opencode.json` خود اضافه کنید. همچنین توصیه می‌شود اشتراک‌گذاری نشست غیرفعال شود.
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "small_model": "gitlab/duo-chat-haiku-4-5",
+  "share": "disabled"
+}
+```
+
+:::
+
+برای نمونه‌های میزبانی‌شده خودتان در GitLab:
+
+```bash
+export GITLAB_INSTANCE_URL=https://gitlab.company.com
+export GITLAB_TOKEN=glpat-...
+```
+
+اگر نمونه شما یک دروازه هوش مصنوعی سفارشی اجرا می‌کند:
+
+```bash
+GITLAB_AI_GATEWAY_URL=https://ai-gateway.company.com
+```
+
+یا آن را به پروفایل bash خود اضافه کنید:
+
+```bash title="~/.bash_profile"
+export GITLAB_INSTANCE_URL=https://gitlab.company.com
+export GITLAB_AI_GATEWAY_URL=https://ai-gateway.company.com
+export GITLAB_TOKEN=glpat-...
+```
+
+:::note
+مدیر GitLab شما باید:
+
+1. [روشن کردن GitLab Duo](https://docs.gitlab.com/user/duo_agent_platform/turn_on_off/#turn-gitlab-duo-on-or-off)
+   را برای کاربر، گروه یا نمونه انجام دهد
+2. [روشن کردن پلتفرم عامل (Agent Platform)](https://docs.gitlab.com/user/duo_agent_platform/turn_on_off/#turn-gitlab-duo-agent-platform-on-or-off)
+   (GitLab 18.8+) یا [فعال کردن ویژگی‌های بتا و آزمایشی](https://docs.gitlab.com/user/duo_agent_platform/turn_on_off/#turn-on-beta-and-experimental-features)
+   (GitLab 18.7 و قبل‌تر)
+3. برای Self-Managed، [نمونه خود را پیکربندی کنید](https://docs.gitlab.com/administration/gitlab_duo/configure/gitlab_self_managed/)
+   :::
+
+##### OAuth برای نمونه‌های میزبانی‌شده خودتان
+
+برای اینکه OAuth برای نمونه میزبانی‌شده خودتان کار کند، باید یک برنامه جدید
+(تنظیمات → برنامه‌ها) با نشانی بازگشتی `http://127.0.0.1:8080/callback` و دامنه‌های زیر ایجاد کنید:
+
+- api (دسترسی به API به نیابت از شما)
+- read_user (خواندن اطلاعات شخصی شما)
+- read_repository (اجازه دسترسی فقط-خواندنی به مخزن)
+
+سپس شناسه برنامه را به عنوان متغیر محیطی قرار دهید:
+
+```bash
+export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
+```
+
+مستندات بیشتر در صفحه اصلی [opencode-gitlab-auth](https://www.npmjs.com/package/opencode-gitlab-auth).
+
+##### پیکربندی
+
+سفارشی‌سازی از طریق `opencode.json`:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "gitlab": {
+      "options": {
+        "instanceUrl": "https://gitlab.com"
+      }
+    }
+  }
+}
+```
+
+##### مدل‌های جریان کاری پلتفرم عامل GitLab Duo (DAP)
+
+مدل‌های جریان کاری DAP یک مسیر اجرای جایگزین ارائه می‌دهند که فراخوانی ابزارها را
+از طریق سرویس جریان کاری Duo در GitLab (DWS) به جای گفتگوی عامل‌گونه استاندارد مسیریابی می‌کند.
+وقتی یک مدل `duo-workflow-*` انتخاب شود، OpenCode:
+
+1. مدل‌های موجود را از فضای نام GitLab شما کشف می‌کند
+2. یک انتخاب‌گر نمایش می‌دهد اگر چندین مدل در دسترس باشد
+3. مدل انتخاب‌شده را برای راه‌اندازی‌های سریع بعدی در دیسک کش می‌کند
+4. درخواست‌های اجرای ابزار را از طریق سیستم ابزار با مجوزِ OpenCode مسیریابی می‌کند
+
+مدل‌های جریان کاری DAP موجود از قرارداد نام‌گذاری `duo-workflow-*` پیروی می‌کنند و
+به‌طور پویا از نمونه GitLab شما کشف می‌شوند.
+
+##### ابزارهای API GitLab (اختیاری، اما بسیار توصیه‌شده)
+
+برای دسترسی به ابزارهای GitLab (درخواست‌های ادغام، مسائل، خطوط لوله، CI/CD و غیره):
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["opencode-gitlab-plugin"]
+}
+```
+
+این افزونه قابلیت‌های جامع مدیریت مخزن GitLab شامل بررسی‌های MR، پیگیری مسائل، نظارت بر خطوط لوله و غیره را فراهم می‌کند.
+
+---
+
+### GitHub Copilot
+
+برای استفاده از اشتراک GitHub Copilot خود با opencode:
+
+:::note
+برخی مدل‌ها ممکن است به یک [اشتراک Pro+](https://github.com/features/copilot/plans) برای استفاده نیاز داشته باشند.
+:::
+
+1. دستور `/connect` را اجرا کنید و GitHub Copilot را جستجو کنید.
+
+   ```txt
+   /connect
+   ```
+
+2. به [github.com/login/device](https://github.com/login/device) بروید و کد را وارد کنید.
+
+   ```txt
+   ┌ Login with GitHub Copilot
+   │
+   │ https://github.com/login/device
+   │
+   │ Enter code: 8F43-6FCF
+   │
+   └ Waiting for authorization...
+   ```
+
+3. اکنون دستور `/models` را اجرا کنید تا مدل مورد نظر خود را انتخاب کنید.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### GMI Cloud
+
+برای استفاده از GMI Cloud با OpenCode:
+
+1. به [کنسول GMI Cloud](https://console.gmicloud.ai/) بروید تا یک کلید API ایجاد کنید. همچنین می‌توانید [مرجع API](https://docs.gmicloud.ai/inference-engine/api-reference/llm-api-reference) را برای جزئیات نقطه پایانی مرور کنید.
+
+2. دستور `/connect` را اجرا کنید و **GMI Cloud** را جستجو کنید.
+
+   ```txt
+   /connect
+   ```
+
+3. کلید API GMI Cloud خود را وارد کنید.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. دستور `/models` را اجرا کنید تا مدل مورد نظر خود را انتخاب کنید.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Google Vertex AI
+
+برای استفاده از Google Vertex AI با OpenCode:
+
+1. به **باغ مدل‌ها (Model Garden)** در کنسول Google Cloud بروید و
+   مدل‌های موجود در ناحیه خود را بررسی کنید.
+
+   :::note
+   باید یک پروژه Google Cloud با API Vertex AI فعال‌شده داشته باشید.
+   :::
+
+2. متغیرهای محیطی مورد نیاز را تنظیم کنید:
+   - `GOOGLE_CLOUD_PROJECT`: شناسه پروژه Google Cloud شما
+   - `VERTEX_LOCATION` (اختیاری): ناحیه برای Vertex AI (پیش‌فرض `global`)
+   - احراز هویت (یکی را انتخاب کنید):
+     - `GOOGLE_APPLICATION_CREDENTIALS`: مسیر فایل کلید JSON حساب کاربری سرویس شما
+     - احراز هویت با استفاده از gcloud CLI: `gcloud auth application-default login`
+
+   آن‌ها را هنگام اجرای opencode تنظیم کنید.
+
+   ```bash
+   GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json GOOGLE_CLOUD_PROJECT=your-project-id opencode
+   ```
+
+   یا آن‌ها را به پروفایل bash خود اضافه کنید.
+
+   ```bash title="~/.bash_profile"
+   export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
+   export GOOGLE_CLOUD_PROJECT=your-project-id
+   export VERTEX_LOCATION=global
+   ```
+
+:::tip
+ناحیه `global` در دسترسی‌پذیری را بهبود می‌بخشد و بدون هزینه اضافی خطاها را کاهش می‌دهد. از نقاط پایانی ناحیه‌ای (مثلاً `us-central1`) برای الزامات اقامت داده استفاده کنید. [بیشتر بدانید](https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-partner-models#regional_and_global_endpoints)
+:::
+
+3. دستور `/models` را اجرا کنید تا مدل مورد نظر خود را انتخاب کنید.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Groq
+
+1. به [کنسول Groq](https://console.groq.com/) بروید، روی **Create API Key** کلیک کنید و کلید را کپی کنید.
+
+2. دستور `/connect` را اجرا کنید و Groq را جستجو کنید.
+
+   ```txt
+   /connect
+   ```
+
+3. کلید API ارائه‌دهنده را وارد کنید.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. دستور `/models` را اجرا کنید تا موردی که می‌خواهید را انتخاب کنید.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Hugging Face
+
+[ارائه‌دهندگان استنتاج Hugging Face](https://huggingface.co/docs/inference-providers) دسترسی به مدل‌های متن‌باز پشتیبانی‌شده توسط ۱۷+ ارائه‌دهنده را فراهم می‌کند.
+
+1. به [تنظیمات Hugging Face](https://huggingface.co/settings/tokens/new?ownUserPermissions=inference.serverless.write&tokenType=fineGrained) بروید تا یک توکن با مجوز فراخوانی به ارائه‌دهندگان استنتاج ایجاد کنید.
+
+2. دستور `/connect` را اجرا کنید و **Hugging Face** را جستجو کنید.
+
+   ```txt
+   /connect
+   ```
+
+3. توکن Hugging Face خود را وارد کنید.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. دستور `/models` را اجرا کنید تا مدلی مانند _Kimi-K2-Instruct_ یا _GLM-4.6_ را انتخاب کنید.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Helicone
+
+[Helicone](https://helicone.ai) یک پلتفرم قابلیت مشاهده (observability) LLM است که ثبت رویداد، نظارت و تحلیل برای برنامه‌های هوش مصنوعی شما فراهم می‌کند. دروازه هوش مصنوعی Helicone درخواست‌های شما را بر اساس مدل به‌طور خودکار به ارائه‌دهنده مناسب مسیریابی می‌کند.
+
+1. به [Helicone](https://helicone.ai) بروید، یک حساب کاربری ایجاد کنید و یک کلید API از داشبورد خود تولید کنید.
+
+2. دستور `/connect` را اجرا کنید و **Helicone** را جستجو کنید.
+
+   ```txt
+   /connect
+   ```
+
+3. کلید API Helicone خود را وارد کنید.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. دستور `/models` را اجرا کنید تا یک مدل را انتخاب کنید.
+
+   ```txt
+   /models
+   ```
+
+برای ارائه‌دهندگان بیشتر و ویژگی‌های پیشرفته مانند کش‌کردن و محدودیت نرخ، به [مستندات Helicone](https://docs.helicone.ai) مراجعه کنید.
+
+#### پیکربندی‌های اختیاری
+
+در صورتی که ویژگی یا مدلی از Helicone را ببینید که به‌طور خودکار از طریق opencode پیکربندی نشده است، همیشه می‌توانید خودتان آن را پیکربندی کنید.
+
+اینجا [فهرست مدل‌های Helicone](https://helicone.ai/models) است، برای افزودن مدل‌ها به شناسه‌های آن‌ها نیاز دارید.
+
+```jsonc title="~/.config/opencode/opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "helicone": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Helicone",
+      "options": {
+        "baseURL": "https://ai-gateway.helicone.ai",
+      },
+      "models": {
+        "gpt-4o": {
+          // Model ID (from Helicone's model directory page)
+          "name": "GPT-4o", // Your own custom name for the model
+        },
+        "claude-sonnet-4-20250514": {
+          "name": "Claude Sonnet 4",
+        },
+      },
+    },
+  },
+}
+```
+
+#### سرآیندهای سفارشی (Custom Headers)
+
+Helicone از سرآیندهای سفارشی برای ویژگی‌هایی مانند کش‌کردن، ردیابی کاربر و مدیریت نشست پشتیبانی می‌کند. آن‌ها را با استفاده از `options.headers` به پیکربندی ارائه‌دهنده خود اضافه کنید:
+
+```jsonc title="~/.config/opencode/opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "helicone": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Helicone",
+      "options": {
+        "baseURL": "https://ai-gateway.helicone.ai",
+        "headers": {
+          "Helicone-Cache-Enabled": "true",
+          "Helicone-User-Id": "opencode",
+        },
+      },
+    },
+  },
+}
+```
+
+##### ردیابی نشست
+
+ویژگی [Sessions](https://docs.helicone.ai/features/sessions) در Helicone به شما اجازه می‌دهد درخواست‌های مرتبط LLM را با هم گروه‌بندی کنید. از افزونه [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session) برای ثبت خودکار هر گفتگوی OpenCode به عنوان یک نشست در Helicone استفاده کنید.
+
+```bash
+npm install -g opencode-helicone-session
+```
+
+آن را به پیکربندی خود اضافه کنید.
+
+```json title="opencode.json"
+{
+  "plugin": ["opencode-helicone-session"]
+}
+```
+
+این افزونه سرآیندهای `Helicone-Session-Id` و `Helicone-Session-Name` را به درخواست‌های شما تزریق می‌کند. در صفحه Sessions در Helicone، هر گفتگوی OpenCode به عنوان یک نشست جداگانه نمایش داده می‌شود.
+
+##### سرآیندهای رایج Helicone
+
+| Header                     | Description                                                   |
+| -------------------------- | ------------------------------------------------------------- |
+| `Helicone-Cache-Enabled`   | Enable response caching (`true`/`false`)                      |
+| `Helicone-User-Id`         | Track metrics by user                                         |
+| `Helicone-Property-[Name]` | Add custom properties (e.g., `Helicone-Property-Environment`) |
+| `Helicone-Prompt-Id`       | Associate requests with prompt versions                       |
+
+برای دیدن تمام سرآیندهای موجود به [فهرست سرآیندهای Helicone](https://docs.helicone.ai/helicone-headers/header-directory) مراجعه کنید.
+
+---
+
+### llama.cpp
+
+می‌توانید opencode را طوری پیکربندی کنید که از طریق ابزار llama-server [llama.cpp](https://github.com/ggml-org/llama.cpp) از مدل‌های محلی استفاده کند
+
+```json title="opencode.json" "llama.cpp" {5, 6, 8, 10-15}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "llama.cpp": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "llama-server (local)",
+      "options": {
+        "baseURL": "http://127.0.0.1:8080/v1"
+      },
+      "models": {
+        "qwen3-coder:a3b": {
+          "name": "Qwen3-Coder: a3b-30b (local)",
+          "limit": {
+            "context": 128000,
+            "output": 65536
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+در این مثال:
+
+- `llama.cpp` شناسه ارائه‌دهنده سفارشی است. این می‌تواند هر رشته‌ای که بخواهید باشد.
+- `npm` بسته‌ای را که برای این ارائه‌دهنده استفاده می‌شود مشخص می‌کند. در اینجا، `@ai-sdk/openai-compatible` برای هر API سازگار با OpenAI استفاده می‌شود.
+- `name` نام نمایشی ارائه‌دهنده در رابط کاربری است.
+- `options.baseURL` نقطه پایانی سرور محلی است.
+- `models` یک نقشه از شناسه‌های مدل به پیکربندی‌های آن‌هاست. نام مدل در فهرست انتخاب مدل نمایش داده می‌شود.
+
+---
+
+### IO.NET
+
+IO.NET ۱۷ مدل بهینه‌شده برای موارد استفاده مختلف ارائه می‌دهد:
+
+1. به [کنسول IO.NET](https://ai.io.net/) بروید، یک حساب کاربری ایجاد کنید و یک کلید API تولید کنید.
+
+2. دستور `/connect` را اجرا کنید و **IO.NET** را جستجو کنید.
+
+   ```txt
+   /connect
+   ```
+
+3. کلید API IO.NET خود را وارد کنید.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. دستور `/models` را اجرا کنید تا یک مدل را انتخاب کنید.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### LM Studio
+
+می‌توانید opencode را طوری پیکربندی کنید که از طریق LM Studio از مدل‌های محلی استفاده کند.
+
+```json title="opencode.json" "lmstudio" {5, 6, 8, 10-14}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "lmstudio": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "LM Studio (local)",
+      "options": {
+        "baseURL": "http://127.0.0.1:1234/v1"
+      },
+      "models": {
+        "google/gemma-3n-e4b": {
+          "name": "Gemma 3n-e4b (local)"
+        }
+      }
+    }
+  }
+}
+```
+
+در این مثال:
+
+- `lmstudio` شناسه ارائه‌دهنده سفارشی است. این می‌تواند هر رشته‌ای که بخواهید باشد.
+- `npm` بسته‌ای را که برای این ارائه‌دهنده استفاده می‌شود مشخص می‌کند. در اینجا، `@ai-sdk/openai-compatible` برای هر API سازگار با OpenAI استفاده می‌شود.
+- `name` نام نمایشی ارائه‌دهنده در رابط کاربری است.
+- `options.baseURL` نقطه پایانی سرور محلی است.
+- `models` یک نقشه از شناسه‌های مدل به پیکربندی‌های آن‌هاست. نام مدل در فهرست انتخاب مدل نمایش داده می‌شود.
+
+---
+
+### Moonshot AI
+
+برای استفاده از Kimi K2 از Moonshot AI:
+
+1. به [کنسول Moonshot AI](https://platform.moonshot.ai/console) بروید، یک حساب کاربری ایجاد کنید و روی **Create API key** کلیک کنید.
+
+2. دستور `/connect` را اجرا کنید و **Moonshot AI** را جستجو کنید.
+
+   ```txt
+   /connect
+   ```
+
+3. کلید API Moonshot خود را وارد کنید.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. دستور `/models` را اجرا کنید تا _Kimi K2_ را انتخاب کنید.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### MiniMax
+
+1. به [کنسول API MiniMax](https://platform.minimax.io/login) بروید، یک حساب کاربری ایجاد کنید و یک کلید API تولید کنید.
+
+2. دستور `/connect` را اجرا کنید و **MiniMax** را جستجو کنید.
+
+   ```txt
+   /connect
+   ```
+
+3. کلید API MiniMax خود را وارد کنید.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. دستور `/models` را اجرا کنید تا مدلی مانند _M2.1_ را انتخاب کنید.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### NVIDIA
+
+NVIDIA دسترسی به مدل‌های Nemotron و بسیاری مدل‌های متن‌باز دیگر را از طریق [build.nvidia.com](https://build.nvidia.com) به‌صورت رایگان فراهم می‌کند.
+
+1. به [build.nvidia.com](https://build.nvidia.com) بروید، یک حساب کاربری ایجاد کنید و یک کلید API تولید کنید.
+
+2. دستور `/connect` را اجرا کنید و **NVIDIA** را جستجو کنید.
+
+   ```txt
+   /connect
+   ```
+
+3. کلید API NVIDIA خود را وارد کنید.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. دستور `/models` را اجرا کنید تا مدلی مانند nemotron-3-super-120b-a12b را انتخاب کنید.
+
+   ```txt
+   /models
+   ```
+
+#### On-Prem / NIM
+
+همچنین می‌توانید مدل‌های NVIDIA را به‌صورت محلی از طریق [NVIDIA NIM](https://docs.nvidia.com/nim/) با تنظیم یک نشانی پایه سفارشی استفاده کنید.
+
+```json title="opencode.json" {6}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "nvidia": {
+      "options": {
+        "baseURL": "http://localhost:8000/v1"
+      }
+    }
+  }
+}
+```
+
+#### متغیر محیطی
+
+همچنین، کلید API خود را به عنوان یک متغیر محیطی تنظیم کنید.
+
+```bash frame="none"
+export NVIDIA_API_KEY=nvapi-your-key-here
+```
+
+---
+
+### Nebius Token Factory
+
+1. به [کنسول Nebius Token Factory](https://tokenfactory.nebius.com/) بروید، یک حساب کاربری ایجاد کنید و روی **Add Key** کلیک کنید.
+
+2. دستور `/connect` را اجرا کنید و **Nebius Token Factory** را جستجو کنید.
+
+   ```txt
+   /connect
+   ```
+
+3. کلید API Nebius Token Factory خود را وارد کنید.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. دستور `/models` را اجرا کنید تا مدلی مانند _Kimi K2 Instruct_ را انتخاب کنید.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Ollama
+
+می‌توانید opencode را طوری پیکربندی کنید که از طریق Ollama از مدل‌های محلی استفاده کند.
+
+:::tip
+Ollama می‌تواند خود را به‌طور خودکار برای OpenCode پیکربندی کند. برای جزئیات به [مستندات ادغام Ollama](https://docs.ollama.com/integrations/opencode) مراجعه کنید.
+:::
+
+```json title="opencode.json" "ollama" {5, 6, 8, 10-14}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "ollama": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Ollama (local)",
+      "options": {
+        "baseURL": "http://localhost:11434/v1"
+      },
+      "models": {
+        "llama2": {
+          "name": "Llama 2"
+        }
+      }
+    }
+  }
+}
+```
+
+در این مثال:
+
+- `ollama` شناسه ارائه‌دهنده سفارشی است. این می‌تواند هر رشته‌ای که بخواهید باشد.
+- `npm` بسته‌ای را که برای این ارائه‌دهنده استفاده می‌شود مشخص می‌کند. در اینجا، `@ai-sdk/openai-compatible` برای هر API سازگار با OpenAI استفاده می‌شود.
+- `name` نام نمایشی ارائه‌دهنده در رابط کاربری است.
+- `options.baseURL` نقطه پایانی سرور محلی است.
+- `models` یک نقشه از شناسه‌های مدل به پیکربندی‌های آن‌هاست. نام مدل در فهرست انتخاب مدل نمایش داده می‌شود.
+
+:::tip
+اگر فراخوانی ابزارها کار نمی‌کند، افزایش `num_ctx` در Ollama را امتحان کنید. از حدود ۱۶ هزار تا ۳۲ هزار شروع کنید.
+:::
+
+---
+
+### Ollama Cloud
+
+برای استفاده از Ollama Cloud با OpenCode:
+
+1. به [https://ollama.com/](https://ollama.com/) بروید و وارد شوید یا یک حساب کاربری ایجاد کنید.
+
+2. به **Settings** > **Keys** بروید و روی **Add API Key** کلیک کنید تا یک کلید API جدید تولید کنید.
+
+3. کلید API را برای استفاده در OpenCode کپی کنید.
+
+4. دستور `/connect` را اجرا کنید و **Ollama Cloud** را جستجو کنید.
+
+   ```txt
+   /connect
+   ```
+
+5. کلید API Ollama Cloud خود را وارد کنید.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+6. **مهم**: قبل از استفاده از مدل‌های ابری در OpenCode، باید اطلاعات مدل را به‌صورت محلی واکشی کنید:
+
+   ```bash
+   ollama pull gpt-oss:20b-cloud
+   ```
+
+7. دستور `/models` را اجرا کنید تا مدل Ollama Cloud خود را انتخاب کنید.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### OpenAI
+
+ما ثبت‌نام در [ChatGPT Plus یا Pro](https://chatgpt.com/pricing) را توصیه می‌کنیم.
+
+1. پس از ثبت‌نام، دستور `/connect` را اجرا کنید و OpenAI را انتخاب کنید.
+
+   ```txt
+   /connect
+   ```
+
+2. در اینجا می‌توانید گزینه **ChatGPT Plus/Pro** را انتخاب کنید و مرورگر شما
+   باز می‌شود و از شما می‌خواهد احراز هویت کنید.
+
+   ```txt
+   ┌ Select auth method
+   │
+   │ ChatGPT Plus/Pro
+   │ Manually enter API Key
+   └
+   ```
+
+3. اکنون تمام مدل‌های OpenAI باید هنگام استفاده از دستور `/models` در دسترس باشند.
+
+   ```txt
+   /models
+   ```
+
+##### استفاده از کلیدهای API
+
+اگر قبلاً یک کلید API دارید، می‌توانید **Manually enter API Key** را انتخاب کنید و آن را در ترمینال خود جای‌گذاری کنید.
+
+---
+
+### OpenCode Zen
+
+OpenCode Zen فهرستی از مدل‌های آزمایش‌شده و تأیید‌شده ارائه‌شده توسط تیم OpenCode است. [بیشتر بدانید](/docs/zen).
+
+1. وارد **<a href={console}>OpenCode Zen</a>** شوید و روی **Create API Key** کلیک کنید.
+
+2. دستور `/connect` را اجرا کنید و **OpenCode Zen** را جستجو کنید.
+
+   ```txt
+   /connect
+   ```
+
+3. کلید API OpenCode خود را وارد کنید.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. دستور `/models` را اجرا کنید تا مدلی مانند _Qwen 3 Coder 480B_ را انتخاب کنید.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### OpenRouter
+
+1. به [داشبورد OpenRouter](https://openrouter.ai/settings/keys) بروید، روی **Create API Key** کلیک کنید و کلید را کپی کنید.
+
+2. دستور `/connect` را اجرا کنید و OpenRouter را جستجو کنید.
+
+   ```txt
+   /connect
+   ```
+
+3. کلید API ارائه‌دهنده را وارد کنید.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. بسیاری از مدل‌های OpenRouter به‌طور پیش‌فرض از قبل بارگذاری شده‌اند، دستور `/models` را اجرا کنید تا موردی که می‌خواهید را انتخاب کنید.
+
+   ```txt
+   /models
+   ```
+
+   همچنین می‌توانید مدل‌های بیشتری را از طریق پیکربندی opencode خود اضافه کنید.
+
+   ```json title="opencode.json" {6}
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "openrouter": {
+         "models": {
+           "somecoolnewmodel": {}
+         }
+       }
+     }
+   }
+   ```
+
+5. همچنین می‌توانید آن‌ها را از طریق پیکربندی opencode خود سفارشی کنید. در اینجا مثالی از مشخص کردن یک ارائه‌دهنده آورده شده است
+
+   ```json title="opencode.json"
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "openrouter": {
+         "models": {
+           "moonshotai/kimi-k2": {
+             "options": {
+               "provider": {
+                 "order": ["baseten"],
+                 "allow_fallbacks": false
+               }
+             }
+           }
+         }
+       }
+     }
+   }
+   ```
+
+---
+
+### LLM Gateway
+
+1. به [داشبورد LLM Gateway](https://llmgateway.io/dashboard) بروید، روی **Create API Key** کلیک کنید و کلید را کپی کنید.
+
+2. دستور `/connect` را اجرا کنید و LLM Gateway را جستجو کنید.
+
+   ```txt
+   /connect
+   ```
+
+3. کلید API ارائه‌دهنده را وارد کنید.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. بسیاری از مدل‌های LLM Gateway به‌طور پیش‌فرض از قبل بارگذاری شده‌اند، دستور `/models` را اجرا کنید تا موردی که می‌خواهید را انتخاب کنید.
+
+   ```txt
+   /models
+   ```
+
+   همچنین می‌توانید مدل‌های بیشتری را از طریق پیکربندی opencode خود اضافه کنید.
+
+   ```json title="opencode.json" {6}
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "llmgateway": {
+         "models": {
+           "somecoolnewmodel": {}
+         }
+       }
+     }
+   }
+   ```
+
+5. همچنین می‌توانید آن‌ها را از طریق پیکربندی opencode خود سفارشی کنید. در اینجا مثالی از مشخص کردن یک ارائه‌دهنده آورده شده است
+
+   ```json title="opencode.json"
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "llmgateway": {
+         "models": {
+           "glm-4.7": {
+             "name": "GLM 4.7"
+           },
+           "gpt-5.2": {
+             "name": "GPT-5.2"
+           },
+           "gemini-2.5-pro": {
+             "name": "Gemini 2.5 Pro"
+           },
+           "claude-3-5-sonnet-20241022": {
+             "name": "Claude 3.5 Sonnet"
+           }
+         }
+       }
+     }
+   }
+   ```
+
+---
+
+### SAP AI Core
+
+SAP AI Core دسترسی به ۴۰+ مدل از OpenAI، Anthropic، Google، Amazon، Meta، Mistral و AI21 را از طریق یک پلتفرم یکپارچه فراهم می‌کند.
+
+1. به [SAP BTP Cockpit](https://account.hana.ondemand.com/) خود بروید، به نمونه سرویس SAP AI Core خود بروید و یک کلید سرویس ایجاد کنید.
+
+   :::tip
+   کلید سرویس یک شیء JSON حاوی `clientid`، `clientsecret`، `url` و `serviceurls.AI_API_URL` است. می‌توانید نمونه AI Core خود را در زیر **Services** > **Instances and Subscriptions** در BTP Cockpit پیدا کنید.
+   :::
+
+2. دستور `/connect` را اجرا کنید و **SAP AI Core** را جستجو کنید.
+
+   ```txt
+   /connect
+   ```
+
+3. کلید سرویس JSON خود را وارد کنید.
+
+   ```txt
+   ┌ Service key
+   │
+   │
+   └ enter
+   ```
+
+   یا متغیر محیطی `AICORE_SERVICE_KEY` را تنظیم کنید:
+
+   ```bash
+   AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}' opencode
+   ```
+
+   یا آن را به پروفایل bash خود اضافه کنید:
+
+   ```bash title="~/.bash_profile"
+   export AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}'
+   ```
+
+4. اختیاری: شناسه استقرار و گروه منبع را تنظیم کنید:
+
+   ```bash
+   AICORE_DEPLOYMENT_ID=your-deployment-id AICORE_RESOURCE_GROUP=your-resource-group opencode
+   ```
+
+   :::note
+   این تنظیمات اختیاری هستند و باید طبق تنظیمات SAP AI Core شما پیکربندی شوند.
+   :::
+
+5. دستور `/models` را اجرا کنید تا از بین ۴۰+ مدل موجود انتخاب کنید.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### STACKIT
+
+STACKIT AI Model Serving یک محیط میزبانی مدیریت‌شده و حاکمیت‌محور برای مدل‌های هوش مصنوعی فراهم می‌کند، با تمرکز بر LLMهایی مانند Llama، Mistral و Qwen، با حداکثر حاکمیت داده بر روی زیرساخت اروپایی.
+
+1. به [پورتال STACKIT](https://portal.stackit.cloud) بروید، به **AI Model Serving** بروید و یک نشانه احراز هویت برای پروژه خود ایجاد کنید.
+
+   :::tip
+   برای ایجاد نشانه‌های احراز هویت، به یک حساب مشتری STACKIT، حساب کاربری و پروژه نیاز دارید.
+   :::
+
+2. دستور `/connect` را اجرا کنید و **STACKIT** را جستجو کنید.
+
+   ```txt
+   /connect
+   ```
+
+3. نشانه احراز هویت STACKIT AI Model Serving خود را وارد کنید.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. دستور `/models` را اجرا کنید تا از بین مدل‌های موجود مانند _Qwen3-VL 235B_ یا _Llama 3.3 70B_ انتخاب کنید.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### OVHcloud AI Endpoints
+
+1. به [پنل OVHcloud](https://ovh.com/manager) بروید. به بخش `Public Cloud`، `AI & Machine Learning` > `AI Endpoints` بروید و در تب `API Keys`، روی **Create a new API key** کلیک کنید.
+
+2. دستور `/connect` را اجرا کنید و **OVHcloud AI Endpoints** را جستجو کنید.
+
+   ```txt
+   /connect
+   ```
+
+3. کلید API OVHcloud AI Endpoints خود را وارد کنید.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. دستور `/models` را اجرا کنید تا مدلی مانند _gpt-oss-120b_ را انتخاب کنید.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Scaleway
+
+برای استفاده از [Scaleway Generative APIs](https://www.scaleway.com/en/docs/generative-apis/) با Opencode:
+
+1. به [تنظیمات IAM کنسول Scaleway](https://console.scaleway.com/iam/api-keys) بروید تا یک کلید API جدید تولید کنید.
+
+2. دستور `/connect` را اجرا کنید و **Scaleway** را جستجو کنید.
+
+   ```txt
+   /connect
+   ```
+
+3. کلید API Scaleway خود را وارد کنید.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. دستور `/models` را اجرا کنید تا مدلی مانند _devstral-2-123b-instruct-2512_ یا _gpt-oss-120b_ را انتخاب کنید.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Snowflake Cortex
+
+[Snowflake Cortex](https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-rest-api) دسترسی به مدل‌های پیشرو (Claude، OpenAI GPT-5 و غیره) را از طریق یک API سازگار با OpenAI فراهم می‌کند. تمام استنتاج در محدوده Snowflake اجرا می‌شود و با اعتبارهای Snowflake صورت‌حساب می‌شود. برای نرخ هر مدل، به [جدول مصرف سرویس Snowflake](https://www.snowflake.com/legal-files/CreditConsumptionTable.pdf) مراجعه کنید.
+
+حساب Snowflake ندارید؟ [برای یک دوره آزمایشی رایگان ثبت‌نام کنید](https://signup.snowflake.com/?utm_source=opencode&utm_medium=docs&utm_campaign=cortex-provider).
+
+جریان کاری هسته opencode برای کدنویسی، ویرایش پرونده‌ها و اجرای دستورات به فراخوانی ابزار متکی است. فقط خانواده‌های Claude و OpenAI درون Snowflake Cortex از این پشتیبانی می‌کنند. ارائه‌دهنده برای پشتیبانی از جریان کاری هسته به آن خانواده‌ها محدود شده است.
+
+OpenCode از دو روش احراز هویت پشتیبانی می‌کند:
+
+- **OAuth مرورگر (توصیه‌شده)** — با IdP/SSO خود وارد شوید؛ بدون راز برای مدیریت، نشانه‌ها به‌طور خودکار تازه می‌شوند.
+- **نشانه بیرر دستی** — یک PAT یا JWT را از کنسول Snowflake جای‌گذاری کنید.
+
+#### OAuth مرورگر (توصیه‌شده)
+
+1. دستور `/connect` را اجرا کنید و **Snowflake Cortex** را جستجو کنید.
+
+   ```txt
+   /connect
+   ```
+
+2. **Login with Snowflake (External Browser)** را انتخاب کنید.
+
+   ```txt
+   ┌ Select auth method
+   │
+   │ Login with Snowflake (External Browser)
+   │ Paste PAT or bearer token manually
+   └
+   ```
+
+3. [شناسه حساب (account identifier)](https://docs.snowflake.com/en/user-guide/admin-account-identifier) خود را هنگام درخواست وارد کنید، برای مثال `myorg-myaccount` یا `xy12345.us-east-1`.
+
+   ```txt
+   ┌ Snowflake Account Identifier
+   │
+   │
+   └ enter
+   ```
+
+4. اختیاری: یک نقش Snowflake را برای محدود کردن دامنه نشست وارد کنید (مثلاً `SYSADMIN`). برای استفاده از نقش پیش‌فرض خود، خالی بگذارید.
+
+5. ورود در مرورگر بازشده را کامل کنید. OpenCode بازگشت OAuth را به‌طور خودکار دریافت می‌کند و نشانه را ذخیره می‌کند — نیازی به کپی/جای‌گذاری نیست.
+
+6. دستور `/models` را اجرا کنید تا یک مدل را انتخاب کنید.
+
+   ```txt
+   /models
+   ```
+
+:::note
+OAuth مرورگر از یکپارچه‌سازی امنیتی داخلی `SNOWFLAKE$LOCAL_APPLICATION` در Snowflake استفاده می‌کند ([مستندات](https://docs.snowflake.com/en/user-guide/oauth-local-applications))، که در حال عرضه به تمام حساب‌هاست. برای بررسی در دسترس بودن در حساب خود:
+
+```sql
+SHOW SECURITY INTEGRATIONS LIKE 'SNOWFLAKE$LOCAL_APPLICATION';
+```
+
+اگر نتیجه خالی بود، در حین عرضه این یکپارچه‌سازی به حساب شما، از روش **نشانه بیرر دستی** در زیر استفاده کنید.
+:::
+
+#### نشانه بیرر دستی
+
+اگر ترجیح می‌دهید مستقیماً یک نشانه را جای‌گذاری کنید، یا اگر `SNOWFLAKE$LOCAL_APPLICATION` هنوز در حساب شما در دسترس نیست:
+
+1. یک [توکن دسترسی برنامه‌ای (PAT)](https://docs.snowflake.com/en/user-guide/programmatic-access-tokens) در حساب Snowflake خود تولید کنید.
+
+2. دستور `/connect` را اجرا کنید، **Snowflake Cortex** را جستجو کنید و **Paste PAT or bearer token manually** را انتخاب کنید.
+
+3. [شناسه حساب (account identifier)](https://docs.snowflake.com/en/user-guide/admin-account-identifier) خود را هنگام درخواست وارد کنید.
+
+4. PAT خود را جای‌گذاری کنید.
+
+5. دستور `/models` را اجرا کنید تا یک مدل را انتخاب کنید.
+
+   ```txt
+   /models
+   ```
+
+#### متغیر محیطی
+
+برای محیط‌های CI یا بدون سر (headless)، یک PAT یا JWT را قبل از شروع opencode تنظیم کنید:
+
+```bash
+export SNOWFLAKE_ACCOUNT=myorg-myaccount
+export SNOWFLAKE_CORTEX_TOKEN=your-pat-or-jwt
+```
+
+:::note
+`SNOWFLAKE_CORTEX_TOKEN` فقط یک PAT یا JWT را می‌پذیرد — جریان OAuth مرورگر فقط از طریق `/connect` در دسترس است و نمی‌توان آن را از طریق متغیر محیطی پیکربندی کرد. `SNOWFLAKE_CORTEX_PAT` همچنان برای سازگاری با نسخه‌های قبلی پشتیبانی می‌شود.
+:::
+
+فهرست مدل‌ها به‌طور خودکار ارائه می‌شود. یک `opencode.json` حداقلی تمام چیزی است که نیاز دارید:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "snowflake-cortex/claude-sonnet-4-6",
+  "small_model": "snowflake-cortex/claude-haiku-4-5"
+}
+```
+
+---
+
+### Together AI
+
+1. به [کنسول Together AI](https://api.together.ai) بروید، یک حساب کاربری ایجاد کنید و روی **Add Key** کلیک کنید.
+
+2. دستور `/connect` را اجرا کنید و **Together AI** را جستجو کنید.
+
+   ```txt
+   /connect
+   ```
+
+3. کلید API Together AI خود را وارد کنید.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. دستور `/models` را اجرا کنید تا مدلی مانند _Kimi K2 Instruct_ را انتخاب کنید.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Venice AI
+
+1. به [کنسول Venice AI](https://venice.ai) بروید، یک حساب کاربری ایجاد کنید و یک کلید API تولید کنید.
+
+2. دستور `/connect` را اجرا کنید و **Venice AI** را جستجو کنید.
+
+   ```txt
+   /connect
+   ```
+
+3. کلید API Venice AI خود را وارد کنید.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. دستور `/models` را اجرا کنید تا مدلی مانند _Llama 3.3 70B_ را انتخاب کنید.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Vercel AI Gateway
+
+Vercel AI Gateway به شما اجازه می‌دهد از مدل‌های OpenAI، Anthropic، Google، xAI و غیره از طریق یک نقطه پایانی یکپارچه دسترسی داشته باشید. مدل‌ها با قیمت لیست بدون افزایش قیمت ارائه می‌شوند.
+
+1. به [داشبورد Vercel](https://vercel.com/) بروید، به تب **AI Gateway** بروید و روی **API keys** کلیک کنید تا یک کلید API جدید ایجاد کنید.
+
+2. دستور `/connect` را اجرا کنید و **Vercel AI Gateway** را جستجو کنید.
+
+   ```txt
+   /connect
+   ```
+
+3. کلید API Vercel AI Gateway خود را وارد کنید.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. دستور `/models` را اجرا کنید تا یک مدل را انتخاب کنید.
+
+   ```txt
+   /models
+   ```
+
+همچنین می‌توانید مدل‌ها را از طریق پیکربندی opencode خود سفارشی کنید. در اینجا مثالی از مشخص کردن ترتیب مسیریابی ارائه‌دهنده آورده شده است.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "vercel": {
+      "models": {
+        "anthropic/claude-sonnet-4": {
+          "options": {
+            "order": ["anthropic", "vertex"]
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+برخی گزینه‌های مسیریابی مفید:
+
+| Option              | Description                                          |
+| ------------------- | ---------------------------------------------------- |
+| `order`             | Provider sequence to try                             |
+| `only`              | Restrict to specific providers                       |
+| `zeroDataRetention` | Only use providers with zero data retention policies |
+
+---
+
+### xAI
+
+سه راه برای احراز هویت: یک اشتراک SuperGrok از طریق OAuth مرورگر، همان اشتراک SuperGrok از طریق یک جریان کد دستگاه بدون سر (برای VPS / SSH / Docker)، یا یک کلید API پرداخت به‌ازای-استفاده از کنسول xAI.
+
+#### گزینه A — OAuth SuperGrok (ورود مرورگر)
+
+1. دستور `/connect` را اجرا کنید و **xAI** را جستجو کنید.
+
+   ```txt
+   /connect
+   ```
+
+2. **xAI Grok OAuth (SuperGrok Subscription)** را انتخاب کنید. OpenCode صفحه رضایت xAI را در مرورگر شما باز می‌کند و منتظر بازگشت روی `http://127.0.0.1:56121/callback` می‌ماند.
+
+3. دستور `/models` را اجرا کنید تا یک مدل Grok را انتخاب کنید.
+
+   ```txt
+   /models
+   ```
+
+OpenCode نشانه دسترسی OAuth را به‌طور خودکار تازه می‌کند. هر طرح Grok یا X Premium که شامل دسترسی به Grok API باشد کار می‌کند؛ نیازی به یک `XAI_API_KEY` جداگانه ندارید.
+
+#### گزینه B — کد دستگاه SuperGrok (بدون سر / سرور دوردست / VPS)
+
+وقتی از این استفاده کنید که OpenCode در جایی اجرا می‌شود که مرورگر به تغییرمسیر لوپ‌بک دسترسی ندارد: یک VPS، یک جعبه توسعه دوردست از طریق SSH، داخل Docker، در CI و غیره. هیچ درگاه بازگشتی روی میزبانی که OpenCode اجرا می‌شود باز نمی‌شود — در عوض xAI یک کد کوتاه به CLI می‌دهد که در هر دستگاه دیگری (لپ‌تاپ، تلفن، …) در یک مرورگر وارد می‌کنید.
+
+1. دستور `/connect` را روی میزبان دوردست اجرا کنید و **xAI** را جستجو کنید.
+
+   ```txt
+   /connect
+   ```
+
+2. **xAI Grok OAuth (Headless / Remote / VPS)** را انتخاب کنید. OpenCode یک نشانی URL تأیید و یک کد کاربر کوتاه چاپ می‌کند.
+
+   ```txt
+   Open https://x.ai/device on any device and enter code: ABCD-1234
+   ```
+
+3. نشانی URL را در دستگاهی که مرورگر دارد (لپ‌تاپ یا تلفن شما) باز کنید، کد را وارد کنید و صفحه رضایت را تأیید کنید. OpenCode نقطه پایانی نشانه xAI را پرس‌وجو می‌کند و نشانه‌های OAuth حاصل را پس از تأیید شما ذخیره می‌کند. تازه‌سازی نشانه دقیقاً مانند گزینه A کار می‌کند.
+
+#### گزینه C — کلید API
+
+1. به [کنسول xAI](https://console.x.ai/) بروید، یک حساب کاربری ایجاد کنید و یک کلید API تولید کنید.
+
+2. دستور `/connect` را اجرا کنید و **xAI** را جستجو کنید.
+
+   ```txt
+   /connect
+   ```
+
+3. **Manually enter API Key** را انتخاب کنید و کلید API xAI خود را جای‌گذاری کنید.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. دستور `/models` را اجرا کنید تا مدلی مانند _Grok Beta_ را انتخاب کنید.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Z.AI
+
+1. به [کنسول API Z.AI](https://z.ai/manage-apikey/apikey-list) بروید، یک حساب کاربری ایجاد کنید و روی **Create a new API key** کلیک کنید.
+
+2. دستور `/connect` را اجرا کنید و **Z.AI** را جستجو کنید.
+
+   ```txt
+   /connect
+   ```
+
+   اگر در **GLM Coding Plan** مشترک هستید، **Z.AI Coding Plan** را انتخاب کنید.
+
+3. کلید API Z.AI خود را وارد کنید.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. دستور `/models` را اجرا کنید تا مدلی مانند _GLM-4.7_ را انتخاب کنید.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### ZenMux
+
+1. به [داشبورد ZenMux](https://zenmux.ai/settings/keys) بروید، روی **Create API Key** کلیک کنید و کلید را کپی کنید.
+
+2. دستور `/connect` را اجرا کنید و ZenMux را جستجو کنید.
+
+   ```txt
+   /connect
+   ```
+
+3. کلید API ارائه‌دهنده را وارد کنید.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. بسیاری از مدل‌های ZenMux به‌طور پیش‌فرض از قبل بارگذاری شده‌اند، دستور `/models` را اجرا کنید تا موردی که می‌خواهید را انتخاب کنید.
+
+   ```txt
+   /models
+   ```
+
+   همچنین می‌توانید مدل‌های بیشتری را از طریق پیکربندی opencode خود اضافه کنید.
+
+   ```json title="opencode.json" {6}
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "zenmux": {
+         "models": {
+           "somecoolnewmodel": {}
+         }
+       }
+     }
+   }
+   ```
+
+---
+
+## ارائه‌دهنده سفارشی
+
+برای افزودن هر **ارائه‌دهنده سازگار با OpenAI** که در دستور `/connect` فهرست نشده است:
+
+:::tip
+می‌توانید از هر ارائه‌دهنده سازگار با OpenAI با opencode استفاده کنید. بیشتر ارائه‌دهندگان هوش مصنوعی مدرن APIهای سازگار با OpenAI ارائه می‌دهند.
+:::
+
+1. دستور `/connect` را اجرا کنید و به پایین به **Other** بروید.
+
+   ```bash
+   $ /connect
+
+   ┌  Add credential
+   │
+   ◆  Select provider
+   │  ...
+   │  ● Other
+   └
+   ```
+
+2. یک شناسه منحصر‌به‌فرد برای ارائه‌دهنده وارد کنید.
+
+   ```bash
+   $ /connect
+
+   ┌  Add credential
+   │
+   ◇  Enter provider id
+   │  myprovider
+   └
+   ```
+
+   :::note
+   یک شناسه به‌یادماندنی انتخاب کنید، زیرا از آن در فایل پیکربندی خود استفاده خواهید کرد.
+   :::
+
+3. کلید API ارائه‌دهنده خود را وارد کنید.
+
+   ```bash
+   $ /connect
+
+   ┌  Add credential
+   │
+   ▲  This only stores a credential for myprovider - you will need to configure it in opencode.json, check the docs for examples.
+   │
+   ◇  Enter your API key
+   │  sk-...
+   └
+   ```
+
+4. فایل `opencode.json` خود را در فهرست پروژه خود ایجاد یا به‌روزرسانی کنید:
+
+   ```json title="opencode.json" ""myprovider"" {5-15}
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "myprovider": {
+         "npm": "@ai-sdk/openai-compatible",
+         "name": "My AI ProviderDisplay Name",
+         "options": {
+           "baseURL": "https://api.myprovider.com/v1"
+         },
+         "models": {
+           "my-model-name": {
+             "name": "My Model Display Name"
+           }
+         }
+       }
+     }
+   }
+   ```
+
+   گزینه‌های پیکربندی عبارتند از:
+   - **npm**: بسته AI SDK برای استفاده، `@ai-sdk/openai-compatible` برای ارائه‌دهندگان سازگار با OpenAI (برای `/v1/chat/completions`). اگر ارائه‌دهنده/مدل شما از `/v1/responses` استفاده می‌کند، از `@ai-sdk/openai` استفاده کنید.
+   - **name**: نام نمایشی در رابط کاربری.
+   - **models**: مدل‌های موجود.
+   - **options.baseURL**: نشانی URL نقطه پایانی API.
+   - **options.apiKey**: به‌صورت اختیاری کلید API را تنظیم کنید، اگر از احراز هویت استفاده نمی‌کنید.
+   - **options.headers**: به‌صورت اختیاری سرآیندهای سفارشی تنظیم کنید.
+
+   درباره گزینه‌های پیشرفته در مثال زیر بیشتر بدانید.
+
+5. دستور `/models` را اجرا کنید و ارائه‌دهنده و مدل‌های سفارشی شما در فهرست انتخاب ظاهر می‌شوند.
+
+---
+
+##### مثال
+
+در اینجا مثالی از تنظیم گزینه‌های `apiKey`، `headers` و `limit` مدل آورده شده است.
+
+```json title="opencode.json" {9,11,17-20}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "myprovider": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "My AI ProviderDisplay Name",
+      "options": {
+        "baseURL": "https://api.myprovider.com/v1",
+        "apiKey": "{env:ANTHROPIC_API_KEY}",
+        "headers": {
+          "Authorization": "Bearer custom-token"
+        }
+      },
+      "models": {
+        "my-model-name": {
+          "name": "My Model Display Name",
+          "limit": {
+            "context": 200000,
+            "output": 65536
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+جزئیات پیکربندی:
+
+- **apiKey**: تنظیم با استفاده از نحو متغیر `env`، [بیشتر بدانید](/docs/config#env-vars).
+- **headers**: سرآیندهای سفارشی ارسال‌شده با هر درخواست.
+- **limit.context**: حداکثر توکن‌های ورودی که مدل می‌پذیرد.
+- **limit.output**: حداکثر توکن‌هایی که مدل می‌تواند تولید کند.
+
+فیلدهای `limit` به OpenCode اجازه می‌دهند بفهمد چقدر از زمینه باقی‌مانده است. ارائه‌دهندگان استاندارد این موارد را به‌طور خودکار از models.dev استخراج می‌کنند.
+
+---
+
+## عیب‌یابی
+
+اگر در پیکربندی یک ارائه‌دهنده مشکل دارید، موارد زیر را بررسی کنید:
+
+1. **بررسی تنظیمات احراز هویت**: دستور `opencode auth list` را اجرا کنید تا ببینید آیا اعتبارنامه‌های
+   ارائه‌دهنده به پیکربندی شما اضافه شده است یا خیر.
+
+   این مورد برای ارائه‌دهندگانی مانند Amazon Bedrock که برای احراز هویت خود به متغیرهای محیطی متکی هستند اعمال نمی‌شود.
+
+2. برای ارائه‌دهندگان سفارشی، پیکربندی opencode را بررسی کنید و:
+   - مطمئن شوید شناسه ارائه‌دهنده استفاده‌شده در دستور `/connect` با شناسه در پیکربندی opencode شما مطابقت دارد.
+   - بسته npm درست برای ارائه‌دهنده استفاده شده است. برای مثال، برای Cerebras از `@ai-sdk/cerebras` استفاده کنید. و برای سایر ارائه‌دهندگان سازگار با OpenAI، از `@ai-sdk/openai-compatible` (برای `/v1/chat/completions`) استفاده کنید؛ اگر یک مدل از `/v1/responses` استفاده می‌کند، از `@ai-sdk/openai` استفاده کنید. برای تنظیمات ترکیبی زیر یک ارائه‌دهنده، می‌توانید به‌ازای هر مدل از طریق `provider.npm` بازنویسی کنید.
+   - بررسی کنید نشانی API درست در فیلد `options.baseURL` استفاده شده است.

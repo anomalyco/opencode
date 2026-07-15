@@ -64,6 +64,11 @@ export default defineConfig({
           lang: "es-ES",
           dir: "ltr",
         },
+        fa: {
+          label: "فارسی",
+          lang: "fa-IR",
+          dir: "rtl",
+        },
         fr: {
           label: "Fran\u00e7ais",
           lang: "fr-FR",

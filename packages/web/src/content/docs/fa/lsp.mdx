@@ -1,0 +1,214 @@
+---
+title: "سرورهای LSP"
+description: "OpenCode با سرورهای LSP شما یکپارچه می‌شود."
+---
+
+OpenCode می‌تواند با سرورهای Language Server Protocol (LSP) یکپارچه شود تا تشخیص‌ها را به‌عنوان بازخورد برای عامل استفاده کند.
+
+---
+
+## داخلی
+
+OpenCode همراه با چندین سرور LSP داخلی برای زبان‌های محبوب ارائه می‌شود:
+
+| سرور LSP          | پسوندها                                                            | پیش‌نیازها                                                  |
+| ------------------ | ------------------------------------------------------------------- | ------------------------------------------------------------ |
+| astro              | .astro                                                              | نصب خودکار برای پروژه‌های Astro                             |
+| bash               | .sh, .bash, .zsh, .ksh                                              | نصب خودکار bash-language-server                              |
+| clangd             | .c, .cpp, .cc, .cxx, .c++, .h, .hpp, .hh, .hxx, .h++                | نصب خودکار برای پروژه‌های C/C++                             |
+| csharp             | .cs, .csx                                                           | `.NET SDK` نصب شده                                           |
+| clojure-lsp        | .clj, .cljs, .cljc, .edn                                            | دستور `clojure-lsp` در دسترس باشد                            |
+| dart               | .dart                                                               | دستور `dart` در دسترس باشد                                   |
+| deno               | .ts, .tsx, .js, .jsx, .mjs                                          | دستور `deno` در دسترس باشد (تشخیص خودکار deno.json/deno.jsonc) |
+| elixir-ls          | .ex, .exs                                                           | دستور `elixir` در دسترس باشد                                 |
+| eslint             | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue                  | وابستگی `eslint` در پروژه                                    |
+| fsharp             | .fs, .fsi, .fsx, .fsscript                                          | `.NET SDK` نصب شده                                           |
+| gleam              | .gleam                                                              | دستور `gleam` در دسترس باشد                                  |
+| gopls              | .go                                                                 | دستور `go` در دسترس باشد                                     |
+| hls                | .hs, .lhs                                                           | دستور `haskell-language-server-wrapper` در دسترس باشد        |
+| jdtls              | .java                                                               | `Java SDK (version 21+)` نصب شده                             |
+| julials            | .jl                                                                 | `julia` و `LanguageServer.jl` نصب شده                        |
+| kotlin-ls          | .kt, .kts                                                           | نصب خودکار برای پروژه‌های Kotlin                            |
+| lua-ls             | .lua                                                                | نصب خودکار برای پروژه‌های Lua                               |
+| nixd               | .nix                                                                | دستور `nixd` در دسترس باشد                                   |
+| ocaml-lsp          | .ml, .mli                                                           | دستور `ocamllsp` در دسترس باشد                               |
+| oxlint             | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue, .astro, .svelte | وابستگی `oxlint` در پروژه                                    |
+| php intelephense   | .php                                                                | نصب خودکار برای پروژه‌های PHP                               |
+| prisma             | .prisma                                                             | دستور `prisma` در دسترس باشد                                 |
+| pyright            | .py, .pyi                                                           | وابستگی `pyright` نصب شده                                    |
+| razor              | .razor, .cshtml                                                     | `.NET SDK` و افزونه C# VS Code نصب شده                       |
+| ruby-lsp (rubocop) | .rb, .rake, .gemspec, .ru                                           | دستورهای `ruby` و `gem` در دسترس باشند                       |
+| rust               | .rs                                                                 | دستور `rust-analyzer` در دسترس باشد                          |
+| sourcekit-lsp      | .swift, .objc, .objcpp                                              | `swift` نصب شده (`xcode` در macOS)                           |
+| svelte             | .svelte                                                             | نصب خودکار برای پروژه‌های Svelte                            |
+| terraform          | .tf, .tfvars                                                        | نصب خودکار از انتشارهای GitHub                              |
+| tinymist           | .typ, .typc                                                         | نصب خودکار از انتشارهای GitHub                              |
+| typescript         | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts                        | وابستگی `typescript` در پروژه                                |
+| vue                | .vue                                                                | نصب خودکار برای پروژه‌های Vue                               |
+| yaml-ls            | .yaml, .yml                                                         | نصب خودکار Red Hat yaml-language-server                      |
+| zls                | .zig, .zon                                                          | دستور `zig` در دسترس باشد                                    |
+
+LSP به‌طور پیش‌فرض غیرفعال است. هنگامی که فعال باشد، سرورها وقتی یکی از پسوندهای پرونده فوق شناسایی شود و پیش‌نیازها برآورده گردد، شروع به کار می‌کنند.
+
+:::note
+می‌توانید بارگیری خودکار سرورهای LSP را با تنظیم متغیر محیطی `OPENCODE_DISABLE_LSP_DOWNLOAD` روی `true` غیرفعال کنید.
+:::
+
+---
+
+## نحوه عملکرد
+
+وقتی LSP فعال باشد و opencode یک پرونده را باز کند، آن:
+
+1. پسوند پرونده را در برابر تمام سرورهای LSP فعال بررسی می‌کند.
+2. سرور LSP مناسب را در صورتی که در حال اجرا نباشد شروع می‌کند.
+
+---
+
+## بهترین شیوه‌ها
+
+LSP می‌تواند به عامل کمک کند تا مشکلات را بیابد و برطرف کند با ارائه تشخیص‌ها از سرورهای زبان. این در برخی پروژه‌ها مفید است، اما همیشه مثبت خالص نیست.
+
+سرورهای زبان ممکن است از همگامی خارج شوند، حافظه قابل‌توجهی مصرف کنند، بسته به نسخه یا پروژه متفاوت باشند و جریان‌کاری عامل را کند کنند. در بسیاری از پروژه‌ها بهتر است عامل به‌طور مستقیم ابزارهای تشخیصی CLI مانند lint، typecheck یا موارد دیگر را اجرا کند، تا خطاها بدون آن معامله‌ها به حلقه عامل بازخورد داده شوند. آن دستورات را در پرونده‌های دستورالعمل مانند `AGENTS.md` یا مهارت‌ها مستند کنید تا عامل بداند چه باید اجرا کند. LSP را زمانی فعال کنید که پروژه شما از بازخورد اضافی سرور زبان سود ببرد.
+
+---
+
+## پیکربندی
+
+می‌توانید سرورهای LSP را از طریق بخش `lsp` در پیکربندی opencode خود فعال و سفارشی کنید.
+
+برای فعال کردن تمام سرورهای LSP داخلی، `lsp` را روی `true` قرار دهید.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": true
+}
+```
+
+از یک شیء استفاده کنید تا سرورهای داخلی فعال بمانند در حالی که بازنویسی‌ها یا سرورهای سفارشی را پیکربندی می‌کنید.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {}
+}
+```
+
+هر ورودی سرور LSP پیکربندی‌شده از موارد زیر پشتیبانی می‌کند:
+
+ورودی‌های سرور به `command` نیاز دارند مگر اینکه فقط یک سرور را غیرفعال کنند.
+
+| ویژگی           | نوع      | توضیحات                                           |
+| ---------------- | -------- | ------------------------------------------------- |
+| `disabled`       | boolean  | تنظیم این مقدار روی `true` سرور LSP را غیرفعال می‌کند |
+| `command`        | string[] | دستوری برای شروع سرور LSP                         |
+| `extensions`     | string[] | پسوندهای پرونده‌ای که این سرور LSP باید مدیریت کند |
+| `env`            | object   | متغیرهای محیطی که هنگام شروع سرور تنظیم می‌شوند  |
+| `initialization` | object   | گزینه‌های مقداردهی اولیه که به سرور LSP ارسال می‌شوند |
+
+بیایید به چند مثال نگاه کنیم.
+
+---
+
+### متغیرهای محیطی
+
+از ویژگی `env` برای تنظیم متغیرهای محیطی هنگام شروع سرور LSP استفاده کنید:
+
+```json title="opencode.json" {5-8}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "rust": {
+      "command": ["rust-analyzer"],
+      "env": {
+        "RUST_LOG": "debug"
+      }
+    }
+  }
+}
+```
+
+---
+
+### گزینه‌های مقداردهی اولیه
+
+از ویژگی `initialization` برای ارسال گزینه‌های مقداردهی اولیه به سرور LSP استفاده کنید. این‌ها تنظیمات اختصاصی سرور هستند که در درخواست `initialize` LSP ارسال می‌شوند:
+
+```json title="opencode.json" {5-13}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "custom-lsp": {
+      "command": ["custom-lsp-server", "--stdio"],
+      "extensions": [".custom"],
+      "initialization": {
+        "preferences": {
+          "importModuleSpecifierPreference": "relative"
+        }
+      }
+    }
+  }
+}
+```
+
+:::note
+گزینه‌های مقداردهی اولیه بسته به سرور LSP متفاوت است. مستندات سرور LSP خود را برای گزینه‌های موجود بررسی کنید.
+:::
+
+---
+
+### غیرفعال کردن سرورهای LSP
+
+اگر `lsp` حذف شود، تمام سرورهای LSP غیرفعال می‌شوند. برای غیرفعال کردن تمام سرورهای LSP پس از اینکه پیکربندی دیگری آن‌ها را فعال کرد، `lsp` را روی `false` قرار دهید:
+
+```json title="opencode.json" {3}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": false
+}
+```
+
+برای غیرفعال کردن یک سرور LSP **مشخص**، `disabled` را روی `true` قرار دهید:
+
+```json title="opencode.json" {5}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "typescript": {
+      "disabled": true
+    }
+  }
+}
+```
+
+---
+
+### سرورهای LSP سفارشی
+
+می‌توانید سرورهای LSP سفارشی را با مشخص کردن دستور و پسوندهای پرونده اضافه کنید:
+
+```json title="opencode.json" {4-7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "custom-lsp": {
+      "command": ["custom-lsp-server", "--stdio"],
+      "extensions": [".custom"]
+    }
+  }
+}
+```
+
+---
+
+## اطلاعات بیشتر
+
+### PHP Intelephense
+
+PHP Intelephense ویژگی‌های پیشرفته را از طریق یک کلید لایسنس ارائه می‌دهد. می‌توانید یک کلید لایسنس را با قرار دادن (تنها) کلید در یک پرونده متنی در موارد زیر فراهم کنید:
+
+- در macOS/Linux: `$HOME/intelephense/license.txt`
+- در Windows: `%USERPROFILE%/intelephense/license.txt`
+
+پرونده باید تنها شامل کلید لایسنس بدون هیچ محتوای اضافی باشد.

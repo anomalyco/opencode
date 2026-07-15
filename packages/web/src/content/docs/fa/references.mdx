@@ -1,0 +1,157 @@
+---
+title: ارجاع‌ها
+description: افزودن فهرست‌های محلی و مخازن Git به عنوان ارجاع پروژه.
+---
+
+ارجاع‌ها به OpenCode اجازه می‌دهند به فهرست‌هایی خارج از پروژه فعلی دسترسی داشته باشد. از آن‌ها برای در دسترس قرار دادن مستندات، کتابخانه‌های مشترک، مثال‌ها، یا مخزن دیگری در حین کار خود استفاده کنید.
+
+ارجاع‌ها با نام مستعار (alias) در `opencode.json` یا `opencode.jsonc` پیکربندی می‌شوند.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "references": {
+    "docs": {
+      "path": "../product-docs",
+      "description": "Use for product behavior and documentation conventions",
+    },
+    "sdk": {
+      "repository": "anomalyco/opencode-sdk-js",
+      "branch": "main",
+      "description": "Use for JavaScript SDK implementation details",
+    },
+  },
+}
+```
+
+---
+
+## فهرست‌های محلی
+
+برای ارجاع به یک فهرست محلی از `path` استفاده کنید.
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "docs": {
+      "path": "../docs",
+    },
+  },
+}
+```
+
+مسیرها می‌توانند به این صورت باشند:
+
+- نسبت به فایل پیکربندی که ارجاع را تعریف می‌کند
+- مطلق، مانند `/home/user/docs`
+- نسبت به فهرست خانگی شما، مانند `~/docs`
+
+همچنین می‌توانید از یک شکل کوتاه رشته‌ای استفاده کنید:
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "docs": "../docs",
+  },
+}
+```
+
+---
+
+## مخازن Git
+
+برای ارجاع به یک مخزن Git از `repository` استفاده کنید. OpenCode مخزن را در حافظه نهان مخازن محلی خود م materialize (پدیدار) می‌کند و سورس چک‌اوت‌شده را به عنوان یک فهرست ارجاع در دسترس قرار می‌دهد.
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "effect": {
+      "repository": "Effect-TS/effect",
+      "branch": "main",
+    },
+  },
+}
+```
+
+`repository` نشانی‌های URL گیت، ارجاع‌های میزبان/مسیر، و شکل کوتاه GitHub `owner/repo` را می‌پذیرد. فیلد اختیاری `branch` یک شاخه یا ref را انتخاب می‌کند. بدون `branch`، OpenCode از شاخه پیش‌فرض مخزن استفاده می‌کند.
+
+هنگامی که به یک شاخه، توضیح، یا گزینه‌های دیگر نیاز ندارید، می‌توانید از شکل کوتاه رشته‌ای استفاده کنید:
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "effect": "Effect-TS/effect",
+  },
+}
+```
+
+:::note
+ارجاع‌های گیت به صورت ناهمگام (asynchronously) به‌روزرسانی می‌شوند. یک مخزن تازه پیکربندی‌شده ممکن است لحظه‌ای طول بکشد تا کلون یا به‌روزرسانی آن تمام شود.
+:::
+
+---
+
+## توصیف نحوه استفاده
+
+`description` را اضافه کنید تا توضیح دهید یک عامل (agent) چه زمانی باید از یک ارجاع استفاده کند.
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "design-system": {
+      "path": "../design-system",
+      "description": "Use when implementing UI components or design tokens",
+    },
+  },
+}
+```
+
+OpenCode ارجاع‌های دارای توضیح را در بافتار (context) عامل قرار می‌دهد. توضیحات باید کوتاه و به اندازه‌ای مشخص باشند که ارجاع‌های دارای محتوای مشابه را از هم متمایز کنند. ارجاع‌های بدون توضیح از طریق تکمیل خودکار و استفاده مستقیم همچنان در دسترس هستند， اما به عامل‌ها معرفی (advertise) نمی‌شوند.
+
+---
+
+## پنهان کردن ورودی‌های تکمیل خودکار
+
+مقدار `hidden` را روی `true` قرار دهید تا یک ارجاع از تکمیل خودکار `@` در TUI حذف شود.
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "internal": {
+      "path": "../internal",
+      "description": "Use for internal implementation details",
+      "hidden": true,
+    },
+  },
+}
+```
+
+`hidden` تنها بر تکمیل خودکار اثر می‌گذارد. یک ارجاع پنهان دارای توضیح همچنان در بافتار عامل گنجانده می‌شود.
+
+---
+
+## استفاده از ارجاع‌ها
+
+ارجاع‌های پیکربندی‌شده در تکمیل خودکار `@` تویی (TUI) ظاهر می‌شوند. عبارت `@alias` را تایپ کنید تا ریشه ارجاع را پیوست کنید، یا `@alias/` را برای جستجوی پرونده‌ها در داخل آن.
+
+```text
+Compare this implementation with @sdk/src/client.ts
+```
+
+عامل‌ها همچنین مسیرهای حل‌شده و توضیحات ارجاع‌های پیکربندی‌شده‌ای که دارای توضیح هستند را در بافتار سیستم خود دریافت می‌کنند، بنابراین می‌توانند وقتی مرتبط است یک ارجاع را بررسی کنند بدون آنکه شما به صورت دستی آن را پیوست کنید.
+
+OpenCode به طور خودکار فهرست‌های ارجاع را از طریق مرز مجوز فهرست‌های خارجی (external-directory) خود مجاز می‌کند. مجوزهای ابزارهای عادی همچنان اعمال می‌شوند؛ برای مثال، عاملی که نمی‌تواند پرونده‌ها را ویرایش کند، به دلیل اینکه یک فهرست به عنوان ارجاع پیکربندی شده است دسترسی ویرایش پیدا نمی‌کند.
+
+---
+
+## فیلدهای پیکربندی
+
+| Field         | Local | Git | Description                                      |
+| ------------- | ----- | --- | ------------------------------------------------ |
+| `path`        | Yes   | No  | Local reference directory                        |
+| `repository`  | No    | Yes | Git URL, host/path, or GitHub `owner/repo` value |
+| `branch`      | No    | Yes | Optional Git branch or ref                       |
+| `description` | Yes   | Yes | Guidance describing when to use the reference    |
+| `hidden`      | Yes   | Yes | Hide the reference from TUI `@` autocomplete     |
+
+نام مستعارهای ارجاع نمی‌توانند خالی باشند یا شامل `/`، فاصله، علامت برگشت (backtick)، یا ویرگول باشند.

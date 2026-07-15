@@ -1,0 +1,353 @@
+---
+title: مقدمه
+description: شروع کار با OpenCode.
+---
+
+import { Tabs, TabItem } from "@astrojs/starlight/components"
+import config from "../../../../config.mjs"
+export const console = config.console
+
+[**OpenCode**](/) یک عامل کدنویسی هوش مصنوعی متن‌باز است. به صورت یک رابط مبتنی بر ترمینال، برنامه دسکتاپ یا افزونه محیط توسعه در دسترس است.
+
+![OpenCode TUI با تم opencode](../../../assets/lander/screenshot.png)
+
+بیایید شروع کنیم.
+
+---
+
+#### پیش‌نیازها
+
+برای استفاده از OpenCode در ترمینال خود، به موارد زیر نیاز دارید:
+
+1. یک شبیه‌ساز ترمینال مدرن مانند:
+   - [WezTerm](https://wezterm.org)، چندسکویی
+   - [Alacritty](https://alacritty.org)، چندسکویی
+   - [Ghostty](https://ghostty.org)، لینوکس و macOS
+   - [Kitty](https://sw.kovidgoyal.net/kitty/)، لینوکس و macOS
+
+2. کلیدهای API برای ارائه‌دهندگان LLM که می‌خواهید استفاده کنید.
+
+---
+
+## نصب
+
+ساده‌ترین راه برای نصب OpenCode استفاده از اسکریپت نصب است.
+
+```bash
+curl -fsSL https://opencode.ai/install | bash
+```
+
+همچنین می‌توانید آن را با دستورات زیر نصب کنید:
+
+- **استفاده از Node.js**
+
+  <Tabs>
+
+    <TabItem label="npm">
+    ```bash
+    npm install -g opencode-ai
+    ```
+
+    </TabItem>
+
+    <TabItem label="Bun">
+    ```bash
+    bun install -g opencode-ai
+    ```
+
+    </TabItem>
+
+    <TabItem label="pnpm">
+    ```bash
+    pnpm install -g opencode-ai
+    ```
+
+    </TabItem>
+
+    <TabItem label="Yarn">
+    ```bash
+    yarn global add opencode-ai
+    ```
+
+    </TabItem>
+
+  </Tabs>
+
+- **استفاده از Homebrew روی macOS و لینوکس**
+
+  ```bash
+  brew install anomalyco/tap/opencode
+  ```
+
+  > ما استفاده از tap مخصوص OpenCode را برای جدیدترین نسخه‌ها توصیه می‌کنیم. فرمول رسمی `brew install opencode` توسط تیم Homebrew نگهداری می‌شود و با فراوانی کمتری به‌روزرسانی می‌شود.
+
+- **نصب روی Arch Linux**
+
+  ```bash
+  sudo pacman -S opencode           # Arch Linux (Stable)
+  paru -S opencode-bin              # Arch Linux (Latest from AUR)
+  ```
+
+#### ویندوز
+
+:::tip[توصیه‌شده: استفاده از WSL]
+برای بهترین تجربه روی ویندوز، ما استفاده از [زیرسیستم ویندوز برای لینوکس (WSL)](/docs/windows-wsl) را توصیه می‌کنیم. عملکرد بهتر و سازگاری کامل با ویژگی‌های OpenCode را فراهم می‌کند.
+:::
+
+- **استفاده از Chocolatey**
+
+  ```bash
+  choco install opencode
+  ```
+
+- **استفاده از Scoop**
+
+  ```bash
+  scoop install opencode
+  ```
+
+- **استفاده از NPM**
+
+  ```bash
+  npm install -g opencode-ai
+  ```
+
+- **استفاده از Mise**
+
+  ```bash
+  mise use -g github:anomalyco/opencode
+  ```
+
+- **استفاده از Docker**
+
+  ```bash
+  docker run -it --rm ghcr.io/anomalyco/opencode
+  ```
+
+پشتیبانی از نصب OpenCode روی ویندوز با استفاده از Bun در حال حاضر در دست اقدام است.
+
+همچنین می‌توانید باینری را از [انتشارها](https://github.com/anomalyco/opencode/releases) دریافت کنید.
+
+---
+
+## پیکربندی
+
+با OpenCode می‌توانید با پیکربندی کلیدهای API، از هر ارائه‌دهنده LLM استفاده کنید.
+
+اگر در استفاده از ارائه‌دهندگان LLM تازه‌کار هستید، استفاده از [OpenCode Zen](/docs/zen) را توصیه می‌کنیم.
+این فهرستی گزینش‌شده از مدل‌هایی است که توسط تیم OpenCode آزمایش و تأیید شده‌اند.
+
+1. دستور `/connect` را در TUI اجرا کنید، opencode را انتخاب کنید و به [opencode.ai/auth](https://opencode.ai/auth) بروید.
+
+   ```txt
+   /connect
+   ```
+
+2. وارد شوید، جزئیات صورت‌حساب خود را اضافه کنید و کلید API خود را کپی کنید.
+
+3. کلید API خود را جای‌گذاری کنید.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+همچنین می‌توانید یکی دیگر از ارائه‌دهندگان را انتخاب کنید. [اطلاعات بیشتر](/docs/providers#directory).
+
+---
+
+## مقداردهی اولیه
+
+اکنون که یک ارائه‌دهنده را پیکربندی کرده‌اید، می‌توانید به پروژه‌ای که
+می‌خواهید روی آن کار کنید بروید.
+
+```bash
+cd /path/to/project
+```
+
+و OpenCode را اجرا کنید.
+
+```bash
+opencode
+```
+
+سپس، OpenCode را برای پروژه با اجرای دستور زیر مقداردهی اولیه کنید.
+
+```bash frame="none"
+/init
+```
+
+این باعث می‌شود OpenCode پروژه شما را تحلیل کند و یک پرونده `AGENTS.md` در
+ریشه پروژه ایجاد کند.
+
+:::tip
+باید پرونده `AGENTS.md` متعلق به پروژه خود را در Git کامیت کنید.
+:::
+
+این به OpenCode کمک می‌کند ساختار پروژه و الگوهای کدنویسی استفاده‌شده را درک کند.
+
+---
+
+## نحوه استفاده
+
+اکنون آماده‌اید که از OpenCode برای کار روی پروژه خود استفاده کنید. هر چه دلتان می‌خواهد از آن بپرسید!
+
+اگر در استفاده از یک عامل کدنویسی هوش مصنوعی تازه‌کار هستید، در اینجا چند مثال آورده شده که ممکن است کمک کند.
+
+---
+
+### پرسیدن سؤال
+
+می‌توانید از OpenCode بخواهید کد‌بنه را برایتان توضیح دهد.
+
+:::tip
+برای جستجوی fuzzy پرونده‌ها در پروژه از کلید `@` استفاده کنید.
+:::
+
+```txt frame="none" "@packages/functions/src/api/index.ts"
+How is authentication handled in @packages/functions/src/api/index.ts
+```
+
+این در صورتی مفید است که بخشی از کد‌بنه را خودتان کار نکرده باشید.
+
+---
+
+### افزودن ویژگی‌ها
+
+می‌توانید از OpenCode بخواهید ویژگی‌های جدیدی به پروژه خود اضافه کند. هرچند ابتدا توصیه می‌کنیم از آن بخواهید یک برنامه ایجاد کند.
+
+1. **ایجاد یک برنامه**
+
+   OpenCode دارای یک _حالت برنامه (Plan mode)_ است که توانایی آن در ایجاد تغییرات را غیرفعال می‌کند و
+   در عوض پیشنهاد می‌دهد که _چگونه_ ویژگی را پیاده‌سازی خواهد کرد.
+
+   با استفاده از کلید **Tab** به آن تغییر وضعیت دهید. یک نشانگر برای این در گوشه پایین سمت راست خواهید دید.
+
+   ```bash frame="none" title="Switch to Plan mode"
+   <TAB>
+   ```
+
+   حالا بیایید توصیف کنیم که می‌خواهیم چه کاری انجام دهد.
+
+   ```txt frame="none"
+   When a user deletes a note, we'd like to flag it as deleted in the database.
+   Then create a screen that shows all the recently deleted notes.
+   From this screen, the user can undelete a note or permanently delete it.
+   ```
+
+   می‌خواهید جزئیات کافی به OpenCode بدهید تا آنچه را می‌خواهید درک کند. کمک می‌کند
+   با او همان‌طور صحبت کنید که انگار با یک توسعه‌دهنده تازه‌کار در تیم خود صحبت می‌کنید.
+
+   :::tip
+   به OpenCode زمینه و مثال‌های فراوانی بدهید تا آنچه را می‌خواهید درک کند.
+   :::
+
+2. **تکرار روی برنامه**
+
+   پس از آنکه برنامه‌ای به شما داد، می‌توانید بازخورد دهید یا جزئیات بیشتری اضافه کنید.
+
+   ```txt frame="none"
+   We'd like to design this new screen using a design I've used before.
+   [Image #1] Take a look at this image and use it as a reference.
+   ```
+
+   :::tip
+   تصاویر را با کشیدن و رها کردن (drag and drop) به ترمینال اضافه کنید تا به درخواست افزوده شوند.
+   :::
+
+   OpenCode می‌تواند هر تصویری که به آن می‌دهید اسکن کند و به درخواست اضافه کند. می‌توانید
+   این کار را با کشیدن و رها کردن یک تصویر در ترمینال انجام دهید.
+
+3. **ساخت ویژگی**
+
+   پس از آنکه از برنامه راضی شدید، با فشردن دوباره کلید **Tab** به _حالت ساخت (Build mode)_ بازگردید.
+
+   ```bash frame="none"
+   <TAB>
+   ```
+
+   و از آن بخواهید تغییرات را اعمال کند.
+
+   ```bash frame="none"
+   Sounds good! Go ahead and make the changes.
+   ```
+
+---
+
+### ایجاد تغییرات
+
+برای تغییرات ساده‌تر، می‌توانید از OpenCode بخواهید مستقیماً آن را بسازد
+بدون اینکه ابتدا برنامه را بررسی کند.
+
+```txt frame="none" "@packages/functions/src/settings.ts" "@packages/functions/src/notes.ts"
+We need to add authentication to the /settings route. Take a look at how this is
+handled in the /notes route in @packages/functions/src/notes.ts and implement
+the same logic in @packages/functions/src/settings.ts
+```
+
+می‌خواهید مطمئن شوید که جزئیات خوبی ارائه می‌دهید تا OpenCode تغییرات درستی
+ایجاد کند.
+
+---
+
+### برگرداندن تغییرات
+
+فرض کنید از OpenCode می‌خواهید تغییراتی ایجاد کند.
+
+```txt frame="none" "@packages/functions/src/api/index.ts"
+Can you refactor the function in @packages/functions/src/api/index.ts?
+```
+
+اما متوجه می‌شوید که آن چیزی نیست که می‌خواستید. می‌توانید تغییرات را
+با استفاده از دستور `/undo` **برگردانید**.
+
+```bash frame="none"
+/undo
+```
+
+OpenCode اکنون تغییراتی را که ایجاد کرده بود واگرداند و پیام اصلی شما را
+دوباره نشان می‌دهد.
+
+```txt frame="none" "@packages/functions/src/api/index.ts"
+Can you refactor the function in @packages/functions/src/api/index.ts?
+```
+
+از اینجا می‌توانید درخواست را تنظیم کنید و از OpenCode بخواهید دوباره تلاش کند.
+
+:::tip
+می‌توانید `/undo` را چندین بار اجرا کنید تا چندین تغییر را برگردانید.
+:::
+
+یا می‌توانید تغییرات را با استفاده از دستور `/redo` **دوباره اعمال کنید**.
+
+```bash frame="none"
+/redo
+```
+
+---
+
+## اشتراک‌گذاری
+
+گفتگوهایی که با OpenCode دارید می‌تواند [با تیم شما به اشتراک گذاشته شود](/docs/share).
+
+```bash frame="none"
+/share
+```
+
+این یک پیوند به گفتگوی فعلی ایجاد کرده و آن را در کلیپ‌بورد شما کپی می‌کند.
+
+:::note
+گفتگوها به طور پیش‌فرض به اشتراک گذاشته نمی‌شوند.
+:::
+
+در اینجا یک [گفتگوی نمونه](https://opencode.ai/s/4XP1fce5) با OpenCode آورده شده است.
+
+---
+
+## سفارشی‌سازی
+
+و تمام شد! اکنون در استفاده از OpenCode یک حرفه‌ای هستید.
+
+برای شخصی‌سازی آن، [انتخاب یک تم](/docs/themes)، [سفارشی‌سازی کلیدهای میان‌بر](/docs/keybinds)، [پیکربندی قالب‌کننده‌های کد](/docs/formatters)، [ایجاد دستورات سفارشی](/docs/commands) یا کار با [پیکربندی OpenCode](/docs/config) را توصیه می‌کنیم.
