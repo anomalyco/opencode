@@ -3,6 +3,7 @@ import { Tool } from "@opencode-ai/core/tool/tool"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import type { PermissionV2 } from "@opencode-ai/core/permission"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { Image } from "@opencode-ai/core/image"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
@@ -28,7 +29,26 @@ const outputStore = Layer.mock(ToolOutputStore.Service, {
     )
   },
 })
-const registryLayer = AppNodeBuilder.build(ToolRegistry.node, [[ToolOutputStore.node, outputStore]])
+const imageStore = Layer.mock(Image.Service, {
+  normalize: (resource, content) =>
+    resource === "too-large.png"
+      ? Effect.fail(
+          new Image.SizeError({
+            resource,
+            width: 9_000,
+            height: 9_000,
+            bytes: content.content.length,
+            maxWidth: 2_000,
+            maxHeight: 2_000,
+            maxBytes: 5,
+          }),
+        )
+      : Effect.succeed({ ...content, content: "bm9ybWFsaXplZA==", mime: "image/jpeg" }),
+})
+const registryLayer = AppNodeBuilder.build(ToolRegistry.node, [
+  [ToolOutputStore.node, outputStore],
+  [Image.node, imageStore],
+])
 const it = testEffect(registryLayer)
 const identity = {
   agent: AgentV2.ID.make("build"),
@@ -252,6 +272,32 @@ describe("ToolRegistry", () => {
         outputPaths: ["/managed/generic"],
       })
       expect(bounds).toHaveLength(1)
+    }),
+  )
+
+  it.effect("normalizes image tool output at settlement and drops unresizable images", () =>
+    Effect.gen(function* () {
+      const service = yield* ToolRegistry.Service
+      yield* service.register({
+        snapshot: Tool.make({
+          description: "Return images",
+          input: Schema.Struct({ text: Schema.String }),
+          output: Schema.Struct({ text: Schema.String }),
+          execute: ({ text }) => Effect.succeed({ text }),
+          toModelOutput: ({ output }) => [
+            { type: "file", data: "aW1hZ2U=", mime: "image/png", name: "frame.png" },
+            { type: "file", data: "aW1hZ2U=", mime: "image/png", name: "too-large.png" },
+            { type: "text", text: output.text },
+          ],
+        }),
+      }, { codemode: false })
+
+      const settlement = yield* settleTool(service, call("snapshot"))
+      expect(settlement.output?.content).toEqual([
+        { type: "file", uri: "data:image/jpeg;base64,bm9ybWFsaXplZA==", mime: "image/jpeg", name: "frame.png" },
+        { type: "text", text: "snapshot" },
+        { type: "text", text: "[1 image omitted: could not be resized below the image size limit.]" },
+      ])
     }),
   )
 

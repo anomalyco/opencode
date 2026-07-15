@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { DateTime, Effect, Fiber, Layer, Schema, Stream } from "effect"
+import { DateTime, Effect, Fiber, Layer, LayerMap, Schema, Stream } from "effect"
 import { mkdtemp, rm } from "fs/promises"
 import { tmpdir } from "os"
 import path from "path"
@@ -24,7 +24,10 @@ import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionPending } from "@opencode-ai/core/session/pending"
 import { SessionPendingTable, SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
+import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
+import type { LocationServices } from "@opencode-ai/core/location-services"
 import { testEffect } from "./lib/effect"
+import { imagePassthrough } from "./lib/image"
 
 const executionCalls: SessionV2.ID[] = []
 const interruptCalls: SessionV2.ID[] = []
@@ -49,10 +52,22 @@ const execution = Layer.succeed(
     awaitIdle: () => Effect.void,
   }),
 )
+const locations = Layer.effect(
+  LocationServiceMap.Service,
+  LayerMap.make(
+    () =>
+      // Attachment admission only needs the location-scoped Image service.
+      // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
+      imagePassthrough as unknown as Layer.Layer<LocationServices>,
+  ),
+)
 const it = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([Database.node, EventV2.node, SessionProjector.node, SessionStore.node, SessionV2.node]),
-    [[SessionExecution.node, execution]],
+    [
+      [SessionExecution.node, execution],
+      [LocationServiceMap.node, locations],
+    ],
   ),
 )
 const sessionID = SessionV2.ID.make("ses_prompt_test")

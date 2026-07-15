@@ -8,7 +8,9 @@ import { SessionV2 } from "@opencode-ai/core/session"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { QuestionTool } from "@opencode-ai/core/tool/question"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
+import { Image } from "@opencode-ai/core/image"
 import { testEffect } from "./lib/effect"
+import { imagePassthrough } from "./lib/image"
 import { makeLocationNode } from "@opencode-ai/core/effect/app-node"
 import { toolIdentity, executeTool, registerToolPlugin, settleTool, toolDefinitions } from "./lib/tool"
 
@@ -84,6 +86,7 @@ const it = testEffect(
     [PermissionV2.node, permission],
     [Form.node, form],
     [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
+    [Image.node, imagePassthrough],
   ]),
 )
 
