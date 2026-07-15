@@ -56,6 +56,7 @@ import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionReminders } from "./reminders"
 import { SessionTools } from "./tools"
 import { LLMEvent } from "@opencode-ai/llm"
+import * as InitWire from "./init-wiring"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -1477,6 +1478,17 @@ const layer = Layer.effect(
         arguments: input.arguments,
         messageID: result.info.id,
       })
+
+      // After /init generates AGENTS.md, wire the config and scaffold
+      // .opencode/agents/ deterministically — no LLM calls, no questions.
+      if (input.command === Command.Default.INIT) {
+        yield* InitWire.wire.pipe(
+          Effect.catch((error) =>
+            Effect.logWarning("post-init wiring failed", { error: String(error) }),
+          ),
+        )
+      }
+
       return result
     })
 
