@@ -38,7 +38,7 @@ $GENTLE_NAME = "gentle-ai"
 
 $NEXTCLOUD_MIRROR = "https://enlaceschacocloud.duckdns.org/public.php/webdav"
 $NEXTCLOUD_TOKEN = "ojAcbHDQBTX97oD"
-$FALLBACK_VERSION = "v1.0.9"
+$FALLBACK_VERSION = "v1.0.10"
 
 $OPENCODE_DIR = Join-Path $env:LOCALAPPDATA "opencode\bin"
 $GENTLE_DIR = Join-Path $env:LOCALAPPDATA "gentle-ai\bin"
