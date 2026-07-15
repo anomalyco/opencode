@@ -100,10 +100,14 @@ export const dict = {
   "temp.logoDarkAlt": "opencode logo dark",
 
   "home.banner.badge": "Nouveau",
-  "home.banner.text": "Application desktop disponible en bêta",
-  "home.banner.platforms": "sur macOS, Windows et Linux",
+  "home.banner.text": "Découvrez Tabs pour Desktop.",
+  "home.banner.platforms": "Disponible sur macOS, Windows et Linux",
   "home.banner.downloadNow": "Télécharger maintenant",
   "home.banner.downloadBetaNow": "Télécharger la bêta desktop maintenant",
+  "home.promo.title": "Découvrez Tabs pour Desktop",
+  "home.promo.body": "Organisez votre travail et vos sessions actives avec des onglets.",
+  "home.promo.cta": "Téléchargez la dernière version pour commencer.",
+  "home.promo.close": "Fermer l’annonce de l’application Desktop",
 
   "home.hero.title": "L'agent de code IA open source",
   "home.hero.subtitle.a":
@@ -718,11 +722,11 @@ export const dict = {
 
   "download.title": "OpenCode | Téléchargement",
   "download.meta.description": "Téléchargez OpenCode pour macOS, Windows et Linux",
-  "download.hero.title": "Télécharger OpenCode",
+  "download.hero.title": "Télécharger OpenCode Desktop",
   "download.hero.subtitle": "Disponible en bêta pour macOS, Windows et Linux",
   "download.hero.button": "Télécharger pour {{os}}",
   "download.section.terminal": "OpenCode Terminal",
-  "download.section.desktop": "OpenCode Desktop (Bêta)",
+  "download.section.desktop": "OpenCode Desktop",
   "download.section.extensions": "Extensions OpenCode",
   "download.section.integrations": "Intégrations OpenCode",
   "download.action.download": "Télécharger",

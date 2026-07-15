@@ -132,7 +132,7 @@ export function createHomeSessionIndexCache(queryClient: QueryClient, server: st
 // parentID: null, order: "desc" }), then remove this adapter and its V1 fields.
 export function parseHomeSessionIndex(sessions: SessionV2Info[]): Session[] {
   return sessions.flatMap((item) => {
-    if (item.parentID || item.time.archived !== undefined) return []
+    if (item.parentID || typeof item.time.archived === "number") return []
     return [toLegacySummary(item)]
   })
 }
@@ -145,7 +145,7 @@ export function retainHomeSessions(sessions: Session[], limit: number, now: numb
 export function applyHomeSessionEvent(sessions: Session[], event: HomeSessionEvent) {
   const info = event.properties.info
   const index = sessions.findIndex((session) => session.id === info.id)
-  if (event.type === "session.deleted" || info.parentID || info.time.archived !== undefined) {
+  if (event.type === "session.deleted" || info.parentID || typeof info.time.archived === "number") {
     if (index === -1) return sessions
     return sessions.toSpliced(index, 1)
   }
