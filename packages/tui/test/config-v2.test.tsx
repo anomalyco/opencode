@@ -3,6 +3,7 @@ import { testRender } from "@opentui/solid"
 import { expect, test } from "bun:test"
 import { Schema } from "effect"
 import { resolve, ConfigProvider, Info, useConfig, type Interface } from "../src/config"
+import { TuiKeybind } from "../src/config/keybind"
 
 test("validates mini replay settings", () => {
   const decode = Schema.decodeUnknownSync(Info)
@@ -38,6 +39,18 @@ test("resolves nested config and keybind defaults", () => {
   expect(config.scroll).toEqual({ speed: 2, acceleration: true })
   expect(config.diffs).toEqual({ view: "split" })
   expect(config.debug).toEqual({ devtools: true })
+})
+
+test("uses command IDs as keybind keys", () => {
+  const config = resolve({ keybinds: { "session.list": "ctrl+l" } }, { terminalSuspend: true })
+
+  expect(config.keybinds.get("session.list")).toMatchObject([{ key: "ctrl+l" }])
+  expect(TuiKeybind.unknownKeys({ session_list: "ctrl+l" })).toEqual(["session_list"])
+  expect(
+    Object.keys(TuiKeybind.Definitions)
+      .filter((key) => key !== "leader")
+      .every((key) => key.includes(".")),
+  ).toBe(true)
 })
 
 test("provides config and its host interface", async () => {

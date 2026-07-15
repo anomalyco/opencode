@@ -189,10 +189,10 @@ export type Resolved = Omit<Info, "attention" | "keybinds" | "leader" | "mouse">
 export function resolve(input: Info, options: { terminalSuspend: boolean }): Resolved {
   const keybinds: TuiKeybind.KeybindOverrides = { ...input.keybinds }
   if (!options.terminalSuspend) {
-    keybinds.terminal_suspend = "none"
-    if (keybinds.input_undo === undefined) {
-      const inputUndo = TuiKeybind.defaultValue("input_undo")
-      keybinds.input_undo = ["ctrl+z", ...(typeof inputUndo === "string" ? inputUndo.split(",") : [])]
+    keybinds["terminal.suspend"] = "none"
+    if (keybinds["input.undo"] === undefined) {
+      const inputUndo = TuiKeybind.defaultValue("input.undo")
+      keybinds["input.undo"] = ["ctrl+z", ...(typeof inputUndo === "string" ? inputUndo.split(",") : [])]
         .filter((value, index, values) => values.indexOf(value) === index)
         .join(",")
     }
@@ -209,7 +209,6 @@ export function resolve(input: Info, options: { terminalSuspend: boolean }): Res
       sounds: input.attention?.sounds ?? {},
     },
     keybinds: createBindingLookup(TuiKeybind.toBindingConfig(TuiKeybind.parse(keybinds)), {
-      commandMap: TuiKeybind.CommandMap,
       bindingDefaults: TuiKeybind.bindingDefaults(),
     }),
     leader: { timeout: input.leader?.timeout ?? 2000 },

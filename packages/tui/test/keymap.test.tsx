@@ -27,8 +27,8 @@ test("legacy page key aliases compile as page keys", async () => {
     <ConfigProvider
       config={createTuiResolvedConfig({
         keybinds: {
-          messages_page_up: "pgup",
-          messages_page_down: "pgdown",
+          "session.page.up": "pgup",
+          "session.page.down": "pgdown",
         },
       })}
     >

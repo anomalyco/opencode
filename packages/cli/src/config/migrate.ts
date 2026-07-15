@@ -1,6 +1,7 @@
 export * as ConfigMigration from "./migrate"
 
 import { TuiConfigV1 } from "@opencode-ai/tui/config/v1"
+import { TuiKeybind } from "@opencode-ai/tui/config/v1/keybind"
 import { Effect, FileSystem, Option, Schema } from "effect"
 import { parse, type ParseError } from "jsonc-parser"
 import path from "path"
@@ -50,12 +51,21 @@ export function migrateV1(legacy: TuiConfigV1.Info | undefined, kv: Record<strin
   const thinking =
     kv.thinking_mode ??
     (kv.thinking_visibility === undefined ? undefined : kv.thinking_visibility ? "show" : "hide")
+  const keybinds =
+    legacy?.keybinds === undefined
+      ? undefined
+      : Object.fromEntries(
+          Object.entries(legacy.keybinds).map(([name, value]) => [
+            TuiKeybind.CommandMap[name as keyof typeof TuiKeybind.CommandMap] ?? name,
+            value,
+          ]),
+        )
 
   return {
     ...(themeName !== undefined || themeMode !== undefined
       ? { theme: { ...(themeName === undefined ? {} : { name: themeName }), ...(themeMode === undefined ? {} : { mode: themeMode }) } }
       : {}),
-    ...(legacy?.keybinds === undefined ? {} : { keybinds: legacy.keybinds }),
+    ...(keybinds === undefined ? {} : { keybinds }),
     ...(plugins.length ? { plugins } : {}),
     ...(legacy?.leader_timeout === undefined ? {} : { leader: { timeout: legacy.leader_timeout } }),
     ...(legacy?.scroll_speed === undefined && legacy?.scroll_acceleration?.enabled === undefined
