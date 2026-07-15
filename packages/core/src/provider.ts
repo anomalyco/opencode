@@ -33,18 +33,18 @@ export type ProviderPackage = ProviderPackageDefinition
 
 const packages = new Map<string, Promise<unknown>>()
 const builtins = new Map<string, () => Promise<unknown>>([
-  ["@opencode-ai/llm/providers/amazon-bedrock", () => import("@opencode-ai/llm/providers/amazon-bedrock")],
-  ["@opencode-ai/llm/providers/anthropic", () => import("@opencode-ai/llm/providers/anthropic")],
-  ["@opencode-ai/llm/providers/azure", () => import("@opencode-ai/llm/providers/azure")],
-  ["@opencode-ai/llm/providers/azure/chat", () => import("@opencode-ai/llm/providers/azure/chat")],
-  ["@opencode-ai/llm/providers/azure/responses", () => import("@opencode-ai/llm/providers/azure/responses")],
-  ["@opencode-ai/llm/providers/google", () => import("@opencode-ai/llm/providers/google")],
-  ["@opencode-ai/llm/providers/openai", () => import("@opencode-ai/llm/providers/openai")],
-  ["@opencode-ai/llm/providers/openai/chat", () => import("@opencode-ai/llm/providers/openai/chat")],
-  ["@opencode-ai/llm/providers/openai/responses", () => import("@opencode-ai/llm/providers/openai/responses")],
-  ["@opencode-ai/llm/providers/openai-compatible", () => import("@opencode-ai/llm/providers/openai-compatible")],
-  ["@opencode-ai/llm/providers/openrouter", () => import("@opencode-ai/llm/providers/openrouter")],
-  ["@opencode-ai/llm/providers/xai", () => import("@opencode-ai/llm/providers/xai")],
+  ["@opencode-ai/ai/providers/amazon-bedrock", () => import("@opencode-ai/ai/providers/amazon-bedrock")],
+  ["@opencode-ai/ai/providers/anthropic", () => import("@opencode-ai/ai/providers/anthropic")],
+  ["@opencode-ai/ai/providers/azure", () => import("@opencode-ai/ai/providers/azure")],
+  ["@opencode-ai/ai/providers/azure/chat", () => import("@opencode-ai/ai/providers/azure/chat")],
+  ["@opencode-ai/ai/providers/azure/responses", () => import("@opencode-ai/ai/providers/azure/responses")],
+  ["@opencode-ai/ai/providers/google", () => import("@opencode-ai/ai/providers/google")],
+  ["@opencode-ai/ai/providers/openai", () => import("@opencode-ai/ai/providers/openai")],
+  ["@opencode-ai/ai/providers/openai/chat", () => import("@opencode-ai/ai/providers/openai/chat")],
+  ["@opencode-ai/ai/providers/openai/responses", () => import("@opencode-ai/ai/providers/openai/responses")],
+  ["@opencode-ai/ai/providers/openai-compatible", () => import("@opencode-ai/ai/providers/openai-compatible")],
+  ["@opencode-ai/ai/providers/openrouter", () => import("@opencode-ai/ai/providers/openrouter")],
+  ["@opencode-ai/ai/providers/xai", () => import("@opencode-ai/ai/providers/xai")],
 ])
 
 export const loadPackage = Effect.fn("ProviderV2.loadPackage")(function* (specifier: string, npm?: Npm.Interface) {
