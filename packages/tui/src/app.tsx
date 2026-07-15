@@ -186,14 +186,15 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
     Effect.catch(() => Effect.tryPromise(() => api.location.get()).pipe(Effect.map((response) => response.directory))),
   )
   const handoff = input.terminalHandoff ? yield* Effect.promise(input.terminalHandoff) : undefined
-  const reconnectEndpoint = input.server.service?.reconnect
-  const reconnect = reconnectEndpoint
-    ? async (onStatus: (status: Service.Status) => void, signal: AbortSignal) => {
-        const endpoint = await reconnectEndpoint(onStatus, signal)
-        const next = { baseUrl: endpoint.url, headers: Service.headers(endpoint) }
-        return {
-          api: OpenCode.make(next),
-        }
+  const managed = input.server.service
+  const service = managed
+    ? {
+        reconnect: async (onStatus: (status: Service.Status) => void, signal: AbortSignal) => {
+          const endpoint = await managed.reconnect(onStatus, signal)
+          const next = { baseUrl: endpoint.url, headers: Service.headers(endpoint) }
+          return { api: OpenCode.make(next) }
+        },
+        restart: managed.restart,
       }
     : undefined
   const exit = { epilogue: undefined as string | undefined, reason: undefined as unknown }
@@ -327,11 +328,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                         }
                                       >
                                         <PluginRuntimeProvider value={pluginRuntime}>
-                                          <ClientProvider
-                                            api={api}
-                                            reconnect={reconnect}
-                                            restart={input.server.service?.restart}
-                                          >
+                                          <ClientProvider api={api} service={service}>
                                             <PermissionProvider>
                                               <DataProvider>
                                                 <LocationProvider>

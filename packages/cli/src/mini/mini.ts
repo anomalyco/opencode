@@ -1,12 +1,11 @@
 import { Service } from "@opencode-ai/client/effect"
 import { OpenCode, type OpenCodeClient } from "@opencode-ai/client/promise"
-import { ServerConnection } from "../services/server-connection"
 import { waitForCatalogReady } from "./catalog.shared"
 import { INTERACTIVE_INPUT_ERROR, resolveInteractiveStdin } from "./runtime.stdin"
 import type { RunInput, RunTuiConfig } from "./types"
 
 export type MiniCommandInput = {
-  server: ServerConnection.Resolved
+  endpoint: Service.Endpoint
   continue?: boolean
   session?: string
   fork?: boolean
@@ -28,8 +27,8 @@ export async function runMini(input: MiniCommandInput) {
 
   try {
     const sdk = OpenCode.make({
-      baseUrl: input.server.endpoint.url,
-      headers: Service.headers(input.server.endpoint),
+      baseUrl: input.endpoint.url,
+      headers: Service.headers(input.endpoint),
     })
     const model = parseModel(input.model)
     let agentTask: Promise<string | undefined> | undefined

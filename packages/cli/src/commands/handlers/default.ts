@@ -4,7 +4,7 @@ import { run } from "@opencode-ai/tui"
 import { Commands } from "../commands"
 import { Runtime } from "../../framework/runtime"
 import { Config } from "../../config"
-import { Effect, FileSystem, Option } from "effect"
+import { Context, Effect, FileSystem, Option } from "effect"
 import { ServerConnection } from "../../services/server-connection"
 import { Updater } from "../../services/updater"
 import { UpdatePreflight } from "../../services/update-preflight"
@@ -37,6 +37,8 @@ export default Runtime.handler(Commands, (input) =>
     preflight.loading()
     const config = yield* Config.Service
     const npm = yield* Npm.Service
+    const fileSystem = yield* FileSystem.FileSystem
+    const runServicePromise = Effect.runPromiseWith(Context.make(FileSystem.FileSystem, fileSystem))
     const context = yield* Effect.context<FileSystem.FileSystem>()
     const runFork = Effect.runForkWith(context)
     const runPromise = Effect.runPromiseWith(context)
@@ -46,8 +48,8 @@ export default Runtime.handler(Commands, (input) =>
         endpoint: server.endpoint,
         service: service
           ? {
-              reconnect: (onStatus, signal) => runPromise(service.reconnect(onStatus), { signal }),
-              restart: () => runPromise(service.restart()),
+              reconnect: (onStatus, signal) => runServicePromise(service.reconnect(onStatus), { signal }),
+              restart: () => runServicePromise(service.restart()),
             }
           : undefined,
       },

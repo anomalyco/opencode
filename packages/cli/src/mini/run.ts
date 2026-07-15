@@ -4,7 +4,6 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Model } from "@opencode-ai/schema/model"
 import { open } from "node:fs/promises"
 import path from "node:path"
-import { ServerConnection } from "../services/server-connection"
 import { loadRunAgents, waitForCatalogReady } from "./catalog.shared"
 import { runNonInteractivePrompt } from "./noninteractive"
 import { toolInlineInfo } from "./tool"
@@ -12,7 +11,7 @@ import type { MiniToolPart } from "./types"
 import { UI } from "./ui"
 
 export type RunCommandInput = {
-  server: ServerConnection.Resolved
+  endpoint: Service.Endpoint
   message: string[]
   continue?: boolean
   session?: string
@@ -52,7 +51,7 @@ async function run(input: RunCommandInput) {
   if (!message?.trim()) fail("You must provide a message")
   const files = await Promise.all(input.file.map((file) => prepareFile(file, root)))
   const prepared = { directory, message, files }
-  return execute(input, prepared, input.server.endpoint)
+  return execute(input, prepared, input.endpoint)
 }
 
 async function execute(input: RunCommandInput, prepared: Prepared, endpoint: Service.Endpoint) {

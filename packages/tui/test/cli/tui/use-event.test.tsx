@@ -65,10 +65,11 @@ async function mount(
   const ready = new Promise<void>((resolve) => {
     done = resolve
   })
+  const service = reconnect ? { reconnect, restart: () => Promise.resolve() } : undefined
 
   const app = await testRender(() => (
     <TestTuiContexts log={log}>
-      <ClientProvider api={createApi(calls.fetch)} reconnect={reconnect}>
+      <ClientProvider api={createApi(calls.fetch)} service={service}>
         <Probe
           onReady={(ctx) => {
             client = ctx.client

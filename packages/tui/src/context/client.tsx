@@ -18,18 +18,18 @@ export type ClientConnectionEvent = {
   }
 }
 
+type ManagedService = {
+  reconnect: (onStatus: (status: Service.Status) => void, signal: AbortSignal) => Promise<{ api: OpenCodeClient }>
+  restart: () => Promise<void>
+}
+
 type ClientEventMap = { [Type in OpenCodeEvent["type"]]: Extract<OpenCodeEvent, { type: Type }> }
 const connectTimeout = 2_000
 const connectionHistoryLimit = 50
 
 export const { use: useClient, provider: ClientProvider } = createSimpleContext({
   name: "Client",
-  init: (props: {
-    api: OpenCodeClient
-    reconnect?: (onStatus: (status: Service.Status) => void, signal: AbortSignal) => Promise<{ api: OpenCodeClient }>
-    // Stops and replaces the managed service; present only in service mode.
-    restart?: () => Promise<void>
-  }) => {
+  init: (props: { api: OpenCodeClient; service?: ManagedService }) => {
     const log = useLog({ component: "client" })
     const abort = new AbortController()
     const history: ClientConnectionEvent[] = []
@@ -115,8 +115,8 @@ export const { use: useClient, provider: ClientProvider } = createSimpleContext(
           // Re-resolve the transport before retrying: the server may have
           // moved (service restarted on a new port) or need starting. Static
           // transports (--server, standalone) resolve to the same address.
-          if (props.reconnect) {
-            const next = await props.reconnect(setService, controller.signal).catch((error) => {
+          if (props.service) {
+            const next = await props.service.reconnect(setService, controller.signal).catch((error) => {
               if (!controller.signal.aborted)
                 log.info("server resolution failed", {
                   attempt,
@@ -168,7 +168,7 @@ export const { use: useClient, provider: ClientProvider } = createSimpleContext(
           },
         },
       },
-      restart: props.restart,
+      restart: props.service?.restart,
     }
   },
 })
