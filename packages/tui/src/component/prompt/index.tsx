@@ -926,6 +926,39 @@ export function Prompt(props: PromptProps) {
     }
   })
 
+  useBindings(() => {
+    return {
+      target: inputTarget,
+      enabled: inputTarget() !== undefined && !props.disabled && !auto()?.visible && input !== undefined,
+      commands: [
+        {
+          name: "prompt.toggle_paste_expand",
+          title: "Expand pasted text",
+          category: "Prompt",
+          run() {
+            const extmarks = input.extmarks.getAllForTypeId(promptPartTypeId)
+            const ranges = extmarks.flatMap((extmark) => {
+              const partIndex = store.extmarkToPartIndex.get(extmark.id)
+              const part = partIndex === undefined ? undefined : store.prompt.parts[partIndex]
+              if (part?.type !== "text" || !part.source?.text) return []
+              return [{ start: extmark.start, end: extmark.end, text: part.text }]
+            })
+            if (ranges.length === 0) return
+
+            const inputText = expandTrackedPastedText(store.prompt.input, ranges)
+            const nonTextParts = store.prompt.parts.filter((p) => p.type !== "text")
+
+            input.extmarks.clear()
+            input.setText(inputText)
+            setStore("prompt", { input: inputText, parts: nonTextParts })
+            setStore("extmarkToPartIndex", new Map())
+            input.gotoBufferEnd()
+          },
+        },
+      ],
+    }
+  })
+
   let submitting = false
   async function submit() {
     // Prevent overlapping invocations (e.g. a double-pressed Enter, or the
