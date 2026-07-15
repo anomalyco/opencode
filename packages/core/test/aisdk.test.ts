@@ -86,7 +86,9 @@ it.effect("maps pro reasoning bodies to AI SDK provider options", () =>
     )
 
     expect(body).toBeUndefined()
-    expect(prepared.body.providerOptions).toEqual({ openai: { reasoningMode: "pro" } })
+    expect(prepared.body.providerOptions).toEqual({
+      openai: { forceReasoning: true, reasoningMode: "pro" },
+    })
   }),
 )
 
@@ -98,19 +100,45 @@ it.effect("maps package-specific AI SDK provider option keys", () =>
     })
 
     const cases = [
-      ["@ai-sdk/github-copilot", "copilot"],
-      ["@ai-sdk/amazon-bedrock/mantle", "openai"],
-      ["@ai-sdk/openai-compatible", "test-provider"],
-      ["@jerome-benoit/sap-ai-provider-v2", "sap-ai"],
-      ["ai-gateway-provider", "openaiCompatible"],
+      ["@ai-sdk/github-copilot", "copilot", { reasoningEffort: "high" }],
+      ["@ai-sdk/amazon-bedrock/mantle", "openai", { reasoningEffort: "high", forceReasoning: true }],
+      ["@ai-sdk/openai-compatible", "test-provider", { reasoningEffort: "high" }],
+      ["@jerome-benoit/sap-ai-provider-v2", "sap-ai", { reasoningEffort: "high" }],
+      ["ai-gateway-provider", "openaiCompatible", { reasoningEffort: "high" }],
     ] as const
-    for (const [packageName, key] of cases) {
+    for (const [packageName, key, settings] of cases) {
       const resolved = yield* aisdk.model(model(packageName, { reasoningEffort: "high" }))
       const prepared = yield* LLMClient.prepare<LanguageModelV3CallOptions>(
         LLM.request({ model: resolved, prompt: "Hello" }),
       )
-      expect(prepared.body.providerOptions).toEqual({ [key]: { reasoningEffort: "high" } })
+      expect(prepared.body.providerOptions).toEqual({ [key]: settings })
     }
+  }),
+)
+
+it.effect("forces reasoning and projects both Azure AI SDK namespaces", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = { languageModel: () => ({ provider: event.model.providerID }) }
+    })
+
+    const openai = yield* aisdk.model(model("@ai-sdk/openai", { reasoningEffort: "high" }))
+    const openaiPrepared = yield* LLMClient.prepare<LanguageModelV3CallOptions>(
+      LLM.request({ model: openai, prompt: "Hello" }),
+    )
+    expect(openaiPrepared.body.providerOptions).toEqual({
+      openai: { reasoningEffort: "high", forceReasoning: true },
+    })
+
+    const azure = yield* aisdk.model(model("@ai-sdk/azure", { reasoningEffort: "high" }))
+    const azurePrepared = yield* LLMClient.prepare<LanguageModelV3CallOptions>(
+      LLM.request({ model: azure, prompt: "Hello" }),
+    )
+    expect(azurePrepared.body.providerOptions).toEqual({
+      openai: { reasoningEffort: "high", forceReasoning: true },
+      azure: { reasoningEffort: "high", forceReasoning: true },
+    })
   }),
 )
 

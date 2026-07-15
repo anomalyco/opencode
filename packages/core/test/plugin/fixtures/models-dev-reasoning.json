@@ -13,7 +13,7 @@
         "attachment": false,
         "reasoning": true,
         "reasoning_options": [
-          { "type": "effort", "values": [null, "low", "high"] },
+          { "type": "effort", "values": [null, "null", "low", "high"] },
           { "type": "budget_tokens", "min": 1024, "max": 64000 },
           { "type": "toggle" }
         ],
@@ -144,7 +144,7 @@
         "release_date": "2026-01-01",
         "attachment": false,
         "reasoning": true,
-        "reasoning_options": [{ "type": "toggle" }],
+        "reasoning_options": [{ "type": "toggle" }, { "type": "effort", "values": ["low", "high"] }],
         "temperature": true,
         "tool_call": true,
         "limit": { "context": 128000, "output": 20000 }

@@ -390,8 +390,12 @@ describe("ModelsDevPlugin", () => {
               settings: { gateway: { reasoning: { enabled: false } } },
             },
             {
-              id: ModelV2.VariantID.make("thinking"),
-              settings: { gateway: { reasoning: { enabled: true } } },
+              id: ModelV2.VariantID.make("low"),
+              settings: { gateway: { reasoning: { effort: "low" } } },
+            },
+            {
+              id: ModelV2.VariantID.make("high"),
+              settings: { gateway: { reasoning: { effort: "high" } } },
             },
           ])
 

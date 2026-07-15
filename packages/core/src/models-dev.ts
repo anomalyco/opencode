@@ -202,7 +202,7 @@ function reasoningVariants(provider: SourceProvider, model: SourceModel): NonNul
       ...off,
       ...effort.values.flatMap((value) => {
         const raw: unknown = value
-        const id = typeof raw === "string" ? raw : undefined
+        const id = typeof raw === "string" && raw !== "null" ? raw : undefined
         if (id === undefined) return []
         if (id === "none" && off.length > 0) return []
         const settings = settingsForEffort(npm, model.id, id)
@@ -246,7 +246,7 @@ function settingsForEffort(npm: string | undefined, modelID: string, effort: str
   if (npm === "@ai-sdk/gateway") {
     const upstream = gatewayPackage(modelID)
     if (upstream) return settingsForEffort(upstream, modelID, effort)
-    return { reasoningEffort: effort }
+    return { gateway: { reasoning: { effort } } }
   }
   if (npm === "@ai-sdk/github-copilot") {
     if (modelID.includes("gemini")) return

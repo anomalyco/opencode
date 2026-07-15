@@ -304,12 +304,14 @@ function modelFromLanguage(info: ModelV2.Info, language: LanguageModelV3) {
   const packageName = ProviderV2.packageName(info.package)
   const projected = mapBodyToProviderOptions(info)
   const optionKey = providerOptionKey(packageName, info.providerID)
-  const projectedProviderOptions = mapSettingsToProviderOptions(
-    packageName,
-    info.providerID,
-    info.modelID ?? info.id,
-    projected.settings,
-  )
+  const providerOptions =
+    projected.settings === undefined
+      ? undefined
+      : packageName === "@ai-sdk/gateway"
+        ? gatewayProviderOptions(info.modelID ?? info.id, projected.settings)
+        : packageName === "@ai-sdk/azure"
+          ? { openai: projected.settings, azure: projected.settings }
+          : { [optionKey]: projected.settings }
   const route: AnyRoute = {
     id: `ai-sdk:${ProviderV2.packageName(info.package) ?? "unknown"}`,
     provider: ProviderID.make(info.providerID),
@@ -332,7 +334,7 @@ function modelFromLanguage(info: ModelV2.Info, language: LanguageModelV3) {
               headers: info.headers,
             },
       limits: { context: info.limit.context, output: info.limit.output },
-      providerOptions: projectedProviderOptions,
+      providerOptions,
     },
     body: {
       schema: Schema.Unknown,
@@ -346,15 +348,7 @@ function modelFromLanguage(info: ModelV2.Info, language: LanguageModelV3) {
   return Model.make({ id: info.modelID ?? info.id, provider: info.providerID, route })
 }
 
-function mapSettingsToProviderOptions(
-  packageName: string | undefined,
-  providerID: ProviderV2.ID,
-  modelID: ModelV2.ID,
-  settings: Readonly<Record<string, unknown>> | undefined,
-) {
-  if (settings === undefined) return
-  if (packageName !== "@ai-sdk/gateway") return { [providerOptionKey(packageName, providerID)]: settings }
-
+function gatewayProviderOptions(modelID: ModelV2.ID, settings: Readonly<Record<string, unknown>>) {
   const gateway =
     typeof settings.gateway === "object" && settings.gateway !== null && !Array.isArray(settings.gateway)
       ? Object.fromEntries(Object.entries(settings.gateway))
@@ -399,12 +393,18 @@ function requestSettings(settings: Readonly<Record<string, unknown>> | undefined
 
 function mapBodyToProviderOptions(model: ModelV2.Info) {
   const settings = requestSettings(model.settings)
-  if (!Schema.is(Schema.Struct({ mode: Schema.Literal("pro") }))(model.body?.reasoning))
-    return { settings, body: model.body }
+  const pro = Schema.is(Schema.Struct({ mode: Schema.Literal("pro") }))(model.body?.reasoning)
+  const forceReasoning =
+    ["@ai-sdk/openai", "@ai-sdk/azure", "@ai-sdk/amazon-bedrock/mantle"].includes(
+      ProviderV2.packageName(model.package) ?? "",
+    ) &&
+    (pro || settings?.reasoningEffort !== undefined || settings?.reasoningSummary !== undefined)
+  const normalized = forceReasoning ? ProviderV2.mergeOverlay(settings, { forceReasoning: true }) : settings
+  if (!pro) return { settings: normalized, body: model.body }
   const body = { ...model.body }
   delete body.reasoning
   return {
-    settings: ProviderV2.mergeOverlay(settings, { reasoningMode: "pro" }),
+    settings: ProviderV2.mergeOverlay(normalized, { reasoningMode: "pro" }),
     body: Object.keys(body).length === 0 ? undefined : body,
   }
 }
