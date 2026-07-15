@@ -338,6 +338,23 @@ describe("ModelsDevPlugin", () => {
             { id: ModelV2.VariantID.make("high"), settings: { effort: "high" } },
           ])
 
+          const grok = yield* catalog.model.get(ProviderV2.ID.make("xai"), ModelV2.ID.make("grok-4.5"))
+          expect(grok?.variants).toEqual(
+            ["low", "medium", "high"].map((id) => ({
+              id: ModelV2.VariantID.make(id),
+              settings: { reasoningEffort: id },
+            })),
+          )
+
+          const minimax = yield* catalog.model.get(ProviderV2.ID.make("opencode-go"), ModelV2.ID.make("minimax-m3"))
+          expect(minimax?.variants).toEqual([
+            { id: ModelV2.VariantID.make("none"), settings: { thinking: { type: "disabled" } } },
+            {
+              id: ModelV2.VariantID.make("thinking"),
+              settings: { thinking: { type: "adaptive", display: "summarized" } },
+            },
+          ])
+
           const toggle = yield* catalog.model.get(ProviderV2.ID.make("alibaba"), ModelV2.ID.make("toggle-only"))
           expect(toggle?.variants).toEqual([
             { id: ModelV2.VariantID.make("none"), settings: { enableThinking: false } },
