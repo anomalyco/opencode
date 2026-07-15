@@ -735,6 +735,7 @@ function toolDefaultOpen(tool: string, shell = false, edit = false) {
 
 export function partDefaultOpen(part: PartType, shell = false, edit = false) {
   if (part.type !== "tool") return
+  if ((part.state.status === "running" || part.state.status === "pending") && part.tool === "bash") return true
   return toolDefaultOpen(part.tool, shell, edit)
 }
 
@@ -2132,7 +2133,7 @@ ToolRegistry.register({
               <span data-slot="basic-tool-tool-title">
                 <TextShimmer text={i18n.t("ui.tool.shell")} active={pending()} />
               </span>
-              <Show when={!pending() && !open() && props.input.command}>
+              <Show when={props.input.command && (pending() || !open())}>
                 <ShellSubmessage text={props.input.command} animate={sawPending} />
               </Show>
             </div>
