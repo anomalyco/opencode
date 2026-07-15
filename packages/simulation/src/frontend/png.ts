@@ -90,6 +90,8 @@ function drawBlockElement(context: SKRSContext2D, char: string, x: number, y: nu
   if (char === "█") context.fillRect(x, y, width, CellHeight)
   else if (char === "▀") context.fillRect(x, y, width, CellHeight / 2)
   else if (char === "▄") context.fillRect(x, y + CellHeight / 2, width, CellHeight / 2)
+  else if (char === "┃") context.fillRect(x + CellWidth / 2 - 1, y, 2, CellHeight)
+  else if (char === "╹") context.fillRect(x + CellWidth / 2 - 1, y, 2, CellHeight / 2)
   else return false
   return true
 }
