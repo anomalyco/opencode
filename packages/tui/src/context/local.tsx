@@ -235,32 +235,18 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
       const currentModel = createMemo(() => {
         const a = agent.current()
-        const own = getFirstValidModel(
-          () => a && modelStore.model[a.name],
-          () => a && a.model,
+        return (
+          getFirstValidModel(
+            () => a && modelStore.model[a.name],
+            () => a && a.model,
+          ) ??
+          fallbackModel() ??
+          undefined
         )
-        // CruiseControl uses its own model only — no silent global fallback.
-        if (a?.name === "cruisecontrol") return own ?? undefined
-        return own ?? fallbackModel() ?? undefined
       })
 
       return {
         current: currentModel,
-        /** True when the agent must have a dedicated model before prompting. */
-        requiresOwnModel(name?: string) {
-          return (name ?? agent.current()?.name) === "cruisecontrol"
-        },
-        /** True when the agent has a usable dedicated (non-fallback) model. */
-        hasOwnModel(name?: string) {
-          const a = name ? sync.data.agent.find((item) => item.name === name) : agent.current()
-          if (!a) return false
-          return Boolean(
-            getFirstValidModel(
-              () => modelStore.model[a.name],
-              () => a.model,
-            ),
-          )
-        },
         get ready() {
           return modelStore.ready
         },

@@ -224,13 +224,9 @@ export function Prompt(props: PromptProps) {
       dialog.replace(() => <DialogProviderConnect />)
       return
     }
-    const current = local.agent.current()
     toast.show({
       variant: "warning",
-      message:
-        current?.name === "cruisecontrol"
-          ? "Select a model for CruiseControl before sending"
-          : "Select a model to send prompts",
+      message: "Select a model to send prompts",
       duration: 3000,
     })
     dialog.replace(() => <DialogModel />)

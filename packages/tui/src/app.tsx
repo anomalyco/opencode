@@ -48,7 +48,6 @@ import { DialogThemeList } from "./component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
 import { DialogAgent } from "./component/dialog-agent"
 import { DialogSessionList } from "./component/dialog-session-list"
-import { Locale } from "./util/locale"
 import { DialogWorkspaceList } from "./component/dialog-workspace-list"
 import { DialogConsoleOrg } from "./component/dialog-console-org"
 import { ThemeProvider, useTheme } from "./context/theme"
@@ -386,17 +385,6 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   const pluginRuntime = usePluginRuntime()
   const attention = createTuiAttention({ renderer, config: tuiConfig, kv })
   const clipboard = useClipboard()
-
-  function promptCruiseControlModel() {
-    const current = local.agent.current()
-    if (!current || !local.model.requiresOwnModel(current.name) || local.model.hasOwnModel(current.name)) return
-    toast.show({
-      variant: "warning",
-      message: `Select a model for ${Locale.agentLabel(current.name)}`,
-      duration: 3000,
-    })
-    dialog.replace(() => <DialogModel />)
-  }
 
   const api = createTuiApi(
     createTuiApiAdapters({
@@ -771,7 +759,6 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         hidden: true,
         run: () => {
           local.agent.move(1)
-          promptCruiseControlModel()
         },
       },
       {
@@ -806,7 +793,6 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         hidden: true,
         run: () => {
           local.agent.move(-1)
-          promptCruiseControlModel()
         },
       },
       {

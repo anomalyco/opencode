@@ -17,7 +17,7 @@ Permission decisions today are a closed `allow | ask | deny` ruleset. Power user
 Non-goals / not in this change:
 - Implementing the full runtime in this propose stage (specs/tasks only here; apply comes later)
 - Replacing TUI/CLI `--auto` / permission mode `auto` (blunt always-once); keep it distinct from `cruise_control`
-- The selectable builtin **agent** id `cruisecontrol` (display CruiseControl) — that is a primary agent for autonomous execution, not this permission classifier. Keep IDs distinct (`cruisecontrol` vs `cruise_control`).
+- A selectable builtin **agent** named CruiseControl — do **not** add one; the product name for the classifier is the permission module id `cruise_control` only
 - Restoring web/desktop/console permission UIs
 - Clustered / remote classifier placement
 - Guaranteeing classifier immunity to prompt injection (mitigate; do not claim solved)

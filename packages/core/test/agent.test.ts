@@ -138,7 +138,6 @@ describe("AgentV2", () => {
       const agents = yield* agent.all()
       expect(agents.map((item) => String(item.id)).sort()).toEqual([
         "compaction",
-        "cruisecontrol",
         "default",
         "explore",
         "general",

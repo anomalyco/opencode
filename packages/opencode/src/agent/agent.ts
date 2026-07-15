@@ -11,7 +11,6 @@ import { ProviderTransform } from "@/provider/transform"
 
 import PROMPT_GENERATE from "./generate.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
-import PROMPT_CRUISECONTROL from "./prompt/cruisecontrol.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
@@ -174,25 +173,6 @@ const layer = Layer.effect(
                   [path.join(".opencode", "plans", "*.md")]: "allow",
                   [path.relative(ctx.worktree, path.join(Global.Path.data, path.join("plans", "*.md")))]: "allow",
                 },
-              }),
-              user,
-            ),
-            mode: "primary",
-            native: true,
-          },
-          // Builtin agent id `cruisecontrol` (display: CruiseControl). Distinct from the
-          // proposed permission-modules classifier id `cruise_control` — do not conflate.
-          cruisecontrol: {
-            name: "cruisecontrol",
-            description:
-              "Autonomous execution agent. Careful tool use with its own model; configure agent.cruisecontrol.model when unset.",
-            prompt: PROMPT_CRUISECONTROL,
-            options: {},
-            permission: Permission.merge(
-              defaults,
-              Permission.fromConfig({
-                question: "allow",
-                plan_enter: "allow",
               }),
               user,
             ),

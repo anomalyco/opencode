@@ -164,7 +164,7 @@ export function Tips(props: { api: TuiPluginApi; connected?: boolean }) {
 const TIPS: Tip[] = [
   "Type {highlight}@{/highlight} followed by a filename to fuzzy search and attach files",
   "Start a message with {highlight}!{/highlight} to run shell commands (e.g., {highlight}!ls -la{/highlight})",
-  (shortcuts) => press(shortcuts.agentCycle(), "to cycle between Default, Plan, and CruiseControl agents"),
+  (shortcuts) => press(shortcuts.agentCycle(), "to cycle between Default and Plan agents"),
   "Use {highlight}/undo{/highlight} to revert the last message and file changes",
   "Use {highlight}/redo{/highlight} to restore previously undone messages and file changes",
   "Run {highlight}/share{/highlight} to create a public share link (when enabled)",
@@ -199,7 +199,6 @@ const TIPS: Tip[] = [
   (shortcuts) => press(shortcuts.inputClear(), "when typing to clear the input field"),
   (shortcuts) => press(shortcuts.sessionInterrupt(), "to stop the AI mid-response"),
   "Switch to {highlight}Plan{/highlight} agent for suggestions without making changes",
-  "Switch to {highlight}CruiseControl{/highlight} for autonomous careful execution (set its model first)",
   "Use {highlight}@agent-name{/highlight} in prompts to invoke specialized subagents",
   (shortcuts) => {
     const items = [
