@@ -202,7 +202,7 @@ function reasoningVariants(provider: SourceProvider, model: SourceModel): NonNul
       ...off,
       ...effort.values.flatMap((value) => {
         const raw: unknown = value
-        const id = raw === null ? "none" : typeof raw === "string" ? raw : undefined
+        const id = typeof raw === "string" ? raw : undefined
         if (id === undefined) return []
         if (id === "none" && off.length > 0) return []
         const settings = settingsForEffort(npm, model.id, id)

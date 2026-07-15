@@ -13,7 +13,7 @@
         "attachment": false,
         "reasoning": true,
         "reasoning_options": [
-          { "type": "effort", "values": ["low", "high"] },
+          { "type": "effort", "values": [null, "low", "high"] },
           { "type": "budget_tokens", "min": 1024, "max": 64000 },
           { "type": "toggle" }
         ],
