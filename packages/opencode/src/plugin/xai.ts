@@ -3,6 +3,16 @@ import { OAUTH_DUMMY_KEY } from "../auth"
 import { createServer } from "http"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { OauthCallbackPage } from "@opencode-ai/core/oauth/page"
+import { Global } from "@opencode-ai/core/global"
+import { Flock } from "@opencode-ai/core/util/flock"
+
+// Ensure Flock's process-shared lock root is initialized (side effect of Global).
+void Global.Path.state
+
+// Cross-process single-flight key. xAI rotates refresh tokens; concurrent
+// opencode (or Grok CLI) processes sharing ~/.local/share/opencode/auth.json
+// must not each call refresh_token with the same value.
+const XAI_OAUTH_REFRESH_LOCK = "xai-oauth-refresh"
 
 // Public Grok-CLI OAuth client. xAI's auth server rejects loopback OAuth from
 // non-allowlisted clients, so we reuse the Grok-CLI client_id that xAI ships
@@ -455,6 +465,71 @@ interface RefreshResult {
   expires: number
 }
 
+type OauthAuth = {
+  type: "oauth"
+  access: string
+  refresh: string
+  expires: number
+}
+
+export function oauthAccessExpiresSoon(
+  auth: { access?: string; expires?: number },
+  now: number = Date.now(),
+  skewMs: number = ACCESS_TOKEN_REFRESH_SKEW_MS,
+): boolean {
+  // Refresh either when the stored expires timestamp is within the skew
+  // window, or — for JWT access tokens — when the JWT exp claim itself is.
+  // The stored expires field is best-effort (xAI doesn't always return
+  // expires_in) so the JWT check is the load-bearing one for tokens that
+  // lack a fresh stored deadline.
+  return !auth.expires || auth.expires - now <= skewMs || accessTokenIsExpiring(auth.access, skewMs)
+}
+
+async function refreshOauthUnderLock(
+  getAuth: () => Promise<{ type: string; access?: string; refresh?: string; expires?: number }>,
+  input: PluginInput,
+  options: XaiAuthPluginOptions,
+): Promise<RefreshResult> {
+  // Cross-process single-flight via Flock (same mechanism as plugin-meta / tui kv).
+  // After acquiring the lock, re-read auth: another process may have already
+  // rotated the refresh token and written the new pair to disk.
+  return Flock.withLock(XAI_OAUTH_REFRESH_LOCK, async () => {
+    const latest = await getAuth()
+    if (latest.type !== "oauth" || !latest.refresh || !latest.access) {
+      throw new Error("xAI OAuth credentials missing during refresh")
+    }
+    if (!oauthAccessExpiresSoon(latest)) {
+      return {
+        access: latest.access,
+        refresh: latest.refresh,
+        expires: latest.expires ?? Date.now() + 3600_000,
+      }
+    }
+
+    const refreshToken = latest.refresh
+    const tokens = await refreshAccessToken(refreshToken, options)
+    const refreshedExpires = Date.now() + (tokens.expires_in ?? 3600) * 1000
+    const refreshedRefresh = tokens.refresh_token || refreshToken
+    // Persist the rotated pair as best-effort. xAI has already consumed the
+    // old refresh_token by the time we get here; an auth.set failure leaves
+    // the on-disk state stale but the in-memory result is still valid for
+    // this turn. Subsequent processes that re-read under the lock will still
+    // see a usable access token until it expires, then force re-login.
+    await input.client.auth
+      .set({
+        path: { id: "xai" },
+        body: {
+          type: "oauth",
+          access: tokens.access_token,
+          refresh: refreshedRefresh,
+          expires: refreshedExpires,
+        },
+      })
+      .catch(() => {})
+    return { access: tokens.access_token, refresh: refreshedRefresh, expires: refreshedExpires }
+  })
+}
+
 export async function XaiAuthPlugin(input: PluginInput, options: XaiAuthPluginOptions = {}): Promise<Hooks> {
   return {
     auth: {
@@ -463,8 +538,9 @@ export async function XaiAuthPlugin(input: PluginInput, options: XaiAuthPluginOp
         const auth = await getAuth()
         if (auth.type !== "oauth") return {}
 
-        // Single-flight refresh: collapse concurrent fetches from this loaded
-        // provider onto one HTTP call so we don't replay a rotating refresh_token.
+        // In-process single-flight: collapse concurrent fetches from this
+        // loaded provider onto one refresh path. Cross-process single-flight
+        // is handled inside refreshOauthUnderLock via Flock.
         let refreshPromise: Promise<RefreshResult> | undefined
 
         return {
@@ -482,46 +558,14 @@ export async function XaiAuthPlugin(input: PluginInput, options: XaiAuthPluginOp
             // Authorization header reaches xAI unmodified.
             if (currentAuth.type !== "oauth") return fetch(requestInput, init)
 
-            // Refresh either when the stored expires timestamp is within the
-            // skew window, or — for JWT access tokens — when the JWT exp
-            // claim itself is. The stored expires field is best-effort
-            // (xAI doesn't always return expires_in) so the JWT check is the
-            // load-bearing one for tokens that lack a fresh stored deadline.
-            const expiresSoon =
-              !currentAuth.expires ||
-              currentAuth.expires - Date.now() <= ACCESS_TOKEN_REFRESH_SKEW_MS ||
-              accessTokenIsExpiring(currentAuth.access)
-            if (expiresSoon) {
+            if (oauthAccessExpiresSoon(currentAuth)) {
               if (!refreshPromise) {
-                const refreshToken = currentAuth.refresh
-                refreshPromise = refreshAccessToken(refreshToken, options)
-                  .then(async (tokens) => {
-                    const refreshedExpires = Date.now() + (tokens.expires_in ?? 3600) * 1000
-                    const refreshedRefresh = tokens.refresh_token || refreshToken
-                    // Persist the rotated pair as best-effort. xAI has already consumed the
-                    // old refresh_token by the time we get here; an auth.set failure leaves
-                    // the on-disk state stale but the in-memory result is still valid for
-                    // this turn. The next live refresh against the stale disk state will
-                    // 4xx and force re-login — a known cross-process limitation.
-                    await input.client.auth
-                      .set({
-                        path: { id: "xai" },
-                        body: {
-                          type: "oauth",
-                          access: tokens.access_token,
-                          refresh: refreshedRefresh,
-                          expires: refreshedExpires,
-                        },
-                      })
-                      .catch(() => {})
-                    return { access: tokens.access_token, refresh: refreshedRefresh, expires: refreshedExpires }
-                  })
-                  .finally(() => {
-                    refreshPromise = undefined
-                  })
+                refreshPromise = refreshOauthUnderLock(getAuth, input, options).finally(() => {
+                  refreshPromise = undefined
+                })
               }
               const refreshed = await refreshPromise
-              currentAuth = { ...currentAuth, ...refreshed }
+              currentAuth = { ...currentAuth, ...refreshed } as OauthAuth
             }
 
             // Copy the caller's headers into a fresh Headers (case-insensitive)

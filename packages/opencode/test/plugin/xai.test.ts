@@ -269,7 +269,9 @@ describe("plugin.xai", () => {
       expect((setCalls[0].body as any).refresh).toBe("rt-new")
     })
 
-    test("does not share refresh single-flight across loader instances", async () => {
+    test("does not share refresh single-flight across loader instances with distinct tokens", async () => {
+      // Distinct refresh tokens still refresh independently (serialized by the
+      // cross-process Flock, but each still needs its own grant rotation).
       const { input } = makeInput()
       const tokenRequests: string[] = []
       const apiRequests: string[] = []
@@ -304,6 +306,63 @@ describe("plugin.xai", () => {
 
       expect(tokenRequests.sort()).toEqual(["rt-a", "rt-b"])
       expect(apiRequests.sort()).toEqual(["Bearer access-rt-a", "Bearer access-rt-b"])
+    })
+
+    test("cross-loader shared store: only one refresh when both see the same rotating token", async () => {
+      // Simulates two processes / loader instances sharing auth.json: after the
+      // first refresh wins the Flock and auth.set updates the shared store, the
+      // second re-reads under the lock and skips refresh_token reuse.
+      const store = {
+        type: "oauth" as const,
+        access: "old",
+        refresh: "rt-shared",
+        expires: 0,
+      }
+      const setCalls: Array<Record<string, unknown>> = []
+      const input = {
+        client: {
+          auth: {
+            set: async (req: Record<string, unknown>) => {
+              setCalls.push(req)
+              const body = req.body as { access: string; refresh: string; expires: number }
+              store.access = body.access
+              store.refresh = body.refresh
+              store.expires = body.expires
+            },
+          },
+        },
+      } as any
+      let tokenRequests = 0
+      const apiAuth: string[] = []
+      using server = makeServer(async (request, url) => {
+        if (url.pathname === "/oauth2/token") {
+          tokenRequests++
+          const body = await request.text()
+          expect(body).toContain("refresh_token=rt-shared")
+          await new Promise((resolve) => setTimeout(resolve, 40))
+          return Response.json({
+            access_token: "new-access",
+            refresh_token: "rt-rotated",
+            expires_in: 3600,
+          })
+        }
+        apiAuth.push(request.headers.get("authorization")!)
+        return new Response("{}", { status: 200 })
+      })
+      const hooks = await XaiAuthPlugin(input, serverOptions(server))
+      const getAuth = async () => ({ ...store })
+      const a = await hooks.auth!.loader!(getAuth, {} as any)
+      const b = await hooks.auth!.loader!(getAuth, {} as any)
+
+      await Promise.all([
+        a.fetch!(new URL("/chat/completions", server.url), { headers: {} }),
+        b.fetch!(new URL("/chat/completions", server.url), { headers: {} }),
+      ])
+
+      expect(tokenRequests).toBe(1)
+      expect(setCalls).toHaveLength(1)
+      expect(apiAuth).toEqual(["Bearer new-access", "Bearer new-access"])
+      expect(store.refresh).toBe("rt-rotated")
     })
 
     test("starts a new refresh after success and clears the refresh promise after failure", async () => {
