@@ -14,6 +14,7 @@ import { Database } from "@opencode-ai/core/database/database"
 import { TodoWriteTool } from "./todo"
 import { WebFetchTool } from "./webfetch"
 import { WriteTool } from "./write"
+import { errorMessage } from "@/util/error"
 import { InvalidTool } from "./invalid"
 import { SkillTool } from "./skill"
 import * as Tool from "./tool"
@@ -184,7 +185,16 @@ const layer = Layer.effect(
           const namespace = path.basename(match, path.extname(match))
           // `match` is an absolute filesystem path from `Glob.scanSync(..., { absolute: true })`.
           // Import it as `file://` so Node on Windows accepts the dynamic import.
-          const mod = yield* Effect.promise(() => import(pathToFileURL(match).href))
+          const mod = yield* Effect.tryPromise({
+            try: () => import(pathToFileURL(match).href),
+            catch: errorMessage,
+          }).pipe(
+            Effect.catchAll((message) =>
+              Effect.logWarning("failed to load custom tool", { tool: namespace, file: match, message }).pipe(
+                Effect.as({}),
+              ),
+            ),
+          )
           for (const [id, def] of Object.entries(mod)) {
             if (!isPluginTool(def)) continue
             custom.push(fromPlugin(id === "default" ? namespace : `${namespace}_${id}`, def))
