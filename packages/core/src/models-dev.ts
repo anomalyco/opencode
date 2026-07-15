@@ -222,25 +222,22 @@ function reasoningVariants(provider: SourceProvider, model: SourceModel): NonNul
 function settingsForEffort(npm: string, modelID: string, effort: string): ProviderV2.Settings | undefined {
   if (npm === "@openrouter/ai-sdk-provider") return { reasoning: { effort } }
   if (npm === "@ai-sdk/anthropic" || npm === "@ai-sdk/google-vertex/anthropic") {
-    if (["opus-4-5", "opus-4.5"].some((value) => modelID.includes(value))) return { effort }
-    if (!anthropicAdaptive(modelID)) return
+    if (anthropicManualThinking(modelID)) return { effort }
     return {
-      thinking: { type: "adaptive", ...(anthropicOmitsThinking(modelID) ? { display: "summarized" } : {}) },
+      thinking: { type: "adaptive", display: "summarized" },
       effort,
     }
   }
   if (npm === "@ai-sdk/google" || npm === "@ai-sdk/google-vertex")
     return { thinkingConfig: { includeThoughts: true, thinkingLevel: effort } }
   if (npm === "@ai-sdk/amazon-bedrock") {
-    if (anthropicAdaptive(modelID))
+    if (modelID.includes("anthropic"))
       return {
         reasoningConfig: {
-          type: "adaptive",
+          ...(anthropicManualThinking(modelID) ? {} : { type: "adaptive", display: "summarized" }),
           maxReasoningEffort: effort,
-          ...(anthropicOmitsThinking(modelID) ? { display: "summarized" } : {}),
         },
       }
-    if (modelID.includes("anthropic")) return
     return { reasoningConfig: { type: "enabled", maxReasoningEffort: effort } }
   }
   if (npm === "@ai-sdk/gateway") {
@@ -260,7 +257,7 @@ function settingsForEffort(npm: string, modelID: string, effort: string): Provid
       return {
         modelParams: {
           additionalModelRequestFields: {
-            thinking: { type: "adaptive", ...(anthropicOmitsThinking(modelID) ? { display: "summarized" } : {}) },
+            ...(anthropicManualThinking(modelID) ? {} : { thinking: { type: "adaptive", display: "summarized" } }),
             output_config: { effort },
           },
         },
@@ -326,11 +323,13 @@ function toggleVariants(npm: string, modelID: string): NonNullable<ModelV2.Info[
     ]
   if (npm === "@ai-sdk/anthropic" || npm === "@ai-sdk/google-vertex/anthropic")
     return [
-      { id: ModelV2.VariantID.make("none"), settings: { thinking: { type: "disabled" } } },
+      ...(anthropicAlwaysOn(modelID)
+        ? []
+        : [{ id: ModelV2.VariantID.make("none"), settings: { thinking: { type: "disabled" } } }]),
       {
         id: ModelV2.VariantID.make("thinking"),
         settings: {
-          thinking: { type: "adaptive", ...(anthropicOmitsThinking(modelID) ? { display: "summarized" } : {}) },
+          thinking: anthropicToggleThinking(modelID),
         },
       },
     ]
@@ -348,24 +347,23 @@ function toggleVariants(npm: string, modelID: string): NonNullable<ModelV2.Info[
   if (npm === "@ai-sdk/amazon-bedrock") {
     const anthropic = modelID.includes("anthropic")
     return [
-      {
-        id: ModelV2.VariantID.make("none"),
-        settings: {
-          additionalModelRequestFields: anthropic
-            ? { thinking: { type: "disabled" } }
-            : { reasoningConfig: { type: "disabled" } },
-        },
-      },
+      ...(anthropic && anthropicAlwaysOn(modelID)
+        ? []
+        : [
+            {
+              id: ModelV2.VariantID.make("none"),
+              settings: {
+                additionalModelRequestFields: anthropic
+                  ? { thinking: { type: "disabled" } }
+                  : { reasoningConfig: { type: "disabled" } },
+              },
+            },
+          ]),
       {
         id: ModelV2.VariantID.make("thinking"),
         settings: {
           additionalModelRequestFields: anthropic
-            ? {
-                thinking: {
-                  type: "adaptive",
-                  ...(anthropicOmitsThinking(modelID) ? { display: "summarized" } : {}),
-                },
-              }
+            ? { thinking: anthropicToggleThinking(modelID) }
             : { reasoningConfig: { type: "enabled" } },
         },
       },
@@ -417,21 +415,22 @@ function toggleVariants(npm: string, modelID: string): NonNullable<ModelV2.Info[
       ]
     if (modelID.includes("anthropic"))
       return [
-        {
-          id: ModelV2.VariantID.make("none"),
-          settings: {
-            modelParams: { additionalModelRequestFields: { thinking: { type: "disabled" } } },
-          },
-        },
+        ...(anthropicAlwaysOn(modelID)
+          ? []
+          : [
+              {
+                id: ModelV2.VariantID.make("none"),
+                settings: {
+                  modelParams: { additionalModelRequestFields: { thinking: { type: "disabled" } } },
+                },
+              },
+            ]),
         {
           id: ModelV2.VariantID.make("thinking"),
           settings: {
             modelParams: {
               additionalModelRequestFields: {
-                thinking: {
-                  type: "adaptive",
-                  ...(anthropicOmitsThinking(modelID) ? { display: "summarized" } : {}),
-                },
+                thinking: anthropicToggleThinking(modelID),
               },
             },
           },
@@ -477,24 +476,24 @@ function gatewayPackage(modelID: string) {
   if (prefix === "alibaba") return "@ai-sdk/alibaba"
 }
 
-function anthropicAdaptive(modelID: string) {
-  return (
-    anthropicOmitsThinking(modelID) ||
-    ["opus-4-6", "opus-4.6", "4-6-opus", "4.6-opus", "sonnet-4-6", "sonnet-4.6", "4-6-sonnet", "4.6-sonnet"].some(
-      (value) => modelID.includes(value),
-    )
-  )
+function anthropicToggleThinking(modelID: string): ProviderV2.Settings[string] {
+  if (["kimi", "k2p"].some((value) => modelID.toLowerCase().includes(value))) return { type: "enabled" }
+  if (modelID.toLowerCase().includes("minimax")) return { type: "adaptive" }
+  return { type: "adaptive", display: "summarized" }
 }
 
-function anthropicOmitsThinking(modelID: string) {
-  const opus = /opus-(\d+)[.-](\d+)(?:[.@-]|$)|claude-(\d+)[.-](\d+)-opus(?:[.@-]|$)/i.exec(modelID)
-  if (opus) {
-    const major = Number(opus[1] ?? opus[3])
-    const minor = Number(opus[2] ?? opus[4])
-    if (major > 4 || (major === 4 && minor >= 7)) return true
-  }
-  const sonnet = /sonnet-(\d+)(?:[.@-]|$)|claude-(\d+)-sonnet(?:[.@-]|$)/i.exec(modelID)
-  return (sonnet !== null && Number(sonnet[1] ?? sonnet[2]) >= 5) || modelID.includes("fable-5")
+function anthropicManualThinking(modelID: string) {
+  const familyFirst = /(?:claude-)?(?:opus|sonnet|haiku)-(\d+)(?:[.-](\d+))?/i.exec(modelID)
+  const versionFirst = /claude-(\d+)(?:[.-](\d+))?-(?:opus|sonnet|haiku)/i.exec(modelID)
+  const major = Number(familyFirst?.[1] ?? versionFirst?.[1])
+  const rawMinor = Number(familyFirst?.[2] ?? versionFirst?.[2] ?? 0)
+  if (!Number.isFinite(major)) return false
+  const minor = rawMinor > 9 ? 0 : rawMinor
+  return major < 4 || (major === 4 && minor < 6)
+}
+
+function anthropicAlwaysOn(modelID: string) {
+  return ["fable-5", "mythos-5", "mythos-preview"].some((value) => modelID.toLowerCase().includes(value))
 }
 
 function modeName(model: SourceModel, mode: string) {

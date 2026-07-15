@@ -37,6 +37,7 @@ const fixture = {
     id: "acme",
     name: "Acme",
     env: ["ACME_API_KEY"],
+    npm: "@ai-sdk/openai-compatible",
     models: {
       "acme-1": {
         id: "acme-1",
@@ -57,7 +58,7 @@ const fixtureSnapshot = [
     info: {
       id: ProviderV2.ID.make("acme"),
       name: "Acme",
-      package: "",
+      package: ProviderV2.aisdk("@ai-sdk/openai-compatible"),
     },
     models: [
       {
@@ -97,6 +98,7 @@ const fixture2 = {
     id: "beta",
     name: "Beta",
     env: ["BETA_API_KEY"],
+    npm: "@ai-sdk/openai-compatible",
     models: {
       "beta-1": {
         id: "beta-1",
@@ -117,7 +119,7 @@ const fixture2Snapshot = [
     info: {
       id: ProviderV2.ID.make("beta"),
       name: "Beta",
-      package: "",
+      package: ProviderV2.aisdk("@ai-sdk/openai-compatible"),
     },
     models: [
       {

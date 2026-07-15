@@ -326,7 +326,22 @@ describe("ModelsDevPlugin", () => {
           )
           expect(anthropicToggleModel?.variants).toEqual([
             { id: ModelV2.VariantID.make("none"), settings: { thinking: { type: "disabled" } } },
+            {
+              id: ModelV2.VariantID.make("thinking"),
+              settings: { thinking: { type: "adaptive", display: "summarized" } },
+            },
+          ])
+
+          const minimaxToggleModel = yield* catalog.model.get(ProviderV2.ID.anthropic, ModelV2.ID.make("MiniMax-M3"))
+          expect(minimaxToggleModel?.variants).toEqual([
+            { id: ModelV2.VariantID.make("none"), settings: { thinking: { type: "disabled" } } },
             { id: ModelV2.VariantID.make("thinking"), settings: { thinking: { type: "adaptive" } } },
+          ])
+
+          const opus45 = yield* catalog.model.get(ProviderV2.ID.anthropic, ModelV2.ID.make("claude-opus-4-5"))
+          expect(opus45?.variants).toEqual([
+            { id: ModelV2.VariantID.make("low"), settings: { effort: "low" } },
+            { id: ModelV2.VariantID.make("high"), settings: { effort: "high" } },
           ])
 
           const toggle = yield* catalog.model.get(ProviderV2.ID.make("alibaba"), ModelV2.ID.make("toggle-only"))
@@ -396,6 +411,21 @@ describe("ModelsDevPlugin", () => {
             {
               id: ModelV2.VariantID.make("high"),
               settings: { gateway: { reasoning: { effort: "high" } } },
+            },
+          ])
+
+          const gatewayFable = yield* catalog.model.get(
+            ProviderV2.ID.make("vercel"),
+            ModelV2.ID.make("anthropic/claude-fable-5"),
+          )
+          expect(gatewayFable?.variants).toEqual([
+            {
+              id: ModelV2.VariantID.make("low"),
+              settings: { thinking: { type: "adaptive", display: "summarized" }, effort: "low" },
+            },
+            {
+              id: ModelV2.VariantID.make("high"),
+              settings: { thinking: { type: "adaptive", display: "summarized" }, effort: "high" },
             },
           ])
 
