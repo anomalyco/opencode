@@ -304,14 +304,12 @@ function modelFromLanguage(info: ModelV2.Info, language: LanguageModelV3) {
   const packageName = ProviderV2.packageName(info.package)
   const projected = mapBodyToProviderOptions(info)
   const optionKey = providerOptionKey(packageName, info.providerID)
-  const providerOptions =
-    projected.settings === undefined
-      ? undefined
-      : packageName === "@ai-sdk/gateway"
-        ? gatewayProviderOptions(info.modelID ?? info.id, projected.settings)
-        : packageName === "@ai-sdk/azure"
-          ? { openai: projected.settings, azure: projected.settings }
-          : { [optionKey]: projected.settings }
+  const providerOptions = (() => {
+    if (projected.settings === undefined) return
+    if (packageName === "@ai-sdk/gateway") return gatewayProviderOptions(info.modelID ?? info.id, projected.settings)
+    if (packageName === "@ai-sdk/azure") return { openai: projected.settings, azure: projected.settings }
+    return { [optionKey]: projected.settings }
+  })()
   const route: AnyRoute = {
     id: `ai-sdk:${ProviderV2.packageName(info.package) ?? "unknown"}`,
     provider: ProviderID.make(info.providerID),
