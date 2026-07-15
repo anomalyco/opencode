@@ -55,10 +55,14 @@ export function websocket(
         .runRaw((message) => writeInbound(message))
         .pipe(
           Effect.catchReason("SocketError", "SocketCloseError", (reason) =>
-            writeInbound(new Socket.CloseEvent(reason.code, reason.closeReason)).pipe(Effect.catch(() => Effect.void)),
+            Effect.logWarning("WebSocket proxy outbound socket error", { code: reason.code, reason: reason.closeReason }).pipe(
+              Effect.andThen(writeInbound(new Socket.CloseEvent(reason.code, reason.closeReason)).pipe(Effect.catch(() => Effect.void))),
+            ),
           ),
-          Effect.catch(() =>
-            writeInbound(new Socket.CloseEvent(1011, "proxy error")).pipe(Effect.catch(() => Effect.void)),
+          Effect.catch((error) =>
+            Effect.logWarning("WebSocket proxy outbound error", { error: String(error) }).pipe(
+              Effect.andThen(writeInbound(new Socket.CloseEvent(1011, "proxy error")).pipe(Effect.catch(() => Effect.void))),
+            ),
           ),
           Effect.forkScoped,
         )
@@ -68,7 +72,9 @@ export function websocket(
           return writeOutbound(typeof message === "string" ? message : message.slice())
         })
         .pipe(
-          Effect.catch(() => Effect.void),
+          Effect.catch((error) =>
+            Effect.logWarning("WebSocket proxy inbound error", { error: String(error) }),
+          ),
           Effect.ensuring(writeOutbound(new Socket.CloseEvent()).pipe(Effect.catch(() => Effect.void))),
         )
       return HttpServerResponse.empty()
@@ -102,7 +108,11 @@ export function http(
       statusText: statusText(response),
       headers,
     })
-  }).pipe(Effect.catch(() => Effect.succeed(HttpServerResponse.empty({ status: 500 }))))
+  }).pipe(Effect.catch((error) =>
+    Effect.logWarning("HTTP proxy error", { error: String(error) }).pipe(
+      Effect.as(HttpServerResponse.empty({ status: 500 })),
+    ),
+  ))
 }
 
 export * as HttpApiProxy from "./proxy"

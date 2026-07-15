@@ -46,8 +46,8 @@ export async function preferAppEnv(userDataPath: string) {
   const shellEnv = shell ? await loadShellEnv(shell, getLogger()) : null
   Object.assign(process.env, {
     ...shellEnv,
-    OPENCODE_EXPERIMENTAL_ICON_DISCOVERY: "true",
-    OPENCODE_EXPERIMENTAL_FILEWATCHER: "true",
+    OPENCODE_EXPERIMENTAL_ICON_DISCOVERY: process.env.OPENCODE_EXPERIMENTAL_ICON_DISCOVERY ?? "true",
+    OPENCODE_EXPERIMENTAL_FILEWATCHER: process.env.OPENCODE_EXPERIMENTAL_FILEWATCHER ?? "true",
     OPENCODE_CLIENT: "desktop",
     XDG_STATE_HOME: process.env.XDG_STATE_HOME ?? userDataPath,
   })
@@ -268,7 +268,8 @@ export async function checkHealth(url: string, password?: string | null): Promis
       signal: AbortSignal.timeout(3000),
     })
     return res.ok
-  } catch {
+  } catch (error) {
+    getLogger().warn?.("health check failed", { url: healthUrl.toString(), error: String(error) })
     return false
   }
 }
