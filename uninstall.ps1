@@ -55,19 +55,20 @@ function Remove-IfExists {
 }
 
 # ─── Parameters ────────────────────────────────────────────────────────────
+# (wrapped in Main function for irm|iex compatibility)
 
-param(
-    [switch]$RemoveEngram
-)
+function Main {
+    [CmdletBinding()]
+    param(
+        [switch]$RemoveEngram
+    )
 
-# ─── Main ──────────────────────────────────────────────────────────────────
+    Write-Host ""
+    Write-Host "  Gentle OpenCode — Uninstaller" -ForegroundColor Cyan
+    Write-Host ""
 
-Write-Host ""
-Write-Host "  Gentle OpenCode — Uninstaller" -ForegroundColor Cyan
-Write-Host ""
-
-# 1. Remove binaries
-Write-Step "Removing binaries"
+    # 1. Remove binaries
+    Write-Step "Removing binaries"
 Remove-IfExists -Path $OPENCODE_DIR -Label "opencode ($OPENCODE_DIR)"
 Remove-IfExists -Path $GENTLE_DIR   -Label "gentle-ai ($GENTLE_DIR)"
 
@@ -151,9 +152,12 @@ if ($RemoveEngram) {
 
 # ─── Done ──────────────────────────────────────────────────────────────────
 
-Write-Host ""
-Write-Host "Uninstall complete." -ForegroundColor Green
-Write-Host ""
-Write-Host "The machine is clean and ready for a fresh installation:" -ForegroundColor White
-Write-Host '  irm https://github.com/ivanfernadezm99/opencode/releases/latest/download/install.ps1 | iex' -ForegroundColor Cyan
-Write-Host ""
+    Write-Host ""
+    Write-Host "Uninstall complete." -ForegroundColor Green
+    Write-Host ""
+    Write-Host "The machine is clean and ready for a fresh installation:" -ForegroundColor White
+    Write-Host '  irm https://github.com/ivanfernadezm99/opencode/releases/latest/download/install.ps1 | iex' -ForegroundColor Cyan
+    Write-Host ""
+}
+
+Main @args
