@@ -7,8 +7,8 @@ import { isRecord } from "@/util/record"
 
 export type Err = ReturnType<NamedError["toObject"]>
 
-export const GO_UPSELL_MESSAGE = "Free usage exceeded"
-export const GO_UPSELL_URL = "https://github.com/puetsua/kancode"
+export const USAGE_LIMIT_MESSAGE = "Free usage exceeded"
+export const USAGE_LIMIT_DOCS_URL = "https://github.com/puetsua/kancode"
 export type RetryReason = "free_tier_limit" | "account_rate_limit" | (string & {})
 
 export type Retryable = {
@@ -75,17 +75,18 @@ export function retryable(error: Err, provider: string) {
     if (!error.data.isRetryable && !(status !== undefined && status >= 500)) return undefined
     if (error.data.responseBody?.includes("FreeUsageLimitError")) {
       return {
-        message: GO_UPSELL_MESSAGE,
+        message: USAGE_LIMIT_MESSAGE,
         action: {
           reason: "free_tier_limit",
           provider,
           title: "Free limit reached",
           message: "This provider's free usage limit was reached. Switch models or providers, or check your API plan.",
           label: "docs",
-          link: GO_UPSELL_URL,
+          link: USAGE_LIMIT_DOCS_URL,
         },
       }
     }
+    // Upstream OpenCode Go quota errors (provider id opencode-go) — no subscribe CTA.
     if (error.data.responseBody?.includes("GoUsageLimitError")) {
       const body = parseJSON(error.data.responseBody)
       const limitName = str(body?.metadata?.limitName)
@@ -105,7 +106,7 @@ export function retryable(error: Err, provider: string) {
 
       const message = `${limitName ? `${limitName} usage limit` : "Usage limit"} reached. It will reset in ${resetIn}. Try another model or provider, or wait for the limit to reset.`
 
-      const link = GO_UPSELL_URL
+      const link = USAGE_LIMIT_DOCS_URL
       return {
         message: `${message} - ${link}`,
         action: {

@@ -72,15 +72,15 @@ export const dict = {
   "ui.sessionTurn.retry.attemptLine": "{{line}} - 第 {{attempt}} 次",
   "ui.sessionTurn.retry.geminiHot": "gemini 目前過載",
   "ui.sessionTurn.error.freeUsageExceeded": "免費使用額度已用完",
-  "ui.sessionTurn.error.addCredits": "新增點數",
+  "ui.sessionTurn.error.addCredits": "查看文件",
 
   "dialog.usageExceeded.freeTier.title": "已達免費額度上限",
   "dialog.usageExceeded.freeTier.description": "已達供應商免費用量上限。請切換模型／供應商，或檢查你的 API 方案。",
-  "dialog.usageExceeded.freeTier.actionLabel": "訂閱",
-  "dialog.usageExceeded.accountRateLimit.title": "已達 Go 額度上限",
+  "dialog.usageExceeded.freeTier.actionLabel": "文件",
+  "dialog.usageExceeded.accountRateLimit.title": "已達使用額度上限",
   "dialog.usageExceeded.accountRateLimit.description":
     "已達使用額度上限。若要現在繼續使用此模型，請從可用餘額中啟用使用",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "開啟設定",
+  "dialog.usageExceeded.accountRateLimit.actionLabel": "開啟文件",
 
   "ui.sessionTurn.status.delegating": "正在委派工作",
   "ui.sessionTurn.status.planning": "正在規劃下一步",

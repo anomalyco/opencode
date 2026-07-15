@@ -238,9 +238,9 @@ describe("SessionStatus.Info", () => {
         reason: "free_tier_limit",
         provider: "opencode",
         title: "Free limit reached",
-        message: "Subscribe to OpenCode Go.",
-        label: "subscribe",
-        link: "https://opencode.ai/go",
+        message: "Provider free usage limit reached. Switch models or providers.",
+        label: "docs",
+        link: "https://github.com/puetsua/kancode",
       },
       next: 500,
     }

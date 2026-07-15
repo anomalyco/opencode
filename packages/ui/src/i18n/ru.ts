@@ -67,16 +67,16 @@ export const dict = {
   "ui.sessionTurn.retry.attemptLine": "{{line}} - попытка №{{attempt}}",
   "ui.sessionTurn.retry.geminiHot": "gemini сейчас перегружен",
   "ui.sessionTurn.error.freeUsageExceeded": "Лимит бесплатного использования превышен",
-  "ui.sessionTurn.error.addCredits": "Добавить кредиты",
+  "ui.sessionTurn.error.addCredits": "Смотреть документацию",
 
   "dialog.usageExceeded.freeTier.title": "Достигнут бесплатный лимит",
   "dialog.usageExceeded.freeTier.description":
-    "Подпишитесь на OpenCode Go для надёжного доступа к лучшим моделям с открытым исходным кодом, от $5/месяц.",
-  "dialog.usageExceeded.freeTier.actionLabel": "Подписаться",
-  "dialog.usageExceeded.accountRateLimit.title": "Достигнут лимит Go",
+    "Достигнут бесплатный лимит провайдера. Переключите модель или провайдера, либо проверьте свой API-план.",
+  "dialog.usageExceeded.freeTier.actionLabel": "Документация",
+  "dialog.usageExceeded.accountRateLimit.title": "Достигнут лимит использования",
   "dialog.usageExceeded.accountRateLimit.description":
-    "Достигнут лимит использования. Чтобы продолжить использовать эту модель сейчас, включите использование из доступного баланса",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "Открыть настройки",
+    "Достигнут лимит использования. Переключите модель или провайдера, либо дождитесь сброса лимита.",
+  "dialog.usageExceeded.accountRateLimit.actionLabel": "Открыть документацию",
 
   "ui.sessionTurn.status.delegating": "Делегирование работы",
   "ui.sessionTurn.status.planning": "Планирование следующих шагов",

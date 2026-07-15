@@ -60,7 +60,7 @@ export function providerOptions(list: { id: string; name: string }[]): ProviderO
           anthropic: "(API key)",
           openai: "(ChatGPT Plus/Pro or API key)",
           opencode: "(Upstream OpenCode Zen — optional)",
-          "opencode-go": "(Upstream subscription — optional)",
+          "opencode-go": "(API key — optional)",
         }[provider.id],
         category: provider.id in PROVIDER_PRIORITY ? "Popular" : "Providers",
       })),
@@ -380,11 +380,7 @@ function ApiMethod(props: ApiMethodProps) {
           "opencode-go": (
             <box gap={1}>
               <text fg={theme.textMuted}>
-                OpenCode Go is an upstream subscription provider. KanCode does not sell this plan; connect a key only if
-                you already use it.
-              </text>
-              <text fg={theme.text}>
-                Details: <span style={{ fg: theme.primary }}>https://opencode.ai/go</span>
+                Optional upstream provider. Paste an API key if you already have one — KanCode does not sell this plan.
               </text>
             </box>
           ),

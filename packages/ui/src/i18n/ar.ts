@@ -68,16 +68,16 @@ export const dict = {
   "ui.sessionTurn.retry.attemptLine": "{{line}} - المحاولة رقم {{attempt}}",
   "ui.sessionTurn.retry.geminiHot": "gemini مزدحم حاليا",
   "ui.sessionTurn.error.freeUsageExceeded": "تم تجاوز حد الاستخدام المجاني",
-  "ui.sessionTurn.error.addCredits": "إضافة رصيد",
+  "ui.sessionTurn.error.addCredits": "عرض المستندات",
 
   "dialog.usageExceeded.freeTier.title": "تم الوصول إلى الحد المجاني",
   "dialog.usageExceeded.freeTier.description":
-    "اشترك في OpenCode Go للحصول على وصول موثوق إلى أفضل النماذج مفتوحة المصدر، ابتداءً من $5/شهر.",
-  "dialog.usageExceeded.freeTier.actionLabel": "اشترك",
-  "dialog.usageExceeded.accountRateLimit.title": "تم الوصول إلى حد Go",
+    "تم الوصول إلى حد الاستخدام المجاني للمزود. قم بتبديل النماذج أو المزودين، أو تحقق من خطة API الخاصة بك.",
+  "dialog.usageExceeded.freeTier.actionLabel": "مستندات",
+  "dialog.usageExceeded.accountRateLimit.title": "تم الوصول إلى حد الاستخدام",
   "dialog.usageExceeded.accountRateLimit.description":
-    "تم الوصول إلى حد الاستخدام. لمتابعة استخدام هذا النموذج الآن، قم بتفعيل الاستخدام من رصيدك المتاح",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "فتح الإعدادات",
+    "تم الوصول إلى حد الاستخدام. قم بتبديل النماذج أو المزودين، أو انتظر حتى تتم إعادة تعيين الحد.",
+  "dialog.usageExceeded.accountRateLimit.actionLabel": "فتح المستندات",
 
   "ui.sessionTurn.status.delegating": "تفويض العمل",
   "ui.sessionTurn.status.planning": "تخطيط الخطوات التالية",

@@ -74,16 +74,16 @@ export const dict = {
   "ui.sessionTurn.retry.attemptLine": "{{line}} - Versuch #{{attempt}}",
   "ui.sessionTurn.retry.geminiHot": "gemini ist gerade sehr überlastet",
   "ui.sessionTurn.error.freeUsageExceeded": "Kostenloses Nutzungslimit überschritten",
-  "ui.sessionTurn.error.addCredits": "Guthaben aufladen",
+  "ui.sessionTurn.error.addCredits": "Docs ansehen",
 
   "dialog.usageExceeded.freeTier.title": "Kostenloses Limit erreicht",
   "dialog.usageExceeded.freeTier.description":
-    "Abonniere OpenCode Go für zuverlässigen Zugriff auf die besten Open-Source-Modelle, ab $5/Monat.",
-  "dialog.usageExceeded.freeTier.actionLabel": "Abonnieren",
-  "dialog.usageExceeded.accountRateLimit.title": "Go-Limit erreicht",
+    "Kostenloses Nutzungslimit des Anbieters erreicht. Wechsle Modell oder Anbieter, oder prüfe deinen API-Plan.",
+  "dialog.usageExceeded.freeTier.actionLabel": "Docs",
+  "dialog.usageExceeded.accountRateLimit.title": "Nutzungslimit erreicht",
   "dialog.usageExceeded.accountRateLimit.description":
-    "Nutzungslimit erreicht. Um dieses Modell jetzt weiter zu nutzen, aktiviere die Nutzung über dein verfügbares Guthaben",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "Einstellungen öffnen",
+    "Nutzungslimit erreicht. Wechsle Modell oder Anbieter, oder warte bis das Limit zurückgesetzt wird.",
+  "dialog.usageExceeded.accountRateLimit.actionLabel": "Docs öffnen",
 
   "ui.sessionTurn.status.delegating": "Arbeit delegieren",
   "ui.sessionTurn.status.planning": "Nächste Schritte planen",

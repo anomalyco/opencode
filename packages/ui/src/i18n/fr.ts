@@ -68,16 +68,16 @@ export const dict = {
   "ui.sessionTurn.retry.attemptLine": "{{line}} - tentative n°{{attempt}}",
   "ui.sessionTurn.retry.geminiHot": "gemini est en surchauffe",
   "ui.sessionTurn.error.freeUsageExceeded": "Limite d'utilisation gratuite dépassée",
-  "ui.sessionTurn.error.addCredits": "Ajouter des crédits",
+  "ui.sessionTurn.error.addCredits": "Voir docs",
 
   "dialog.usageExceeded.freeTier.title": "Limite gratuite atteinte",
   "dialog.usageExceeded.freeTier.description":
-    "Abonnez-vous à OpenCode Go pour un accès fiable aux meilleurs modèles open source, à partir de $5/mois.",
-  "dialog.usageExceeded.freeTier.actionLabel": "S'abonner",
-  "dialog.usageExceeded.accountRateLimit.title": "Limite Go atteinte",
+    "Limite d usage gratuit du fournisseur atteinte. Changez de modèle ou de fournisseur, ou vérifiez votre plan API.",
+  "dialog.usageExceeded.freeTier.actionLabel": "Docs",
+  "dialog.usageExceeded.accountRateLimit.title": "Limite d'utilisation atteinte",
   "dialog.usageExceeded.accountRateLimit.description":
-    "Limite d'utilisation atteinte. Pour continuer à utiliser ce modèle maintenant, activez l'utilisation depuis votre solde disponible",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "Ouvrir les paramètres",
+    "Limite d utilisation atteinte. Changez de modèle ou de fournisseur, ou attendez la réinitialisation.",
+  "dialog.usageExceeded.accountRateLimit.actionLabel": "Ouvrir docs",
 
   "ui.sessionTurn.status.delegating": "Délégation du travail",
   "ui.sessionTurn.status.planning": "Planification des prochaines étapes",

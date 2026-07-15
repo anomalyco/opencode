@@ -18,8 +18,11 @@ import {
   type ScrollbackWriter,
 } from "@opentui/core"
 import * as Locale from "@/util/locale"
-import { go } from "@/cli/logo"
+import { logo } from "@/cli/logo"
 import type { RunSplashTheme } from "./theme"
+
+/** Compact KanCode mark for scrollback splash (not OpenCode Go art). */
+const splashMark = logo.right.slice(1, 4)
 
 export const SPLASH_TITLE_LIMIT = 50
 export const SPLASH_TITLE_FALLBACK = "Untitled session"
@@ -181,7 +184,7 @@ function build(input: SplashWriterInput, kind: "entry" | "exit", ctx: Scrollback
   let height = 1
 
   if (kind === "entry") {
-    const mark = go.right.slice(1)
+    const mark = splashMark
     const top = 1
     const body_left = (mark[0]?.length ?? 0) + 2
 
@@ -209,7 +212,7 @@ function build(input: SplashWriterInput, kind: "entry" | "exit", ctx: Scrollback
   }
 
   if (kind === "exit") {
-    const mark = go.right.slice(1)
+    const mark = splashMark
     const top = 1
     const body_left = (mark[0]?.length ?? 0) + 2
     const session = "Session  "

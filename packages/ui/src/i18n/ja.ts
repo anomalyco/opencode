@@ -67,16 +67,16 @@ export const dict = {
   "ui.sessionTurn.retry.attemptLine": "{{line}} - {{attempt}}回目",
   "ui.sessionTurn.retry.geminiHot": "gemini が混雑しています",
   "ui.sessionTurn.error.freeUsageExceeded": "無料使用制限に達しました",
-  "ui.sessionTurn.error.addCredits": "クレジットを追加",
+  "ui.sessionTurn.error.addCredits": "ドキュメントを見る",
 
   "dialog.usageExceeded.freeTier.title": "無料制限に達しました",
   "dialog.usageExceeded.freeTier.description":
-    "OpenCode Go にサブスクライブして、最高のオープンソースモデルに安定してアクセスできます。月額 $5 から。",
-  "dialog.usageExceeded.freeTier.actionLabel": "サブスクライブ",
-  "dialog.usageExceeded.accountRateLimit.title": "Go の制限に達しました",
+    "プロバイダーの無料利用上限に達しました。モデル／プロバイダーを切り替えるか、API プランを確認してください。",
+  "dialog.usageExceeded.freeTier.actionLabel": "ドキュメント",
+  "dialog.usageExceeded.accountRateLimit.title": "使用制限に達しました",
   "dialog.usageExceeded.accountRateLimit.description":
-    "使用制限に達しました。今すぐこのモデルを使い続けるには、利用可能な残高からの使用を有効にしてください",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "設定を開く",
+    "使用制限に達しました。モデル／プロバイダーを切り替えるか、制限のリセットを待ってください。",
+  "dialog.usageExceeded.accountRateLimit.actionLabel": "ドキュメントを開く",
 
   "ui.sessionTurn.status.delegating": "作業を委任中",
   "ui.sessionTurn.status.planning": "次のステップを計画中",
