@@ -15,6 +15,7 @@ export type Config = RouteDefaultsInput &
 
 export interface Settings extends ProviderPackage.Settings {
   readonly accessToken?: string
+  readonly apiKey?: never
   readonly baseURL?: string
   readonly location?: string
   readonly project?: string
@@ -24,6 +25,8 @@ export interface Settings extends ProviderPackage.Settings {
 export const routes = [GoogleVertexAnthropic.route]
 
 const configuredRoute = (input: Config) => {
+  if ("apiKey" in input && input.apiKey !== undefined)
+    throw new Error("Google Vertex Anthropic does not support API keys")
   const {
     accessToken: _accessToken,
     auth: _auth,
@@ -41,7 +44,7 @@ const configuredRoute = (input: Config) => {
         baseURL ??
         `https://${GoogleVertexShared.host(location)}/v1/projects/${GoogleVertexShared.requireProject(project)}/locations/${location}/publishers/anthropic/models`,
     },
-    auth: GoogleVertexShared.oauth(input),
+    auth: GoogleVertexShared.oauth(input, project),
   })
 }
 
@@ -59,8 +62,9 @@ export const provider = {
   configure,
 }
 
-export const model: ProviderPackage.Definition<Settings>["model"] = (modelID, settings) =>
-  configure({
+export const model: ProviderPackage.Definition<Settings>["model"] = (modelID, settings) => {
+  if (settings.apiKey !== undefined) throw new Error("Google Vertex Anthropic does not support API keys")
+  return configure({
     accessToken: settings.accessToken,
     baseURL: settings.baseURL,
     headers: settings.headers === undefined ? undefined : { ...settings.headers },
@@ -70,3 +74,4 @@ export const model: ProviderPackage.Definition<Settings>["model"] = (modelID, se
     project: settings.project,
     providerOptions: settings.providerOptions,
   }).model(modelID)
+}

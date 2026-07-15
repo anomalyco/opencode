@@ -12,11 +12,13 @@ export const routes = [AnthropicMessages.route]
 
 export type Config = RouteDefaultsInput & ProviderAuthOption<"optional"> & { readonly baseURL?: string }
 
-export interface Settings extends ProviderPackage.Settings {
-  readonly apiKey?: string
-  readonly authToken?: string
-  readonly baseURL?: string
-}
+export type Settings = ProviderPackage.Settings &
+  (
+    | { readonly apiKey?: string; readonly authToken?: never }
+    | { readonly apiKey?: never; readonly authToken?: string }
+  ) & {
+    readonly baseURL?: string
+  }
 
 const auth = (options: ProviderAuthOption<"optional">) => {
   if ("auth" in options && options.auth) return options.auth
@@ -41,11 +43,14 @@ export const configure = (input: Config = {}) => {
 }
 
 export const provider = configure()
-export const model: ProviderPackage.Definition<Settings>["model"] = (modelID, settings) =>
-  configure({
+export const model: ProviderPackage.Definition<Settings>["model"] = (modelID, settings) => {
+  if (settings.apiKey !== undefined && settings.authToken !== undefined)
+    throw new Error("Anthropic apiKey cannot be combined with authToken")
+  return configure({
     ...(settings.authToken === undefined ? { apiKey: settings.apiKey } : { auth: Auth.bearer(settings.authToken) }),
     baseURL: settings.baseURL,
     headers: settings.headers === undefined ? undefined : { ...settings.headers },
     http: settings.body === undefined ? undefined : { body: { ...settings.body } },
     limits: settings.limits,
   }).model(modelID)
+}

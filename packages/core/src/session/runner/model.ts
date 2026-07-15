@@ -191,11 +191,7 @@ export const fromCatalogModel = (
   const packageName = ProviderV2.packageName(resolved.package)
   const key = apiKey(resolved, credential)
 
-  if (
-    OpenAICodex.isChatGPT(credential) &&
-    !ProviderV2.isAISDK(resolved.package) &&
-    isNativeOpenAI(resolved.package)
-  ) {
+  if (OpenAICodex.isChatGPT(credential) && !ProviderV2.isAISDK(resolved.package) && isNativeOpenAI(resolved.package)) {
     return Effect.succeed(codexModel(resolved, credential, key))
   }
 
@@ -243,11 +239,10 @@ export const fromCatalogModel = (
     const module = yield* (dependencies.loadPackage ?? ProviderV2.loadPackage)(specifier).pipe(
       Effect.mapError(() => unsupported(resolved)),
     )
+    const configured = { ...resolved.settings, ...credential?.metadata }
     const settings = {
-      ...resolved.settings,
-      ...(credential?.type === "key" ? { apiKey: credential.key } : {}),
-      ...(credential?.type === "oauth" ? { apiKey: credential.access } : {}),
-      ...credential?.metadata,
+      ...(credential ? withoutNativeAuthSettings(configured) : configured),
+      ...nativeCredentialSettings(specifier, credential),
       headers: resolved.headers,
       body: resolved.body,
       limits: { context: resolved.limit.context, output: resolved.limit.output },
@@ -263,6 +258,27 @@ export const fromCatalogModel = (
 const isNativeOpenAI = (packageName: string | undefined) =>
   packageName === "@opencode-ai/llm/providers/openai" ||
   packageName?.startsWith("@opencode-ai/llm/providers/openai/") === true
+
+const nativeCredentialSettings = (specifier: string, credential: Credential.Value | undefined) => {
+  if (!credential) return {}
+  if (credential.type === "key") return { apiKey: credential.key }
+  if (
+    specifier === "@opencode-ai/llm/providers/anthropic" ||
+    specifier === "@opencode-ai/llm/providers/anthropic-compatible"
+  )
+    return { authToken: credential.access }
+  if (
+    specifier === "@opencode-ai/llm/providers/google-vertex" ||
+    specifier.startsWith("@opencode-ai/llm/providers/google-vertex/")
+  )
+    return { accessToken: credential.access }
+  return { apiKey: credential.access }
+}
+
+const withoutNativeAuthSettings = (settings: Record<string, unknown>) => {
+  const { accessToken: _accessToken, apiKey: _apiKey, authToken: _authToken, ...rest } = settings
+  return rest
+}
 
 const codexModel = (
   model: ModelV2.Info,

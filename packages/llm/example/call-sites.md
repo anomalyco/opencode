@@ -366,13 +366,13 @@ while sharing project/location resolution and ADC authentication internally:
 ```ts
 import { model } from "@opencode-ai/llm/providers/google-vertex"
 
-model("gemini-2.5-flash", { project, location: "us-central1" })
+model("gemini-3.5-flash", { project, location: "global" })
 ```
 
 ```ts
 import { model } from "@opencode-ai/llm/providers/google-vertex/anthropic"
 
-model("claude-sonnet-4@20250514", { project, location: "global" })
+model("claude-sonnet-4-6", { project, location: "global" })
 ```
 
 The client should not require a different public layer just because a selected

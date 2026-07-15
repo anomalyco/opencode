@@ -9,7 +9,10 @@ export const route = Route.make({
   provider: "google-vertex",
   providerMetadataKey: "google",
   protocol: Gemini.protocol,
-  endpoint: Endpoint.path(({ request }) => `/models/${request.model.id}:streamGenerateContent?alt=sse`),
+  endpoint: Endpoint.path(({ request }) => {
+    const model = String(request.model.id)
+    return `/${model.startsWith("endpoints/") ? model : `models/${model}`}:streamGenerateContent?alt=sse`
+  }),
   auth: Auth.none,
   framing: Framing.sse,
 })

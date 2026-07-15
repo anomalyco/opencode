@@ -4,14 +4,13 @@ import { Auth, MissingCredentialError } from "../route/auth"
 
 const SCOPE = "https://www.googleapis.com/auth/cloud-platform"
 
-export interface OAuthOptions {
-  readonly accessToken?: string
-  readonly auth?: Auth
-}
+export type OAuthOptions =
+  | { readonly accessToken?: string; readonly auth?: never }
+  | { readonly accessToken?: never; readonly auth?: Auth }
 
-export interface ApiKeyOptions extends OAuthOptions {
-  readonly apiKey?: string
-}
+export type ApiKeyOptions =
+  | (OAuthOptions & { readonly apiKey?: never })
+  | { readonly accessToken?: never; readonly apiKey?: string; readonly auth?: never }
 
 export const project = (value?: string) =>
   value ??
@@ -46,11 +45,13 @@ export const apiKey = (input: ApiKeyOptions) => {
   return input.apiKey ?? process.env.GOOGLE_VERTEX_API_KEY
 }
 
-const adc = () => {
+const adc = (project?: string) => {
   let client: Promise<AnyAuthClient> | undefined
   const loadClient = () => {
     if (client) return client
-    client = import("google-auth-library").then(({ GoogleAuth }) => new GoogleAuth({ scopes: [SCOPE] }).getClient())
+    client = import("google-auth-library").then(({ GoogleAuth }) =>
+      new GoogleAuth({ projectId: project, scopes: [SCOPE] }).getClient(),
+    )
     return client
   }
   return Auth.effect(
@@ -65,10 +66,12 @@ const adc = () => {
   ).bearer()
 }
 
-export const oauth = (input: OAuthOptions) => {
+export const oauth = (input: OAuthOptions, project?: string) => {
+  if (input.accessToken !== undefined && input.auth !== undefined)
+    throw new Error("Google Vertex accessToken cannot be combined with auth")
   if (input.auth) return input.auth
   if (input.accessToken !== undefined) return Auth.bearer(input.accessToken)
-  return adc()
+  return adc(project)
 }
 
 export * as GoogleVertexShared from "./google-vertex-shared"

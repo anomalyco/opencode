@@ -540,6 +540,42 @@ describe("SessionRunnerModel", () => {
     }),
   )
 
+  it.effect("maps OAuth credentials to native provider auth settings", () =>
+    Effect.gen(function* () {
+      const native = yield* SessionRunnerModel.fromCatalogModel(
+        model(ProviderV2.aisdk("@ai-sdk/openai"), {
+          settings: { baseURL: "https://openai.example/v1" },
+        }),
+      )
+      const credential = Credential.OAuth.make({
+        type: "oauth",
+        methodID: Integration.MethodID.make("device"),
+        access: "oauth-token",
+        refresh: "refresh",
+        expires: Date.now() + 60_000,
+      })
+      const packages = [
+        ["@opencode-ai/llm/providers/google-vertex", "accessToken"],
+        ["@opencode-ai/llm/providers/google-vertex/anthropic", "accessToken"],
+        ["@opencode-ai/llm/providers/anthropic", "authToken"],
+        ["@opencode-ai/llm/providers/anthropic-compatible", "authToken"],
+      ] as const
+
+      yield* Effect.forEach(packages, ([specifier, key]) =>
+        SessionRunnerModel.fromCatalogModel(model(specifier, { settings: { apiKey: "configured-key" } }), credential, {
+          loadPackage: () =>
+            Effect.succeed({
+              model: (modelID, settings) => {
+                expect(settings).toMatchObject({ [key]: "oauth-token" })
+                expect(settings).not.toHaveProperty("apiKey")
+                return Model.make({ id: modelID, provider: "package-provider", route: native.route })
+              },
+            }),
+        }),
+      )
+    }),
+  )
+
   it.effect("loads arbitrary AISDK packages through the injected AISDK loader", () =>
     Effect.gen(function* () {
       const native = yield* SessionRunnerModel.fromCatalogModel(

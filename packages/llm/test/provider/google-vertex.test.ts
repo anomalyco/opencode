@@ -9,15 +9,15 @@ import { dynamicResponse } from "../lib/http"
 import { sseEvents } from "../lib/sse"
 
 describe("Google Vertex providers", () => {
-  it.effect("sends Gemini requests to the regional Vertex endpoint", () =>
+  it.effect("sends Gemini requests to the global Vertex endpoint", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
         LLM.request({
           model: GoogleVertex.configure({
             accessToken: "vertex-token",
-            location: "us-central1",
+            location: "global",
             project: "vertex-project",
-          }).model("gemini-2.5-flash"),
+          }).model("gemini-3.5-flash"),
           prompt: "Say hello.",
         }),
       ).pipe(
@@ -26,7 +26,7 @@ describe("Google Vertex providers", () => {
             Effect.gen(function* () {
               const request = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
               expect(request.url).toBe(
-                "https://us-central1-aiplatform.googleapis.com/v1beta1/projects/vertex-project/locations/us-central1/publishers/google/models/gemini-2.5-flash:streamGenerateContent?alt=sse",
+                "https://aiplatform.googleapis.com/v1beta1/projects/vertex-project/locations/global/publishers/google/models/gemini-3.5-flash:streamGenerateContent?alt=sse",
               )
               expect(request.headers.get("authorization")).toBe("Bearer vertex-token")
               expect(yield* Effect.promise(() => request.json())).toMatchObject({
@@ -60,7 +60,7 @@ describe("Google Vertex providers", () => {
             accessToken: "vertex-token",
             location: "eu",
             project: "vertex-project",
-          }).model("claude-sonnet-4@20250514"),
+          }).model("claude-sonnet-4-6"),
           prompt: "Say hello.",
         }),
       ).pipe(
@@ -69,7 +69,7 @@ describe("Google Vertex providers", () => {
             Effect.gen(function* () {
               const request = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
               expect(request.url).toBe(
-                "https://aiplatform.eu.rep.googleapis.com/v1/projects/vertex-project/locations/eu/publishers/anthropic/models/claude-sonnet-4@20250514:streamRawPredict",
+                "https://aiplatform.eu.rep.googleapis.com/v1/projects/vertex-project/locations/eu/publishers/anthropic/models/claude-sonnet-4-6:streamRawPredict",
               )
               expect(request.headers.get("authorization")).toBe("Bearer vertex-token")
               expect(request.headers.get("anthropic-version")).toBeNull()
@@ -107,12 +107,59 @@ describe("Google Vertex providers", () => {
             accessToken: "vertex-token",
             http: { body: { anthropic_version: "wrong" } },
             project: "vertex-project",
-          }).model("claude-sonnet-4@20250514"),
+          }).model("claude-sonnet-4-6"),
           prompt: "Say hello.",
         }),
       ).pipe(Effect.flip)
 
       expect(error.message).toContain("http.body cannot overlay protocol-owned field(s): anthropic_version")
+    }),
+  )
+
+  it.effect("routes tuned Gemini models through their deployed endpoint", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(
+        LLM.request({
+          model: GoogleVertex.configure({
+            accessToken: "vertex-token",
+            location: "us-central1",
+            project: "vertex-project",
+          }).model("endpoints/1234567890"),
+          prompt: "Say hello.",
+        }),
+      ).pipe(
+        Effect.provide(
+          dynamicResponse((input) =>
+            Effect.gen(function* () {
+              const request = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
+              expect(request.url).toBe(
+                "https://us-central1-aiplatform.googleapis.com/v1beta1/projects/vertex-project/locations/us-central1/endpoints/1234567890:streamGenerateContent?alt=sse",
+              )
+              return input.respond(
+                sseEvents({
+                  candidates: [
+                    {
+                      content: { role: "model", parts: [{ text: "Hello." }] },
+                      finishReason: "STOP",
+                    },
+                  ],
+                }),
+                { headers: { "content-type": "text/event-stream" } },
+              )
+            }),
+          ),
+        ),
+      )
+
+      expect(response.text).toBe("Hello.")
+    }),
+  )
+
+  it.effect("rejects tuned Gemini models in express mode", () =>
+    Effect.sync(() => {
+      expect(() => GoogleVertex.configure({ apiKey: "fixture" }).model("endpoints/1234567890")).toThrow(
+        "Google Vertex tuned models do not support Express Mode API keys",
+      )
     }),
   )
 })
