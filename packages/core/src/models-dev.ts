@@ -193,8 +193,7 @@ const OUTPUT_TOKEN_MAX = 32_000
 function reasoningVariants(provider: SourceProvider, model: SourceModel): NonNullable<ModelV2.Info["variants"]> {
   const npm = model.provider?.npm ?? provider.npm
   const options = model.reasoning_options
-  if (options === undefined) return []
-  if (options.length === 0) return []
+  if (!options?.length) return []
   const toggle = options.some((option) => option.type === "toggle")
   const effort = options.find((option) => option.type === "effort")
   if (effort?.type === "effort") {
