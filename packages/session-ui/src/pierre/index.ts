@@ -16,10 +16,7 @@ export type DiffProps<T = {}> = FileDiffOptions<T> & {
 
 const unsafeCSS = `
 :host {
-  --diffs-bg: var(
-    --opencode-diffs-bg,
-    light-dark(var(--diffs-light-bg, #fff), var(--diffs-dark-bg, #000))
-  );
+  --diffs-bg: var(--opencode-diffs-bg, var(--color-background-stronger));
 }
 
 [data-diff],
