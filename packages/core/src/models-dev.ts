@@ -245,7 +245,7 @@ function settingsForEffort(npm: string, modelID: string, effort: string): Provid
   if (npm === "@ai-sdk/gateway") {
     const upstream = gatewayPackage(modelID)
     if (upstream) return settingsForEffort(upstream, modelID, effort)
-    return { gateway: { reasoning: { effort } } }
+    return { reasoningEffort: effort }
   }
   if (npm === "@ai-sdk/github-copilot") {
     if (modelID.includes("gemini")) return
@@ -310,11 +310,11 @@ function toggleVariants(npm: string, modelID: string): NonNullable<ModelV2.Info[
     return [
       {
         id: ModelV2.VariantID.make("none"),
-        settings: { gateway: { reasoning: { enabled: false } } },
+        settings: { reasoning: { enabled: false } },
       },
       {
         id: ModelV2.VariantID.make("thinking"),
-        settings: { gateway: { reasoning: { enabled: true } } },
+        settings: { reasoning: { enabled: true } },
       },
     ]
   }
@@ -441,7 +441,7 @@ function settingsForBudget(npm: string, modelID: string, budget: number): Provid
   if (npm === "@ai-sdk/amazon-bedrock") return { reasoningConfig: { type: "enabled", budgetTokens: budget } }
   if (npm === "@ai-sdk/gateway") {
     const upstream = gatewayPackage(modelID)
-    return upstream ? settingsForBudget(upstream, modelID, budget) : { gateway: { reasoning: { max_tokens: budget } } }
+    return upstream ? settingsForBudget(upstream, modelID, budget) : { reasoning: { max_tokens: budget } }
   }
   if (npm === "@ai-sdk/cohere") return { thinking: { type: "enabled", tokenBudget: budget } }
   if (npm === "@ai-sdk/alibaba") return { enableThinking: true, thinkingBudget: budget }

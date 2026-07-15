@@ -396,15 +396,15 @@ describe("ModelsDevPlugin", () => {
           expect(gatewayFallback?.variants).toEqual([
             {
               id: ModelV2.VariantID.make("none"),
-              settings: { gateway: { reasoning: { enabled: false } } },
+              settings: { reasoning: { enabled: false } },
             },
             {
               id: ModelV2.VariantID.make("low"),
-              settings: { gateway: { reasoning: { effort: "low" } } },
+              settings: { reasoningEffort: "low" },
             },
             {
               id: ModelV2.VariantID.make("high"),
-              settings: { gateway: { reasoning: { effort: "high" } } },
+              settings: { reasoningEffort: "high" },
             },
           ])
 

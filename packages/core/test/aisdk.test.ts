@@ -176,14 +176,14 @@ it.effect("routes AI Gateway model options by upstream prefix", () =>
     })
 
     const fallback = yield* aisdk.model({
-      ...model("@ai-sdk/gateway", { gateway: { reasoning: { enabled: false } } }),
+      ...model("@ai-sdk/gateway", { reasoningEffort: "high" }),
       modelID: ModelV2.ID.make("deepseek/deepseek-v4"),
     })
     const fallbackPrepared = yield* LLMClient.prepare<LanguageModelV3CallOptions>(
       LLM.request({ model: fallback, prompt: "Hello" }),
     )
     expect(fallbackPrepared.body.providerOptions).toEqual({
-      gateway: { reasoning: { enabled: false } },
+      deepseek: { reasoningEffort: "high" },
     })
   }),
 )
