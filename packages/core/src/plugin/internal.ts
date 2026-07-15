@@ -122,7 +122,7 @@ const pre = [
   AgentPlugin.Plugin,
   CommandPlugin.Plugin,
   SkillPlugin.Plugin,
-  SystemPromptPlugin.Plugin,
+  ...SystemPromptPlugin.Plugins,
   ModelsDevPlugin,
   ...ProviderPlugins,
   PatchTool.Plugin,

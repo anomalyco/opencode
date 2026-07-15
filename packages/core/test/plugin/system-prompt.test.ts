@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { SystemPart } from "@opencode-ai/ai"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
@@ -26,21 +26,34 @@ const context = (id: string, system = fallback): SessionHooks["context"] => ({
 })
 
 describe("SystemPromptPlugin", () => {
-  it.effect("selects model-family prompts through the session context hook", () =>
+  test("uses granular IDs with a common prefix", () => {
+    expect(SystemPromptPlugin.Plugins.map((plugin) => plugin.id)).toEqual([
+      "opencode.system-prompt.openai",
+      "opencode.system-prompt.google",
+      "opencode.system-prompt.anthropic",
+      "opencode.system-prompt.kimi",
+      "opencode.system-prompt.arcee",
+      "opencode.system-prompt.meta",
+    ])
+  })
+
+  it.effect("selects model-lab prompts through session context hooks", () =>
     Effect.gen(function* () {
       const hooks = yield* PluginHooks.Service
-      yield* SystemPromptPlugin.Plugin.effect(
-        host({ session: { hook: (name, callback) => hooks.register("session", name, callback) } }),
-      )
+      const pluginHost = host({ session: { hook: (name, callback) => hooks.register("session", name, callback) } })
+      yield* Effect.forEach(SystemPromptPlugin.Plugins, (plugin) => plugin.effect(pluginHost), {
+        discard: true,
+      })
       const cases = [
         ["gpt-5", "You are OpenCode, You and the user share the same workspace"],
-        ["gpt-4.1", "THE PROBLEM CAN NOT BE SOLVED WITHOUT EXTENSIVE INTERNET RESEARCH"],
-        ["o3", "THE PROBLEM CAN NOT BE SOLVED WITHOUT EXTENSIVE INTERNET RESEARCH"],
+        ["gpt-4.1", "You are OpenCode, You and the user share the same workspace"],
+        ["o3", "You are OpenCode, You and the user share the same workspace"],
         ["gpt-5-codex", "## Editing constraints"],
         ["gemini-2.5-pro", "# Core Mandates"],
         ["claude-sonnet-4", "# Professional objectivity"],
         ["kimi-k2", "# Prompt and Tool Use"],
         ["trinity", "what command should I run to list files"],
+        ["meta/muse-spark-1.1", "OpenCode powered by Meta Muse Spark"],
         ["llama-3.3", "You are opencode, an interactive CLI tool"],
       ] as const
 
@@ -60,14 +73,32 @@ describe("SystemPromptPlugin", () => {
   it.effect("preserves an explicit agent system prompt", () =>
     Effect.gen(function* () {
       const hooks = yield* PluginHooks.Service
-      yield* SystemPromptPlugin.Plugin.effect(
-        host({ session: { hook: (name, callback) => hooks.register("session", name, callback) } }),
-      )
+      const pluginHost = host({ session: { hook: (name, callback) => hooks.register("session", name, callback) } })
+      yield* Effect.forEach(SystemPromptPlugin.Plugins, (plugin) => plugin.effect(pluginHost), {
+        discard: true,
+      })
       const event = context("gpt-5", "Custom agent prompt")
 
       yield* hooks.trigger("session", "context", event)
 
       expect(event.system.map((part) => part.text)).toEqual(["Custom agent prompt"])
+    }),
+  )
+
+  it.effect("allows one model-lab prompt plugin to be enabled independently", () =>
+    Effect.gen(function* () {
+      const hooks = yield* PluginHooks.Service
+      yield* SystemPromptPlugin.GooglePlugin.effect(
+        host({ session: { hook: (name, callback) => hooks.register("session", name, callback) } }),
+      )
+      const gemini = context("gemini-2.5-pro")
+      const claude = context("claude-sonnet-4")
+
+      yield* hooks.trigger("session", "context", gemini)
+      yield* hooks.trigger("session", "context", claude)
+
+      expect(gemini.system[0]?.text).toContain("# Core Mandates")
+      expect(claude.system[0]?.text).toBe(fallback)
     }),
   )
 })

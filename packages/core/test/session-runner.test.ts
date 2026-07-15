@@ -458,9 +458,10 @@ const insertSession = (id: SessionV2.ID) =>
 const setup = Effect.gen(function* () {
   const { db } = yield* Database.Service
   const hooks = yield* PluginHooks.Service
-  yield* SystemPromptPlugin.Plugin.effect(
-    host({ session: { hook: (name, callback) => hooks.register("session", name, callback) } }),
-  )
+  const pluginHost = host({ session: { hook: (name, callback) => hooks.register("session", name, callback) } })
+  yield* Effect.forEach(SystemPromptPlugin.Plugins, (plugin) => plugin.effect(pluginHost), {
+    discard: true,
+  })
   requests.length = 0
   authorizations.length = 0
   executions.length = 0
