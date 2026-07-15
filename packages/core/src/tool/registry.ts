@@ -124,7 +124,7 @@ const registryLayer = Layer.effect(
   }),
 )
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Tools.Service,
   Service.use((registry) => Effect.succeed(Tools.Service.of({ register: registry.register }))),
 ).pipe(Layer.provideMerge(registryLayer))
@@ -133,11 +133,6 @@ function whollyDisabled(action: string, rules: PermissionV2.Ruleset) {
   const rule = rules.findLast((rule) => Wildcard.match(action, rule.action))
   return rule?.resource === "*" && rule.effect === "deny"
 }
-
-export const defaultLayer = layer.pipe(
-  Layer.provide(ApplicationTools.layer),
-  Layer.provide(ToolOutputStore.defaultLayer),
-)
 
 export const node = makeLocationNode({
   service: Service,

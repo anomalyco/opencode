@@ -1,4 +1,13 @@
-import { For, Show, splitProps, type Accessor, type ComponentProps } from "solid-js"
+import {
+  createEffect,
+  createSignal,
+  For,
+  onCleanup,
+  Show,
+  splitProps,
+  type Accessor,
+  type ComponentProps,
+} from "solid-js"
 import { createStore } from "solid-js/store"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -8,6 +17,7 @@ import { getProjectAvatarVariant } from "@/context/layout"
 import { useLanguage } from "@/context/language"
 import { displayName, getProjectAvatarSource } from "@/pages/layout/helpers"
 import { pathKey } from "@/utils/path-key"
+import { handleDocumentSearchKeydown } from "@/utils/search-keydown"
 
 export type PromptProject = {
   name?: string
@@ -101,6 +111,16 @@ export function createPromptProjectController(input: {
     setStore({ open: false, search: "", active: "" })
     input.controls().add(language.t("command.project.open"), server)
   }
+  const setSearch = (value: string) => {
+    const search = value.trim().toLowerCase()
+    const first = input
+      .controls()
+      .available.find((project) => !search || displayName(project).toLowerCase().includes(search))
+    setStore({
+      search: value,
+      active: first ? projectKey(first) : actionKey(servers().length > 1 ? undefined : servers()[0]?.key),
+    })
+  }
 
   return {
     selected,
@@ -127,16 +147,7 @@ export function createPromptProjectController(input: {
       }
       setStore({ open: false, search: "", active: "" })
     },
-    setSearch(value: string) {
-      const search = value.trim().toLowerCase()
-      const first = input
-        .controls()
-        .available.find((project) => !search || displayName(project).toLowerCase().includes(search))
-      setStore({
-        search: value,
-        active: first ? projectKey(first) : actionKey(servers().length > 1 ? undefined : servers()[0]?.key),
-      })
-    },
+    setSearch,
     clearSearch() {
       setStore({ search: "", active: initialActive() })
       setTimeout(() => searchRef?.focus())
@@ -170,6 +181,9 @@ export function createPromptProjectController(input: {
     focusSearch() {
       setTimeout(() => requestAnimationFrame(() => searchRef?.focus()))
     },
+    handleSearchKeydown(event: KeyboardEvent) {
+      return handleDocumentSearchKeydown(searchRef, event, store.search, setSearch)
+    },
   }
 }
 
@@ -179,8 +193,27 @@ export function PromptProjectSelector(props: {
   controller: PromptProjectController
   placement?: "bottom" | "bottom-start"
 }) {
+  const [triggerReady, setTriggerReady] = createSignal(false)
   let contentRef: HTMLDivElement | undefined
+  let triggerFrame: number | undefined
   let restoreTrigger = true
+
+  // Floating UI requires a connected anchor; route transitions can construct this trigger before adoption.
+  const setTriggerRef = (element: HTMLButtonElement) => {
+    const ready = () => {
+      if (!element.isConnected) {
+        triggerFrame = requestAnimationFrame(ready)
+        return
+      }
+      triggerFrame = undefined
+      setTriggerReady(true)
+    }
+    ready()
+  }
+
+  onCleanup(() => {
+    if (triggerFrame !== undefined) cancelAnimationFrame(triggerFrame)
+  })
 
   const activeItem = () =>
     props.controller.active()
@@ -243,15 +276,22 @@ export function PromptProjectSelector(props: {
     return project ? props.controller.projectKey(project) : undefined
   }
 
+  createEffect(() => {
+    if (!props.controller.open()) return
+    const handler = (event: KeyboardEvent) => props.controller.handleSearchKeydown(event)
+    document.addEventListener("keydown", handler, true)
+    onCleanup(() => document.removeEventListener("keydown", handler, true))
+  })
+
   return (
     <DropdownMenu
-      open={props.controller.open()}
+      open={triggerReady() && props.controller.open()}
       placement={props.placement ?? "bottom"}
       gutter={4}
       modal={false}
       onOpenChange={(open) => props.controller.setOpen(open)}
     >
-      <DropdownMenu.Trigger as={ProjectTrigger} controller={props.controller} />
+      <DropdownMenu.Trigger as={ProjectTrigger} ref={setTriggerRef} controller={props.controller} />
       <DropdownMenu.Portal>
         <DropdownMenu.Content
           ref={contentRef}

@@ -102,10 +102,14 @@ export const dict = {
   "temp.logoDarkAlt": "opencode 어두운 로고",
 
   "home.banner.badge": "신규",
-  "home.banner.text": "데스크톱 앱 베타 버전 출시",
-  "home.banner.platforms": "macOS, Windows, Linux 지원",
+  "home.banner.text": "데스크톱 탭을 소개합니다.",
+  "home.banner.platforms": "macOS, Windows, Linux에서 사용할 수 있습니다",
   "home.banner.downloadNow": "지금 다운로드",
   "home.banner.downloadBetaNow": "데스크톱 베타 다운로드",
+  "home.promo.title": "데스크톱 탭을 소개합니다",
+  "home.promo.body": "탭으로 작업과 활성 세션을 정리하세요.",
+  "home.promo.cta": "최신 버전을 다운로드하여 시작하세요.",
+  "home.promo.close": "데스크톱 앱 안내 닫기",
 
   "home.hero.title": "오픈 소스 AI 코딩 에이전트",
   "home.hero.subtitle.a": "무료 모델이 포함되어 있으며, 어떤 제공자의 모델이든 연결 가능합니다.",
@@ -246,7 +250,6 @@ export const dict = {
   "zen.privacy.exceptionsLink": "다음 예외",
 
   "go.title": "OpenCode Go | 모두를 위한 저비용 코딩 모델",
-  "go.banner.text": "MiniMax M3 사용 한도가 한시적으로 3배 확대됩니다",
   "go.meta.description":
     "Go는 첫 달 $5, 이후 $10/월로 시작하며, GLM-5.2, GLM-5.1, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro, DeepSeek V4 Flash에 대해 넉넉한 5시간 요청 한도를 제공합니다.",
   "go.hero.title": "모두를 위한 저비용 코딩 모델",
@@ -368,6 +371,8 @@ export const dict = {
   "zen.api.error.userMonthlyLimitReached":
     "월간 지출 한도인 ${{amount}}에 도달했습니다. 한도 관리를 여기서 하세요: {{membersUrl}}",
   "zen.api.error.modelDisabled": "모델이 비활성화되었습니다",
+  "zen.api.error.regionNotAllowed":
+    "이 모델은 중국에서 호스팅됩니다. 이 모델을 사용하려면 설정에서 활성화하세요: {{consoleGoUrl}}",
   "zen.api.error.trialEnded":
     "{{model}}의 무료 프로모션이 종료되었습니다. OpenCode Go를 구독하면 모델을 계속 사용할 수 있습니다 - {{link}}",
 
@@ -646,6 +651,9 @@ export const dict = {
   "workspace.lite.subscription.useBalance": "사용 한도 도달 후에는 보유 잔액 사용",
   "workspace.lite.subscription.selectProvider":
     'Go 모델을 사용하려면 opencode 설정에서 "OpenCode Go"를 공급자로 선택하세요.',
+  "workspace.lite.providers.title": "공급자",
+  "workspace.lite.providers.description": "라우팅에 사용할 공급자를 제어합니다.",
+  "workspace.lite.providers.useChina": "중국에서 호스팅되는 모델 활성화",
   "workspace.lite.black.message":
     "현재 OpenCode Black을 구독 중이거나 대기 명단에 등록되어 있습니다. Go로 전환하려면 먼저 구독을 취소해 주세요.",
   "workspace.lite.other.message":
@@ -696,11 +704,11 @@ export const dict = {
 
   "download.title": "OpenCode | 다운로드",
   "download.meta.description": "macOS, Windows, Linux용 OpenCode 다운로드",
-  "download.hero.title": "OpenCode 다운로드",
+  "download.hero.title": "OpenCode 데스크톱 다운로드",
   "download.hero.subtitle": "macOS, Windows, Linux용 베타 버전 사용 가능",
   "download.hero.button": "{{os}}용 다운로드",
   "download.section.terminal": "OpenCode 터미널",
-  "download.section.desktop": "OpenCode 데스크톱 (베타)",
+  "download.section.desktop": "OpenCode 데스크톱",
   "download.section.extensions": "OpenCode 확장 프로그램",
   "download.section.integrations": "OpenCode 통합",
   "download.action.download": "다운로드",

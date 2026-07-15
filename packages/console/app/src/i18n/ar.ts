@@ -102,10 +102,14 @@ export const dict = {
   "temp.logoDarkAlt": "شعار opencode الداكن",
 
   "home.banner.badge": "جديد",
-  "home.banner.text": "تطبيق سطح المكتب متاح بنسخة تجريبية",
-  "home.banner.platforms": "على macOS، Windows، وLinux",
+  "home.banner.text": "نقدّم علامات التبويب لتطبيق سطح المكتب.",
+  "home.banner.platforms": "متاحة على macOS وWindows وLinux",
   "home.banner.downloadNow": "حمّل الآن",
   "home.banner.downloadBetaNow": "حمّل النسخة التجريبية لتطبيق سطح المكتب الآن",
+  "home.promo.title": "نقدّم علامات التبويب لتطبيق سطح المكتب",
+  "home.promo.body": "نظّم عملك وجلساتك النشطة باستخدام علامات التبويب.",
+  "home.promo.cta": "نزّل أحدث إصدار للبدء.",
+  "home.promo.close": "إغلاق إعلان تطبيق سطح المكتب",
 
   "home.hero.title": "وكيل برمجة بالذكاء الاصطناعي مفتوح المصدر",
   "home.hero.subtitle.a": "نماذج مجانية مضمّنة أو اربط أي نموذج من أي مزوّد،",
@@ -248,7 +252,6 @@ export const dict = {
   "zen.privacy.exceptionsLink": "الاستثناءات التالية",
 
   "go.title": "OpenCode Go | نماذج برمجة منخفضة التكلفة للجميع",
-  "go.banner.text": "MiniMax M3: حد استخدام أكبر 3 مرات لفترة محدودة",
   "go.meta.description":
     "يبدأ Go من $5 للشهر الأول، ثم $10/شهر، مع حدود طلب سخية لمدة 5 ساعات لـ GLM-5.2 وGLM-5.1 وKimi K2.7 Code وKimi K2.6 وMiMo-V2.5-Pro وMiMo-V2.5 وQwen3.7 Max وQwen3.7 Plus وQwen3.6 Plus وMiniMax M2.7 وMiniMax M3 وDeepSeek V4 Pro وDeepSeek V4 Flash.",
   "go.hero.title": "نماذج برمجة منخفضة التكلفة للجميع",
@@ -369,6 +372,8 @@ export const dict = {
   "zen.api.error.userMonthlyLimitReached":
     "لقد وصلت إلى حد الإنفاق الشهري البالغ ${{amount}}. إدارة حدودك هنا: {{membersUrl}}",
   "zen.api.error.modelDisabled": "النموذج معطل",
+  "zen.api.error.regionNotAllowed":
+    "هذا النموذج مستضاف في الصين. إذا كنت ترغب في استخدام هذا النموذج، فعّله في إعداداتك: {{consoleGoUrl}}",
   "zen.api.error.trialEnded":
     "انتهى العرض المجاني لـ {{model}}. يمكنك مواصلة استخدام النموذج بالاشتراك في OpenCode Go - {{link}}",
 
@@ -646,6 +651,9 @@ export const dict = {
   "workspace.lite.subscription.useBalance": "استخدم رصيدك المتوفر بعد الوصول إلى حدود الاستخدام",
   "workspace.lite.subscription.selectProvider":
     'اختر "OpenCode Go" كمزود في إعدادات opencode الخاصة بك لاستخدام نماذج Go.',
+  "workspace.lite.providers.title": "المزودون",
+  "workspace.lite.providers.description": "تحكم في المزودين المستخدمين للتوجيه.",
+  "workspace.lite.providers.useChina": "تفعيل النماذج المستضافة في الصين",
   "workspace.lite.black.message":
     "أنت مشترك حاليًا في OpenCode Black أو في قائمة الانتظار. يرجى إلغاء الاشتراك أولاً إذا كنت ترغب في التبديل إلى Go.",
   "workspace.lite.other.message":
@@ -696,11 +704,11 @@ export const dict = {
 
   "download.title": "OpenCode | تنزيل",
   "download.meta.description": "نزّل OpenCode لـ macOS، Windows، وLinux",
-  "download.hero.title": "تنزيل OpenCode",
+  "download.hero.title": "تنزيل OpenCode لسطح المكتب",
   "download.hero.subtitle": "متاح في نسخة تجريبية لـ macOS، Windows، وLinux",
   "download.hero.button": "تنزيل لـ {{os}}",
   "download.section.terminal": "OpenCode للطرفية",
-  "download.section.desktop": "OpenCode لسطح المكتب (Beta)",
+  "download.section.desktop": "OpenCode لسطح المكتب",
   "download.section.extensions": "امتدادات OpenCode",
   "download.section.integrations": "تكاملات OpenCode",
   "download.action.download": "تنزيل",

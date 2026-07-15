@@ -66,7 +66,7 @@ test("shows the V2 thinking level control while relevant", async ({ page }) => {
   await expect(control).toBeVisible()
 
   await control.locator('[data-action="prompt-model-variant"]').click()
-  const high = page.getByRole("option", { name: "high" })
+  const high = page.getByRole("menuitemradio", { name: "high" })
   await expect(high).toBeVisible()
   await page.mouse.move(0, 0)
   await expect(control).toBeVisible()

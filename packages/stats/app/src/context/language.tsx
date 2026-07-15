@@ -4,8 +4,10 @@ import { createStore } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import {
   LOCALES,
+  cookie,
   detectFromLanguages,
   dir,
+  fromPathname,
   label,
   localeFromCookieHeader,
   localeFromRequest,
@@ -19,11 +21,16 @@ function initial() {
   const event = getRequestEvent()
   if (event) return localeFromRequest(event.request)
 
+  if (typeof window === "object") {
+    const fromPath = fromPathname(window.location.pathname)
+    if (fromPath) return fromPath
+  }
+
   if (typeof document === "object") {
-    const fromDom = parseLocale(document.documentElement.dataset.locale)
-    if (fromDom) return fromDom
     const fromCookie = localeFromCookieHeader(document.cookie)
     if (fromCookie) return fromCookie
+    const fromDom = parseLocale(document.documentElement.dataset.locale)
+    if (fromDom) return fromDom
   }
 
   if (typeof navigator !== "object") return "en" satisfies Locale
@@ -55,6 +62,8 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       },
       setLocale(next: Locale) {
         setStore("locale", next)
+        if (typeof document !== "object") return
+        document.cookie = cookie(next)
       },
     }
   },

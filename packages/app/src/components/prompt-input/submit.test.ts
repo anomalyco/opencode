@@ -1,11 +1,12 @@
 import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test"
 import type { Prompt } from "@/context/prompt"
+import type { ModelSelection } from "@/context/local"
 
 let createPromptSubmit: typeof import("./submit").createPromptSubmit
 
 const createdClients: string[] = []
 const createdSessions: string[] = []
-const enabledAutoAccept: Array<{ sessionID: string; directory: string }> = []
+const enabledAutoAccept: Array<{ server: string; sessionID: string; directory: string }> = []
 const optimistic: Array<{
   directory?: string
   sessionID?: string
@@ -26,6 +27,8 @@ let params: { id?: string } = {}
 let search: { draftId?: string } = {}
 let selected = "/repo/worktree-a"
 let variant: string | undefined
+let permissionServer = "server-a"
+let createSessionGate: Promise<void> | undefined
 
 const promptValue: Prompt = [{ type: "text", content: "ls", start: 0, end: 2 }]
 const prompt = {
@@ -33,6 +36,10 @@ const prompt = {
   current: () => promptValue,
   cursor: () => 0,
   dirty: () => true,
+  model: {
+    current: () => undefined,
+    set: () => undefined,
+  },
   reset: () => undefined,
   set: () => undefined,
   context: {
@@ -51,6 +58,7 @@ const clientFor = (directory: string) => {
   return {
     session: {
       create: async () => {
+        await createSessionGate
         createdSessions.push(directory)
         return {
           data: {
@@ -117,13 +125,14 @@ beforeAll(async () => {
     }),
   }))
 
-  mock.module("@/context/permission", () => ({
-    usePermission: () => ({
+  mock.module("@/context/permission", () => {
+    const state = (server: string) => ({
       enableAutoAccept(sessionID: string, directory: string) {
-        enabledAutoAccept.push({ sessionID, directory })
+        enabledAutoAccept.push({ server, sessionID, directory })
       },
-    }),
-  }))
+    })
+    return { usePermission: () => ({ currentServerState: () => state(permissionServer) }) }
+  })
 
   mock.module("@/context/server", () => ({
     useServer: () => ({ key: "server-key" }),
@@ -246,6 +255,8 @@ beforeEach(() => {
   syncedDirectories.length = 0
   selected = "/repo/worktree-a"
   variant = undefined
+  permissionServer = "server-a"
+  createSessionGate = undefined
   for (const key of Object.keys(storedSessions)) delete storedSessions[key]
 })
 
@@ -313,7 +324,40 @@ describe("prompt submit worktree selection", () => {
 
     await submit.handleSubmit(event)
 
-    expect(enabledAutoAccept).toEqual([{ sessionID: "session-1", directory: "/repo/worktree-a" }])
+    expect(enabledAutoAccept).toEqual([{ server: "server-a", sessionID: "session-1", directory: "/repo/worktree-a" }])
+  })
+
+  test("keeps auto-accept bound to the submission server", async () => {
+    let release = () => {}
+    createSessionGate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const submit = createPromptSubmit({
+      prompt,
+      info: () => undefined,
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => true,
+      mode: () => "shell",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      newSessionWorktree: () => selected,
+      onNewSessionWorktreeReset: () => undefined,
+      onSubmit: () => undefined,
+    })
+
+    const result = submit.handleSubmit({ preventDefault: () => undefined } as unknown as Event)
+    permissionServer = "server-b"
+    release()
+    await result
+
+    expect(enabledAutoAccept).toEqual([{ server: "server-a", sessionID: "session-1", directory: "/repo/worktree-a" }])
   })
 
   test("promotes drafts using the selected project's server", async () => {
@@ -374,6 +418,39 @@ describe("prompt submit worktree selection", () => {
       message: {
         agent: "agent",
         model: { providerID: "provider", modelID: "model", variant: "high" },
+      },
+    })
+  })
+
+  test("uses an injected model selection", async () => {
+    params = { id: "session-1" }
+    const model = {
+      current: () => ({ id: "draft-model", provider: { id: "draft-provider" } }),
+      variant: { current: () => "draft-variant" },
+    } as unknown as ModelSelection
+    const submit = createPromptSubmit({
+      prompt,
+      info: () => ({ id: "session-1" }),
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      model,
+    })
+
+    await submit.handleSubmit({ preventDefault: () => undefined } as unknown as Event)
+
+    expect(optimistic[0]).toMatchObject({
+      message: {
+        model: { providerID: "draft-provider", modelID: "draft-model", variant: "draft-variant" },
       },
     })
   })

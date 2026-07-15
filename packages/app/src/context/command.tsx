@@ -82,8 +82,13 @@ export interface CommandOption {
   suggested?: boolean
   disabled?: boolean
   hidden?: boolean
+  when?: (event: KeyboardEvent) => boolean
   onSelect?: (source?: "palette" | "keybind" | "slash") => void
   onHighlight?: () => (() => void) | void
+}
+
+export function resolveKeybindOption(candidates: CommandOption[] | undefined, event: KeyboardEvent) {
+  return candidates?.find((option) => option.when?.(event)) ?? candidates?.find((option) => !option.when)
 }
 
 type CommandSource = "palette" | "keybind" | "slash"
@@ -334,7 +339,7 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
     })
 
     const keymap = createMemo(() => {
-      const map = new Map<string, CommandOption>()
+      const map = new Map<string, CommandOption[]>()
       for (const option of options()) {
         if (option.id.startsWith(SUGGESTED_PREFIX)) continue
         if (option.disabled) continue
@@ -344,8 +349,12 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
         for (const kb of keybinds) {
           if (!kb.key) continue
           const sig = signature(kb.key, kb.ctrl, kb.meta, kb.shift, kb.alt)
-          if (map.has(sig)) continue
-          map.set(sig, option)
+          const existing = map.get(sig)
+          if (existing) {
+            existing.push(option)
+            continue
+          }
+          map.set(sig, [option])
         }
       }
       return map
@@ -374,7 +383,7 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
 
       const sig = signatureFromEvent(event)
       const isPalette = palette().has(sig)
-      const option = keymap().get(sig)
+      const option = resolveKeybindOption(keymap().get(sig), event)
       const modified = event.ctrlKey || event.metaKey || event.altKey
       const isTab = event.key === "Tab"
 
@@ -383,17 +392,19 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
 
       if (isPalette) {
         event.preventDefault()
+        event.stopPropagation()
         showPalette()
         return
       }
 
       if (!option) return
       event.preventDefault()
+      event.stopPropagation()
       option.onSelect?.("keybind")
     }
 
     onMount(() => {
-      makeEventListener(document, "keydown", handleKeyDown)
+      makeEventListener(document, "keydown", handleKeyDown, { capture: true })
     })
 
     function register(cb: () => CommandOption[]): void

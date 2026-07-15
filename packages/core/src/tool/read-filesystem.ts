@@ -351,7 +351,7 @@ export const list = Effect.fn("ReadTool.list")(function* (fs: FSUtil.Interface, 
   return new ListPage({ entries: selected, truncated, ...(truncated ? { next: offset + selected.length } : {}) })
 })
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service

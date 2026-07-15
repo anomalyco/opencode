@@ -1,0 +1,137 @@
+[data-component="file-tree-v2"] {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+[data-component="file-tree-v2"] [data-slot="file-tree-v2-row"] {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  padding-right: 8px;
+  overflow: visible;
+  border: none;
+  border-radius: 6px;
+  background-color: transparent;
+  color: var(--v2-text-text-muted);
+  text-align: left;
+  cursor: pointer;
+  scroll-margin-block: 8px;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+[data-component="file-tree-v2"] [data-slot="file-tree-v2-row"][data-ignored] {
+  color: var(--v2-text-text-faint);
+}
+
+[data-component="file-tree-v2"] [data-slot="file-tree-v2-row"]:hover {
+  background-color: var(--v2-overlay-simple-overlay-hover);
+}
+
+[data-component="file-tree-v2"] [data-slot="file-tree-v2-row"][data-selected] {
+  color: var(--v2-text-text-base);
+  background-color: var(--v2-overlay-simple-overlay-pressed);
+}
+
+[data-component="file-tree-v2"] [data-slot="file-tree-v2-row"][data-selected]:hover {
+  background-color: var(--v2-overlay-simple-overlay-pressed);
+}
+
+[data-component="file-tree-v2"] [data-slot="file-tree-v2-guide"] {
+  position: absolute;
+  top: 0;
+  margin-top: -2px;
+  height: calc(100% + 2px);
+  width: 1px;
+  pointer-events: none;
+  background-color: var(--v2-border-border-muted);
+  opacity: 0;
+}
+
+[data-component="file-tree-v2"]:hover [data-slot="file-tree-v2-guide"] {
+  opacity: 0.5;
+}
+
+[data-component="file-tree-v2"] .filetree-icon--mono {
+  color: var(--v2-icon-icon-muted);
+}
+
+[data-component="file-tree-v2"] .filetree-iconpair .filetree-icon--color {
+  opacity: 0;
+}
+
+[data-component="file-tree-v2"] [data-slot="file-tree-v2-row"][data-selected] .filetree-iconpair .filetree-icon--color {
+  opacity: 1;
+}
+
+[data-component="file-tree-v2"] [data-slot="file-tree-v2-row"][data-selected] .filetree-iconpair .filetree-icon--mono {
+  opacity: 0;
+}
+
+[data-component="file-tree-v2"] [data-slot="file-tree-v2-chevron"] {
+  color: var(--v2-text-text-muted);
+}
+
+[data-component="file-tree-v2"] [data-slot="file-tree-v2-chevron"] svg {
+  transition: transform 120ms ease;
+}
+
+[data-component="file-tree-v2"] [data-slot="file-tree-v2-chevron"]:not([data-expanded]) svg {
+  transform: rotate(-90deg);
+}
+
+[data-component="file-tree-v2"] [data-slot="file-tree-v2-row"][data-selected] [data-slot="file-tree-v2-chevron"] {
+  color: var(--v2-text-text-base);
+}
+
+[data-component="file-tree-v2"] .filetree-iconpair {
+  position: relative;
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+}
+
+[data-component="file-tree-v2"] .filetree-iconpair [data-component="file-icon"] {
+  position: absolute;
+  inset: 0;
+}
+
+[data-component="file-tree-v2"] [data-slot="file-tree-v2-change"] {
+  box-sizing: border-box;
+  flex: none;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  font-size: 11px;
+  font-weight: 530;
+  line-height: 1;
+  letter-spacing: -0.04px;
+  text-align: center;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings:
+    "tnum" on,
+    "lnum" on;
+}
+
+[data-component="file-tree-v2"] [data-slot="file-tree-v2-change"][data-change="modified"] {
+  color: var(--v2-state-fg-info);
+}
+
+[data-component="file-tree-v2"] [data-slot="file-tree-v2-change"][data-change="added"] {
+  color: var(--v2-state-fg-success);
+}
+
+[data-component="file-tree-v2"] [data-slot="file-tree-v2-change"][data-change="deleted"] {
+  color: var(--v2-state-fg-danger);
+}

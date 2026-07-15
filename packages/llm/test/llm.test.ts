@@ -90,13 +90,45 @@ describe("llm constructors", () => {
       provider: "fake",
       route: chatRoute,
     })
-    const updated = Model.update(base, { route: responsesRoute })
+    const updated = Model.update(base, {
+      route: responsesRoute,
+      defaults: { generation: { maxTokens: 20 } },
+      compatibility: { toolSchema: "gemini" },
+    })
+    const updatedInput = Model.input(updated)
 
     expect(updated).toBeInstanceOf(Model)
     expect(String(updated.id)).toBe("fake-model")
     expect(updated.route).toBe(responsesRoute)
-    expect(String(Model.input(updated).provider)).toBe("fake")
+    expect(updated.defaults?.generation).toEqual({ maxTokens: 20 })
+    expect(updated.compatibility).toEqual({ toolSchema: "gemini" })
+    expect(updatedInput.defaults).toBe(updated.defaults)
+    expect(updatedInput.compatibility).toBe(updated.compatibility)
+    expect(String(updatedInput.provider)).toBe("fake")
     expect(Model.update(updated, {})).toBe(updated)
+  })
+
+  test("carries model defaults and compatibility through route model selection", () => {
+    const model = chatRoute.model({
+      id: "kimi-k2",
+      defaults: {
+        limits: { context: 128_000, output: 8_192 },
+        generation: { maxTokens: 1_024, stop: ["END"] },
+        providerOptions: { openai: { parallelToolCalls: false } },
+        http: { body: { extra_body: true } },
+      },
+      compatibility: { toolSchema: "moonshot" },
+    })
+    const request = LLM.request({ model, prompt: "Say hello." })
+
+    expect(request.model.defaults?.limits).toEqual({ context: 128_000, output: 8_192 })
+    expect(request.model.defaults?.generation).toEqual({ maxTokens: 1_024, stop: ["END"] })
+    expect(request.model.defaults?.providerOptions).toEqual({ openai: { parallelToolCalls: false } })
+    expect(request.model.defaults?.http).toEqual({ body: { extra_body: true } })
+    expect(request.model.compatibility).toEqual({ toolSchema: "moonshot" })
+    expect(request.generation).toBeUndefined()
+    expect(request.providerOptions).toBeUndefined()
+    expect(request.http).toBeUndefined()
   })
 
   test("builds tool choices from names and tools", () => {

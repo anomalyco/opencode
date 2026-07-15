@@ -143,6 +143,21 @@ describe("layer node", () => {
     expect(acquisitions).toBe(0)
   })
 
+  test("applies later replacements inside earlier replacement nodes", async () => {
+    const original = make({ service: Greeting, layer: greetingLayer, deps: [value] })
+    const replacement = make({ service: Greeting, layer: greetingLayer, deps: [value] })
+    const program = Effect.map(Greeting, (item) => item.value).pipe(
+      Effect.provide(
+        build(LayerNode.group([original]), [
+          [original, replacement],
+          [value, Layer.succeed(Value, Value.of({ value: "replacement dependency" }))],
+        ]),
+      ),
+    )
+
+    expect(await Effect.runPromise(program)).toBe("hello replacement dependency")
+  })
+
   test("hoists and compiles tagged graphs", async () => {
     const tags = LayerNode.tags({ location: ["global"], global: [] })
     const global = tags.make("global")

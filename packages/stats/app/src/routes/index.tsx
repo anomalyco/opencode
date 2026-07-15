@@ -34,6 +34,7 @@ import { localizedUrl } from "../lib/language"
 import { findModelCatalogEntry, getModelCatalog, type ModelCatalog } from "./model-catalog"
 import { SectionHeading } from "./section-heading"
 import { setStatsPageCacheHeaders } from "./stats-cache"
+import { ComparisonCardsSection, uniqueComparisonPairs, type ComparisonModelRef } from "./compare-cards"
 import {
   applyThemePreference,
   Footer,
@@ -48,6 +49,12 @@ import {
 const products = ["All Users", "Zen", "Go"] as const
 const tokenProducts = ["Zen", "Go"] as const
 const ranges = ["1D", "1W", "2W", "1M", "2M"] as const
+const comparisonPairIndexes = [
+  [0, 1, "Top two by recent usage"],
+  [0, 2, "Leader vs challenger"],
+  [1, 2, "Adjacent leaderboard pair"],
+  [2, 3, "Top model alternative"],
+] as const
 const statsUnfurlPath = "banner.jpg"
 const usageColors = [
   "#ed6aff",
@@ -183,11 +190,21 @@ export default function StatsHome() {
                 <CacheRatioSection data={stats().cacheRatio} />
                 <MarketShareSection data={stats().market} />
                 <GeoBreakdownSection data={stats().country} />
+                <ComparisonCardsSection
+                  pairs={homeComparisonPairs(stats().leaderboard["All Users"]["2M"])}
+                  title="Model Comparisons"
+                  description="Popular model pairs from the leaderboard."
+                  variant="featured"
+                />
               </>
             )}
           </Show>
         </div>
-        <Footer themePreference={themePreference()} onThemePreferenceChange={updateThemePreference} />
+        <Footer
+          themePreference={themePreference()}
+          onThemePreferenceChange={updateThemePreference}
+          bridge={{ href: "#model-comparison", label: "MODEL COMPARISONS" }}
+        />
       </div>
     </main>
   )
@@ -1262,30 +1279,56 @@ function MarketShareList(props: {
   onActiveAuthorChange: (author: string) => void
 }) {
   const i18n = useI18n()
+  const language = useLanguage()
   return (
     <ol data-component="market-share-list">
       <For each={props.data}>
-        {(item, index) => (
-          <li
-            role="button"
-            tabIndex={0}
-            aria-label={`${item.author} ${formatTrillions(item.tokens)} ${item.share.toFixed(1)} ${i18n.t("chart.percent")}`}
-            data-active={props.activeAuthor === item.author ? "true" : undefined}
-            onPointerEnter={() => props.onActiveAuthorChange(item.author)}
-            onFocus={() => props.onActiveAuthorChange(item.author)}
-            onKeyDown={(event) => {
-              if (event.key !== "Enter" && event.key !== " ") return
-              event.preventDefault()
-              props.onActiveAuthorChange(item.author)
-            }}
-          >
-            <span>{String(index() + 1).padStart(2, "0")}</span>
-            <i style={{ background: getRankColor(item.author, index(), props.authorOrder, marketColors) }} />
-            <strong>{item.author}</strong>
-            <em>{formatTrillions(item.tokens)}</em>
-            <b>{item.share.toFixed(1)}%</b>
-          </li>
-        )}
+        {(item, index) => {
+          const label = () =>
+            `${item.author} ${formatTrillions(item.tokens)} ${item.share.toFixed(1)} ${i18n.t("chart.percent")}`
+          const content = () => (
+            <>
+              <span>{String(index() + 1).padStart(2, "0")}</span>
+              <i style={{ background: getRankColor(item.author, index(), props.authorOrder, marketColors) }} />
+              <strong>{item.author}</strong>
+              <em>{formatTrillions(item.tokens)}</em>
+              <b>{item.share.toFixed(1)}%</b>
+            </>
+          )
+          const href = () =>
+            item.author === "Other" ? undefined : language.route(`${import.meta.env.BASE_URL}${modelSlug(item.author)}`)
+          return (
+            <li
+              data-active={props.activeAuthor === item.author ? "true" : undefined}
+              onPointerEnter={() => props.onActiveAuthorChange(item.author)}
+            >
+              <Show
+                when={href()}
+                fallback={
+                  <button
+                    type="button"
+                    aria-label={label()}
+                    onClick={() => props.onActiveAuthorChange(item.author)}
+                    onFocus={() => props.onActiveAuthorChange(item.author)}
+                  >
+                    {content()}
+                  </button>
+                }
+              >
+                {(href) => (
+                  <a
+                    href={href()}
+                    aria-label={label()}
+                    onClick={() => props.onActiveAuthorChange(item.author)}
+                    onFocus={() => props.onActiveAuthorChange(item.author)}
+                  >
+                    {content()}
+                  </a>
+                )}
+              </Show>
+            </li>
+          )
+        }}
       </For>
     </ol>
   )
@@ -1941,6 +1984,26 @@ function catalogModelCost(catalog: ModelCatalog, model: string) {
 
 function formatSessionCost(value: number) {
   return `$${value.toFixed(4)}`
+}
+
+function homeComparisonPairs(leaderboard: LeaderboardEntry[]) {
+  return uniqueComparisonPairs(
+    comparisonPairIndexes.flatMap(([firstIndex, secondIndex, detail]) => {
+      const first = leaderboard[firstIndex]
+      const second = leaderboard[secondIndex]
+      return first && second ? [{ first: leaderboardRef(first), second: leaderboardRef(second), detail }] : []
+    }),
+  )
+}
+
+function leaderboardRef(entry: LeaderboardEntry): ComparisonModelRef {
+  return {
+    name: entry.model,
+    lab: entry.provider,
+    slug: modelSlug(entry.model),
+    labName: entry.author,
+    metric: `#${entry.rank} / ${formatBillions(entry.tokens)}`,
+  }
 }
 
 function modelSlug(value: string) {

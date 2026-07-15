@@ -103,7 +103,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Pr
 
 type GitResult = { code: number; text: string; stderr: string }
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
@@ -461,17 +461,6 @@ export const layer = Layer.effect(
       removeSandbox,
     })
   }),
-)
-
-export const defaultLayer = layer.pipe(
-  Layer.provide(EventV2Bridge.defaultLayer),
-  Layer.provide(ProjectV2.defaultLayer),
-  Layer.provide(ProjectDirectories.defaultLayer),
-  Layer.provide(AppProcess.defaultLayer),
-  Layer.provide(CrossSpawnSpawner.defaultLayer),
-  Layer.provide(FSUtil.defaultLayer),
-  Layer.provide(Database.defaultLayer),
-  Layer.provide(RuntimeFlags.defaultLayer),
 )
 
 export const use = serviceUse(Service)

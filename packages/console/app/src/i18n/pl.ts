@@ -101,10 +101,14 @@ export const dict = {
   "temp.logoDarkAlt": "ciemne logo opencode",
 
   "home.banner.badge": "Nowość",
-  "home.banner.text": "Aplikacja desktopowa dostępna w wersji beta",
-  "home.banner.platforms": "na macOS, Windows i Linux",
+  "home.banner.text": "Przedstawiamy karty w aplikacji desktopowej.",
+  "home.banner.platforms": "Dostępne na macOS, Windows i Linux",
   "home.banner.downloadNow": "Pobierz teraz",
   "home.banner.downloadBetaNow": "Pobierz betę wersji desktopowej",
+  "home.promo.title": "Przedstawiamy karty w aplikacji desktopowej",
+  "home.promo.body": "Organizuj swoją pracę i aktywne sesje za pomocą kart.",
+  "home.promo.cta": "Pobierz najnowszą wersję, aby rozpocząć.",
+  "home.promo.close": "Zamknij ogłoszenie o aplikacji desktopowej",
 
   "home.hero.title": "Open source'owy agent AI do kodowania",
   "home.hero.subtitle.a": "Darmowe modele w zestawie lub podłącz dowolny model od dowolnego dostawcy,",
@@ -251,7 +255,6 @@ export const dict = {
   "zen.privacy.exceptionsLink": "następującymi wyjątkami",
 
   "go.title": "OpenCode Go | Niskokosztowe modele do kodowania dla każdego",
-  "go.banner.text": "MiniMax M3 oferuje 3x wyższe limity użycia przez ograniczony czas",
   "go.meta.description":
     "Go zaczyna się od $5 za pierwszy miesiąc, potem $10/miesiąc, z hojnymi 5-godzinnymi limitami zapytań dla GLM-5.2, GLM-5.1, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro i DeepSeek V4 Flash.",
   "go.hero.title": "Niskokosztowe modele do kodowania dla każdego",
@@ -375,6 +378,8 @@ export const dict = {
   "zen.api.error.userMonthlyLimitReached":
     "Osiągnąłeś swój miesięczny limit wydatków w wysokości ${{amount}}. Zarządzaj swoimi limitami tutaj: {{membersUrl}}",
   "zen.api.error.modelDisabled": "Model jest wyłączony",
+  "zen.api.error.regionNotAllowed":
+    "Ten model jest hostowany w Chinach. Jeśli chcesz korzystać z tego modelu, włącz go w swoich ustawieniach: {{consoleGoUrl}}",
   "zen.api.error.trialEnded":
     "Bezpłatna promocja {{model}} dobiegła końca. Możesz dalej korzystać z modelu, subskrybując OpenCode Go - {{link}}",
 
@@ -654,6 +659,9 @@ export const dict = {
   "workspace.lite.subscription.useBalance": "Użyj dostępnego salda po osiągnięciu limitów użycia",
   "workspace.lite.subscription.selectProvider":
     'Wybierz "OpenCode Go" jako dostawcę w konfiguracji opencode, aby używać modeli Go.',
+  "workspace.lite.providers.title": "Dostawcy",
+  "workspace.lite.providers.description": "Kontroluj, którzy dostawcy są używani do routingu.",
+  "workspace.lite.providers.useChina": "Włącz modele hostowane w Chinach",
   "workspace.lite.black.message":
     "Obecnie subskrybujesz OpenCode Black lub jesteś na liście oczekujących. Jeśli chcesz przejść na Go, najpierw anuluj subskrypcję.",
   "workspace.lite.other.message":
@@ -704,11 +712,11 @@ export const dict = {
 
   "download.title": "OpenCode | Pobierz",
   "download.meta.description": "Pobierz OpenCode na macOS, Windows i Linux",
-  "download.hero.title": "Pobierz OpenCode",
+  "download.hero.title": "Pobierz OpenCode Desktop",
   "download.hero.subtitle": "Dostępne w wersji Beta na macOS, Windows i Linux",
   "download.hero.button": "Pobierz na {{os}}",
   "download.section.terminal": "Terminal OpenCode",
-  "download.section.desktop": "Pulpit OpenCode (Beta)",
+  "download.section.desktop": "Pulpit OpenCode",
   "download.section.extensions": "Rozszerzenia OpenCode",
   "download.section.integrations": "Integracje OpenCode",
   "download.action.download": "Pobierz",

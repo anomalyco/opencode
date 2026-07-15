@@ -1,4 +1,4 @@
-import { Show, type Component } from "solid-js"
+import { Show, type Component, type JSX } from "solid-js"
 import { useLanguage } from "@/context/language"
 
 type InputKey = "text" | "image" | "audio" | "video" | "pdf"
@@ -23,7 +23,18 @@ type ModelInfo = {
   }
 }
 
-export const ModelTooltip: Component<{ model: ModelInfo; latest?: boolean; free?: boolean }> = (props) => {
+function ModelTooltipRow(props: { name: JSX.Element; value: JSX.Element }) {
+  return (
+    <div class="flex min-w-0 items-center gap-4">
+      <span class="shrink-0 text-v2-text-text-muted">{props.name}</span>
+      <span class="ml-auto min-w-0 truncate text-right text-v2-text-text-base">{props.value}</span>
+    </div>
+  )
+}
+
+export const ModelTooltip: Component<{ model: ModelInfo; latest?: boolean; free?: boolean; v2?: boolean }> = (
+  props,
+) => {
   const language = useLanguage()
   const sourceName = (model: ModelInfo) => {
     const value = `${model.id} ${model.name}`.toLowerCase()
@@ -51,6 +62,13 @@ export const ModelTooltip: Component<{ model: ModelInfo; latest?: boolean; free?
     const suffix = tags.length ? ` (${tags.join(", ")})` : ""
     return `${sourceName(props.model)} ${props.model.name}${suffix}`
   }
+  const name = () => {
+    const tags: Array<string> = []
+    if (props.latest) tags.push(language.t("model.tag.latest"))
+    if (props.free) tags.push(language.t("model.tag.free"))
+    const suffix = tags.length ? ` (${tags.join(", ")})` : ""
+    return `${props.model.name}${suffix}`
+  }
   const inputs = () => {
     if (props.model.capabilities) {
       const input = props.model.capabilities.input
@@ -73,6 +91,21 @@ export const ModelTooltip: Component<{ model: ModelInfo; latest?: boolean; free?
       : language.t("model.tooltip.reasoning.none")
   }
   const context = () => language.t("model.tooltip.context", { limit: props.model.limit.context.toLocaleString() })
+  const contextLimit = () => props.model.limit.context.toLocaleString(language.intl())
+
+  if (props.v2) {
+    return (
+      <div class="flex w-[180px] flex-col gap-2">
+        <ModelTooltipRow name={language.t("model.tooltip.model")} value={name()} />
+        <ModelTooltipRow name={language.t("model.tooltip.provider")} value={props.model.provider.name} />
+        <Show when={inputs()}>
+          {(value) => <ModelTooltipRow name={language.t("model.tooltip.inputs")} value={value()} />}
+        </Show>
+        <ModelTooltipRow name={language.t("model.tooltip.reasoning")} value={reasoning()} />
+        <ModelTooltipRow name={language.t("model.tooltip.context.label")} value={contextLimit()} />
+      </div>
+    )
+  }
 
   return (
     <div class="flex flex-col gap-1 py-1">

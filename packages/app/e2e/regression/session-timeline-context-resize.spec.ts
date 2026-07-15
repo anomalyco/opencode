@@ -1,6 +1,13 @@
 import { expect, test, type Page } from "@playwright/test"
 import { mockOpenCodeServer } from "../utils/mock-server"
 import { expectAppVisible, expectSessionTitle } from "../utils/waits"
+import {
+  analyzeVisualObservations,
+  defineVisualRegions,
+  startVisualProbe,
+  stopVisualProbe,
+  visualPlan,
+} from "../utils/visual-stability"
 
 const directory = "C:/OpenCode/ContextResizeRegression"
 const projectID = "proj_context_resize_regression"
@@ -35,6 +42,82 @@ test.describe("regression: session timeline context group resize", () => {
     expect(samples[0]?.overlap).toBe(0)
     expect(visibleOverlap).toEqual([])
     expect(samples.at(-1)?.expanded).toBe("true")
+  })
+
+  test("paints a stable exploring to explored transition", async ({ page }) => {
+    const events: { directory: string; payload: Record<string, unknown> }[] = []
+    await page.setViewportSize({ width: 1400, height: 900 })
+    await mockServer(page, events, [
+      ...Array.from({ length: 8 }, (_, index) => turn(index, false)).flat(),
+      ...turn(10, true, "running"),
+    ])
+    await configurePage(page)
+
+    await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
+    await expectSessionTitle(page, title)
+    const devtools = await page.context().newCDPSession(page)
+    await devtools.send("Emulation.setCPUThrottlingRate", { rate: 4 })
+    const context = page.locator(`[data-timeline-part-ids="${contextIDs.join(",")}"]`).first()
+    await expectAppVisible(context)
+    await expect(context.locator('[data-component="tool-status-title"]')).toHaveAttribute("aria-label", "Exploring")
+
+    const contextSelector = `[data-timeline-part-ids="${contextIDs.join(",")}"]`
+    const regions = defineVisualRegions({
+      status: {
+        selector: `${contextSelector} [data-component="tool-status-title"]`,
+        opacitySelectors: ['[data-slot="tool-status-active"]', '[data-slot="tool-status-done"]'],
+      },
+      context: { selector: contextSelector, closest: '[data-timeline-row="AssistantPart"]' },
+      following: {
+        selector: `[data-timeline-part-id="${followingTextID}"]`,
+        closest: '[data-timeline-row="AssistantPart"]',
+      },
+    })
+    await startVisualProbe(page, regions)
+    for (const [index, delay] of [120, 350, 80, 500].entries()) {
+      events.push({
+        directory,
+        payload: {
+          type: "message.part.updated",
+          properties: {
+            part: contextTool(
+              contextIDs[index]!,
+              id("msg_assistant", 10),
+              ["read", "glob", "grep", "list"][index]!,
+              [
+                { filePath: "src/recent-a.ts" },
+                { path: directory, pattern: "**/*.ts" },
+                { path: directory, pattern: "Explored" },
+                { path: "src" },
+              ][index]!,
+            ),
+          },
+        },
+      })
+      await page.waitForTimeout(delay)
+    }
+
+    await expect(context.locator('[data-component="tool-status-title"]')).toHaveAttribute("aria-label", "Explored")
+    await page.waitForTimeout(700)
+    const trace = await stopVisualProbe<keyof typeof regions>(page)
+    const labels = trace.samples
+      .map((sample) => sample.regions.status?.label)
+      .filter((value): value is string => !!value)
+      .filter((value, index, all) => value !== all[index - 1])
+    const issues = analyzeVisualObservations(
+      trace.samples,
+      visualPlan(regions, [
+        { type: "required", regions: ["context", "following"] },
+        { type: "opacity", regions: "all" },
+        { type: "continuity", regions: "all" },
+        { type: "motion", regions: "all" },
+        { type: "label-stability", regions: "all" },
+        { type: "flow", regions: ["context", "following"] },
+      ]),
+    )
+
+    expect(labels).toEqual(["Exploring", "Explored"])
+    expect(issues, JSON.stringify(trace.samples, null, 2)).toEqual([])
   })
 })
 
@@ -128,7 +211,7 @@ async function sampleExpansion(page: Page) {
   )
 }
 
-function turn(index: number, target: boolean): Message[] {
+function turn(index: number, target: boolean, status: "running" | "completed" = "completed"): Message[] {
   const userID = id("msg_user", index)
   const assistantID = id("msg_assistant", index)
   return [
@@ -163,10 +246,22 @@ function turn(index: number, target: boolean): Message[] {
       },
       parts: target
         ? [
-            contextTool(contextIDs[0]!, assistantID, "read", { filePath: "src/recent-a.ts", offset: 0, limit: 120 }),
-            contextTool(contextIDs[1]!, assistantID, "glob", { path: directory, pattern: "**/*.ts" }),
-            contextTool(contextIDs[2]!, assistantID, "grep", { path: directory, pattern: "Explored", include: "*.ts" }),
-            contextTool(contextIDs[3]!, assistantID, "list", { path: "src" }),
+            contextTool(
+              contextIDs[0]!,
+              assistantID,
+              "read",
+              { filePath: "src/recent-a.ts", offset: 0, limit: 120 },
+              status,
+            ),
+            contextTool(contextIDs[1]!, assistantID, "glob", { path: directory, pattern: "**/*.ts" }, status),
+            contextTool(
+              contextIDs[2]!,
+              assistantID,
+              "grep",
+              { path: directory, pattern: "Explored", include: "*.ts" },
+              status,
+            ),
+            contextTool(contextIDs[3]!, assistantID, "list", { path: "src" }, status),
             {
               id: followingTextID,
               sessionID,
@@ -188,7 +283,13 @@ function turn(index: number, target: boolean): Message[] {
   ]
 }
 
-function contextTool(partID: string, messageID: string, tool: string, input: Record<string, unknown>) {
+function contextTool(
+  partID: string,
+  messageID: string,
+  tool: string,
+  input: Record<string, unknown>,
+  status: "running" | "completed" = "completed",
+) {
   return {
     id: partID,
     sessionID,
@@ -197,7 +298,7 @@ function contextTool(partID: string, messageID: string, tool: string, input: Rec
     callID: `call_${partID}`,
     tool,
     state: {
-      status: "completed",
+      status,
       input,
       output: `Completed ${tool}.\n${"detail line\n".repeat(8)}`,
       title: input.filePath || input.path || input.pattern || "completed",
@@ -207,13 +308,19 @@ function contextTool(partID: string, messageID: string, tool: string, input: Rec
   }
 }
 
-async function mockServer(page: Page) {
+async function mockServer(
+  page: Page,
+  events: { directory: string; payload: Record<string, unknown> }[] = [],
+  fixtureMessages = messages,
+) {
   await mockOpenCodeServer(page, {
     directory,
     project: project(),
     provider: provider(),
     sessions: [session()],
-    pageMessages: () => ({ items: messages }),
+    pageMessages: () => ({ items: fixtureMessages }),
+    events: () => events.splice(0, 1),
+    eventRetry: 50,
   })
 }
 

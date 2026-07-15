@@ -102,10 +102,14 @@ export const dict = {
   "temp.logoDarkAlt": "โลโก้ opencode แบบมืด",
 
   "home.banner.badge": "ใหม่",
-  "home.banner.text": "แอปเดสก์ท็อปพร้อมใช้งานในเวอร์ชันเบต้า",
-  "home.banner.platforms": "บน macOS, Windows และ Linux",
+  "home.banner.text": "ขอแนะนำแท็บสำหรับเดสก์ท็อป.",
+  "home.banner.platforms": "พร้อมใช้งานบน macOS, Windows และ Linux",
   "home.banner.downloadNow": "ดาวน์โหลดตอนนี้",
   "home.banner.downloadBetaNow": "ดาวน์โหลดเบต้าเดสก์ท็อปตอนนี้",
+  "home.promo.title": "ขอแนะนำแท็บสำหรับเดสก์ท็อป",
+  "home.promo.body": "จัดระเบียบงานและเซสชันที่ใช้งานอยู่ด้วยแท็บ",
+  "home.promo.cta": "ดาวน์โหลดเวอร์ชันล่าสุดเพื่อเริ่มต้นใช้งาน",
+  "home.promo.close": "ปิดประกาศเกี่ยวกับแอปเดสก์ท็อป",
 
   "home.hero.title": "เอเจนต์เขียนโค้ดด้วย AI แบบโอเพนซอร์ส",
   "home.hero.subtitle.a": "มีโมเดลฟรีรวมอยู่ หรือเชื่อมต่อโมเดลใดก็ได้จากผู้ให้บริการรายใดก็ได้,",
@@ -249,7 +253,6 @@ export const dict = {
   "zen.privacy.exceptionsLink": "ข้อยกเว้นดังนี้",
 
   "go.title": "OpenCode Go | โมเดลเขียนโค้ดราคาประหยัดสำหรับทุกคน",
-  "go.banner.text": "MiniMax M3 เพิ่มโควตาการใช้งานเป็น 3 เท่าในช่วงเวลาจำกัด",
   "go.meta.description":
     "Go เริ่มต้นที่ $5 สำหรับเดือนแรก จากนั้น $10/เดือน พร้อมขีดจำกัดคำขอ 5 ชั่วโมงที่เอื้อเฟื้อสำหรับ GLM-5.2, GLM-5.1, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro และ DeepSeek V4 Flash",
   "go.hero.title": "โมเดลเขียนโค้ดราคาประหยัดสำหรับทุกคน",
@@ -370,6 +373,8 @@ export const dict = {
   "zen.api.error.userMonthlyLimitReached":
     "คุณถึงขีดจำกัดการใช้จ่ายรายเดือนที่ ${{amount}} แล้ว จัดการขีดจำกัดของคุณที่นี่: {{membersUrl}}",
   "zen.api.error.modelDisabled": "โมเดลถูกปิดใช้งาน",
+  "zen.api.error.regionNotAllowed":
+    "โมเดลนี้โฮสต์อยู่ในประเทศจีน หากคุณต้องการใช้โมเดลนี้ ให้เปิดใช้งานในการตั้งค่าของคุณ: {{consoleGoUrl}}",
   "zen.api.error.trialEnded":
     "โปรโมชันฟรีสำหรับ {{model}} สิ้นสุดแล้ว คุณสามารถใช้โมเดลต่อได้โดยสมัครสมาชิก OpenCode Go - {{link}}",
 
@@ -649,6 +654,9 @@ export const dict = {
   "workspace.lite.subscription.useBalance": "ใช้ยอดคงเหลือของคุณหลังจากถึงขีดจำกัดการใช้งาน",
   "workspace.lite.subscription.selectProvider":
     'เลือก "OpenCode Go" เป็นผู้ให้บริการในการตั้งค่า opencode ของคุณเพื่อใช้โมเดล Go',
+  "workspace.lite.providers.title": "ผู้ให้บริการ",
+  "workspace.lite.providers.description": "ควบคุมผู้ให้บริการที่ใช้สำหรับการกำหนดเส้นทาง",
+  "workspace.lite.providers.useChina": "เปิดใช้โมเดลที่โฮสต์ในจีน",
   "workspace.lite.black.message":
     "ขณะนี้คุณสมัครสมาชิก OpenCode Black หรืออยู่ในรายการรอ โปรดยกเลิกการสมัครก่อนหากต้องการเปลี่ยนไปใช้ Go",
   "workspace.lite.other.message":
@@ -699,11 +707,11 @@ export const dict = {
 
   "download.title": "OpenCode | ดาวน์โหลด",
   "download.meta.description": "ดาวน์โหลด OpenCode สำหรับ macOS, Windows และ Linux",
-  "download.hero.title": "ดาวน์โหลด OpenCode",
+  "download.hero.title": "ดาวน์โหลด OpenCode สำหรับเดสก์ท็อป",
   "download.hero.subtitle": "พร้อมใช้งานในเวอร์ชันเบต้าสำหรับ macOS, Windows และ Linux",
   "download.hero.button": "ดาวน์โหลดสำหรับ {{os}}",
   "download.section.terminal": "OpenCode Terminal",
-  "download.section.desktop": "OpenCode Desktop (Beta)",
+  "download.section.desktop": "OpenCode Desktop",
   "download.section.extensions": "ส่วนขยาย OpenCode",
   "download.section.integrations": "การเชื่อมต่อ OpenCode",
   "download.action.download": "ดาวน์โหลด",

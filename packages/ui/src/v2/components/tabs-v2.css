@@ -192,6 +192,7 @@
   color: var(--v2-text-text-muted);
   font-size: 12px;
   font-weight: 500;
+  user-select: none;
 }
 
 [data-component="tabs-v2"][data-variant="settings"][data-orientation="vertical"] [data-slot="tabs-v2-trigger-wrapper"] {

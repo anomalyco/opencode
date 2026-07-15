@@ -37,6 +37,9 @@ type PlatformBase = {
   /** Open a local path in a local app (desktop only) */
   openPath?(path: string, app?: string): Promise<void>
 
+  /** Reveal a local path in the system file manager; false when the path does not exist (desktop only) */
+  revealPath?(path: string): Promise<boolean>
+
   /** Restart the app  */
   restart(): Promise<void>
 
@@ -63,6 +66,9 @@ type PlatformBase = {
 
   /** Storage mechanism, defaults to localStorage */
   storage?: (name?: string) => SyncStorage | AsyncStorage
+
+  /** Stable platform window identity for window-scoped persistence */
+  windowID?: string
 
   /** Application-global desktop updater */
   updater?: UpdaterPlatform

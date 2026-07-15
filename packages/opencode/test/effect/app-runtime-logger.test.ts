@@ -1,4 +1,5 @@
 import { expect } from "bun:test"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Context, Deferred, Effect, Fiber, Layer, Logger } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { AppLayer } from "../../src/effect/app-runtime"
@@ -9,7 +10,8 @@ import { attach } from "../../src/effect/run-service"
 import { TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
-const it = testEffect(CrossSpawnSpawner.defaultLayer)
+const observabilityLayer = LayerNode.compile(Observability.node)
+const it = testEffect(LayerNode.compile(CrossSpawnSpawner.node))
 
 function check(loggers: ReadonlySet<Logger.Logger<unknown, any>>) {
   return {
@@ -34,7 +36,7 @@ it.live("makeRuntime installs the observability logger", () =>
     )
 
     const current = yield* Dummy.use((svc) => svc.current()).pipe(
-      Effect.provide(Layer.provideMerge(layer, Observability.layer)),
+      Effect.provide(Layer.provideMerge(layer, observabilityLayer)),
     )
 
     expect(current.size).toBeGreaterThan(0)
@@ -94,6 +96,6 @@ it.instance(
 
       expect(result.directory).toBe(test.directory)
       expect(result.size).toBeGreaterThan(0)
-    }).pipe(Effect.provide(Observability.layer)),
+    }).pipe(Effect.provide(observabilityLayer)),
   { git: true },
 )

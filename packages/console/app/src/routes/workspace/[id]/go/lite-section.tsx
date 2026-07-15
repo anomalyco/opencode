@@ -5,7 +5,9 @@ import { Modal } from "~/component/modal"
 import { Billing } from "@opencode-ai/console-core/billing.js"
 import { Database, eq, and, isNull } from "@opencode-ai/console-core/drizzle/index.js"
 import { BillingTable, LiteTable } from "@opencode-ai/console-core/schema/billing.sql.js"
+import { WorkspaceTable } from "@opencode-ai/console-core/schema/workspace.sql.js"
 import { Actor } from "@opencode-ai/console-core/actor.js"
+import { Workspace } from "@opencode-ai/console-core/workspace.js"
 import { Subscription } from "@opencode-ai/console-core/subscription.js"
 import { LiteData } from "@opencode-ai/console-core/lite.js"
 import { withActor } from "~/context/auth.withActor"
@@ -16,6 +18,8 @@ import { useLanguage } from "~/context/language"
 import { formError } from "~/lib/form-error"
 import { formatResetTime, liteResetTimeKeys } from "~/lib/format-reset-time"
 import { createReferralFromCookie } from "~/lib/referral-invite"
+import { getRequestEvent } from "solid-js/web"
+import { countryFromRequest } from "~/lib/request-country"
 
 import { IconAlipay, IconUpi } from "~/component/icon"
 
@@ -34,9 +38,11 @@ export const queryLiteSubscription = query(async (workspaceID: string) => {
           timeMonthlyUpdated: LiteTable.timeMonthlyUpdated,
           timeCreated: LiteTable.timeCreated,
           lite: BillingTable.lite,
+          region: WorkspaceTable.region,
         })
         .from(BillingTable)
         .innerJoin(LiteTable, eq(LiteTable.workspaceID, BillingTable.workspaceID))
+        .innerJoin(WorkspaceTable, eq(WorkspaceTable.id, BillingTable.workspaceID))
         .where(and(eq(LiteTable.workspaceID, Actor.workspace()), isNull(LiteTable.timeDeleted)))
         .then((r) => r[0]),
     )
@@ -48,6 +54,8 @@ export const queryLiteSubscription = query(async (workspaceID: string) => {
     return {
       mine,
       useBalance: row.lite?.useBalance ?? false,
+      region:
+        row.region ?? (await Workspace.setDefaultRegion({ country: countryFromRequest(getRequestEvent()?.request) })),
       rollingUsage: Subscription.analyzeRollingUsage({
         limit: limits.rollingLimit,
         window: limits.rollingWindow,
@@ -128,6 +136,24 @@ const setLiteUseBalance = action(async (form: FormData) => {
   )
 }, "setLiteUseBalance")
 
+const setGoProviderRouting = action(async (form: FormData) => {
+  "use server"
+  const workspaceID = form.get("workspaceID") as string | null
+  if (!workspaceID) return { error: formError.workspaceRequired }
+  const useChinaProviders = (form.get("useChinaProviders") as string | null) === "true"
+
+  return json(
+    await withActor(
+      () =>
+        Workspace.update({ region: useChinaProviders ? ["us", "eu", "sg"] : ["us", "eu", "sg", "cn"] })
+          .then(() => ({ error: undefined }))
+          .catch((e) => ({ error: e.message as string })),
+      workspaceID,
+    ),
+    { revalidate: queryLiteSubscription.key },
+  )
+}, "go.providerRouting.set")
+
 function LiteUsageItem(props: { label: string; usage: { usagePercent: number; resetInSec: number } }) {
   const i18n = useI18n()
 
@@ -159,6 +185,7 @@ export function LiteSection(props: { lite: LiteSubscription | undefined }) {
   const checkoutAction = useAction(createLiteCheckoutUrl)
   const checkoutSubmission = useSubmission(createLiteCheckoutUrl)
   const useBalanceSubmission = useSubmission(setLiteUseBalance)
+  const providerRoutingSubmission = useSubmission(setGoProviderRouting)
   const [store, setStore] = createStore({
     loading: undefined as undefined | "session" | "checkout" | "alipay" | "upi",
     showModal: false,
@@ -232,6 +259,28 @@ export function LiteSection(props: { lite: LiteSubscription | undefined }) {
                 <span></span>
               </label>
             </form>
+            {/*
+            <div data-slot="providers-section">
+              <div data-slot="providers-header">
+                <h3>{i18n.t("workspace.lite.providers.title")}</h3>
+                <p>{i18n.t("workspace.lite.providers.description")}</p>
+              </div>
+              <form action={setGoProviderRouting} method="post" data-slot="setting-row">
+                <p>{i18n.t("workspace.lite.providers.useChina")}</p>
+                <input type="hidden" name="workspaceID" value={params.id} />
+                <input type="hidden" name="useChinaProviders" value={sub().region.includes("cn") ? "true" : "false"} />
+                <label data-slot="toggle-label">
+                  <input
+                    type="checkbox"
+                    checked={sub().region.includes("cn")}
+                    disabled={providerRoutingSubmission.pending}
+                    onChange={(e) => e.currentTarget.form?.requestSubmit()}
+                  />
+                  <span></span>
+                </label>
+              </form>
+            </div>
+            */}
           </section>
         )}
       </Show>
