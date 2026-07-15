@@ -174,7 +174,7 @@ describe("server session", () => {
     await ctx.store.sync("root")
 
     expect(ctx.get).toEqual([{ sessionID: "root" }])
-    expect(ctx.messages).toEqual([{ sessionID: "root", limit: 2, before: undefined }])
+    expect(ctx.messages).toEqual([{ sessionID: "root", limit: 20, before: undefined }])
     expect(ctx.store.data.message.root).toEqual([])
   })
 
@@ -194,7 +194,7 @@ describe("server session", () => {
 
     await store.sync("child")
 
-    expect(client.requests).toEqual([{ sessionID: "child", limit: 2, before: undefined }])
+    expect(client.requests).toEqual([{ sessionID: "child", limit: 20, before: undefined }])
     expect(client.rootRequests).toEqual([{ sessionID: "child", messageID: user.id }])
     expect(store.data.message.child).toEqual([user, ...assistants])
     expect(store.history.more("child")).toBe(true)

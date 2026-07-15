@@ -39,6 +39,7 @@ export type SessionReviewV2Props = {
 
 export type SessionReviewV2SidebarProps = {
   open: boolean
+  transition: boolean
   title?: JSX.Element
   stats?: JSX.Element
   filter: string
@@ -76,6 +77,7 @@ export function SessionReviewV2Sidebar(props: SessionReviewV2SidebarProps) {
       <Show when={props.open}>
         <aside
           data-slot="session-review-v2-sidebar"
+          data-transition={props.transition ? "" : undefined}
           data-resizing={resizing() ? "" : undefined}
           style={{ width: `${width()}px` }}
         >
