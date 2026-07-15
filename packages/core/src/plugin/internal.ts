@@ -50,6 +50,7 @@ import { ModelsDevPlugin } from "./models-dev"
 import { ProviderPlugins } from "./provider"
 import { PluginRuntime } from "./runtime"
 import { SkillPlugin } from "./skill"
+import { SystemPromptPlugin } from "./system-prompt"
 import { VariantPlugin } from "./variant"
 
 const services = Effect.fn("PluginInternal.services")(function* () {
@@ -121,6 +122,7 @@ const pre = [
   AgentPlugin.Plugin,
   CommandPlugin.Plugin,
   SkillPlugin.Plugin,
+  SystemPromptPlugin.Plugin,
   ModelsDevPlugin,
   ...ProviderPlugins,
   PatchTool.Plugin,

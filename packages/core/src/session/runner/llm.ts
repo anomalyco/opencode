@@ -44,7 +44,7 @@ import { SessionRunnerModel } from "./model"
 import { createLLMEventPublisher } from "./publish-llm-event"
 import { toLLMMessages } from "./to-llm-message"
 import { MAX_STEPS_PROMPT } from "./max-steps"
-import { SessionRunnerSystemPrompt } from "./system-prompt"
+import PROMPT_DEFAULT from "./prompt/default.txt"
 import { Snapshot } from "../../snapshot"
 import { makeLocationNode } from "../../effect/app-node"
 import { llmClient } from "../../effect/app-node-platform"
@@ -205,7 +205,7 @@ const layer = Layer.effect(
           headers: SessionModelHeaders.make(session),
         },
         providerOptions: { openai: { promptCacheKey } },
-        system: [agentInfo.system ? agentInfo.system : SessionRunnerSystemPrompt.provider(model), history.initial]
+        system: [agentInfo.system ? agentInfo.system : PROMPT_DEFAULT, history.initial]
           .filter((part): part is string => part !== undefined && part.length > 0)
           .map(SystemPart.make),
         messages: [
