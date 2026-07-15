@@ -1,15 +1,8 @@
 export const logo = {
-  // Single mark (five-petal flower + six-spoke hub); bold on the right.
-  left: ["", "", "", "", "", "", ""],
-  right: [
-    "        ^^^        ",
-    "     ▄▀▀___▀▀▄     ",
-    "    ▄▀_  │  _▀▄    ",
-    "   █__  ─○─  __█   ",
-    "    ▀█~  │  ~█▀    ",
-    "     ▀▄▄~~~▄▄▀     ",
-    "        ~~~        ",
-  ],
+  // KanCode wordmark: muted KAN (left) + bold CODE (right).
+  // Only uses solid blocks + shadow marks (_^~,); flower ASCII fell apart in OpenTUI.
+  left: ["              ", "█__█ █▀▀█ █▀▀▄", "█▀▀▄ █^^█ █__█", "█__█ █__█ ▀~~▀"],
+  right: ["             ▄     ", "█▀▀▀ █▀▀█ █▀▀█ █▀▀█", "█___ █__█ █__█ █^^^", "▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀"],
 }
 
 export const go = {
