@@ -550,7 +550,7 @@ export function SessionSidePanel(props: {
                           >
                             <Show when={props.reviewSidebarToggle}>
                               {(toggle) => (
-                                <div class="h-full shrink-0 flex items-center justify-center">
+                                <div class="session-review-v2-sidebar-toggle-slot h-full shrink-0 sticky left-0 z-10 flex items-center justify-center bg-v2-background-bg-base">
                                   {toggle()(activeTab() === SESSION_OPEN_FILE_TAB)}
                                 </div>
                               )}

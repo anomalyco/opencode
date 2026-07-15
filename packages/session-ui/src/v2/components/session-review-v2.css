@@ -149,16 +149,46 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 8px 12px;
+  padding: 10px 12px;
   padding-left: 8px;
   flex-shrink: 0;
   border-bottom: 1px solid var(--border-weaker-base, var(--v2-border-border-weak));
+  container-type: inline-size;
+  container-name: session-review-v2-toolbar;
 }
 
 [data-component="session-review-v2"] [data-slot="session-review-v2-toolbar-group"] {
   display: flex;
   align-items: center;
   gap: 0px;
+}
+
+[data-slot="session-review-v2-toolbar-overflow"] {
+  display: none;
+}
+
+@container session-review-v2-toolbar (max-width: 269px) {
+  [data-component="session-review-v2"][data-sidebar="open"]
+    [data-slot="segmented-control-v2"].session-review-v2-segmented-control {
+    display: none;
+  }
+
+  [data-component="session-review-v2"][data-sidebar="open"] [data-slot="session-review-v2-toolbar-overflow"] {
+    display: flex;
+    align-items: center;
+  }
+}
+
+@container session-review-v2-toolbar (max-width: 399px) {
+  [data-component="session-review-v2"][data-sidebar="closed"]
+    [data-slot="segmented-control-v2"].session-review-v2-segmented-control {
+    display: none;
+  }
+
+  [data-component="session-review-v2"][data-sidebar="closed"] [data-slot="session-review-v2-toolbar-overflow"] {
+    display: flex;
+    align-items: center;
+  }
 }
 
 [data-component="session-review-v2"] .session-review-v2-toolbar-group--start {
@@ -273,9 +303,37 @@
   flex: 1;
 }
 
-[data-component="session-review-v2"] [data-slot="session-review-v2-file-header"] [data-component="diff-changes"] {
+[data-component="session-review-v2"] [data-slot="session-review-v2-file-diff"] {
+  position: relative;
   flex-shrink: 0;
   margin-left: auto;
+  background-color: var(--v2-background-bg-base);
+
+  &::before {
+    content: "";
+    position: absolute;
+    top: -8px;
+    bottom: -8px;
+    right: 100%;
+    width: 16px;
+    z-index: 1;
+    pointer-events: none;
+    background: linear-gradient(90deg, transparent, var(--v2-background-bg-base));
+  }
+
+  &::after {
+    content: "";
+    position: absolute;
+    inset: -8px -16px -8px 0;
+    z-index: 0;
+    pointer-events: none;
+    background-color: var(--v2-background-bg-base);
+  }
+
+  [data-component="diff-changes"] {
+    position: relative;
+    z-index: 1;
+  }
 }
 
 [data-component="session-review-v2"] [data-slot="session-review-v2-file-status"] {
