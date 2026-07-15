@@ -28,6 +28,8 @@ import {
 import { SectionHeading } from "../section-heading"
 import { runStatsEffect } from "../../stats-runtime"
 import { setStatsPageCacheHeaders } from "../stats-cache"
+import { ComparisonCardsSection, modelRefFromCatalog, uniqueComparisonPairs } from "../compare-cards"
+import { BreadcrumbSelect } from "../breadcrumb-select"
 import {
   applyThemePreference,
   Footer,
@@ -149,6 +151,12 @@ export default function StatsLab() {
                     labs={catalog()?.labs ?? []}
                     market={homeStats()?.market["2M"] ?? []}
                   />
+                  <ComparisonCardsSection
+                    pairs={labComparisonPairs(data(), stats()?.models ?? [])}
+                    title={`${data().name} Model Comparisons`}
+                    description="Model pairs from this lab."
+                    variant="featured"
+                  />
                 </>
               )}
             </Show>
@@ -158,6 +166,7 @@ export default function StatsLab() {
           themePreference={themePreference()}
           onThemePreferenceChange={updateThemePreference}
           links={labFooterLinks()}
+          bridge={{ href: "#model-comparison", label: "MODEL COMPARISONS" }}
         />
       </div>
     </main>
@@ -198,6 +207,7 @@ function LabHero(props: { lab: ModelCatalogLab; labs: ModelCatalogLab[] }) {
 function LabHeroBreadcrumb(props: { label: string; labs?: ModelCatalogLab[] }) {
   const language = useLanguage()
   const labs = () => props.labs ?? []
+  const current = () => labs().find((lab) => lab.name === props.label)
   return (
     <nav data-component="lab-hero-breadcrumb" aria-label="Data breadcrumb">
       <a data-slot="lab-hero-crumb" href={language.route(import.meta.env.BASE_URL)}>
@@ -210,32 +220,23 @@ function LabHeroBreadcrumb(props: { label: string; labs?: ModelCatalogLab[] }) {
           <span data-slot="lab-hero-crumb" data-current="true" aria-current="page">
             <span>{props.label}</span>
             <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-              <path d="M4.75 6.25L8 9.5L11.25 6.25" fill="none" stroke="currentColor" stroke-width="1.5" />
+              <path d="M5 6.5L8 9.5L11 6.5" fill="none" stroke="currentColor" />
             </svg>
           </span>
         }
       >
-        <details data-component="lab-hero-menu">
-          <summary data-slot="lab-hero-crumb" data-current="true" aria-current="page">
-            <span>{props.label}</span>
-            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-              <path d="M4.75 6.25L8 9.5L11.25 6.25" fill="none" stroke="currentColor" stroke-width="1.5" />
-            </svg>
-          </summary>
-          <div data-slot="lab-hero-options">
-            <For each={labs()}>
-              {(lab) => (
-                <a
-                  data-slot="lab-hero-option"
-                  data-current={lab.name === props.label ? "true" : undefined}
-                  href={language.route(`${import.meta.env.BASE_URL}${lab.id}`)}
-                >
-                  {lab.name}
-                </a>
-              )}
-            </For>
-          </div>
-        </details>
+        <BreadcrumbSelect
+          ariaLabel="Choose a lab"
+          current
+          label={props.label}
+          options={labs().map((lab) => ({
+            href: language.route(`${import.meta.env.BASE_URL}${lab.id}`),
+            label: lab.name,
+            value: lab.id,
+          }))}
+          value={current()?.id ?? ""}
+          variant="lab"
+        />
       </Show>
     </nav>
   )
@@ -559,24 +560,28 @@ function LabModelRow(props: {
 }) {
   const i18n = useI18n()
   const language = useLanguage()
-  const showTooltip = (x: number, y: number) => {
+  const showTooltip = (target: HTMLAnchorElement) => {
+    const rect = target.getBoundingClientRect()
     const viewportWidth = typeof window === "undefined" ? 0 : window.innerWidth
     const viewportHeight = typeof window === "undefined" ? 0 : window.innerHeight
+    const anchorX = viewportWidth > 0 ? Math.min(Math.max(rect.left + 320, 24), viewportWidth - 24) : rect.left + 320
     props.onTooltipChange({
       model: props.model,
-      placement: viewportWidth > 0 && x > viewportWidth - 280 ? "left" : "right",
+      placement: viewportWidth > 0 && anchorX > viewportWidth - 280 ? "left" : "right",
       usage: props.usage,
-      x,
-      y: viewportHeight > 0 ? Math.min(Math.max(y, 96), viewportHeight - 128) : y,
+      x: anchorX,
+      y:
+        viewportHeight > 0
+          ? Math.min(Math.max(rect.top + rect.height / 2, 96), viewportHeight - 128)
+          : rect.top + rect.height / 2,
     })
   }
   const showPointerTooltip: JSX.EventHandler<HTMLAnchorElement, PointerEvent> = (event) => {
     if (event.pointerType === "touch") return
-    showTooltip(event.clientX, event.clientY)
+    showTooltip(event.currentTarget)
   }
   const showFocusTooltip: JSX.EventHandler<HTMLAnchorElement, FocusEvent> = (event) => {
-    const rect = event.currentTarget.getBoundingClientRect()
-    showTooltip(rect.left + rect.width * 0.58, rect.top + rect.height / 2)
+    showTooltip(event.currentTarget)
   }
   return (
     <a
@@ -587,11 +592,12 @@ function LabModelRow(props: {
       onBlur={() => props.onTooltipChange(undefined)}
       onFocus={showFocusTooltip}
       onPointerEnter={showPointerTooltip}
+      onPointerDown={() => props.onTooltipChange(undefined)}
       onPointerLeave={(event) => {
         if (event.pointerType === "touch") return
         props.onTooltipChange(undefined)
       }}
-      onPointerMove={showPointerTooltip}
+      onClick={() => props.onTooltipChange(undefined)}
     >
       <span data-slot="lab-model-cell" data-column="model" role="cell">
         <span data-slot="lab-model-avatar" aria-hidden="true">
@@ -727,6 +733,31 @@ function LabEmptyState(props: { title: string; description: string }) {
   )
 }
 
+function labComparisonPairs(lab: ModelCatalogLab, usage: LabUsageModelEntry[]) {
+  const usageRefs = usage.slice(0, 4).map((model) => ({
+    name: model.model,
+    lab: model.provider,
+    slug: model.slug,
+    labName: model.author,
+    metric: formatTokens(model.tokens),
+  }))
+  const refs = usageRefs.length > 1 ? usageRefs : lab.models.slice(0, 4).map(modelRefFromCatalog)
+  return uniqueComparisonPairs(
+    (
+      [
+        [0, 1, "Most-used lab pair"],
+        [0, 2, "Lab alternative"],
+        [1, 2, "Adjacent lab pair"],
+        [2, 3, "Same lab pair"],
+      ] as const
+    ).flatMap(([firstIndex, secondIndex, detail]) => {
+      const first = refs[firstIndex]
+      const second = refs[secondIndex]
+      return first && second ? [{ first, second, detail }] : []
+    }),
+  )
+}
+
 type RelatedLabEntry = { lab: ModelCatalogLab; share: number; tokens: number }
 
 function relatedLabs(current: ModelCatalogLab, labs: ModelCatalogLab[], market: MarketDay[]): RelatedLabEntry[] {
@@ -851,7 +882,7 @@ function trimNumber(value: number, digits: number) {
 
 function usageStripHeight(value: number, max: number) {
   if (value <= 0 || max <= 0) return 0
-  return Math.max(1, (value / max) * 40)
+  return Math.max(2, (value / max) * 76)
 }
 
 function usageLineY(value: number, max: number) {

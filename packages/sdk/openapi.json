@@ -14507,6 +14507,7 @@
         },
         "description": "Establish a WebSocket connection streaming PTY output and accepting terminal input.",
         "summary": "Connect to PTY session",
+        "x-websocket": true,
         "x-codeSamples": [
           {
             "lang": "js",
@@ -21261,6 +21262,10 @@
           },
           "default_agent": {
             "type": "string"
+          },
+          "subagent_depth": {
+            "type": "integer",
+            "minimum": 0
           },
           "username": {
             "type": "string"

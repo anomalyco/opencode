@@ -113,32 +113,32 @@ const poll: (
   return yield* poll(client, queryExecutionId, attempt + 1)
 })
 
-const results: (
-  client: AwsAthenaClient,
-  queryExecutionId: string,
-  nextToken?: string,
-) => Effect.Effect<AthenaData[], AthenaQueryError> = Effect.fn("Athena.results")(function* (
-  client: AwsAthenaClient,
-  queryExecutionId: string,
-  nextToken?: string,
-) {
-  const result = yield* Effect.tryPromise({
-    try: () =>
-      client.send(
-        new GetQueryResultsCommand({
-          QueryExecutionId: queryExecutionId,
-          NextToken: nextToken,
-          MaxResults: ATHENA_PAGE_SIZE,
-        }),
-      ),
-    catch: (cause) => new AthenaQueryError({ message: "Failed to read Athena stats results", queryExecutionId, cause }),
+const results: (client: AwsAthenaClient, queryExecutionId: string) => Effect.Effect<AthenaData[], AthenaQueryError> =
+  Effect.fn("Athena.results")(function* (client: AwsAthenaClient, queryExecutionId: string) {
+    // Accumulate pages iteratively; recursive spreads copied every previously
+    // fetched row per page and blew up memory on large result sets.
+    const rows: AthenaData[] = []
+    let nextToken: string | undefined
+    while (true) {
+      const result = yield* Effect.tryPromise({
+        try: () =>
+          client.send(
+            new GetQueryResultsCommand({
+              QueryExecutionId: queryExecutionId,
+              NextToken: nextToken,
+              MaxResults: ATHENA_PAGE_SIZE,
+            }),
+          ),
+        catch: (cause) =>
+          new AthenaQueryError({ message: "Failed to read Athena stats results", queryExecutionId, cause }),
+      })
+      const columns = result.ResultSet?.ResultSetMetadata?.ColumnInfo?.map((item) => item.Name ?? "") ?? []
+      // The first page starts with the header row.
+      for (const row of (result.ResultSet?.Rows ?? []).slice(nextToken ? 0 : 1)) rows.push(rowData(columns, row))
+      if (!result.NextToken) return rows
+      nextToken = result.NextToken
+    }
   })
-  const columns = result.ResultSet?.ResultSetMetadata?.ColumnInfo?.map((item) => item.Name ?? "") ?? []
-  const rows = (result.ResultSet?.Rows ?? []).slice(nextToken ? 0 : 1).map((row) => rowData(columns, row))
-
-  if (!result.NextToken) return rows
-  return [...rows, ...(yield* results(client, queryExecutionId, result.NextToken))]
-})
 
 function rowData(columns: string[], row: Row): AthenaData {
   return Object.fromEntries(

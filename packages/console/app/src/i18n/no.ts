@@ -102,10 +102,14 @@ export const dict = {
   "temp.logoDarkAlt": "opencode logo mørk",
 
   "home.banner.badge": "Ny",
-  "home.banner.text": "Desktop-app tilgjengelig i beta",
-  "home.banner.platforms": "på macOS, Windows og Linux",
+  "home.banner.text": "Vi introduserer Tabs for Desktop.",
+  "home.banner.platforms": "Tilgjengelig på macOS, Windows og Linux",
   "home.banner.downloadNow": "Last ned nå",
   "home.banner.downloadBetaNow": "Last ned desktop-betaen nå",
+  "home.promo.title": "Vi introduserer Tabs for Desktop",
+  "home.promo.body": "Organiser arbeidet ditt og aktive økter med faner.",
+  "home.promo.cta": "Last ned den nyeste versjonen for å komme i gang.",
+  "home.promo.close": "Lukk kunngjøringen om Desktop-appen",
 
   "home.hero.title": "Den åpne kildekode AI-kodingsagenten",
   "home.hero.subtitle.a":
@@ -707,11 +711,11 @@ export const dict = {
 
   "download.title": "OpenCode | Last ned",
   "download.meta.description": "Last ned OpenCode for macOS, Windows og Linux",
-  "download.hero.title": "Last ned OpenCode",
+  "download.hero.title": "Last ned OpenCode Desktop",
   "download.hero.subtitle": "Tilgjengelig i beta for macOS, Windows og Linux",
   "download.hero.button": "Last ned for {{os}}",
   "download.section.terminal": "OpenCode Terminal",
-  "download.section.desktop": "OpenCode Desktop (Beta)",
+  "download.section.desktop": "OpenCode Desktop",
   "download.section.extensions": "OpenCode Extensions",
   "download.section.integrations": "OpenCode Integrations",
   "download.action.download": "Last ned",

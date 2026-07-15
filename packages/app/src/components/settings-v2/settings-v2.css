@@ -20,6 +20,11 @@
   height: 100%;
   overflow-y: auto;
   scrollbar-width: none;
+  user-select: none;
+}
+
+.settings-v2-panel :is(input, textarea, [contenteditable="true"]) {
+  user-select: text;
 }
 
 .settings-v2-panel::-webkit-scrollbar {
@@ -85,6 +90,11 @@
   box-shadow: inset 0 0 0 0.5px var(--v2-border-border-muted);
 }
 
+.settings-v2-interface-feature [data-component="settings-v2-list"] {
+  background-color: var(--v2-background-bg-base);
+  box-shadow: var(--v2-elevation-raised);
+}
+
 [data-component="settings-v2-row"] {
   display: flex;
   flex-wrap: wrap;
@@ -123,7 +133,7 @@
 }
 
 [data-slot="settings-v2-row-description"] {
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 440;
   line-height: 1;
   color: var(--v2-text-text-muted);
@@ -181,6 +191,7 @@
   flex-direction: column;
   gap: 8px;
   padding: 4px 0 4px 4px;
+  user-select: none;
 }
 
 .settings-v2-nav-footer > span {
@@ -360,7 +371,7 @@
   transform: translateY(-50%);
 }
 
-.settings-v2-tab-body.settings-v2-models {
+.settings-v2-models {
   gap: 24px;
 }
 
@@ -399,7 +410,7 @@
   overflow: hidden;
   font-size: 13px;
   font-weight: 440;
-  line-height: 1;
+  line-height: 16px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
