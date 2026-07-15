@@ -53,10 +53,12 @@ export const LspTool = Tool.define(
               : args.operation === "documentSymbol"
                 ? { operation: args.operation, filePath: file }
                 : { operation: args.operation, filePath: file, line: args.line, character: args.character }
+          const lspPattern = path.relative(instance.worktree, file)
+          const lspDir = path.dirname(lspPattern)
           yield* ctx.ask({
             permission: "lsp",
-            patterns: ["*"],
-            always: ["*"],
+            patterns: [lspPattern],
+            always: lspDir === "." ? ["*"] : [path.join(lspDir, "*")],
             metadata: meta,
           })
 

@@ -252,10 +252,12 @@ export const ReadTool = Tool.define<
         kind: stat?.type === "Directory" ? "directory" : "file",
       })
 
+      const readPattern = path.relative(instance.worktree, filepath)
+      const readDir = path.dirname(readPattern)
       yield* ctx.ask({
         permission: "read",
-        patterns: [path.relative(instance.worktree, filepath)],
-        always: ["*"],
+        patterns: [readPattern],
+        always: readDir === "." ? ["*"] : [path.join(readDir, "*")],
         metadata: {},
       })
 

@@ -99,10 +99,12 @@ export const EditTool = Tool.define(
                 contentOld = ""
                 contentNew = next.text
                 diff = trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
+                const editPattern = path.relative(instance.worktree, filePath)
+                const editDir = path.dirname(editPattern)
                 yield* ctx.ask({
                   permission: "edit",
-                  patterns: [path.relative(instance.worktree, filePath)],
-                  always: ["*"],
+                  patterns: [editPattern],
+                  always: editDir === "." ? ["*"] : [path.join(editDir, "*")],
                   metadata: {
                     filepath: filePath,
                     diff,
@@ -142,10 +144,12 @@ export const EditTool = Tool.define(
                   normalizeLineEndings(contentNew),
                 ),
               )
+              const editPattern2 = path.relative(instance.worktree, filePath)
+              const editDir2 = path.dirname(editPattern2)
               yield* ctx.ask({
                 permission: "edit",
-                patterns: [path.relative(instance.worktree, filePath)],
-                always: ["*"],
+                patterns: [editPattern2],
+                always: editDir2 === "." ? ["*"] : [path.join(editDir2, "*")],
                 metadata: {
                   filepath: filePath,
                   diff,
