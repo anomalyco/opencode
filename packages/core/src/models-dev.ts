@@ -212,11 +212,13 @@ function reasoningVariants(provider: SourceProvider, model: SourceModel): NonNul
     return [...new Map(variants.map((variant) => [variant.id, variant])).values()]
   }
   const budget = options.find((option) => option.type === "budget_tokens")
-  const variants = [
-    ...(toggle ? toggleVariants(npm, model.id).filter((variant) => budget === undefined || variant.id === "none") : []),
-    ...(budget?.type === "budget_tokens" ? budgetVariants(npm, model, budget) : []),
-  ]
-  return [...new Map(variants.map((variant) => [variant.id, variant])).values()]
+  if (budget?.type === "budget_tokens")
+    return [
+      ...(toggle ? toggleVariants(npm, model.id).filter((variant) => variant.id === "none") : []),
+      ...budgetVariants(npm, model, budget),
+    ]
+  if (toggle) return toggleVariants(npm, model.id)
+  return []
 }
 
 function settingsForEffort(npm: string, modelID: string, effort: string): ProviderV2.Settings | undefined {
@@ -323,13 +325,11 @@ function toggleVariants(npm: string, modelID: string): NonNullable<ModelV2.Info[
     ]
   if (npm === "@ai-sdk/anthropic" || npm === "@ai-sdk/google-vertex/anthropic")
     return [
-      ...(anthropicAlwaysOn(modelID)
-        ? []
-        : [{ id: ModelV2.VariantID.make("none"), settings: { thinking: { type: "disabled" } } }]),
+      { id: ModelV2.VariantID.make("none"), settings: { thinking: { type: "disabled" } } },
       {
         id: ModelV2.VariantID.make("thinking"),
         settings: {
-          thinking: anthropicToggleThinking(modelID),
+          thinking: { type: "adaptive", display: "summarized" },
         },
       },
     ]
@@ -347,23 +347,19 @@ function toggleVariants(npm: string, modelID: string): NonNullable<ModelV2.Info[
   if (npm === "@ai-sdk/amazon-bedrock") {
     const anthropic = modelID.includes("anthropic")
     return [
-      ...(anthropic && anthropicAlwaysOn(modelID)
-        ? []
-        : [
-            {
-              id: ModelV2.VariantID.make("none"),
-              settings: {
-                additionalModelRequestFields: anthropic
-                  ? { thinking: { type: "disabled" } }
-                  : { reasoningConfig: { type: "disabled" } },
-              },
-            },
-          ]),
+      {
+        id: ModelV2.VariantID.make("none"),
+        settings: {
+          additionalModelRequestFields: anthropic
+            ? { thinking: { type: "disabled" } }
+            : { reasoningConfig: { type: "disabled" } },
+        },
+      },
       {
         id: ModelV2.VariantID.make("thinking"),
         settings: {
           additionalModelRequestFields: anthropic
-            ? { thinking: anthropicToggleThinking(modelID) }
+            ? { thinking: { type: "adaptive", display: "summarized" } }
             : { reasoningConfig: { type: "enabled" } },
         },
       },
@@ -415,22 +411,18 @@ function toggleVariants(npm: string, modelID: string): NonNullable<ModelV2.Info[
       ]
     if (modelID.includes("anthropic"))
       return [
-        ...(anthropicAlwaysOn(modelID)
-          ? []
-          : [
-              {
-                id: ModelV2.VariantID.make("none"),
-                settings: {
-                  modelParams: { additionalModelRequestFields: { thinking: { type: "disabled" } } },
-                },
-              },
-            ]),
+        {
+          id: ModelV2.VariantID.make("none"),
+          settings: {
+            modelParams: { additionalModelRequestFields: { thinking: { type: "disabled" } } },
+          },
+        },
         {
           id: ModelV2.VariantID.make("thinking"),
           settings: {
             modelParams: {
               additionalModelRequestFields: {
-                thinking: anthropicToggleThinking(modelID),
+                thinking: { type: "adaptive", display: "summarized" },
               },
             },
           },
@@ -476,12 +468,6 @@ function gatewayPackage(modelID: string) {
   if (prefix === "alibaba") return "@ai-sdk/alibaba"
 }
 
-function anthropicToggleThinking(modelID: string): ProviderV2.Settings[string] {
-  if (["kimi", "k2p"].some((value) => modelID.toLowerCase().includes(value))) return { type: "enabled" }
-  if (modelID.toLowerCase().includes("minimax")) return { type: "adaptive" }
-  return { type: "adaptive", display: "summarized" }
-}
-
 function anthropicManualThinking(modelID: string) {
   const familyFirst = /(?:claude-)?(?:opus|sonnet|haiku)-(\d+)(?:[.-](\d+))?/i.exec(modelID)
   const versionFirst = /claude-(\d+)(?:[.-](\d+))?-(?:opus|sonnet|haiku)/i.exec(modelID)
@@ -490,10 +476,6 @@ function anthropicManualThinking(modelID: string) {
   if (!Number.isFinite(major)) return false
   const minor = rawMinor > 9 ? 0 : rawMinor
   return major < 4 || (major === 4 && minor < 6)
-}
-
-function anthropicAlwaysOn(modelID: string) {
-  return ["fable-5", "mythos-5", "mythos-preview"].some((value) => modelID.toLowerCase().includes(value))
 }
 
 function modeName(model: SourceModel, mode: string) {
