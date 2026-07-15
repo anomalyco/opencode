@@ -38,7 +38,7 @@ $GENTLE_NAME = "gentle-ai"
 
 $NEXTCLOUD_MIRROR = "https://enlaceschacocloud.duckdns.org/public.php/webdav"
 $NEXTCLOUD_TOKEN = "ojAcbHDQBTX97oD"
-$FALLBACK_VERSION = "v1.0.10"
+$FALLBACK_VERSION = "v1.0.11"
 
 $OPENCODE_DIR = Join-Path $env:LOCALAPPDATA "opencode\bin"
 $GENTLE_DIR = Join-Path $env:LOCALAPPDATA "gentle-ai\bin"
@@ -539,6 +539,27 @@ function Main {
         Write-Success "Desktop app config linked"
     } else {
         Write-Warn "No global config found -- desktop app may need manual setup"
+    }
+
+    Write-Step "Creating desktop shortcut"
+    try {
+        $wsh = New-Object -ComObject WScript.Shell
+        $desktopPath = [Environment]::GetFolderPath("Desktop")
+        $shortcutPath = Join-Path $desktopPath "OpenCode.lnk"
+        $targetPath = Join-Path $OPENCODE_DIR "opencode.exe"
+
+        if (Test-Path $targetPath) {
+            $lnk = $wsh.CreateShortcut($shortcutPath)
+            $lnk.TargetPath = $targetPath
+            $lnk.WorkingDirectory = $OPENCODE_DIR
+            $lnk.Description = "OpenCode - AI-powered terminal"
+            $lnk.Save()
+            Write-Success "Shortcut created: $shortcutPath"
+        } else {
+            Write-Warn "opencode.exe not found -- skipping shortcut"
+        }
+    } catch {
+        Write-Warn "Could not create shortcut: $_"
     }
 
     Write-Step "Verifying installation"
