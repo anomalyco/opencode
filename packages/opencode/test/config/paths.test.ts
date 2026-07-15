@@ -72,4 +72,23 @@ describe("ConfigPaths writable helpers", () => {
     await Bun.write(path.join(dir, "kancode.json"), "{}")
     expect(ConfigPaths.preferredUserConfigFile(dir)).toBe(path.join(dir, "kancode.json"))
   })
+
+  test("projectConfigFilesInDirectory merges OpenCode then KanCode", async () => {
+    const dir = await tmp()
+    await Bun.write(path.join(dir, "opencode.json"), "{}")
+    expect(ConfigPaths.projectConfigFilesInDirectory(dir)).toEqual([path.join(dir, "opencode.json")])
+
+    await Bun.write(path.join(dir, "kancode.json"), "{}")
+    expect(ConfigPaths.projectConfigFilesInDirectory(dir)).toEqual([
+      path.join(dir, "opencode.json"),
+      path.join(dir, "kancode.json"),
+    ])
+
+    await Bun.write(path.join(dir, "kancode.jsonc"), "{}")
+    await Bun.write(path.join(dir, "opencode.jsonc"), "{}")
+    expect(ConfigPaths.projectConfigFilesInDirectory(dir)).toEqual([
+      path.join(dir, "opencode.jsonc"),
+      path.join(dir, "kancode.jsonc"),
+    ])
+  })
 })

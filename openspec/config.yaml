@@ -9,10 +9,10 @@ context: |
 
   Branding / compatibility (see openspec change kancode-rebrand / branding-compat):
   - User-facing name is KanCode; binary prefers `kancode` with `opencode` alias.
-  - Project config: prefer kancode.json(c) else opencode.json(c); dual-read .kancode/ and .opencode/ (.kancode wins).
-  - User scope (XDG/global, ~/.kancode): KanCode only — no .opencode / opencode.json fallback.
+  - Project config: merge-include opencode.json(c) then kancode.json(c) (KanCode wins); dual-read .opencode/ and .kancode/ (.kancode wins).
+  - User scope (XDG/global, ~/.kancode, data/cache/state/tmp/managed): KanCode only — no .opencode / opencode.json / opencode-dir fallback.
   - Env: OPENCODE_* still honored; KANCODE_* aliases win when both set.
-  - XDG: config path always kancode; data/cache/state/tmp prefer nonempty kancode, else fall back to opencode.
+  - XDG: config/data/cache/state/tmp always kancode (create if missing).
   - Do not rename @opencode-ai/* packages, packages/opencode, or provider id "opencode".
 
   In-scope packages (workspace):

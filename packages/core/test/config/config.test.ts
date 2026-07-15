@@ -795,7 +795,7 @@ describe("Config", () => {
     ),
   )
 
-  it.live("prefers kancode.json over opencode.json and loads both project dirs", () =>
+  it.live("merges kancode.json over opencode.json and loads both project dirs", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
@@ -838,6 +838,7 @@ describe("Config", () => {
             ])
             expect(documents.map((document) => document.info.$schema)).toEqual([
               "global-kancode",
+              "dir-opencode",
               "dir-kancode",
               "dot-opencode",
               "dot-kancode",

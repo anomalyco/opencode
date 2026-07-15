@@ -45,10 +45,11 @@ KanCode 會繼續讀取 OpenCode 設定：
 
 | 類型 | 優先順序 |
 | --- | --- |
-| 設定檔 | 優先 `kancode.json` / `kancode.jsonc`；否則 `opencode.json` / `opencode.jsonc`（同一目錄只取第一個存在的檔名，不會合併兩個名字） |
-| 專案目錄 | 同時載入 `.kancode/` 與 `.opencode/`；衝突時 `.kancode` 優先 |
+| 專案設定檔 | 兩者都存在時一併載入：先 `opencode.json(c)`，再疊上 `kancode.json(c)`（衝突時 KanCode 勝出；同家族內 `.jsonc` 優先於 `.json`） |
+| 專案目錄 | 同時載入 `.opencode/` 與 `.kancode/`；衝突時 `.kancode` 優先 |
+| 使用者範圍（XDG／全域、`~/.kancode`） | 僅 KanCode：`kancode.json(c)` 與 `.kancode/` — **不**讀取 `opencode.json` 或 `~/.opencode` |
 | 環境變數 | 繼續支援 `OPENCODE_*`；`KANCODE_*` 為同義別名（兩者都設時以 `KANCODE_*` 為準） |
-| XDG / 資料目錄 | 優先使用非空的 `kancode` 路徑；否則回退到既有的 `opencode` 目錄 |
+| XDG / 資料目錄 | config、data、cache、state、tmp、managed 一律使用 `kancode`（不存在則建立）— 不回退到 `opencode` |
 
 問題回報：[puetsua/kancode](https://github.com/puetsua/kancode/issues)。
 

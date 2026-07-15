@@ -23,24 +23,20 @@ KanCode is a TUI/CLI-focused fork of OpenCode (`puetsua/kancode`). Package names
 
 ### 1. Config file precedence (global + project root)
 
-**Decision:** Prefer KanCode filenames when present; otherwise OpenCode — **project scope only**.
+**Decision:** Project scope **merge-includes** both filename families when present.
 
-Project-directory order:
+Per directory merge order:
 
-1. `kancode.jsonc`
-2. `kancode.json`
-3. `opencode.jsonc`
-4. `opencode.json`
+1. Preferred OpenCode file: `opencode.jsonc` else `opencode.json`
+2. Preferred KanCode file: `kancode.jsonc` else `kancode.json` (overrides OpenCode on conflict)
 
 **User scope** (XDG/global config directory): KanCode only — `kancode.jsonc`, `kancode.json`, then legacy `config.json`. Do **not** fall back to `opencode.json(c)`.
 
-When merging layered configs (home → project → dir), load at most one preferred file per layer using that order (first existing wins). Do not merge both `kancode.json` and `opencode.json` from the same directory.
-
-**Alternative considered:** Always merge both names — rejected; ambiguous overrides and duplicate keys.
+**Alternative considered:** First-existing-wins (KanCode exclusive when both exist) — rejected; users who keep OpenCode settings alongside a thin KanCode overlay need merge-include.
 
 ### 2. Project directory discovery (`.kancode` / `.opencode`)
 
-**Decision:** At project/worktree ancestry, discover both `.kancode` and `.opencode`. When both exist at the same ancestry level, load `.kancode` after `.opencode` so KanCode wins on merge conflict. Both directories may contribute agents/commands/plugins. At user home, discover `.kancode` only — never `~/.opencode`.
+**Decision:** At project/worktree ancestry, discover both `.kancode` and `.opencode`. When both exist at the same ancestry level, load `.kancode` after `.opencode` so KanCode wins on merge conflict. Config files inside each dir follow project merge-include. Both directories may contribute agents/commands/plugins. At user home, discover `.kancode` only — never `~/.opencode`.
 
 **Alternative considered:** Prefer only one dir name everywhere — rejected for projects; breaks users who already have `.opencode/`. User-scope KanCode-only is intentional for this fork.
 
@@ -50,12 +46,11 @@ When merging layered configs (home → project → dir), load at most one prefer
 
 ### 4. XDG / data paths
 
-**Decision:** App name for new paths is `kancode`.
+**Decision:** App name for user-scope paths is always `kancode`.
 
-- **Config** XDG dir: always `kancode` (no fallback to `opencode`)
-- **Data / cache / state / tmp**: if the `kancode` path exists and is non-empty use it; else if legacy `opencode` exists use that; else create `kancode`
+- **Config / data / cache / state / tmp / managed**: always `kancode` (create if missing); no fallback to `opencode`
 
-No automatic copy/migrate; users can move dirs manually later.
+No automatic copy/migrate from legacy OpenCode dirs; users can move dirs manually if needed.
 
 ### 5. Binary naming
 

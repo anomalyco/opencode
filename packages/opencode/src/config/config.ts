@@ -424,8 +424,7 @@ const layer = Layer.effect(
 
         for (const dir of directories) {
           if (ConfigPaths.isProjectConfigDir(dir)) {
-            const source = ConfigPaths.preferredConfigFile(dir)
-            if (source) {
+            for (const source of ConfigPaths.projectConfigFilesInDirectory(dir)) {
               yield* Effect.logDebug(`loading config from ${source}`)
               yield* merge(source, yield* loadFile(source, authEnv))
               result.agent ??= {}
@@ -517,8 +516,9 @@ const layer = Layer.effect(
 
         const managedDir = ConfigManaged.managedConfigDir()
         if (existsSync(managedDir)) {
-          const source = ConfigPaths.preferredConfigFile(managedDir)
-          if (source) yield* merge(source, yield* loadFile(source), "global")
+          for (const source of ConfigPaths.projectConfigFilesInDirectory(managedDir)) {
+            yield* merge(source, yield* loadFile(source), "global")
+          }
         }
 
         // macOS managed preferences (.mobileconfig deployed via MDM) override everything

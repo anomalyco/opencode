@@ -24,21 +24,22 @@ The package bin entries SHALL prefer `kancode` as the primary command name and M
 - **WHEN** either `kancode` or `opencode` is invoked from an installed package bin
 - **THEN** the same application entrypoint runs
 
-### Requirement: Config File Dual-Read With KanCode Preference (Project Scope)
+### Requirement: Config File Merge-Include With KanCode Precedence (Project Scope)
 
-Project and worktree config loading SHALL accept `kancode.json` / `kancode.jsonc` and `opencode.json` / `opencode.jsonc`. When both KanCode and OpenCode config filenames exist in the same directory, the system MUST use the KanCode file and MUST NOT merge the OpenCode file from that same directory.
+Project and worktree config loading SHALL accept `kancode.json` / `kancode.jsonc` and `opencode.json` / `opencode.jsonc`. When both KanCode and OpenCode config filenames exist in the same directory, the system MUST load and merge both (OpenCode first, then KanCode). KanCode MUST win on conflicting keys. Within each filename family, `.jsonc` is preferred over `.json` (at most one file per family).
 
-#### Scenario: Prefer kancode.json when both exist
+#### Scenario: Merge both when present
 - **WHEN** a project directory contains both `kancode.json` and `opencode.json`
-- **THEN** config for that directory is loaded from `kancode.json` only
+- **THEN** both files are loaded
+- **AND** keys from `kancode.json` override conflicting keys from `opencode.json`
 
-#### Scenario: Fall back to opencode.json
+#### Scenario: OpenCode alone still works
 - **WHEN** a project directory has `opencode.json` and no `kancode.json` / `kancode.jsonc`
 - **THEN** config is loaded from `opencode.json`
 
 ### Requirement: User Scope Is KanCode Only
 
-User-scope config discovery and load (XDG/global config directory, home `~/.kancode`, and user-global writers) SHALL use only KanCode names: `kancode.json` / `kancode.jsonc` and `.kancode/`. The system MUST NOT read `opencode.json` / `opencode.jsonc` or discover `~/.opencode` at user scope. Managed/system config dirs MAY keep dual-read independently of this requirement.
+User-scope config discovery and load (XDG/global config directory, home `~/.kancode`, and user-global writers) SHALL use only KanCode names: `kancode.json` / `kancode.jsonc` and `.kancode/`. The system MUST NOT read `opencode.json` / `opencode.jsonc` or discover `~/.opencode` at user scope. Managed/system config directory paths SHALL use the `kancode` application name only (no fallback to an `opencode` managed directory).
 
 #### Scenario: Global config ignores opencode.json
 - **WHEN** the XDG/global config directory contains only `opencode.json`
@@ -50,7 +51,7 @@ User-scope config discovery and load (XDG/global config directory, home `~/.kanc
 
 ### Requirement: Project Directory Dual-Read With KanCode Precedence
 
-Project config directories SHALL be discovered for both `.kancode` and `.opencode`. When both exist at the same path level, content from `.kancode` MUST take precedence on conflicting keys after merge.
+Project config directories SHALL be discovered for both `.kancode` and `.opencode`. When both exist at the same path level, content from `.kancode` MUST take precedence on conflicting keys after merge. Config files inside each discovered project directory follow the project merge-include rules (OpenCode then KanCode).
 
 #### Scenario: Both project dirs are discovered
 - **WHEN** a project has `.opencode/` and `.kancode/` directories
@@ -73,21 +74,17 @@ The system MUST continue to honor `OPENCODE_*` environment variables. It SHALL a
 - **WHEN** both `KANCODE_CONFIG` and `OPENCODE_CONFIG` are set to different paths
 - **THEN** `KANCODE_CONFIG` is used
 
-### Requirement: XDG Paths — Config KanCode Only; Data Fallback
+### Requirement: XDG Paths — User Scope Always KanCode
 
-The XDG **config** application directory SHALL always use the `kancode` name (no fallback to `opencode`). Global **data**, **cache**, **state**, and **tmp** paths SHALL prefer the `kancode` XDG application name when that path exists and is non-empty; otherwise they MUST fall back to existing `opencode` XDG paths so users do not lose sessions.
+The XDG **config**, **data**, **cache**, **state**, and **tmp** application directories SHALL always use the `kancode` name. The system MUST create the `kancode` path when missing and MUST NOT fall back to existing `opencode` XDG or tmp directories for user-scope runtime state.
 
 #### Scenario: Config XDG is always kancode
 - **WHEN** Global config paths are resolved
 - **THEN** they resolve under the `kancode` application name even if an `opencode` config directory exists
 
-#### Scenario: Prefer nonempty kancode data dir
-- **WHEN** the kancode data directory exists and contains entries
-- **THEN** Global data paths resolve under the kancode application name
-
-#### Scenario: Fall back to opencode data dir
-- **WHEN** the kancode data directory is missing or empty and an opencode data directory exists
-- **THEN** Global data paths resolve under the opencode application name
+#### Scenario: Data cache state tmp are always kancode
+- **WHEN** Global data, cache, state, or tmp paths are resolved
+- **THEN** they resolve under the `kancode` application name even if a nonempty `opencode` directory exists
 
 ### Requirement: Soften Upstream SaaS Upsell
 

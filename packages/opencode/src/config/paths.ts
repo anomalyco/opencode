@@ -8,8 +8,17 @@ import { unique } from "remeda"
 import * as Effect from "effect/Effect"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 
-/** Project-scope basenames: KanCode first, then OpenCode. First existing wins per directory. */
-export const CONFIG_FILE_CANDIDATES = ["kancode.jsonc", "kancode.json", "opencode.jsonc", "opencode.json"] as const
+/** OpenCode project basenames (jsonc preferred over json within the family). */
+export const OPENCODE_CONFIG_FILE_CANDIDATES = ["opencode.jsonc", "opencode.json"] as const
+
+/** KanCode project basenames (jsonc preferred over json within the family). */
+export const KANCODE_CONFIG_FILE_CANDIDATES = ["kancode.jsonc", "kancode.json"] as const
+
+/**
+ * Project-scope basenames for discovery/scans.
+ * Prefer KanCode names first for writable helpers; merge load order is OpenCode then KanCode.
+ */
+export const CONFIG_FILE_CANDIDATES = [...KANCODE_CONFIG_FILE_CANDIDATES, ...OPENCODE_CONFIG_FILE_CANDIDATES] as const
 
 /** User-scope (XDG/global, home) basenames: KanCode only — no opencode.json fallback. */
 export const USER_CONFIG_FILE_CANDIDATES = ["kancode.jsonc", "kancode.json"] as const
@@ -30,6 +39,19 @@ export function preferredConfigFile(dir: string, candidates: readonly string[] =
 /** Preferred file under user-scope dirs (global/XDG): KanCode names only. */
 export function preferredUserConfigFile(dir: string) {
   return preferredConfigFile(dir, USER_CONFIG_FILE_CANDIDATES)
+}
+
+/**
+ * Project-scope files in one directory, merge order: OpenCode first, then KanCode
+ * (KanCode overrides). Within each family, jsonc wins over json (one file per family).
+ */
+export function projectConfigFilesInDirectory(dir: string) {
+  const files: string[] = []
+  const opencode = preferredConfigFile(dir, OPENCODE_CONFIG_FILE_CANDIDATES)
+  if (opencode) files.push(opencode)
+  const kancode = preferredConfigFile(dir, KANCODE_CONFIG_FILE_CANDIDATES)
+  if (kancode) files.push(kancode)
+  return files
 }
 
 /**
@@ -82,7 +104,10 @@ export const files = Effect.fn("ConfigPaths.projectFiles")(function* (
   })).toReversed()
 })
 
-/** Walk up project ancestry and pick one preferred app config file per directory (dual-read). */
+/**
+ * Walk up project ancestry and include both OpenCode and KanCode config files
+ * per directory (merge-include; OpenCode then KanCode so KanCode wins).
+ */
 export const configFiles = Effect.fn("ConfigPaths.configFiles")(function* (directory: string, worktree?: string) {
   const afs = yield* FSUtil.Service
   const found = yield* afs.up({
@@ -90,13 +115,15 @@ export const configFiles = Effect.fn("ConfigPaths.configFiles")(function* (direc
     start: directory,
     stop: worktree,
   })
-  const byDir = new Map<string, string>()
+  const dirs: string[] = []
+  const seen = new Set<string>()
   for (const file of found) {
     const dir = path.dirname(file)
-    if (byDir.has(dir)) continue
-    byDir.set(dir, file)
+    if (seen.has(dir)) continue
+    seen.add(dir)
+    dirs.push(dir)
   }
-  return [...byDir.values()].toReversed()
+  return dirs.toReversed().flatMap((dir) => projectConfigFilesInDirectory(dir))
 })
 
 export const directories = Effect.fn("ConfigPaths.directories")(function* (directory: string, worktree?: string) {

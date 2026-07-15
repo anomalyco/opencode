@@ -1,6 +1,5 @@
 import path from "path"
 import fs from "fs/promises"
-import fsSync from "fs"
 import { xdgData, xdgCache, xdgConfig, xdgState } from "xdg-basedir"
 import os from "os"
 import { Context, Effect, Layer } from "effect"
@@ -8,39 +7,17 @@ import { Flock } from "./util/flock"
 import { Flag, envAlias } from "./flag/flag"
 import { makeGlobalNode } from "./effect/app-node"
 
-/** Prefer nonempty kancode XDG dir; else fall back to legacy opencode (data/cache/state/tmp). */
-function pickAppDir(base: string) {
-  const preferred = path.join(base, "kancode")
-  const legacy = path.join(base, "opencode")
-  if (fsSync.existsSync(preferred)) {
-    try {
-      if (fsSync.readdirSync(preferred).length > 0) return preferred
-    } catch {
-      // fall through
-    }
-  }
-  if (fsSync.existsSync(legacy)) return legacy
-  return preferred
+/** User-scope XDG app dirs are always `kancode` — never fall back to `opencode`. */
+function appDir(base: string) {
+  return path.join(base, "kancode")
 }
 
-const data = pickAppDir(xdgData!)
-const cache = pickAppDir(xdgCache!)
+const data = appDir(xdgData!)
+const cache = appDir(xdgCache!)
 // User-scope config XDG: KanCode only — never fall back to ~/.config/opencode.
 const config = path.join(xdgConfig!, "kancode")
-const state = pickAppDir(xdgState!)
-const tmp = (() => {
-  const preferred = path.join(os.tmpdir(), "kancode")
-  const legacy = path.join(os.tmpdir(), "opencode")
-  if (fsSync.existsSync(preferred)) {
-    try {
-      if (fsSync.readdirSync(preferred).length > 0) return preferred
-    } catch {
-      // fall through
-    }
-  }
-  if (fsSync.existsSync(legacy)) return legacy
-  return preferred
-})()
+const state = appDir(xdgState!)
+const tmp = path.join(os.tmpdir(), "kancode")
 
 const paths = {
   get home() {

@@ -45,11 +45,11 @@ KanCode keeps OpenCode configs working in projects; user/global scope is KanCode
 
 | Kind | Preference |
 | --- | --- |
-| Project config files | Prefer `kancode.json` / `kancode.jsonc`; else `opencode.json` / `opencode.jsonc` (first existing wins per directory; do not merge both names in the same dir) |
-| Project dirs | Load both `.kancode/` and `.opencode/`; `.kancode` wins on conflicting keys |
+| Project config files | Load both when present: `opencode.json(c)` first, then `kancode.json(c)` on top (KanCode wins on conflict; within each family, `.jsonc` preferred over `.json`) |
+| Project dirs | Load both `.opencode/` and `.kancode/`; `.kancode` wins on conflicting keys |
 | User scope (XDG/global, `~/.kancode`) | KanCode only: `kancode.json(c)` and `.kancode/` — do **not** read `opencode.json` or `~/.opencode` |
 | Env flags | Honor `OPENCODE_*`; `KANCODE_*` aliases map to the same flags (`KANCODE_*` wins when both set) |
-| XDG / data dirs | Config path is always `…/kancode`; data/cache/state/tmp prefer nonempty `kancode`, else fall back to existing `opencode` dirs |
+| XDG / data dirs | Config, data, cache, state, tmp, and managed paths always use `kancode` (create if missing) — no `opencode` fallback |
 
 Issues and feedback: [puetsua/kancode](https://github.com/puetsua/kancode/issues).
 

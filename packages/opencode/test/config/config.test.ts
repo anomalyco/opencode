@@ -493,6 +493,32 @@ it.instance("jsonc overrides json in the same directory", () =>
   }),
 )
 
+it.instance("merges opencode.json then kancode.json in the same directory", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* writeConfigEffect(
+      test.directory,
+      {
+        $schema: "https://opencode.ai/config.json",
+        model: "from-opencode",
+        username: "opencode-user",
+      },
+      "opencode.json",
+    )
+    yield* writeConfigEffect(
+      test.directory,
+      {
+        $schema: "https://opencode.ai/config.json",
+        model: "from-kancode",
+      },
+      "kancode.json",
+    )
+    const config = yield* Config.use.get()
+    expect(config.model).toBe("from-kancode")
+    expect(config.username).toBe("opencode-user")
+  }),
+)
+
 it.instance("handles environment variable substitution", () =>
   withProcessEnv(
     "TEST_VAR",

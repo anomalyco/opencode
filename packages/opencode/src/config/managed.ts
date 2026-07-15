@@ -1,6 +1,6 @@
 export * as ConfigManaged from "./managed"
 
-import { existsSync, readdirSync } from "fs"
+import { existsSync } from "fs"
 import os from "os"
 import path from "path"
 import { Process } from "@/util/process"
@@ -18,40 +18,16 @@ const PLIST_META = new Set([
   "_manualProfile",
 ])
 
-function nonemptyDir(dir: string) {
-  if (!existsSync(dir)) return false
-  try {
-    return readdirSync(dir).length > 0
-  } catch {
-    return false
-  }
-}
-
 function systemManagedConfigDir(): string {
-  const kancode = (() => {
-    switch (process.platform) {
-      case "darwin":
-        return "/Library/Application Support/kancode"
-      case "win32":
-        return path.join(process.env.ProgramData || "C:\\ProgramData", "kancode")
-      default:
-        return "/etc/kancode"
-    }
-  })()
-  const opencode = (() => {
-    switch (process.platform) {
-      case "darwin":
-        return "/Library/Application Support/opencode"
-      case "win32":
-        return path.join(process.env.ProgramData || "C:\\ProgramData", "opencode")
-      default:
-        return "/etc/opencode"
-    }
-  })()
-  // Match XDG pickAppDir: nonempty kancode wins; else fall back to legacy opencode.
-  if (nonemptyDir(kancode)) return kancode
-  if (existsSync(opencode)) return opencode
-  return kancode
+  // User/system managed path is always kancode — no opencode fallback.
+  switch (process.platform) {
+    case "darwin":
+      return "/Library/Application Support/kancode"
+    case "win32":
+      return path.join(process.env.ProgramData || "C:\\ProgramData", "kancode")
+    default:
+      return "/etc/kancode"
+  }
 }
 
 export function managedConfigDir() {
