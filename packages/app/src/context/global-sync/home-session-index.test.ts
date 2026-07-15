@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import type { SessionV2Info } from "@opencode-ai/sdk/v2/client"
 import {
   applyHomeSessionEvent,
   appendHomeSessionEvent,
@@ -72,8 +73,13 @@ describe("Home V2 session index", () => {
   })
 
   test("maps visible roots to Home session summaries", () => {
+    const activeNull = {
+      ...session({ id: "active-null", updated: 20 }),
+      time: { created: 1, updated: 20, archived: null },
+    } as unknown as SessionV2Info
     const result = parseHomeSessionIndex([
       session({ id: "root", updated: 30 }),
+      activeNull,
       session({ id: "child", parentID: "root", updated: 40 }),
       session({ id: "archived", archived: 50, updated: 50 }),
     ])
@@ -87,6 +93,10 @@ describe("Home V2 session index", () => {
         projectID: "project",
         title: "root",
         time: { created: 1, updated: 30 },
+      }),
+      expect.objectContaining({
+        id: "active-null",
+        time: { created: 1, updated: 20, archived: null },
       }),
     ])
   })
