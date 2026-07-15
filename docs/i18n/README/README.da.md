@@ -1,13 +1,13 @@
 <p align="center">
   <a href="https://opencode.ai">
     <picture>
-      <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
-      <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
-      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="OpenCode logo">
+      <source srcset="../../packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
+      <source srcset="../../packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
+      <img src="../../packages/console/app/src/asset/logo-ornate-light.svg" alt="OpenCode logo">
     </picture>
   </a>
 </p>
-<p align="center">AI-kodeagent med åpen kildekode.</p>
+<p align="center">Den open source AI-kodeagent.</p>
 <p align="center">
   <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
   <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <a href="README.md">English</a> |
+  <a href="../../README.md">English</a> |
   <a href="README.zh.md">简体中文</a> |
   <a href="README.zht.md">繁體中文</a> |
   <a href="README.ko.md">한국어</a> |
@@ -39,22 +39,22 @@
   <a href="README.vi.md">Tiếng Việt</a>
 </p>
 
-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+[![OpenCode Terminal UI](../../packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
 
 ---
 
-### Installasjon
+### Installation
 
 ```bash
 # YOLO
 curl -fsSL https://opencode.ai/install | bash
 
-# Pakkehåndterere
+# Pakkehåndteringer
 npm i -g opencode-ai@latest        # eller bun/pnpm/yarn
 scoop install opencode             # Windows
 choco install opencode             # Windows
-brew install anomalyco/tap/opencode # macOS og Linux (anbefalt, alltid oppdatert)
-brew install opencode              # macOS og Linux (offisiell brew-formel, oppdateres sjeldnere)
+brew install anomalyco/tap/opencode # macOS og Linux (anbefalet, altid up to date)
+brew install opencode              # macOS og Linux (officiel brew formula, opdateres sjældnere)
 sudo pacman -S opencode            # Arch Linux (Stable)
 paru -S opencode-bin               # Arch Linux (Latest from AUR)
 mise use -g opencode               # alle OS
@@ -62,18 +62,18 @@ nix run nixpkgs#opencode           # eller github:anomalyco/opencode for nyeste 
 ```
 
 > [!TIP]
-> Fjern versjoner eldre enn 0.1.x før du installerer.
+> Fjern versioner ældre end 0.1.x før installation.
 
 ### Desktop-app (BETA)
 
-OpenCode er også tilgjengelig som en desktop-app. Last ned direkte fra [releases-siden](https://github.com/anomalyco/opencode/releases) eller [opencode.ai/download](https://opencode.ai/download).
+OpenCode findes også som desktop-app. Download direkte fra [releases-siden](https://github.com/anomalyco/opencode/releases) eller [opencode.ai/download](https://opencode.ai/download).
 
-| Plattform             | Nedlasting                         |
+| Platform              | Download                           |
 | --------------------- | ---------------------------------- |
 | macOS (Apple Silicon) | `opencode-desktop-mac-arm64.dmg`   |
 | macOS (Intel)         | `opencode-desktop-mac-x64.dmg`     |
 | Windows               | `opencode-desktop-windows-x64.exe` |
-| Linux                 | `.deb`, `.rpm` eller AppImage      |
+| Linux                 | `.deb`, `.rpm`, eller AppImage     |
 
 ```bash
 # macOS (Homebrew)
@@ -82,13 +82,13 @@ brew install --cask opencode-desktop
 scoop bucket add extras; scoop install extras/opencode-desktop
 ```
 
-#### Installasjonsmappe
+#### Installationsmappe
 
-Installasjonsskriptet bruker følgende prioritet for installasjonsstien:
+Installationsscriptet bruger følgende prioriteringsrækkefølge for installationsstien:
 
-1. `$OPENCODE_INSTALL_DIR` - Egendefinert installasjonsmappe
-2. `$XDG_BIN_DIR` - Sti som følger XDG Base Directory Specification
-3. `$HOME/bin` - Standard brukerbinar-mappe (hvis den finnes eller kan opprettes)
+1. `$OPENCODE_INSTALL_DIR` - Tilpasset installationsmappe
+2. `$XDG_BIN_DIR` - Sti der følger XDG Base Directory Specification
+3. `$HOME/bin` - Standard bruger-bin-mappe (hvis den findes eller kan oprettes)
 4. `$HOME/.opencode/bin` - Standard fallback
 
 ```bash
@@ -99,31 +99,31 @@ XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
 
 ### Agents
 
-OpenCode har to innebygde agents du kan bytte mellom med `Tab`-tasten.
+OpenCode har to indbyggede agents, som du kan skifte mellem med `Tab`-tasten.
 
-- **build** - Standard, agent med full tilgang for utviklingsarbeid
-- **plan** - Skrivebeskyttet agent for analyse og kodeutforsking
-  - Nekter filendringer som standard
-  - Spør om tillatelse før bash-kommandoer
-  - Ideell for å utforske ukjente kodebaser eller planlegge endringer
+- **build** - Standard, agent med fuld adgang til udviklingsarbejde
+- **plan** - Skrivebeskyttet agent til analyse og kodeudforskning
+  - Afviser filredigering som standard
+  - Spørger om tilladelse før bash-kommandoer
+  - Ideel til at udforske ukendte kodebaser eller planlægge ændringer
 
-Det finnes også en **general**-subagent for komplekse søk og flertrinnsoppgaver.
-Den brukes internt og kan kalles via `@general` i meldinger.
+Derudover findes der en **general**-subagent til komplekse søgninger og flertrinsopgaver.
+Den bruges internt og kan kaldes via `@general` i beskeder.
 
-Les mer om [agents](https://opencode.ai/docs/agents).
+Læs mere om [agents](https://opencode.ai/docs/agents).
 
-### Dokumentasjon
+### Dokumentation
 
-For mer info om hvordan du konfigurerer OpenCode, [**se dokumentasjonen**](https://opencode.ai/docs).
+For mere info om konfiguration af OpenCode, [**se vores docs**](https://opencode.ai/docs).
 
-### Bidra
+### Bidrag
 
-Hvis du vil bidra til OpenCode, les [contributing docs](./CONTRIBUTING.md) før du sender en pull request.
+Hvis du vil bidrage til OpenCode, så læs vores [contributing docs](../../CONTRIBUTING.md) før du sender en pull request.
 
-### Bygge på OpenCode
+### Bygget på OpenCode
 
-Hvis du jobber med et prosjekt som er relatert til OpenCode og bruker "opencode" som en del av navnet; for eksempel "opencode-dashboard" eller "opencode-mobile", legg inn en merknad i README som presiserer at det ikke er bygget av OpenCode-teamet og ikke er tilknyttet oss på noen måte.
+Hvis du arbejder på et projekt der er relateret til OpenCode og bruger "opencode" som en del af navnet; f.eks. "opencode-dashboard" eller "opencode-mobile", så tilføj en note i din README, der tydeliggør at projektet ikke er bygget af OpenCode-teamet og ikke er tilknyttet os på nogen måde.
 
 ---
 
-**Bli med i fellesskapet** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+**Bliv en del af vores community** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)

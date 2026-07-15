@@ -1,9 +1,9 @@
 <p align="center">
   <a href="https://opencode.ai">
     <picture>
-      <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
-      <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
-      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="OpenCode logo">
+      <source srcset="../../packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
+      <source srcset="../../packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
+      <img src="../../packages/console/app/src/asset/logo-ornate-light.svg" alt="OpenCode logo">
     </picture>
   </a>
 </p>
@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <a href="README.md">English</a> |
+  <a href="../../README.md">English</a> |
   <a href="README.zh.md">简体中文</a> |
   <a href="README.zht.md">繁體中文</a> |
   <a href="README.ko.md">한국어</a> |
@@ -39,7 +39,7 @@
   <a href="README.vi.md">Tiếng Việt</a>
 </p>
 
-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+[![OpenCode Terminal UI](../../packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
 
 ---
 
@@ -118,7 +118,7 @@ OpenCode এ দুটি বিল্ট-ইন এজেন্ট রয়ে
 
 ### অবদান (Contributing)
 
-আপনি যদি OpenCode এ অবদান রাখতে চান, অনুগ্রহ করে একটি পুল রিকোয়েস্ট সাবমিট করার আগে আমাদের [কন্ট্রিবিউটিং ডকস](./CONTRIBUTING.md) পড়ে নিন।
+আপনি যদি OpenCode এ অবদান রাখতে চান, অনুগ্রহ করে একটি পুল রিকোয়েস্ট সাবমিট করার আগে আমাদের [কন্ট্রিবিউটিং ডকস](../../CONTRIBUTING.md) পড়ে নিন।
 
 ### OpenCode এর উপর বিল্ডিং (Building on OpenCode)
 
