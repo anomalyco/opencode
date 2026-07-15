@@ -56,4 +56,20 @@ describe("ServerAuth", () => {
     expect(ServerAuth.authorized({ username: "alice", password: Redacted.make("secret") }, config)).toBe(true)
     expect(ServerAuth.authorized({ username: "opencode", password: Redacted.make("secret") }, config)).toBe(false)
   })
+
+  test("recognizes only literal loopback hostnames", () => {
+    expect(ServerAuth.isLoopbackHostname("localhost")).toBe(true)
+    expect(ServerAuth.isLoopbackHostname("127.0.0.1")).toBe(true)
+    expect(ServerAuth.isLoopbackHostname("127.1.2.3")).toBe(true)
+    expect(ServerAuth.isLoopbackHostname("::1")).toBe(true)
+    expect(ServerAuth.isLoopbackHostname("0:0:0:0:0:0:0:1")).toBe(true)
+    expect(ServerAuth.isLoopbackHostname("127.evil.example")).toBe(false)
+    expect(ServerAuth.isLoopbackHostname("0.0.0.0")).toBe(false)
+  })
+
+  test("requires authentication for mDNS and non-loopback binds", () => {
+    expect(ServerAuth.requiresPasswordForBind({ hostname: "127.0.0.1" })).toBe(false)
+    expect(ServerAuth.requiresPasswordForBind({ hostname: "127.0.0.1", mdns: true })).toBe(true)
+    expect(ServerAuth.requiresPasswordForBind({ hostname: "0.0.0.0" })).toBe(true)
+  })
 })

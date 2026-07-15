@@ -45,6 +45,18 @@ async function startNoAuthListener() {
   return Server.listen({ hostname: "127.0.0.1", port: 0 })
 }
 
+async function expectUnauthenticatedBindRejected(hostname: string) {
+  try {
+    const listener = await Server.listen({ hostname, port: 0 })
+    await listener.stop(true)
+  } catch (error) {
+    if (!(error instanceof Error)) throw error
+    expect(error.message).toContain(`Refusing to bind ${hostname} without authentication`)
+    return
+  }
+  throw new Error(`Server.listen unexpectedly bound ${hostname} without authentication`)
+}
+
 function authorization() {
   return `Basic ${btoa(`${auth.username}:${auth.password}`)}`
 }
@@ -167,6 +179,20 @@ async function openPtySocket(listener: Awaited<ReturnType<typeof startListener>>
 }
 
 describe("HttpApi Server.listen", () => {
+  test("refuses an unauthenticated non-loopback bind before opening a listener", async () => {
+    Flag.AIXPLAIN_CODE_SERVER_PASSWORD = undefined
+    delete process.env.AIXPLAIN_CODE_SERVER_PASSWORD
+
+    await expectUnauthenticatedBindRejected("0.0.0.0")
+  })
+
+  test("refuses a hostname that only starts like a loopback address", async () => {
+    Flag.AIXPLAIN_CODE_SERVER_PASSWORD = undefined
+    delete process.env.AIXPLAIN_CODE_SERVER_PASSWORD
+
+    await expectUnauthenticatedBindRejected("127.evil.example")
+  })
+
   testPty("serves HTTP routes and upgrades PTY websocket through Server.listen", async () => {
     await using tmp = await tmpdir({ config: { formatter: false, lsp: false } })
     const listener = await startListener()

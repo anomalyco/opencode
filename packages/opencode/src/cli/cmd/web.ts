@@ -5,6 +5,7 @@ import { withNetworkOptions, resolveNetworkOptions } from "../network"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import open from "open"
 import { networkInterfaces } from "os"
+import { ServerAuth } from "@/server/auth"
 
 function getNetworkIPs() {
   const nets = networkInterfaces()
@@ -37,10 +38,21 @@ export const WebCommand = effectCmd({
   instance: false,
   handler: Effect.fn("Cli.web")(function* (args) {
     const { Server } = yield* Effect.promise(() => import("../../server/server"))
+    const opts = yield* resolveNetworkOptions(args)
     if (!Flag.OPENCODE_SERVER_PASSWORD) {
+      if (ServerAuth.requiresPasswordForBind(opts)) {
+        UI.println(
+          UI.Style.TEXT_DANGER_BOLD +
+          `!  Refusing to bind ${opts.hostname}${opts.mdns ? " (mDNS)" : ""} without authentication.`,
+        )
+        UI.println(
+          UI.Style.TEXT_NORMAL +
+          "   Set OPENCODE_SERVER_PASSWORD to expose the server on the network, or bind 127.0.0.1 for local-only access.",
+        )
+        return yield* Effect.sync(() => process.exit(1))
+      }
       UI.println(UI.Style.TEXT_WARNING_BOLD + "!  OPENCODE_SERVER_PASSWORD is not set; server is unsecured.")
     }
-    const opts = yield* resolveNetworkOptions(args)
     const server = yield* Effect.promise(() => Server.listen(opts))
     UI.empty()
     UI.println(UI.logo("  "))
@@ -72,11 +84,11 @@ export const WebCommand = effectCmd({
       }
 
       // Open localhost in browser
-      open(localhostUrl).catch(() => {})
+      open(localhostUrl).catch(() => { })
     } else {
       const displayUrl = server.url.toString()
       UI.println(UI.Style.TEXT_INFO_BOLD + "  Web interface:    ", UI.Style.TEXT_NORMAL, displayUrl)
-      open(displayUrl).catch(() => {})
+      open(displayUrl).catch(() => { })
     }
 
     yield* Effect.never

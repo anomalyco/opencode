@@ -9,6 +9,9 @@
     "@types/bun": "catalog:",
     "@types/semver": "^7.5.8"
   },
+  "scripts": {
+    "typecheck": "tsgo --noEmit"
+  },
   "exports": {
     ".": "./src/index.ts"
   }

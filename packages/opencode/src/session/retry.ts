@@ -1,7 +1,6 @@
 import type { NamedError } from "@opencode-ai/core/util/error"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
-import { Cause, Clock, Duration, Effect, Schedule } from "effect"
-import { MessageV2 } from "./message-v2"
+import { Cause, Clock, Duration, Random, Effect, Schedule } from "effect"
 import { iife } from "@/util/iife"
 import { isRecord } from "@/util/record"
 
@@ -27,6 +26,15 @@ export const RETRY_INITIAL_DELAY = 2000
 export const RETRY_BACKOFF_FACTOR = 2
 export const RETRY_MAX_DELAY_NO_HEADERS = 30_000 // 30 seconds
 export const RETRY_MAX_DELAY = 2_147_483_647 // max 32-bit signed integer for setTimeout
+
+// Cap the number of retries so a persistent condition (429, overload, 5xx)
+// cannot make a single session retry forever.
+export const MAX_RETRY_ATTEMPTS = 8
+// Additive jitter (as a fraction of the base delay, capped absolutely) spreads
+// concurrent retriers apart to avoid synchronized "thundering herd" waves.
+// Additive-only so a server-provided retry-after is never undercut.
+export const RETRY_JITTER_FRACTION = 0.25
+export const RETRY_JITTER_MAX = 5_000
 
 function cap(ms: number) {
   return Math.min(ms, RETRY_MAX_DELAY)
@@ -183,8 +191,13 @@ export function policy(opts: {
       const error = opts.parse(meta.input)
       const retry = retryable(error, opts.provider)
       if (!retry) return Cause.done(meta.attempt)
+      // Stop after a bounded number of attempts instead of retrying indefinitely.
+      if (meta.attempt > MAX_RETRY_ATTEMPTS) return Cause.done(meta.attempt)
       return Effect.gen(function* () {
-        const wait = delay(meta.attempt, SessionV1.APIError.isInstance(error) ? error : undefined)
+const base = delay(meta.attempt, SessionV1.APIError.isInstance(error) ? error : undefined)
+        const jitterRange = Math.min(Math.floor(base * RETRY_JITTER_FRACTION), RETRY_JITTER_MAX)
+        const jitter = jitterRange > 0 ? Math.round(yield* Random.nextBetween(0, jitterRange)) : 0
+        const wait = cap(base + jitter)
         const now = yield* Clock.currentTimeMillis
         yield* opts.set({
           attempt: meta.attempt,

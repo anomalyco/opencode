@@ -11,7 +11,7 @@ void mock.module("bonjour-service", () => ({
   Bonjour: class {
     publish(opts: { port: number; name: string }) {
       events.push({ kind: "publish", port: opts.port, name: opts.name })
-      return { on: () => {} }
+      return { on: () => { } }
     }
     unpublishAll() {
       events.push({ kind: "unpublishAll" })
@@ -28,13 +28,18 @@ const { Server } = await import("../../src/server/server")
 const original = {
   OPENCODE_SERVER_PASSWORD: Flag.OPENCODE_SERVER_PASSWORD,
   OPENCODE_SERVER_USERNAME: Flag.OPENCODE_SERVER_USERNAME,
+  envPassword: process.env.OPENCODE_SERVER_PASSWORD,
+  envUsername: process.env.OPENCODE_SERVER_USERNAME,
 }
 
 afterEach(async () => {
   events.length = 0
   Flag.OPENCODE_SERVER_PASSWORD = original.OPENCODE_SERVER_PASSWORD
   Flag.OPENCODE_SERVER_USERNAME = original.OPENCODE_SERVER_USERNAME
-  await disposeAllInstances()
+  if (original.envPassword === undefined) delete process.env.OPENCODE_SERVER_PASSWORD
+  else process.env.OPENCODE_SERVER_PASSWORD = original.envPassword
+  if (original.envUsername === undefined) delete process.env.OPENCODE_SERVER_USERNAME
+  else process.env.OPENCODE_SERVER_USERNAME = original.envUsername
   await resetDatabase()
 })
 
@@ -42,7 +47,9 @@ describe("HttpApi Server.listen mDNS", () => {
   test("skips publish for loopback hostnames", async () => {
     Flag.OPENCODE_SERVER_PASSWORD = "mdns-secret"
     Flag.OPENCODE_SERVER_USERNAME = "opencode"
-    const listener = await Server.listen({ hostname: "127.0.0.1", port: 0, mdns: true })
+    process.env.OPENCODE_SERVER_PASSWORD = "mdns-secret"
+    process.env.OPENCODE_SERVER_USERNAME = "opencode"
+    const listener = await Server.listen({ hostname: "0.0.0.0", port: 0, mdns: true })
     try {
       expect(events.filter((e) => e.kind === "publish")).toEqual([])
     } finally {
@@ -54,6 +61,8 @@ describe("HttpApi Server.listen mDNS", () => {
   test("publishes for non-loopback hostnames and unpublishes on stop", async () => {
     Flag.OPENCODE_SERVER_PASSWORD = "mdns-secret"
     Flag.OPENCODE_SERVER_USERNAME = "opencode"
+    process.env.OPENCODE_SERVER_PASSWORD = "mdns-secret"
+    process.env.OPENCODE_SERVER_USERNAME = "opencode"
     const listener = await Server.listen({ hostname: "0.0.0.0", port: 0, mdns: true })
     try {
       const published = events.filter((e) => e.kind === "publish")
@@ -70,6 +79,8 @@ describe("HttpApi Server.listen mDNS", () => {
   test("scope finalizer unpublishes even if stop() is not called for force-close", async () => {
     Flag.OPENCODE_SERVER_PASSWORD = "mdns-secret"
     Flag.OPENCODE_SERVER_USERNAME = "opencode"
+    process.env.OPENCODE_SERVER_PASSWORD = "mdns-secret"
+    process.env.OPENCODE_SERVER_USERNAME = "opencode"
     const listener = await Server.listen({ hostname: "0.0.0.0", port: 0, mdns: true })
     expect(events.filter((e) => e.kind === "publish").length).toBe(1)
     // Plain (graceful) stop without close=true should still unpublish.

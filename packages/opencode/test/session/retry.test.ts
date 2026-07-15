@@ -4,7 +4,7 @@ import { SessionV1 } from "@opencode-ai/core/v1/session"
 import type { NamedError } from "@opencode-ai/core/util/error"
 import { APICallError } from "ai"
 import { setTimeout as sleep } from "node:timers/promises"
-import { Effect, Schedule, Schema } from "effect"
+import { Duration, Effect, Exit, Layer, Schedule, Schema } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { SessionRetry } from "../../src/session/retry"
 import { MessageV2 } from "../../src/session/message-v2"
@@ -13,6 +13,7 @@ import { SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
 import { testEffect } from "../lib/effect"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+
 
 const providerID = ProviderV2.ID.make("test")
 const retryProvider = "test"
@@ -113,6 +114,45 @@ describe("session.retry.delay", () => {
         attempt: 2,
         message: "boom",
       })
+    }),
+  )
+
+  it.live("policy stops after the configured retry limit", () =>
+    Effect.gen(function* () {
+      const attempts: number[] = []
+      const error = apiError({ "retry-after-ms": "0" })
+      const step = yield* Schedule.toStepWithMetadata(
+        SessionRetry.policy({
+          provider: "test",
+          parse: Schema.decodeUnknownSync(SessionV1.APIError.Schema),
+          set: (info) => Effect.sync(() => attempts.push(info.attempt)),
+        }),
+      )
+
+      for (const _ of Array.from({ length: SessionRetry.MAX_RETRY_ATTEMPTS })) yield* step(error)
+      const exhausted = yield* Effect.exit(step(error))
+
+      expect(attempts).toEqual(Array.from({ length: SessionRetry.MAX_RETRY_ATTEMPTS }, (_, index) => index + 1))
+      expect(Exit.isFailure(exhausted)).toBe(true)
+    }),
+  )
+
+  it.live("policy adds bounded jitter without undercutting retry-after", () =>
+    Effect.gen(function* () {
+      const base = 100
+      const step = yield* Schedule.toStepWithMetadata(
+        SessionRetry.policy({
+          provider: "test",
+          parse: Schema.decodeUnknownSync(SessionV1.APIError.Schema),
+          set: () => Effect.void,
+        }),
+      )
+
+      const result = yield* step(apiError({ "retry-after-ms": String(base) }))
+      const wait = Duration.toMillis(result.duration)
+
+      expect(wait).toBeGreaterThanOrEqual(base)
+      expect(wait).toBeLessThanOrEqual(base + base * SessionRetry.RETRY_JITTER_FRACTION)
     }),
   )
 })

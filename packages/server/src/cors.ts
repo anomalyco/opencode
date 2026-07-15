@@ -1,7 +1,8 @@
 import { Context } from "effect"
 
-const opencodeOrigin = /^https:\/\/([a-z0-9-]+\.)*opencode\.ai$/
-
+// Case-insensitive: browsers lowercase the Origin host, so a case-sensitive
+// pattern would never match a real `https://app.opencode.ai` origin.
+const opencodeOrigin = /^https:\/\/([a-z0-9-]+\.)*opencode\.ai$/i
 export type CorsOptions = { readonly cors?: ReadonlyArray<string> }
 
 export const CorsConfig = Context.Reference<CorsOptions | undefined>("@opencode/ServerCorsConfig", {
