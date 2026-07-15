@@ -3,7 +3,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { GlobalBus } from "@/bus/global"
 import { EventV2 } from "@opencode-ai/core/event"
 import * as Log from "@opencode-ai/core/util/log"
-import { Effect, Queue } from "effect"
+import { Effect, PubSub } from "effect"
 import * as Stream from "effect/Stream"
 import { HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
@@ -31,10 +31,10 @@ function eventResponse(events: EventV2.Interface) {
     const workspaceID = yield* InstanceState.workspaceID
     // Listener registration is eager, so events published after this point cannot
     // be lost while the HTTP body fiber is starting or emitting server.connected.
-    const queue = yield* Queue.unbounded<EventV2.Payload>()
-    const unsubscribe = yield* events.listen((event) => Effect.sync(() => Queue.offerUnsafe(queue, event)))
+    const pubsub = yield* PubSub.unbounded<EventV2.Payload>()
+    const unsubscribe = yield* events.listen((event) => PubSub.publish(pubsub, event))
     yield* Effect.addFinalizer(() => unsubscribe)
-    const stream = Stream.fromQueue(queue).pipe(
+    const stream = Stream.fromPubSub(pubsub).pipe(
       Stream.filter(
         (event) =>
           event.location?.directory === instance.directory &&
@@ -42,23 +42,28 @@ function eventResponse(events: EventV2.Interface) {
       ),
       Stream.map((event) => ({ id: event.id, type: event.type, properties: event.data })),
     )
-    const disposed = Stream.callback<{ id: string; type: string; properties: unknown }>((queue) => {
-      const listener = (event: {
-        directory?: string
-        payload: { id?: string; type?: string; properties?: unknown }
-      }) => {
-        if (event.directory !== instance.directory || event.payload.type !== "server.instance.disposed") return
-        Queue.offerUnsafe(queue, {
+    // PubSub vs Queue: PubSub is broadcast model for consistency with the main
+    // event stream above. Single-consumer here so functionally equivalent.
+    const disposedPubsub = yield* PubSub.unbounded<{ id: string; type: string; properties: unknown }>()
+    const runtime = yield* Effect.runtime<never>()
+    const disposedListener = (event: {
+      directory?: string
+      payload: { id?: string; type?: string; properties?: unknown }
+    }) => {
+      if (event.directory !== instance.directory || event.payload.type !== "server.instance.disposed") return
+      runtime.runSync(
+        PubSub.publish(disposedPubsub, {
           id: event.payload.id ?? eventID(),
           type: "server.instance.disposed",
           properties: event.payload.properties ?? {},
-        })
-      }
-      return Effect.acquireRelease(
-        Effect.sync(() => GlobalBus.on("event", listener)),
-        () => Effect.sync(() => GlobalBus.off("event", listener)),
+        }),
       )
-    })
+    }
+    yield* Effect.acquireRelease(
+      Effect.sync(() => GlobalBus.on("event", disposedListener)),
+      () => Effect.sync(() => GlobalBus.off("event", disposedListener)),
+    )
+    const disposed = Stream.fromPubSub(disposedPubsub)
     const output = stream.pipe(
       Stream.merge(disposed, { haltStrategy: "left" }),
       Stream.takeUntil((event) => event.type === "server.instance.disposed"),

@@ -6,7 +6,7 @@ import { Installation } from "@/installation"
 import { disposeAllInstancesAndEmitGlobalDisposed } from "@/server/global-lifecycle"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import * as Log from "@opencode-ai/core/util/log"
-import { Effect, Queue, Schema } from "effect"
+import { Effect, PubSub, Schema } from "effect"
 import * as Stream from "effect/Stream"
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
@@ -34,36 +34,42 @@ function parseBody(body: string) {
 }
 
 function eventResponse() {
-  log.info("global event connected")
-  const events = Stream.callback<GlobalBusEvent>((queue) => {
-    const handler = (event: GlobalBusEvent) => Queue.offerUnsafe(queue, event)
-    return Effect.acquireRelease(
+  return Effect.gen(function* () {
+    log.info("global event connected")
+    const pubsub = yield* PubSub.unbounded<GlobalBusEvent>()
+    const runtime = yield* Effect.runtime<never>()
+    // unbounded PubSub publish is synchronous — runSync avoids orphan fibers
+    const handler = (event: GlobalBusEvent) => {
+      runtime.runSync(PubSub.publish(pubsub, event))
+    }
+    yield* Effect.acquireRelease(
       Effect.sync(() => GlobalBus.on("event", handler)),
       () => Effect.sync(() => GlobalBus.off("event", handler)),
     )
-  })
-  const heartbeat = Stream.tick("10 seconds").pipe(
-    Stream.drop(1),
-    Stream.map(() => ({ payload: { id: EventV2.ID.create(), type: "server.heartbeat", properties: {} } })),
-  )
+    const events = Stream.fromPubSub(pubsub)
+    const heartbeat = Stream.tick("10 seconds").pipe(
+      Stream.drop(1),
+      Stream.map(() => ({ payload: { id: EventV2.ID.create(), type: "server.heartbeat", properties: {} } })),
+    )
 
-  return HttpServerResponse.stream(
-    Stream.make({ payload: { id: EventV2.ID.create(), type: "server.connected", properties: {} } }).pipe(
-      Stream.concat(events.pipe(Stream.merge(heartbeat, { haltStrategy: "left" }))),
-      Stream.map(eventData),
-      Stream.pipeThroughChannel(Sse.encode()),
-      Stream.encodeText,
-      Stream.ensuring(Effect.sync(() => log.info("global event disconnected"))),
-    ),
-    {
-      contentType: "text/event-stream",
-      headers: {
-        "Cache-Control": "no-cache, no-transform",
-        "X-Accel-Buffering": "no",
-        "X-Content-Type-Options": "nosniff",
+    return HttpServerResponse.stream(
+      Stream.make({ payload: { id: EventV2.ID.create(), type: "server.connected", properties: {} } }).pipe(
+        Stream.concat(events.pipe(Stream.merge(heartbeat, { haltStrategy: "left" }))),
+        Stream.map(eventData),
+        Stream.pipeThroughChannel(Sse.encode()),
+        Stream.encodeText,
+        Stream.ensuring(Effect.sync(() => log.info("global event disconnected"))),
+      ),
+      {
+        contentType: "text/event-stream",
+        headers: {
+          "Cache-Control": "no-cache, no-transform",
+          "X-Accel-Buffering": "no",
+          "X-Content-Type-Options": "nosniff",
+        },
       },
-    },
-  )
+    )
+  })
 }
 
 export const globalHandlers = HttpApiBuilder.group(RootHttpApi, "global", (handlers) =>
@@ -77,7 +83,7 @@ export const globalHandlers = HttpApiBuilder.group(RootHttpApi, "global", (handl
     })
 
     const event = Effect.fn("GlobalHttpApi.event")(function* () {
-      return eventResponse()
+      return yield* eventResponse()
     })
 
     const configGet = Effect.fn("GlobalHttpApi.configGet")(function* () {
