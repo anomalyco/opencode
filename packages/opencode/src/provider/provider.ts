@@ -1690,6 +1690,21 @@ const layer = Layer.effect(
           if (baseURL) options.baseURL = baseURL
         }
 
+        if (
+          model.providerID === "google-vertex" &&
+          model.api.npm === "@ai-sdk/google-vertex" &&
+          !options.baseURL &&
+          !options.apiKey &&
+          typeof options.project === "string"
+        ) {
+          // @ai-sdk/google-vertex's own baseURL default only special-cases
+          // "global", producing an invalid "us-aiplatform.googleapis.com" /
+          // "eu-aiplatform.googleapis.com" host for continental multi-regions;
+          // compute the correct host ourselves instead of relying on it.
+          const location = typeof options.location === "string" ? options.location : "us-central1"
+          options.baseURL = `https://${googleVertexEndpoint(location)}/v1beta1/projects/${options.project}/locations/${location}/publishers/google`
+        }
+
         if (model.providerID === "google-vertex" && !model.api.npm.includes("@ai-sdk/openai-compatible")) {
           delete options.fetch
         }

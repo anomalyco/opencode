@@ -338,6 +338,68 @@ describe("GoogleVertexPlugin", () => {
     ),
   )
 
+  it.effect("overrides the native Vertex SDK baseURL for multi-region locations", () =>
+    withEnv(
+      {
+        GOOGLE_CLOUD_PROJECT: "env-project",
+        GOOGLE_VERTEX_LOCATION: "us",
+      },
+      () =>
+        Effect.gen(function* () {
+          vertexOptions.length = 0
+          const aisdk = yield* AISDK.Service
+          yield* addPlugin()
+          yield* aisdk.runSDK({
+            model: ModelV2.Info.make({
+              ...ModelV2.Info.empty(ProviderV2.ID.make("google-vertex"), ModelV2.ID.make("gemini")),
+              api: {
+                id: ModelV2.ID.make("gemini"),
+                type: "aisdk",
+                package: "@ai-sdk/google-vertex",
+              },
+            }),
+            package: "@ai-sdk/google-vertex",
+            options: { name: "google-vertex" },
+          })
+          expect(vertexOptions).toHaveLength(1)
+          expect(vertexOptions[0].baseURL).toBe(
+            "https://aiplatform.googleapis.com/v1beta1/projects/env-project/locations/us/publishers/google",
+          )
+        }),
+    ),
+  )
+
+  it.effect("keeps the native Vertex SDK baseURL region-prefixed for single regions", () =>
+    withEnv(
+      {
+        GOOGLE_CLOUD_PROJECT: "env-project",
+        GOOGLE_VERTEX_LOCATION: "us-central1",
+      },
+      () =>
+        Effect.gen(function* () {
+          vertexOptions.length = 0
+          const aisdk = yield* AISDK.Service
+          yield* addPlugin()
+          yield* aisdk.runSDK({
+            model: ModelV2.Info.make({
+              ...ModelV2.Info.empty(ProviderV2.ID.make("google-vertex"), ModelV2.ID.make("gemini")),
+              api: {
+                id: ModelV2.ID.make("gemini"),
+                type: "aisdk",
+                package: "@ai-sdk/google-vertex",
+              },
+            }),
+            package: "@ai-sdk/google-vertex",
+            options: { name: "google-vertex" },
+          })
+          expect(vertexOptions).toHaveLength(1)
+          expect(vertexOptions[0].baseURL).toBe(
+            "https://us-central1-aiplatform.googleapis.com/v1beta1/projects/env-project/locations/us-central1/publishers/google",
+          )
+        }),
+    ),
+  )
+
   it.effect("keeps Google auth fetch for OpenAI-compatible Vertex endpoints", () =>
     Effect.gen(function* () {
       googleAuthOptions.length = 0

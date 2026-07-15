@@ -98,13 +98,22 @@ export const GoogleVertexPlugin = define({
         if (evt.package !== "@ai-sdk/google-vertex") return
         const mod = yield* Effect.promise(() => import("@ai-sdk/google-vertex"))
         const project = resolveProject(evt.options)
-        const location = resolveLocation(evt.options)
+        const location = String(resolveLocation(evt.options))
         const options = { ...evt.options }
         delete options.fetch
         evt.sdk = mod.createVertex({
           ...options,
           project,
           location,
+          // @ai-sdk/google-vertex's own baseURL default only special-cases
+          // "global", producing an invalid "us-aiplatform.googleapis.com" /
+          // "eu-aiplatform.googleapis.com" host for continental multi-regions;
+          // compute the correct host ourselves instead of relying on it.
+          ...(project && !options.apiKey && !options.baseURL
+            ? {
+                baseURL: `https://${vertexEndpoint(location)}/v1beta1/projects/${project}/locations/${location}/publishers/google`,
+              }
+            : {}),
         })
       }),
     )
