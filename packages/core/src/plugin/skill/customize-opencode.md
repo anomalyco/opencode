@@ -276,9 +276,14 @@ file, `disable: true` in frontmatter.
 
 ### Built-in agents
 
-opencode ships with `default`, `plan`, `general`, `explore`. Hidden internal agents:
+opencode ships with `default`, `plan`, `cruisecontrol`, `general`, `explore`. Hidden internal agents:
 `compaction`, `title`, `summary`. To override a built-in's fields, define the
 same key in `agent: { <name>: { ... } }`. The legacy agent id `build` aliases to `default`.
+
+`cruisecontrol` is the CruiseControl builtin agent (autonomous execution). It is
+distinct from any future permission-module id `cruise_control` (LLM permission
+classifier). Bind its model with `agent.cruisecontrol.model` — the TUI prompts
+for a model when unset rather than falling back to the global default.
 
 ## Commands
 

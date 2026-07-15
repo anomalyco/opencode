@@ -50,6 +50,7 @@ it.instance("returns default native agents when no config", () =>
     const names = agents.map((a) => a.name)
     expect(names).toContain("default")
     expect(names).toContain("plan")
+    expect(names).toContain("cruisecontrol")
     expect(names).toContain("general")
     expect(names).toContain("explore")
     expect(names).toContain("compaction")
@@ -87,6 +88,18 @@ it.instance("plan agent denies the general subagent by default", () =>
     expect(Permission.evaluate("task", "general", plan!.permission).action).toBe("deny")
     expect(Permission.evaluate("task", "explore", plan!.permission).action).toBe("allow")
     expect(Permission.evaluate("task", "custom", plan!.permission).action).toBe("allow")
+  }),
+)
+
+it.instance("cruisecontrol agent is a native primary with a prompt", () =>
+  Effect.gen(function* () {
+    const agent = yield* load((svc) => svc.get("cruisecontrol"))
+    expect(agent).toBeDefined()
+    expect(agent?.mode).toBe("primary")
+    expect(agent?.native).toBe(true)
+    expect(agent?.prompt).toContain("CruiseControl")
+    expect(evalPerm(agent, "edit")).toBe("allow")
+    expect(evalPerm(agent, "question")).toBe("allow")
   }),
 )
 
@@ -790,6 +803,7 @@ it.instance(
       agent: {
         default: { disable: true },
         plan: { disable: true },
+        cruisecontrol: { disable: true },
       },
     },
   },

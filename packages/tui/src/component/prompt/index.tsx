@@ -44,6 +44,7 @@ import { formatDuration } from "../../util/format"
 import { createColors, createFrames } from "../../ui/spinner"
 import { useDialog } from "../../ui/dialog"
 import { DialogProvider as DialogProviderConnect } from "../dialog-provider"
+import { DialogModel } from "../dialog-model"
 import { DialogAlert } from "../../ui/dialog-alert"
 import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
@@ -214,14 +215,25 @@ export function Prompt(props: PromptProps) {
   const hasRightContent = createMemo(() => Boolean(props.right))
 
   function promptModelWarning() {
+    if (sync.data.provider.length === 0) {
+      toast.show({
+        variant: "warning",
+        message: "Connect a provider to send prompts",
+        duration: 3000,
+      })
+      dialog.replace(() => <DialogProviderConnect />)
+      return
+    }
+    const current = local.agent.current()
     toast.show({
       variant: "warning",
-      message: "Connect a provider to send prompts",
+      message:
+        current?.name === "cruisecontrol"
+          ? "Select a model for CruiseControl before sending"
+          : "Select a model to send prompts",
       duration: 3000,
     })
-    if (sync.data.provider.length === 0) {
-      dialog.replace(() => <DialogProviderConnect />)
-    }
+    dialog.replace(() => <DialogModel />)
   }
 
   function dismissEditorContext() {
@@ -1444,7 +1456,7 @@ export function Prompt(props: PromptProps) {
                   {(agent) => (
                     <>
                       <text fg={fadeColor(highlight(), agentMetaAlpha())}>
-                        {store.mode === "shell" ? "Shell" : Locale.titlecase(agent().name)}
+                        {store.mode === "shell" ? "Shell" : Locale.agentLabel(agent().name)}
                       </text>
                       <Show when={store.mode === "normal" && local.permission.mode === "auto"}>
                         <text fg={fadeColor(theme.textMuted, agentMetaAlpha())}>auto</text>
