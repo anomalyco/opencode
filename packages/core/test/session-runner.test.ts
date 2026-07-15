@@ -15,6 +15,7 @@ import {
   type LLMRequest,
 } from "@opencode-ai/ai"
 import * as OpenAIChat from "@opencode-ai/ai/protocols/openai-chat"
+import { Catalog } from "@opencode-ai/core/catalog"
 import { Database } from "@opencode-ai/core/database/database"
 import { makeLocationNode } from "@opencode-ai/core/effect/app-node"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -360,6 +361,20 @@ const pluginSupervisor = Layer.succeed(
     flush: Effect.suspend(() => pluginFlushHook),
   }),
 )
+const promptCatalog = Layer.mock(Catalog.Service, {
+  provider: {
+    get: () => Effect.succeed(undefined),
+    all: () => Effect.succeed([]),
+    available: () => Effect.succeed([]),
+  },
+  model: {
+    get: () => Effect.succeed(undefined),
+    all: () => Effect.succeed([]),
+    available: () => Effect.succeed([]),
+    default: () => Effect.succeed(undefined),
+    small: () => Effect.succeed(undefined),
+  },
+})
 const runnerLayer = AppNodeBuilder.build(SessionRunnerLLM.node, [
   [Snapshot.node, Snapshot.noopLayer],
   [LayerNodePlatform.llmClient, client],
@@ -400,6 +415,7 @@ const it = testEffect(
       SessionProjector.node,
       SessionStore.node,
       AgentV2.node,
+      Catalog.node,
       ToolRegistry.node,
       ToolRegistry.toolsNode,
       PluginHooks.node,
@@ -419,6 +435,7 @@ const it = testEffect(
     [
       [LayerNodePlatform.llmClient, client],
       [PermissionV2.node, permission],
+      [Catalog.node, promptCatalog],
       [SessionRunnerModel.node, models],
       [InstructionBuiltIns.node, systemContext],
       [InstructionDiscovery.node, instructionContext],

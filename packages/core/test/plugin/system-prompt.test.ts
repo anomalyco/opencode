@@ -1,19 +1,21 @@
 import { describe, expect, test } from "bun:test"
 import { SystemPart } from "@opencode-ai/ai"
 import { AgentV2 } from "@opencode-ai/core/agent"
+import { Catalog } from "@opencode-ai/core/catalog"
 import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { SystemPromptPlugin } from "@opencode-ai/core/plugin/system-prompt"
 import { SessionV2 } from "@opencode-ai/core/session"
 import type { SessionHooks } from "@opencode-ai/plugin/v2/effect/session"
 import { Model } from "@opencode-ai/schema/model"
 import { Provider } from "@opencode-ai/schema/provider"
-import { Effect, Layer } from "effect"
+import { Effect } from "effect"
 import { testEffect } from "../lib/effect"
+import { PluginTestLayer } from "./fixture"
 import { host } from "./host"
+import PROMPT_META from "../../src/plugin/system-prompt/meta.txt"
 import PROMPT_DEFAULT from "../../src/session/runner/prompt/default.txt"
 
-const layer = PluginHooks.node.implementation as Layer.Layer<PluginHooks.Service>
-const it = testEffect(layer)
+const it = testEffect(PluginTestLayer)
 const fallback = PROMPT_DEFAULT
 
 const context = (id: string, system = fallback): SessionHooks["context"] => ({
@@ -26,6 +28,19 @@ const context = (id: string, system = fallback): SessionHooks["context"] => ({
 })
 
 describe("SystemPromptPlugin", () => {
+  test("uses V2 vocabulary in the Meta prompt", () => {
+    expect(PROMPT_META).toContain("webfetch tool")
+    expect(PROMPT_META).toContain("subagent tool")
+    expect(PROMPT_META).toContain("shell tool")
+    expect(PROMPT_META).toContain("read for reading files")
+    expect(PROMPT_META).toContain("edit for editing")
+    expect(PROMPT_META).toContain("write for creating files")
+    expect(PROMPT_META).toContain("https://v2.opencode.ai/llms.txt")
+    expect(PROMPT_META).not.toMatch(
+      /TodoWrite|Task tool|WebFetch|\bBash\b|Read for reading files|Edit for editing|Write for creating files|https:\/\/opencode\.ai\/docs/,
+    )
+  })
+
   test("uses granular IDs with a common prefix", () => {
     expect(SystemPromptPlugin.Plugins.map((plugin) => plugin.id)).toEqual([
       "opencode.system-prompt.openai",
@@ -99,6 +114,39 @@ describe("SystemPromptPlugin", () => {
 
       expect(gemini.system[0]?.text).toContain("# Core Mandates")
       expect(claude.system[0]?.text).toBe(fallback)
+    }),
+  )
+
+  it.effect("selects against the catalog model ID instead of its alias", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const hooks = yield* PluginHooks.Service
+      yield* catalog.transform((draft) => {
+        draft.model.update(Provider.ID.make("test"), Model.ID.make("openai-alias"), (model) => {
+          model.modelID = Model.ID.make("gpt-5")
+        })
+        draft.model.update(Provider.ID.make("test"), Model.ID.make("gpt-5-alias"), (model) => {
+          model.modelID = Model.ID.make("custom-model")
+        })
+        draft.model.update(Provider.ID.make("test"), Model.ID.make("codex-family-alias"), (model) => {
+          model.modelID = Model.ID.make("custom-deployment")
+          model.family = Model.Family.make("gpt-codex")
+        })
+      })
+      yield* SystemPromptPlugin.OpenAIPlugin.effect(
+        host({ session: { hook: (name, callback) => hooks.register("session", name, callback) } }),
+      )
+      const physicalOpenAI = context("openai-alias")
+      const physicalCustom = context("gpt-5-alias")
+      const familyOpenAI = context("codex-family-alias")
+
+      yield* hooks.trigger("session", "context", physicalOpenAI)
+      yield* hooks.trigger("session", "context", physicalCustom)
+      yield* hooks.trigger("session", "context", familyOpenAI)
+
+      expect(physicalOpenAI.system[0]?.text).toContain("You are OpenCode, You and the user share the same workspace")
+      expect(physicalCustom.system[0]?.text).toBe(fallback)
+      expect(familyOpenAI.system[0]?.text).toContain("## Editing constraints")
     }),
   )
 })
