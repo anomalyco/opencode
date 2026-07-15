@@ -514,6 +514,38 @@ it.instance("loop calls LLM and returns assistant message", () =>
   }),
 )
 
+it.instance("loop sends max steps instruction as a user message", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig((url) => ({
+      ...providerCfg(url),
+      agent: { build: { steps: 1 } },
+    }))
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+    yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "hello" }],
+    })
+    yield* llm.text("world")
+
+    yield* prompt.loop({ sessionID: chat.id })
+
+    const hits = yield* llm.hits
+    expect(hits).toHaveLength(1)
+    const messages = hits[0]?.body.messages
+    expect(messages).toBeArray()
+    if (!Array.isArray(messages)) return
+    const maxSteps = messages.find(
+      (message) => JSON.stringify(message).includes("CRITICAL - MAXIMUM STEPS REACHED"),
+    )
+    expect(maxSteps).toMatchObject({ role: "user" })
+  }),
+  30_000,
+)
+
 withMcpInstructions.instance(
   "loop includes MCP instructions in model system context",
   () =>
