@@ -1,4 +1,8 @@
 <p align="center">
+  <img src="assets/kancode.png" alt="KanCode" width="128" />
+</p>
+
+<p align="center">
   <a href="https://github.com/puetsua/kancode">
     <strong>KanCode</strong>
   </a>
