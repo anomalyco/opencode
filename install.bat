@@ -9,9 +9,9 @@ echo.
 
 if exist "%~dp0install.ps1" (
     echo    Using local install.ps1
-    powershell -ExecutionPolicy Bypass -File "%~dp0install.ps1" %*
+    powershell -ExecutionPolicy Bypass -File "%~dp0install.ps1" -Desktop %*
 ) else (
-    echo    Downloading installer...
-    powershell -ExecutionPolicy Bypass -Command "& { irm 'https://github.com/ivanfernadezm99/opencode/releases/latest/download/install.ps1' | iex }"
+    echo    Downloading and installing (CLI + Desktop)...
+    powershell -ExecutionPolicy Bypass -Command "& { $s = irm 'https://github.com/ivanfernadezm99/opencode/releases/latest/download/install.ps1'; $s += \"`nMain -Desktop\"; iex $s }"
 )
 pause

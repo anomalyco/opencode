@@ -358,7 +358,8 @@ function Main {
         [string]$Version = "",
         [string]$Channel = $(if ($env:GENTLE_AI_CHANNEL) { $env:GENTLE_AI_CHANNEL } else { "stable" }),
         [switch]$NoModifyPath,
-        [switch]$UseMirror
+        [switch]$UseMirror,
+        [switch]$Desktop
     )
 
     if ($Channel -eq "nightly") { $Channel = "beta" }
@@ -579,6 +580,33 @@ function Main {
             Write-Success "gentle-ai: $ver"
         } catch {
             Write-Warn "Could not verify gentle-ai version"
+        }
+    }
+
+    if ($Desktop) {
+        Write-Step "Installing desktop app"
+        $desktopExeName = "opencode-desktop-win-x64.exe"
+        $desktopUrl = "https://github.com/$OPENCODE_REPO/releases/download/$Version/$desktopExeName"
+        $desktopPath = Join-Path $env:TEMP $desktopExeName
+
+        Write-Info "Downloading desktop app installer..."
+        $ok = Download-WithRetry -Url $desktopUrl -OutFile $desktopPath -MaxRetries 2
+        if ($ok) {
+            Write-Info "Running desktop installer (silent)..."
+            try {
+                $proc = Start-Process -FilePath $desktopPath -ArgumentList "/S" -Wait -NoNewWindow -PassThru
+                if ($proc.ExitCode -eq 0) {
+                    Write-Success "Desktop app installed"
+                } else {
+                    Write-Warn "Desktop installer exited with code $($proc.ExitCode)"
+                }
+            } catch {
+                Write-Warn "Could not run desktop installer: $_"
+            }
+            Remove-Item -Path $desktopPath -Force -ErrorAction SilentlyContinue
+        } else {
+            Write-Warn "Could not download desktop app installer"
+            Write-Info "Download it manually from: https://github.com/$OPENCODE_REPO/releases/tag/$Version"
         }
     }
 
