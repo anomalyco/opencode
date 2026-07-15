@@ -40,6 +40,7 @@ describe("interpreter reference walks", () => {
     const tool = new ToolReference(["items", "get"])
     const sparse: Array<unknown> = [tool]
     sparse.length = 1_000_000
+    Object.defineProperty(sparse, 0, { enumerable: false, value: tool })
     Object.defineProperty(sparse, sparse.length - 1, {
       enumerable: true,
       get: () => {
@@ -53,6 +54,7 @@ describe("interpreter reference walks", () => {
     const container = {}
     const insertion: Array<unknown> = [container]
     insertion.length = sparse.length
+    Object.defineProperty(insertion, 0, { enumerable: false, value: container })
     Object.defineProperty(insertion, insertion.length - 1, {
       enumerable: true,
       get: () => {

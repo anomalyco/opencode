@@ -35,14 +35,11 @@ export const isRuntimeReference = (value: unknown): boolean =>
   isCodeModeValue(value)
 
 function* childValues(value: object): Generator<unknown> {
-  if (!Array.isArray(value)) {
-    yield* Object.values(value)
+  if (Array.isArray(value)) {
+    for (let index = 0; index < value.length; index++) yield value[index]
     return
   }
-  for (const key in value) {
-    const index = Number(key)
-    if (Number.isInteger(index) && index >= 0 && index < value.length && String(index) === key) yield value[index]
-  }
+  yield* Object.values(value)
 }
 
 export const containsRuntimeReference = (value: unknown): boolean => {
