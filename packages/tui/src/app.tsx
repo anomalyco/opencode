@@ -139,7 +139,7 @@ export type TuiInput = {
   server: {
     endpoint: Service.Endpoint
     reconnect?: (onStatus: (status: Service.Status) => void, signal: AbortSignal) => Promise<Service.Endpoint>
-    reload?: () => Promise<void>
+    restart?: () => Promise<void>
   }
   args: Args
   config: Config.Interface
@@ -324,7 +324,11 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                         }
                                       >
                                         <PluginRuntimeProvider value={pluginRuntime}>
-                                          <ClientProvider api={api} reconnect={reconnect} reload={input.server.reload}>
+                                          <ClientProvider
+                                            api={api}
+                                            reconnect={reconnect}
+                                            restart={input.server.restart}
+                                          >
                                             <PermissionProvider>
                                               <DataProvider>
                                                 <LocationProvider>
@@ -757,19 +761,21 @@ function App(props: { pair?: DialogPairCredentials }) {
         },
         category: "System",
       },
-      ...(client.reload
+      ...(client.restart
         ? [
             {
               name: "server.reload",
-              title: "Reload server",
+              title: "Restart server",
               slash: { name: "reload" },
               run: async () => {
+                const restart = client.restart
+                if (!restart) return
                 dialog.clear()
-                toast.show({ variant: "info", message: "Reloading server...", duration: 30000 })
-                // reload resolves once the replacement service is healthy; the
+                toast.show({ variant: "info", message: "Restarting server...", duration: 30000 })
+                // restart resolves once the replacement service is healthy; the
                 // event stream reattaches through the reconnect loop.
-                await client.reload!()
-                  .then(() => toast.show({ variant: "success", message: "Server reloaded" }))
+                await restart()
+                  .then(() => toast.show({ variant: "success", message: "Server restarted" }))
                   .catch(toast.error)
               },
               category: "System",

@@ -1,4 +1,3 @@
-import { NodeFileSystem } from "@effect/platform-node"
 import { Service } from "@opencode-ai/client/effect"
 import { ClientError, isUnauthorizedError, OpenCode } from "@opencode-ai/client/promise"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
@@ -16,8 +15,12 @@ export type Args = {
 
 export type Resolved = {
   readonly endpoint: Service.Endpoint
-  readonly reconnect?: (onStatus: (status: Service.Status) => void, signal: AbortSignal) => Promise<Service.Endpoint>
-  readonly reload?: () => Promise<void>
+  readonly reconnect?: (onStatus: (status: Service.Status) => void) => ReturnType<typeof Service.start>
+  readonly restart?: Effect.Effect<
+    void,
+    Effect.Error<ReturnType<typeof Service.stop>> | Effect.Error<ReturnType<typeof Service.start>>,
+    Effect.Services<ReturnType<typeof Service.stop>> | Effect.Services<ReturnType<typeof Service.start>>
+  >
 }
 
 export const resolve = Effect.fn("cli.server.resolve")(function* (args: Args) {
@@ -49,17 +52,11 @@ export const resolve = Effect.fn("cli.server.resolve")(function* (args: Args) {
   const reconnectOptions = { ...options, version: undefined }
   return {
     endpoint,
-    reconnect: (onStatus, signal) =>
-      Effect.runPromise(Service.start({ ...reconnectOptions, onStatus }).pipe(Effect.provide(NodeFileSystem.layer)), {
-        signal,
-      }),
-    reload: () =>
-      Effect.runPromise(
-        Effect.gen(function* () {
-          yield* Service.stop(options, { targetVersion: options.version })
-          yield* Service.start(options)
-        }).pipe(Effect.provide(NodeFileSystem.layer)),
-      ),
+    reconnect: (onStatus) => Service.start({ ...reconnectOptions, onStatus }),
+    restart: Effect.gen(function* () {
+      yield* Service.stop(options, { targetVersion: options.version })
+      yield* Service.start(options)
+    }),
   } satisfies Resolved
 })
 
