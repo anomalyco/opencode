@@ -167,13 +167,14 @@ const layer = Layer.effect(
               modules.value.registerSync({
                 id: module.id,
                 decide: (input) =>
-                  Effect.promise(() =>
-                    module.decide({
+                  Effect.promise(async () => {
+                    const decision = await module.decide({
                       permission: input.permission,
                       patterns: input.patterns,
                       metadata: input.metadata,
-                    }),
-                  ),
+                    })
+                    return { decision }
+                  }),
               })
             },
           },

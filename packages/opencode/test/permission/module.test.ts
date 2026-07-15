@@ -7,6 +7,7 @@ import {
   applySafety,
   parseClassifierResult,
   runClassifier,
+  destructiveReason,
   MISSING_MODEL_MESSAGE,
 } from "../../src/permission/module"
 import { EventV2Bridge } from "../../src/event-v2-bridge"
@@ -19,17 +20,20 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { ConfigPermissionV1 } from "@opencode-ai/core/v1/config/permission"
 import { ConfigMigrateV1 } from "@opencode-ai/core/v1/config/migrate"
+import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Config } from "../../src/config/config"
 import { Provider } from "../../src/provider/provider"
 import { TestConfig } from "../fixture/config"
 
 const noopBootstrap = Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void }))
 
-function stubModules(decide: (input: PermissionModule.DecideInput) => Effect.Effect<PermissionModule.Decision>) {
+function stubModules(
+  decide: (input: PermissionModule.DecideInput) => Effect.Effect<PermissionModule.Decision | PermissionModule.DecideResult>,
+) {
   return Layer.succeed(
     PermissionModule.Service,
     PermissionModule.Service.of({
-      decide,
+      decide: (input) => decide(input).pipe(Effect.map(PermissionModule.normalizeDecide)),
       register: () => Effect.void,
       registerSync: () => undefined,
       has: () => true,
@@ -184,6 +188,133 @@ itAsk.instance("cruise_control ask publishes pending request", () =>
   }),
 )
 
+const askReasonEnv = AppNodeBuilder.build(
+  LayerNode.group([
+    Permission.node,
+    PermissionModule.node,
+    EventV2Bridge.node,
+    CrossSpawnSpawner.node,
+    InstanceStore.node,
+  ]),
+  [
+    [InstanceStore.bootstrapNode, noopBootstrap],
+    [
+      PermissionModule.node,
+      stubModules(() => Effect.succeed({ decision: "ask" as const, reason: "network install needs review" })),
+    ],
+  ],
+)
+
+const itAskReason = testEffect(askReasonEnv)
+
+itAskReason.instance("cruise_control ask attaches classifier reason to metadata", () =>
+  Effect.gen(function* () {
+    const permission = yield* Permission.Service
+    const fiber = yield* permission
+      .ask({
+        sessionID: SessionID.make("ses_module_ask_reason"),
+        permission: "bash",
+        patterns: ["npm install"],
+        metadata: {},
+        always: ["npm install"],
+        ruleset: Permission.fromConfig({ bash: PermissionModuleSchema.CRUISE_CONTROL }),
+      })
+      .pipe(Effect.forkChild)
+
+    const pending = yield* Effect.gen(function* () {
+      while (true) {
+        const list = yield* permission.list()
+        if (list.length === 1) return list
+        yield* Effect.sleep("10 millis")
+      }
+    }).pipe(
+      Effect.timeoutOrElse({
+        duration: "1 second",
+        orElse: () => Effect.fail(new Error("timed out waiting for pending ask")),
+      }),
+    )
+
+    expect(pending[0]?.metadata?.reason).toBe("network install needs review")
+    yield* permission.reply({ requestID: pending[0]!.id, reply: "once" })
+    yield* Fiber.join(fiber)
+  }),
+)
+
+const allowReasonEnv = AppNodeBuilder.build(
+  LayerNode.group([
+    Permission.node,
+    PermissionModule.node,
+    EventV2Bridge.node,
+    CrossSpawnSpawner.node,
+    InstanceStore.node,
+  ]),
+  [
+    [InstanceStore.bootstrapNode, noopBootstrap],
+    [
+      PermissionModule.node,
+      stubModules(() => Effect.succeed({ decision: "allow" as const, reason: "safe read-only command" })),
+    ],
+  ],
+)
+
+const itAllowReason = testEffect(allowReasonEnv)
+
+itAllowReason.instance("cruise_control allow returns conclusion", () =>
+  Effect.gen(function* () {
+    const permission = yield* Permission.Service
+    const result = yield* permission.ask({
+      sessionID: SessionID.make("ses_module_allow_reason"),
+      permission: "bash",
+      patterns: ["ls"],
+      metadata: {},
+      always: ["ls"],
+      ruleset: Permission.fromConfig({ bash: PermissionModuleSchema.CRUISE_CONTROL }),
+      tool: { messageID: MessageID.make("msg_module_allow_reason"), callID: "call_allow_reason" },
+    })
+    expect(result.conclusion).toBe("safe read-only command")
+    expect(yield* permission.list()).toEqual([])
+  }),
+)
+
+const denyReasonEnv = AppNodeBuilder.build(
+  LayerNode.group([
+    Permission.node,
+    PermissionModule.node,
+    EventV2Bridge.node,
+    CrossSpawnSpawner.node,
+    InstanceStore.node,
+  ]),
+  [
+    [InstanceStore.bootstrapNode, noopBootstrap],
+    [
+      PermissionModule.node,
+      stubModules(() =>
+        Effect.succeed({ decision: "deny" as const, reason: "Recursive force delete (rm -rf) is blocked" }),
+      ),
+    ],
+  ],
+)
+
+const itDenyReason = testEffect(denyReasonEnv)
+
+itDenyReason.instance("cruise_control deny surfaces reason on DeniedError", () =>
+  Effect.gen(function* () {
+    const permission = yield* Permission.Service
+    const blocked = yield* permission
+      .ask({
+        sessionID: SessionID.make("ses_module_deny_reason"),
+        permission: "bash",
+        patterns: ["rm -rf /"],
+        metadata: {},
+        always: [],
+        ruleset: Permission.fromConfig({ bash: PermissionModuleSchema.CRUISE_CONTROL }),
+      })
+      .pipe(Effect.flip)
+    expect(blocked).toBeInstanceOf(PermissionV1.DeniedError)
+    expect(blocked.message).toBe("Recursive force delete (rm -rf) is blocked")
+  }),
+)
+
 const missingModelEnv = AppNodeBuilder.build(
   LayerNode.group([
     Permission.node,
@@ -211,7 +342,7 @@ itMissingModel.instance("missing cruise_control model asks with configure warnin
         patterns: ["ls"],
         metadata: {},
       }),
-    ).toBe("ask")
+    ).toEqual({ decision: "ask", reason: MISSING_MODEL_MESSAGE })
 
     const permission = yield* Permission.Service
     const fiber = yield* permission
@@ -261,6 +392,16 @@ describe("classifier contract", () => {
     expect(parseClassifierResult("not json")).toBeUndefined()
   })
 
+  test("destructiveReason matches rm -rf and SQL drops", () => {
+    expect(destructiveReason("bash", ["rm -rf /tmp/foo"])).toBe("Recursive force delete (rm -rf) is blocked")
+    expect(destructiveReason("bash", ["rm -fr ./build"])).toBe("Recursive force delete (rm -rf) is blocked")
+    expect(destructiveReason("bash", ["rm -r -f nest"])).toBe("Recursive force delete (rm -rf) is blocked")
+    expect(destructiveReason("bash", ["DROP DATABASE prod"])).toBe("DROP DATABASE is blocked")
+    expect(destructiveReason("bash", ["truncate table users"])).toBe("TRUNCATE TABLE is blocked")
+    expect(destructiveReason("bash", ["echo hello"])).toBeUndefined()
+    expect(destructiveReason("bash", ["rm file.txt"])).toBeUndefined()
+  })
+
   test("valid allow passes allowlist safety", () => {
     expect(
       applySafety("allow", "bash", {
@@ -283,7 +424,7 @@ describe("classifier contract", () => {
   })
 
   test("valid allow from classifier", async () => {
-    const decision = await Effect.runPromise(
+    const outcome = await Effect.runPromise(
       runClassifier({
         permission: "bash",
         patterns: ["ls"],
@@ -292,11 +433,32 @@ describe("classifier contract", () => {
         modelRef: "opencode/deepseek-v4-flash",
       }),
     )
-    expect(decision).toBe("allow")
+    expect(outcome).toEqual({ decision: "allow", reason: "safe read-only command" })
+  })
+
+  test("destructive patterns deny without calling classifier", async () => {
+    let called = false
+    const outcome = await Effect.runPromise(
+      runClassifier({
+        permission: "bash",
+        patterns: ["rm -rf /"],
+        opts: { fallback: "ask", allowlist: ["bash"], timeout_ms: 1000 },
+        classify: Effect.sync(() => {
+          called = true
+          return { decision: "allow" as const, reason: "should not run" }
+        }),
+        modelRef: "opencode/deepseek-v4-flash",
+      }),
+    )
+    expect(called).toBe(false)
+    expect(outcome).toEqual({
+      decision: "deny",
+      reason: "Recursive force delete (rm -rf) is blocked",
+    })
   })
 
   test("invalid classifier output uses fallback", async () => {
-    const decision = await Effect.runPromise(
+    const outcome = await Effect.runPromise(
       runClassifier({
         permission: "bash",
         patterns: ["ls"],
@@ -305,11 +467,12 @@ describe("classifier contract", () => {
         modelRef: "opencode/deepseek-v4-flash",
       }),
     )
-    expect(decision).toBe("ask")
+    expect(outcome.decision).toBe("ask")
+    expect(outcome.reason).toContain("Classifier unavailable")
   })
 
   test("timeout uses fallback and never allows", async () => {
-    const decision = await Effect.runPromise(
+    const outcome = await Effect.runPromise(
       runClassifier({
         permission: "bash",
         patterns: ["ls"],
@@ -318,11 +481,11 @@ describe("classifier contract", () => {
         modelRef: "opencode/deepseek-v4-flash",
       }),
     )
-    expect(decision).toBe("deny")
+    expect(outcome.decision).toBe("deny")
   })
 
   test("timeout defaults to ask when fallback unset", async () => {
-    const decision = await Effect.runPromise(
+    const outcome = await Effect.runPromise(
       runClassifier({
         permission: "bash",
         patterns: ["ls"],
@@ -331,6 +494,6 @@ describe("classifier contract", () => {
         modelRef: "opencode/deepseek-v4-flash",
       }),
     )
-    expect(decision).toBe("ask")
+    expect(outcome.decision).toBe("ask")
   })
 })

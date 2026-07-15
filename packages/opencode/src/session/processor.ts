@@ -168,13 +168,16 @@ const layer = Layer.effect(
       ) {
         const match = yield* readToolCall(toolCallID)
         if (!match || match.part.state.status !== "running") return
+        const previous = isRecord(match.part.state.metadata) ? match.part.state.metadata : {}
+        const cruise =
+          typeof previous.cruise_control === "string" ? { cruise_control: previous.cruise_control } : undefined
         yield* session.updatePart({
           ...match.part,
           state: {
             status: "completed",
             input: match.part.state.input,
             output: output.output,
-            metadata: output.metadata,
+            metadata: { ...output.metadata, ...cruise },
             title: output.title,
             time: { start: match.part.state.time.start, end: Date.now() },
             attachments: output.attachments,

@@ -385,6 +385,10 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
             const value = props.request.metadata?.warning
             return typeof value === "string" ? value : undefined
           }
+          const reason = () => {
+            const value = props.request.metadata?.reason
+            return typeof value === "string" ? value : undefined
+          }
 
           const header = () => (
             <box flexDirection="column" gap={0}>
@@ -401,6 +405,11 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
               <Show when={warning()}>
                 <box paddingLeft={2} paddingTop={1}>
                   <text fg={theme.warning}>{warning()}</text>
+                </box>
+              </Show>
+              <Show when={reason()}>
+                <box paddingLeft={2} paddingTop={warning() ? 0 : 1}>
+                  <text fg={theme.textMuted}>◈ {reason()}</text>
                 </box>
               </Show>
             </box>

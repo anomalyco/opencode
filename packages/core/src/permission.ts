@@ -179,7 +179,7 @@ const layer = Layer.effect(
           return { effect: "ask" as const, rules: all }
         }
         for (const moduleID of moduleIDs) {
-          const decision = yield* modules.value.decide({
+          const { decision } = yield* modules.value.decide({
             moduleID,
             permission: input.action,
             patterns: input.resources,

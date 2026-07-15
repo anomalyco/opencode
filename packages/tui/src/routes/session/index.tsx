@@ -1701,6 +1701,7 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
 
 function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMessage }) {
   const ctx = use()
+  const { theme } = useTheme()
   const display = createMemo(() => toolDisplay(props.part.tool))
 
   // Hide tool if showDetails is false and tool completed successfully
@@ -1708,6 +1709,12 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
     if (ctx.showDetails()) return false
     if (props.part.state.status !== "completed") return false
     return true
+  })
+
+  const cruiseConclusion = createMemo(() => {
+    if (props.part.state.status === "pending") return undefined
+    const value = props.part.state.metadata?.cruise_control
+    return typeof value === "string" && value.trim() ? value.trim() : undefined
   })
 
   const toolprops = {
@@ -1730,53 +1737,60 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
 
   return (
     <Show when={!shouldHide()}>
-      <Switch>
-        <Match when={display() === "bash"}>
-          <Shell {...toolprops} />
-        </Match>
-        <Match when={display() === "glob"}>
-          <Glob {...toolprops} />
-        </Match>
-        <Match when={display() === "read"}>
-          <Read {...toolprops} />
-        </Match>
-        <Match when={display() === "grep"}>
-          <Grep {...toolprops} />
-        </Match>
-        <Match when={display() === "webfetch"}>
-          <WebFetch {...toolprops} />
-        </Match>
-        <Match when={display() === "websearch"}>
-          <WebSearch {...toolprops} />
-        </Match>
-        <Match when={display() === "write"}>
-          <Write {...toolprops} />
-        </Match>
-        <Match when={display() === "edit"}>
-          <Edit {...toolprops} />
-        </Match>
-        <Match when={display() === "task"}>
-          <Task {...toolprops} />
-        </Match>
-        <Match when={display() === "execute"}>
-          <Execute {...toolprops} />
-        </Match>
-        <Match when={display() === "apply_patch"}>
-          <ApplyPatch {...toolprops} />
-        </Match>
-        <Match when={display() === "todowrite"}>
-          <TodoWrite {...toolprops} />
-        </Match>
-        <Match when={display() === "question"}>
-          <Question {...toolprops} />
-        </Match>
-        <Match when={display() === "skill"}>
-          <Skill {...toolprops} />
-        </Match>
-        <Match when={true}>
-          <GenericTool {...toolprops} />
-        </Match>
-      </Switch>
+      <box flexDirection="column">
+        <Switch>
+          <Match when={display() === "bash"}>
+            <Shell {...toolprops} />
+          </Match>
+          <Match when={display() === "glob"}>
+            <Glob {...toolprops} />
+          </Match>
+          <Match when={display() === "read"}>
+            <Read {...toolprops} />
+          </Match>
+          <Match when={display() === "grep"}>
+            <Grep {...toolprops} />
+          </Match>
+          <Match when={display() === "webfetch"}>
+            <WebFetch {...toolprops} />
+          </Match>
+          <Match when={display() === "websearch"}>
+            <WebSearch {...toolprops} />
+          </Match>
+          <Match when={display() === "write"}>
+            <Write {...toolprops} />
+          </Match>
+          <Match when={display() === "edit"}>
+            <Edit {...toolprops} />
+          </Match>
+          <Match when={display() === "task"}>
+            <Task {...toolprops} />
+          </Match>
+          <Match when={display() === "execute"}>
+            <Execute {...toolprops} />
+          </Match>
+          <Match when={display() === "apply_patch"}>
+            <ApplyPatch {...toolprops} />
+          </Match>
+          <Match when={display() === "todowrite"}>
+            <TodoWrite {...toolprops} />
+          </Match>
+          <Match when={display() === "question"}>
+            <Question {...toolprops} />
+          </Match>
+          <Match when={display() === "skill"}>
+            <Skill {...toolprops} />
+          </Match>
+          <Match when={true}>
+            <GenericTool {...toolprops} />
+          </Match>
+        </Switch>
+        <Show when={cruiseConclusion()}>
+          <box paddingLeft={3}>
+            <text fg={theme.textMuted}>◈ {cruiseConclusion()}</text>
+          </box>
+        </Show>
+      </box>
     </Show>
   )
 }

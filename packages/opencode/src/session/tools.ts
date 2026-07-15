@@ -67,26 +67,45 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
     metadata: (val) =>
       input.processor.updateToolCall(options.toolCallId, (match) => {
         if (!["running", "pending"].includes(match.state.status)) return match
+        const previous =
+          match.state.status === "running" && isRecord(match.state.metadata) ? match.state.metadata : {}
         return {
           ...match,
           state: {
-            title: val.title,
-            metadata: val.metadata,
+            title: val.title ?? (match.state.status === "running" ? match.state.title : undefined),
+            metadata: { ...previous, ...val.metadata },
             status: "running",
             input: args,
-            time: { start: Date.now() },
+            time: match.state.status === "running" ? match.state.time : { start: Date.now() },
           },
         }
       }),
     ask: (req) =>
-      permission
-        .ask({
+      Effect.gen(function* () {
+        const result = yield* permission.ask({
           ...req,
           sessionID: input.session.id,
           tool: { messageID: input.processor.message.id, callID: options.toolCallId },
           ruleset: Permission.merge(input.agent.permission, input.session.permission ?? []),
         })
-        .pipe(Effect.orDie),
+        const conclusion = result.conclusion?.trim()
+        if (!conclusion) return
+        yield* input.processor.updateToolCall(options.toolCallId, (match) => {
+          if (!["running", "pending"].includes(match.state.status)) return match
+          const previous =
+            match.state.status === "running" && isRecord(match.state.metadata) ? match.state.metadata : {}
+          return {
+            ...match,
+            state: {
+              title: match.state.status === "running" ? match.state.title : undefined,
+              metadata: { ...previous, cruise_control: conclusion },
+              status: "running",
+              input: args,
+              time: match.state.status === "running" ? match.state.time : { start: Date.now() },
+            },
+          }
+        })
+      }).pipe(Effect.orDie),
   })
 
   for (const item of yield* registry.tools({

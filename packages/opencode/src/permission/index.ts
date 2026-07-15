@@ -13,8 +13,13 @@ import { Config } from "@/config/config"
 
 export const Event = PermissionV1.Event
 
+export interface AskResult {
+  /** Short cruise_control / module conclusion when a tool was auto-allowed. */
+  conclusion?: string
+}
+
 export interface Interface {
-  readonly ask: (input: PermissionV1.AskInput) => Effect.Effect<void, PermissionV1.Error>
+  readonly ask: (input: PermissionV1.AskInput) => Effect.Effect<AskResult, PermissionV1.Error>
   readonly reply: (input: PermissionV1.ReplyInput) => Effect.Effect<void, PermissionV1.NotFoundError>
   readonly list: () => Effect.Effect<ReadonlyArray<PermissionV1.Request>>
 }
@@ -74,6 +79,7 @@ const layer = Layer.effect(
       let needsAsk = false
       const moduleIDs = new Set<string>()
       let metadata = request.metadata
+      let conclusion: string | undefined
 
       for (const pattern of request.patterns) {
         const rule = evaluate(request.permission, pattern, ruleset, approved)
@@ -107,20 +113,33 @@ const layer = Layer.effect(
         } else {
           const module = modules.value
           for (const moduleID of moduleIDs) {
-            const decision = yield* module.decide({
+            const result = yield* module.decide({
               moduleID,
               permission: request.permission,
               patterns: request.patterns,
               metadata: request.metadata,
             })
-            if (decision === "deny") {
+            const reason = result.reason?.trim() || undefined
+            if (result.decision === "deny") {
               return yield* new PermissionV1.DeniedError({
                 ruleset: ruleset.filter((rule) => Wildcard.match(request.permission, rule.permission)),
+                reason,
               })
             }
-            if (decision === "ask") {
+            if (result.decision === "ask") {
               needsAsk = true
-              if (moduleID === PermissionModuleSchema.CRUISE_CONTROL) {
+              if (reason === MISSING_MODEL_MESSAGE) {
+                metadata = {
+                  ...metadata,
+                  warning: MISSING_MODEL_MESSAGE,
+                }
+              } else if (reason) {
+                metadata = {
+                  ...metadata,
+                  reason,
+                }
+              }
+              if (moduleID === PermissionModuleSchema.CRUISE_CONTROL && typeof metadata.warning !== "string") {
                 const config = yield* Effect.serviceOption(Config.Service)
                 if (Option.isSome(config)) {
                   const cfg = yield* config.value.get()
@@ -138,12 +157,14 @@ const layer = Layer.effect(
                   }
                 }
               }
+              continue
             }
+            if (reason) conclusion = reason
           }
         }
       }
 
-      if (!needsAsk) return
+      if (!needsAsk) return { conclusion }
 
       const id = request.id ?? PermissionV1.ID.ascending()
       const info: PermissionV1.Request = {
@@ -160,12 +181,13 @@ const layer = Layer.effect(
       const deferred = yield* Deferred.make<void, PermissionV1.RejectedError | PermissionV1.CorrectedError>()
       pending.set(id, { info, deferred })
       yield* events.publish(Event.Asked, info)
-      return yield* Effect.ensuring(
+      yield* Effect.ensuring(
         Deferred.await(deferred),
         Effect.sync(() => {
           pending.delete(id)
         }),
       )
+      return {}
     })
 
     const reply = Effect.fn("Permission.reply")(function* (input: PermissionV1.ReplyInput) {

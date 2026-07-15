@@ -10,6 +10,7 @@ import { Provider, parseModel } from "@/provider/provider"
 import { ToolJsonSchema } from "@/tool/json-schema"
 
 export type Decision = CorePermissionModule.Decision
+export type DecideResult = CorePermissionModule.DecideResult
 export type DecideInput = CorePermissionModule.DecideInput
 export type DecideFn = CorePermissionModule.DecideFn
 export type Interface = CorePermissionModule.Interface
@@ -17,6 +18,7 @@ export type RegisterInput = CorePermissionModule.RegisterInput
 export const Service = CorePermissionModule.Service
 export const RegistrationError = CorePermissionModule.RegistrationError
 export const isReservedModuleID = CorePermissionModule.isReservedModuleID
+export const normalizeDecide = CorePermissionModule.normalizeDecide
 
 const ClassifierResult = Schema.Struct({
   decision: Schema.Literals(["allow", "deny", "ask"]),
@@ -62,6 +64,62 @@ Clearly harmless, reversible commands (for example echo, pwd, true) should be al
 export type ClassifierObject = {
   decision: Decision
   reason: string
+}
+
+/** Cap classifier copy for TUI / tool metadata. */
+export function shortenReason(reason: string, max = 120): string {
+  const trimmed = reason.trim().replace(/\s+/g, " ")
+  if (!trimmed) return ""
+  if (trimmed.length <= max) return trimmed
+  return `${trimmed.slice(0, Math.max(0, max - 3))}...`
+}
+
+/**
+ * Deterministic deny for clearly destructive commands — runs before the LLM classifier.
+ * Returns a short reason when matched; undefined otherwise.
+ */
+export function destructiveReason(permission: string, patterns: readonly string[]): string | undefined {
+  void permission
+  for (const pattern of patterns) {
+    const reason = matchDestructivePattern(pattern)
+    if (reason) return reason
+  }
+  return undefined
+}
+
+function matchDestructivePattern(raw: string): string | undefined {
+  const text = raw.trim()
+  if (!text) return undefined
+  const lower = text.toLowerCase()
+
+  // rm -rf / rm -fr / rm -r -f / rm --recursive --force (any flag order)
+  if (/\brm\b/.test(lower)) {
+    const window = lower.replace(/\s+/g, " ")
+    const recursiveForce =
+      /\brm\b(?:\s+-[a-z0-9]*)*\s+(-[a-z0-9]*r[a-z0-9]*f[a-z0-9]*|-[a-z0-9]*f[a-z0-9]*r[a-z0-9]*)\b/.test(window) ||
+      (/\brm\b/.test(window) &&
+        /(?:^|\s)-r(?:\s|$)|--recursive/.test(window) &&
+        /(?:^|\s)-f(?:\s|$)|--force/.test(window))
+    if (recursiveForce) return "Recursive force delete (rm -rf) is blocked"
+  }
+
+  if (/\bdrop\s+database\b/.test(lower)) return "DROP DATABASE is blocked"
+  if (/\bdrop\s+schema\b/.test(lower) && /\bcascade\b/.test(lower)) return "DROP SCHEMA CASCADE is blocked"
+  if (/\btruncate\s+table\b/.test(lower)) return "TRUNCATE TABLE is blocked"
+
+  if (
+    /\bgit\b/.test(lower) &&
+    /\bpush\b/.test(lower) &&
+    /(?:^|\s)(-f|--force|--force-with-lease)(?:\s|$)/.test(lower) &&
+    /\b(main|master)\b/.test(lower)
+  ) {
+    return "Force-push to main/master is blocked"
+  }
+
+  if (/\bmkfs(\.|$|\s)/.test(lower)) return "Filesystem format (mkfs) is blocked"
+  if (/\bdd\b/.test(lower) && /\bof\s*=\s*\/dev\//.test(lower)) return "dd write to device is blocked"
+
+  return undefined
 }
 
 /**
@@ -143,13 +201,30 @@ export const runClassifier = Effect.fn("PermissionModule.runClassifier")(functio
   classify: Effect.Effect<{ decision: Decision; reason: string }, unknown>
   modelRef?: string
 }) {
+  const destructive = destructiveReason(input.permission, input.patterns)
+  if (destructive) {
+    yield* Effect.logInfo("cruise_control destructive deny", {
+      permission: input.permission,
+      patterns: input.patterns,
+      reason: destructive,
+    })
+    return { decision: "deny" as const, reason: destructive }
+  }
+
   // Prefer ask over silent deny on timeout / provider errors (interactive-friendly default).
   const fallback = input.opts?.fallback ?? "ask"
   const timeoutMs = input.opts?.timeout_ms ?? DEFAULT_TIMEOUT_MS
   const started = Date.now()
 
-  const decision = yield* input.classify.pipe(
-    Effect.map((result) => applySafety(result.decision, input.permission, input.opts)),
+  const outcome = yield* input.classify.pipe(
+    Effect.map((result) => {
+      const decision = applySafety(result.decision, input.permission, input.opts)
+      let reason = shortenReason(result.reason)
+      if (result.decision === "allow" && decision === "ask") {
+        reason = reason || "Requires approval (safety rails)"
+      }
+      return { decision, reason }
+    }),
     Effect.timeout(timeoutMs),
     Effect.catch((error) =>
       Effect.gen(function* () {
@@ -160,7 +235,10 @@ export const runClassifier = Effect.fn("PermissionModule.runClassifier")(functio
           error: String(error),
         })
         // Never allow on failure; prefer ask so the human can proceed or configure.
-        return fallback
+        return {
+          decision: fallback,
+          reason: fallback === "ask" ? "Classifier unavailable; needs approval" : "Classifier unavailable; denied",
+        }
       }),
     ),
   )
@@ -169,11 +247,12 @@ export const runClassifier = Effect.fn("PermissionModule.runClassifier")(functio
     permission: input.permission,
     patterns: input.patterns,
     model: input.modelRef,
-    decision,
+    decision: outcome.decision,
+    reason: outcome.reason || undefined,
     latency_ms: Date.now() - started,
   })
 
-  return decision
+  return outcome
 })
 
 async function generateClassifierObject(input: {
@@ -216,7 +295,7 @@ const layer = Layer.effect(
 
       if (!modelRef) {
         yield* Effect.logWarning(MISSING_MODEL_MESSAGE)
-        return "ask" as const
+        return { decision: "ask" as const, reason: MISSING_MODEL_MESSAGE }
       }
 
       const classify = Effect.gen(function* () {
@@ -295,9 +374,9 @@ const layer = Layer.effect(
       const handler = builtin.get(input.moduleID) ?? custom.get(input.moduleID)
       if (!handler) {
         yield* Effect.logError("unknown permission module", { module: input.moduleID })
-        return "deny" as const
+        return { decision: "deny" as const }
       }
-      return yield* handler(input)
+      return normalizeDecide(yield* handler(input))
     })
 
     const has = (id: string) => builtin.has(id) || custom.has(id)

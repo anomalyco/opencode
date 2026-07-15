@@ -5,6 +5,12 @@ import { PermissionModule as PermissionModuleSchema } from "@opencode-ai/schema/
 
 export type Decision = PermissionModuleSchema.Decision
 
+export interface DecideResult {
+  decision: Decision
+  /** Short human-facing rationale from the classifier or safety rails. */
+  reason?: string
+}
+
 export interface DecideInput {
   moduleID: string
   permission: string
@@ -12,7 +18,13 @@ export interface DecideInput {
   metadata: Record<string, unknown>
 }
 
-export type DecideFn = (input: DecideInput) => Effect.Effect<Decision>
+/** Handlers may return a bare decision or a result with an optional reason. */
+export type DecideFn = (input: DecideInput) => Effect.Effect<Decision | DecideResult>
+
+export function normalizeDecide(outcome: Decision | DecideResult): DecideResult {
+  if (typeof outcome === "string") return { decision: outcome }
+  return outcome
+}
 
 export class RegistrationError extends Schema.TaggedErrorClass<RegistrationError>()(
   "PermissionModule.RegistrationError",
@@ -30,7 +42,7 @@ export interface RegisterInput {
 export interface Interface {
   readonly register: (input: RegisterInput) => Effect.Effect<void, RegistrationError>
   readonly registerSync: (input: RegisterInput) => void
-  readonly decide: (input: DecideInput) => Effect.Effect<Decision>
+  readonly decide: (input: DecideInput) => Effect.Effect<DecideResult>
   readonly has: (id: string) => boolean
 }
 
@@ -69,9 +81,9 @@ function makeRegistry(builtin: ReadonlyMap<string, DecideFn> = new Map()) {
     const handler = builtin.get(input.moduleID) ?? custom.get(input.moduleID)
     if (!handler) {
       yield* Effect.logError("unknown permission module", { module: input.moduleID })
-      return "deny" as const
+      return { decision: "deny" as const }
     }
-    return yield* handler(input)
+    return normalizeDecide(yield* handler(input))
   })
 
   const has = (id: string) => builtin.has(id) || custom.has(id)

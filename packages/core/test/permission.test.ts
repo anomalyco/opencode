@@ -317,12 +317,12 @@ describe("PermissionV2", () => {
 
 describe("PermissionV2 modules", () => {
   function moduleLayer(
-    decide: (input: PermissionModule.DecideInput) => Effect.Effect<PermissionModule.Decision>,
+    decide: (input: PermissionModule.DecideInput) => Effect.Effect<PermissionModule.Decision | PermissionModule.DecideResult>,
   ) {
     return Layer.succeed(
       PermissionModule.Service,
       PermissionModule.Service.of({
-        decide,
+        decide: (input) => decide(input).pipe(Effect.map(PermissionModule.normalizeDecide)),
         register: () => Effect.void,
         registerSync: () => undefined,
         has: () => true,

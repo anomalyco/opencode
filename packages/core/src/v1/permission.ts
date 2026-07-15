@@ -20,8 +20,12 @@ export class CorrectedError extends Schema.TaggedErrorClass<CorrectedError>()("P
 
 export class DeniedError extends Schema.TaggedErrorClass<DeniedError>()("PermissionDeniedError", {
   ruleset: Schema.Any,
+  reason: Schema.optionalKey(Schema.String),
 }) {
   override get message() {
+    const brief = this.reason?.trim()
+    if (brief) return brief
+
     const rules = this.ruleset
     const cruise =
       Array.isArray(rules) &&
