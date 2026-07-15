@@ -36,6 +36,35 @@ describe("interpreter reference walks", () => {
     expect(containsOpaqueReference({ map })).toBe(false)
   })
 
+  test("short-circuit sparse arrays in index order", () => {
+    const tool = new ToolReference(["items", "get"])
+    const sparse: Array<unknown> = [tool]
+    sparse.length = 1_000_000
+    Object.defineProperty(sparse, sparse.length - 1, {
+      enumerable: true,
+      get: () => {
+        throw new Error("walked past the decisive first child")
+      },
+    })
+
+    expect(containsRuntimeReference(sparse)).toBe(true)
+    expect(containsOpaqueReference(sparse)).toBe(true)
+
+    const container = {}
+    const insertion: Array<unknown> = [container]
+    insertion.length = sparse.length
+    Object.defineProperty(insertion, insertion.length - 1, {
+      enumerable: true,
+      get: () => {
+        throw new Error("walked past the destination container")
+      },
+    })
+
+    expect(() => rejectCircularInsertion(container, insertion, "Value", node)).toThrow(
+      "Value contains a circular value.",
+    )
+  })
+
   test("skip cycles that do not reach the destination container", () => {
     const cycle: { self?: unknown } = {}
     cycle.self = cycle

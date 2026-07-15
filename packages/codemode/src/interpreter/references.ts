@@ -34,35 +34,51 @@ export const isRuntimeReference = (value: unknown): boolean =>
   value instanceof ErrorConstructorReference ||
   isCodeModeValue(value)
 
-const enqueueChildren = (pending: Array<unknown>, value: object): void => {
-  const children = Array.isArray(value) ? value : Object.values(value)
-  for (const child of children) pending.push(child)
+function* childValues(value: object): Generator<unknown> {
+  if (!Array.isArray(value)) {
+    yield* Object.values(value)
+    return
+  }
+  for (const key in value) {
+    const index = Number(key)
+    if (Number.isInteger(index) && index >= 0 && index < value.length && String(index) === key) yield value[index]
+  }
 }
 
 export const containsRuntimeReference = (value: unknown): boolean => {
-  const pending = [value]
+  const pending: Array<Iterator<unknown>> = [[value].values()]
   const seen = new Set<object>()
   while (pending.length > 0) {
-    const current = pending.pop()
+    const next = pending.at(-1)!.next()
+    if (next.done) {
+      pending.pop()
+      continue
+    }
+    const current = next.value
     if (isRuntimeReference(current)) return true
     if (current === null || typeof current !== "object" || seen.has(current)) continue
     seen.add(current)
-    enqueueChildren(pending, current)
+    pending.push(childValues(current))
   }
   return false
 }
 
 // CodeMode values are data here, not opaque interpreter references.
 export const containsOpaqueReference = (value: unknown): boolean => {
-  const pending = [value]
+  const pending: Array<Iterator<unknown>> = [[value].values()]
   const seen = new Set<object>()
   while (pending.length > 0) {
-    const current = pending.pop()
+    const next = pending.at(-1)!.next()
+    if (next.done) {
+      pending.pop()
+      continue
+    }
+    const current = next.value
     if (isCodeModeValue(current)) continue
     if (isRuntimeReference(current)) return true
     if (current === null || typeof current !== "object" || seen.has(current)) continue
     seen.add(current)
-    enqueueChildren(pending, current)
+    pending.push(childValues(current))
   }
   return false
 }
@@ -74,15 +90,20 @@ export const rejectCircularInsertion = (
   label: string,
   node: AstNode,
 ): void => {
-  const pending = [value]
+  const pending: Array<Iterator<unknown>> = [[value].values()]
   const seen = new Set<object>()
   while (pending.length > 0) {
-    const current = pending.pop()
+    const next = pending.at(-1)!.next()
+    if (next.done) {
+      pending.pop()
+      continue
+    }
+    const current = next.value
     if (current === container)
       throw new InterpreterRuntimeError(`${label} contains a circular value.`, node, "InvalidDataValue")
     if (current === null || typeof current !== "object" || isRuntimeReference(current) || seen.has(current)) continue
     seen.add(current)
-    enqueueChildren(pending, current)
+    pending.push(childValues(current))
   }
 }
 
