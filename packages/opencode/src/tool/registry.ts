@@ -39,6 +39,7 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Format } from "../format"
 import { InstanceState } from "@/effect/instance-state"
 import { EffectBridge } from "@/effect/bridge"
+import { EventV2Bridge } from "@/event-v2-bridge"
 import { Question } from "../question"
 import { Todo } from "../session/todo"
 import { LSP } from "@/lsp/lsp"
@@ -184,14 +185,13 @@ const layer = Layer.effect(
           const namespace = path.basename(match, path.extname(match))
           // `match` is an absolute filesystem path from `Glob.scanSync(..., { absolute: true })`.
           // Import it as `file://` so Node on Windows accepts the dynamic import.
-          const mod = yield* Effect.tryPromise({
-            try: () => import(pathToFileURL(match).href),
-            catch: errorMessage,
-          }).pipe(
-            Effect.catchAll((message) =>
-              Effect.logWarning("failed to load custom tool", { tool: namespace, file: match, message }).pipe(
-                Effect.as({}),
-              ),
+          const mod = yield* Effect.promise(() => import(pathToFileURL(match).href)).pipe(
+            Effect.catchDefect((defect) =>
+              Effect.logWarning("failed to load custom tool", {
+                tool: namespace,
+                file: match,
+                message: errorMessage(defect),
+              }).pipe(Effect.as({})),
             ),
           )
           for (const [id, def] of Object.entries(mod)) {
