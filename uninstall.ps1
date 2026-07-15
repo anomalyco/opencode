@@ -128,9 +128,18 @@ if ($userPath) {
 
 # 5. Engram database
 Write-Step "Engram database"
+$engramDbFile = Join-Path $ENGRAM_DB "engram.db"
 if ($RemoveEngram) {
+    # Backup before deleting
+    if (Test-Path $engramDbFile) {
+        $backupName = "engram.db.backup-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+        $backupPath = Join-Path $ENGRAM_DB $backupName
+        Copy-Item -Path $engramDbFile -Destination $backupPath -Force
+        $dbSize = (Get-Item $engramDbFile).Length
+        Write-OK "Backed up engram.db ($([math]::Round($dbSize / 1KB)) KB) -> $backupName"
+    }
     Remove-IfExists -Path $ENGRAM_DB -Label "Engram DB ($ENGRAM_DB)"
-    Write-WARN "All AI memory has been deleted."
+    Write-WARN "All AI memory has been deleted. Backup saved."
 } else {
     if (Test-Path $ENGRAM_DB) {
         Write-OK "Preserved Engram DB at $ENGRAM_DB"
