@@ -528,6 +528,19 @@ it.instance("preserves env variables when adding $schema to config", () =>
   ),
 )
 
+it.instance("writes valid JSON when adding $schema to a config with no other keys", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    // Empty object without $schema: auto-add must not leave a trailing comma (invalid strict JSON).
+    yield* FSUtil.use.writeWithDirs(path.join(test.directory, "opencode.json"), "{}")
+    yield* Config.use.get()
+
+    const content = yield* FSUtil.use.readFileString(path.join(test.directory, "opencode.json"))
+    expect(() => JSON.parse(content)).not.toThrow()
+    expect(JSON.parse(content).$schema).toBe("https://opencode.ai/config.json")
+  }),
+)
+
 it.instance("handles file inclusion substitution", () =>
   Effect.gen(function* () {
     const test = yield* TestInstance
