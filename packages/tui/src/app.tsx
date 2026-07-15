@@ -105,6 +105,7 @@ const appGlobalBindingCommands = [
 
 const appBindingCommands = [
   "command.palette.show",
+  "session.title.model",
   "model.list",
   "model.cycle_recent",
   "model.cycle_recent_reverse",
@@ -590,6 +591,65 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
             type: "home",
           })
           dialog.clear()
+        },
+      },
+      {
+        name: "session.title.model",
+        title: (() => {
+          const titleAgent = sync.data.agent.find((agent) => agent.name === "title")
+          if (titleAgent?.model) {
+            return `Session title model (${titleAgent.model.providerID}/${titleAgent.model.modelID})`
+          }
+          if (sync.data.config.small_model) {
+            return `Session title model (${sync.data.config.small_model})`
+          }
+          return "Session title model"
+        })(),
+        category: "Session",
+        slashName: "title-model",
+        run: () => {
+          const titleAgent = sync.data.agent.find((agent) => agent.name === "title")
+          const current = titleAgent?.model
+          const label = current
+            ? `${current.providerID}/${current.modelID}`
+            : (sync.data.config.small_model ?? "small model / session model")
+          toast.show({
+            message: `Current title model: ${label}`,
+            variant: "info",
+            duration: 2500,
+          })
+          dialog.replace(() => (
+            <DialogModel
+              title="Session title model"
+              current={current}
+              onSelect={async (providerID, modelID) => {
+                const model = `${providerID}/${modelID}`
+                await sdk.client.global.config
+                  .update({
+                    config: {
+                      agent: {
+                        title: { model },
+                      },
+                    },
+                  })
+                  .then(() => {
+                    toast.show({
+                      message: `Session title model set to ${model}`,
+                      variant: "success",
+                      duration: 3000,
+                    })
+                    dialog.clear()
+                  })
+                  .catch((error) => {
+                    toast.show({
+                      message: error instanceof Error ? error.message : "Failed to save title model",
+                      variant: "error",
+                      duration: 4000,
+                    })
+                  })
+              }}
+            />
+          ))
         },
       },
       {
