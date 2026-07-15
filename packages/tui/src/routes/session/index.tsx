@@ -53,6 +53,7 @@ import { DialogConfirm } from "../../ui/dialog-confirm"
 import { DialogTimeline } from "./dialog-timeline"
 import { DialogForkFromTimeline } from "./dialog-fork-from-timeline"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
+import { DialogSessionContext } from "./dialog-session-context"
 import { Sidebar } from "./sidebar"
 import { SubagentFooter } from "./subagent-footer.tsx"
 import { filetype } from "../../util/filetype"
@@ -1078,6 +1079,17 @@ export function Session() {
         moveChild(-1)
       }),
     },
+    {
+      title: "Session context",
+      value: "session.context",
+      category: "Session",
+      slash: {
+        name: "context",
+      },
+      run: () => {
+        dialog.replace(() => <DialogSessionContext sessionID={route.sessionID} />)
+      },
+    },
   ])
 
   const sessionCommands = createMemo(() =>
@@ -1472,6 +1484,14 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
     return props.message.time.completed - user.time.created
   })
 
+  const tokensPerSecond = createMemo(() => {
+    const dur = duration()
+    if (dur <= 0) return
+    const total = props.message.tokens.input + props.message.tokens.output + props.message.tokens.reasoning + props.message.tokens.cache.read + props.message.tokens.cache.write
+    if (total <= 0) return
+    return (total / (dur / 1000)).toFixed(1)
+  })
+
   const childShortcut = useCommandShortcut("session.child.first")
   const backgroundShortcut = useCommandShortcut("session.background")
 
@@ -1549,6 +1569,9 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
               <span style={{ fg: theme.textMuted }}> · {model()}</span>
               <Show when={duration()}>
                 <span style={{ fg: theme.textMuted }}> · {Locale.duration(duration())}</span>
+              </Show>
+              <Show when={tokensPerSecond()}>
+                <span style={{ fg: theme.textMuted }}> · {tokensPerSecond()} tok/s</span>
               </Show>
               <Show when={props.message.error?.name === "MessageAbortedError"}>
                 <span style={{ fg: theme.textMuted }}> · interrupted</span>
