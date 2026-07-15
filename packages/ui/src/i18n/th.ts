@@ -69,16 +69,16 @@ export const dict = {
   "ui.sessionTurn.retry.attemptLine": "{{line}} - ครั้งที่ {{attempt}}",
   "ui.sessionTurn.retry.geminiHot": "gemini กำลังใช้งานหนาแน่นมาก",
   "ui.sessionTurn.error.freeUsageExceeded": "เกินขีดจำกัดการใช้งานฟรี",
-  "ui.sessionTurn.error.addCredits": "เพิ่มเครดิต",
+  "ui.sessionTurn.error.addCredits": "ดูเอกสาร",
 
   "dialog.usageExceeded.freeTier.title": "ถึงขีดจำกัดฟรีแล้ว",
   "dialog.usageExceeded.freeTier.description":
-    "สมัครสมาชิก OpenCode Go เพื่อการเข้าถึงโมเดลโอเพนซอร์สที่ดีที่สุดอย่างเชื่อถือได้ เริ่มต้นที่ $5/เดือน",
-  "dialog.usageExceeded.freeTier.actionLabel": "สมัครสมาชิก",
-  "dialog.usageExceeded.accountRateLimit.title": "ถึงขีดจำกัดของ Go แล้ว",
+    "ถึงขีดจำกัดการใช้งานฟรีของผู้ให้บริการแล้ว สลับโมเดลหรือผู้ให้บริการ หรือตรวจสอบแผน API ของคุณ",
+  "dialog.usageExceeded.freeTier.actionLabel": "เอกสาร",
+  "dialog.usageExceeded.accountRateLimit.title": "ถึงขีดจำกัดการใช้งานแล้ว",
   "dialog.usageExceeded.accountRateLimit.description":
-    "ถึงขีดจำกัดการใช้งานแล้ว หากต้องการใช้โมเดลนี้ต่อในตอนนี้ ให้เปิดใช้งานจากยอดคงเหลือที่มี",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "เปิดการตั้งค่า",
+    "ถึงขีดจำกัดการใช้งานแล้ว สลับโมเดลหรือผู้ให้บริการ หรือรอให้ขีดจำกัดรีเซ็ต",
+  "dialog.usageExceeded.accountRateLimit.actionLabel": "เปิดเอกสาร",
 
   "ui.sessionTurn.status.delegating": "มอบหมายงาน",
   "ui.sessionTurn.status.planning": "วางแผนขั้นตอนถัดไป",

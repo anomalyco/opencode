@@ -67,16 +67,16 @@ export const dict = {
   "ui.sessionTurn.retry.attemptLine": "{{line}} - forsøg #{{attempt}}",
   "ui.sessionTurn.retry.geminiHot": "gemini er meget overbelastet lige nu",
   "ui.sessionTurn.error.freeUsageExceeded": "Gratis forbrug overskredet",
-  "ui.sessionTurn.error.addCredits": "Tilføj kreditter",
+  "ui.sessionTurn.error.addCredits": "Se docs",
 
   "dialog.usageExceeded.freeTier.title": "Gratis grænse nået",
   "dialog.usageExceeded.freeTier.description":
-    "Abonnér på OpenCode Go for pålidelig adgang til de bedste open source-modeller, fra $5/måned.",
-  "dialog.usageExceeded.freeTier.actionLabel": "Abonnér",
-  "dialog.usageExceeded.accountRateLimit.title": "Go-grænse nået",
+    "Udbyderens gratis forbrugsgrænse er nået. Skift model eller udbyder, eller tjek din API-plan.",
+  "dialog.usageExceeded.freeTier.actionLabel": "Docs",
+  "dialog.usageExceeded.accountRateLimit.title": "Brugsgrænse nået",
   "dialog.usageExceeded.accountRateLimit.description":
-    "Forbrugsgrænse nået. For at fortsætte med at bruge denne model nu, aktivér forbrug fra din tilgængelige saldo",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "Åbn indstillinger",
+    "Brugsgrænse nået. Skift model eller udbyder, eller vent på at grænsen nulstilles.",
+  "dialog.usageExceeded.accountRateLimit.actionLabel": "Åbn docs",
 
   "ui.sessionTurn.status.delegating": "Delegerer arbejde",
   "ui.sessionTurn.status.planning": "Planlægger næste trin",

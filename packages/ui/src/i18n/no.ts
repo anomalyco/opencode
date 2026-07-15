@@ -47,16 +47,16 @@ export const dict: Record<Keys, string> = {
   "ui.sessionTurn.retry.attemptLine": "{{line}} - forsøk #{{attempt}}",
   "ui.sessionTurn.retry.geminiHot": "gemini er veldig overbelastet nå",
   "ui.sessionTurn.error.freeUsageExceeded": "Gratis bruk overskredet",
-  "ui.sessionTurn.error.addCredits": "Legg til kreditt",
+  "ui.sessionTurn.error.addCredits": "Se docs",
 
   "dialog.usageExceeded.freeTier.title": "Gratis grense nådd",
   "dialog.usageExceeded.freeTier.description":
-    "Abonner på OpenCode Go for pålitelig tilgang til de beste åpen kildekode-modellene, fra $5/måned.",
-  "dialog.usageExceeded.freeTier.actionLabel": "Abonner",
-  "dialog.usageExceeded.accountRateLimit.title": "Go-grense nådd",
+    "Leverandørens gratis bruksgrense er nådd. Bytt modell eller leverandør, eller sjekk API-planen din.",
+  "dialog.usageExceeded.freeTier.actionLabel": "Docs",
+  "dialog.usageExceeded.accountRateLimit.title": "Bruksgrense nådd",
   "dialog.usageExceeded.accountRateLimit.description":
-    "Bruksgrense nådd. For å fortsette å bruke denne modellen nå, aktiver bruk fra din tilgjengelige saldo",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "Åpne innstillinger",
+    "Bruksgrense nådd. Bytt modell eller leverandør, eller vent til grensen nullstilles.",
+  "dialog.usageExceeded.accountRateLimit.actionLabel": "Åpne docs",
 
   "ui.sessionTurn.status.delegating": "Delegerer arbeid",
   "ui.sessionTurn.status.planning": "Planlegger neste trinn",

@@ -72,16 +72,16 @@ export const dict = {
   "ui.sessionTurn.retry.attemptLine": "{{line}} - pokušaj #{{attempt}}",
   "ui.sessionTurn.retry.geminiHot": "gemini je trenutno preopterećen",
   "ui.sessionTurn.error.freeUsageExceeded": "Besplatna upotreba premašena",
-  "ui.sessionTurn.error.addCredits": "Dodaj kredite",
+  "ui.sessionTurn.error.addCredits": "Pogledaj docs",
 
   "dialog.usageExceeded.freeTier.title": "Dostignut besplatan limit",
   "dialog.usageExceeded.freeTier.description":
-    "Pretplatite se na OpenCode Go za pouzdan pristup najboljim open-source modelima, počevši od $5/mjesec.",
-  "dialog.usageExceeded.freeTier.actionLabel": "Pretplati se",
-  "dialog.usageExceeded.accountRateLimit.title": "Dostignut Go limit",
+    "Dostignut je besplatan limit pružatelja. Promijenite modele ili pružatelje, ili provjerite svoj API plan.",
+  "dialog.usageExceeded.freeTier.actionLabel": "Docs",
+  "dialog.usageExceeded.accountRateLimit.title": "Dostignut limit upotrebe",
   "dialog.usageExceeded.accountRateLimit.description":
-    "Dostignut je limit korištenja. Da nastavite koristiti ovaj model sada, omogućite korištenje iz vašeg dostupnog stanja",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "Otvori postavke",
+    "Dostignut je limit upotrebe. Promijenite modele ili pružatelje, ili sačekajte reset limitu.",
+  "dialog.usageExceeded.accountRateLimit.actionLabel": "Otvori docs",
 
   "ui.sessionTurn.status.delegating": "Delegiranje posla",
   "ui.sessionTurn.status.planning": "Planiranje sljedećih koraka",
