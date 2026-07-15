@@ -13,6 +13,7 @@ import type {
   QuestionRequest,
   Session,
   SessionStatus,
+  SkillV2Info,
   TextPart,
   Config as SdkConfig,
 } from "@opencode-ai/sdk/v2"
@@ -396,6 +397,10 @@ export type TuiState = {
   part: (messageID: string) => ReadonlyArray<Part>
   lsp: () => ReadonlyArray<TuiSidebarLspItem>
   mcp: () => ReadonlyArray<TuiSidebarMcpItem>
+  skill: {
+    list: (sessionID: string) => ReadonlyArray<TuiSidebarSkillItem>
+    refresh: (sessionID: string) => Promise<void>
+  }
 }
 
 type TuiBindingLookupView = {
@@ -451,6 +456,8 @@ export type TuiSidebarFileItem = {
   additions: number
   deletions: number
 }
+
+export type TuiSidebarSkillItem = Pick<SkillV2Info, "name" | "description">
 
 export type TuiHostSlotMap = {
   app: {}

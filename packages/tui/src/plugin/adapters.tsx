@@ -8,6 +8,7 @@ import type { useTheme } from "../context/theme"
 import { Dialog as DialogUI, type useDialog } from "../ui/dialog"
 import type { useOpencodeKeymap } from "../keymap"
 import type { useKV } from "../context/kv"
+import type { useData } from "../context/data"
 import { DialogAlert } from "../ui/dialog-alert"
 import { DialogConfirm } from "../ui/dialog-confirm"
 import { DialogPrompt } from "../ui/dialog-prompt"
@@ -31,6 +32,7 @@ type Input = {
   event: ReturnType<typeof useEvent>
   sdk: ReturnType<typeof useSDK>
   sync: ReturnType<typeof useSync>
+  data: ReturnType<typeof useData>
   theme: ReturnType<typeof useTheme>
   toast: ReturnType<typeof useToast>
   renderer: TuiPluginApi["renderer"]
@@ -95,7 +97,7 @@ function mapOptionCb<Value>(cb?: (item: TuiDialogSelectOption<Value>) => void) {
   return (item: SelectOption<Value>) => cb(pickOption(item))
 }
 
-function stateApi(sync: ReturnType<typeof useSync>): TuiPluginApi["state"] {
+function stateApi(sync: ReturnType<typeof useSync>, data: ReturnType<typeof useData>): TuiPluginApi["state"] {
   return {
     get ready() {
       return sync.ready
@@ -158,6 +160,18 @@ function stateApi(sync: ReturnType<typeof useSync>): TuiPluginApi["state"] {
           status: item.status,
           error: item.status === "failed" ? item.error : undefined,
         }))
+    },
+    skill: {
+      list(sessionID) {
+        const session = sync.session.get(sessionID)
+        if (!session) return []
+        return data.location.skill.list({ directory: session.directory, workspaceID: session.workspaceID }) ?? []
+      },
+      async refresh(sessionID) {
+        const session = sync.session.get(sessionID)
+        if (!session) return
+        await data.location.skill.refresh({ directory: session.directory, workspaceID: session.workspaceID })
+      },
     },
   }
 }
@@ -297,7 +311,7 @@ export function createTuiApiAdapters(input: Input): Omit<TuiPluginApi, "lifecycl
         return input.kv.ready
       },
     },
-    state: stateApi(input.sync),
+    state: stateApi(input.sync, input.data),
     get client() {
       return input.sdk.client
     },
