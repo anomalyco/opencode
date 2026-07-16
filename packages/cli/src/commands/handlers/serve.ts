@@ -5,7 +5,7 @@ import { ServerProcess } from "../../server-process"
 
 export default Runtime.handler(
   Commands.commands.serve,
-  Effect.fn("cli.serve")(function* (input) {
+  Effect.fnUntraced(function* (input) {
     if (input.service && input.stdio) return yield* Effect.fail(new Error("--service and --stdio cannot be combined"))
     return yield* ServerProcess.run({
       mode: input.service ? "service" : input.stdio ? "stdio" : "default",

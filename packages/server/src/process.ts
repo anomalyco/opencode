@@ -30,7 +30,8 @@ type App = Effect.Effect<
   HttpServerRequest.HttpServerRequest | Scope.Scope
 >
 
-export const start = Effect.fn("ServerProcess.start")(function* <E, R>(options: Options<E, R>) {
+// The request handler captures this context and outlives startup, so this boundary must not become its parent span.
+export const start = Effect.fnUntraced(function* <E, R>(options: Options<E, R>) {
   if (!options.password) return yield* Effect.fail(new Error("Missing server password"))
   const shutdown = yield* Deferred.make<void>()
   const status = yield* Status.make({

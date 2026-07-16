@@ -24,13 +24,14 @@ export type Options = {
   readonly port?: number
 }
 
-export const run = Effect.fn("cli.server-process.run")((options: Options) =>
-  processEffect(options).pipe(
+// The process effect lives until server shutdown; tracing it would parent every request to one process-lifetime trace.
+export const run = Effect.fnUntraced(function* (options: Options) {
+  return yield* processEffect(options).pipe(
     Effect.provide(Updater.layer),
     Effect.provide(AppNodeBuilder.build(LayerNode.group([Global.node, AppProcess.node]))),
     Effect.provide(NodeServices.layer),
-  ),
-)
+  )
+})
 
 const processEffect = Effect.fnUntraced(function* (options: Options) {
   if (options.mode === "service") yield* Effect.sync(() => process.chdir(Global.Path.home))
