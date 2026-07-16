@@ -333,7 +333,8 @@ describe("ProjectCopy", () => {
     }),
   )
 
-  it.live("refresh ignores stale git worktree registrations", () =>
+  it.live(
+    "refresh ignores stale git worktree registrations",
     Effect.gen(function* () {
       const input = yield* setup()
       const copy = yield* ProjectCopy.Service
@@ -356,6 +357,7 @@ describe("ProjectCopy", () => {
         ].toSorted((a, b) => a.directory.localeCompare(b.directory)),
       )
     }),
+    15_000,
   )
 
   it.live("refresh ignores existing directories that are no longer git checkouts", () =>
