@@ -737,6 +737,7 @@ function App(props: { pair?: DialogPairCredentials }) {
       {
         name: "opencode.settings",
         title: "Open settings",
+        suggested: true,
         slash: { name: "settings" },
         run: () => {
           dialog.replace(() => <DialogConfig />)
