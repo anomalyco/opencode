@@ -108,10 +108,13 @@ export const TaskTool = Tool.define(
         depth++
         current = yield* sessions.get(current.parentID)
       }
-      if (depth >= (cfg.subagent_depth ?? 1)) {
+      const currentAgent = yield* agent.get(ctx.agent)
+      const maxDepth = currentAgent?.subagent_depth ?? cfg.subagent_depth ?? 1
+
+      if (depth >= maxDepth) {
         return yield* Effect.fail(
           new Error(
-            `Subagent depth limit reached (${cfg.subagent_depth ?? 1}). Increase "subagent_depth" to allow nested subagents.`,
+            `Subagent depth limit reached (${maxDepth}). Increase "subagent_depth" to allow nested subagents.`,
           ),
         )
       }
