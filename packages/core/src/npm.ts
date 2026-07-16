@@ -72,6 +72,21 @@ const resolveEntryPoint = (name: string, dir: string): EntryPoint => {
 // arborist-based installer.
 const lockfiles = ["aube-lock.yaml", "package-lock.json"]
 
+// Runtime installs get the supply-chain policy opencode's own dependencies get
+// from bunfig's minimumReleaseAge: 3 days (bunfig counts seconds, aube counts
+// minutes). Range and dist-tag specs resolve to the newest version at least 3
+// days old; an explicitly pinned exact version is still honored via aube's
+// non-strict fallback. Embedder defaults sit below environment variables,
+// project files, and user configuration, so operators can override per
+// project. configure() is process-global first-write-wins and must precede the
+// first install, so it rides the addon's lazy import edge.
+let aubeNode: Promise<typeof import("@jdxcode/aube-node")> | undefined
+const loadAubeNode = () =>
+  (aubeNode ??= import("@jdxcode/aube-node").then((mod) => {
+    mod.configure({ defaults: { minimumReleaseAge: "4320" } })
+    return mod
+  }))
+
 const parseAddSpec = (spec: string): { name: string; version?: string; exact: boolean } => {
   try {
     const hit = npa(spec)
@@ -94,12 +109,17 @@ const layer = Layer.effect(
     const reify = (input: { dir: string; add?: string[]; onEvent?: (event: InstallEvent) => void }) =>
       Effect.gen(function* () {
         yield* flock.acquire(`npm-install:${input.dir}`)
-        const { install } = yield* Effect.promise(() => import("@jdxcode/aube-node"))
+        const { install } = yield* Effect.promise(loadAubeNode)
         const parsed = (input.add ?? []).map(parseAddSpec)
         const add = parsed.map(({ name, version }) => ({ name, version }))
+        // Fresh resolutions already get aube's live OSV MAL-* gate;
+        // osvTransitiveCheck extends it to lockfile-reuse repair installs,
+        // which otherwise run no advisory check. The verified no-op path
+        // returns before OSV routing, so the per-launch cost is unchanged.
         const attempt = (offline: boolean) =>
           Effect.tryPromise({
-            try: (signal) => install(input.dir, { add, offline, signal, onEvent: input.onEvent }),
+            try: (signal) =>
+              install(input.dir, { add, offline, signal, onEvent: input.onEvent, osvTransitiveCheck: true }),
             catch: (cause) =>
               new InstallFailedError({
                 cause,
