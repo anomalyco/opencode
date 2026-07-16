@@ -33,7 +33,7 @@ import { LocationServiceMap } from "./location-service-map"
 import { MessageDecodeError } from "./session/error"
 import { SessionEvent } from "./session/event"
 import { SessionPending } from "./session/pending"
-import type { Error as SessionGenerateError } from "./session/generate"
+import { SessionGenerate } from "./session/generate"
 import { Snapshot } from "./snapshot"
 import { SessionRevert } from "./session/revert"
 import { Session } from "@opencode-ai/schema/session"
@@ -176,7 +176,7 @@ export type Error =
   | CommandV2.NotFoundError
   | CommandV2.EvaluationError
   | MessageNotFoundError
-  | SessionGenerateError
+  | SessionGenerate.Error
 
 export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<{
@@ -249,7 +249,7 @@ export interface Interface {
   readonly generate: (input: {
     sessionID: SessionSchema.ID
     prompt: string
-  }) => Effect.Effect<string, NotFoundError | SessionGenerateError>
+  }) => Effect.Effect<string, NotFoundError | SessionGenerate.Error>
   readonly command: (input: {
     id?: SessionMessage.ID
     sessionID: SessionSchema.ID
@@ -573,10 +573,7 @@ const layer = Layer.effect(
       ),
       generate: Effect.fn("V2Session.generate")(function* (input) {
         const session = yield* result.get(input.sessionID)
-        // PermissionV2 imports SessionV2 while the Location graph imports PermissionV2.
-        // Load the Location implementation lazily to avoid closing that module cycle.
-        const sessionGenerate = yield* Effect.promise(() => import("./session/generate"))
-        const generate = yield* sessionGenerate.Service.pipe(Effect.provide(locations.get(session.location)))
+        const generate = yield* SessionGenerate.Service.pipe(Effect.provide(locations.get(session.location)))
         return yield* generate.generate(input)
       }),
       command: Effect.fn("V2Session.command")(function* (input) {

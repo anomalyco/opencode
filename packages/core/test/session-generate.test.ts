@@ -21,6 +21,7 @@ import { ReferenceInstructions } from "@opencode-ai/core/reference/instructions"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionGenerate } from "@opencode-ai/core/session/generate"
+import { SessionGenerateNode } from "@opencode-ai/core/session/generate-node"
 import { InstructionState } from "@opencode-ai/core/session/instruction-state"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
@@ -95,7 +96,7 @@ const it = testEffect(
       AgentV2.node,
       InstructionBuiltIns.node,
       PluginHooks.node,
-      SessionGenerate.node,
+      SessionGenerateNode.node,
     ]),
     [
       [llmClient, client],
