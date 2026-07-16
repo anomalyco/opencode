@@ -569,6 +569,15 @@ describe("destructuring assignment", () => {
     ).toEqual({ first: "a", length: 3, sliced: ["b", "c"], rest: { 1: "b", 2: "c" } })
   })
 
+  test("preserves exact computed property names on arrays", async () => {
+    expect(
+      await value(`
+        const { ["01"]: item, ...rest } = [10, 20]
+        return { missing: item === undefined, rest }
+      `),
+    ).toEqual({ missing: true, rest: { 0: 10, 1: 20 } })
+  })
+
   test("supports array patterns over strings, Maps, Sets, and URLSearchParams", async () => {
     expect(
       await value(`

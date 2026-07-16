@@ -920,11 +920,9 @@ export class Interpreter<R> {
   private destructuringPropertyValue(source: SafeObject | Array<unknown>, key: string | number): unknown {
     if (!Array.isArray(source)) return source[String(key)]
     if (key === "length") return source.length
-    if (typeof key === "string" && arrayMethods.has(key)) return new IntrinsicReference(source, key)
-    if (typeof key === "number" || /^\d+$/.test(key)) return source[Number(key)]
-    if (typeof key === "string" && Object.hasOwn(source, key)) {
-      return (source as Record<string, unknown> & Array<unknown>)[key]
-    }
+    if (typeof key === "number") return source[key]
+    if (Object.hasOwn(source, key)) return (source as Record<string, unknown> & Array<unknown>)[key]
+    if (arrayMethods.has(key)) return new IntrinsicReference(source, key)
     return undefined
   }
 
