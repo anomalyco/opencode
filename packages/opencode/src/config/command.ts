@@ -17,6 +17,7 @@ export async function load(dir: string) {
     absolute: true,
     dot: true,
     symlink: true,
+    ignore: ["**/node_modules/**"],
   })) {
     const md = await ConfigMarkdown.parse(item).catch(() => undefined)
     if (!md) continue

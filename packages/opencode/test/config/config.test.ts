@@ -2050,3 +2050,52 @@ test("parseManagedPlist handles empty config", async () => {
   )
   expect(config.$schema).toBe("https://opencode.ai/config.json")
 })
+
+it.instance("ignores markdown files under .opencode/node_modules during config discovery", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* FSUtil.use.writeWithDirs(
+      path.join(test.directory, ".opencode", "node_modules", "pkg", "agents", "ignored.md"),
+      `---
+model: test/model
+---
+Ignored agent prompt`,
+    )
+    yield* FSUtil.use.writeWithDirs(
+      path.join(test.directory, ".opencode", "agents", "loaded.md"),
+      `---
+model: test/model
+---
+Loaded agent prompt`,
+    )
+    yield* FSUtil.use.writeWithDirs(
+      path.join(test.directory, ".opencode", "node_modules", "pkg", "commands", "ignored.md"),
+      `---
+description: ignored
+---
+Ignored command template`,
+    )
+    yield* FSUtil.use.writeWithDirs(
+      path.join(test.directory, ".opencode", "commands", "loaded.md"),
+      `---
+description: loaded
+---
+Loaded command template`,
+    )
+
+    const config = yield* Config.use.get()
+
+    expect(config.agent?.["loaded"]).toMatchObject({
+      name: "loaded",
+      model: "test/model",
+      prompt: "Loaded agent prompt",
+    })
+    expect(config.agent?.["pkg/agents/ignored"]).toBeUndefined()
+
+    expect(config.command?.["loaded"]).toEqual({
+      description: "loaded",
+      template: "Loaded command template",
+    })
+    expect(config.command?.["pkg/commands/ignored"]).toBeUndefined()
+  }),
+)
