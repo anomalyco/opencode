@@ -1,5 +1,5 @@
 import { expect } from "bun:test"
-import { LLMClient, LLMEvent, LLMResponse, Model, type LLMRequest } from "@opencode-ai/ai"
+import { LLMClient, LLMEvent, LLMResponse, Model, SystemPart, type LLMRequest } from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { Database } from "@opencode-ai/core/database/database"
@@ -35,8 +35,8 @@ import {
 } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { SkillInstructions } from "@opencode-ai/core/skill/instructions"
+import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
-import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { asc, eq } from "drizzle-orm"
 import { Effect, Layer, Schema, Stream } from "effect"
 import { testEffect } from "./lib/effect"
@@ -84,10 +84,6 @@ const skills = Layer.mock(SkillInstructions.Service, { load: () => Effect.succee
 const references = Layer.mock(ReferenceInstructions.Service, { load: () => Effect.succeed(Instructions.empty) })
 const mcp = Layer.mock(McpInstructions.Service, { load: () => Effect.succeed(Instructions.empty) })
 const plugins = Layer.mock(PluginSupervisor.Service, { flush: Effect.void })
-const tools = Layer.mock(ToolRegistry.Service, {
-  register: () => Effect.die(new Error("unused")),
-  materialize: () => Effect.die(new Error("transient generation must not materialize tools")),
-})
 
 const it = testEffect(
   AppNodeBuilder.build(
@@ -98,6 +94,7 @@ const it = testEffect(
       SessionStore.node,
       AgentV2.node,
       InstructionBuiltIns.node,
+      PluginHooks.node,
       SessionGenerate.node,
     ]),
     [
@@ -109,7 +106,6 @@ const it = testEffect(
       [ReferenceInstructions.node, references],
       [McpInstructions.node, mcp],
       [PluginSupervisor.node, plugins],
-      [ToolRegistry.node, tools],
       [Location.node, Location.boundNode({ directory: AbsolutePath.make("/project") })],
     ],
   ),
@@ -200,6 +196,24 @@ it.effect("generates from fresh settled Session context without durable mutation
       input: { type: "user", data: { text: "Existing durable context" }, delivery: "steer" },
     })
     yield* events.publish(SessionEvent.InputPromoted, { sessionID, inputID: existing })
+    const settledAssistant = SessionMessage.ID.create()
+    yield* events.publish(SessionEvent.Step.Started, {
+      sessionID,
+      assistantMessageID: settledAssistant,
+      agent: AgentV2.ID.make("build"),
+      model: { id: ModelV2.ID.make("generate-model"), providerID: ProviderV2.ID.make("test") },
+    })
+    yield* events.publish(SessionEvent.Text.Started, {
+      sessionID,
+      assistantMessageID: settledAssistant,
+      ordinal: 0,
+    })
+    yield* events.publish(SessionEvent.Text.Ended, {
+      sessionID,
+      assistantMessageID: settledAssistant,
+      ordinal: 0,
+      text: "Settled partial answer",
+    })
     const activeAssistant = SessionMessage.ID.create()
     yield* events.publish(SessionEvent.Step.Started, {
       sessionID,
@@ -233,6 +247,12 @@ it.effect("generates from fresh settled Session context without durable mutation
     })
     instruction = "Changed context"
     const before = yield* durableState(db, sessionID)
+    const hooks = yield* PluginHooks.Service
+    yield* hooks.register("session", "context", (event) =>
+      Effect.sync(() => {
+        event.system = [SystemPart.make("Hooked system"), ...event.system]
+      }),
+    )
 
     const generate = yield* SessionGenerate.Service
     const result = yield* generate.generate({ sessionID, prompt: "Summarize privately" })
@@ -240,7 +260,10 @@ it.effect("generates from fresh settled Session context without durable mutation
     expect(result).toBe("Transient answer")
     expect(requests).toHaveLength(1)
     expect(requests[0]?.model).toBe(model)
+    expect(requests[0]?.system[0]?.text).toBe("Hooked system")
     expect(requests[0]?.system.map((part) => part.text)).toContain("Initial context")
+    expect(requests[0]?.http?.headers).toMatchObject({ "X-Session-Id": sessionID })
+    expect(requests[0]?.providerOptions).toMatchObject({ openai: { promptCacheKey: sessionID } })
     expect(
       requests[0]?.messages.flatMap((message) =>
         message.role === "system"
@@ -249,7 +272,13 @@ it.effect("generates from fresh settled Session context without durable mutation
       ),
     ).toEqual(["Changed context"])
     expect(userTexts(requests[0])).toEqual(["Existing durable context", "Summarize privately"])
-    expect(requests[0]?.messages.some((message) => message.role === "assistant")).toBe(false)
+    expect(
+      requests[0]?.messages.flatMap((message) =>
+        message.role === "assistant"
+          ? message.content.flatMap((content) => (content.type === "text" ? [content.text] : []))
+          : [],
+      ),
+    ).toEqual(["Settled partial answer"])
     expect(requests[0]?.tools).toEqual([])
     expect(requests[0]?.toolChoice).toMatchObject({ type: "none" })
     expect(yield* durableState(db, sessionID)).toEqual(before)

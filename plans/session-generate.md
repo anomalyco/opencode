@@ -41,8 +41,9 @@ session.prompt
     -> SessionSettlement
 
 session.generate
-    -> SessionContext.select/loadForGenerate
-    -> SessionModelRequest.prepareGenerate
+    -> SessionContext.select
+    -> SessionHistory.preview
+    -> SessionGenerate request construction
     -> LLMClient.generate
     -> return text
 ```
@@ -51,7 +52,8 @@ The modules have distinct jobs:
 
 - `SessionAdmission` records and promotes durable input.
 - `SessionContext` resolves a read-only, internally consistent view of what the selected agent would see.
-- `SessionModelRequest` converts that view into the provider request used by a Physical Attempt.
+- `SessionModelRequest` converts durable Step context into a provider request paired with tool capability.
+- `SessionGenerate` owns the one tool-free transient request shape rather than threading generation through the durable modules.
 - `LLMClient` executes one provider request without deciding what becomes durable.
 - `SessionSettlement` gives streamed provider events their durable Session meaning, executes local tools, records usage, and decides continuation.
 - `SessionCompaction` replaces oversized active history and remains a durable Session operation.
@@ -60,15 +62,11 @@ Durability becomes a property of admission and settlement, not request preparati
 
 ## The Core Seam
 
-The Location-scoped request module exposes two concrete methods rather than a generic operation protocol:
+The Location-scoped request module keeps its durable Step interface:
 
 ```ts
 interface SessionModelRequest {
   readonly prepare: (input: { context: SessionContext.Loaded; step: number }) => Effect<PreparedSessionModelRequest>
-  readonly prepareGenerate: (input: {
-    context: SessionContext.Loaded & { instructionDelta: string }
-    prompt: string
-  }) => Effect<LLMRequest>
 }
 ```
 
@@ -88,11 +86,11 @@ type PreparedSessionModelRequest = {
 - active-history selection after the latest completed compaction;
 - conversion to provider messages;
 - provider system prompts and model headers;
-- tool permission filtering and definition materialization for durable Steps;
+- tool permission filtering and definition materialization;
 - provider transforms and Session context hooks;
 - Session-based prompt-cache identity.
 
-Durable `prepare` advertises permitted tools and returns the capability used by settlement, except when the agent's Step limit disables tools. `prepareGenerate` does not materialize or advertise tools and sets tool choice to `none`, independently of agent permissions. Avoid a generic `step | generate | compaction` operation union or independently selectable behavior flags; the two concrete methods encode the only supported request shapes.
+Durable `prepare` advertises permitted tools and returns the capability used by settlement, except when the agent's Step limit disables tools. `SessionGenerate` constructs its request with no tool definitions and tool choice `none`, independently of agent permissions. Avoid a generic `step | generate | compaction` operation union or independently selectable behavior flags; the two operations own their concrete request shapes.
 
 ## Read-Only Session Context
 

@@ -63,6 +63,11 @@ const instructionEvents = (db: Database.Interface["db"], sessionID: SessionSchem
     .all()
     .pipe(Effect.orDie)
 
+const preview = (db: Database.Interface["db"], sessionID: SessionSchema.ID, instructions: Instructions.Instructions) =>
+  Instructions.read(instructions).pipe(
+    Effect.flatMap((observed) => InstructionState.preview(db, sessionID, instructions, observed)),
+  )
+
 describe("InstructionState", () => {
   it.effect("observes each source once without publishing events or inserting blobs", () =>
     Effect.gen(function* () {
@@ -246,9 +251,9 @@ describe("InstructionState", () => {
       const beforeEvents = yield* instructionEvents(db, sessionID)
       const beforeBlobs = yield* db.select().from(InstructionBlobTable).all().pipe(Effect.orDie)
 
-      const assembled = yield* InstructionState.assembleForGenerate(db, sessionID, instructions)
+      const assembled = yield* preview(db, sessionID, instructions)
 
-      expect(assembled).toEqual({ initial: "Initial context", updates: [], delta: "Changed context" })
+      expect(assembled).toEqual({ initial: "Initial context", updates: [], update: "Changed context" })
       expect(yield* instructionEvents(db, sessionID)).toEqual(beforeEvents)
       expect(yield* db.select().from(InstructionBlobTable).all().pipe(Effect.orDie)).toEqual(beforeBlobs)
       expect(
@@ -285,11 +290,11 @@ describe("InstructionState", () => {
       const beforeBlobs = yield* db.select().from(InstructionBlobTable).all().pipe(Effect.orDie)
       const beforeState = yield* db.select().from(InstructionStateTable).get().pipe(Effect.orDie)
 
-      const assembled = yield* InstructionState.assembleForGenerate(db, sessionID, instructions)
+      const assembled = yield* preview(db, sessionID, instructions)
 
       expect(assembled.initial).toBe("Initial context")
       expect(assembled.updates.map((entry) => entry.message.text)).toEqual(["Committed update"])
-      expect(assembled.delta).toBe("Private update")
+      expect(assembled.update).toBe("Private update")
       expect(yield* instructionEvents(db, sessionID)).toEqual(beforeEvents)
       expect(yield* db.select().from(InstructionBlobTable).all().pipe(Effect.orDie)).toEqual(beforeBlobs)
       expect(yield* db.select().from(InstructionStateTable).get().pipe(Effect.orDie)).toEqual(beforeState)
@@ -302,10 +307,10 @@ describe("InstructionState", () => {
       const { db } = yield* setup(sessionID)
       const instructions = source("test/context", Effect.succeed("Initial context"))
 
-      expect(yield* InstructionState.assembleForGenerate(db, sessionID, instructions)).toEqual({
+      expect(yield* preview(db, sessionID, instructions)).toEqual({
         initial: "Initial context",
         updates: [],
-        delta: "",
+        update: "",
       })
       expect(yield* instructionEvents(db, sessionID)).toEqual([])
       expect(yield* db.select().from(InstructionBlobTable).all().pipe(Effect.orDie)).toEqual([])
@@ -328,10 +333,10 @@ describe("InstructionState", () => {
       const beforeBlobs = yield* db.select().from(InstructionBlobTable).all().pipe(Effect.orDie)
       const beforeState = yield* db.select().from(InstructionStateTable).get().pipe(Effect.orDie)
 
-      expect(yield* InstructionState.assembleForGenerate(db, sessionID, instructions)).toEqual({
+      expect(yield* preview(db, sessionID, instructions)).toEqual({
         initial: "Committed context",
         updates: [],
-        delta: "",
+        update: "",
       })
       expect(yield* instructionEvents(db, sessionID)).toEqual(beforeEvents)
       expect(yield* db.select().from(InstructionBlobTable).all().pipe(Effect.orDie)).toEqual(beforeBlobs)
@@ -345,7 +350,7 @@ describe("InstructionState", () => {
       const { db } = yield* setup(sessionID)
       const instructions = source("test/context", Effect.succeed(Instructions.unavailable))
 
-      const error = yield* InstructionState.assembleForGenerate(db, sessionID, instructions).pipe(Effect.flip)
+      const error = yield* preview(db, sessionID, instructions).pipe(Effect.flip)
 
       expect(error).toBeInstanceOf(Instructions.InitializationBlocked)
       expect(error.keys).toEqual([Instructions.Key.make("test/context")])
