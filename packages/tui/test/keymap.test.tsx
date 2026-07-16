@@ -114,6 +114,7 @@ test("formats navigation keys as arrows", async () => {
 test("dispatches message navigation while the composer is focused", async () => {
   for (const kittyKeyboard of [false, true]) {
     const counts = {
+      "session.first": 0,
       "session.message.previous": 0,
       "session.message.next": 0,
       "session.messages_last_user": 0,
@@ -153,8 +154,10 @@ test("dispatches message navigation while the composer is focused", async () => 
       await app.renderOnce()
       app.mockInput.pressArrow("up", { meta: true })
       app.mockInput.pressArrow("down", { meta: true })
+      app.mockInput.pressKey("HOME", { meta: true })
       app.mockInput.pressKey("END", { meta: true })
       expect(counts).toEqual({
+        "session.first": 1,
         "session.message.previous": 1,
         "session.message.next": 1,
         "session.messages_last_user": 1,
@@ -225,13 +228,13 @@ test("mode-less bindings stay active when opencode mode changes", async () => {
   const app = await testRender(() => <Harness />)
   try {
     expect(counts).toEqual({
-      base: { "session.list": 1, "session.new": 1, "session.page.up": 2, "session.first": 2, "model.list": 1 },
-      question: { "session.list": 1, "session.new": 1, "session.page.up": 2, "session.first": 2, "model.list": 0 },
+      base: { "session.list": 1, "session.new": 1, "session.page.up": 2, "session.first": 3, "model.list": 1 },
+      question: { "session.list": 1, "session.new": 1, "session.page.up": 2, "session.first": 3, "model.list": 0 },
       autocomplete: {
         "session.list": 1,
         "session.new": 1,
         "session.page.up": 2,
-        "session.first": 2,
+        "session.first": 3,
         "model.list": 0,
       },
     })
