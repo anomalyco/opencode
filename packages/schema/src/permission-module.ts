@@ -65,6 +65,10 @@ export const Options = Schema.Struct({
     description:
       "Max classifier attempts including the first (default: 3). Each attempt gets its own timeout_ms budget. Not applied when the model is unset.",
   }),
+  retry_interval_ms: NonNegativeInt.pipe(optional).annotate({
+    description:
+      "Delay between classifier retry attempts in milliseconds (default: 2000). Use 0 for immediate retries. Not applied when the model is unset.",
+  }),
   timeout_ms: Schema.Number.pipe(optional).annotate({
     description: "Per-attempt classifier deadline in milliseconds (default: 8000)",
   }),

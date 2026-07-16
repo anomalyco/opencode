@@ -831,7 +831,7 @@ describe("classifier contract", () => {
       runClassifier({
         permission: "bash",
         patterns: ["ls"],
-        opts: { fallback: "ask", allowlist: ["bash"], timeout_ms: 1000 },
+        opts: { fallback: "ask", allowlist: ["bash"], timeout_ms: 1000, retry_interval_ms: 0 },
         classify: Effect.suspend(() => {
           calls += 1
           return Effect.fail(new Error(`fail ${calls}`))
@@ -852,7 +852,7 @@ describe("classifier contract", () => {
       runClassifier({
         permission: "bash",
         patterns: ["ls"],
-        opts: { fallback: "ask", allowlist: ["bash"], timeout_ms: 1000, retries: 3 },
+        opts: { fallback: "ask", allowlist: ["bash"], timeout_ms: 1000, retries: 3, retry_interval_ms: 0 },
         classify: Effect.suspend(() => {
           calls += 1
           if (calls < 2) return Effect.fail(new Error("transient"))
@@ -866,6 +866,32 @@ describe("classifier contract", () => {
       decision: "allow",
       reason: "ok after retry",
     })
+  })
+
+  test("retry_interval_ms delays between classify attempts", async () => {
+    let calls = 0
+    const started = Date.now()
+    const outcome = await Effect.runPromise(
+      runClassifier({
+        permission: "bash",
+        patterns: ["ls"],
+        opts: {
+          fallback: "ask",
+          allowlist: ["bash"],
+          timeout_ms: 1000,
+          retries: 2,
+          retry_interval_ms: 80,
+        },
+        classify: Effect.suspend(() => {
+          calls += 1
+          return Effect.fail(new Error(`fail ${calls}`))
+        }),
+        modelRef: "opencode/deepseek-v4-flash",
+      }),
+    )
+    expect(calls).toBe(2)
+    expect(Date.now() - started).toBeGreaterThanOrEqual(70)
+    expect(outcome.decision).toBe("ask")
   })
 
   test("retries: 0 skips classify and falls back immediately", async () => {
@@ -895,7 +921,7 @@ describe("classifier contract", () => {
       runClassifier({
         permission: "bash",
         patterns: ["ls"],
-        opts: { fallback: "ask", allowlist: ["bash"], timeout_ms: 40, retries: 2 },
+        opts: { fallback: "ask", allowlist: ["bash"], timeout_ms: 40, retries: 2, retry_interval_ms: 0 },
         classify: Effect.gen(function* () {
           calls += 1
           yield* Effect.sleep("80 millis")

@@ -3,7 +3,7 @@ import { Global } from "@opencode-ai/core/global"
 import { PermissionModule as CorePermissionModule } from "@opencode-ai/core/permission/module"
 import { PermissionModule as PermissionModuleSchema } from "@opencode-ai/schema/permission-module"
 import { generateObject, jsonSchema, NoObjectGeneratedError, type ModelMessage } from "ai"
-import { Effect, Schedule, Schema, Semaphore } from "effect"
+import { Duration, Effect, Schedule, Schema, Semaphore } from "effect"
 import path from "path"
 import { Config } from "@/config/config"
 import { Provider, parseModel } from "@/provider/provider"
@@ -48,6 +48,8 @@ const CLASSIFIER_DECISIONS = new Set<ClassifierDecision>(["allow", "deny"])
 const DEFAULT_TIMEOUT_MS = 8000
 /** Max classify attempts including the first when `retries` is unset. */
 const DEFAULT_RETRIES = 3
+/** Delay between classify retry attempts when `retry_interval_ms` is unset. */
+const DEFAULT_RETRY_INTERVAL_MS = 2000
 /**
  * Process-wide gate for cruise_control LLM classify calls when `parallel_classify` is false/omitted.
  * Rails and dynamic-list hits run before acquiring this permit.
@@ -405,8 +407,9 @@ function unavailableReason(fallback: PermissionModuleSchema.Fallback, attempts: 
 
 /**
  * Run the classifier with per-attempt timeout, retries, fallback, and safety rails.
- * `opts.retries` is max attempts including the first (default 3). Missing-model is handled
- * before this path and is not retried.
+ * `opts.retries` is max attempts including the first (default 3).
+ * `opts.retry_interval_ms` is the delay between attempts (default 2000; 0 = immediate).
+ * Missing-model is handled before this path and is not retried.
  *
  * Evaluate order: destructive deny → managed allow → dynamic deny → dynamic allow
  * (still rails-checked) → LLM classify (serialized unless `parallel_classify: true`) →
@@ -469,6 +472,7 @@ export const runClassifier = Effect.fn("CruiseControl.runClassifier")(function* 
   const fallback = input.opts?.fallback ?? "ask"
   const timeoutMs = input.opts?.timeout_ms ?? DEFAULT_TIMEOUT_MS
   const maxAttempts = input.opts?.retries ?? DEFAULT_RETRIES
+  const retryIntervalMs = input.opts?.retry_interval_ms ?? DEFAULT_RETRY_INTERVAL_MS
   const started = Date.now()
   // Default false: one LLM classify at a time across concurrent tool permission decides.
   const classify =
@@ -488,6 +492,10 @@ export const runClassifier = Effect.fn("CruiseControl.runClassifier")(function* 
     Effect.timeout(timeoutMs),
   )
 
+  const retrySchedule = Schedule.spaced(Duration.millis(retryIntervalMs)).pipe(
+    Schedule.both(Schedule.recurs(Math.max(0, maxAttempts - 1))),
+  )
+
   const outcome = yield* (
     maxAttempts <= 0
       ? Effect.fail("no classifier attempts configured" as const)
@@ -499,7 +507,7 @@ export const runClassifier = Effect.fn("CruiseControl.runClassifier")(function* 
               error: String(error),
             }),
           ),
-          Effect.retry(Schedule.recurs(Math.max(0, maxAttempts - 1))),
+          Effect.retry(retrySchedule),
         )
   ).pipe(
     Effect.catch((error) =>
