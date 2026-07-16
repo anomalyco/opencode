@@ -3,11 +3,11 @@
 // The operation handle is posted back before waiting so the main thread can
 // aube_cancel it.
 import { CString, dlopen, ptr } from "bun:ffi"
-import { libraryPath } from "@jdxcode/aube-ffi"
 
+import { resolveLibraryPath } from "./library"
 import type { FfiOperation, FfiResult, WorkerRequest, WorkerResponse } from "./protocol"
 
-const library = dlopen(libraryPath, {
+const library = dlopen(await resolveLibraryPath(), {
   aube_init: { args: ["ptr"], returns: "i32" },
   aube_install: { args: ["ptr", "ptr", "ptr"], returns: "u64" },
   aube_add: { args: ["ptr", "ptr", "ptr", "ptr", "ptr"], returns: "u64" },
