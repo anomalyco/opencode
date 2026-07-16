@@ -26,7 +26,7 @@ export type PlugDeps = {
     info: (msg: string) => void
     success: (msg: string) => void
   }
-  resolve: (spec: string) => Promise<string>
+  resolve: (spec: string, options?: Npm.EventOptions) => Promise<string>
   readText: (file: string) => Promise<string>
   write: (file: string, text: string) => Promise<void>
   exists: (file: string) => Promise<boolean>
@@ -77,7 +77,7 @@ const defaultPlugDeps: PlugDeps = {
     info: (msg) => log.info(msg),
     success: (msg) => log.success(msg),
   },
-  resolve: (spec) => resolvePluginTarget(spec),
+  resolve: (spec, options) => resolvePluginTarget(spec, options),
   readText: (file) => Filesystem.readText(file),
   write: async (file, text) => {
     await Filesystem.write(file, text)
