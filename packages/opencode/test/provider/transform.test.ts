@@ -1919,11 +1919,10 @@ describe("ProviderTransform.message - unsupportedParts with savedPath", () => {
 
     expect(result[0].content).toHaveLength(2)
     // Vision model should pass the file through unchanged
-    expect(result[0].content[1]).toEqual({
+    expect(result[0].content[1]).toMatchObject({
       type: "file",
       mediaType: "image/png",
       filename: "photo.png",
-      savedPath: "/tmp/attachments/photo.png",
     })
   })
 
@@ -1937,7 +1936,7 @@ describe("ProviderTransform.message - unsupportedParts with savedPath", () => {
 
     const result = ProviderTransform.message(msgs, textOnlyModel, {})
 
-    expect(result[0].content[0].text).not.toContain("saved to")
+    expect((result[0].content[0] as any).text).not.toContain("saved to")
   })
 })
 

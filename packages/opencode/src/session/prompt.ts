@@ -842,7 +842,7 @@ export const layer = Layer.effect(
                 const cfg = yield* config.get()
                 const attachmentCfg = cfg.attachment ?? {}
                 const savedPath = yield* saveDataUrlToFile(part.url, attachmentCfg, input.sessionID)
-                const result: Draft<SessionLegacy.Part> = {
+                const result: Draft<SessionV1.Part> = {
                   ...part,
                   messageID: info.id,
                   sessionID: input.sessionID,

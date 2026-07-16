@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
-import { ConfigAttachment } from "../../src/config/attachment"
+import { ConfigAttachmentV1 as ConfigAttachment } from "@opencode-ai/core/v1/config/attachment"
 
 describe("AttachmentSaveConfig", () => {
   const decode = Schema.decodeUnknownSync(ConfigAttachment.Info)

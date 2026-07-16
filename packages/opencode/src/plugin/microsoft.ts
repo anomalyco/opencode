@@ -670,7 +670,7 @@ export async function MicrosoftAuthPlugin(
                   .then(async (tokens) => {
                     const refreshedExpires = Date.now() + (tokens.expires_in ?? 3600) * 1000
                     const refreshedRefresh = tokens.refresh_token || refreshToken
-                    const accountId = extractAccountId(tokens) || currentAuth.accountId
+                    const accountId = extractAccountId(tokens) || (currentAuth as any).accountId
                     await input.client.auth
                       .set({
                         path: { id: "microsoft" },
