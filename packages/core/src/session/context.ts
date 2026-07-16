@@ -1,0 +1,118 @@
+export * as SessionContext from "./context"
+
+import { Context, Effect, Layer } from "effect"
+import { AgentV2 } from "../agent"
+import { Database } from "../database/database"
+import { makeLocationNode } from "../effect/app-node"
+import { InstructionDiscovery } from "../instruction-discovery"
+import { Instructions } from "../instructions/index"
+import { InstructionBuiltIns } from "../instructions/builtins"
+import { Location } from "../location"
+import { McpGuidance } from "../mcp/guidance"
+import { PluginSupervisor } from "../plugin/supervisor"
+import { ReferenceGuidance } from "../reference/guidance"
+import { SkillGuidance } from "../skill/guidance"
+import { AgentNotFoundError } from "./error"
+import { SessionHistory } from "./history"
+import { InstructionEntry } from "./instruction-entry"
+import { SessionMessage } from "./message"
+import { SessionRunnerModel } from "./runner/model"
+import { SessionSchema } from "./schema"
+import { SessionStore } from "./store"
+
+export interface Selection {
+  readonly session: SessionSchema.Info
+  readonly agent: AgentV2.Selection & { readonly info: AgentV2.Info }
+  readonly instructions: Instructions.Instructions
+}
+
+export interface Loaded {
+  readonly session: SessionSchema.Info
+  readonly agent: AgentV2.Selection & { readonly info: AgentV2.Info }
+  readonly model: SessionRunnerModel.Resolved
+  readonly initial: string
+  readonly messages: ReadonlyArray<SessionMessage.Info>
+}
+
+export interface Interface {
+  /** Resolves the Session, selected agent, and current instruction sources before durable Step preparation. */
+  readonly select: (sessionID: SessionSchema.ID) => Effect.Effect<Selection, AgentNotFoundError>
+  /** Loads the selected model and active history after instruction sync and pending-input promotion. */
+  readonly load: (selection: Selection) => Effect.Effect<Loaded, SessionRunnerModel.Error>
+}
+
+export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SessionContext") {}
+
+const layer = Layer.effect(
+  Service,
+  Effect.gen(function* () {
+    const agents = yield* AgentV2.Service
+    const builtins = yield* InstructionBuiltIns.Service
+    const db = (yield* Database.Service).db
+    const discovery = yield* InstructionDiscovery.Service
+    const entries = yield* InstructionEntry.Service
+    const location = yield* Location.Service
+    const mcpGuidance = yield* McpGuidance.Service
+    const models = yield* SessionRunnerModel.Service
+    const plugins = yield* PluginSupervisor.Service
+    const referenceGuidance = yield* ReferenceGuidance.Service
+    const skillGuidance = yield* SkillGuidance.Service
+    const store = yield* SessionStore.Service
+
+    const select = Effect.fn("SessionContext.select")(function* (sessionID: SessionSchema.ID) {
+      const session = yield* store.get(sessionID)
+      if (!session) return yield* Effect.die(new Error(`Session not found: ${sessionID}`))
+      if (session.location.directory !== location.directory || session.location.workspaceID !== location.workspaceID)
+        return yield* Effect.interrupt
+
+      yield* plugins.flush
+      const agent = yield* agents.select(session.agent)
+      if (!agent.info) return yield* new AgentNotFoundError({ sessionID: session.id, agent: session.agent ?? agent.id })
+      const instructions = yield* Effect.all(
+        [
+          builtins.load(sessionID),
+          discovery.load(),
+          skillGuidance.load(agent),
+          referenceGuidance.load(),
+          mcpGuidance.load(agent),
+          entries.load(sessionID),
+        ],
+        { concurrency: "unbounded" },
+      ).pipe(Effect.map(Instructions.combine))
+      return { session, agent: { ...agent, info: agent.info }, instructions }
+    })
+
+    const load = Effect.fn("SessionContext.load")(function* (selection: Selection) {
+      const model = yield* models.resolve(selection.session)
+      const history = yield* SessionHistory.entriesForRunner(db, selection.session.id, selection.instructions)
+      return {
+        session: selection.session,
+        agent: selection.agent,
+        model,
+        initial: history.initial,
+        messages: history.entries.map((entry) => entry.message),
+      }
+    })
+
+    return Service.of({ select, load })
+  }),
+)
+
+export const node = makeLocationNode({
+  service: Service,
+  layer,
+  deps: [
+    AgentV2.node,
+    Database.node,
+    InstructionBuiltIns.node,
+    InstructionDiscovery.node,
+    InstructionEntry.node,
+    Location.node,
+    McpGuidance.node,
+    PluginSupervisor.node,
+    ReferenceGuidance.node,
+    SessionRunnerModel.node,
+    SessionStore.node,
+    SkillGuidance.node,
+  ],
+})
