@@ -18,7 +18,6 @@ type ToolCallResolution =
 
 interface Prepared {
   readonly request: LLMRequest
-  readonly retryAllowed: boolean
   readonly resolveToolCall: (name: string) => ToolCallResolution
 }
 
@@ -28,11 +27,12 @@ interface PrepareInput {
 }
 
 /**
- * Builds an outbound model request and captures the retry and tool-call
- * capabilities that must remain paired with it. It does not execute the
- * request or mutate Session state.
+ * Builds an outbound model request and captures the tool-call capability that
+ * must remain paired with it. It does not execute the request or mutate
+ * Session state.
  */
 export interface Interface {
+  /** Builds one outbound model request and its matching tool-call capability. */
   readonly prepare: (input: PrepareInput) => Effect.Effect<Prepared>
 }
 
@@ -59,7 +59,8 @@ const layer = Layer.effect(
         .map(SystemPart.make)
       const history = toLLMMessages(input.context.messages, resolved.ref, providerMetadataKey)
       const messages = stepLimitReached ? [...history, Message.assistant(MAX_STEPS_PROMPT)] : history
-      const toolsByName = new Map((executableTools?.definitions ?? []).map((tool) => [tool.name, tool]))
+      const toolDefinitions = executableTools?.definitions ?? []
+      const toolsByName = new Map(toolDefinitions.map((tool) => [tool.name, tool]))
       // Hooks may reshape available definitions but cannot advertise tools omitted by permissions or the Step limit.
       const contextEvent = yield* hooks.trigger("session", "context", {
         sessionID: session.id,
@@ -68,23 +69,15 @@ const layer = Layer.effect(
         system,
         messages,
         tools: Object.fromEntries(
-          Array.from(toolsByName.values(), (tool) => [
-            tool.name,
-            { description: tool.description, input: { ...tool.inputSchema } },
-          ]),
+          toolDefinitions.map((tool) => [tool.name, { description: tool.description, input: { ...tool.inputSchema } }]),
         ),
       })
-      // Tools removed by context hooks remain non-executable for this request.
-      const hookedTools = Object.entries(contextEvent.tools).reduce<Array<LLMRequest["tools"][number]>>(
-        (result, [name, tool]) => {
-          const registered = toolsByName.get(name)
-          if (!registered) return result
-          toolsByName.delete(name)
-          result.push(Object.assign({}, registered, { description: tool.description, inputSchema: tool.input }))
-          return result
-        },
-        [],
-      )
+      const hookedTools = Object.entries(contextEvent.tools).flatMap(([name, tool]) => {
+        const registered = toolsByName.get(name)
+        return registered
+          ? [Object.assign({}, registered, { description: tool.description, inputSchema: tool.input })]
+          : []
+      })
       const request = LLM.request({
         model,
         http: {
@@ -102,7 +95,7 @@ const layer = Layer.effect(
             type: "reject",
             error: { type: "tool.execution", message: "Tools are disabled after the maximum agent steps" },
           }
-        if (toolsByName.has(name))
+        if (toolsByName.has(name) && !Object.hasOwn(contextEvent.tools, name))
           return {
             type: "reject",
             error: { type: "tool.execution", message: `Tool is not available for this request: ${name}` },
@@ -111,7 +104,6 @@ const layer = Layer.effect(
       }
       return {
         request,
-        retryAllowed: !stepLimitReached,
         resolveToolCall,
       }
     })

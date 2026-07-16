@@ -40,7 +40,9 @@ export interface Loaded {
  * that selection. This module does not build or execute the model request.
  */
 export interface Interface {
+  /** Selects the Session, agent, and instruction sources used by subsequent work. */
   readonly select: (sessionID: SessionSchema.ID) => Effect.Effect<Selection, AgentNotFoundError>
+  /** Resolves the model and active history for that selection. */
   readonly load: (selection: Selection) => Effect.Effect<Loaded, SessionRunnerModel.Error>
 }
 
