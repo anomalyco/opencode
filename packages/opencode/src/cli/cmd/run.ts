@@ -239,10 +239,16 @@ export const RunCommand = effectCmd({
         describe: "run in direct interactive split-footer mode",
         default: false,
       })
-      .option("auto", {
+      .option("unrestricted-permission", {
         type: "boolean",
         describe: "auto-approve permissions that are not explicitly denied (dangerous!)",
         default: false,
+      })
+      .option("auto", {
+        type: "boolean",
+        hidden: true,
+        default: false,
+        describe: "alias for --unrestricted-permission (deprecated)",
       })
       .option("yolo", {
         type: "boolean",
@@ -271,7 +277,8 @@ export const RunCommand = effectCmd({
     yield* Effect.promise(async () => {
       const rawMessage = [...args.message, ...(args["--"] || [])].join(" ")
       const interactive = args.mini
-      const auto = args.auto || args.yolo || args["dangerously-skip-permissions"]
+      const auto =
+        args["unrestricted-permission"] || args.auto || args.yolo || args["dangerously-skip-permissions"]
       const thinking = interactive ? (args.thinking ?? true) : (args.thinking ?? false)
       const die = (message: string): never => {
         UI.error(message)
@@ -1003,6 +1010,8 @@ export async function runMini(input: MiniCommandInput) {
     "replay-limit": input.replayLimit,
     replayLimit: input.replayLimit,
     auto: false,
+    "unrestricted-permission": false,
+    unrestrictedPermission: false,
     yolo: false,
     "dangerously-skip-permissions": false,
     dangerouslySkipPermissions: false,

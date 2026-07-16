@@ -1004,7 +1004,9 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       {
         name: "permission.mode",
         title:
-          local.permission.mode === "auto" ? "Disable auto-approve permissions" : "Enable auto-approve permissions",
+          local.permission.mode === "auto"
+            ? "Disable unrestricted permissions"
+            : "Enable unrestricted permissions",
         category: "System",
         run: () => {
           local.permission.toggle()
