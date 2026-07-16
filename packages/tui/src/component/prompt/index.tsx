@@ -190,7 +190,7 @@ export function Prompt(props: PromptProps) {
   const renderer = useRenderer()
   const exit = useExit()
   const dimensions = useTerminalDimensions()
-  const { themeV2, syntax } = useTheme()
+  const { themeV2, syntax, mode } = useTheme()
   const animationsEnabled = createMemo(() => config.animations ?? true)
   const list = createMemo(() => props.placeholders?.normal ?? [])
   const shell = createMemo(() => props.placeholders?.shell ?? [])
@@ -1366,6 +1366,12 @@ export function Prompt(props: PromptProps) {
   })
   const maxHeight = createMemo(() => Math.max(6, Math.floor(dimensions().height / 3)))
 
+  const promptBg = createMemo(() =>
+    mode() === "light"
+      ? themeV2.increase(themeV2.background.surface.offset(), 1)
+      : themeV2.decrease(themeV2.background.surface.offset(), 1),
+  )
+
   return (
     <>
       <box ref={(r: BoxRenderable) => (anchor = r)} visible={props.visible !== false} width="100%">
@@ -1383,7 +1389,7 @@ export function Prompt(props: PromptProps) {
             paddingRight={2}
             paddingTop={1}
             flexShrink={0}
-            backgroundColor={themeV2.background.action("focused")}
+            backgroundColor={promptBg()}
             flexGrow={1}
             width="100%"
           >
@@ -1459,10 +1465,8 @@ export function Prompt(props: PromptProps) {
                 if (props.disabled) return
                 r.target?.focus()
               }}
-              focusedBackgroundColor={themeV2.background.action("focused")}
-              cursorColor={
-                props.disabled ? themeV2.background.surface.offset() : themeV2.text()
-              }
+              focusedBackgroundColor="transparent"
+              cursorColor={props.disabled ? themeV2.background.surface.offset() : themeV2.text()}
               syntaxStyle={syntax()}
             />
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1} justifyContent="space-between">
@@ -1481,16 +1485,11 @@ export function Prompt(props: PromptProps) {
                           <text fg={fadeColor(themeV2.text.subdued(), modelMetaAlpha())}>·</text>
                           <text
                             flexShrink={0}
-                            fg={fadeColor(
-                              leader() ? themeV2.text.subdued() : themeV2.text(),
-                              modelMetaAlpha(),
-                            )}
+                            fg={fadeColor(leader() ? themeV2.text.subdued() : themeV2.text(), modelMetaAlpha())}
                           >
                             {local.model.parsed().model}
                           </text>
-                          <text fg={fadeColor(themeV2.text.subdued(), modelMetaAlpha())}>
-                            {currentProviderLabel()}
-                          </text>
+                          <text fg={fadeColor(themeV2.text.subdued(), modelMetaAlpha())}>{currentProviderLabel()}</text>
                           <Show when={showVariant()}>
                             <text fg={fadeColor(themeV2.text.subdued(), variantMetaAlpha())}>·</text>
                             <text>
@@ -1524,15 +1523,15 @@ export function Prompt(props: PromptProps) {
           borderColor={borderHighlight()}
           customBorderChars={{
             ...EmptyBorder,
-            vertical: themeV2.background.action("focused").a !== 0 ? "╹" : " ",
+            vertical: promptBg().a !== 0 ? "╹" : " ",
           }}
         >
           <box
             height={1}
             border={["bottom"]}
-            borderColor={themeV2.background.action("focused")}
+            borderColor={promptBg()}
             customBorderChars={
-              themeV2.background.action("focused").a !== 0
+              promptBg().a !== 0
                 ? {
                     ...EmptyBorder,
                     horizontal: "▀",
@@ -1549,23 +1548,15 @@ export function Prompt(props: PromptProps) {
             <Match when={status() === "running"}>
               <box flexDirection="row" gap={1} flexGrow={1} justifyContent="flex-start">
                 <box marginLeft={1}>
-                  <Show
-                    when={config.animations ?? true}
-                    fallback={<text fg={themeV2.text.subdued()}>[⋯]</text>}
-                  >
+                  <Show when={config.animations ?? true} fallback={<text fg={themeV2.text.subdued()}>[⋯]</text>}>
                     <spinner color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
                   </Show>
                 </box>
-                <text
-                  fg={store.interrupt > 0 ? themeV2.background.action() : themeV2.text()}
-                >
+                <text fg={store.interrupt > 0 ? themeV2.background.action() : themeV2.text()}>
                   esc{" "}
                   <span
                     style={{
-                      fg:
-                        store.interrupt > 0
-                          ? themeV2.background.action()
-                          : themeV2.text.subdued(),
+                      fg: store.interrupt > 0 ? themeV2.background.action() : themeV2.text.subdued(),
                     }}
                   >
                     {store.interrupt > 0 ? "again to interrupt" : "interrupt"}
@@ -1589,10 +1580,7 @@ export function Prompt(props: PromptProps) {
               </box>
             </Match>
             <Match when={true}>
-              <Show
-                when={!props.hint && locationLabel()}
-                fallback={props.hint ?? <text />}
-              >
+              <Show when={!props.hint && locationLabel()} fallback={props.hint ?? <text />}>
                 {(location) => (
                   <text fg={themeV2.text.subdued()} wrapMode="none" truncate flexGrow={1} flexShrink={1}>
                     {location()}
@@ -1604,13 +1592,7 @@ export function Prompt(props: PromptProps) {
           <box gap={2} flexDirection="row">
             <Show when={editorContextLabelState() !== "none" ? editorFileLabelDisplay() : undefined}>
               {(file) => (
-                <text
-                  fg={
-                    editorContextLabelState() === "pending"
-                      ? themeV2.hue.accent(500)
-                      : themeV2.text.subdued()
-                  }
-                >
+                <text fg={editorContextLabelState() === "pending" ? themeV2.hue.accent(500) : themeV2.text.subdued()}>
                   {file()}
                 </text>
               )}

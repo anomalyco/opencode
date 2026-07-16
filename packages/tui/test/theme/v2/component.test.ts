@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
 import { createSignal } from "solid-js"
+import { RGBA } from "@opentui/core"
 import { createComponentTheme } from "../../../src/theme/v2/component"
 import { DEFAULT_THEME } from "../../../src/theme/v2/defaults"
 import { resolveTheme } from "../../../src/theme/v2/resolve"
@@ -18,6 +19,14 @@ test("provides reactive property, variant, state, and context accessors", () => 
   expect(theme.hue.accent(500)).toBe(resolved().hue.accent[500])
   expect(theme.hue.interactive(500)).toBe(resolved().hue.interactive[500])
   expect(theme.hue.gray(200)).toBe(resolved().hue.gray[200])
+  expect(theme.increase(theme.background.surface.offset(), 1)).toBe(resolved().hue.neutral[300])
+  expect(theme.decrease(theme.hue.red(300), 2)).toBe(resolved().hue.red[100])
+  expect(theme.increase(theme.hue.red(900), 3)).toBe(resolved().hue.red[900])
+  expect(theme.decrease(theme.hue.red(100), 3)).toBe(resolved().hue.red[100])
+  const equivalent = RGBA.fromInts(...resolved().hue.green[500].toInts())
+  expect(theme.increase(equivalent, 1)).toBe(resolved().hue.green[600])
+  const unmatched = RGBA.fromInts(1, 2, 3)
+  expect(theme.increase(unmatched, 1)).toBe(unmatched)
   expect(theme.text.subdued()).toBe(resolved().text.subdued)
   expect(theme.text.action()).toBe(resolved().text.action.primary.default)
   expect(theme.text.action("pressed")).toBe(resolved().text.action.primary.pressed)

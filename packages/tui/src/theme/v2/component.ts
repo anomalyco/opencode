@@ -6,9 +6,8 @@ import type {
   ResolvedActionState,
   ResolvedFormfieldState,
   ResolvedThemeView,
-  HueStep,
 } from "./index"
-import { ActionState } from "./schema"
+import { ActionState, HueStep } from "./schema"
 
 export type ActionStates = Partial<Record<ActionState, boolean>>
 
@@ -79,6 +78,8 @@ export function createComponentTheme(current: Accessor<ResolvedThemeView>) {
 
   return {
     hue,
+    increase: (color: RGBA, amount = 1) => shiftHue(current(), color, amount),
+    decrease: (color: RGBA, amount = 1) => shiftHue(current(), color, -amount),
     text,
     background,
     border: () => current().border.default,
@@ -120,6 +121,17 @@ export function createComponentTheme(current: Accessor<ResolvedThemeView>) {
     },
     markdown,
   }
+}
+
+function shiftHue(theme: ResolvedThemeView, color: RGBA, amount: number) {
+  const colors = Object.values(theme.hue).flatMap((scale) =>
+    HueStep.literals.map((step, index) => ({ color: scale[step], index, scale })),
+  )
+  const match = colors.find((entry) => entry.color === color) ?? colors.find((entry) => entry.color.equals(color))
+  if (!match) return color
+  const offset = Number.isFinite(amount) ? Math.trunc(amount) : 0
+  const index = Math.max(0, Math.min(HueStep.literals.length - 1, match.index + offset))
+  return match.scale[HueStep.literals[index]]
 }
 
 function actions(get: (variant: ActionVariant, state: ResolvedActionState) => RGBA) {
