@@ -50,7 +50,7 @@ ultimate source of truth.
 - [x] Direct function declarations are hoisted in program and block statement lists.
 - [x] Parameter defaults observe a temporal dead zone for later parameters.
 - [ ] JavaScript-correct function scoping, hoisting, and redeclaration for accepted `var` declarations.
-- [ ] Predeclare `let` and `const` bindings in every lexical scope, including program/block bodies, switch bodies, and
+- [x] Predeclare `let` and `const` bindings in every lexical scope, including program/block bodies, switch bodies, and
       loop headers, so reads before initialization and self- or cross-referential initializers observe the JavaScript
       temporal dead zone.
 - [ ] Hoist function declarations accepted directly in switch cases.

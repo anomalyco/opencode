@@ -144,6 +144,20 @@ const collectPatternNames = (pattern: AstNode, out: Array<string> = []): Array<s
   return out
 }
 
+const loopDeclaration = (left: AstNode, statement: "for...of" | "for...in") => {
+  if (left.type !== "VariableDeclaration") return undefined
+  const declarations = getArray(left, "declarations")
+  if (declarations.length !== 1) {
+    throw new InterpreterRuntimeError(`${statement} supports one declared binding.`, left)
+  }
+  const kind = getString(left, "kind")
+  return {
+    pattern: getNode(asNode(declarations[0], "declarations[0]"), "id"),
+    mutable: kind !== "const",
+    lexical: kind !== "var",
+  }
+}
+
 export class Interpreter<R> {
   private scopes: ScopeStack
   private readonly invokeTool: (path: ReadonlyArray<string>, args: Array<unknown>) => Effect.Effect<unknown, unknown, R>
@@ -207,6 +221,7 @@ export class Interpreter<R> {
     // Keep top-level declarations separate so they can shadow builtins.
     this.scopes.push()
     return Effect.gen(function* () {
+      self.predeclareLexical(program.body)
       self.hoistFunctions(program.body)
       let value: unknown = undefined
       for (const [index, statement] of program.body.entries()) {
@@ -303,6 +318,7 @@ export class Interpreter<R> {
     const self = this
     return Effect.gen(function* () {
       const body = getArray(node, "body")
+      self.predeclareLexical(body)
       self.hoistFunctions(body)
 
       for (const statementValue of body) {
@@ -343,6 +359,25 @@ export class Interpreter<R> {
     }
   }
 
+  private predeclareLexical(statements: Array<unknown>): void {
+    for (const statementValue of statements) {
+      if (!isRecord(statementValue) || statementValue.type !== "VariableDeclaration") continue
+      const statement = statementValue as AstNode
+      const kind = getString(statement, "kind")
+      if (kind === "var") continue
+      for (const declarationValue of getArray(statement, "declarations")) {
+        const declaration = asNode(declarationValue, "declarations")
+        for (const name of collectPatternNames(getNode(declaration, "id"))) {
+          this.scopes.reserve(name, kind !== "const", declaration)
+        }
+      }
+    }
+  }
+
+  private predeclarePattern(pattern: AstNode, mutable: boolean, node: AstNode): void {
+    for (const name of collectPatternNames(pattern)) this.scopes.reserve(name, mutable, node)
+  }
+
   private evaluateIfStatement(node: AstNode): Effect.Effect<StatementResult, unknown, R> {
     const testNode = getNode(node, "test")
     const consequentNode = getNode(node, "consequent")
@@ -359,7 +394,6 @@ export class Interpreter<R> {
 
   private evaluateSwitchStatement(node: AstNode): Effect.Effect<StatementResult, unknown, R> {
     const self = this
-    this.scopes.push()
     return Effect.gen(function* () {
       const discriminant = yield* self.evaluateExpression(getNode(node, "discriminant"))
       if (containsOpaqueReference(discriminant)) {
@@ -369,39 +403,43 @@ export class Interpreter<R> {
           "InvalidDataValue",
         )
       }
-      const cases = getArray(node, "cases").map((value, index) => asNode(value, `cases[${index}]`))
-      let defaultIndex: number | undefined
-      let selected: number | undefined
-      for (const [index, branch] of cases.entries()) {
-        const test = getOptionalNode(branch, "test")
-        if (!test) {
-          defaultIndex = index
-          continue
+      self.scopes.push()
+      return yield* Effect.gen(function* () {
+        const cases = getArray(node, "cases").map((value, index) => asNode(value, `cases[${index}]`))
+        self.predeclareLexical(cases.flatMap((branch) => getArray(branch, "consequent")))
+        let defaultIndex: number | undefined
+        let selected: number | undefined
+        for (const [index, branch] of cases.entries()) {
+          const test = getOptionalNode(branch, "test")
+          if (!test) {
+            defaultIndex = index
+            continue
+          }
+          const candidate = yield* self.evaluateExpression(test)
+          if (containsOpaqueReference(candidate)) {
+            throw new InterpreterRuntimeError(
+              "Switch case values must be data values in CodeMode.",
+              test,
+              "InvalidDataValue",
+            )
+          }
+          if (candidate === discriminant) {
+            selected = index
+            break
+          }
         }
-        const candidate = yield* self.evaluateExpression(test)
-        if (containsOpaqueReference(candidate)) {
-          throw new InterpreterRuntimeError(
-            "Switch case values must be data values in CodeMode.",
-            test,
-            "InvalidDataValue",
-          )
+        const start = selected ?? defaultIndex
+        if (start === undefined) return { kind: "none" } satisfies StatementResult
+        for (let index = start; index < cases.length; index += 1) {
+          for (const statementValue of getArray(cases[index]!, "consequent")) {
+            const result = yield* self.evaluateStatement(asNode(statementValue, "consequent"))
+            if (result.kind === "break") return { kind: "none" } satisfies StatementResult
+            if (result.kind === "return" || result.kind === "continue") return result
+          }
         }
-        if (candidate === discriminant) {
-          selected = index
-          break
-        }
-      }
-      const start = selected ?? defaultIndex
-      if (start === undefined) return { kind: "none" } satisfies StatementResult
-      for (let index = start; index < cases.length; index += 1) {
-        for (const statementValue of getArray(cases[index]!, "consequent")) {
-          const result = yield* self.evaluateStatement(asNode(statementValue, "consequent"))
-          if (result.kind === "break") return { kind: "none" } satisfies StatementResult
-          if (result.kind === "return" || result.kind === "continue") return result
-        }
-      }
-      return { kind: "none" } satisfies StatementResult
-    }).pipe(Effect.ensuring(Effect.sync(() => self.scopes.pop())))
+        return { kind: "none" } satisfies StatementResult
+      }).pipe(Effect.ensuring(Effect.sync(() => self.scopes.pop())))
+    })
   }
 
   private evaluateWhileStatement(node: AstNode): Effect.Effect<StatementResult, unknown, R> {
@@ -465,6 +503,10 @@ export class Interpreter<R> {
       const updateNode = getOptionalNode(node, "update")
       const bodyNode = getNode(node, "body")
 
+      if (initNode?.type === "VariableDeclaration" && getString(initNode, "kind") !== "var") {
+        self.predeclareLexical([initNode])
+      }
+
       if (initNode) {
         if (initNode.type === "VariableDeclaration") {
           yield* self.evaluateVariableDeclaration(initNode)
@@ -478,21 +520,18 @@ export class Interpreter<R> {
           ? Array.from(self.scopes.current().keys())
           : []
 
-      while (testNode ? yield* self.evaluateExpression(testNode) : true) {
-        const iterationScope =
-          perIterationBindings.length > 0
-            ? new Map(
-                perIterationBindings.map((name): [string, Binding] => [name, { ...self.scopes.current().get(name)! }]),
-              )
-            : undefined
-        if (iterationScope) self.scopes.push(iterationScope)
-        const result = yield* self.evaluateStatement(bodyNode).pipe(
-          Effect.ensuring(
-            Effect.sync(() => {
-              if (iterationScope) self.scopes.pop()
-            }),
-          ),
+      const nextIteration = () => {
+        if (perIterationBindings.length === 0) return
+        const current = self.scopes.current()
+        self.scopes.pop()
+        self.scopes.push(
+          new Map(perIterationBindings.map((name): [string, Binding] => [name, { ...current.get(name)! }])),
         )
+      }
+      nextIteration()
+
+      while (testNode ? yield* self.evaluateExpression(testNode) : true) {
+        const result = yield* self.evaluateStatement(bodyNode)
 
         if (result.kind === "return") {
           return result
@@ -502,13 +541,7 @@ export class Interpreter<R> {
           return { kind: "none" } satisfies StatementResult
         }
 
-        if (iterationScope) {
-          const loopScope = self.scopes.current()
-          for (const name of perIterationBindings) {
-            loopScope.set(name, { ...iterationScope.get(name)! })
-          }
-        }
-
+        nextIteration()
         if (updateNode) {
           yield* self.evaluateExpression(updateNode)
         }
@@ -527,9 +560,13 @@ export class Interpreter<R> {
       throw new InterpreterRuntimeError("for await...of is not supported.", node)
     }
 
+    const left = getNode(node, "left")
+    const declared = loopDeclaration(left, "for...of")
+    if (declared?.lexical) this.scopes.push()
+
     const self = this
     return Effect.gen(function* () {
-      const left = getNode(node, "left")
+      if (declared?.lexical) self.predeclarePattern(declared.pattern, declared.mutable, left)
       const right = yield* self.evaluateExpression(getNode(node, "right"))
       const body = getNode(node, "body")
 
@@ -538,40 +575,34 @@ export class Interpreter<R> {
         throw new InterpreterRuntimeError("for...of requires an array, string, Map, or Set value in CodeMode.", node)
       }
 
-      let declaration: { readonly pattern: AstNode; readonly mutable: boolean } | undefined
       let assignment: AstNode | undefined
 
-      if (left.type === "VariableDeclaration") {
-        const declarations = getArray(left, "declarations")
-        if (declarations.length !== 1) {
-          throw new InterpreterRuntimeError("for...of supports one declared binding.", left)
-        }
-
-        const declarator = asNode(declarations[0], "declarations[0]")
-        declaration = { pattern: getNode(declarator, "id"), mutable: getString(left, "kind") !== "const" }
-      } else if (
-        left.type === "Identifier" ||
-        left.type === "MemberExpression" ||
-        left.type === "ArrayPattern" ||
-        left.type === "ObjectPattern"
+      if (
+        left.type !== "VariableDeclaration" &&
+        (left.type === "Identifier" ||
+          left.type === "MemberExpression" ||
+          left.type === "ArrayPattern" ||
+          left.type === "ObjectPattern")
       ) {
         assignment = left
-      } else {
+      } else if (left.type !== "VariableDeclaration") {
         throw new InterpreterRuntimeError("Unsupported for...of binding.", left)
       }
 
       for (const value of iterable) {
-        if (declaration) {
-          self.scopes.push()
-          yield* self.declarePattern(declaration.pattern, value, declaration.mutable, left)
-        } else if (assignment) {
-          yield* self.assignPattern(assignment, value, left)
-        }
-
-        const result = yield* self.evaluateStatement(body).pipe(
+        const result = yield* Effect.gen(function* () {
+          if (declared) {
+            self.scopes.push()
+            if (declared.lexical) self.predeclarePattern(declared.pattern, declared.mutable, left)
+            yield* self.declarePattern(declared.pattern, value, declared.mutable, left, declared.lexical)
+          } else if (assignment) {
+            yield* self.assignPattern(assignment, value, left)
+          }
+          return yield* self.evaluateStatement(body)
+        }).pipe(
           Effect.ensuring(
             Effect.sync(() => {
-              if (declaration) self.scopes.pop()
+              if (declared) self.scopes.pop()
             }),
           ),
         )
@@ -581,7 +612,7 @@ export class Interpreter<R> {
         }
 
         if (result.kind === "break") {
-          return { kind: "none" }
+          return { kind: "none" } satisfies StatementResult
         }
 
         if (result.kind === "continue") {
@@ -589,8 +620,14 @@ export class Interpreter<R> {
         }
       }
 
-      return { kind: "none" }
-    })
+      return { kind: "none" } satisfies StatementResult
+    }).pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          if (declared?.lexical) self.scopes.pop()
+        }),
+      ),
+    )
   }
 
   private enumerableKeys(value: unknown): Array<string> | undefined {
@@ -607,9 +644,13 @@ export class Interpreter<R> {
   }
 
   private evaluateForInStatement(node: AstNode): Effect.Effect<StatementResult, unknown, R> {
+    const left = getNode(node, "left")
+    const declared = loopDeclaration(left, "for...in")
+    if (declared?.lexical) this.scopes.push()
+
     const self = this
     return Effect.gen(function* () {
-      const left = getNode(node, "left")
+      if (declared?.lexical) self.predeclarePattern(declared.pattern, declared.mutable, left)
       const right = yield* self.evaluateExpression(getNode(node, "right"))
       const body = getNode(node, "body")
 
@@ -621,35 +662,28 @@ export class Interpreter<R> {
         )
       }
 
-      let declaration: { readonly pattern: AstNode; readonly mutable: boolean } | undefined
       let assignmentName: string | undefined
 
-      if (left.type === "VariableDeclaration") {
-        const declarations = getArray(left, "declarations")
-        if (declarations.length !== 1) {
-          throw new InterpreterRuntimeError("for...in supports one declared binding.", left)
-        }
-
-        const declarator = asNode(declarations[0], "declarations[0]")
-        declaration = { pattern: getNode(declarator, "id"), mutable: getString(left, "kind") !== "const" }
-      } else if (left.type === "Identifier") {
+      if (left.type === "Identifier") {
         assignmentName = getString(left, "name")
-      } else {
+      } else if (left.type !== "VariableDeclaration") {
         throw new InterpreterRuntimeError("Unsupported for...in binding.", left)
       }
 
       for (const key of keys) {
-        if (declaration) {
-          self.scopes.push()
-          yield* self.declarePattern(declaration.pattern, key, declaration.mutable, left)
-        } else if (assignmentName) {
-          self.scopes.set(assignmentName, key, left)
-        }
-
-        const result = yield* self.evaluateStatement(body).pipe(
+        const result = yield* Effect.gen(function* () {
+          if (declared) {
+            self.scopes.push()
+            if (declared.lexical) self.predeclarePattern(declared.pattern, declared.mutable, left)
+            yield* self.declarePattern(declared.pattern, key, declared.mutable, left, declared.lexical)
+          } else if (assignmentName) {
+            self.scopes.set(assignmentName, key, left)
+          }
+          return yield* self.evaluateStatement(body)
+        }).pipe(
           Effect.ensuring(
             Effect.sync(() => {
-              if (declaration) self.scopes.pop()
+              if (declared) self.scopes.pop()
             }),
           ),
         )
@@ -659,7 +693,7 @@ export class Interpreter<R> {
         }
 
         if (result.kind === "break") {
-          return { kind: "none" }
+          return { kind: "none" } satisfies StatementResult
         }
 
         if (result.kind === "continue") {
@@ -667,8 +701,14 @@ export class Interpreter<R> {
         }
       }
 
-      return { kind: "none" }
-    })
+      return { kind: "none" } satisfies StatementResult
+    }).pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          if (declared?.lexical) self.scopes.pop()
+        }),
+      ),
+    )
   }
 
   private evaluateBreakStatement(node: AstNode): StatementResult {
@@ -752,7 +792,7 @@ export class Interpreter<R> {
 
         const init = getOptionalNode(declaration, "init")
         const value = init ? yield* self.evaluateExpression(init) : undefined
-        yield* self.declarePattern(getNode(declaration, "id"), value, kind !== "const", declaration)
+        yield* self.declarePattern(getNode(declaration, "id"), value, kind !== "const", declaration, kind !== "var")
       }
     })
   }
@@ -762,17 +802,20 @@ export class Interpreter<R> {
     value: unknown,
     mutable: boolean,
     node: AstNode,
+    initialize = false,
   ): Effect.Effect<void, unknown, R> {
     const self = this
     return Effect.gen(function* () {
       if (pattern.type === "Identifier") {
-        self.scopes.declare(getString(pattern, "name"), value, mutable, node)
+        const name = getString(pattern, "name")
+        if (initialize) self.scopes.initialize(name, value, node)
+        else self.scopes.declare(name, value, mutable, node)
         return
       }
 
       if (pattern.type === "AssignmentPattern") {
         const resolved = value === undefined ? yield* self.evaluateExpression(getNode(pattern, "right")) : value
-        yield* self.declarePattern(getNode(pattern, "left"), resolved, mutable, node)
+        yield* self.declarePattern(getNode(pattern, "left"), resolved, mutable, node, initialize)
         return
       }
 
@@ -794,7 +837,7 @@ export class Interpreter<R> {
             for (const [key, item] of Object.entries(value as SafeObject)) {
               if (!consumed.has(key) && !isBlockedMember(key)) rest[key] = item
             }
-            yield* self.declarePattern(getNode(property, "argument"), rest, mutable, property)
+            yield* self.declarePattern(getNode(property, "argument"), rest, mutable, property, initialize)
             continue
           }
 
@@ -808,6 +851,7 @@ export class Interpreter<R> {
             self.destructuringPropertyValue(value as SafeObject | Array<unknown>, key),
             mutable,
             property,
+            initialize,
           )
         }
         return
@@ -823,10 +867,10 @@ export class Interpreter<R> {
           if (item === null) continue
           const element = asNode(item, `elements[${index}]`)
           if (element.type === "RestElement") {
-            yield* self.declarePattern(getNode(element, "argument"), items.slice(index), mutable, element)
+            yield* self.declarePattern(getNode(element, "argument"), items.slice(index), mutable, element, initialize)
             break
           }
-          yield* self.declarePattern(element, items[index], mutable, pattern)
+          yield* self.declarePattern(element, items[index], mutable, pattern, initialize)
         }
         return
       }
@@ -1577,10 +1621,10 @@ export class Interpreter<R> {
       }
       for (const [index, parameter] of fn.parameters.entries()) {
         if (parameter.type === "RestElement") {
-          yield* invocation.declarePattern(getNode(parameter, "argument"), args.slice(index), true, parameter)
+          yield* invocation.declarePattern(getNode(parameter, "argument"), args.slice(index), true, parameter, true)
           break
         }
-        yield* invocation.declarePattern(parameter, args[index], true, parameter)
+        yield* invocation.declarePattern(parameter, args[index], true, parameter, true)
       }
 
       if (fn.body.type === "BlockStatement") {
