@@ -18,7 +18,7 @@ await Bun.build({
   outdir: "./dist/node",
   format: "esm",
   sourcemap: "linked",
-  external: ["jsonc-parser", "@lydell/node-pty"],
+  external: ["jsonc-parser", "@lydell/node-pty", "@jdxcode/aube-node"],
   define: {
     OPENCODE_MODELS_DEV: generated.modelsData,
     OPENCODE_CHANNEL: `'${Script.channel}'`,

@@ -5,6 +5,7 @@ import fs from "fs"
 import path from "path"
 import { fileURLToPath } from "url"
 import { createSolidTransformPlugin } from "@opentui/solid/bun-plugin"
+import { bunPlugin as createAubeNodePlugin, type AubeNodeTarget } from "@jdxcode/aube-node/bun-plugin"
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -141,6 +142,7 @@ if (!skipInstall) {
   await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`
   await $`bun install --os="*" --cpu="*" @parcel/watcher@${pkg.dependencies["@parcel/watcher"]}`
   await $`bun install --os="*" --cpu="*" @ff-labs/fff-bun@${pkg.dependencies["@ff-labs/fff-bun"]}`
+  await $`bun install --os="*" --cpu="*" @jdxcode/aube-node@${pkg.devDependencies["@jdxcode/aube-node"]}`
 }
 for (const item of targets) {
   const name = [
@@ -168,7 +170,14 @@ for (const item of targets) {
   await Bun.build({
     conditions: ["bun", "node"],
     tsconfig: "./tsconfig.json",
-    plugins: [plugin],
+    plugins: [
+      plugin,
+      createAubeNodePlugin({
+        os: item.os as AubeNodeTarget["os"],
+        arch: item.arch as AubeNodeTarget["arch"],
+        ...(item.os === "linux" ? { libc: item.abi === "musl" ? ("musl" as const) : ("glibc" as const) } : {}),
+      }),
+    ],
     external: ["node-gyp"],
     format: "esm",
     minify: true,

@@ -34,7 +34,6 @@
       "@effect/opentelemetry": "4.0.0-beta.83",
       "@effect/platform-node": "4.0.0-beta.83",
       "@effect/sql-sqlite-bun": "4.0.0-beta.83",
-      "@npmcli/arborist": "9.4.0",
       "@types/bun": "1.3.13",
       "@types/cross-spawn": "6.0.6",
       "@octokit/rest": "22.0.0",

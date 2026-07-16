@@ -3,7 +3,6 @@ export * as Npm from "./npm"
 import path from "path"
 import npa from "npm-package-arg"
 import { Effect, Schema, Context, Layer, Option, FileSystem } from "effect"
-import { NodeFileSystem } from "@effect/platform-node"
 import { FSUtil } from "./fs-util"
 import { Global } from "./global"
 import { EffectFlock } from "./util/effect-flock"
@@ -11,7 +10,6 @@ import { makeGlobalNode } from "./effect/app-node"
 import { filesystem } from "./effect/app-node-platform"
 import { LayerNode } from "./effect/layer-node"
 import { makeRuntime } from "./effect/runtime"
-import { NpmConfig } from "./npm-config"
 
 export class InstallFailedError extends Schema.TaggedErrorClass<InstallFailedError>()("NpmInstallFailedError", {
   add: Schema.Array(Schema.String).pipe(Schema.optional),
@@ -60,13 +58,18 @@ const resolveEntryPoint = (name: string, dir: string): EntryPoint => {
   }
 }
 
-interface ArboristNode {
-  name: string
-  path: string
-}
+// aube's canonical lockfile plus package-lock.json left behind by the previous
+// arborist-based installer.
+const lockfiles = ["aube-lock.yaml", "package-lock.json"]
 
-interface ArboristTree {
-  edgesOut: Map<string, { to?: ArboristNode }>
+const parseAddSpec = (spec: string): { name: string; version?: string; exact: boolean } => {
+  try {
+    const hit = npa(spec)
+    if (hit.name) return { name: hit.name, version: hit.rawSpec ? hit.rawSpec : undefined, exact: hit.type === "version" }
+  } catch {}
+  // Specs without a name portion (git urls, tarballs) pass through whole; the
+  // addon hands a version-less name to aube as a raw specifier.
+  return { name: spec, exact: false }
 }
 
 const layer = Layer.effect(
@@ -80,37 +83,41 @@ const layer = Layer.effect(
     const reify = (input: { dir: string; add?: string[] }) =>
       Effect.gen(function* () {
         yield* flock.acquire(`npm-install:${input.dir}`)
-        const { Arborist } = yield* Effect.promise(() => import("@npmcli/arborist"))
-        const add = input.add ?? []
-        const npmOptions = yield* NpmConfig.load(input.dir)
-        const arborist = new Arborist({
-          ...npmOptions,
-          path: input.dir,
-          binLinks: true,
-          progress: false,
-          savePrefix: "",
-          ignoreScripts: true,
-        })
-        return yield* Effect.tryPromise({
-          try: () =>
-            arborist.reify({
-              ...npmOptions,
-              add,
-              save: true,
-              saveType: "prod",
-            }),
-          catch: (cause) =>
-            new InstallFailedError({
-              cause,
-              add,
-              dir: input.dir,
-            }),
-        }) as Effect.Effect<ArboristTree, InstallFailedError>
+        const { install } = yield* Effect.promise(() => import("@jdxcode/aube-node"))
+        const parsed = (input.add ?? []).map(parseAddSpec)
+        const add = parsed.map(({ name, version }) => ({ name, version }))
+        const attempt = (offline: boolean) =>
+          Effect.tryPromise({
+            try: (signal) => install(input.dir, { add, offline, signal }),
+            catch: (cause) =>
+              new InstallFailedError({
+                cause,
+                add: input.add ?? [],
+                dir: input.dir,
+              }),
+          })
+        // A clean project or exact-version add resolves from the local store
+        // with no registry traffic; tags and ranges go online so `latest`
+        // cannot come from a stale cached packument.
+        if (parsed.every((item) => item.exact)) {
+          return yield* attempt(true).pipe(Effect.catch(() => attempt(false)))
+        }
+        return yield* attempt(false)
       }).pipe(
         Effect.withSpan("Npm.reify", {
           attributes: input,
         }),
       )
+
+    // Cache dirs hold a single package, so the manifest aube wrote names the
+    // installed package even when the requested spec had no name portion.
+    const installedName = (dir: string, requested: string) =>
+      Effect.gen(function* () {
+        if (yield* afs.existsSafe(path.join(dir, "node_modules", requested))) return requested
+        const pkg = yield* afs.readJson(path.join(dir, "package.json")).pipe(Effect.orElseSucceed(() => ({})))
+        const deps = (pkg as { dependencies?: Record<string, string> }).dependencies ?? {}
+        return Object.keys(deps)[0] ?? requested
+      })
 
     const add = Effect.fn("Npm.add")(function* (pkg: string) {
       const dir = directory(pkg)
@@ -126,14 +133,15 @@ const layer = Layer.effect(
         return resolveEntryPoint(name, path.join(dir, "node_modules", name))
       }
 
-      const tree = yield* reify({ dir, add: [pkg] })
-      const first = tree.edgesOut.values().next().value?.to
-      if (!first) {
-        const result = resolveEntryPoint(name, path.join(dir, "node_modules", name))
-        if (result.entrypoint) return result
-        return yield* new InstallFailedError({ add: [pkg], dir })
+      yield* reify({ dir, add: [pkg] })
+      const installed = yield* installedName(dir, name)
+      const target = path.join(dir, "node_modules", installed)
+      if (yield* afs.existsSafe(target)) {
+        return resolveEntryPoint(installed, target)
       }
-      return resolveEntryPoint(first.name, first.path)
+      const result = resolveEntryPoint(installed, target)
+      if (result.entrypoint) return result
+      return yield* new InstallFailedError({ add: [pkg], dir })
     }, Effect.scoped)
 
     const install: Interface["install"] = Effect.fn("Npm.install")(function* (dir, input) {
@@ -144,49 +152,7 @@ const layer = Layer.effect(
       if (!canWrite) return
 
       const add = input?.add.map((pkg) => [pkg.name, pkg.version].filter(Boolean).join("@")) ?? []
-      if (
-        yield* Effect.gen(function* () {
-          const nodeModulesExists = yield* afs.existsSafe(path.join(dir, "node_modules"))
-          if (!nodeModulesExists) {
-            yield* reify({ add, dir })
-            return true
-          }
-          return false
-        }).pipe(Effect.withSpan("Npm.checkNodeModules"))
-      )
-        return
-
-      yield* Effect.gen(function* () {
-        const pkg = yield* afs.readJson(path.join(dir, "package.json")).pipe(Effect.orElseSucceed(() => ({})))
-        const lock = yield* afs.readJson(path.join(dir, "package-lock.json")).pipe(Effect.orElseSucceed(() => ({})))
-
-        const pkgAny = pkg as any
-        const lockAny = lock as any
-        const declared = new Set([
-          ...Object.keys(pkgAny?.dependencies || {}),
-          ...Object.keys(pkgAny?.devDependencies || {}),
-          ...Object.keys(pkgAny?.peerDependencies || {}),
-          ...Object.keys(pkgAny?.optionalDependencies || {}),
-          ...(input?.add || []).map((pkg) => pkg.name),
-        ])
-
-        const root = lockAny?.packages?.[""] || {}
-        const locked = new Set([
-          ...Object.keys(root?.dependencies || {}),
-          ...Object.keys(root?.devDependencies || {}),
-          ...Object.keys(root?.peerDependencies || {}),
-          ...Object.keys(root?.optionalDependencies || {}),
-        ])
-
-        for (const name of declared) {
-          if (!locked.has(name)) {
-            yield* reify({ dir, add })
-            return
-          }
-        }
-      }).pipe(Effect.withSpan("Npm.checkDirty"))
-
-      return
+      yield* reify({ dir, add })
     }, Effect.scoped)
 
     const which = Effect.fn("Npm.which")(function* (pkg: string, bin?: string) {
@@ -226,7 +192,9 @@ const layer = Layer.effect(
             return Option.some(path.join(binDir, bin.value))
           }
 
-          yield* fs.remove(path.join(dir, "package-lock.json")).pipe(Effect.orElseSucceed(() => {}))
+          yield* Effect.forEach(lockfiles, (file) =>
+            fs.remove(path.join(dir, file)).pipe(Effect.orElseSucceed(() => {})),
+          )
 
           yield* add(pkg)
 
