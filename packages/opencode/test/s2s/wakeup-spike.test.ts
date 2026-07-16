@@ -68,7 +68,7 @@ import { ToolRegistry } from "@/tool/registry"
 import { Truncate } from "@/tool/truncate"
 import { SessionID } from "../../src/session/schema"
 import { TestInstance, disposeAllInstances } from "../fixture/fixture"
-import { testEffectShared } from "../lib/effect"
+import { testEffectIsolatedShared } from "../lib/effect"
 import { TestLLMServer } from "../lib/llm-server"
 
 afterEach(async () => {
@@ -219,7 +219,7 @@ function makeRunLoopLayer() {
 }
 
 const spikeLayer = Layer.mergeAll(TestLLMServer.layer, makeRunLoopLayer())
-const it = testEffectShared(spikeLayer as unknown as Layer.Layer<any, any, never>)
+const it = testEffectIsolatedShared(spikeLayer as unknown as Layer.Layer<any, any, never>)
 
 const writeConfig = Effect.fn("WakeupSpike.writeConfig")(function* (
   dir: string,

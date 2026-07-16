@@ -52,6 +52,7 @@ import { Question } from "@/question"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Session } from "@/session/session"
+import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionCompaction } from "@/session/compaction"
 import { SessionProcessor } from "@/session/processor"
 import { SessionPrompt } from "@/session/prompt"
@@ -68,7 +69,7 @@ import { Todo } from "@/session/todo"
 import { ToolRegistry } from "@/tool/registry"
 import { Truncate } from "@/tool/truncate"
 import { TestInstance, disposeAllInstances } from "../fixture/fixture"
-import { testEffectShared } from "../lib/effect"
+import { testEffectIsolatedShared } from "../lib/effect"
 import { TestLLMServer } from "../lib/llm-server"
 
 afterEach(async () => {
@@ -166,6 +167,7 @@ function makeRunLoopLayer() {
   const flags = RuntimeFlags.layer({ experimentalEventSystem: true, experimentalAgentMessaging: true })
   const root = LayerNode.group([
     Session.node,
+    SessionProjector.node,
     Snapshot.node,
     LLM.node,
     Env.node,
@@ -213,7 +215,7 @@ function makeRunLoopLayer() {
 }
 
 const spikeLayer = Layer.mergeAll(TestLLMServer.layer, makeRunLoopLayer())
-const it = testEffectShared(spikeLayer as unknown as Layer.Layer<any, any, never>)
+const it = testEffectIsolatedShared(spikeLayer as unknown as Layer.Layer<any, any, never>)
 
 const useServerConfig = Effect.fn("FrameTest.useServerConfig")(function* (
   config: (url: string) => Partial<ConfigV1.Info>,
