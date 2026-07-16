@@ -129,7 +129,14 @@ export const Plugin = define({
   effect: Effect.fn(function* (ctx) {
     const location = yield* Location.Service
     const worktree = location.directory
-    const whitelistedDirs = [TRUNCATION_GLOB, path.join(Global.Path.tmp, "*")]
+    const whitelistedDirs = [
+      TRUNCATION_GLOB,
+      path.join(Global.Path.tmp, "*"),
+      path.join(Global.Path.config, "*"),
+      path.join(Global.Path.data, "*"),
+      path.join(Global.Path.cache, "*"),
+      path.join(Global.Path.state, "*"),
+    ]
     const readonlyExternalDirectory: PermissionV2.Ruleset = [
       { action: "external_directory", resource: "*", effect: "ask" },
       ...whitelistedDirs.map(
@@ -190,6 +197,14 @@ export const Plugin = define({
             { action: "*", resource: "*", effect: "ask", module: PermissionModule.CRUISE_CONTROL },
             { action: "question", resource: "*", effect: "allow" },
             { action: "plan_enter", resource: "*", effect: "allow" },
+            // After "*": cruise_control so later rules win for managed app directories.
+            ...whitelistedDirs.map(
+              (resource): PermissionV2.Rule => ({
+                action: "external_directory",
+                resource,
+                effect: "allow",
+              }),
+            ),
           ]),
         )
       })

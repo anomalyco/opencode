@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Exit, Fiber, Layer } from "effect"
+import path from "path"
+import { Global } from "@opencode-ai/core/global"
 import { PermissionModule as PermissionModuleSchema } from "@opencode-ai/schema/permission-module"
 import { Permission } from "../../src/permission"
 import {
@@ -8,6 +10,8 @@ import {
   parseClassifierResult,
   runClassifier,
   destructiveReason,
+  managedAppDirectoryAllow,
+  isManagedAppDirectoryPattern,
   MISSING_MODEL_MESSAGE,
 } from "../../src/permission/module"
 import { EventV2Bridge } from "../../src/event-v2-bridge"
@@ -423,6 +427,29 @@ describe("classifier contract", () => {
     expect(applySafety("allow", "external_directory", { allowlist: ["external_directory"] })).toBe("ask")
   })
 
+  test("managed KanCode config dir patterns are recognized", () => {
+    const configGlob = path.join(Global.Path.config, "*")
+    const configChild = path.join(Global.Path.config, "agents")
+    const homeConfig = path.join(path.dirname(Global.Path.config), "*")
+    expect(isManagedAppDirectoryPattern(configGlob)).toBe(true)
+    expect(isManagedAppDirectoryPattern(configChild)).toBe(true)
+    expect(isManagedAppDirectoryPattern(path.join(Global.Path.data, "db"))).toBe(true)
+    expect(isManagedAppDirectoryPattern(homeConfig)).toBe(false)
+    expect(isManagedAppDirectoryPattern("/some/other/path/*")).toBe(false)
+    expect(managedAppDirectoryAllow("external_directory", [configGlob])).toBe(
+      "KanCode managed app directory access is allowed",
+    )
+    expect(managedAppDirectoryAllow("external_directory", [homeConfig])).toBeUndefined()
+    expect(managedAppDirectoryAllow("read", [configGlob])).toBeUndefined()
+  })
+
+  test("never_auto does not block managed app directory allow", () => {
+    const configGlob = path.join(Global.Path.config, "*")
+    expect(
+      applySafety("allow", "external_directory", { allowlist: ["external_directory"] }, [configGlob]),
+    ).toBe("allow")
+  })
+
   test("valid allow from classifier", async () => {
     const outcome = await Effect.runPromise(
       runClassifier({
@@ -454,6 +481,47 @@ describe("classifier contract", () => {
     expect(outcome).toEqual({
       decision: "deny",
       reason: "Recursive force delete (rm -rf) is blocked",
+    })
+  })
+
+  test("managed app directory allow skips classifier and never_auto", async () => {
+    let called = false
+    const configGlob = path.join(Global.Path.config, "*")
+    const outcome = await Effect.runPromise(
+      runClassifier({
+        permission: "external_directory",
+        patterns: [configGlob],
+        opts: { fallback: "ask", allowlist: ["external_directory"], timeout_ms: 1000 },
+        classify: Effect.sync(() => {
+          called = true
+          return { decision: "ask" as const, reason: "should not run" }
+        }),
+        modelRef: "opencode/deepseek-v4-flash",
+      }),
+    )
+    expect(called).toBe(false)
+    expect(outcome).toEqual({
+      decision: "allow",
+      reason: "KanCode managed app directory access is allowed",
+    })
+  })
+
+  test("safety rails replace allow-sounding reason when escalating external_directory", async () => {
+    const outcome = await Effect.runPromise(
+      runClassifier({
+        permission: "external_directory",
+        patterns: ["/some/other/path/*"],
+        opts: { fallback: "ask", allowlist: ["external_directory"], timeout_ms: 1000 },
+        classify: Effect.succeed({
+          decision: "allow" as const,
+          reason: "Access to user's own configuration directory for kancode is a standard, safe operation.",
+        }),
+        modelRef: "opencode/deepseek-v4-flash",
+      }),
+    )
+    expect(outcome).toEqual({
+      decision: "ask",
+      reason: "Requires approval (safety rails)",
     })
   })
 

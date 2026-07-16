@@ -16,6 +16,7 @@ import PROMPT_EXPLORE from "./prompt/explore.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 import { Permission } from "@/permission"
+import { managedAppDirectoryGlobs } from "@/permission/module"
 import { PermissionModule } from "@opencode-ai/schema/permission-module"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@opencode-ai/core/global"
@@ -109,7 +110,7 @@ const layer = Layer.effect(
           : []
         const whitelistedDirs = [
           Truncate.GLOB,
-          path.join(Global.Path.tmp, "*"),
+          ...managedAppDirectoryGlobs(),
           ...skillDirs.map((dir) => path.join(dir, "*")),
           ...referenceDirs.map((dir) => path.join(dir, "*")),
         ]
@@ -195,6 +196,10 @@ const layer = Layer.effect(
                 "*": PermissionModule.CRUISE_CONTROL,
                 question: "allow",
                 plan_enter: "allow",
+                // After "*": cruise_control so findLast prefers these over the module.
+                external_directory: Object.fromEntries(
+                  managedAppDirectoryGlobs().map((dir) => [dir, "allow" as const]),
+                ),
               }),
               user,
             ),

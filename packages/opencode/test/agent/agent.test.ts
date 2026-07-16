@@ -10,6 +10,7 @@ import { Config } from "../../src/config/config"
 import { RuntimeFlags } from "../../src/effect/runtime-flags"
 import { Global } from "@opencode-ai/core/global"
 import { Permission } from "../../src/permission"
+import { PermissionModule } from "@opencode-ai/schema/permission-module"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Plugin } from "../../src/plugin"
 import { Provider } from "../../src/provider/provider"
@@ -564,6 +565,42 @@ it.instance("global tmp directory children are allowed for external_directory", 
       Permission.evaluate("external_directory", path.join(Global.Path.tmp, "scratch"), primary!.permission).action,
     ).toBe("allow")
     expect(Permission.evaluate("external_directory", "/some/other/path", primary!.permission).action).toBe("ask")
+  }),
+)
+
+it.instance("KanCode config and data directory children are allowed for external_directory", () =>
+  Effect.gen(function* () {
+    const primary = yield* load((svc) => svc.get("default"))
+    expect(
+      Permission.evaluate("external_directory", path.join(Global.Path.config, "kancode.json"), primary!.permission)
+        .action,
+    ).toBe("allow")
+    expect(
+      Permission.evaluate("external_directory", path.join(Global.Path.data, "log"), primary!.permission).action,
+    ).toBe("allow")
+    expect(
+      Permission.evaluate(
+        "external_directory",
+        path.join(path.dirname(Global.Path.config), "other"),
+        primary!.permission,
+      ).action,
+    ).toBe("ask")
+  }),
+)
+
+it.instance("cruisecontrol allows managed app directories without cruise_control module", () =>
+  Effect.gen(function* () {
+    const agent = yield* load((svc) => svc.get("cruisecontrol"))
+    expect(agent).toBeDefined()
+    expect(
+      Permission.evaluate("external_directory", path.join(Global.Path.config, "agents"), agent!.permission).action,
+    ).toBe("allow")
+    expect(
+      Permission.evaluate("external_directory", path.join(Global.Path.data, "tool-output"), agent!.permission).action,
+    ).toBe("allow")
+    expect(Permission.evaluate("external_directory", "/some/other/path", agent!.permission).action).toBe(
+      PermissionModule.CRUISE_CONTROL,
+    )
   }),
 )
 
