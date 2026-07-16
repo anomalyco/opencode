@@ -178,6 +178,7 @@ describe("tool.apply_patch freeform", () => {
         expect(moveFile.type).toBe("move")
         expect(moveFile.relativePath).toBe("renamed/dir/name.txt")
         expect(moveFile.movePath).toBe(path.join(test.directory, "renamed/dir/name.txt"))
+        expect(permissionCall.patterns).toEqual(["old/name.txt", "renamed/dir/name.txt"])
         expect(moveFile.patch).toContain("-old content")
         expect(moveFile.patch).toContain("+new content")
       }),
