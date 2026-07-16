@@ -58,6 +58,8 @@ export const WriteTool = Tool.define(
             metadata: {
               filepath,
               diff,
+              oldString: contentOld,
+              newString: contentNew,
             },
           })
 

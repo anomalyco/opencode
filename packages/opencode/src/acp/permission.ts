@@ -187,33 +187,18 @@ async function permissionContent(toolName: string, input: ToolInput): Promise<To
   if (files.length) return diffContentForFiles(files)
 
   const filepath = stringValue(input.filepath) ?? stringValue(input.filePath)
-  const diff = stringValue(input.diff)
-  if (!filepath || !diff) return []
-  const content = await diffContentForPatch(filepath, diff)
-  return content ? [content] : []
+  const oldText = stringValue(input.oldString)
+  const newText = stringValue(input.newString)
+  if (!filepath || oldText === undefined || newText === undefined) return []
+  return [{ type: "diff" as const, path: filepath, oldText, newText }]
 }
 
-async function diffContentForFiles(files: PermissionFileMetadata[]) {
-  const content = await Promise.all(
-    files.map(async (file) => {
-      if (!file.patch) return []
-      const content = await diffContentForPatch(file.filePath, file.patch, file.movePath)
-      return content ? [content] : []
-    }),
-  )
-  return content.flat()
-}
-
-async function diffContentForPatch(filepath: string, diff: string, displayPath = filepath) {
-  const content = (await exists(filepath)) ? await readText(filepath) : ""
-  const next = applyPatch(content, diff)
-  if (next === false) return undefined
-  return {
-    type: "diff" as const,
-    path: displayPath,
-    oldText: content,
-    newText: next,
-  }
+function diffContentForFiles(files: PermissionFileMetadata[]): ToolCallContent[] {
+  return files.flatMap((file) => {
+    if (file.oldString === undefined || file.newString === undefined) return []
+    const displayPath = file.movePath ?? file.filePath
+    return [{ type: "diff" as const, path: displayPath, oldText: file.oldString, newText: file.newString }]
+  })
 }
 
 function selectedReply(result: RequestPermissionResponse): Reply {
@@ -231,6 +216,8 @@ type PermissionFileMetadata = {
   readonly relativePath?: string
   readonly movePath?: string
   readonly patch?: string
+  readonly oldString?: string
+  readonly newString?: string
 }
 
 function fileMetadata(input: ToolInput): PermissionFileMetadata[] {
@@ -246,6 +233,8 @@ function fileMetadata(input: ToolInput): PermissionFileMetadata[] {
         relativePath: stringValue(info.relativePath),
         movePath: stringValue(info.movePath),
         patch: stringValue(info.patch),
+        oldString: stringValue(info.oldString),
+        newString: stringValue(info.newString),
       },
     ]
   })
