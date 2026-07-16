@@ -24,13 +24,14 @@ import { errorMessage } from "@/util/error"
 import { isRecord } from "@/util/record"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Database } from "@opencode-ai/core/database/database"
-import { Usage, type LLMEvent } from "@opencode-ai/llm"
+import { Usage, type LLMEvent, type ProviderMetadata } from "@opencode-ai/llm"
 
 const DOOM_LOOP_THRESHOLD = 3
 export type Result = "compact" | "stop" | "continue"
 
 export interface Handle {
   readonly message: SessionV1.Assistant
+  readonly contentFilter: { category?: string; explanation?: string } | undefined
   readonly updateToolCall: (
     toolCallID: string,
     update: (part: SessionV1.ToolPart) => SessionV1.ToolPart,
@@ -72,9 +73,19 @@ interface ProcessorContext extends Input {
   needsCompaction: boolean
   currentText: SessionV1.TextPart | undefined
   reasoningMap: Record<string, SessionV1.ReasoningPart>
+  contentFilter: { category?: string; explanation?: string } | undefined
 }
 
 type StreamEvent = LLMEvent
+
+export function readContentFilter(metadata: ProviderMetadata | undefined) {
+  const details = metadata?.["anthropic"]?.["stopDetails"]
+  if (!isRecord(details)) return undefined
+  const category = typeof details["category"] === "string" ? details["category"] : undefined
+  const explanation = typeof details["explanation"] === "string" ? details["explanation"] : undefined
+  if (!category && !explanation) return undefined
+  return { ...(category ? { category } : {}), ...(explanation ? { explanation } : {}) }
+}
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionProcessor") {}
 
@@ -111,6 +122,7 @@ const layer = Layer.effect(
         needsCompaction: false,
         currentText: undefined,
         reasoningMap: {},
+        contentFilter: undefined,
       }
       let aborted = false
 
@@ -441,6 +453,7 @@ const layer = Layer.effect(
               metadata: value.providerMetadata,
             })
             ctx.assistantMessage.finish = value.reason
+            if (value.reason === "content-filter") ctx.contentFilter = readContentFilter(value.providerMetadata)
             ctx.assistantMessage.cost += usage.cost
             ctx.assistantMessage.tokens = usage.tokens
             yield* session.updatePart({
@@ -532,6 +545,8 @@ const layer = Layer.effect(
             return
 
           case "finish":
+            if (!ctx.contentFilter && value.reason === "content-filter")
+              ctx.contentFilter = readContentFilter(value.providerMetadata)
             return
         }
       })
@@ -685,6 +700,9 @@ const layer = Layer.effect(
       return {
         get message() {
           return ctx.assistantMessage
+        },
+        get contentFilter() {
+          return ctx.contentFilter
         },
         updateToolCall,
         completeToolCall,

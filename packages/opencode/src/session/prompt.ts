@@ -1299,8 +1299,13 @@ const layer = Layer.effect(
               // output at all — previously the session went idle silently — or
               // partial text that was cut off by the provider's filter.
               if (handle.message.finish === "content-filter") {
+                const filter = handle.contentFilter
                 handle.message.error = new SessionV1.ContentFilterError({
-                  message: "The response was blocked by the provider's content filter",
+                  message: filter?.category
+                    ? `Response refused by provider (${filter.category})${filter.explanation ? `: ${filter.explanation}` : ""}`
+                    : "The response was blocked by the provider's content filter",
+                  category: filter?.category,
+                  explanation: filter?.explanation,
                 }).toObject()
                 yield* sessions.updateMessage(handle.message)
                 yield* events.publish(Session.Event.Error, { sessionID, error: handle.message.error })
