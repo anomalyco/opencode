@@ -3,7 +3,7 @@ import { Global } from "@opencode-ai/core/global"
 import { PermissionModule as CorePermissionModule } from "@opencode-ai/core/permission/module"
 import { PermissionModule as PermissionModuleSchema } from "@opencode-ai/schema/permission-module"
 import { generateObject, jsonSchema, NoObjectGeneratedError, type ModelMessage } from "ai"
-import { Effect, Schedule, Schema } from "effect"
+import { Effect, Schedule, Schema, Semaphore } from "effect"
 import path from "path"
 import { Config } from "@/config/config"
 import { Provider, parseModel } from "@/provider/provider"
@@ -49,6 +49,11 @@ const DEFAULT_TIMEOUT_MS = 8000
 /** Max classify attempts including the first when `retries` is unset. */
 const DEFAULT_RETRIES = 3
 const DEFAULT_NEVER_AUTO = ["external_directory", "doom_loop"] as const
+/**
+ * Process-wide gate for cruise_control LLM classify calls when `parallel_classify` is false/omitted.
+ * Rails and dynamic-list hits run before acquiring this permit.
+ */
+const classifyLock = Semaphore.makeUnsafe(1)
 /** Used when `allowlist` is omitted from config. Explicit `allowlist: []` still blocks auto-allow. */
 export const DEFAULT_ALLOWLIST = [
   "read",
@@ -401,7 +406,8 @@ function unavailableReason(fallback: PermissionModuleSchema.Fallback, attempts: 
  * before this path and is not retried.
  *
  * Evaluate order: destructive deny → managed allow → dynamic deny → dynamic allow
- * (still rails-checked) → LLM classify → applySafety → remember final allow/deny.
+ * (still rails-checked) → LLM classify (serialized unless `parallel_classify: true`) →
+ * applySafety → remember final allow/deny.
  *
  * Used by cruise_control and exposed for contract tests.
  */
@@ -461,8 +467,11 @@ export const runClassifier = Effect.fn("CruiseControl.runClassifier")(function* 
   const timeoutMs = input.opts?.timeout_ms ?? DEFAULT_TIMEOUT_MS
   const maxAttempts = input.opts?.retries ?? DEFAULT_RETRIES
   const started = Date.now()
+  // Default false: one LLM classify at a time across concurrent tool permission decides.
+  const classify =
+    input.opts?.parallel_classify === true ? input.classify : classifyLock.withPermits(1)(input.classify)
 
-  const classifyOnce = input.classify.pipe(
+  const classifyOnce = classify.pipe(
     Effect.map((result) => {
       const decision = applySafety(result.decision, input.permission, input.opts, input.patterns)
       // Do not surface allow-sounding classifier copy when rails forced ask.

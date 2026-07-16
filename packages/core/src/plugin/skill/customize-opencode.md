@@ -299,13 +299,19 @@ on missing model, safety rails, timeout, or parse failure.
 Within a single user-prompt turn, successful allow/deny outcomes are remembered in an
 in-memory dynamic list (`permission_modules.cruise_control.dynamic_list`, default on)
 so identical permission asks skip the LLM (`Cached allow` / `Cached deny`). The lists
-clear on each new user prompt (`chat.message`) and are not persisted to disk. Example:
+clear on each new user prompt (`chat.message`) and are not persisted to disk.
+
+By default (`parallel_classify: false` or omitted), concurrent cruise_control LLM classify
+calls are serialized so only one runs at a time when multiple tools need classification
+in one turn. Set `parallel_classify: true` to allow concurrent classify. Deterministic
+rails and dynamic-list hits bypass that queue. Example:
 
 ```json
 {
   "permission_modules": {
     "cruise_control": {
       "model": "opencode/deepseek-v4-flash",
+      "parallel_classify": false,
       "dynamic_list": { "enabled": true, "max_size": 256 },
       "instructions": {
         "background": ["The user works in a local project with KanCode."],

@@ -79,6 +79,10 @@ export const Options = Schema.Struct({
     description:
       "Per-prompt learned allow/deny action lists (in-memory; cleared on each new user prompt). Reduces repeated classifier calls within one turn.",
   }),
+  parallel_classify: Schema.Boolean.pipe(optional).annotate({
+    description:
+      "When true, allow concurrent cruise_control LLM classify calls. When false or omitted (default), serialize classify so only one runs at a time. Deterministic rails and dynamic-list hits bypass the queue.",
+  }),
 }).annotate({ identifier: "PermissionModule.Options" })
 
 /** Top-level map of permission module id → options. */

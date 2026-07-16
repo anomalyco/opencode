@@ -96,6 +96,23 @@ The `cruise_control` module SHALL maintain separate in-memory allow and deny act
 - **WHEN** a pending bash pattern matches a destructive auto-deny rule
 - **THEN** the module denies without consulting the dynamic lists or the LLM
 
+### Requirement: Parallel Classify Concurrency
+
+The `cruise_control` module SHALL honor `permission_modules.cruise_control.parallel_classify`. When the option is `false` or omitted (default), concurrent LLM classify calls MUST be serialized so only one classify runs at a time. When `true`, concurrent classify calls MAY run in parallel. Deterministic rails (destructive deny, managed-directory allow) and dynamic-list hits MUST NOT wait on the classify queue.
+
+#### Scenario: Default serializes concurrent classify
+- **WHEN** multiple tools need cruise_control LLM classification in one turn and `parallel_classify` is unset or `false`
+- **THEN** only one classify LLM call runs at a time
+
+#### Scenario: Parallel classify when enabled
+- **WHEN** `permission_modules.cruise_control.parallel_classify` is `true` and multiple classify calls are pending
+- **THEN** those LLM classify calls may run concurrently
+
+#### Scenario: Rails bypass the classify queue
+- **WHEN** one classify call is in progress under serialized mode
+- **AND** another pending permission matches a destructive rail or dynamic-list hit
+- **THEN** that decision completes without waiting for the in-flight classify to finish
+
 ### Requirement: Example Config Shape
 
 Documentation and schema examples for `cruise_control` MUST show module ID `"cruise_control"` and a `permission_modules.cruise_control` block including `model`.

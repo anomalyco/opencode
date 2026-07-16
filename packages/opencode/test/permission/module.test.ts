@@ -1,5 +1,5 @@
 import { describe, expect, test, beforeEach } from "bun:test"
-import { Effect, Exit, Fiber, Layer } from "effect"
+import { Deferred, Effect, Exit, Fiber, Layer } from "effect"
 import path from "path"
 import { Global } from "@opencode-ai/core/global"
 import { PermissionModule as PermissionModuleSchema } from "@opencode-ai/schema/permission-module"
@@ -842,6 +842,173 @@ describe("classifier contract", () => {
     expect(calls).toBe(2)
     expect(outcome.decision).toBe("ask")
     expect(outcome.reason).toBe("Classifier unavailable after 2 attempts; needs approval")
+  })
+
+  test("parallel_classify false (default) serializes concurrent classify", async () => {
+    let active = 0
+    let maxActive = 0
+    const classify = Effect.gen(function* () {
+      active += 1
+      maxActive = Math.max(maxActive, active)
+      yield* Effect.sleep("40 millis")
+      active -= 1
+      return { decision: "allow" as const, reason: "ok" }
+    })
+    const opts = {
+      fallback: "ask" as const,
+      allowlist: ["bash"],
+      timeout_ms: 2000,
+      retries: 1,
+      parallel_classify: false,
+    }
+    const [a, b] = await Effect.runPromise(
+      Effect.all(
+        [
+          runClassifier({
+            permission: "bash",
+            patterns: ["ls"],
+            opts,
+            classify,
+            modelRef: "opencode/deepseek-v4-flash",
+          }),
+          runClassifier({
+            permission: "bash",
+            patterns: ["pwd"],
+            opts,
+            classify,
+            modelRef: "opencode/deepseek-v4-flash",
+          }),
+        ],
+        { concurrency: "unbounded" },
+      ),
+    )
+    expect(a.decision).toBe("allow")
+    expect(b.decision).toBe("allow")
+    expect(maxActive).toBe(1)
+  })
+
+  test("parallel_classify omitted defaults to serialized classify", async () => {
+    let active = 0
+    let maxActive = 0
+    const classify = Effect.gen(function* () {
+      active += 1
+      maxActive = Math.max(maxActive, active)
+      yield* Effect.sleep("40 millis")
+      active -= 1
+      return { decision: "allow" as const, reason: "ok" }
+    })
+    const opts = { fallback: "ask" as const, allowlist: ["bash"], timeout_ms: 2000, retries: 1 }
+    await Effect.runPromise(
+      Effect.all(
+        [
+          runClassifier({
+            permission: "bash",
+            patterns: ["echo a"],
+            opts,
+            classify,
+            modelRef: "opencode/deepseek-v4-flash",
+          }),
+          runClassifier({
+            permission: "bash",
+            patterns: ["echo b"],
+            opts,
+            classify,
+            modelRef: "opencode/deepseek-v4-flash",
+          }),
+        ],
+        { concurrency: "unbounded" },
+      ),
+    )
+    expect(maxActive).toBe(1)
+  })
+
+  test("parallel_classify true allows concurrent classify", async () => {
+    let active = 0
+    let maxActive = 0
+    const bothStarted = await Effect.runPromise(Deferred.make<void>())
+    let started = 0
+    const classify = Effect.gen(function* () {
+      active += 1
+      maxActive = Math.max(maxActive, active)
+      started += 1
+      if (started === 2) yield* Deferred.succeed(bothStarted, undefined)
+      yield* Deferred.await(bothStarted)
+      active -= 1
+      return { decision: "allow" as const, reason: "ok" }
+    })
+    const opts = {
+      fallback: "ask" as const,
+      allowlist: ["bash"],
+      timeout_ms: 2000,
+      retries: 1,
+      parallel_classify: true,
+    }
+    await Effect.runPromise(
+      Effect.all(
+        [
+          runClassifier({
+            permission: "bash",
+            patterns: ["ls"],
+            opts,
+            classify,
+            modelRef: "opencode/deepseek-v4-flash",
+          }),
+          runClassifier({
+            permission: "bash",
+            patterns: ["pwd"],
+            opts,
+            classify,
+            modelRef: "opencode/deepseek-v4-flash",
+          }),
+        ],
+        { concurrency: "unbounded" },
+      ),
+    )
+    expect(maxActive).toBe(2)
+  })
+
+  test("destructive rail bypasses classify queue while serialize lock is held", async () => {
+    const release = await Effect.runPromise(Deferred.make<void>())
+    const entered = await Effect.runPromise(Deferred.make<void>())
+    const slow = Effect.gen(function* () {
+      yield* Deferred.succeed(entered, undefined)
+      yield* Deferred.await(release)
+      return { decision: "allow" as const, reason: "held" }
+    })
+    const opts = {
+      fallback: "ask" as const,
+      allowlist: ["bash"],
+      timeout_ms: 5000,
+      retries: 1,
+      parallel_classify: false,
+    }
+    const fiber = Effect.runFork(
+      runClassifier({
+        permission: "bash",
+        patterns: ["ls"],
+        opts,
+        classify: slow,
+        modelRef: "opencode/deepseek-v4-flash",
+      }),
+    )
+    await Effect.runPromise(Deferred.await(entered))
+
+    const rail = await Effect.runPromise(
+      runClassifier({
+        permission: "bash",
+        patterns: ["rm -rf /tmp/x"],
+        opts,
+        classify: Effect.succeed({ decision: "allow" as const, reason: "should not run" }),
+        modelRef: "opencode/deepseek-v4-flash",
+      }),
+    )
+    expect(rail).toEqual({
+      decision: "deny",
+      reason: "Recursive force delete (rm -rf) is blocked",
+    })
+
+    await Effect.runPromise(Deferred.succeed(release, undefined))
+    await Effect.runPromise(Fiber.join(fiber))
   })
 
   test("dynamic allow cache hit skips classifier", async () => {
