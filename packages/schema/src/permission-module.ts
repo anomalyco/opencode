@@ -24,7 +24,7 @@ export const Options = Schema.Struct({
   }),
   system_prompt: Schema.String.pipe(optional).annotate({
     description:
-      "Classifier system prompt override; omit to use the built-in cruise_control default",
+      "Classifier system prompt; when unset/blank, KanCode seeds the built-in default into global config",
   }),
   fallback: Fallback.pipe(optional).annotate({
     description: "Outcome when classification fails or times out (default: ask)",

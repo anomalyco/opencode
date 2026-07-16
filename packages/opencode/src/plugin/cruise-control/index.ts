@@ -1,7 +1,8 @@
 import type { Hooks, Plugin, PluginInput } from "@opencode-ai/plugin"
 import { PermissionModule as PermissionModuleSchema } from "@opencode-ai/schema/permission-module"
+import { Effect } from "effect"
 import { EffectBridge } from "@/effect/bridge"
-import { decideCruiseControl } from "./classifier"
+import { decideCruiseControl, ensureDefaultSystemPrompt } from "./classifier"
 
 export {
   applySafety,
@@ -9,6 +10,8 @@ export {
   DEFAULT_ALLOWLIST,
   DEFAULT_SYSTEM_PROMPT,
   destructiveReason,
+  ensureDefaultSystemPrompt,
+  hasConfiguredSystemPrompt,
   isManagedAppDirectoryPattern,
   managedAppDirectoryAllow,
   managedAppDirectoryGlobs,
@@ -37,9 +40,22 @@ export {
  *
  * Disabled with other default plugins when `disableDefaultPlugins` is set.
  * Requires an EffectBridge so decide can use Config/Provider from the host fiber.
+ *
+ * On init, seeds `permission_modules.cruise_control.system_prompt` into global
+ * config when unset/blank so users can edit the default in kancode.json.
  */
 export function createCruiseControlPlugin(bridge: EffectBridge.Shape): Plugin {
   return async (input: PluginInput): Promise<Hooks> => {
+    await bridge.promise(
+      ensureDefaultSystemPrompt().pipe(
+        Effect.catchCause((cause) =>
+          Effect.logWarning("cruise_control failed to seed default system_prompt", {
+            error: String(cause),
+          }),
+        ),
+      ),
+    )
+
     input.permission.registerModule({
       id: PermissionModuleSchema.CRUISE_CONTROL,
       decide: async (req) => {

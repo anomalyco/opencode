@@ -9,6 +9,8 @@ import {
   applySafety,
   decideCruiseControl,
   DEFAULT_SYSTEM_PROMPT,
+  ensureDefaultSystemPrompt,
+  hasConfiguredSystemPrompt,
   parseClassifierResult,
   resolveSystemPrompt,
   runClassifier,
@@ -407,6 +409,93 @@ describe("classifier contract", () => {
     const custom = "Custom classifier instructions.\nReturn JSON only."
     expect(resolveSystemPrompt({ system_prompt: custom })).toBe(custom)
     expect(resolveSystemPrompt({ system_prompt: `  ${custom}  ` })).toBe(custom)
+  })
+
+  test("hasConfiguredSystemPrompt treats blank as unset", () => {
+    expect(hasConfiguredSystemPrompt(undefined)).toBe(false)
+    expect(hasConfiguredSystemPrompt({})).toBe(false)
+    expect(hasConfiguredSystemPrompt({ system_prompt: "   " })).toBe(false)
+    expect(hasConfiguredSystemPrompt({ system_prompt: "custom" })).toBe(true)
+  })
+
+  test("ensureDefaultSystemPrompt writes default when unset", async () => {
+    const patches: unknown[] = []
+    await Effect.runPromise(
+      ensureDefaultSystemPrompt().pipe(
+        Effect.provide(
+          TestConfig.layer({
+            getGlobal: () => Effect.succeed({}),
+            updateGlobal: (config) => {
+              patches.push(config)
+              return Effect.succeed({ info: config, changed: true })
+            },
+          }),
+        ),
+      ),
+    )
+    expect(patches).toEqual([
+      {
+        permission_modules: {
+          cruise_control: { system_prompt: DEFAULT_SYSTEM_PROMPT },
+        },
+      },
+    ])
+  })
+
+  test("ensureDefaultSystemPrompt writes default when blank", async () => {
+    const patches: unknown[] = []
+    await Effect.runPromise(
+      ensureDefaultSystemPrompt().pipe(
+        Effect.provide(
+          TestConfig.layer({
+            getGlobal: () =>
+              Effect.succeed({
+                permission_modules: {
+                  cruise_control: { model: "opencode/deepseek-v4-flash", system_prompt: "  " },
+                },
+              }),
+            updateGlobal: (config) => {
+              patches.push(config)
+              return Effect.succeed({ info: config, changed: true })
+            },
+          }),
+        ),
+      ),
+    )
+    expect(patches).toEqual([
+      {
+        permission_modules: {
+          cruise_control: { system_prompt: DEFAULT_SYSTEM_PROMPT },
+        },
+      },
+    ])
+  })
+
+  test("ensureDefaultSystemPrompt does not overwrite configured system_prompt", async () => {
+    const patches: unknown[] = []
+    const result = await Effect.runPromise(
+      ensureDefaultSystemPrompt().pipe(
+        Effect.provide(
+          TestConfig.layer({
+            getGlobal: () =>
+              Effect.succeed({
+                permission_modules: {
+                  cruise_control: {
+                    model: "opencode/deepseek-v4-flash",
+                    system_prompt: "Custom classifier prompt",
+                  },
+                },
+              }),
+            updateGlobal: (config) => {
+              patches.push(config)
+              return Effect.succeed({ info: config, changed: true })
+            },
+          }),
+        ),
+      ),
+    )
+    expect(result).toEqual({ changed: false })
+    expect(patches).toEqual([])
   })
 
   test("parseClassifierResult accepts missing reason and fences", () => {

@@ -62,6 +62,31 @@ export function resolveSystemPrompt(opts: PermissionModuleSchema.Options | undef
   return override
 }
 
+/** True when the user has a non-empty `system_prompt` (blank/whitespace counts as unset). */
+export function hasConfiguredSystemPrompt(opts: PermissionModuleSchema.Options | undefined): boolean {
+  return Boolean(opts?.system_prompt?.trim())
+}
+
+/**
+ * Persist the built-in classifier system prompt into global config when
+ * `permission_modules.cruise_control.system_prompt` is missing or blank.
+ * Does not overwrite a non-empty user value; merges into existing cruise_control options.
+ */
+export const ensureDefaultSystemPrompt = Effect.fn("CruiseControl.ensureDefaultSystemPrompt")(function* () {
+  const config = yield* Config.Service
+  const global = yield* config.getGlobal()
+  const cruise = global.permission_modules?.[PermissionModuleSchema.CRUISE_CONTROL]
+  if (hasConfiguredSystemPrompt(cruise)) return { changed: false as const }
+
+  return yield* config.updateGlobal({
+    permission_modules: {
+      [PermissionModuleSchema.CRUISE_CONTROL]: {
+        system_prompt: DEFAULT_SYSTEM_PROMPT,
+      },
+    },
+  })
+})
+
 export type ClassifierObject = {
   decision: Decision
   reason: string
