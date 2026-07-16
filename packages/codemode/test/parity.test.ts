@@ -99,6 +99,19 @@ describe("H4: typeof on an undeclared identifier is 'undefined'", () => {
   })
 })
 
+describe("unary void", () => {
+  test("evaluates its operand and returns undefined", async () => {
+    expect(await value(`let count = 0; const result = void (count += 1); return [count, result === undefined]`)).toEqual([
+      1,
+      true,
+    ])
+  })
+
+  test("discards opaque values", async () => {
+    expect(await value(`return void tools === undefined`)).toBe(true)
+  })
+})
+
 describe("H1: NaN/Infinity flow as intermediates and normalize to null at the boundary", () => {
   test("guards run instead of the program crashing on a transient NaN", async () => {
     expect(await value(`return parseInt("abc") || 0`)).toBe(0)

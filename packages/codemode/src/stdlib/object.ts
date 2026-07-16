@@ -1,4 +1,5 @@
 import { type AstNode, InterpreterRuntimeError } from "../interpreter/model.js"
+import { containsOpaqueReference } from "../interpreter/references.js"
 import { isBlockedMember } from "../tool-runtime.js"
 import { isCodeModeValue, CodeModeMap, CodeModePromise, CodeModeSet, CodeModeURLSearchParams } from "../values.js"
 import { boundedData, coerceToString } from "./value.js"
@@ -44,6 +45,11 @@ export const invokeObjectMethod = (name: string, args: Array<unknown>, node: Ast
       return Object.entries(requireObject()).map(([key, item]) => [key, item])
     case "hasOwn":
       return Object.hasOwn(requireObject(), String(args[1]))
+    case "is":
+      if (containsOpaqueReference(args[0]) || containsOpaqueReference(args[1])) {
+        throw new InterpreterRuntimeError("Object.is requires data values in CodeMode.", node, "InvalidDataValue")
+      }
+      return Object.is(args[0], args[1])
     case "assign": {
       const target = args[0]
       if (target === null || typeof target !== "object" || Array.isArray(target) || isCodeModeValue(target)) {

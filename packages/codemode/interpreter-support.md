@@ -114,10 +114,10 @@ ultimate source of truth.
 - [x] Equality and ordering: `==`, `!=`, `===`, `!==`, `<`, `<=`, `>`, and `>=`.
 - [x] Bitwise operators: `&`, `|`, `^`, `~`, `<<`, `>>`, and `>>>`.
 - [x] Logical operators: `&&`, `||`, `??`, and `!`, with short-circuiting.
-- [x] Unary `+`, unary `-`, `typeof`, `instanceof`, and own-property-only `in`.
+- [x] Unary `+`, unary `-`, `void`, `typeof`, `instanceof`, and own-property-only `in`.
 - [x] Prefix and postfix `++` and `--`.
 - [x] Plain, arithmetic, bitwise, and logical assignment operators.
-- [ ] Unary `void` and property deletion, including computed forms such as `delete object[key]`.
+- [ ] Property deletion, including computed forms such as `delete object[key]`.
 
 ## Promises and tools
 
@@ -172,7 +172,7 @@ ultimate source of truth.
 - [x] Prototype traversal and mutation through `__proto__`, `constructor`, and `prototype` are blocked.
 - [ ] Legal own data fields named `__proto__`, `constructor`, or `prototype` are rejected at JSON/tool boundaries and
       cannot be created, read, or written in CodeMode; tool path segments with those names remain supported.
-- [ ] `Object.is` for supported data values.
+- [x] `Object.is` for supported data values.
 - [ ] `Object.groupBy`.
 
 ## Arrays

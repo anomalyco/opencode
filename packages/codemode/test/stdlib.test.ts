@@ -593,6 +593,24 @@ describe("Set", () => {
 })
 
 describe("stdlib integration", () => {
+  test("Object.is uses SameValue semantics", async () => {
+    expect(
+      await value(`
+        const object = {}
+        return [
+          Object.is(NaN, NaN),
+          Object.is(0, -0),
+          Object.is(object, object),
+          Object.is({}, {}),
+        ]
+      `),
+    ).toEqual([true, false, true, false])
+  })
+
+  test("Object.is rejects opaque runtime references", async () => {
+    expect((await error(`return Object.is(Math.max, Math.max)`)).kind).toBe("InvalidDataValue")
+  })
+
   test("Object values and entries accept arrays", async () => {
     expect(await value(`return [Object.values(["a", "b"]), Object.entries(["a", "b"])]`)).toEqual([
       ["a", "b"],

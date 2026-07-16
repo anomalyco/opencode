@@ -1286,6 +1286,7 @@ export class Interpreter<R> {
     return Effect.map(this.evaluateExpression(argument), (value) => {
       if (operator === "typeof") return typeofValue(value)
       if (operator === "!") return !value
+      if (operator === "void") return undefined
       if (containsOpaqueReference(value)) {
         throw new InterpreterRuntimeError("Unary operators require data values in CodeMode.", node, "InvalidDataValue")
       }
