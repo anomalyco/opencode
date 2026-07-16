@@ -56,7 +56,9 @@ export function Footer() {
       <box flexDirection="row" gap={1} alignItems="center">
         <text fg={theme.textMuted}>{directory()}</text>
         <Show when={permission.mode === "auto"}>
-          <text style={{ fg: theme.error, bold: true }}>Unrestricted</text>
+          <text fg={theme.error}>
+            <span style={{ bold: true }}>Unrestricted</span>
+          </text>
         </Show>
       </box>
       <box gap={2} flexDirection="row" flexShrink={0}>
