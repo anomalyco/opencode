@@ -1,7 +1,7 @@
 export * as ConfigAgentV1 from "./agent"
 
 import { Schema, SchemaGetter } from "effect"
-import { PositiveInt } from "../../schema"
+import { NonNegativeInt, PositiveInt } from "../../schema"
 import { ConfigPermissionV1 } from "./permission"
 
 const Color = Schema.Union([
@@ -36,6 +36,10 @@ const AgentSchema = Schema.StructWithRest(
     }),
     maxSteps: Schema.optional(PositiveInt).annotate({ description: "@deprecated Use 'steps' field instead." }),
     permission: Schema.optional(ConfigPermissionV1.Info),
+    subagent_depth: Schema.optional(NonNegativeInt).annotate({
+      description:
+        "Maximum subagent nesting depth for this agent. Overrides the global subagent_depth when this agent launches subagents.",
+    }),
   }),
   [Schema.Record(Schema.String, Schema.Any)],
 )
@@ -53,6 +57,7 @@ const KNOWN_KEYS = new Set([
   "color",
   "steps",
   "maxSteps",
+  "subagent_depth",
   "options",
   "permission",
   "disable",
