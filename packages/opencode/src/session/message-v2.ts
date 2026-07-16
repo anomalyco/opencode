@@ -588,7 +588,13 @@ export function latest(msgs: WithParts[]) {
   let finished: Assistant | undefined
   for (const msg of msgs) {
     const info = msg.info
-    if (info.role === "user" && (!user || info.id > user.id)) user = info
+    if (
+      info.role === "user" &&
+      !(msg.parts.length > 0 && msg.parts.every((part) => "ignored" in part && part.ignored)) &&
+      (!user || info.id > user.id)
+    ) {
+      user = info
+    }
     if (info.role === "assistant" && (!assistant || info.id > assistant.id)) assistant = info
     if (info.role === "assistant" && info.finish && (!finished || info.id > finished.id)) finished = info
   }
