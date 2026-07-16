@@ -23,7 +23,10 @@ function configLayerWith(experimental: Record<string, unknown> | undefined) {
   return Layer.succeed(
     Config.Service,
     TestConfig.make({
-      get: () => Effect.succeed({ experimental } as ReturnType<Config.Interface["get"] extends () => Effect.Effect<infer A> ? () => A : never>),
+      get: () =>
+        Effect.succeed({ experimental } as ReturnType<
+          Config.Interface["get"] extends () => Effect.Effect<infer A> ? () => A : never
+        >),
     }),
   )
 }
@@ -84,11 +87,7 @@ describe("session.tool-timeout.resolve", () => {
       const result = yield* ToolTimeout.resolve({
         tool: "task",
         agent: makeAgent(),
-      }).pipe(
-        Effect.provide(
-          configLayerWith({ tool_timeout: 30_000, task_timeout: 120_000 }),
-        ),
-      )
+      }).pipe(Effect.provide(configLayerWith({ tool_timeout: 30_000, task_timeout: 120_000 })))
       expect(result).toBe(120_000)
     }),
   )
@@ -108,11 +107,7 @@ describe("session.tool-timeout.resolve", () => {
       const result = yield* ToolTimeout.resolve({
         tool: "bash",
         agent: makeAgent(),
-      }).pipe(
-        Effect.provide(
-          configLayerWith({ tool_timeout: 30_000, task_timeout: 120_000 }),
-        ),
-      )
+      }).pipe(Effect.provide(configLayerWith({ tool_timeout: 30_000, task_timeout: 120_000 })))
       expect(result).toBe(30_000)
     }),
   )
@@ -122,11 +117,7 @@ describe("session.tool-timeout.resolve", () => {
       const result = yield* ToolTimeout.resolve({
         tool: "task",
         agent: makeAgent({ tool_timeout: 90_000 }),
-      }).pipe(
-        Effect.provide(
-          configLayerWith({ tool_timeout: 30_000, task_timeout: 120_000 }),
-        ),
-      )
+      }).pipe(Effect.provide(configLayerWith({ tool_timeout: 30_000, task_timeout: 120_000 })))
       expect(result).toBe(90_000)
     }),
   )
@@ -141,5 +132,60 @@ describe("session.tool-timeout.ToolTimeoutError", () => {
     expect(error.message).toBe('Tool "bash" timed out after 42000ms')
     expect(error.tool).toBe("bash")
     expect(error.timeoutMs).toBe(42_000)
+  })
+})
+
+describe("session.tool-timeout.createTimeoutController", () => {
+  test("fires ToolTimeoutError after timeout", async () => {
+    const tc = ToolTimeout.createTimeoutController({ tool: "test-tool", timeoutMs: 50 })
+    const fired = new Promise<unknown>((resolve) => {
+      tc.signal!.addEventListener("abort", () => resolve((tc.signal as AbortSignal).reason))
+    })
+    const result = await fired
+    expect(result).toBeInstanceOf(ToolTimeout.ToolTimeoutError)
+    tc.dispose()
+  })
+
+  test("aborted signal has correct tool and timeoutMs", async () => {
+    const tc = ToolTimeout.createTimeoutController({ tool: "my-tool", timeoutMs: 100 })
+    const fired = new Promise<unknown>((resolve) => {
+      tc.signal!.addEventListener("abort", () => resolve((tc.signal as AbortSignal).reason))
+    })
+    const error = (await fired) as ToolTimeout.ToolTimeoutError
+    expect(error.tool).toBe("my-tool")
+    expect(error.timeoutMs).toBe(100)
+    tc.dispose()
+  })
+
+  test("composes user signal with timeout signal", () => {
+    const userController = new AbortController()
+    const tc = ToolTimeout.createTimeoutController({
+      tool: "compound",
+      timeoutMs: 5000,
+      userSignal: userController.signal,
+    })
+    // The composed signal should abort when the user aborts
+    const aborted = new Promise<void>((resolve) => {
+      tc.signal!.addEventListener("abort", () => resolve())
+    })
+    userController.abort()
+    return aborted.then(() => {
+      tc.dispose()
+    })
+  })
+
+  test("dispose clears the timer so no abort fires", async () => {
+    const tc = ToolTimeout.createTimeoutController({ tool: "no-timeout", timeoutMs: 30 })
+    tc.dispose()
+    // Wait longer than the timeout to confirm no abort fires
+    await new Promise((resolve) => setTimeout(resolve, 80))
+    expect(tc.signal?.aborted).toBe(false)
+  })
+
+  test("createTimeoutController with non-aborted signal", () => {
+    const tc = ToolTimeout.createTimeoutController({ tool: "idle", timeoutMs: 999_999 })
+    expect(tc.signal).toBeDefined()
+    expect(tc.signal?.aborted).toBe(false)
+    tc.dispose()
   })
 })

@@ -104,17 +104,15 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
         return run.promise(
           Effect.gen(function* () {
             const timeoutMs = yield* ToolTimeout.resolve({ tool: item.id, agent: input.agent })
-            // Compose the user's abort signal with our own timer-driven controller
-            // so an Esc interrupt OR a timeout expires both fire the same signal
-            // that the tool's `execute(ctx.abort)` already listens to.
-            const controller = timeoutMs > 0 ? new AbortController() : undefined
-            const timer =
-              controller && setTimeout(
-                () => controller.abort(new ToolTimeout.ToolTimeoutError({ tool: item.id, timeoutMs })),
-                timeoutMs,
-              )
-            const mergedSignal = composeSignals(options.abortSignal, controller?.signal)
-            const ctx = context(args, { ...options, abortSignal: mergedSignal })
+            const tc =
+              timeoutMs > 0
+                ? ToolTimeout.createTimeoutController({
+                    tool: item.id,
+                    timeoutMs,
+                    userSignal: options.abortSignal,
+                  })
+                : { signal: options.abortSignal, dispose: () => {} }
+            const ctx = context(args, { ...options, abortSignal: tc.signal })
             yield* plugin.trigger(
               "tool.execute.before",
               { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID },
@@ -142,11 +140,6 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
               return output
             } catch (error) {
               if (error instanceof ToolTimeout.ToolTimeoutError) {
-                // Synthesize a tool-result so the agent loop continues instead of
-                // wedging on a part that stays `status="running"` forever. The
-                // underlying process may still be alive — the abort signal we
-                // fired into `ctx.abort` is the cleanup nudge, but completion is
-                // best-effort. See #20096.
                 const output = {
                   title: `Tool timed out after ${timeoutMs}ms`,
                   metadata: { timeout: true, tool: item.id, timeoutMs },
@@ -157,7 +150,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
               }
               throw error
             } finally {
-              if (timer) clearTimeout(timer)
+              tc.dispose()
             }
           }),
         )
@@ -431,14 +424,15 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
       run.promise(
         Effect.gen(function* () {
           const timeoutMs = yield* ToolTimeout.resolve({ tool: key, agent: input.agent })
-          const controller = timeoutMs > 0 ? new AbortController() : undefined
-          const timer =
-            controller && setTimeout(
-              () => controller.abort(new ToolTimeout.ToolTimeoutError({ tool: key, timeoutMs })),
-              timeoutMs,
-            )
-          const mergedSignal = composeSignals(opts.abortSignal, controller?.signal)
-          const ctx = context(args, { ...opts, abortSignal: mergedSignal })
+          const tc =
+            timeoutMs > 0
+              ? ToolTimeout.createTimeoutController({
+                  tool: key,
+                  timeoutMs,
+                  userSignal: opts.abortSignal,
+                })
+              : { signal: opts.abortSignal, dispose: () => {} }
+          const ctx = context(args, { ...opts, abortSignal: tc.signal })
           yield* plugin.trigger(
             "tool.execute.before",
             { tool: key, sessionID: ctx.sessionID, callID: opts.toolCallId },
@@ -447,7 +441,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
           try {
             const result: Awaited<ReturnType<NonNullable<typeof execute>>> = yield* Effect.gen(function* () {
               yield* ctx.ask({ permission: key, metadata: {}, patterns: ["*"], always: ["*"] })
-              return yield* Effect.promise(() => execute(args, { ...opts, abortSignal: mergedSignal }))
+              return yield* Effect.promise(() => execute(args, { ...opts, abortSignal: tc.signal }))
             }).pipe(
               Effect.withSpan("Tool.execute", {
                 attributes: {
@@ -538,7 +532,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
             }
             throw error
           } finally {
-            if (timer) clearTimeout(timer)
+            tc.dispose()
           }
         }),
       )
