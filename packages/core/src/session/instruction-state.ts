@@ -15,27 +15,53 @@ type DatabaseService = Database.Interface["db"]
 
 const decodeInstructionsUpdated = Schema.decodeUnknownSync(SessionEvent.InstructionsUpdated.data)
 
+export interface Observation extends Instructions.Admission {
+  readonly sessionID: SessionSchema.ID
+  readonly initial: boolean
+  readonly current: Instructions.Values
+}
+
+export const observe = Effect.fn("InstructionState.observe")(function* (
+  db: DatabaseService,
+  instructions: Instructions.Instructions,
+  sessionID: SessionSchema.ID,
+): Effect.fn.Return<Observation, Instructions.InitializationBlocked> {
+  const [observed, stored] = yield* Effect.all([Instructions.read(instructions), ensure(db, sessionID)], {
+    concurrency: "unbounded",
+  })
+  const admission = yield* Instructions.diff(observed, stored?.current_values)
+  return {
+    sessionID,
+    initial: !stored,
+    current: Instructions.applyHashDelta(stored?.current_values ?? {}, admission.delta),
+    ...admission,
+  }
+})
+
+export const commit = Effect.fn("InstructionState.commit")(function* (
+  db: DatabaseService,
+  events: EventV2.Interface,
+  observation: Observation,
+) {
+  if (!observation.initial && Object.keys(observation.delta).length === 0) return
+  yield* events.publish(
+    SessionEvent.InstructionsUpdated,
+    { sessionID: observation.sessionID, delta: observation.delta },
+    {
+      // Initial sync establishes the baseline; unlike later deltas it is not chronological history.
+      ...(observation.initial ? { metadata: { instructions: { initial: true } } } : {}),
+      commit: () => insertBlobs(db, observation.blobs),
+    },
+  )
+})
+
 export const prepare = Effect.fn("InstructionState.prepare")(function* (
   db: DatabaseService,
   events: EventV2.Interface,
   instructions: Instructions.Instructions,
   sessionID: SessionSchema.ID,
 ) {
-  const [observed, stored] = yield* Effect.all([Instructions.read(instructions), ensure(db, sessionID)], {
-    concurrency: "unbounded",
-  })
-  const admission = yield* Instructions.diff(observed, stored?.current_values)
-  if (!stored || Object.keys(admission.delta).length > 0) {
-    yield* events.publish(
-      SessionEvent.InstructionsUpdated,
-      { sessionID, delta: admission.delta },
-      {
-        // Initial sync establishes the baseline; unlike later deltas it is not chronological history.
-        ...(!stored ? { metadata: { instructions: { initial: true } } } : {}),
-        commit: () => insertBlobs(db, admission.blobs),
-      },
-    )
-  }
+  yield* commit(db, events, yield* observe(db, instructions, sessionID))
 })
 
 export const apply = Effect.fn("InstructionState.apply")(function* (
