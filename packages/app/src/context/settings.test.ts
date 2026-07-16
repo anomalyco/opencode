@@ -1,10 +1,13 @@
 import { describe, expect, test } from "bun:test"
 import {
+  isAppUpgrade,
   layoutTransitionState,
   maximumSunsetTimeout,
   newLayoutDesignsDefault,
   nextSunsetCheckDelay,
   resolveNewLayoutDesigns,
+  shouldDisplayTabsToast,
+  shouldEnableNewLayout,
 } from "./settings"
 
 describe("layout transition", () => {
@@ -36,5 +39,34 @@ describe("layout transition", () => {
     expect(nextSunsetCheckDelay(maximumSunsetTimeout + 1_000, 0)).toBe(maximumSunsetTimeout)
     expect(nextSunsetCheckDelay(10_000, 9_000)).toBe(1_000)
     expect(nextSunsetCheckDelay(9_000, 10_000)).toBe(0)
+  })
+
+  test("enables the new layout when upgrading from 1.17.19 or earlier", () => {
+    expect(shouldEnableNewLayout("v1.17.19", "1.17.20")).toBe(true)
+    expect(shouldEnableNewLayout("1.16.9", "2.0.0")).toBe(true)
+  })
+
+  test("enables the new layout when no previous version was recorded", () => {
+    expect(shouldEnableNewLayout(undefined, "1.17.20")).toBe(true)
+  })
+
+  test("detects upgrades only when a previous version is older", () => {
+    expect(isAppUpgrade("1.17.19", "1.17.20")).toBe(true)
+    expect(isAppUpgrade(undefined, "1.17.20")).toBe(false)
+    expect(isAppUpgrade("1.17.20", "1.17.20")).toBe(false)
+    expect(isAppUpgrade("1.17.21", "1.17.20")).toBe(false)
+  })
+
+  test("shows the tabs toast for upgrades and existing installs without a recorded version", () => {
+    expect(shouldDisplayTabsToast("1.17.19", "1.17.20", false)).toBe(true)
+    expect(shouldDisplayTabsToast(undefined, "1.17.20", true)).toBe(true)
+    expect(shouldDisplayTabsToast(undefined, "1.17.20", false)).toBe(false)
+  })
+
+  test("does not enable the new layout without a qualifying upgrade", () => {
+    expect(shouldEnableNewLayout("1.17.19", "1.17.19")).toBe(false)
+    expect(shouldEnableNewLayout("1.17.20", "1.17.21")).toBe(false)
+    expect(shouldEnableNewLayout(undefined, "1.17.19")).toBe(false)
+    expect(shouldEnableNewLayout("dev", "1.17.20")).toBe(false)
   })
 })

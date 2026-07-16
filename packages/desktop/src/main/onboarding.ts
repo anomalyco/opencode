@@ -7,7 +7,7 @@ import { FIRST_LAUNCH_ONBOARDING_COMPLETE_KEY, OLD_LAYOUT_ELIGIBLE_KEY } from ".
 import { write as writeLog } from "./logging"
 import { hasExistingAppState } from "./install-state"
 
-const DEFAULT_PROJECT_DIR = "New OpenCode Project"
+const DEFAULT_PROJECT_DIR = "Default Project"
 
 export function initializeOldLayoutEligibility(userDataPath: string) {
   const entries = existsSync(userDataPath) ? readdirSync(userDataPath, { withFileTypes: true }) : []
