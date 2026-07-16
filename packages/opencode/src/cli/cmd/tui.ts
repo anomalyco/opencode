@@ -201,6 +201,10 @@ export const TuiThreadCommand = cmd({
         return
       }
 
+      const unrestricted =
+        args["unrestricted-permission"] || args.auto || args.yolo || args["dangerously-skip-permissions"]
+      if (unrestricted) process.env.KANCODE_UNRESTRICTED_PERMISSION = "1"
+
       // Resolve relative --project paths from PWD, then use the real cwd after
       // chdir so the thread and worker share the same directory key.
       const next = resolveThreadDirectory(args.project)
@@ -297,8 +301,7 @@ export const TuiThreadCommand = cmd({
               model: args.model,
               prompt,
               fork: args.fork,
-              auto:
-                args["unrestricted-permission"] || args.auto || args.yolo || args["dangerously-skip-permissions"],
+              auto: unrestricted,
             },
           }),
         )

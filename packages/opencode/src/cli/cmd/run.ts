@@ -279,6 +279,7 @@ export const RunCommand = effectCmd({
       const interactive = args.mini
       const auto =
         args["unrestricted-permission"] || args.auto || args.yolo || args["dangerously-skip-permissions"]
+      if (auto) process.env.KANCODE_UNRESTRICTED_PERMISSION = "1"
       const thinking = interactive ? (args.thinking ?? true) : (args.thinking ?? false)
       const die = (message: string): never => {
         UI.error(message)

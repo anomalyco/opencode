@@ -82,6 +82,8 @@ const layer = Layer.effect(
       let metadata = request.metadata
       let conclusion: string | undefined
 
+      const unrestricted = process.env.KANCODE_UNRESTRICTED_PERMISSION === "1"
+
       for (const pattern of request.patterns) {
         const rule = evaluate(request.permission, pattern, ruleset, approved)
         yield* Effect.logInfo("evaluated", { permission: request.permission, pattern, action: rule })
@@ -92,7 +94,16 @@ const layer = Layer.effect(
         }
         if (rule.action === "allow") continue
         if (PermissionV1.isStaticAction(rule.action)) {
+          if (unrestricted) continue
           needsAsk = true
+          continue
+        }
+        // module action (e.g. cruise_control)
+        if (unrestricted) {
+          yield* Effect.logInfo("unrestricted mode; skipping permission module", {
+            permission: request.permission,
+            module: rule.action,
+          })
           continue
         }
         moduleIDs.add(rule.action)
