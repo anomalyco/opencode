@@ -5,7 +5,7 @@ import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { SessionRestart } from "@opencode-ai/core/session/execution/restart"
 import { ServiceStatus } from "@opencode-ai/protocol/groups/health"
 import { hasPtyConnectTicketURL } from "@opencode-ai/protocol/groups/pty"
-import { Cause, Context, Deferred, Effect, Exit, Layer, Option, Ref, Schema, Scope } from "effect"
+import { Cause, Context, Deferred, Effect, Exit, Layer, Option, Ref, Schema, Scope, Tracer } from "effect"
 import { HttpMiddleware, HttpRouter, HttpServer, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { createServer } from "node:http"
 import { ServerAuth } from "./auth"
@@ -40,7 +40,12 @@ export const start = Effect.fnUntraced(function* <E, R>(options: Options<E, R>) 
   })
   const bound = yield* listen(options)
   const application = yield* Ref.make(Option.none<App>())
-  yield* bound.http.serve(dispatch(options.password, status, application, shutdown), HttpMiddleware.logger)
+  // Request fibers may continue inbound trace context, but must not inherit the server startup parent.
+  yield* bound.http
+    .serve(dispatch(options.password, status, application, shutdown), HttpMiddleware.logger)
+    .pipe(
+      Effect.updateContext((context: Context.Context<Scope.Scope>) => Context.omit(Tracer.ParentSpan)(context)),
+    )
   if (options.service) yield* options.service.onListen(bound.http.address)
 
   const parentScope = yield* Scope.Scope
