@@ -70,6 +70,33 @@ install.ps1
 
 El proveedor `opencode-go` se sirve del catálogo `https://models.dev/api.json`. Requiere `OPENCODE_API_KEY`.
 
+## Build
+
+```bash
+# NUNCA buildear sin filtro — compila 12 targets y causa OOM, matando la sesión
+
+# Solo plataforma actual (linux-x64 en server)
+bun run packages/opencode/script/build.ts --single
+
+# Solo Windows x64
+BUILD_ONLY=opencode-windows-x64 bun run packages/opencode/script/build.ts
+```
+
+> ⚠️ **NO ejecutar `bun run packages/opencode/script/build.ts` sin `--single` ni `BUILD_ONLY`**. El script intenta compilar 12 binarios con `Bun.build({ compile: true })` en un solo proceso, saturando la RAM y causando OOM que mata la sesión.
+
+### NSIS Installer
+
+```bash
+# Requiere makensis (NSIS) instalado
+makensis \
+  -DPRODUCT_VERSION="1.17.12" \
+  -DGENTLE_AI_VERSION="0.1.0" \
+  -DBINARY_DIR="../packages/opencode/dist/opencode-windows-x64/bin" \
+  -DLICENSE_FILE="../LICENSE" \
+  -DPRODUCT_OUTFILE="../dist/GentleOpenCode-Setup.exe" \
+  scripts/installer.nsi
+```
+
 ## Principio
 
 gentle-ai es source of truth de skills/prompts/agentes/config. Este fork no duplica ni modifica nada de gentle-ai.
