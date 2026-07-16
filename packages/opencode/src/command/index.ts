@@ -158,18 +158,54 @@ const layer = Layer.effect(
           }
         }
 
+        const workflowList = yield* workflowService.list()
+        const workflowMap = new Map(workflowList.map((w) => [w.name, w]))
+
         commands["workflow"] = {
           name: "workflow",
           description: "run a workflow pipeline",
           source: "command",
-          template: "No workflows found. Create workflow files in .opencode/workflows/ directory.",
+          template: "",
+          resolveTemplate: async (args: string) => {
+            const workflowName = args.trim().split(/\s+/)[0]
+            if (!workflowName) {
+              if (workflowList.length === 0) {
+                return "No workflows found. Create workflow files in .opencode/workflows/ directory."
+              }
+              return [
+                "Available workflows:",
+                ...workflowList.map((w) => `  - ${w.name}: ${w.description ?? "No description"}`),
+                "",
+                "Usage: /workflow <name>",
+              ].join("\n")
+            }
+            const workflow = workflowMap.get(workflowName)
+            if (!workflow) {
+              return `Workflow not found: "${workflowName}". Available: ${workflowList.map((w) => w.name).join(", ")}`
+            }
+            const definition = toWorkflowDefinition(workflowName, {
+              name: workflow.name,
+              description: workflow.description,
+              agent: workflow.agent,
+              model: workflow.model,
+              steps: workflow.steps.map((s) => ({
+                ...s,
+                depends_on: s.depends_on
+                  ? [...(Array.isArray(s.depends_on) ? s.depends_on : [s.depends_on])]
+                  : undefined,
+                outputs: s.outputs?.map((o) => ({ ...o })),
+              })),
+            })
+            const inputArgs = args.trim().slice(workflowName.length).trim()
+            const { prompt } = buildWorkflowPrompt(definition, inputArgs)
+            return prompt
+          },
           hints: ["<name>"],
         }
 
-        const workflows = yield* workflowService.list()
-        for (const workflow of workflows) {
-          commands[`workflow/${workflow.name}`] = {
-            name: `workflow/${workflow.name}`,
+        for (const workflow of workflowList) {
+          commands[`wf-${workflow.name}`] = {
+            name: `wf-${workflow.name}`,
             description: workflow.description ?? `Run ${workflow.name} workflow`,
             source: "command",
             template: "",
