@@ -39,13 +39,13 @@ session.prompt
     -> SessionAdmission
     -> SessionExecution
     -> SessionContext.snapshot
-    -> SessionRequest.prepare
+    -> SessionModelRequest.prepare
     -> LLMClient.stream
     -> SessionSettlement
 
 session.generate
     -> SessionContext.snapshot
-    -> SessionRequest.prepare
+    -> SessionModelRequest.prepare
     -> LLMClient.generate
     -> return text
 ```
@@ -54,7 +54,7 @@ The modules have distinct jobs:
 
 - `SessionAdmission` records and promotes durable input.
 - `SessionContext` resolves a read-only, internally consistent view of what the selected agent would see.
-- `SessionRequest` converts that view into the provider request used by a Physical Attempt.
+- `SessionModelRequest` converts that view into the provider request used by a Physical Attempt.
 - `LLMClient` executes one provider request without deciding what becomes durable.
 - `SessionSettlement` gives streamed provider events their durable Session meaning, executes local tools, records usage, and decides continuation.
 - `SessionCompaction` replaces oversized active history and remains a durable Session operation.
@@ -66,16 +66,16 @@ Durability becomes a property of admission and settlement, not request preparati
 The first extraction should be one internal Location-scoped module with a small interface. Names are provisional; behavior is not.
 
 ```ts
-interface SessionRequest {
+interface SessionModelRequest {
   readonly prepare: (input: {
     snapshot: SessionContext.Snapshot
     operation: { type: "step"; current: number; maximum?: number } | { type: "generate"; prompt: Message.User }
-  }) => Effect<PreparedSessionRequest, SessionRequestError>
+  }) => Effect<PreparedSessionModelRequest, SessionModelRequestError>
 }
 ```
 
 ```ts
-type PreparedSessionRequest = {
+type PreparedSessionModelRequest = {
   request: LLM.Request
   snapshot: SessionContext.Snapshot
   executableTools?: MaterializedTools
@@ -154,7 +154,7 @@ The prepared result carries the captured revision internally. A later recap inte
 The existing Session context hook should run because it participates in normal request preparation. Its event should eventually identify the operation:
 
 ```ts
-type SessionRequestOperation = { type: "step"; step: number } | { type: "generate" } | { type: "compaction" }
+type SessionModelRequestOperation = { type: "step"; step: number } | { type: "generate" } | { type: "compaction" }
 ```
 
 Request preparation and observation hooks run for `session.generate`. Admission, projection, Session settlement, and tool-execution hooks do not run because those stages do not occur.
@@ -211,9 +211,9 @@ Move instruction source loading and read-only assembly behind one internal inter
 
 This commit should not add `session.generate`.
 
-### 3. Extract Session Request Preparation
+### 3. Extract Session Model Request Preparation
 
-Move model resolution, history selection, request construction, tool definitions, cache identity, and context hooks into the Location-scoped `SessionRequest` module. Make the durable runner its only caller first.
+Move model resolution, history selection, request construction, tool definitions, cache identity, and context hooks into the Location-scoped `SessionModelRequest` module. Make the durable runner its only caller first.
 
 Verify the recorded normal request before and after extraction. Keep compaction detection and pending promotion outside the new module if putting them inside would make preparation mutate state.
 

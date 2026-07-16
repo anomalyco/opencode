@@ -15,7 +15,7 @@ import { SessionCompaction } from "../compaction"
 import { SessionContext } from "../context"
 import { SessionEvent } from "../event"
 import { SessionPending } from "../pending"
-import { SessionRequest } from "../request"
+import { SessionModelRequest } from "../model-request"
 import { SessionMessage } from "../message"
 import { SessionSchema } from "../schema"
 import { SessionStore } from "../store"
@@ -53,11 +53,6 @@ export function calculateCost(costs: ModelV2.Info["cost"], tokens: StepTokens) {
   )
 }
 
-/**
- * Runs one durable coding-agent Session until it settles. Each step reloads projected history,
- * materializes tools, makes one model request, and settles local calls before continuation.
- */
-
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -65,7 +60,7 @@ const layer = Layer.effect(
     const llm = yield* LLMClient.Service
     const store = yield* SessionStore.Service
     const context = yield* SessionContext.Service
-    const requests = yield* SessionRequest.Service
+    const modelRequests = yield* SessionModelRequest.Service
     const snapshots = yield* Snapshot.Service
     const db = (yield* Database.Service).db
     const compaction = yield* SessionCompaction.Service
@@ -138,7 +133,7 @@ const layer = Layer.effect(
         if (compacted.status === "completed") return { _tag: "RestartAfterCompaction", step: currentStep } as const
         return yield* new StepFailedError({ error: compacted.error })
       }
-      const prepared = yield* requests.prepare({
+      const prepared = yield* modelRequests.prepare({
         context: loaded,
         step: currentStep,
       })
@@ -174,7 +169,7 @@ const layer = Layer.effect(
             }
             yield* publish(event)
             if (event.type !== "tool-call" || event.providerExecuted) return
-            const tool = prepared.resolveTool(event.name)
+            const tool = prepared.resolveToolCall(event.name)
             if (tool.type === "reject") {
               yield* serialized(publisher.failUnsettledTools(tool.error))
               return
@@ -505,7 +500,7 @@ export const node = makeLocationNode({
     EventV2.node,
     llmClient,
     SessionContext.node,
-    SessionRequest.node,
+    SessionModelRequest.node,
     SessionStore.node,
     SessionCompaction.node,
     SessionTitle.node,

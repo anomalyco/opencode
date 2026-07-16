@@ -1,4 +1,4 @@
-export * as SessionRequest from "./request"
+export * as SessionModelRequest from "./model-request"
 
 import { LLM, Message, SystemPart, type LLMRequest } from "@opencode-ai/ai"
 import { SessionError } from "@opencode-ai/schema/session-error"
@@ -12,14 +12,14 @@ import { MAX_STEPS_PROMPT } from "./runner/max-steps"
 import PROMPT_DEFAULT from "./runner/prompt/base.txt"
 import { toLLMMessages } from "./runner/to-llm-message"
 
-type ResolvedTool =
+type ToolCallResolution =
   | { readonly type: "reject"; readonly error: SessionError.Error }
   | { readonly type: "settle"; readonly settle: ToolRegistry.Materialization["settle"] }
 
 interface Prepared {
   readonly request: LLMRequest
   readonly retryAllowed: boolean
-  readonly resolveTool: (name: string) => ResolvedTool
+  readonly resolveToolCall: (name: string) => ToolCallResolution
 }
 
 interface PrepareInput {
@@ -28,23 +28,16 @@ interface PrepareInput {
 }
 
 /**
- * Prepares the canonical provider request for one Session Step.
- *
- * Preparation assembles system and history messages, applies Session headers
- * and prompt-cache identity, materializes permitted tools, enforces the Step
- * limit, and runs Session context hooks. The result keeps the request paired
- * with its retry and tool-settlement capabilities.
- *
- * This module does not call the provider, execute tools, publish Session
- * events, or mutate Session history.
+ * Builds an outbound model request and captures the retry and tool-call
+ * capabilities that must remain paired with it. It does not execute the
+ * request or mutate Session state.
  */
 export interface Interface {
-  /** Produces one provider-ready request and its matching execution capabilities. */
   readonly prepare: (input: PrepareInput) => Effect.Effect<Prepared>
 }
 
-/** Location-scoped request preparation for Session model calls. */
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SessionRequest") {}
+/** Location-scoped outbound model-request preparation. */
+export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SessionModelRequest") {}
 
 const layer = Layer.effect(
   Service,
@@ -52,7 +45,7 @@ const layer = Layer.effect(
     const hooks = yield* PluginHooks.Service
     const registry = yield* ToolRegistry.Service
 
-    const prepare = Effect.fn("SessionRequest.prepare")(function* (input: PrepareInput) {
+    const prepare = Effect.fn("SessionModelRequest.prepare")(function* (input: PrepareInput) {
       const session = input.context.session
       const agent = input.context.agent
       const resolved = input.context.model
@@ -62,7 +55,7 @@ const layer = Layer.effect(
       const executableTools = stepLimitReached ? undefined : yield* registry.materialize(agent.info.permissions)
       const promptCacheKey = /^ses_[0-9a-f]{64}$/.test(session.id) ? session.id.slice(4) : session.id
       const system = [agent.info.system ? agent.info.system : PROMPT_DEFAULT, input.context.initial]
-        .filter((part): part is string => part !== undefined && part.length > 0)
+        .filter((part) => part.length > 0)
         .map(SystemPart.make)
       const history = toLLMMessages(input.context.messages, resolved.ref, providerMetadataKey)
       const messages = stepLimitReached ? [...history, Message.assistant(MAX_STEPS_PROMPT)] : history
@@ -103,7 +96,7 @@ const layer = Layer.effect(
         tools: hookedTools,
         toolChoice: stepLimitReached ? "none" : undefined,
       })
-      const resolveTool = (name: string): ResolvedTool => {
+      const resolveToolCall = (name: string): ToolCallResolution => {
         if (!executableTools)
           return {
             type: "reject",
@@ -119,7 +112,7 @@ const layer = Layer.effect(
       return {
         request,
         retryAllowed: !stepLimitReached,
-        resolveTool,
+        resolveToolCall,
       }
     })
 

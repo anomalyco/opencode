@@ -35,16 +35,12 @@ export interface Loaded {
 }
 
 /**
- * Resolves the model-facing inputs for a Session.
- *
- * `select` fixes the Session, agent, and instruction sources for subsequent
- * work. `load` adds the selected model and active history for that selection.
- * This module does not prepare or execute a provider request.
+ * Resolves model-request state in two phases: `select` fixes the Session,
+ * agent, and instruction sources; `load` adds the model and active history for
+ * that selection. This module does not build or execute the model request.
  */
 export interface Interface {
-  /** Resolves the Session, selected agent, and current instruction sources. */
   readonly select: (sessionID: SessionSchema.ID) => Effect.Effect<Selection, AgentNotFoundError>
-  /** Adds the selected model and active history. */
   readonly load: (selection: Selection) => Effect.Effect<Loaded, SessionRunnerModel.Error>
 }
 
