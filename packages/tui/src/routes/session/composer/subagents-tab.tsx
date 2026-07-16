@@ -207,7 +207,6 @@ export function SubagentsTab(props: { sessionID: string }) {
           <For each={entries()}>
             {(entry, index) => {
               const active = createMemo(() => index() === selected())
-              const states = createMemo(() => ({ focused: active(), selected: entry.current }))
               const status = createMemo(() => {
                 if (entry.status === "running") return "Running"
                 return ""
@@ -217,7 +216,7 @@ export function SubagentsTab(props: { sessionID: string }) {
                   flexDirection="row"
                   paddingLeft={1}
                   paddingRight={1}
-                  backgroundColor={themeV2.background.action.primary(states())}
+                  backgroundColor={themeV2.background.action.primary({ focused: active(), selected: entry.current })}
                   onMouseOver={() => setStore("selected", index())}
                   onMouseUp={() => {
                     setStore("selected", index())
@@ -226,7 +225,7 @@ export function SubagentsTab(props: { sessionID: string }) {
                 >
                   <box flexGrow={1} minWidth={0} flexDirection="row">
                     <text
-                      fg={themeV2.text.action.primary(states())}
+                      fg={themeV2.text.action.primary({ focused: active(), selected: entry.current })}
                       attributes={active() ? TextAttributes.BOLD : undefined}
                       wrapMode="none"
                     >
@@ -234,7 +233,14 @@ export function SubagentsTab(props: { sessionID: string }) {
                     </text>
                   </box>
                   <Show when={status()}>
-                    <text fg={active() ? themeV2.text.action.primary(states()) : themeV2.text.subdued()} wrapMode="none">
+                    <text
+                      fg={
+                        active()
+                          ? themeV2.text.action.primary({ focused: active(), selected: entry.current })
+                          : themeV2.text.subdued()
+                      }
+                      wrapMode="none"
+                    >
                       {status()}
                     </text>
                   </Show>

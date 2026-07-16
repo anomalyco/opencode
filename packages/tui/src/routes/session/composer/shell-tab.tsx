@@ -100,17 +100,16 @@ export function ShellTab(props: { sessionID: string }) {
           <For each={entries()}>
             {(shell, index) => {
               const active = createMemo(() => index() === store.selected)
-              const states = createMemo(() => ({ focused: active() }))
               return (
                 <box
                   flexDirection="row"
                   paddingLeft={1}
                   paddingRight={1}
-                  backgroundColor={themeV2.background.action.primary(states())}
+                  backgroundColor={themeV2.background.action.primary({ focused: active() })}
                   onMouseOver={() => setStore("selected", index())}
                 >
                   <text
-                    fg={themeV2.text.action.primary(states())}
+                    fg={themeV2.text.action.primary({ focused: active() })}
                     attributes={active() ? TextAttributes.BOLD : undefined}
                     wrapMode="none"
                   >
