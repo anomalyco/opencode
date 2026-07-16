@@ -704,7 +704,7 @@ export const SettingsGeneralV2: Component = () => {
               <Show when={!done()} fallback={<span class="text-success">{language.t("settings.general.logout.success")}</span>}>
                 <ButtonV2
                   size="normal"
-                  variant="danger"
+                  variant="neutral"
                   disabled={loggingOut()}
                   onClick={handleLogout}
                 >
