@@ -19,7 +19,6 @@ import { Location } from "./location"
 import { LocationMutation } from "./location-mutation"
 import { LocationServiceMap } from "./location-service-map"
 import { MCP } from "./mcp/index"
-import { McpInstructions } from "./mcp/instructions"
 import { PermissionV2 } from "./permission"
 import { PluginV2 } from "./plugin"
 import { PluginSupervisor } from "./plugin/supervisor"
@@ -78,7 +77,6 @@ const locationServiceNodes = [
   Image.node,
   SkillInstructions.node,
   ReferenceInstructions.node,
-  McpInstructions.node,
   InstructionEntry.node,
   Form.node,
   QuestionV2.node,

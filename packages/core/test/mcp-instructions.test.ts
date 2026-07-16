@@ -2,18 +2,11 @@ import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { Location } from "@opencode-ai/core/location"
-import { LocationServiceMap } from "@opencode-ai/core/location-services"
 import { MCP } from "@opencode-ai/core/mcp/index"
 import { McpInstructions } from "@opencode-ai/core/mcp/instructions"
 import { PermissionV2 } from "@opencode-ai/core/permission"
-import { AbsolutePath } from "@opencode-ai/core/schema"
 import { McpTool } from "@opencode-ai/core/tool/mcp"
-import { Database } from "../src/database/database"
-import { EventV2 } from "../src/event"
-import { tmpdir } from "./fixture/tmpdir"
-import { it, testEffect } from "./lib/effect"
+import { it } from "./lib/effect"
 import { readInitial, readUpdate } from "./lib/instructions"
 
 const build = AgentV2.ID.make("build")
@@ -39,29 +32,7 @@ const layer = (catalog: () => MCP.ServerInstructions[], tools: () => MCP.Tool[])
     ],
   ])
 
-const locationIt = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Database.node, EventV2.node, LocationServiceMap.node])),
-)
-
 describe("McpInstructions", () => {
-  locationIt.live("is available from the Location service map", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (directory) => Effect.promise(() => directory[Symbol.asyncDispose]()),
-    ).pipe(
-      Effect.flatMap((directory) =>
-        Effect.gen(function* () {
-          const locations = yield* LocationServiceMap.Service
-          const context = yield* locations.contextEffect(
-            Location.Ref.make({ directory: AbsolutePath.make(directory.path) }),
-          )
-
-          expect(yield* McpInstructions.Service.pipe(Effect.provide(context))).toBeDefined()
-        }),
-      ),
-    ),
-  )
-
   it.effect("renders instructions for servers with at least one permitted tool", () =>
     Effect.gen(function* () {
       const service = yield* McpInstructions.Service
