@@ -117,7 +117,8 @@ ultimate source of truth.
 - [x] Unary `+`, unary `-`, `void`, `typeof`, `instanceof`, and own-property-only `in`.
 - [x] Prefix and postfix `++` and `--`.
 - [x] Plain, arithmetic, bitwise, and logical assignment operators.
-- [ ] Property deletion, including computed forms such as `delete object[key]`.
+- [x] Property deletion on plain data objects and arrays, including computed and optional forms; deleting an array index
+      creates a hole without changing its length.
 
 ## Promises and tools
 

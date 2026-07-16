@@ -112,6 +112,71 @@ describe("unary void", () => {
   })
 })
 
+describe("property deletion", () => {
+  test("deletes plain object fields and reports missing fields as successful", async () => {
+    expect(
+      await value(`
+        const object = { keep: 1, remove: 2 }
+        return [delete object.remove, delete object.missing, object]
+      `),
+    ).toEqual([true, true, { keep: 1 }])
+  })
+
+  test("evaluates computed object and key expressions once", async () => {
+    expect(
+      await value(`
+        const object = { remove: true }
+        let objectReads = 0
+        let keyReads = 0
+        function getObject() { objectReads++; return object }
+        function getKey() { keyReads++; return "remove" }
+        const removed = delete getObject()[getKey()]
+        return [removed, objectReads, keyReads, Object.hasOwn(object, "remove")]
+      `),
+    ).toEqual([true, 1, 1, false])
+  })
+
+  test("deleting an array index creates a hole without changing its length", async () => {
+    expect(await value(`const values = [1, 2, 3]; const removed = delete values[1]; return [removed, values.length, 1 in values, values]`)).toEqual([
+      true,
+      3,
+      false,
+      [1, null, 3],
+    ])
+  })
+
+  test("array length is not configurable", async () => {
+    expect(await value(`const values = [1, 2]; return [delete values.length, values.length]`)).toEqual([false, 2])
+  })
+
+  test("does not broaden unsupported array property assignment", async () => {
+    expect(
+      await value(`
+        const values = []
+        let rightHandSideRuns = 0
+        function next() { rightHandSideRuns++; return 1 }
+        try { values.field = next() } catch {}
+        return rightHandSideRuns
+      `),
+    ).toBe(0)
+  })
+
+  test("optional deletion short-circuits without evaluating the key", async () => {
+    expect(
+      await value(`let keyReads = 0; const object = null; return [delete object?.[keyReads++], keyReads]`),
+    ).toEqual([true, 0])
+  })
+
+  test("rejects deletion from opaque runtime references", async () => {
+    expect((await error(`return delete tools.example`)).kind).toBe("InvalidDataValue")
+  })
+
+  test("keeps blocked property names unavailable", async () => {
+    expect((await error(`const object = {}; return delete object.__proto__`)).kind).toBe("ExecutionFailure")
+    expect((await error(`const values = []; return delete values["constructor"]`)).kind).toBe("ExecutionFailure")
+  })
+})
+
 describe("H1: NaN/Infinity flow as intermediates and normalize to null at the boundary", () => {
   test("guards run instead of the program crashing on a transient NaN", async () => {
     expect(await value(`return parseInt("abc") || 0`)).toBe(0)
