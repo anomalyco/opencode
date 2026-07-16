@@ -148,13 +148,15 @@ export function selectedForeground(theme: Theme, bg?: RGBA): RGBA {
   if (theme._hasSelectedListItemText) return theme.selectedListItemText
 
   if (theme.background.a === 0) {
-    const targetColor = bg ?? theme.primary
-    const { r, g, b } = targetColor
-    const luminance = 0.299 * r + 0.587 * g + 0.114 * b
-    return luminance > 0.5 ? RGBA.fromInts(0, 0, 0) : RGBA.fromInts(255, 255, 255)
+    return contrastForeground(bg ?? theme.primary)
   }
 
   return theme.background
+}
+
+function contrastForeground(bg: RGBA): RGBA {
+  const luminance = 0.299 * bg.r + 0.587 * bg.g + 0.114 * bg.b
+  return luminance > 0.5 ? RGBA.fromInts(0, 0, 0) : RGBA.fromInts(255, 255, 255)
 }
 
 export function generateSyntax(theme: Theme) {

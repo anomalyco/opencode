@@ -116,6 +116,10 @@ export function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
   const hasSelectedListItemText = theme.theme.selectedListItemText !== undefined
   if (hasSelectedListItemText) {
     resolved.selectedListItemText = resolveColor(theme.theme.selectedListItemText!)
+  } else if (resolved.background?.a === 0) {
+    const bg = resolved.primary ?? RGBA.fromInts(0, 0, 0)
+    const luminance = 0.299 * bg.r + 0.587 * bg.g + 0.114 * bg.b
+    resolved.selectedListItemText = luminance > 0.5 ? RGBA.fromInts(0, 0, 0) : RGBA.fromInts(255, 255, 255)
   } else {
     // Backward compatibility: if selectedListItemText is not defined, use background color
     // This preserves the current behavior for all existing themes

@@ -45,6 +45,14 @@ test("resolveTheme rejects circular color refs", () => {
   expect(() => resolveTheme(item, "dark")).toThrow("Circular color reference")
 })
 
+test("resolveTheme uses a contrasting selected foreground for transparent themes", () => {
+  const item = structuredClone(DEFAULT_THEMES.opencode)
+  item.theme.background = "transparent"
+  item.theme.primary = "#eeeeee"
+
+  expect(resolveTheme(item, "dark").selectedListItemText.toInts()).toEqual([0, 0, 0, 255])
+})
+
 function terminalColors(defaultBackground: string | null, palette: Array<string | null> = []): TerminalColors {
   return {
     palette,

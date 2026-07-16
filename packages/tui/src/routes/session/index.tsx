@@ -73,6 +73,7 @@ import { usePathFormatter } from "../../context/path-format"
 import { useLocation } from "../../context/location"
 import { createSessionRows, resolvePart, type PartRef, type SessionRow } from "./rows"
 import { switchLabel } from "../../util/model"
+import { selectedForeground } from "../../theme"
 
 addDefaultParsers(parsers.parsers)
 
@@ -1594,7 +1595,9 @@ function UserMessage(props: { message: SessionMessageUser }) {
                   const label = file.mime === "application/x-directory" ? "dir" : "file"
                   return (
                     <text fg={theme.text}>
-                      <span style={{ bg: theme.secondary, fg: theme.background, bold: true }}>{` ${label} `}</span>
+                      <span style={{ bg: theme.secondary, fg: selectedForeground(theme, theme.secondary), bold: true }}>
+                        {` ${label} `}
+                      </span>
                       <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}>
                         {" "}
                         {file.name ?? (file.source.type === "uri" ? file.source.uri : "attachment")}{" "}
