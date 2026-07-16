@@ -54,6 +54,7 @@ function migrateMode(theme: Theme, mode: "light" | "dark"): ThemeFile["light"] {
           default: "$text.default",
           $disabled: textMuted,
           $focused: selected,
+          $selected: primary,
         },
         secondary: {
           default: "$text.default",
@@ -82,7 +83,7 @@ function migrateMode(theme: Theme, mode: "light" | "dark"): ThemeFile["light"] {
         overlay: backgroundMenu,
       },
       action: {
-        primary: { default: "transparent", $focused: primary },
+        primary: { default: "transparent", $focused: primary, $selected: primary },
         secondary: {
           default: "$background.default",
           $focused: color("backgroundElement"),
@@ -150,11 +151,7 @@ function migrateMode(theme: Theme, mode: "light" | "dark"): ThemeFile["light"] {
       imageText: color("markdownImageText"),
       codeBlock: color("markdownCodeBlock"),
     },
-    "@context:elevated": {
-      background: {
-        default: "$background.surface.offset",
-      },
-    },
+    "@context:elevated": { background: { default: "$background.surface.offset" } },
     "@context:overlay": { background: { default: "$background.surface.overlay" } },
   }
 }

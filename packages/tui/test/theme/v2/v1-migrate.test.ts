@@ -26,6 +26,7 @@ test("migrates resolved V1 modes into literal V2 tokens", () => {
   expect(migrated.dark.background?.surface?.offset).toBe("$hue.neutral.800")
   expect(migrated.dark.background?.surface?.overlay).toBe("$hue.neutral.700")
   expect(migrated.light.text?.action?.primary?.default).toBe("$text.default")
+  expect(migrated.light.background?.action?.primary?.$selected).toBe("$hue.interactive.900")
   expect(migrated.light.scrollbar?.default).toBe(hex(legacy.borderActive))
   expect(migrated.light.diff?.lineNumber?.background?.removed).toBe(hex(legacy.diffRemovedLineNumberBg))
   expect(migrated.light.markdown?.emphasis).toBe(hex(legacy.markdownEmph))
@@ -39,6 +40,8 @@ test("migrates resolved V1 modes into literal V2 tokens", () => {
   expect(resolved.text.formfield.focused.toInts()).toEqual(legacy.primary.toInts())
   expect(resolved.hue.accent[900].toInts()).toEqual(legacy.accent.toInts())
   expect(resolved.hue.interactive[900].toInts()).toEqual(legacy.primary.toInts())
+  expect(resolved.background.action.primary.selected.toInts()).toEqual(legacy.primary.toInts())
+  expect(resolved.text.action.primary.selected.toInts()).toEqual(legacy.primary.toInts())
   expect(resolved.background.feedback.error.default.toInts()).toEqual(legacy.background.toInts())
   expect(resolved.contexts["@context:elevated"]?.background.default.toInts()).toEqual(
     legacy.backgroundPanel.toInts(),

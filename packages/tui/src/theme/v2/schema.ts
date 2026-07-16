@@ -12,7 +12,7 @@ export type HueAlias = Schema.Schema.Type<typeof HueAlias>
 export const ActionVariant = Schema.Literals(["primary", "secondary", "destructive"])
 export type ActionVariant = Schema.Schema.Type<typeof ActionVariant>
 
-export const ActionState = Schema.Literals(["focused", "pressed", "disabled"])
+export const ActionState = Schema.Literals(["focused", "pressed", "selected", "disabled"])
 export type ActionState = Schema.Schema.Type<typeof ActionState>
 export type ActionStateKey = `$${ActionState}`
 
@@ -77,6 +77,7 @@ const StatefulColorDefinition = Schema.Struct({
   default: Schema.optional(ColorValue),
   $focused: Schema.optional(ColorValue),
   $pressed: Schema.optional(ColorValue),
+  $selected: Schema.optional(ColorValue),
   $disabled: Schema.optional(ColorValue),
 })
 export type StatefulColorDefinition = Schema.Schema.Type<typeof StatefulColorDefinition>

@@ -13,7 +13,6 @@ export function ShellTab(props: { sessionID: string }) {
   const location = useLocation()
   const client = useClient()
   const { themeV2 } = useTheme()
-  const fg = themeV2.text.action.primary("focused")
   const composer = useComposerTab()
   const shortcuts = Keymap.useShortcuts()
 
@@ -96,11 +95,7 @@ export function ShellTab(props: { sessionID: string }) {
 
   return (
     <Show when={composer.active("shell")}>
-      <scrollbox
-        scrollbarOptions={{ visible: false }}
-        maxHeight={5}
-        ref={(r: ScrollBoxRenderable) => (scroll = r)}
-      >
+      <scrollbox scrollbarOptions={{ visible: false }} maxHeight={5} ref={(r: ScrollBoxRenderable) => (scroll = r)}>
         <Show when={entries().length > 0} fallback={<text fg={themeV2.text.subdued()}> No shell commands</text>}>
           <For each={entries()}>
             {(shell, index) => {
@@ -110,11 +105,11 @@ export function ShellTab(props: { sessionID: string }) {
                   flexDirection="row"
                   paddingLeft={1}
                   paddingRight={1}
-                  backgroundColor={active() ? themeV2.background.action.primary() : RGBA.fromInts(0, 0, 0, 0)}
+                  backgroundColor={active() ? themeV2.background.action.primary("selected") : RGBA.fromInts(0, 0, 0, 0)}
                   onMouseOver={() => setStore("selected", index())}
                 >
                   <text
-                    fg={active() ? fg : themeV2.text()}
+                    fg={themeV2.text.action.primary(active() ? "focused" : "default")}
                     attributes={active() ? TextAttributes.BOLD : undefined}
                     wrapMode="none"
                   >

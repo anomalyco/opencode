@@ -22,7 +22,6 @@ export function SubagentsTab(props: { sessionID: string }) {
   const data = useData()
   const client = useClient()
   const { themeV2 } = useTheme()
-  const fg = themeV2.text.action.primary("focused")
   const navigate = useRoute().navigate
   const composer = useComposerTab()
   const shortcuts = Keymap.useShortcuts()
@@ -39,7 +38,11 @@ export function SubagentsTab(props: { sessionID: string }) {
       const siblings = data.session.list().filter((s) => s.parentID === current.parentID)
       for (const sibling of siblings) {
         const agentMatch = sibling.title.match(/@(\w+) subagent/)
-        const agent = sibling.agent ? Locale.titlecase(sibling.agent) : agentMatch ? Locale.titlecase(agentMatch[1]) : "Subagent"
+        const agent = sibling.agent
+          ? Locale.titlecase(sibling.agent)
+          : agentMatch
+            ? Locale.titlecase(agentMatch[1])
+            : "Subagent"
         const name = agentMatch ? sibling.title.replace(agentMatch[0], "").trim() || sibling.title : sibling.title
         result.push({
           sessionID: sibling.id,
@@ -53,7 +56,11 @@ export function SubagentsTab(props: { sessionID: string }) {
       const children = data.session.list().filter((s) => s.parentID === props.sessionID)
       for (const child of children) {
         const agentMatch = child.title.match(/@(\w+) subagent/)
-        const agent = child.agent ? Locale.titlecase(child.agent) : agentMatch ? Locale.titlecase(agentMatch[1]) : "Subagent"
+        const agent = child.agent
+          ? Locale.titlecase(child.agent)
+          : agentMatch
+            ? Locale.titlecase(agentMatch[1])
+            : "Subagent"
         const name = agentMatch ? child.title.replace(agentMatch[0], "").trim() || child.title : child.title
         result.push({
           sessionID: child.id,
@@ -195,11 +202,7 @@ export function SubagentsTab(props: { sessionID: string }) {
 
   return (
     <Show when={composer.active("subagents")}>
-      <scrollbox
-        scrollbarOptions={{ visible: false }}
-        maxHeight={5}
-        ref={(r: ScrollBoxRenderable) => (scroll = r)}
-      >
+      <scrollbox scrollbarOptions={{ visible: false }} maxHeight={5} ref={(r: ScrollBoxRenderable) => (scroll = r)}>
         <Show when={entries().length > 0} fallback={<text fg={themeV2.text.subdued()}> No subagents</text>}>
           <For each={entries()}>
             {(entry, index) => {
@@ -213,7 +216,7 @@ export function SubagentsTab(props: { sessionID: string }) {
                   flexDirection="row"
                   paddingLeft={1}
                   paddingRight={1}
-                  backgroundColor={active() ? themeV2.background.action.primary() : RGBA.fromInts(0, 0, 0, 0)}
+                  backgroundColor={themeV2.background.action.primary(active() ? "focused" : "default")}
                   onMouseOver={() => setStore("selected", index())}
                   onMouseUp={() => {
                     setStore("selected", index())
@@ -222,7 +225,9 @@ export function SubagentsTab(props: { sessionID: string }) {
                 >
                   <box flexGrow={1} minWidth={0} flexDirection="row">
                     <text
-                      fg={active() ? fg : entry.current ? themeV2.background.action.primary() : themeV2.text()}
+                      fg={themeV2.text.action.primary(
+                        active() ? "focused" : entry.current ? "selected" : "default",
+                      )}
                       attributes={active() ? TextAttributes.BOLD : undefined}
                       wrapMode="none"
                     >
@@ -230,7 +235,7 @@ export function SubagentsTab(props: { sessionID: string }) {
                     </text>
                   </box>
                   <Show when={status()}>
-                    <text fg={active() ? fg : themeV2.text.subdued()} wrapMode="none">
+                    <text fg={active() ? themeV2.text.action.primary() : themeV2.text.subdued()} wrapMode="none">
                       {status()}
                     </text>
                   </Show>

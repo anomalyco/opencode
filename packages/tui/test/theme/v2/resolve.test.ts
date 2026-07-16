@@ -139,7 +139,9 @@ test("resolves matched action variants and states", () => {
   const theme = resolveTheme(light)
 
   expect(theme.text.action.primary.pressed).toBeInstanceOf(RGBA)
+  expect(theme.text.action.primary.selected).toBeInstanceOf(RGBA)
   expect(theme.background.action.primary.pressed).toBeInstanceOf(RGBA)
+  expect(theme.background.action.primary.selected).toBeInstanceOf(RGBA)
   expect(theme.text.action.secondary.default).toBeInstanceOf(RGBA)
   expect(theme.background.action.destructive.disabled).toBeInstanceOf(RGBA)
 })

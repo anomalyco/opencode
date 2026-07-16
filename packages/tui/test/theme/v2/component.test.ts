@@ -21,6 +21,8 @@ test("provides reactive property, variant, state, and context accessors", () => 
   expect(theme.text.subdued()).toBe(resolved().text.subdued)
   expect(theme.text.action()).toBe(resolved().text.action.primary.default)
   expect(theme.text.action.primary("pressed")).toBe(resolved().text.action.primary.pressed)
+  expect(theme.text.action.primary("selected")).toBe(resolved().text.action.primary.selected)
+  expect(theme.background.action.primary("selected")).toBe(resolved().background.action.primary.selected)
   expect(theme.background.action.secondary("disabled")).toBe(
     resolved().background.action.secondary.disabled,
   )
