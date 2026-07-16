@@ -48,9 +48,9 @@ stdenv.mkDerivation (finalAttrs: {
     desktopName = "OpenCode";
     exec = "opencode-desktop %U";
     icon = "ai.opencode.desktop";
-    startupWMClass = "ai.opencode.desktop";
+    # Electron 41 derives X11 WM_CLASS from app.name.
+    startupWMClass = "OpenCode";
     categories = [ "Development" ];
-    mimeTypes = [ "x-scheme-handler/opencode" ];
   });
 
   env = opencode.env // {
