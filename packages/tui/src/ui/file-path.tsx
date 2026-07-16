@@ -1,5 +1,6 @@
 import type { RGBA } from "@opentui/core"
 import { createMemo } from "solid-js"
+import { stringWidth } from "../util/string-width"
 
 const graphemeSegmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" })
 
@@ -29,7 +30,7 @@ export function FilePath(props: FilePathProps) {
 
 export function truncateFilePath(value: string, maxWidth: number) {
   if (maxWidth <= 0) return ""
-  if (Bun.stringWidth(value) <= maxWidth) return value
+  if (stringWidth(value) <= maxWidth) return value
 
   const drive = value.match(/^([A-Za-z]:)([\\/])/)
   const unc = value.match(/^(\\\\|\/\/)([^\\/]+)[\\/]([^\\/]+)(?:[\\/]|$)/)
@@ -46,22 +47,22 @@ export function truncateFilePath(value: string, maxWidth: number) {
   const segments = source.split(windows ? /[\\/]/ : separator).filter(Boolean)
   const basename = segments.at(-1) ?? value
   if (segments.length < 2) {
-    const rootWidth = Bun.stringWidth(root)
+    const rootWidth = stringWidth(root)
     if (rootWidth >= maxWidth) return takeStart(root, maxWidth)
     return root + truncateBasename(basename, maxWidth - rootWidth)
   }
 
   const prefix = `${root}…${separator}`
-  const basenameWidth = maxWidth - Bun.stringWidth(prefix)
+  const basenameWidth = maxWidth - stringWidth(prefix)
   if (basenameWidth <= 0) return takeStart(prefix, maxWidth)
   const compact = truncateBasename(basename, basenameWidth)
   if (compact !== basename) return prefix + compact
 
   const selected = [basename]
-  const separatorWidth = Bun.stringWidth(separator)
-  let width = Bun.stringWidth(prefix + basename)
+  const separatorWidth = stringWidth(separator)
+  let width = stringWidth(prefix + basename)
   for (let index = segments.length - 2; index >= 0; index--) {
-    const next = Bun.stringWidth(segments[index]!) + separatorWidth
+    const next = stringWidth(segments[index]!) + separatorWidth
     if (width + next > maxWidth) break
     selected.unshift(segments[index]!)
     width += next
@@ -70,12 +71,12 @@ export function truncateFilePath(value: string, maxWidth: number) {
 }
 
 function truncateBasename(value: string, maxWidth: number) {
-  if (Bun.stringWidth(value) <= maxWidth) return value
+  if (stringWidth(value) <= maxWidth) return value
   if (maxWidth <= 1) return takeStart("…", maxWidth)
 
   const dot = value.lastIndexOf(".")
   const extension = dot > 0 ? value.slice(dot) : ""
-  const extensionWidth = Bun.stringWidth(extension)
+  const extensionWidth = stringWidth(extension)
   if (extensionWidth >= maxWidth) return "…" + takeEnd(extension, maxWidth - 1)
 
   const stem = extension ? value.slice(0, dot) : value
@@ -96,7 +97,7 @@ function take(value: string, maxWidth: number, reverse: boolean) {
   const selected: string[] = []
   let width = 0
   for (const segment of segments) {
-    const next = Bun.stringWidth(segment)
+    const next = stringWidth(segment)
     if (width + next > maxWidth) break
     selected.push(segment)
     width += next
