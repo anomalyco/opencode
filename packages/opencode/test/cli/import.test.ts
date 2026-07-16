@@ -1,4 +1,6 @@
 import { test, expect } from "bun:test"
+import { Effect } from "effect"
+import { cliIt } from "../lib/cli-process"
 import {
   parseShareUrl,
   shouldAttachShareAuthHeaders,
@@ -52,3 +54,16 @@ test("returns null for invalid share data", () => {
   expect(transformShareData([{ type: "message", data: {} as any }])).toBeNull()
   expect(transformShareData([{ type: "session", data: { id: "s" } as any }])).toBeNull() // no messages
 })
+
+cliIt.live(
+  "share import failures exit non-zero and emit one diagnostic",
+  ({ opencode }) =>
+    Effect.gen(function* () {
+      const result = yield* opencode.spawn(["import", "https://example.com/not-a-share"], { timeoutMs: 60_000 })
+      expect(result.exitCode).not.toBe(0)
+      const output = `${result.stdout}\n${result.stderr}`
+      expect(output).toContain("Invalid share URL: https://example.com/not-a-share")
+      expect(output.match(/Invalid share URL: https:\/\/example\.com\/not-a-share/g)).toHaveLength(1)
+    }),
+  60_000,
+)

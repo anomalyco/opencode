@@ -109,9 +109,9 @@ const runImport = Effect.fn("Cli.import.body")(function* (file: string, ctx: Ins
     const slug = parseShareUrl(file)
     if (!slug) {
       const baseUrl = yield* Effect.orDie(share.url())
-      process.stdout.write(`Invalid URL format. Expected: ${baseUrl}/share/<slug>`)
-      process.stdout.write(EOL)
-      return
+      return yield* Effect.fail(
+        new CliError({ message: `Invalid share URL: ${file}. Expected: ${baseUrl}/share/<slug>` }),
+      )
     }
 
     const baseUrl = new URL(file).origin
@@ -135,9 +135,7 @@ const runImport = Effect.fn("Cli.import.body")(function* (file: string, ctx: Ins
     }
 
     if (!response.ok) {
-      process.stdout.write(`Failed to fetch share data: ${response.statusText}`)
-      process.stdout.write(EOL)
-      return
+      return yield* Effect.fail(new CliError({ message: `Failed to fetch share data: ${response.statusText}` }))
     }
 
     const shareData = yield* Effect.tryPromise({
@@ -147,9 +145,7 @@ const runImport = Effect.fn("Cli.import.body")(function* (file: string, ctx: Ins
     const transformed = transformShareData(shareData)
 
     if (!transformed) {
-      process.stdout.write(`Share not found or empty: ${slug}`)
-      process.stdout.write(EOL)
-      return
+      return yield* Effect.fail(new CliError({ message: `Share not found or empty: ${slug}` }))
     }
 
     exportData = transformed
