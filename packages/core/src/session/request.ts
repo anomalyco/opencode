@@ -27,10 +27,23 @@ interface PrepareInput {
   readonly step: number
 }
 
+/**
+ * Prepares the canonical provider request for one Session Step.
+ *
+ * Preparation assembles system and history messages, applies Session headers
+ * and prompt-cache identity, materializes permitted tools, enforces the Step
+ * limit, and runs Session context hooks. The result keeps the request paired
+ * with its retry and tool-settlement capabilities.
+ *
+ * This module does not call the provider, execute tools, publish Session
+ * events, or mutate Session history.
+ */
 export interface Interface {
+  /** Produces one provider-ready request and its matching execution capabilities. */
   readonly prepare: (input: PrepareInput) => Effect.Effect<Prepared>
 }
 
+/** Location-scoped request preparation for Session model calls. */
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SessionRequest") {}
 
 const layer = Layer.effect(
