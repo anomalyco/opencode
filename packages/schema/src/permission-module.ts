@@ -33,6 +33,20 @@ export const Instructions = Schema.Struct({
   }),
 }).annotate({ identifier: "PermissionModule.Instructions" })
 
+/**
+ * Per-prompt dynamic allow/deny action-list options for cruise_control.
+ * Lists are in-memory and cleared on each new user prompt — not persisted to config.
+ */
+export interface DynamicList extends Schema.Schema.Type<typeof DynamicList> {}
+export const DynamicList = Schema.Struct({
+  enabled: Schema.Boolean.pipe(optional).annotate({
+    description: "When false, skip dynamic allow/deny lookup and learning (default: true)",
+  }),
+  max_size: NonNegativeInt.pipe(optional).annotate({
+    description: "Max entries per allow/deny list within a prompt turn (default: 256); oldest evicted",
+  }),
+}).annotate({ identifier: "PermissionModule.DynamicList" })
+
 /** Options for a named permission module (e.g. cruise_control). */
 export interface Options extends Schema.Schema.Type<typeof Options> {}
 export const Options = Schema.Struct({
@@ -60,6 +74,10 @@ export const Options = Schema.Struct({
   }),
   never_auto: Schema.Array(Schema.String).pipe(optional).annotate({
     description: "Permission keys that must never resolve to allow from the module",
+  }),
+  dynamic_list: DynamicList.pipe(optional).annotate({
+    description:
+      "Per-prompt learned allow/deny action lists (in-memory; cleared on each new user prompt). Reduces repeated classifier calls within one turn.",
   }),
 }).annotate({ identifier: "PermissionModule.Options" })
 

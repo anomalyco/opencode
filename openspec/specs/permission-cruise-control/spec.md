@@ -75,6 +75,27 @@ The `cruise_control` module MUST apply `timeout_ms`, `fallback`, `allowlist`, an
 - **WHEN** TUI permission mode is `auto` and no permission rule selects `cruise_control`
 - **THEN** asks are auto-replied with `once` without invoking the LLM classifier
 
+### Requirement: Per-Prompt Dynamic Allow/Deny Lists
+
+The `cruise_control` module SHALL maintain separate in-memory allow and deny action lists learned from successful classifier outcomes after safety rails. Before invoking the LLM, the module MUST check the deny list then the allow list. A deny-list hit MUST return deny with reason indicating a cached deny. An allow-list hit MUST return allow only when safety rails still permit auto-allow; otherwise it MUST escalate without treating the hit as a durable allow. Ask outcomes, classifier failures, and fallbacks MUST NOT be cached. Destructive auto-deny and managed-directory auto-allow MUST still run before dynamic-list lookup and MUST NOT require the LLM. The lists MUST be cleared when a new user prompt starts (`chat.message`) and MUST NOT persist across prompt turns or to config/state files by default. Configuration under `permission_modules.cruise_control.dynamic_list` MAY disable the feature or set a max size (oldest entries evicted).
+
+#### Scenario: Cache hit skips LLM within a prompt turn
+- **WHEN** the classifier previously allowed a permission key+patterns within the current user-prompt turn
+- **AND** the same key is evaluated again before the next user prompt
+- **THEN** the module returns allow with a cached-allow reason without calling the classifier LLM
+
+#### Scenario: Deny wins over allow
+- **WHEN** the same action key is present on both dynamic lists
+- **THEN** the effective decision is deny
+
+#### Scenario: Lists clear on new user prompt
+- **WHEN** a new user message is created for a session (`chat.message`)
+- **THEN** both dynamic allow and deny lists are empty before subsequent classifications
+
+#### Scenario: Destructive still wins without LLM
+- **WHEN** a pending bash pattern matches a destructive auto-deny rule
+- **THEN** the module denies without consulting the dynamic lists or the LLM
+
 ### Requirement: Example Config Shape
 
 Documentation and schema examples for `cruise_control` MUST show module ID `"cruise_control"` and a `permission_modules.cruise_control` block including `model`.

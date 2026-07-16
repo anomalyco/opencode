@@ -8,6 +8,25 @@ import path from "path"
 import { Config } from "@/config/config"
 import { Provider, parseModel } from "@/provider/provider"
 import { ToolJsonSchema } from "@/tool/json-schema"
+import {
+  actionKey,
+  CACHED_ALLOW_REASON,
+  CACHED_DENY_REASON,
+  lookupDynamic,
+  rememberDynamic,
+} from "./dynamic-list"
+
+export {
+  actionKey,
+  CACHED_ALLOW_REASON,
+  CACHED_DENY_REASON,
+  clearDynamicLists,
+  dynamicListSnapshot,
+  lookupDynamic,
+  rememberDynamic,
+  resetDynamicListsForTests,
+  type DynamicListOptions,
+} from "./dynamic-list"
 
 export type Decision = CorePermissionModule.Decision
 export type DecideInput = CorePermissionModule.DecideInput
@@ -380,6 +399,10 @@ function unavailableReason(fallback: PermissionModuleSchema.Fallback, attempts: 
  * Run the classifier with per-attempt timeout, retries, fallback, and safety rails.
  * `opts.retries` is max attempts including the first (default 3). Missing-model is handled
  * before this path and is not retried.
+ *
+ * Evaluate order: destructive deny → managed allow → dynamic deny → dynamic allow
+ * (still rails-checked) → LLM classify → applySafety → remember final allow/deny.
+ *
  * Used by cruise_control and exposed for contract tests.
  */
 export const runClassifier = Effect.fn("CruiseControl.runClassifier")(function* (input: {
@@ -388,6 +411,7 @@ export const runClassifier = Effect.fn("CruiseControl.runClassifier")(function* 
   opts: PermissionModuleSchema.Options | undefined
   classify: Effect.Effect<{ decision: ClassifierDecision; reason: string }, unknown>
   modelRef?: string
+  metadata?: Record<string, unknown>
 }) {
   const destructive = destructiveReason(input.permission, input.patterns)
   if (destructive) {
@@ -409,6 +433,29 @@ export const runClassifier = Effect.fn("CruiseControl.runClassifier")(function* 
     return { decision: "allow" as const, reason: managed }
   }
 
+  const listOpts = input.opts?.dynamic_list
+  const key = actionKey(input.permission, input.patterns, input.metadata ?? {})
+  const cached = lookupDynamic(key, listOpts)
+  if (cached === "deny") {
+    yield* Effect.logInfo("cruise_control cached deny", {
+      permission: input.permission,
+      patterns: input.patterns,
+    })
+    return { decision: "deny" as const, reason: CACHED_DENY_REASON }
+  }
+  if (cached === "allow") {
+    const decision = applySafety("allow", input.permission, input.opts, input.patterns)
+    if (decision === "allow") {
+      yield* Effect.logInfo("cruise_control cached allow", {
+        permission: input.permission,
+        patterns: input.patterns,
+      })
+      return { decision: "allow" as const, reason: CACHED_ALLOW_REASON }
+    }
+    // Config rails changed since cache write — do not auto-allow; escalate without LLM.
+    return { decision: "ask" as const, reason: "Requires approval (safety rails)" }
+  }
+
   // Prefer ask over silent deny on timeout / provider errors (interactive-friendly default).
   const fallback = input.opts?.fallback ?? "ask"
   const timeoutMs = input.opts?.timeout_ms ?? DEFAULT_TIMEOUT_MS
@@ -423,7 +470,7 @@ export const runClassifier = Effect.fn("CruiseControl.runClassifier")(function* 
         result.decision === "allow" && decision === "ask"
           ? "Requires approval (safety rails)"
           : shortenReason(result.reason)
-      return { decision, reason }
+      return { decision, reason, learned: true as const }
     }),
     // Timeout budget is per attempt; retries each get a fresh timeout_ms window.
     Effect.timeout(timeoutMs),
@@ -454,13 +501,19 @@ export const runClassifier = Effect.fn("CruiseControl.runClassifier")(function* 
           error: String(error),
         })
         // Never allow on failure; prefer ask so the human can proceed or configure.
+        // Do not learn fallback outcomes — they are not action-specific judgments.
         return {
           decision: fallback,
           reason: unavailableReason(fallback, attempts),
+          learned: false as const,
         }
       }),
     ),
   )
+
+  if (outcome.learned && (outcome.decision === "allow" || outcome.decision === "deny")) {
+    rememberDynamic(key, outcome.decision, listOpts)
+  }
 
   yield* Effect.logInfo("cruise_control decision", {
     permission: input.permission,
@@ -471,7 +524,7 @@ export const runClassifier = Effect.fn("CruiseControl.runClassifier")(function* 
     latency_ms: Date.now() - started,
   })
 
-  return outcome
+  return { decision: outcome.decision, reason: outcome.reason }
 })
 
 async function generateClassifierObject(input: {
@@ -557,5 +610,6 @@ export const decideCruiseControl = Effect.fn("CruiseControl.decide")(function* (
     opts,
     classify,
     modelRef,
+    metadata: input.metadata,
   })
 })

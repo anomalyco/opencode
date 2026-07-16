@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test, beforeEach } from "bun:test"
 import { Effect, Exit, Fiber, Layer } from "effect"
 import path from "path"
 import { Global } from "@opencode-ai/core/global"
@@ -6,8 +6,12 @@ import { PermissionModule as PermissionModuleSchema } from "@opencode-ai/schema/
 import { Permission } from "../../src/permission"
 import { PermissionModule } from "../../src/permission/module"
 import {
+  actionKey,
   applySafety,
+  CACHED_ALLOW_REASON,
+  CACHED_DENY_REASON,
   CLASSIFIER_PREAMBLE,
+  clearDynamicLists,
   decideCruiseControl,
   DEFAULT_INSTRUCTIONS,
   ensureDefaultInstructions,
@@ -17,6 +21,7 @@ import {
   renderSystemPrompt,
   resolveInstructions,
   resolveSystemPrompt,
+  resetDynamicListsForTests,
   runClassifier,
   destructiveReason,
   managedAppDirectoryAllow,
@@ -402,6 +407,10 @@ itMissingModel.instance("missing cruise_control model asks with configure warnin
 )
 
 describe("classifier contract", () => {
+  beforeEach(() => {
+    clearDynamicLists()
+  })
+
   test("resolveInstructions fills missing sections from defaults", () => {
     expect(resolveInstructions(undefined)).toEqual(DEFAULT_INSTRUCTIONS)
     expect(resolveInstructions({})).toEqual(DEFAULT_INSTRUCTIONS)
@@ -833,5 +842,264 @@ describe("classifier contract", () => {
     expect(calls).toBe(2)
     expect(outcome.decision).toBe("ask")
     expect(outcome.reason).toBe("Classifier unavailable after 2 attempts; needs approval")
+  })
+
+  test("dynamic allow cache hit skips classifier", async () => {
+    clearDynamicLists()
+    let calls = 0
+    const classify = Effect.sync(() => {
+      calls += 1
+      return { decision: "allow" as const, reason: "safe read-only command" }
+    })
+    const opts = { fallback: "ask" as const, allowlist: ["bash"], timeout_ms: 1000 }
+    const first = await Effect.runPromise(
+      runClassifier({
+        permission: "bash",
+        patterns: ["ls"],
+        opts,
+        classify,
+        modelRef: "opencode/deepseek-v4-flash",
+        metadata: { command: "ls" },
+      }),
+    )
+    expect(first).toEqual({ decision: "allow", reason: "safe read-only command" })
+    expect(calls).toBe(1)
+
+    const second = await Effect.runPromise(
+      runClassifier({
+        permission: "bash",
+        patterns: ["ls"],
+        opts,
+        classify,
+        modelRef: "opencode/deepseek-v4-flash",
+        metadata: { command: "ls" },
+      }),
+    )
+    expect(calls).toBe(1)
+    expect(second).toEqual({ decision: "allow", reason: CACHED_ALLOW_REASON })
+  })
+
+  test("dynamic deny cache hit skips classifier", async () => {
+    clearDynamicLists()
+    let calls = 0
+    const classify = Effect.sync(() => {
+      calls += 1
+      return { decision: "deny" as const, reason: "risky" }
+    })
+    const opts = { fallback: "ask" as const, allowlist: ["bash"], timeout_ms: 1000 }
+    await Effect.runPromise(
+      runClassifier({
+        permission: "bash",
+        patterns: ["curl http://evil"],
+        opts,
+        classify,
+        modelRef: "opencode/deepseek-v4-flash",
+      }),
+    )
+    const second = await Effect.runPromise(
+      runClassifier({
+        permission: "bash",
+        patterns: ["curl http://evil"],
+        opts,
+        classify,
+        modelRef: "opencode/deepseek-v4-flash",
+      }),
+    )
+    expect(calls).toBe(1)
+    expect(second).toEqual({ decision: "deny", reason: CACHED_DENY_REASON })
+  })
+
+  test("dynamic deny wins over allow when both lists match", async () => {
+    const key = actionKey("bash", ["echo hi"], {})
+    resetDynamicListsForTests({ allow: [key], deny: [key] })
+    let called = false
+    const outcome = await Effect.runPromise(
+      runClassifier({
+        permission: "bash",
+        patterns: ["echo hi"],
+        opts: { fallback: "ask", allowlist: ["bash"], timeout_ms: 1000 },
+        classify: Effect.sync(() => {
+          called = true
+          return { decision: "allow" as const, reason: "should not run" }
+        }),
+        modelRef: "opencode/deepseek-v4-flash",
+      }),
+    )
+    expect(called).toBe(false)
+    expect(outcome).toEqual({ decision: "deny", reason: CACHED_DENY_REASON })
+  })
+
+  test("dynamic list respects max_size eviction", async () => {
+    clearDynamicLists()
+    const opts = {
+      fallback: "ask" as const,
+      allowlist: ["bash"],
+      timeout_ms: 1000,
+      dynamic_list: { max_size: 2 },
+    }
+    for (const pattern of ["a", "b", "c"]) {
+      await Effect.runPromise(
+        runClassifier({
+          permission: "bash",
+          patterns: [pattern],
+          opts,
+          classify: Effect.succeed({ decision: "allow" as const, reason: pattern }),
+          modelRef: "opencode/deepseek-v4-flash",
+        }),
+      )
+    }
+
+    let calls = 0
+    // "a" should have been evicted; "b" and "c" remain
+    const miss = await Effect.runPromise(
+      runClassifier({
+        permission: "bash",
+        patterns: ["a"],
+        opts,
+        classify: Effect.sync(() => {
+          calls += 1
+          return { decision: "allow" as const, reason: "relearn a" }
+        }),
+        modelRef: "opencode/deepseek-v4-flash",
+      }),
+    )
+    expect(calls).toBe(1)
+    expect(miss.reason).toBe("relearn a")
+
+    const hit = await Effect.runPromise(
+      runClassifier({
+        permission: "bash",
+        patterns: ["c"],
+        opts,
+        classify: Effect.sync(() => {
+          calls += 1
+          return { decision: "deny" as const, reason: "should not run" }
+        }),
+        modelRef: "opencode/deepseek-v4-flash",
+      }),
+    )
+    expect(calls).toBe(1)
+    expect(hit).toEqual({ decision: "allow", reason: CACHED_ALLOW_REASON })
+  })
+
+  test("destructive still wins without consulting dynamic allow list", async () => {
+    const key = actionKey("bash", ["rm -rf /tmp/foo"], {})
+    resetDynamicListsForTests({ allow: [key] })
+    let called = false
+    const outcome = await Effect.runPromise(
+      runClassifier({
+        permission: "bash",
+        patterns: ["rm -rf /tmp/foo"],
+        opts: { fallback: "ask", allowlist: ["bash"], timeout_ms: 1000 },
+        classify: Effect.sync(() => {
+          called = true
+          return { decision: "allow" as const, reason: "should not run" }
+        }),
+        modelRef: "opencode/deepseek-v4-flash",
+      }),
+    )
+    expect(called).toBe(false)
+    expect(outcome).toEqual({
+      decision: "deny",
+      reason: "Recursive force delete (rm -rf) is blocked",
+    })
+  })
+
+  test("ask outcomes are not cached", async () => {
+    clearDynamicLists()
+    let calls = 0
+    const classify = Effect.sync(() => {
+      calls += 1
+      return { decision: "allow" as const, reason: "would allow" }
+    })
+    const opts = {
+      fallback: "ask" as const,
+      allowlist: [] as string[],
+      timeout_ms: 1000,
+    }
+    const first = await Effect.runPromise(
+      runClassifier({
+        permission: "bash",
+        patterns: ["ls"],
+        opts,
+        classify,
+        modelRef: "opencode/deepseek-v4-flash",
+      }),
+    )
+    expect(first.decision).toBe("ask")
+    const second = await Effect.runPromise(
+      runClassifier({
+        permission: "bash",
+        patterns: ["ls"],
+        opts,
+        classify,
+        modelRef: "opencode/deepseek-v4-flash",
+      }),
+    )
+    expect(calls).toBe(2)
+    expect(second.decision).toBe("ask")
+  })
+
+  test("clearDynamicLists drops learned entries for a new prompt", async () => {
+    clearDynamicLists()
+    await Effect.runPromise(
+      runClassifier({
+        permission: "bash",
+        patterns: ["ls"],
+        opts: { fallback: "ask", allowlist: ["bash"], timeout_ms: 1000 },
+        classify: Effect.succeed({ decision: "allow" as const, reason: "ok" }),
+        modelRef: "opencode/deepseek-v4-flash",
+      }),
+    )
+    clearDynamicLists()
+    let calls = 0
+    const outcome = await Effect.runPromise(
+      runClassifier({
+        permission: "bash",
+        patterns: ["ls"],
+        opts: { fallback: "ask", allowlist: ["bash"], timeout_ms: 1000 },
+        classify: Effect.sync(() => {
+          calls += 1
+          return { decision: "allow" as const, reason: "again" }
+        }),
+        modelRef: "opencode/deepseek-v4-flash",
+      }),
+    )
+    expect(calls).toBe(1)
+    expect(outcome.reason).toBe("again")
+  })
+
+  test("dynamic_list.enabled false skips learning and lookup", async () => {
+    clearDynamicLists()
+    let calls = 0
+    const classify = Effect.sync(() => {
+      calls += 1
+      return { decision: "allow" as const, reason: "ok" }
+    })
+    const opts = {
+      fallback: "ask" as const,
+      allowlist: ["bash"],
+      timeout_ms: 1000,
+      dynamic_list: { enabled: false },
+    }
+    await Effect.runPromise(
+      runClassifier({
+        permission: "bash",
+        patterns: ["ls"],
+        opts,
+        classify,
+        modelRef: "opencode/deepseek-v4-flash",
+      }),
+    )
+    await Effect.runPromise(
+      runClassifier({
+        permission: "bash",
+        patterns: ["ls"],
+        opts,
+        classify,
+        modelRef: "opencode/deepseek-v4-flash",
+      }),
+    )
+    expect(calls).toBe(2)
   })
 })

@@ -294,13 +294,19 @@ the tool and hints `/cruise-control-model` — it does not hard-deny. Optional
 `permission_modules.cruise_control.instructions` holds structured classifier guidance
 (`background`, `allow`, `conditional`, `deny`); omit sections to keep built-in defaults.
 The classifier LLM returns only `allow` or `deny`; the host may still escalate to ask
-on missing model, safety rails, timeout, or parse failure. Example:
+on missing model, safety rails, timeout, or parse failure.
+
+Within a single user-prompt turn, successful allow/deny outcomes are remembered in an
+in-memory dynamic list (`permission_modules.cruise_control.dynamic_list`, default on)
+so identical permission asks skip the LLM (`Cached allow` / `Cached deny`). The lists
+clear on each new user prompt (`chat.message`) and are not persisted to disk. Example:
 
 ```json
 {
   "permission_modules": {
     "cruise_control": {
       "model": "opencode/deepseek-v4-flash",
+      "dynamic_list": { "enabled": true, "max_size": 256 },
       "instructions": {
         "background": ["The user works in a local project with KanCode."],
         "allow": ["Allow harmless read-only shell commands."],

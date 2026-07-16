@@ -2,11 +2,15 @@ import type { Hooks, Plugin, PluginInput } from "@opencode-ai/plugin"
 import { PermissionModule as PermissionModuleSchema } from "@opencode-ai/schema/permission-module"
 import { Effect } from "effect"
 import { EffectBridge } from "@/effect/bridge"
-import { decideCruiseControl, ensureDefaultInstructions } from "./classifier"
+import { clearDynamicLists, decideCruiseControl, ensureDefaultInstructions } from "./classifier"
 
 export {
+  actionKey,
   applySafety,
+  CACHED_ALLOW_REASON,
+  CACHED_DENY_REASON,
   CLASSIFIER_PREAMBLE,
+  clearDynamicLists,
   decideCruiseControl,
   DEFAULT_ALLOWLIST,
   DEFAULT_INSTRUCTIONS,
@@ -49,6 +53,9 @@ export {
  *
  * On init, seeds `permission_modules.cruise_control.instructions` into global
  * config when sections are missing so users can edit defaults in kancode.json.
+ *
+ * Clears the per-prompt dynamic allow/deny lists on each new user message
+ * (`chat.message`) so learned decisions do not leak across prompt turns.
  */
 export function createCruiseControlPlugin(bridge: EffectBridge.Shape): Plugin {
   return async (input: PluginInput): Promise<Hooks> => {
@@ -76,6 +83,11 @@ export function createCruiseControlPlugin(bridge: EffectBridge.Shape): Plugin {
         return { decision: result.decision, reason: result.reason }
       },
     })
-    return {}
+
+    return {
+      "chat.message": async () => {
+        clearDynamicLists()
+      },
+    }
   }
 }
