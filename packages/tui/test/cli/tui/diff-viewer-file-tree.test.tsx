@@ -170,7 +170,7 @@ async function renderOnceSettled(app: Awaited<ReturnType<typeof testRender>>) {
 async function captureSettledFrame(app: Awaited<ReturnType<typeof testRender>>) {
   for (let attempt = 0; attempt < 5; attempt++) {
     const frame = app.captureCharFrame()
-    if (frame.trim().length > 0) return frame
+    if (visibleLines(frame).length > 0) return frame
     await new Promise((resolve) => setTimeout(resolve, 25))
     await app.renderOnce()
   }

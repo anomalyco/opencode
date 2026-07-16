@@ -1,5 +1,6 @@
 import path from "node:path"
 import { readFile } from "node:fs/promises"
+import { createRequire } from "node:module"
 import { defineConfig, type Plugin, type UserConfig } from "vite"
 import solid from "vite-plugin-solid"
 import { nodeExecArgv, nodeTarget, type NodeTarget, photonWasmAsset } from "./src/node/target"
@@ -33,7 +34,10 @@ const resolve = {
   alias: [
     { find: /^solid-js\/store$/, replacement: "solid-js/store/dist/store.js" },
     { find: /^solid-js$/, replacement: "solid-js/dist/solid.js" },
-    { find: /^ws$/, replacement: path.resolve(dir, "node_modules/ws/wrapper.mjs") },
+    {
+      find: /^ws$/,
+      replacement: path.join(path.dirname(createRequire(import.meta.url).resolve("ws/package.json")), "wrapper.mjs"),
+    },
   ],
   conditions: ["node"],
 }
