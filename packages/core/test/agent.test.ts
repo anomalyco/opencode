@@ -4,6 +4,7 @@ import { AgentV2 } from "@opencode-ai/core/agent"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Location } from "@opencode-ai/core/location"
 import { AgentPlugin } from "@opencode-ai/core/plugin/agent"
+import { CruiseControlPlugin } from "@opencode-ai/core/plugin/cruise-control"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { location } from "./fixture/location"
 import { testEffect } from "./lib/effect"
@@ -124,16 +125,20 @@ describe("AgentV2", () => {
   it.effect("does not ambiently opt built-in agents into bash", () =>
     Effect.gen(function* () {
       const agent = yield* AgentV2.Service
+      const provide = Effect.provideService(
+        Location.Service,
+        Location.Service.of(location({ directory: AbsolutePath.make("/project") })),
+      )
       yield* AgentPlugin.Plugin.effect(
         host({
           agent: agentHost(agent),
         }),
-      ).pipe(
-        Effect.provideService(
-          Location.Service,
-          Location.Service.of(location({ directory: AbsolutePath.make("/project") })),
-        ),
-      )
+      ).pipe(provide)
+      yield* CruiseControlPlugin.Plugin.effect(
+        host({
+          agent: agentHost(agent),
+        }),
+      ).pipe(provide)
 
       const agents = yield* agent.all()
       expect(agents.map((item) => String(item.id)).sort()).toEqual([

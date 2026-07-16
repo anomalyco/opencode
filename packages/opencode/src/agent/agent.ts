@@ -11,13 +11,17 @@ import { ProviderTransform } from "@/provider/transform"
 
 import PROMPT_GENERATE from "./generate.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
-import PROMPT_CRUISECONTROL from "./prompt/cruisecontrol.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 import { Permission } from "@/permission"
-import { managedAppDirectoryGlobs } from "@/permission/module"
-import { PermissionModule } from "@opencode-ai/schema/permission-module"
+import {
+  AGENT_DESCRIPTION as CRUISECONTROL_DESCRIPTION,
+  AGENT_ID as CRUISECONTROL_ID,
+  AGENT_PROMPT as PROMPT_CRUISECONTROL,
+  cruiseControlPermissionConfig,
+} from "@/plugin/cruise-control/agent"
+import { managedAppDirectoryGlobs } from "@/plugin/cruise-control/classifier"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@opencode-ai/core/global"
 import path from "path"
@@ -182,27 +186,14 @@ const layer = Layer.effect(
             mode: "primary",
             native: true,
           },
-          // Builtin agent id `cruisecontrol` (display: CruiseControl). Distinct from the
-          // permission-module classifier id `cruise_control` — do not conflate.
-          cruisecontrol: {
-            name: "cruisecontrol",
-            description:
-              "Autonomous execution agent. Careful tool use; tool permissions go through the cruise_control classifier.",
+          // Builtin agent id `cruisecontrol` (display: CruiseControl). Seeded here because
+          // V1 plugins cannot register agents; classifier module is the cruise-control plugin.
+          [CRUISECONTROL_ID]: {
+            name: CRUISECONTROL_ID,
+            description: CRUISECONTROL_DESCRIPTION,
             prompt: PROMPT_CRUISECONTROL,
             options: {},
-            permission: Permission.merge(
-              defaults,
-              Permission.fromConfig({
-                "*": PermissionModule.CRUISE_CONTROL,
-                question: "allow",
-                plan_enter: "allow",
-                // After "*": cruise_control so findLast prefers these over the module.
-                external_directory: Object.fromEntries(
-                  managedAppDirectoryGlobs().map((dir) => [dir, "allow" as const]),
-                ),
-              }),
-              user,
-            ),
+            permission: Permission.merge(defaults, Permission.fromConfig(cruiseControlPermissionConfig()), user),
             mode: "primary",
             native: true,
           },

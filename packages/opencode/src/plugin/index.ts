@@ -63,7 +63,8 @@ export function experimentalWebSocketsEnabled(input: { enabled: boolean; channel
   return input.enabled || ["local", "dev", "beta"].includes(input.channel ?? InstallationChannel)
 }
 
-// Built-in plugins that are directly imported (not installed from npm)
+// Built-in plugins that are directly imported (not installed from npm).
+// Cruise Control is loaded lazily below to avoid a Provider ↔ Plugin cycle.
 function internalPlugins(flags: RuntimeFlags.Info): PluginInstance[] {
   return [
     // Temporary rollout: pre-release builds use WebSockets by default; releases require explicit opt-in.
@@ -168,12 +169,13 @@ const layer = Layer.effect(
                 id: module.id,
                 decide: (input) =>
                   Effect.promise(async () => {
-                    const decision = await module.decide({
+                    const raw = await module.decide({
                       permission: input.permission,
                       patterns: input.patterns,
                       metadata: input.metadata,
                     })
-                    return { decision }
+                    if (typeof raw === "string") return { decision: raw }
+                    return { decision: raw.decision, reason: raw.reason }
                   }),
               })
             },
@@ -191,6 +193,20 @@ const layer = Layer.effect(
             catch: errorMessage,
           }).pipe(
             Effect.tapError((error) => Effect.logError("failed to load internal plugin", { name: plugin.name, error })),
+            Effect.option,
+          )
+          if (init._tag === "Some") hooks.push(init.value)
+        }
+
+        if (!flags.disableDefaultPlugins) {
+          // Lazy import: classifier depends on Provider, which depends on Plugin.
+          const { createCruiseControlPlugin } = yield* Effect.promise(() => import("./cruise-control"))
+          const cruise = createCruiseControlPlugin(bridge)
+          const init = yield* Effect.tryPromise({
+            try: () => cruise(input),
+            catch: errorMessage,
+          }).pipe(
+            Effect.tapError((error) => Effect.logError("failed to load internal plugin", { name: "cruise-control", error })),
             Effect.option,
           )
           if (init._tag === "Some") hooks.push(init.value)

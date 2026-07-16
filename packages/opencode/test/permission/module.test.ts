@@ -4,16 +4,17 @@ import path from "path"
 import { Global } from "@opencode-ai/core/global"
 import { PermissionModule as PermissionModuleSchema } from "@opencode-ai/schema/permission-module"
 import { Permission } from "../../src/permission"
+import { PermissionModule } from "../../src/permission/module"
 import {
-  PermissionModule,
   applySafety,
+  decideCruiseControl,
   parseClassifierResult,
   runClassifier,
   destructiveReason,
   managedAppDirectoryAllow,
   isManagedAppDirectoryPattern,
   MISSING_MODEL_MESSAGE,
-} from "../../src/permission/module"
+} from "../../src/plugin/cruise-control/classifier"
 import { EventV2Bridge } from "../../src/event-v2-bridge"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { InstanceBootstrap } from "../../src/project/bootstrap"
@@ -326,6 +327,8 @@ const missingModelEnv = AppNodeBuilder.build(
     EventV2Bridge.node,
     CrossSpawnSpawner.node,
     InstanceStore.node,
+    Config.node,
+    Provider.node,
   ]),
   [
     [InstanceStore.bootstrapNode, noopBootstrap],
@@ -339,6 +342,16 @@ const itMissingModel = testEffect(missingModelEnv)
 itMissingModel.instance("missing cruise_control model asks with configure warning", () =>
   Effect.gen(function* () {
     const modules = yield* PermissionModule.Service
+    const config = yield* Config.Service
+    const provider = yield* Provider.Service
+    modules.registerSync({
+      id: PermissionModuleSchema.CRUISE_CONTROL,
+      decide: (input) =>
+        decideCruiseControl(input).pipe(
+          Effect.provideService(Config.Service, config),
+          Effect.provideService(Provider.Service, provider),
+        ),
+    })
     expect(
       yield* modules.decide({
         moduleID: PermissionModuleSchema.CRUISE_CONTROL,

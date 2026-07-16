@@ -280,17 +280,17 @@ opencode ships with `default`, `plan`, `cruisecontrol`, `general`, `explore`. Hi
 `compaction`, `title`, `summary`. To override a built-in's fields, define the
 same key in `agent: { <name>: { ... } }`. The legacy agent id `build` aliases to `default`.
 
-`cruisecontrol` is the CruiseControl builtin agent (autonomous execution). Its default
-tool permissions use the `cruise_control` classifier module (`"*": "cruise_control"`).
-It uses normal chat model resolution (global/default) — do not conflate the agent id
-with the permission-module id.
+`cruisecontrol` is the CruiseControl agent (autonomous execution), registered by the
+built-in `cruise-control` plugin. Its default tool permissions use the `cruise_control`
+classifier module (`"*": "cruise_control"`). It uses normal chat model resolution
+(global/default) — do not conflate the agent id with the permission-module id.
 
 For smart tool auto-gating (including CruiseControl's defaults), use the built-in
-permission module `cruise_control`: set permission actions to `"cruise_control"` and
-configure it with `/cruise-control-model` or `permission_modules.cruise_control.model`
-(for example `opencode/deepseek-v4-flash` or `ollama_cloud/kimi-k2.7-code`). If the
-model is unset, KanCode asks you to approve the tool and hints `/cruise-control-model`
-— it does not hard-deny. Example:
+permission module `cruise_control` (also from the `cruise-control` plugin): set
+permission actions to `"cruise_control"` and configure it with `/cruise-control-model`
+or `permission_modules.cruise_control.model` (for example `opencode/deepseek-v4-flash`
+or `ollama_cloud/kimi-k2.7-code`). If the model is unset, KanCode asks you to approve
+the tool and hints `/cruise-control-model` — it does not hard-deny. Example:
 
 ```json
 {
@@ -302,8 +302,9 @@ model is unset, KanCode asks you to approve the tool and hints `/cruise-control-
 }
 ```
 
-Plugins may register additional modules via `permission.registerModule({ id, decide })`
-(for example `puetsua_permit`).
+Disable with other default plugins via `disableDefaultPlugins`. Plugins may register
+additional modules via `permission.registerModule({ id, decide })` (for example
+`puetsua_permit`).
 
 ## Commands
 

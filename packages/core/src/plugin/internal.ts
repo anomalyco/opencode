@@ -29,6 +29,7 @@ import { State } from "../state"
 import { FetchHttpClient, HttpClient } from "effect/unstable/http"
 import { AgentPlugin } from "./agent"
 import { CommandPlugin } from "./command"
+import { CruiseControlPlugin } from "./cruise-control"
 import { ModelsDevPlugin } from "./models-dev"
 import { ProviderPlugins } from "./provider"
 import { SkillPlugin } from "./skill"
@@ -109,6 +110,7 @@ const layer = Layer.effectDiscard(
       Effect.gen(function* () {
         yield* add(ConfigReferencePlugin.Plugin)
         yield* add(AgentPlugin.Plugin)
+        yield* add(CruiseControlPlugin.Plugin)
         yield* add(CommandPlugin.Plugin)
         yield* add(SkillPlugin.Plugin)
         yield* add(ModelsDevPlugin)

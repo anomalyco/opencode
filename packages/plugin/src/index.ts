@@ -52,7 +52,11 @@ export type WorkspaceAdapter = {
   target(config: WorkspaceInfo): WorkspaceTarget | Promise<WorkspaceTarget>
 }
 
-export type PermissionModuleDecision = "allow" | "deny" | "ask"
+export type PermissionModuleDecision =
+  | "allow"
+  | "deny"
+  | "ask"
+  | { decision: "allow" | "deny" | "ask"; reason?: string }
 
 export type PermissionModuleDecideInput = {
   permission: string
@@ -75,9 +79,9 @@ export type PluginInput = {
   }
   /**
    * Register a named permission classifier module for use as a V1 permission
-   * action / V2 `module` field (e.g. `puetsua_permit`). Built-in id
-   * `cruise_control` and reserved actions `allow` | `ask` | `deny` cannot be
-   * registered. Collisions fail plugin load.
+   * action / V2 `module` field (e.g. `cruise_control`, `puetsua_permit`).
+   * Reserved actions `allow` | `ask` | `deny` cannot be registered.
+   * Collisions (including with the built-in cruise_control plugin) fail plugin load.
    */
   permission: {
     registerModule(module: PermissionModuleRegistration): void
