@@ -44,6 +44,13 @@ export interface Interface {
   readonly select: (sessionID: SessionSchema.ID) => Effect.Effect<Selection, AgentNotFoundError>
   /** Resolves the model and active history for that selection. */
   readonly load: (selection: Selection) => Effect.Effect<Loaded, SessionRunnerModel.Error>
+  /** Resolves current model context without committing instruction changes or promoting input. */
+  readonly loadForGenerate: (
+    selection: Selection,
+  ) => Effect.Effect<
+    Loaded & { readonly instructionDelta: string },
+    Instructions.InitializationBlocked | SessionRunnerModel.Error
+  >
 }
 
 /** Location-scoped model-context loader for durable Session Steps. */
@@ -100,7 +107,20 @@ const layer = Layer.effect(
       }
     })
 
-    return Service.of({ select, load })
+    const loadForGenerate = Effect.fn("SessionContext.loadForGenerate")(function* (selection: Selection) {
+      const model = yield* models.resolve(selection.session)
+      const history = yield* SessionHistory.entriesForGenerate(db, selection.session.id, selection.instructions)
+      return {
+        session: selection.session,
+        agent: selection.agent,
+        model,
+        initial: history.initial,
+        messages: history.entries.map((entry) => entry.message),
+        instructionDelta: history.delta,
+      }
+    })
+
+    return Service.of({ select, load, loadForGenerate })
   }),
 )
 

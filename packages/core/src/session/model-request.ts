@@ -26,6 +26,11 @@ interface PrepareInput {
   readonly step: number
 }
 
+interface GenerateInput {
+  readonly context: SessionContext.Loaded & { readonly instructionDelta: string }
+  readonly prompt: string
+}
+
 /**
  * Builds an outbound model request and captures the tool-call capability that
  * must remain paired with it. It does not execute the request or mutate
@@ -34,6 +39,8 @@ interface PrepareInput {
 export interface Interface {
   /** Builds one outbound model request and its matching tool-call capability. */
   readonly prepare: (input: PrepareInput) => Effect.Effect<Prepared>
+  /** Builds one tool-free outbound request from a read-only Session snapshot. */
+  readonly prepareGenerate: (input: GenerateInput) => Effect.Effect<LLMRequest>
 }
 
 /** Location-scoped outbound model-request preparation. */
@@ -45,20 +52,19 @@ const layer = Layer.effect(
     const hooks = yield* PluginHooks.Service
     const registry = yield* ToolRegistry.Service
 
-    const prepare = Effect.fn("SessionModelRequest.prepare")(function* (input: PrepareInput) {
-      const session = input.context.session
-      const agent = input.context.agent
-      const resolved = input.context.model
+    const build = Effect.fn("SessionModelRequest.build")(function* (
+      context: SessionContext.Loaded,
+      messages: Array<Message>,
+      executableTools: ToolRegistry.Materialization | undefined,
+    ) {
+      const session = context.session
+      const agent = context.agent
+      const resolved = context.model
       const model = resolved.model
-      const providerMetadataKey = model.route.providerMetadataKey ?? model.provider
-      const stepLimitReached = agent.info.steps !== undefined && input.step >= agent.info.steps
-      const executableTools = stepLimitReached ? undefined : yield* registry.materialize(agent.info.permissions)
       const promptCacheKey = /^ses_[0-9a-f]{64}$/.test(session.id) ? session.id.slice(4) : session.id
-      const system = [agent.info.system ? agent.info.system : PROMPT_DEFAULT, input.context.initial]
+      const system = [agent.info.system ? agent.info.system : PROMPT_DEFAULT, context.initial]
         .filter((part) => part.length > 0)
         .map(SystemPart.make)
-      const history = toLLMMessages(input.context.messages, resolved.ref, providerMetadataKey)
-      const messages = stepLimitReached ? [...history, Message.assistant(MAX_STEPS_PROMPT)] : history
       const toolDefinitions = executableTools?.definitions ?? []
       const toolsByName = new Map(toolDefinitions.map((tool) => [tool.name, tool]))
       // Hooks may reshape available definitions but cannot advertise tools omitted by permissions or the Step limit.
@@ -87,7 +93,7 @@ const layer = Layer.effect(
         system: contextEvent.system,
         messages: contextEvent.messages,
         tools: hookedTools,
-        toolChoice: stepLimitReached ? "none" : undefined,
+        toolChoice: executableTools ? undefined : "none",
       })
       const resolveToolCall = (name: string): ToolCallResolution => {
         if (!executableTools)
@@ -108,7 +114,39 @@ const layer = Layer.effect(
       }
     })
 
-    return Service.of({ prepare })
+    const prepare = Effect.fn("SessionModelRequest.prepare")(function* (input: PrepareInput) {
+      const model = input.context.model.model
+      const providerMetadataKey = model.route.providerMetadataKey ?? model.provider
+      const stepLimitReached =
+        input.context.agent.info.steps !== undefined && input.step >= input.context.agent.info.steps
+      const executableTools = stepLimitReached
+        ? undefined
+        : yield* registry.materialize(input.context.agent.info.permissions)
+      const history = toLLMMessages(input.context.messages, input.context.model.ref, providerMetadataKey)
+      return yield* build(
+        input.context,
+        stepLimitReached ? [...history, Message.assistant(MAX_STEPS_PROMPT)] : history,
+        executableTools,
+      )
+    })
+
+    const prepareGenerate = Effect.fn("SessionModelRequest.prepareGenerate")(function* (input: GenerateInput) {
+      const model = input.context.model.model
+      const providerMetadataKey = model.route.providerMetadataKey ?? model.provider
+      const history = toLLMMessages(input.context.messages, input.context.model.ref, providerMetadataKey)
+      const prepared = yield* build(
+        input.context,
+        [
+          ...history,
+          ...(input.context.instructionDelta ? [Message.system(input.context.instructionDelta)] : []),
+          Message.user(input.prompt),
+        ],
+        undefined,
+      )
+      return prepared.request
+    })
+
+    return Service.of({ prepare, prepareGenerate })
   }),
 )
 

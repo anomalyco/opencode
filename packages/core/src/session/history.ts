@@ -60,6 +60,13 @@ const decodeMessageRow = (row: typeof SessionMessageTable.$inferSelect) =>
     ),
   )
 
+const messageEntries = Effect.fnUntraced(function* (db: DatabaseService, sessionID: SessionSchema.ID) {
+  const rows = yield* messageRows(db, sessionID, yield* latestCompaction(db, sessionID))
+  return yield* Effect.forEach(rows, (row) =>
+    decodeMessageRow(row).pipe(Effect.map((message) => ({ seq: row.seq, message }))),
+  )
+})
+
 export const load = Effect.fn("SessionHistory.load")(function* (db: DatabaseService, sessionID: SessionSchema.ID) {
   return yield* Effect.forEach(
     yield* messageRows(db, sessionID, yield* latestCompaction(db, sessionID)),
@@ -75,10 +82,7 @@ export const entriesForRunner = Effect.fn("SessionHistory.entriesForRunner")(fun
   return yield* db
     .transaction(() =>
       Effect.gen(function* () {
-        const rows = yield* messageRows(db, sessionID, yield* latestCompaction(db, sessionID))
-        const messages = yield* Effect.forEach(rows, (row) =>
-          decodeMessageRow(row).pipe(Effect.map((message) => ({ seq: row.seq, message }))),
-        )
+        const messages = yield* messageEntries(db, sessionID)
         const assembled = yield* InstructionState.assemble(db, sessionID, instructions)
         return {
           initial: assembled.initial,
@@ -87,6 +91,31 @@ export const entriesForRunner = Effect.fn("SessionHistory.entriesForRunner")(fun
       }),
     )
     .pipe(Effect.orDie)
+})
+
+export const entriesForGenerate = Effect.fn("SessionHistory.entriesForGenerate")(function* (
+  db: DatabaseService,
+  sessionID: SessionSchema.ID,
+  instructions: Instructions.Instructions,
+) {
+  return yield* db
+    .transaction(() =>
+      Effect.gen(function* () {
+        const messages = yield* messageEntries(db, sessionID)
+        // Do not append a transient user message after an unresolved assistant tool call.
+        const unsettled = messages.findIndex(
+          (entry) => entry.message.type === "assistant" && entry.message.finish === undefined,
+        )
+        const settled = unsettled === -1 ? messages : messages.slice(0, unsettled)
+        const assembled = yield* InstructionState.assembleForGenerate(db, sessionID, instructions)
+        return {
+          initial: assembled.initial,
+          entries: [...settled, ...assembled.updates].toSorted((a, b) => a.seq - b.seq),
+          delta: assembled.delta,
+        }
+      }),
+    )
+    .pipe(Effect.catch((error) => (error instanceof Instructions.InitializationBlocked ? error : Effect.die(error))))
 })
 
 /** Returns the session's sole user message, or `undefined` once a second one exists. */

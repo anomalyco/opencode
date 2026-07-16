@@ -227,6 +227,134 @@ describe("InstructionState", () => {
     }),
   )
 
+  it.effect("assembles a fresh private update without repairing a missing cache", () =>
+    Effect.gen(function* () {
+      const sessionID = SessionSchema.ID.make("ses_instruction_generate")
+      const { db, events } = yield* setup(sessionID)
+      let value = "Initial context"
+      const instructions = source(
+        "test/context",
+        Effect.sync(() => value),
+      )
+      yield* InstructionState.prepare(db, events, instructions, sessionID)
+      yield* db
+        .delete(InstructionStateTable)
+        .where(eq(InstructionStateTable.session_id, sessionID))
+        .run()
+        .pipe(Effect.orDie)
+      value = "Changed context"
+      const beforeEvents = yield* instructionEvents(db, sessionID)
+      const beforeBlobs = yield* db.select().from(InstructionBlobTable).all().pipe(Effect.orDie)
+
+      const assembled = yield* InstructionState.assembleForGenerate(db, sessionID, instructions)
+
+      expect(assembled).toEqual({ initial: "Initial context", updates: [], delta: "Changed context" })
+      expect(yield* instructionEvents(db, sessionID)).toEqual(beforeEvents)
+      expect(yield* db.select().from(InstructionBlobTable).all().pipe(Effect.orDie)).toEqual(beforeBlobs)
+      expect(
+        yield* db
+          .select()
+          .from(InstructionStateTable)
+          .where(eq(InstructionStateTable.session_id, sessionID))
+          .get()
+          .pipe(Effect.orDie),
+      ).toBeUndefined()
+    }),
+  )
+
+  it.effect("reads through a stale cache without repairing it", () =>
+    Effect.gen(function* () {
+      const sessionID = SessionSchema.ID.make("ses_instruction_generate_stale")
+      const { db, events } = yield* setup(sessionID)
+      let value = "Initial context"
+      const instructions = source(
+        "test/context",
+        Effect.sync(() => value),
+      )
+      yield* InstructionState.prepare(db, events, instructions, sessionID)
+      value = "Committed update"
+      yield* InstructionState.prepare(db, events, instructions, sessionID)
+      yield* db
+        .update(InstructionStateTable)
+        .set({ through_seq: 0, current_values: { "test/context": Instructions.hash("Initial context") } })
+        .where(eq(InstructionStateTable.session_id, sessionID))
+        .run()
+        .pipe(Effect.orDie)
+      value = "Private update"
+      const beforeEvents = yield* instructionEvents(db, sessionID)
+      const beforeBlobs = yield* db.select().from(InstructionBlobTable).all().pipe(Effect.orDie)
+      const beforeState = yield* db.select().from(InstructionStateTable).get().pipe(Effect.orDie)
+
+      const assembled = yield* InstructionState.assembleForGenerate(db, sessionID, instructions)
+
+      expect(assembled.initial).toBe("Initial context")
+      expect(assembled.updates.map((entry) => entry.message.text)).toEqual(["Committed update"])
+      expect(assembled.delta).toBe("Private update")
+      expect(yield* instructionEvents(db, sessionID)).toEqual(beforeEvents)
+      expect(yield* db.select().from(InstructionBlobTable).all().pipe(Effect.orDie)).toEqual(beforeBlobs)
+      expect(yield* db.select().from(InstructionStateTable).get().pipe(Effect.orDie)).toEqual(beforeState)
+    }),
+  )
+
+  it.effect("assembles initial instructions without persisting a baseline", () =>
+    Effect.gen(function* () {
+      const sessionID = SessionSchema.ID.make("ses_instruction_generate_initial")
+      const { db } = yield* setup(sessionID)
+      const instructions = source("test/context", Effect.succeed("Initial context"))
+
+      expect(yield* InstructionState.assembleForGenerate(db, sessionID, instructions)).toEqual({
+        initial: "Initial context",
+        updates: [],
+        delta: "",
+      })
+      expect(yield* instructionEvents(db, sessionID)).toEqual([])
+      expect(yield* db.select().from(InstructionBlobTable).all().pipe(Effect.orDie)).toEqual([])
+      expect(yield* db.select().from(InstructionStateTable).get().pipe(Effect.orDie)).toBeUndefined()
+    }),
+  )
+
+  it.effect("retains a committed value when fresh instructions are unavailable", () =>
+    Effect.gen(function* () {
+      const sessionID = SessionSchema.ID.make("ses_instruction_generate_unavailable")
+      const { db, events } = yield* setup(sessionID)
+      let value: string | Instructions.Unavailable = "Committed context"
+      const instructions = source(
+        "test/context",
+        Effect.sync(() => value),
+      )
+      yield* InstructionState.prepare(db, events, instructions, sessionID)
+      value = Instructions.unavailable
+      const beforeEvents = yield* instructionEvents(db, sessionID)
+      const beforeBlobs = yield* db.select().from(InstructionBlobTable).all().pipe(Effect.orDie)
+      const beforeState = yield* db.select().from(InstructionStateTable).get().pipe(Effect.orDie)
+
+      expect(yield* InstructionState.assembleForGenerate(db, sessionID, instructions)).toEqual({
+        initial: "Committed context",
+        updates: [],
+        delta: "",
+      })
+      expect(yield* instructionEvents(db, sessionID)).toEqual(beforeEvents)
+      expect(yield* db.select().from(InstructionBlobTable).all().pipe(Effect.orDie)).toEqual(beforeBlobs)
+      expect(yield* db.select().from(InstructionStateTable).get().pipe(Effect.orDie)).toEqual(beforeState)
+    }),
+  )
+
+  it.effect("blocks an unavailable initial instruction without persisting a baseline", () =>
+    Effect.gen(function* () {
+      const sessionID = SessionSchema.ID.make("ses_instruction_generate_blocked")
+      const { db } = yield* setup(sessionID)
+      const instructions = source("test/context", Effect.succeed(Instructions.unavailable))
+
+      const error = yield* InstructionState.assembleForGenerate(db, sessionID, instructions).pipe(Effect.flip)
+
+      expect(error).toBeInstanceOf(Instructions.InitializationBlocked)
+      expect(error.keys).toEqual([Instructions.Key.make("test/context")])
+      expect(yield* instructionEvents(db, sessionID)).toEqual([])
+      expect(yield* db.select().from(InstructionBlobTable).all().pipe(Effect.orDie)).toEqual([])
+      expect(yield* db.select().from(InstructionStateTable).get().pipe(Effect.orDie)).toBeUndefined()
+    }),
+  )
+
   it.effect("keeps prepare equivalent to observe followed by commit", () =>
     Effect.gen(function* () {
       const observedSessionID = SessionSchema.ID.make("ses_instruction_composed")
