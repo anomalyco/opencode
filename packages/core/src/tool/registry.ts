@@ -60,10 +60,6 @@ const registryLayer = Layer.effect(
     const toolHooks = yield* ToolHooks.Service
     const image = yield* Image.Service
 
-    // Generic model-output image bounding: every tool's media content settles through
-    // here, so individual tools do not add their own resize calls. A missing resizer
-    // keeps the original image; an undecodable or unresizable image is dropped and
-    // reported in a per-reason note, mirroring V1 settlement behavior.
     type NormalizedItem = ToolOutput["content"][number] | "decode" | "size"
     const normalizeImages = Effect.fn("ToolRegistry.normalizeImages")(function* (content: ToolOutput["content"]) {
       const normalized = yield* Effect.forEach(content, (item): Effect.Effect<NormalizedItem> => {
@@ -81,7 +77,6 @@ const registryLayer = Layer.effect(
               mime: result.mime,
             })),
             Effect.catchTag("Image.ResizerUnavailableError", () => Effect.succeed(item)),
-            // String markers stand in for dropped items and become the notes below.
             Effect.catchTag("Image.DecodeError", () => Effect.succeed("decode" as const)),
             Effect.catchTag("Image.SizeError", () => Effect.succeed("size" as const)),
           )
@@ -127,8 +122,6 @@ const registryLayer = Layer.effect(
           progress: (update) => {
             const progress = input.progress
             if (!progress) return Effect.void
-            // Progress content is published durably and lowered to providers when a
-            // call errors mid-progress, so it needs the same image bounding as output.
             return normalizeImages(
               (update.content ?? []).map((part) =>
                 part.type === "text"

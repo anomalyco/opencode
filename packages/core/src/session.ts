@@ -925,9 +925,6 @@ const materializeAttachment = Effect.fn("V2Session.materializeAttachment")(funct
   })
 })
 
-// V1 parity: bound image attachments at prompt admission so oversized images never
-// reach persistence or providers. A missing resizer keeps the original image; an
-// image that cannot fit the configured limits fails the prompt.
 const normalizeImageAttachment = Effect.fn("V2Session.normalizeImageAttachment")(function* (
   input: PromptInput.FileAttachment,
   data: Base64,
