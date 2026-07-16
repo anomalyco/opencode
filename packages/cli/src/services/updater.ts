@@ -12,11 +12,16 @@ import { parse, type ParseError } from "jsonc-parser"
 import path from "node:path"
 import semver from "semver"
 
+declare const OPENCODE_CLI_NAME: string | undefined
+
 export type Policy = boolean | "notify"
 export type Action = "none" | "upgrade"
 type Method = "npm" | "pnpm" | "bun" | "yarn"
 
-const packageName = "@opencode-ai/cli"
+const packageName =
+  typeof OPENCODE_CLI_NAME === "string" && OPENCODE_CLI_NAME === "opencode2-node"
+    ? OPENCODE_CLI_NAME
+    : "@opencode-ai/cli"
 
 export interface Interface {
   readonly check: () => Effect.Effect<void>

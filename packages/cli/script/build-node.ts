@@ -57,7 +57,7 @@ const builder =
     : undefined
 
 for (const target of targets) {
-  console.log(`building cli-${targetName(target)}`)
+  console.log(`building cli-node-${targetName(target)}`)
   const assets = await collectNodeAssets(target)
   await rm("dist-node", { recursive: true, force: true })
   const assetHash = await hashNodeAssets(assets)
@@ -73,8 +73,8 @@ for (const target of targets) {
   }
   if (bundleOnly) continue
 
-  const name = `cli-${targetName(target)}`
-  const binary = target.platform === "win32" ? "opencode2.exe" : "opencode2"
+  const name = `cli-node-${targetName(target)}`
+  const binary = target.platform === "win32" ? "opencode2-node.exe" : "opencode2-node"
   const output = path.join(outdir, name, "bin", binary)
   if (!builder) throw new Error("Node SEA builder is unavailable")
   await mkdir(path.dirname(output), { recursive: true })

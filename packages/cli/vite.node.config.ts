@@ -186,7 +186,7 @@ export function mainConfig(input: NodeBuildInput): UserConfig {
     esbuild: { jsx: "automatic" },
     define: {
       OPENCODE_VERSION: JSON.stringify(input.version),
-      OPENCODE_CLI_NAME: JSON.stringify("opencode2"),
+      OPENCODE_CLI_NAME: JSON.stringify("opencode2-node"),
       OPENCODE_MODELS_DEV: input.models,
       OPENCODE_CHANNEL: JSON.stringify(input.channel),
       OPENCODE_LIBC: input.target.platform === "linux" ? JSON.stringify("glibc") : "undefined",

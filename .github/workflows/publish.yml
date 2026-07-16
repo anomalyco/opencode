@@ -121,6 +121,53 @@ jobs:
     outputs:
       version: ${{ needs.version.outputs.version }}
 
+  build-node-cli:
+    needs: version
+    if: github.repository == 'anomalyco/opencode'
+    strategy:
+      fail-fast: false
+      matrix:
+        settings:
+          - target: linux-arm64
+            host: blacksmith-4vcpu-ubuntu-2404-arm
+          - target: linux-x64
+            host: blacksmith-4vcpu-ubuntu-2404
+          - target: darwin-arm64
+            host: macos-26
+          - target: windows-arm64
+            host: windows-2025
+          - target: windows-x64
+            host: blacksmith-4vcpu-windows-2025
+    runs-on: ${{ matrix.settings.host }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+
+      - uses: ./.github/actions/setup-bun
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "26.4.0"
+
+      - name: Build
+        run: bun packages/cli/script/build-node.ts --target=${{ matrix.settings.target }} --outdir=dist/node
+        env:
+          OPENCODE_VERSION: ${{ needs.version.outputs.version }}
+          OPENCODE_RELEASE: ${{ needs.version.outputs.release }}
+
+      - name: Verify service lifecycle
+        if: matrix.settings.target != 'windows-arm64'
+        working-directory: packages/cli
+        run: bun run script/service-smoke.ts --node
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: opencode-node-cli-${{ matrix.settings.target }}
+          path: packages/cli/dist/node/cli-node-*
+          if-no-files-found: error
+
   sign-cli-windows:
     needs:
       - build-cli
@@ -413,6 +460,7 @@ jobs:
     needs:
       - version
       - build-cli
+      - build-node-cli
       - sign-cli-windows
       - build-electron
     if: always() && !failure() && !cancelled()
@@ -460,6 +508,12 @@ jobs:
         with:
           name: opencode-preview-cli
           path: packages/cli/dist
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: opencode-node-cli-*
+          path: packages/cli/dist/node
+          merge-multiple: true
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         if: needs.version.outputs.release

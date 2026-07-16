@@ -47,6 +47,11 @@
       "bun": "./src/runtime/import.bun.ts",
       "node": "./src/runtime/import.node.ts",
       "default": "./src/runtime/import.bun.ts"
+    },
+    "#process-lock-ffi": {
+      "bun": "./src/util/process-lock-ffi.bun.ts",
+      "node": "./src/util/process-lock-ffi.node.ts",
+      "default": "./src/util/process-lock-ffi.bun.ts"
     }
   },
   "devDependencies": {

@@ -78,6 +78,20 @@ jobs:
           bun run script/build.ts --single --skip-install
           bun run script/service-smoke.ts
 
+      - name: Setup Node build runtime
+        if: always()
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "26.4.0"
+
+      - name: Verify Node build
+        if: always()
+        timeout-minutes: 15
+        working-directory: packages/cli
+        run: |
+          bun run script/build-node.ts --single --skip-install --outdir=dist/node
+          bun run script/service-smoke.ts --node
+
       - name: Check generated client
         if: runner.os == 'Linux'
         working-directory: packages/client

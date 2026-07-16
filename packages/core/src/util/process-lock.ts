@@ -1,5 +1,5 @@
-import { dlopen, read, type Pointer } from "bun:ffi"
-import { closeSync, existsSync, mkdirSync, openSync } from "node:fs"
+import { lockDarwin, lockLinux, type LockResult } from "#process-lock-ffi"
+import { closeSync, mkdirSync, openSync } from "node:fs"
 import { connect, createServer, type Server, type Socket } from "node:net"
 import path from "node:path"
 import { Effect, Schema } from "effect"
@@ -76,58 +76,10 @@ export namespace ProcessLock {
   })
 }
 
-type Result =
-  | { readonly acquired: true }
-  | { readonly acquired: false; readonly held: true }
-  | { readonly acquired: false; readonly held: false; readonly code: number }
-
-const LOCK_EX = 2
-const LOCK_NB = 4
-const DARWIN_EWOULDBLOCK = 35
-const LINUX_EWOULDBLOCK = 11
-
-function lock(fd: number): Result {
+function lock(fd: number): LockResult {
   if (process.platform === "darwin") return lockDarwin(fd)
   if (process.platform === "linux") return lockLinux(fd)
   throw new Error(`Unsupported process lock platform: ${process.platform}`)
-}
-
-function lockDarwin(fd: number): Result {
-  const library = dlopen("/usr/lib/libSystem.B.dylib", {
-    flock: { args: ["i32", "i32"], returns: "i32" },
-    __error: { args: [], returns: "ptr" },
-  })
-  try {
-    const result = library.symbols.flock(fd, LOCK_EX | LOCK_NB)
-    const code = result === 0 ? 0 : errorCode(library.symbols.__error())
-    if (result === 0) return { acquired: true }
-    if (code === DARWIN_EWOULDBLOCK) return { acquired: false, held: true }
-    return { acquired: false, held: false, code }
-  } finally {
-    library.close()
-  }
-}
-
-function lockLinux(fd: number): Result {
-  const musl = `/lib/libc.musl-${process.arch === "arm64" ? "aarch64" : "x86_64"}.so.1`
-  const library = dlopen(existsSync(musl) ? musl : "libc.so.6", {
-    flock: { args: ["i32", "i32"], returns: "i32" },
-    __errno_location: { args: [], returns: "ptr" },
-  })
-  try {
-    const result = library.symbols.flock(fd, LOCK_EX | LOCK_NB)
-    const code = result === 0 ? 0 : errorCode(library.symbols.__errno_location())
-    if (result === 0) return { acquired: true }
-    if (code === LINUX_EWOULDBLOCK) return { acquired: false, held: true }
-    return { acquired: false, held: false, code }
-  } finally {
-    library.close()
-  }
-}
-
-function errorCode(pointer: Pointer | null) {
-  if (pointer === null) throw new Error("Failed to read process lock error code")
-  return read.i32(pointer, 0)
 }
 
 function acquireWindows(file: string) {
