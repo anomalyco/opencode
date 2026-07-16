@@ -46,7 +46,7 @@ describe("alwaysPattern", () => {
   })
 
   it("never produces bare '*' wildcard for any path", () => {
-    const seed = Math.floor(Math.random() * 2147483647)
+    const seed = process.env.TEST_SEED ? Number(process.env.TEST_SEED) : Math.floor(Math.random() * 2147483647)
     const rng = seededRandom(seed)
     const paths = [
       ".", "",
