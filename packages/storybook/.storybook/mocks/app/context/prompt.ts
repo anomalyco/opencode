@@ -60,6 +60,10 @@ export function isPromptEqual(a: Prompt, b: Prompt) {
   return a.every((part, i) => JSON.stringify(part) === JSON.stringify(b[i]))
 }
 
+export function isCommentItem(item: ContextItem) {
+  return !!item.comment?.trim()
+}
+
 export function createPromptState() {
   const [store, setStore] = createStore({
     prompt: clonePrompt(DEFAULT_PROMPT),
