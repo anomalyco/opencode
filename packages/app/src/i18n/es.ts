@@ -786,11 +786,6 @@ export const dict = {
   "settings.general.row.terminalFont.description": "Personaliza la fuente utilizada en el terminal",
   "settings.general.row.uiFont.title": "Fuente de la interfaz",
   "settings.general.row.uiFont.description": "Personaliza la fuente usada en toda la interfaz",
-  "settings.general.row.followup.title": "Comportamiento de seguimiento",
-  "settings.general.row.followup.description":
-    "Elige si los prompts de seguimiento se dirigen inmediatamente o esperan en una cola",
-  "settings.general.row.followup.option.queue": "Cola",
-  "settings.general.row.followup.option.steer": "Dirigir",
   "settings.general.row.showFileTree.title": "Árbol de archivos",
   "settings.general.row.showFileTree.description": "Mostrar el panel del árbol de archivos en las sesiones",
   "settings.general.row.showNavigation.title": "Controles de navegación",
@@ -807,6 +802,8 @@ export const dict = {
   "settings.general.row.mobileTitlebarBottom.description":
     "Colocar la barra de título y las pestañas de sesión en la parte inferior de la pantalla en dispositivos móviles",
   "settings.general.row.showCustomAgents.title": "Agentes personalizados",
+  "settings.general.row.showQueueControls.title": "Prompt queue",
+  "settings.general.row.showQueueControls.description": "Show queue and interrupt options in the composer while the session is busy",
   "settings.general.row.showCustomAgents.description": "Mostrar el selector de agentes en el editor",
   "settings.general.row.reasoningSummaries.title": "Mostrar resúmenes de razonamiento",
   "settings.general.row.reasoningSummaries.description":
@@ -1104,4 +1101,16 @@ export const dict = {
   "error.childStore.persistedProjectIconCreateFailed": "Error al crear icono de proyecto persistente",
   "error.childStore.storeCreateFailed": "Error al crear almacén",
   "terminal.connectionLost.abnormalClose": "WebSocket cerrado anormalmente: {{code}}",
+  "prompt.queue.target.followup": "After this turn",
+  "prompt.queue.target.followup.description": "Queue your message and send it after the current turn finishes.",
+  "prompt.queue.target.sub-session": "Sub-session",
+  "prompt.queue.target.sub-session.description": "Queue your message and, when idle, fork the conversation into a new tab.",
+  "prompt.queue.target.steer": "Send now",
+  "prompt.queue.target.steer.description": "Stop the current response and send your message immediately.",
+  "prompt.queue.target.current-stream": "After current stream",
+  "prompt.queue.target.current-stream.description": "Inject your message into the current response without stopping it.",
+  "session.followupDock.target.followup": "After this turn",
+  "session.followupDock.target.sub-session": "Sub-session",
+  "session.followupDock.target.steer": "Send now",
+  "session.followupDock.target.current-stream": "After current stream",
 }

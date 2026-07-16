@@ -407,6 +407,18 @@ export const SettingsGeneralV2: Component<{
             />
           </div>
         </SettingsRowV2>
+
+        <SettingsRowV2
+          title={language.t("settings.general.row.showQueueControls.title")}
+          description={language.t("settings.general.row.showQueueControls.description")}
+        >
+          <div data-action="settings-show-queue-controls">
+            <Switch
+              checked={settings.general.showQueueControls()}
+              onChange={(checked) => settings.general.setShowQueueControls(checked)}
+            />
+          </div>
+        </SettingsRowV2>
       </SettingsListV2>
     </div>
   )

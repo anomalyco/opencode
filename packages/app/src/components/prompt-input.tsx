@@ -12,6 +12,7 @@ import {
   Switch,
   Match,
   type JSX,
+  type Accessor,
 } from "solid-js"
 import { createStore, type SetStoreFunction, type Store } from "solid-js/store"
 import type { useLocal } from "@/context/local"
@@ -66,7 +67,7 @@ import {
   type PromptHistoryStoredEntry,
   promptLength,
 } from "./prompt-input/history"
-import { createPromptSubmit, type FollowupDraft } from "./prompt-input/submit"
+import { createPromptSubmit, type FollowupDraft, type FollowupTarget } from "./prompt-input/submit"
 import { PromptPopover, type AtOption, type SlashCommand } from "./prompt-input/slash-popover"
 import { PromptContextItems } from "./prompt-input/context-items"
 import { PromptImageAttachments } from "./prompt-input/image-attachments"
@@ -167,10 +168,13 @@ export interface PromptInputProps {
   ref?: (el: HTMLDivElement) => void
   newSessionWorktree?: string
   onNewSessionWorktreeReset?: () => void
-  edit?: { id: string; prompt: Prompt; context: FollowupDraft["context"] }
+  edit?: { id: string; prompt: Prompt; context: FollowupDraft["context"]; target?: FollowupTarget }
   onEditLoaded?: () => void
   shouldQueue?: () => boolean
+  queueTarget?: Accessor<FollowupTarget>
+  setQueueTarget?: (target: FollowupTarget) => void
   onQueue?: (draft: FollowupDraft) => void
+  onInterrupt?: (draft: FollowupDraft, messageID: string) => void | Promise<void>
   onAbort?: () => void
   onSubmit?: () => void
   toolbar?: JSX.Element
@@ -1223,6 +1227,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       (id) => {
         const edit = props.edit
         if (!id || !edit) return
+        props.setQueueTarget?.(edit.target ?? "followup")
 
         for (const item of prompt.context.items()) {
           prompt.context.remove(item.key)
@@ -1335,7 +1340,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       newSessionWorktree: () => props.newSessionWorktree,
       onNewSessionWorktreeReset: props.onNewSessionWorktreeReset,
       shouldQueue: props.shouldQueue,
+      queueTarget: props.queueTarget,
       onQueue: props.onQueue,
+      onInterrupt: props.onInterrupt,
       onAbort: props.onAbort,
       onSubmit: props.onSubmit,
       model: props.controls.model.selection,

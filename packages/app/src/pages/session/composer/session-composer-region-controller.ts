@@ -2,16 +2,19 @@ import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useSpring } from "@opencode-ai/ui/motion-spring"
 import { type Accessor, createEffect, createMemo, createResource, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
+import type { FollowupTarget } from "@/components/prompt-input/submit"
 import type { PromptInputState } from "@/components/prompt-input"
 import { useSync } from "@/context/sync"
 import { getSessionHandoff, setSessionHandoff } from "@/pages/session/handoff"
 import type { SessionComposerController } from "./session-composer-state"
 
 export type SessionComposerFollowupDock = {
-  items: { id: string; text: string }[]
+  items: { id: string; text: string; target: FollowupTarget }[]
   sending?: string
   onSend: (id: string) => void
   onEdit: (id: string) => void
+  onChangeTarget: (id: string, target: FollowupTarget) => void
+  onReorder: (fromIndex: number, toIndex: number) => void
 }
 
 export type SessionComposerRevertDock = {

@@ -1,4 +1,5 @@
 import type { FilePart, Project, UserMessage, VcsFileDiff } from "@opencode-ai/sdk/v2"
+import type { Session } from "@opencode-ai/sdk/v2/client"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { createQuery, skipToken, useMutation, useQueryClient } from "@tanstack/solid-query"
@@ -61,13 +62,18 @@ import { PromptInput } from "@/components/prompt-input"
 import { useSettingsCommand } from "@/components/settings-dialog"
 import { setCursorPosition } from "@/components/prompt-input/editor-dom"
 import { promptLength } from "@/components/prompt-input/history"
-import { type FollowupDraft, sendFollowupDraft } from "@/components/prompt-input/submit"
+import {
+  type FollowupDraft,
+  type FollowupTarget,
+  sendFollowupDraft,
+} from "@/components/prompt-input/submit"
 import {
   createPromptInputController,
   createSessionComposerController,
   createSessionComposerRegionController,
   SessionComposerRegion,
 } from "@/pages/session/composer"
+import { QueueTargetControl } from "@/pages/session/composer/queue-target-control"
 import { createOpenReviewFile, createSessionTabs, createSizing, shouldShowFileTree } from "@/pages/session/helpers"
 import { MessageTimeline } from "@/pages/session/timeline/message-timeline"
 import { createTimelineModel } from "@/pages/session/timeline/model"
@@ -103,7 +109,7 @@ import { createSessionOwnership } from "./session/session-ownership"
 import { createSessionLineage } from "./session/session-lineage"
 
 type FollowupItem = FollowupDraft & { id: string }
-type FollowupEdit = Pick<FollowupItem, "id" | "prompt" | "context">
+type FollowupEdit = Pick<FollowupItem, "id" | "prompt" | "context" | "target">
 const emptyFollowups: FollowupItem[] = []
 
 type ChangeMode = "git" | "branch" | "turn"
@@ -359,6 +365,7 @@ export default function Page() {
   const language = useLanguage()
   const sdk = useSDK()
   const serverSDK = useServerSDK()
+  const appTabs = useTabs()
   const settings = useSettings()
   const platform = usePlatform()
   const prompt = usePrompt()
@@ -602,20 +609,87 @@ export default function Page() {
     deferRender: false,
   })
 
+  const migrateFollowupState = (value: unknown): unknown => {
+    const isRecord = (value: unknown): value is Record<string, unknown> =>
+      typeof value === "object" && value !== null
+
+    if (!isRecord(value)) return value
+    const next = { ...value }
+
+    const migrateTarget = (target: unknown) => {
+      if (target === "subagent-wait") return "followup"
+      if (target === "subagent") return "sub-session"
+      return target
+    }
+
+    if (isRecord(next.items)) {
+      next.items = Object.fromEntries(
+        Object.entries(next.items).map(([sessionID, items]) => [
+          sessionID,
+          Array.isArray(items)
+            ? items.map((item) => {
+                if (!isRecord(item)) return item
+                const target = item.target
+                if (target === "subagent-wait" || target === "subagent") {
+                  return { ...item, target: migrateTarget(target) }
+                }
+                return item
+              })
+            : items,
+        ]),
+      )
+    }
+
+    if (isRecord(next.edit)) {
+      const target = next.edit.target
+      if (target === "subagent-wait" || target === "subagent") {
+        next.edit = { ...next.edit, target: migrateTarget(target) }
+      }
+    }
+
+    if (isRecord(next.target)) {
+      next.target = Object.fromEntries(
+        Object.entries(next.target).map(([key, target]) => [key, migrateTarget(target)]),
+      )
+    }
+
+    return next
+  }
+
   const [followup, setFollowup] = persisted(
-    Persist.serverWorkspace(serverSDK().scope, sdk().directory, "followup", ["followup.v1"]),
+    {
+      ...Persist.serverWorkspace(serverSDK().scope, sdk().directory, "followup", ["followup.v1"]),
+      migrate: migrateFollowupState,
+    },
     createStore<{
       items: Record<string, FollowupItem[] | undefined>
       failed: Record<string, string | undefined>
       paused: Record<string, boolean | undefined>
       edit: Record<string, FollowupEdit | undefined>
+      target: Record<string, FollowupTarget | undefined>
     }>({
       items: {},
       failed: {},
       paused: {},
       edit: {},
+      target: {},
     }),
   )
+
+  const [queueTarget, setQueueTarget] = createSignal<FollowupTarget>("followup")
+
+  createEffect(() => {
+    const id = params.id
+    if (!id) return
+    setQueueTarget(followup.target[id] ?? "followup")
+  })
+
+  const persistQueueTarget = (target: FollowupTarget) => {
+    setQueueTarget(target)
+    const id = params.id
+    if (!id) return
+    setFollowup("target", id, target)
+  }
 
   createComputed((prev) => {
     const key = sessionKey()
@@ -1733,6 +1807,13 @@ export default function Page() {
 
   const busy = (sessionID: string) => sync().data.session_working(sessionID)
 
+  const halt = (sessionID: string) =>
+    busy(sessionID)
+      ? sdk()
+          .client.session.abort({ sessionID })
+          .catch(() => {})
+      : Promise.resolve()
+
   const queuedFollowups = createMemo(() => {
     const id = params.id
     if (!id) return emptyFollowups
@@ -1754,12 +1835,40 @@ export default function Page() {
       if (input.manual) setFollowup("paused", input.sessionID, undefined)
       setFollowup("failed", input.sessionID, undefined)
 
+      if (input.manual) await halt(input.sessionID)
+
+      const target = item.target ?? "followup"
+      let targetSessionID = item.sessionID
+      let targetSessionInfo: Session | undefined
+
+      if (target === "sub-session") {
+        const forked = await sdk()
+          .client.session.fork({ sessionID: item.sessionID })
+          .then((result) => result.data)
+          .catch((err) => {
+            fail(err)
+            return undefined
+          })
+        if (!forked) {
+          setFollowup("failed", input.sessionID, input.id)
+          return
+        }
+        targetSessionID = forked.id
+        targetSessionInfo = forked
+      }
+
+      if (targetSessionInfo) {
+        serverSync().session.remember(targetSessionInfo)
+        sync().session.remember(targetSessionInfo)
+      }
+
       const ok = await sendFollowupDraft({
         client: sdk().client,
         sync: sync(),
         serverSync: serverSync(),
         draft: item,
-        optimisticBusy: item.sessionDirectory === sdk().directory,
+        targetSessionID,
+        optimisticBusy: targetSessionID === item.sessionID && item.sessionDirectory === sdk().directory,
       }).catch((err) => {
         setFollowup("failed", input.sessionID, input.id)
         fail(err)
@@ -1767,7 +1876,16 @@ export default function Page() {
       })
       if (!ok) return
 
+      if (target === "sub-session") {
+        const tab = appTabs.addSessionTab({
+          server: requireServerKey(params.serverKey),
+          sessionId: targetSessionID,
+        })
+        appTabs.select(tab)
+      }
+
       setFollowup("items", input.sessionID, (items) => (items ?? []).filter((entry) => entry.id !== input.id))
+
       if (input.manual) owner.run(resumeScroll)
     },
   }))
@@ -1782,10 +1900,24 @@ export default function Page() {
     return followupMutation.variables?.id
   })
 
+  const resolvedQueueTarget = createMemo(() => {
+    if (!settings.general.showQueueControls()) return "steer"
+    return queueTarget()
+  })
+
   const queueEnabled = createMemo(() => {
     const id = params.id
     if (!id) return false
-    return settings.general.followup() === "queue" && busy(id) && !composer.blocked() && !isChildSession()
+    if (!settings.general.showQueueControls()) return false
+    return busy(id) && !composer.blocked() && !isChildSession()
+  })
+
+  const shouldQueue = createMemo(() => {
+    const id = params.id
+    if (!id) return false
+    if (!settings.general.showQueueControls()) return false
+    const target = resolvedQueueTarget()
+    return target !== "steer" && target !== "current-stream" && busy(id) && !composer.blocked() && !isChildSession()
   })
 
   const followupText = (item: FollowupDraft) => {
@@ -1814,7 +1946,25 @@ export default function Page() {
     setFollowup("paused", draft.sessionID, undefined)
   }
 
-  const followupDock = createMemo(() => queuedFollowups().map((item) => ({ id: item.id, text: followupText(item) })))
+  const interruptFollowup = async (draft: FollowupDraft, messageID: string) => {
+    await halt(draft.sessionID)
+    await sendFollowupDraft({
+      client: sdk().client,
+      sync: sync(),
+      serverSync: serverSync(),
+      draft,
+      messageID,
+      optimisticBusy: draft.sessionDirectory === sdk().directory,
+    })
+  }
+
+  const followupDock = createMemo(() =>
+    queuedFollowups().map((item) => ({
+      id: item.id,
+      text: followupText(item),
+      target: item.target ?? "followup",
+    })),
+  )
 
   const sendFollowup = (sessionID: string, id: string, opts?: { manual?: boolean }) => {
     if (sync().session.get(sessionID)?.parentID) return Promise.resolve()
@@ -1839,6 +1989,33 @@ export default function Page() {
       id: item.id,
       prompt: item.prompt,
       context: item.context,
+      target: item.target ?? "followup",
+    })
+  }
+
+  const changeFollowupTarget = (id: string, target: FollowupTarget) => {
+    const sessionID = params.id
+    if (!sessionID) return
+    if (followupBusy(sessionID)) return
+
+    setFollowup("items", sessionID, (items) =>
+      (items ?? []).map((item) => (item.id === id ? { ...item, target } : item)),
+    )
+
+    if (target === "steer" || target === "current-stream") {
+      void sendFollowup(sessionID, id, { manual: target === "steer" })
+    }
+  }
+
+  const reorderFollowup = (sessionID: string, fromIndex: number, toIndex: number) => {
+    if (followupBusy(sessionID)) return
+
+    setFollowup("items", sessionID, (items) => {
+      if (!items) return items
+      const next = [...items]
+      const [moved] = next.splice(fromIndex, 1)
+      next.splice(toIndex, 0, moved)
+      return next
     })
   }
 
@@ -1847,13 +2024,6 @@ export default function Page() {
     if (!id) return
     setFollowup("edit", id, undefined)
   }
-
-  const halt = (sessionID: string) =>
-    busy(sessionID)
-      ? sdk()
-          .client.session.abort({ sessionID })
-          .catch(() => {})
-      : Promise.resolve()
 
   const revertMutation = useMutation(() => ({
     mutationFn: async (input: { sessionID: string; messageID: string }) => {
@@ -1959,6 +2129,7 @@ export default function Page() {
   createEffect(() => {
     const sessionID = params.id
     if (!sessionID) return
+    if (!settings.general.showQueueControls()) return
 
     const item = queuedFollowups()[0]
     if (!item) return
@@ -2058,12 +2229,14 @@ export default function Page() {
         onToggle: () => view().todoCollapsed.set(!view().todoCollapsed.get()),
       },
       followup: () =>
-        params.id && !isChildSession()
+        params.id && !isChildSession() && settings.general.showQueueControls()
           ? {
               items: followupDock(),
               sending: sendingFollowup(),
               onSend: (id) => void sendFollowup(params.id!, id, { manual: true }),
               onEdit: editFollowup,
+              onChangeTarget: changeFollowupTarget,
+              onReorder: (fromIndex: number, toIndex: number) => reorderFollowup(params.id!, fromIndex, toIndex),
             }
           : undefined,
       revert: () =>
@@ -2109,13 +2282,21 @@ export default function Page() {
             }}
             edit={editingFollowup()}
             onEditLoaded={clearFollowupEdit}
-            shouldQueue={queueEnabled}
+            shouldQueue={shouldQueue}
+            queueTarget={resolvedQueueTarget}
+            setQueueTarget={persistQueueTarget}
             onQueue={queueFollowup}
+            onInterrupt={interruptFollowup}
             onAbort={() => {
               const id = params.id
               if (!id) return
               setFollowup("paused", id, true)
             }}
+            toolbar={
+              params.id && !isChildSession() && queueEnabled() ? (
+                <QueueTargetControl target={queueTarget()} onChange={persistQueueTarget} />
+              ) : undefined
+            }
           />
         }
       />
