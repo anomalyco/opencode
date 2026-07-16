@@ -360,13 +360,19 @@ import { model } from "@opencode-ai/ai/providers/openai/responses"
 model("gpt-4o", { apiKey, transport: "websocket" })
 ```
 
-Vertex keeps Gemini and Messages as separate package-like entrypoints,
+Vertex keeps Gemini, Chat, and Messages as separate package-like entrypoints,
 while sharing project/location resolution and ADC authentication internally:
 
 ```ts
 import { model } from "@opencode-ai/ai/providers/google-vertex/gemini"
 
 model("gemini-3.5-flash", { project, location: "global" })
+```
+
+```ts
+import { model } from "@opencode-ai/ai/providers/google-vertex/chat"
+
+model("deepseek-ai/deepseek-v3.2-maas", { project, location: "global" })
 ```
 
 ```ts

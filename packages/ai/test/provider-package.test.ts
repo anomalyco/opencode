@@ -18,6 +18,7 @@ describe("provider package entrypoints", () => {
       import("@opencode-ai/ai/providers/google"),
       import("@opencode-ai/ai/providers/google-vertex"),
       import("@opencode-ai/ai/providers/google-vertex/gemini"),
+      import("@opencode-ai/ai/providers/google-vertex/chat"),
       import("@opencode-ai/ai/providers/google-vertex/messages"),
     ])
 
@@ -182,6 +183,7 @@ describe("provider package entrypoints", () => {
   test("selects Vertex entrypoints with the same model contract", async () => {
     const GoogleVertex = await import("@opencode-ai/ai/providers/google-vertex")
     const GoogleVertexGemini = await import("@opencode-ai/ai/providers/google-vertex/gemini")
+    const GoogleVertexChat = await import("@opencode-ai/ai/providers/google-vertex/chat")
     const GoogleVertexMessages = await import("@opencode-ai/ai/providers/google-vertex/messages")
     const gemini = GoogleVertex.model("gemini-3.5-flash", {
       apiKey: "fixture",
@@ -190,6 +192,11 @@ describe("provider package entrypoints", () => {
       limits: { context: 1_000_000, output: 65_536 },
     })
     const messages = GoogleVertexMessages.model("claude-sonnet-4-6", {
+      accessToken: "fixture",
+      location: "global",
+      project: "vertex-project",
+    })
+    const chat = GoogleVertexChat.model("deepseek-ai/deepseek-v3.2-maas", {
       accessToken: "fixture",
       location: "global",
       project: "vertex-project",
@@ -214,10 +221,17 @@ describe("provider package entrypoints", () => {
     expect(messages.route.endpoint.baseURL).toBe(
       "https://aiplatform.googleapis.com/v1/projects/vertex-project/locations/global/publishers/anthropic/models",
     )
+    expect(chat.route.id).toBe("google-vertex-chat")
+    expect(chat.route.protocol).toBe("openai-chat")
+    expect(chat.route.endpoint).toMatchObject({
+      baseURL: "https://aiplatform.googleapis.com/v1/projects/vertex-project/locations/global/endpoints/openapi",
+      path: "/chat/completions",
+    })
   })
 
   test("rejects conflicting Vertex auth settings at runtime", async () => {
     const GoogleVertex = await import("@opencode-ai/ai/providers/google-vertex")
+    const GoogleVertexChat = await import("@opencode-ai/ai/providers/google-vertex/chat")
     const GoogleVertexMessages = await import("@opencode-ai/ai/providers/google-vertex/messages")
     const Providers = await import("@opencode-ai/ai/providers")
     expect(() =>
@@ -241,5 +255,16 @@ describe("provider package entrypoints", () => {
         { apiKey: "fixture", project: "vertex-project" },
       ]),
     ).toThrow("Google Vertex Messages does not support API keys")
+    expect(() =>
+      Reflect.apply(GoogleVertexChat.model, undefined, [
+        "deepseek-ai/deepseek-v3.2-maas",
+        { apiKey: "fixture", project: "vertex-project" },
+      ]),
+    ).toThrow("Google Vertex Chat does not support API keys")
+    expect(() =>
+      Reflect.apply(Providers.GoogleVertexChat.configure, undefined, [
+        { apiKey: "fixture", project: "vertex-project" },
+      ]),
+    ).toThrow("Google Vertex Chat does not support API keys")
   })
 })

@@ -11,6 +11,7 @@ import * as Cloudflare from "../src/providers/cloudflare"
 import * as GitHubCopilot from "../src/providers/github-copilot"
 import * as Google from "../src/providers/google"
 import * as GoogleVertex from "../src/providers/google-vertex"
+import * as GoogleVertexChat from "../src/providers/google-vertex-chat"
 import * as GoogleVertexMessages from "../src/providers/google-vertex-messages"
 import * as OpenAI from "../src/providers/openai"
 import * as OpenAICompatible from "../src/providers/openai-compatible"
@@ -170,6 +171,24 @@ GoogleVertex.configure({ apiKey: "vertex-key" }).model("gemini-3.5-flash", {})
 GoogleVertex.configure({ accessToken: "vertex-token", apiKey: "vertex-key", project: "project" })
 // @ts-expect-error Vertex Gemini package settings accept only one auth source.
 GoogleVertex.model("gemini-3.5-flash", { accessToken: "vertex-token", apiKey: "vertex-key", project: "project" })
+
+GoogleVertexChat.configure({ accessToken: "vertex-token", project: "project" }).model("deepseek-ai/deepseek-v3.2-maas")
+GoogleVertexChat.configure({ auth: RuntimeAuth.bearer("vertex-token"), project: "project" }).model(
+  "deepseek-ai/deepseek-v3.2-maas",
+)
+// @ts-expect-error Vertex Chat package settings do not accept API keys.
+GoogleVertexChat.model("deepseek-ai/deepseek-v3.2-maas", { apiKey: "vertex-key", project: "project" })
+GoogleVertexChat.configure({ accessToken: "vertex-token", project: "project" }).model(
+  "deepseek-ai/deepseek-v3.2-maas",
+  // @ts-expect-error Vertex Chat model selectors only accept model ids.
+  {},
+)
+GoogleVertexChat.configure({
+  accessToken: "vertex-token",
+  // @ts-expect-error Vertex Chat config accepts only one auth source.
+  auth: RuntimeAuth.bearer("vertex-token"),
+  project: "project",
+})
 
 GoogleVertexMessages.configure({ accessToken: "vertex-token", project: "project" }).model("claude-sonnet-4-6")
 // @ts-expect-error Vertex Messages package settings do not accept API keys.

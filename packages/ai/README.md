@@ -128,11 +128,12 @@ OpenAI Chat and OpenAI Responses are separate semantic entrypoints:
 - `@opencode-ai/ai/providers/openai-compatible/responses`
 - `@opencode-ai/ai/providers/anthropic-compatible`
 - `@opencode-ai/ai/providers/google-vertex/gemini`
+- `@opencode-ai/ai/providers/google-vertex/chat`
 - `@opencode-ai/ai/providers/google-vertex/messages`
 
 Responses HTTP versus WebSocket is a scoped `transport` setting on the OpenAI Responses entrypoint, not another entrypoint. Azure follows the same Chat/Responses split at `providers/azure/chat` and `providers/azure/responses`. Generic OpenAI-compatible Chat remains at `providers/openai-compatible`; compatible Responses is separate at `providers/openai-compatible/responses`. Generic Anthropic Messages-compatible providers use `providers/anthropic-compatible`, which the named Anthropic provider composes. Google Gemini and Amazon Bedrock expose their single native API through their existing provider paths.
 
-Vertex Gemini and Vertex Messages are separate API entrypoints. Both accept `project`, `location`, and an optional `accessToken`; when no explicit token or auth override is supplied they lazily use Google Application Default Credentials. Vertex Gemini instead selects express mode when `apiKey` or `GOOGLE_VERTEX_API_KEY` is present. `providers/google-vertex` remains the default alias for `providers/google-vertex/gemini`.
+Vertex Gemini, Vertex Chat, and Vertex Messages are separate API entrypoints. All accept `project`, `location`, and an optional `accessToken`; when no explicit token or auth override is supplied they lazily use Google Application Default Credentials. Vertex Gemini instead selects express mode when `apiKey` or `GOOGLE_VERTEX_API_KEY` is present. Vertex Chat targets MaaS models through the OpenAI-compatible Chat Completions endpoint. `providers/google-vertex` remains the default alias for `providers/google-vertex/gemini`.
 
 Tuned Vertex Gemini deployments use model ids shaped like `endpoints/1234567890` and require OAuth or ADC; Vertex express-mode API keys support publisher models only.
 
@@ -140,6 +141,12 @@ Tuned Vertex Gemini deployments use model ids shaped like `endpoints/1234567890`
 import { model } from "@opencode-ai/ai/providers/google-vertex/gemini"
 
 model("gemini-3.5-flash", { project: "my-project", location: "global" })
+```
+
+```ts
+import { model } from "@opencode-ai/ai/providers/google-vertex/chat"
+
+model("deepseek-ai/deepseek-v3.2-maas", { project: "my-project", location: "global" })
 ```
 
 ```ts
