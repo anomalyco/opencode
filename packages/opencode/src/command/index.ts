@@ -7,6 +7,8 @@ import { Effect, Layer, Context, Schema } from "effect"
 import { Config } from "@/config/config"
 import { MCP } from "../mcp"
 import { Skill } from "../skill"
+import { Workflow } from "../workflow"
+import { buildWorkflowPrompt, toWorkflowDefinition } from "../workflow/runner"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
 import PROMPT_REVIEW from "./template/review.txt"
 import { LegacyEvent } from "@opencode-ai/schema/legacy-event"
@@ -31,7 +33,10 @@ export const Info = Schema.Struct({
   hints: Schema.Array(Schema.String),
 }).annotate({ identifier: "Command" })
 
-export type Info = Omit<Schema.Schema.Type<typeof Info>, "template"> & { template: Promise<string> | string }
+export type Info = Omit<Schema.Schema.Type<typeof Info>, "template"> & {
+  template: Promise<string> | string
+  resolveTemplate?: (args: string) => Promise<string> | string
+}
 
 export function hints(template: string) {
   const result: string[] = []
@@ -61,102 +66,137 @@ const layer = Layer.effect(
     const config = yield* Config.Service
     const mcp = yield* MCP.Service
     const skill = yield* Skill.Service
+    const workflowService = yield* Workflow.Service
 
-    const init = Effect.fn("Command.state")(function* (ctx: InstanceContext) {
-      const cfg = yield* config.get()
-      const bridge = yield* EffectBridge.make()
-      const commands: Record<string, Info> = {}
+    const state = yield* InstanceState.make<State>(
+      Effect.fn("Command.state")(function* (ctx: InstanceContext) {
+        const cfg = yield* config.get()
+        const bridge = yield* EffectBridge.make()
+        const commands: Record<string, Info> = {}
 
-      commands[Default.INIT] = {
-        name: Default.INIT,
-        description: "guided AGENTS.md setup",
-        source: "command",
-        get template() {
-          return PROMPT_INITIALIZE.replace("${path}", ctx.worktree)
-        },
-        hints: hints(PROMPT_INITIALIZE),
-      }
-      commands[Default.REVIEW] = {
-        name: Default.REVIEW,
-        description: "review changes [commit|branch|pr], defaults to uncommitted",
-        source: "command",
-        get template() {
-          return PROMPT_REVIEW.replace("${path}", ctx.worktree)
-        },
-        subtask: true,
-        hints: hints(PROMPT_REVIEW),
-      }
-
-      for (const [name, command] of Object.entries(cfg.command ?? {})) {
-        commands[name] = {
-          name,
-          agent: command.agent,
-          model: command.model,
-          description: command.description,
+        commands[Default.INIT] = {
+          name: Default.INIT,
+          description: "guided AGENTS.md setup",
           source: "command",
           get template() {
-            return command.template
+            return PROMPT_INITIALIZE.replace("${path}", ctx.worktree)
           },
-          subtask: command.subtask,
-          hints: hints(command.template),
+          hints: hints(PROMPT_INITIALIZE),
         }
-      }
-
-      for (const [name, prompt] of Object.entries(yield* mcp.prompts())) {
-        commands[name] = {
-          name,
-          source: "mcp",
-          description: prompt.description,
+        commands[Default.REVIEW] = {
+          name: Default.REVIEW,
+          description: "review changes [commit|branch|pr], defaults to uncommitted",
+          source: "command",
           get template() {
-            return bridge.promise(
-              mcp
-                .getPrompt(
-                  prompt.client,
-                  prompt.name,
-                  prompt.arguments
-                    ? Object.fromEntries(prompt.arguments.map((argument, i) => [argument.name, `$${i + 1}`]))
-                    : {},
-                )
-                .pipe(
-                  Effect.map(
-                    (template) =>
-                      template?.messages
-                        .map((message) => (message.content.type === "text" ? message.content.text : ""))
-                        .join("\n") || "",
+            return PROMPT_REVIEW.replace("${path}", ctx.worktree)
+          },
+          subtask: true,
+          hints: hints(PROMPT_REVIEW),
+        }
+
+        for (const [name, command] of Object.entries(cfg.command ?? {})) {
+          commands[name] = {
+            name,
+            agent: command.agent,
+            model: command.model,
+            description: command.description,
+            source: "command",
+            get template() {
+              return command.template
+            },
+            subtask: command.subtask,
+            hints: hints(command.template),
+          }
+        }
+
+        for (const [name, prompt] of Object.entries(yield* mcp.prompts())) {
+          commands[name] = {
+            name,
+            source: "mcp",
+            description: prompt.description,
+            get template() {
+              return bridge.promise(
+                mcp
+                  .getPrompt(
+                    prompt.client,
+                    prompt.name,
+                    prompt.arguments
+                      ? Object.fromEntries(prompt.arguments.map((argument, i) => [argument.name, `$${i + 1}`]))
+                      : {},
+                  )
+                  .pipe(
+                    Effect.map(
+                      (template) =>
+                        template?.messages
+                          .map((message) => (message.content.type === "text" ? message.content.text : ""))
+                          .join("\n") || "",
+                    ),
                   ),
-                ),
-            )
-          },
-          hints: prompt.arguments?.map((_, i) => `$${i + 1}`) ?? [],
+              )
+            },
+            hints: prompt.arguments?.map((_, i) => `$${i + 1}`) ?? [],
+          }
         }
-      }
 
-      for (const item of yield* skill.all()) {
-        if (commands[item.name]) continue
-        const dir = item.location === "<built-in>" ? undefined : path.dirname(item.location)
-        commands[item.name] = {
-          name: item.name,
-          description: item.description,
-          source: "skill",
-          get template() {
-            if (!dir) return item.content
-            return [
-              item.content,
-              "",
-              `Base directory for this skill: ${dir}`,
-              "Relative paths in this skill (e.g., scripts/, references/) are relative to this base directory.",
-            ].join("\n")
-          },
-          hints: [],
+        for (const item of yield* skill.all()) {
+          if (commands[item.name]) continue
+          const dir = item.location === "<built-in>" ? undefined : path.dirname(item.location)
+          commands[item.name] = {
+            name: item.name,
+            description: item.description,
+            source: "skill",
+            get template() {
+              if (!dir) return item.content
+              return [
+                item.content,
+                "",
+                `Base directory for this skill: ${dir}`,
+                "Relative paths in this skill (e.g., scripts/, references/) are relative to this base directory.",
+              ].join("\n")
+            },
+            hints: [],
+          }
         }
-      }
 
-      return {
-        commands,
-      }
-    })
+        commands["workflow"] = {
+          name: "workflow",
+          description: "run a workflow pipeline",
+          source: "command",
+          template: "No workflows found. Create workflow files in .opencode/workflows/ directory.",
+          hints: ["<name>"],
+        }
 
-    const state = yield* InstanceState.make<State>((ctx) => init(ctx))
+        const workflows = yield* workflowService.list()
+        for (const workflow of workflows) {
+          commands[`workflow/${workflow.name}`] = {
+            name: `workflow/${workflow.name}`,
+            description: workflow.description ?? `Run ${workflow.name} workflow`,
+            source: "command",
+            template: "",
+            resolveTemplate: async () => {
+              const definition = toWorkflowDefinition(workflow.name, {
+                name: workflow.name,
+                description: workflow.description,
+                agent: workflow.agent,
+                model: workflow.model,
+                steps: workflow.steps.map((s) => ({
+                  ...s,
+                  depends_on: s.depends_on
+                    ? [...(Array.isArray(s.depends_on) ? s.depends_on : [s.depends_on])]
+                    : undefined,
+                  outputs: s.outputs?.map((o) => ({ ...o })),
+                })),
+              })
+              const { prompt } = buildWorkflowPrompt(definition, "")
+              return prompt
+            },
+            hints: [],
+          }
+        }
+
+        return { commands }
+      }),
+    )
 
     const get = Effect.fn("Command.get")(function* (name: string) {
       const s = yield* InstanceState.get(state)
@@ -172,6 +212,6 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = LayerNode.make({ service: Service, layer: layer, deps: [Config.node, MCP.node, Skill.node] })
+export const node = LayerNode.make({ service: Service, layer: layer, deps: [Config.node, MCP.node, Skill.node, Workflow.node] })
 
 export * as Command from "."

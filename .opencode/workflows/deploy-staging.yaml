@@ -1,0 +1,39 @@
+name: deploy-staging
+description: Deploy application to staging environment with validation
+
+agent: build
+model: opencode/mimo-v2.5-free
+
+steps:
+  - id: lint
+    name: Lint code
+    prompt: |
+      Run ESLint on the codebase and fix any auto-fixable issues.
+      Report the number of errors and warnings found.
+
+  - id: test
+    name: Run tests
+    prompt: |
+      Run the test suite. Report pass/fail counts and any failures.
+    depends_on: lint
+
+  - id: build
+    name: Build project
+    prompt: |
+      Build the project for production. Report any build errors.
+    depends_on: test
+
+  - id: validate-build
+    name: Validate build output
+    prompt: |
+      Verify the build output exists and is valid.
+      Check for required files and correct structure.
+    depends_on: build
+    when: ${{steps.build.output contains "success"}}
+
+  - id: deploy
+    name: Deploy to staging
+    prompt: |
+      Deploy the built artifacts to the staging environment.
+      Report deployment status and URLs.
+    depends_on: validate-build

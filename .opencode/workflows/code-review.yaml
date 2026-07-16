@@ -1,0 +1,41 @@
+name: code-review
+description: Review code changes for quality, security, and best practices
+
+agent: build
+model: opencode/mimo-v2.5-free
+
+steps:
+  - id: analyze
+    name: Analyze changes
+    prompt: |
+      Analyze the current code changes (git diff). Identify:
+      - Files changed
+      - Lines added/removed
+      - Key modifications
+
+  - id: quality
+    name: Quality review
+    prompt: |
+      Review the code changes for quality issues:
+      - Code style consistency
+      - Error handling
+      - Performance concerns
+      - Readability and maintainability
+
+  - id: security
+    name: Security review
+    prompt: |
+      Review the code changes for security issues:
+      - Input validation
+      - Authentication/authorization
+      - Data exposure risks
+      - Vulnerability patterns
+
+  - id: summary
+    name: Summary report
+    prompt: |
+      Create a summary report of the code review with:
+      - Overall assessment
+      - Key findings
+      - Recommendations
+      - Priority items to address
