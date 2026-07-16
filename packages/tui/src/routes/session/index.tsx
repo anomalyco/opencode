@@ -1340,7 +1340,7 @@ function SessionNoticeMessageV2(props: { message: SessionMessageInfo }) {
     if (state() === "error") return "failed"
     return state() ?? "finished"
   }
-  const heading = () => `${state() === "completed" ? "✓" : "!"} ${actor()} ${status()}`
+  const heading = () => `${state() === "completed" ? "↳" : "!"} ${actor()} ${status()}`
   const suffix = () =>
     Locale.truncateWidth(` · ${description()}`, Math.max(0, ctx.width - 3 - Bun.stringWidth(heading())))
   const color = () => {
