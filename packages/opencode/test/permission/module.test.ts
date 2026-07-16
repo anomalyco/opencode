@@ -714,13 +714,13 @@ describe("classifier contract", () => {
       runClassifier({
         permission: "bash",
         patterns: ["ls"],
-        opts: { fallback: "ask", allowlist: ["bash"], timeout_ms: 1000 },
+        opts: { fallback: "ask", allowlist: ["bash"], timeout_ms: 1000, retries: 1 },
         classify: Effect.fail(new Error("invalid JSON")),
         modelRef: "opencode/deepseek-v4-flash",
       }),
     )
     expect(outcome.decision).toBe("ask")
-    expect(outcome.reason).toContain("Classifier unavailable")
+    expect(outcome.reason).toBe("Classifier unavailable after 1 attempts; needs approval")
   })
 
   test("timeout uses fallback and never allows", async () => {
@@ -728,12 +728,13 @@ describe("classifier contract", () => {
       runClassifier({
         permission: "bash",
         patterns: ["ls"],
-        opts: { fallback: "deny", allowlist: ["bash"], timeout_ms: 20 },
+        opts: { fallback: "deny", allowlist: ["bash"], timeout_ms: 20, retries: 1 },
         classify: Effect.sleep("1 second").pipe(Effect.as({ decision: "allow" as const, reason: "late" })),
         modelRef: "opencode/deepseek-v4-flash",
       }),
     )
     expect(outcome.decision).toBe("deny")
+    expect(outcome.reason).toBe("Classifier unavailable after 1 attempts; denied")
   })
 
   test("timeout defaults to ask when fallback unset", async () => {
@@ -741,11 +742,96 @@ describe("classifier contract", () => {
       runClassifier({
         permission: "bash",
         patterns: ["ls"],
-        opts: { allowlist: ["bash"], timeout_ms: 20 },
+        opts: { allowlist: ["bash"], timeout_ms: 20, retries: 1 },
         classify: Effect.sleep("1 second").pipe(Effect.as({ decision: "allow" as const, reason: "late" })),
         modelRef: "opencode/deepseek-v4-flash",
       }),
     )
     expect(outcome.decision).toBe("ask")
+    expect(outcome.reason).toBe("Classifier unavailable after 1 attempts; needs approval")
+  })
+
+  test("retries defaults to 3 total attempts then reports count in fallback", async () => {
+    let calls = 0
+    const outcome = await Effect.runPromise(
+      runClassifier({
+        permission: "bash",
+        patterns: ["ls"],
+        opts: { fallback: "ask", allowlist: ["bash"], timeout_ms: 1000 },
+        classify: Effect.suspend(() => {
+          calls += 1
+          return Effect.fail(new Error(`fail ${calls}`))
+        }),
+        modelRef: "opencode/deepseek-v4-flash",
+      }),
+    )
+    expect(calls).toBe(3)
+    expect(outcome).toEqual({
+      decision: "ask",
+      reason: "Classifier unavailable after 3 attempts; needs approval",
+    })
+  })
+
+  test("retries succeeds on a later attempt", async () => {
+    let calls = 0
+    const outcome = await Effect.runPromise(
+      runClassifier({
+        permission: "bash",
+        patterns: ["ls"],
+        opts: { fallback: "ask", allowlist: ["bash"], timeout_ms: 1000, retries: 3 },
+        classify: Effect.suspend(() => {
+          calls += 1
+          if (calls < 2) return Effect.fail(new Error("transient"))
+          return Effect.succeed({ decision: "allow" as const, reason: "ok after retry" })
+        }),
+        modelRef: "opencode/deepseek-v4-flash",
+      }),
+    )
+    expect(calls).toBe(2)
+    expect(outcome).toEqual({
+      decision: "allow",
+      reason: "ok after retry",
+    })
+  })
+
+  test("retries: 0 skips classify and falls back immediately", async () => {
+    let calls = 0
+    const outcome = await Effect.runPromise(
+      runClassifier({
+        permission: "bash",
+        patterns: ["ls"],
+        opts: { fallback: "deny", allowlist: ["bash"], retries: 0 },
+        classify: Effect.sync(() => {
+          calls += 1
+          return { decision: "allow" as const, reason: "should not run" }
+        }),
+        modelRef: "opencode/deepseek-v4-flash",
+      }),
+    )
+    expect(calls).toBe(0)
+    expect(outcome).toEqual({
+      decision: "deny",
+      reason: "Classifier unavailable after 0 attempts; denied",
+    })
+  })
+
+  test("timeout budget is per attempt", async () => {
+    let calls = 0
+    const outcome = await Effect.runPromise(
+      runClassifier({
+        permission: "bash",
+        patterns: ["ls"],
+        opts: { fallback: "ask", allowlist: ["bash"], timeout_ms: 40, retries: 2 },
+        classify: Effect.gen(function* () {
+          calls += 1
+          yield* Effect.sleep("80 millis")
+          return { decision: "allow" as const, reason: "late" }
+        }),
+        modelRef: "opencode/deepseek-v4-flash",
+      }),
+    )
+    expect(calls).toBe(2)
+    expect(outcome.decision).toBe("ask")
+    expect(outcome.reason).toBe("Classifier unavailable after 2 attempts; needs approval")
   })
 })

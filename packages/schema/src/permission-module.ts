@@ -1,7 +1,7 @@
 export * as PermissionModule from "./permission-module"
 
 import { Schema } from "effect"
-import { optional } from "./schema"
+import { NonNegativeInt, optional } from "./schema"
 
 /** Built-in permission module id for the LLM permission classifier. */
 export const CRUISE_CONTROL = "cruise_control" as const
@@ -46,8 +46,13 @@ export const Options = Schema.Struct({
   fallback: Fallback.pipe(optional).annotate({
     description: "Outcome when classification fails or times out (default: ask)",
   }),
+  /** Max classify attempts including the first (default 3 when unset). Each attempt gets its own timeout_ms. */
+  retries: NonNegativeInt.pipe(optional).annotate({
+    description:
+      "Max classifier attempts including the first (default: 3). Each attempt gets its own timeout_ms budget. Not applied when the model is unset.",
+  }),
   timeout_ms: Schema.Number.pipe(optional).annotate({
-    description: "Classifier deadline in milliseconds (default: 8000)",
+    description: "Per-attempt classifier deadline in milliseconds (default: 8000)",
   }),
   allowlist: Schema.Array(Schema.String).pipe(optional).annotate({
     description:

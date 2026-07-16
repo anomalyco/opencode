@@ -3,7 +3,7 @@ import { Global } from "@opencode-ai/core/global"
 import { PermissionModule as CorePermissionModule } from "@opencode-ai/core/permission/module"
 import { PermissionModule as PermissionModuleSchema } from "@opencode-ai/schema/permission-module"
 import { generateObject, jsonSchema, NoObjectGeneratedError, type ModelMessage } from "ai"
-import { Effect, Schema } from "effect"
+import { Effect, Schedule, Schema } from "effect"
 import path from "path"
 import { Config } from "@/config/config"
 import { Provider, parseModel } from "@/provider/provider"
@@ -27,6 +27,8 @@ const CLASSIFIER_JSON_SCHEMA = ToolJsonSchema.fromSchema(ClassifierResult)
 const CLASSIFIER_DECISIONS = new Set<ClassifierDecision>(["allow", "deny"])
 
 const DEFAULT_TIMEOUT_MS = 8000
+/** Max classify attempts including the first when `retries` is unset. */
+const DEFAULT_RETRIES = 3
 const DEFAULT_NEVER_AUTO = ["external_directory", "doom_loop"] as const
 /** Used when `allowlist` is omitted from config. Explicit `allowlist: []` still blocks auto-allow. */
 export const DEFAULT_ALLOWLIST = [
@@ -369,8 +371,15 @@ export function applySafety(
   return "allow"
 }
 
+function unavailableReason(fallback: PermissionModuleSchema.Fallback, attempts: number): string {
+  const suffix = fallback === "ask" ? "needs approval" : "denied"
+  return `Classifier unavailable after ${attempts} attempts; ${suffix}`
+}
+
 /**
- * Run a classifier attempt with timeout + fallback + safety rails.
+ * Run the classifier with per-attempt timeout, retries, fallback, and safety rails.
+ * `opts.retries` is max attempts including the first (default 3). Missing-model is handled
+ * before this path and is not retried.
  * Used by cruise_control and exposed for contract tests.
  */
 export const runClassifier = Effect.fn("CruiseControl.runClassifier")(function* (input: {
@@ -403,9 +412,10 @@ export const runClassifier = Effect.fn("CruiseControl.runClassifier")(function* 
   // Prefer ask over silent deny on timeout / provider errors (interactive-friendly default).
   const fallback = input.opts?.fallback ?? "ask"
   const timeoutMs = input.opts?.timeout_ms ?? DEFAULT_TIMEOUT_MS
+  const maxAttempts = input.opts?.retries ?? DEFAULT_RETRIES
   const started = Date.now()
 
-  const outcome = yield* input.classify.pipe(
+  const classifyOnce = input.classify.pipe(
     Effect.map((result) => {
       const decision = applySafety(result.decision, input.permission, input.opts, input.patterns)
       // Do not surface allow-sounding classifier copy when rails forced ask.
@@ -415,19 +425,38 @@ export const runClassifier = Effect.fn("CruiseControl.runClassifier")(function* 
           : shortenReason(result.reason)
       return { decision, reason }
     }),
+    // Timeout budget is per attempt; retries each get a fresh timeout_ms window.
     Effect.timeout(timeoutMs),
+  )
+
+  const outcome = yield* (
+    maxAttempts <= 0
+      ? Effect.fail("no classifier attempts configured" as const)
+      : classifyOnce.pipe(
+          Effect.tapError((error) =>
+            Effect.logWarning("cruise_control classification attempt failed", {
+              permission: input.permission,
+              model: input.modelRef,
+              error: String(error),
+            }),
+          ),
+          Effect.retry(Schedule.recurs(Math.max(0, maxAttempts - 1))),
+        )
+  ).pipe(
     Effect.catch((error) =>
       Effect.gen(function* () {
+        const attempts = Math.max(0, maxAttempts)
         yield* Effect.logWarning("cruise_control classification failed", {
           permission: input.permission,
           model: input.modelRef,
+          attempts,
           latency_ms: Date.now() - started,
           error: String(error),
         })
         // Never allow on failure; prefer ask so the human can proceed or configure.
         return {
           decision: fallback,
-          reason: fallback === "ask" ? "Classifier unavailable; needs approval" : "Classifier unavailable; denied",
+          reason: unavailableReason(fallback, attempts),
         }
       }),
     ),
