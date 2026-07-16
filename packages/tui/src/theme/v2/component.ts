@@ -7,6 +7,7 @@ import type {
   ResolvedActionState,
   ResolvedFormfieldState,
   ResolvedThemeView,
+  HueStep,
 } from "./index"
 
 export function createComponentTheme(current: Accessor<ResolvedThemeView>) {
@@ -14,6 +15,18 @@ export function createComponentTheme(current: Accessor<ResolvedThemeView>) {
   const backgroundAction = actions((variant, state) => current().background.action[variant][state])
   const textFormfield = formfield((state) => current().text.formfield[state])
   const backgroundFormfield = formfield((state) => current().background.formfield[state])
+  const hue = {
+    gray: (step: HueStep) => current().hue.gray[step],
+    red: (step: HueStep) => current().hue.red[step],
+    orange: (step: HueStep) => current().hue.orange[step],
+    yellow: (step: HueStep) => current().hue.yellow[step],
+    green: (step: HueStep) => current().hue.green[step],
+    cyan: (step: HueStep) => current().hue.cyan[step],
+    blue: (step: HueStep) => current().hue.blue[step],
+    purple: (step: HueStep) => current().hue.purple[step],
+    accent: (step: HueStep) => current().hue.accent[step],
+    neutral: (step: HueStep) => current().hue.neutral[step],
+  }
   const text = Object.assign(() => current().text.default, {
     subdued: () => current().text.subdued,
     action: textAction,
@@ -62,7 +75,7 @@ export function createComponentTheme(current: Accessor<ResolvedThemeView>) {
   }
 
   return {
-    hue: () => current().hue,
+    hue,
     text,
     background,
     border: () => current().border.default,

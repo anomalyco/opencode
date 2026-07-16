@@ -1601,7 +1601,7 @@ function UserMessage(props: { message: SessionMessageUser }) {
                     <text fg={themeV2.text()}>
                       <span
                         style={{
-                          bg: themeV2.hue().accent[500],
+                          bg: themeV2.hue.accent(500),
                           fg: themeV2.background(),
                           bold: true,
                         }}

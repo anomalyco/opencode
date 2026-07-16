@@ -754,7 +754,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
     <box
       backgroundColor={themeV2.background()}
       border={["left"]}
-      borderColor={themeV2.hue().accent[300]}
+      borderColor={themeV2.hue.accent(500)}
       customBorderChars={SplitBorder.customBorderChars}
     >
       <box gap={1} paddingLeft={1} paddingRight={3} paddingTop={1} paddingBottom={1}>

@@ -84,7 +84,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         current: undefined as string | undefined,
       })
       const colors = createMemo(() => [
-        themeV2.hue().accent[500],
+        themeV2.hue.accent(500),
         theme.accent,
         theme.success,
         theme.warning,

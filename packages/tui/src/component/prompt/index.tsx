@@ -1576,7 +1576,7 @@ export function Prompt(props: PromptProps) {
             <Match when={move.progress()}>
               {(progress) => (
                 <box paddingLeft={3}>
-                  <Spinner color={themeV2.hue().accent[300]}>
+                  <Spinner color={themeV2.hue.accent(500)}>
                     {progress()}
                     <span style={{ fg: themeV2.text.subdued() }}>{".".repeat(move.creatingDots())}</span>
                   </Spinner>
@@ -1585,7 +1585,7 @@ export function Prompt(props: PromptProps) {
             </Match>
             <Match when={move.pendingNew()}>
               <box paddingLeft={3}>
-                <text fg={themeV2.hue().accent[300]}>(new working copy)</text>
+                <text fg={themeV2.hue.accent(500)}>(new working copy)</text>
               </box>
             </Match>
             <Match when={true}>
@@ -1607,7 +1607,7 @@ export function Prompt(props: PromptProps) {
                 <text
                   fg={
                     editorContextLabelState() === "pending"
-                      ? themeV2.hue().accent[500]
+                      ? themeV2.hue.accent(500)
                       : themeV2.text.subdued()
                   }
                 >
