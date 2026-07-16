@@ -251,7 +251,7 @@ export function registerIpcHandlers(deps: Deps) {
     setPinchZoomEnabled(enabled)
   })
   
-  // 便携模式 IPC 处理 (修复了遗漏的 return)
+  // Portable mode IPC handling (fixed missing return)
   ipcMain.handle("get-portable-mode-enabled", () => deps.getPortableModeEnabled())
   ipcMain.handle("set-portable-mode-enabled", (_event: IpcMainInvokeEvent, enabled: boolean) => {
     return deps.setPortableModeEnabled(enabled)
