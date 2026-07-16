@@ -89,10 +89,10 @@ test("resolves a session move keybind", () => {
 test("resolves message navigation defaults", () => {
   const config = resolve({}, { terminalSuspend: true })
 
-  expect(config.keybinds.get("session.message.previous")).toMatchObject([{ key: "alt+shift+up" }])
-  expect(config.keybinds.get("session.message.next")).toMatchObject([{ key: "alt+shift+down" }])
-  expect(config.keybinds.get("session.message.user.previous")).toMatchObject([{ key: "alt+up" }])
-  expect(config.keybinds.get("session.message.user.next")).toMatchObject([{ key: "alt+down" }])
+  expect(config.keybinds.get("session.message.previous")).toMatchObject([{ key: "alt+up" }])
+  expect(config.keybinds.get("session.message.next")).toMatchObject([{ key: "alt+down" }])
+  expect(config.keybinds.get("session.message.user.previous")).toMatchObject([{ key: "alt+shift+up" }])
+  expect(config.keybinds.get("session.message.user.next")).toMatchObject([{ key: "alt+shift+down" }])
   expect(config.keybinds.get("session.messages_last_user")).toMatchObject([{ key: "alt+end" }])
 })
 

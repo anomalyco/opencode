@@ -111,11 +111,11 @@ test("formats navigation keys as arrows", async () => {
   }
 })
 
-test("dispatches user message navigation while the composer is focused", async () => {
+test("dispatches message navigation while the composer is focused", async () => {
   for (const kittyKeyboard of [false, true]) {
     const counts = {
-      "session.message.user.previous": 0,
-      "session.message.user.next": 0,
+      "session.message.previous": 0,
+      "session.message.next": 0,
       "session.messages_last_user": 0,
     }
 
@@ -155,8 +155,8 @@ test("dispatches user message navigation while the composer is focused", async (
       app.mockInput.pressArrow("down", { meta: true })
       app.mockInput.pressKey("END", { meta: true })
       expect(counts).toEqual({
-        "session.message.user.previous": 1,
-        "session.message.user.next": 1,
+        "session.message.previous": 1,
+        "session.message.next": 1,
         "session.messages_last_user": 1,
       })
     } finally {
