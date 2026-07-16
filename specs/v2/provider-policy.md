@@ -1,10 +1,10 @@
-# Provider Policy Proposal
+# Provider Policy
 
-Status: **Proposed and unimplemented.** This document is design input, not current configuration or runtime behavior.
+Status: **Implemented.**
 
 ## Purpose
 
-This proposal would let policies control whether an operation on a named resource is allowed. Statements could be authored in configuration files while policy evaluation remained its own runtime concern.
+Policies control whether an operation on a named resource is allowed. Statements are authored in configuration files and applied by a terminal catalog plugin.
 
 The first policy consumer is provider availability:
 
@@ -60,7 +60,7 @@ interface PolicyInfo {
 }
 ```
 
-The proposed `Policy` module would own the shared `Policy.Info` interface, `Policy.Effect` type, and evaluator. Domains would define their supported typed statement schemas; for example, `Catalog.ProviderPolicy` would fix `action` to `"provider.use"`. The config schema could gather those domain-defined statement schemas into an `experimental.policies` union.
+`ConfigPolicy` owns the statement schema. The policy plugin interprets the supported `provider.use` action after all other catalog transforms have run.
 
 ## Matching
 
@@ -236,16 +236,16 @@ Provider policy applies regardless of how a provider becomes known or usable, in
 
 ## Applying Provider Policy
 
-Provider records and model overrides should be assembled before checking provider policy. Otherwise later provider loading could recreate a provider that was already filtered.
+Provider records and model overrides are assembled before checking provider policy. Otherwise later provider loading could recreate a provider that was already filtered.
 
-Intended flow:
+Flow:
 
 1. Build provider/model catalog entries.
 2. Apply configured provider and model overrides.
-3. Ask `Policy.Service` to evaluate `provider.use` for each provider ID.
-4. Prevent denied providers from being selectable or used.
+3. Run the terminal config policy transform.
+4. Remove providers denied by the final matching `provider.use` statement.
 
-Whether denied providers are removed entirely or retained as disabled records for diagnostics remains an implementation decision.
+Config reload refreshes the plugin's policy snapshot and rebuilds the catalog.
 
 ## Legacy Migration
 

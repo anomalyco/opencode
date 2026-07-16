@@ -60,11 +60,15 @@ const decodeMessageRow = (row: typeof SessionMessageTable.$inferSelect) =>
     ),
   )
 
-export const load = Effect.fn("SessionHistory.load")(function* (db: DatabaseService, sessionID: SessionSchema.ID) {
-  return yield* Effect.forEach(
-    yield* messageRows(db, sessionID, yield* latestCompaction(db, sessionID)),
-    decodeMessageRow,
+const messageEntries = Effect.fnUntraced(function* (db: DatabaseService, sessionID: SessionSchema.ID) {
+  const rows = yield* messageRows(db, sessionID, yield* latestCompaction(db, sessionID))
+  return yield* Effect.forEach(rows, (row) =>
+    decodeMessageRow(row).pipe(Effect.map((message) => ({ seq: row.seq, message }))),
   )
+})
+
+export const load = Effect.fn("SessionHistory.load")(function* (db: DatabaseService, sessionID: SessionSchema.ID) {
+  return (yield* messageEntries(db, sessionID)).map((entry) => entry.message)
 })
 
 export const entriesForRunner = Effect.fn("SessionHistory.entriesForRunner")(function* (
@@ -75,10 +79,7 @@ export const entriesForRunner = Effect.fn("SessionHistory.entriesForRunner")(fun
   return yield* db
     .transaction(() =>
       Effect.gen(function* () {
-        const rows = yield* messageRows(db, sessionID, yield* latestCompaction(db, sessionID))
-        const messages = yield* Effect.forEach(rows, (row) =>
-          decodeMessageRow(row).pipe(Effect.map((message) => ({ seq: row.seq, message }))),
-        )
+        const messages = yield* messageEntries(db, sessionID)
         const assembled = yield* InstructionState.assemble(db, sessionID, instructions)
         return {
           initial: assembled.initial,
@@ -87,6 +88,33 @@ export const entriesForRunner = Effect.fn("SessionHistory.entriesForRunner")(fun
       }),
     )
     .pipe(Effect.orDie)
+})
+
+export const preview = Effect.fn("SessionHistory.preview")(function* (
+  db: DatabaseService,
+  sessionID: SessionSchema.ID,
+  instructions: Instructions.Instructions,
+) {
+  const observed = yield* Instructions.read(instructions)
+  return yield* db
+    .transaction(() =>
+      Effect.gen(function* () {
+        const messages = yield* messageEntries(db, sessionID)
+        // An active assistant may contain an unresolved tool call, so only preview the settled prefix.
+        const unsettled = messages.findIndex(
+          (entry) => entry.message.type === "assistant" && entry.message.time.completed === undefined,
+        )
+        const settled = unsettled === -1 ? messages : messages.slice(0, unsettled)
+        const assembled = yield* InstructionState.preview(db, sessionID, instructions, observed)
+        const entries = [...settled, ...assembled.updates].toSorted((a, b) => a.seq - b.seq)
+        return {
+          initial: assembled.initial,
+          messages: entries.map((entry) => entry.message),
+          instructionUpdate: assembled.update,
+        }
+      }),
+    )
+    .pipe(Effect.catch((error) => (error instanceof Instructions.InitializationBlocked ? error : Effect.die(error))))
 })
 
 /** Returns the session's sole user message, or `undefined` once a second one exists. */

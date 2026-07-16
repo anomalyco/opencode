@@ -34,13 +34,19 @@ export interface Loaded {
   readonly messages: ReadonlyArray<SessionMessage.Info>
 }
 
+/**
+ * Resolves model-request state in two phases: `select` fixes the Session,
+ * agent, and instruction sources; `load` adds the model and active history for
+ * that selection. This module does not build or execute the model request.
+ */
 export interface Interface {
-  /** Resolves the Session, selected agent, and current instruction sources before durable Step preparation. */
+  /** Selects the Session, agent, and instruction sources used by subsequent work. */
   readonly select: (sessionID: SessionSchema.ID) => Effect.Effect<Selection, AgentNotFoundError>
-  /** Loads the selected model and active history after instruction sync and pending-input promotion. */
+  /** Resolves the model and active history for that selection. */
   readonly load: (selection: Selection) => Effect.Effect<Loaded, SessionRunnerModel.Error>
 }
 
+/** Location-scoped model-context loader for durable Session Steps. */
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SessionContext") {}
 
 const layer = Layer.effect(

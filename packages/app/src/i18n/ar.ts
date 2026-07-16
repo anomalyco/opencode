@@ -86,6 +86,7 @@ export const dict = {
   "command.session.unshare": "إلغاء مشاركة الجلسة",
   "command.session.unshare.description": "إيقاف مشاركة هذه الجلسة",
   "palette.search.placeholder": "البحث في الملفات والأوامر والجلسات",
+  "palette.search.placeholder.home": "البحث في الأوامر والجلسات",
   "palette.empty": "لا توجد نتائج",
   "palette.group.commands": "الأوامر",
   "palette.group.files": "الملفات",

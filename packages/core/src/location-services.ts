@@ -39,6 +39,7 @@ import { InstructionDiscovery } from "./instruction-discovery"
 import { InstructionBuiltIns } from "./instructions/builtins"
 import { InstructionEntry } from "./session/instruction-entry"
 import { SessionInstructions } from "./session/instructions"
+import { SessionGenerateNode } from "./session/generate-node"
 import { McpTool } from "./tool/mcp"
 import { ReadToolFileSystem } from "./tool/read-filesystem"
 import { ToolRegistry } from "./tool/registry"
@@ -81,6 +82,7 @@ const locationServiceNodes = [
   Form.node,
   QuestionV2.node,
   Generate.node,
+  SessionGenerateNode.node,
   ReadToolFileSystem.node,
   McpTool.node,
   SessionInstructions.node,

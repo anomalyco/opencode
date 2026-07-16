@@ -157,7 +157,6 @@ function resolveHue(definition: HueDefinition) {
     if (stack.includes(name)) throw new Error(`Circular hue reference: ${[...stack, name].join(" -> ")}`)
     const value = source[name]
     if (typeof value === "string") {
-      if ((BaseHue.literals as readonly string[]).includes(name)) throw new Error(`Base hue "${name}" must be a scale`)
       const match = /^\$hue\.([^.]+)$/.exec(value)
       if (!match?.[1]) throw new Error(`Hue alias "${value}" must reference a hue scale`)
       const result = resolve(match[1], [...stack, name])

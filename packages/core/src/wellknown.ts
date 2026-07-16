@@ -1,10 +1,12 @@
 export * as WellKnown from "./wellknown"
 
 import { Integration } from "@opencode-ai/schema/integration"
-import { Context, Effect, Layer, PubSub, Ref, Schema, Semaphore, Stream } from "effect"
+import { Context, Effect, Layer, Ref, Schema, Semaphore } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { isDeepStrictEqual } from "node:util"
 import { makeGlobalNode } from "./effect/app-node"
 import { httpClient } from "./effect/app-node-platform"
+import { EventV2 } from "./event"
 import { KV } from "./kv"
 
 export interface Auth extends Schema.Schema.Type<typeof Auth> {}
@@ -43,13 +45,17 @@ export interface Entry {
 export interface Interface {
   readonly entries: () => Effect.Effect<readonly Entry[], Error>
   readonly snapshot: () => readonly Entry[]
+  readonly refresh: () => Effect.Effect<boolean, Error>
   readonly add: (origin: string) => Effect.Effect<Entry, Error>
   readonly remove: (origin: string) => Effect.Effect<void>
-  readonly changes: Stream.Stream<void>
   readonly resolve: (entry: Entry, variables: Readonly<Record<string, string>>) => Effect.Effect<Config[], Error>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/WellKnown") {}
+
+export const Event = {
+  Updated: EventV2.ephemeral({ type: "wellknown.updated", schema: {} }),
+}
 
 export const inspect = Effect.fn("WellKnown.inspect")(function* (origin: string) {
   const url = `${origin.replace(/\/+$/, "")}/.well-known/opencode`
@@ -97,8 +103,8 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient
     const kv = yield* KV.Service
+    const events = yield* EventV2.Service
     const cache = yield* Ref.make(new Map<string, Entry>())
-    const changes = yield* PubSub.unbounded<void>()
     const lock = Semaphore.makeUnsafe(1)
 
     const load = Effect.fn("WellKnown.load")(function* () {
@@ -117,9 +123,32 @@ const layer = Layer.effect(
       return entries
     })
 
+    const refresh = Effect.fn("WellKnown.refresh")(function* () {
+      return yield* lock.withPermit(
+        Effect.gen(function* () {
+          const value = yield* kv.get(sourcesKey)
+          const origins = Schema.is(Sources)(value) ? value : []
+          if (!origins.length) return false
+          const entries = yield* Effect.forEach(origins, (origin) =>
+            inspect(origin).pipe(
+              Effect.provideService(HttpClient.HttpClient, http),
+              Effect.map((manifest) => ({ origin, integrationID: Integration.ID.make(origin), manifest })),
+            ),
+          )
+          const next = new Map(entries.map((entry) => [entry.origin, entry]))
+          const changed = !isDeepStrictEqual(Ref.getUnsafe(cache), next)
+          if (!changed) return false
+          yield* Ref.set(cache, next)
+          yield* events.publish(Event.Updated, {})
+          return true
+        }),
+      )
+    })
+
     return Service.of({
       entries: load,
       snapshot: () => Array.from(Ref.getUnsafe(cache).values()),
+      refresh,
       add: Effect.fn("WellKnown.add")(function* (value) {
         return yield* lock.withPermit(
           Effect.gen(function* () {
@@ -131,7 +160,7 @@ const layer = Layer.effect(
             const origins = Schema.is(Sources)(sources) ? sources : []
             yield* kv.set(sourcesKey, Array.from(new Set([...origins, origin])))
             yield* Ref.update(cache, (current) => new Map(current).set(origin, entry))
-            yield* PubSub.publish(changes, undefined)
+            yield* events.publish(Event.Updated, {})
             return entry
           }),
         )
@@ -151,11 +180,10 @@ const layer = Layer.effect(
               next.delete(origin)
               return next
             })
-            yield* PubSub.publish(changes, undefined)
+            yield* events.publish(Event.Updated, {})
           }),
         )
       }),
-      changes: Stream.fromPubSub(changes),
       resolve: Effect.fn("WellKnown.resolveEntry")(function* (entry, variables) {
         return yield* resolveEntry(entry, variables).pipe(Effect.provideService(HttpClient.HttpClient, http))
       }),
@@ -163,4 +191,4 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeGlobalNode({ service: Service, layer, deps: [httpClient, KV.node] })
+export const node = makeGlobalNode({ service: Service, layer, deps: [httpClient, KV.node, EventV2.node] })

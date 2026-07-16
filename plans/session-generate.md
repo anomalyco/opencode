@@ -1,19 +1,16 @@
 # Session-Aware One-Shot Generation Plan
 
-Status: **Proposed**
+Status: **In progress**
 
 ## Decision
 
 Add a Session operation that prepares one request from the Session's active model context, appends a transient prompt, executes exactly one Physical Attempt, returns the assistant text, and leaves the Session unchanged:
 
 ```ts
-const { text } = await client.session.generate({
-  sessionID,
-  text: "Summarize where we left off.",
-})
+const text = yield * session.generate({ sessionID, prompt: "Summarize where we left off." })
 ```
 
-The operation belongs to Session because its meaning depends on Session History, selected agent and model, instructions, tools, provider transforms, hooks, and prompt-cache identity. The existing stateless `Generate.text` module remains unaware of Session.
+The operation belongs to Session because its meaning depends on Session History, the selected agent and model, instructions, provider transforms, hooks, and prompt-cache identity. The existing stateless `Generate.text` module remains unaware of Session.
 
 This feature should deepen the Session request-preparation module rather than add a second approximation of the runner. The durable runner and `session.generate` must share preparation, then diverge before provider output acquires durable consequences.
 
@@ -38,14 +35,15 @@ The desired architecture makes request preparation independently callable while 
 session.prompt
     -> SessionAdmission
     -> SessionExecution
-    -> SessionContext.snapshot
-    -> SessionRequest.prepare
+    -> SessionContext.select/load
+    -> SessionModelRequest.prepare
     -> LLMClient.stream
     -> SessionSettlement
 
 session.generate
-    -> SessionContext.snapshot
-    -> SessionRequest.prepare
+    -> SessionContext.select
+    -> SessionHistory.preview
+    -> SessionGenerate request construction
     -> LLMClient.generate
     -> return text
 ```
@@ -54,7 +52,8 @@ The modules have distinct jobs:
 
 - `SessionAdmission` records and promotes durable input.
 - `SessionContext` resolves a read-only, internally consistent view of what the selected agent would see.
-- `SessionRequest` converts that view into the provider request used by a Physical Attempt.
+- `SessionModelRequest` converts durable Step context into a provider request paired with tool capability.
+- `SessionGenerate` owns the one tool-free transient request shape rather than threading generation through the durable modules.
 - `LLMClient` executes one provider request without deciding what becomes durable.
 - `SessionSettlement` gives streamed provider events their durable Session meaning, executes local tools, records usage, and decides continuation.
 - `SessionCompaction` replaces oversized active history and remains a durable Session operation.
@@ -63,22 +62,18 @@ Durability becomes a property of admission and settlement, not request preparati
 
 ## The Core Seam
 
-The first extraction should be one internal Location-scoped module with a small interface. Names are provisional; behavior is not.
+The Location-scoped request module keeps its durable Step interface:
 
 ```ts
-interface SessionRequest {
-  readonly prepare: (input: {
-    snapshot: SessionContext.Snapshot
-    operation: { type: "step"; current: number; maximum?: number } | { type: "generate"; prompt: Message.User }
-  }) => Effect<PreparedSessionRequest, SessionRequestError>
+interface SessionModelRequest {
+  readonly prepare: (input: { context: SessionContext.Loaded; step: number }) => Effect<PreparedSessionModelRequest>
 }
 ```
 
 ```ts
-type PreparedSessionRequest = {
+type PreparedSessionModelRequest = {
   request: LLM.Request
-  snapshot: SessionContext.Snapshot
-  executableTools?: MaterializedTools
+  resolveToolCall: (name: string) => ToolCallResolution
 }
 ```
 
@@ -95,14 +90,7 @@ type PreparedSessionRequest = {
 - provider transforms and Session context hooks;
 - Session-based prompt-cache identity.
 
-The operation determines tool capability and request shape:
-
-- `step` advertises tools and returns the execution capability used by durable settlement, except when the agent's Step limit disables tools.
-- `generate` advertises the same definitions but returns no execution capability.
-
-`session.generate` keeps normal tool choice so providers retain the normal request and cache shape. Several protocols omit tool definitions entirely when `toolChoice` is `none`, so that setting cannot satisfy cache-shape parity. A generated tool call is collected but never executed or continued.
-
-Avoid a broad bag of booleans or independently selectable tool modes. The operation discriminant derives valid tool materialization and request behavior. Admission, compaction, attempts, and settlement remain separate modules rather than modes hidden inside preparation.
+Durable `prepare` advertises permitted tools and returns the capability used by settlement, except when the agent's Step limit disables tools. `SessionGenerate` constructs its request with no tool definitions and tool choice `none`, independently of agent permissions. Avoid a generic `step | generate | compaction` operation union or independently selectable behavior flags; the two operations own their concrete request shapes.
 
 ## Read-Only Session Context
 
@@ -117,9 +105,11 @@ commit the canonical model's instruction state    durable
 
 Both a durable Step and `session.generate` resolve and assemble instructions. Only durable execution commits instruction-state changes. A transient request must not make the false durable claim that the canonical Session model saw an instruction update.
 
-The context snapshot should be loaded from one consistent database view and carry a revision, likely the latest aggregate or projected sequence used to assemble it. A concurrent durable Step may advance the Session after that point; the transient request continues against its immutable snapshot.
+The active history and committed instruction state are loaded from one consistent database view. A concurrent durable Step may advance the Session afterward; the already prepared request remains immutable. No reusable snapshot or revision protocol is needed for this operation.
 
 Pending inputs remain excluded. They are not Session History until promotion, and `session.generate` must not alter admission order or expose queued work early.
+
+If the Session currently has an unsettled assistant message, generation stops history at that boundary. In particular, it never appends the transient user prompt after an unresolved tool call.
 
 ## One Physical Attempt Without Settlement
 
@@ -127,7 +117,7 @@ Use the existing `LLMClient` interface directly. The durable runner consumes `ll
 
 `LLMClient.generate` collects exactly one provider stream. It does not retry as a new logical Step, execute tools, continue after tool calls, publish Session events, capture filesystem snapshots, or update Session usage.
 
-The initial public result exposes only `{ text }`. Keeping richer evidence internal avoids prematurely committing the public contract while allowing tests to verify tool-call and finish behavior.
+The internal result is the collected text string. Keeping richer evidence internal avoids prematurely committing a public transport contract.
 
 If a provider returns tool calls, collection records and ignores them. No tool hook or execution path runs. Assistant text, including an empty string, remains a successful result. Empty text is required for cache-warming calls.
 
@@ -147,32 +137,22 @@ The first contract should state:
 
 The operation does not acquire ownership of the durable Session Drain and does not fail merely because the Session is running. This keeps transient generation independent from durable scheduling.
 
-The prepared result carries the captured revision internally. A later recap integration can suppress stale output when the Session advances while generation runs. Returning the revision publicly can follow if more consumers need compare-and-display behavior.
+A later recap integration can suppress stale output by comparing the Session aggregate sequence captured by that caller. Core does not expose a generic revision protocol before a concrete consumer needs one.
 
 ## Hooks Follow The Stage They Affect
 
-The existing Session context hook should run because it participates in normal request preparation. Its event should eventually identify the operation:
-
-```ts
-type SessionRequestOperation = { type: "step"; step: number } | { type: "generate" } | { type: "compaction" }
-```
-
-Request preparation and observation hooks run for `session.generate`. Admission, projection, Session settlement, and tool-execution hooks do not run because those stages do not occur.
+The existing Session context hook runs because it participates in normal request preparation. Admission, projection, Session settlement, and tool-execution hooks do not run because those stages do not occur. Add operation metadata only when a concrete hook consumer needs it; do not introduce a speculative operation union.
 
 The no-mutation guarantee covers OpenCode's durable Session state. Arbitrary plugin hooks may still perform external side effects.
 
-## Public Contract
+## Internal Contract
 
 Start with the smallest useful interface:
 
 ```ts
 type SessionGenerateInput = {
   sessionID: SessionID
-  text: string
-}
-
-type SessionGenerateOutput = {
-  text: string
+  prompt: string
 }
 ```
 
@@ -180,9 +160,9 @@ The operation:
 
 1. Resolves the Session or returns the normal Session-not-found error.
 2. Captures its latest committed active model context.
-3. Uses the selected agent, model, instructions, provider configuration, tools, transforms, hooks, and Session cache key.
-4. Appends `text` only to the in-memory provider request.
-5. Executes exactly one Physical Attempt with normal tool definitions and no executable tool capability.
+3. Uses the selected agent, model, instructions, provider configuration, transforms, hooks, and Session cache key.
+4. Appends `prompt` only to the in-memory provider request.
+5. Executes exactly one Physical Attempt with tools disabled.
 6. Returns collected assistant text, including an empty string.
 7. Does not admit input, publish Session events, execute tools, initiate compaction, update usage, or mutate Session projections.
 
@@ -211,9 +191,9 @@ Move instruction source loading and read-only assembly behind one internal inter
 
 This commit should not add `session.generate`.
 
-### 3. Extract Session Request Preparation
+### 3. Extract Session Model Request Preparation
 
-Move model resolution, history selection, request construction, tool definitions, cache identity, and context hooks into the Location-scoped `SessionRequest` module. Make the durable runner its only caller first.
+Move model resolution, history selection, request construction, tool definitions, cache identity, and context hooks into the Location-scoped `SessionModelRequest` module. Make the durable runner its only caller first.
 
 Verify the recorded normal request before and after extraction. Keep compaction detection and pending promotion outside the new module if putting them inside would make preparation mutate state.
 
@@ -229,7 +209,7 @@ promote -> snapshot -> compact if required -> prepare -> attempt -> settle
 
 ### 5. Add The Core `Session.generate` Operation
 
-Use read-only snapshot and request preparation, append one transient user message, select advertise-only tools, collect one attempt, and return text. Add tests proving that messages, pending inputs, instruction state, Session events, snapshots, and usage remain unchanged.
+Use read-only context and request preparation, append one transient user message, disable tools, collect one attempt, and return text. Add tests proving that messages, pending inputs, instruction state, Session events, and usage remain unchanged.
 
 Test concurrent Session advancement with deterministic synchronization around request dispatch. The generated request should retain its captured context while the source Session advances independently.
 
@@ -248,11 +228,11 @@ The implementation is complete when tests establish these laws:
 1. **Request equivalence:** the durable runner's prepared request remains equivalent before and after extraction.
 2. **Transcript immutability:** `session.generate` leaves Session messages and pending inputs unchanged.
 3. **Instruction immutability:** transient generation does not advance instruction state or publish instruction events.
-4. **Single attempt:** one call produces exactly one `llm.stream` invocation and no continuation.
-5. **No tool execution:** advertised tool calls never reach tool settlement or tool hooks.
+4. **Single attempt:** one call produces exactly one `llm.generate` invocation and no continuation.
+5. **No tools:** transient requests advertise no tools and never reach tool settlement or tool hooks.
 6. **Cache identity:** normal Steps and transient generation use the same Session-derived prompt-cache key.
 7. **Hook parity:** Session request hooks see and may transform transient requests through the same preparation seam.
-8. **Empty success:** a provider response with no assistant text returns `{ text: "" }`.
+8. **Empty success:** a provider response with no assistant text returns `""`.
 9. **Snapshot isolation:** concurrent Session advancement does not change an already prepared transient request.
 10. **No accounting mutation:** transient usage does not alter durable Session cost or token totals.
 

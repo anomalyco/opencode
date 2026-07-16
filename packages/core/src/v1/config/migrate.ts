@@ -77,14 +77,36 @@ export function migrate(info: typeof ConfigV1.Info.Type) {
     commands: commands(info.command),
     instructions: info.instructions,
     references: info.references ?? info.reference,
-    experimental:
-      info.experimental?.subagent_depth === undefined
-        ? undefined
-        : { subagent_depth: info.experimental.subagent_depth },
+    experimental: experimental(info),
     plugins: info.plugin?.map((plugin) =>
       typeof plugin === "string" ? plugin : { package: plugin[0], options: plugin[1] },
     ),
     providers: providers(info.provider),
+  }
+}
+
+function experimental(info: typeof ConfigV1.Info.Type) {
+  const policies = [
+    ...(info.enabled_providers === undefined
+      ? []
+      : [
+          { action: "provider.use" as const, resource: "*", effect: "deny" as const },
+          ...info.enabled_providers.map((resource) => ({
+            action: "provider.use" as const,
+            resource,
+            effect: "allow" as const,
+          })),
+        ]),
+    ...(info.disabled_providers ?? []).map((resource) => ({
+      action: "provider.use" as const,
+      resource,
+      effect: "deny" as const,
+    })),
+  ]
+  if (info.experimental?.subagent_depth === undefined && !policies.length) return
+  return {
+    subagent_depth: info.experimental?.subagent_depth,
+    policies: policies.length ? policies : undefined,
   }
 }
 

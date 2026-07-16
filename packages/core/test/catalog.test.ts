@@ -1,6 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Money } from "@opencode-ai/schema/money"
 import { Effect, Fiber, Layer, Stream } from "effect"
+import { TestClock } from "effect/testing"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Integration } from "@opencode-ai/core/integration"
 import { Credential } from "@opencode-ai/core/credential"
@@ -261,7 +262,9 @@ describe("CatalogV2", () => {
       expect((yield* catalog.model.default())?.id).toBe(old)
 
       configured = false
-      yield* catalog.reload()
+      const reload = yield* catalog.reload().pipe(Effect.forkChild({ startImmediately: true }))
+      yield* TestClock.adjust("500 millis")
+      yield* Fiber.join(reload)
       expect((yield* catalog.model.default())?.id).toBe(newest)
     }),
   )

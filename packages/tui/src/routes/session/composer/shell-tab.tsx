@@ -1,6 +1,6 @@
 import { createMemo, For, Show, createEffect, onMount, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
-import { TextAttributes, RGBA, ScrollBoxRenderable } from "@opentui/core"
+import { TextAttributes, ScrollBoxRenderable } from "@opentui/core"
 import { useData } from "../../../context/data"
 import { useLocation } from "../../../context/location"
 import { useClient } from "../../../context/client"
@@ -13,7 +13,6 @@ export function ShellTab(props: { sessionID: string }) {
   const location = useLocation()
   const client = useClient()
   const { themeV2 } = useTheme()
-  const fg = themeV2.text.action.primary("focused")
   const composer = useComposerTab()
   const shortcuts = Keymap.useShortcuts()
 
@@ -96,11 +95,7 @@ export function ShellTab(props: { sessionID: string }) {
 
   return (
     <Show when={composer.active("shell")}>
-      <scrollbox
-        scrollbarOptions={{ visible: false }}
-        maxHeight={5}
-        ref={(r: ScrollBoxRenderable) => (scroll = r)}
-      >
+      <scrollbox scrollbarOptions={{ visible: false }} maxHeight={5} ref={(r: ScrollBoxRenderable) => (scroll = r)}>
         <Show when={entries().length > 0} fallback={<text fg={themeV2.text.subdued()}> No shell commands</text>}>
           <For each={entries()}>
             {(shell, index) => {
@@ -110,11 +105,11 @@ export function ShellTab(props: { sessionID: string }) {
                   flexDirection="row"
                   paddingLeft={1}
                   paddingRight={1}
-                  backgroundColor={active() ? themeV2.background.action.primary() : RGBA.fromInts(0, 0, 0, 0)}
+                  backgroundColor={themeV2.background.action.primary({ focused: active() })}
                   onMouseOver={() => setStore("selected", index())}
                 >
                   <text
-                    fg={active() ? fg : themeV2.text()}
+                    fg={themeV2.text.action.primary({ focused: active() })}
                     attributes={active() ? TextAttributes.BOLD : undefined}
                     wrapMode="none"
                   >

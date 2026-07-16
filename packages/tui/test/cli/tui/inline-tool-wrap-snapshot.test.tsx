@@ -4,6 +4,7 @@ import { testRender, type JSX } from "@opentui/solid"
 import {
   formatSubagentRetry,
   InlineToolRow,
+  isBackgroundSubagent,
   parseApplyPatchFiles,
   parseDiagnostics,
   parseQuestionAnswers,
@@ -199,6 +200,13 @@ describe("TUI inline tool wrapping", () => {
 
   test("keeps retry status ahead of wrapping messages", () => {
     expect(formatSubagentRetry(2, "Rate limited by provider")).toBe("Retrying (attempt 2) · Rate limited by provider")
+  })
+
+  test("labels only detached or async subagents as background", () => {
+    expect(isBackgroundSubagent({ status: "running" }, "running")).toBeFalse()
+    expect(isBackgroundSubagent({ status: "running" }, "completed")).toBeTrue()
+    expect(isBackgroundSubagent({ status: "running" }, "error")).toBeFalse()
+    expect(isBackgroundSubagent({ status: "completed" }, "completed")).toBeFalse()
   })
 
   test("snapshots consecutive grep, glob, and read rows at a narrow width", async () => {

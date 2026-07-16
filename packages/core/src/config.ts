@@ -2,8 +2,9 @@ export * as Config from "./config"
 
 import { makeLocationNode } from "./effect/app-node"
 import path from "path"
+import { isDeepStrictEqual } from "node:util"
 import { type ParseError, parse } from "jsonc-parser"
-import { Context, Effect, Fiber, Layer, Option, PubSub, Schema, Stream } from "effect"
+import { Context, Effect, Fiber, Layer, Option, PubSub, Schema, Semaphore, Stream } from "effect"
 import { Permission } from "@opencode-ai/schema/permission"
 import { Config as ConfigSchema } from "@opencode-ai/schema/config"
 import { Integration } from "@opencode-ai/schema/integration"
@@ -165,6 +166,7 @@ const layer = Layer.effect(
     const credentials = yield* Credential.Service
     const wellknown = yield* WellKnown.Service
     const names = ["opencode.json", "opencode.jsonc"]
+    const reloadLock = Semaphore.makeUnsafe(1)
     const decodeOptions = { errors: "all", onExcessProperty: "ignore", propertyOrder: "original" } as const
     const decodeInfo = Schema.decodeUnknownOption(Info, decodeOptions)
     const decodeV1Info = Schema.decodeUnknownOption(ConfigV1.Info, decodeOptions)
@@ -326,12 +328,17 @@ const layer = Layer.effect(
       }
     })
 
-    const reload = Effect.fn("Config.reload")(function* () {
-      const next = yield* discover()
-      configs = next
-      yield* reconcile(next)
-      yield* events.publish(ConfigSchema.Event.Updated, {})
-    })
+    const reload = Effect.fn("Config.reload")(() =>
+      reloadLock.withPermit(
+        Effect.gen(function* () {
+          const next = yield* discover()
+          if (isDeepStrictEqual(configs, next)) return
+          configs = next
+          yield* reconcile(next)
+          yield* events.publish(ConfigSchema.Event.Updated, {})
+        }),
+      ),
+    )
 
     yield* Stream.fromPubSub(updates).pipe(
       Stream.debounce("100 millis"),
@@ -354,10 +361,27 @@ const layer = Layer.effect(
       ),
       Effect.forkScoped({ startImmediately: true }),
     )
-    yield* wellknown.changes.pipe(
+    yield* events.subscribe(WellKnown.Event.Updated).pipe(
       Stream.runForEach(() =>
         reload().pipe(Effect.catchCause((cause) => Effect.logError("failed to reload wellknown sources", { cause }))),
       ),
+      Effect.forkScoped({ startImmediately: true }),
+    )
+    yield* Effect.sleep("10 minutes").pipe(
+      Effect.andThen(
+        Effect.suspend(() => {
+          if (!wellknown.snapshot().length) return Effect.void
+          return Effect.gen(function* () {
+            const changed = yield* wellknown.refresh().pipe(
+              Effect.catch((error) =>
+                Effect.logWarning("failed to refresh wellknown manifests", { error }).pipe(Effect.as(false)),
+              ),
+            )
+            if (!changed) yield* reload()
+          }).pipe(Effect.catchCause((cause) => Effect.logWarning("failed to refresh wellknown config", { cause })))
+        }),
+      ),
+      Effect.forever,
       Effect.forkScoped({ startImmediately: true }),
     )
     yield* reconcile(initial)

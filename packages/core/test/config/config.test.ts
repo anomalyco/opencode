@@ -53,9 +53,9 @@ const emptyWellknownNode = makeGlobalNode({
     WellKnown.Service.of({
       entries: () => Effect.succeed([]),
       snapshot: () => [],
+      refresh: () => Effect.succeed(false),
       add: () => Effect.die("unused Wellknown.add"),
       remove: () => Effect.die("unused Wellknown.remove"),
-      changes: Stream.empty,
       resolve: () => Effect.die("unused Wellknown.resolve"),
     }),
   ),
@@ -216,9 +216,9 @@ describe("Config", () => {
               WellKnown.Service.of({
                 entries: () => Effect.succeed([entry]),
                 snapshot: () => [entry],
+                refresh: () => Effect.succeed(false),
                 add: () => Effect.die("unused Wellknown.add"),
                 remove: () => Effect.die("unused Wellknown.remove"),
-                changes: Stream.empty,
                 resolve: (_entry, variables) => Effect.succeed([{ shell: variables.TOKEN }]),
               }),
             ),
@@ -286,6 +286,25 @@ describe("Config", () => {
   it.effect("migrates the v1 experimental subagent depth", () =>
     Effect.sync(() => {
       expect(ConfigMigrateV1.migrate({ experimental: { subagent_depth: 2 } }).experimental?.subagent_depth).toBe(2)
+    }),
+  )
+
+  it.effect("migrates v1 provider lists to policies", () =>
+    Effect.sync(() => {
+      expect(
+        ConfigMigrateV1.migrate({
+          enabled_providers: ["anthropic", "openai"],
+          disabled_providers: ["openai"],
+        }).experimental?.policies,
+      ).toEqual([
+        { action: "provider.use", resource: "*", effect: "deny" },
+        { action: "provider.use", resource: "anthropic", effect: "allow" },
+        { action: "provider.use", resource: "openai", effect: "allow" },
+        { action: "provider.use", resource: "openai", effect: "deny" },
+      ])
+      expect(ConfigMigrateV1.migrate({ enabled_providers: [] }).experimental?.policies).toEqual([
+        { action: "provider.use", resource: "*", effect: "deny" },
+      ])
     }),
   )
 

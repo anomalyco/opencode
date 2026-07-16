@@ -656,7 +656,7 @@ function Prompt<const T extends Record<string, string>>(props: {
     <box
       backgroundColor={themeV2.background()}
       border={["left"]}
-      borderColor={themeV2.text.feedback.warning()}
+      borderColor={themeV2.background.action.primary("focused")}
       customBorderChars={SplitBorder.customBorderChars}
       {...(store.expanded
         ? { top: dimensions().height * -1 + 1, bottom: 1, left: 2, right: 2, position: "absolute" }

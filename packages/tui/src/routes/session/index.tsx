@@ -71,10 +71,14 @@ import { usePluginRuntime } from "../../plugin/runtime"
 import { Keymap, type KeymapCommand } from "../../context/keymap"
 import { usePathFormatter } from "../../context/path-format"
 import { useLocation } from "../../context/location"
-import { createSessionRows, resolvePart, type PartRef, type SessionRow } from "./rows"
+import { createSessionRows, messageBoundaryIDs, resolvePart, type PartRef, type SessionRow } from "./rows"
 import { switchLabel } from "../../util/model"
+import { findMessageBoundary, messageNavigationSlack } from "./message-navigation"
 
 addDefaultParsers(parsers.parsers)
+
+// Exclude temporary bottom space when measuring the real transcript height.
+const NAVIGATION_SLACK_ID = "session-navigation-slack"
 
 const context = createContext<{
   width: number
@@ -180,6 +184,23 @@ export function Session() {
   const client = useClient()
   const editor = useEditorContext()
   const rows = createSessionRows(() => route.sessionID)
+  const boundaries = createMemo(() => messageBoundaryIDs(rows, messages()))
+  const [navigationMessage, setNavigationMessage] = createSignal<string>()
+  const [navigationSlack, setNavigationSlack] = createSignal(0)
+
+  const clearMessageNavigation = () => {
+    setNavigationSlack(0)
+    setNavigationMessage(undefined)
+  }
+
+  createEffect(
+    on(
+      () => [dimensions().width, dimensions().height] as const,
+      (_, previous) => {
+        if (previous) clearMessageNavigation()
+      },
+    ),
+  )
 
   createEffect(
     on([descendantSessionIDs, () => client.connection.status()], ([sessionIDs, status]) => {
@@ -239,53 +260,55 @@ export function Session() {
     dialog.clear()
   }
 
-  // Helper: Find next visible message boundary in direction
-  const findNextVisibleMessage = (direction: "next" | "prev"): string | null => {
-    const children = scroll.getChildren()
-    const messagesList = messages()
-    const scrollTop = scroll.y
-
-    // Get visible messages sorted by position, filtering for valid non-synthetic, non-ignored content
-    const visibleMessages = children
-      .filter((c) => {
-        if (!c.id) return false
-        const message = messagesList.find((m) => m.id === c.id)
-        if (!message) return false
-
-        if (message.type === "user") return Boolean(message.text.trim())
-        return (
-          message.type === "assistant" &&
-          message.content.some((content) => content.type === "text" && content.text.trim())
-        )
+  const alignMessage = (messageID: string, top: number) => {
+    scroll.stickyScroll = false
+    setNavigationMessage(messageID)
+    setNavigationSlack(
+      messageNavigationSlack({
+        top,
+        viewportHeight: scroll.viewport.height,
+        scrollHeight: scroll.scrollHeight,
+        currentSlack: scroll.getRenderable(NAVIGATION_SLACK_ID)?.height ?? 0,
+      }),
+    )
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (scroll.isDestroyed || navigationMessage() !== messageID) return
+        scroll.scrollTo(top)
       })
-      .sort((a, b) => a.y - b.y)
-
-    if (visibleMessages.length === 0) return null
-
-    if (direction === "next") {
-      // Find first message below current position
-      return visibleMessages.find((c) => c.y > scrollTop + 10)?.id ?? null
-    }
-    // Find last message above current position
-    return [...visibleMessages].reverse().find((c) => c.y < scrollTop - 10)?.id ?? null
+    })
   }
 
-  // Helper: Scroll to message in direction or fallback to page scroll
-  const scrollToMessage = (direction: "next" | "prev", dialog: ReturnType<typeof useDialog>) => {
-    const targetID = findNextVisibleMessage(direction)
+  const scrollToMessage = (direction: "next" | "prev", dialog: ReturnType<typeof useDialog>, userOnly = false) => {
+    const target = findMessageBoundary({
+      direction,
+      children: scroll.getChildren(),
+      messages: messages(),
+      scrollTop: scroll.scrollTop,
+      viewportY: scroll.viewport.y,
+      currentID: navigationMessage(),
+      userOnly,
+    })
 
-    if (!targetID) {
-      scroll.scrollBy(direction === "next" ? scroll.height : -scroll.height)
+    if (!target) {
       dialog.clear()
       return
     }
 
-    const child = scroll.getChildren().find((c) => c.id === targetID)
-    if (child) scroll.scrollBy(child.y - scroll.y - 1)
+    alignMessage(target.id, target.top)
     dialog.clear()
   }
 
+  const jumpToMessage = (messageID: string) => {
+    const child = scroll.getRenderable(messageID)
+    if (!child) return
+    const y = scroll.scrollTop + child.y - scroll.viewport.y
+    const message = data.session.message.get(route.sessionID, messageID)
+    alignMessage(messageID, Math.max(0, y - (message?.type === "assistant" ? 1 : 0)))
+  }
+
   function toBottom() {
+    clearMessageNavigation()
     setTimeout(() => {
       if (!scroll || scroll.isDestroyed) return
       scroll.scrollTo(scroll.scrollHeight)
@@ -299,6 +322,7 @@ export function Session() {
       group: "Session",
       palette: undefined,
       run: () => {
+        clearMessageNavigation()
         scroll.scrollBy(-scroll.height / 2)
         dialog.clear()
       },
@@ -309,6 +333,7 @@ export function Session() {
       group: "Session",
       palette: undefined,
       run: () => {
+        clearMessageNavigation()
         scroll.scrollBy(scroll.height / 2)
         dialog.clear()
       },
@@ -319,6 +344,7 @@ export function Session() {
       group: "Session",
       palette: undefined,
       run: () => {
+        clearMessageNavigation()
         scroll.scrollBy(-1)
         dialog.clear()
       },
@@ -329,6 +355,7 @@ export function Session() {
       group: "Session",
       palette: undefined,
       run: () => {
+        clearMessageNavigation()
         scroll.scrollBy(1)
         dialog.clear()
       },
@@ -339,6 +366,7 @@ export function Session() {
       group: "Session",
       palette: undefined,
       run: () => {
+        clearMessageNavigation()
         scroll.scrollBy(-scroll.height / 4)
         dialog.clear()
       },
@@ -349,6 +377,7 @@ export function Session() {
       group: "Session",
       palette: undefined,
       run: () => {
+        clearMessageNavigation()
         scroll.scrollBy(scroll.height / 4)
         dialog.clear()
       },
@@ -362,6 +391,7 @@ export function Session() {
       group: "Session",
       palette: undefined,
       run: () => {
+        clearMessageNavigation()
         scroll.scrollTo(0)
         dialog.clear()
       },
@@ -372,6 +402,7 @@ export function Session() {
       group: "Session",
       palette: undefined,
       run: () => {
+        clearMessageNavigation()
         scroll.scrollTo(scroll.scrollHeight)
         dialog.clear()
       },
@@ -412,8 +443,7 @@ export function Session() {
             sessionID={route.sessionID}
             onMove={(messageID) => {
               if (!messageID) return
-              const child = scroll.getChildren().find((child) => child.id === messageID)
-              if (child) scroll.scrollBy(child.y - scroll.y - 1)
+              jumpToMessage(messageID)
             }}
           />
         ))
@@ -574,10 +604,7 @@ export function Session() {
           const message = messages[i]
           if (!message || message.type !== "user" || !message.text.trim()) continue
           {
-            const child = scroll.getChildren().find((child) => {
-              return child.id === message.id
-            })
-            if (child) scroll.scrollBy(child.y - scroll.y - 1)
+            jumpToMessage(message.id)
             break
           }
         }
@@ -596,6 +623,20 @@ export function Session() {
       group: "Session",
       palette: undefined,
       run: () => scrollToMessage("prev", dialog),
+    },
+    {
+      title: "Next user message",
+      id: "session.message.user.next",
+      group: "Session",
+      palette: undefined,
+      run: () => scrollToMessage("next", dialog, true),
+    },
+    {
+      title: "Previous user message",
+      id: "session.message.user.previous",
+      group: "Session",
+      palette: undefined,
+      run: () => scrollToMessage("prev", dialog, true),
     },
     {
       title: "Copy last assistant message",
@@ -767,20 +808,20 @@ export function Session() {
       },
     },
     {
-      title: "Next child session",
+      title: "Next subagent",
       id: "session.child.next",
       group: "Session",
       palette: undefined,
       enabled: !!session()?.parentID,
-      run: () => unavailable("Sibling session navigation"),
+      run: () => unavailable("Subagent navigation"),
     },
     {
-      title: "Previous child session",
+      title: "Previous subagent",
       id: "session.child.previous",
       group: "Session",
       palette: undefined,
       enabled: !!session()?.parentID,
-      run: () => unavailable("Sibling session navigation"),
+      run: () => unavailable("Subagent navigation"),
     },
   ])
 
@@ -815,7 +856,10 @@ export function Session() {
   createEffect(
     on(
       () => route.sessionID,
-      () => setComposer("open", false),
+      () => {
+        setComposer("open", false)
+        clearMessageNavigation()
+      },
     ),
   )
 
@@ -851,16 +895,17 @@ export function Session() {
                   foregroundColor: themeV2.border(),
                 },
               }}
-              stickyScroll={true}
+              stickyScroll={!navigationMessage()}
               stickyStart="bottom"
               flexGrow={1}
               scrollAcceleration={scrollAcceleration()}
             >
               <For each={rows}>
-                {(row) => (
+                {(row, index) => (
                   <SessionRowView
                     row={row}
                     message={(messageID) => data.session.message.get(route.sessionID, messageID)}
+                    boundaryID={boundaries()[index()]}
                   />
                 )}
               </For>
@@ -874,6 +919,9 @@ export function Session() {
                   }
                   files={session()!.revert!.files ?? []}
                 />
+              </Show>
+              <Show when={navigationSlack()}>
+                {(height) => <box id={NAVIGATION_SLACK_ID} height={height()} flexShrink={0} />}
               </Show>
             </scrollbox>
             <box flexShrink={0}>
@@ -947,9 +995,13 @@ export function Session() {
   )
 }
 
-function SessionRowView(props: { row: SessionRow; message: (messageID: string) => SessionMessageInfo | undefined }) {
+function SessionRowView(props: {
+  row: SessionRow
+  message: (messageID: string) => SessionMessageInfo | undefined
+  boundaryID?: string
+}) {
   return (
-    <box marginTop={1} flexShrink={0}>
+    <box id={props.boundaryID} marginTop={1} flexShrink={0}>
       <Switch>
         <Match when={props.row.type === "message" ? props.row : undefined}>
           {(row) => (
@@ -1568,7 +1620,6 @@ function UserMessage(props: { message: SessionMessageUser }) {
   return (
     <Show when={props.message.text.trim() || files().length}>
       <box
-        id={props.message.id}
         border={["left"]}
         borderColor={queued() ? themeV2.border() : color()}
         customBorderChars={SplitBorder.customBorderChars}
@@ -2284,7 +2335,7 @@ function BlockTool(props: {
       paddingLeft={2}
       gap={1}
       backgroundColor={
-        hover() ? themeV2.background.action.secondary() : themeV2.background()
+        hover() ? themeV2.background.action.secondary("focused") : themeV2.background()
       }
       customBorderChars={SplitBorder.customBorderChars}
       borderColor={themeV2.background()}
@@ -2553,10 +2604,8 @@ function WebSearch(props: ToolProps) {
 function Subagent(props: ToolProps) {
   const { navigate } = useRoute()
   const data = useData()
-  const input = createMemo(() => (typeof props.part.state.input === "string" ? {} : props.part.state.input))
-  const metadata = createMemo(() => (props.part.state.status === "streaming" ? {} : props.part.state.structured))
-  const sessionID = createMemo(() => stringValue(metadata().sessionID) ?? stringValue(metadata().sessionId))
-  const description = createMemo(() => stringValue(input().description))
+  const sessionID = createMemo(() => stringValue(props.metadata.sessionID) ?? stringValue(props.metadata.sessionId))
+  const description = createMemo(() => stringValue(props.input.description))
   const isRunning = createMemo(() => {
     const id = sessionID()
     return props.part.state.status === "running" || Boolean(id && data.session.status(id) === "running")
@@ -2574,14 +2623,21 @@ function Subagent(props: ToolProps) {
         if (id) navigate({ type: "session", sessionID: id })
       }}
       status={
-        input().background === true || metadata().status === "running" ? (
+        isBackgroundSubagent(props.metadata, props.part.state.status) ? (
           <StatusBadge>Background</StatusBadge>
         ) : undefined
       }
     >
-      {`${Locale.titlecase(stringValue(input().agent) ?? stringValue(input().subagent_type) ?? "General")} Subagent — ${description() ?? "Subagent"}`}
+      {`${Locale.titlecase(stringValue(props.input.agent) ?? stringValue(props.input.subagent_type) ?? "General")} Subagent — ${description() ?? "Subagent"}`}
     </InlineTool>
   )
+}
+
+export function isBackgroundSubagent(
+  metadata: Record<string, unknown>,
+  status: SessionMessageAssistantTool["state"]["status"],
+) {
+  return status === "completed" && metadata.status === "running"
 }
 
 export function formatSubagentRetry(attempt: number, message: string) {

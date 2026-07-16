@@ -19,11 +19,15 @@ const background = {
   default: "$hue.neutral.100",
   surface: { offset: "$hue.neutral.200", overlay: "$hue.neutral.300" },
   action: {
-    primary: { default: "$hue.accent.600", $pressed: "$hue.accent.800" },
+    primary: {
+      default: "$hue.interactive.600",
+      $pressed: "$hue.interactive.800",
+      $selected: "$hue.interactive.700",
+    },
     secondary: { default: "$hue.neutral.200" },
     destructive: { default: "$hue.red.600" },
   },
-  formfield: { default: "$hue.neutral.100", $selected: "$hue.accent.600" },
+  formfield: { default: "$hue.neutral.100", $selected: "$hue.interactive.600" },
   feedback: { error: { default: "$hue.red.100" } },
 } satisfies BackgroundDefinition
 
@@ -45,6 +49,7 @@ test("supports property-first definitions, variants, states, and contexts", () =
   expect(text.action.primary.$pressed).toBe("$hue.neutral.200")
   expect(text.formfield.$selected).toBe("$hue.neutral.100")
   expect(background.action.destructive.default).toBe("$hue.red.600")
+  expect(background.action.primary.$selected).toBe("$hue.interactive.700")
   expect(background.surface.offset).toBe("$hue.neutral.200")
   expect(definition["@context:elevated"].text?.default).toBe("$hue.neutral.800")
   expect(definition["@context:overlay"].background?.default).toBe("$hue.neutral.300")

@@ -3,11 +3,12 @@ import { Effect, Fiber, Stream } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
 import { KV } from "@opencode-ai/core/kv"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { EventV2 } from "@opencode-ai/core/event"
 import { WellKnown } from "@opencode-ai/core/wellknown"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(FetchHttpClient.layer)
-const serviceIt = testEffect(LayerNode.compile(LayerNode.group([WellKnown.node, KV.node])))
+const serviceIt = testEffect(LayerNode.compile(LayerNode.group([WellKnown.node, KV.node, EventV2.node])))
 
 it.live("loads embedded and remote configuration", () =>
   Effect.acquireUseRelease(
@@ -65,7 +66,10 @@ serviceIt.live("persists sources in one KV value", () =>
       Effect.gen(function* () {
         const wellknown = yield* WellKnown.Service
         const kv = yield* KV.Service
-        const changed = yield* wellknown.changes.pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+        const events = yield* EventV2.Service
+        const changed = yield* events
+          .subscribe(WellKnown.Event.Updated)
+          .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
         const entry = yield* wellknown.add(`${server.url.origin}/`)
 
         expect(entry.origin).toBe(server.url.origin)
@@ -78,5 +82,38 @@ serviceIt.live("persists sources in one KV value", () =>
         expect(yield* wellknown.entries()).toEqual([])
       }),
     (server) => Effect.promise(() => server.stop(true)),
+  ),
+)
+
+serviceIt.live("refreshes changed manifests", () =>
+  Effect.acquireUseRelease(
+    Effect.sync(() => {
+      let command = "first"
+      return {
+        server: Bun.serve({
+          port: 0,
+          fetch: () => Response.json({ auth: { command: [command], env: "TOKEN" } }),
+        }),
+        update: () => {
+          command = "second"
+        },
+      }
+    }),
+    ({ server, update }) =>
+      Effect.gen(function* () {
+        const wellknown = yield* WellKnown.Service
+        const events = yield* EventV2.Service
+        yield* wellknown.add(server.url.origin)
+        expect(yield* wellknown.refresh()).toBe(false)
+
+        const changed = yield* events
+          .subscribe(WellKnown.Event.Updated)
+          .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+        update()
+        expect(yield* wellknown.refresh()).toBe(true)
+        expect(yield* Fiber.join(changed)).toHaveLength(1)
+        expect(wellknown.snapshot()[0]?.manifest.auth?.command).toEqual(["second"])
+      }),
+    ({ server }) => Effect.promise(() => server.stop(true)),
   ),
 )

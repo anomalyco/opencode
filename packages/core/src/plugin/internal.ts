@@ -10,6 +10,7 @@ import { Config } from "../config"
 import { ConfigAgentPlugin } from "../config/plugin/agent"
 import { ConfigCommandPlugin } from "../config/plugin/command"
 import { ConfigProviderPlugin } from "../config/plugin/provider"
+import { ConfigPolicyPlugin } from "../config/plugin/policy"
 import { ConfigReferencePlugin } from "../config/plugin/reference"
 import { ConfigSkillPlugin } from "../config/plugin/skill"
 import { EventV2 } from "../event"
@@ -151,6 +152,7 @@ const post = [
   ConfigSkillPlugin.Plugin,
   ConfigProviderPlugin.Plugin,
   VariantPlugin.Plugin,
+  ConfigPolicyPlugin.Plugin,
 ] as const satisfies readonly InternalPlugin[]
 
 export const list = Effect.fn("PluginInternal.list")(function* () {

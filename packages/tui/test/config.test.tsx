@@ -86,6 +86,17 @@ test("resolves a session move keybind", () => {
   expect(config.keybinds.get("session.move")).toMatchObject([{ key: "ctrl+o" }])
 })
 
+test("resolves message navigation defaults", () => {
+  const config = resolve({}, { terminalSuspend: true })
+
+  expect(config.keybinds.get("session.first")).toMatchObject([{ key: "ctrl+g,home,alt+home" }])
+  expect(config.keybinds.get("session.message.previous")).toMatchObject([{ key: "alt+up" }])
+  expect(config.keybinds.get("session.message.next")).toMatchObject([{ key: "alt+down" }])
+  expect(config.keybinds.get("session.message.user.previous")).toMatchObject([{ key: "alt+shift+up" }])
+  expect(config.keybinds.get("session.message.user.next")).toMatchObject([{ key: "alt+shift+down" }])
+  expect(config.keybinds.get("session.messages_last_user")).toMatchObject([{ key: "alt+end" }])
+})
+
 test("opens the subagent picker with down", () => {
   const config = resolve({}, { terminalSuspend: true })
 

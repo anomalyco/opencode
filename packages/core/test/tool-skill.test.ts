@@ -12,7 +12,9 @@ import { SkillTool } from "@opencode-ai/core/tool/skill"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { tmpdir } from "./fixture/tmpdir"
+import { Image } from "@opencode-ai/core/image"
 import { it } from "./lib/effect"
+import { imagePassthrough } from "./lib/image"
 import { makeLocationNode } from "@opencode-ai/core/effect/app-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { toolIdentity, executeTool, registerToolPlugin, settleTool, toolDefinitions } from "./lib/tool"
@@ -90,6 +92,7 @@ describe("SkillTool", () => {
               [PermissionV2.node, permission],
               [SkillV2.node, skills],
               [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
+              [Image.node, imagePassthrough],
             ],
           )
 

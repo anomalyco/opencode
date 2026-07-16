@@ -29,7 +29,9 @@ import { McpTool } from "@opencode-ai/core/tool/mcp"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { Deferred, Effect, Exit, Fiber, Layer, Schema, Stream } from "effect"
+import { Image } from "@opencode-ai/core/image"
 import { testEffect } from "./lib/effect"
+import { imagePassthrough } from "./lib/image"
 import { location } from "./fixture/location"
 import { settleTool, toolDefinitions, toolIdentity, waitForTool } from "./lib/tool"
 
@@ -250,6 +252,7 @@ const it = testEffect(
     [PermissionV2.node, permissions],
     [EventV2.node, events],
     [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
+    [Image.node, imagePassthrough],
   ]),
 )
 

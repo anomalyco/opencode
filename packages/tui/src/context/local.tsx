@@ -1,4 +1,5 @@
 import { createStore } from "solid-js/store"
+import { dedupeWith } from "effect/Array"
 import { createSimpleContext } from "./helper"
 import { batch, createEffect, createMemo } from "solid-js"
 import { useEvent } from "./event"
@@ -54,7 +55,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const data = useData()
     const client = useClient()
     const toast = useToast()
-    const { theme, themeV2 } = useTheme()
+    const { theme, themeV2, mode } = useTheme()
     const route = useRoute()
     const paths = useTuiPaths()
     const args = useArgs()
@@ -83,15 +84,20 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       const [agentStore, setAgentStore] = createStore({
         current: undefined as string | undefined,
       })
-      const colors = createMemo(() => [
-        themeV2.hue.accent(500),
-        theme.accent,
-        theme.success,
-        theme.warning,
-        theme.primary,
-        theme.error,
-        theme.info,
-      ])
+      const colors = createMemo(() => {
+        const step = mode() === "light" ? 800 : 200
+        return dedupeWith(
+          [
+            themeV2.hue.blue(step),
+            themeV2.hue.purple(step),
+            themeV2.hue.green(step),
+            themeV2.hue.orange(step),
+            themeV2.hue.red(step),
+            themeV2.hue.cyan(step),
+          ],
+          (first, second) => first.equals(second),
+        )
+      })
       return {
         list() {
           return agents()
@@ -441,7 +447,12 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         })
 
       const slots = createMemo(() => {
-        const existing = new Set(data.session.list().filter((x) => x.parentID === undefined).map((x) => x.id))
+        const existing = new Set(
+          data.session
+            .list()
+            .filter((x) => x.parentID === undefined)
+            .map((x) => x.id),
+        )
         return sessionStore.pinned.filter((id) => existing.has(id)).slice(0, 9)
       })
 

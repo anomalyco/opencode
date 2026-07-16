@@ -10,7 +10,9 @@ import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { WebSearchTool } from "@opencode-ai/core/tool/websearch"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { makeLocationNode } from "@opencode-ai/core/effect/app-node"
+import { Image } from "@opencode-ai/core/image"
 import { testEffect } from "./lib/effect"
+import { imagePassthrough } from "./lib/image"
 import { toolIdentity, executeTool, registerToolPlugin, settleTool, toolDefinitions } from "./lib/tool"
 
 const webSearchToolNode = makeLocationNode({
@@ -138,6 +140,7 @@ const it = testEffect(
       [LayerNodePlatform.httpClient, http],
       [WebSearchTool.configNode, websearchConfig],
       [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
+      [Image.node, imagePassthrough],
     ],
   ),
 )

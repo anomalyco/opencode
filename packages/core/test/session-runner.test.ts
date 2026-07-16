@@ -4028,11 +4028,19 @@ describe("SessionRunnerLLM", () => {
         { attempt: 5, at: 30_000 },
       ])
       expect((yield* recordedEventTypes(sessionID)).filter((type) => type === "session.step.started.1")).toHaveLength(5)
-      expect((yield* session.context(sessionID)).filter((message) => message.type === "assistant")).toHaveLength(1)
+      const assistant = requireAssistant(yield* session.context(sessionID))
+      expect(yield* recordedStepSettlementEvents(sessionID, assistant.id)).toMatchObject([
+        { type: "session.step.started.1" },
+        { type: "session.step.started.1" },
+        { type: "session.step.started.1" },
+        { type: "session.step.started.1" },
+        { type: "session.step.started.1" },
+        { type: "session.step.failed.1" },
+      ])
     }),
   )
 
-  it.effect("counts retry attempts against the agent step allowance", () =>
+  it.effect("retries a physical attempt without consuming the logical agent step", () =>
     Effect.gen(function* () {
       const session = yield* setup
       const agents = yield* AgentV2.Service
@@ -4041,21 +4049,36 @@ describe("SessionRunnerLLM", () => {
           agent.steps = 2
         }),
       )
-      yield* admit(session, "Bound retries by steps")
+      yield* admit(session, "Retry without consuming a step")
       const failure = providerUnavailable()
       responseStream = Stream.fail(failure)
-      streamFailure = failure
+      responses = [reply.tool("call-after-retry", "echo", { text: "recovered" }), reply.stop()]
 
       const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
       while (requests.length < 1) yield* Effect.yieldNow
       yield* TestClock.adjust("2 seconds")
-      expect(yield* Fiber.join(run).pipe(Effect.flip)).toBe(failure)
+      yield* Fiber.join(run)
 
-      expect(requests).toHaveLength(2)
+      expect(requests).toHaveLength(3)
+      expect(requests[0]?.toolChoice).toBeUndefined()
+      expect(requests[0]?.tools.map((tool) => tool.name)).toContain("echo")
+      expect(requests[1]?.toolChoice).toBeUndefined()
+      expect(requests[1]?.tools.map((tool) => tool.name)).toContain("echo")
+      expect(requests[1]?.messages.at(-1)).not.toMatchObject({
+        role: "assistant",
+        content: [{ type: "text", text: expect.stringContaining("MAXIMUM STEPS REACHED") }],
+      })
+      expect(requests[2]?.toolChoice).toMatchObject({ type: "none" })
+      expect(requests[2]?.tools).toEqual([])
+      expect(requests[2]?.messages.at(-1)).toMatchObject({
+        role: "assistant",
+        content: [{ type: "text", text: expect.stringContaining("MAXIMUM STEPS REACHED") }],
+      })
+      expect(executions).toEqual(["recovered"])
       const eventTypes = yield* recordedEventTypes(sessionID)
-      expect(eventTypes.filter((type) => type === "session.step.started.1")).toHaveLength(2)
+      expect(eventTypes.filter((type) => type === "session.step.started.1")).toHaveLength(3)
       expect(eventTypes.filter((type) => type === "session.retry.scheduled.1")).toHaveLength(1)
-      expect((yield* session.context(sessionID)).filter((message) => message.type === "assistant")).toHaveLength(1)
+      expect((yield* session.context(sessionID)).filter((message) => message.type === "assistant")).toHaveLength(2)
     }),
   )
 

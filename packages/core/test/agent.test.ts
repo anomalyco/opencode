@@ -1,5 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect, Exit, Fiber, Layer, Scope, Stream } from "effect"
+import { TestClock } from "effect/testing"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { EventV2 } from "@opencode-ai/core/event"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -76,7 +77,9 @@ describe("AgentV2", () => {
       )
       description = "New description"
       hidden = false
-      yield* agent.reload()
+      const reload = yield* agent.reload().pipe(Effect.forkChild({ startImmediately: true }))
+      yield* TestClock.adjust("500 millis")
+      yield* Fiber.join(reload)
 
       expect(yield* agent.get(id)).toMatchObject({ description: "New description", hidden: false })
     }),

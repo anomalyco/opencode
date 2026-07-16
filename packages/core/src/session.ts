@@ -33,10 +33,12 @@ import { LocationServiceMap } from "./location-service-map"
 import { MessageDecodeError } from "./session/error"
 import { SessionEvent } from "./session/event"
 import { SessionPending } from "./session/pending"
+import { SessionGenerate } from "./session/generate"
 import { Snapshot } from "./snapshot"
 import { SessionRevert } from "./session/revert"
 import { Session } from "@opencode-ai/schema/session"
 import { FSUtil } from "./fs-util"
+import { Image } from "./image"
 import { Mime } from "./mime"
 import type { EventLog } from "@opencode-ai/schema/event-log"
 import { SkillV2 } from "./skill"
@@ -175,6 +177,7 @@ export type Error =
   | CommandV2.NotFoundError
   | CommandV2.EvaluationError
   | MessageNotFoundError
+  | SessionGenerate.Error
 
 export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<{
@@ -243,6 +246,11 @@ export interface Interface {
     delivery?: SessionPending.Delivery
     resume?: boolean
   }) => Effect.Effect<SessionPending.User, NotFoundError | PromptConflictError | AttachmentError>
+  /** Generates text from current Session context without admitting input or mutating history. */
+  readonly generate: (input: {
+    sessionID: SessionSchema.ID
+    prompt: string
+  }) => Effect.Effect<string, NotFoundError | SessionGenerate.Error>
   readonly command: (input: {
     id?: SessionMessage.ID
     sessionID: SessionSchema.ID
@@ -531,9 +539,13 @@ const layer = Layer.effect(
             // continues from the reverted boundary rather than stale post-boundary history.
             if (session.revert)
               yield* SessionRevert.commit(session).pipe(Effect.provideService(EventV2.Service, events))
-            const prompt = yield* resolvePrompt({ text: input.text, files: input.files, agents: input.agents }).pipe(
-              Effect.provideService(FSUtil.Service, fs),
-            )
+            // Resolved lazily so prompt admission only boots location services when an
+            // image attachment actually needs the resizer.
+            const image = Image.Service.pipe(Effect.provide(locations.get(session.location)))
+            const prompt = yield* resolvePrompt(
+              { text: input.text, files: input.files, agents: input.agents },
+              image,
+            ).pipe(Effect.provideService(FSUtil.Service, fs))
             const messageID = input.id ?? SessionMessage.ID.create()
             const admittedInput = SessionPending.Message.make({
               type: "user",
@@ -564,6 +576,11 @@ const layer = Layer.effect(
           }),
         ),
       ),
+      generate: Effect.fn("V2Session.generate")(function* (input) {
+        const session = yield* result.get(input.sessionID)
+        const generate = yield* SessionGenerate.Service.pipe(Effect.provide(locations.get(session.location)))
+        return yield* generate.generate(input)
+      }),
       command: Effect.fn("V2Session.command")(function* (input) {
         const session = yield* result.get(input.sessionID)
         const commands = yield* CommandV2.Service.pipe(Effect.provide(locations.get(session.location)))
@@ -859,10 +876,13 @@ function synthesizeTerminalShellInfo(started: ShellSchema.Info): ShellSchema.Inf
   }
 }
 
-const resolvePrompt = Effect.fn("V2Session.resolvePrompt")(function* (input: PromptInput.Prompt) {
+const resolvePrompt = Effect.fn("V2Session.resolvePrompt")(function* (
+  input: PromptInput.Prompt,
+  image: Effect.Effect<Image.Interface>,
+) {
   const fs = yield* FSUtil.Service
   const files = input.files
-    ? yield* Effect.forEach(input.files, (file) => materializeAttachment(fs, file), { concurrency: 8 })
+    ? yield* Effect.forEach(input.files, (file) => materializeAttachment(fs, file, image), { concurrency: 8 })
     : undefined
   return Prompt.make({ text: input.text, agents: input.agents, files })
 })
@@ -872,6 +892,7 @@ const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
 const materializeAttachment = Effect.fn("V2Session.materializeAttachment")(function* (
   fs: FSUtil.Interface,
   input: PromptInput.FileAttachment,
+  image: Effect.Effect<Image.Interface>,
 ) {
   const resolved = input.uri.startsWith("data:")
     ? {
@@ -900,14 +921,37 @@ const materializeAttachment = Effect.fn("V2Session.materializeAttachment")(funct
             .join("\n"),
         )
       : resolved.bytes
-  return FileAttachment.create({
-    data: Base64.make(Buffer.from(content).toString("base64")),
+  const normalized = yield* normalizeImageAttachment(
+    input,
+    Base64.make(Buffer.from(content).toString("base64")),
     mime,
+    image,
+  )
+  return FileAttachment.create({
+    data: normalized.data,
+    mime: normalized.mime,
     source: resolved.source,
     name: input.name ?? resolved.name,
     description: input.description,
     mention: input.mention,
   })
+})
+
+const normalizeImageAttachment = Effect.fn("V2Session.normalizeImageAttachment")(function* (
+  input: PromptInput.FileAttachment,
+  data: Base64,
+  mime: string,
+  image: Effect.Effect<Image.Interface>,
+) {
+  if (!mime.startsWith("image/")) return { data, mime }
+  const service = yield* image
+  const label = input.name ?? (input.uri.startsWith("data:") ? "inline attachment" : input.uri)
+  const content = { uri: label, content: data, encoding: "base64" as const, mime }
+  const normalized = yield* service.normalize(label, content).pipe(
+    Effect.catchTag("Image.ResizerUnavailableError", () => Effect.succeed(content)),
+    Effect.mapError((error) => new AttachmentError({ uri: label, message: error.message })),
+  )
+  return { data: Base64.make(normalized.content), mime: normalized.mime }
 })
 
 const readFileAttachment = Effect.fn("V2Session.readFileAttachment")(function* (fs: FSUtil.Interface, uri: string) {

@@ -99,6 +99,84 @@ describe("H4: typeof on an undeclared identifier is 'undefined'", () => {
   })
 })
 
+describe("unary void", () => {
+  test("evaluates its operand and returns undefined", async () => {
+    expect(await value(`let count = 0; const result = void (count += 1); return [count, result === undefined]`)).toEqual([
+      1,
+      true,
+    ])
+  })
+
+  test("discards opaque values", async () => {
+    expect(await value(`return void tools === undefined`)).toBe(true)
+  })
+})
+
+describe("property deletion", () => {
+  test("deletes plain object fields and reports missing fields as successful", async () => {
+    expect(
+      await value(`
+        const object = { keep: 1, remove: 2 }
+        return [delete object.remove, delete object.missing, object]
+      `),
+    ).toEqual([true, true, { keep: 1 }])
+  })
+
+  test("evaluates computed object and key expressions once", async () => {
+    expect(
+      await value(`
+        const object = { remove: true }
+        let objectReads = 0
+        let keyReads = 0
+        function getObject() { objectReads++; return object }
+        function getKey() { keyReads++; return "remove" }
+        const removed = delete getObject()[getKey()]
+        return [removed, objectReads, keyReads, Object.hasOwn(object, "remove")]
+      `),
+    ).toEqual([true, 1, 1, false])
+  })
+
+  test("deleting an array index creates a hole without changing its length", async () => {
+    expect(await value(`const values = [1, 2, 3]; const removed = delete values[1]; return [removed, values.length, 1 in values, values]`)).toEqual([
+      true,
+      3,
+      false,
+      [1, null, 3],
+    ])
+  })
+
+  test("array length is not configurable", async () => {
+    expect(await value(`const values = [1, 2]; return [delete values.length, values.length]`)).toEqual([false, 2])
+  })
+
+  test("does not broaden unsupported array property assignment", async () => {
+    expect(
+      await value(`
+        const values = []
+        let rightHandSideRuns = 0
+        function next() { rightHandSideRuns++; return 1 }
+        try { values.field = next() } catch {}
+        return rightHandSideRuns
+      `),
+    ).toBe(0)
+  })
+
+  test("optional deletion short-circuits without evaluating the key", async () => {
+    expect(
+      await value(`let keyReads = 0; const object = null; return [delete object?.[keyReads++], keyReads]`),
+    ).toEqual([true, 0])
+  })
+
+  test("rejects deletion from opaque runtime references", async () => {
+    expect((await error(`return delete tools.example`)).kind).toBe("InvalidDataValue")
+  })
+
+  test("keeps blocked property names unavailable", async () => {
+    expect((await error(`const object = {}; return delete object.__proto__`)).kind).toBe("ExecutionFailure")
+    expect((await error(`const values = []; return delete values["constructor"]`)).kind).toBe("ExecutionFailure")
+  })
+})
+
 describe("H1: NaN/Infinity flow as intermediates and normalize to null at the boundary", () => {
   test("guards run instead of the program crashing on a transient NaN", async () => {
     expect(await value(`return parseInt("abc") || 0`)).toBe(0)
@@ -469,5 +547,72 @@ describe("destructuring assignment", () => {
 
   test("returns the assigned value", async () => {
     expect(await value(`let a = 0; const result = ([a] = [7]); return [a, result]`)).toEqual([7, [7]])
+  })
+
+  test("supports computed object keys and evaluates them once", async () => {
+    expect(
+      await value(`
+        let calls = 0
+        const field = () => { calls++; return "name" }
+        const { [field()]: name, ...rest } = { name: "Ada", role: "engineer" }
+        return { calls, name, rest }
+      `),
+    ).toEqual({ calls: 1, name: "Ada", rest: { role: "engineer" } })
+  })
+
+  test("supports object patterns over arrays", async () => {
+    expect(
+      await value(`
+        const { 0: first, length, slice, ...rest } = ["a", "b", "c"]
+        return { first, length, sliced: slice(1), rest }
+      `),
+    ).toEqual({ first: "a", length: 3, sliced: ["b", "c"], rest: { 1: "b", 2: "c" } })
+  })
+
+  test("preserves exact computed property names on arrays", async () => {
+    expect(
+      await value(`
+        const { ["01"]: item, ...rest } = [10, 20]
+        return { missing: item === undefined, rest }
+      `),
+    ).toEqual({ missing: true, rest: { 0: 10, 1: 20 } })
+  })
+
+  test("supports array patterns over strings, Maps, Sets, and URLSearchParams", async () => {
+    expect(
+      await value(`
+        const [letter, ...letters] = "A😀B"
+        const [[mapKey, mapValue]] = new Map([["key", 1]])
+        const [setFirst, setSecond] = new Set([2, 3])
+        const [[queryKey, queryValue]] = new URLSearchParams("q=test&page=2")
+        return { letter, letters, mapKey, mapValue, setFirst, setSecond, queryKey, queryValue }
+      `),
+    ).toEqual({
+      letter: "A",
+      letters: ["😀", "B"],
+      mapKey: "key",
+      mapValue: 1,
+      setFirst: 2,
+      setSecond: 3,
+      queryKey: "q",
+      queryValue: "test",
+    })
+  })
+
+  test("supports iterable patterns in assignment and parameters", async () => {
+    expect(
+      await value(`
+        let first
+        let rest
+        ;[first, ...rest] = new Set([1, 2, 3])
+        const read = ([[key, value]]) => key + value
+        return { first, rest, entry: read(new Map([["a", 4]])) }
+      `),
+    ).toEqual({ first: 1, rest: [2, 3], entry: "a4" })
+  })
+
+  test("rejects computed keys that are not confined property keys", async () => {
+    const err = await error(`const key = {}; const { [key]: value } = {}`)
+    expect(err.message).toContain("Property key must be a string or number")
   })
 })
