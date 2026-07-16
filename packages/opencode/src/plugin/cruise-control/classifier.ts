@@ -104,13 +104,15 @@ export const DEFAULT_INSTRUCTIONS: Instructions = {
     "Allow harmless shell commands that only inspect state or print output without modifying the system.",
     "Allow access to KanCode managed app directories under the user's resolved config, data, cache, state, and tmp roots.",
     "Allow routine edits and writes that are clearly scoped to the current project task.",
+    "Allow todowrite when patterns or metadata show session scope (session task list state, not a filesystem write).",
     "Allow web fetch or search when the request is clearly for documentation or public reference material.",
   ],
   conditional: [
     "Allow bash package installs only when they target the current project and do not elevate privileges.",
     "Allow git commands that inspect or commit locally, but treat push and history rewrite as higher risk.",
     "Allow external_directory only when the path is clearly inside KanCode managed app directories.",
-    "Allow write or edit outside the obvious task scope only when user intent is explicit in the request metadata.",
+    "Allow edit, write, or apply_patch outside the obvious task scope only when user intent is explicit in the request metadata.",
+    "Do not treat todowrite as a filesystem write; deny only if metadata clearly indicates a different destructive intent.",
     "Deny when a command mixes a mostly safe operation with a clearly destructive flag or target.",
   ],
   deny: [
@@ -280,6 +282,23 @@ export function managedAppDirectoryAllow(permission: string, patterns: readonly 
 }
 
 /**
+ * Deterministic allow for session-scoped todowrite (in-session task list, not filesystem).
+ * Requires an explicit session pattern or scope metadata — bare `*` without metadata still
+ * goes to the LLM so broad/unscoped asks are not silently auto-allowed.
+ */
+export function sessionTodoAllow(
+  permission: string,
+  patterns: readonly string[],
+  metadata?: Record<string, unknown>,
+): string | undefined {
+  if (permission !== "todowrite") return undefined
+  const scopedPattern = patterns.some((pattern) => pattern === "session" || pattern.startsWith("ses_"))
+  const scopedMeta = metadata?.scope === "session" || metadata?.kind === "todo_list"
+  if (!scopedPattern && !scopedMeta) return undefined
+  return "Session todo list update is allowed"
+}
+
+/**
  * Deterministic deny for clearly destructive commands — runs before the LLM classifier.
  * Returns a short reason when matched; undefined otherwise.
  */
@@ -411,9 +430,9 @@ function unavailableReason(fallback: PermissionModuleSchema.Fallback, attempts: 
  * `opts.retry_interval_ms` is the delay between attempts (default 2000; 0 = immediate).
  * Missing-model is handled before this path and is not retried.
  *
- * Evaluate order: destructive deny → managed allow → dynamic deny → dynamic allow
- * (still rails-checked) → LLM classify (serialized unless `parallel_classify: true`) →
- * applySafety → remember final allow/deny.
+ * Evaluate order: destructive deny → managed allow → session todo allow →
+ * dynamic deny → dynamic allow (still rails-checked) → LLM classify
+ * (serialized unless `parallel_classify: true`) → applySafety → remember final allow/deny.
  *
  * Used by cruise_control and exposed for contract tests.
  */
@@ -443,6 +462,16 @@ export const runClassifier = Effect.fn("CruiseControl.runClassifier")(function* 
       reason: managed,
     })
     return { decision: "allow" as const, reason: managed }
+  }
+
+  const sessionTodo = sessionTodoAllow(input.permission, input.patterns, input.metadata)
+  if (sessionTodo) {
+    yield* Effect.logInfo("cruise_control session todo allow", {
+      permission: input.permission,
+      patterns: input.patterns,
+      reason: sessionTodo,
+    })
+    return { decision: "allow" as const, reason: sessionTodo }
   }
 
   const listOpts = input.opts?.dynamic_list

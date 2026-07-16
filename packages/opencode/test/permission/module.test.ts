@@ -26,6 +26,7 @@ import {
   destructiveReason,
   managedAppDirectoryAllow,
   isManagedAppDirectoryPattern,
+  sessionTodoAllow,
   MISSING_MODEL_MESSAGE,
 } from "../../src/plugin/cruise-control/classifier"
 import { EventV2Bridge } from "../../src/event-v2-bridge"
@@ -653,6 +654,17 @@ describe("classifier contract", () => {
     expect(managedAppDirectoryAllow("read", [configGlob])).toBeUndefined()
   })
 
+  test("sessionTodoAllow requires session pattern or scope metadata", () => {
+    expect(sessionTodoAllow("todowrite", ["session"], { scope: "session", kind: "todo_list" })).toBe(
+      "Session todo list update is allowed",
+    )
+    expect(sessionTodoAllow("todowrite", ["*"], { scope: "session" })).toBe("Session todo list update is allowed")
+    expect(sessionTodoAllow("todowrite", ["session"], {})).toBe("Session todo list update is allowed")
+    expect(sessionTodoAllow("todowrite", ["*"], {})).toBeUndefined()
+    expect(sessionTodoAllow("todowrite", ["*"])).toBeUndefined()
+    expect(sessionTodoAllow("write", ["session"], { scope: "session" })).toBeUndefined()
+  })
+
   test("never_auto does not block managed app directory allow", () => {
     const configGlob = path.join(Global.Path.config, "*")
     expect(
@@ -719,6 +731,50 @@ describe("classifier contract", () => {
       decision: "allow",
       reason: "KanCode managed app directory access is allowed",
     })
+  })
+
+  test("session-scoped todowrite allow skips classifier", async () => {
+    let called = false
+    const outcome = await Effect.runPromise(
+      runClassifier({
+        permission: "todowrite",
+        patterns: ["session"],
+        metadata: { sessionID: "ses_test", scope: "session", kind: "todo_list", count: 2 },
+        opts: { fallback: "ask", allowlist: ["todowrite"], timeout_ms: 1000 },
+        classify: Effect.sync(() => {
+          called = true
+          return { decision: "deny" as const, reason: "should not run" }
+        }),
+        modelRef: "opencode/deepseek-v4-flash",
+      }),
+    )
+    expect(called).toBe(false)
+    expect(outcome).toEqual({
+      decision: "allow",
+      reason: "Session todo list update is allowed",
+    })
+  })
+
+  test("unscoped todowrite wildcard still reaches classifier", async () => {
+    let called = false
+    const outcome = await Effect.runPromise(
+      runClassifier({
+        permission: "todowrite",
+        patterns: ["*"],
+        metadata: {},
+        opts: { fallback: "ask", allowlist: ["todowrite"], timeout_ms: 1000 },
+        classify: Effect.sync(() => {
+          called = true
+          return {
+            decision: "deny" as const,
+            reason: "No metadata provided to scope the write; wildcard pattern is too broad without explicit user intent.",
+          }
+        }),
+        modelRef: "opencode/deepseek-v4-flash",
+      }),
+    )
+    expect(called).toBe(true)
+    expect(outcome.decision).toBe("deny")
   })
 
   test("safety rails replace allow-sounding reason when never_auto escalates", async () => {

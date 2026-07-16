@@ -28,6 +28,7 @@ export {
   resolveInstructions,
   resolveSystemPrompt,
   runClassifier,
+  sessionTodoAllow,
   shortenReason,
   type ClassifierDecision,
   type ClassifierObject,

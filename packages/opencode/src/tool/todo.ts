@@ -21,11 +21,18 @@ export const TodoWriteTool = Tool.define<typeof Parameters, Metadata, Todo.Servi
       parameters: Parameters,
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context<Metadata>) =>
         Effect.gen(function* () {
+          // Session-scoped pattern + metadata so cruise_control does not treat
+          // this as an unscoping filesystem wildcard write.
           yield* ctx.ask({
             permission: "todowrite",
-            patterns: ["*"],
+            patterns: ["session"],
             always: ["*"],
-            metadata: {},
+            metadata: {
+              sessionID: ctx.sessionID,
+              scope: "session",
+              kind: "todo_list",
+              count: params.todos.length,
+            },
           })
 
           yield* todo.update({
