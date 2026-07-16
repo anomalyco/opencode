@@ -616,8 +616,17 @@ describe("classifier contract", () => {
     expect(applySafety("allow", "bash", { fallback: "deny" })).toBe("allow")
   })
 
-  test("never_auto escalates allow to ask", () => {
-    expect(applySafety("allow", "external_directory", { allowlist: ["external_directory"] })).toBe("ask")
+  test("never_auto escalates allow to ask when configured", () => {
+    expect(
+      applySafety("allow", "external_directory", {
+        allowlist: ["external_directory"],
+        never_auto: ["external_directory"],
+      }),
+    ).toBe("ask")
+  })
+
+  test("unset never_auto keeps classifier allow for allowlisted key", () => {
+    expect(applySafety("allow", "external_directory", { allowlist: ["external_directory"] })).toBe("allow")
   })
 
   test("managed KanCode config dir patterns are recognized", () => {
@@ -639,7 +648,12 @@ describe("classifier contract", () => {
   test("never_auto does not block managed app directory allow", () => {
     const configGlob = path.join(Global.Path.config, "*")
     expect(
-      applySafety("allow", "external_directory", { allowlist: ["external_directory"] }, [configGlob]),
+      applySafety(
+        "allow",
+        "external_directory",
+        { allowlist: ["external_directory"], never_auto: ["external_directory"] },
+        [configGlob],
+      ),
     ).toBe("allow")
   })
 
@@ -699,12 +713,17 @@ describe("classifier contract", () => {
     })
   })
 
-  test("safety rails replace allow-sounding reason when escalating external_directory", async () => {
+  test("safety rails replace allow-sounding reason when never_auto escalates", async () => {
     const outcome = await Effect.runPromise(
       runClassifier({
         permission: "external_directory",
         patterns: ["/some/other/path/*"],
-        opts: { fallback: "ask", allowlist: ["external_directory"], timeout_ms: 1000 },
+        opts: {
+          fallback: "ask",
+          allowlist: ["external_directory"],
+          never_auto: ["external_directory"],
+          timeout_ms: 1000,
+        },
         classify: Effect.succeed({
           decision: "allow" as const,
           reason: "Access to user's own configuration directory for kancode is a standard, safe operation.",
@@ -715,6 +734,25 @@ describe("classifier contract", () => {
     expect(outcome).toEqual({
       decision: "ask",
       reason: "Requires approval (safety rails)",
+    })
+  })
+
+  test("classifier allow for external_directory sticks without never_auto", async () => {
+    const outcome = await Effect.runPromise(
+      runClassifier({
+        permission: "external_directory",
+        patterns: ["/tmp/build/*"],
+        opts: { fallback: "ask", allowlist: ["external_directory"], timeout_ms: 1000 },
+        classify: Effect.succeed({
+          decision: "allow" as const,
+          reason: "Temp build output path is safe for this task.",
+        }),
+        modelRef: "opencode/deepseek-v4-flash",
+      }),
+    )
+    expect(outcome).toEqual({
+      decision: "allow",
+      reason: "Temp build output path is safe for this task.",
     })
   })
 

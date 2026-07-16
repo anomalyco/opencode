@@ -73,7 +73,8 @@ export const Options = Schema.Struct({
       "Permission keys the module may auto-allow; omit for built-in defaults, use [] to disable auto-allow",
   }),
   never_auto: Schema.Array(Schema.String).pipe(optional).annotate({
-    description: "Permission keys that must never resolve to allow from the module",
+    description:
+      "Permission keys that must never resolve to allow from the module; omit or [] for no never_auto escalation (default)",
   }),
   dynamic_list: DynamicList.pipe(optional).annotate({
     description:

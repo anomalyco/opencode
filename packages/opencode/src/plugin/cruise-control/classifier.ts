@@ -48,7 +48,6 @@ const CLASSIFIER_DECISIONS = new Set<ClassifierDecision>(["allow", "deny"])
 const DEFAULT_TIMEOUT_MS = 8000
 /** Max classify attempts including the first when `retries` is unset. */
 const DEFAULT_RETRIES = 3
-const DEFAULT_NEVER_AUTO = ["external_directory", "doom_loop"] as const
 /**
  * Process-wide gate for cruise_control LLM classify calls when `parallel_classify` is false/omitted.
  * Rails and dynamic-list hits run before acquiring this permit.
@@ -384,10 +383,11 @@ export function applySafety(
   patterns: readonly string[] = [],
 ): Decision {
   const allowlist = opts?.allowlist ?? [...DEFAULT_ALLOWLIST]
-  const neverAuto = new Set([...(opts?.never_auto ?? []), ...DEFAULT_NEVER_AUTO])
+  // never_auto is opt-in only; unset or empty means no never_auto escalation.
+  const neverAuto = new Set(opts?.never_auto ?? [])
 
   if (decision !== "allow") return decision
-  // Managed KanCode dirs may auto-allow even when external_directory is never_auto.
+  // Managed KanCode dirs may auto-allow even when the key is on never_auto.
   if (managedAppDirectoryAllow(permission, patterns)) return "allow"
   // never_auto / not allowlisted: cannot auto-allow — escalate to human rather than hard-deny
   if (neverAuto.has(permission)) return "ask"

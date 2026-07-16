@@ -60,11 +60,15 @@ Classifier guidance MUST be configurable via `permission_modules.cruise_control.
 
 ### Requirement: cruise_control Safety Rails
 
-The `cruise_control` module MUST apply `timeout_ms`, `fallback`, `allowlist`, and `never_auto`. Default `never_auto` MUST include at least `external_directory` and `doom_loop` where those permissions exist. An empty allowlist MUST prevent auto-allow. Timeout, abort, and provider errors MUST use `fallback` and MUST NEVER allow. Classifier `allow` outcomes MUST be once-scoped and MUST NOT write durable always-allow state.
+The `cruise_control` module MUST apply `timeout_ms`, `fallback`, `allowlist`, and optional `never_auto`. `never_auto` MUST default to empty/unset (no never_auto escalation) unless the user configures it. An empty allowlist MUST prevent auto-allow. Timeout, abort, and provider errors MUST use `fallback` and MUST NEVER allow. Classifier `allow` outcomes MUST be once-scoped and MUST NOT write durable always-allow state.
 
-#### Scenario: never_auto blocks auto allow
-- **WHEN** the pending permission key is `external_directory` and the classifier returns `allow`
-- **THEN** the effective decision is not allow (uses `fallback` or deny/ask per policy)
+#### Scenario: never_auto blocks auto allow when configured
+- **WHEN** `never_auto` includes `external_directory` and the classifier returns `allow` for that key
+- **THEN** the effective decision is not allow (escalate to ask)
+
+#### Scenario: unset never_auto does not force ask
+- **WHEN** `never_auto` is omitted or empty and the classifier returns `allow` for an allowlisted key
+- **THEN** the effective decision remains `allow`
 
 #### Scenario: Timeout never allows
 - **WHEN** the classifier call exceeds `timeout_ms`
