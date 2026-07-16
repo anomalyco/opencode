@@ -767,20 +767,20 @@ export function Session() {
       },
     },
     {
-      title: "Next child session",
+      title: "Next subagent",
       name: "session.child.next",
       category: "Session",
       hidden: true,
       enabled: !!session()?.parentID,
-      run: () => unavailable("Sibling session navigation"),
+      run: () => unavailable("Subagent navigation"),
     },
     {
-      title: "Previous child session",
+      title: "Previous subagent",
       name: "session.child.previous",
       category: "Session",
       hidden: true,
       enabled: !!session()?.parentID,
-      run: () => unavailable("Sibling session navigation"),
+      run: () => unavailable("Subagent navigation"),
     },
   ])
 
