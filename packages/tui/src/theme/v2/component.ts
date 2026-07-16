@@ -1,7 +1,6 @@
 import type { RGBA } from "@opentui/core"
 import type { Accessor } from "solid-js"
 import type {
-  ActionState,
   ActionVariant,
   FormfieldState,
   ResolvedActionState,
@@ -9,6 +8,9 @@ import type {
   ResolvedThemeView,
   HueStep,
 } from "./index"
+import { ActionState } from "./schema"
+
+export type ActionStates = Partial<Record<ActionState, boolean>>
 
 export function createComponentTheme(current: Accessor<ResolvedThemeView>) {
   const textAction = actions((variant, state) => current().text.action[variant][state])
@@ -121,7 +123,10 @@ export function createComponentTheme(current: Accessor<ResolvedThemeView>) {
 }
 
 function actions(get: (variant: ActionVariant, state: ResolvedActionState) => RGBA) {
-  const action = (variant: ActionVariant) => (state: ActionState | "default" = "default") => get(variant, state)
+  const action = (variant: ActionVariant) => (states: ActionState | "default" | ActionStates = "default") => {
+    if (typeof states === "string") return get(variant, states)
+    return get(variant, ActionState.literals.find((state) => states[state]) ?? "default")
+  }
   const primary = action("primary")
   return Object.assign(primary, {
     primary,

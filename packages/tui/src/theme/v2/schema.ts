@@ -12,7 +12,7 @@ export type HueAlias = Schema.Schema.Type<typeof HueAlias>
 export const ActionVariant = Schema.Literals(["primary", "secondary", "destructive"])
 export type ActionVariant = Schema.Schema.Type<typeof ActionVariant>
 
-export const ActionState = Schema.Literals(["focused", "pressed", "selected", "disabled"])
+export const ActionState = Schema.Literals(["disabled", "pressed", "focused", "selected"])
 export type ActionState = Schema.Schema.Type<typeof ActionState>
 export type ActionStateKey = `$${ActionState}`
 

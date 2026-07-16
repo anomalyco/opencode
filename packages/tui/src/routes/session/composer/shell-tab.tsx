@@ -1,6 +1,6 @@
 import { createMemo, For, Show, createEffect, onMount, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
-import { TextAttributes, RGBA, ScrollBoxRenderable } from "@opentui/core"
+import { TextAttributes, ScrollBoxRenderable } from "@opentui/core"
 import { useData } from "../../../context/data"
 import { useLocation } from "../../../context/location"
 import { useClient } from "../../../context/client"
@@ -100,16 +100,17 @@ export function ShellTab(props: { sessionID: string }) {
           <For each={entries()}>
             {(shell, index) => {
               const active = createMemo(() => index() === store.selected)
+              const states = createMemo(() => ({ focused: active() }))
               return (
                 <box
                   flexDirection="row"
                   paddingLeft={1}
                   paddingRight={1}
-                  backgroundColor={active() ? themeV2.background.action.primary("selected") : RGBA.fromInts(0, 0, 0, 0)}
+                  backgroundColor={themeV2.background.action.primary(states())}
                   onMouseOver={() => setStore("selected", index())}
                 >
                   <text
-                    fg={themeV2.text.action.primary(active() ? "focused" : "default")}
+                    fg={themeV2.text.action.primary(states())}
                     attributes={active() ? TextAttributes.BOLD : undefined}
                     wrapMode="none"
                   >

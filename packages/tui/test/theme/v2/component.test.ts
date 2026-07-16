@@ -23,6 +23,19 @@ test("provides reactive property, variant, state, and context accessors", () => 
   expect(theme.text.action.primary("pressed")).toBe(resolved().text.action.primary.pressed)
   expect(theme.text.action.primary("selected")).toBe(resolved().text.action.primary.selected)
   expect(theme.background.action.primary("selected")).toBe(resolved().background.action.primary.selected)
+  expect(theme.background.action.primary({ selected: true })).toBe(resolved().background.action.primary.selected)
+  expect(theme.background.action.primary({ focused: true, selected: true })).toBe(
+    resolved().background.action.primary.focused,
+  )
+  expect(theme.background.action.primary({ pressed: true, focused: true, selected: true })).toBe(
+    resolved().background.action.primary.pressed,
+  )
+  expect(theme.background.action.primary({ disabled: true, pressed: true, focused: true, selected: true })).toBe(
+    resolved().background.action.primary.disabled,
+  )
+  expect(theme.background.action.primary({ disabled: false, selected: false })).toBe(
+    resolved().background.action.primary.default,
+  )
   expect(theme.background.action.secondary("disabled")).toBe(
     resolved().background.action.secondary.disabled,
   )
