@@ -460,6 +460,28 @@ noLLMServer.instance(
   { config: cfg },
 )
 
+noLLMServer.instance(
+  "loop ignores user messages with only ignored parts",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Pinned" })
+      const seeded = yield* seed(chat.id, { finish: "stop" })
+
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "internal status", ignored: true }],
+      })
+
+      const result = yield* prompt.loop({ sessionID: chat.id })
+      expect(result.info.id).toBe(seeded.assistant.id)
+    }),
+  { config: cfg },
+)
+
 it.instance("loop exits without an LLM request for interrupted orphan tool calls", () =>
   Effect.gen(function* () {
     const { llm } = yield* useServerConfig(providerCfg)
