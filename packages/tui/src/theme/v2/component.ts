@@ -25,6 +25,7 @@ export function createComponentTheme(current: Accessor<ResolvedThemeView>) {
     blue: (step: HueStep) => current().hue.blue[step],
     purple: (step: HueStep) => current().hue.purple[step],
     accent: (step: HueStep) => current().hue.accent[step],
+    interactive: (step: HueStep) => current().hue.interactive[step],
     neutral: (step: HueStep) => current().hue.neutral[step],
   }
   const text = Object.assign(() => current().text.default, {

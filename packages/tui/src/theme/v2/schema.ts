@@ -6,7 +6,7 @@ export type HueStep = Schema.Schema.Type<typeof HueStep>
 export const BaseHue = Schema.Literals(["gray", "red", "orange", "yellow", "green", "cyan", "blue", "purple"])
 export type BaseHue = Schema.Schema.Type<typeof BaseHue>
 
-export const HueAlias = Schema.Literals(["accent", "neutral"])
+export const HueAlias = Schema.Literals(["accent", "interactive", "neutral"])
 export type HueAlias = Schema.Schema.Type<typeof HueAlias>
 
 export const ActionVariant = Schema.Literals(["primary", "secondary", "destructive"])
@@ -41,33 +41,35 @@ const ContextKey = Schema.Literals(["@context:elevated", "@context:overlay"])
 export type ContextKey = Schema.Schema.Type<typeof ContextKey>
 
 const HueScaleDefinition = Schema.Record(HueStep, HexColor)
-const HueAliasDefinition = Schema.Union([Schema.TemplateLiteral(["$hue.", HueName]), HueScaleDefinition])
+const HueValueDefinition = Schema.Union([Schema.TemplateLiteral(["$hue.", HueName]), HueScaleDefinition])
 
 const HueDefinition = Schema.Struct({
-  gray: HueScaleDefinition,
-  red: HueScaleDefinition,
-  orange: HueScaleDefinition,
-  yellow: HueScaleDefinition,
-  green: HueScaleDefinition,
-  cyan: HueScaleDefinition,
-  blue: HueScaleDefinition,
-  purple: HueScaleDefinition,
-  accent: HueAliasDefinition,
-  neutral: HueAliasDefinition,
+  gray: HueValueDefinition,
+  red: HueValueDefinition,
+  orange: HueValueDefinition,
+  yellow: HueValueDefinition,
+  green: HueValueDefinition,
+  cyan: HueValueDefinition,
+  blue: HueValueDefinition,
+  purple: HueValueDefinition,
+  accent: HueValueDefinition,
+  interactive: HueValueDefinition,
+  neutral: HueValueDefinition,
 })
 export type HueDefinition = Schema.Schema.Type<typeof HueDefinition>
 
 const HueOverrideDefinition = Schema.Struct({
-  gray: Schema.optional(HueScaleDefinition),
-  red: Schema.optional(HueScaleDefinition),
-  orange: Schema.optional(HueScaleDefinition),
-  yellow: Schema.optional(HueScaleDefinition),
-  green: Schema.optional(HueScaleDefinition),
-  cyan: Schema.optional(HueScaleDefinition),
-  blue: Schema.optional(HueScaleDefinition),
-  purple: Schema.optional(HueScaleDefinition),
-  accent: Schema.optional(HueAliasDefinition),
-  neutral: Schema.optional(HueAliasDefinition),
+  gray: Schema.optional(HueValueDefinition),
+  red: Schema.optional(HueValueDefinition),
+  orange: Schema.optional(HueValueDefinition),
+  yellow: Schema.optional(HueValueDefinition),
+  green: Schema.optional(HueValueDefinition),
+  cyan: Schema.optional(HueValueDefinition),
+  blue: Schema.optional(HueValueDefinition),
+  purple: Schema.optional(HueValueDefinition),
+  accent: Schema.optional(HueValueDefinition),
+  interactive: Schema.optional(HueValueDefinition),
+  neutral: Schema.optional(HueValueDefinition),
 })
 export type HueOverrideDefinition = Schema.Schema.Type<typeof HueOverrideDefinition>
 

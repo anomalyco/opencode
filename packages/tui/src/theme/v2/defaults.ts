@@ -93,6 +93,7 @@ export const DEFAULT_THEME = {
         900: "#581c87",
       },
       accent: "$hue.blue",
+      interactive: "$hue.blue",
       neutral: "$hue.gray",
     },
     text: {
@@ -108,7 +109,7 @@ export const DEFAULT_THEME = {
           $focused: "$text.action.primary.default",
           $pressed: "$hue.neutral.100",
           $disabled: "$hue.neutral.500",
-          $selected: "$hue.accent.600",
+          $selected: "$hue.interactive.600",
         },
         feedback: {
           error: { default: "$hue.red.700", subdued: "$hue.red.600" },
@@ -125,7 +126,7 @@ export const DEFAULT_THEME = {
         },
         action: {
           primary: {
-            default: "$hue.accent.600", $focused: "$hue.accent.700", $pressed: "$hue.accent.800",
+            default: "$hue.interactive.600", $focused: "$hue.interactive.700", $pressed: "$hue.interactive.800",
             $disabled: "$hue.neutral.300",
           },
           secondary: {
@@ -140,7 +141,7 @@ export const DEFAULT_THEME = {
         formfield: {
           default: "$background.default",
           $focused: "$background.action.primary.default",
-          $pressed: "$hue.accent.800",
+          $pressed: "$hue.interactive.800",
           $disabled: "$background.default",
           $selected: "$background.formfield.default",
         },
@@ -196,14 +197,14 @@ export const DEFAULT_THEME = {
       text: { action: { primary: { default: "$hue.neutral.100" } } },
       background: {
         default: "$background.surface.offset",
-        action: { primary: { default: "$hue.accent.500" } },
+        action: { primary: { default: "$hue.interactive.500" } },
       },
     },
     "@context:overlay": {
       text: { action: { primary: { default: "$hue.neutral.100" } } },
       background: {
         default: "$background.surface.overlay",
-        action: { primary: { default: "$hue.accent.500" } },
+        action: { primary: { default: "$hue.interactive.500" } },
       },
     },
   },
@@ -298,6 +299,7 @@ export const DEFAULT_THEME = {
         900: "#581c87",
       },
       accent: "$hue.blue",
+      interactive: "$hue.blue",
       neutral: "$hue.gray",
     },
     text: {
@@ -313,7 +315,7 @@ export const DEFAULT_THEME = {
           $focused: "$text.action.primary.default",
           $pressed: "$hue.neutral.100",
           $disabled: "$hue.neutral.500",
-          $selected: "$hue.accent.500",
+          $selected: "$hue.interactive.500",
         },
         feedback: {
           error: { default: "$hue.red.300", subdued: "$hue.red.400" },
@@ -330,7 +332,7 @@ export const DEFAULT_THEME = {
         },
         action: {
           primary: {
-            default: "$hue.accent.500", $focused: "$hue.accent.600", $pressed: "$hue.accent.800",
+            default: "$hue.interactive.500", $focused: "$hue.interactive.600", $pressed: "$hue.interactive.800",
             $disabled: "$hue.neutral.800",
           },
           secondary: {
@@ -345,7 +347,7 @@ export const DEFAULT_THEME = {
         formfield: {
           default: "$background.default",
           $focused: "$background.action.primary.default",
-          $pressed: "$hue.accent.800",
+          $pressed: "$hue.interactive.800",
           $disabled: "$background.default",
           $selected: "$background.formfield.default",
         },
@@ -401,14 +403,14 @@ export const DEFAULT_THEME = {
       text: { action: { primary: { default: "$hue.neutral.100" } } },
       background: {
         default: "$background.surface.offset",
-        action: { primary: { default: "$hue.accent.400" } },
+        action: { primary: { default: "$hue.interactive.400" } },
       },
     },
     "@context:overlay": {
       text: { action: { primary: { default: "$hue.neutral.900" } } },
       background: {
         default: "$background.surface.overlay",
-        action: { primary: { default: "$hue.accent.400" } },
+        action: { primary: { default: "$hue.interactive.400" } },
       },
     },
   },

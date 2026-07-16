@@ -19,11 +19,11 @@ const background = {
   default: "$hue.neutral.100",
   surface: { offset: "$hue.neutral.200", overlay: "$hue.neutral.300" },
   action: {
-    primary: { default: "$hue.accent.600", $pressed: "$hue.accent.800" },
+    primary: { default: "$hue.interactive.600", $pressed: "$hue.interactive.800" },
     secondary: { default: "$hue.neutral.200" },
     destructive: { default: "$hue.red.600" },
   },
-  formfield: { default: "$hue.neutral.100", $selected: "$hue.accent.600" },
+  formfield: { default: "$hue.neutral.100", $selected: "$hue.interactive.600" },
   feedback: { error: { default: "$hue.red.100" } },
 } satisfies BackgroundDefinition
 

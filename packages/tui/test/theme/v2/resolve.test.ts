@@ -13,6 +13,7 @@ test("resolves independent definitions and hue aliases", () => {
   const darkTheme = resolveTheme(dark)
 
   expect(lightTheme.hue.accent).toBe(lightTheme.hue.blue)
+  expect(lightTheme.hue.interactive).toBe(lightTheme.hue.blue)
   expect(lightTheme.hue.neutral).toBe(lightTheme.hue.gray)
   expect(lightTheme.text.default).toBeInstanceOf(RGBA)
   expect(darkTheme.background.default).toBeInstanceOf(RGBA)
@@ -21,31 +22,52 @@ test("resolves independent definitions and hue aliases", () => {
   expect(lightTheme.syntax.keyword).toBeInstanceOf(RGBA)
   expect(lightTheme.text.action.primary.default).toBe(lightTheme.hue.neutral[100])
   expect(lightTheme.contexts["@context:elevated"]?.background.action.primary.default).toBe(
-    lightTheme.hue.accent[500],
+    lightTheme.hue.interactive[500],
   )
   expect(lightTheme.contexts["@context:elevated"]?.background.default).toBe(lightTheme.background.surface.offset)
   expect(lightTheme.contexts["@context:elevated"]?.text.action.primary.default).toBe(
     lightTheme.hue.neutral[100],
   )
   expect(lightTheme.contexts["@context:overlay"]?.background.action.primary.default).toBe(
-    lightTheme.hue.accent[500],
+    lightTheme.hue.interactive[500],
   )
   expect(lightTheme.contexts["@context:overlay"]?.background.default).toBe(lightTheme.background.surface.overlay)
   expect(lightTheme.contexts["@context:overlay"]?.text.action.primary.default).toBe(
     lightTheme.hue.neutral[100],
   )
   expect(darkTheme.contexts["@context:elevated"]?.background.action.primary.default).toBe(
-    darkTheme.hue.accent[400],
+    darkTheme.hue.interactive[400],
   )
   expect(darkTheme.contexts["@context:elevated"]?.text.action.primary.default).toBe(
     darkTheme.hue.neutral[100],
   )
   expect(darkTheme.contexts["@context:overlay"]?.background.action.primary.default).toBe(
-    darkTheme.hue.accent[400],
+    darkTheme.hue.interactive[400],
   )
   expect(darkTheme.contexts["@context:overlay"]?.text.action.primary.default).toBe(
     darkTheme.hue.neutral[900],
   )
+})
+
+test("resolves base hue aliases and rejects circular hue aliases", () => {
+  const aliased = resolveTheme({
+    ...light,
+    hue: { ...light.hue, blue: "$hue.red", purple: "$hue.blue" },
+  })
+  const overridden = resolveThemeFile(
+    { version: 2, light: { hue: { blue: "$hue.red" } }, dark: {} },
+    "light",
+  )
+
+  expect(aliased.hue.blue).toBe(aliased.hue.red)
+  expect(aliased.hue.purple).toBe(aliased.hue.red)
+  expect(overridden.hue.blue).toBe(overridden.hue.red)
+  expect(() =>
+    resolveTheme({
+      ...light,
+      hue: { ...light.hue, red: "$hue.blue", blue: "$hue.red" },
+    }),
+  ).toThrow("Circular hue reference: red -> blue -> red")
 })
 
 test("merges partial files with the selected OpenCode defaults", () => {

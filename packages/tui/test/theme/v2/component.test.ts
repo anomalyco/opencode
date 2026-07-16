@@ -16,6 +16,7 @@ test("provides reactive property, variant, state, and context accessors", () => 
 
   expect(theme.text()).toBe(resolved().text.default)
   expect(theme.hue.accent(500)).toBe(resolved().hue.accent[500])
+  expect(theme.hue.interactive(500)).toBe(resolved().hue.interactive[500])
   expect(theme.hue.gray(200)).toBe(resolved().hue.gray[200])
   expect(theme.text.subdued()).toBe(resolved().text.subdued)
   expect(theme.text.action()).toBe(resolved().text.action.primary.default)
