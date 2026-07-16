@@ -8,6 +8,7 @@ import {
 } from "jsonc-parser"
 
 import * as ConfigPaths from "@/config/paths"
+import type { Npm } from "@opencode-ai/core/npm"
 import { Global } from "@opencode-ai/core/global"
 import { Filesystem } from "@/util/filesystem"
 import { Flock } from "@opencode-ai/core/util/flock"
@@ -24,7 +25,7 @@ export type Target = {
 }
 
 export type InstallDeps = {
-  resolve: (spec: string) => Promise<string>
+  resolve: (spec: string, options?: Npm.EventOptions) => Promise<string>
 }
 
 export type PatchDeps = {
@@ -76,7 +77,7 @@ type PatchOne = Ok<{ item: PatchItem }> | PatchErr
 export type PatchResult = Ok<{ dir: string; items: PatchItem[] }> | (PatchErr & { dir: string })
 
 const defaultInstallDeps: InstallDeps = {
-  resolve: (spec) => resolvePluginTarget(spec),
+  resolve: (spec, options) => resolvePluginTarget(spec, options),
 }
 
 const defaultPatchDeps: PatchDeps = {
@@ -256,8 +257,12 @@ function patchPluginList(
   }
 }
 
-export async function installPlugin(spec: string, dep: InstallDeps = defaultInstallDeps): Promise<InstallResult> {
-  const target = await dep.resolve(spec).then(
+export async function installPlugin(
+  spec: string,
+  dep: InstallDeps = defaultInstallDeps,
+  options?: Npm.EventOptions,
+): Promise<InstallResult> {
+  const target = await dep.resolve(spec, options).then(
     (item) => ({
       ok: true as const,
       item,

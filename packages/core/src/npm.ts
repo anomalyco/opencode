@@ -2,6 +2,7 @@ export * as Npm from "./npm"
 
 import path from "path"
 import npa from "npm-package-arg"
+import type { InstallEvent } from "@jdxcode/aube-node"
 import { Effect, Schema, Context, Layer, Option, FileSystem } from "effect"
 import { FSUtil } from "./fs-util"
 import { Global } from "./global"
@@ -22,8 +23,17 @@ export interface EntryPoint {
   readonly entrypoint?: string
 }
 
+export type { InstallEvent }
+
+export interface EventOptions {
+  readonly onEvent?: (event: InstallEvent) => void
+}
+
 export interface Interface {
-  readonly add: (pkg: string) => Effect.Effect<EntryPoint, InstallFailedError | EffectFlock.LockError>
+  readonly add: (
+    pkg: string,
+    options?: EventOptions,
+  ) => Effect.Effect<EntryPoint, InstallFailedError | EffectFlock.LockError>
   readonly install: (
     dir: string,
     input?: {
@@ -31,9 +41,9 @@ export interface Interface {
         name: string
         version?: string
       }[]
-    },
+    } & EventOptions,
   ) => Effect.Effect<void, EffectFlock.LockError | InstallFailedError>
-  readonly which: (pkg: string, bin?: string) => Effect.Effect<string | undefined>
+  readonly which: (pkg: string, bin?: string, options?: EventOptions) => Effect.Effect<string | undefined>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Npm") {}
@@ -65,7 +75,8 @@ const lockfiles = ["aube-lock.yaml", "package-lock.json"]
 const parseAddSpec = (spec: string): { name: string; version?: string; exact: boolean } => {
   try {
     const hit = npa(spec)
-    if (hit.name) return { name: hit.name, version: hit.rawSpec ? hit.rawSpec : undefined, exact: hit.type === "version" }
+    if (hit.name)
+      return { name: hit.name, version: hit.rawSpec ? hit.rawSpec : undefined, exact: hit.type === "version" }
   } catch {}
   // Specs without a name portion (git urls, tarballs) pass through whole; the
   // addon hands a version-less name to aube as a raw specifier.
@@ -80,7 +91,7 @@ const layer = Layer.effect(
     const fs = yield* FileSystem.FileSystem
     const flock = yield* EffectFlock.Service
     const directory = (pkg: string) => path.join(global.cache, "packages", sanitize(pkg))
-    const reify = (input: { dir: string; add?: string[] }) =>
+    const reify = (input: { dir: string; add?: string[]; onEvent?: (event: InstallEvent) => void }) =>
       Effect.gen(function* () {
         yield* flock.acquire(`npm-install:${input.dir}`)
         const { install } = yield* Effect.promise(() => import("@jdxcode/aube-node"))
@@ -88,7 +99,7 @@ const layer = Layer.effect(
         const add = parsed.map(({ name, version }) => ({ name, version }))
         const attempt = (offline: boolean) =>
           Effect.tryPromise({
-            try: (signal) => install(input.dir, { add, offline, signal }),
+            try: (signal) => install(input.dir, { add, offline, signal, onEvent: input.onEvent }),
             catch: (cause) =>
               new InstallFailedError({
                 cause,
@@ -119,7 +130,7 @@ const layer = Layer.effect(
         return Object.keys(deps)[0] ?? requested
       })
 
-    const add = Effect.fn("Npm.add")(function* (pkg: string) {
+    const add = Effect.fn("Npm.add")(function* (pkg: string, options?: EventOptions) {
       const dir = directory(pkg)
       const name = (() => {
         try {
@@ -133,7 +144,7 @@ const layer = Layer.effect(
         return resolveEntryPoint(name, path.join(dir, "node_modules", name))
       }
 
-      yield* reify({ dir, add: [pkg] })
+      yield* reify({ dir, add: [pkg], onEvent: options?.onEvent })
       const installed = yield* installedName(dir, name)
       const target = path.join(dir, "node_modules", installed)
       if (yield* afs.existsSafe(target)) {
@@ -152,10 +163,10 @@ const layer = Layer.effect(
       if (!canWrite) return
 
       const add = input?.add.map((pkg) => [pkg.name, pkg.version].filter(Boolean).join("@")) ?? []
-      yield* reify({ dir, add })
+      yield* reify({ dir, add, onEvent: input?.onEvent })
     }, Effect.scoped)
 
-    const which = Effect.fn("Npm.which")(function* (pkg: string, bin?: string) {
+    const which = Effect.fn("Npm.which")(function* (pkg: string, bin?: string, options?: EventOptions) {
       const dir = directory(pkg)
       const binDir = path.join(dir, "node_modules", ".bin")
 
@@ -196,7 +207,7 @@ const layer = Layer.effect(
             fs.remove(path.join(dir, file)).pipe(Effect.orElseSucceed(() => {})),
           )
 
-          yield* add(pkg)
+          yield* add(pkg, options)
 
           const resolved = yield* pick()
           if (Option.isNone(resolved)) return Option.none<string>()

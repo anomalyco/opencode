@@ -58,6 +58,47 @@ describe("Npm.add", () => {
 })
 
 describe("Npm.install", () => {
+  test("preserves an existing lockfile's format", async () => {
+    await using tmp = await tmpdir()
+
+    await writePackage(tmp.path, { name: "fixture" })
+    await fs.mkdir(path.join(tmp.path, "prod-pkg"))
+    await writePackage(path.join(tmp.path, "prod-pkg"), { name: "prod-pkg" })
+    await Bun.write(
+      path.join(tmp.path, "package-lock.json"),
+      JSON.stringify({ name: "fixture", lockfileVersion: 3, requires: true, packages: {} }),
+    )
+
+    await Npm.install(tmp.path, { add: [{ name: "prod-pkg", version: "file:./prod-pkg" }] })
+
+    await expect(fs.stat(path.join(tmp.path, "node_modules", "prod-pkg"))).resolves.toBeDefined()
+    expect(await Bun.file(path.join(tmp.path, "package-lock.json")).text()).toContain("prod-pkg")
+    await expect(fs.stat(path.join(tmp.path, "aube-lock.yaml"))).rejects.toThrow()
+  })
+
+  test("reports install events", async () => {
+    await using tmp = await tmpdir()
+
+    await writePackage(tmp.path, {
+      name: "fixture",
+      dependencies: {
+        "prod-pkg": "file:./prod-pkg",
+      },
+    })
+    await fs.mkdir(path.join(tmp.path, "prod-pkg"))
+    await writePackage(path.join(tmp.path, "prod-pkg"), { name: "prod-pkg" })
+
+    const phases: string[] = []
+    await Npm.install(tmp.path, {
+      add: [],
+      onEvent: (event) => {
+        if (event.kind === "phase") phases.push(event.phase)
+      },
+    })
+
+    expect(phases).toContain("complete")
+  })
+
   test("respects omit from project .npmrc", async () => {
     await using tmp = await tmpdir()
 

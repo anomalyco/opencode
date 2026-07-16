@@ -204,11 +204,11 @@ export async function checkPluginCompatibility(target: string, opencodeVersion: 
   }
 }
 
-export async function resolvePluginTarget(spec: string) {
+export async function resolvePluginTarget(spec: string, options?: Npm.EventOptions) {
   if (isPathPluginSpec(spec)) return resolvePathPluginTarget(spec)
   const hit = parse(spec)
   const pkg = hit?.name && hit.raw === hit.name ? `${hit.name}@latest` : spec
-  const result = await Npm.add(pkg)
+  const result = await Npm.add(pkg, options)
   return result.directory
 }
 

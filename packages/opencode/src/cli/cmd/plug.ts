@@ -3,6 +3,7 @@ import { Effect } from "effect"
 
 import { ConfigPaths } from "@/config/paths"
 import { Global } from "@opencode-ai/core/global"
+import type { Npm } from "@opencode-ai/core/npm"
 import { installPlugin, patchPluginConfig, readPluginManifest } from "../../plugin/install"
 import { resolvePluginTarget } from "../../plugin/shared"
 import { errorMessage } from "../../util/error"
@@ -15,6 +16,7 @@ import { InstanceRef } from "@/effect/instance-ref"
 type Spin = {
   start: (msg: string) => void
   stop: (msg: string, code?: number) => void
+  message?: (msg: string) => void
 }
 
 export type PlugDeps = {
@@ -42,6 +44,30 @@ export type PlugCtx = {
   vcs?: string
   worktree: string
   directory: string
+}
+
+function formatInstallEvent(event: Npm.InstallEvent) {
+  switch (event.kind) {
+    case "phase":
+      switch (event.phase) {
+        case "resolving":
+          return "Resolving packages..."
+        case "fetching":
+          return "Fetching packages..."
+        case "linking":
+          return "Linking packages..."
+        default:
+          return
+      }
+    case "progress": {
+      const done = event.reused + event.downloaded
+      const bytes =
+        event.downloadedBytes >= 1024 * 1024 ? ` · ${(event.downloadedBytes / 1024 / 1024).toFixed(1)} MB` : ""
+      return `Fetching packages... ${done}/${event.total}${bytes}`
+    }
+    default:
+      return
+  }
 }
 
 const defaultPlugDeps: PlugDeps = {
@@ -75,7 +101,12 @@ export function createPlugTask(input: PlugInput, dep: PlugDeps = defaultPlugDeps
   return async (ctx: PlugCtx) => {
     const install = dep.spinner()
     install.start("Installing plugin package...")
-    const target = await installPlugin(mod, dep)
+    const target = await installPlugin(mod, dep, {
+      onEvent: (event) => {
+        const message = formatInstallEvent(event)
+        if (message) install.message?.(message)
+      },
+    })
     if (!target.ok) {
       install.stop("Install failed", 1)
       dep.log.error(`Could not install "${mod}"`)
