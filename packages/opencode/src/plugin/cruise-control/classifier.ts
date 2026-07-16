@@ -68,6 +68,9 @@ export const DEFAULT_ALLOWLIST = [
   "todowrite",
   "skill",
   "task",
+  // Classifier/dynamic-cache allow may stick; destructive rails + managed-dir logic still apply.
+  // doom_loop stays off defaults — require an explicit allowlist entry to auto-allow.
+  "external_directory",
 ] as const
 
 export const MISSING_MODEL_MESSAGE = "cruise_control model unset. Run /cruise-control-model, then retry."

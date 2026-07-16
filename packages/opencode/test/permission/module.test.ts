@@ -616,6 +616,14 @@ describe("classifier contract", () => {
     expect(applySafety("allow", "bash", { fallback: "deny" })).toBe("allow")
   })
 
+  test("omitted allowlist uses defaults and can auto-allow external_directory", () => {
+    expect(applySafety("allow", "external_directory", { fallback: "ask" })).toBe("allow")
+  })
+
+  test("omitted allowlist does not auto-allow doom_loop", () => {
+    expect(applySafety("allow", "doom_loop", { fallback: "ask" })).toBe("ask")
+  })
+
   test("never_auto escalates allow to ask when configured", () => {
     expect(
       applySafety("allow", "external_directory", {
@@ -743,6 +751,25 @@ describe("classifier contract", () => {
         permission: "external_directory",
         patterns: ["/tmp/build/*"],
         opts: { fallback: "ask", allowlist: ["external_directory"], timeout_ms: 1000 },
+        classify: Effect.succeed({
+          decision: "allow" as const,
+          reason: "Temp build output path is safe for this task.",
+        }),
+        modelRef: "opencode/deepseek-v4-flash",
+      }),
+    )
+    expect(outcome).toEqual({
+      decision: "allow",
+      reason: "Temp build output path is safe for this task.",
+    })
+  })
+
+  test("classifier allow for external_directory sticks with default allowlist", async () => {
+    const outcome = await Effect.runPromise(
+      runClassifier({
+        permission: "external_directory",
+        patterns: ["/tmp/build/*"],
+        opts: { fallback: "ask", timeout_ms: 1000 },
         classify: Effect.succeed({
           decision: "allow" as const,
           reason: "Temp build output path is safe for this task.",
