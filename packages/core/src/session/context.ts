@@ -35,18 +35,16 @@ export interface Loaded {
 }
 
 /**
- * Loads the model-facing Session inputs on either side of the runner's durable
- * pre-request work.
+ * Resolves the model-facing inputs for a Session.
  *
- * `select` runs before instruction synchronization and pending-input promotion
- * so those operations use one selected Session, agent, and instruction set.
- * `load` runs afterward and adds the selected model and resulting active
- * history. This module does not prepare or execute a provider request.
+ * `select` fixes the Session, agent, and instruction sources for subsequent
+ * work. `load` adds the selected model and active history for that selection.
+ * This module does not prepare or execute a provider request.
  */
 export interface Interface {
   /** Resolves the Session, selected agent, and current instruction sources. */
   readonly select: (sessionID: SessionSchema.ID) => Effect.Effect<Selection, AgentNotFoundError>
-  /** Adds the selected model and active history after the durable pre-request work. */
+  /** Adds the selected model and active history. */
   readonly load: (selection: Selection) => Effect.Effect<Loaded, SessionRunnerModel.Error>
 }
 

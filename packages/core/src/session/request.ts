@@ -81,7 +81,7 @@ const layer = Layer.effect(
           ]),
         ),
       })
-      // Leave hook-removed definitions in the map so calls to them can be rejected before settlement.
+      // Tools removed by context hooks remain non-executable for this request.
       const hookedTools = Object.entries(contextEvent.tools).reduce<Array<LLMRequest["tools"][number]>>(
         (result, [name, tool]) => {
           const registered = toolsByName.get(name)
