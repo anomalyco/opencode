@@ -67,7 +67,6 @@ import { useMarked } from "@opencode-ai/ui/context/marked"
 import { preloadMarkdown } from "@opencode-ai/session-ui/markdown-cache"
 import { archiveHomeSession } from "./home-session-archive"
 import { shouldOpenSessionInBackground } from "./home-session-open"
-import { shouldBlockHomeWheel } from "./home-scroll"
 import { showToast } from "@/utils/toast"
 import { fileManagerApp } from "@/utils/file-manager"
 import {
@@ -80,6 +79,23 @@ const HOME_SESSION_LIMIT = 64
 const HOME_SESSION_HEADER_STICKY_TOP = 12
 const HOME_SESSION_HEADER_TEXT_HEIGHT = 16
 const HOME_SESSION_HEADER_FADE_DISTANCE = 16
+
+function containHomeWheel(event: WheelEvent, viewport: HTMLElement) {
+  if (event.defaultPrevented || event.ctrlKey || !event.deltaY) return
+  if (!(event.target instanceof Element)) return
+
+  const scrollable = event.target.closest<HTMLElement>("[data-scrollable]")
+  if (
+    scrollable !== viewport &&
+    scrollable &&
+    (event.deltaY < 0
+      ? scrollable.scrollTop > 0
+      : scrollable.scrollTop < scrollable.scrollHeight - scrollable.clientHeight)
+  )
+    return
+
+  event.preventDefault()
+}
 const SHOW_HOME_SESSION_ARCHIVE = false
 const HOME_ROW_LAYOUT =
   "flex min-w-0 w-full shrink-0 cursor-default items-center rounded-[6px] bg-transparent text-left transition-[background-color,color,box-shadow] duration-[120ms] ease-in-out focus-visible:outline-none"
@@ -601,17 +617,8 @@ export function NewHome() {
         onScroll={(event) => sessionHeaderOpacity.update(event.currentTarget.scrollTop)}
         onWheel={(event) => {
           if (!sessionViewport) return
-          if (
-            !shouldBlockHomeWheel({
-              target: event.target,
-              viewport: sessionViewport,
-              deltaY: event.deltaY,
-              ctrlKey: event.ctrlKey,
-              defaultPrevented: event.defaultPrevented,
-            })
-          )
-            return
-          event.preventDefault()
+          if (event.target instanceof Node && sessionViewport.contains(event.target)) return
+          containHomeWheel(event, sessionViewport)
         }}
       >
         <div class="mx-auto grid min-h-full w-full max-w-[1080px] grid-rows-[auto_minmax(0,1fr)_auto] gap-4 px-3 lg:grid-cols-[280px_minmax(0,720px)] lg:grid-rows-1 lg:gap-8 lg:px-6">
@@ -640,6 +647,9 @@ export function NewHome() {
             openSettings={openSettings}
             openHelp={() => platform.openLink("https://opencode.ai/desktop-feedback")}
             language={language}
+            onWheel={(event) => {
+              if (sessionViewport) containHomeWheel(event, sessionViewport)
+            }}
           />
 
           <section
@@ -647,7 +657,12 @@ export function NewHome() {
             class="min-h-0 min-w-0 flex-1 flex flex-col"
             aria-label={language.t("sidebar.project.recentSessions")}
           >
-            <div class="sticky top-0 z-30 shrink-0 bg-v2-background-bg-base pb-3 pt-6 lg:pt-12">
+            <div
+              class="sticky top-0 z-30 shrink-0 bg-v2-background-bg-base pb-3 pt-6 lg:pt-12"
+              onWheel={(event) => {
+                if (sessionViewport) containHomeWheel(event, sessionViewport)
+              }}
+            >
               <HomeSessionSearch
                 value={state.search}
                 placeholder={searchPlaceholder()}
@@ -763,6 +778,7 @@ function HomeProjectColumn(props: {
   openSettings: () => void
   openHelp: () => void
   language: ReturnType<typeof useLanguage>
+  onWheel: (event: WheelEvent) => void
 }) {
   const global = useGlobal()
   const dialog = useDialog()
@@ -781,6 +797,10 @@ function HomeProjectColumn(props: {
     <aside
       class="mt-6 flex min-h-0 min-w-0 flex-col gap-4 overflow-hidden lg:sticky lg:top-14 lg:mt-14 lg:h-[calc(100cqh-56px)] lg:self-start lg:pt-[52px]"
       aria-label={props.language.t("home.projects")}
+      onWheel={(event) => {
+        if (event.target === event.currentTarget) return
+        props.onWheel(event)
+      }}
     >
       <div class="flex h-7 min-w-0 shrink-0 items-center justify-between pl-1.5 pr-3">
         <div class="text-v2-text-text-muted [font-weight:530]">{props.language.t("home.projects")}</div>
@@ -1323,12 +1343,7 @@ function HomeSessionSearch(props: {
 
   return (
     <div class="w-full">
-      <div
-        ref={root}
-        data-component="home-session-search"
-        data-open={props.open ? "" : undefined}
-        class="relative z-30 w-full"
-      >
+      <div ref={root} data-component="home-session-search" class="relative z-30 w-full">
         <Show when={props.open}>
           <div
             data-component="home-session-search-panel"
