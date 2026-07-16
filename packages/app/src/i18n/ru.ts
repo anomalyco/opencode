@@ -93,6 +93,7 @@ export const dict = {
   "command.session.unshare.description": "Прекратить публикацию сессии",
 
   "palette.search.placeholder": "Поиск файлов, команд и сессий",
+  "palette.search.placeholder.home": "Поиск команд и сессий",
   "palette.empty": "Ничего не найдено",
   "palette.group.commands": "Команды",
   "palette.group.files": "Файлы",
@@ -286,6 +287,11 @@ export const dict = {
   "prompt.context.removeActiveFile": "Удалить активный файл из контекста",
   "prompt.context.removeFile": "Удалить файл из контекста",
   "prompt.action.attachFile": "Прикрепить файл",
+  "prompt.menu.addImagesAndFiles": "Добавить файлы и другое",
+  "prompt.menu.imagesAndFiles": "Изображения и файлы",
+  "prompt.menu.commands": "Команды",
+  "prompt.menu.context": "Контекст",
+  "prompt.menu.shellCommand": "Команда оболочки",
   "prompt.attachment.remove": "Удалить вложение",
   "prompt.action.send": "Отправить",
   "prompt.action.stop": "Остановить",
@@ -604,6 +610,8 @@ export const dict = {
   "home.sessions.group.today": "Сегодня",
   "home.sessions.group.yesterday": "Вчера",
   "home.sessions.group.older": "Ранее",
+  "home.providerTip":
+    "Подключитесь к более чем 75 провайдерам, чтобы использовать другие модели, включая Claude, GPT, Gemini и другие",
 
   "session.tab.session": "Сессия",
   "session.tab.review": "Обзор",
@@ -805,9 +813,13 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Разворачивать элементы инструмента edit",
   "settings.general.row.editToolPartsExpanded.description":
     "Показывать элементы инструментов edit, write и patch в ленте развернутыми по умолчанию",
-  "settings.general.row.newLayoutDesigns.title": "Новая компоновка и оформление",
-  "settings.general.row.newLayoutDesigns.description":
-    "Включить обновлённую компоновку, главную страницу, редактор запросов и интерфейс сессии",
+  "settings.general.row.newInterface.title": "Новая компоновка",
+  "settings.general.row.newInterface.badge": "Новое",
+  "settings.general.row.newInterface.description":
+    "Используйте новые вкладки и компоновку главной страницы. В течение ограниченного времени можно переключаться между вариантами компоновки.",
+  "settings.general.row.newInterfaceNotice.title": "Теперь вы используете новую компоновку",
+  "settings.general.row.newInterfaceNotice.description": "Прежняя компоновка больше недоступна",
+  "settings.general.row.newInterfaceNotice.dismiss": "Закрыть",
   "settings.general.row.pinchZoom.title": "Масштабирование щипком",
   "settings.general.row.pinchZoom.description":
     "Разрешить масштабирование жестом щипка на трекпаде и прокруткой с Ctrl",

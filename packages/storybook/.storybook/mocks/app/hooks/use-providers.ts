@@ -1,5 +1,16 @@
 const model_id = "claude-3-7-sonnet"
 
+export const popularProviders = [
+  "opencode",
+  "opencode-go",
+  "anthropic",
+  "github-copilot",
+  "openai",
+  "google",
+  "openrouter",
+  "vercel",
+]
+
 const provider = {
   id: "anthropic",
   models: {

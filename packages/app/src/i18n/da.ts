@@ -93,6 +93,7 @@ export const dict = {
   "command.session.unshare.description": "Stop med at dele denne session",
 
   "palette.search.placeholder": "Søg i filer, kommandoer og sessioner",
+  "palette.search.placeholder.home": "Søg i kommandoer og sessioner",
   "palette.empty": "Ingen resultater fundet",
   "palette.group.commands": "Kommandoer",
   "palette.group.files": "Filer",
@@ -285,6 +286,11 @@ export const dict = {
   "prompt.context.removeActiveFile": "Fjern aktiv fil fra kontekst",
   "prompt.context.removeFile": "Fjern fil fra kontekst",
   "prompt.action.attachFile": "Vedhæft fil",
+  "prompt.menu.addImagesAndFiles": "Tilføj filer og mere",
+  "prompt.menu.imagesAndFiles": "Billeder og filer",
+  "prompt.menu.commands": "Kommandoer",
+  "prompt.menu.context": "Kontekst",
+  "prompt.menu.shellCommand": "Shell-kommando",
   "prompt.attachment.remove": "Fjern vedhæftning",
   "prompt.action.send": "Send",
   "prompt.action.stop": "Stop",
@@ -600,6 +606,8 @@ export const dict = {
   "home.sessions.group.today": "I dag",
   "home.sessions.group.yesterday": "I går",
   "home.sessions.group.older": "Ældre",
+  "home.providerTip":
+    "Opret forbindelse til mere end 75 udbydere for at bruge andre modeller, herunder Claude, GPT, Gemini og flere",
 
   "session.tab.session": "Session",
   "session.tab.review": "Gennemgang",
@@ -797,9 +805,13 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Udvid edit-værktøjsdele",
   "settings.general.row.editToolPartsExpanded.description":
     "Vis edit-, write- og patch-værktøjsdele udvidet som standard i tidslinjen",
-  "settings.general.row.newLayoutDesigns.title": "Nyt layout og design",
-  "settings.general.row.newLayoutDesigns.description":
-    "Aktivér det nydesignede layout, startsiden, promptfeltet og sessionsbrugerfladen",
+  "settings.general.row.newInterface.title": "Nyt layout",
+  "settings.general.row.newInterface.badge": "Ny",
+  "settings.general.row.newInterface.description":
+    "Brug de nye faner og startsidens layout. Du kan skifte mellem layoutene i en begrænset periode.",
+  "settings.general.row.newInterfaceNotice.title": "Du bruger nu det nye layout",
+  "settings.general.row.newInterfaceNotice.description": "Det tidligere layout er ikke længere tilgængeligt",
+  "settings.general.row.newInterfaceNotice.dismiss": "Afvis",
   "settings.general.row.pinchZoom.title": "Knib for at zoome",
   "settings.general.row.pinchZoom.description": "Tillad knibebevægelser på pegefeltet og Ctrl-rulning for at zoome",
   "settings.general.row.wayland.title": "Brug native Wayland",

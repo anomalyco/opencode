@@ -47,11 +47,14 @@ import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { Markdown } from "./markdown"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
 import { getDirectory as _getDirectory, getFilename } from "@opencode-ai/core/util/path"
+import { AttachmentCardV2 } from "../v2/components/attachment-card-v2"
+import { CommentCardV2 } from "../v2/components/comment-card-v2"
 import { checksum } from "@opencode-ai/core/util/encode"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
+import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
@@ -60,7 +63,7 @@ import { ToolStatusTitle } from "./tool-status-title"
 import { patchFiles } from "./apply-patch-file"
 import { animate } from "motion"
 import { useLocation } from "@solidjs/router"
-import { attached, inline, kind } from "./message-file"
+import { attached, inline, kind, typeLabel } from "./message-file"
 import { readPartText } from "./message-part-text"
 import { SessionProgressIndicatorV2 } from "../v2/components/session-progress-indicator-v2"
 
@@ -167,6 +170,7 @@ export interface MessageProps {
   showAssistantCopyPartID?: string | null
   showReasoningSummaries?: boolean
   useV2Actions?: boolean
+  comments?: UserMessageComment[]
 }
 
 export type SessionAction = (input: { sessionID: string; messageID: string }) => Promise<void> | void
@@ -174,6 +178,16 @@ export type SessionAction = (input: { sessionID: string; messageID: string }) =>
 export type UserActions = {
   fork?: SessionAction
   revert?: SessionAction
+  openAttachment?: (file: FilePart) => void
+}
+
+export type UserMessageComment = {
+  path: string
+  comment: string
+  selection?: {
+    startLine: number
+    endLine: number
+  }
 }
 
 export interface MessagePartProps {
@@ -371,22 +385,12 @@ const agentTones: Record<string, string> = {
   plan: "var(--icon-agent-plan-base)",
 }
 
-const v2AgentTones: Record<string, { color: string; border: string; background: string }> = {
-  build: {
-    color: "var(--v2-agent-build-solid)",
-    border: "var(--v2-agent-build-border)",
-    background: "var(--v2-agent-build-background)",
-  },
-  explore: {
-    color: "var(--v2-agent-explore-solid)",
-    border: "var(--v2-agent-explore-border)",
-    background: "var(--v2-agent-explore-background)",
-  },
-  plan: {
-    color: "var(--v2-agent-plan-solid)",
-    border: "var(--v2-agent-plan-border)",
-    background: "var(--v2-agent-plan-background)",
-  },
+const v2AgentTones: Record<string, string> = {
+  build: "var(--v2-agent-build-solid)",
+  explore: "var(--v2-agent-explore-solid)",
+  plan: "var(--v2-agent-plan-solid)",
+  review: "var(--v2-agent-review-solid)",
+  writer: "var(--v2-agent-writer-solid)",
 }
 
 const agentThemeColors: Record<string, string> = {
@@ -433,19 +437,17 @@ function tone(name: string) {
 function taskAgent(
   raw: unknown,
   list?: readonly { name: string; color?: string }[],
-): { name?: string; color?: string; v2Color?: string; border?: string; background?: string } {
+): { name?: string; color?: string; v2Color?: string } {
   if (typeof raw !== "string" || !raw) return {}
   const key = raw.toLowerCase()
   const item = list?.find((entry) => entry.name === raw || entry.name.toLowerCase() === key)
   const v2Tone = item?.color ? undefined : v2AgentTones[key]
   const color = agentColor(item?.color, agentThemeColors) ?? agentTones[key] ?? tone(key)
-  const v2Color = agentColor(item?.color, v2AgentThemeColors) ?? v2Tone?.color ?? color
+  const v2Color = agentColor(item?.color, v2AgentThemeColors) ?? v2Tone ?? color
   return {
     name: item?.name ?? `${raw[0]!.toUpperCase()}${raw.slice(1)}`,
     color,
     v2Color,
-    border: v2Tone?.border ?? `color-mix(in srgb, ${v2Color} 48%, transparent)`,
-    background: v2Tone?.background ?? `color-mix(in srgb, ${v2Color} 12%, transparent)`,
   }
 }
 
@@ -958,6 +960,7 @@ export function Message(props: MessageProps) {
             parts={props.parts}
             actions={props.actions}
             useV2Actions={props.useV2Actions}
+            comments={props.comments}
           />
         )}
       </Match>
@@ -1170,11 +1173,40 @@ export function ContextToolGroup(props: {
   )
 }
 
+function UserMessageComments(props: { comments: UserMessageComment[]; bounded: boolean }) {
+  const i18n = useI18n()
+  const [state, setState] = createStore({ expanded: false })
+  const comments = createMemo(() => (props.bounded && !state.expanded ? props.comments.slice(0, 5) : props.comments))
+
+  return (
+    <div data-slot="user-message-comments" data-bounded={props.bounded ? "true" : undefined}>
+      <For each={comments()}>
+        {(comment) => (
+          <CommentCardV2
+            comment={comment.comment}
+            path={comment.path}
+            selection={comment.selection}
+            title={comment.comment}
+            tooltip
+            wide
+          />
+        )}
+      </For>
+      <Show when={props.bounded && props.comments.length > 5 && !state.expanded}>
+        <ButtonV2 size="small" variant="ghost-muted" onClick={() => setState("expanded", true)}>
+          {i18n.t("ui.common.showMore")}
+        </ButtonV2>
+      </Show>
+    </div>
+  )
+}
+
 export function UserMessageDisplay(props: {
   message: UserMessage
   parts: PartType[]
   actions?: UserActions
   useV2Actions?: boolean
+  comments?: UserMessageComment[]
 }) {
   const data = useData()
   const dialog = useDialog()
@@ -1195,6 +1227,8 @@ export function UserMessageDisplay(props: {
   const files = createMemo(() => (props.parts?.filter((p) => p.type === "file") as FilePart[]) ?? [])
 
   const attachments = createMemo(() => files().filter(attached))
+
+  const messageComments = createMemo(() => (newLayout() ? (props.comments ?? []) : []))
 
   const inlineFiles = createMemo(() => files().filter(inline))
 
@@ -1250,83 +1284,114 @@ export function UserMessageDisplay(props: {
       .finally(() => setState("busy", false))
   }
 
+  const renderAttachments = () => (
+    <Show when={attachments().length > 0}>
+      <div data-slot="user-message-attachments">
+        <For each={attachments()}>
+          {(file) => {
+            const type = kind(file)
+            const name = file.filename ?? i18n.t("ui.message.attachment.alt")
+
+            return (
+              <Show
+                when={newLayout() && type === "file"}
+                fallback={
+                  <div
+                    data-slot="user-message-attachment"
+                    data-type={type}
+                    data-clickable={type === "image" ? "true" : undefined}
+                    title={type === "file" ? name : undefined}
+                    onClick={() => {
+                      if (type === "image") openImagePreview(file.url, name)
+                    }}
+                  >
+                    <Show
+                      when={type === "image"}
+                      fallback={
+                        <div data-slot="user-message-attachment-file">
+                          <FileIcon node={{ path: name, type: "file" }} />
+                          <span data-slot="user-message-attachment-name">{name}</span>
+                        </div>
+                      }
+                    >
+                      <img data-slot="user-message-attachment-image" src={file.url} alt={name} />
+                    </Show>
+                  </div>
+                }
+              >
+                <AttachmentCardV2
+                  title={getFilename(name)}
+                  hover={name}
+                  clickable={!!props.actions?.openAttachment}
+                  onClick={() => props.actions?.openAttachment?.(file)}
+                >
+                  {typeLabel(name, file.mime)}
+                </AttachmentCardV2>
+              </Show>
+            )
+          }}
+        </For>
+      </div>
+    </Show>
+  )
+
   return (
     <div data-component="user-message" data-timeline-part-id={textPart()?.id}>
-      <Show when={attachments().length > 0}>
-        <div data-slot="user-message-attachments">
-          <For each={attachments()}>
-            {(file) => {
-              const type = kind(file)
-              const name = file.filename ?? i18n.t("ui.message.attachment.alt")
-
-              return (
-                <div
-                  data-slot="user-message-attachment"
-                  data-type={type}
-                  data-clickable={type === "image" ? "true" : undefined}
-                  title={type === "file" ? name : undefined}
-                  onClick={() => {
-                    if (type === "image") openImagePreview(file.url, name)
-                  }}
-                >
-                  <Show
-                    when={type === "image"}
-                    fallback={
-                      <div data-slot="user-message-attachment-file">
-                        <FileIcon node={{ path: name, type: "file" }} />
-                        <span data-slot="user-message-attachment-name">{name}</span>
-                      </div>
-                    }
-                  >
-                    <img data-slot="user-message-attachment-image" src={file.url} alt={name} />
-                  </Show>
-                </div>
-              )
-            }}
-          </For>
+      <Show when={!props.useV2Actions}>{renderAttachments()}</Show>
+      <Show
+        when={text()}
+        fallback={
+          <Show when={messageComments().length > 0}>
+            <UserMessageComments comments={messageComments()} bounded={false} />
+          </Show>
+        }
+      >
+        <div data-slot="user-message-body">
+          <div data-slot="user-message-text" data-comments={messageComments().length > 0 ? "true" : undefined}>
+            <HighlightedText text={text()} references={inlineFiles()} agents={agents()} />
+            <Show when={messageComments().length > 0}>
+              <UserMessageComments comments={messageComments()} bounded />
+            </Show>
+          </div>
         </div>
       </Show>
-      <Show when={text()}>
-        <>
-          <div data-slot="user-message-body">
-            <div data-slot="user-message-text">
-              <HighlightedText text={text()} references={inlineFiles()} agents={agents()} />
-            </div>
-          </div>
-          <div data-slot="user-message-copy-wrapper">
-            <Show when={metaHead() || metaTail()}>
-              <span data-slot="user-message-meta-wrap">
-                <Show when={metaHead()}>
-                  <span data-slot="user-message-meta" class="text-12-regular text-text-weak cursor-default">
-                    {metaHead()}
-                  </span>
-                </Show>
-                <Show when={metaHead() && metaTail()}>
-                  <span data-slot="user-message-meta-sep" class="text-12-regular text-text-weak cursor-default">
-                    {"\u00A0\u00B7\u00A0"}
-                  </span>
-                </Show>
-                <Show when={metaTail()}>
-                  <span data-slot="user-message-meta-tail" class="text-12-regular text-text-weak cursor-default">
-                    {metaTail()}
-                  </span>
-                </Show>
-              </span>
-            </Show>
-            <Show when={props.actions?.revert}>
-              <MessageActionButton
-                icon="reset"
-                label={i18n.t("ui.message.revertMessage")}
-                useV2={props.useV2Actions}
-                disabled={!!busy()}
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={(event) => {
-                  event.stopPropagation()
-                  revert()
-                }}
-                aria-label={i18n.t("ui.message.revertMessage")}
-              />
-            </Show>
+      <Show when={props.useV2Actions}>{renderAttachments()}</Show>
+      <Show when={text() || (props.useV2Actions && messageComments().length > 0)}>
+        <div data-slot="user-message-copy-wrapper">
+          <Show when={metaHead() || metaTail()}>
+            <span data-slot="user-message-meta-wrap">
+              <Show when={metaHead()}>
+                <span data-slot="user-message-meta" class="text-12-regular text-text-weak cursor-default">
+                  {metaHead()}
+                </span>
+              </Show>
+              <Show when={metaHead() && metaTail()}>
+                <span data-slot="user-message-meta-sep" class="text-12-regular text-text-weak cursor-default">
+                  {"\u00A0\u00B7\u00A0"}
+                </span>
+              </Show>
+              <Show when={metaTail()}>
+                <span data-slot="user-message-meta-tail" class="text-12-regular text-text-weak cursor-default">
+                  {metaTail()}
+                </span>
+              </Show>
+            </span>
+          </Show>
+          <Show when={props.actions?.revert}>
+            <MessageActionButton
+              icon="reset"
+              label={i18n.t("ui.message.revertMessage")}
+              useV2={props.useV2Actions}
+              disabled={!!busy()}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={(event) => {
+                event.stopPropagation()
+                revert()
+              }}
+              aria-label={i18n.t("ui.message.revertMessage")}
+            />
+          </Show>
+          <Show when={text()}>
             <MessageActionButton
               icon={copied() ? "check" : "copy"}
               label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyMessage")}
@@ -1338,8 +1403,8 @@ export function UserMessageDisplay(props: {
               }}
               aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyMessage")}
             />
-          </div>
-        </>
+          </Show>
+        </div>
       </Show>
     </div>
   )
@@ -1937,8 +2002,6 @@ ToolRegistry.register({
     const title = createMemo(() => agent().name ?? i18n.t("ui.tool.agent.default"))
     const tone = createMemo(() => agent().color)
     const v2Tone = createMemo(() => agent().v2Color)
-    const border = createMemo(() => agent().border)
-    const background = createMemo(() => agent().background)
     const subtitle = createMemo(() => {
       const value =
         typeof props.input.description === "string" && props.input.description
@@ -1983,25 +2046,34 @@ ToolRegistry.register({
         style={{
           "--task-agent-color": v2Tone(),
           "--task-agent-legacy-color": tone(),
-          "--task-agent-border": border(),
-          "--task-agent-background": background(),
         }}
       >
-        <div data-slot="basic-tool-tool-info-structured">
-          <div data-slot="basic-tool-tool-info-main">
-            <Show when={running()}>
-              <span data-component="task-tool-spinner" style={{ color: tone() ?? "var(--icon-interactive-base)" }}>
-                <Show when={newLayout()} fallback={<Spinner />}>
-                  <SessionProgressIndicatorV2
-                    style={{ color: v2Tone() ?? "light-dark(var(--v2-text-text-base), #ffffff)" }}
-                  />
-                </Show>
-              </span>
-            </Show>
-            <span data-component="task-tool-title">{title()}</span>
-            <Show when={subtitle()}>
-              <span data-slot="basic-tool-tool-subtitle">{subtitle()}</span>
-            </Show>
+        <div data-component="task-tool-surface">
+          <div data-slot="basic-tool-tool-info-structured">
+            <div data-slot="basic-tool-tool-info-main">
+              <Show
+                when={running()}
+                fallback={
+                  <Show when={newLayout()}>
+                    <span data-component="task-tool-icon">
+                      <Icon name="subagent" size="small" />
+                    </span>
+                  </Show>
+                }
+              >
+                <span data-component="task-tool-spinner" style={{ color: tone() ?? "var(--icon-interactive-base)" }}>
+                  <Show when={newLayout()} fallback={<Spinner />}>
+                    <SessionProgressIndicatorV2
+                      style={{ color: v2Tone() ?? "light-dark(var(--v2-text-text-base), #ffffff)" }}
+                    />
+                  </Show>
+                </span>
+              </Show>
+              <span data-component="task-tool-title">{title()}</span>
+              <Show when={subtitle()}>
+                <span data-slot="basic-tool-tool-subtitle">{subtitle()}</span>
+              </Show>
+            </div>
           </div>
         </div>
         <Show when={clickable()}>

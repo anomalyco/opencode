@@ -47,12 +47,20 @@ export function getAvatarColors(key?: string) {
 }
 
 export function getProjectAvatarVariant(key?: string): ProjectAvatarVariant {
-  if (key === "orange") return "orange"
-  if (key === "pink") return "pink"
-  if (key === "cyan") return "cyan"
-  if (key === "purple") return "purple"
   if (key === "mint") return "cyan"
   if (key === "lime") return "green"
+  if (
+    key === "orange" ||
+    key === "yellow" ||
+    key === "cyan" ||
+    key === "green" ||
+    key === "red" ||
+    key === "pink" ||
+    key === "blue" ||
+    key === "purple" ||
+    key === "gray"
+  )
+    return key
   return "gray"
 }
 
