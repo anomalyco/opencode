@@ -339,8 +339,7 @@ const layer = Layer.effect(
             const error = toSessionError(llmFailure)
             if (
               SessionRunnerRetry.isRetryable(llmFailure) &&
-              !publisher.hasRetryEvidence() &&
-              (agentInfo.steps === undefined || currentStep < agentInfo.steps)
+              !publisher.hasRetryEvidence()
             ) {
               return yield* new SessionRunnerRetry.RetryableFailure({
                 cause: llmFailure,
@@ -457,7 +456,7 @@ const layer = Layer.effect(
           Effect.tapError((error) =>
             error instanceof SessionRunnerRetry.RetryableFailure
               ? Effect.sync(() => {
-                  currentStep = error.step + 1
+                  currentStep = error.step
                   assistantMessageID = error.assistantMessageID
                   currentPromotion = undefined
                 })
