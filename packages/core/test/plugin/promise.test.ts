@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Message, SystemPart } from "@opencode-ai/ai"
-import { Effect, Schema } from "effect"
+import { DateTime, Effect, Schema } from "effect"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { ModelV2 } from "@opencode-ai/core/model"
@@ -10,6 +10,7 @@ import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { PluginPromise } from "@opencode-ai/core/plugin/promise"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionMessage } from "@opencode-ai/core/session/message"
+import { SessionPending } from "@opencode-ai/core/session/pending"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { Plugin } from "@opencode-ai/plugin/v2"
@@ -18,10 +19,63 @@ import { Model } from "@opencode-ai/schema/model"
 import { Provider } from "@opencode-ai/schema/provider"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
+import { host as testHost } from "./host"
 
 const it = testEffect(PluginTestLayer)
 
 describe("fromPromise", () => {
+  it.effect("forwards synthetic session input", () =>
+    Effect.gen(function* () {
+      const input = {
+        sessionID: "ses_synthetic",
+        id: "msg_synthetic",
+        text: "Background work completed",
+        description: null,
+        metadata: { shellID: "shell_1" },
+        delivery: null,
+        resume: null,
+      }
+      let seen: unknown
+      const host = testHost({
+        session: {
+          synthetic: (value) => {
+            seen = value
+            return Effect.succeed(
+              SessionPending.Synthetic.make({
+                admittedSeq: 1,
+                id: SessionMessage.ID.make(input.id),
+                sessionID: SessionV2.ID.make(input.sessionID),
+                timeCreated: DateTime.makeUnsafe(0),
+                type: "synthetic",
+                data: {
+                  text: input.text,
+                  metadata: input.metadata,
+                },
+                delivery: "queue",
+              }),
+            )
+          },
+        },
+      })
+
+      yield* PluginPromise.fromPromise(
+        Plugin.define({
+          id: "promise-session-synthetic",
+          setup: async (ctx) => {
+            await ctx.session.synthetic(input)
+          },
+        }),
+      ).effect(host)
+
+      expect(seen).toEqual({
+        ...input,
+        description: undefined,
+        delivery: undefined,
+        resume: undefined,
+      })
+    }),
+  )
+
   it.effect("forwards standard client reads", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service

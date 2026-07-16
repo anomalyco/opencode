@@ -244,6 +244,17 @@ export function fromPromise(plugin: Plugin) {
                   resume: input.resume ?? undefined,
                 }),
               ),
+            synthetic: (input) =>
+              run(
+                host.session.synthetic({
+                  ...input,
+                  sessionID: Session.ID.make(input.sessionID),
+                  id: input.id == null ? undefined : SessionMessage.ID.make(input.id),
+                  description: input.description ?? undefined,
+                  delivery: input.delivery ?? undefined,
+                  resume: input.resume ?? undefined,
+                }),
+              ),
             interrupt: (input) => run(host.session.interrupt({ sessionID: Session.ID.make(input.sessionID) })),
           },
         }
