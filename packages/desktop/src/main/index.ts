@@ -26,7 +26,7 @@ import {
   spawnLocalServer,
   type SidecarListener,
 } from "./server"
-import { setupAutoUpdater, showUpdaterDialog } from "./updater"
+import { setupAutoUpdater, showUpdaterDialog, checkForUpdateNotification } from "./updater"
 import { clearAuth, enforceDesktopLogin } from "./login-gate"
 import {
   createMainWindow,
@@ -286,7 +286,13 @@ const main = Effect.gen(function* () {
   void updater.start()
   const updateTimer = setInterval(() => void updater.check(), 10 * 60 * 1000)
   updateTimer.unref()
-  app.once("will-quit", () => clearInterval(updateTimer))
+  // Periodic version notification check every 4 hours
+  const versionNotifyTimer = setInterval(() => void checkForUpdateNotification(updater), 4 * 60 * 60 * 1000)
+  versionNotifyTimer.unref()
+  app.once("will-quit", () => {
+    clearInterval(updateTimer)
+    clearInterval(versionNotifyTimer)
+  })
   yield* Effect.promise(() => startNetLog()).pipe(
     Effect.catch((error) =>
       Effect.sync(() => {

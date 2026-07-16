@@ -542,6 +542,75 @@ function Main {
         Write-Warn "No global config found -- desktop app may need manual setup"
     }
 
+    Write-Step "Configuring MCP servers"
+    $opencodeConfigDir = Join-Path $env:USERPROFILE ".config\opencode"
+    $opencodeConfigFile = Join-Path $opencodeConfigDir "opencode.json"
+    # Ensure directory exists
+    if (-not (Test-Path $opencodeConfigDir)) {
+        New-Item -ItemType Directory -Path $opencodeConfigDir -Force | Out-Null
+    }
+    # Read existing config or create minimal one
+    if (Test-Path $opencodeConfigFile) {
+        $config = Get-Content $opencodeConfigFile -Raw | ConvertFrom-Json
+    } else {
+        $config = [ordered]@{}
+    }
+    # Add MCP servers if not present
+    if (-not $config.mcp) { $config | Add-Member -NotePropertyName "mcp" -NotePropertyValue ([ordered]@{}) }
+    if (-not $config.mcp.context7) {
+        $config.mcp | Add-Member -NotePropertyName "context7" -NotePropertyValue ([ordered]@{
+            enabled = $true
+            type = "remote"
+            url = "https://mcp.context7.com/mcp"
+        })
+        Write-Success "Added context7 MCP server"
+    }
+    if (-not $config.mcp.engram) {
+        $engramPath = Join-Path $GENTLE_DIR "engram.exe"
+        $config.mcp | Add-Member -NotePropertyName "engram" -NotePropertyValue ([ordered]@{
+            command = @($engramPath, "mcp", "--tools=agent")
+            type = "local"
+        })
+        Write-Success "Added engram MCP server"
+    }
+    if (-not $config.mcp.playwright) {
+        $config.mcp | Add-Member -NotePropertyName "playwright" -NotePropertyValue ([ordered]@{
+            command = @("npx", "@anthropic-ai/mcp-playwright@latest")
+            type = "local"
+        })
+        Write-Success "Added playwright MCP server"
+    }
+    if (-not $config.mcp.codegraph) {
+        $config.mcp | Add-Member -NotePropertyName "codegraph" -NotePropertyValue ([ordered]@{
+            command = @("codegraph", "serve", "--mcp")
+            type = "local"
+            enabled = $true
+        })
+        Write-Success "Added codegraph MCP server"
+    }
+    # Write back
+    $config | ConvertTo-Json -Depth 10 | Set-Content $opencodeConfigFile -Encoding UTF8
+    Write-Success "MCP servers configured"
+
+    Write-Step "Installing Playwright and Chromium"
+    # Check if npx is available
+    if (Get-Command npx -ErrorAction SilentlyContinue) {
+        try {
+            Write-Info "Installing @anthropic-ai/mcp-playwright..."
+            $prevEA = $ErrorActionPreference
+            $ErrorActionPreference = "Continue"
+            & npx @anthropic-ai/mcp-playwright@latest install 2>&1 | Out-Null
+            $ErrorActionPreference = $prevEA
+            Write-Success "Playwright and Chromium installed"
+        } catch {
+            Write-Warn "Playwright install failed: $_"
+            Write-Warn "You can run 'npx @anthropic-ai/mcp-playwright@latest install' manually later."
+        }
+    } else {
+        Write-Warn "npx not found -- skipping Playwright install"
+        Write-Warn "Install Node.js first, then run: npx @anthropic-ai/mcp-playwright@latest install"
+    }
+
     Write-Step "Creating desktop shortcut"
     try {
         $wsh = New-Object -ComObject WScript.Shell

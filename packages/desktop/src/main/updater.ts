@@ -66,3 +66,21 @@ export async function showUpdaterDialog(controller: ReturnType<typeof setupAutoU
   })
   if (response.response === 0) await controller.install()
 }
+
+export async function checkForUpdateNotification(controller: ReturnType<typeof setupAutoUpdater>) {
+  const state = await controller.check()
+  if (state.status === "ready" && state.version !== app.getVersion()) {
+    const response = await dialog.showMessageBox({
+      type: "info",
+      message: `A new version (${state.version}) is available.`,
+      title: "Update Available",
+      buttons: ["Download", "Later"],
+      defaultId: 0,
+      cancelId: 1,
+    })
+    if (response.response === 0) {
+      // This triggers the download flow via the controller
+      await controller.check()
+    }
+  }
+}

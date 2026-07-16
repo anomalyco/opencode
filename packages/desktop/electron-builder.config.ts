@@ -125,7 +125,7 @@ function getConfig() {
         appId,
         productName: "oneinfo beta",
         protocols: { name: "OneInfo Beta", schemes: ["opencode"] },
-        publish: { provider: "github", owner: "anomalyco", repo: "opencode-beta", channel: "latest" },
+        publish: { provider: "github", owner: "ivanfernadezm99", repo: "opencode-beta", channel: "latest" },
         rpm: { packageName: "opencode-beta" },
       }
     }
@@ -135,7 +135,7 @@ function getConfig() {
         appId,
         productName: "oneinfo",
         protocols: { name: "OneInfo", schemes: ["opencode"] },
-        publish: { provider: "github", owner: "anomalyco", repo: "opencode", channel: "latest" },
+        publish: { provider: "github", owner: "ivanfernadezm99", repo: "opencode", channel: "latest" },
         deb: { fpm: [legacyDesktopEntryFpm] },
         rpm: { packageName: "opencode", fpm: [legacyDesktopEntryFpm] },
       }
