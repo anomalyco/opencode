@@ -9,6 +9,8 @@
 </p>
 <p align="center">The open source AI coding agent (TUI / CLI). Fork of OpenCode with dual-read config compatibility.</p>
 
+<p align="center">MIT licensed · See <a href="LICENSE">LICENSE</a> and <a href="NOTICE">NOTICE</a> for attribution.</p>
+
 <p align="center">
   <a href="README.md">English</a> |
   <a href="README.zht.md">繁體中文</a>
