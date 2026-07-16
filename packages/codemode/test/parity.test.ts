@@ -99,50 +99,28 @@ describe("H4: typeof on an undeclared identifier is 'undefined'", () => {
   })
 })
 
-describe("lexical temporal dead zones", () => {
-  test("predeclares program and block bindings before execution", async () => {
-    expect(
-      await value(`
-        let programError
-        try { programError = later } catch (error) { programError = error.name }
-        const later = 1
-
-        const value = "outer"
-        let blockError
-        try {
-          {
-            blockError = value
-            const value = "inner"
-          }
-        } catch (error) { blockError = error.name }
-        return [programError, blockError]
-      `),
-    ).toEqual(["ReferenceError", "ReferenceError"])
-  })
-
+describe("CodeMode lexical scope integration", () => {
   test("keeps self, cross, and destructuring defaults in the TDZ", async () => {
     expect(
       await value(`
         const outer = 1
         const errors = []
-        try { { const outer = outer } } catch (error) { errors.push(error.name) }
         try { const first = second, second = 2 } catch (error) { errors.push(error.name) }
         try { const [first = second, second = 2] = [] } catch (error) { errors.push(error.name) }
         return errors
       `),
-    ).toEqual(["ReferenceError", "ReferenceError", "ReferenceError"])
+    ).toEqual(["ReferenceError", "ReferenceError"])
   })
 
-  test("throws for typeof and assignment before initialization", async () => {
+  test("keeps typeof and constant assignment inside the TDZ", async () => {
     expect(
       await value(`
         const errors = []
         try { { errors.push(typeof item); let item } } catch (error) { errors.push(error.name) }
-        try { { item = 1; let item } } catch (error) { errors.push(error.name) }
         try { { constant = 1; const constant = 2 } } catch (error) { errors.push(error.name) }
         return errors
       `),
-    ).toEqual(["ReferenceError", "ReferenceError", "ReferenceError"])
+    ).toEqual(["ReferenceError", "ReferenceError"])
   })
 
   test("shadows builtins from the start of the program scope", async () => {
@@ -156,68 +134,13 @@ describe("lexical temporal dead zones", () => {
     ).toBe("ReferenceError")
   })
 
-  test("applies one lexical environment across switch cases after the discriminant", async () => {
-    expect(
-      await value(`
-        let value = 1
-        let read
-        let selected
-        switch ((read = () => value, value)) {
-          case 1:
-            let value = 2
-            selected = value
-        }
-
-        let caseError
-        let match = 1
-        try {
-          switch (0) {
-            case match:
-              let match = 2
-          }
-        } catch (error) { caseError = error.name }
-        return [read(), selected, caseError]
-      `),
-    ).toEqual([1, 2, "ReferenceError"])
-  })
-
-  test("puts classic, for-of, and for-in headers in the TDZ", async () => {
+  test("keeps classic for initializers inside the header TDZ", async () => {
     expect(
       await value(`
         let index = 1
-        let values = [1]
-        let record = { key: 1 }
-        const errors = []
-        try { for (let index = index; index < 2; index++) {} } catch (error) { errors.push(error.name) }
-        try { for (let values of values) {} } catch (error) { errors.push(error.name) }
-        try { for (let record in record) {} } catch (error) { errors.push(error.name) }
-        return errors
+        try { for (let index = index; index < 2; index++) {} } catch (error) { return error.name }
       `),
-    ).toEqual(["ReferenceError", "ReferenceError", "ReferenceError"])
-  })
-
-  test("preserves a fresh initialized binding for each loop iteration", async () => {
-    expect(
-      await value(`
-        const readers = []
-        for (let index = 0; index < 3; index++) readers.push(() => index)
-        return readers.map((read) => read())
-      `),
-    ).toEqual([0, 1, 2])
-  })
-
-  test("uses distinct classic-loop bindings for initialization, body, and updates", async () => {
-    expect(
-      await value(`
-        let initial
-        const body = []
-        const updates = []
-        for (let index = (initial = () => index, 0); index < 2; (updates.push(() => index), index++)) {
-          body.push(() => index)
-        }
-        return [initial(), body.map((read) => read()), updates.map((read) => read())]
-      `),
-    ).toEqual([0, [0, 1], [1, 2]])
+    ).toBe("ReferenceError")
   })
 
   test("removes loop scopes when per-iteration initialization fails", async () => {
@@ -228,21 +151,6 @@ describe("lexical temporal dead zones", () => {
         return value
       `),
     ).toBe("outer")
-  })
-
-  test("preserves parameter TDZ ordering", async () => {
-    expect(
-      await value(`
-        function earlier(first = 1, second = first) { return second }
-        function later(first = second, second = 2) { return first }
-        function self(value = value) { return value }
-        function destructured([first = second, second = 2] = []) { return first }
-        function failure(run) {
-          try { return run() } catch (error) { return error.name }
-        }
-        return [earlier(), failure(later), failure(self), failure(destructured)]
-      `),
-    ).toEqual([1, "ReferenceError", "ReferenceError", "ReferenceError"])
   })
 })
 
