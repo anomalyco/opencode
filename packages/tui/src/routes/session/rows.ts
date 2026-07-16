@@ -285,6 +285,36 @@ export function reduceSessionRows(messages: SessionMessageInfo[], inputs = new S
   }, [])
 }
 
+export function messageBoundaryIDs(rows: SessionRow[], messages: SessionMessageInfo[]) {
+  const byID = new Map(messages.map((message) => [message.id, message]))
+  const seen = new Set<string>()
+  return rows.map((row) => {
+    const id = rowBoundaryMessageID(row, byID)
+    if (!id || seen.has(id)) return undefined
+    seen.add(id)
+    return id
+  })
+}
+
+function rowBoundaryMessageID(row: SessionRow, messages: Map<string, SessionMessageInfo>) {
+  if (row.type === "message") {
+    const message = messages.get(row.messageID)
+    if (message?.type === "user" && message.text.trim()) return message.id
+    return undefined
+  }
+  const messageID =
+    row.type === "part"
+      ? row.ref.messageID
+      : row.type === "group"
+        ? row.refs[0]?.messageID
+        : row.type === "assistant-footer"
+          ? row.messageID
+          : undefined
+  if (!messageID) return undefined
+  const message = messages.get(messageID)
+  if (message?.type === "assistant") return message.id
+}
+
 export function resolvePart(message: SessionMessageAssistant, partID: string) {
   const tool = message.content.find((part) => part.type === "tool" && part.id === partID)
   if (tool) return tool

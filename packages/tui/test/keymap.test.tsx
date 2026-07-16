@@ -1,9 +1,10 @@
 /** @jsxImportSource @opentui/solid */
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
 import { createBindingLookup } from "@opentui/keymap/extras"
+import { type TextareaRenderable } from "@opentui/core"
 import { testRender, useRenderer } from "@opentui/solid"
 import { expect, test } from "bun:test"
-import { onCleanup } from "solid-js"
+import { onCleanup, onMount } from "solid-js"
 import { TuiKeybind } from "../src/config/keybind"
 import {
   formatKeySequence,
@@ -107,6 +108,61 @@ test("formats navigation keys as arrows", async () => {
     })
   } finally {
     app.renderer.destroy()
+  }
+})
+
+test("dispatches user message navigation while the composer is focused", async () => {
+  for (const kittyKeyboard of [false, true]) {
+    const counts = {
+      "session.message.user.previous": 0,
+      "session.message.user.next": 0,
+      "session.messages_last_user": 0,
+    }
+
+    function Harness() {
+      const renderer = useRenderer()
+      const keymap = createDefaultOpenTuiKeymap(renderer)
+      const config = createResolvedKeymapConfig()
+      const offKeymap = registerOpencodeKeymap(keymap, renderer, config)
+      const commands = Object.keys(counts) as (keyof typeof counts)[]
+      const offLayer = keymap.registerLayer({
+        commands: commands.map((name) => ({
+          name,
+          run() {
+            counts[name]++
+          },
+        })),
+        bindings: commands.flatMap((command) => config.keybinds.get(command)),
+      })
+      let textarea: TextareaRenderable
+      onMount(() => textarea.focus())
+      onCleanup(() => {
+        offLayer()
+        offKeymap()
+      })
+
+      return (
+        <OpencodeKeymapProvider keymap={keymap}>
+          <textarea ref={(value) => (textarea = value)} />
+        </OpencodeKeymapProvider>
+      )
+    }
+
+    const app = await testRender(() => <Harness />, { kittyKeyboard })
+    try {
+      await app.renderOnce()
+      app.mockInput.pressArrow("up", { meta: true })
+      app.mockInput.pressArrow("down", { meta: true })
+      app.mockInput.pressKey("END", { meta: true })
+      expect(counts).toEqual({
+        "session.message.user.previous": 1,
+        "session.message.user.next": 1,
+        "session.messages_last_user": 1,
+      })
+    } finally {
+      app.renderer.currentFocusedEditor?.blur()
+      app.renderer.destroy()
+    }
   }
 })
 
