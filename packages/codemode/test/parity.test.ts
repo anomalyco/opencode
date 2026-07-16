@@ -548,4 +548,62 @@ describe("destructuring assignment", () => {
   test("returns the assigned value", async () => {
     expect(await value(`let a = 0; const result = ([a] = [7]); return [a, result]`)).toEqual([7, [7]])
   })
+
+  test("supports computed object keys and evaluates them once", async () => {
+    expect(
+      await value(`
+        let calls = 0
+        const field = () => { calls++; return "name" }
+        const { [field()]: name, ...rest } = { name: "Ada", role: "engineer" }
+        return { calls, name, rest }
+      `),
+    ).toEqual({ calls: 1, name: "Ada", rest: { role: "engineer" } })
+  })
+
+  test("supports object patterns over arrays", async () => {
+    expect(
+      await value(`
+        const { 0: first, length, slice, ...rest } = ["a", "b", "c"]
+        return { first, length, sliced: slice(1), rest }
+      `),
+    ).toEqual({ first: "a", length: 3, sliced: ["b", "c"], rest: { 1: "b", 2: "c" } })
+  })
+
+  test("supports array patterns over strings, Maps, Sets, and URLSearchParams", async () => {
+    expect(
+      await value(`
+        const [letter, ...letters] = "A😀B"
+        const [[mapKey, mapValue]] = new Map([["key", 1]])
+        const [setFirst, setSecond] = new Set([2, 3])
+        const [[queryKey, queryValue]] = new URLSearchParams("q=test&page=2")
+        return { letter, letters, mapKey, mapValue, setFirst, setSecond, queryKey, queryValue }
+      `),
+    ).toEqual({
+      letter: "A",
+      letters: ["😀", "B"],
+      mapKey: "key",
+      mapValue: 1,
+      setFirst: 2,
+      setSecond: 3,
+      queryKey: "q",
+      queryValue: "test",
+    })
+  })
+
+  test("supports iterable patterns in assignment and parameters", async () => {
+    expect(
+      await value(`
+        let first
+        let rest
+        ;[first, ...rest] = new Set([1, 2, 3])
+        const read = ([[key, value]]) => key + value
+        return { first, rest, entry: read(new Map([["a", 4]])) }
+      `),
+    ).toEqual({ first: 1, rest: [2, 3], entry: "a4" })
+  })
+
+  test("rejects computed keys that are not confined property keys", async () => {
+    const err = await error(`const key = {}; const { [key]: value } = {}`)
+    expect(err.message).toContain("Property key must be a string or number")
+  })
 })

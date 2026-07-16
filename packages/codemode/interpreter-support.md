@@ -54,9 +54,9 @@ ultimate source of truth.
       loop headers, so reads before initialization and self- or cross-referential initializers observe the JavaScript
       temporal dead zone.
 - [ ] Hoist function declarations accepted directly in switch cases.
-- [ ] Computed object destructuring keys such as `const { [field]: value } = record`.
-- [ ] Object destructuring from arrays, such as `const { length } = values`.
-- [ ] Array destructuring from supported non-array iterables: strings, Maps, Sets, and URLSearchParams.
+- [x] Computed object destructuring keys such as `const { [field]: value } = record`.
+- [x] Object destructuring from arrays, such as `const { length } = values`.
+- [x] Array destructuring from supported non-array iterables: strings, Maps, Sets, and URLSearchParams.
 
 ## Statements and control flow
 

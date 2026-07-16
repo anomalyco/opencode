@@ -777,9 +777,9 @@ export class Interpreter<R> {
       }
 
       if (pattern.type === "ObjectPattern") {
-        if (value === null || typeof value !== "object" || Array.isArray(value) || isRuntimeReference(value)) {
+        if (value === null || typeof value !== "object" || isRuntimeReference(value)) {
           throw new InterpreterRuntimeError(
-            "Object destructuring requires a data object value.",
+            "Object destructuring requires a data object or array value.",
             pattern,
             "InvalidDataValue",
           )
@@ -798,38 +798,35 @@ export class Interpreter<R> {
             continue
           }
 
-          if (
-            property.type !== "Property" ||
-            getBoolean(property, "computed") ||
-            getString(property, "kind") !== "init"
-          ) {
-            throw new InterpreterRuntimeError("Only named object destructuring properties are supported.", property)
+          const key = yield* self.destructuringPropertyKey(property)
+          if (isBlockedMember(String(key))) {
+            throw new InterpreterRuntimeError(`Property '${String(key)}' is not available in CodeMode.`, property)
           }
-
-          const keyNode = getNode(property, "key")
-          const key = keyNode.type === "Identifier" ? getString(keyNode, "name") : String(keyNode.value)
-          if (isBlockedMember(key)) {
-            throw new InterpreterRuntimeError(`Property '${key}' is not available in CodeMode.`, keyNode)
-          }
-          consumed.add(key)
-          yield* self.declarePattern(getNode(property, "value"), (value as SafeObject)[key], mutable, property)
+          consumed.add(String(key))
+          yield* self.declarePattern(
+            getNode(property, "value"),
+            self.destructuringPropertyValue(value as SafeObject | Array<unknown>, key),
+            mutable,
+            property,
+          )
         }
         return
       }
 
       if (pattern.type === "ArrayPattern") {
-        if (!Array.isArray(value)) {
-          throw new InterpreterRuntimeError("Array destructuring requires an array value.", pattern)
+        const items = spreadItems(value)
+        if (items === undefined) {
+          throw new InterpreterRuntimeError("Array destructuring requires a supported iterable value.", pattern)
         }
 
         for (const [index, item] of getArray(pattern, "elements").entries()) {
           if (item === null) continue
           const element = asNode(item, `elements[${index}]`)
           if (element.type === "RestElement") {
-            yield* self.declarePattern(getNode(element, "argument"), value.slice(index), mutable, element)
+            yield* self.declarePattern(getNode(element, "argument"), items.slice(index), mutable, element)
             break
           }
-          yield* self.declarePattern(element, value[index], mutable, pattern)
+          yield* self.declarePattern(element, items[index], mutable, pattern)
         }
         return
       }
@@ -858,15 +855,15 @@ export class Interpreter<R> {
       }
 
       if (pattern.type === "ObjectPattern") {
-        if (value === null || typeof value !== "object" || Array.isArray(value) || isRuntimeReference(value)) {
+        if (value === null || typeof value !== "object" || isRuntimeReference(value)) {
           throw new InterpreterRuntimeError(
-            "Object destructuring requires a data object value.",
+            "Object destructuring requires a data object or array value.",
             pattern,
             "InvalidDataValue",
           )
         }
 
-        const source = value as SafeObject
+        const source = value as SafeObject | Array<unknown>
         const consumed = new Set<string>()
         for (const propertyValue of getArray(pattern, "properties")) {
           const property = asNode(propertyValue, "properties")
@@ -878,42 +875,57 @@ export class Interpreter<R> {
             yield* self.assignPattern(getNode(property, "argument"), rest, property)
             continue
           }
-          if (
-            property.type !== "Property" ||
-            getBoolean(property, "computed") ||
-            getString(property, "kind") !== "init"
-          ) {
-            throw new InterpreterRuntimeError("Only named object destructuring properties are supported.", property)
+          const key = yield* self.destructuringPropertyKey(property)
+          if (isBlockedMember(String(key))) {
+            throw new InterpreterRuntimeError(`Property '${String(key)}' is not available in CodeMode.`, property)
           }
-          const keyNode = getNode(property, "key")
-          const key = keyNode.type === "Identifier" ? getString(keyNode, "name") : String(keyNode.value)
-          if (isBlockedMember(key)) {
-            throw new InterpreterRuntimeError(`Property '${key}' is not available in CodeMode.`, keyNode)
-          }
-          consumed.add(key)
-          yield* self.assignPattern(getNode(property, "value"), source[key], property)
+          consumed.add(String(key))
+          yield* self.assignPattern(getNode(property, "value"), self.destructuringPropertyValue(source, key), property)
         }
         return
       }
 
       if (pattern.type === "ArrayPattern") {
-        if (!Array.isArray(value)) {
-          throw new InterpreterRuntimeError("Array destructuring requires an array value.", pattern)
+        const items = spreadItems(value)
+        if (items === undefined) {
+          throw new InterpreterRuntimeError("Array destructuring requires a supported iterable value.", pattern)
         }
         for (const [index, item] of getArray(pattern, "elements").entries()) {
           if (item === null) continue
           const element = asNode(item, `elements[${index}]`)
           if (element.type === "RestElement") {
-            yield* self.assignPattern(getNode(element, "argument"), value.slice(index), element)
+            yield* self.assignPattern(getNode(element, "argument"), items.slice(index), element)
             break
           }
-          yield* self.assignPattern(element, value[index], pattern)
+          yield* self.assignPattern(element, items[index], pattern)
         }
         return
       }
 
       throw new InterpreterRuntimeError(`Unsupported assignment pattern '${pattern.type}'.`, node)
     })
+  }
+
+  private destructuringPropertyKey(property: AstNode): Effect.Effect<string | number, unknown, R> {
+    if (property.type !== "Property" || getString(property, "kind") !== "init") {
+      throw new InterpreterRuntimeError("Unsupported object destructuring property.", property)
+    }
+    const keyNode = getNode(property, "key")
+    if (getBoolean(property, "computed")) {
+      return Effect.map(this.evaluateExpression(keyNode), (value) => this.toPropertyKey(value, keyNode))
+    }
+    return Effect.succeed(keyNode.type === "Identifier" ? getString(keyNode, "name") : String(keyNode.value))
+  }
+
+  private destructuringPropertyValue(source: SafeObject | Array<unknown>, key: string | number): unknown {
+    if (!Array.isArray(source)) return source[String(key)]
+    if (key === "length") return source.length
+    if (typeof key === "string" && arrayMethods.has(key)) return new IntrinsicReference(source, key)
+    if (typeof key === "number" || /^\d+$/.test(key)) return source[Number(key)]
+    if (typeof key === "string" && Object.hasOwn(source, key)) {
+      return (source as Record<string, unknown> & Array<unknown>)[key]
+    }
+    return undefined
   }
 
   private evaluateExpression(node: AstNode): Effect.Effect<unknown, unknown, R> {
