@@ -9,6 +9,7 @@ import { Question } from "../src/question"
 import { Session } from "../src/session"
 import { SessionEvent } from "../src/session-event"
 import { SessionTodo } from "../src/session-todo"
+import { Skill } from "../src/skill"
 import { optional } from "../src/schema"
 
 describe("contract hygiene", () => {
@@ -33,6 +34,29 @@ describe("contract hygiene", () => {
     expect(Pty.ID.create()).toStartWith("pty_")
   })
 
+  test("skill names and descriptions enforce documented bounds", () => {
+    const decode = Schema.decodeUnknownOption(Skill.Info)
+    const input = (name: string, description: string) => ({
+      name,
+      description,
+      location: "/tmp/SKILL.md",
+      content: "# Skill",
+    })
+
+    expect(decode(input("a", "x")).valueOrUndefined).toBeDefined()
+    expect(decode(input(`a${"b".repeat(63)}`, "x".repeat(1024))).valueOrUndefined).toBeDefined()
+    expect(decode(input("", "x")).valueOrUndefined).toBeUndefined()
+    expect(decode(input(`a${"b".repeat(64)}`, "x")).valueOrUndefined).toBeUndefined()
+    for (const name of ["Invalid-name", "invalid_name", "-invalid", "invalid-", "invalid--name"]) {
+      expect(decode(input(name, "x")).valueOrUndefined).toBeUndefined()
+    }
+    expect(
+      decode({ name: "valid-name", location: "/tmp/SKILL.md", content: "# Skill" }).valueOrUndefined,
+    ).toBeUndefined()
+    expect(decode(input("valid-name", "")).valueOrUndefined).toBeUndefined()
+    expect(decode(input("valid-name", "x".repeat(1025))).valueOrUndefined).toBeUndefined()
+  })
+
   test("reusable public identifiers are stable and unique", () => {
     const identifiers = [
       Agent.Color,
@@ -47,6 +71,8 @@ describe("contract hygiene", () => {
       Project.Info,
       Pty.Info,
       Session.ListAnchor,
+      Skill.Name,
+      Skill.Description,
     ].map((schema) => schema.ast.annotations?.identifier)
 
     expect(identifiers.every((identifier) => typeof identifier === "string")).toBe(true)

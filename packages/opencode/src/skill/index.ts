@@ -15,8 +15,8 @@ import { ConfigMarkdown } from "@/config/markdown"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Glob } from "@opencode-ai/core/util/glob"
 import { Discovery } from "./discovery"
-import { isRecord } from "@/util/record"
 import { escapeHtml } from "@/util/html"
+import { Name, Description } from "@opencode-ai/schema/skill"
 
 const CLAUDE_EXTERNAL_DIR = ".claude"
 const AGENTS_EXTERNAL_DIR = ".agents"
@@ -35,8 +35,8 @@ const CUSTOMIZE_OPENCODE_SKILL_DESCRIPTION =
 const CUSTOMIZE_OPENCODE_SKILL_BODY = SkillPlugin.CustomizeOpencodeContent
 
 export const Info = Schema.Struct({
-  name: Schema.String,
-  description: Schema.optional(Schema.String),
+  name: Name,
+  description: Description,
   location: Schema.String,
   content: Schema.String,
 })
@@ -50,13 +50,8 @@ const Issue = Schema.StructWithRest(
   [Schema.Record(Schema.String, Schema.Unknown)],
 )
 
-function isSkillFrontmatter(data: unknown): data is { name: string; description?: string } {
-  return (
-    isRecord(data) &&
-    typeof data.name === "string" &&
-    (data.description === undefined || typeof data.description === "string")
-  )
-}
+const Frontmatter = Schema.Struct({ name: Name, description: Description })
+const decodeFrontmatter = Schema.decodeUnknownOption(Frontmatter)
 
 export class InvalidError extends Schema.TaggedErrorClass<InvalidError>()("SkillInvalidError", {
   path: Schema.String,
@@ -120,20 +115,24 @@ const add = Effect.fnUntraced(function* (state: State, match: string, events: Ev
 
   if (!md) return
 
-  if (!isSkillFrontmatter(md.data)) return
+  const frontmatter = decodeFrontmatter(md.data).valueOrUndefined
+  if (!frontmatter) {
+    yield* Effect.logWarning("invalid skill frontmatter", { skill: match })
+    return
+  }
 
-  if (state.skills[md.data.name]) {
+  if (state.skills[frontmatter.name]) {
     yield* Effect.logWarning("duplicate skill name", {
-      name: md.data.name,
-      existing: state.skills[md.data.name].location,
+      name: frontmatter.name,
+      existing: state.skills[frontmatter.name].location,
       duplicate: match,
     })
   }
 
   state.dirs.add(path.dirname(match))
-  state.skills[md.data.name] = {
-    name: md.data.name,
-    description: md.data.description,
+  state.skills[frontmatter.name] = {
+    name: frontmatter.name,
+    description: frontmatter.description,
     location: match,
     content: md.content,
   }

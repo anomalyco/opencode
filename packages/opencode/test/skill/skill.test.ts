@@ -211,7 +211,7 @@ Just some content without YAML frontmatter.
     ),
   )
 
-  it.live("discovers skills without descriptions", () =>
+  it.live("skips skills without descriptions", () =>
     provideTmpdirInstance(
       (dir) =>
         Effect.gen(function* () {
@@ -231,12 +231,50 @@ Instructions here.
 
           const skill = yield* Skill.Service
           const list = (yield* skill.all()).filter((s) => s.location !== "<built-in>")
-          expect(list.length).toBe(1)
-          const item = list.find((x) => x.name === "manual-skill")
-          expect(item).toBeDefined()
-          expect(item!.description).toBeUndefined()
-          expect(Skill.fmt(list, { verbose: false })).toBe("No skills are currently available.")
-          expect(Skill.fmt(list, { verbose: true })).toBe("No skills are currently available.")
+          expect(list).toEqual([])
+        }),
+      { git: true },
+    ),
+  )
+
+  it.live("skips skills with invalid names or descriptions", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const names = {
+            minimum: "a",
+            maximum: `a${"b".repeat(63)}`,
+            tooLong: `a${"b".repeat(64)}`,
+            invalid: "invalid_name",
+            emptyDescription: "empty-description",
+            longDescription: "long-description",
+          }
+          const skillRoot = path.join(dir, ".opencode", "skill")
+          yield* Effect.promise(() =>
+            Promise.all(
+              [
+                [names.minimum, "x"],
+                [names.maximum, "x".repeat(1024)],
+                [names.tooLong, "Too long name"],
+                [names.invalid, "Invalid name"],
+                [names.emptyDescription, ""],
+                [names.longDescription, "x".repeat(1025)],
+              ].map(([name, description]) =>
+                Bun.write(
+                  path.join(skillRoot, name, "SKILL.md"),
+                  `---\nname: ${name}\ndescription: ${description}\n---\n# ${name}`,
+                ),
+              ),
+            ),
+          )
+
+          const skill = yield* Skill.Service
+          expect(
+            (yield* skill.all())
+              .filter((item) => item.location !== "<built-in>")
+              .map((item) => item.name)
+              .toSorted(),
+          ).toEqual([names.minimum, names.maximum].toSorted())
         }),
       { git: true },
     ),

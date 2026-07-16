@@ -32,10 +32,11 @@ export const available = (skills: ReadonlyArray<Info>, agent: AgentV2.Info) =>
 
 const Frontmatter = Schema.Struct({
   name: Schema.String.pipe(Schema.optional),
-  description: Schema.String.pipe(Schema.optional),
+  description: Skill.Description,
   slash: Schema.Boolean.pipe(Schema.optional),
 })
 const decodeFrontmatter = Schema.decodeUnknownOption(Frontmatter)
+const decodeName = Schema.decodeUnknownOption(Skill.Name)
 
 export type Data = {
   sources: Types.DeepMutable<Source>[]
@@ -84,14 +85,22 @@ const layer = Layer.effect(
           const markdown = ConfigMarkdown.parseOption(content)
           if (!markdown) continue
           const frontmatter = decodeFrontmatter(markdown.data).valueOrUndefined
-          if (!frontmatter) continue
-          const name =
+          if (!frontmatter) {
+            yield* Effect.logWarning("invalid skill frontmatter", { skill: filepath })
+            continue
+          }
+          const candidate =
             frontmatter.name !== undefined
               ? frontmatter.name
               : path.dirname(filepath) === directory
                 ? path.basename(filepath, ".md")
                 : undefined
-          if (!name) continue
+          if (candidate === undefined) continue
+          const name = decodeName(candidate).valueOrUndefined
+          if (!name) {
+            yield* Effect.logWarning("invalid skill name", { skill: filepath, name: candidate })
+            continue
+          }
           skills.push({
             name,
             description: frontmatter.description,

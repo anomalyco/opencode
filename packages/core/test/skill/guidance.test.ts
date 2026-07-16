@@ -16,11 +16,6 @@ const effect = SkillV2.Info.make({
   location: AbsolutePath.make(path.resolve("/skills/effect/SKILL.md")),
   content: "Effect guidance",
 })
-const hidden = SkillV2.Info.make({
-  name: "hidden",
-  location: AbsolutePath.make(path.resolve("/skills/hidden/SKILL.md")),
-  content: "Undescribed guidance",
-})
 const denied = SkillV2.Info.make({
   name: "denied",
   description: "Must not be advertised",
@@ -39,7 +34,7 @@ describe("SkillGuidance", () => {
       ...AgentV2.Info.empty(build),
       permissions: [{ action: "skill", resource: "denied", effect: "deny" }],
     })
-    let skills = [hidden, denied, effect]
+    let skills = [denied, effect]
     return Effect.gen(function* () {
       const guidance = yield* SkillGuidance.Service
       const initialized = yield* guidance

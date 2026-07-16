@@ -27,12 +27,12 @@ const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([SkillV2.node, AgentV2.node]), [[SkillDiscovery.node, discovery]]),
 )
 
-function write(directory: string, name: string, description: string) {
+function write(directory: string, name: string, description?: string) {
   return fs.writeFile(
     path.join(directory, name, "SKILL.md"),
     `---
 name: ${name}
-description: ${description}
+${description === undefined ? "" : `description: ${description}`}
 ---
 # ${name}`,
   )
@@ -53,7 +53,7 @@ describe("SkillV2", () => {
             await fs.mkdir(path.join(second, "review"), { recursive: true })
             await write(first, "review", "First")
             await write(second, "review", "Second")
-            await fs.writeFile(path.join(first, "foo.md"), "---\nslash: true\n---\n# foo")
+            await fs.writeFile(path.join(first, "foo.md"), "---\ndescription: Flat skill\nslash: true\n---\n# foo")
           })
 
           const skill = yield* SkillV2.Service
@@ -74,6 +74,7 @@ describe("SkillV2", () => {
           expect(yield* skill.list()).toEqual([
             SkillV2.Info.make({
               name: "foo",
+              description: "Flat skill",
               slash: true,
               location: AbsolutePath.make(path.join(first, "foo.md")),
               content: "# foo",
@@ -118,6 +119,44 @@ describe("SkillV2", () => {
           expect((yield* skill.list()).map((item) => item.name)).toEqual(["deploy"])
           expect(pulls).toBe(1)
           expect(SkillV2.available(yield* skill.list(), (yield* agents.get(AgentV2.ID.make("reviewer")))!)).toEqual([])
+        }),
+      ),
+    ),
+  )
+
+  it.live("skips skills with invalid names or descriptions", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const names = {
+            minimum: "a",
+            maximum: `a${"b".repeat(63)}`,
+            tooLong: `a${"b".repeat(64)}`,
+            invalid: "invalid_name",
+            missingDescription: "missing-description",
+            emptyDescription: "empty-description",
+            longDescription: "long-description",
+          }
+          yield* Effect.promise(async () => {
+            await Promise.all(
+              Object.values(names).map((name) => fs.mkdir(path.join(tmp.path, name), { recursive: true })),
+            )
+            await write(tmp.path, names.minimum, "x")
+            await write(tmp.path, names.maximum, "x".repeat(1024))
+            await write(tmp.path, names.tooLong, "Too long name")
+            await write(tmp.path, names.invalid, "Invalid name")
+            await write(tmp.path, names.missingDescription)
+            await write(tmp.path, names.emptyDescription, "")
+            await write(tmp.path, names.longDescription, "x".repeat(1025))
+          })
+
+          const skill = yield* SkillV2.Service
+          yield* skill.transform((editor) => editor.source({ type: "directory", path: AbsolutePath.make(tmp.path) }))
+
+          expect((yield* skill.list()).map((item) => item.name)).toEqual([names.minimum, names.maximum])
         }),
       ),
     ),

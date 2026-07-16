@@ -4,6 +4,19 @@ import { Schema } from "effect"
 import { optional } from "./schema"
 import { AbsolutePath } from "./schema"
 
+export const Name = Schema.String.annotate({ identifier: "Skill.Name" }).check(
+  Schema.isMinLength(1),
+  Schema.isMaxLength(64),
+  Schema.isPattern(/^[a-z0-9]+(-[a-z0-9]+)*$/),
+)
+export type Name = typeof Name.Type
+
+export const Description = Schema.String.annotate({ identifier: "Skill.Description" }).check(
+  Schema.isMinLength(1),
+  Schema.isMaxLength(1024),
+)
+export type Description = typeof Description.Type
+
 export interface DirectorySource extends Schema.Schema.Type<typeof DirectorySource> {}
 export const DirectorySource = Schema.Struct({
   type: Schema.Literal("directory"),
@@ -18,8 +31,8 @@ export const UrlSource = Schema.Struct({
 
 export interface Info extends Schema.Schema.Type<typeof Info> {}
 export const Info = Schema.Struct({
-  name: Schema.String,
-  description: Schema.String.pipe(optional),
+  name: Name,
+  description: Description,
   slash: Schema.Boolean.pipe(optional),
   location: AbsolutePath,
   content: Schema.String,
