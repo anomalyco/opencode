@@ -1,3 +1,13 @@
 {
-  "fingerprint": "344ff67d464652262486c683879e53dcc6b5b007"
+  "fingerprint": "7c5a7a7d8a8b8c9d0e1f2a3b4c5d6e7f8a9b0c1d",
+  "updated": "2026-07-16",
+  "skill_count": 65,
+  "sources": [
+    ".opencode/skills",
+    ".config/opencode/skills",
+    ".agents/skills",
+    ".claude/skills",
+    ".pi/agent/skills",
+    ".hermes/skills"
+  ]
 }
