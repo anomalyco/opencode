@@ -12,7 +12,7 @@ export type Definition<
   Input extends SchemaType<any>,
   Output extends SchemaType<any>,
   Structured extends SchemaType<any> = Output,
-> = Omit<Tool.Definition<Input, Output, Structured>, "execute" | "permission"> & {
+> = Omit<Tool.Definition<Input, Structured, Output>, "execute" | "permission"> & {
   readonly name: string
   readonly options?: RegisterOptions
   readonly execute: (input: Tool.InputValue<Input>, context: Context) => Promise<Tool.OutputValue<Output>>

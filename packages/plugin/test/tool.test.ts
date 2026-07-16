@@ -114,3 +114,19 @@ test("portable schema failures become tool failures", async () => {
   const error = await Effect.runPromiseExit(Tool.settle(tool, { input: 1 }, context))
   expect(error.toString()).toContain("Invalid tool input: expected a string")
 })
+
+test("two-parameter Definition annotations retain their original meaning", () => {
+  const input = Schema.Struct({ value: Schema.String })
+  const output = Schema.Struct({ value: Schema.String, internal: Schema.Boolean })
+  const structured = Schema.Struct({ value: Schema.String })
+  const tool: Tool.Definition<typeof input, typeof structured> = Tool.make({
+    description: "Annotated tool",
+    input,
+    output,
+    structured,
+    toStructuredOutput: ({ output }) => ({ value: output.value }),
+    execute: ({ value }) => Effect.succeed({ value, internal: true }),
+  })
+
+  expect(tool.structured).toBe(structured)
+})

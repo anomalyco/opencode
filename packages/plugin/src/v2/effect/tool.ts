@@ -90,8 +90,8 @@ export type Content =
 
 export type Definition<
   Input extends SchemaType<any>,
-  Output extends SchemaType<any>,
-  Structured extends SchemaType<any> = Output,
+  Structured extends SchemaType<any>,
+  Output extends SchemaType<any> = any,
 > = {
   readonly description: string
   readonly input: Input
@@ -127,13 +127,13 @@ export type DynamicDefinition = {
   readonly execute: (input: unknown, context: Context) => Effect.Effect<DynamicOutput, Failure>
 }
 
-export type AnyTool = Definition<any, any, any> | DynamicDefinition
+export type AnyTool = Definition<any, any> | DynamicDefinition
 
 export function make<
   Input extends SchemaType<any>,
   Output extends SchemaType<any>,
   Structured extends SchemaType<any> = Output,
->(config: Definition<Input, Output, Structured>): Definition<Input, Output, Structured>
+>(config: Definition<Input, Structured, Output>): Definition<Input, Structured, Output>
 export function make(config: DynamicDefinition): DynamicDefinition
 export function make(config: AnyTool): AnyTool
 export function make(config: AnyTool): AnyTool {
