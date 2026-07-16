@@ -4,6 +4,7 @@ import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
+import { EventTable } from "@opencode-ai/core/event/sql"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import type { LocationServices } from "@opencode-ai/core/location-services"
 import { Project } from "@opencode-ai/core/project"
@@ -12,11 +13,12 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionRestart } from "@opencode-ai/core/session/execution/restart"
-import { UserInterruptedError } from "@opencode-ai/core/session/error"
+import { StepFailedError, UserInterruptedError } from "@opencode-ai/core/session/error"
 import { SessionRunner } from "@opencode-ai/core/session/runner"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
+import { asc, eq } from "drizzle-orm"
 import { Context, Deferred, Effect, Exit, Fiber, Layer, LayerMap, Scope } from "effect"
 import { testEffect } from "./lib/effect"
 
@@ -123,6 +125,50 @@ describe("SessionExecution lifecycle", () => {
 
       yield* restart.resumeSuspendedSessions
       expect(drained.length).toBe(2)
+      yield* Scope.close(scope, Exit.void)
+    }),
+  )
+
+  it.effect("publishes failed instead of succeeded for invalid provider output", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const sessionID = SessionV2.ID.make("ses_invalid_provider_output")
+      const failure = new StepFailedError({
+        error: {
+          type: "provider.invalid-output",
+          message: "Provider returned no usable assistant output",
+        },
+      })
+      yield* seedSessions(database, [sessionID])
+
+      const scope = yield* Scope.make()
+      const context = yield* buildExecution(scope, () => Effect.fail(failure))
+      const execution = Context.get(context, SessionExecution.Service)
+
+      expect(yield* execution.resume(sessionID).pipe(Effect.flip)).toBe(failure)
+      yield* execution.awaitIdle(sessionID)
+
+      const lifecycle = yield* database.db
+        .select({ type: EventTable.type, data: EventTable.data })
+        .from(EventTable)
+        .where(eq(EventTable.aggregate_id, sessionID))
+        .orderBy(asc(EventTable.seq))
+        .all()
+        .pipe(Effect.orDie)
+      expect(lifecycle).toEqual([
+        { type: "session.execution.started.1", data: { sessionID } },
+        {
+          type: "session.execution.failed.1",
+          data: {
+            sessionID,
+            error: {
+              type: "provider.invalid-output",
+              message: "Provider returned no usable assistant output",
+            },
+          },
+        },
+      ])
+      expect(lifecycle.map((event) => event.type)).not.toContain("session.execution.succeeded.1")
       yield* Scope.close(scope, Exit.void)
     }),
   )

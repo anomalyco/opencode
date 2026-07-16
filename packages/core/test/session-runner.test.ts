@@ -33,6 +33,7 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { Snapshot } from "@opencode-ai/core/snapshot"
 import { SessionEvent } from "@opencode-ai/core/session/event"
+import { StepFailedError } from "@opencode-ai/core/session/error"
 import { SessionPending } from "@opencode-ai/core/session/pending"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { Money } from "@opencode-ai/schema/money"
@@ -118,6 +119,9 @@ const client = Layer.succeed(
 const reply = {
   stop: () => [
     LLMEvent.stepStart({ index: 0 }),
+    LLMEvent.textStart({ id: "text-stop" }),
+    LLMEvent.textDelta({ id: "text-stop", text: "Done" }),
+    LLMEvent.textEnd({ id: "text-stop" }),
     LLMEvent.stepFinish({ index: 0, reason: "stop" }),
     LLMEvent.finish({ reason: "stop" }),
   ],
@@ -490,7 +494,7 @@ const setup = Effect.gen(function* () {
   requests.length = 0
   authorizations.length = 0
   executions.length = 0
-  response = []
+  response = reply.stop()
   systemBaseline = "Initial context"
   systemRemoved = false
   systemUnavailable = false
@@ -681,16 +685,20 @@ const fragmentFixture = (kind: FragmentKind, id: string, chunks: readonly string
         ...chunks.map((text) => LLMEvent.reasoningDelta({ id, text })),
       ]
       const expectedContent = { type: "reasoning", text }
+      const visibleContent = { type: "text", text: "Done" }
       return {
         delta: SessionEvent.Reasoning.Delta,
         partialEvents,
         completeEvents: [
           ...partialEvents,
           LLMEvent.reasoningEnd({ id }),
+          LLMEvent.textStart({ id: `${id}-final` }),
+          LLMEvent.textDelta({ id: `${id}-final`, text: visibleContent.text }),
+          LLMEvent.textEnd({ id: `${id}-final` }),
           LLMEvent.stepFinish({ index: 0, reason: "stop" }),
           LLMEvent.finish({ reason: "stop" }),
         ],
-        expectedAssistant: { type: "assistant", finish: "stop", content: [expectedContent] },
+        expectedAssistant: { type: "assistant", finish: "stop", content: [expectedContent, visibleContent] },
         expectedContent,
       }
     }
@@ -700,12 +708,29 @@ const fragmentFixture = (kind: FragmentKind, id: string, chunks: readonly string
         LLMEvent.toolInputStart({ id, name: "echo" }),
         ...chunks.map((text) => LLMEvent.toolInputDelta({ id, name: "echo", text })),
       ]
-      const expectedContent = { type: "tool", id, state: { status: "streaming", input: text } }
+      const expectedContent = {
+        type: "tool",
+        id,
+        executed: true,
+        state: { status: "completed", input: { text }, structured: { text } },
+      }
       return {
         delta: SessionEvent.Tool.Input.Delta,
         partialEvents,
-        completeEvents: [...partialEvents, LLMEvent.toolInputEnd({ id, name: "echo" })],
-        expectedAssistant: { type: "assistant", content: [expectedContent] },
+        completeEvents: [
+          ...partialEvents,
+          LLMEvent.toolInputEnd({ id, name: "echo" }),
+          LLMEvent.toolCall({ id, name: "echo", input: { text }, providerExecuted: true }),
+          LLMEvent.toolResult({
+            id,
+            name: "echo",
+            result: { type: "json", value: { text } },
+            providerExecuted: true,
+          }),
+          LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+          LLMEvent.finish({ reason: "stop" }),
+        ],
+        expectedAssistant: { type: "assistant", finish: "stop", content: [expectedContent] },
         expectedContent,
       }
     }
@@ -853,7 +878,7 @@ describe("SessionRunnerLLM", () => {
         }),
       }, { codemode: false })
       yield* admit(session, "Use application context")
-      responses = [reply.tool("call-location", "location_context", { query: "hello" }), []]
+      responses = [reply.tool("call-location", "location_context", { query: "hello" }), reply.stop()]
       const events = yield* EventV2.Service
       const progressFiber = yield* events.subscribe(SessionEvent.Tool.Progress).pipe(
         Stream.filter((event) => event.data.sessionID === sessionID && event.data.callID === "call-location"),
@@ -887,6 +912,7 @@ describe("SessionRunnerLLM", () => {
             },
           ],
         },
+        { type: "assistant", content: [{ type: "text", text: "Done" }] },
       ])
     }),
   )
@@ -915,7 +941,7 @@ describe("SessionRunnerLLM", () => {
           LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
           LLMEvent.finish({ reason: "tool-calls" }),
         ],
-        [],
+        reply.stop(),
       ]
       streamGate = yield* Deferred.make<void>()
       streamStarted = yield* Deferred.make<void>()
@@ -947,6 +973,7 @@ describe("SessionRunnerLLM", () => {
             },
           ],
         },
+        { type: "assistant", content: [{ type: "text", text: "Done" }] },
       ])
     }),
   )
@@ -963,6 +990,7 @@ describe("SessionRunnerLLM", () => {
 
       expect(requests).toHaveLength(1)
       expect(yield* session.messages({ sessionID })).toMatchObject([
+        { type: "assistant", content: [{ type: "text", text: "Done" }] },
         { id: message.id, type: "user", text: "Run automatically" },
       ])
     }),
@@ -1011,7 +1039,7 @@ describe("SessionRunnerLLM", () => {
         { role: "user", content: [{ type: "text", text: "First" }] },
         { role: "user", content: [{ type: "text", text: "Second" }] },
       ])
-      expect(yield* session.messages({ sessionID })).toHaveLength(2)
+      expect(yield* session.messages({ sessionID })).toHaveLength(3)
     }),
   )
 
@@ -1195,7 +1223,7 @@ describe("SessionRunnerLLM", () => {
 
       expect(requests).toHaveLength(1)
       expect(requests[0]?.system.map((part) => part.text)).toEqual([defaultSystem, "Initial context"])
-      expect(requests[0]?.messages.map((message) => message.role)).toEqual(["user", "user"])
+      expect(requests[0]?.messages.map((message) => message.role)).toEqual(["user", "assistant", "user"])
       expect(
         yield* db
           .select({ id: EventTable.id })
@@ -1224,9 +1252,9 @@ describe("SessionRunnerLLM", () => {
         [defaultSystem, "Initial context"],
         [defaultSystem, "Initial context"],
       ])
-      expect(requests[1]?.messages.map((message) => message.role)).toEqual(["user", "system", "user"])
-      expect(requests[1]?.messages.at(1)?.content).toEqual([{ type: "text", text: "Changed context" }])
-      expect(yield* session.messages({ sessionID })).toHaveLength(2)
+      expect(requests[1]?.messages.map((message) => message.role)).toEqual(["user", "assistant", "system", "user"])
+      expect(requests[1]?.messages.at(2)?.content).toEqual([{ type: "text", text: "Changed context" }])
+      expect(yield* session.messages({ sessionID })).toHaveLength(4)
       const { db } = yield* Database.Service
       const updates = yield* db
         .select({ data: EventTable.data })
@@ -1245,7 +1273,7 @@ describe("SessionRunnerLLM", () => {
         delta: { "test/context": Instructions.hash("Changed context") },
       })
       yield* replaySessionProjection(sessionID)
-      expect(yield* session.messages({ sessionID })).toHaveLength(2)
+      expect(yield* session.messages({ sessionID })).toHaveLength(4)
     }),
   )
 
@@ -1413,7 +1441,7 @@ describe("SessionRunnerLLM", () => {
       yield* session.prompt({ sessionID, text: "Wait for plugins", resume: false })
 
       requests.length = 0
-      response = []
+      response = reply.stop()
       const running = yield* session.resume(sessionID).pipe(Effect.forkChild({ startImmediately: true }))
       yield* Effect.yieldNow
 
@@ -1518,11 +1546,11 @@ describe("SessionRunnerLLM", () => {
       yield* admit(session, "Second")
       yield* session.resume(sessionID)
 
-      expect(requests[1]?.messages.map((message) => message.role)).toEqual(["user", "system", "user"])
-      expect(requests[1]?.messages.at(1)?.content).toEqual([
+      expect(requests[1]?.messages.map((message) => message.role)).toEqual(["user", "assistant", "system", "user"])
+      expect(requests[1]?.messages.at(2)?.content).toEqual([
         { type: "text", text: "System context source removed: test/context" },
       ])
-      expect(yield* session.messages({ sessionID })).toHaveLength(2)
+      expect(yield* session.messages({ sessionID })).toHaveLength(4)
     }),
   )
 
@@ -1546,8 +1574,8 @@ describe("SessionRunnerLLM", () => {
       yield* admit(session, "Second")
       yield* session.resume(sessionID)
 
-      expect(requests[1]?.messages.map((message) => message.role)).toEqual(["user", "system", "user"])
-      expect(requests[1]?.messages.at(1)?.content).toEqual([
+      expect(requests[1]?.messages.map((message) => message.role)).toEqual(["user", "assistant", "system", "user"])
+      expect(requests[1]?.messages.at(2)?.content).toEqual([
         {
           type: "text",
           text: [
@@ -1567,7 +1595,15 @@ describe("SessionRunnerLLM", () => {
       yield* admit(session, "Third")
       yield* session.resume(sessionID)
 
-      expect(requests[2]?.messages.map((message) => message.role)).toEqual(["user", "system", "user", "system", "user"])
+      expect(requests[2]?.messages.map((message) => message.role)).toEqual([
+        "user",
+        "assistant",
+        "system",
+        "user",
+        "assistant",
+        "system",
+        "user",
+      ])
       expect(requests[2]?.messages.at(-2)?.content).toEqual([
         { type: "text", text: 'The context under "deploy-target" no longer applies. Disregard it.' },
       ])
@@ -1587,7 +1623,7 @@ describe("SessionRunnerLLM", () => {
       yield* admit(session, "Second")
       yield* session.resume(sessionID)
 
-      expect(requests[1]?.messages.at(1)?.content).toEqual([
+      expect(requests[1]?.messages.at(2)?.content).toEqual([
         {
           type: "text",
           text: [
@@ -1640,16 +1676,19 @@ describe("SessionRunnerLLM", () => {
         [defaultSystem, "Initial context"],
         [defaultSystem, "Initial context"],
       ])
-      expect(requests[1]?.messages.map((message) => message.role)).toEqual(["user", "system", "user"])
+      expect(requests[1]?.messages.map((message) => message.role)).toEqual(["user", "assistant", "system", "user"])
       expect(requests[2]?.messages.filter((message) => message.role === "system")).toHaveLength(2)
       expect((yield* session.context(sessionID)).map((message) => message.type)).toEqual([
         "user",
+        "assistant",
         "user",
+        "assistant",
         "model-switched",
         "user",
+        "assistant",
       ])
       yield* replaySessionProjection(sessionID)
-      expect(yield* session.messages({ sessionID })).toHaveLength(4)
+      expect(yield* session.messages({ sessionID })).toHaveLength(7)
       yield* admit(session, "Fourth")
       yield* session.resume(sessionID)
     }),
@@ -2415,6 +2454,9 @@ describe("SessionRunnerLLM", () => {
             anthropic: { ignored: true },
           },
         }),
+        LLMEvent.textStart({ id: "text-final" }),
+        LLMEvent.textDelta({ id: "text-final", text: "Done" }),
+        LLMEvent.textEnd({ id: "text-final" }),
         LLMEvent.stepFinish({ index: 0, reason: "stop" }),
         LLMEvent.finish({ reason: "stop" }),
       ]
@@ -2436,12 +2478,13 @@ describe("SessionRunnerLLM", () => {
               text: "Encrypted thought",
               state: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" },
             },
+            { type: "text", text: "Done" },
           ],
         },
       ])
 
       yield* admit(session, "Continue")
-      response = []
+      response = reply.stop()
       yield* session.resume(sessionID)
 
       expect(requests[1]?.messages[1]?.content).toEqual([
@@ -2455,6 +2498,7 @@ describe("SessionRunnerLLM", () => {
           text: "Encrypted thought",
           providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
         },
+        { type: "text", text: "Done" },
       ])
     }),
   )
@@ -2487,7 +2531,7 @@ describe("SessionRunnerLLM", () => {
       yield* replaySessionProjection(sessionID)
 
       yield* admit(session, "Continue")
-      response = []
+      response = reply.stop()
       yield* session.resume(sessionID)
 
       expect(requests[1]?.messages.map((message) => message.role)).toEqual(["user", "assistant", "user"])
@@ -2575,7 +2619,7 @@ describe("SessionRunnerLLM", () => {
       responses = [
         reply.tool("tool_0", "echo", { text: "first" }),
         reply.tool("tool_0", "echo", { text: "second" }),
-        [],
+        reply.stop(),
       ]
 
       yield* session.resume(sessionID)
@@ -2608,6 +2652,7 @@ describe("SessionRunnerLLM", () => {
             },
           ],
         },
+        { type: "assistant", content: [{ type: "text", text: "Done" }] },
       ])
 
       yield* replaySessionProjection(sessionID)
@@ -2638,6 +2683,7 @@ describe("SessionRunnerLLM", () => {
             },
           ],
         },
+        { type: "assistant", content: [{ type: "text", text: "Done" }] },
       ])
     }),
   )
@@ -2976,7 +3022,7 @@ describe("SessionRunnerLLM", () => {
         executed: false,
       })
       requests.length = 0
-      response = []
+      response = reply.stop()
       yield* session.resume(sessionID)
 
       expect(requests).toHaveLength(1)
@@ -2996,6 +3042,7 @@ describe("SessionRunnerLLM", () => {
             },
           ],
         },
+        { type: "assistant", content: [{ type: "text", text: "Done" }] },
       ])
     }),
   )
@@ -3034,7 +3081,7 @@ describe("SessionRunnerLLM", () => {
         state: { itemId: "call-hosted-interrupted" },
       })
       requests.length = 0
-      response = []
+      response = reply.stop()
       yield* session.resume(sessionID)
 
       expect(requests).toHaveLength(1)
@@ -3071,7 +3118,7 @@ describe("SessionRunnerLLM", () => {
         name: "echo",
       })
       requests.length = 0
-      response = []
+      response = reply.stop()
       yield* session.resume(sessionID)
 
       expect(requests).toHaveLength(1)
@@ -3079,6 +3126,7 @@ describe("SessionRunnerLLM", () => {
       expect(yield* session.context(sessionID)).toMatchObject([
         { type: "user", text: "Recover interrupted tool input" },
         { type: "assistant", content: [{ type: "tool", id: "call-pending-interrupted", state: { status: "error" } }] },
+        { type: "assistant", content: [{ type: "text", text: "Done" }] },
       ])
     }),
   )
@@ -3481,10 +3529,7 @@ describe("SessionRunnerLLM", () => {
       const registry = yield* ToolRegistry.Service
       yield* registry.register({ permissionfail: permissionFail }, { codemode: false })
       yield* admit(session, "Reject permission")
-      responses = [
-        reply.tool("call-permission", "permissionfail", {}),
-        [LLMEvent.stepStart({ index: 0 }), LLMEvent.stepFinish({ index: 0, reason: "stop" })],
-      ]
+      responses = [reply.tool("call-permission", "permissionfail", {}), reply.stop()]
 
       yield* session.resume(sessionID)
 
@@ -3642,7 +3687,7 @@ describe("SessionRunnerLLM", () => {
       ])
       requests.length = 0
       responseStream = undefined
-      response = []
+      response = reply.stop()
       yield* session.resume(sessionID)
       expect(requests[0]?.messages.map((message) => message.role)).toEqual(["user", "assistant", "tool"])
     }),
@@ -3811,6 +3856,93 @@ describe("SessionRunnerLLM", () => {
         { type: "user", text: "Fail before step" },
         { type: "assistant", finish: "error", error: { type: "provider.unknown", message: "Provider unavailable" } },
       ])
+    }),
+  )
+
+  it.effect("fails an empty successful provider stream", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      yield* admit(session, "Answer visibly")
+      response = []
+
+      const failure = yield* session.resume(sessionID).pipe(Effect.flip)
+      expect(failure).toMatchObject({
+        _tag: "Session.StepFailedError",
+        error: {
+          type: "provider.invalid-output",
+          message: "Provider returned no usable assistant output",
+        },
+      })
+      expect(failure).toBeInstanceOf(StepFailedError)
+      if (!(failure instanceof StepFailedError)) throw new Error("Expected step failure")
+      expect(SessionExecution.terminal(Exit.fail(failure))).toEqual({
+        type: "failed",
+        error: {
+          type: "provider.invalid-output",
+          message: "Provider returned no usable assistant output",
+        },
+      })
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Answer visibly" },
+        {
+          type: "assistant",
+          finish: "error",
+          error: {
+            type: "provider.invalid-output",
+            message: "Provider returned no usable assistant output",
+          },
+        },
+      ])
+      expect(yield* recordedEventTypes(sessionID)).toContain("session.step.failed.1")
+      expect(yield* recordedEventTypes(sessionID)).not.toContain("session.step.ended.1")
+    }),
+  )
+
+  it.effect("fails reasoning-only output even with whitespace text and nonzero tokens", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      yield* admit(session, "Answer visibly")
+      response = [
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.reasoningStart({ id: "reasoning-only" }),
+        LLMEvent.reasoningDelta({ id: "reasoning-only", text: "Still thinking" }),
+        LLMEvent.reasoningEnd({ id: "reasoning-only" }),
+        LLMEvent.textStart({ id: "text-whitespace" }),
+        LLMEvent.textDelta({ id: "text-whitespace", text: " \n\t" }),
+        LLMEvent.textEnd({ id: "text-whitespace" }),
+        LLMEvent.stepFinish({
+          index: 0,
+          reason: "stop",
+          usage: { nonCachedInputTokens: 10, outputTokens: 68, reasoningTokens: 62 },
+        }),
+        LLMEvent.finish({ reason: "stop" }),
+      ]
+
+      expect(yield* session.resume(sessionID).pipe(Effect.flip)).toMatchObject({
+        _tag: "Session.StepFailedError",
+        error: {
+          type: "provider.invalid-output",
+          message: "Provider returned no usable assistant output",
+        },
+      })
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Answer visibly" },
+        {
+          type: "assistant",
+          finish: "error",
+          error: {
+            type: "provider.invalid-output",
+            message: "Provider returned no usable assistant output",
+          },
+          tokens: { input: 10, output: 6, reasoning: 62 },
+          content: [
+            { type: "reasoning", text: "Still thinking" },
+            { type: "text", text: " \n\t" },
+          ],
+        },
+      ])
+      expect(yield* recordedEventTypes(sessionID)).toContain("session.step.failed.1")
+      expect(yield* recordedEventTypes(sessionID)).not.toContain("session.step.ended.1")
     }),
   )
 

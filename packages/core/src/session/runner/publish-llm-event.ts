@@ -73,6 +73,7 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
   let stepFailed = false
   let providerFailed = false
   let retryEvidence = false
+  let usableOutput = false
   let stepFailure: SessionError.Error | undefined
   let stepSettlement:
     | {
@@ -291,6 +292,7 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
         })
         return
       case "text-delta":
+        if (event.text.trim().length > 0) usableOutput = true
         const deltaTextOrdinal = yield* text.append(event.id, event.text)
         yield* events.publish(SessionEvent.Text.Delta, {
           sessionID: input.sessionID,
@@ -352,6 +354,7 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
         return
       case "tool-call": {
         retryEvidence = true
+        usableOutput = true
         if (!tools.has(event.id)) yield* startToolInput(event)
         const tool = tools.get(event.id)!
         if (toolInput.has(event.id)) yield* endToolInput(event)
@@ -453,6 +456,7 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
     failUnsettledTools,
     hasProviderError: () => providerFailed,
     hasRetryEvidence: () => retryEvidence,
+    hasUsableOutput: () => usableOutput,
     stepFailure: () => stepFailure,
     stepSettlement: () => stepSettlement,
     startAssistant,

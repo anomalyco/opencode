@@ -344,6 +344,13 @@ const layer = Layer.effect(
                 message: "Provider did not return a tool result",
               }),
             )
+          if (stream._tag === "Success" && !providerFailed && !publisher.hasUsableOutput())
+            yield* serialized(
+              publisher.failAssistant({
+                type: "provider.invalid-output",
+                message: "Provider returned no usable assistant output",
+              }),
+            )
 
           const stepFailure = publisher.stepFailure()
           const stepSettlement = publisher.stepSettlement()
