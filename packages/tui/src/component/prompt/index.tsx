@@ -1555,7 +1555,7 @@ export function Prompt(props: PromptProps) {
             }
           />
         </box>
-        <box width="100%" flexDirection="row" justifyContent="space-between">
+        <box width="100%" flexDirection="row" justifyContent="space-between" gap={2}>
           <Switch>
             <Match when={status() === "running"}>
               <box flexDirection="row" gap={1} flexGrow={1} justifyContent="flex-start">
