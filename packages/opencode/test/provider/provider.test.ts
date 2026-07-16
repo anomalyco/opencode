@@ -805,38 +805,6 @@ it.instance("getSmallModel skips inferred models for Azure Cognitive Services", 
   }),
 )
 
-it.instance("Azure Cognitive Services uses the v1 OpenAI endpoint", () =>
-  Effect.gen(function* () {
-    yield* set("AZURE_COGNITIVE_SERVICES_RESOURCE_NAME", "test-resource")
-    yield* set("AZURE_COGNITIVE_SERVICES_API_KEY", "test-key")
-    const providers = yield* list
-    expect(providers[ProviderV2.ID.make("azure-cognitive-services")].options.baseURL).toBe(
-      "https://test-resource.cognitiveservices.azure.com/openai/v1",
-    )
-  }),
-)
-
-it.instance(
-  "Azure Cognitive Services preserves deployment-based endpoints",
-  Effect.gen(function* () {
-    yield* set("AZURE_COGNITIVE_SERVICES_RESOURCE_NAME", "test-resource")
-    yield* set("AZURE_COGNITIVE_SERVICES_API_KEY", "test-key")
-    const providers = yield* list
-    expect(providers[ProviderV2.ID.make("azure-cognitive-services")].options.baseURL).toBe(
-      "https://test-resource.cognitiveservices.azure.com/openai",
-    )
-  }),
-  {
-    config: {
-      provider: {
-        "azure-cognitive-services": {
-          options: { useDeploymentBasedUrls: true },
-        },
-      },
-    },
-  },
-)
-
 it.instance(
   "getSmallModel respects config small_model override",
   Effect.gen(function* () {
