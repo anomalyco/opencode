@@ -6,6 +6,9 @@ import { PermissionModule } from "@opencode-ai/schema/permission-module"
 export const Options = PermissionModule.Options
 export type Options = PermissionModule.Options
 
+export const Instructions = PermissionModule.Instructions
+export type Instructions = PermissionModule.Instructions
+
 export const Info = PermissionModule.Info
 export type Info = PermissionModule.Info
 

@@ -16,15 +16,32 @@ export const Fallback = Schema.Literals(["ask", "deny"]).annotate({
 })
 export type Fallback = typeof Fallback.Type
 
+/** Structured classifier instructions for cruise_control (and similar modules). */
+export interface Instructions extends Schema.Schema.Type<typeof Instructions> {}
+export const Instructions = Schema.Struct({
+  background: Schema.Array(Schema.String).pipe(optional).annotate({
+    description: "Context about the user's setup that helps the classifier decide",
+  }),
+  allow: Schema.Array(Schema.String).pipe(optional).annotate({
+    description: "Specific actions that should be permitted",
+  }),
+  conditional: Schema.Array(Schema.String).pipe(optional).annotate({
+    description: "Conditions under which certain actions are allowed or denied",
+  }),
+  deny: Schema.Array(Schema.String).pipe(optional).annotate({
+    description: "Specific actions that should be explicitly denied",
+  }),
+}).annotate({ identifier: "PermissionModule.Instructions" })
+
 /** Options for a named permission module (e.g. cruise_control). */
 export interface Options extends Schema.Schema.Type<typeof Options> {}
 export const Options = Schema.Struct({
   model: Schema.String.pipe(optional).annotate({
     description: "Provider/model ref used to classify tool permissions, e.g. opencode/deepseek-v4-flash",
   }),
-  system_prompt: Schema.String.pipe(optional).annotate({
+  instructions: Instructions.pipe(optional).annotate({
     description:
-      "Classifier system prompt; when unset/blank, KanCode seeds the built-in default into global config",
+      "Structured classifier instructions (background/allow/conditional/deny); seeded with defaults when unset",
   }),
   fallback: Fallback.pipe(optional).annotate({
     description: "Outcome when classification fails or times out (default: ask)",
@@ -48,6 +65,7 @@ export const Info = Schema.Record(Schema.String, Options).annotate({
 })
 export type Info = typeof Info.Type
 
+/** Host-facing module decision (ask remains for missing model, rails, timeout, fallback). */
 export const Decision = Schema.Literals(["allow", "deny", "ask"]).annotate({
   identifier: "PermissionModule.Decision",
 })

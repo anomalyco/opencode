@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Built-in LLM permission classifier module `cruise_control` that auto-allows/denies/asks gated tool permissions using a user-configured model with fail-closed safety rails.
+Built-in LLM permission classifier module `cruise_control` that auto-allows/denies gated tool permissions using a user-configured model with fail-closed safety rails. Host-side ask remains for missing model, rails, timeout, and parse failure.
 
 ## Requirements
 
@@ -24,7 +24,7 @@ The `cruise_control` module SHALL require a configured model reference under `pe
 
 #### Scenario: Classify with deepseek flash
 - **WHEN** `permission_modules.cruise_control.model` is `opencode/deepseek-v4-flash` and a gated tool permission is evaluated
-- **THEN** `cruise_control` invokes that model to produce an allow/deny/ask decision
+- **THEN** `cruise_control` invokes that model to produce an allow/deny decision
 
 #### Scenario: Classify with ollama cloud model
 - **WHEN** `permission_modules.cruise_control.model` is `ollama_cloud/kimi-k2.7-code` and a gated tool permission is evaluated
@@ -32,31 +32,31 @@ The `cruise_control` module SHALL require a configured model reference under `pe
 
 #### Scenario: Missing model fails closed
 - **WHEN** a rule selects `cruise_control` but `permission_modules.cruise_control.model` is missing or cannot be resolved
-- **THEN** the effective decision is the configured `fallback` (default `deny`)
+- **THEN** the effective decision is host-side ask (configure warning) or the configured `fallback` when the model cannot be resolved after being set
 - **AND** the decision MUST NOT be `allow`
 
 ### Requirement: Classifier Input And Output Contract
 
-The `cruise_control` classifier MUST receive a structured, non-executable summary of the permission request (permission key, patterns/resources, tool metadata, truncated args) with tool args placed in a delimited data section that MUST NOT be treated as system instructions. The classifier MUST return schema-validated JSON with a `decision` of `allow`, `deny`, or `ask` (and a reason string). Invalid or unparseable output MUST map to `fallback`.
+The `cruise_control` classifier MUST receive a structured, non-executable summary of the permission request (permission key, patterns/resources, tool metadata, truncated args) with tool args placed in a delimited data section that MUST NOT be treated as system instructions. The classifier LLM MUST return schema-validated JSON with a `decision` of `allow` or `deny` (and a reason string). Invalid or unparseable output MUST map to `fallback`. Host-side ask remains available for missing model, `never_auto`/allowlist rails, timeout, and parse failure.
 
-The classifier system prompt MUST be configurable via `permission_modules.cruise_control.system_prompt`. When that field is omitted or blank, KanCode MUST use the built-in default classifier prompt (same text as the shipped default).
+Classifier guidance MUST be configurable via `permission_modules.cruise_control.instructions` with optional `background`, `allow`, `conditional`, and `deny` string arrays. When the whole `instructions` object or individual sections are omitted, KanCode MUST seed/use built-in defaults for missing sections and MUST NOT wipe sections the user already set (including empty arrays). Legacy `system_prompt` MUST NOT be part of the schema.
 
 #### Scenario: Valid allow decision
 - **WHEN** the classifier returns valid JSON `{ "decision": "allow", "reason": "..." }` for a permission key on the allowlist and not on `never_auto`
 - **THEN** the tool permission is allowed without showing the human ask UI
 
 #### Scenario: Uncertain or invalid output uses fallback
-- **WHEN** the classifier returns invalid JSON, omits `decision`, or otherwise cannot be validated
+- **WHEN** the classifier returns invalid JSON, omits `decision`, returns `ask`, or otherwise cannot be validated
 - **THEN** the effective decision is `fallback`
 - **AND** the decision MUST NOT be `allow`
 
-#### Scenario: Default system prompt when unset
-- **WHEN** `permission_modules.cruise_control.system_prompt` is omitted
-- **THEN** the classifier uses the built-in default system prompt
+#### Scenario: Default instructions when unset
+- **WHEN** `permission_modules.cruise_control.instructions` is omitted
+- **THEN** the classifier uses the built-in default instructions rendered into the system prompt
 
-#### Scenario: Custom system prompt override
-- **WHEN** `permission_modules.cruise_control.system_prompt` is set to a non-empty string
-- **THEN** the classifier uses that string as its system prompt instead of the built-in default
+#### Scenario: Partial instructions merge
+- **WHEN** the user configures only some instruction sections
+- **THEN** missing sections use built-in defaults and configured sections are preserved as-is
 
 ### Requirement: cruise_control Safety Rails
 

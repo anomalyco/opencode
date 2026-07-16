@@ -7,11 +7,15 @@ import { Permission } from "../../src/permission"
 import { PermissionModule } from "../../src/permission/module"
 import {
   applySafety,
+  CLASSIFIER_PREAMBLE,
   decideCruiseControl,
-  DEFAULT_SYSTEM_PROMPT,
-  ensureDefaultSystemPrompt,
-  hasConfiguredSystemPrompt,
+  DEFAULT_INSTRUCTIONS,
+  ensureDefaultInstructions,
+  hasCompleteInstructions,
+  mergeInstructionsDefaults,
   parseClassifierResult,
+  renderSystemPrompt,
+  resolveInstructions,
   resolveSystemPrompt,
   runClassifier,
   destructiveReason,
@@ -398,30 +402,76 @@ itMissingModel.instance("missing cruise_control model asks with configure warnin
 )
 
 describe("classifier contract", () => {
-  test("resolveSystemPrompt uses built-in default when unset or blank", () => {
-    expect(resolveSystemPrompt(undefined)).toBe(DEFAULT_SYSTEM_PROMPT)
-    expect(resolveSystemPrompt({})).toBe(DEFAULT_SYSTEM_PROMPT)
-    expect(resolveSystemPrompt({ system_prompt: "   " })).toBe(DEFAULT_SYSTEM_PROMPT)
-    expect(DEFAULT_SYSTEM_PROMPT).toContain("KanCode cruise_control")
+  test("resolveInstructions fills missing sections from defaults", () => {
+    expect(resolveInstructions(undefined)).toEqual(DEFAULT_INSTRUCTIONS)
+    expect(resolveInstructions({})).toEqual(DEFAULT_INSTRUCTIONS)
+    expect(resolveInstructions({ instructions: { allow: ["Custom allow."] } })).toEqual({
+      background: DEFAULT_INSTRUCTIONS.background,
+      allow: ["Custom allow."],
+      conditional: DEFAULT_INSTRUCTIONS.conditional,
+      deny: DEFAULT_INSTRUCTIONS.deny,
+    })
+    expect(resolveInstructions({ instructions: { allow: [] } }).allow).toEqual([])
   })
 
-  test("resolveSystemPrompt prefers configured system_prompt override", () => {
-    const custom = "Custom classifier instructions.\nReturn JSON only."
-    expect(resolveSystemPrompt({ system_prompt: custom })).toBe(custom)
-    expect(resolveSystemPrompt({ system_prompt: `  ${custom}  ` })).toBe(custom)
+  test("resolveSystemPrompt renders preamble and instruction sections", () => {
+    const prompt = resolveSystemPrompt(undefined)
+    expect(prompt.startsWith(CLASSIFIER_PREAMBLE)).toBe(true)
+    expect(prompt).toContain("## Background")
+    expect(prompt).toContain("## Allow")
+    expect(prompt).toContain("## Conditional")
+    expect(prompt).toContain("## Deny")
+    expect(prompt).toContain(DEFAULT_INSTRUCTIONS.background[0]!)
+    expect(prompt).toContain('"decision":"allow"|"deny"')
+    expect(prompt).not.toContain("|\"ask\"")
   })
 
-  test("hasConfiguredSystemPrompt treats blank as unset", () => {
-    expect(hasConfiguredSystemPrompt(undefined)).toBe(false)
-    expect(hasConfiguredSystemPrompt({})).toBe(false)
-    expect(hasConfiguredSystemPrompt({ system_prompt: "   " })).toBe(false)
-    expect(hasConfiguredSystemPrompt({ system_prompt: "custom" })).toBe(true)
+  test("renderSystemPrompt includes custom instruction lines", () => {
+    const prompt = renderSystemPrompt({
+      background: ["Custom background."],
+      allow: ["Custom allow."],
+      conditional: ["Custom conditional."],
+      deny: ["Custom deny."],
+    })
+    expect(prompt).toContain("- Custom background.")
+    expect(prompt).toContain("- Custom allow.")
+    expect(prompt).toContain("- Custom conditional.")
+    expect(prompt).toContain("- Custom deny.")
   })
 
-  test("ensureDefaultSystemPrompt writes default when unset", async () => {
+  test("hasCompleteInstructions requires all four sections", () => {
+    expect(hasCompleteInstructions(undefined)).toBe(false)
+    expect(hasCompleteInstructions({})).toBe(false)
+    expect(hasCompleteInstructions({ instructions: { allow: [] } })).toBe(false)
+    expect(
+      hasCompleteInstructions({
+        instructions: { background: [], allow: [], conditional: [], deny: [] },
+      }),
+    ).toBe(true)
+  })
+
+  test("mergeInstructionsDefaults seeds missing sections only", () => {
+    expect(mergeInstructionsDefaults(undefined)).toEqual(DEFAULT_INSTRUCTIONS)
+    expect(mergeInstructionsDefaults({ allow: ["Keep me."] })).toEqual({
+      background: DEFAULT_INSTRUCTIONS.background,
+      allow: ["Keep me."],
+      conditional: DEFAULT_INSTRUCTIONS.conditional,
+      deny: DEFAULT_INSTRUCTIONS.deny,
+    })
+    expect(
+      mergeInstructionsDefaults({
+        background: [],
+        allow: ["Keep."],
+        conditional: DEFAULT_INSTRUCTIONS.conditional,
+        deny: DEFAULT_INSTRUCTIONS.deny,
+      }),
+    ).toBeUndefined()
+  })
+
+  test("ensureDefaultInstructions writes defaults when unset", async () => {
     const patches: unknown[] = []
     await Effect.runPromise(
-      ensureDefaultSystemPrompt().pipe(
+      ensureDefaultInstructions().pipe(
         Effect.provide(
           TestConfig.layer({
             getGlobal: () => Effect.succeed({}),
@@ -436,22 +486,25 @@ describe("classifier contract", () => {
     expect(patches).toEqual([
       {
         permission_modules: {
-          cruise_control: { system_prompt: DEFAULT_SYSTEM_PROMPT },
+          cruise_control: { instructions: DEFAULT_INSTRUCTIONS },
         },
       },
     ])
   })
 
-  test("ensureDefaultSystemPrompt writes default when blank", async () => {
+  test("ensureDefaultInstructions fills only missing sections", async () => {
     const patches: unknown[] = []
     await Effect.runPromise(
-      ensureDefaultSystemPrompt().pipe(
+      ensureDefaultInstructions().pipe(
         Effect.provide(
           TestConfig.layer({
             getGlobal: () =>
               Effect.succeed({
                 permission_modules: {
-                  cruise_control: { model: "opencode/deepseek-v4-flash", system_prompt: "  " },
+                  cruise_control: {
+                    model: "opencode/deepseek-v4-flash",
+                    instructions: { allow: ["User allow rule."] },
+                  },
                 },
               }),
             updateGlobal: (config) => {
@@ -465,16 +518,29 @@ describe("classifier contract", () => {
     expect(patches).toEqual([
       {
         permission_modules: {
-          cruise_control: { system_prompt: DEFAULT_SYSTEM_PROMPT },
+          cruise_control: {
+            instructions: {
+              background: DEFAULT_INSTRUCTIONS.background,
+              allow: ["User allow rule."],
+              conditional: DEFAULT_INSTRUCTIONS.conditional,
+              deny: DEFAULT_INSTRUCTIONS.deny,
+            },
+          },
         },
       },
     ])
   })
 
-  test("ensureDefaultSystemPrompt does not overwrite configured system_prompt", async () => {
+  test("ensureDefaultInstructions does not overwrite complete instructions", async () => {
     const patches: unknown[] = []
+    const custom = {
+      background: ["Custom background."],
+      allow: [],
+      conditional: ["Custom conditional."],
+      deny: ["Custom deny."],
+    }
     const result = await Effect.runPromise(
-      ensureDefaultSystemPrompt().pipe(
+      ensureDefaultInstructions().pipe(
         Effect.provide(
           TestConfig.layer({
             getGlobal: () =>
@@ -482,7 +548,7 @@ describe("classifier contract", () => {
                 permission_modules: {
                   cruise_control: {
                     model: "opencode/deepseek-v4-flash",
-                    system_prompt: "Custom classifier prompt",
+                    instructions: custom,
                   },
                 },
               }),
@@ -508,7 +574,8 @@ describe("classifier contract", () => {
       decision: "deny",
       reason: "risky",
     })
-    expect(parseClassifierResult({ action: "ask" })).toEqual({ decision: "ask", reason: "" })
+    expect(parseClassifierResult({ action: "ask" })).toBeUndefined()
+    expect(parseClassifierResult({ decision: "ask" })).toBeUndefined()
     expect(parseClassifierResult({ decision: "maybe" })).toBeUndefined()
     expect(parseClassifierResult("not json")).toBeUndefined()
   })
@@ -611,7 +678,7 @@ describe("classifier contract", () => {
         opts: { fallback: "ask", allowlist: ["external_directory"], timeout_ms: 1000 },
         classify: Effect.sync(() => {
           called = true
-          return { decision: "ask" as const, reason: "should not run" }
+          return { decision: "deny" as const, reason: "should not run" }
         }),
         modelRef: "opencode/deepseek-v4-flash",
       }),

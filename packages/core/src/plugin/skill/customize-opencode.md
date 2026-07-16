@@ -291,14 +291,22 @@ permission actions to `"cruise_control"` and configure it with `/cruise-control-
 or `permission_modules.cruise_control.model` (for example `opencode/deepseek-v4-flash`
 or `ollama_cloud/kimi-k2.7-code`). If the model is unset, KanCode asks you to approve
 the tool and hints `/cruise-control-model` — it does not hard-deny. Optional
-`permission_modules.cruise_control.system_prompt` overrides the classifier system
-prompt; omit it to keep the built-in default. Example:
+`permission_modules.cruise_control.instructions` holds structured classifier guidance
+(`background`, `allow`, `conditional`, `deny`); omit sections to keep built-in defaults.
+The classifier LLM returns only `allow` or `deny`; the host may still escalate to ask
+on missing model, safety rails, timeout, or parse failure. Example:
 
 ```json
 {
   "permission_modules": {
     "cruise_control": {
-      "model": "opencode/deepseek-v4-flash"
+      "model": "opencode/deepseek-v4-flash",
+      "instructions": {
+        "background": ["The user works in a local project with KanCode."],
+        "allow": ["Allow harmless read-only shell commands."],
+        "conditional": ["Allow package installs only for the current project."],
+        "deny": ["Deny recursive force deletes such as rm -rf."]
+      }
     }
   }
 }
