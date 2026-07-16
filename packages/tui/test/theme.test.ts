@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
 import type { TerminalColors } from "@opentui/core"
-import { DEFAULT_THEMES, addTheme, allThemes, hasTheme, resolveTheme } from "../src/theme"
+import { DEFAULT_THEMES, addTheme, allThemes, hasTheme, resolveTheme, selectedForeground } from "../src/theme"
 import { discoverThemes } from "../src/context/theme"
 import { terminalMode } from "../src/theme/system"
 import { tmpdir } from "./fixture/fixture"
@@ -49,8 +49,29 @@ test("resolveTheme uses a contrasting selected foreground for transparent themes
   const item = structuredClone(DEFAULT_THEMES.opencode)
   item.theme.background = "transparent"
   item.theme.primary = "#eeeeee"
+  item.theme.secondary = "#111111"
 
-  expect(resolveTheme(item, "dark").selectedListItemText.toInts()).toEqual([0, 0, 0, 255])
+  const theme = resolveTheme(item, "dark")
+  expect(theme.selectedListItemText.toInts()).toEqual([0, 0, 0, 255])
+  expect(selectedForeground(theme, theme.secondary).toInts()).toEqual([255, 255, 255, 255])
+})
+
+test("resolveTheme uses white selected text for dark transparent-theme actions", () => {
+  const item = structuredClone(DEFAULT_THEMES.opencode)
+  item.theme.background = "transparent"
+  item.theme.primary = "#111111"
+
+  expect(resolveTheme(item, "dark").selectedListItemText.toInts()).toEqual([255, 255, 255, 255])
+})
+
+test("resolveTheme preserves an explicit selected foreground for transparent themes", () => {
+  const item = structuredClone(DEFAULT_THEMES.opencode)
+  item.theme.background = "transparent"
+  item.theme.selectedListItemText = "#123456"
+
+  const theme = resolveTheme(item, "dark")
+  expect(theme.selectedListItemText.toInts()).toEqual([18, 52, 86, 255])
+  expect(selectedForeground(theme, theme.secondary).toInts()).toEqual([18, 52, 86, 255])
 })
 
 function terminalColors(defaultBackground: string | null, palette: Array<string | null> = []): TerminalColors {

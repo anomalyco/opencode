@@ -32,11 +32,24 @@ test("preserves V1 selected foreground behavior on transparent backgrounds", () 
   const source = structuredClone(DEFAULT_THEMES.opencode)
   source.theme.background = "transparent"
   source.theme.primary = { light: "#ffffff", dark: "#000000" }
+  source.theme.error = { light: "#ffffff", dark: "#000000" }
   delete source.theme.selectedListItemText
   const migrated = migrateV1(source)
 
   expect(migrated.light.color?.text?.action?.primary?.default).toBe("#000000")
   expect(migrated.dark.color?.text?.action?.primary?.default).toBe("#ffffff")
+  expect(migrated.light.color?.text?.action?.destructive?.default).toBe("#000000")
+  expect(migrated.dark.color?.text?.action?.destructive?.default).toBe("#ffffff")
+})
+
+test("preserves explicit V1 selected text during migration", () => {
+  const source = structuredClone(DEFAULT_THEMES.opencode)
+  source.theme.background = "transparent"
+  source.theme.selectedListItemText = "#123456"
+
+  const migrated = migrateV1(source)
+  expect(migrated.light.color?.text?.action?.primary?.default).toBe("#123456")
+  expect(migrated.dark.color?.text?.action?.destructive?.default).toBe("#123456")
 })
 
 test("retains V1 circular reference errors", () => {

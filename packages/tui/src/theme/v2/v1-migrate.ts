@@ -139,7 +139,9 @@ function resolveV1(theme: ThemeJson, mode: "dark" | "light"): Theme {
   const hasSelectedListItemText = theme.theme.selectedListItemText !== undefined
   resolved.selectedListItemText = hasSelectedListItemText
     ? resolveColor(theme.theme.selectedListItemText)
-    : resolved.background
+    : resolved.background?.a === 0
+      ? contrastForeground(resolved.primary ?? RGBA.fromInts(0, 0, 0))
+      : resolved.background
   resolved.backgroundMenu = theme.theme.backgroundMenu
     ? resolveColor(theme.theme.backgroundMenu)
     : resolved.backgroundElement
@@ -154,6 +156,10 @@ function resolveV1(theme: ThemeJson, mode: "dark" | "light"): Theme {
 function selectedForeground(theme: Theme, background: RGBA) {
   if (theme._hasSelectedListItemText) return theme.selectedListItemText
   if (theme.background.a !== 0) return theme.background
+  return contrastForeground(background)
+}
+
+function contrastForeground(background: RGBA) {
   return 0.299 * background.r + 0.587 * background.g + 0.114 * background.b > 0.5
     ? RGBA.fromInts(0, 0, 0)
     : RGBA.fromInts(255, 255, 255)
