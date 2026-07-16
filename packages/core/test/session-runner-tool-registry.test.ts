@@ -107,17 +107,6 @@ describe("ToolRegistry", () => {
     }),
   )
 
-  it.effect("reuses model definitions across requests", () =>
-    Effect.gen(function* () {
-      const service = yield* ToolRegistry.Service
-      yield* service.register({ echo: make() }, { codemode: false })
-      const first = yield* toolDefinitions(service)
-      const second = yield* toolDefinitions(service)
-
-      expect(second[0]).toBe(first[0])
-    }),
-  )
-
   it.effect("removes a scoped registration", () =>
     Effect.gen(function* () {
       const service = yield* ToolRegistry.Service

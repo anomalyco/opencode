@@ -4,7 +4,8 @@ import { Agent } from "@opencode-ai/schema/agent"
 import type { LLM } from "@opencode-ai/schema/llm"
 import { Session } from "@opencode-ai/schema/session"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
-import { Effect, JsonSchema, Schema, type Scope } from "effect"
+import type { StandardJSONSchemaV1, StandardSchemaV1 } from "@standard-schema/spec"
+import { Effect, JsonSchema, Schema } from "effect"
 import type { Hooks, Transform } from "./registration.js"
 
 export interface Context {
@@ -20,7 +21,34 @@ export interface Progress {
   readonly content?: ReadonlyArray<Content>
 }
 
-export type SchemaType<A> = Schema.Codec<A, any>
+export type StandardSchemaType<Input = unknown, Output = Input> = StandardSchemaV1<Input, Output> &
+  StandardJSONSchemaV1<Input, Output>
+export type SchemaType<A> = Schema.Codec<A, any> | StandardSchemaType<any, A>
+type IsAny<A> = 0 extends 1 & A ? true : false
+export type InputValue<S> =
+  IsAny<S> extends true
+    ? any
+    : S extends Schema.Codec<infer A, any>
+      ? A
+      : S extends StandardSchemaV1<any, infer A>
+        ? A
+        : never
+export type OutputValue<S> =
+  IsAny<S> extends true
+    ? any
+    : S extends Schema.Codec<infer A, any>
+      ? A
+      : S extends StandardSchemaV1<infer A, any>
+        ? A
+        : never
+export type EncodedValue<S> =
+  IsAny<S> extends true
+    ? any
+    : S extends Schema.Codec<any, infer A>
+      ? A
+      : S extends StandardSchemaV1<any, infer A>
+        ? A
+        : never
 
 type ToolDefinition = {
   readonly name: string
@@ -45,16 +73,6 @@ type ToolOutput = {
   readonly content: ReadonlyArray<LLM.ToolContent>
 }
 
-declare const TypeId: unique symbol
-
-export interface Definition<Input extends SchemaType<any>, Output extends SchemaType<any>> {
-  readonly [TypeId]: {
-    readonly _Input: Input
-    readonly _Output: Output
-  }
-}
-
-export type AnyTool = Definition<any, any>
 export class Failure extends Schema.TaggedErrorClass<Failure>()("LLM.ToolFailure", {
   message: Schema.String,
   error: Schema.optional(Schema.Defect()),
@@ -70,7 +88,7 @@ export type Content =
   | { readonly type: "text"; readonly text: string }
   | { readonly type: "file"; readonly data: string; readonly mime: string; readonly name?: string }
 
-type Config<
+export type Definition<
   Input extends SchemaType<any>,
   Output extends SchemaType<any>,
   Structured extends SchemaType<any> = Output,
@@ -79,17 +97,15 @@ type Config<
   readonly input: Input
   readonly output: Output
   readonly structured?: Structured
+  readonly permission?: string
   readonly toStructuredOutput?: (input: {
-    readonly input: Schema.Schema.Type<Input>
-    readonly output: Output["Encoded"]
-  }) => Schema.Schema.Type<Structured>
-  readonly execute: (
-    input: Schema.Schema.Type<Input>,
-    context: Context,
-  ) => Effect.Effect<Schema.Schema.Type<Output>, Failure>
+    readonly input: InputValue<Input>
+    readonly output: EncodedValue<Output>
+  }) => OutputValue<Structured>
+  readonly execute: (input: InputValue<Input>, context: Context) => Effect.Effect<OutputValue<Output>, Failure>
   readonly toModelOutput?: (input: {
-    readonly input: Schema.Schema.Type<Input>
-    readonly output: Output["Encoded"]
+    readonly input: InputValue<Input>
+    readonly output: EncodedValue<Output>
   }) => ReadonlyArray<Content>
 }
 
@@ -103,109 +119,25 @@ export type DynamicOutput = {
  * time (MCP servers, plugin manifests). Input is passed through as `unknown`;
  * `execute` returns the already-projected structured value and model content.
  */
-type DynamicConfig = {
+export type DynamicDefinition = {
   readonly description: string
   readonly jsonSchema: JsonSchema.JsonSchema
   readonly outputSchema?: JsonSchema.JsonSchema
+  readonly permission?: string
   readonly execute: (input: unknown, context: Context) => Effect.Effect<DynamicOutput, Failure>
 }
 
-type Runtime = {
-  readonly permission?: string
-  readonly definition: (name: string) => ToolDefinition
-  readonly settle: (call: ToolCall, context: Context) => Effect.Effect<ToolOutput, Failure>
-}
-
-const runtimes = new WeakMap<AnyTool, Runtime>()
+export type AnyTool = Definition<any, any, any> | DynamicDefinition
 
 export function make<
   Input extends SchemaType<any>,
   Output extends SchemaType<any>,
   Structured extends SchemaType<any> = Output,
->(config: Config<Input, Output, Structured>): Definition<Input, Structured>
-export function make(config: DynamicConfig): AnyTool
-export function make(config: Config<any, any, any> | DynamicConfig): AnyTool {
-  if ("jsonSchema" in config) return makeDynamic(config)
-  return makeTyped(config)
-}
-
-function makeTyped<
-  Input extends SchemaType<any>,
-  Output extends SchemaType<any>,
-  Structured extends SchemaType<any> = Output,
->(config: Config<Input, Output, Structured>): Definition<Input, Structured> {
-  const tool = Object.freeze({}) as Definition<Input, Structured>
-  const definitions = new Map<string, ToolDefinition>()
-  runtimes.set(tool, {
-    definition: (name) => {
-      const cached = definitions.get(name)
-      if (cached) return cached
-      const definition: ToolDefinition = {
-        name,
-        description: config.description,
-        inputSchema: toJsonSchema(config.input),
-        outputSchema: toJsonSchema(config.structured ?? config.output),
-      }
-      definitions.set(name, definition)
-      return definition
-    },
-    settle: (call, context) =>
-      Schema.decodeUnknownEffect(config.input)(call.input).pipe(
-        Effect.mapError((error) => new Failure({ message: `Invalid tool input: ${error.message}` })),
-        Effect.flatMap((input) =>
-          config.execute(input, context).pipe(
-            Effect.flatMap((output) =>
-              Schema.encodeEffect(config.output)(output).pipe(
-                Effect.flatMap((output) => {
-                  if (!config.structured || !config.toStructuredOutput)
-                    return Effect.succeed({ output, structured: output })
-                  return Schema.encodeEffect(config.structured)(config.toStructuredOutput({ input, output })).pipe(
-                    Effect.map((structured) => ({ output, structured })),
-                  )
-                }),
-                Effect.mapError(
-                  (error) =>
-                    new Failure({
-                      message: `Tool returned an invalid value for its output schema: ${error.message}`,
-                    }),
-                ),
-              ),
-            ),
-            Effect.map(({ output, structured }) => ({
-              structured,
-              content:
-                config.toModelOutput?.({ input, output }).map(toModelContent) ??
-                (typeof output === "string" ? [{ type: "text" as const, text: output }] : []),
-            })),
-          ),
-        ),
-      ),
-  })
-  return tool
-}
-
-function makeDynamic(config: DynamicConfig): AnyTool {
-  const tool = Object.freeze({}) as AnyTool
-  const definitions = new Map<string, ToolDefinition>()
-  runtimes.set(tool, {
-    definition: (name) => {
-      const cached = definitions.get(name)
-      if (cached) return cached
-      const definition: ToolDefinition = {
-        name,
-        description: config.description,
-        inputSchema: config.jsonSchema,
-        outputSchema: config.outputSchema,
-      }
-      definitions.set(name, definition)
-      return definition
-    },
-    settle: (call, context) =>
-      config
-        .execute(call.input, context)
-        .pipe(Effect.map((output) => ({ structured: output.structured, content: output.content.map(toModelContent) }))),
-  })
-  return tool
+>(config: Definition<Input, Output, Structured>): Definition<Input, Output, Structured>
+export function make(config: DynamicDefinition): DynamicDefinition
+export function make(config: AnyTool): AnyTool
+export function make(config: AnyTool): AnyTool {
+  return config
 }
 
 function toModelContent(part: Content) {
@@ -230,23 +162,110 @@ export const registrationEntries = (tools: Readonly<Record<string, AnyTool>>, gr
     }
   })
 
-export const withPermission = <Input extends SchemaType<any>, Output extends SchemaType<any>>(
-  tool: Definition<Input, Output>,
+export const withPermission = <T extends AnyTool>(
+  tool: T,
   permission: string,
-) => {
-  const decorated = Object.freeze({}) as Definition<Input, Output>
-  runtimes.set(decorated, { ...runtimeOf(tool), permission })
-  return decorated
+): Omit<T, "permission"> & {
+  readonly permission: string
+} => ({ ...tool, permission })
+
+export const permission = (tool: AnyTool, name: string) => tool.permission ?? name
+
+export const definition = (name: string, tool: AnyTool): ToolDefinition =>
+  "jsonSchema" in tool
+    ? {
+        name,
+        description: tool.description,
+        inputSchema: tool.jsonSchema,
+        outputSchema: tool.outputSchema,
+      }
+    : {
+        name,
+        description: tool.description,
+        inputSchema: inputJsonSchema(tool.input),
+        outputSchema: outputJsonSchema(tool.structured ?? tool.output),
+      }
+
+export const settle = (tool: AnyTool, call: ToolCall, context: Context): Effect.Effect<ToolOutput, Failure> => {
+  if ("jsonSchema" in tool)
+    return tool
+      .execute(call.input, context)
+      .pipe(Effect.map((output) => ({ structured: output.structured, content: output.content.map(toModelContent) })))
+  return decodeInput(tool.input, call.input).pipe(
+    Effect.flatMap((input) =>
+      tool.execute(input, context).pipe(
+        Effect.flatMap((value) =>
+          encodeOutput(tool.output, value).pipe(
+            Effect.flatMap((output) => {
+              if (!tool.structured || !tool.toStructuredOutput) return Effect.succeed({ output, structured: output })
+              return encodeOutput(tool.structured, tool.toStructuredOutput({ input, output })).pipe(
+                Effect.map((structured) => ({ output, structured })),
+              )
+            }),
+          ),
+        ),
+        Effect.map(({ output, structured }) => ({
+          structured,
+          content:
+            tool.toModelOutput?.({ input, output }).map(toModelContent) ??
+            (typeof output === "string" ? [{ type: "text" as const, text: output }] : []),
+        })),
+      ),
+    ),
+  )
 }
 
-export const permission = (tool: AnyTool, name: string) => runtimeOf(tool).permission ?? name
-export const definition = (name: string, tool: AnyTool) => runtimeOf(tool).definition(name)
-export const settle = (tool: AnyTool, call: ToolCall, context: Context) => runtimeOf(tool).settle(call, context)
+function decodeInput(schema: SchemaType<any>, value: unknown): Effect.Effect<any, Failure> {
+  if (Schema.isSchema(schema))
+    return Schema.decodeUnknownEffect(schema)(value).pipe(
+      Effect.mapError((error) => new Failure({ message: `Invalid tool input: ${error.message}` })),
+    )
+  return validateStandard(schema, value, "Invalid tool input")
+}
 
-function runtimeOf(tool: AnyTool) {
-  const runtime = runtimes.get(tool)
-  if (!runtime) throw new TypeError("Invalid Tool value")
-  return runtime
+function encodeOutput(schema: SchemaType<any>, value: unknown): Effect.Effect<any, Failure> {
+  if (Schema.isSchema(schema))
+    return Schema.encodeEffect(schema)(value).pipe(
+      Effect.mapError(
+        (error) => new Failure({ message: `Tool returned an invalid value for its output schema: ${error.message}` }),
+      ),
+    )
+  return validateStandard(schema, value, "Tool returned an invalid value for its output schema")
+}
+
+function validateStandard(schema: StandardSchemaType, value: unknown, prefix: string): Effect.Effect<unknown, Failure> {
+  const result = Effect.try({
+    try: () => schema["~standard"].validate(value),
+    catch: (error) => new Failure({ message: `${prefix}: ${error instanceof Error ? error.message : String(error)}` }),
+  })
+  return result.pipe(
+    Effect.flatMap((result) =>
+      result instanceof Promise
+        ? Effect.tryPromise({
+            try: () => result,
+            catch: (error) =>
+              new Failure({ message: `${prefix}: ${error instanceof Error ? error.message : String(error)}` }),
+          })
+        : Effect.succeed(result),
+    ),
+    Effect.flatMap((result) =>
+      result.issues
+        ? Effect.fail(new Failure({ message: `${prefix}: ${result.issues.map((issue) => issue.message).join(", ")}` }))
+        : Effect.succeed(result.value),
+    ),
+  )
+}
+
+function inputJsonSchema(schema: SchemaType<any>): JsonSchema.JsonSchema {
+  if (!Schema.isSchema(schema))
+    return schema["~standard"].jsonSchema.input({ target: "draft-2020-12" }) as JsonSchema.JsonSchema
+  return toJsonSchema(schema)
+}
+
+function outputJsonSchema(schema: SchemaType<any>): JsonSchema.JsonSchema {
+  if (!Schema.isSchema(schema))
+    return schema["~standard"].jsonSchema.output({ target: "draft-2020-12" }) as JsonSchema.JsonSchema
+  return toJsonSchema(schema)
 }
 
 function toJsonSchema(schema: Schema.Top): JsonSchema.JsonSchema {

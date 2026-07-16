@@ -4,7 +4,7 @@ This folder owns Core's one local tool representation, process and Location regi
 
 ## Representations
 
-- `tool.ts` defines the opaque canonical `Tool.make({ description, input, output, execute, toModelOutput })` value. Shipped built-ins and plugin tools use the same type.
+- `tool.ts` defines the structural canonical `Tool.make({ description, input, output, execute, toModelOutput })` declaration. Shipped built-ins and plugin tools use the same type.
 - `tools.ts` exposes the registration-only `Tools.Service` view used by Location producers.
 - `registry.ts` stores only canonical Location registrations, derives definitions, invokes tools, and applies generic output bounding.
 
@@ -12,7 +12,7 @@ Do not add a second executable entry type, registry-owned executor, authorizatio
 
 ## Construction
 
-Tool schemas and projection use `input` and `output` terminology. A tool value is opaque: its codecs, executor, definition derivation, and catalog permission declaration are private runtime details.
+Tool schemas and projection use `input` and `output` terminology. A tool value carries its schemas, executor, projection, and optional catalog permission directly so separately loaded plugin package instances can exchange it structurally.
 
 Location-scoped built-in layers acquire `PermissionV2.Service` and every other required Location service while the layer is constructed. The executor captures those services. Permission sources are always constructed from the canonical invocation context:
 

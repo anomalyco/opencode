@@ -29,6 +29,7 @@
     "@opencode-ai/client": "workspace:*",
     "@opencode-ai/schema": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
+    "@standard-schema/spec": "^1.1.0",
     "effect": "catalog:",
     "zod": "catalog:"
   },

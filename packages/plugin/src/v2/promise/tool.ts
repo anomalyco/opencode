@@ -1,8 +1,4 @@
 import type { Tool } from "../effect/tool.js"
-import type { Agent } from "@opencode-ai/schema/agent"
-import type { Session } from "@opencode-ai/schema/session"
-import type { SessionMessage } from "@opencode-ai/schema/session-message"
-import type { JsonSchema, Schema } from "effect"
 import type { Hooks, Transform } from "./registration.js"
 
 export type Context = Omit<Tool.Context, "progress"> & {
@@ -16,71 +12,28 @@ export type Definition<
   Input extends SchemaType<any>,
   Output extends SchemaType<any>,
   Structured extends SchemaType<any> = Output,
-> = {
+> = Omit<Tool.Definition<Input, Output, Structured>, "execute" | "permission"> & {
   readonly name: string
   readonly options?: RegisterOptions
-  readonly description: string
-  readonly input: Input
-  readonly output: Output
-  readonly structured?: Structured
-  readonly toStructuredOutput?: (input: {
-    readonly input: Schema.Schema.Type<Input>
-    readonly output: Output["Encoded"]
-  }) => Schema.Schema.Type<Structured>
-  readonly execute: (
-    input: Schema.Schema.Type<Input>,
-    context: Context,
-  ) => Promise<Schema.Schema.Type<Output>>
-  readonly toModelOutput?: (input: {
-    readonly input: Schema.Schema.Type<Input>
-    readonly output: Output["Encoded"]
-  }) => ReadonlyArray<Content>
+  readonly execute: (input: Tool.InputValue<Input>, context: Context) => Promise<Tool.OutputValue<Output>>
 }
 
-export type DynamicDefinition = {
+export type DynamicDefinition = Omit<Tool.DynamicDefinition, "execute" | "permission"> & {
   readonly name: string
   readonly options?: RegisterOptions
-  readonly description: string
-  readonly jsonSchema: JsonSchema.JsonSchema
-  readonly outputSchema?: JsonSchema.JsonSchema
   readonly execute: (input: unknown, context: Context) => Promise<DynamicOutput>
 }
 
 export type AnyTool = Definition<any, any, any> | DynamicDefinition
 
-export interface ToolExecuteBeforeEvent {
-  readonly tool: string
-  readonly sessionID: Session.ID
-  readonly agent: Agent.ID
-  readonly messageID: SessionMessage.ID
-  readonly callID: string
-  input: unknown
-}
-
-export interface ToolExecuteAfterEvent {
-  readonly tool: string
-  readonly sessionID: Session.ID
-  readonly agent: Agent.ID
-  readonly messageID: SessionMessage.ID
-  readonly callID: string
-  readonly input: unknown
-  result: Tool.ToolExecuteAfterEvent["result"]
-  output?: Tool.ToolExecuteAfterEvent["output"]
-  outputPaths?: ReadonlyArray<string>
-}
-
-export interface RegisterOptions {
-  readonly group?: string
-  /** Defaults to true. False exposes the tool directly to the provider. */
-  readonly codemode?: boolean
-}
+export type ToolExecuteBeforeEvent = Tool.ToolExecuteBeforeEvent
+export type ToolExecuteAfterEvent = Tool.ToolExecuteAfterEvent
+export type RegisterOptions = Tool.RegisterOptions
 
 export interface ToolDraft {
-  add<
-    Input extends SchemaType<any>,
-    Output extends SchemaType<any>,
-    Structured extends SchemaType<any> = Output,
-  >(tool: Definition<Input, Output, Structured>): void
+  add<Input extends SchemaType<any>, Output extends SchemaType<any>, Structured extends SchemaType<any> = Output>(
+    tool: Definition<Input, Output, Structured>,
+  ): void
   add(tool: DynamicDefinition): void
 }
 

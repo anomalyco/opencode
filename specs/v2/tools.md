@@ -2,9 +2,9 @@
 
 Status: **Current semantic overview.** The Plugin package owns the public tool type; Core owns registration, settlement, and generic output bounding.
 
-## Tool Definitions Are Opaque
+## Tool Declarations
 
-V2 has one opaque type for locally executable tools. Typed tools declare codecs, execution, and optional model-facing projection together:
+V2 has one structural declaration for locally executable tools. Typed tools declare schemas, execution, and optional model-facing projection together:
 
 ```ts
 const read = Tool.make({
@@ -16,11 +16,13 @@ const read = Tool.make({
 })
 ```
 
-`structured` and `toStructuredOutput` may expose a smaller validated result than the complete execution output. Dynamic MCP and manifest tools use the same opaque representation with runtime JSON Schema.
+`structured` and `toStructuredOutput` may expose a smaller validated result than the complete execution output. Dynamic MCP and manifest tools use the same declaration with runtime JSON Schema.
 
 Built-ins and statically authored plugin tools use this same constructor and execution contract.
 
-`Tool.Definition` is opaque and has exactly one executor. Its schemas and executor are not public fields. The Tool module privately derives model definitions and interprets invocations for the registry; callers normally rely on `Tool.make` inference rather than naming the carrier type.
+`Tool.Definition` is a transparent structural value with exactly one executor. Effect schemas and schemas implementing both Standard Schema V1 and Standard JSON Schema V1 are accepted. The Tool module derives model definitions and interprets invocations for the registry; callers normally rely on `Tool.make` inference rather than naming the declaration type.
+
+Standard input schemas validate model input into the handler value. Standard output schemas validate the handler result into the model-facing value. Effect codecs retain their native decode-input and encode-output directions.
 
 Input and output codecs are self-contained. Schema conversion cannot require services. Tool dependencies are acquired during construction and captured by `execute`.
 
