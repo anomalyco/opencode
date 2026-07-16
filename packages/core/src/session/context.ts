@@ -8,10 +8,10 @@ import { InstructionDiscovery } from "../instruction-discovery"
 import { Instructions } from "../instructions/index"
 import { InstructionBuiltIns } from "../instructions/builtins"
 import { Location } from "../location"
-import { McpGuidance } from "../mcp/guidance"
+import { McpInstructions } from "../mcp/instructions"
 import { PluginSupervisor } from "../plugin/supervisor"
-import { ReferenceGuidance } from "../reference/guidance"
-import { SkillGuidance } from "../skill/guidance"
+import { ReferenceInstructions } from "../reference/instructions"
+import { SkillInstructions } from "../skill/instructions"
 import { AgentNotFoundError } from "./error"
 import { SessionHistory } from "./history"
 import { InstructionEntry } from "./instruction-entry"
@@ -52,11 +52,11 @@ const layer = Layer.effect(
     const discovery = yield* InstructionDiscovery.Service
     const entries = yield* InstructionEntry.Service
     const location = yield* Location.Service
-    const mcpGuidance = yield* McpGuidance.Service
+    const mcpInstructions = yield* McpInstructions.Service
     const models = yield* SessionRunnerModel.Service
     const plugins = yield* PluginSupervisor.Service
-    const referenceGuidance = yield* ReferenceGuidance.Service
-    const skillGuidance = yield* SkillGuidance.Service
+    const referenceInstructions = yield* ReferenceInstructions.Service
+    const skillInstructions = yield* SkillInstructions.Service
     const store = yield* SessionStore.Service
 
     const select = Effect.fn("SessionContext.select")(function* (sessionID: SessionSchema.ID) {
@@ -72,9 +72,9 @@ const layer = Layer.effect(
         [
           builtins.load(sessionID),
           discovery.load(),
-          skillGuidance.load(agent),
-          referenceGuidance.load(),
-          mcpGuidance.load(agent),
+          skillInstructions.load(agent),
+          referenceInstructions.load(),
+          mcpInstructions.load(agent),
           entries.load(sessionID),
         ],
         { concurrency: "unbounded" },
@@ -108,11 +108,11 @@ export const node = makeLocationNode({
     InstructionDiscovery.node,
     InstructionEntry.node,
     Location.node,
-    McpGuidance.node,
+    McpInstructions.node,
     PluginSupervisor.node,
-    ReferenceGuidance.node,
+    ReferenceInstructions.node,
     SessionRunnerModel.node,
     SessionStore.node,
-    SkillGuidance.node,
+    SkillInstructions.node,
   ],
 })

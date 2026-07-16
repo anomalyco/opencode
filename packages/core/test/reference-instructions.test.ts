@@ -3,18 +3,18 @@ import { Effect, Layer } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Reference } from "@opencode-ai/core/reference"
-import { ReferenceGuidance } from "@opencode-ai/core/reference/guidance"
+import { ReferenceInstructions } from "@opencode-ai/core/reference/instructions"
 import { it } from "./lib/effect"
 import { readInitial, readUpdate } from "./lib/instructions"
 
-const guidanceLayer = (referenceLayer: Layer.Layer<Reference.Service>) =>
-  AppNodeBuilder.build(ReferenceGuidance.node, [[Reference.node, referenceLayer]])
+const instructionsLayer = (referenceLayer: Layer.Layer<Reference.Service>) =>
+  AppNodeBuilder.build(ReferenceInstructions.node, [[Reference.node, referenceLayer]])
 
-describe("ReferenceGuidance", () => {
+describe("ReferenceInstructions", () => {
   it.effect("lists available references in the instructions", () =>
     Effect.gen(function* () {
-      const guidance = yield* ReferenceGuidance.Service
-      const generation = yield* readInitial(yield* guidance.load())
+      const instructions = yield* ReferenceInstructions.Service
+      const generation = yield* readInitial(yield* instructions.load())
 
       expect(generation.text).toContain("<available_references>")
       expect(generation.text).toContain("<name>docs</name>")
@@ -22,7 +22,7 @@ describe("ReferenceGuidance", () => {
       expect(generation.text).toContain("<description>Use for product documentation</description>")
     }).pipe(
       Effect.provide(
-        guidanceLayer(
+        instructionsLayer(
           Layer.mock(Reference.Service, {
             list: () =>
               Effect.succeed([
@@ -43,22 +43,22 @@ describe("ReferenceGuidance", () => {
     ),
   )
 
-  it.effect("omits guidance when no references are available", () =>
+  it.effect("omits instructions when no references are available", () =>
     Effect.gen(function* () {
-      const guidance = yield* ReferenceGuidance.Service
-      const generation = yield* readInitial(yield* guidance.load())
+      const instructions = yield* ReferenceInstructions.Service
+      const generation = yield* readInitial(yield* instructions.load())
       expect(generation.text).toBe("")
-    }).pipe(Effect.provide(guidanceLayer(Layer.mock(Reference.Service, { list: () => Effect.succeed([]) })))),
+    }).pipe(Effect.provide(instructionsLayer(Layer.mock(Reference.Service, { list: () => Effect.succeed([]) })))),
   )
 
   it.effect("omits references without descriptions", () =>
     Effect.gen(function* () {
-      const guidance = yield* ReferenceGuidance.Service
-      const generation = yield* readInitial(yield* guidance.load())
+      const instructions = yield* ReferenceInstructions.Service
+      const generation = yield* readInitial(yield* instructions.load())
       expect(generation.text).toBe("")
     }).pipe(
       Effect.provide(
-        guidanceLayer(
+        instructionsLayer(
           Layer.mock(Reference.Service, {
             list: () =>
               Effect.succeed([
@@ -84,11 +84,11 @@ describe("ReferenceGuidance", () => {
       })
     let references = [reference("docs", "Use for product documentation")]
     return Effect.gen(function* () {
-      const guidance = yield* ReferenceGuidance.Service
-      const initialized = yield* readInitial(yield* guidance.load())
+      const instructions = yield* ReferenceInstructions.Service
+      const initialized = yield* readInitial(yield* instructions.load())
 
       references = [reference("docs", "Use for product documentation"), reference("examples", "Use for examples")]
-      const added = yield* readUpdate(yield* guidance.load(), initialized)
+      const added = yield* readUpdate(yield* instructions.load(), initialized)
       expect(added.text).toBe(
         [
           "New project references are available in addition to those previously listed:",
@@ -101,9 +101,11 @@ describe("ReferenceGuidance", () => {
       )
 
       references = [reference("examples", "Use for examples")]
-      expect((yield* readUpdate(yield* guidance.load(), added)).text).toBe(
+      expect((yield* readUpdate(yield* instructions.load(), added)).text).toBe(
         "The following project references are no longer available and must not be used: docs.",
       )
-    }).pipe(Effect.provide(guidanceLayer(Layer.mock(Reference.Service, { list: () => Effect.succeed(references) }))))
+    }).pipe(
+      Effect.provide(instructionsLayer(Layer.mock(Reference.Service, { list: () => Effect.succeed(references) }))),
+    )
   })
 })

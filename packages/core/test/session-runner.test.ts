@@ -63,9 +63,9 @@ import { SessionStore } from "@opencode-ai/core/session/store"
 import { Instructions } from "@opencode-ai/core/instructions"
 import { InstructionBuiltIns } from "@opencode-ai/core/instructions/builtins"
 import { InstructionDiscovery } from "@opencode-ai/core/instruction-discovery"
-import { SkillGuidance } from "@opencode-ai/core/skill/guidance"
-import { ReferenceGuidance } from "@opencode-ai/core/reference/guidance"
-import { McpGuidance } from "@opencode-ai/core/mcp/guidance"
+import { SkillInstructions } from "@opencode-ai/core/skill/instructions"
+import { ReferenceInstructions } from "@opencode-ai/core/reference/instructions"
+import { McpInstructions } from "@opencode-ai/core/mcp/instructions"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { Location } from "@opencode-ai/core/location"
 import { ProviderV2 } from "@opencode-ai/core/provider"
@@ -318,7 +318,7 @@ const systemContext = Layer.mock(InstructionBuiltIns.Service, {
     ),
 })
 const instructionContext = Layer.mock(InstructionDiscovery.Service, { load: () => Effect.succeed(Instructions.empty) })
-const skillGuidance = Layer.mock(SkillGuidance.Service, {
+const skillInstructions = Layer.mock(SkillInstructions.Service, {
   load: (agent) =>
     Effect.succeed(
       skillBaselines.has(agent.id)
@@ -335,8 +335,10 @@ const skillGuidance = Layer.mock(SkillGuidance.Service, {
         : Instructions.empty,
     ),
 })
-const referenceGuidance = Layer.mock(ReferenceGuidance.Service, { load: () => Effect.succeed(Instructions.empty) })
-const mcpGuidance = Layer.mock(McpGuidance.Service, { load: () => Effect.succeed(Instructions.empty) })
+const referenceInstructions = Layer.mock(ReferenceInstructions.Service, {
+  load: () => Effect.succeed(Instructions.empty),
+})
+const mcpInstructions = Layer.mock(McpInstructions.Service, { load: () => Effect.succeed(Instructions.empty) })
 const config = Layer.succeed(
   Config.Service,
   Config.Service.of({
@@ -382,11 +384,11 @@ const runnerLayer = AppNodeBuilder.build(SessionRunnerLLM.node, [
   [InstructionBuiltIns.node, systemContext],
   [InstructionDiscovery.node, instructionContext],
   [Location.node, Location.boundNode({ directory: AbsolutePath.make("/project") })],
-  [SkillGuidance.node, skillGuidance],
-  [ReferenceGuidance.node, referenceGuidance],
+  [SkillInstructions.node, skillInstructions],
+  [ReferenceInstructions.node, referenceInstructions],
   [PermissionV2.node, permission],
   [Config.node, config],
-  [McpGuidance.node, mcpGuidance],
+  [McpInstructions.node, mcpInstructions],
   [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
   [PluginSupervisor.node, pluginSupervisor],
 ])
@@ -424,8 +426,8 @@ const it = testEffect(
       InstructionBuiltIns.node,
       InstructionDiscovery.node,
       InstructionEntry.node,
-      SkillGuidance.node,
-      ReferenceGuidance.node,
+      SkillInstructions.node,
+      ReferenceInstructions.node,
       Config.node,
       Snapshot.node,
       SessionRunnerLLM.node,
@@ -440,8 +442,8 @@ const it = testEffect(
       [InstructionBuiltIns.node, systemContext],
       [InstructionDiscovery.node, instructionContext],
       [Location.node, Location.boundNode({ directory: AbsolutePath.make("/project") })],
-      [SkillGuidance.node, skillGuidance],
-      [ReferenceGuidance.node, referenceGuidance],
+      [SkillInstructions.node, skillInstructions],
+      [ReferenceInstructions.node, referenceInstructions],
       [Snapshot.node, Snapshot.noopLayer],
       [SessionExecution.node, execution],
       [Config.node, config],
@@ -1424,7 +1426,7 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("updates selected-agent skill guidance after an agent switch", () =>
+  it.effect("updates selected-agent skill instructions after an agent switch", () =>
     Effect.gen(function* () {
       const session = yield* setup
       const events = yield* EventV2.Service

@@ -1,4 +1,4 @@
-export * as SkillGuidance from "./guidance"
+export * as SkillInstructions from "./instructions"
 
 import { makeLocationNode } from "../effect/app-node"
 import { Context, Effect, Layer, Schema } from "effect"
@@ -60,7 +60,7 @@ export interface Interface {
   readonly load: (agent: AgentV2.Selection) => Effect.Effect<Instructions.Instructions>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SkillGuidance") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SkillInstructions") {}
 
 const layer = Layer.effect(
   Service,
@@ -68,7 +68,7 @@ const layer = Layer.effect(
     const skills = yield* SkillV2.Service
 
     return Service.of({
-      load: Effect.fn("SkillGuidance.load")(function* (selection) {
+      load: Effect.fn("SkillInstructions.load")(function* (selection) {
         const agent = selection.info
         if (!agent) return Instructions.empty
         const permitted = SkillV2.available(yield* skills.list(), agent)

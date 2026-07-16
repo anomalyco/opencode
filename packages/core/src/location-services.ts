@@ -27,13 +27,13 @@ import { Pty } from "./pty"
 import { QuestionV2 } from "./question"
 import { Shell } from "./shell"
 import { Reference } from "./reference"
-import { ReferenceGuidance } from "./reference/guidance"
+import { ReferenceInstructions } from "./reference/instructions"
 import { SessionRunnerLLM } from "./session/runner/llm"
 import { SessionRunnerModel } from "./session/runner/model"
 import { SessionCompaction } from "./session/compaction"
 import { SessionTitle } from "./session/title"
 import { SkillV2 } from "./skill"
-import { SkillGuidance } from "./skill/guidance"
+import { SkillInstructions } from "./skill/instructions"
 import { Snapshot } from "./snapshot"
 import { InstructionDiscovery } from "./instruction-discovery"
 import { InstructionBuiltIns } from "./instructions/builtins"
@@ -75,8 +75,8 @@ const locationServiceNodes = [
   ToolRegistry.node,
   ToolRegistry.toolsNode,
   Image.node,
-  SkillGuidance.node,
-  ReferenceGuidance.node,
+  SkillInstructions.node,
+  ReferenceInstructions.node,
   InstructionEntry.node,
   Form.node,
   QuestionV2.node,

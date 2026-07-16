@@ -1,4 +1,4 @@
-export * as McpGuidance from "./guidance"
+export * as McpInstructions from "./instructions"
 
 import { makeLocationNode } from "../effect/app-node"
 import { Context, Effect, Layer, Schema } from "effect"
@@ -54,7 +54,7 @@ export interface Interface {
   readonly load: (agent: AgentV2.Selection) => Effect.Effect<Instructions.Instructions>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/McpGuidance") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/v2/McpInstructions") {}
 
 export const layer = Layer.effect(
   Service,
@@ -62,7 +62,7 @@ export const layer = Layer.effect(
     const mcp = yield* MCP.Service
 
     return Service.of({
-      load: Effect.fn("McpGuidance.load")(function* (selection) {
+      load: Effect.fn("McpInstructions.load")(function* (selection) {
         const agent = selection.info
         if (!agent) return Instructions.empty
         const source = (value: ReadonlyArray<Summary> | Instructions.Removed) =>
