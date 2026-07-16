@@ -98,6 +98,8 @@ export type ElectronAPI = {
   setZoomFactor: (factor: number) => Promise<void>
   getPinchZoomEnabled: () => Promise<boolean>
   setPinchZoomEnabled: (enabled: boolean) => Promise<void>
+  getPortableModeEnabled: () => Promise<boolean>
+  setPortableModeEnabled: (enabled: boolean) => Promise<void>
   onPinchZoomEnabledChanged: (cb: (enabled: boolean) => void) => () => void
   onZoomFactorChanged: (cb: (factor: number) => void) => () => void
   setTitlebar: (theme: TitlebarTheme) => Promise<void>

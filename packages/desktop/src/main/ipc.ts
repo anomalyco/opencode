@@ -27,6 +27,8 @@ type Deps = {
   consumeInitialDeepLinks: () => Promise<string[]> | string[]
   getDefaultServerUrl: () => Promise<string | null> | string | null
   setDefaultServerUrl: (url: string | null) => Promise<void> | void
+  getPortableModeEnabled: () => Promise<boolean> | boolean
+  setPortableModeEnabled: (enabled: boolean) => Promise<void> | void
   isFirstLaunchOnboardingPending: () => Promise<boolean> | boolean
   finishFirstLaunchOnboarding: (createDefaultProject: boolean) => Promise<string | null> | string | null
   isOldLayoutEligible: () => Promise<boolean> | boolean
@@ -248,6 +250,13 @@ export function registerIpcHandlers(deps: Deps) {
   ipcMain.handle("set-pinch-zoom-enabled", (_event: IpcMainInvokeEvent, enabled: boolean) => {
     setPinchZoomEnabled(enabled)
   })
+  
+  // 便携模式 IPC 处理 (修复了遗漏的 return)
+  ipcMain.handle("get-portable-mode-enabled", () => deps.getPortableModeEnabled())
+  ipcMain.handle("set-portable-mode-enabled", (_event: IpcMainInvokeEvent, enabled: boolean) => {
+    return deps.setPortableModeEnabled(enabled)
+  })
+  
   ipcMain.handle("set-titlebar", (event: IpcMainInvokeEvent, theme: TitlebarTheme) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     if (!win) return

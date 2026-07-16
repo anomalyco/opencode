@@ -853,6 +853,10 @@ export const dict = {
   "settings.general.section.sounds": "Sound effects",
   "settings.general.section.feed": "Feed",
   "settings.general.section.display": "Display",
+  "settings.general.section.portable": "Portable mode",
+
+  "settings.general.row.portableMode.title": "Portable mode",
+  "settings.general.row.portableMode.description": "Store all data alongside the installation directory. Requires restart to toggle",
 
   "settings.general.row.language.title": "Language",
   "settings.general.row.language.description": "Change the display language for OpenCode",

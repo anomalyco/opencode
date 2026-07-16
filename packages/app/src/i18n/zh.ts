@@ -755,6 +755,11 @@ export const dict = {
   "settings.general.section.sounds": "音效",
   "settings.general.section.feed": "动态",
   "settings.general.section.display": "显示",
+
+  "settings.general.section.portable": "便携模式",
+
+  "settings.general.row.portableMode.title": "便携模式",
+  "settings.general.row.portableMode.description": "将所有数据存储在安装目录旁。开启/关闭需要重启",
   "settings.general.row.language.title": "语言",
   "settings.general.row.language.description": "更改 OpenCode 的显示语言",
   "settings.general.row.shell.title": "终端 Shell",

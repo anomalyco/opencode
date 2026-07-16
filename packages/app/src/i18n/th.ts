@@ -757,6 +757,12 @@ export const dict = {
   "settings.general.section.feed": "ฟีด",
   "settings.general.section.display": "การแสดงผล",
 
+  "settings.general.section.portable": "โหมดพกพา",
+
+  "settings.general.row.portableMode.title": "โหมดพกพา",
+  "settings.general.row.portableMode.description":
+    "เก็บข้อมูลทั้งหมดไว้ข้างโฟลเดอร์ติดตั้งแอป การเปิด/ปิดต้องรีสตาร์ท",
+
   "settings.general.row.language.title": "ภาษา",
   "settings.general.row.language.description": "เปลี่ยนภาษาที่แสดงสำหรับ OpenCode",
   "settings.general.row.shell.title": "เชลล์เทอร์มินัล",

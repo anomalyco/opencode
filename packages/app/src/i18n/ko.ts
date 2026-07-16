@@ -571,6 +571,11 @@ export const dict = {
   "settings.general.section.sounds": "효과음",
   "settings.general.section.feed": "피드",
   "settings.general.section.display": "디스플레이",
+
+  "settings.general.section.portable": "휴대용 모드",
+
+  "settings.general.row.portableMode.title": "휴대용 모드",
+  "settings.general.row.portableMode.description": "앱 설치 폴더 옆에 모든 데이터를 저장합니다. 켜기/끄기에는 재시작이 필요합니다",
   "settings.general.row.language.title": "언어",
   "settings.general.row.language.description": "OpenCode 표시 언어 변경",
   "settings.general.row.appearance.title": "모양",

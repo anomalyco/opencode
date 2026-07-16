@@ -690,6 +690,12 @@ export const dict = {
   "settings.general.section.sounds": "المؤثرات الصوتية",
   "settings.general.section.feed": "الخلاصة",
   "settings.general.section.display": "شاشة العرض",
+
+  "settings.general.section.portable": "الوضع المحمول",
+
+  "settings.general.row.portableMode.title": "الوضع المحمول",
+  "settings.general.row.portableMode.description":
+    "تخزين جميع البيانات بجوار مجلد تثبيت التطبيق. يتطلب التمكين/الإيقاف إعادة التشغيل",
   "settings.general.row.language.title": "اللغة",
   "settings.general.row.language.description": "تغيير لغة العرض لـ OpenCode",
   "settings.general.row.shell.title": "Shell المحطة الطرفية",

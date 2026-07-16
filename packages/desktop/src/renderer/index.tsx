@@ -295,6 +295,11 @@ const createPlatform = (windowState: DesktopWindowState): Platform => {
     getPinchZoomEnabled: () => window.api.getPinchZoomEnabled(),
 
     setPinchZoomEnabled,
+    
+    // Portable Mode bindings added here
+    getPortableModeEnabled: () => window.api.getPortableModeEnabled(),
+    
+    setPortableModeEnabled: (enabled: boolean) => window.api.setPortableModeEnabled(enabled),
 
     runDesktopMenuAction,
 

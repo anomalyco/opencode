@@ -769,6 +769,12 @@ export const dict = {
   "settings.general.section.feed": "Akış",
   "settings.general.section.display": "Ekran",
 
+  "settings.general.section.portable": "Taşınabilir mod",
+
+  "settings.general.row.portableMode.title": "Taşınabilir mod",
+  "settings.general.row.portableMode.description":
+    "Tüm verileri uygulama kurulum klasörünün yanına kaydet. Etkinleştirme/devre dışı bırakma yeniden başlatmayı gerektirir",
+
   "settings.general.row.language.title": "Dil",
   "settings.general.row.language.description": "OpenCode'un görünüm dilini değiştirin",
   "settings.general.row.shell.title": "Terminal Kabuğu",

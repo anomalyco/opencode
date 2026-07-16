@@ -706,6 +706,12 @@ export const dict = {
   "settings.general.section.sounds": "Effets sonores",
   "settings.general.section.feed": "Flux",
   "settings.general.section.display": "Affichage",
+
+  "settings.general.section.portable": "Mode portable",
+
+  "settings.general.row.portableMode.title": "Mode portable",
+  "settings.general.row.portableMode.description":
+    "Stocker toutes les données à côté du dossier d'installation de l'app. Activer/désactiver nécessite un redémarrage",
   "settings.general.row.language.title": "Langue",
   "settings.general.row.language.description": "Changer la langue d'affichage pour OpenCode",
   "settings.general.row.shell.title": "Shell du terminal",

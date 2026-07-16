@@ -764,6 +764,12 @@ export const dict = {
   "settings.general.section.feed": "Лента",
   "settings.general.section.display": "Дисплей",
 
+  "settings.general.section.portable": "Портативный режим",
+
+  "settings.general.row.portableMode.title": "Портативный режим",
+  "settings.general.row.portableMode.description":
+    "Хранить все данные рядом с установленным приложением. Включение/выключение требует перезапуска",
+
   "settings.general.row.language.title": "Язык",
   "settings.general.row.language.description": "Изменить язык отображения OpenCode",
   "settings.general.row.shell.title": "Оболочка терминала",

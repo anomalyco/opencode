@@ -147,6 +147,12 @@ export const SettingsGeneral: Component = () => {
     { initialValue: false },
   )
 
+  const [portableMode, { mutate: setPortableMode }] = createResource(
+    () => (desktop() && platform.getPortableModeEnabled ? true : false),
+    () => Promise.resolve(platform.getPortableModeEnabled?.() ?? false).catch(() => false),
+    { initialValue: false },
+  )
+
   onMount(() => {
     void theme.loadThemes()
   })
@@ -736,6 +742,31 @@ export const SettingsGeneral: Component = () => {
     </Show>
   )
 
+  const PortableSection = () => (
+    <Show when={desktop()}>
+      <div class="flex flex-col gap-1">
+        <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.portable")}</h3>
+
+        <SettingsList>
+          <SettingsRow
+            title={language.t("settings.general.row.portableMode.title")}
+            description={language.t("settings.general.row.portableMode.description")}
+          >
+            <div data-action="settings-portable-mode">
+              <Switch
+                checked={portableMode.latest}
+                onChange={(checked) => {
+                  setPortableMode(checked)
+                  platform.setPortableModeEnabled?.(checked).catch(() => setPortableMode(!checked))
+                }}
+              />
+            </div>
+          </SettingsRow>
+        </SettingsList>
+      </div>
+    </Show>
+  )
+
   return (
     <div class="flex flex-col h-full overflow-y-auto no-scrollbar px-4 pb-10 sm:px-10 sm:pb-10">
       <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
@@ -761,9 +792,13 @@ export const SettingsGeneral: Component = () => {
 
         <SoundsSection />
 
-        <UpdatesSection />
+        <Show when={desktop()}>
+          <UpdatesSection />
+        </Show>
 
         <DisplaySection />
+
+        <PortableSection />
 
         <Show when={desktop()}>
           <AdvancedSection />

@@ -695,6 +695,12 @@ export const dict = {
   "settings.general.section.sounds": "効果音",
   "settings.general.section.feed": "フィード",
   "settings.general.section.display": "ディスプレイ",
+
+  "settings.general.section.portable": "ポータブルモード",
+
+  "settings.general.row.portableMode.title": "ポータブルモード",
+  "settings.general.row.portableMode.description":
+    "アプリのインストール先ディレクトリにすべてのデータを保存します。有効/無効化には再起動が必要です",
   "settings.general.row.language.title": "言語",
   "settings.general.row.language.description": "OpenCodeの表示言語を変更します",
   "settings.general.row.shell.title": "ターミナルシェル",

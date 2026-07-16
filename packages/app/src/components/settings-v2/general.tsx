@@ -136,6 +136,12 @@ export const SettingsGeneralV2: Component<{
     { initialValue: false },
   )
 
+  const [portableMode, { mutate: setPortableMode }] = createResource(
+    () => (desktop() && platform.getPortableModeEnabled ? true : false),
+    () => Promise.resolve(platform.getPortableModeEnabled?.() ?? false).catch(() => false),
+    { initialValue: false },
+  )
+
   onMount(() => {
     void theme.loadThemes()
   })
@@ -684,6 +690,31 @@ export const SettingsGeneralV2: Component<{
     </Show>
   )
 
+  const PortableSection = () => (
+    <Show when={desktop()}>
+      <div class="settings-v2-section">
+        <h3 class="settings-v2-section-title">{language.t("settings.general.section.portable")}</h3>
+
+        <SettingsListV2>
+          <SettingsRowV2
+            title={language.t("settings.general.row.portableMode.title")}
+            description={language.t("settings.general.row.portableMode.description")}
+          >
+            <div data-action="settings-portable-mode">
+              <Switch
+                checked={portableMode.latest}
+                onChange={(checked) => {
+                  setPortableMode(checked)
+                  platform.setPortableModeEnabled?.(checked).catch(() => setPortableMode(!checked))
+                }}
+              />
+            </div>
+          </SettingsRowV2>
+        </SettingsListV2>
+      </div>
+    </Show>
+  )
+
   return (
     <>
       <div class="settings-v2-tab-header">
@@ -712,6 +743,8 @@ export const SettingsGeneralV2: Component<{
         </Show>
 
         <DisplaySection />
+
+        <PortableSection />
 
         <AdvancedSection />
       </div>

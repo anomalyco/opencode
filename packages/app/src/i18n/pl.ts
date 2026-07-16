@@ -699,6 +699,12 @@ export const dict = {
   "settings.general.section.sounds": "Efekty dźwiękowe",
   "settings.general.section.feed": "Kanał",
   "settings.general.section.display": "Ekran",
+
+  "settings.general.section.portable": "Tryb przenośny",
+
+  "settings.general.row.portableMode.title": "Tryb przenośny",
+  "settings.general.row.portableMode.description":
+    "Przechowuj wszystkie dane obok folderu instalacji aplikacji. Włączenie/wyłączenie wymaga ponownego uruchomienia",
   "settings.general.row.language.title": "Język",
   "settings.general.row.language.description": "Zmień język wyświetlania dla OpenCode",
   "settings.general.row.shell.title": "Powłoka terminala",

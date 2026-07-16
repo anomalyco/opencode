@@ -857,6 +857,12 @@ export const dict = {
   "settings.general.section.feed": "Стрічка",
   "settings.general.section.display": "Дисплей",
 
+  "settings.general.section.portable": "Портативний режим",
+
+  "settings.general.row.portableMode.title": "Портативний режим",
+  "settings.general.row.portableMode.description":
+    "Зберігати всі дані поруч з папкою встановленого додатку. Увімкнення/вимкнення потребує перезапуску",
+
   "settings.general.row.language.title": "Мова",
   "settings.general.row.language.description": "Змінити мову інтерфейсу OpenCode",
   "settings.general.row.shell.title": "Командна оболонка термінала",

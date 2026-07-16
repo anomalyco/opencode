@@ -107,6 +107,8 @@ const api: ElectronAPI = {
   setZoomFactor: (factor) => ipcRenderer.invoke("set-zoom-factor", factor),
   getPinchZoomEnabled: () => ipcRenderer.invoke("get-pinch-zoom-enabled"),
   setPinchZoomEnabled: (enabled) => ipcRenderer.invoke("set-pinch-zoom-enabled", enabled),
+  getPortableModeEnabled: () => ipcRenderer.invoke("get-portable-mode-enabled"),
+  setPortableModeEnabled: (enabled) => ipcRenderer.invoke("set-portable-mode-enabled", enabled),
   onPinchZoomEnabledChanged: (cb) => {
     const handler = (_: unknown, enabled: boolean) => cb(enabled)
     ipcRenderer.on("pinch-zoom-enabled-changed", handler)

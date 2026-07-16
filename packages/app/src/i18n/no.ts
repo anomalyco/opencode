@@ -645,6 +645,12 @@ export const dict = {
   "settings.general.section.feed": "Feed",
   "settings.general.section.display": "Skjerm",
 
+  "settings.general.section.portable": "Bærbar modus",
+
+  "settings.general.row.portableMode.title": "Bærbar modus",
+  "settings.general.row.portableMode.description":
+    "Lagre alle data ved siden av app-installasjonsmappen. Aktivering/deaktivering krever omstart",
+
   "settings.general.row.language.title": "Språk",
   "settings.general.row.language.description": "Endre visningsspråket for OpenCode",
   "settings.general.row.appearance.title": "Utseende",

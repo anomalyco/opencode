@@ -750,6 +750,11 @@ export const dict = {
   "settings.general.section.feed": "資訊流",
   "settings.general.section.display": "顯示",
 
+  "settings.general.section.portable": "便攜模式",
+
+  "settings.general.row.portableMode.title": "便攜模式",
+  "settings.general.row.portableMode.description": "將所有資料儲存於安裝目錄旁。開啟/關閉需要重新啟動",
+
   "settings.general.row.language.title": "語言",
   "settings.general.row.language.description": "變更 OpenCode 的顯示語言",
   "settings.general.row.shell.title": "終端機 Shell",

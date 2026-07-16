@@ -103,6 +103,12 @@ type PlatformBase = {
   /** Allow native pinch/Ctrl-scroll zoom gestures (desktop only) */
   setPinchZoomEnabled?(enabled: boolean): Promise<void> | void
 
+  /** Get whether portable mode is enabled (desktop only) */
+  getPortableModeEnabled?(): Promise<boolean> | boolean
+
+  /** Enable or disable portable mode (desktop only; requires restart) */
+  setPortableModeEnabled?(enabled: boolean): Promise<void> | void
+
   /** Run a desktop-only menu action from the app chrome */
   runDesktopMenuAction?(action: DesktopMenuAction): Promise<void> | void
 

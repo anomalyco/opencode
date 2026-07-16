@@ -759,6 +759,12 @@ export const dict = {
   "settings.general.section.feed": "Feed",
   "settings.general.section.display": "Skærm",
 
+  "settings.general.section.portable": "Portabel tilstand",
+
+  "settings.general.row.portableMode.title": "Portabel tilstand",
+  "settings.general.row.portableMode.description":
+    "Gem alle data ved siden af app-installationsmappen. Aktivering/deaktivering kræver genstart",
+
   "settings.general.row.language.title": "Sprog",
   "settings.general.row.language.description": "Ændr visningssproget for OpenCode",
   "settings.general.row.shell.title": "Terminalshell",

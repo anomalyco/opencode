@@ -764,6 +764,12 @@ export const dict = {
   "settings.general.section.feed": "Feed",
   "settings.general.section.display": "Prikaz",
 
+  "settings.general.section.portable": "Prijenosni režim",
+
+  "settings.general.row.portableMode.title": "Prijenosni režim",
+  "settings.general.row.portableMode.description":
+    "Skladišti sve podatke pored instalacijskog foldera aplikacije. Uključivanje/isključivanje zahtijeva ponovno pokretanje",
+
   "settings.general.row.language.title": "Jezik",
   "settings.general.row.language.description": "Promijeni jezik prikaza u OpenCode-u",
   "settings.general.row.shell.title": "Shell terminala",

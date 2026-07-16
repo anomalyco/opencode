@@ -6,7 +6,7 @@ import { homedir, tmpdir } from "node:os"
 import { join } from "node:path"
 import { getCACertificates, setDefaultCACertificates } from "node:tls"
 import type { Event } from "electron"
-import { app } from "electron"
+import { app, dialog } from "electron"
 
 import { Deferred, Effect, Fiber } from "effect"
 import contextMenu from "electron-context-menu"
@@ -25,6 +25,14 @@ import {
   isFirstLaunchOnboardingPending,
   isOldLayoutEligible,
 } from "./onboarding"
+import {
+  createPortableDir,
+  defaultPortableRoot,
+  detectPortableMode,
+  disablePortableMarker,
+  ensurePortableStructure,
+  applyPortableEnv,
+} from "./portable"
 import {
   getDefaultServerUrl,
   preferAppEnv,
@@ -135,15 +143,34 @@ const main = Effect.gen(function* () {
     process.env.XDG_STATE_HOME = join(root, "state")
     return root
   })()
+
+  // 1. Detect Portable Mode and inject paths before app setup
+  const portablePaths = detectPortableMode()
+  if (portablePaths) {
+    ensurePortableStructure(portablePaths.root)
+    applyPortableEnv(portablePaths)
+  }
+
   app.setName(app.isPackaged ? APP_NAMES[CHANNEL] : "OpenCode Dev")
   app.setAppUserModelId(appId)
+  
+  // 2. Override default userData path if portable mode is active
   app.setPath(
     "userData",
-    onboardingTestRoot ? join(onboardingTestRoot, "desktop") : join(app.getPath("appData"), appId),
+    onboardingTestRoot
+      ? join(onboardingTestRoot, "desktop")
+      : portablePaths
+        ? portablePaths.desktop
+        : join(app.getPath("appData"), appId),
   )
   if (onboardingTestRoot) app.setPath("sessionData", join(onboardingTestRoot, "session"))
   initializeOldLayoutEligibility(app.getPath("userData"))
   logger = initLogging()
+  
+  if (portablePaths) {
+    logger.log("portable mode enabled", { root: portablePaths.root })
+  }
+  
   initCrashReporter()
 
   const wslServers = createWslServersController(
@@ -284,6 +311,47 @@ const main = Effect.gen(function* () {
     consumeInitialDeepLinks: () => pendingDeepLinks.splice(0),
     getDefaultServerUrl: () => getDefaultServerUrl(),
     setDefaultServerUrl: (url) => setDefaultServerUrl(url),
+    
+    // 3. Portable mode IPC Handlers with Restart Confirmation
+    getPortableModeEnabled: () => detectPortableMode() !== null,
+    setPortableModeEnabled: async (enabled: boolean) => {
+      const action = enabled ? "Enable" : "Disable"
+      const detail = enabled
+        ? "This will create an 'opencode-data' folder next to the application to store all your future data. Existing data will not be moved. The app will restart immediately."
+        : "This will disable portable mode and revert to using the system's default AppData folder. The 'opencode-data' folder will not be deleted. The app will restart immediately."
+
+      const options = {
+        type: "question" as const,
+        title: `${action} Portable Mode`,
+        message: `Are you sure you want to ${action.toLowerCase()} portable mode?`,
+        detail,
+        buttons: ["Restart Now", "Cancel"],
+        defaultId: 0,
+        cancelId: 1,
+      }
+
+      const win = getLastFocusedWindow()
+      const result = win ? await dialog.showMessageBox(win, options) : await dialog.showMessageBox(options)
+
+      if (result.response === 0) {
+        try {
+          if (enabled) {
+            createPortableDir(defaultPortableRoot())
+          } else {
+            disablePortableMarker(defaultPortableRoot())
+          }
+          app.relaunch()
+          app.exit(0)
+        } catch (err) {
+          dialog.showErrorBox("Error", `Failed to ${action.toLowerCase()} portable mode: ${err}`)
+          throw err
+        }
+      } else {
+        // Rejecting promise so the React/Solid UI resets the Switch position
+        throw new Error("User cancelled")
+      }
+    },
+
     isFirstLaunchOnboardingPending,
     finishFirstLaunchOnboarding,
     isOldLayoutEligible,

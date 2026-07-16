@@ -767,6 +767,12 @@ export const dict = {
   "settings.general.section.feed": "Feed",
   "settings.general.section.display": "Pantalla",
 
+  "settings.general.section.portable": "Modo portátil",
+
+  "settings.general.row.portableMode.title": "Modo portátil",
+  "settings.general.row.portableMode.description":
+    "Guardar todos los datos junto a la carpeta de instalación de la app. Activar/desactivar requiere reiniciar",
+
   "settings.general.row.language.title": "Idioma",
   "settings.general.row.language.description": "Cambiar el idioma de visualización para OpenCode",
   "settings.general.row.shell.title": "Shell del terminal",
