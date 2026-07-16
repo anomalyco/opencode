@@ -420,7 +420,9 @@ export function Prompt(props: PromptProps) {
         name: "prompt.paste",
         category: "Prompt",
         palette: undefined,
-        run: async () => {
+        run: async (_input: string | undefined, event?: KeyEvent) => {
+          event?.preventDefault()
+          event?.stopPropagation()
           const content = await clipboard.read?.()
           if (content?.mime.startsWith("image/")) {
             await pasteAttachment({

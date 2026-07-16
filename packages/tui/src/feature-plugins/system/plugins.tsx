@@ -40,6 +40,7 @@ function Install(props: { api: TuiPluginApi }) {
   const [busy, setBusy] = createSignal(false)
 
   Keymap.createLayer(() => ({
+    mode: "modal",
     enabled: !busy(),
     commands: [
       {

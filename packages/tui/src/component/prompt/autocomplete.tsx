@@ -578,6 +578,7 @@ export function Autocomplete(props: {
   }
 
   Keymap.createLayer(() => ({
+    mode: "autocomplete",
     target: props.input,
     enabled: () => Boolean(store.visible),
     commands: [
