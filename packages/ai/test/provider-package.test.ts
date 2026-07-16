@@ -19,6 +19,7 @@ describe("provider package entrypoints", () => {
       import("@opencode-ai/ai/providers/google-vertex"),
       import("@opencode-ai/ai/providers/google-vertex/gemini"),
       import("@opencode-ai/ai/providers/google-vertex/chat"),
+      import("@opencode-ai/ai/providers/google-vertex/responses"),
       import("@opencode-ai/ai/providers/google-vertex/messages"),
     ])
 
@@ -184,6 +185,7 @@ describe("provider package entrypoints", () => {
     const GoogleVertex = await import("@opencode-ai/ai/providers/google-vertex")
     const GoogleVertexGemini = await import("@opencode-ai/ai/providers/google-vertex/gemini")
     const GoogleVertexChat = await import("@opencode-ai/ai/providers/google-vertex/chat")
+    const GoogleVertexResponses = await import("@opencode-ai/ai/providers/google-vertex/responses")
     const GoogleVertexMessages = await import("@opencode-ai/ai/providers/google-vertex/messages")
     const gemini = GoogleVertex.model("gemini-3.5-flash", {
       apiKey: "fixture",
@@ -197,6 +199,11 @@ describe("provider package entrypoints", () => {
       project: "vertex-project",
     })
     const chat = GoogleVertexChat.model("deepseek-ai/deepseek-v3.2-maas", {
+      accessToken: "fixture",
+      location: "global",
+      project: "vertex-project",
+    })
+    const responses = GoogleVertexResponses.model("xai/grok-4.20-reasoning", {
       accessToken: "fixture",
       location: "global",
       project: "vertex-project",
@@ -227,12 +234,20 @@ describe("provider package entrypoints", () => {
       baseURL: "https://aiplatform.googleapis.com/v1/projects/vertex-project/locations/global/endpoints/openapi",
       path: "/chat/completions",
     })
+    expect(responses.route.id).toBe("google-vertex-responses")
+    expect(responses.route.protocol).toBe("openai-responses")
+    expect(responses.route.endpoint).toMatchObject({
+      baseURL: "https://aiplatform.googleapis.com/v1/projects/vertex-project/locations/global/endpoints/openapi",
+      path: "/responses",
+    })
+    expect(responses.route.defaults.providerOptions).toEqual({ openai: { store: false } })
   })
 
   test("rejects conflicting Vertex auth settings at runtime", async () => {
     const GoogleVertex = await import("@opencode-ai/ai/providers/google-vertex")
     const GoogleVertexChat = await import("@opencode-ai/ai/providers/google-vertex/chat")
     const GoogleVertexMessages = await import("@opencode-ai/ai/providers/google-vertex/messages")
+    const GoogleVertexResponses = await import("@opencode-ai/ai/providers/google-vertex/responses")
     const Providers = await import("@opencode-ai/ai/providers")
     expect(() =>
       Reflect.apply(GoogleVertex.model, undefined, [
@@ -266,5 +281,16 @@ describe("provider package entrypoints", () => {
         { apiKey: "fixture", project: "vertex-project" },
       ]),
     ).toThrow("Google Vertex Chat does not support API keys")
+    expect(() =>
+      Reflect.apply(GoogleVertexResponses.model, undefined, [
+        "xai/grok-4.20-reasoning",
+        { apiKey: "fixture", project: "vertex-project" },
+      ]),
+    ).toThrow("Google Vertex Responses does not support API keys")
+    expect(() =>
+      Reflect.apply(Providers.GoogleVertexResponses.configure, undefined, [
+        { apiKey: "fixture", project: "vertex-project" },
+      ]),
+    ).toThrow("Google Vertex Responses does not support API keys")
   })
 })

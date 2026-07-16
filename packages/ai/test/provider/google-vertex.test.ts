@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
 import { LLM } from "../../src"
-import { GoogleVertex, GoogleVertexChat, GoogleVertexMessages } from "../../src/providers"
+import { GoogleVertex, GoogleVertexChat, GoogleVertexMessages, GoogleVertexResponses } from "../../src/providers"
 import { LLMClient } from "../../src/route"
 import { it } from "../lib/effect"
 import { dynamicResponse } from "../lib/http"
@@ -129,6 +129,48 @@ describe("Google Vertex providers", () => {
               return input.respond(sseEvents(deltaChunk({ content: "Hello." }), finishChunk("stop")), {
                 headers: { "content-type": "text/event-stream" },
               })
+            }),
+          ),
+        ),
+      )
+
+      expect(response.text).toBe("Hello.")
+    }),
+  )
+
+  it.effect("sends Grok requests through Vertex Responses", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(
+        LLM.request({
+          model: GoogleVertexResponses.configure({
+            accessToken: "vertex-token",
+            location: "global",
+            project: "vertex-project",
+          }).model("xai/grok-4.20-reasoning"),
+          prompt: "Say hello.",
+        }),
+      ).pipe(
+        Effect.provide(
+          dynamicResponse((input) =>
+            Effect.gen(function* () {
+              const request = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
+              expect(request.url).toBe(
+                "https://aiplatform.googleapis.com/v1/projects/vertex-project/locations/global/endpoints/openapi/responses",
+              )
+              expect(request.headers.get("authorization")).toBe("Bearer vertex-token")
+              expect(yield* Effect.promise(() => request.json())).toMatchObject({
+                model: "xai/grok-4.20-reasoning",
+                input: [{ role: "user", content: [{ type: "input_text", text: "Say hello." }] }],
+                store: false,
+                stream: true,
+              })
+              return input.respond(
+                sseEvents(
+                  { type: "response.output_text.delta", item_id: "msg_1", delta: "Hello." },
+                  { type: "response.completed", response: { id: "resp_1" } },
+                ),
+                { headers: { "content-type": "text/event-stream" } },
+              )
             }),
           ),
         ),

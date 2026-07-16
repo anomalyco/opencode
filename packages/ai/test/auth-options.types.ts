@@ -13,6 +13,7 @@ import * as Google from "../src/providers/google"
 import * as GoogleVertex from "../src/providers/google-vertex"
 import * as GoogleVertexChat from "../src/providers/google-vertex-chat"
 import * as GoogleVertexMessages from "../src/providers/google-vertex-messages"
+import * as GoogleVertexResponses from "../src/providers/google-vertex-responses"
 import * as OpenAI from "../src/providers/openai"
 import * as OpenAICompatible from "../src/providers/openai-compatible"
 import * as OpenRouter from "../src/providers/openrouter"
@@ -186,6 +187,24 @@ GoogleVertexChat.configure({ accessToken: "vertex-token", project: "project" }).
 GoogleVertexChat.configure({
   accessToken: "vertex-token",
   // @ts-expect-error Vertex Chat config accepts only one auth source.
+  auth: RuntimeAuth.bearer("vertex-token"),
+  project: "project",
+})
+
+GoogleVertexResponses.configure({ accessToken: "vertex-token", project: "project" }).model("xai/grok-4.20-reasoning")
+GoogleVertexResponses.configure({ auth: RuntimeAuth.bearer("vertex-token"), project: "project" }).model(
+  "xai/grok-4.20-reasoning",
+)
+// @ts-expect-error Vertex Responses package settings do not accept API keys.
+GoogleVertexResponses.model("xai/grok-4.20-reasoning", { apiKey: "vertex-key", project: "project" })
+GoogleVertexResponses.configure({ accessToken: "vertex-token", project: "project" }).model(
+  "xai/grok-4.20-reasoning",
+  // @ts-expect-error Vertex Responses model selectors only accept model ids.
+  {},
+)
+GoogleVertexResponses.configure({
+  accessToken: "vertex-token",
+  // @ts-expect-error Vertex Responses config accepts only one auth source.
   auth: RuntimeAuth.bearer("vertex-token"),
   project: "project",
 })
