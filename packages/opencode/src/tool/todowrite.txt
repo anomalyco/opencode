@@ -15,6 +15,14 @@ Skip when:
 - The request is purely informational or conversational
 - Tracking adds no organizational value
 
+## Arguments
+Replace the full list each call. `todos` is required. Each item requires:
+- `content` (string) - brief task description
+- `status` (string) - `pending` | `in_progress` | `completed` | `cancelled`
+- `priority` (string) - `high` | `medium` | `low`
+
+Do not omit `content`. There is no `id` or `merge` field on this tool.
+
 ## States
 - `pending` - not started
 - `in_progress` - actively working (exactly ONE at a time)

@@ -20,14 +20,14 @@ KanCode SHALL provide a built-in permission module with ID `cruise_control` that
 
 ### Requirement: User-Configured Classifier Model
 
-The `cruise_control` module SHALL require a configured model reference under `permission_modules.cruise_control.model` (for example `opencode/deepseek-v4-flash` or `ollama_cloud/kimi-k2.7-code`). The module MUST resolve that model through the existing provider/model stack. Missing or unresolvable model configuration MUST fail closed to the configured `fallback` (never allow).
+The `cruise_control` module SHALL require a configured model reference under `permission_modules.cruise_control.model` (for example `opencode/deepseek-v4-flash` or `ollama-cloud/kimi-k2.7-code`). The module MUST resolve that model through the existing provider/model stack. Missing or unresolvable model configuration MUST fail closed to the configured `fallback` (never allow).
 
 #### Scenario: Classify with deepseek flash
 - **WHEN** `permission_modules.cruise_control.model` is `opencode/deepseek-v4-flash` and a gated tool permission is evaluated
 - **THEN** `cruise_control` invokes that model to produce an allow/deny decision
 
 #### Scenario: Classify with ollama cloud model
-- **WHEN** `permission_modules.cruise_control.model` is `ollama_cloud/kimi-k2.7-code` and a gated tool permission is evaluated
+- **WHEN** `permission_modules.cruise_control.model` is `ollama-cloud/kimi-k2.7-code` and a gated tool permission is evaluated
 - **THEN** `cruise_control` invokes that model through normal provider resolution
 
 #### Scenario: Missing model fails closed
@@ -131,4 +131,4 @@ Documentation and schema examples for `cruise_control` MUST show module ID `"cru
 
 #### Scenario: Documented example uses cruise_control
 - **WHEN** a user follows the documented starter config for LLM permission gating
-- **THEN** the example uses `"cruise_control"` as the permission action and sets `permission_modules.cruise_control.model` to a concrete ref such as `opencode/deepseek-v4-flash` or `ollama_cloud/kimi-k2.7-code`
+- **THEN** the example uses `"cruise_control"` as the permission action and sets `permission_modules.cruise_control.model` to a concrete ref such as `opencode/deepseek-v4-flash` or `ollama-cloud/kimi-k2.7-code`
