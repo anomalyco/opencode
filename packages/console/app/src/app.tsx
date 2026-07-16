@@ -9,6 +9,7 @@ import "./app.css"
 import { LanguageProvider } from "~/context/language"
 import { I18nProvider, useI18n } from "~/context/i18n"
 import { strip } from "~/lib/language"
+import { DesktopPromo } from "~/component/desktop-promo"
 
 function AppMeta() {
   const i18n = useI18n()
@@ -33,6 +34,7 @@ export default function App() {
             <MetaProvider>
               <AppMeta />
               <Suspense>{props.children}</Suspense>
+              <DesktopPromo />
             </MetaProvider>
           </I18nProvider>
         </LanguageProvider>

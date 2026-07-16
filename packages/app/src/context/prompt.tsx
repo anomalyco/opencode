@@ -24,6 +24,7 @@ export {
   createPromptSession,
   createPromptState,
   DEFAULT_PROMPT,
+  isCommentItem,
   isPromptEqual,
 } from "./prompt-state"
 export type {
