@@ -19,7 +19,7 @@ import type {
   ShellInfo,
   SkillInfo,
 } from "@opencode-ai/client"
-import type { Renderable } from "@opentui/core"
+import type { KeyEvent, Renderable } from "@opentui/core"
 import type { JSX } from "@opentui/solid"
 
 interface LocationCollection<Value> {
@@ -139,8 +139,8 @@ export interface KeymapCommand {
   }
   /** Promotes the command in discovery UI. */
   readonly suggested?: boolean | (() => boolean)
-  /** Executes the command. Return false to let keymap dispatch continue. */
-  readonly run: (input?: string) => void | false | Promise<void>
+  /** Executes the command. Keyboard dispatch includes its event; programmatic dispatch does not. Return false to continue. */
+  readonly run: (input?: string, event?: KeyEvent) => void | false | Promise<void>
 }
 
 export interface KeymapLayer {

@@ -80,8 +80,7 @@ import { Config, ConfigProvider, useConfig } from "./config"
 import { createPluginRuntime, PluginRuntimeProvider, usePluginRuntime } from "./plugin/runtime"
 import { PluginProvider, PluginRoute, PluginSlot, usePlugin, type PackageResolver } from "./plugin/context"
 import { CommandPaletteDialog } from "./component/command-palette"
-import { COMMAND_PALETTE_COMMAND, OPENCODE_BASE_MODE, useBindings, useOpencodeKeymap } from "./keymap"
-import { Keymap } from "./context/keymap"
+import { COMMAND_PALETTE_COMMAND, Keymap, type KeymapCommand } from "./context/keymap"
 
 import { DialogVariant } from "./component/dialog-variant"
 import { win32DisableProcessedInput, win32FlushInputBuffer } from "./terminal-win32"
@@ -416,7 +415,7 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
   const renderer = useRenderer()
   const dialog = useDialog()
   const local = useLocal()
-  const keymap = useOpencodeKeymap()
+  const keymap = Keymap.use()
   const event = useEvent()
   const client = useClient()
   const toast = useToast()
@@ -589,7 +588,7 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
         name: COMMAND_PALETTE_COMMAND,
         title: "Show command palette",
         category: "System",
-        hidden: true,
+        palette: undefined,
         run: () => {
           dialog.replace(() => <CommandPaletteDialog />)
         },
@@ -621,7 +620,7 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
         name: `session.quick_switch.${i + 1}`,
         title: `Switch to session in quick slot ${i + 1}`,
         category: "Session",
-        hidden: true,
+        palette: undefined,
         run: () => {
           local.session.quickSwitch(i + 1)
         },
@@ -641,7 +640,7 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
         name: "model.cycle_recent",
         title: "Model cycle",
         category: "Agent",
-        hidden: true,
+        palette: undefined,
         run: () => {
           local.model.cycle(1)
         },
@@ -650,7 +649,7 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
         name: "model.cycle_recent_reverse",
         title: "Model cycle reverse",
         category: "Agent",
-        hidden: true,
+        palette: undefined,
         run: () => {
           local.model.cycle(-1)
         },
@@ -659,7 +658,7 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
         name: "model.cycle_favorite",
         title: "Favorite cycle",
         category: "Agent",
-        hidden: true,
+        palette: undefined,
         run: () => {
           local.model.cycleFavorite(1)
         },
@@ -668,7 +667,7 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
         name: "model.cycle_favorite_reverse",
         title: "Favorite cycle reverse",
         category: "Agent",
-        hidden: true,
+        palette: undefined,
         run: () => {
           local.model.cycleFavorite(-1)
         },
@@ -695,7 +694,7 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
         name: "agent.cycle",
         title: "Agent cycle",
         category: "Agent",
-        hidden: true,
+        palette: undefined,
         run: () => {
           local.agent.move(1)
         },
@@ -712,7 +711,7 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
         name: "variant.list",
         title: "Switch model variant",
         category: "Agent",
-        hidden: local.model.variant.list().length === 0,
+        palette: local.model.variant.list().length === 0 ? undefined : (true as const),
         slash: { name: "variants" },
         run: () => {
           if (local.model.variant.list().length === 0) {
@@ -729,7 +728,7 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
         name: "agent.cycle.reverse",
         title: "Agent cycle reverse",
         category: "Agent",
-        hidden: true,
+        palette: undefined,
         run: () => {
           local.agent.move(-1)
         },
@@ -818,7 +817,7 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
       {
         name: "theme.switch_mode",
         title: mode() === "dark" ? "Switch to light mode" : "Switch to dark mode",
-        hidden: true,
+        palette: undefined,
         run: () => {
           setMode(mode() === "dark" ? "light" : "dark")
           dialog.clear()
@@ -828,7 +827,7 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
       {
         name: "theme.mode.lock",
         title: locked() ? "Unlock theme mode" : "Lock theme mode",
-        hidden: true,
+        palette: undefined,
         run: () => {
           if (locked()) unlock()
           else lock()
@@ -883,7 +882,7 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
         name: "terminal.suspend",
         title: "Suspend terminal",
         category: "System",
-        hidden: true,
+        palette: undefined,
         enabled: process.platform !== "win32",
         run: () => {
           renderer.suspend()
@@ -895,7 +894,7 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
         name: "terminal.title.toggle",
         title: terminalTitleEnabled() ? "Disable terminal title" : "Enable terminal title",
         category: "System",
-        hidden: true,
+        palette: undefined,
         run: () => {
           const next = !terminalTitleEnabled()
           if (!next) renderer.setTerminalTitle("")
@@ -911,7 +910,7 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
         name: "app.toggle.animations",
         title: (config.data.animations ?? true) ? "Disable animations" : "Enable animations",
         category: "System",
-        hidden: true,
+        palette: undefined,
         run: () => {
           void config
             .update((draft) => {
@@ -925,7 +924,7 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
         name: "app.toggle.file_context",
         title: (config.data.prompt?.editor ?? true) ? "Disable file context" : "Enable file context",
         category: "System",
-        hidden: true,
+        palette: undefined,
         run: () => {
           void config
             .update((draft) => {
@@ -939,7 +938,7 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
         name: "app.toggle.diffwrap",
         title: (config.data.diffs?.wrap ?? "word") === "word" ? "Disable diff wrapping" : "Enable diff wrapping",
         category: "System",
-        hidden: true,
+        palette: undefined,
         run: () => {
           void config
             .update((draft) => {
@@ -956,7 +955,7 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
         name: "app.toggle.paste_summary",
         title: pasteSummaryEnabled() ? "Disable paste summary" : "Enable paste summary",
         category: "System",
-        hidden: true,
+        palette: undefined,
         run: () => {
           void config
             .update((draft) => {
@@ -976,38 +975,44 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
           dialog.clear()
         },
       },
-    ].map((command) => ({
-      namespace: "palette",
-      ...command,
-    })),
+    ].map(
+      ({ name, category, ...command }) =>
+        ({
+          id: name,
+          group: category,
+          bind: false,
+          palette: true as const,
+          ...command,
+        }) satisfies KeymapCommand,
+    ),
   )
 
-  useBindings(() => ({
+  Keymap.createLayer(() => ({
+    mode: "global",
     commands: appCommands(),
   }))
 
-  useBindings(() => ({
-    mode: OPENCODE_BASE_MODE,
-    bindings: appBindingCommands.flatMap((command) => config.data.keybinds.get(command)),
+  Keymap.createLayer(() => ({
+    bindings: appBindingCommands,
   }))
 
-  useBindings(() => ({
-    bindings: appGlobalBindingCommands.flatMap((command) => config.data.keybinds.get(command)),
+  Keymap.createLayer(() => ({
+    mode: "global",
+    bindings: appGlobalBindingCommands,
   }))
 
-  useBindings(() => ({
-    mode: OPENCODE_BASE_MODE,
+  Keymap.createLayer(() => ({
     enabled: () => {
       const current = promptRef.current
       if (!current?.focused) return true
       return current.current.text === ""
     },
-    bindings: config.data.keybinds.get("app.exit"),
+    bindings: ["app.exit"],
   }))
 
   event.on("tui.command.execute", (evt, { workspace }) => {
     if (workspace !== (location.current?.workspaceID ?? data.location.default().workspaceID)) return
-    keymap.dispatchCommand(evt.data.command)
+    keymap.dispatch(evt.data.command)
   })
 
   event.on("tui.toast.show", (evt, { workspace }) => {

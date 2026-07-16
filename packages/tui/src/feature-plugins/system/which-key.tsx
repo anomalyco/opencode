@@ -2,7 +2,7 @@
 import { RGBA, TextAttributes, type KeyEvent, type Renderable } from "@opentui/core"
 import { useTerminalDimensions } from "@opentui/solid"
 import { createEffect, createMemo, createSignal, For, Show } from "solid-js"
-import { useBindings, useKeymapSelector } from "../../keymap"
+import { Keymap } from "../../context/keymap"
 import type { ActiveKey } from "@opentui/keymap"
 import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { BuiltinTuiPlugin } from "../builtins"
@@ -153,12 +153,9 @@ function grouped(entries: Entry[]): Group[] {
     .toSorted((a, b) => a.label.localeCompare(b.label))
 }
 
-function commandShortcut(api: TuiPluginApi, name: string) {
-  return useKeymapSelector((keymap) =>
-    api.keys.formatSequence(
-      keymap.getCommandBindings({ visibility: "registered", commands: [name] }).get(name)?.[0]?.sequence,
-    ),
-  )
+function commandShortcut(_api: TuiPluginApi, name: string) {
+  const shortcuts = Keymap.useShortcuts()
+  return () => shortcuts.get(name) ?? ""
 }
 
 function layout(value: unknown): Layout {
@@ -189,8 +186,8 @@ function WhichKeyPanel(props: {
   const dimensions = useTerminalDimensions()
   const [offset, setOffset] = createSignal(0)
   const [activeGroup, setActiveGroup] = createSignal<string | undefined>()
-  const pending = useKeymapSelector((keymap) => keymap.getPendingSequence())
-  const active = useKeymapSelector((keymap) => keymap.getActiveKeys({ includeMetadata: true }))
+  const pending = Keymap.usePendingSequence()
+  const active = Keymap.useActiveKeys()
   const pendingActive = createMemo(() => pending().length > 0 && active().length > 0)
   const pendingAutoVisible = createMemo(() => props.mode() === "overlay" && props.pendingPreview() && pendingActive())
   const visible = createMemo(() => props.pinned() || pendingAutoVisible())
@@ -281,86 +278,92 @@ function WhichKeyPanel(props: {
     setOffset(0)
   }
 
-  useBindings(() => ({
+  Keymap.createLayer(() => ({
     priority: 1000,
     enabled: visible(),
     commands: [
       {
-        name: command.groupPrevious,
+        id: command.groupPrevious,
+        bind: false,
         title: "Previous key binding group",
-        desc: "Show the previous which-key group",
-        category: "System",
+        description: "Show the previous which-key group",
+        group: "System",
         run() {
           moveGroup(-1)
         },
       },
       {
-        name: command.groupNext,
+        id: command.groupNext,
+        bind: false,
         title: "Next key binding group",
-        desc: "Show the next which-key group",
-        category: "System",
+        description: "Show the next which-key group",
+        group: "System",
         run() {
           moveGroup(1)
         },
       },
       {
-        name: command.scrollUp,
+        id: command.scrollUp,
+        bind: false,
         title: "Scroll key bindings up",
-        desc: "Scroll the which-key panel up",
-        category: "System",
+        description: "Scroll the which-key panel up",
+        group: "System",
         run() {
           scroll(-columns())
         },
       },
       {
-        name: command.scrollDown,
+        id: command.scrollDown,
+        bind: false,
         title: "Scroll key bindings down",
-        desc: "Scroll the which-key panel down",
-        category: "System",
+        description: "Scroll the which-key panel down",
+        group: "System",
         run() {
           scroll(columns())
         },
       },
       {
-        name: command.pageUp,
+        id: command.pageUp,
+        bind: false,
         title: "Page key bindings up",
-        desc: "Page the which-key panel up",
-        category: "System",
+        description: "Page the which-key panel up",
+        group: "System",
         run() {
           scroll(-pageSize())
         },
       },
       {
-        name: command.pageDown,
+        id: command.pageDown,
+        bind: false,
         title: "Page key bindings down",
-        desc: "Page the which-key panel down",
-        category: "System",
+        description: "Page the which-key panel down",
+        group: "System",
         run() {
           scroll(pageSize())
         },
       },
       {
-        name: command.home,
+        id: command.home,
+        bind: false,
         title: "First key binding",
-        desc: "Jump to the first which-key binding",
-        category: "System",
+        description: "Jump to the first which-key binding",
+        group: "System",
         run() {
           setOffset(0)
         },
       },
       {
-        name: command.end,
+        id: command.end,
+        bind: false,
         title: "Last key binding",
-        desc: "Jump to the last which-key binding",
-        category: "System",
+        description: "Jump to the last which-key binding",
+        group: "System",
         run() {
           setOffset(maxOffset())
         },
       },
     ],
-    bindings: (pendingMode() ? scrollCommands : panelCommands).flatMap((command) =>
-      props.api.tuiConfig.keybinds.get(command),
-    ),
+    bindings: pendingMode() ? scrollCommands : panelCommands,
   }))
 
   createEffect(() => {

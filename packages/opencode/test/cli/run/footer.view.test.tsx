@@ -1,11 +1,10 @@
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
 import { BoxRenderable, RGBA, type RootRenderable } from "@opentui/core"
-import { testRender, useRenderer } from "@opentui/solid"
+import { testRender } from "@opentui/solid"
 import { createSignal } from "solid-js"
-import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
 import type { QuestionRequest } from "@opencode-ai/sdk/v2"
-import { OpencodeKeymapProvider, registerOpencodeKeymap } from "@opencode-ai/tui/keymap"
+import { Keymap } from "@opencode-ai/tui/context/keymap"
 import {
   RUN_COMMAND_PANEL_ROWS,
   RUN_SUBAGENT_PANEL_ROWS,
@@ -174,15 +173,9 @@ async function renderFooter(
   )
   const state = footerState(input.state)
   const config = input.tuiConfig ?? tuiConfig
-  let offKeymap: (() => void) | undefined
-
   function Harness() {
-    const renderer = useRenderer()
-    const keymap = createDefaultOpenTuiKeymap(renderer)
-    offKeymap = registerOpencodeKeymap(keymap, renderer, config)
-
     return (
-      <OpencodeKeymapProvider keymap={keymap}>
+      <Keymap.Provider config={config}>
         <RunFooterView
           directory="/tmp"
           findFiles={async () => []}
@@ -215,7 +208,7 @@ async function renderFooter(
           onStatus={() => {}}
           onQueuedRemove={async () => true}
         />
-      </OpencodeKeymapProvider>
+      </Keymap.Provider>
     )
   }
 
@@ -233,8 +226,6 @@ async function renderFooter(
     cleanup() {
       app.renderer.currentFocusedRenderable?.blur()
       app.renderer.currentFocusedEditor?.blur()
-      offKeymap?.()
-      offKeymap = undefined
       app.renderer.destroy()
     },
   }
@@ -967,14 +958,9 @@ test("direct footer shows editable prompts and additional queued work while runn
     permissions: [],
     questions: [],
   })
-  let offKeymap: (() => void) | undefined
   function Harness() {
-    const renderer = useRenderer()
-    const keymap = createDefaultOpenTuiKeymap(renderer)
-    offKeymap = registerOpencodeKeymap(keymap, renderer, tuiConfig)
-
     return (
-      <OpencodeKeymapProvider keymap={keymap}>
+      <Keymap.Provider config={tuiConfig}>
         <RunFooterView
           directory="/tmp"
           findFiles={async () => []}
@@ -1013,7 +999,7 @@ test("direct footer shows editable prompts and additional queued work while runn
           onStatus={() => {}}
           onQueuedRemove={async () => true}
         />
-      </OpencodeKeymapProvider>
+      </Keymap.Provider>
     )
   }
 
@@ -1049,7 +1035,7 @@ test("direct footer shows editable prompts and additional queued work while runn
     expect(frame).toContain("3 queued")
     expect(frame).toContain("ctrl+b background")
     expect(frame).toContain("ctrl+x q 3 queued")
-    expect(frame).toContain("ctrl+x down subagents")
+    expect(frame).toContain("↓ subagents")
     expect(frame).toContain("ctrl+p cmd")
     expect(frame).toContain("a-model-name-long-enough-to-force-responsive-truncation")
     expect(frame).toContain("subagents · ctrl+p cmd")
@@ -1063,7 +1049,6 @@ test("direct footer shows editable prompts and additional queued work while runn
   } finally {
     app.renderer.currentFocusedRenderable?.blur()
     app.renderer.currentFocusedEditor?.blur()
-    offKeymap?.()
     app.renderer.destroy()
   }
 })
@@ -1087,7 +1072,7 @@ test("direct footer always offers backgrounding for a foreground subagent", asyn
     const frame = app.captureCharFrame()
 
     expect(frame).toContain("GPT-5")
-    expect(frame).toContain("xhigh · ctrl+b background · ctrl+x down subagents · ctrl+p cmd")
+    expect(frame).toContain("xhigh · ctrl+b background · ↓ subagents · ctrl+p cmd")
     expect(frame).toContain("ctrl+b background")
     expect(frame).not.toContain("queued")
   } finally {
@@ -1115,7 +1100,7 @@ test("direct footer hides the subagent hint when only completed subagents remain
 
     expect(frame).toContain("GPT-5")
     expect(frame).toContain("xhigh · ctrl+p cmd")
-    expect(frame).not.toContain("ctrl+x down subagents")
+    expect(frame).not.toContain("↓ subagents")
   } finally {
     app.cleanup()
   }
@@ -1233,15 +1218,9 @@ test.skip("direct custom answer submits through keymap return binding", async ()
     ],
   } satisfies QuestionRequest
   const questions: unknown[] = []
-  let off: (() => void) | undefined
-
   function Harness() {
-    const renderer = useRenderer()
-    const keymap = createDefaultOpenTuiKeymap(renderer)
-    off = registerOpencodeKeymap(keymap, renderer, tuiConfig)
-
     return (
-      <OpencodeKeymapProvider keymap={keymap}>
+      <Keymap.Provider config={tuiConfig}>
         <RunQuestionBody
           request={question}
           theme={RUN_THEME_FALLBACK.footer}
@@ -1250,7 +1229,7 @@ test.skip("direct custom answer submits through keymap return binding", async ()
           }}
           onReject={() => {}}
         />
-      </OpencodeKeymapProvider>
+      </Keymap.Provider>
     )
   }
 
@@ -1275,7 +1254,6 @@ test.skip("direct custom answer submits through keymap return binding", async ()
   } finally {
     app.renderer.currentFocusedRenderable?.blur()
     app.renderer.currentFocusedEditor?.blur()
-    off?.()
     app.renderer.destroy()
   }
 })
@@ -1283,15 +1261,9 @@ test.skip("direct custom answer submits through keymap return binding", async ()
 test("direct permission rejection submits through keymap return binding", async () => {
   let text = ""
   const submits: string[] = []
-  let off: (() => void) | undefined
-
   function Harness() {
-    const renderer = useRenderer()
-    const keymap = createDefaultOpenTuiKeymap(renderer)
-    off = registerOpencodeKeymap(keymap, renderer, tuiConfig)
-
     return (
-      <OpencodeKeymapProvider keymap={keymap}>
+      <Keymap.Provider config={tuiConfig}>
         <RejectField
           theme={RUN_THEME_FALLBACK.footer}
           text=""
@@ -1304,7 +1276,7 @@ test("direct permission rejection submits through keymap return binding", async 
           }}
           onCancel={() => {}}
         />
-      </OpencodeKeymapProvider>
+      </Keymap.Provider>
     )
   }
 
@@ -1328,7 +1300,6 @@ test("direct permission rejection submits through keymap return binding", async 
   } finally {
     app.renderer.currentFocusedRenderable?.blur()
     app.renderer.currentFocusedEditor?.blur()
-    off?.()
     app.renderer.destroy()
   }
 })

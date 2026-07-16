@@ -23,7 +23,7 @@ import {
   movePromptHistory,
   pushPromptHistory,
 } from "./prompt.shared"
-import { OPENCODE_BASE_MODE, useBindings } from "@opencode-ai/tui/keymap"
+import { Keymap } from "@opencode-ai/tui/context/keymap"
 import { realignEditorPromptParts, resolveEditorSlashValue } from "./prompt.editor"
 import { FOOTER_MENU_ROWS, createFooterMenuState, type RunFooterMenuItem } from "./footer.menu"
 import type { RunFooterTheme } from "./theme"
@@ -993,93 +993,83 @@ export function createPromptState(input: PromptInput): PromptState {
     return true
   }
 
-  useBindings(() => ({
-    mode: OPENCODE_BASE_MODE,
+  Keymap.createLayer(() => ({
     enabled: baseBindingsEnabled(),
     commands: [
       {
-        name: "prompt.clear",
+        id: "prompt.clear",
         title: "Clear prompt or exit",
-        category: "Prompt",
+        group: "Prompt",
         run() {
           if (requestExit()) return
           return false
         },
       },
     ],
-    bindings: input.tuiConfig.keybinds.get("prompt.clear"),
   }))
 
-  useBindings(() => ({
-    mode: OPENCODE_BASE_MODE,
+  Keymap.createLayer(() => ({
     enabled: input.prompt(),
     commands: [
       {
-        name: "session.interrupt",
+        id: "session.interrupt",
         title: "Interrupt session",
-        category: "Session",
+        group: "Session",
         run() {
           if (input.onInterrupt()) return
           return false
         },
       },
     ],
-    bindings: input.tuiConfig.keybinds.get("session.interrupt"),
   }))
 
-  useBindings(() => ({
-    mode: OPENCODE_BASE_MODE,
+  Keymap.createLayer(() => ({
     enabled: input.prompt() && !visible(),
     commands: [
       {
-        name: "prompt.editor",
+        id: "prompt.editor",
         title: "Open editor",
-        category: "Prompt",
+        group: "Prompt",
         run() {
           void openEditor()
         },
       },
     ],
-    bindings: input.tuiConfig.keybinds.get("prompt.editor"),
   }))
 
-  useBindings(() => ({
+  Keymap.createLayer(() => ({
     priority: 1,
-    mode: OPENCODE_BASE_MODE,
     enabled: input.prompt() && !visible(),
     commands: [
       {
-        name: "prompt.history.previous",
+        id: "prompt.history.previous",
         title: "Previous prompt history",
-        category: "Prompt",
-        run(ctx: { event: KeyEvent }) {
-          return historyCommand(-1, ctx.event)
+        group: "Prompt",
+        run(_input: string | undefined, event?: KeyEvent) {
+          if (!event) return false
+          return historyCommand(-1, event)
         },
       },
       {
-        name: "prompt.history.next",
+        id: "prompt.history.next",
         title: "Next prompt history",
-        category: "Prompt",
-        run(ctx: { event: KeyEvent }) {
-          return historyCommand(1, ctx.event)
+        group: "Prompt",
+        run(_input: string | undefined, event?: KeyEvent) {
+          if (!event) return false
+          return historyCommand(1, event)
         },
       },
-    ],
-    bindings: [
-      ...input.tuiConfig.keybinds.get("prompt.history.previous"),
-      ...input.tuiConfig.keybinds.get("prompt.history.next"),
     ],
   }))
 
-  useBindings(() => ({
-    mode: OPENCODE_BASE_MODE,
+  Keymap.createLayer(() => ({
     enabled: input.prompt() && !visible(),
-    bindings: [
+    commands: [
       {
-        key: "!",
-        desc: "Shell mode",
+        bind: "!",
+        title: "Shell mode",
         group: "Prompt",
-        cmd() {
+        run() {
           if (shell()) return false
           if (!area || area.isDestroyed) return false
           if (area.cursorOffset !== 0) return false
@@ -1089,21 +1079,20 @@ export function createPromptState(input: PromptInput): PromptState {
     ],
   }))
 
-  useBindings(() => ({
-    mode: OPENCODE_BASE_MODE,
+  Keymap.createLayer(() => ({
     enabled: input.prompt() && shell() && !visible(),
-    bindings: [
+    commands: [
       {
-        key: "escape",
-        desc: "Exit shell mode",
+        bind: "escape",
+        title: "Exit shell mode",
         group: "Prompt",
-        cmd: () => setShellMode(false),
+        run: () => setShellMode(false),
       },
       {
-        key: "backspace",
-        desc: "Exit shell mode",
+        bind: "backspace",
+        title: "Exit shell mode",
         group: "Prompt",
-        cmd() {
+        run() {
           if (!area || area.isDestroyed) return false
           if (area.cursorOffset !== 0) return false
           setShellMode(false)
@@ -1112,32 +1101,31 @@ export function createPromptState(input: PromptInput): PromptState {
     ],
   }))
 
-  useBindings(() => ({
-    mode: OPENCODE_BASE_MODE,
+  Keymap.createLayer(() => ({
     enabled: input.prompt() && visible(),
     commands: [
       {
-        name: "prompt.autocomplete.prev",
+        id: "prompt.autocomplete.prev",
         title: "Previous autocomplete item",
-        category: "Autocomplete",
+        group: "Autocomplete",
         run: () => menu.move(-1),
       },
       {
-        name: "prompt.autocomplete.next",
+        id: "prompt.autocomplete.next",
         title: "Next autocomplete item",
-        category: "Autocomplete",
+        group: "Autocomplete",
         run: () => menu.move(1),
       },
       {
-        name: "prompt.autocomplete.hide",
+        id: "prompt.autocomplete.hide",
         title: "Hide autocomplete",
-        category: "Autocomplete",
+        group: "Autocomplete",
         run: cancelAutocomplete,
       },
       {
-        name: "prompt.autocomplete.select",
+        id: "prompt.autocomplete.select",
         title: "Select autocomplete item",
-        category: "Autocomplete",
+        group: "Autocomplete",
         run() {
           if (mode() === "slash" && options().length === 0) {
             hide()
@@ -1147,9 +1135,9 @@ export function createPromptState(input: PromptInput): PromptState {
         },
       },
       {
-        name: "prompt.autocomplete.complete",
+        id: "prompt.autocomplete.complete",
         title: "Complete autocomplete item",
-        category: "Autocomplete",
+        group: "Autocomplete",
         run() {
           if (mode() === "slash" && options().length === 0) {
             hide()
@@ -1164,13 +1152,6 @@ export function createPromptState(input: PromptInput): PromptState {
         },
       },
     ],
-    bindings: [
-      "prompt.autocomplete.prev",
-      "prompt.autocomplete.next",
-      "prompt.autocomplete.hide",
-      "prompt.autocomplete.select",
-      "prompt.autocomplete.complete",
-    ].flatMap((command) => input.tuiConfig.keybinds.get(command)),
   }))
 
   const onKeyDown = (event: KeyEvent) => {

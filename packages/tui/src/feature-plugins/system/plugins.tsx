@@ -4,7 +4,7 @@ import { useTerminalDimensions } from "@opentui/solid"
 import { fileURLToPath } from "url"
 import { DialogSelect, type DialogSelectOption } from "../../ui/dialog-select"
 import { Show, createEffect, createMemo, createSignal } from "solid-js"
-import { useBindings } from "../../keymap"
+import { Keymap } from "../../context/keymap"
 
 const id = "internal:plugin-manager"
 
@@ -39,9 +39,18 @@ function Install(props: { api: TuiPluginApi }) {
   const [global, setGlobal] = createSignal(false)
   const [busy, setBusy] = createSignal(false)
 
-  useBindings(() => ({
+  Keymap.createLayer(() => ({
     enabled: !busy(),
-    bindings: [{ key: "tab", desc: "Toggle install scope", group: "Plugins", cmd: () => setGlobal((value) => !value) }],
+    commands: [
+      {
+        bind: "tab",
+        title: "Toggle install scope",
+        group: "Plugins",
+        run: () => {
+          setGlobal((value) => !value)
+        },
+      },
+    ],
   }))
 
   return (

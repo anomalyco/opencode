@@ -27,14 +27,8 @@ import { RunPromptBody, createPromptState } from "./footer.prompt"
 import { RunPermissionBody } from "./footer.permission"
 import { RunQuestionBody } from "./footer.question"
 import { footerWidthPolicy } from "./footer.width"
-import {
-  OPENCODE_BASE_MODE,
-  formatKeyBindings,
-  formatKeySequence,
-  useBindings,
-  useKeymapSelector,
-  type OpenTuiKeymap,
-} from "@opencode-ai/tui/keymap"
+import { Keymap } from "@opencode-ai/tui/context/keymap"
+
 import type {
   FooterPromptRoute,
   FooterQueuedPrompt,
@@ -177,75 +171,15 @@ export function RunFooterView(props: RunFooterViewProps) {
     const current = route()
     return current.type === "subagent" ? subagent().details[current.sessionID] : undefined
   })
-  const command = useKeymapSelector(
-    (keymap: OpenTuiKeymap) =>
-      formatKeySequence(
-        keymap
-          .getCommandBindings({ visibility: "registered", commands: ["command.palette.show"] })
-          .get("command.palette.show")?.[0]?.sequence,
-        props.tuiConfig,
-      ) ?? "",
-  )
-  const subagentShortcut = useKeymapSelector(
-    (keymap: OpenTuiKeymap) =>
-      formatKeySequence(
-        keymap
-          .getCommandBindings({ visibility: "registered", commands: ["session.child.first"] })
-          .get("session.child.first")?.[0]?.sequence,
-        props.tuiConfig,
-      ) ?? "",
-  )
-  const queuedShortcut = useKeymapSelector(
-    (keymap: OpenTuiKeymap) =>
-      formatKeySequence(
-        keymap
-          .getCommandBindings({ visibility: "registered", commands: ["session.queued_prompts"] })
-          .get("session.queued_prompts")?.[0]?.sequence,
-        props.tuiConfig,
-      ) ?? "",
-  )
-  const backgroundShortcut = useKeymapSelector(
-    (keymap: OpenTuiKeymap) =>
-      formatKeySequence(
-        keymap
-          .getCommandBindings({ visibility: "registered", commands: ["session.background"] })
-          .get("session.background")?.[0]?.sequence,
-        props.tuiConfig,
-      ) ?? "",
-  )
-  const subagentInterruptShortcut = useKeymapSelector(
-    (keymap: OpenTuiKeymap) =>
-      formatKeySequence(
-        keymap
-          .getCommandBindings({ visibility: "registered", commands: ["subagent.interrupt"] })
-          .get("subagent.interrupt")?.[0]?.sequence,
-        props.tuiConfig,
-      ) ?? "",
-  )
-  const interrupt = useKeymapSelector(
-    (keymap: OpenTuiKeymap) =>
-      formatKeySequence(
-        keymap
-          .getCommandBindings({ visibility: "registered", commands: ["session.interrupt"] })
-          .get("session.interrupt")?.[0]?.sequence,
-        props.tuiConfig,
-      ) ?? "",
-  )
-  const variantCycle = useKeymapSelector(
-    (keymap: OpenTuiKeymap) =>
-      formatKeyBindings(
-        keymap.getCommandBindings({ visibility: "registered", commands: ["variant.cycle"] }).get("variant.cycle"),
-        props.tuiConfig,
-      ) ?? "",
-  )
-  const clearShortcut = useKeymapSelector(
-    (keymap: OpenTuiKeymap) =>
-      formatKeySequence(
-        keymap.getCommandBindings({ visibility: "registered", commands: ["prompt.clear"] }).get("prompt.clear")?.[0]
-          ?.sequence,
-        props.tuiConfig,
-      ) ?? "",
-  )
+  const shortcuts = Keymap.useShortcuts()
+  const command = () => shortcuts.get("command.palette.show") ?? ""
+  const subagentShortcut = () => shortcuts.get("session.child.first") ?? ""
+  const queuedShortcut = () => shortcuts.get("session.queued_prompts") ?? ""
+  const backgroundShortcut = () => shortcuts.get("session.background") ?? ""
+  const subagentInterruptShortcut = () => shortcuts.get("subagent.interrupt") ?? ""
+  const interrupt = () => shortcuts.get("session.interrupt") ?? ""
+  const variantCycle = () => shortcuts.all("variant.cycle") ?? ""
+  const clearShortcut = () => shortcuts.get("prompt.clear") ?? ""
   const busy = createMemo(() => props.state().phase === "running")
   const armed = createMemo(() => props.state().interrupt > 0)
   const exiting = createMemo(() => props.state().exit > 0)
@@ -504,74 +438,62 @@ export function RunFooterView(props: RunFooterViewProps) {
     props.onRequestExit?.(undefined)
   })
 
-  useBindings(() => ({
-    mode: OPENCODE_BASE_MODE,
+  Keymap.createLayer(() => ({
     enabled: active().type === "prompt" && route().type === "composer" && !composer.visible(),
     commands: [
       {
-        name: "command.palette.show",
+        id: "command.palette.show",
         title: "Open command palette",
-        category: "Prompt",
+        group: "Prompt",
         run: openCommand,
       },
       {
-        name: "variant.cycle",
+        id: "variant.cycle",
         title: "Cycle model variant",
-        category: "Model",
+        group: "Model",
         run: props.onCycle,
       },
     ],
-    bindings: [
-      ...props.tuiConfig.keybinds.get("command.palette.show"),
-      ...props.tuiConfig.keybinds.get("variant.cycle"),
-    ],
   }))
 
-  useBindings(() => ({
-    mode: OPENCODE_BASE_MODE,
+  Keymap.createLayer(() => ({
     enabled: active().type === "prompt" && route().type === "composer" && foregroundSubagents() && !!props.onBackground,
     priority: 1,
     commands: [
       {
-        name: "session.background",
+        id: "session.background",
         title: "Background subagents",
-        category: "Session",
+        group: "Session",
         run: () => props.onBackground?.(),
       },
     ],
-    bindings: props.tuiConfig.keybinds.get("session.background"),
   }))
 
-  useBindings(() => ({
-    mode: OPENCODE_BASE_MODE,
+  Keymap.createLayer(() => ({
     enabled: active().type === "prompt" && route().type === "composer" && tabs().length > 0,
     commands: [
       {
-        name: "session.child.first",
+        id: "session.child.first",
         title: "View subagents",
-        category: "Session",
+        group: "Session",
         run: openSubagentMenu,
       },
     ],
-    bindings: props.tuiConfig.keybinds.get("session.child.first"),
   }))
 
-  useBindings(() => ({
-    mode: OPENCODE_BASE_MODE,
+  Keymap.createLayer(() => ({
     enabled: active().type === "prompt" && route().type === "composer" && queuedPrompts().length > 0,
     commands: [
       {
-        name: "session.queued_prompts",
+        id: "session.queued_prompts",
         title: "Manage queued prompts",
-        category: "Session",
+        group: "Session",
         run: openQueuedMenu,
       },
     ],
-    bindings: props.tuiConfig.keybinds.get("session.queued_prompts"),
   }))
 
-  useBindings(() => ({
-    mode: OPENCODE_BASE_MODE,
+  Keymap.createLayer(() => ({
     enabled:
       active().type === "prompt" &&
       route().type === "subagent" &&
@@ -580,9 +502,10 @@ export function RunFooterView(props: RunFooterViewProps) {
     priority: 1,
     commands: [
       {
-        name: "subagent.interrupt",
+        id: "subagent.interrupt",
         title: "Interrupt subagent",
-        category: "Session",
+        group: "Session",
+        bind: "ctrl+d",
         run: () => {
           const current = selectedTab()
           if (current?.status !== "running") {
@@ -593,7 +516,6 @@ export function RunFooterView(props: RunFooterViewProps) {
         },
       },
     ],
-    bindings: [{ key: "ctrl+d", desc: "Interrupt subagent", group: "Subagents", cmd: "subagent.interrupt" }],
   }))
 
   createEffect(() => {

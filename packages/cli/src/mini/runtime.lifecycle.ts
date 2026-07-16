@@ -10,9 +10,7 @@
 // back to the usual two-press exit sequence through RunFooter.requestExit().
 import path from "path"
 import { CliRenderEvents, createCliRenderer, type CliRenderer, type ScrollbackWriter } from "@opentui/core"
-import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
 import { Global } from "@opencode-ai/core/global"
-import { registerOpencodeKeymap } from "@opencode-ai/tui/keymap"
 import { isDefaultTitle } from "@opencode-ai/tui/util/session"
 import { Locale } from "@opencode-ai/tui/util/locale"
 import { resolveInteractiveStdin } from "./runtime.stdin"
@@ -167,8 +165,6 @@ function queueSplash(
 export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lifecycle> {
   const source = resolveInteractiveStdin()
   const footerTask = import("./footer")
-  let unregisterKeymap: (() => void) | undefined
-
   try {
     const renderer = await createCliRenderer({
       stdin: source.stdin,
@@ -187,8 +183,6 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
     })
     const [theme, tuiConfig] = await Promise.all([resolveRunTheme(renderer), input.tuiConfig])
     renderer.setBackgroundColor(theme.background)
-    const keymap = createDefaultOpenTuiKeymap(renderer)
-    unregisterKeymap = registerOpencodeKeymap(keymap, renderer, tuiConfig)
     const state: SplashState = {
       entry: false,
       exit: false,
@@ -233,7 +227,6 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
       history: input.history,
       theme,
       wrote,
-      keymap,
       tuiConfig,
       diffStyle: tuiConfig.diff_style ?? "auto",
       onPermissionReply: input.onPermissionReply,
@@ -333,7 +326,6 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
         footer.close()
         await footer.idle().catch(() => {})
         footer.destroy()
-        unregisterKeymap?.()
         shutdown(renderer)
         if (!wroteExit) {
           process.stdout.write("\n")
@@ -391,7 +383,6 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
       close,
     }
   } catch (error) {
-    unregisterKeymap?.()
     source.cleanup?.()
     throw error
   }

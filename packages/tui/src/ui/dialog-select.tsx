@@ -11,7 +11,6 @@ import { useDialog, type DialogContext } from "./dialog"
 import { Locale } from "../util/locale"
 import { getScrollAcceleration } from "../util/scroll"
 import { useConfig } from "../config"
-import { formatKeyBindings, useKeymapSelector } from "../keymap"
 
 export interface DialogSelectProps<T> {
   title: string
@@ -126,18 +125,13 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
 
   const actions = createMemo(() => props.actions ?? [])
   const shownActions = createMemo(() => actions().filter((item) => !item.hidden))
-  const actionBindings = useKeymapSelector((keymap) =>
-    keymap.getCommandBindings({
-      visibility: "registered",
-      commands: shownActions().map((item) => item.command),
-    }),
-  )
+  const shortcuts = Keymap.useShortcuts()
 
   const actionLabels = createMemo(() => {
     const labels = new Map<string, string>()
 
     for (const action of shownActions()) {
-      const label = formatKeyBindings(actionBindings().get(action.command), config)
+      const label = shortcuts.all(action.command)
       if (label) labels.set(action.command, label)
     }
 

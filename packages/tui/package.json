@@ -30,7 +30,7 @@
     "./editor-zed": "./src/editor-zed.ts",
     "./runtime": "./src/runtime.tsx",
     "./terminal-win32": "./src/terminal-win32.ts",
-    "./keymap": "./src/keymap.tsx",
+    "./context/keymap": "./src/context/keymap.tsx",
     "./prompt/content": "./src/prompt/content.ts",
     "./prompt/display": "./src/prompt/display.ts",
     "./plugin/runtime": "./src/plugin/runtime.tsx",

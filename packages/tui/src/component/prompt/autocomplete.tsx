@@ -18,7 +18,6 @@ import { useTerminalDimensions } from "@opentui/solid"
 import { Locale } from "../../util/locale"
 import type { PromptInfo, PromptPartRef } from "../../prompt/history"
 import { useFrecency } from "../../prompt/frecency"
-import { useBindings } from "../../keymap"
 import { Keymap } from "../../context/keymap"
 import { displayCharAt, mentionTriggerIndex } from "../../prompt/display"
 import type { FileSystemEntry } from "@opencode-ai/client"
@@ -578,48 +577,48 @@ export function Autocomplete(props: {
     setStore("selected", 0)
   }
 
-  useBindings(() => ({
+  Keymap.createLayer(() => ({
     target: props.input,
     enabled: () => Boolean(store.visible),
     commands: [
       {
-        name: "prompt.autocomplete.prev",
+        id: "prompt.autocomplete.prev",
         title: "Previous autocomplete item",
-        category: "Autocomplete",
+        group: "Autocomplete",
         run() {
           setStore("input", "keyboard")
           move(-1)
         },
       },
       {
-        name: "prompt.autocomplete.next",
+        id: "prompt.autocomplete.next",
         title: "Next autocomplete item",
-        category: "Autocomplete",
+        group: "Autocomplete",
         run() {
           setStore("input", "keyboard")
           move(1)
         },
       },
       {
-        name: "prompt.autocomplete.hide",
+        id: "prompt.autocomplete.hide",
         title: "Hide autocomplete",
-        category: "Autocomplete",
+        group: "Autocomplete",
         run() {
           hide()
         },
       },
       {
-        name: "prompt.autocomplete.select",
+        id: "prompt.autocomplete.select",
         title: "Select autocomplete item",
-        category: "Autocomplete",
+        group: "Autocomplete",
         run() {
           select()
         },
       },
       {
-        name: "prompt.autocomplete.complete",
+        id: "prompt.autocomplete.complete",
         title: "Complete autocomplete item",
-        category: "Autocomplete",
+        group: "Autocomplete",
         run() {
           const selected = options()[store.selected]
           if (selected?.isDirectory) {
@@ -631,13 +630,6 @@ export function Autocomplete(props: {
         },
       },
     ],
-    bindings: [
-      "prompt.autocomplete.prev",
-      "prompt.autocomplete.next",
-      "prompt.autocomplete.hide",
-      "prompt.autocomplete.select",
-      "prompt.autocomplete.complete",
-    ].flatMap((command) => config.keybinds.get(command)),
   }))
 
   function show(mode: "@" | "/") {

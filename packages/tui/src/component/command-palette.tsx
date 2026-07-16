@@ -1,8 +1,7 @@
 import { createMemo } from "solid-js"
 import { DialogSelect, type DialogSelectRef } from "../ui/dialog-select"
 import { type DialogContext } from "../ui/dialog"
-import { COMMAND_PALETTE_COMMAND } from "../keymap"
-import { Keymap, type KeymapCommand } from "../context/keymap"
+import { COMMAND_PALETTE_COMMAND, Keymap, type KeymapCommand } from "../context/keymap"
 
 function isSuggestedPaletteCommand(command: KeymapCommand) {
   const suggested = command.suggested

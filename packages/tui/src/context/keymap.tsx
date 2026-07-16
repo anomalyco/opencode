@@ -1,6 +1,6 @@
 import type { KeymapCommand, KeymapLayer } from "@opencode-ai/plugin/v2/tui/context"
-import { InputRenderable, TextareaRenderable } from "@opentui/core"
-import { stringifyKeyStroke } from "@opentui/keymap"
+import { InputRenderable, TextareaRenderable, type KeyEvent, type Renderable } from "@opentui/core"
+import { stringifyKeyStroke, type Binding, type CommandContext } from "@opentui/keymap"
 import {
   registerBackspacePopsPendingSequence,
   registerBaseLayoutFallback,
@@ -32,17 +32,27 @@ const MODE = { key: "opencode.mode", base: "base" } as const
 
 type OpenTuiKeymap = Parameters<typeof KeymapProvider>[0]["keymap"]
 type Mode = ReturnType<typeof createMode>
+type KeymapConfig = {
+  readonly keybinds: {
+    get(command: string): readonly Binding<Renderable, KeyEvent>[]
+  }
+  readonly leader?: { readonly timeout: number }
+  readonly leader_timeout?: number
+}
+
+export const COMMAND_PALETTE_COMMAND = "command.palette.show"
 
 const Context = createContext<{
   readonly keymap: OpenTuiKeymap
+  readonly config: KeymapConfig
   readonly mode: Mode
   readonly dispatch: (id: string, input?: string) => void
   readonly input: (id: string) => string | undefined
 }>()
 
-function Provider(props: ParentProps) {
+function Provider(props: ParentProps<{ config?: KeymapConfig }>) {
   const renderer = useRenderer()
-  const config = useConfig()
+  const config: KeymapConfig = props.config ?? useConfig().data
   const keymap = createDefaultOpenTuiKeymap(renderer)
   const mode = createMode(keymap)
   let invocation: { readonly id: string; readonly input?: string } | undefined
@@ -111,16 +121,16 @@ function Provider(props: ParentProps) {
         "input.delete.word.backward",
         "input.select.all",
         "input.submit",
-      ].flatMap((command) => config.data.keybinds.get(command)),
+      ].flatMap((command) => config.keybinds.get(command)),
     }),
   ]
-  const leader = config.data.keybinds.get("leader")?.[0]?.key
+  const leader = config.keybinds.get("leader")?.[0]?.key
   if (leader) {
     dispose.push(
       registerTimedLeader(keymap, {
         trigger: leader,
         name: "leader",
-        timeoutMs: config.data.leader.timeout,
+        timeoutMs: config.leader?.timeout ?? ("leader_timeout" in config ? config.leader_timeout : undefined) ?? 2000,
       }),
     )
   }
@@ -131,7 +141,13 @@ function Provider(props: ParentProps) {
   return (
     <KeymapProvider keymap={keymap}>
       <Context.Provider
-        value={{ keymap, mode, dispatch, input: (id) => (invocation?.id === id ? invocation.input : undefined) }}
+        value={{
+          keymap,
+          config,
+          mode,
+          dispatch,
+          input: (id) => (invocation?.id === id ? invocation.input : undefined),
+        }}
       >
         {props.children}
       </Context.Provider>
@@ -151,6 +167,8 @@ export interface Keymap {
     /** Pushes a mode until the returned cleanup is called. */
     push(mode: string): () => void
   }
+  /** Registers a low-level keymap interceptor. */
+  intercept: OpenTuiKeymap["intercept"]
 }
 
 function use(): Keymap {
@@ -160,12 +178,12 @@ function use(): Keymap {
       value.dispatch(id, input)
     },
     mode: value.mode,
+    intercept: value.keymap.intercept.bind(value.keymap),
   }
 }
 
 function createLayer(input: () => KeymapLayer) {
   const value = useValue()
-  const config = useConfig()
   useBindings(() => {
     const layer = input()
     const { commands, bindings, mode, ...options } = layer
@@ -199,7 +217,7 @@ function createLayer(input: () => KeymapLayer) {
           ...definition,
           name: id,
           opencode: command,
-          run: () => run(value.input(id)),
+          run: (context: CommandContext<Renderable, KeyEvent>) => run(value.input(id), context.event),
           ...(description === undefined ? {} : { desc: description }),
           ...(group === undefined ? {} : { category: group }),
           ...(palette === undefined ? {} : { namespace: "palette" }),
@@ -220,20 +238,19 @@ function createLayer(input: () => KeymapLayer) {
         })),
         ...grouped.named.flatMap((command) => {
           if (command.bind === false) return []
-          const configured = config.data.keybinds.get(command.id)
+          const configured = value.config.keybinds.get(command.id)
           if (configured.length) return configured
           if (typeof command.bind !== "string") return []
           return [{ key: command.bind, cmd: command.id }]
         }),
-        ...(bindings ?? []).flatMap((id) => config.data.keybinds.get(id)),
+        ...(bindings ?? []).flatMap((id) => value.config.keybinds.get(id)),
       ],
     }
   })
 }
 
 function useShortcuts() {
-  useValue()
-  const config = useConfig()
+  const value = useValue()
   const shortcuts = useKeymapSelector((keymap) => {
     const commands = keymap.getCommands({ visibility: "registered" }).map((command) => command.name)
     const bindings = keymap.getCommandBindings({ visibility: "registered", commands })
@@ -241,8 +258,8 @@ function useShortcuts() {
       commands.map((id) => [
         id,
         {
-          first: formatKeySequence(bindings.get(id)?.[0]?.sequence, formatOptions(config.data)),
-          all: formatCommandBindings(bindings.get(id) ?? [], formatOptions(config.data)),
+          first: formatKeySequence(bindings.get(id)?.[0]?.sequence, formatOptions(value.config)),
+          all: formatCommandBindings(bindings.get(id) ?? [], formatOptions(value.config)),
         },
       ]),
     )
@@ -255,6 +272,16 @@ function useShortcuts() {
       return shortcuts().get(id)?.all
     },
   }
+}
+
+function useShortcut(id: string) {
+  const shortcuts = useShortcuts()
+  return () => shortcuts.get(id)
+}
+
+function useLeaderActive() {
+  const pending = usePendingSequence()
+  return () => pending()[0]?.tokenName === "leader"
 }
 
 function useCommands(): Accessor<readonly KeymapCommand[]> {
@@ -312,6 +339,8 @@ export const Keymap = {
   use,
   createLayer,
   useShortcuts,
+  useShortcut,
+  useLeaderActive,
   useCommands,
   usePendingSequence,
   useActiveKeys,
@@ -355,7 +384,7 @@ function createMode(keymap: OpenTuiKeymap) {
   }
 }
 
-function formatOptions(config: ReturnType<typeof useConfig>["data"]) {
+function formatOptions(config: KeymapConfig) {
   const leader = config.keybinds.get("leader")?.[0]?.key
   return {
     tokenDisplay: {

@@ -6,9 +6,7 @@ import {
   PasteEvent,
   decodePasteBytes,
   type KeyEvent,
-  type Renderable,
 } from "@opentui/core"
-import type { CommandContext } from "@opentui/keymap"
 import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show, Switch, Match } from "solid-js"
 import { registerOpencodeSpinner } from "../register-spinner"
 import path from "path"
@@ -46,7 +44,6 @@ import { useToast } from "../../ui/toast"
 import { createFadeIn } from "../../util/signal"
 import { DialogSkill } from "../dialog-skill"
 import { useArgs } from "../../context/args"
-import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useLeaderActive, useOpencodeKeymap } from "../../keymap"
 import { useConfig } from "../../config"
 import { usePromptMove } from "./move"
 import { readLocalAttachment } from "./local-attachment"
@@ -155,7 +152,7 @@ export function Prompt(props: PromptProps) {
   let anchor: BoxRenderable
   const [inputTarget, setInputTarget] = createSignal<TextareaRenderable | undefined>()
 
-  const leader = useLeaderActive()
+  const leader = Keymap.useLeaderActive()
   const local = useLocal()
   const args = useArgs()
   const paths = useTuiPaths()
@@ -183,10 +180,10 @@ export function Prompt(props: PromptProps) {
   )
   const history = usePromptHistory()
   const stash = usePromptStash()
-  const keymap = useOpencodeKeymap()
-  const agentShortcut = useCommandShortcut("agent.cycle")
-  const paletteShortcut = useCommandShortcut("command.palette.show")
-  const liveWorkShortcut = useCommandShortcut("session.child.first")
+  const keymap = Keymap.use()
+  const agentShortcut = Keymap.useShortcut("agent.cycle")
+  const paletteShortcut = Keymap.useShortcut("command.palette.show")
+  const liveWorkShortcut = Keymap.useShortcut("session.child.first")
   const renderer = useRenderer()
   const exit = useExit()
   const dimensions = useTerminalDimensions()
@@ -387,7 +384,7 @@ export function Prompt(props: PromptProps) {
         title: "Clear prompt",
         name: "prompt.clear",
         category: "Prompt",
-        hidden: true,
+        palette: undefined,
         run: () => {
           clearPrompt()
           dialog.clear()
@@ -397,8 +394,10 @@ export function Prompt(props: PromptProps) {
         title: "Submit prompt",
         name: "prompt.submit",
         category: "Prompt",
-        hidden: true,
-        run: async () => {
+        palette: undefined,
+        run: async (_input: string | undefined, event?: KeyEvent) => {
+          event?.preventDefault()
+          event?.stopPropagation()
           if (!input.focused) return
           const handled = await submit()
           if (!handled) return
@@ -420,10 +419,8 @@ export function Prompt(props: PromptProps) {
         title: "Paste",
         name: "prompt.paste",
         category: "Prompt",
-        hidden: true,
-        run: async (ctx: CommandContext<Renderable, KeyEvent>) => {
-          ctx.event.preventDefault()
-          ctx.event.stopPropagation()
+        palette: undefined,
+        run: async () => {
           const content = await clipboard.read?.()
           if (content?.mime.startsWith("image/")) {
             await pasteAttachment({
@@ -441,7 +438,7 @@ export function Prompt(props: PromptProps) {
         title: "Interrupt session",
         name: "session.interrupt",
         category: "Session",
-        hidden: true,
+        palette: undefined,
         enabled: status() === "running",
         run: () => {
           if (auto()?.visible) return
@@ -472,7 +469,7 @@ export function Prompt(props: PromptProps) {
         title: "Background blocking tools",
         name: "session.background",
         category: "Session",
-        hidden: true,
+        palette: undefined,
         enabled: status() === "running",
         run: () => {
           if (auto()?.visible) return
@@ -564,18 +561,24 @@ export function Prompt(props: PromptProps) {
           move.open()
         },
       },
-    ].map((entry) => ({
-      namespace: "palette",
-      ...entry,
-    })),
+    ].map(
+      ({ name, category, ...command }) =>
+        ({
+          id: name,
+          group: category,
+          bind: false,
+          palette: true as const,
+          ...command,
+        }) satisfies KeymapCommand,
+    ),
   )
 
-  useBindings(() => ({
+  Keymap.createLayer(() => ({
+    mode: "global",
     commands: promptCommands(),
   }))
 
-  useBindings(() => ({
-    mode: OPENCODE_BASE_MODE,
+  Keymap.createLayer(() => ({
     bindings: [
       "prompt.submit",
       "prompt.editor",
@@ -587,7 +590,7 @@ export function Prompt(props: PromptProps) {
       "session.interrupt",
       "session.background",
       "session.move",
-    ].flatMap((command) => config.keybinds.get(command)),
+    ],
   }))
 
   const ref: PromptRef = {
@@ -803,33 +806,40 @@ export function Prompt(props: PromptProps) {
           ))
         },
       },
-    ].map((entry) => ({
-      namespace: "palette",
-      ...entry,
-    })),
+    ].map(
+      ({ name, category, ...command }) =>
+        ({
+          id: name,
+          group: category,
+          bind: false,
+          palette: true as const,
+          ...command,
+        }) satisfies KeymapCommand,
+    ),
   )
 
-  useBindings(() => ({
+  Keymap.createLayer(() => ({
+    mode: "global",
     commands: stashCommands(),
   }))
 
-  useBindings(() => {
+  Keymap.createLayer(() => {
     return {
       target: inputTarget,
       enabled: inputTarget() !== undefined && !props.disabled,
-      bindings: config.keybinds.get("prompt.paste"),
+      bindings: ["prompt.paste"],
     }
   })
 
-  useBindings(() => {
+  Keymap.createLayer(() => {
     return {
       target: inputTarget,
       enabled: inputTarget() !== undefined && !props.disabled && store.prompt.text !== "",
-      bindings: config.keybinds.get("prompt.clear"),
+      bindings: ["prompt.clear"],
     }
   })
 
-  useBindings(() => {
+  Keymap.createLayer(() => {
     return {
       target: inputTarget,
       enabled: (() => {
@@ -842,12 +852,12 @@ export function Prompt(props: PromptProps) {
           input?.visualCursor.offset === 0
         )
       })(),
-      bindings: [
+      commands: [
         {
-          key: "!",
-          desc: "Shell mode",
+          bind: "!",
+          title: "Shell mode",
           group: "Prompt",
-          cmd: () => {
+          run: () => {
             setStore("placeholder", randomIndex(shell().length))
             setStore("mode", "shell")
           },
@@ -856,26 +866,28 @@ export function Prompt(props: PromptProps) {
     }
   })
 
-  useBindings(() => {
+  Keymap.createLayer(() => {
     return {
       target: inputTarget,
       enabled: inputTarget() !== undefined && store.mode === "shell",
-      bindings: [{ key: "escape", desc: "Exit shell mode", group: "Prompt", cmd: () => setStore("mode", "normal") }],
+      commands: [{ bind: "escape", title: "Exit shell mode", group: "Prompt", run: () => setStore("mode", "normal") }],
     }
   })
 
-  useBindings(() => {
+  Keymap.createLayer(() => {
     return {
       target: inputTarget,
       enabled: (() => {
         cursorVersion()
         return inputTarget() !== undefined && store.mode === "shell" && input?.visualCursor.offset === 0
       })(),
-      bindings: [{ key: "backspace", desc: "Exit shell mode", group: "Prompt", cmd: () => setStore("mode", "normal") }],
+      commands: [
+        { bind: "backspace", title: "Exit shell mode", group: "Prompt", run: () => setStore("mode", "normal") },
+      ],
     }
   })
 
-  useBindings(() => {
+  Keymap.createLayer(() => {
     return {
       priority: 1,
       target: inputTarget,
@@ -885,9 +897,9 @@ export function Prompt(props: PromptProps) {
       })(),
       commands: [
         {
-          name: "prompt.history.previous",
+          id: "prompt.history.previous",
           title: "Previous prompt history",
-          category: "Prompt",
+          group: "Prompt",
           run() {
             if (input.cursorOffset !== 0) {
               if (input.scrollY + input.visualCursor.visualRow === 0) {
@@ -908,11 +920,10 @@ export function Prompt(props: PromptProps) {
           },
         },
       ],
-      bindings: config.keybinds.get("prompt.history.previous"),
     }
   })
 
-  useBindings(() => {
+  Keymap.createLayer(() => {
     return {
       priority: 1,
       target: inputTarget,
@@ -922,9 +933,9 @@ export function Prompt(props: PromptProps) {
       })(),
       commands: [
         {
-          name: "prompt.history.next",
+          id: "prompt.history.next",
           title: "Next prompt history",
-          category: "Prompt",
+          group: "Prompt",
           run() {
             if (input.cursorOffset !== input.plainText.length) {
               if (
@@ -948,7 +959,6 @@ export function Prompt(props: PromptProps) {
           },
         },
       ],
-      bindings: config.keybinds.get("prompt.history.next"),
     }
   })
 
@@ -1429,7 +1439,7 @@ export function Prompt(props: PromptProps) {
                 // Windows Terminal <1.25 can surface image-only clipboard as an
                 // empty bracketed paste. Windows Terminal 1.25+ does not.
                 if (!pastedContent) {
-                  keymap.dispatchCommand("prompt.paste")
+                  keymap.dispatch("prompt.paste")
                   return
                 }
 
@@ -1589,10 +1599,7 @@ export function Prompt(props: PromptProps) {
               </box>
             </Match>
             <Match when={true}>
-              <Show
-                when={!props.hint && locationLabel()}
-                fallback={props.hint ?? <text />}
-              >
+              <Show when={!props.hint && locationLabel()} fallback={props.hint ?? <text />}>
                 {(location) => (
                   <text fg={themeV2.text.subdued()} wrapMode="none" truncate flexGrow={1} flexShrink={1}>
                     {location()}
