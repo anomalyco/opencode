@@ -5,11 +5,12 @@ import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { SessionRestart } from "@opencode-ai/core/session/execution/restart"
 import { ServiceStatus } from "@opencode-ai/protocol/groups/health"
 import { hasPtyConnectTicketURL } from "@opencode-ai/protocol/groups/pty"
-import { Cause, Context, Deferred, Effect, Exit, Layer, Option, Ref, Schema, Scope, Tracer } from "effect"
+import { Cause, Context, Deferred, Effect, Exit, Layer, Option, Ref, Schema, Scope } from "effect"
 import { HttpMiddleware, HttpRouter, HttpServer, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { createServer } from "node:http"
 import { ServerAuth } from "./auth"
 import { authorizedRequest } from "./middleware/authorization"
+import { withoutParentSpan } from "./request-tracing"
 import { createRoutes } from "./routes"
 import { ServerInfo } from "./server-info"
 import { Status } from "./service-status"
@@ -30,8 +31,7 @@ type App = Effect.Effect<
   HttpServerRequest.HttpServerRequest | Scope.Scope
 >
 
-// The request handler captures this context and outlives startup, so this boundary must not become its parent span.
-export const start = Effect.fnUntraced(function* <E, R>(options: Options<E, R>) {
+export const start = Effect.fn("ServerProcess.start")(function* <E, R>(options: Options<E, R>) {
   if (!options.password) return yield* Effect.fail(new Error("Missing server password"))
   const shutdown = yield* Deferred.make<void>()
   const status = yield* Status.make({
@@ -43,9 +43,7 @@ export const start = Effect.fnUntraced(function* <E, R>(options: Options<E, R>) 
   // Request fibers may continue inbound trace context, but must not inherit the server startup parent.
   yield* bound.http
     .serve(dispatch(options.password, status, application, shutdown), HttpMiddleware.logger)
-    .pipe(
-      Effect.updateContext((context: Context.Context<Scope.Scope>) => Context.omit(Tracer.ParentSpan)(context)),
-    )
+    .pipe(withoutParentSpan)
   if (options.service) yield* options.service.onListen(bound.http.address)
 
   const parentScope = yield* Scope.Scope
