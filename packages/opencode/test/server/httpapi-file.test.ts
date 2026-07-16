@@ -32,7 +32,8 @@ afterEach(async () => {
 describe("file HttpApi", () => {
   test("serves read endpoints", async () => {
     await using tmp = await tmpdir({ git: true })
-    await Bun.write(path.join(tmp.path, "hello.txt"), "hello")
+    const fileContent = "\n  hello  \n\n"
+    await Bun.write(path.join(tmp.path, "hello.txt"), fileContent)
 
     const [list, content, status] = await Promise.all([
       request(FilePaths.list, tmp.path, { path: "." }),
@@ -46,7 +47,7 @@ describe("file HttpApi", () => {
     )
 
     expect(content.status).toBe(200)
-    expect(await content.json()).toMatchObject({ type: "text", content: "hello" })
+    expect(await content.json()).toMatchObject({ type: "text", content: fileContent })
 
     expect(status.status).toBe(200)
     expect(await status.json()).toEqual([])
