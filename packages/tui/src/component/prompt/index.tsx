@@ -1556,101 +1556,113 @@ export function Prompt(props: PromptProps) {
           />
         </box>
         <box width="100%" flexDirection="row" justifyContent="space-between" gap={2}>
-          <Switch>
-            <Match when={status() === "running"}>
-              <box flexDirection="row" gap={1} flexGrow={1} justifyContent="flex-start">
-                <box marginLeft={1}>
-                  <Show when={config.animations ?? true} fallback={<text fg={themeV2.text.subdued()}>[⋯]</text>}>
-                    <spinner color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
-                  </Show>
-                </box>
-                <text fg={store.interrupt > 0 ? themeV2.background.action() : themeV2.text()}>
-                  esc{" "}
-                  <span
-                    style={{
-                      fg: store.interrupt > 0 ? themeV2.background.action() : themeV2.text.subdued(),
-                    }}
-                  >
-                    {store.interrupt > 0 ? "again to interrupt" : "interrupt"}
-                  </span>
-                </text>
-              </box>
-            </Match>
-            <Match when={move.progress()}>
-              {(progress) => (
-                <box paddingLeft={3}>
-                  <Spinner color={themeV2.hue.accent(500)}>
-                    {progress()}
-                    <span style={{ fg: themeV2.text.subdued() }}>{".".repeat(move.creatingDots())}</span>
-                  </Spinner>
-                </box>
-              )}
-            </Match>
-            <Match when={move.pendingNew()}>
-              <box paddingLeft={3}>
-                <text fg={themeV2.hue.accent(500)}>(new working copy)</text>
-              </box>
-            </Match>
-            <Match when={true}>
-              <Show when={!props.hint && locationLabel()} fallback={props.hint ?? <text />}>
-                {(location) => (
-                  <text fg={themeV2.text.subdued()} wrapMode="none" truncate flexGrow={1} flexShrink={1}>
-                    {location()}
-                  </text>
-                )}
-              </Show>
-            </Match>
-          </Switch>
-          <box gap={2} flexDirection="row" flexShrink={0}>
-            <Show when={editorContextLabelState() !== "none" ? editorFileLabelDisplay() : undefined}>
-              {(file) => (
-                <text fg={editorContextLabelState() === "pending" ? themeV2.hue.accent(500) : themeV2.text.subdued()}>
-                  {file()}
-                </text>
-              )}
-            </Show>
+          <box flexGrow={1} flexShrink={1} minWidth={0}>
             <Switch>
-              <Match when={store.mode === "normal"}>
-                <Switch>
-                  <Match when={liveWorkStatusVisible() || statusItems().length > 0}>
-                    <text fg={themeV2.text.subdued()} wrapMode="none">
-                      <Show when={liveWorkStatusVisible() && liveWorkShortcut()}>
-                        {(shortcut) => <span style={{ fg: themeV2.text() }}>{shortcut()} </span>}
-                      </Show>
-                      <Show when={subagentStatusLabel()}>
-                        {(label) => <span style={{ fg: themeV2.text.subdued() }}>{label()}</span>}
-                      </Show>
-                      <Show when={subagentStatusLabel() && shellStatusLabel()}>
-                        <span style={{ fg: themeV2.text.subdued() }}> · </span>
-                      </Show>
-                      <Show when={shellStatusLabel()}>
-                        {(label) => <span style={{ fg: themeV2.text.subdued() }}>{label()}</span>}
-                      </Show>
-                      <Show when={liveWorkStatusVisible() && statusItems().length > 0}>
-                        <span style={{ fg: themeV2.text.subdued() }}> · </span>
-                      </Show>
-                      <Show when={statusItems().length > 0}>
-                        <span style={{ fg: themeV2.text.subdued() }}>{statusItems().join(" · ")}</span>
-                      </Show>
-                    </text>
-                  </Match>
-                  <Match when={true}>
-                    <text fg={themeV2.text()}>
-                      {agentShortcut()} <span style={{ fg: themeV2.text.subdued() }}>agents</span>
-                    </text>
-                  </Match>
-                </Switch>
-                <text fg={themeV2.text()}>
-                  {paletteShortcut()} <span style={{ fg: themeV2.text.subdued() }}>commands</span>
-                </text>
+              <Match when={status() === "running"}>
+                <box flexDirection="row" gap={1} flexGrow={1} justifyContent="flex-start">
+                  <box marginLeft={1}>
+                    <Show when={config.animations ?? true} fallback={<text fg={themeV2.text.subdued()}>[⋯]</text>}>
+                      <spinner color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
+                    </Show>
+                  </box>
+                  <text
+                    fg={store.interrupt > 0 ? themeV2.background.action() : themeV2.text()}
+                    wrapMode="none"
+                    truncate
+                    flexShrink={1}
+                  >
+                    esc{" "}
+                    <span
+                      style={{
+                        fg: store.interrupt > 0 ? themeV2.background.action() : themeV2.text.subdued(),
+                      }}
+                    >
+                      {store.interrupt > 0 ? "again to interrupt" : "interrupt"}
+                    </span>
+                  </text>
+                </box>
               </Match>
-              <Match when={store.mode === "shell"}>
-                <text fg={themeV2.text()}>
-                  esc <span style={{ fg: themeV2.text.subdued() }}>exit shell mode</span>
-                </text>
+              <Match when={move.progress()}>
+                {(progress) => (
+                  <box paddingLeft={3} height={1} minHeight={0} flexShrink={1}>
+                    <Spinner color={themeV2.hue.accent(500)}>
+                      {progress()}
+                      <span style={{ fg: themeV2.text.subdued() }}>{".".repeat(move.creatingDots())}</span>
+                    </Spinner>
+                  </box>
+                )}
+              </Match>
+              <Match when={move.pendingNew()}>
+                <box paddingLeft={3} height={1} minHeight={0} flexShrink={1}>
+                  <text fg={themeV2.hue.accent(500)} wrapMode="none" truncate>
+                    (new working copy)
+                  </text>
+                </box>
+              </Match>
+              <Match when={true}>
+                <Show when={!props.hint && locationLabel()} fallback={props.hint ?? <text />}>
+                  {(location) => (
+                    <text fg={themeV2.text.subdued()} wrapMode="none" truncate flexGrow={1} flexShrink={1}>
+                      {location()}
+                    </text>
+                  )}
+                </Show>
               </Match>
             </Switch>
           </box>
+          <Show when={editorContextLabelState() !== "none" ? editorFileLabelDisplay() : undefined}>
+            {(file) => (
+              <text
+                wrapMode="none"
+                truncate
+                flexShrink={1}
+                fg={editorContextLabelState() === "pending" ? themeV2.hue.accent(500) : themeV2.text.subdued()}
+              >
+                {file()}
+              </text>
+            )}
+          </Show>
+          <Switch>
+            <Match when={store.mode === "normal"}>
+              <Switch>
+                <Match when={liveWorkStatusVisible() || statusItems().length > 0}>
+                  <text fg={themeV2.text.subdued()} wrapMode="none" truncate flexShrink={1}>
+                    <Show when={liveWorkStatusVisible() && liveWorkShortcut()}>
+                      {(shortcut) => <span style={{ fg: themeV2.text() }}>{shortcut()} </span>}
+                    </Show>
+                    <Show when={subagentStatusLabel()}>
+                      {(label) => <span style={{ fg: themeV2.text.subdued() }}>{label()}</span>}
+                    </Show>
+                    <Show when={subagentStatusLabel() && shellStatusLabel()}>
+                      <span style={{ fg: themeV2.text.subdued() }}> · </span>
+                    </Show>
+                    <Show when={shellStatusLabel()}>
+                      {(label) => <span style={{ fg: themeV2.text.subdued() }}>{label()}</span>}
+                    </Show>
+                    <Show when={liveWorkStatusVisible() && statusItems().length > 0}>
+                      <span style={{ fg: themeV2.text.subdued() }}> · </span>
+                    </Show>
+                    <Show when={statusItems().length > 0}>
+                      <span style={{ fg: themeV2.text.subdued() }}>{statusItems().join(" · ")}</span>
+                    </Show>
+                  </text>
+                </Match>
+                <Match when={true}>
+                  <text fg={themeV2.text()} flexShrink={0}>
+                    {agentShortcut()} <span style={{ fg: themeV2.text.subdued() }}>agents</span>
+                  </text>
+                </Match>
+              </Switch>
+              <text fg={themeV2.text()} flexShrink={0}>
+                {paletteShortcut()} <span style={{ fg: themeV2.text.subdued() }}>commands</span>
+              </text>
+            </Match>
+            <Match when={store.mode === "shell"}>
+              <text fg={themeV2.text()} flexShrink={0}>
+                esc <span style={{ fg: themeV2.text.subdued() }}>exit shell mode</span>
+              </text>
+            </Match>
+          </Switch>
         </box>
       </box>
       <Autocomplete
