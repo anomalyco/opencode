@@ -1,9 +1,17 @@
+import { Effect, Schema, Struct } from "effect"
 import type { ProviderPackage } from "../provider-package"
-import { GoogleVertexAnthropic } from "../protocols/google-vertex-anthropic"
-import type { RouteDefaultsInput } from "../route/client"
+import { AnthropicMessages } from "../protocols/anthropic-messages"
+import { Auth } from "../route/auth"
+import { Route, type RouteDefaultsInput } from "../route/client"
+import { Endpoint } from "../route/endpoint"
+import { Framing } from "../route/framing"
+import { Protocol } from "../route/protocol"
 import { ProviderID, type ModelID, type ProviderOptions } from "../schema"
 import { GoogleVertexShared } from "./google-vertex-shared"
 
+const VERSION = "vertex-2023-10-16" as const
+
+// models.dev uses this provider id even though the API contract is Anthropic Messages.
 export const id = ProviderID.make("google-vertex-anthropic")
 
 export type Config = RouteDefaultsInput &
@@ -22,11 +30,37 @@ export interface Settings extends ProviderPackage.Settings {
   readonly providerOptions?: ProviderOptions
 }
 
-export const routes = [GoogleVertexAnthropic.route]
+const route = Route.make({
+  id: "google-vertex-messages",
+  provider: id,
+  providerMetadataKey: "anthropic",
+  protocol: Protocol.make({
+    id: AnthropicMessages.protocol.id,
+    body: {
+      schema: Schema.Struct({
+        ...Struct.omit(AnthropicMessages.AnthropicMessagesBody.fields, ["model"]),
+        anthropic_version: Schema.Literal(VERSION),
+      }),
+      from: (request) =>
+        AnthropicMessages.protocol.body.from(request).pipe(
+          Effect.map((body) => ({
+            ...Struct.omit(body, ["model"]),
+            anthropic_version: VERSION,
+          })),
+        ),
+    },
+    stream: AnthropicMessages.protocol.stream,
+  }),
+  endpoint: Endpoint.path(({ request }) => `/${request.model.id}:streamRawPredict`),
+  auth: Auth.none,
+  framing: Framing.sse,
+})
+
+export const routes = [route]
 
 const configuredRoute = (input: Config) => {
   if ("apiKey" in input && input.apiKey !== undefined)
-    throw new Error("Google Vertex Anthropic does not support API keys")
+    throw new Error("Google Vertex Messages does not support API keys")
   const {
     accessToken: _accessToken,
     auth: _auth,
@@ -37,7 +71,7 @@ const configuredRoute = (input: Config) => {
   } = input
   const location = GoogleVertexShared.location(inputLocation, "global")
   const project = GoogleVertexShared.project(inputProject)
-  return GoogleVertexAnthropic.route.with({
+  return route.with({
     ...rest,
     endpoint: {
       baseURL:
@@ -63,7 +97,7 @@ export const provider = {
 }
 
 export const model: ProviderPackage.Definition<Settings>["model"] = (modelID, settings) => {
-  if (settings.apiKey !== undefined) throw new Error("Google Vertex Anthropic does not support API keys")
+  if (settings.apiKey !== undefined) throw new Error("Google Vertex Messages does not support API keys")
   return configure({
     accessToken: settings.accessToken,
     baseURL: settings.baseURL,

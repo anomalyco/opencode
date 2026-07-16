@@ -1,6 +1,4 @@
 export * as AnthropicMessages from "./anthropic-messages"
-export * as GoogleVertexAnthropic from "./google-vertex-anthropic"
-export * as GoogleVertexGemini from "./google-vertex-gemini"
 export * as BedrockConverse from "./bedrock-converse"
 export * as Gemini from "./gemini"
 export * as OpenAIChat from "./openai-chat"

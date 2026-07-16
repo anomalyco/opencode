@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
 import { LLM } from "../../src"
-import { GoogleVertex, GoogleVertexAnthropic } from "../../src/providers"
+import { GoogleVertex, GoogleVertexMessages } from "../../src/providers"
 import { LLMClient } from "../../src/route"
 import { it } from "../lib/effect"
 import { dynamicResponse } from "../lib/http"
@@ -56,7 +56,7 @@ describe("Google Vertex providers", () => {
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
         LLM.request({
-          model: GoogleVertexAnthropic.configure({
+          model: GoogleVertexMessages.configure({
             accessToken: "vertex-token",
             location: "eu",
             project: "vertex-project",
@@ -99,11 +99,11 @@ describe("Google Vertex providers", () => {
     }),
   )
 
-  it.effect("protects the Vertex Anthropic API version from body overlays", () =>
+  it.effect("protects the Vertex Messages API version from body overlays", () =>
     Effect.gen(function* () {
       const error = yield* LLMClient.prepare(
         LLM.request({
-          model: GoogleVertexAnthropic.configure({
+          model: GoogleVertexMessages.configure({
             accessToken: "vertex-token",
             http: { body: { anthropic_version: "wrong" } },
             project: "vertex-project",

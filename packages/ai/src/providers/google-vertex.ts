@@ -1,7 +1,9 @@
 import type { ProviderPackage } from "../provider-package"
-import { GoogleVertexGemini } from "../protocols/google-vertex-gemini"
+import { Gemini } from "../protocols/gemini"
 import { Auth } from "../route/auth"
-import type { RouteDefaultsInput } from "../route/client"
+import { Route, type RouteDefaultsInput } from "../route/client"
+import { Endpoint } from "../route/endpoint"
+import { Framing } from "../route/framing"
 import { ProviderID, type ModelID, type ProviderOptions } from "../schema"
 import { GoogleVertexShared } from "./google-vertex-shared"
 
@@ -25,7 +27,20 @@ export type Settings = ProviderPackage.Settings &
     readonly providerOptions?: ProviderOptions
   }
 
-export const routes = [GoogleVertexGemini.route]
+const route = Route.make({
+  id: "google-vertex-gemini",
+  provider: id,
+  providerMetadataKey: "google",
+  protocol: Gemini.protocol,
+  endpoint: Endpoint.path(({ request }) => {
+    const model = String(request.model.id)
+    return `/${model.startsWith("endpoints/") ? model : `models/${model}`}:streamGenerateContent?alt=sse`
+  }),
+  auth: Auth.none,
+  framing: Framing.sse,
+})
+
+export const routes = [route]
 
 const configuredRoute = (input: Config, modelID: string | ModelID) => {
   const {
@@ -48,7 +63,7 @@ const configuredRoute = (input: Config, modelID: string | ModelID) => {
     (apiKey
       ? "https://aiplatform.googleapis.com/v1/publishers/google"
       : `https://${GoogleVertexShared.host(location)}/v1beta1/projects/${GoogleVertexShared.requireProject(project)}/locations/${location}${endpointModel ? "" : "/publishers/google"}`)
-  return GoogleVertexGemini.route.with({
+  return route.with({
     ...rest,
     endpoint: { baseURL: endpoint },
     auth: apiKey === undefined ? GoogleVertexShared.oauth(input, project) : Auth.header("x-goog-api-key", apiKey),

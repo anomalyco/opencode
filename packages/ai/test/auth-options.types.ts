@@ -11,7 +11,7 @@ import * as Cloudflare from "../src/providers/cloudflare"
 import * as GitHubCopilot from "../src/providers/github-copilot"
 import * as Google from "../src/providers/google"
 import * as GoogleVertex from "../src/providers/google-vertex"
-import * as GoogleVertexAnthropic from "../src/providers/google-vertex-anthropic"
+import * as GoogleVertexMessages from "../src/providers/google-vertex-messages"
 import * as OpenAI from "../src/providers/openai"
 import * as OpenAICompatible from "../src/providers/openai-compatible"
 import * as OpenRouter from "../src/providers/openrouter"
@@ -171,20 +171,20 @@ GoogleVertex.configure({ accessToken: "vertex-token", apiKey: "vertex-key", proj
 // @ts-expect-error Vertex Gemini package settings accept only one auth source.
 GoogleVertex.model("gemini-3.5-flash", { accessToken: "vertex-token", apiKey: "vertex-key", project: "project" })
 
-GoogleVertexAnthropic.configure({ accessToken: "vertex-token", project: "project" }).model("claude-sonnet-4-6")
-// @ts-expect-error Vertex Anthropic package settings do not accept API keys.
-GoogleVertexAnthropic.model("claude-sonnet-4-6", { apiKey: "vertex-key", project: "project" })
-GoogleVertexAnthropic.configure({ auth: RuntimeAuth.bearer("vertex-token"), project: "project" }).model(
+GoogleVertexMessages.configure({ accessToken: "vertex-token", project: "project" }).model("claude-sonnet-4-6")
+// @ts-expect-error Vertex Messages package settings do not accept API keys.
+GoogleVertexMessages.model("claude-sonnet-4-6", { apiKey: "vertex-key", project: "project" })
+GoogleVertexMessages.configure({ auth: RuntimeAuth.bearer("vertex-token"), project: "project" }).model(
   "claude-sonnet-4-6",
 )
-GoogleVertexAnthropic.configure({ accessToken: "vertex-token", project: "project" }).model(
+GoogleVertexMessages.configure({ accessToken: "vertex-token", project: "project" }).model(
   "claude-sonnet-4-6",
-  // @ts-expect-error Vertex Anthropic model selectors only accept model ids.
+  // @ts-expect-error Vertex Messages model selectors only accept model ids.
   {},
 )
-GoogleVertexAnthropic.configure({
+GoogleVertexMessages.configure({
   accessToken: "vertex-token",
-  // @ts-expect-error Vertex Anthropic config accepts only one auth source.
+  // @ts-expect-error Vertex Messages config accepts only one auth source.
   auth: RuntimeAuth.bearer("vertex-token"),
   project: "project",
 })

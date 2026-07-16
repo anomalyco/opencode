@@ -556,7 +556,8 @@ describe("SessionRunnerModel", () => {
       })
       const packages = [
         ["@opencode-ai/ai/providers/google-vertex", "accessToken"],
-        ["@opencode-ai/ai/providers/google-vertex/anthropic", "accessToken"],
+        ["@opencode-ai/ai/providers/google-vertex/gemini", "accessToken"],
+        ["@opencode-ai/ai/providers/google-vertex/messages", "accessToken"],
         ["@opencode-ai/ai/providers/anthropic", "authToken"],
         ["@opencode-ai/ai/providers/anthropic-compatible", "authToken"],
       ] as const
