@@ -173,7 +173,6 @@ export const githubInstall = Effect.fn("Cli.github.install")(function* () {
 
       const provider = await promptProvider()
       const model = await promptModel()
-      //const key = await promptKey()
 
       await addWorkflowFiles()
       printNextSteps()
@@ -846,7 +845,6 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
           if (evt.type !== MessageV2.Event.PartUpdated.type) return Effect.void
           const data = evt.data as EventV2.Data<typeof MessageV2.Event.PartUpdated>
           if (data.part.sessionID !== session.id) return Effect.void
-          //if (evt.properties.part.messageID === messageID) return
           const part = data.part
 
           if (part.type === "tool" && part.state.status === "completed") {

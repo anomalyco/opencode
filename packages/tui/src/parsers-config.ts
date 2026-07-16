@@ -146,25 +146,9 @@ export default {
       wasm: "https://github.com/tree-sitter/tree-sitter-html/releases/download/v0.23.2/tree-sitter-html.wasm",
       queries: {
         highlights: [
-          // NOTE: This nvim-treesitter query is currently broken, because the parser is not compatible with the query apparently.
-          // "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/html/highlights.scm",
           "https://github.com/tree-sitter/tree-sitter-html/raw/refs/heads/master/queries/highlights.scm",
         ],
-        // TODO: Injections not working for some reason
-        // injections: [
-        //   "https://github.com/tree-sitter/tree-sitter-html/raw/refs/heads/master/queries/injections.scm",
-        // ],
       },
-      // injectionMapping: {
-      //   nodeTypes: {
-      //     script_element: "javascript",
-      //     style_element: "css",
-      //   },
-      //   infoStringMap: {
-      //     javascript: "javascript",
-      //     css: "css",
-      //   },
-      // },
     },
     {
       filetype: "vue",

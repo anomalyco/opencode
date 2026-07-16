@@ -252,9 +252,6 @@ export const KeybindOverrides = Schema.Struct(
     ]),
   ),
 ).annotate({ description: "TUI keybinding overrides" })
-export const Descriptions = Object.fromEntries(
-  Object.entries(Definitions).map(([name, item]) => [name, item.description]),
-) as Record<KeybindName, string>
 export const CommandMap = {
   app_exit: "app.exit",
   app_debug: "app.debug",

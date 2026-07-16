@@ -1,4 +1,4 @@
-import { Audio, type AudioErrorContext, type AudioPlayOptions, type AudioSound, type AudioVoice } from "@opentui/core"
+import { Audio, type AudioErrorContext, type AudioPlayOptions, type AudioSound } from "@opentui/core"
 import { readFile } from "node:fs/promises"
 
 let audio: Audio | null | undefined
@@ -40,10 +40,6 @@ export function play(sound: AudioSound, options?: AudioPlayOptions) {
   if (!current) return null
   if (!current.isStarted() && !current.start()) return null
   return current.play(sound, options)
-}
-
-export function stopVoice(voice: AudioVoice) {
-  return audio?.stopVoice(voice) ?? false
 }
 
 export function dispose() {

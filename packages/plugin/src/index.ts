@@ -241,9 +241,6 @@ export type ProviderHook = {
   models?: (provider: ProviderV2, ctx: ProviderHookContext) => Promise<Record<string, ModelV2>>
 }
 
-/** @deprecated Use AuthOAuthResult instead. */
-export type AuthOuathResult = AuthOAuthResult
-
 export interface Hooks {
   dispose?: () => Promise<void>
   event?: (input: { event: Event }) => Promise<void>

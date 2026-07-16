@@ -38,7 +38,6 @@ const COLUMN_GAP = 4
 const TAB_GAP = 3
 const MIN_TAB_GAP = 1
 const TAB_CONTENT_GAP = 1
-const MIN_COLUMN_WIDTH = 28
 const MAX_COLUMN_WIDTH = 44
 const PANEL_HEIGHT_RATIO = 0.3
 const MIN_PANEL_HEIGHT = 8
