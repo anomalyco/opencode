@@ -186,34 +186,27 @@ export const definition = (name: string, tool: AnyTool): ToolDefinition =>
         outputSchema: outputJsonSchema(tool.structured ?? tool.output),
       }
 
-export const settle = (tool: AnyTool, call: ToolCall, context: Context): Effect.Effect<ToolOutput, Failure> => {
-  if ("jsonSchema" in tool)
-    return tool
-      .execute(call.input, context)
-      .pipe(Effect.map((output) => ({ structured: output.structured, content: output.content.map(toModelContent) })))
-  return decodeInput(tool.input, call.input).pipe(
-    Effect.flatMap((input) =>
-      tool.execute(input, context).pipe(
-        Effect.flatMap((value) =>
-          encodeOutput(tool.output, value).pipe(
-            Effect.flatMap((output) => {
-              if (!tool.structured || !tool.toStructuredOutput) return Effect.succeed({ output, structured: output })
-              return encodeOutput(tool.structured, tool.toStructuredOutput({ input, output })).pipe(
-                Effect.map((structured) => ({ output, structured })),
-              )
-            }),
-          ),
-        ),
-        Effect.map(({ output, structured }) => ({
-          structured,
-          content:
-            tool.toModelOutput?.({ input, output }).map(toModelContent) ??
-            (typeof output === "string" ? [{ type: "text" as const, text: output }] : []),
-        })),
-      ),
-    ),
-  )
-}
+export const settle = (tool: AnyTool, call: ToolCall, context: Context): Effect.Effect<ToolOutput, Failure> =>
+  Effect.gen(function* () {
+    if ("jsonSchema" in tool) {
+      const output = yield* tool.execute(call.input, context)
+      return { structured: output.structured, content: output.content.map(toModelContent) }
+    }
+
+    const input = yield* decodeInput(tool.input, call.input)
+    const value = yield* tool.execute(input, context)
+    const output = yield* encodeOutput(tool.output, value)
+    const structured =
+      tool.structured && tool.toStructuredOutput
+        ? yield* encodeOutput(tool.structured, tool.toStructuredOutput({ input, output }))
+        : output
+    return {
+      structured,
+      content:
+        tool.toModelOutput?.({ input, output }).map(toModelContent) ??
+        (typeof output === "string" ? [{ type: "text" as const, text: output }] : []),
+    }
+  })
 
 function decodeInput(schema: SchemaType<any>, value: unknown): Effect.Effect<any, Failure> {
   if (Schema.isSchema(schema))
@@ -234,26 +227,25 @@ function encodeOutput(schema: SchemaType<any>, value: unknown): Effect.Effect<an
 }
 
 function validateStandard(schema: StandardSchemaType, value: unknown, prefix: string): Effect.Effect<unknown, Failure> {
-  const result = Effect.try({
-    try: () => schema["~standard"].validate(value),
-    catch: (error) => new Failure({ message: `${prefix}: ${error instanceof Error ? error.message : String(error)}` }),
+  return Effect.gen(function* () {
+    const pending = yield* Effect.try({
+      try: () => schema["~standard"].validate(value),
+      catch: (error) => standardFailure(prefix, error),
+    })
+    const result =
+      pending instanceof Promise
+        ? yield* Effect.tryPromise({ try: () => pending, catch: (error) => standardFailure(prefix, error) })
+        : pending
+    if (result.issues)
+      return yield* Effect.fail(
+        new Failure({ message: `${prefix}: ${result.issues.map((issue) => issue.message).join(", ")}` }),
+      )
+    return result.value
   })
-  return result.pipe(
-    Effect.flatMap((result) =>
-      result instanceof Promise
-        ? Effect.tryPromise({
-            try: () => result,
-            catch: (error) =>
-              new Failure({ message: `${prefix}: ${error instanceof Error ? error.message : String(error)}` }),
-          })
-        : Effect.succeed(result),
-    ),
-    Effect.flatMap((result) =>
-      result.issues
-        ? Effect.fail(new Failure({ message: `${prefix}: ${result.issues.map((issue) => issue.message).join(", ")}` }))
-        : Effect.succeed(result.value),
-    ),
-  )
+}
+
+function standardFailure(prefix: string, error: unknown) {
+  return new Failure({ message: `${prefix}: ${error instanceof Error ? error.message : String(error)}` })
 }
 
 function inputJsonSchema(schema: SchemaType<any>): JsonSchema.JsonSchema {
