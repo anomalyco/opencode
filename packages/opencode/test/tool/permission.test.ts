@@ -6,8 +6,8 @@ describe("alwaysPattern", () => {
     expect(alwaysPattern("src/tool/read.ts")).toEqual(["src/tool/*"])
   })
 
-  it("uses wildcard for file at worktree root", () => {
-    expect(alwaysPattern("package.json")).toEqual(["*"])
+  it("scopes to current directory for file at worktree root", () => {
+    expect(alwaysPattern("package.json")).toEqual(["./*"])
   })
 
   it("scopes to parent directory for external files via relative path", () => {
@@ -20,5 +20,23 @@ describe("alwaysPattern", () => {
 
   it("handles single file in subdirectory without extension", () => {
     expect(alwaysPattern("bin/opencode")).toEqual(["bin/*"])
+  })
+
+  it("never produces bare '*' wildcard", () => {
+    const paths = [
+      "package.json",
+      "src/tool/read.ts",
+      "a/b/c.txt",
+      "../../.config/file",
+      "readme.md",
+      ".",
+      "",
+    ]
+    for (const p of paths) {
+      const result = alwaysPattern(p)
+      for (const pattern of result) {
+        expect(pattern).not.toBe("*")
+      }
+    }
   })
 })
