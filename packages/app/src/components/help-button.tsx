@@ -21,7 +21,7 @@ export function TabsInfoPopup() {
     <Drawer open={drawerOpen()} onOpenChange={setDrawerOpen} side="right">
       <Show when={settings.general.shouldDisplayTabsToast()}>
         <div
-          class="fixed bottom-14 right-5 z-50 h-[240px] w-[192px] rounded-[8px] bg-v2-background-bg-base p-1 shadow-[var(--v2-elevation-floating)]"
+          class="fixed bottom-5 right-5 z-50 h-[240px] w-[192px] rounded-[8px] bg-v2-background-bg-base p-1 shadow-[var(--v2-elevation-floating)]"
           aria-label="Introducing Tabs. Organize your work and active sessions with tabs"
         >
           <button
