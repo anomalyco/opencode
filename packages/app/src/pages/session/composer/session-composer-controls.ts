@@ -41,7 +41,7 @@ export function createPromptInputController(input: {
       options: local.agent.list().map((agent) => agent.name),
       current: local.agent.current()?.name ?? "",
       loading: agentsQuery.isLoading,
-      visible: settings.visibility.customAgents(),
+      visible: local.agent.visible(),
       select: local.agent.set,
     },
     model: {
