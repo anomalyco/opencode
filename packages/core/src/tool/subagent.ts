@@ -4,6 +4,7 @@ import { ToolFailure } from "@opencode-ai/ai"
 import type { Context as PluginContext } from "@opencode-ai/plugin/v2/effect/plugin"
 import { Effect, Schema, Scope } from "effect"
 import { AgentV2 } from "../agent"
+import { Config } from "../config"
 import { PluginRuntime } from "../plugin/runtime"
 import { PermissionV2 } from "../permission"
 import { SessionSchema } from "../session/schema"
@@ -43,6 +44,7 @@ export const Plugin = {
   effect: Effect.fn("SubagentTool.Plugin")(function* (ctx: PluginContext) {
     const runtime = yield* PluginRuntime.Service
     const agents = yield* AgentV2.Service
+    const config = yield* Config.Service
     const permission = yield* PermissionV2.Service
     const scope = yield* Scope.Scope
 
@@ -123,6 +125,23 @@ export const Plugin = {
                       (error) => new ToolFailure({ message: `Parent session not found: ${context.sessionID}`, error }),
                     ),
                   )
+                let current = parent
+                let depth = 0
+                while (current.parentID) {
+                  depth++
+                  current = yield* runtime.session
+                    .get(current.parentID)
+                    .pipe(
+                      Effect.mapError(
+                        (error) => new ToolFailure({ message: `Parent session not found: ${current.parentID}`, error }),
+                      ),
+                    )
+                }
+                const limit = Config.latest(yield* config.entries(), "experimental")?.subagent_depth ?? 1
+                if (depth >= limit)
+                  return yield* new ToolFailure({
+                    message: `Subagent depth limit reached (${limit}). Increase "experimental.subagent_depth" to allow nested subagents.`,
+                  })
                 const agent = yield* agents.resolve(input.agent)
                 if (agent === undefined) return yield* new ToolFailure({ message: `Unknown agent: ${input.agent}` })
                 if (agent.mode === "primary")

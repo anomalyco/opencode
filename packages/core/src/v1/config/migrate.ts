@@ -77,6 +77,10 @@ export function migrate(info: typeof ConfigV1.Info.Type) {
     commands: commands(info.command),
     instructions: info.instructions,
     references: info.references ?? info.reference,
+    experimental:
+      info.experimental?.subagent_depth === undefined
+        ? undefined
+        : { subagent_depth: info.experimental.subagent_depth },
     plugins: info.plugin?.map((plugin) =>
       typeof plugin === "string" ? plugin : { package: plugin[0], options: plugin[1] },
     ),

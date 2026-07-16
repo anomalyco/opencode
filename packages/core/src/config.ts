@@ -18,6 +18,7 @@ import { ConfigAgent } from "./config/agent"
 import { ConfigAttachments } from "./config/attachments"
 import { ConfigCompaction } from "./config/compaction"
 import { ConfigCommand } from "./config/command"
+import { ConfigExperimental } from "./config/experimental"
 import { ConfigFormatter } from "./config/formatter"
 import { ConfigLSP } from "./config/lsp"
 import { ConfigMCP } from "./config/mcp"
@@ -109,6 +110,7 @@ export class Info extends Schema.Class<Info>("Config.Info")({
     description: "Ordered plugin enablement directives and external package declarations",
   }),
   providers: Schema.Record(Schema.String, ConfigProvider.Info).pipe(Schema.optional),
+  experimental: ConfigExperimental.Info.pipe(Schema.optional),
 }) {}
 
 export class Document extends Schema.Class<Document>("Config.Document")({

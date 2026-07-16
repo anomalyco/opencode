@@ -283,6 +283,12 @@ describe("Config", () => {
     }),
   )
 
+  it.effect("migrates the v1 experimental subagent depth", () =>
+    Effect.sync(() => {
+      expect(ConfigMigrateV1.migrate({ experimental: { subagent_depth: 2 } }).experimental?.subagent_depth).toBe(2)
+    }),
+  )
+
   it.effect("migrates v1 provider setup options into AISDK settings", () =>
     Effect.sync(() => {
       const migrated = ConfigMigrateV1.migrate({
