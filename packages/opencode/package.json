@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "version": "1.17.20",
-  "name": "opencode",
+  "name": "@puetsua/kancode",
   "type": "module",
   "license": "MIT",
   "private": true,
@@ -16,8 +16,7 @@
     "dev:temporary": "bun run --conditions=browser ./src/temporary.ts"
   },
   "bin": {
-    "kancode": "./bin/opencode",
-    "opencode": "./bin/opencode"
+    "kancode": "./bin/kancode"
   },
   "exports": {
     "./*": "./src/*.ts"

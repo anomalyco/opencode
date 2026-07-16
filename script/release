@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+# Run a release locally. Pass a bump type: patch | minor | major (default: patch).
 BUMP_TYPE=${1:-patch}
 
-gh workflow run publish.yml -f bump="$BUMP_TYPE"
+export OPENCODE_BUMP="$BUMP_TYPE"
+export OPENCODE_RELEASE="1"
+
+bun script/publish.ts

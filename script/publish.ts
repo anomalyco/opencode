@@ -25,7 +25,6 @@ async function prepareReleaseFiles() {
   }
 
   await $`bun install`
-  await $`./packages/sdk/js/script/build.ts`
 }
 
 if (Script.release && !Script.preview) {
@@ -35,20 +34,8 @@ if (Script.release && !Script.preview) {
 
 await prepareReleaseFiles()
 
-console.log("\n=== cli ===\n")
+console.log("\n=== kancode ===\n")
 await $`bun ./packages/opencode/script/publish.ts`
-
-console.log("\n=== preview cli ===\n")
-await $`bun ./packages/cli/script/publish.ts`
-
-console.log("\n=== sdk ===\n")
-await $`bun ./packages/sdk/js/script/publish.ts`
-
-console.log("\n=== plugin ===\n")
-await $`bun ./packages/plugin/script/publish.ts`
-
-console.log("\n=== ui ===\n")
-await $`bun ./packages/ui/script/publish.ts`
 
 if (Script.release && !Script.preview) {
   await $`git commit -am "release: ${tag}"`

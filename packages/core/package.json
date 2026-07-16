@@ -12,9 +12,6 @@
     "test": "bun test --only-failures",
     "typecheck": "tsgo --noEmit"
   },
-  "bin": {
-    "opencode": "./bin/opencode"
-  },
   "exports": {
     "./effect/layer-node": "./src/effect/layer-node.ts",
     "./effect/app-node": "./src/effect/app-node.ts",
