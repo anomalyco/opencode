@@ -24,6 +24,46 @@
   }
 }
 
+/* RTL: ensure paragraph-level bidi runs render in the correct visual order
+   for mixed Arabic/English content. The text nodes live in class-less spans
+   inside the markdown container, so we target them by element type. */
+[data-component="markdown"] p,
+[data-component="markdown"] li,
+[data-component="markdown"] blockquote,
+[data-component="markdown"] h1,
+[data-component="markdown"] h2,
+[data-component="markdown"] h3,
+[data-component="markdown"] h4,
+[data-component="markdown"] h5,
+[data-component="markdown"] h6,
+[data-component="markdown"] dd,
+[data-component="markdown"] dt,
+[data-component="markdown"] figcaption,
+[data-component="markdown"] summary,
+[data-component="markdown"] div,
+[data-component="markdown"] span {
+  unicode-bidi: plaintext;
+}
+
+/* Tables that received an explicit dir from the renderer need to be flushed
+   to the right edge and have their columns reordered. */
+table[dir="rtl"] {
+  margin-left: auto;
+  margin-right: 0;
+}
+
+/* Code blocks must stay LTR regardless of surrounding language. */
+[data-component="markdown"] pre,
+[data-component="markdown"] code,
+[data-component="markdown"] kbd,
+[data-component="markdown"] samp,
+[data-component="markdown"] pre *,
+[data-component="markdown"] code * {
+  unicode-bidi: isolate;
+  direction: ltr;
+  text-align: left;
+}
+
 @layer components {
   [data-component="getting-started"] {
     container-type: inline-size;

@@ -31,6 +31,7 @@ import { markdownBlockKey, type MarkdownToken } from "./markdown-worker-protocol
 import { shouldResetCodeTokens, type RenderedCodeState } from "./markdown-code-state"
 import { getCachedMarkdown, sanitizeMarkdown, touchCachedMarkdown, type MarkdownCacheEntry } from "./markdown-cache"
 import { inlineCodeKind } from "./markdown-inline-code-kind"
+import { applyAutoDirection, applyTableDirection } from "./rtl"
 
 type RenderedBlock =
   | (MarkdownCacheEntry & { key: string; mode: Exclude<Block["mode"], "code"> })
@@ -566,6 +567,8 @@ function updateBlock(container: HTMLDivElement, index: number, block: RenderedBl
   next.dataset.markdownHash = block.hash
   next.style.display = "contents"
   next.innerHTML = block.html
+  applyAutoDirection(next)
+  applyTableDirection(next)
   decorate(next, labels)
 
   if (!(current instanceof HTMLDivElement)) {

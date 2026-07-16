@@ -1678,6 +1678,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     aria-multiline="true"
                     aria-label={designPlaceholder()}
                     contenteditable="true"
+                    dir="auto"
                     autocapitalize={store.mode === "normal" ? "sentences" : "off"}
                     autocorrect={store.mode === "normal" ? "on" : "off"}
                     spellcheck={store.mode === "normal"}
@@ -1902,6 +1903,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   aria-multiline="true"
                   aria-label={placeholder()}
                   contenteditable="true"
+                  dir="auto"
                   autocapitalize={store.mode === "normal" ? "sentences" : "off"}
                   autocorrect={store.mode === "normal" ? "on" : "off"}
                   spellcheck={store.mode === "normal"}
