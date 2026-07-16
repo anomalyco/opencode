@@ -290,7 +290,9 @@ permission module `cruise_control` (also from the `cruise-control` plugin): set
 permission actions to `"cruise_control"` and configure it with `/cruise-control-model`
 or `permission_modules.cruise_control.model` (for example `opencode/deepseek-v4-flash`
 or `ollama_cloud/kimi-k2.7-code`). If the model is unset, KanCode asks you to approve
-the tool and hints `/cruise-control-model` — it does not hard-deny. Example:
+the tool and hints `/cruise-control-model` — it does not hard-deny. Optional
+`permission_modules.cruise_control.system_prompt` overrides the classifier system
+prompt; omit it to keep the built-in default. Example:
 
 ```json
 {

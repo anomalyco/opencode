@@ -8,7 +8,9 @@ import { PermissionModule } from "../../src/permission/module"
 import {
   applySafety,
   decideCruiseControl,
+  DEFAULT_SYSTEM_PROMPT,
   parseClassifierResult,
+  resolveSystemPrompt,
   runClassifier,
   destructiveReason,
   managedAppDirectoryAllow,
@@ -394,6 +396,19 @@ itMissingModel.instance("missing cruise_control model asks with configure warnin
 )
 
 describe("classifier contract", () => {
+  test("resolveSystemPrompt uses built-in default when unset or blank", () => {
+    expect(resolveSystemPrompt(undefined)).toBe(DEFAULT_SYSTEM_PROMPT)
+    expect(resolveSystemPrompt({})).toBe(DEFAULT_SYSTEM_PROMPT)
+    expect(resolveSystemPrompt({ system_prompt: "   " })).toBe(DEFAULT_SYSTEM_PROMPT)
+    expect(DEFAULT_SYSTEM_PROMPT).toContain("KanCode cruise_control")
+  })
+
+  test("resolveSystemPrompt prefers configured system_prompt override", () => {
+    const custom = "Custom classifier instructions.\nReturn JSON only."
+    expect(resolveSystemPrompt({ system_prompt: custom })).toBe(custom)
+    expect(resolveSystemPrompt({ system_prompt: `  ${custom}  ` })).toBe(custom)
+  })
+
   test("parseClassifierResult accepts missing reason and fences", () => {
     expect(parseClassifierResult({ decision: "allow" })).toEqual({ decision: "allow", reason: "" })
     expect(parseClassifierResult({ decision: "ALLOW", reason: "safe" })).toEqual({

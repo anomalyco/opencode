@@ -39,6 +39,8 @@ The `cruise_control` module SHALL require a configured model reference under `pe
 
 The `cruise_control` classifier MUST receive a structured, non-executable summary of the permission request (permission key, patterns/resources, tool metadata, truncated args) with tool args placed in a delimited data section that MUST NOT be treated as system instructions. The classifier MUST return schema-validated JSON with a `decision` of `allow`, `deny`, or `ask` (and a reason string). Invalid or unparseable output MUST map to `fallback`.
 
+The classifier system prompt MUST be configurable via `permission_modules.cruise_control.system_prompt`. When that field is omitted or blank, KanCode MUST use the built-in default classifier prompt (same text as the shipped default).
+
 #### Scenario: Valid allow decision
 - **WHEN** the classifier returns valid JSON `{ "decision": "allow", "reason": "..." }` for a permission key on the allowlist and not on `never_auto`
 - **THEN** the tool permission is allowed without showing the human ask UI
@@ -47,6 +49,14 @@ The `cruise_control` classifier MUST receive a structured, non-executable summar
 - **WHEN** the classifier returns invalid JSON, omits `decision`, or otherwise cannot be validated
 - **THEN** the effective decision is `fallback`
 - **AND** the decision MUST NOT be `allow`
+
+#### Scenario: Default system prompt when unset
+- **WHEN** `permission_modules.cruise_control.system_prompt` is omitted
+- **THEN** the classifier uses the built-in default system prompt
+
+#### Scenario: Custom system prompt override
+- **WHEN** `permission_modules.cruise_control.system_prompt` is set to a non-empty string
+- **THEN** the classifier uses that string as its system prompt instead of the built-in default
 
 ### Requirement: cruise_control Safety Rails
 

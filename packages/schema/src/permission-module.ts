@@ -22,6 +22,10 @@ export const Options = Schema.Struct({
   model: Schema.String.pipe(optional).annotate({
     description: "Provider/model ref used to classify tool permissions, e.g. opencode/deepseek-v4-flash",
   }),
+  system_prompt: Schema.String.pipe(optional).annotate({
+    description:
+      "Classifier system prompt override; omit to use the built-in cruise_control default",
+  }),
   fallback: Fallback.pipe(optional).annotate({
     description: "Outcome when classification fails or times out (default: ask)",
   }),
