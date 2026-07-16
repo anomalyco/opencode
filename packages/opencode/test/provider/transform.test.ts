@@ -5128,3 +5128,177 @@ describe("ProviderTransform.providerOptions - ai-gateway-provider", () => {
     expect(result).toEqual({ openaiCompatible: { reasoningEffort: "high" } })
   })
 })
+
+describe("ProviderTransform.message - kimi family unsigned thinking", () => {
+  const kimiAnthropicModel = {
+    id: "moonshotai/kimi-k2-thinking",
+    providerID: "moonshotai",
+    api: {
+      id: "kimi-k2-thinking",
+      url: "https://api.moonshot.ai/anthropic",
+      npm: "@ai-sdk/anthropic",
+    },
+    name: "Kimi K2 Thinking",
+    capabilities: {
+      temperature: true,
+      reasoning: true,
+      attachment: false,
+      toolcall: true,
+      input: { text: true, audio: false, image: false, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: { input: 0.001, output: 0.002, cache: { read: 0.0001, write: 0.0002 } },
+    limit: { context: 262144, output: 65536 },
+    status: "active",
+    options: {},
+    headers: {},
+  } as any
+
+  test("marks unsigned reasoning parts with the sentinel signature", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "thinking without a signature" },
+          { type: "text", text: "done" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, kimiAnthropicModel, {})
+    const reasoning = (result[0].content as any[]).find((part) => part.type === "reasoning")
+    expect(reasoning.providerOptions?.anthropic?.signature).toBe(ProviderTransform.UNSIGNED_THINKING_SIGNATURE)
+  })
+
+  test("keeps real signatures untouched", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "reasoning",
+            text: "signed thinking",
+            providerOptions: { anthropic: { signature: "EqUDCkYIARgCKkA" } },
+          },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, kimiAnthropicModel, {})
+    const reasoning = (result[0].content as any[]).find((part) => part.type === "reasoning")
+    expect(reasoning.providerOptions?.anthropic?.signature).toBe("EqUDCkYIARgCKkA")
+  })
+
+  test("marks redacted reasoning parts as untouched", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "reasoning",
+            text: "",
+            providerOptions: { anthropic: { redactedData: "encrypted-payload" } },
+          },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, kimiAnthropicModel, {})
+    const reasoning = (result[0].content as any[]).find((part) => part.type === "reasoning")
+    expect(reasoning.providerOptions?.anthropic?.redactedData).toBe("encrypted-payload")
+    expect(reasoning.providerOptions?.anthropic?.signature).toBeUndefined()
+  })
+
+  test("appends an empty marked reasoning part to tool-call messages without reasoning", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "calling a tool" },
+          { type: "tool-call", toolCallId: "123", toolName: "bash", input: { command: "ls" } },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, kimiAnthropicModel, {})
+    expect(result[0].content[0]).toEqual({
+      type: "reasoning",
+      text: "",
+      providerOptions: { anthropic: { signature: ProviderTransform.UNSIGNED_THINKING_SIGNATURE } },
+    })
+  })
+
+  test("does not synthesize reasoning for assistant messages without tool calls", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "plain answer" }],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, kimiAnthropicModel, {})
+    expect((result[0].content as any[]).some((part) => part.type === "reasoning")).toBe(false)
+  })
+
+  test("leaves unsigned reasoning untouched for non-kimi anthropic models", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [{ type: "reasoning", text: "unsigned" }],
+      },
+    ] as any[]
+    const anthropicModel = {
+      ...kimiAnthropicModel,
+      id: "anthropic/claude-sonnet-4-5",
+      providerID: "anthropic",
+      api: {
+        id: "claude-sonnet-4-5",
+        url: "https://api.anthropic.com",
+        npm: "@ai-sdk/anthropic",
+      },
+    }
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {})
+    const reasoning = (result[0].content as any[]).find((part) => part.type === "reasoning")
+    expect(reasoning.providerOptions?.anthropic?.signature).toBeUndefined()
+  })
+})
+
+describe("ProviderTransform.stripUnsignedThinkingMarkers", () => {
+  test("strips sentinel signatures and keeps real ones", () => {
+    const body = JSON.stringify({
+      messages: [
+        {
+          role: "assistant",
+          content: [
+            { type: "thinking", thinking: "unsigned", signature: ProviderTransform.UNSIGNED_THINKING_SIGNATURE },
+            { type: "thinking", thinking: "signed", signature: "real-signature" },
+            { type: "text", text: "answer" },
+          ],
+        },
+      ],
+    })
+
+    const parsed = JSON.parse(ProviderTransform.stripUnsignedThinkingMarkers(body))
+    expect(parsed.messages[0].content[0]).toEqual({ type: "thinking", thinking: "unsigned" })
+    expect(parsed.messages[0].content[1]).toEqual({
+      type: "thinking",
+      thinking: "signed",
+      signature: "real-signature",
+    })
+    expect(parsed.messages[0].content[2]).toEqual({ type: "text", text: "answer" })
+  })
+
+  test("returns bodies without the marker untouched", () => {
+    const body = JSON.stringify({
+      messages: [{ role: "assistant", content: [{ type: "thinking", thinking: "signed", signature: "real" }] }],
+    })
+    expect(ProviderTransform.stripUnsignedThinkingMarkers(body)).toBe(body)
+  })
+
+  test("tolerates non-object bodies containing the marker", () => {
+    const body = JSON.stringify(ProviderTransform.UNSIGNED_THINKING_SIGNATURE)
+    expect(ProviderTransform.stripUnsignedThinkingMarkers(body)).toBe(body)
+  })
+})

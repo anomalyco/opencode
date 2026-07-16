@@ -34,6 +34,7 @@ import { errorMessage } from "@/util/error"
 import { isMedia } from "@/util/media"
 import type { SystemError } from "bun"
 import type { Provider } from "@/provider/provider"
+import { ProviderTransform } from "@/provider/transform"
 import { Effect, Schema } from "effect"
 
 /** Error shape thrown by Bun's fetch() when gzip/br decompression fails mid-stream */
@@ -360,7 +361,11 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
             })
         }
         if (part.type === "reasoning") {
-          if (differentModel) {
+          // Kimi family endpoints require reasoning to round-trip even when
+          // the assistant turn was produced by a different model. Keep it as
+          // a reasoning part, dropping provider metadata — signatures are
+          // issued by the originating provider and must not cross endpoints.
+          if (differentModel && !ProviderTransform.isKimiFamily(model)) {
             if (part.text.trim().length > 0)
               assistantMessage.parts.push({
                 type: "text",
@@ -371,7 +376,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
           assistantMessage.parts.push({
             type: "reasoning",
             text: part.text,
-            providerMetadata: part.metadata,
+            ...(differentModel ? {} : { providerMetadata: part.metadata }),
           })
         }
       }

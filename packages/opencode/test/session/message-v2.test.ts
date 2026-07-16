@@ -684,6 +684,114 @@ describe("session.message-v2.toModelMessage", () => {
     ])
   })
 
+  test("keeps reasoning parts without provider metadata for kimi family models when assistant model differs", async () => {
+    const userID = "m-user"
+    const assistantID = "m-assistant"
+    const kimiModel: Provider.Model = {
+      ...model,
+      providerID: ProviderV2.ID.make("moonshotai"),
+      api: {
+        id: "kimi-k2-thinking",
+        url: "https://api.moonshot.ai/anthropic",
+        npm: "@ai-sdk/anthropic",
+      },
+    }
+
+    const input: SessionV1.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1"),
+            type: "text",
+            text: "hi",
+          },
+        ] as SessionV1.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID, undefined, { providerID: "anthropic", modelID: "claude-sonnet" }),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "reasoning",
+            text: "thinking",
+            metadata: { anthropic: { signature: "signed-by-other-provider" } },
+            time: { start: 0 },
+          },
+          {
+            ...basePart(assistantID, "a2"),
+            type: "text",
+            text: "done",
+          },
+        ] as SessionV1.Part[],
+      },
+    ]
+
+    expect(await MessageV2.toModelMessages(input, kimiModel)).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "hi" }],
+      },
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "thinking", providerOptions: undefined },
+          { type: "text", text: "done" },
+        ],
+      },
+    ])
+  })
+
+  test("keeps reasoning parts for kimi family models on openai-compatible when assistant model differs", async () => {
+    const userID = "m-user"
+    const assistantID = "m-assistant"
+    const kimiModel: Provider.Model = {
+      ...model,
+      providerID: ProviderV2.ID.make("moonshotai"),
+      api: {
+        id: "kimi-k2-thinking",
+        url: "https://api.moonshot.ai/v1",
+        npm: "@ai-sdk/openai-compatible",
+      },
+    }
+
+    const input: SessionV1.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1"),
+            type: "text",
+            text: "hi",
+          },
+        ] as SessionV1.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID, undefined, { providerID: "other", modelID: "other" }),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "reasoning",
+            text: "thinking",
+            metadata: { openai: { reasoning: "meta" } },
+            time: { start: 0 },
+          },
+        ] as SessionV1.Part[],
+      },
+    ]
+
+    expect(await MessageV2.toModelMessages(input, kimiModel)).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "hi" }],
+      },
+      {
+        role: "assistant",
+        content: [{ type: "reasoning", text: "thinking", providerOptions: undefined }],
+      },
+    ])
+  })
+
   test("replaces compacted tool output with placeholder", async () => {
     const userID = "m-user"
     const assistantID = "m-assistant"

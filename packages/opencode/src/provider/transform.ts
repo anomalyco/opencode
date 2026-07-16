@@ -4,6 +4,7 @@ import type { JSONSchema7 } from "@ai-sdk/provider"
 import type * as Provider from "./provider"
 import type * as ModelsDev from "@opencode-ai/core/models-dev"
 import { iife } from "@/util/iife"
+import { isRecord } from "@/util/record"
 
 type Modality = NonNullable<ModelsDev.Model["modalities"]>["input"][number]
 
@@ -24,6 +25,46 @@ const INCLUDE_ENCRYPTED_REASONING = ["reasoning.encrypted_content"] as const
 
 export function sanitizeSurrogates(content: string) {
   return content.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "\uFFFD")
+}
+
+// Kimi family endpoints (Moonshot's Anthropic-compatible API, api.kimi.com)
+// require thinking content to round-trip on replayed assistant messages, even
+// when it carries no Anthropic signature. The @ai-sdk/anthropic request
+// converter silently drops reasoning parts without one, so normalizeMessages
+// marks them with this sentinel signature instead, and the provider fetch
+// wrapper calls stripUnsignedThinkingMarkers to delete the marker before the
+// request goes out — delivering an unsigned thinking block upstream. Real
+// signatures are opaque base64 payloads and can never collide with this value.
+export const UNSIGNED_THINKING_SIGNATURE = "opencode-unsigned-thinking"
+
+export function isKimiFamily(model: Provider.Model): boolean {
+  const providerID = model.providerID.toLowerCase()
+  if (providerID.includes("kimi") || providerID.includes("moonshot")) return true
+  const apiID = model.api.id.toLowerCase()
+  if (apiID.includes("kimi") || apiID.includes("moonshot")) return true
+  const modelID = model.id.toLowerCase()
+  if (modelID.includes("kimi") || modelID.includes("moonshot")) return true
+  const url = model.api.url.toLowerCase()
+  return ["api.kimi.com", "api.moonshot.ai", "api.moonshot.cn", "api.moonshotai.cn"].some((host) =>
+    url.includes(host),
+  )
+}
+
+// Removes sentinel signature markers from a serialized request body so marked
+// thinking blocks go out unsigned (see UNSIGNED_THINKING_SIGNATURE). Bodies
+// without the marker pass through untouched.
+export function stripUnsignedThinkingMarkers(body: string): string {
+  if (!body.includes(UNSIGNED_THINKING_SIGNATURE)) return body
+  const parsed: unknown = JSON.parse(body)
+  if (!isRecord(parsed) || !Array.isArray(parsed.messages)) return body
+  for (const message of parsed.messages) {
+    if (!isRecord(message) || !Array.isArray(message.content)) continue
+    for (const block of message.content) {
+      if (isRecord(block) && block.type === "thinking" && block.signature === UNSIGNED_THINKING_SIGNATURE)
+        delete block.signature
+    }
+  }
+  return JSON.stringify(parsed)
 }
 
 // Maps npm package to the key the AI SDK expects for providerOptions
@@ -128,6 +169,43 @@ function normalizeMessages(
         return msg
     }
   })
+
+  // Kimi family Anthropic endpoints require thinking content to round-trip on
+  // replayed assistant messages. Mark unsigned reasoning parts with the
+  // sentinel signature so the SDK emits them as thinking blocks; the provider
+  // fetch wrapper strips the marker before the request goes out. Assistant
+  // tool-call messages get an empty block when no reasoning was produced —
+  // Moonshot requires the field to exist even when empty.
+  if (model.api.npm === "@ai-sdk/anthropic" && isKimiFamily(model)) {
+    msgs = msgs.map((msg) => {
+      if (msg.role !== "assistant" || !Array.isArray(msg.content)) return msg
+      const content = msg.content.map((part) => {
+        if (part.type !== "reasoning") return part
+        const anthropic = part.providerOptions?.anthropic
+        if (anthropic?.signature != null || anthropic?.redactedData != null) return part
+        return {
+          ...part,
+          providerOptions: {
+            ...part.providerOptions,
+            anthropic: { ...anthropic, signature: UNSIGNED_THINKING_SIGNATURE },
+          },
+        }
+      })
+      if (content.some((part) => part.type === "reasoning")) return { ...msg, content }
+      if (!content.some((part) => part.type === "tool-call")) return { ...msg, content }
+      return {
+        ...msg,
+        content: [
+          {
+            type: "reasoning" as const,
+            text: "",
+            providerOptions: { anthropic: { signature: UNSIGNED_THINKING_SIGNATURE } },
+          },
+          ...content,
+        ],
+      }
+    })
+  }
 
   // Anthropic rejects messages with empty content - filter out empty string messages
   // and remove empty text/reasoning parts from array content

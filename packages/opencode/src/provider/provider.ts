@@ -1736,6 +1736,9 @@ const layer = Layer.effect(
         options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
           const fetchFn = customFetch ?? fetch
           const opts = init ?? {}
+          // Thinking blocks marked by ProviderTransform as unsigned (Kimi
+          // family endpoints) go out without the sentinel signature key.
+          if (typeof opts.body === "string") opts.body = ProviderTransform.stripUnsignedThinkingMarkers(opts.body)
           const chunkAbortCtl = typeof chunkTimeout === "number" && chunkTimeout > 0 ? new AbortController() : undefined
           const headerTimeoutMs = headerTimeout === false ? undefined : headerTimeout
           const headerTimeoutCtl = typeof headerTimeoutMs === "number" ? timeoutController(headerTimeoutMs) : undefined
