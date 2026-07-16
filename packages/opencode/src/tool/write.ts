@@ -13,6 +13,7 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { InstanceState } from "@/effect/instance-state"
 import { trimDiff } from "./edit"
 import { assertExternalDirectoryEffect } from "./external-directory"
+import { alwaysPattern } from "./permission"
 import * as Bom from "@/util/bom"
 
 const MAX_PROJECT_DIAGNOSTICS_FILES = 5
@@ -51,12 +52,11 @@ export const WriteTool = Tool.define(
           const contentNew = next.text
 
           const diff = trimDiff(createTwoFilesPatch(filepath, filepath, contentOld, contentNew))
-          const editPattern = path.relative(instance.worktree, filepath)
-          const editDir = path.dirname(editPattern)
+          const relPath = path.relative(instance.worktree, filepath)
           yield* ctx.ask({
             permission: "edit",
-            patterns: [editPattern],
-            always: editDir === "." ? ["*"] : [path.join(editDir, "*")],
+            patterns: [relPath],
+            always: alwaysPattern(relPath),
             metadata: {
               filepath,
               diff,

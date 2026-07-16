@@ -7,6 +7,7 @@ import { LSP } from "@/lsp/lsp"
 import DESCRIPTION from "./read.txt"
 import { InstanceState } from "@/effect/instance-state"
 import { assertExternalDirectoryEffect } from "./external-directory"
+import { alwaysPattern } from "./permission"
 import { Instruction } from "../session/instruction"
 import { isPdfAttachment, sniffAttachmentMime } from "@/util/media"
 
@@ -252,12 +253,11 @@ export const ReadTool = Tool.define<
         kind: stat?.type === "Directory" ? "directory" : "file",
       })
 
-      const readPattern = path.relative(instance.worktree, filepath)
-      const readDir = path.dirname(readPattern)
+      const relPath = path.relative(instance.worktree, filepath)
       yield* ctx.ask({
         permission: "read",
-        patterns: [readPattern],
-        always: readDir === "." ? ["*"] : [path.join(readDir, "*")],
+        patterns: [relPath],
+        always: alwaysPattern(relPath),
         metadata: {},
       })
 

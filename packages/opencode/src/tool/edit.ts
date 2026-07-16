@@ -16,6 +16,7 @@ import { Format } from "../format"
 import { InstanceState } from "@/effect/instance-state"
 import { Snapshot } from "@/snapshot"
 import { assertExternalDirectoryEffect } from "./external-directory"
+import { alwaysPattern } from "./permission"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import * as Bom from "@/util/bom"
 
@@ -99,12 +100,11 @@ export const EditTool = Tool.define(
                 contentOld = ""
                 contentNew = next.text
                 diff = trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
-                const editPattern = path.relative(instance.worktree, filePath)
-                const editDir = path.dirname(editPattern)
+                const relPath = path.relative(instance.worktree, filePath)
                 yield* ctx.ask({
                   permission: "edit",
-                  patterns: [editPattern],
-                  always: editDir === "." ? ["*"] : [path.join(editDir, "*")],
+                  patterns: [relPath],
+                  always: alwaysPattern(relPath),
                   metadata: {
                     filepath: filePath,
                     diff,
@@ -144,12 +144,11 @@ export const EditTool = Tool.define(
                   normalizeLineEndings(contentNew),
                 ),
               )
-              const editPattern2 = path.relative(instance.worktree, filePath)
-              const editDir2 = path.dirname(editPattern2)
+              const relPath = path.relative(instance.worktree, filePath)
               yield* ctx.ask({
                 permission: "edit",
-                patterns: [editPattern2],
-                always: editDir2 === "." ? ["*"] : [path.join(editDir2, "*")],
+                patterns: [relPath],
+                always: alwaysPattern(relPath),
                 metadata: {
                   filepath: filePath,
                   diff,
