@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Duration, Effect, Exit, Fiber, Scope, Stream } from "effect"
+import { Clock, Duration, Effect, Exit, Fiber, Scope, Stream } from "effect"
 import * as TestClock from "effect/testing/TestClock"
 import { Credential } from "@opencode-ai/core/credential"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -194,6 +194,7 @@ describe("Integration", () => {
       const credentials = yield* Credential.Service
       const integrationID = Integration.ID.make("openai")
       const methodID = Integration.MethodID.make("chatgpt")
+      const expiresAt = (yield* Clock.currentTimeMillis) + Duration.toMillis(Duration.hours(1))
       let closed = false
       yield* integrations.transform((editor) =>
         editor.method.update({
@@ -205,6 +206,7 @@ describe("Integration", () => {
                 mode: "code" as const,
                 url: "https://example.com/authorize",
                 instructions: "Paste the code",
+                expiresAt,
                 callback: () => Effect.die("unexpected callback"),
               }),
             ),
@@ -212,6 +214,7 @@ describe("Integration", () => {
       )
 
       const attempt = yield* integrations.connection.oauth({ integrationID, methodID, inputs: {} })
+      expect(attempt.time.expires).toBe(expiresAt)
       expect(yield* integrations.attempt.complete({ attemptID: attempt.attemptID }).pipe(Effect.flip)).toBeInstanceOf(
         Integration.CodeRequiredError,
       )
@@ -219,6 +222,68 @@ describe("Integration", () => {
       yield* integrations.attempt.cancel(attempt.attemptID)
       expect(closed).toBe(true)
       expect(yield* credentials.list(integrationID)).toEqual([])
+    }),
+  )
+
+  it.effect("honors shorter and longer OAuth expirations", () =>
+    Effect.gen(function* () {
+      const integrations = yield* Integration.Service
+      const integrationID = Integration.ID.make("openai")
+      const shortMethodID = Integration.MethodID.make("short")
+      const longMethodID = Integration.MethodID.make("long")
+      const created = yield* Clock.currentTimeMillis
+      const shortExpiresAt = created + Duration.toMillis(Duration.minutes(1))
+      const longExpiresAt = created + Duration.toMillis(Duration.minutes(20))
+      let shortClosed = false
+      let longClosed = false
+
+      yield* integrations.transform((editor) => {
+        editor.method.update({
+          integrationID,
+          method: { id: shortMethodID, type: "oauth", label: "Short" },
+          authorize: () =>
+            Effect.addFinalizer(() => Effect.sync(() => (shortClosed = true))).pipe(
+              Effect.as({
+                mode: "auto" as const,
+                url: "https://example.com/short",
+                instructions: "Sign in",
+                expiresAt: shortExpiresAt,
+                callback: Effect.never,
+              }),
+            ),
+        })
+        editor.method.update({
+          integrationID,
+          method: { id: longMethodID, type: "oauth", label: "Long" },
+          authorize: () =>
+            Effect.addFinalizer(() => Effect.sync(() => (longClosed = true))).pipe(
+              Effect.as({
+                mode: "auto" as const,
+                url: "https://example.com/long",
+                instructions: "Sign in",
+                expiresAt: longExpiresAt,
+                callback: Effect.never,
+              }),
+            ),
+        })
+      })
+
+      const short = yield* integrations.connection.oauth({ integrationID, methodID: shortMethodID, inputs: {} })
+      const long = yield* integrations.connection.oauth({ integrationID, methodID: longMethodID, inputs: {} })
+      expect(short.time.expires).toBe(shortExpiresAt)
+      expect(long.time.expires).toBe(longExpiresAt)
+
+      yield* TestClock.adjust(Duration.minutes(1))
+      yield* Effect.yieldNow
+      expect((yield* integrations.attempt.status(short.attemptID)).status).toBe("expired")
+      expect((yield* integrations.attempt.status(long.attemptID)).status).toBe("pending")
+      expect(shortClosed).toBe(true)
+      expect(longClosed).toBe(false)
+
+      yield* TestClock.adjust(Duration.minutes(19))
+      yield* Effect.yieldNow
+      expect((yield* integrations.attempt.status(long.attemptID)).status).toBe("expired")
+      expect(longClosed).toBe(true)
     }),
   )
 

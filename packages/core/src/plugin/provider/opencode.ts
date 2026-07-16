@@ -1,4 +1,4 @@
-import { Duration, Effect, Schema, Semaphore, Stream } from "effect"
+import { Clock, Duration, Effect, Schema, Semaphore, Stream } from "effect"
 import type { Scope } from "effect"
 import type { IntegrationOAuthMethodRegistration } from "@opencode-ai/plugin/v2/effect/integration"
 import { define } from "@opencode-ai/plugin/v2/effect/plugin"
@@ -49,6 +49,7 @@ function oauth(http: HttpClient.HttpClient) {
           mode: "auto" as const,
           url: `${defaultServer}${device.verification_uri_complete}`,
           instructions: `Enter code: ${device.user_code}`,
+          expiresAt: (yield* Clock.currentTimeMillis) + device.expires_in * 1000,
           callback: poll(http, defaultServer, device.device_code, Duration.seconds(device.interval)),
         }
       }),

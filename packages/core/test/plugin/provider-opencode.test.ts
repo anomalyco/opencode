@@ -1,5 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
+import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Credential } from "@opencode-ai/core/credential"
 import { EventV2 } from "@opencode-ai/core/event"
@@ -79,6 +80,36 @@ describe("OpencodePlugin", () => {
         },
         { type: "key", label: "API key (service account)" },
       ])
+    }),
+  )
+
+  it.effect("uses the device code expiration for the OAuth attempt", () =>
+    Effect.gen(function* () {
+      const expiresIn = 20 * 60
+      const http = HttpClient.make((request) =>
+        Effect.succeed(
+          HttpClientResponse.fromWeb(
+            request,
+            Response.json({
+              device_code: "device-code",
+              user_code: "user-code",
+              verification_uri_complete: "/auth/device",
+              expires_in: expiresIn,
+              interval: 5,
+            }),
+          ),
+        ),
+      )
+      yield* addPlugin().pipe(Effect.provideService(HttpClient.HttpClient, http))
+
+      const integration = yield* Integration.Service
+      const attempt = yield* integration.connection.oauth({
+        integrationID: Integration.ID.make("opencode"),
+        methodID: Integration.MethodID.make("device"),
+        inputs: {},
+      })
+      expect(attempt.time.expires - attempt.time.created).toBe(expiresIn * 1000)
+      yield* integration.attempt.cancel(attempt.attemptID)
     }),
   )
 

@@ -63,6 +63,7 @@ export type Inputs = Integration.Inputs
 export type OAuthAuthorization = {
   readonly url: string
   readonly instructions: string
+  readonly expiresAt?: number
 } & (
   | {
       readonly mode: "auto"
@@ -427,7 +428,7 @@ export const locationLayer = Layer.effect(
           )
           const id = AttemptID.create()
           const created = yield* Clock.currentTimeMillis
-          const time = { created, expires: created + attemptLifetime }
+          const time = { created, expires: authorization.expiresAt ?? created + attemptLifetime }
           yield* SynchronizedRef.update(attempts, (current) =>
             new Map(current).set(id, {
               status: "pending",
