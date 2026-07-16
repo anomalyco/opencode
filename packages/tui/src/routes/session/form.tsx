@@ -848,7 +848,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                 <text fg={themeV2.text.subdued()}>{external().description}</text>
               </Show>
               <text
-                fg={themeV2.background.action.primary()}
+                fg={themeV2.background.action()}
                 onMouseUp={() => {
                   if (renderer.getSelection()?.getSelectedText()) return
                   openExternal()

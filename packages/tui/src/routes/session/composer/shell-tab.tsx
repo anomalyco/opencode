@@ -105,11 +105,11 @@ export function ShellTab(props: { sessionID: string }) {
                   flexDirection="row"
                   paddingLeft={1}
                   paddingRight={1}
-                  backgroundColor={themeV2.background.action.primary({ focused: active() })}
+                  backgroundColor={themeV2.background.action({ focused: active() })}
                   onMouseOver={() => setStore("selected", index())}
                 >
                   <text
-                    fg={themeV2.text.action.primary({ focused: active() })}
+                    fg={themeV2.text.action({ focused: active() })}
                     attributes={active() ? TextAttributes.BOLD : undefined}
                     wrapMode="none"
                   >

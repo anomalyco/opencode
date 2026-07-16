@@ -101,7 +101,6 @@ export const DEFAULT_THEME = {
       subdued: "$hue.neutral.600",
       action: {
         primary: { default: "$hue.neutral.100", $disabled: "$hue.neutral.500" },
-        secondary: { default: "$hue.neutral.900", $disabled: "$hue.neutral.500" },
         destructive: { default: "$hue.red.100", $disabled: "$hue.neutral.500" },
       },
       formfield: {
@@ -131,13 +130,6 @@ export const DEFAULT_THEME = {
           $pressed: "$hue.interactive.800",
           $selected: "$hue.interactive.700",
           $disabled: "$hue.neutral.300",
-        },
-        secondary: {
-          default: "$hue.neutral.200",
-          $focused: "$hue.neutral.300",
-          $pressed: "$hue.neutral.400",
-          $selected: "$hue.neutral.300",
-          $disabled: "$hue.neutral.200",
         },
         destructive: {
           default: "$hue.red.600",
@@ -318,7 +310,6 @@ export const DEFAULT_THEME = {
       subdued: "$hue.neutral.400",
       action: {
         primary: { default: "$hue.neutral.100", $disabled: "$hue.neutral.500" },
-        secondary: { default: "$hue.neutral.100", $disabled: "$hue.neutral.500" },
         destructive: { default: "$hue.red.100", $disabled: "$hue.neutral.500" },
       },
       formfield: {
@@ -348,13 +339,6 @@ export const DEFAULT_THEME = {
           $pressed: "$hue.interactive.800",
           $selected: "$hue.interactive.600",
           $disabled: "$hue.neutral.800",
-        },
-        secondary: {
-          default: "$hue.neutral.800",
-          $focused: "$hue.neutral.700",
-          $pressed: "$hue.neutral.900",
-          $selected: "$hue.neutral.700",
-          $disabled: "$hue.neutral.900",
         },
         destructive: {
           default: "$hue.red.600",

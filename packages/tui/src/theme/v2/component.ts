@@ -129,8 +129,6 @@ function actions(get: (variant: ActionVariant, state: ResolvedActionState) => RG
   }
   const primary = action("primary")
   return Object.assign(primary, {
-    primary,
-    secondary: action("secondary"),
     destructive: action("destructive"),
   })
 }

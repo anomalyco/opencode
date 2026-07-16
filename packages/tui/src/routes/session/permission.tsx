@@ -516,7 +516,7 @@ function RejectPrompt(props: { onConfirm: (message: string) => void; onCancel: (
         paddingLeft={2}
         paddingRight={3}
         paddingBottom={1}
-        backgroundColor={themeV2.background.action.secondary("focused")}
+        backgroundColor={themeV2.background.action("focused")}
         justifyContent={narrow() ? "flex-start" : "space-between"}
         alignItems={narrow() ? "flex-start" : "center"}
         gap={1}
@@ -656,7 +656,7 @@ function Prompt<const T extends Record<string, string>>(props: {
     <box
       backgroundColor={themeV2.background()}
       border={["left"]}
-      borderColor={themeV2.background.action.primary("focused")}
+      borderColor={themeV2.background.action("focused")}
       customBorderChars={SplitBorder.customBorderChars}
       {...(store.expanded
         ? { top: dimensions().height * -1 + 1, bottom: 1, left: 2, right: 2, position: "absolute" }
@@ -693,7 +693,7 @@ function Prompt<const T extends Record<string, string>>(props: {
         paddingLeft={2}
         paddingRight={3}
         paddingBottom={1}
-        backgroundColor={themeV2.background.action.secondary("focused")}
+        backgroundColor={themeV2.background.action("focused")}
         justifyContent={narrow() ? "flex-start" : "space-between"}
         alignItems={narrow() ? "flex-start" : "center"}
       >
@@ -703,7 +703,7 @@ function Prompt<const T extends Record<string, string>>(props: {
               <box
                 paddingLeft={1}
                 paddingRight={1}
-                backgroundColor={themeV2.background.action.primary(
+                backgroundColor={themeV2.background.action(
                   option === store.selected ? "focused" : "default",
                 )}
                 onMouseOver={() => setStore("selected", option)}
@@ -713,7 +713,7 @@ function Prompt<const T extends Record<string, string>>(props: {
                 }}
               >
                 <text
-                  fg={themeV2.text.action.primary(
+                  fg={themeV2.text.action(
                     option === store.selected ? "focused" : "default",
                   )}
                 >

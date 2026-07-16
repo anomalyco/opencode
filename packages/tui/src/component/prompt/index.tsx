@@ -1307,7 +1307,7 @@ export function Prompt(props: PromptProps) {
 
   const highlight = createMemo(() => {
     if (leader()) return themeV2.border()
-    if (store.mode === "shell") return themeV2.background.action.primary()
+    if (store.mode === "shell") return themeV2.background.action()
     const agent = local.agent.current()
     if (!agent) return themeV2.border()
     return local.agent.color(agent.id)
@@ -1383,7 +1383,7 @@ export function Prompt(props: PromptProps) {
             paddingRight={2}
             paddingTop={1}
             flexShrink={0}
-            backgroundColor={themeV2.background.action.secondary("focused")}
+            backgroundColor={themeV2.background.action("focused")}
             flexGrow={1}
             width="100%"
           >
@@ -1459,7 +1459,7 @@ export function Prompt(props: PromptProps) {
                 if (props.disabled) return
                 r.target?.focus()
               }}
-              focusedBackgroundColor={themeV2.background.action.secondary("focused")}
+              focusedBackgroundColor={themeV2.background.action("focused")}
               cursorColor={
                 props.disabled ? themeV2.background.surface.offset() : themeV2.text()
               }
@@ -1524,15 +1524,15 @@ export function Prompt(props: PromptProps) {
           borderColor={borderHighlight()}
           customBorderChars={{
             ...EmptyBorder,
-            vertical: themeV2.background.action.secondary("focused").a !== 0 ? "╹" : " ",
+            vertical: themeV2.background.action("focused").a !== 0 ? "╹" : " ",
           }}
         >
           <box
             height={1}
             border={["bottom"]}
-            borderColor={themeV2.background.action.secondary("focused")}
+            borderColor={themeV2.background.action("focused")}
             customBorderChars={
-              themeV2.background.action.secondary("focused").a !== 0
+              themeV2.background.action("focused").a !== 0
                 ? {
                     ...EmptyBorder,
                     horizontal: "▀",
@@ -1557,14 +1557,14 @@ export function Prompt(props: PromptProps) {
                   </Show>
                 </box>
                 <text
-                  fg={store.interrupt > 0 ? themeV2.background.action.primary() : themeV2.text()}
+                  fg={store.interrupt > 0 ? themeV2.background.action() : themeV2.text()}
                 >
                   esc{" "}
                   <span
                     style={{
                       fg:
                         store.interrupt > 0
-                          ? themeV2.background.action.primary()
+                          ? themeV2.background.action()
                           : themeV2.text.subdued(),
                     }}
                   >

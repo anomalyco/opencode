@@ -6,7 +6,6 @@ const text = {
   subdued: "$hue.neutral.600",
   action: {
     primary: { default: "$hue.neutral.100", $pressed: "$hue.neutral.200" },
-    secondary: { default: "$hue.neutral.900" },
     destructive: { default: "$hue.red.100", $disabled: "$hue.neutral.500" },
   },
   formfield: { default: "$hue.neutral.600", $selected: "$hue.neutral.100" },
@@ -24,7 +23,6 @@ const background = {
       $pressed: "$hue.interactive.800",
       $selected: "$hue.interactive.700",
     },
-    secondary: { default: "$hue.neutral.200" },
     destructive: { default: "$hue.red.600" },
   },
   formfield: { default: "$hue.neutral.100", $selected: "$hue.interactive.600" },

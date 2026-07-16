@@ -216,7 +216,7 @@ export function SubagentsTab(props: { sessionID: string }) {
                   flexDirection="row"
                   paddingLeft={1}
                   paddingRight={1}
-                  backgroundColor={themeV2.background.action.primary({ focused: active(), selected: entry.current })}
+                  backgroundColor={themeV2.background.action({ focused: active(), selected: entry.current })}
                   onMouseOver={() => setStore("selected", index())}
                   onMouseUp={() => {
                     setStore("selected", index())
@@ -225,7 +225,7 @@ export function SubagentsTab(props: { sessionID: string }) {
                 >
                   <box flexGrow={1} minWidth={0} flexDirection="row">
                     <text
-                      fg={themeV2.text.action.primary({ focused: active(), selected: entry.current })}
+                      fg={themeV2.text.action({ focused: active(), selected: entry.current })}
                       attributes={active() ? TextAttributes.BOLD : undefined}
                       wrapMode="none"
                     >
@@ -236,7 +236,7 @@ export function SubagentsTab(props: { sessionID: string }) {
                     <text
                       fg={
                         active()
-                          ? themeV2.text.action.primary({ focused: active(), selected: entry.current })
+                          ? themeV2.text.action({ focused: active(), selected: entry.current })
                           : themeV2.text.subdued()
                       }
                       wrapMode="none"

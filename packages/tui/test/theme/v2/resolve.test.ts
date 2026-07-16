@@ -142,7 +142,6 @@ test("resolves matched action variants and states", () => {
   expect(theme.text.action.primary.selected).toBeInstanceOf(RGBA)
   expect(theme.background.action.primary.pressed).toBeInstanceOf(RGBA)
   expect(theme.background.action.primary.selected).toBeInstanceOf(RGBA)
-  expect(theme.text.action.secondary.default).toBeInstanceOf(RGBA)
   expect(theme.background.action.destructive.disabled).toBeInstanceOf(RGBA)
 })
 
@@ -175,7 +174,6 @@ test("context overrides rewire semantic references and apply state precedence", 
       default: "#111111",
       action: {
         primary: { default: "$text.default", $pressed: "#222222" },
-        secondary: { default: "$text.default" },
       },
     },
     "@context:elevated": {
@@ -189,7 +187,6 @@ test("context overrides rewire semantic references and apply state precedence", 
   const overlay = theme.contexts["@context:elevated"]!
 
   expect(overlay.text.default.toInts()).toEqual([51, 51, 51, 255])
-  expect(overlay.text.action.secondary.default.toInts()).toEqual([51, 51, 51, 255])
   expect(overlay.text.action.primary.pressed.toInts()).toEqual([68, 68, 68, 255])
   expect(overlay.text.action.primary.focused.toInts()).toEqual([85, 85, 85, 255])
 })

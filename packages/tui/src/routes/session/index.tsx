@@ -886,7 +886,7 @@ export function Session() {
                 paddingLeft: 1,
                 visible: showScrollbar(),
                 trackOptions: {
-                  backgroundColor: themeV2.background.action.secondary("focused"),
+                  backgroundColor: themeV2.background.action("focused"),
                   foregroundColor: themeV2.border(),
                 },
               }}
@@ -1217,7 +1217,7 @@ function SessionReasoningGroupView(props: {
                         <box
                           border={["left"]}
                           customBorderChars={SplitBorder.customBorderChars}
-                          borderColor={themeV2.background.action.secondary("focused")}
+                          borderColor={themeV2.background.action("focused")}
                           paddingLeft={1}
                         >
                           <code
@@ -1533,7 +1533,7 @@ function RevertMessage(props: {
         paddingTop={1}
         paddingBottom={1}
         paddingLeft={2}
-        backgroundColor={hover() ? themeV2.background.action.secondary("focused") : themeV2.background()}
+        backgroundColor={hover() ? themeV2.background.action("focused") : themeV2.background()}
       >
         <text fg={themeV2.text.subdued()}>
           {props.count} message{props.count === 1 ? "" : "s"} reverted
@@ -1639,7 +1639,7 @@ function UserMessage(props: { message: SessionMessageUser }) {
           paddingTop={1}
           paddingBottom={1}
           paddingLeft={2}
-          backgroundColor={hover() ? themeV2.background.action.secondary("focused") : themeV2.background()}
+          backgroundColor={hover() ? themeV2.background.action("focused") : themeV2.background()}
           flexShrink={0}
         >
           <text fg={themeV2.text()}>{props.message.text}</text>
@@ -1659,7 +1659,7 @@ function UserMessage(props: { message: SessionMessageUser }) {
                       >
                         {` ${label} `}
                       </span>
-                      <span style={{ bg: themeV2.background.action.secondary("focused"), fg: themeV2.text.subdued() }}>
+                      <span style={{ bg: themeV2.background.action("focused"), fg: themeV2.text.subdued() }}>
                         {" "}
                         {file.name ?? (file.source.type === "uri" ? file.source.uri : "attachment")}{" "}
                       </span>
@@ -1875,7 +1875,7 @@ function ReasoningPart(props: {
         <box
           border={!inMinimal() || expanded() ? ["left"] : undefined}
           customBorderChars={SplitBorder.customBorderChars}
-          borderColor={themeV2.background.action.secondary("focused")}
+          borderColor={themeV2.background.action("focused")}
           paddingLeft={!inMinimal() || expanded() ? 1 : 0}
         >
           <box onMouseUp={toggle}>
@@ -1893,7 +1893,7 @@ function ReasoningPart(props: {
             <box
               border={["left"]}
               customBorderChars={SplitBorder.customBorderChars}
-              borderColor={themeV2.background.action.secondary("focused")}
+              borderColor={themeV2.background.action("focused")}
               paddingLeft={inMinimal() ? 3 : 1}
             >
               <code
@@ -2088,7 +2088,7 @@ function GenericTool(props: ToolProps) {
           <Show when={Object.keys(props.input).length > 0}>
             <box gap={1}>
               <text>
-                <span style={{ bg: themeV2.background.action.secondary("focused"), fg: themeV2.text.subdued() }}> Input </span>
+                <span style={{ bg: themeV2.background.action("focused"), fg: themeV2.text.subdued() }}> Input </span>
               </text>
               <box paddingLeft={1}>
                 <code
@@ -2106,7 +2106,7 @@ function GenericTool(props: ToolProps) {
             {(value) => (
               <box gap={1}>
                 <text>
-                  <span style={{ bg: themeV2.background.action.secondary("focused"), fg: themeV2.text.subdued() }}> Output </span>
+                  <span style={{ bg: themeV2.background.action("focused"), fg: themeV2.text.subdued() }}> Output </span>
                 </text>
                 <box paddingLeft={1}>
                   <text fg={themeV2.text()} wrapMode="word">
@@ -2296,7 +2296,7 @@ function InlineToolLabel(props: { color?: RGBA; denied?: boolean; status: JSX.El
 function StatusBadge(props: { children: string }) {
   const { themeV2 } = useTheme()
   return (
-    <text flexShrink={0} bg={themeV2.background.action.secondary("focused")} fg={themeV2.text.subdued()}>
+    <text flexShrink={0} bg={themeV2.background.action("focused")} fg={themeV2.text.subdued()}>
       {" "}
       {props.children}{" "}
     </text>
@@ -2330,7 +2330,7 @@ function BlockTool(props: {
       paddingLeft={2}
       gap={1}
       backgroundColor={
-        hover() ? themeV2.background.action.secondary("focused") : themeV2.background()
+        hover() ? themeV2.background.action("focused") : themeV2.background()
       }
       customBorderChars={SplitBorder.customBorderChars}
       borderColor={themeV2.background()}

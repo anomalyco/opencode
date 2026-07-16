@@ -30,7 +30,6 @@ test("migrates resolved V1 modes into literal V2 tokens", () => {
   expect(migrated.light.scrollbar?.default).toBe(hex(legacy.borderActive))
   expect(migrated.light.diff?.lineNumber?.background?.removed).toBe(hex(legacy.diffRemovedLineNumberBg))
   expect(migrated.light.markdown?.emphasis).toBe(hex(legacy.markdownEmph))
-  expect(resolved.background.action.secondary.focused.toInts()).toEqual(legacy.backgroundElement.toInts())
   expect(resolved.background.surface.offset.toInts()).toEqual(legacy.backgroundPanel.toInts())
   expect(resolved.background.surface.overlay.toInts()).toEqual(legacy.backgroundMenu.toInts())
   expect(resolved.background.formfield.selected.toInts()).toEqual(legacy.background.toInts())
@@ -44,9 +43,6 @@ test("migrates resolved V1 modes into literal V2 tokens", () => {
   expect(resolved.text.action.primary.selected.toInts()).toEqual(legacy.primary.toInts())
   expect(resolved.background.feedback.error.default.toInts()).toEqual(legacy.background.toInts())
   expect(resolved.contexts["@context:elevated"]?.background.default.toInts()).toEqual(
-    legacy.backgroundPanel.toInts(),
-  )
-  expect(resolved.contexts["@context:elevated"]?.background.action.secondary.default.toInts()).toEqual(
     legacy.backgroundPanel.toInts(),
   )
   expect(resolved.contexts["@context:elevated"]?.background.action.primary.default.toInts()).toEqual([0, 0, 0, 0])

@@ -20,7 +20,7 @@ export function DevToolsSidebar() {
         {(group) => (
           <box flexShrink={0} marginBottom={1}>
             <box marginBottom={1}>
-              <text fg={themeV2.background.action.primary()} attributes={TextAttributes.BOLD}>
+              <text fg={themeV2.background.action()} attributes={TextAttributes.BOLD}>
                 {group.title}
               </text>
             </box>

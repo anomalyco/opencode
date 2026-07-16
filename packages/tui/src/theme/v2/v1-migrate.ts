@@ -56,10 +56,6 @@ function migrateMode(theme: Theme, mode: "light" | "dark"): ThemeFile["light"] {
           $focused: selected,
           $selected: primary,
         },
-        secondary: {
-          default: "$text.default",
-          $disabled: textMuted,
-        },
         destructive: { default: destructive, $disabled: textMuted },
       },
       formfield: {
@@ -84,11 +80,6 @@ function migrateMode(theme: Theme, mode: "light" | "dark"): ThemeFile["light"] {
       },
       action: {
         primary: { default: "transparent", $focused: primary, $selected: primary },
-        secondary: {
-          default: "$background.default",
-          $focused: color("backgroundElement"),
-          $pressed: color("backgroundElement"),
-        },
         destructive: { default: color("error") },
       },
       formfield: {
