@@ -46,21 +46,18 @@ describe("alwaysPattern", () => {
   })
 
   it("never produces bare '*' wildcard for any path", () => {
-    const rng = seededRandom(42)
+    const seed = Math.floor(Math.random() * 2147483647)
+    const rng = seededRandom(seed)
     const paths = [
-      "package.json",
-      "src/tool/read.ts",
-      "a/b/c.txt",
+      ".", "",
+      "package.json", "readme.md",
+      "src/tool/read.ts", "a/b/c.txt",
       "../../.config/file",
-      "readme.md",
-      ".",
-      "",
       ...Array.from({ length: 100 }, () => randomPath(rng)),
     ]
     for (const p of paths) {
-      const result = alwaysPattern(p)
-      for (const pattern of result) {
-        expect(pattern).not.toBe("*")
+      for (const pattern of alwaysPattern(p)) {
+        if (pattern === "*") throw new Error(`seed=${seed} path=${JSON.stringify(p)}`)
       }
     }
   })
