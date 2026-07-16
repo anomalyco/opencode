@@ -1,16 +1,6 @@
 export * as SessionRunnerLLM from "./llm"
 
-import {
-  LLM,
-  LLMClient,
-  LLMError,
-  LLMEvent,
-  Message,
-  SystemPart,
-  isContextOverflowFailure,
-  type ProviderErrorEvent,
-} from "@opencode-ai/ai"
-import type { SessionHooks } from "@opencode-ai/plugin/v2/effect/session"
+import { LLMClient, LLMError, LLMEvent, isContextOverflowFailure, type ProviderErrorEvent } from "@opencode-ai/ai"
 import { SessionError } from "@opencode-ai/schema/session-error"
 import { Money } from "@opencode-ai/schema/money"
 import { Cause, Effect, Exit, Fiber, FiberSet, Layer, Option, Semaphore, Stream } from "effect"
@@ -19,30 +9,25 @@ import { EventV2 } from "../../event"
 import { ModelV2 } from "../../model"
 import { PermissionV2 } from "../../permission"
 import { QuestionTool } from "../../tool/question"
-import { ToolRegistry } from "../../tool/registry"
 import { ToolOutputStore } from "../../tool-output-store"
 import { InstructionState } from "../instruction-state"
 import { SessionCompaction } from "../compaction"
 import { SessionContext } from "../context"
 import { SessionEvent } from "../event"
 import { SessionPending } from "../pending"
+import { SessionRequest } from "../request"
 import { SessionMessage } from "../message"
 import { SessionSchema } from "../schema"
 import { SessionStore } from "../store"
 import { SessionTitle } from "../title"
 import { Service } from "./index"
 import { createLLMEventPublisher } from "./publish-llm-event"
-import { toLLMMessages } from "./to-llm-message"
-import { MAX_STEPS_PROMPT } from "./max-steps"
-import PROMPT_DEFAULT from "./prompt/base.txt"
 import { Snapshot } from "../../snapshot"
 import { makeLocationNode } from "../../effect/app-node"
 import { llmClient } from "../../effect/app-node-platform"
 import { StepFailedError } from "../error"
 import { toSessionError } from "../to-session-error"
 import { SessionRunnerRetry } from "./retry"
-import { PluginHooks } from "../../plugin/hooks"
-import { SessionModelHeaders } from "../model-headers"
 
 type StepTokens = {
   readonly input: number
@@ -78,10 +63,9 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const events = yield* EventV2.Service
     const llm = yield* LLMClient.Service
-    const tools = yield* ToolRegistry.Service
-    const hooks = yield* PluginHooks.Service
     const store = yield* SessionStore.Service
     const context = yield* SessionContext.Service
+    const requests = yield* SessionRequest.Service
     const snapshots = yield* Snapshot.Service
     const db = (yield* Database.Service).db
     const compaction = yield* SessionCompaction.Service
@@ -146,59 +130,18 @@ const layer = Layer.effect(
       const loaded = yield* context.load(selected)
       const session = loaded.session
       const agent = loaded.agent
-      const agentInfo = agent.info
       const resolved = loaded.model
       const model = resolved.model
-      const providerMetadataKey = model.route.providerMetadataKey ?? model.provider
       const compactionInput = { session, messages: loaded.messages, model }
       if (compaction.required(compactionInput) && !(yield* SessionPending.compaction(db, session.id))) {
         const compacted = yield* compaction.compact(compactionInput)
         if (compacted.status === "completed") return { _tag: "RestartAfterCompaction", step: currentStep } as const
         return yield* new StepFailedError({ error: compacted.error })
       }
-      const isLastStep = agentInfo.steps !== undefined && currentStep >= agentInfo.steps
-      const toolMaterialization = isLastStep ? undefined : yield* tools.materialize(agentInfo.permissions)
-      const promptCacheKey = /^ses_[0-9a-f]{64}$/.test(session.id) ? session.id.slice(4) : session.id
-      const request = LLM.request({
-        model,
-        http: {
-          headers: SessionModelHeaders.make(session),
-        },
-        providerOptions: { openai: { promptCacheKey } },
-        system: [agentInfo.system ? agentInfo.system : PROMPT_DEFAULT, loaded.initial]
-          .filter((part): part is string => part !== undefined && part.length > 0)
-          .map(SystemPart.make),
-        messages: [
-          ...toLLMMessages(loaded.messages, resolved.ref, providerMetadataKey),
-          ...(isLastStep ? [Message.assistant(MAX_STEPS_PROMPT)] : []),
-        ],
-        tools: toolMaterialization?.definitions ?? [],
-        toolChoice: isLastStep ? "none" : undefined,
+      const prepared = yield* requests.prepare({
+        context: loaded,
+        step: currentStep,
       })
-      const availableTools = new Map(request.tools.map((tool) => [tool.name, tool]))
-      const contextEvent: SessionHooks["context"] = {
-        sessionID: session.id,
-        agent: agent.id,
-        model: resolved.ref,
-        system: [...request.system],
-        messages: [...request.messages],
-        tools: Object.fromEntries(
-          request.tools.map((tool) => [tool.name, { description: tool.description, input: { ...tool.inputSchema } }]),
-        ),
-      }
-      // Plugins may reshape the draft but cannot advertise tools excluded by
-      // permissions, registration state, or the selected agent's step limit.
-      yield* hooks.trigger("session", "context", contextEvent)
-      const hookedRequest = LLM.updateRequest(request, {
-        system: contextEvent.system,
-        messages: contextEvent.messages,
-        tools: Object.entries(contextEvent.tools).flatMap(([name, tool]) => {
-          const registered = availableTools.get(name)
-          if (!registered) return []
-          return [{ ...registered, description: tool.description, inputSchema: tool.input }]
-        }),
-      })
-      const advertisedTools = new Set(hookedRequest.tools.map((tool) => tool.name))
       const toolFibers = yield* FiberSet.make<void, ToolOutputStore.Error>()
       const ownedToolFibers: Array<Fiber.Fiber<void, ToolOutputStore.Error>> = []
       let needsContinuation = false
@@ -209,7 +152,7 @@ const layer = Layer.effect(
         // The selected catalog identity, not model.id: route-level ids are provider API
         // model ids (for example gpt-5.5-fast resolves to api id gpt-5.5).
         model: resolved.ref,
-        providerMetadataKey,
+        providerMetadataKey: model.route.providerMetadataKey ?? model.provider,
         snapshot: startSnapshot,
         assistantMessageID,
       })
@@ -219,7 +162,7 @@ const layer = Layer.effect(
       const serialized = <A, E, R>(effect: Effect.Effect<A, E, R>) => publication.withPermit(effect)
       const publish = (event: LLMEvent, error?: SessionError.Error) => serialized(publisher.publish(event, error))
       let overflowFailure: ProviderErrorEvent | undefined
-      const providerStream = llm.stream(hookedRequest).pipe(
+      const providerStream = llm.stream(prepared.request).pipe(
         Stream.runForEach((event) =>
           Effect.gen(function* () {
             if (overflowFailure || publisher.hasProviderError()) return
@@ -231,15 +174,9 @@ const layer = Layer.effect(
             }
             yield* publish(event)
             if (event.type !== "tool-call" || event.providerExecuted) return
-            if (!toolMaterialization || (availableTools.has(event.name) && !advertisedTools.has(event.name))) {
-              yield* serialized(
-                publisher.failUnsettledTools({
-                  type: "tool.execution",
-                  message: toolMaterialization
-                    ? `Tool is not available for this request: ${event.name}`
-                    : "Tools are disabled after the maximum agent steps",
-                }),
-              )
+            const tool = prepared.resolveTool(event.name)
+            if (tool.type === "reject") {
+              yield* serialized(publisher.failUnsettledTools(tool.error))
               return
             }
             needsContinuation = true
@@ -247,7 +184,7 @@ const layer = Layer.effect(
             ownedToolFibers.push(
               yield* Effect.uninterruptibleMask((restore) =>
                 restore(
-                  toolMaterialization.settle({
+                  tool.settle({
                     sessionID: session.id,
                     agent: agent.id,
                     messageID: assistantMessageID,
@@ -337,10 +274,7 @@ const layer = Layer.effect(
           const llmFailure = streamFailure instanceof LLMError ? streamFailure : undefined
           if (llmFailure && !publisher.hasProviderError()) {
             const error = toSessionError(llmFailure)
-            if (
-              SessionRunnerRetry.isRetryable(llmFailure) &&
-              !publisher.hasRetryEvidence()
-            ) {
+            if (SessionRunnerRetry.isRetryable(llmFailure) && !publisher.hasRetryEvidence()) {
               return yield* new SessionRunnerRetry.RetryableFailure({
                 cause: llmFailure,
                 assistantMessageID: yield* publisher.startAssistant(),
@@ -570,9 +504,8 @@ export const node = makeLocationNode({
   deps: [
     EventV2.node,
     llmClient,
-    ToolRegistry.node,
-    PluginHooks.node,
     SessionContext.node,
+    SessionRequest.node,
     SessionStore.node,
     SessionCompaction.node,
     SessionTitle.node,
