@@ -3,22 +3,15 @@ import { commandPaletteOptions, resolveKeybindOption, upsertCommandRegistration,
 
 const paletteOptions: CommandOption[] = [
   { id: "settings.open", title: "Open settings" },
-  { id: "session.undo", title: "Undo", scope: "session" },
-  { id: "file.open", title: "Open file", scope: "session" },
+  { id: "session.undo", title: "Undo" },
+  { id: "file.open", title: "Open file" },
   { id: "hidden", title: "Hidden", hidden: true },
   { id: "disabled", title: "Disabled", disabled: true },
 ]
 
 describe("commandPaletteOptions", () => {
-  test("keeps only general commands on home", () => {
-    expect(commandPaletteOptions(paletteOptions, "general").map((option) => option.id)).toEqual(["settings.open"])
-  })
-
-  test("keeps general and session commands in sessions", () => {
-    expect(commandPaletteOptions(paletteOptions, "session").map((option) => option.id)).toEqual([
-      "settings.open",
-      "session.undo",
-    ])
+  test("keeps visible enabled commands", () => {
+    expect(commandPaletteOptions(paletteOptions).map((option) => option.id)).toEqual(["settings.open", "session.undo"])
   })
 })
 

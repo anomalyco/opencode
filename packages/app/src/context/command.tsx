@@ -75,7 +75,6 @@ export interface Keybind {
 export interface CommandOption {
   id: string
   title: string
-  scope?: "general" | "session"
   description?: string
   category?: string
   keybind?: KeybindConfig
@@ -88,14 +87,13 @@ export interface CommandOption {
   onHighlight?: () => (() => void) | void
 }
 
-export function commandPaletteOptions(options: CommandOption[], scope: "general" | "session") {
+export function commandPaletteOptions(options: CommandOption[]) {
   return options.filter(
     (option) =>
       !option.disabled &&
       !option.hidden &&
       !option.id.startsWith(SUGGESTED_PREFIX) &&
-      option.id !== "file.open" &&
-      (scope === "session" || option.scope !== "session"),
+      option.id !== "file.open",
   )
 }
 

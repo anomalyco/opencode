@@ -32,7 +32,6 @@ const withCategory = (category: string) => {
   return (option: Omit<CommandOption, "category">): CommandOption => ({
     ...option,
     category,
-    scope: "session",
   })
 }
 
@@ -464,12 +463,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const fileCmds = () => {
     const tab = closableTab()
     return [
-      fileCommand({
-        id: "command.palette",
-        title: language.t("command.palette"),
-        hidden: true,
-        onSelect: openFile,
-      }),
       fileCommand({
         id: "file.open",
         title: language.t("command.file.open"),

@@ -92,7 +92,7 @@ export function createCommandPaletteModel(props: { filesOnly?: () => boolean; on
 
   const allowedCommands = createMemo(() => {
     if (filesOnly()) return []
-    return commandPaletteOptions(command.options, "session")
+    return commandPaletteOptions(command.options)
   })
   const commandEntries = createMemo(() => {
     const category = language.t("palette.group.commands")

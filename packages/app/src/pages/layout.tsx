@@ -946,7 +946,6 @@ export default function LegacyLayout(props: ParentProps) {
       {
         id: "session.previous",
         title: language.t("command.session.previous"),
-        scope: "session",
         category: language.t("command.category.session"),
         keybind: "alt+arrowup",
         onSelect: () => navigateSessionByOffset(-1),
@@ -954,7 +953,6 @@ export default function LegacyLayout(props: ParentProps) {
       {
         id: "session.next",
         title: language.t("command.session.next"),
-        scope: "session",
         category: language.t("command.category.session"),
         keybind: "alt+arrowdown",
         onSelect: () => navigateSessionByOffset(1),
@@ -962,7 +960,6 @@ export default function LegacyLayout(props: ParentProps) {
       {
         id: "session.previous.unseen",
         title: language.t("command.session.previous.unseen"),
-        scope: "session",
         category: language.t("command.category.session"),
         keybind: "shift+alt+arrowup",
         onSelect: () => navigateSessionByUnseen(-1),
@@ -970,7 +967,6 @@ export default function LegacyLayout(props: ParentProps) {
       {
         id: "session.next.unseen",
         title: language.t("command.session.next.unseen"),
-        scope: "session",
         category: language.t("command.category.session"),
         keybind: "shift+alt+arrowdown",
         onSelect: () => navigateSessionByUnseen(1),
@@ -978,7 +974,6 @@ export default function LegacyLayout(props: ParentProps) {
       {
         id: "session.archive",
         title: language.t("command.session.archive"),
-        scope: "session",
         category: language.t("command.category.session"),
         keybind: "mod+shift+backspace",
         disabled: !params.dir || !params.id,

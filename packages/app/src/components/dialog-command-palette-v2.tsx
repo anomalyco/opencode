@@ -73,7 +73,7 @@ export function DialogHomeCommandPaletteV2(props: {
   const state = { cleanup: undefined as (() => void) | void, committed: false }
   const commandEntries = createMemo(() => {
     const category = language.t("palette.group.commands")
-    return commandPaletteOptions(command.options, "general").map((option) =>
+    return commandPaletteOptions(command.options).map((option) =>
       createCommandPaletteCommandEntry(option, category),
     )
   })

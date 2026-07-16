@@ -536,7 +536,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     {
       id: "file.attach",
       title: language.t("prompt.action.attachFile"),
-      scope: "session",
       category: language.t("command.category.file"),
       keybind: "mod+u",
       disabled: store.mode !== "normal",
@@ -545,7 +544,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     {
       id: "prompt.mode.shell",
       title: language.t("command.prompt.mode.shell"),
-      scope: "session",
       category: language.t("command.category.session"),
       keybind: shellModeKey,
       disabled: store.mode === "shell",
@@ -554,7 +552,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     {
       id: "prompt.mode.normal",
       title: language.t("command.prompt.mode.normal"),
-      scope: "session",
       category: language.t("command.category.session"),
       keybind: normalModeKey,
       disabled: store.mode === "normal",
