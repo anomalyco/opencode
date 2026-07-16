@@ -10,7 +10,7 @@ const ptyID = "pty_terminal_composer_focus"
 
 test.use({ viewport: { width: 1440, height: 900 } })
 
-test("routes typing to the composer unless the open terminal is focused", async ({ page }) => {
+test("routes typing to the composer and restores its caret after window focus", async ({ page }) => {
   await mockOpenCodeServer(page, {
     directory,
     project: {
@@ -86,4 +86,53 @@ test("routes typing to the composer unless the open terminal is focused", async 
 
   await expect(composer).toBeFocused()
   await expect(composer).toHaveText("a")
+
+  await composer.fill("abcdef")
+  await page.keyboard.press("ArrowLeft")
+  await page.keyboard.press("ArrowLeft")
+  await expect
+    .poll(() =>
+      composer.evaluate((element) => {
+        const selection = window.getSelection()
+        if (!selection?.rangeCount) return -1
+        const range = selection.getRangeAt(0).cloneRange()
+        range.selectNodeContents(element)
+        range.setEnd(selection.anchorNode!, selection.anchorOffset)
+        return range.toString().length
+      }),
+    )
+    .toBe(4)
+
+  await composer.evaluate((element) => {
+    window.dispatchEvent(new Event("blur"))
+    const range = document.createRange()
+    range.selectNodeContents(element)
+    range.collapse(true)
+    const selection = window.getSelection()
+    selection?.removeAllRanges()
+    selection?.addRange(range)
+    window.dispatchEvent(new Event("focus"))
+  })
+
+  await page.keyboard.type("X")
+  await expect(composer).toHaveText("abcdXef")
+
+  await composer.fill("abcdef")
+  await composer.evaluate((element) => {
+    const text = element.firstChild!
+    const range = document.createRange()
+    range.setStart(text, 2)
+    range.setEnd(text, 4)
+    const selection = window.getSelection()
+    selection?.removeAllRanges()
+    selection?.addRange(range)
+  })
+  await expect.poll(() => page.evaluate(() => window.getSelection()?.toString())).toBe("cd")
+  await page.evaluate(() => {
+    window.dispatchEvent(new Event("blur"))
+    window.dispatchEvent(new Event("focus"))
+  })
+
+  await page.keyboard.type("Y")
+  await expect(composer).toHaveText("abYef")
 })

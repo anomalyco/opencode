@@ -9,11 +9,13 @@ import {
   createMemo,
   createSignal,
   createResource,
+  onMount,
   Switch,
   Match,
   type JSX,
 } from "solid-js"
 import { createStore, type SetStoreFunction, type Store } from "solid-js/store"
+import { makeEventListener } from "@solid-primitives/event-listener"
 import type { useLocal } from "@/context/local"
 import { selectionFromLines, type SelectedLineRange, useFile } from "@/context/file"
 import {
@@ -222,7 +224,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   let scrollRef!: HTMLDivElement
   let slashPopoverRef!: HTMLDivElement
   let restoreEndOnFocus = true
+  let restoreCursorOnWindowFocus = false
   let savedCursor: number | null = null
+  let savedCursorCollapsed = true
+  let cursorPrompt = prompt.capture()
+  let switchingPrompt = false
+  let pointerFocus = false
 
   const mirror = { input: false }
   const inset = 56
@@ -577,15 +584,43 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     })
   }
 
+  const [composing, setComposing] = createSignal(false)
+  const isImeComposing = (event: KeyboardEvent) => event.isComposing || composing() || event.keyCode === 229
+
   const currentCursor = () => {
     const selection = window.getSelection()
     if (!selection || selection.rangeCount === 0 || !editorRef.contains(selection.anchorNode)) return null
     return getCursorPosition(editorRef)
   }
 
+  const saveCursor = () => {
+    const selection = window.getSelection()
+    const cursor = currentCursor()
+    if (cursor === null) return
+    cursorPrompt = prompt.capture()
+    savedCursor = cursor
+    savedCursorCollapsed = selection?.isCollapsed ?? true
+  }
+
+  const persistCursor = () => {
+    if (cursorPrompt !== prompt.capture() || savedCursor === null || savedCursor === prompt.cursor()) return
+    prompt.set(prompt.current(), savedCursor)
+  }
+
+  const restoreSavedCursor = () => {
+    if (document.activeElement !== editorRef) return false
+    if (composing() || !savedCursorCollapsed) return true
+    const cursor =
+      (cursorPrompt === prompt.capture() ? savedCursor : null) ?? prompt.cursor() ?? promptLength(prompt.current())
+    setCursorPosition(editorRef, cursor)
+    queueScroll()
+    return true
+  }
+
   const restoreFocus = () => {
     requestAnimationFrame(() => {
-      const cursor = savedCursor ?? prompt.cursor() ?? promptLength(prompt.current())
+      const cursor =
+        (cursorPrompt === prompt.capture() ? savedCursor : null) ?? prompt.cursor() ?? promptLength(prompt.current())
       editorRef.focus()
       setCursorPosition(editorRef, cursor)
       queueScroll()
@@ -593,13 +628,32 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const handleFocus = () => {
+    if (pointerFocus) {
+      restoreCursorOnWindowFocus = false
+      restoreEndOnFocus = false
+      return
+    }
+    if (restoreCursorOnWindowFocus) {
+      restoreCursorOnWindowFocus = false
+      restoreSavedCursor()
+      return
+    }
     if (!restoreEndOnFocus) return
     restoreEndOnFocus = false
     requestAnimationFrame(() => {
       if (document.activeElement !== editorRef) return
-      setCursorPosition(editorRef, prompt.cursor() ?? promptLength(prompt.current()))
+      const cursor = prompt.cursor() ?? promptLength(prompt.current())
+      cursorPrompt = prompt.capture()
+      savedCursor = cursor
+      savedCursorCollapsed = true
+      setCursorPosition(editorRef, cursor)
       queueScroll()
     })
+  }
+
+  const handlePointerDown = () => {
+    pointerFocus = true
+    requestAnimationFrame(() => (pointerFocus = false))
   }
 
   const renderEditorWithCursor = (parts: Prompt) => {
@@ -618,14 +672,58 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     onCleanup(() => clearInterval(interval))
   })
 
-  const [composing, setComposing] = createSignal(false)
-  const isImeComposing = (event: KeyboardEvent) => event.isComposing || composing() || event.keyCode === 229
-
   const handleBlur = () => {
-    savedCursor = currentCursor()
+    if (document.hasFocus()) saveCursor()
+    if (!document.hasFocus()) restoreCursorOnWindowFocus = true
+    persistCursor()
     closePopover()
     setComposing(false)
   }
+
+  onMount(() => {
+    makeEventListener(document, "selectionchange", () => {
+      if (switchingPrompt || !document.hasFocus() || document.activeElement !== editorRef) return
+      saveCursor()
+    })
+    makeEventListener(window, "blur", () => {
+      if (document.activeElement === editorRef) restoreCursorOnWindowFocus = true
+      persistCursor()
+    })
+    makeEventListener(window, "focus", () => {
+      if (!restoreCursorOnWindowFocus) return
+      if (restoreSavedCursor()) {
+        restoreCursorOnWindowFocus = false
+        return
+      }
+      requestAnimationFrame(() => {
+        if (restoreCursorOnWindowFocus) restoreSavedCursor()
+        restoreCursorOnWindowFocus = false
+      })
+    })
+  })
+
+  createEffect(
+    on(
+      () => prompt.capture(),
+      (current) => {
+        const cursor = current.cursor() ?? promptLength(current.current())
+        switchingPrompt = true
+        cursorPrompt = current
+        savedCursor = cursor
+        savedCursorCollapsed = true
+        restoreEndOnFocus = true
+        requestAnimationFrame(() => {
+          if (cursorPrompt !== current) return
+          switchingPrompt = false
+          if (composing() || document.activeElement !== editorRef) return
+          restoreEndOnFocus = false
+          setCursorPosition(editorRef, cursor)
+          queueScroll()
+        })
+      },
+      { defer: true },
+    ),
+  )
 
   const handleCompositionStart = () => {
     setComposing(true)
@@ -1051,6 +1149,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const rawParts = parseFromDOM()
     const images = imageAttachments()
     const cursorPosition = getCursorPosition(editorRef)
+    cursorPrompt = prompt.capture()
+    savedCursor = cursorPosition
+    savedCursorCollapsed = true
     const rawText =
       rawParts.length === 1 && rawParts[0]?.type === "text"
         ? rawParts[0].content
@@ -1667,6 +1768,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     onPaste={handlePaste}
                     onCompositionStart={handleCompositionStart}
                     onCompositionEnd={handleCompositionEnd}
+                    onPointerDown={handlePointerDown}
                     onFocus={handleFocus}
                     onBlur={handleBlur}
                     onKeyDown={handleKeyDown}
@@ -1889,6 +1991,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   onPaste={handlePaste}
                   onCompositionStart={handleCompositionStart}
                   onCompositionEnd={handleCompositionEnd}
+                  onPointerDown={handlePointerDown}
                   onFocus={handleFocus}
                   onBlur={handleBlur}
                   onKeyDown={handleKeyDown}
