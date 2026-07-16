@@ -86,6 +86,7 @@ export const dict = {
   "command.session.unshare": "Ne plus partager la session",
   "command.session.unshare.description": "Arrêter de partager cette session",
   "palette.search.placeholder": "Rechercher des fichiers, des commandes et des sessions",
+  "palette.search.placeholder.home": "Rechercher des commandes et des sessions",
   "palette.empty": "Aucun résultat trouvé",
   "palette.group.commands": "Commandes",
   "palette.group.files": "Fichiers",
@@ -756,9 +757,13 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Développer les parties de l'outil edit",
   "settings.general.row.editToolPartsExpanded.description":
     "Afficher les parties des outils edit, write et patch développées par défaut dans la chronologie",
-  "settings.general.row.newLayoutDesigns.title": "Nouvelle mise en page et nouveaux designs",
-  "settings.general.row.newLayoutDesigns.description":
-    "Activer la nouvelle mise en page et les nouvelles interfaces d'accueil, de saisie et de session",
+  "settings.general.row.newInterface.title": "Nouvelle mise en page",
+  "settings.general.row.newInterface.badge": "Nouveau",
+  "settings.general.row.newInterface.description":
+    "Utilisez les nouveaux onglets et la mise en page de l'accueil. Vous pouvez alterner entre les mises en page pendant une durée limitée.",
+  "settings.general.row.newInterfaceNotice.title": "Vous utilisez maintenant la nouvelle mise en page",
+  "settings.general.row.newInterfaceNotice.description": "La mise en page précédente n'est plus disponible",
+  "settings.general.row.newInterfaceNotice.dismiss": "Ignorer",
   "settings.general.row.pinchZoom.title": "Pincer pour zoomer",
   "settings.general.row.pinchZoom.description":
     "Autoriser les gestes de pincement du pavé tactile et Ctrl-défilement pour zoomer",

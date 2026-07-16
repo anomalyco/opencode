@@ -41,13 +41,13 @@ import { useLocation, useNavigate, useParams, useSearchParams } from "@solidjs/r
 import { NewSessionView, SessionHeader } from "@/components/session"
 import { ErrorPage } from "@/pages/error"
 import { CommentsProvider, useComments } from "@/context/comments"
+import { useCommand } from "@/context/command"
 import { DirectoryDataProvider } from "@/pages/directory-layout"
 import { useServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { ModelsProvider } from "@/context/models"
 import { useNotification } from "@/context/notification"
-import { PermissionProvider } from "@/context/permission"
 import { PromptProvider, usePrompt } from "@/context/prompt"
 import { usePlatform } from "@/context/platform"
 import { SDKProvider, useSDK } from "@/context/sdk"
@@ -159,7 +159,7 @@ export function TargetSessionRouteContent() {
   const serverSync = useServerSync()
   const directory = createMemo(() => serverSync().session.lineage.peek(params.id)?.session.directory)
   return (
-    // Settings must keep the complete target-server context and remain registered
+    // Settings must keep the target-server SDK, sync, and models context and remain registered
     // when session content falls back to the route error boundary.
     <TargetServerScopedProviders directory={directory} sessionID={() => params.id}>
       <TargetSessionSettingsCommand />
@@ -294,10 +294,10 @@ function TargetServerScopedProviders(
   props: ParentProps<{ directory?: () => string | undefined; sessionID?: () => string | undefined }>,
 ) {
   return (
-    <PermissionProvider directory={props.directory}>
+    <>
       <MarkSessionNotificationsViewed sessionID={props.sessionID} />
       <ModelsProvider directory={props.directory}>{props.children}</ModelsProvider>
-    </PermissionProvider>
+    </>
   )
 }
 
@@ -363,6 +363,7 @@ export default function Page() {
   const platform = usePlatform()
   const prompt = usePrompt()
   const comments = useComments()
+  const command = useCommand()
   const terminal = useTerminal()
   const [searchParams, setSearchParams] = useSearchParams<{ prompt?: string }>()
   const location = useLocation()
@@ -1136,6 +1137,14 @@ export default function Page() {
     review: reviewTab,
     fileBrowser: () => newSessionDesign() && isDesktop() && !!params.id,
   })
+  command.register("session-palette", () => [
+    {
+      id: "command.palette",
+      title: language.t("command.palette"),
+      hidden: true,
+      onSelect: () => command.trigger("file.open", "palette"),
+    },
+  ])
 
   const openReviewFile = createOpenReviewFile({
     showAllFiles,

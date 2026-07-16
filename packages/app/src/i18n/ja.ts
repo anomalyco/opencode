@@ -86,6 +86,7 @@ export const dict = {
   "command.session.unshare": "セッションの共有を停止",
   "command.session.unshare.description": "このセッションの共有を停止",
   "palette.search.placeholder": "ファイル、コマンド、セッションを検索",
+  "palette.search.placeholder.home": "コマンドとセッションを検索",
   "palette.empty": "結果が見つかりません",
   "palette.group.commands": "コマンド",
   "palette.group.files": "ファイル",
@@ -741,9 +742,13 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "edit ツールパーツを展開",
   "settings.general.row.editToolPartsExpanded.description":
     "タイムラインで edit、write、patch ツールパーツをデフォルトで展開して表示します",
-  "settings.general.row.newLayoutDesigns.title": "新しいレイアウトとデザイン",
-  "settings.general.row.newLayoutDesigns.description":
-    "刷新されたレイアウト、ホーム、コンポーザー、セッションUIを有効にします",
+  "settings.general.row.newInterface.title": "新しいレイアウト",
+  "settings.general.row.newInterface.badge": "新機能",
+  "settings.general.row.newInterface.description":
+    "新しいタブとホーム画面のレイアウトを使用します。期間限定でレイアウトを切り替えられます。",
+  "settings.general.row.newInterfaceNotice.title": "新しいレイアウトを使用しています",
+  "settings.general.row.newInterfaceNotice.description": "以前のレイアウトは利用できなくなりました",
+  "settings.general.row.newInterfaceNotice.dismiss": "閉じる",
   "settings.general.row.pinchZoom.title": "ピンチでズーム",
   "settings.general.row.pinchZoom.description":
     "トラックパッドのピンチ操作とCtrl+スクロール操作によるズームを許可します",
