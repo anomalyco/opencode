@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { and, eq } from "drizzle-orm"
-import { Effect, Schema } from "effect"
+import { Effect, Option, Schema } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -79,15 +79,27 @@ describe("SessionPending attachment bounding", () => {
       const eventData = Schema.decodeUnknownSync(SessionEvent.InputAdmitted.data)(rows[0]!.data)
       expect(eventData.payloadHash).toBeDefined()
       const inputType = "user"
-      expect(eventData.input.type).toBe(inputType)
-      if (eventData.input.type !== inputType) throw new Error(`Expected ${inputType} input on admitted event`)
-      expect(eventData.input.data.files?.[0]?.data).toBe("")
+      const input = Option.getOrThrowWith(
+        Option.liftPredicate(eventData.input, (value): value is Extract<typeof eventData.input, { type: "user" }> =>
+          value.type === inputType,
+        ),
+        () => new Error(`Expected ${inputType} input on admitted event`),
+      )
+      expect(input.data.files?.[0]?.data).toBe("")
       expect(JSON.stringify(eventData).includes(mega)).toBe(false)
 
       const pending = yield* SessionPending.list(db, sessionID)
-      const row = pending.find((item) => item.id === inputID)
-      expect(row?.type).toBe(inputType)
-      if (row?.type === inputType) expect(row.data.files?.[0]?.data).toBe(mega)
+      const pendingRow = Option.getOrThrowWith(
+        Option.fromUndefinedOr(pending.find((item) => item.id === inputID)),
+        () => new Error(`Expected pending input ${inputID}`),
+      )
+      const row = Option.getOrThrowWith(
+        Option.liftPredicate(pendingRow, (value): value is Extract<(typeof pending)[number], { type: "user" }> =>
+          value.type === inputType,
+        ),
+        () => new Error(`Expected ${inputType} pending input`),
+      )
+      expect(row.data.files?.[0]?.data).toBe(mega)
     }),
   )
 
@@ -108,12 +120,16 @@ describe("SessionPending attachment bounding", () => {
           ],
         },
       })
-      expect(stripped.type).toBe("user")
-      if (stripped.type === "user") {
-        expect(stripped.data.text).toBe("hi")
-        expect(stripped.data.files?.[0]?.data).toBe("")
-        expect(stripped.data.files?.[0]?.name).toBe("a.txt")
-      }
+      const inputType = "user"
+      const input = Option.getOrThrowWith(
+        Option.liftPredicate(stripped, (value): value is Extract<typeof stripped, { type: "user" }> =>
+          value.type === inputType,
+        ),
+        () => new Error(`Expected ${inputType} input`),
+      )
+      expect(input.data.text).toBe("hi")
+      expect(input.data.files?.[0]?.data).toBe("")
+      expect(input.data.files?.[0]?.name).toBe("a.txt")
     }),
   )
 
@@ -162,9 +178,13 @@ describe("SessionPending attachment bounding", () => {
       const eventData = Schema.decodeUnknownSync(SessionEvent.InputAdmitted.data)(rows[0]!.data)
       expect(eventData.payloadHash).toBeUndefined()
       const inputType = "user"
-      expect(eventData.input.type).toBe(inputType)
-      if (eventData.input.type !== inputType) throw new Error(`Expected ${inputType} input on admitted event`)
-      expect(eventData.input.data.text).toBe("hello")
+      const input = Option.getOrThrowWith(
+        Option.liftPredicate(eventData.input, (value): value is Extract<typeof eventData.input, { type: "user" }> =>
+          value.type === inputType,
+        ),
+        () => new Error(`Expected ${inputType} input on admitted event`),
+      )
+      expect(input.data.text).toBe("hello")
     }),
   )
 })

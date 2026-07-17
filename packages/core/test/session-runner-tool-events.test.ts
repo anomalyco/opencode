@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { Effect, Schema } from "effect"
+import { Effect, Option, Schema } from "effect"
 import { LLMEvent } from "@opencode-ai/ai"
 import { Money } from "@opencode-ai/schema/money"
 import { EventV2 } from "@opencode-ai/core/event"
@@ -78,13 +78,15 @@ test("local tool success stores media in the payload blob and omits base64 from 
   await Effect.runPromise(publisher.publish(result))
 
   const successType = "session.tool.success.1"
-  const success = published.find((event) => event.type === successType)
-  expect(success).toBeDefined()
-  if (!success) throw new Error(`Expected ${successType}`)
+  const success = Option.getOrThrowWith(
+    Option.fromUndefinedOr(published.find((event) => event.type === successType)),
+    () => new Error(`Expected ${successType}`),
+  )
   const data = Schema.decodeUnknownSync(SessionEvent.Tool.Success.data)(success.data)
-  const payloadHash = data.payloadHash
-  expect(payloadHash).toBeDefined()
-  if (!payloadHash) throw new Error("Expected payloadHash on thin success")
+  const payloadHash = Option.getOrThrowWith(
+    Option.fromUndefinedOr(data.payloadHash),
+    () => new Error("Expected payloadHash on thin success"),
+  )
   expect(JSON.stringify(success).includes(base64)).toBe(false)
   expect(success.data).not.toHaveProperty("result")
   expect(data.content).toEqual([{ type: "text", text: "Image read successfully" }])
@@ -102,14 +104,16 @@ test("provider-executed success keeps raw provider result in the payload blob on
   await Effect.runPromise(publisher.publish(LLMEvent.toolCall({ ...call, providerExecuted: true })))
   await Effect.runPromise(publisher.publish(LLMEvent.toolResult({ ...result, providerExecuted: true })))
   const successType = "session.tool.success.1"
-  const success = published.find((event) => event.type === successType)
-  expect(success).toBeDefined()
-  if (!success) throw new Error(`Expected ${successType}`)
+  const success = Option.getOrThrowWith(
+    Option.fromUndefinedOr(published.find((event) => event.type === successType)),
+    () => new Error(`Expected ${successType}`),
+  )
   expect(success.data).not.toHaveProperty("result")
   const data = Schema.decodeUnknownSync(SessionEvent.Tool.Success.data)(success.data)
-  const payloadHash = data.payloadHash
-  expect(payloadHash).toBeDefined()
-  if (!payloadHash) throw new Error("Expected payloadHash on thin success")
+  const payloadHash = Option.getOrThrowWith(
+    Option.fromUndefinedOr(data.payloadHash),
+    () => new Error("Expected payloadHash on thin success"),
+  )
   expect(payloads.get(payloadHash)?.result).toBeDefined()
 })
 
@@ -267,12 +271,14 @@ test("content-filter finish retains failure evidence until step closeout", async
   )
 
   expect(published.map((event) => event.type)).toEqual(["session.step.started.1"])
-  const settlement = publisher.stepSettlement()
+  const settlement = Option.getOrThrowWith(
+    Option.fromUndefinedOr(publisher.stepSettlement()),
+    () => new Error("Expected content-filter settlement"),
+  )
   expect(settlement).toMatchObject({
     finish: "content-filter",
     tokens: { input: 8, output: 2, reasoning: 1 },
   })
-  if (!settlement) throw new Error("Expected content-filter settlement")
   await Effect.runPromise(
     publisher.publishStepFailure({
       cost: Money.USD.make(1.25),
