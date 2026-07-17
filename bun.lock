@@ -316,7 +316,7 @@
         "@effect/platform-node": "catalog:",
         "@effect/sql-sqlite-bun": "catalog:",
         "@ff-labs/fff-bun": "0.9.4",
-        "@jdxcode/aube-ffi": "1.29.0",
+        "@jdxcode/aube-ffi": "1.29.1",
         "@lydell/node-pty": "catalog:",
         "@npmcli/config": "10.8.1",
         "@opencode-ai/effect-drizzle-sqlite": "workspace:*",
@@ -1726,23 +1726,23 @@
 
     "@isaacs/fs-minipass": ["@isaacs/fs-minipass@4.0.1", "", { "dependencies": { "minipass": "^7.0.4" } }, "sha512-wgm9Ehl2jpeqP3zw/7mo3kRHFp5MEDhqAdwy1fTGkHAwnkGOVsgpvQhL8B5n1qlb01jV3n/bI0ZfZp5lWA1k4w=="],
 
-    "@jdxcode/aube-ffi": ["@jdxcode/aube-ffi@1.29.0", "", { "optionalDependencies": { "@jdxcode/aube-ffi-darwin-arm64": "1.29.0", "@jdxcode/aube-ffi-darwin-x64": "1.29.0", "@jdxcode/aube-ffi-linux-arm64": "1.29.0", "@jdxcode/aube-ffi-linux-arm64-musl": "1.29.0", "@jdxcode/aube-ffi-linux-x64": "1.29.0", "@jdxcode/aube-ffi-linux-x64-musl": "1.29.0", "@jdxcode/aube-ffi-win32-arm64": "1.29.0", "@jdxcode/aube-ffi-win32-x64": "1.29.0" } }, "sha512-ZluZqnZeTJ0+zO1r+XPnb8bIGox6Hcytp3xCzNYRUMwCgrX0TOi9fK+acj4Odq4NMfHDwuuAJRALizoo70D0NA=="],
+    "@jdxcode/aube-ffi": ["@jdxcode/aube-ffi@1.29.1", "", { "optionalDependencies": { "@jdxcode/aube-ffi-darwin-arm64": "1.29.1", "@jdxcode/aube-ffi-darwin-x64": "1.29.1", "@jdxcode/aube-ffi-linux-arm64": "1.29.1", "@jdxcode/aube-ffi-linux-arm64-musl": "1.29.1", "@jdxcode/aube-ffi-linux-x64": "1.29.1", "@jdxcode/aube-ffi-linux-x64-musl": "1.29.1", "@jdxcode/aube-ffi-win32-arm64": "1.29.1", "@jdxcode/aube-ffi-win32-x64": "1.29.1" } }, "sha512-viKsV8Xj+9SbySF6aXDT5s1KV+KYcgUI2g9aQtfaPInZhx5GsngjMDu/Vnd/xhM7VL3vbGIv7F9otdimT/Gj9g=="],
 
-    "@jdxcode/aube-ffi-darwin-arm64": ["@jdxcode/aube-ffi-darwin-arm64@1.29.0", "", { "os": "darwin", "cpu": "arm64" }, "sha512-JY/hu2npOZaRNEE8o4otwDoptACKgV3rmUX9qVTUPFyUiZxjvXI/ZOXB2A3EJsEpTCaI19z2po9fZ02CmOr/iQ=="],
+    "@jdxcode/aube-ffi-darwin-arm64": ["@jdxcode/aube-ffi-darwin-arm64@1.29.1", "", { "os": "darwin", "cpu": "arm64" }, "sha512-p4O4d6vZXDhhTPlw07cZWUpgD7jBAEzoZ4Z/CcDlNzIzkhAzgNfqiIZUJ231lbcDoqjyaL+R0EKCzj3BIVnVbQ=="],
 
-    "@jdxcode/aube-ffi-darwin-x64": ["@jdxcode/aube-ffi-darwin-x64@1.29.0", "", { "os": "darwin", "cpu": "x64" }, "sha512-iJ4jcm71x/kRthJEHUtsm3ZHW+sQIqz9z3NFAlYu3dbWaaKafn/OCHFBbwKqjXA74kRFK2AGBEh40U/iE8K6Cw=="],
+    "@jdxcode/aube-ffi-darwin-x64": ["@jdxcode/aube-ffi-darwin-x64@1.29.1", "", { "os": "darwin", "cpu": "x64" }, "sha512-ilSyu4LpnWvhvF4Tud8SbQ6Jlm0Ff5SZraYXQFgUDsv/eufHu7zS3rr6BUM9x6XLDTJA2K+DjP/tuwqHThEHNA=="],
 
-    "@jdxcode/aube-ffi-linux-arm64": ["@jdxcode/aube-ffi-linux-arm64@1.29.0", "", { "os": "linux", "cpu": "arm64" }, "sha512-6FGZAo7vliuwpIVFyIydPT66tJYytb2EJ4gFCiWCjMqo0DKM8IW0USl4HuYKKr6PGrhh5XVwKNW1xX6O2rKv8A=="],
+    "@jdxcode/aube-ffi-linux-arm64": ["@jdxcode/aube-ffi-linux-arm64@1.29.1", "", { "os": "linux", "cpu": "arm64" }, "sha512-9vP3a+cdBSIJoZWxyMfH8/9KsXcOR9SmjFustSu4OW381iwQFmOoK2sjvZWHQqmBw3cJLLnRvmDyfo/JaJgZ0A=="],
 
-    "@jdxcode/aube-ffi-linux-arm64-musl": ["@jdxcode/aube-ffi-linux-arm64-musl@1.29.0", "", { "os": "linux", "cpu": "arm64" }, "sha512-2N8aRC7zI/6WOsKpTJgjQWCNfg7lu7jCvy+GZ28O6nDxwHa/MiDcV3IoDYk/Fm7tedpT5/ceOxT4LC4r/SWl9A=="],
+    "@jdxcode/aube-ffi-linux-arm64-musl": ["@jdxcode/aube-ffi-linux-arm64-musl@1.29.1", "", { "os": "linux", "cpu": "arm64" }, "sha512-A1fpJUmFWnz7ReO88USvK3lMKzwSW+Ngkh/LvTwjZjRC/XtPB1FQdtHAoe4KXZygmjkBuqz3we86QnVB868MOA=="],
 
-    "@jdxcode/aube-ffi-linux-x64": ["@jdxcode/aube-ffi-linux-x64@1.29.0", "", { "os": "linux", "cpu": "x64" }, "sha512-z1gKRDYWxjR3s+lUkgcdLJlVtkbuXaBI5bgONDw85zpqderqIw37gJtC9Dt+M6+eRLkKbjutM9R0+zK6kepL7g=="],
+    "@jdxcode/aube-ffi-linux-x64": ["@jdxcode/aube-ffi-linux-x64@1.29.1", "", { "os": "linux", "cpu": "x64" }, "sha512-Z8mKFavqTsGQ6myqMdd3hAgwOW+4y3UNgGBOgSB0nSDtUkPRpT+t7PuVvOzVfOwD9M4xb6V6qdU/QLruaalB6w=="],
 
-    "@jdxcode/aube-ffi-linux-x64-musl": ["@jdxcode/aube-ffi-linux-x64-musl@1.29.0", "", { "os": "linux", "cpu": "x64" }, "sha512-j3yQY3sYwq6N7QQankWY3eWorYfFQaYiRzkxlmIdg4+lEOBh6jLQhMovX6YI/H76TkroDiWSPq3GrwaX9zVd3w=="],
+    "@jdxcode/aube-ffi-linux-x64-musl": ["@jdxcode/aube-ffi-linux-x64-musl@1.29.1", "", { "os": "linux", "cpu": "x64" }, "sha512-pFjXDY4KpHPFowJ++IHncp7J1OctOrQsfIvoHzQhM+T3xuxyLhRTWbdpl1GhKFwUE0qvxGjQc1lOq9ewpI3gwQ=="],
 
-    "@jdxcode/aube-ffi-win32-arm64": ["@jdxcode/aube-ffi-win32-arm64@1.29.0", "", { "os": "win32", "cpu": "arm64" }, "sha512-/BjBI/wKUjCX3VCLZ3SBr5MEquwcYkvkGFeVq1/xb6ugakbYasxDjMwkC0pfJV7yJYwlNPymsPR24B/lo+tE7Q=="],
+    "@jdxcode/aube-ffi-win32-arm64": ["@jdxcode/aube-ffi-win32-arm64@1.29.1", "", { "os": "win32", "cpu": "arm64" }, "sha512-XOeNvcH4WdyxWDHGQCg4UR+McyUv8lcAzE/tl+dI1CdBxUHJJ32eblWavf731DRvS2vjVWwz6FGctFPje6QCSw=="],
 
-    "@jdxcode/aube-ffi-win32-x64": ["@jdxcode/aube-ffi-win32-x64@1.29.0", "", { "os": "win32", "cpu": "x64" }, "sha512-V8X+5GonOBT8F+HRowzl9culh9evWtN8SfctMN3xsDq7tyKETxfRutj2291iY8O7hVWnaCY5mvSYYWz1zh3ktQ=="],
+    "@jdxcode/aube-ffi-win32-x64": ["@jdxcode/aube-ffi-win32-x64@1.29.1", "", { "os": "win32", "cpu": "x64" }, "sha512-fZNhyJ225Vp9xOGq/kBz8o5TFe749IuZPdULfwQ4m3BRPBFtaql5SJ7Xcdnc/B66Kd8ogRVZ5ZfGkwWpDzbYSA=="],
 
     "@joshwooding/vite-plugin-react-docgen-typescript": ["@joshwooding/vite-plugin-react-docgen-typescript@0.7.0", "", { "dependencies": { "glob": "^13.0.1", "react-docgen-typescript": "^2.2.2" }, "peerDependencies": { "typescript": ">= 4.3.x", "vite": "^3.0.0 || ^4.0.0 || ^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0" }, "optionalPeers": ["typescript"] }, "sha512-qvsTEwEFefhdirGOPnu9Wp6ChfIwy2dBCRuETU3uE+4cC+PFoxMSiiEhxk4lOluA34eARHA0OxqsEUYDqRMgeQ=="],
 
