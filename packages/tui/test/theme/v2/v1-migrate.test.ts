@@ -14,44 +14,38 @@ test("migrates resolved V1 modes into literal V2 tokens", () => {
   if (typeof migrated.light.hue?.accent !== "object" || typeof migrated.light.hue.interactive !== "object") {
     throw new Error("Expected concrete accent and interactive scales")
   }
-  expect(migrated.light.hue.accent[900]).toBe(hex(legacy.accent))
-  expect(migrated.light.hue.interactive[900]).toBe(hex(legacy.primary))
-  expect(migrated.light.text?.default).toBe("$hue.neutral.900")
-  expect(migrated.light.text?.subdued).toBe("$hue.neutral.700")
+  expect(migrated.light.hue.accent[800]).toBe(hex(legacy.accent))
+  expect(migrated.light.hue.interactive[800]).toBe(hex(legacy.primary))
+  expect(migrated.light.text?.default).toBe("$hue.neutral.800")
+  expect(migrated.light.text?.subdued).toBe("$hue.neutral.600")
   expect(migrated.light.background?.action?.primary?.default).toBe("transparent")
-  expect(migrated.light.background?.default).toBe("$hue.neutral.100")
-  expect(migrated.light.background?.surface?.offset).toBe("$hue.neutral.200")
-  expect(migrated.light.background?.surface?.overlay).toBe("$hue.neutral.300")
-  expect(migrated.dark.background?.default).toBe("$hue.neutral.900")
-  expect(migrated.dark.background?.surface?.offset).toBe("$hue.neutral.800")
-  expect(migrated.dark.background?.surface?.overlay).toBe("$hue.neutral.700")
+  expect(migrated.light.background?.default).toBe("$hue.neutral.200")
+  expect(migrated.light.background?.surface?.offset).toBe("$hue.neutral.300")
+  expect(migrated.light.background?.surface?.overlay).toBe("$hue.neutral.400")
+  expect(migrated.dark.background?.default).toBe("$hue.neutral.800")
+  expect(migrated.dark.background?.surface?.offset).toBe("$hue.neutral.700")
+  expect(migrated.dark.background?.surface?.overlay).toBe("$hue.neutral.600")
   expect(migrated.light.text?.action?.primary?.default).toBe("$text.default")
-  expect(migrated.light.background?.action?.primary?.$selected).toBe("$hue.interactive.900")
+  expect(migrated.light.background?.action?.primary?.$selected).toBe("$hue.interactive.800")
   expect(migrated.light.scrollbar?.default).toBe(hex(legacy.borderActive))
   expect(migrated.light.diff?.lineNumber?.background?.removed).toBe(hex(legacy.diffRemovedLineNumberBg))
   expect(migrated.light.markdown?.emphasis).toBe(hex(legacy.markdownEmph))
   expect(resolved.background.surface.offset.toInts()).toEqual(legacy.backgroundPanel.toInts())
-  expect(resolved.background.surface.overlay.toInts()).toEqual(legacy.backgroundMenu.toInts())
+  expect(resolved.background.surface.overlay.toInts()).toEqual(legacy.backgroundElement.toInts())
   expect(resolved.background.formfield.selected.toInts()).toEqual(legacy.background.toInts())
   expect(resolved.background.formfield.focused.toInts()).toEqual(legacy.background.toInts())
   expect(resolved.text.formfield.default.toInts()).toEqual(legacy.text.toInts())
   expect(resolved.text.formfield.selected.toInts()).toEqual(legacy.primary.toInts())
   expect(resolved.text.formfield.focused.toInts()).toEqual(legacy.primary.toInts())
-  expect(resolved.hue.accent[900].toInts()).toEqual(legacy.accent.toInts())
-  expect(resolved.hue.interactive[900].toInts()).toEqual(legacy.primary.toInts())
+  expect(resolved.hue.accent[800].toInts()).toEqual(legacy.accent.toInts())
+  expect(resolved.hue.interactive[800].toInts()).toEqual(legacy.primary.toInts())
   expect(resolved.background.action.primary.selected.toInts()).toEqual(legacy.primary.toInts())
   expect(resolved.text.action.primary.selected.toInts()).toEqual(legacy.primary.toInts())
   expect(resolved.background.feedback.error.default.toInts()).toEqual(legacy.background.toInts())
-  expect(resolved.contexts["@context:elevated"]?.background.default.toInts()).toEqual(
-    legacy.backgroundPanel.toInts(),
-  )
+  expect(resolved.contexts["@context:elevated"]?.background.default.toInts()).toEqual(legacy.backgroundPanel.toInts())
   expect(resolved.contexts["@context:elevated"]?.background.action.primary.default.toInts()).toEqual([0, 0, 0, 0])
-  expect(resolved.contexts["@context:elevated"]?.text.action.primary.default.toInts()).toEqual(
-    legacy.text.toInts(),
-  )
-  expect(resolved.contexts["@context:overlay"]?.background.default.toInts()).toEqual(
-    legacy.backgroundMenu.toInts(),
-  )
+  expect(resolved.contexts["@context:elevated"]?.text.action.primary.default.toInts()).toEqual(legacy.text.toInts())
+  expect(resolved.contexts["@context:overlay"]?.background.default.toInts()).toEqual(legacy.backgroundMenu.toInts())
   expect(resolved.contexts["@context:overlay"]?.background.action.primary.default.toInts()).toEqual([0, 0, 0, 0])
 })
 
@@ -71,8 +65,10 @@ test("infers chromatic hues, anchors light and dark colors, and aliases ambiguou
   const darkRed = migrated.dark.hue?.red
   if (typeof lightRed !== "object" || typeof darkRed !== "object") throw new Error("Expected generated red scales")
 
-  expect(lightRed[900]).toBe("#ff6666")
-  expect(darkRed[100]).toBe("#450000")
+  expect(lightRed[800]).toBe("#ff6666")
+  expect(darkRed[200]).toBe("#450000")
+  expect(lightRed[900]).not.toBe(lightRed[800])
+  expect(darkRed[100]).not.toBe(darkRed[200])
   expect(migrated.light.hue?.orange).toBe("$hue.gray")
   expect(migrated.light.hue?.yellow).toBe("$hue.gray")
   expect(migrated.light.hue?.green).toBe("$hue.gray")
@@ -85,8 +81,13 @@ test("infers chromatic hues, anchors light and dark colors, and aliases ambiguou
   expect(() => resolveThemeFile(migrated, "dark")).not.toThrow()
 })
 
-test("builds gray from V1 surfaces and text without using menus or borders", () => {
+test("builds and extrapolates gray from V1 surfaces and text without using menus or borders", () => {
   const source = structuredClone(DEFAULT_THEMES.opencode)
+  source.theme.background = { light: "#eeeeee", dark: "#111111" }
+  source.theme.backgroundPanel = { light: "#dddddd", dark: "#222222" }
+  source.theme.backgroundElement = { light: "#cccccc", dark: "#333333" }
+  source.theme.textMuted = { light: "#777777", dark: "#999999" }
+  source.theme.text = { light: "#333333", dark: "#dddddd" }
   source.theme.backgroundMenu = { light: "#ededed", dark: "#252525" }
   const light = resolveV1(source, "light")
   const dark = resolveV1(source, "dark")
@@ -95,16 +96,20 @@ test("builds gray from V1 surfaces and text without using menus or borders", () 
   const darkGray = migrated.dark.hue?.gray
   if (typeof lightGray !== "object" || typeof darkGray !== "object") throw new Error("Expected concrete gray scales")
 
-  expect(lightGray[100]).toBe(hex(light.background))
-  expect(lightGray[200]).toBe(hex(light.backgroundPanel))
-  expect(lightGray[300]).toBe(hex(light.backgroundElement))
-  expect(lightGray[700]).toBe(hex(light.textMuted))
-  expect(lightGray[900]).toBe(hex(light.text))
-  expect(darkGray[100]).toBe(hex(dark.text))
-  expect(darkGray[300]).toBe(hex(dark.textMuted))
-  expect(darkGray[700]).toBe(hex(dark.backgroundElement))
-  expect(darkGray[800]).toBe(hex(dark.backgroundPanel))
-  expect(darkGray[900]).toBe(hex(dark.background))
+  expect(lightGray[100]).not.toBe(lightGray[200])
+  expect(lightGray[200]).toBe(hex(light.background))
+  expect(lightGray[300]).toBe(hex(light.backgroundPanel))
+  expect(lightGray[400]).toBe(hex(light.backgroundElement))
+  expect(lightGray[600]).toBe(hex(light.textMuted))
+  expect(lightGray[800]).toBe(hex(light.text))
+  expect(lightGray[900]).not.toBe(lightGray[800])
+  expect(darkGray[100]).not.toBe(darkGray[200])
+  expect(darkGray[200]).toBe(hex(dark.text))
+  expect(darkGray[400]).toBe(hex(dark.textMuted))
+  expect(darkGray[600]).toBe(hex(dark.backgroundElement))
+  expect(darkGray[700]).toBe(hex(dark.backgroundPanel))
+  expect(darkGray[800]).toBe(hex(dark.background))
+  expect(darkGray[900]).not.toBe(darkGray[800])
 
   source.theme.borderSubtle = "#ff00ff"
   source.theme.border = "#00ff00"

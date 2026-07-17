@@ -26,12 +26,12 @@ function migrateMode(theme: Theme, mode: "light" | "dark"): ThemeFile["light"] {
   const selected = hex(selectedForeground(theme, theme.primary))
   const destructive = hex(selectedForeground(theme, theme.error))
   const hues = inferHues(theme, mode)
-  const text = mode === "light" ? "$hue.neutral.900" : "$hue.neutral.100"
-  const textMuted = mode === "light" ? "$hue.neutral.700" : "$hue.neutral.300"
-  const primary = mode === "light" ? "$hue.interactive.900" : "$hue.interactive.100"
-  const background = mode === "light" ? "$hue.neutral.100" : "$hue.neutral.900"
-  const backgroundPanel = mode === "light" ? "$hue.neutral.200" : "$hue.neutral.800"
-  const backgroundMenu = mode === "light" ? "$hue.neutral.300" : "$hue.neutral.700"
+  const text = mode === "light" ? "$hue.neutral.800" : "$hue.neutral.200"
+  const textMuted = mode === "light" ? "$hue.neutral.600" : "$hue.neutral.400"
+  const primary = mode === "light" ? "$hue.interactive.800" : "$hue.interactive.200"
+  const background = mode === "light" ? "$hue.neutral.200" : "$hue.neutral.800"
+  const backgroundPanel = mode === "light" ? "$hue.neutral.300" : "$hue.neutral.700"
+  const backgroundMenu = mode === "light" ? "$hue.neutral.400" : "$hue.neutral.600"
 
   return {
     hue: {
@@ -233,13 +233,13 @@ function selectedForeground(theme: Theme, background: RGBA) {
 
 function hueScale(color: RGBA, mode: "light" | "dark") {
   const value = toOklch(color)
-  const anchor = mode === "light" ? 900 : 100
+  const anchor = mode === "light" ? 800 : 200
   const endpoint = mode === "light" ? Math.max(0.97, value.l) : Math.min(0.18, value.l)
   const alpha = color.toInts()[3]
   return Object.fromEntries(
     HueStep.literals.map((step) => {
       if (step === anchor) return [step, hex(color)]
-      const progress = mode === "light" ? (900 - step) / 800 : (step - 100) / 800
+      const progress = mode === "light" ? (anchor - step) / (anchor - 100) : (step - anchor) / (900 - anchor)
       const generated = oklchToHex({
         l: value.l + (endpoint - value.l) * progress,
         c: value.c * (1 - progress * 0.5),
@@ -256,8 +256,14 @@ function neutralScale(theme: Theme, mode: "light" | "dark") {
     HueStep.literals.map((step) => {
       const exact = anchors.find((anchor) => anchor.step === step)
       if (exact) return [step, hex(exact.color)]
-      const lower = anchors.filter((anchor) => anchor.step < step).at(-1)!
-      const upper = anchors.find((anchor) => anchor.step > step)!
+      const first = anchors[0]!
+      const last = anchors.at(-1)!
+      const [lower, upper] =
+        step < first.step
+          ? [first, anchors[1]!]
+          : step > last.step
+            ? [anchors.at(-2)!, last]
+            : [anchors.filter((anchor) => anchor.step < step).at(-1)!, anchors.find((anchor) => anchor.step > step)!]
       return [step, interpolate(lower.color, upper.color, (step - lower.step) / (upper.step - lower.step))]
     }),
   ) as Record<HueStep, string>
@@ -265,11 +271,11 @@ function neutralScale(theme: Theme, mode: "light" | "dark") {
 
 function neutralAnchors(theme: Theme, mode: "light" | "dark") {
   const light: { step: HueStep; color: RGBA }[] = [
-    { step: 100, color: theme.background },
-    { step: 200, color: theme.backgroundPanel },
-    { step: 300, color: theme.backgroundElement || theme.backgroundMenu },
-    { step: 700, color: theme.textMuted },
-    { step: 900, color: theme.text },
+    { step: 200, color: theme.background },
+    { step: 300, color: theme.backgroundPanel },
+    { step: 400, color: theme.backgroundElement || theme.backgroundMenu },
+    { step: 600, color: theme.textMuted },
+    { step: 800, color: theme.text },
   ]
   if (mode === "light") return light
   return light.toReversed().map((source) => ({ ...source, step: (1000 - source.step) as HueStep }))
@@ -278,13 +284,18 @@ function neutralAnchors(theme: Theme, mode: "light" | "dark") {
 function interpolate(first: RGBA, second: RGBA, amount: number) {
   const start = toOklch(first)
   const end = toOklch(second)
-  const hue = ((((end.h - start.h) % 360) + 540) % 360) - 180
+  const startHue = Number.isFinite(start.h) ? start.h : Number.isFinite(end.h) ? end.h : 0
+  const endHue = Number.isFinite(end.h) ? end.h : startHue
+  const hue = ((((endHue - startHue) % 360) + 540) % 360) - 180
   const generated = oklchToHex({
     l: start.l + (end.l - start.l) * amount,
     c: start.c + (end.c - start.c) * amount,
-    h: start.h + hue * amount,
+    h: startHue + hue * amount,
   })
-  const alpha = Math.round(first.toInts()[3] + (second.toInts()[3] - first.toInts()[3]) * amount)
+  const alpha = Math.max(
+    0,
+    Math.min(255, Math.round(first.toInts()[3] + (second.toInts()[3] - first.toInts()[3]) * amount)),
+  )
   return alpha === 255 ? generated : `${generated}${byte(alpha)}`
 }
 
