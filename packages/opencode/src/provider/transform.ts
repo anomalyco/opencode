@@ -1150,7 +1150,7 @@ export function options(input: {
   }
 
   if (input.model.providerID === "meta" && input.model.api.npm === "@ai-sdk/openai") {
-    result["reasoningEffort"] = "xhigh"
+    result["reasoningEffort"] = "high"
     result["reasoningSummary"] = "auto"
     result["include"] = INCLUDE_ENCRYPTED_REASONING
   }
