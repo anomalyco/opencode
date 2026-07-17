@@ -1672,6 +1672,41 @@ describe("SessionNs.getUsage", () => {
     })
 
     expect(result.cost).toBe(0.04473525)
+    expect(result.providerCost).toBeUndefined()
+  })
+
+  test("uses authoritative OpenRouter cost and exposes its source", () => {
+    const result = SessionNs.getUsage({
+      model: createModel({
+        context: 100_000,
+        output: 32_000,
+        cost: { input: 99, output: 99, cache: { read: 99, write: 99 } },
+      }),
+      usage: usage({ inputTokens: 1_000, outputTokens: 500, totalTokens: 1_500 }),
+      metadata: { openrouter: { usage: { cost: 0.0042 } } },
+    })
+
+    expect(result.cost).toBe(0.0042)
+    expect(result.providerCost).toBe(0.0042)
+  })
+
+  test.each([undefined, -1, Number.POSITIVE_INFINITY, Number.NaN, "0.0042"])(
+    "keeps catalog fallback non-authoritative for invalid OpenRouter cost %p",
+    (cost) => {
+      const result = SessionNs.getUsage({
+        model: createModel({
+          context: 100_000,
+          output: 32_000,
+          cost: { input: 3, output: 15, cache: { read: 0.3, write: 0.3 } },
+        }),
+        usage: usage({ inputTokens: 1_000_000, outputTokens: 100_000, totalTokens: 1_100_000 }),
+        metadata: { openrouter: { usage: { cost } } },
+      })
+
+      expect(result.cost).toBe(4.5)
+      expect(result.providerCost).toBeUndefined()
+    },
+  )
   })
 
   test("uses matching context cost tier before over-200k fallback", () => {

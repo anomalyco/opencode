@@ -452,6 +452,7 @@ const layer = Layer.effect(
               type: "step-finish",
               tokens: usage.tokens,
               cost: usage.cost,
+              providerCost: usage.providerCost,
             })
             yield* session.updateMessage(ctx.assistantMessage)
             if (ctx.snapshot) {

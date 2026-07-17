@@ -1,0 +1,42 @@
+name: Klonay OpenCode release
+
+on:
+  push:
+    tags:
+      - "v*-klonay.*"
+
+permissions:
+  contents: write
+
+jobs:
+  linux-x64:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout immutable tag
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Set up Bun and dependencies
+        uses: ./.github/actions/setup-bun
+
+      - name: Test authoritative provider cost contract
+        run: bun test packages/opencode/test/session/compaction.test.ts packages/opencode/test/session/session.test.ts
+
+      - name: Build Linux x64 binary
+        run: bun run --cwd packages/opencode build --single --skip-embed-web-ui
+
+      - name: Package binary and checksum
+        run: |
+          tar -C packages/opencode/dist/opencode-linux-x64 -czf opencode-linux-x64.tar.gz bin/opencode
+          sha256sum opencode-linux-x64.tar.gz > opencode-linux-x64.tar.gz.sha256
+          ./packages/opencode/dist/opencode-linux-x64/bin/opencode --version
+
+      - name: Publish immutable release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            opencode-linux-x64.tar.gz \
+            opencode-linux-x64.tar.gz.sha256 \
+            --verify-tag \
+            --title "$GITHUB_REF_NAME" \
+            --notes "OpenCode v1.18.2 with authoritative OpenRouter provider cost propagation."

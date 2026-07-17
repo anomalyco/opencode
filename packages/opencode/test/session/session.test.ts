@@ -182,6 +182,7 @@ describe("step-finish token propagation via event", () => {
           type: "step-finish" as const,
           reason: "stop",
           cost: 0.005,
+          providerCost: 0.0042,
           tokens,
         }
 
@@ -197,6 +198,7 @@ describe("step-finish token propagation via event", () => {
         expect(finish.tokens.cache.read).toBe(100)
         expect(finish.tokens.cache.write).toBe(50)
         expect(finish.cost).toBe(0.005)
+        expect(finish.providerCost).toBe(0.0042)
         expect(receivedPart).not.toBe(partInput)
 
         yield* session.remove(info.id)

@@ -243,6 +243,7 @@ export const StepFinishPart = Schema.Struct({
   reason: Schema.String,
   snapshot: Schema.optional(Schema.String),
   cost: Schema.Finite,
+  providerCost: Schema.optional(Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0))),
   tokens: Schema.Struct({
     total: Schema.optional(Schema.Finite),
     input: Schema.Finite,
