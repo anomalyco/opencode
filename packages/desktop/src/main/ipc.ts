@@ -2,11 +2,12 @@ import { execFile } from "node:child_process"
 import { stat } from "node:fs/promises"
 import { basename } from "node:path"
 import { app, BrowserWindow, Notification, clipboard, dialog, ipcMain, shell } from "electron"
-import type { IpcMainEvent, IpcMainInvokeEvent, WebContents } from "electron"
+import type { IpcMainEvent, IpcMainInvokeEvent } from "electron"
 import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
 
 import type { FatalRendererError, ServerReadyData, TitlebarTheme } from "../preload/types"
 import { runDesktopMenuAction } from "./desktop-menu-actions"
+import { setForceFocus } from "./debug"
 import { assertAttachmentBudget, createPickedFileAuthorizations } from "./attachment-picker"
 import { getStore, removeStoreFileIfEmpty } from "./store"
 import { getPinchZoomEnabled, getWindowID, setPinchZoomEnabled, setTitlebar, updateTitlebar } from "./windows"
@@ -19,18 +20,6 @@ const pickerFilters = (ext?: string[]) => {
 }
 
 const pickedFiles = createPickedFileAuthorizations()
-const focusDebuggerOwners = new WeakSet<WebContents>()
-const forcedFocusNodes = new WeakMap<WebContents, number[]>()
-const focusableSelector = `
-  a[href],
-  button:not([disabled]),
-  input:not([disabled]),
-  select:not([disabled]),
-  textarea:not([disabled]),
-  summary,
-  [contenteditable="true"],
-  [tabindex]:not([tabindex="-1"])
-`
 
 type Deps = {
   killSidecar: () => Promise<void> | void
@@ -93,58 +82,9 @@ export function registerIpcHandlers(deps: Deps) {
   ipcMain.handle("updater-install", () => deps.updater.install())
   ipcMain.handle("set-background-color", (_event: IpcMainInvokeEvent, color: string) => deps.setBackgroundColor(color))
   ipcMain.handle("export-debug-logs", () => deps.exportDebugLogs())
-  ipcMain.handle("set-force-focus", async (event: IpcMainInvokeEvent, enabled: boolean) => {
-    const debuggerApi = event.sender.debugger
-    if (!debuggerApi.isAttached()) {
-      if (!enabled) {
-        focusDebuggerOwners.delete(event.sender)
-        forcedFocusNodes.delete(event.sender)
-        return
-      }
-      debuggerApi.attach("1.3")
-      focusDebuggerOwners.add(event.sender)
-      debuggerApi.once("detach", () => {
-        focusDebuggerOwners.delete(event.sender)
-        forcedFocusNodes.delete(event.sender)
-      })
-    }
-
-    if (!enabled) {
-      await Promise.allSettled(
-        (forcedFocusNodes.get(event.sender) ?? []).map((nodeId) =>
-          debuggerApi.sendCommand("CSS.forcePseudoState", {
-            nodeId,
-            forcedPseudoClasses: [],
-          }),
-        ),
-      )
-      forcedFocusNodes.delete(event.sender)
-      if (!focusDebuggerOwners.delete(event.sender)) return
-      debuggerApi.detach()
-      return
-    }
-
-    await debuggerApi.sendCommand("DOM.enable")
-    await debuggerApi.sendCommand("CSS.enable")
-    const document: unknown = await debuggerApi.sendCommand("DOM.getDocument", {
-      depth: -1,
-      pierce: true,
-    })
-    const nodes: unknown = await debuggerApi.sendCommand("DOM.querySelectorAll", {
-      nodeId: readDocumentNodeId(document),
-      selector: focusableSelector,
-    })
-    const nodeIds = readNodeIds(nodes)
-    forcedFocusNodes.set(event.sender, [...new Set([...(forcedFocusNodes.get(event.sender) ?? []), ...nodeIds])])
-    await Promise.allSettled(
-      nodeIds.map((nodeId) =>
-        debuggerApi.sendCommand("CSS.forcePseudoState", {
-          nodeId,
-          forcedPseudoClasses: ["focus", "focus-visible"],
-        }),
-      ),
-    )
-  })
+  ipcMain.handle("set-force-focus", (event: IpcMainInvokeEvent, enabled: boolean) =>
+    setForceFocus(event.sender, enabled),
+  )
   ipcMain.handle("record-fatal-renderer-error", (_event: IpcMainInvokeEvent, error: FatalRendererError) =>
     deps.recordFatalRendererError(error),
   )
@@ -323,34 +263,6 @@ export function registerIpcHandlers(deps: Deps) {
       relaunch: deps.relaunch,
     })
   })
-}
-
-function readDocumentNodeId(value: unknown) {
-  if (
-    !value ||
-    typeof value !== "object" ||
-    !("root" in value) ||
-    !value.root ||
-    typeof value.root !== "object" ||
-    !("nodeId" in value.root) ||
-    typeof value.root.nodeId !== "number"
-  ) {
-    throw new Error("Invalid DOM.getDocument response")
-  }
-  return value.root.nodeId
-}
-
-function readNodeIds(value: unknown) {
-  if (
-    !value ||
-    typeof value !== "object" ||
-    !("nodeIds" in value) ||
-    !Array.isArray(value.nodeIds) ||
-    !value.nodeIds.every((nodeId) => typeof nodeId === "number")
-  ) {
-    throw new Error("Invalid DOM.querySelectorAll response")
-  }
-  return value.nodeIds
 }
 
 export function sendMenuCommand(win: BrowserWindow, id: string) {
