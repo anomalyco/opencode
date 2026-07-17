@@ -188,8 +188,12 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
           ]
             .filter(Boolean)
             .join("\n")
-          yield* fs.ensureDir(path.join(state.gitdir, "info")).pipe(Effect.orDie)
-          yield* fs.writeFileString(target, text ? `${text}\n` : "").pipe(Effect.orDie)
+          yield* fs.ensureDir(path.join(state.gitdir, "info")).pipe(Effect.catch((err) =>
+            Effect.logWarning("failed to ensure snapshot info dir", err)
+          ))
+          yield* fs.writeFileString(target, text ? `${text}\n` : "").pipe(Effect.catch((err) =>
+            Effect.logWarning("failed to write snapshot excludes", err)
+          ))
         })
 
         // Reuse the hashes for the git storage between the original repo and snapshot
