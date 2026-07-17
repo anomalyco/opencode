@@ -93,6 +93,7 @@ export const dict = {
   "command.session.unshare.description": "Прекратить публикацию сессии",
 
   "palette.search.placeholder": "Поиск файлов, команд и сессий",
+  "palette.search.placeholder.home": "Поиск команд и сессий",
   "palette.empty": "Ничего не найдено",
   "palette.group.commands": "Команды",
   "palette.group.files": "Файлы",
