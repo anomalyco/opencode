@@ -9,8 +9,7 @@ import { SessionToolPayloadTable } from "./sql"
 import type { SessionSchema } from "./schema"
 
 export { Hash, Body }
-export type Hash = typeof Hash.Type
-export type Body = typeof Body.Type
+export type { Hash, Body }
 
 /** UTF-8 byte ceiling for encoded durable tool event `data` after thinning. */
 export const MaxEventDataBytes = 256 * 1024
