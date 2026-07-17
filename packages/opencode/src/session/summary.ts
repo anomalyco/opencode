@@ -103,16 +103,14 @@ const layer = Layer.effect(
       sessionID: SessionID
       messageID: MessageID
     }) {
-      yield* sessions.setSummary({
-        sessionID: input.sessionID,
-        summary: {
-          additions: 0,
-          deletions: 0,
-          files: 0,
-        },
-      })
-      yield* events.publish(Session.Event.Diff, { sessionID: input.sessionID, diff: [] })
-      if ((yield* config.get()).snapshot === false) return
+      if ((yield* config.get()).snapshot === false) {
+        yield* sessions.setSummary({
+          sessionID: input.sessionID,
+          summary: { additions: 0, deletions: 0, files: 0 },
+        })
+        yield* events.publish(Session.Event.Diff, { sessionID: input.sessionID, diff: [] })
+        return
+      }
       const all = yield* sessions.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)
       if (!all.length) return
 
@@ -124,6 +122,28 @@ const layer = Layer.effect(
       const msgDiffs = yield* computeDiff({ messages })
       target.info.summary = { ...target.info.summary, diffs: msgDiffs }
       yield* sessions.updateMessage(target.info)
+
+      // Rebuild the session projection from stored turn diffs without diffing the full snapshot history.
+      const diffs = Array.from(
+        new Map(
+          all
+            .filter(
+              (message): message is SessionV1.WithParts & { info: SessionV1.User } => message.info.role === "user",
+            )
+            .flatMap((message) => (message.info.summary ? message.info.summary.diffs : []))
+            .map((item, index) => [item.file ?? index, item] as const),
+        ).values(),
+      )
+      yield* sessions.setSummary({
+        sessionID: input.sessionID,
+        summary: {
+          additions: diffs.reduce((sum, item) => sum + item.additions, 0),
+          deletions: diffs.reduce((sum, item) => sum + item.deletions, 0),
+          files: diffs.length,
+          diffs,
+        },
+      })
+      yield* events.publish(Session.Event.Diff, { sessionID: input.sessionID, diff: diffs })
     })
 
     const diff = Effect.fn("SessionSummary.diff")(function* (input: { sessionID: SessionID; messageID?: MessageID }) {
