@@ -551,7 +551,6 @@ export default function Page() {
   const lastUserMessage = timeline.lastUserMessage
   const messages = timeline.messages
   const messagesReady = timeline.ready
-  const sessionSync = timeline.resource
   const userMessages = timeline.userMessages
   const visibleUserMessages = timeline.visibleUserMessages
 
@@ -2092,7 +2091,6 @@ export default function Page() {
 
   const sessionPanelContent = () => (
     <>
-      {sessionSync() ?? ""}
       <Show when={!isDesktop() && !!params.id && settings.general.newLayoutDesigns() && !mobileTabsBottom()}>
         {mobileTabs(true)}
       </Show>
