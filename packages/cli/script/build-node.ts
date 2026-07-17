@@ -170,8 +170,10 @@ async function resolveTargetNode(target: NodeTarget, host?: string) {
   await rm(temporary, { recursive: true, force: true })
   await mkdir(temporary)
   if (target.platform !== "win32") run("tar", ["-xzf", archive, "-C", temporary])
-  else if (process.platform === "win32") run("tar", ["-xf", archive, "-C", temporary])
-  else run("unzip", ["-q", archive, "-d", temporary])
+  if (target.platform === "win32" && process.platform === "win32") {
+    run(path.join(process.env.SystemRoot ?? "C:\\Windows", "System32", "tar.exe"), ["-xf", archive, "-C", temporary])
+  }
+  if (target.platform === "win32" && process.platform !== "win32") run("unzip", ["-q", archive, "-d", temporary])
   await rm(targetDirectory, { recursive: true, force: true })
   await rename(path.join(temporary, archiveName), targetDirectory)
   await writeFile(path.join(targetDirectory, ".verified"), `${expected}\n`)

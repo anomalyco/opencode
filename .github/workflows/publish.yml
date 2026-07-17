@@ -135,7 +135,7 @@ jobs:
           - target: darwin-arm64
             host: macos-26
           - target: windows-arm64
-            host: windows-2025
+            host: blacksmith-4vcpu-windows-2025
           - target: windows-x64
             host: blacksmith-4vcpu-windows-2025
     runs-on: ${{ matrix.settings.host }}
