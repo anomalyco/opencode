@@ -7,6 +7,26 @@ import { testEffect } from "./lib/effect"
 const it = testEffect(Layer.empty)
 
 describe("State", () => {
+  it.effect("makes rebuilt state visible before finalize runs", () =>
+    Effect.gen(function* () {
+      let seen: string[] | undefined
+      const state = State.create({
+        initial: () => ({ values: [] as string[] }),
+        draft: (draft) => ({ add: (item: string) => draft.values.push(item) }),
+        finalize: () =>
+          Effect.sync(() => {
+            seen = state.get().values
+          }),
+      })
+
+      yield* state.transform((editor) => {
+        editor.add("visible")
+      })
+
+      expect(seen).toEqual(["visible"])
+    }),
+  )
+
   it.effect("commits a transform atomically when its updater is interrupted", () =>
     Effect.gen(function* () {
       const rebuilding = yield* Deferred.make<void>()

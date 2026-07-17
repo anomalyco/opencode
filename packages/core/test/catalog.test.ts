@@ -31,18 +31,23 @@ const catalogLayer = AppNodeBuilder.build(
 const it = testEffect(catalogLayer)
 
 describe("CatalogV2", () => {
-  it.effect("publishes an updated event after catalog changes", () =>
+  it.effect("publishes an updated event after catalog changes are visible", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
       const events = yield* EventV2.Service
       const updated = yield* events
         .subscribe(Catalog.Event.Updated)
-        .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+        .pipe(
+          Stream.take(1),
+          Stream.runHead,
+          Effect.andThen(catalog.provider.get(ProviderV2.ID.make("test"))),
+          Effect.forkScoped,
+        )
       yield* Effect.yieldNow
 
       yield* catalog.transform((editor) => editor.provider.update(ProviderV2.ID.make("test"), () => {}))
 
-      expect((yield* Fiber.join(updated)).length).toBe(1)
+      expect(yield* Fiber.join(updated)).toMatchObject({ id: "test" })
     }),
   )
 

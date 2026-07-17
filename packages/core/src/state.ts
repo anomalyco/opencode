@@ -59,7 +59,7 @@ export interface Options<State, DraftApi> {
   readonly initial: () => State
   /** Wraps mutable state in a domain-specific draft API. */
   readonly draft: MakeDraft<State, DraftApi>
-  /** Runs after all active transforms and before the rebuilt state becomes visible. */
+  /** Runs after the rebuilt state is visible to get(). Often publishes update events. */
   readonly finalize?: (draft: DraftApi) => Effect.Effect<void>
 }
 
@@ -82,8 +82,8 @@ export function create<State, DraftApi>(options: Options<State, DraftApi>): Inte
 
   const commit = Effect.fn("State.commit")(function* (next: State) {
     const api = options.draft(next)
-    if (options.finalize) yield* options.finalize(api)
     state = next
+    if (options.finalize) yield* options.finalize(api)
   })
 
   const apply = (transform: TransformCallback<DraftApi>, draft: DraftApi) =>

@@ -23,18 +23,18 @@ const it = testEffect(
 )
 
 describe("AgentV2", () => {
-  it.effect("publishes an updated event after agent changes", () =>
+  it.effect("publishes an updated event after agent changes are visible", () =>
     Effect.gen(function* () {
       const agent = yield* AgentV2.Service
       const events = yield* EventV2.Service
       const updated = yield* events
         .subscribe(AgentV2.Event.Updated)
-        .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+        .pipe(Stream.take(1), Stream.runHead, Effect.andThen(agent.get(AgentV2.ID.make("reviewer"))), Effect.forkScoped)
       yield* Effect.yieldNow
 
       yield* agent.transform((editor) => editor.update(AgentV2.ID.make("reviewer"), () => {}))
 
-      expect(yield* Fiber.join(updated)).toMatchObject([{ location: { directory: testLocation.directory } }])
+      expect(yield* Fiber.join(updated)).toMatchObject({ id: "reviewer" })
     }),
   )
 

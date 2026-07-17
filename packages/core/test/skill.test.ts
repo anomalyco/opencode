@@ -54,6 +54,22 @@ function waitForSkillUpdate() {
 }
 
 describe("SkillV2", () => {
+  it.live("publishes an updated event after skill source changes are visible", () =>
+    Effect.gen(function* () {
+      const skill = yield* SkillV2.Service
+      const events = yield* EventV2.Service
+      const source = { type: "directory" as const, path: AbsolutePath.make("/tmp/opencode-skills") }
+      const updated = yield* events
+        .subscribe(SkillV2.Event.Updated)
+        .pipe(Stream.take(1), Stream.runHead, Effect.andThen(skill.sources()), Effect.forkScoped)
+      yield* Effect.yieldNow
+
+      yield* skill.transform((editor) => editor.source(source))
+
+      expect(yield* Fiber.join(updated)).toContainEqual(source)
+    }),
+  )
+
   it.live("publishes updates when skill sources change", () =>
     Effect.gen(function* () {
       const skill = yield* SkillV2.Service
