@@ -68,6 +68,7 @@ import { nextThinkingMode, reasoningSummary, type ThinkingMode } from "../../con
 import { getScrollAcceleration } from "../../util/scroll"
 import { collapseToolOutput } from "../../util/collapse-tool-output"
 import { usePluginRuntime } from "../../plugin/runtime"
+import { PluginSlot } from "../../plugin/context"
 import { Keymap, type KeymapCommand } from "../../context/keymap"
 import { usePathFormatter } from "../../context/path-format"
 import { useLocation } from "../../context/location"
@@ -888,6 +889,7 @@ export function Session() {
     >
       <box flexDirection="row" flexGrow={1} minHeight={0}>
         <box flexGrow={1} minHeight={0} paddingBottom={1} paddingLeft={2} paddingRight={2} gap={1}>
+          <PluginSlot name="session.header" input={{ sessionID: route.sessionID }} />
           <Show when={session()}>
             <scrollbox
               ref={(r) => (scroll = r)}
