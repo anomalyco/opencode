@@ -192,7 +192,7 @@ const layer = Layer.effect(
             })
             const reason = result.reason?.trim() || undefined
             const isCruiseControl = moduleID === PermissionModuleSchema.CRUISE_CONTROL
-            if (result.decision === "deny" || (isCruiseControl && result.decision === "ask")) {
+            if (result.decision === "deny") {
               const assessment = isCruiseControl ? cruiseControlReview(result.metadata) : undefined
               return yield* new PermissionV1.DeniedError({
                 ruleset: ruleset.filter((rule) => Wildcard.match(request.permission, rule.permission)),

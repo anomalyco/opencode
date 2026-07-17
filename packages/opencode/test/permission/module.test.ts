@@ -1080,14 +1080,11 @@ describe("classifier contract", () => {
   })
 
   test("never_auto blocks managed app directory candidate allow", () => {
-    const configGlob = path.join(Global.Path.config, "*")
     expect(
-      applySafety(
-        "allow",
-        "external_directory",
-        { allowlist: ["external_directory"], never_auto: ["external_directory"] },
-        [configGlob],
-      ),
+      applySafety("allow", "external_directory", {
+        allowlist: ["external_directory"],
+        never_auto: ["external_directory"],
+      }),
     ).toBe("deny")
   })
 

@@ -18,11 +18,7 @@ export {
   CACHED_ALLOW_REASON,
   CACHED_DENY_REASON,
   clearDynamicLists,
-  dynamicListSnapshot,
-  lookupDynamic,
-  rememberDynamic,
   resetDynamicListsForTests,
-  type DynamicListOptions,
 } from "./dynamic-list"
 
 export type Decision = CorePermissionModule.Decision
@@ -411,9 +407,7 @@ export function applySafety(
   decision: CruiseControlDecision,
   permission: string,
   opts: PermissionModuleSchema.Options | undefined,
-  patterns: readonly string[] = [],
 ): CruiseControlDecision {
-  void patterns
   const allowlist = opts?.allowlist ?? [...DEFAULT_ALLOWLIST]
   const neverAuto = new Set(opts?.never_auto ?? [])
 
@@ -540,11 +534,11 @@ export const runClassifier = Effect.fn("CruiseControl.runClassifier")(function* 
 
   const classifyOnce = classify.pipe(
     Effect.map((result) => {
-      const approved = explicitApprovalIntent(input.userPrompt, input.patterns, input.metadata)
+      // Explicit approval already returned above; this path always has explicitApproval: false.
       const derivedIntent = deriveInstructionIntent({
         modelIntent: result.intent,
         hasExplicitPrompt: input.hasExplicitPrompt === true,
-        explicitApproval: approved,
+        explicitApproval: false,
       })
       const intent = derivedIntent.intent
       const derived = decisionFromAssessment(result.risk, intent)

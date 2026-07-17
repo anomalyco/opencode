@@ -11,7 +11,3 @@ export type Instructions = PermissionModule.Instructions
 
 export const Info = PermissionModule.Info
 export type Info = PermissionModule.Info
-
-export const CRUISE_CONTROL = PermissionModule.CRUISE_CONTROL
-export const Fallback = PermissionModule.Fallback
-export type Fallback = PermissionModule.Fallback

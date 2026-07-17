@@ -94,7 +94,7 @@ This is the right intermediate state. Do not block facade removal on effectifyin
 If the old facade call existed only to kick off initialization, call the service through the existing runtime for that file.
 
 ```ts
-void BootstrapRuntime.runPromise(Vcs.Service.use((svc) => svc.init()))
+void AppRuntime.runPromise(Vcs.Service.use((svc) => svc.init()))
 ```
 
 Do not reintroduce a dedicated runtime in the service just for bootstrap.

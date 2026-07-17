@@ -132,15 +132,6 @@ export function clearDynamicLists(scopePrefix?: string) {
   }
 }
 
-/** Test / diagnostics helpers. */
-export function dynamicListSnapshot(scope = "") {
-  const store = getStore(scope)
-  return {
-    allow: [...(store?.allow.keys() ?? [])],
-    deny: [...(store?.deny.keys() ?? [])],
-  }
-}
-
 /** Replace store contents (tests only). */
 export function resetDynamicListsForTests(next?: { allow?: string[]; deny?: string[] }, scope = "") {
   stores.delete(scope)

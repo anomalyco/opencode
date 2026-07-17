@@ -4,45 +4,6 @@ import { Effect } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { clearDynamicLists, decideCruiseControl, ensureDefaultInstructions } from "./classifier"
 
-export {
-  actionKey,
-  applySafety,
-  buildClassifierMessages,
-  CACHED_ALLOW_REASON,
-  CACHED_DENY_REASON,
-  CLASSIFIER_PREAMBLE,
-  clearDynamicLists,
-  decideCruiseControl,
-  DEFAULT_ALLOWLIST,
-  DEFAULT_INSTRUCTIONS,
-  destructiveReason,
-  decisionFromAssessment,
-  ensureDefaultInstructions,
-  hasCompleteInstructions,
-  isManagedAppDirectoryPattern,
-  managedAppDirectoryAllow,
-  managedAppDirectoryGlobs,
-  managedAppDirectoryRoots,
-  mergeInstructionsDefaults,
-  MISSING_MODEL_MESSAGE,
-  parseClassifierResult,
-  renderSystemPrompt,
-  resolveInstructions,
-  resolveSystemPrompt,
-  runClassifier,
-  sessionTodoAllow,
-  shortenReason,
-  type ClassifierLevel,
-  type ClassifierObject,
-  type CruiseControlDecision,
-  type Decision,
-  type DecideInput,
-  type DecideResult,
-  type Instructions,
-} from "./classifier"
-
-export { AGENT_DESCRIPTION, AGENT_ID, AGENT_PROMPT, cruiseControlPermissionConfig } from "./agent"
-
 /**
  * Built-in Cruise Control plugin: registers permission module `cruise_control`
  * via the public `permission.registerModule` API.

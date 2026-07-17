@@ -24,7 +24,7 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { isRecord } from "@/util/record"
 import { RuntimeFlags } from "@/effect/runtime-flags"
-import { cruiseControlUserPrompt, currentUserPrompt } from "./cruise-control-prompt"
+import { cruiseControlUserPrompt } from "./cruise-control-prompt"
 
 export { cruiseControlUserPrompt, currentUserPrompt } from "./cruise-control-prompt"
 

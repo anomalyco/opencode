@@ -6,11 +6,6 @@ import { NonNegativeInt, optional } from "./schema"
 /** Built-in permission module id for the LLM permission classifier. */
 export const CRUISE_CONTROL = "cruise_control" as const
 
-export const ReservedAction = Schema.Literals(["allow", "deny", "ask"]).annotate({
-  identifier: "PermissionModule.ReservedAction",
-})
-export type ReservedAction = typeof ReservedAction.Type
-
 export const Fallback = Schema.Literals(["ask", "deny"]).annotate({
   identifier: "PermissionModule.Fallback",
 })
