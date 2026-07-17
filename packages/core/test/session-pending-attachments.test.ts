@@ -15,6 +15,7 @@ import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionSchema } from "@opencode-ai/core/session/schema"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionTable } from "@opencode-ai/core/session/sql"
+import { assertDefined, assertTag } from "./lib/assert"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(AppNodeBuilder.build(LayerNode.group([Database.node, EventV2.node, SessionProjector.node])))
@@ -77,16 +78,16 @@ describe("SessionPending attachment bounding", () => {
         .pipe(Effect.orDie)
       expect(rows).toHaveLength(1)
       const eventData = Schema.decodeUnknownSync(SessionEvent.InputAdmitted.data)(rows[0]!.data)
-      expect(eventData.payloadHash).toBeDefined()
-      expect(eventData.input.type).toBe("user")
-      if (eventData.input.type !== "user") throw new Error("Expected user input on admitted event")
+      assertDefined(eventData.payloadHash)
+      assertTag(eventData.input, "user")
       expect(eventData.input.data.files?.[0]?.data).toBe("")
       expect(JSON.stringify(eventData).includes(mega)).toBe(false)
 
       const pending = yield* SessionPending.list(db, sessionID)
       const row = pending.find((item) => item.id === inputID)
-      expect(row?.type).toBe("user")
-      if (row?.type === "user") expect(row.data.files?.[0]?.data).toBe(mega)
+      assertDefined(row)
+      assertTag(row, "user")
+      expect(row.data.files?.[0]?.data).toBe(mega)
     }),
   )
 
@@ -107,12 +108,10 @@ describe("SessionPending attachment bounding", () => {
           ],
         },
       })
-      expect(stripped.type).toBe("user")
-      if (stripped.type === "user") {
-        expect(stripped.data.text).toBe("hi")
-        expect(stripped.data.files?.[0]?.data).toBe("")
-        expect(stripped.data.files?.[0]?.name).toBe("a.txt")
-      }
+      assertTag(stripped, "user")
+      expect(stripped.data.text).toBe("hi")
+      expect(stripped.data.files?.[0]?.data).toBe("")
+      expect(stripped.data.files?.[0]?.name).toBe("a.txt")
     }),
   )
 
@@ -160,8 +159,7 @@ describe("SessionPending attachment bounding", () => {
       expect(rows).toHaveLength(1)
       const eventData = Schema.decodeUnknownSync(SessionEvent.InputAdmitted.data)(rows[0]!.data)
       expect(eventData.payloadHash).toBeUndefined()
-      expect(eventData.input.type).toBe("user")
-      if (eventData.input.type !== "user") throw new Error("Expected user input on admitted event")
+      assertTag(eventData.input, "user")
       expect(eventData.input.data.text).toBe("hello")
     }),
   )
