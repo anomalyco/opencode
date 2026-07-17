@@ -2820,6 +2820,68 @@ describe("ProviderTransform.variants", () => {
     expect(result).toEqual({})
   })
 
+  test("explicit efforts override npm heuristics", () => {
+    const model = createMockModel({
+      id: "mammouth-ai/claude-opus-4-8",
+      providerID: "mammouth-ai",
+      api: {
+        id: "claude-opus-4-8",
+        url: "https://api.mammouth.ai/v1",
+        npm: "@ai-sdk/openai-compatible",
+      },
+      efforts: ["low", "medium", "high", "xhigh", "max"],
+    })
+    expect(ProviderTransform.variants(model)).toEqual({
+      low: { reasoningEffort: "low" },
+      medium: { reasoningEffort: "medium" },
+      high: { reasoningEffort: "high" },
+      xhigh: { reasoningEffort: "xhigh" },
+      max: { reasoningEffort: "max" },
+    })
+  })
+
+  test("explicit efforts override the no-variant id blocklist", () => {
+    const model = createMockModel({
+      id: "mammouth-ai/kimi-k2.6",
+      providerID: "mammouth-ai",
+      api: {
+        id: "kimi-k2.6",
+        url: "https://api.mammouth.ai/v1",
+        npm: "@ai-sdk/openai-compatible",
+      },
+      efforts: ["low", "medium", "high"],
+    })
+    expect(ProviderTransform.variants(model)).toEqual({
+      low: { reasoningEffort: "low" },
+      medium: { reasoningEffort: "medium" },
+      high: { reasoningEffort: "high" },
+    })
+  })
+
+  test("explicit efforts still require reasoning capability", () => {
+    const model = createMockModel({
+      capabilities: { reasoning: false },
+      efforts: ["low", "medium", "high"],
+    })
+    expect(ProviderTransform.variants(model)).toEqual({})
+  })
+
+  test("empty efforts list falls through to npm heuristics", () => {
+    const model = createMockModel({
+      api: {
+        id: "test-model",
+        url: "https://api.test.com",
+        npm: "@ai-sdk/openai-compatible",
+      },
+      efforts: [],
+    })
+    expect(ProviderTransform.variants(model)).toEqual({
+      low: { reasoningEffort: "low" },
+      medium: { reasoningEffort: "medium" },
+      high: { reasoningEffort: "high" },
+    })
+  })
+
   test("deepseek returns empty object", () => {
     const model = createMockModel({
       id: "deepseek/deepseek-chat",

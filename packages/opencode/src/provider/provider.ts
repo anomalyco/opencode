@@ -1052,6 +1052,7 @@ export const Model = Schema.Struct({
   options: Schema.Record(Schema.String, Schema.Any),
   headers: Schema.Record(Schema.String, Schema.String),
   release_date: Schema.String,
+  efforts: optionalOmitUndefined(Schema.Array(Schema.String)),
   variants: optionalOmitUndefined(Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Any))),
 }).annotate({ identifier: "Model" })
 export type Model = Types.DeepMutable<Schema.Schema.Type<typeof Model>>
@@ -1251,6 +1252,7 @@ function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model
       interleaved: model.interleaved ?? false,
     },
     release_date: model.release_date ?? "",
+    efforts: model.efforts ? [...model.efforts] : undefined,
     variants: {},
   }
 
@@ -1497,6 +1499,7 @@ export const layer = Layer.effect(
               headers: mergeDeep(existingModel?.headers ?? {}, model.headers ?? {}),
               family: model.family ?? existingModel?.family ?? "",
               release_date: model.release_date ?? existingModel?.release_date ?? "",
+              efforts: existingModel?.efforts,
               variants: {},
             }
             const merged = mergeDeep(ProviderTransform.variants(parsedModel), model.variants ?? {})
