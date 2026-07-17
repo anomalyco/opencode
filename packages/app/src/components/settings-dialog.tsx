@@ -3,6 +3,7 @@ import { onCleanup } from "solid-js"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { DEFAULT_KEYBINDS } from "@/default-keybinds"
 
 export function useSettingsDialog(defaultValue?: string) {
   const dialog = useDialog()
@@ -34,7 +35,7 @@ export function useSettingsCommand() {
       id: "settings.open",
       title: language.t("command.settings.open"),
       category: language.t("command.category.settings"),
-      keybind: "mod+comma",
+      keybind: DEFAULT_KEYBINDS["settings.open"],
       onSelect: show,
     },
   ])

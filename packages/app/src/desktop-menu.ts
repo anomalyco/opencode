@@ -1,3 +1,5 @@
+import { desktopAccelerator } from "./default-keybinds"
+
 export type DesktopMenuPlatform = "macos" | "windows"
 
 export type DesktopMenuAction =
@@ -77,7 +79,12 @@ export const DESKTOP_MENU: DesktopMenu[] = [
     items: [
       { type: "item", role: "about" },
       { type: "item", label: "Check for Updates...", action: "app.checkForUpdates", enabled: "updater" },
-      { type: "item", label: "Settings", command: "settings.open", accelerator: { macos: "Cmd+," } },
+      {
+        type: "item",
+        label: "Settings",
+        command: "settings.open",
+        accelerator: { macos: desktopAccelerator("settings.open", "macos") },
+      },
       { type: "item", label: "Reload Webview", action: "view.reload" },
       { type: "item", label: "Restart", action: "app.relaunch" },
       { type: "item", label: "Export Logs...", command: "logs.export" },
@@ -97,14 +104,19 @@ export const DESKTOP_MENU: DesktopMenu[] = [
         type: "item",
         label: "New Session",
         command: "session.new",
-        accelerator: { macos: "Shift+Cmd+S" },
+        accelerator: { macos: desktopAccelerator("session.new", "macos") },
       },
-      { type: "item", label: "Open Project...", command: "project.open", accelerator: { macos: "Cmd+O" } },
+      {
+        type: "item",
+        label: "Open Project...",
+        command: "project.open",
+        accelerator: { macos: desktopAccelerator("project.open", "macos") },
+      },
       {
         type: "item",
         label: "Settings",
         command: "settings.open",
-        accelerator: { windows: "Ctrl+," },
+        accelerator: { windows: desktopAccelerator("settings.open", "windows") },
         platforms: ["windows"],
       },
       {
@@ -142,7 +154,12 @@ export const DESKTOP_MENU: DesktopMenu[] = [
     label: "View",
     items: [
       { type: "item", label: "Toggle Sidebar", command: "sidebar.toggle" },
-      { type: "item", label: "Toggle Terminal", command: "terminal.toggle", accelerator: { macos: "Cmd+J" } },
+      {
+        type: "item",
+        label: "Toggle Terminal",
+        command: "terminal.toggle",
+        accelerator: { macos: desktopAccelerator("terminal.toggle", "macos") },
+      },
       { type: "item", label: "Toggle File Tree", command: "fileTree.toggle" },
       { type: "separator" },
       { type: "item", label: "Reload", action: "view.reload", role: "reload" },
@@ -165,23 +182,43 @@ export const DESKTOP_MENU: DesktopMenu[] = [
     id: "go",
     label: "Go",
     items: [
-      { type: "item", label: "Back", command: "common.goBack", accelerator: { macos: "Cmd+[" } },
-      { type: "item", label: "Forward", command: "common.goForward", accelerator: { macos: "Cmd+]" } },
+      {
+        type: "item",
+        label: "Back",
+        command: "common.goBack",
+        accelerator: { macos: desktopAccelerator("common.goBack", "macos") },
+      },
+      {
+        type: "item",
+        label: "Forward",
+        command: "common.goForward",
+        accelerator: { macos: desktopAccelerator("common.goForward", "macos") },
+      },
       { type: "separator" },
-      { type: "item", label: "Previous Session", command: "session.previous", accelerator: { macos: "Option+Up" } },
-      { type: "item", label: "Next Session", command: "session.next", accelerator: { macos: "Option+Down" } },
+      {
+        type: "item",
+        label: "Previous Session",
+        command: "session.previous",
+        accelerator: { macos: desktopAccelerator("session.previous", "macos") },
+      },
+      {
+        type: "item",
+        label: "Next Session",
+        command: "session.next",
+        accelerator: { macos: desktopAccelerator("session.next", "macos") },
+      },
       { type: "separator" },
       {
         type: "item",
         label: "Previous Project",
         command: "project.previous",
-        accelerator: { macos: "Cmd+Option+Up" },
+        accelerator: { macos: desktopAccelerator("project.previous", "macos") },
       },
       {
         type: "item",
         label: "Next Project",
         command: "project.next",
-        accelerator: { macos: "Cmd+Option+Down" },
+        accelerator: { macos: desktopAccelerator("project.next", "macos") },
       },
     ],
   },

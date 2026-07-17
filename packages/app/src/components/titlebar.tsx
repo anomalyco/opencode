@@ -28,6 +28,7 @@ import { tabKey, useTabs } from "@/context/tabs"
 import type { PromptSession } from "@/context/prompt"
 import "./titlebar.css"
 import { newTabTooltipKeybind } from "./command-tooltip-keybind"
+import { DEFAULT_KEYBINDS } from "@/default-keybinds"
 
 type TauriDesktopWindow = {
   startDragging?: () => Promise<void>
@@ -163,14 +164,14 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
       id: "common.goBack",
       title: language.t("common.goBack"),
       category: language.t("command.category.view"),
-      keybind: "mod+[",
+      keybind: DEFAULT_KEYBINDS["common.goBack"],
       onSelect: back,
     },
     {
       id: "common.goForward",
       title: language.t("common.goForward"),
       category: language.t("command.category.view"),
-      keybind: "mod+]",
+      keybind: DEFAULT_KEYBINDS["common.goForward"],
       onSelect: forward,
     },
   ])

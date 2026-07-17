@@ -15,6 +15,7 @@ import { useTerminal } from "@/context/terminal"
 import { showToast } from "@/utils/toast"
 import { findLast } from "@opencode-ai/core/util/array"
 import { createSessionTabs } from "@/pages/session/helpers"
+import { DEFAULT_KEYBINDS } from "@/default-keybinds"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { UserMessage } from "@opencode-ai/sdk/v2"
 import { useSessionLayout } from "@/pages/session/session-layout"
@@ -417,7 +418,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     sessionCommand({
       id: "session.new",
       title: language.t("command.session.new"),
-      keybind: "mod+shift+s",
+      keybind: DEFAULT_KEYBINDS["session.new"],
       slash: "new",
       onSelect: (source) => {
         if (settings.general.newLayoutDesigns()) {
@@ -497,7 +498,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     viewCommand({
       id: "terminal.toggle",
       title: language.t("command.terminal.toggle"),
-      keybind: "mod+j,ctrl+`",
+      keybind: DEFAULT_KEYBINDS["terminal.toggle"],
       slash: "terminal",
       onSelect: () => {
         if (view().terminal.opened()) {

@@ -48,6 +48,7 @@ import { setNavigate } from "@/utils/notification-click"
 import { Worktree as WorktreeState } from "@/utils/worktree"
 import { setSessionHandoff } from "@/pages/session/handoff"
 import { SessionRouteKey, SessionStateKey } from "@/utils/server-scope"
+import { DEFAULT_KEYBINDS } from "@/default-keybinds"
 
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme/context"
@@ -907,21 +908,21 @@ export default function LegacyLayout(props: ParentProps) {
         id: "project.open",
         title: language.t("command.project.open"),
         category: language.t("command.category.project"),
-        keybind: "mod+o",
+        keybind: DEFAULT_KEYBINDS["project.open"],
         onSelect: () => chooseProject(),
       },
       {
         id: "project.previous",
         title: language.t("command.project.previous"),
         category: language.t("command.category.project"),
-        keybind: "mod+alt+arrowup",
+        keybind: DEFAULT_KEYBINDS["project.previous"],
         onSelect: () => navigateProjectByOffset(-1),
       },
       {
         id: "project.next",
         title: language.t("command.project.next"),
         category: language.t("command.category.project"),
-        keybind: "mod+alt+arrowdown",
+        keybind: DEFAULT_KEYBINDS["project.next"],
         onSelect: () => navigateProjectByOffset(1),
       },
       {
@@ -940,21 +941,21 @@ export default function LegacyLayout(props: ParentProps) {
         id: "settings.open",
         title: language.t("command.settings.open"),
         category: language.t("command.category.settings"),
-        keybind: "mod+comma",
+        keybind: DEFAULT_KEYBINDS["settings.open"],
         onSelect: () => openSettings(),
       },
       {
         id: "session.previous",
         title: language.t("command.session.previous"),
         category: language.t("command.category.session"),
-        keybind: "alt+arrowup",
+        keybind: DEFAULT_KEYBINDS["session.previous"],
         onSelect: () => navigateSessionByOffset(-1),
       },
       {
         id: "session.next",
         title: language.t("command.session.next"),
         category: language.t("command.category.session"),
-        keybind: "alt+arrowdown",
+        keybind: DEFAULT_KEYBINDS["session.next"],
         onSelect: () => navigateSessionByOffset(1),
       },
       {

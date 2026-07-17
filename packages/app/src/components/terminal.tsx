@@ -17,9 +17,10 @@ import type { LocalPTY } from "@/context/terminal"
 import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "@/utils/runtime-adapters"
 import { terminalWriter } from "@/utils/terminal-writer"
 import { terminalWebSocketURL } from "@/utils/terminal-websocket-url"
+import { DEFAULT_KEYBINDS } from "@/default-keybinds"
 
 const TOGGLE_TERMINAL_ID = "terminal.toggle"
-const DEFAULT_TOGGLE_TERMINAL_KEYBIND = "mod+j,ctrl+`"
+const DEFAULT_TOGGLE_TERMINAL_KEYBIND = DEFAULT_KEYBINDS["terminal.toggle"]
 export interface TerminalProps extends ComponentProps<"div"> {
   pty: LocalPTY
   autoFocus?: boolean
