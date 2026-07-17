@@ -86,6 +86,18 @@ export const Renamed = Event.durable({
 })
 export type Renamed = typeof Renamed.Type
 
+export const UsageRecorded = Event.durable({
+  type: "session.usage.recorded",
+  ...options,
+  schema: {
+    ...Base,
+    source: Schema.Literals(["title", "compaction"]),
+    cost: Money.USD,
+    tokens: TokenUsage.Info,
+  },
+})
+export type UsageRecorded = typeof UsageRecorded.Type
+
 export const UsageUpdated = Event.ephemeral({
   type: "session.usage.updated",
   schema: {
@@ -569,8 +581,10 @@ export const Definitions = Event.inventory(
   RevertEvent.Committed,
 )
 
+// UsageRecorded is durable but internal: excluded from Definitions so it never reaches the public manifest.
 export const DurableDefinitions = Event.inventory(
   ...Definitions.filter((definition) => definition.durability === "durable"),
+  UsageRecorded,
 )
 
 export const Durable = Schema.Union(DurableDefinitions, { mode: "oneOf" })
@@ -578,6 +592,8 @@ export const Durable = Schema.Union(DurableDefinitions, { mode: "oneOf" })
   .annotate({ identifier: "Session.Event.Durable" })
 export type DurableEvent = typeof Durable.Type
 
-export const All = Schema.Union(Definitions, { mode: "oneOf" }).pipe(Schema.toTaggedUnion("type"))
+export const All = Schema.Union(Event.inventory(...Definitions, UsageRecorded), { mode: "oneOf" }).pipe(
+  Schema.toTaggedUnion("type"),
+)
 export type Event = typeof All.Type
 export type Type = Event["type"]

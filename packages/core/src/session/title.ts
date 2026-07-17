@@ -1,7 +1,7 @@
 export * as SessionTitle from "./title"
 
 import { LLM, LLMClient, LLMError, LLMEvent, Message, type LLMRequest } from "@opencode-ai/ai"
-import { Context, DateTime, Effect, Layer, Stream } from "effect"
+import { Context, Effect, Layer, Stream } from "effect"
 import { AgentV2 } from "../agent"
 import { Database } from "../database/database"
 import { EventV2 } from "../event"
@@ -12,6 +12,7 @@ import { SessionHistory } from "./history"
 import { SessionModelHeaders } from "./model-headers"
 import { SessionRunnerModel } from "./runner/model"
 import { SessionSchema } from "./schema"
+import { SessionUsage } from "./usage"
 
 const MAX_LENGTH = 100
 
@@ -51,6 +52,16 @@ const make = (dependencies: Dependencies) => {
     if (!resolved) return
     const chunks: string[] = []
     let failed = false
+    let usage: SessionUsage.Recorded | undefined
+    const recordUsage = Effect.suspend(() =>
+      usage
+        ? dependencies.events.publish(SessionEvent.UsageRecorded, {
+            sessionID: session.id,
+            source: "title",
+            ...usage,
+          })
+        : Effect.void,
+    )
     const streamed = yield* dependencies.llm
       .stream(
         LLM.request({
@@ -65,11 +76,17 @@ const make = (dependencies: Dependencies) => {
         Stream.runForEach((event) => {
           if (LLMEvent.is.providerError(event)) failed = true
           if (LLMEvent.is.textDelta(event)) chunks.push(event.text)
+          if (LLMEvent.is.stepFinish(event)) {
+            const step = SessionUsage.record(event.usage, resolved.cost)
+            usage = usage ? SessionUsage.add(usage, step) : step
+          }
           return Effect.void
         }),
         Effect.as(true),
         Effect.catchTag("LLM.Error", () => Effect.succeed(false)),
+        Effect.onInterrupt(() => recordUsage.pipe(Effect.asVoid)),
       )
+    yield* recordUsage
     if (!streamed || failed) return
     const title = chunks
       .join("")

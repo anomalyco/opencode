@@ -2,11 +2,9 @@ export * as SessionRunnerLLM from "./llm"
 
 import { LLMClient, LLMError, LLMEvent, isContextOverflowFailure, type ProviderErrorEvent } from "@opencode-ai/ai"
 import { SessionError } from "@opencode-ai/schema/session-error"
-import { Money } from "@opencode-ai/schema/money"
 import { Cause, Effect, Exit, Fiber, FiberSet, Layer, Option, Semaphore, Stream } from "effect"
 import { Database } from "../../database/database"
 import { EventV2 } from "../../event"
-import { ModelV2 } from "../../model"
 import { PermissionV2 } from "../../permission"
 import { QuestionTool } from "../../tool/question"
 import { ToolOutputStore } from "../../tool-output-store"
@@ -28,30 +26,7 @@ import { llmClient } from "../../effect/app-node-platform"
 import { StepFailedError } from "../error"
 import { toSessionError } from "../to-session-error"
 import { SessionRunnerRetry } from "./retry"
-
-type StepTokens = {
-  readonly input: number
-  readonly output: number
-  readonly reasoning: number
-  readonly cache: { readonly read: number; readonly write: number }
-}
-
-// TODO(#35765): Use Copilot's reported billed amount once billing has a dedicated typed runtime contract.
-export function calculateCost(costs: ModelV2.Info["cost"], tokens: StepTokens) {
-  const context = tokens.input + tokens.cache.read + tokens.cache.write
-  const tier = costs
-    .filter((cost) => cost.tier?.type === "context" && context > cost.tier.size)
-    .toSorted((a, b) => (b.tier?.size ?? 0) - (a.tier?.size ?? 0))[0]
-  const cost = tier ?? costs.find((cost) => cost.tier === undefined)
-  if (!cost) return Money.USD.zero
-  return Money.USD.make(
-    (tokens.input * cost.input +
-      (tokens.output + tokens.reasoning) * cost.output +
-      tokens.cache.read * cost.cache.read +
-      tokens.cache.write * cost.cache.write) /
-      1_000_000,
-  )
-}
+import { SessionUsage } from "../usage"
 
 const layer = Layer.effect(
   Service,
@@ -127,7 +102,7 @@ const layer = Layer.effect(
       const agent = loaded.agent
       const resolved = loaded.model
       const model = resolved.model
-      const compactionInput = { session, messages: loaded.messages, model }
+      const compactionInput = { session, messages: loaded.messages, model, cost: resolved.cost }
       if (compaction.required(compactionInput) && !(yield* SessionPending.compaction(db, session.id))) {
         const compacted = yield* compaction.compact(compactionInput)
         if (compacted.status === "completed") return { _tag: "RestartAfterCompaction", step: currentStep } as const
@@ -216,7 +191,7 @@ const layer = Layer.effect(
       )
 
       const stepUsage = (settlement: NonNullable<ReturnType<typeof publisher.stepSettlement>>) => ({
-        cost: calculateCost(resolved.cost, settlement.tokens),
+        cost: SessionUsage.calculateCost(resolved.cost, settlement.tokens),
         tokens: settlement.tokens,
       })
 
@@ -258,7 +233,8 @@ const layer = Layer.effect(
             recoverOverflow &&
             !publisher.hasRetryEvidence() &&
             isContextOverflowFailure(overflowFailure ?? streamFailure) &&
-            (yield* restore(recoverOverflow({ session, messages: loaded.messages, model }))).status === "completed"
+            (yield* restore(recoverOverflow({ session, messages: loaded.messages, model, cost: resolved.cost })))
+              .status === "completed"
           )
             return { _tag: "RestartAfterOverflowCompaction", step: currentStep } as const
 

@@ -1,4 +1,4 @@
-import { ToolOutput, type LLMEvent, type ProviderMetadata, type ToolResultValue, type Usage } from "@opencode-ai/ai"
+import { ToolOutput, type LLMEvent, type ProviderMetadata, type ToolResultValue } from "@opencode-ai/ai"
 import { Effect } from "effect"
 import { EventV2 } from "../../event"
 import { ModelV2 } from "../../model"
@@ -9,6 +9,7 @@ import { SessionError } from "@opencode-ai/schema/session-error"
 import { Money } from "@opencode-ai/schema/money"
 import { AgentV2 } from "../../agent"
 import { Snapshot } from "../../snapshot"
+import { SessionUsage } from "../usage"
 
 type Input = {
   readonly sessionID: SessionSchema.ID
@@ -17,20 +18,6 @@ type Input = {
   readonly providerMetadataKey: string
   readonly snapshot?: Snapshot.ID
   readonly assistantMessageID?: SessionMessage.ID
-}
-
-const safe = (value: number | undefined) => Math.max(0, Number.isFinite(value) ? (value ?? 0) : 0)
-
-const tokens = (usage: Usage | undefined) => {
-  const reasoning = safe(usage?.reasoningTokens)
-  const read = safe(usage?.cacheReadInputTokens)
-  const write = safe(usage?.cacheWriteInputTokens)
-  return {
-    input: safe(usage?.nonCachedInputTokens),
-    output: safe(usage?.visibleOutputTokens),
-    reasoning,
-    cache: { read, write },
-  }
 }
 
 const record = (value: unknown): Record<string, unknown> =>
@@ -77,7 +64,7 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
   let stepSettlement:
     | {
         readonly finish: Extract<LLMEvent, { type: "step-finish" }>["reason"]
-        readonly tokens: ReturnType<typeof tokens>
+        readonly tokens: ReturnType<typeof SessionUsage.tokens>
       }
     | undefined
 
@@ -251,7 +238,7 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
 
   const publishStepFailure = Effect.fnUntraced(function* (usage?: {
     readonly cost: Money.USD
-    readonly tokens: ReturnType<typeof tokens>
+    readonly tokens: ReturnType<typeof SessionUsage.tokens>
   }) {
     if (stepFailed || stepFailure === undefined) return
     const assistantMessageID = yield* startAssistant()
@@ -429,7 +416,7 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
       case "step-finish":
         yield* flush()
         if (stepSettlement) return yield* Effect.die(new Error("Duplicate step finish"))
-        stepSettlement = { finish: event.reason, tokens: tokens(event.usage) }
+        stepSettlement = { finish: event.reason, tokens: SessionUsage.tokens(event.usage) }
         if (event.reason === "content-filter") {
           providerFailed = true
           yield* failAssistant({ type: "provider.content-filter", message: "Provider blocked the response" }, true)

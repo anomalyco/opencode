@@ -20,7 +20,8 @@ import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { AbsolutePath } from "@opencode-ai/core/schema"
-import { DateTime, Effect, Layer, Stream } from "effect"
+import { Money } from "@opencode-ai/schema/money"
+import { Effect, Layer, Stream } from "effect"
 import { testEffect } from "./lib/effect"
 
 let requests: LLMRequest[] = []
@@ -29,16 +30,43 @@ const model = Model.make({
   provider: "test",
   route: OpenAIChat.route.with({ limits: { context: 10_000, output: 1_000 } }),
 })
+const cost = [
+  {
+    input: Money.USDPerMillionTokens.make(1),
+    output: Money.USDPerMillionTokens.make(2),
+    cache: {
+      read: Money.USDPerMillionTokens.make(0.1),
+      write: Money.USDPerMillionTokens.make(0.5),
+    },
+  },
+]
 const client = Layer.mock(LLMClient.Service)({
   prepare: () => Effect.die("unused"),
   stream: (request: LLMRequest) => {
     requests.push(request)
-    return Stream.make(LLMEvent.textDelta({ id: "title", text: "Generated Title\n" }))
+    return Stream.make(
+      LLMEvent.textDelta({ id: "title", text: "Generated Title\n" }),
+      LLMEvent.stepFinish({
+        index: 0,
+        reason: "stop",
+        usage: {
+          inputTokens: 15,
+          outputTokens: 6,
+          nonCachedInputTokens: 10,
+          cacheReadInputTokens: 3,
+          cacheWriteInputTokens: 2,
+          reasoningTokens: 2,
+        },
+      }),
+      LLMEvent.finish({
+        reason: "stop",
+      }),
+    )
   },
   generate: () => Effect.die("unused"),
 })
 const models = Layer.mock(SessionRunnerModel.Service)({
-  resolve: () => Effect.succeed(SessionRunnerModel.resolved(model)),
+  resolve: () => Effect.succeed(SessionRunnerModel.resolved(model, undefined, cost)),
 })
 const it = testEffect(
   AppNodeBuilder.build(
@@ -130,6 +158,8 @@ it.effect("generates a title from the sole user message and renames the session"
     expect(JSON.stringify(requests[0]?.messages)).toContain("Help me debug the failing build")
     const renamed = yield* store.get(sessionID)
     expect(renamed?.title).toBe("Generated Title")
+    expect(renamed?.tokens).toEqual({ input: 10, output: 4, reasoning: 2, cache: { read: 3, write: 2 } })
+    expect(renamed?.cost).toBeCloseTo(0.0000233)
   }),
 )
 

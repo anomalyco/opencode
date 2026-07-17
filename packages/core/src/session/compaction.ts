@@ -14,6 +14,8 @@ import { SessionRunnerModel } from "./runner/model"
 import { SessionSchema } from "./schema"
 import { toSessionError } from "./to-session-error"
 import { Token } from "../util/token"
+import type { ModelV2 } from "../model"
+import { SessionUsage } from "./usage"
 
 const DEFAULT_BUFFER = 20_000
 const DEFAULT_KEEP_TOKENS = 8_000
@@ -70,6 +72,7 @@ export type AutoInput = {
   readonly session: SessionSchema.Info
   readonly messages: readonly SessionMessage.Info[]
   readonly model: Model
+  readonly cost: ModelV2.Info["cost"]
 }
 
 export type ManualInput = {
@@ -81,6 +84,7 @@ export type ManualInput = {
 type Plan = {
   readonly session: SessionSchema.Info
   readonly model: Model
+  readonly cost: ModelV2.Info["cost"]
   readonly reason: SessionMessage.Compaction["reason"]
   readonly prompt: string
   readonly recent: string
@@ -240,6 +244,16 @@ const make = (dependencies: Dependencies) => {
 
     const chunks: string[] = []
     let failure: SessionError.Error | undefined
+    let usage: SessionUsage.Recorded | undefined
+    const recordUsage = Effect.suspend(() =>
+      usage
+        ? dependencies.events.publish(SessionEvent.UsageRecorded, {
+            sessionID: plan.session.id,
+            source: "compaction",
+            ...usage,
+          })
+        : Effect.void,
+    )
     yield* dependencies.llm
       .stream(
         LLM.request({
@@ -263,6 +277,10 @@ const make = (dependencies: Dependencies) => {
               text: event.text,
             })
           }
+          if (LLMEvent.is.stepFinish(event)) {
+            const step = SessionUsage.record(event.usage, plan.cost)
+            usage = usage ? SessionUsage.add(usage, step) : step
+          }
           return Effect.void
         }),
         Effect.catchTag("LLM.Error", (error) =>
@@ -271,16 +289,21 @@ const make = (dependencies: Dependencies) => {
           }),
         ),
         Effect.onInterrupt(() =>
-          plan.reason === "auto"
-            ? failed({
-                sessionID: plan.session.id,
-                reason: plan.reason,
-                error: { type: "compaction.interrupted", message: "Compaction was interrupted" },
-                inputID: plan.inputID,
-              }).pipe(Effect.asVoid)
-            : Effect.void,
+          recordUsage.pipe(
+            Effect.andThen(
+              plan.reason === "auto"
+                ? failed({
+                    sessionID: plan.session.id,
+                    reason: plan.reason,
+                    error: { type: "compaction.interrupted", message: "Compaction was interrupted" },
+                    inputID: plan.inputID,
+                  }).pipe(Effect.asVoid)
+                : Effect.void,
+            ),
+          ),
         ),
       )
+    yield* recordUsage
     const summary = chunks.join("")
     if (failure || !summary.trim()) {
       const error = failure ?? { type: "compaction.failed" as const, message: "Compaction produced no summary" }
@@ -305,6 +328,7 @@ const make = (dependencies: Dependencies) => {
       return yield* execute({
         session: input.session,
         model: input.model,
+        cost: input.cost,
         reason: "auto",
         ...content,
       })
@@ -353,6 +377,7 @@ const make = (dependencies: Dependencies) => {
     return yield* execute({
       session: input.session,
       model: resolved.model,
+      cost: resolved.cost,
       reason: "manual",
       inputID: input.inputID,
       ...content,

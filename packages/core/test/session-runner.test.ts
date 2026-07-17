@@ -42,6 +42,7 @@ import { SessionRunCoordinator } from "@opencode-ai/core/session/run-coordinator
 import { SessionRunner } from "@opencode-ai/core/session/runner"
 import * as SessionRunnerLLM from "@opencode-ai/core/session/runner/llm"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
+import { SessionUsage } from "@opencode-ai/core/session/usage"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
@@ -165,7 +166,7 @@ const recoveryModel = Model.make({
 
 test("calculates step cost using the matching context tier", () => {
   expect(
-    SessionRunnerLLM.calculateCost(
+    SessionUsage.calculateCost(
       [
         {
           input: Money.USDPerMillionTokens.make(1),
@@ -192,7 +193,7 @@ test("calculates step cost using the matching context tier", () => {
 
 test("does not apply an ineligible tier without base pricing", () => {
   expect(
-    SessionRunnerLLM.calculateCost(
+    SessionUsage.calculateCost(
       [
         {
           tier: { type: "context", size: 100 },
