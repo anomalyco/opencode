@@ -145,7 +145,7 @@ function requestOptions(form: FormWithLocation) {
 
 export function FormPrompt(props: { form: FormWithLocation }) {
   const client = useClient()
-  const { themeV2 } = useTheme().contextual("elevated")
+  const { themeV2, mode: themeMode } = useTheme().contextual("elevated")
   const renderer = useRenderer()
   const dimensions = useTerminalDimensions()
   const keymap = Keymap.use()
@@ -754,7 +754,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
     <box
       backgroundColor={themeV2.background()}
       border={["left"]}
-      borderColor={themeV2.hue.accent(500)}
+      borderColor={themeV2.hue.interactive(themeMode() === "light" ? 800 : 200)}
       customBorderChars={SplitBorder.customBorderChars}
     >
       <box gap={1} paddingLeft={1} paddingRight={3} paddingTop={1} paddingBottom={1}>
@@ -857,11 +857,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                 {external().url}
               </text>
               <text
-                fg={
-                  store.answers[external().key] === true
-                    ? themeV2.text.feedback.success()
-                    : themeV2.text.subdued()
-                }
+                fg={store.answers[external().key] === true ? themeV2.text.feedback.success() : themeV2.text.subdued()}
               >
                 {store.answers[external().key] === true
                   ? "✓ Acknowledged"
@@ -925,25 +921,15 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                       >
                         <box flexDirection="row">
                           <box
-                            backgroundColor={
-                              active() ? themeV2.background.formfield("focused") : themeV2.background()
-                            }
+                            backgroundColor={active() ? themeV2.background.formfield("focused") : themeV2.background()}
                             paddingRight={1}
                           >
-                            <text fg={themeV2.text.formfield(active() ? "focused" : "default")}>
-                              {`${i() + 1}.`}
-                            </text>
+                            <text fg={themeV2.text.formfield(active() ? "focused" : "default")}>{`${i() + 1}.`}</text>
                           </box>
                           <box
-                            backgroundColor={
-                              active() ? themeV2.background.formfield("focused") : themeV2.background()
-                            }
+                            backgroundColor={active() ? themeV2.background.formfield("focused") : themeV2.background()}
                           >
-                            <text
-                              fg={themeV2.text.formfield(
-                                active() ? "focused" : picked() ? "selected" : "default",
-                              )}
-                            >
+                            <text fg={themeV2.text.formfield(active() ? "focused" : picked() ? "selected" : "default")}>
                               {multi() ? `[${picked() ? "✓" : " "}] ${row.label}` : row.label}
                             </text>
                           </box>
@@ -978,9 +964,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                           {`${rows().length + 1}.`}
                         </text>
                       </box>
-                      <box
-                        backgroundColor={other() ? themeV2.background.formfield("focused") : themeV2.background()}
-                      >
+                      <box backgroundColor={other() ? themeV2.background.formfield("focused") : themeV2.background()}>
                         <text
                           fg={
                             other()
@@ -1052,9 +1036,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                         <span style={{ fg: themeV2.text.subdued() }}>{truncate(fieldLabel(item), 40)}:</span>{" "}
                         <span
                           style={{
-                            fg: acknowledged()
-                              ? themeV2.text.feedback.success()
-                              : themeV2.text.feedback.error(),
+                            fg: acknowledged() ? themeV2.text.feedback.success() : themeV2.text.feedback.error(),
                           }}
                         >
                           {acknowledged() ? "Acknowledged" : "(acknowledgement required)"}
