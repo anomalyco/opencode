@@ -11,7 +11,7 @@ const Internal = EventV2.ephemeral({ type: "test.internal", schema: { value: Sch
 
 const event = (
   id: string,
-  location?: { directory: string; workspaceID?: string },
+  location?: { directory: string },
 ): EventV2.Payload<typeof AgentV2.Event.Updated> => ({
   id: EventV2.ID.make(`evt_${id}`),
   created: DateTime.makeUnsafe(Date.now()),
@@ -21,7 +21,6 @@ const event = (
     ? {
         location: {
           directory: AbsolutePath.make(location.directory),
-          ...(location.workspaceID !== undefined ? { workspaceID: location.workspaceID as never } : {}),
         },
       }
     : {}),
