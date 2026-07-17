@@ -193,6 +193,10 @@ for (const item of targets) {
         name,
         version: Script.version,
         preferUnplugged: true,
+        repository: {
+          type: "git",
+          url: "https://github.com/puetsua/kancode",
+        },
         os: [item.os],
         cpu: [item.arch],
         ...(item.abi ? { libc: [item.abi] } : {}),

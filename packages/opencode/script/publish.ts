@@ -72,6 +72,10 @@ await Bun.file(`${wrapperDir}/package.json`).write(
       },
       version: version,
       license: pkg.license,
+      repository: {
+        type: "git",
+        url: "https://github.com/puetsua/kancode",
+      },
       os: ["darwin", "linux", "win32"],
       cpu: ["arm64", "x64"],
       optionalDependencies: binaries,
