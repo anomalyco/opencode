@@ -17,6 +17,19 @@ type Spin = {
   stop: (msg: string, code?: number) => void
 }
 
+type Output = {
+  readonly isTTY?: boolean
+  write: (chunk: string) => unknown
+}
+
+export function plugSpinner(output: Output = process.stdout): Spin {
+  if (output.isTTY) return spinner()
+  return {
+    start: (msg) => output.write(msg + "\n"),
+    stop: (msg) => output.write(msg + "\n"),
+  }
+}
+
 export type PlugDeps = {
   spinner: () => Spin
   log: {
@@ -45,7 +58,7 @@ export type PlugCtx = {
 }
 
 const defaultPlugDeps: PlugDeps = {
-  spinner: () => spinner(),
+  spinner: () => plugSpinner(),
   log: {
     error: (msg) => log.error(msg),
     info: (msg) => log.info(msg),
