@@ -381,7 +381,7 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
             error: result.error,
             result: event.result,
             executed,
-            resultState,
+            ...(resultState !== undefined ? { resultState } : {}),
           })
           return
         }
@@ -399,8 +399,8 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
           structured: thin.structured,
           content: thin.content,
           executed,
-          resultState,
           payloadHash,
+          ...(resultState !== undefined ? { resultState } : {}),
         }
         yield* ToolPayload.assertEventDataBudget(data).pipe(
           Effect.andThen(events.publish(SessionEvent.Tool.Success, data)),
@@ -411,7 +411,7 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
               callID: event.id,
               error: { type: "unknown", message: error.message },
               executed,
-              resultState,
+              ...(resultState !== undefined ? { resultState } : {}),
             }),
           ),
         )
@@ -424,6 +424,7 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
           return yield* Effect.die(new Error(`Tool error name changed for ${event.id}: ${tool.name} -> ${event.name}`))
         if (tool.settled) return yield* Effect.die(new Error(`Duplicate tool error: ${event.id}`))
         tool.settled = true
+        const resultState = providerState(event.providerMetadata)
         yield* events.publish(SessionEvent.Tool.Failed, {
           sessionID: input.sessionID,
           assistantMessageID: tool.assistantMessageID,
@@ -433,7 +434,7 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
               ? { type: "tool.unknown", message: event.message }
               : { type: "tool.execution", message: event.message },
           executed: tool.providerExecuted,
-          resultState: providerState(event.providerMetadata),
+          ...(resultState !== undefined ? { resultState } : {}),
         })
         return
       }
