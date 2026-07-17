@@ -161,7 +161,6 @@ export const Info = Schema.Struct({
   url: Schema.String,
   pid: Schema.Int.check(Schema.isGreaterThan(0)),
   password: Schema.optional(Schema.String),
-  startedAt: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))),
 })
 
 const decode = Schema.decodeUnknownEffect(Schema.fromJsonString(Info))

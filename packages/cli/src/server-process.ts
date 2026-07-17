@@ -1,7 +1,7 @@
 export * as ServerProcess from "./server-process"
 
 import { NodeServices } from "@effect/platform-node"
-import { Service, type DiscoverOptions } from "@opencode-ai/client/effect/service"
+import { Service, type DiscoverOptions, type Info } from "@opencode-ai/client/effect/service"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Global } from "@opencode-ai/core/global"
@@ -69,7 +69,9 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
         service:
           serviceOptions === undefined
             ? undefined
-            : { onListen: (address) => register(address, password, instanceID, serviceOptions.file) },
+            : {
+                onListen: (address, shutdown) => register(address, password, instanceID, serviceOptions.file, shutdown),
+              },
       }).pipe(
         Effect.provide(Logger.layer([], { mergeWithExisting: false })),
         Effect.catch((error) => {
@@ -108,53 +110,45 @@ const infoJson = Schema.fromJsonString(Service.Info)
 const encodeInfo = Schema.encodeEffect(infoJson)
 const decodeInfo = Schema.decodeUnknownEffect(infoJson)
 
-const register = Effect.fnUntraced(function* (address: HttpServer.Address, password: string, id: string, file: string) {
+const register = Effect.fnUntraced(function* (
+  address: HttpServer.Address,
+  password: string,
+  id: string,
+  file: string,
+  shutdown: Effect.Effect<void>,
+) {
   const fs = yield* FileSystem.FileSystem
   const temp = file + "." + id + ".tmp"
   yield* fs.makeDirectory(path.dirname(file), { recursive: true })
-  const previous = yield* fs.readFileString(file).pipe(
-    Effect.flatMap(decodeInfo),
-    Effect.orElseSucceed(() => undefined),
-  )
   const info = {
     id,
     version: InstallationVersion,
     url: HttpServer.formatAddress(address),
     pid: process.pid,
     password,
-    startedAt: Math.max(Date.now(), (previous?.startedAt ?? 0) + 1),
   }
   const encoded = yield* encodeInfo(info)
-  const publish = fs.writeFileString(temp, encoded, { mode: 0o600 }).pipe(Effect.andThen(fs.rename(temp, file)))
-  yield* publish
   const current = fs.readFileString(file).pipe(
     Effect.flatMap(decodeInfo),
     Effect.orElseSucceed(() => undefined),
   )
-  const assertRegistration = Effect.gen(function* () {
-    const found = yield* current
-    if (
-      found !== undefined &&
-      found.id === info.id &&
-      found.version === info.version &&
-      found.url === info.url &&
-      found.pid === info.pid &&
-      found.password === info.password
-    )
-      return
-    if (found?.startedAt !== undefined && found.startedAt >= info.startedAt) return
-    yield* publish
-  })
-  yield* Effect.addFinalizer(() =>
-    current.pipe(
-      Effect.flatMap((current) => (current?.id === id ? fs.remove(file) : Effect.void)),
-      Effect.ignore,
-    ),
-  )
-  yield* assertRegistration.pipe(
-    Effect.catchCause((cause) => Effect.logWarning("failed to reassert service registration", { cause })),
+  const owns = (found: Info | undefined) =>
+    found?.id === info.id &&
+    found.version === info.version &&
+    found.url === info.url &&
+    found.pid === info.pid &&
+    found.password === info.password
+  yield* fs.writeFileString(temp, encoded, { mode: 0o600 }).pipe(Effect.andThen(fs.rename(temp, file)))
+  yield* current.pipe(
+    Effect.filterOrFail(owns),
     Effect.repeat(Schedule.spaced("5 seconds")),
+    Effect.ignore,
+    Effect.andThen(shutdown),
     Effect.forkScoped,
+  )
+  return current.pipe(
+    Effect.flatMap((found) => (owns(found) ? fs.remove(file) : Effect.void)),
+    Effect.ignore,
   )
 })
 

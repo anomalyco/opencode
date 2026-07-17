@@ -50,6 +50,4 @@ export type Info = {
   readonly pid: number
   /** Private service password, when authentication is enabled. */
   readonly password?: string
-  /** Registration generation used to resolve owner write races. */
-  readonly startedAt?: number
 }

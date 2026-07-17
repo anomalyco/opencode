@@ -21,7 +21,10 @@ export type Options<E = never, R = never> = {
   readonly password: string
   readonly instanceID: string
   readonly service?: {
-    readonly onListen: (address: HttpServer.Address) => Effect.Effect<void, E, R>
+    readonly onListen: (
+      address: HttpServer.Address,
+      shutdown: Effect.Effect<void>,
+    ) => Effect.Effect<Effect.Effect<void>, E, R>
   }
 }
 
@@ -44,17 +47,21 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(options: 
   yield* bound.http
     .serve(dispatch(options.password, status, application, shutdown), HttpMiddleware.logger)
     .pipe(withoutParentSpan)
-  if (options.service) yield* options.service.onListen(bound.http.address)
+  if (options.service)
+    yield* options.service.onListen(bound.http.address, Deferred.succeed(shutdown, undefined).pipe(Effect.asVoid)).pipe(
+      Effect.flatMap((cleanup) =>
+        Effect.addFinalizer(() => Scope.close(bound.scope, Exit.void).pipe(Effect.andThen(cleanup))),
+      ),
+      Effect.uninterruptible,
+    )
 
   const parentScope = yield* Scope.Scope
   const applicationScope = yield* Scope.fork(parentScope)
   yield* Effect.addFinalizer(() =>
-    status
-      .beginStopping
-      .pipe(
-        Effect.andThen(Ref.set(application, Option.none())),
-        Effect.andThen(Effect.sync(() => bound.server.closeAllConnections())),
-      ),
+    status.beginStopping.pipe(
+      Effect.andThen(Ref.set(application, Option.none())),
+      Effect.andThen(Effect.sync(() => bound.server.closeAllConnections())),
+    ),
   )
 
   const boot = Effect.gen(function* () {
@@ -112,7 +119,7 @@ function bind(hostname: string, port: number) {
     return yield* Effect.gen(function* () {
       const http = yield* NodeHttpServer.make(() => server, { port, host: hostname })
       yield* Effect.addFinalizer(() => Effect.sync(() => server.closeAllConnections()))
-      return { http, server }
+      return { http, server, scope: serverScope }
     }).pipe(
       Effect.provideService(Scope.Scope, serverScope),
       Effect.onError((cause) => Scope.close(serverScope, Exit.failCause(cause))),
@@ -190,10 +197,13 @@ const control = Effect.fnUntraced(function* (
 
 const healthResponse = Effect.fnUntraced(function* (status: Status.Interface) {
   const state = yield* status.current
-  return HttpServerResponse.jsonUnsafe({ healthy: true, version: InstallationVersion, pid: process.pid }, {
-    status: state.type === "ready" ? 200 : state.type === "failed" ? 500 : 503,
-    headers: state.type === "starting" || state.type === "stopping" ? { "retry-after": "1" } : undefined,
-  })
+  return HttpServerResponse.jsonUnsafe(
+    { healthy: true, version: InstallationVersion, pid: process.pid },
+    {
+      status: state.type === "ready" ? 200 : state.type === "failed" ? 500 : 503,
+      headers: state.type === "starting" || state.type === "stopping" ? { "retry-after": "1" } : undefined,
+    },
+  )
 })
 
 function unavailable(status: Status.State) {
