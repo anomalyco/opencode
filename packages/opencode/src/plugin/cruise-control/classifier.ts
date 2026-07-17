@@ -318,11 +318,7 @@ export function sessionTodoAllow(
 }
 
 export { destructiveReason } from "./destructive"
-export {
-  deriveInstructionIntent,
-  matchesAllowOrConditionalInstructions,
-  matchesDenyInstructions,
-} from "./instruction-intent"
+export { deriveInstructionIntent } from "./instruction-intent"
 
 /**
  * Lenient parse of classifier model output.
@@ -546,9 +542,6 @@ export const runClassifier = Effect.fn("CruiseControl.runClassifier")(function* 
     Effect.map((result) => {
       const approved = explicitApprovalIntent(input.userPrompt, input.patterns, input.metadata)
       const derivedIntent = deriveInstructionIntent({
-        permission: input.permission,
-        patterns: input.patterns,
-        metadata: input.metadata,
         modelIntent: result.intent,
         hasExplicitPrompt: input.hasExplicitPrompt === true,
         explicitApproval: approved,

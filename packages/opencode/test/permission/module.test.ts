@@ -26,8 +26,6 @@ import {
   resetDynamicListsForTests,
   runClassifier,
   deriveInstructionIntent,
-  matchesAllowOrConditionalInstructions,
-  matchesDenyInstructions,
   destructiveReason,
   managedAppDirectoryAllow,
   isManagedAppDirectoryPattern,
@@ -1103,17 +1101,10 @@ describe("classifier contract", () => {
         modelRef: "opencode/deepseek-v4-flash",
       }),
     )
-    expect(outcome).toEqual(
-      reviewed(
-        "allow",
-        "low",
-        "high",
-        "Harmless shell commands that only inspect or print output are allowed.",
-      ),
-    )
+    expect(outcome).toEqual(reviewed("allow", "low", "medium", "safe read-only command"))
   })
 
-  test("git reset without explicit approval scores low intent from deny instructions", async () => {
+  test("host keeps model intent for instruction fit; deny is LLM-scored", async () => {
     const outcome = await Effect.runPromise(
       runClassifier({
         permission: "bash",
@@ -1123,8 +1114,8 @@ describe("classifier contract", () => {
         hasExplicitPrompt: false,
         classify: Effect.succeed({
           risk: "medium",
-          intent: "high",
-          reason: "User asked to undo the commit earlier in the session.",
+          intent: "low",
+          reason: "Git history rewrite matches deny instructions without clear intent.",
         }),
       }),
     )
@@ -1133,12 +1124,12 @@ describe("classifier contract", () => {
         "deny",
         "medium",
         "low",
-        "Git history rewrite requires clear explicit user intent.",
+        "Git history rewrite matches deny instructions without clear intent.",
       ),
     )
   })
 
-  test("read permission scores high intent from allow instructions without explicit prompt", async () => {
+  test("read permission allows on classifier medium/medium without host instruction regex", async () => {
     const outcome = await Effect.runPromise(
       runClassifier({
         permission: "read",
@@ -1152,36 +1143,32 @@ describe("classifier contract", () => {
         }),
       }),
     )
-    expect(outcome).toEqual(
-      reviewed(
-        "allow",
-        "medium",
-        "high",
-        "Read or search tools inside the project workspace are allowed.",
-      ),
-    )
+    expect(outcome).toEqual(reviewed("allow", "medium", "medium", "Classifier was uncertain."))
   })
 
-  test("instruction deny fit wins over model high intent", () => {
+  test("explicit approval still forces high intent over model assessment", () => {
     expect(
       deriveInstructionIntent({
-        permission: "bash",
-        patterns: ["git reset --soft HEAD~1"],
-        metadata: { command: "git reset --soft HEAD~1" },
-        modelIntent: "high",
+        modelIntent: "low",
         hasExplicitPrompt: true,
-        explicitApproval: false,
+        explicitApproval: true,
       }),
     ).toEqual({
-      intent: "low",
-      reason: "Git history rewrite requires clear explicit user intent.",
+      intent: "high",
+      reason: "User approved the assistant permission request for this action.",
     })
   })
 
-  test("instruction allow fit scores high intent for harmless bash", () => {
-    expect(matchesAllowOrConditionalInstructions("bash", ["ls"], { command: "ls" })).toEqual({
-      intent: "high",
-      reason: "Harmless shell commands that only inspect or print output are allowed.",
+  test("model high intent without explicit prompt is capped to medium", () => {
+    expect(
+      deriveInstructionIntent({
+        modelIntent: "high",
+        hasExplicitPrompt: false,
+        explicitApproval: false,
+      }),
+    ).toEqual({
+      intent: "medium",
+      reason: "High intent requires an explicit current user prompt.",
     })
   })
 
@@ -1709,14 +1696,7 @@ describe("classifier contract", () => {
         cacheScope,
       }),
     )
-    expect(first).toEqual(
-      reviewed(
-        "allow",
-        "low",
-        "high",
-        "Harmless shell commands that only inspect or print output are allowed.",
-      ),
-    )
+    expect(first).toEqual(reviewed("allow", "low", "medium", "safe read-only command"))
     expect(calls).toBe(1)
 
     const second = await Effect.runPromise(
