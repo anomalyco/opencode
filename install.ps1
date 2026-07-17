@@ -544,39 +544,56 @@ function Main {
 
     Write-Step "Installing project skills"
     $skillsDir = Join-Path $env:USERPROFILE ".config\opencode\skills"
+    $skillsStampFile = Join-Path $skillsDir ".installed-version"
     $repoUrl = "https://github.com/ivanfernadezm99/opencode.git"
     $tempDir = Join-Path $env:TEMP "opencode-skills-$(Get-Random)"
-    try {
-        # Sparse checkout of .opencode/skills/ only — fast, no full clone
-        $null = New-Item -ItemType Directory -Path $tempDir -Force
-        git init -q $tempDir 2>$null
-        git -C $tempDir remote add origin $repoUrl
-        git -C $tempDir config core.sparseCheckout true
-        New-Item -Path "$tempDir\.git\info" -Name "sparse-checkout" -ItemType File -Force | Out-Null
-        Set-Content "$tempDir\.git\info\sparse-checkout" ".opencode/skills/*"
-        Write-Info "Downloading skills from repo..."
-        git -C $tempDir pull -q --depth 1 origin dev 2>$null
-        $downloadedSkills = Join-Path $tempDir ".opencode\skills"
-        if (Test-Path $downloadedSkills) {
-            if (-not (Test-Path $skillsDir)) {
-                New-Item -ItemType Directory -Path $skillsDir -Force | Out-Null
-            }
-            # Copy each skill, skip node_modules
-            Get-ChildItem -Path $downloadedSkills -Directory | ForEach-Object {
-                $dest = Join-Path $skillsDir $_.Name
-                if (Test-Path $dest) {
-                    Write-Info "  Skill '$($_.Name)' already exists, updating..."
-                    Remove-Item -Path $dest -Recurse -Force -ErrorAction SilentlyContinue
-                }
-                Copy-Item -Path $_.FullName -Destination $dest -Recurse -Force -Exclude "node_modules"
-                Write-Success "  Skill '$($_.Name)' installed"
-            }
+    $shouldInstall = $true
+
+    # Check if skills already installed with the current opencode version
+    if (Test-Path $skillsStampFile -and $Version) {
+        $installedVersion = (Get-Content $skillsStampFile -Raw).Trim()
+        if ($installedVersion -eq $Version) {
+            Write-Info "Skills already up to date (version $Version), skipping."
+            $shouldInstall = $false
         }
-    } catch {
-        Write-Warn "Could not download skills: $_"
-        Write-Warn "Skills can be cloned manually: git clone $repoUrl"
-    } finally {
-        if (Test-Path $tempDir) { Remove-Item -Path $tempDir -Recurse -Force -ErrorAction SilentlyContinue }
+    }
+
+    if ($shouldInstall) {
+        try {
+            # Sparse checkout of .opencode/skills/ only — fast, no full clone
+            $null = New-Item -ItemType Directory -Path $tempDir -Force
+            git init -q $tempDir 2>$null
+            git -C $tempDir remote add origin $repoUrl
+            git -C $tempDir config core.sparseCheckout true
+            New-Item -Path "$tempDir\.git\info" -Name "sparse-checkout" -ItemType File -Force | Out-Null
+            Set-Content "$tempDir\.git\info\sparse-checkout" ".opencode/skills/*"
+            Write-Info "Downloading skills from repo..."
+            git -C $tempDir pull -q --depth 1 origin dev 2>$null
+            $downloadedSkills = Join-Path $tempDir ".opencode\skills"
+            if (Test-Path $downloadedSkills) {
+                if (-not (Test-Path $skillsDir)) {
+                    New-Item -ItemType Directory -Path $skillsDir -Force | Out-Null
+                }
+                # Copy each skill, skip node_modules
+                Get-ChildItem -Path $downloadedSkills -Directory | ForEach-Object {
+                    $dest = Join-Path $skillsDir $_.Name
+                    if (Test-Path $dest) {
+                        Remove-Item -Path $dest -Recurse -Force -ErrorAction SilentlyContinue
+                    }
+                    Copy-Item -Path $_.FullName -Destination $dest -Recurse -Force -Exclude "node_modules"
+                    Write-Success "  Skill '$($_.Name)' installed"
+                }
+                # Write version stamp
+                if ($Version) {
+                    Set-Content -Path $skillsStampFile -Value $Version -NoNewline
+                }
+            }
+        } catch {
+            Write-Warn "Could not download skills: $_"
+            Write-Warn "Skills can be cloned manually: git clone $repoUrl"
+        } finally {
+            if (Test-Path $tempDir) { Remove-Item -Path $tempDir -Recurse -Force -ErrorAction SilentlyContinue }
+        }
     }
 
     Write-Step "Configuring MCP servers"
