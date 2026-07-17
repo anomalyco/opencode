@@ -3028,8 +3028,8 @@ describe("ProviderTransform.temperature - Cohere North", () => {
 
 describe("ProviderTransform.reasoningVariants", () => {
   const model = (reasoning_options: ModelsDev.Model["reasoning_options"]) => ({ reasoning_options }) as ModelsDev.Model
-  const target = (npm: string, id = "test-model") =>
-    ({ id, api: { id, npm, url: "" }, capabilities: { reasoning: true }, limit: { output: 64_000 } }) as any
+  const target = (npm: string, id = "test-model", family?: string) =>
+    ({ id, family, api: { id, npm, url: "" }, capabilities: { reasoning: true }, limit: { output: 64_000 } }) as any
 
   test("respects explicitly empty reasoning options", () => {
     expect(ProviderTransform.reasoningVariants(model([]), target("@ai-sdk/openai"))).toEqual({})
@@ -3101,6 +3101,19 @@ describe("ProviderTransform.reasoningVariants", () => {
         target("@ai-sdk/anthropic", "claude-opus-4-5"),
       ),
     ).toEqual({ high: { effort: "high" } })
+  })
+
+  test("uses adaptive effort for Kimi K3", () => {
+    expect(
+      ProviderTransform.reasoningVariants(
+        model([{ type: "effort", values: ["low", "high", "max"] }]),
+        target("@ai-sdk/anthropic", "k3", "kimi-k3"),
+      ),
+    ).toEqual({
+      low: { thinking: { type: "adaptive" }, effort: "low" },
+      high: { thinking: { type: "adaptive" }, effort: "high" },
+      max: { thinking: { type: "adaptive" }, effort: "max" },
+    })
   })
 
   test("leaves legacy Anthropic effort options to budget fallback", () => {

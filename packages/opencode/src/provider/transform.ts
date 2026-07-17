@@ -1704,6 +1704,8 @@ function reasoningEffort(model: Provider.Model, effort: string) {
 }
 
 function anthropicEffort(model: Provider.Model, effort: string) {
+  // K3's Anthropic-compatible endpoint exposes adaptive thinking through output_config.effort.
+  if (model.family === "kimi-k3") return { thinking: { type: "adaptive" }, effort }
   if (["opus-4-5", "opus-4.5"].some((value) => model.api.id.includes(value))) return { effort }
   if (!anthropicAdaptiveEfforts(model.api.id)) return
   return {

@@ -1514,6 +1514,15 @@ test("models.dev reasoning options replace generated variants and unsupported op
         limit: { context: 128_000, output: 64_000 },
         experimental: { modes: { fast: {} } },
       },
+      k3: {
+        id: "k3",
+        name: "Kimi K3",
+        family: "kimi-k3",
+        reasoning: true,
+        reasoning_options: [{ type: "effort", values: ["low", "high", "max"] }],
+        provider: { npm: "@ai-sdk/anthropic" },
+        limit: { context: 1_048_576, output: 131_072 },
+      },
     },
   } as unknown as ModelsDev.Provider
 
@@ -1531,6 +1540,11 @@ test("models.dev reasoning options replace generated variants and unsupported op
     high: { thinkingConfig: { includeThoughts: true, thinkingLevel: "high" } },
   })
   expect(models["gemini-3-pro-fast"].variants).toEqual(models.override.variants)
+  expect(models.k3.variants).toEqual({
+    low: { thinking: { type: "adaptive" }, effort: "low" },
+    high: { thinking: { type: "adaptive" }, effort: "high" },
+    max: { thinking: { type: "adaptive" }, effort: "max" },
+  })
 })
 
 test("public provider info omits invalid models", () => {
