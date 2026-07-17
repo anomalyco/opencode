@@ -41,6 +41,7 @@ import { FSUtil } from "./fs-util"
 import { Image } from "./image"
 import { Mime } from "./mime"
 import type { EventLog } from "@opencode-ai/schema/event-log"
+import { Skill } from "@opencode-ai/schema/skill"
 import { SkillV2 } from "./skill"
 import { Job } from "./job"
 import { CommandV2 } from "./command"
@@ -147,7 +148,7 @@ export class BusyError extends Schema.TaggedErrorClass<BusyError>()("Session.Bus
   sessionID: SessionSchema.ID,
 }) {}
 export class SkillNotFoundError extends Schema.TaggedErrorClass<SkillNotFoundError>()("Session.SkillNotFoundError", {
-  skill: SkillV2.ID,
+  skill: Skill.ID,
 }) {}
 
 export class DestinationNotFoundError extends Schema.TaggedErrorClass<DestinationNotFoundError>()(
@@ -273,7 +274,7 @@ export interface Interface {
   readonly skill: (input: {
     id?: SessionMessage.ID
     sessionID: SessionSchema.ID
-    skill: SkillV2.ID
+    skill: Skill.ID
     resume?: boolean
   }) => Effect.Effect<void, NotFoundError | SkillNotFoundError>
   readonly compact: (
