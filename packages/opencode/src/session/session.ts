@@ -724,6 +724,21 @@ const layer: Layer.Layer<
             messageID: cloned.id,
             sessionID: session.id,
           }
+          if (p.type === "reasoning" && p.metadata) {
+            p.metadata = Object.fromEntries(
+              Object.entries(p.metadata).map(([key, value]) => {
+                if (!value || typeof value !== "object" || !("reasoningEncryptedContent" in value)) {
+                  return [key, value]
+                }
+                return [
+                  key,
+                  Object.fromEntries(
+                    Object.entries(value).filter(([name]) => name !== "itemId" && name !== "reasoningEncryptedContent"),
+                  ),
+                ]
+              }),
+            )
+          }
           if (p.type === "compaction" && p.tail_start_id) {
             p.tail_start_id = idMap.get(p.tail_start_id)
           }

@@ -238,6 +238,76 @@ describe("Session", () => {
     }),
   )
 
+  it.instance("drops OpenAI reasoning continuation metadata on fork", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionNs.Service
+      const created = yield* Effect.acquireRelease(session.create({ title: "reasoning-meta" }), (info) =>
+        session.remove(info.id).pipe(Effect.ignore),
+      )
+      const userID = MessageID.ascending()
+      yield* session.updateMessage({
+        id: userID,
+        sessionID: created.id,
+        role: "user",
+        time: { created: Date.now() },
+        agent: "test",
+        model: { providerID: "openai", modelID: "gpt-5" },
+        tools: {},
+        mode: "",
+      } as unknown as SessionV1.Info)
+      const assistantID = MessageID.ascending()
+      yield* session.updateMessage({
+        id: assistantID,
+        sessionID: created.id,
+        role: "assistant",
+        time: { created: Date.now() },
+        parentID: userID,
+        modelID: "gpt-5",
+        providerID: "openai",
+        mode: "",
+        agent: "default",
+        path: { cwd: "/", root: "/" },
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      } as unknown as SessionV1.Info)
+      yield* session.updatePart({
+        id: PartID.ascending(),
+        sessionID: created.id,
+        messageID: assistantID,
+        type: "reasoning",
+        text: "summary",
+        time: { start: Date.now(), end: Date.now() },
+        metadata: {
+          openai: {
+            itemId: "rs_old",
+            reasoningEncryptedContent: "legacy-encrypted-state",
+            other: "keep",
+          },
+          anthropic: { signature: "keep" },
+        },
+      })
+
+      const fork = yield* Effect.acquireRelease(session.fork({ sessionID: created.id }), (info) =>
+        session.remove(info.id).pipe(Effect.ignore),
+      )
+      const original = (yield* session.messages({ sessionID: created.id })).flatMap((msg) => msg.parts)
+      const copied = (yield* session.messages({ sessionID: fork.id })).flatMap((msg) => msg.parts)
+      const source = original.find((part) => part.type === "reasoning")
+      const reasoning = copied.find((part) => part.type === "reasoning")
+
+      expect(source?.metadata?.openai).toEqual({
+        itemId: "rs_old",
+        reasoningEncryptedContent: "legacy-encrypted-state",
+        other: "keep",
+      })
+      expect(reasoning?.text).toBe("summary")
+      expect(reasoning?.metadata).toEqual({
+        openai: { other: "keep" },
+        anthropic: { signature: "keep" },
+      })
+    }),
+  )
+
   it.instance("omits metadata when not provided", () =>
     Effect.gen(function* () {
       const session = yield* SessionNs.Service
