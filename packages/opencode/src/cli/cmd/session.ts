@@ -86,7 +86,8 @@ export const SessionListCommand = effectCmd({
         default: "table",
       }),
   handler: Effect.fn("Cli.session.list")(function* (args) {
-    const { project } = yield* Project.Service.use((svc) => svc.fromDirectory(process.cwd()))
+    const currentWorkingDirectory = process.cwd()
+    const { project } = yield* Project.Service.use((svc) => svc.fromDirectory(currentWorkingDirectory))
     const sessions = yield* Session.Service.use((svc) =>
       svc.list({ projectID: project.id, roots: true, limit: args.maxCount }),
     )
