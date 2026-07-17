@@ -36,6 +36,7 @@ export type PromptInputV2Props = {
   controller: PromptInputV2Interaction
   disabled?: boolean
   readOnly?: boolean
+  borderUnderlay?: boolean
   class?: string
   modelControl?: JSX.Element
 }
@@ -102,8 +103,12 @@ export function PromptInputV2(props: PromptInputV2Props) {
       </Show>
       <form
         data-component="prompt-input-v2"
-        class="group/prompt-input relative min-h-[96px] w-full rounded-xl bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)]"
-        classList={{ "border border-v2-icon-icon-info border-dashed": state.drag === "active" }}
+        data-dock-border-underlay={props.borderUnderlay ? "v2" : undefined}
+        class="group/prompt-input relative min-h-[96px] w-full rounded-xl bg-v2-background-bg-base"
+        classList={{
+          "shadow-[var(--v2-elevation-raised)]": !props.borderUnderlay,
+          "border border-v2-icon-icon-info border-dashed": state.drag === "active",
+        }}
         onSubmit={(event) => {
           event.preventDefault()
           if (!props.disabled) props.controller.submit()

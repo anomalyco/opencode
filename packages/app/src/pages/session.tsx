@@ -2265,6 +2265,7 @@ export default function Page() {
                     return (
                       <PromptInputV2Composer
                         controller={controller}
+                        borderUnderlay
                         edit={editingFollowup()}
                         onEditLoaded={clearFollowupEdit}
                       />
