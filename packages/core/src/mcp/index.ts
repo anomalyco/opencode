@@ -133,6 +133,7 @@ export interface Interface {
   readonly add: (server: ServerName | string, config: typeof ConfigMCP.Server.Type) => Effect.Effect<void>
   readonly connect: (server: ServerName | string) => Effect.Effect<void, NotFoundError>
   readonly disconnect: (server: ServerName | string) => Effect.Effect<void, NotFoundError>
+  readonly remove: (server: ServerName | string) => Effect.Effect<void, NotFoundError>
   readonly tools: () => Effect.Effect<Tool[]>
   readonly callTool: (input: {
     readonly server: ServerName | string
@@ -549,7 +550,7 @@ export const layer = Layer.effect(
         if (!match) return
         const name = match[0]
         yield* Effect.gen(function* () {
-          // add() may have replaced the entry while we waited for the lock.
+          // add() or remove() may have replaced or deleted the entry while we waited for the lock.
           const entry = runtime.get(name)
           if (!entry || entry.integrationID !== integrationID) return
           if (entry.status.status === "disabled") return
@@ -628,6 +629,19 @@ export const layer = Layer.effect(
           const target = yield* requireServer(name)
           yield* stopServer(name, target.entry)
           target.entry.status = { status: "disabled" }
+          yield* events.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore)
+        }).pipe(locks.withLock(name))
+      }),
+      remove: Effect.fn("MCP.remove")(function* (server) {
+        const name = ServerName.make(server)
+        yield* Effect.gen(function* () {
+          const target = yield* requireServer(name)
+          yield* stopServer(name, target.entry)
+          if (target.entry.integrationID) owned.delete(target.entry.integrationID)
+          if (target.entry.registration) yield* target.entry.registration.dispose
+          // Credentials are kept: they are keyed by name + url, so re-adding the same server
+          // reuses them without forcing re-auth, matching add()'s replacement semantics.
+          runtime.delete(name)
           yield* events.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore)
         }).pipe(locks.withLock(name))
       }),

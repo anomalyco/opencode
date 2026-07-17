@@ -686,6 +686,11 @@ test("adds, disconnects, and reconnects MCP servers at runtime", async () => {
           expect((yield* service.servers()).find((server) => server.name === "dynamic")?.status).toEqual({
             status: "connected",
           })
+
+          yield* service.remove("dynamic")
+          expect((yield* service.servers()).some((server) => server.name === "dynamic")).toBe(false)
+          expect(yield* service.tools()).toEqual([])
+          expect(yield* service.remove("dynamic").pipe(Effect.flip)).toBeInstanceOf(MCP.NotFoundError)
         }).pipe(
           Effect.provide(
             resourceMcpLayer(
