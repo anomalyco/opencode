@@ -45,6 +45,10 @@ export function PromptInputV2(props: PromptInputV2Props) {
   const view = props.controller.view
   let editor: HTMLDivElement | undefined
   let localInput = false
+  const updateCursor = () => {
+    if (!editor || !window.getSelection()?.isCollapsed) return
+    props.controller.onCursor(promptInputV2Cursor(editor))
+  }
   const mode = createMemo(() => state.mode)
   const buttons = createMemo(() => ({
     opacity: mode() === "normal" ? 1 : 0,
@@ -162,8 +166,8 @@ export function PromptInputV2(props: PromptInputV2Props) {
                 props.controller.submit()
               }
             }}
-            onKeyUp={(event) => props.controller.onCursor(promptInputV2Cursor(event.currentTarget))}
-            onPointerUp={(event) => props.controller.onCursor(promptInputV2Cursor(event.currentTarget))}
+            onKeyUp={updateCursor}
+            onPointerUp={updateCursor}
             onPaste={props.controller.onPaste}
             onFocus={() => props.controller.dispatch({ type: "focus.editor" })}
           />
