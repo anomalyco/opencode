@@ -16,6 +16,7 @@ import { IntegrationConnection } from "../integration/connection"
 import { KeyedMutex } from "../effect/keyed-mutex"
 import { Location } from "../location"
 import { waitForAbort } from "../process"
+import { State } from "../state"
 import { MCPClient } from "./client"
 import { MCPOAuth } from "./oauth"
 
@@ -119,6 +120,7 @@ type ServerEntry = {
   prompts?: ReadonlyArray<Prompt>
   // Set when a remote server is registered as an OAuth integration; the credential lives in the global store.
   integrationID?: Integration.ID
+  registration?: State.Registration
 }
 
 // MCP elicitations are Location-scoped, not Session-scoped: the server cannot attribute them to a
@@ -206,7 +208,7 @@ export const layer = Layer.effect(
       entry.integrationID = integrationID
       owned.add(integrationID)
       const methodID = Integration.MethodID.make(suffix)
-      yield* integration
+      entry.registration = yield* integration
         .transform((draft) => {
           draft.update(integrationID, (ref) => {
             ref.name = name
@@ -588,11 +590,8 @@ export const layer = Layer.effect(
           const previous = runtime.get(name)
           if (previous) {
             yield* stopServer(name, previous)
-            if (previous.integrationID) {
-              const integrationID = previous.integrationID
-              owned.delete(integrationID)
-              yield* integration.transform((draft) => draft.remove(integrationID)).pipe(Scope.provide(root))
-            }
+            if (previous.integrationID) owned.delete(previous.integrationID)
+            if (previous.registration) yield* previous.registration.dispose
           }
           const entry: ServerEntry = {
             config: { ...config, timeout: { ...timeout, ...config.timeout } },

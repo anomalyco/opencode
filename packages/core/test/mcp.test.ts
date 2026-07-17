@@ -646,6 +646,8 @@ test("adds, disconnects, and reconnects MCP servers at runtime", async () => {
           const service = yield* MCP.Service
 
           expect((yield* service.servers())[0]?.status).toEqual({ status: "disabled" })
+          expect(yield* service.connect("missing").pipe(Effect.flip)).toBeInstanceOf(MCP.NotFoundError)
+          expect(yield* service.disconnect("missing").pipe(Effect.flip)).toBeInstanceOf(MCP.NotFoundError)
           yield* service.add(
             "dynamic",
             new ConfigMCP.Local({
