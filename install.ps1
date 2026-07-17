@@ -622,7 +622,7 @@ function Main {
     $shouldInstall = $true
 
     # Check if skills already installed with the current opencode version
-    if (Test-Path $skillsStampFile -and $Version) {
+    if ((Test-Path $skillsStampFile) -and $Version) {
         $installedVersion = (Get-Content $skillsStampFile -Raw).Trim()
         if ($installedVersion -eq $Version) {
             Write-Info "Skills already up to date (version $Version), skipping."
@@ -750,7 +750,7 @@ function Main {
             Write-Success "Added MCP server: $serverName"
 
             # Run postinstall if defined
-            if (Test-Property $serverDef "postinstall" -and $serverDef.postinstall) {
+            if ((Test-Property $serverDef "postinstall") -and $serverDef.postinstall) {
                 Write-Info "Running postinstall for '$serverName'..."
                 try {
                     $prevEA = $ErrorActionPreference
@@ -935,4 +935,14 @@ function Main {
     Write-Host ""
 }
 
-Main @args
+$mainParams = @{}
+for ($i = 0; $i -lt $args.Count; $i++) {
+    switch -Wildcard ($args[$i]) {
+        '-Desktop'      { $mainParams['Desktop'] = $true }
+        '-NoModifyPath' { $mainParams['NoModifyPath'] = $true }
+        '-UseMirror'    { $mainParams['UseMirror'] = $true }
+        '-Version'      { if ($i+1 -lt $args.Count) { $mainParams['Version'] = $args[++$i] } }
+        '-Channel'      { if ($i+1 -lt $args.Count) { $mainParams['Channel'] = $args[++$i] } }
+    }
+}
+Main @mainParams
