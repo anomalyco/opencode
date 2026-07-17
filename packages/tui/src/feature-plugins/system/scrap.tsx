@@ -26,7 +26,8 @@ function Commands(props: { context: Plugin.Context }) {
 
 function Scrap(props: { context: Plugin.Context }) {
   const dimensions = useTerminalDimensions()
-  const { theme } = useTheme()
+  const { themeV2 } = useTheme()
+  const { themeV2: elevatedTheme } = useTheme().contextual("elevated")
 
   Keymap.createLayer(() => ({
     commands: [
@@ -42,19 +43,19 @@ function Scrap(props: { context: Plugin.Context }) {
   }))
 
   return (
-    <box width={dimensions().width} height={dimensions().height} backgroundColor={theme.background}>
+    <box width={dimensions().width} height={dimensions().height} backgroundColor={themeV2.background()}>
       <box flexGrow={1} />
       <box
         height={1}
         flexShrink={0}
-        backgroundColor={theme.backgroundPanel}
+        backgroundColor={elevatedTheme.background()}
         paddingLeft={1}
         paddingRight={1}
         flexDirection="row"
       >
-        <text fg={theme.textMuted}>~/code/anomalyco/opencode</text>
+        <text fg={elevatedTheme.text.subdued()}>~/code/anomalyco/opencode</text>
         <box flexGrow={1} />
-        <text fg={theme.textMuted}>esc home</text>
+        <text fg={elevatedTheme.text.subdued()}>esc home</text>
       </box>
     </box>
   )

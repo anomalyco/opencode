@@ -2,7 +2,7 @@ import { RGBA, TextAttributes } from "@opentui/core"
 import open from "open"
 import { createSignal } from "solid-js"
 import { Keymap } from "../context/keymap"
-import { selectedForeground, useTheme } from "../context/theme"
+import { useTheme } from "../context/theme"
 import { useDialog, type DialogContext } from "../ui/dialog"
 import { Link } from "../ui/link"
 import { BgPulse } from "./bg-pulse"
@@ -38,10 +38,9 @@ function panelOverlay(color: RGBA) {
 
 export function DialogRetryAction(props: DialogRetryActionProps) {
   const dialog = useDialog()
-  const { theme } = useTheme()
-  const fg = selectedForeground(theme)
+  const { themeV2 } = useTheme().contextual("elevated")
   const showGoTreatment = () => props.link === GO_URL
-  const textBg = () => (showGoTreatment() ? panelOverlay(theme.backgroundPanel) : undefined)
+  const textBg = () => (showGoTreatment() ? panelOverlay(themeV2.background()) : undefined)
   const [selected, setSelected] = createSignal<"dismiss" | "action">("action")
 
   Keymap.createLayer(() => ({
@@ -86,26 +85,26 @@ export function DialogRetryAction(props: DialogRetryActionProps) {
       ) : null}
       <box zIndex={1} paddingLeft={PAD_X} paddingRight={PAD_X} paddingBottom={1} gap={1}>
         <box flexDirection="row" justifyContent="space-between">
-          <text attributes={TextAttributes.BOLD} fg={theme.text} bg={textBg()}>
+          <text attributes={TextAttributes.BOLD} fg={themeV2.text()} bg={textBg()}>
             {props.title}
           </text>
-          <text fg={theme.textMuted} bg={textBg()} onMouseUp={() => dialog.clear()}>
+          <text fg={themeV2.text.subdued()} bg={textBg()} onMouseUp={() => dialog.clear()}>
             esc
           </text>
         </box>
         <box gap={0}>
-          <text fg={theme.textMuted} bg={textBg()}>
+          <text fg={themeV2.text.subdued()} bg={textBg()}>
             {props.message}
           </text>
         </box>
         {props.link ? (
           showGoTreatment() ? (
             <box alignItems="center" justifyContent="flex-end" height={7} paddingBottom={1}>
-              <Link href={props.link} fg={theme.primary} bg={textBg()} wrapMode="none" />
+              <Link href={props.link} fg={themeV2.markdown.link()} bg={textBg()} wrapMode="none" />
             </box>
           ) : (
             <box width="100%" flexDirection="row" justifyContent="center" paddingBottom={1}>
-              <Link href={props.link} fg={theme.primary} wrapMode="none" />
+              <Link href={props.link} fg={themeV2.markdown.link()} wrapMode="none" />
             </box>
           )
         ) : (
@@ -115,12 +114,14 @@ export function DialogRetryAction(props: DialogRetryActionProps) {
           <box
             paddingLeft={2}
             paddingRight={2}
-            backgroundColor={selected() === "dismiss" ? theme.primary : RGBA.fromInts(0, 0, 0, 0)}
+            backgroundColor={
+              selected() === "dismiss" ? themeV2.background.action("focused") : RGBA.fromInts(0, 0, 0, 0)
+            }
             onMouseOver={() => setSelected("dismiss")}
             onMouseUp={() => dismiss(props, dialog)}
           >
             <text
-              fg={selected() === "dismiss" ? fg : theme.textMuted}
+              fg={selected() === "dismiss" ? themeV2.text.action("focused") : themeV2.text.subdued()}
               bg={selected() === "dismiss" ? undefined : textBg()}
               attributes={selected() === "dismiss" ? TextAttributes.BOLD : undefined}
             >
@@ -130,12 +131,12 @@ export function DialogRetryAction(props: DialogRetryActionProps) {
           <box
             paddingLeft={2}
             paddingRight={2}
-            backgroundColor={selected() === "action" ? theme.primary : RGBA.fromInts(0, 0, 0, 0)}
+            backgroundColor={selected() === "action" ? themeV2.background.action("focused") : RGBA.fromInts(0, 0, 0, 0)}
             onMouseOver={() => setSelected("action")}
             onMouseUp={() => runAction(props, dialog)}
           >
             <text
-              fg={selected() === "action" ? fg : theme.text}
+              fg={selected() === "action" ? themeV2.text.action("focused") : themeV2.text()}
               bg={selected() === "action" ? undefined : textBg()}
               attributes={selected() === "action" ? TextAttributes.BOLD : undefined}
             >

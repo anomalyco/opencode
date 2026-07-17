@@ -14,7 +14,7 @@ type ToastInput = Omit<ToastOptions, "duration"> & { duration?: number }
 
 export function Toast() {
   const toast = useToast()
-  const { theme, themeV2 } = useTheme()
+  const { themeV2 } = useTheme().contextual("overlay")
   const dimensions = useTerminalDimensions()
 
   return (
@@ -31,8 +31,8 @@ export function Toast() {
           paddingRight={2}
           paddingTop={1}
           paddingBottom={1}
-          backgroundColor={theme.backgroundPanel}
-          borderColor={theme[current().variant]}
+          backgroundColor={themeV2.background()}
+          borderColor={themeV2.text.feedback[current().variant]()}
           border={["left", "right"]}
           customBorderChars={SplitBorder.customBorderChars}
         >

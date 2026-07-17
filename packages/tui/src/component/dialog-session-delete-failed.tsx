@@ -13,7 +13,7 @@ export function DialogSessionDeleteFailed(props: {
   onDone?: () => void
 }) {
   const dialog = useDialog()
-  const { theme } = useTheme()
+  const { themeV2 } = useTheme().contextual("elevated")
   const [store, setStore] = createStore({
     active: "delete" as "delete" | "restore",
   })
@@ -64,17 +64,17 @@ export function DialogSessionDeleteFailed(props: {
   return (
     <box paddingLeft={2} paddingRight={2} gap={1}>
       <box flexDirection="row" justifyContent="space-between">
-        <text attributes={TextAttributes.BOLD} fg={theme.text}>
+        <text attributes={TextAttributes.BOLD} fg={themeV2.text()}>
           Failed to Delete Session
         </text>
-        <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>
+        <text fg={themeV2.text.subdued()} onMouseUp={() => dialog.clear()}>
           esc
         </text>
       </box>
-      <text fg={theme.textMuted} wrapMode="word">
+      <text fg={themeV2.text.subdued()} wrapMode="word">
         {`The session "${props.session}" could not be deleted because the workspace "${props.workspace}" is not available.`}
       </text>
-      <text fg={theme.textMuted} wrapMode="word">
+      <text fg={themeV2.text.subdued()} wrapMode="word">
         Choose how you want to recover this broken workspace session.
       </text>
       <box flexDirection="column" paddingBottom={1} gap={1}>
@@ -86,7 +86,7 @@ export function DialogSessionDeleteFailed(props: {
               paddingRight={1}
               paddingTop={1}
               paddingBottom={1}
-              backgroundColor={item.id === store.active ? theme.primary : undefined}
+              backgroundColor={item.id === store.active ? themeV2.background.action("focused") : undefined}
               onMouseUp={() => {
                 setStore("active", item.id)
                 void confirm()
@@ -94,11 +94,14 @@ export function DialogSessionDeleteFailed(props: {
             >
               <text
                 attributes={TextAttributes.BOLD}
-                fg={item.id === store.active ? theme.selectedListItemText : theme.text}
+                fg={item.id === store.active ? themeV2.text.action("focused") : themeV2.text()}
               >
                 {item.title}
               </text>
-              <text fg={item.id === store.active ? theme.selectedListItemText : theme.textMuted} wrapMode="word">
+              <text
+                fg={item.id === store.active ? themeV2.text.action("focused") : themeV2.text.subdued()}
+                wrapMode="word"
+              >
                 {item.description}
               </text>
             </box>

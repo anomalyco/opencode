@@ -16,7 +16,7 @@ export function Dialog(
   }>,
 ) {
   const dimensions = useTerminalDimensions()
-  const { theme } = useTheme()
+  const { themeV2 } = useTheme().contextual("elevated")
   const renderer = useRenderer()
 
   let dismiss = false
@@ -59,7 +59,7 @@ export function Dialog(
         }}
         width={width()}
         maxWidth={dimensions().width - 2}
-        backgroundColor={theme.backgroundPanel}
+        backgroundColor={themeV2.background()}
         paddingTop={1}
       >
         {props.children}

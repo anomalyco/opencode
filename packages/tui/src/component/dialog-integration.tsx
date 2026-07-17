@@ -62,7 +62,7 @@ export function connectionSummary(integration: IntegrationInfo) {
 export function DialogIntegration(props: { onConnected?: OnIntegrationConnected } = {}) {
   const data = useData()
   const dialog = useDialog()
-  const { theme } = useTheme()
+  const { themeV2 } = useTheme().contextual("elevated")
   const options = createMemo(() =>
     integrationOptions(data.location.integration.list() ?? []).map((integration) => {
       const methods = connectMethods(integration)
@@ -74,7 +74,7 @@ export function DialogIntegration(props: { onConnected?: OnIntegrationConnected 
         footer: connectionSummary(integration) || undefined,
         category: integration.id in INTEGRATION_PRIORITY ? "Popular" : "Services",
         disabled: methods.length === 0,
-        gutter: connected ? () => <text fg={theme.success}>✓</text> : undefined,
+        gutter: connected ? () => <text fg={themeV2.text.feedback.success()}>✓</text> : undefined,
         onSelect: () =>
           credentialConnections(integration).length
             ? manageConnections(integration, methods, dialog, props.onConnected)
@@ -89,12 +89,12 @@ export function DialogIntegration(props: { onConnected?: OnIntegrationConnected 
       options={options()}
       emptyView={
         <box paddingLeft={4} paddingRight={4} paddingTop={1}>
-          <text fg={theme.textMuted}>No integrations available</text>
+          <text fg={themeV2.text.subdued()}>No integrations available</text>
         </box>
       }
       noMatchView={
         <box paddingLeft={4} paddingRight={4} paddingTop={1}>
-          <text fg={theme.textMuted}>No integrations found</text>
+          <text fg={themeV2.text.subdued()}>No integrations found</text>
         </box>
       }
     />
@@ -289,23 +289,30 @@ function CommandPending(props: {
 
 function CommandView(props: { title: string; output: string; message: string }) {
   const dialog = useDialog()
-  const { theme } = useTheme()
+  const { themeV2 } = useTheme().contextual("elevated")
+  const { themeV2: overlayTheme } = useTheme().contextual("overlay")
   onMount(() => dialog.setSize("large"))
   return (
     <box gap={1} paddingBottom={1}>
       <box flexDirection="row" justifyContent="space-between" paddingLeft={2} paddingRight={2}>
-        <text attributes={TextAttributes.BOLD} fg={theme.text}>
+        <text attributes={TextAttributes.BOLD} fg={themeV2.text()}>
           {props.title}
         </text>
-        <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>
+        <text fg={themeV2.text.subdued()} onMouseUp={() => dialog.clear()}>
           esc close
         </text>
       </box>
-      <box backgroundColor={theme.backgroundElement} paddingLeft={2} paddingRight={2} paddingTop={1} paddingBottom={1}>
-        <text fg={theme.text}>{props.output.trim()}</text>
+      <box
+        backgroundColor={overlayTheme.background()}
+        paddingLeft={2}
+        paddingRight={2}
+        paddingTop={1}
+        paddingBottom={1}
+      >
+        <text fg={overlayTheme.text()}>{props.output.trim()}</text>
       </box>
       <box paddingLeft={2} paddingRight={2}>
-        <text fg={theme.textMuted}>{props.message}</text>
+        <text fg={themeV2.text.subdued()}>{props.message}</text>
       </box>
     </box>
   )
@@ -320,7 +327,7 @@ function KeyMethod(props: {
   const dialog = useDialog()
   const client = useClient()
   const toast = useToast()
-  const { theme } = useTheme()
+  const { themeV2 } = useTheme().contextual("elevated")
   const [error, setError] = createSignal<string>()
 
   return (
@@ -338,7 +345,9 @@ function KeyMethod(props: {
           .then(() => connected(props.integration, data, dialog, toast, props.onConnected))
           .catch((cause) => setError(message(cause)))
       }}
-      description={() => <Show when={error()}>{(value) => <text fg={theme.error}>{value()}</text>}</Show>}
+      description={() => (
+        <Show when={error()}>{(value) => <text fg={themeV2.text.feedback.error()}>{value()}</text>}</Show>
+      )}
     />
   )
 }
@@ -493,7 +502,7 @@ function OAuthCode(props: {
   const dialog = useDialog()
   const client = useClient()
   const toast = useToast()
-  const { theme } = useTheme()
+  const { themeV2 } = useTheme().contextual("elevated")
   const [error, setError] = createSignal<string>()
   let settled = false
 
@@ -527,9 +536,9 @@ function OAuthCode(props: {
       }}
       description={() => (
         <box gap={1}>
-          <text fg={theme.textMuted}>{props.attempt.instructions}</text>
-          <Link href={props.attempt.url} fg={theme.primary} />
-          <Show when={error()}>{(value) => <text fg={theme.error}>{value()}</text>}</Show>
+          <text fg={themeV2.text.subdued()}>{props.attempt.instructions}</text>
+          <Link href={props.attempt.url} fg={themeV2.markdown.link()} />
+          <Show when={error()}>{(value) => <text fg={themeV2.text.feedback.error()}>{value()}</text>}</Show>
         </box>
       )}
     />
@@ -538,31 +547,31 @@ function OAuthCode(props: {
 
 function OAuthView(props: { title: string; url?: string; instructions?: string; message: string; copy?: boolean }) {
   const dialog = useDialog()
-  const { theme } = useTheme()
+  const { themeV2 } = useTheme().contextual("elevated")
   return (
     <box paddingLeft={2} paddingRight={2} gap={1} paddingBottom={1}>
       <box flexDirection="row" justifyContent="space-between">
-        <text attributes={TextAttributes.BOLD} fg={theme.text}>
+        <text attributes={TextAttributes.BOLD} fg={themeV2.text()}>
           {props.title}
         </text>
-        <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>
+        <text fg={themeV2.text.subdued()} onMouseUp={() => dialog.clear()}>
           esc
         </text>
       </box>
       <Show when={props.url}>
         {(url) => (
           <box gap={1}>
-            <Link href={url()} fg={theme.primary} />
+            <Link href={url()} fg={themeV2.markdown.link()} />
             <Show when={props.instructions}>
-              {(instructions) => <text fg={theme.textMuted}>{instructions()}</text>}
+              {(instructions) => <text fg={themeV2.text.subdued()}>{instructions()}</text>}
             </Show>
           </box>
         )}
       </Show>
-      <text fg={theme.textMuted}>{props.message}</text>
+      <text fg={themeV2.text.subdued()}>{props.message}</text>
       <Show when={props.copy}>
-        <text fg={theme.text}>
-          c <span style={{ fg: theme.textMuted }}>copy</span>
+        <text fg={themeV2.text()}>
+          c <span style={{ fg: themeV2.text.subdued() }}>copy</span>
         </text>
       </Show>
     </box>

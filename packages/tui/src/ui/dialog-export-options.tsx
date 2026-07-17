@@ -17,7 +17,8 @@ type Active = ExportFormat | "debug" | "thinking" | "copy" | "export"
 
 export function DialogExportOptions(props: DialogExportOptionsProps) {
   const dialog = useDialog()
-  const { theme } = useTheme()
+  const { themeV2 } = useTheme().contextual("elevated")
+  const { themeV2: overlayTheme } = useTheme().contextual("overlay")
   const [store, setStore] = createStore({
     format: "markdown" as ExportFormat,
     debug: false,
@@ -75,25 +76,33 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
   return (
     <box paddingLeft={2} paddingRight={2} gap={1}>
       <box flexDirection="row" justifyContent="space-between">
-        <text attributes={TextAttributes.BOLD} fg={theme.text}>
+        <text attributes={TextAttributes.BOLD} fg={themeV2.text()}>
           Export session
         </text>
-        <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>
+        <text fg={themeV2.text.subdued()} onMouseUp={() => dialog.clear()}>
           esc
         </text>
       </box>
       <box flexDirection="row" gap={1}>
-        <text fg={theme.text}>Export as:</text>
+        <text fg={themeV2.text()}>Export as:</text>
         <box flexDirection="row" gap={1}>
           <For each={["markdown", "json"] as const}>
             {(format) => (
               <box
                 paddingLeft={1}
                 paddingRight={1}
-                backgroundColor={store.format === format ? theme.backgroundElement : undefined}
+                backgroundColor={themeV2.background.formfield({
+                  focused: store.active === format,
+                  selected: store.format === format,
+                })}
                 onMouseUp={() => selectFormat(format)}
               >
-                <text fg={store.format === format ? theme.text : theme.textMuted}>
+                <text
+                  fg={themeV2.text.formfield({
+                    focused: store.active === format,
+                    selected: store.format === format,
+                  })}
+                >
                   {store.format === format ? "◉" : "○"} {format === "markdown" ? "Markdown" : "JSON"}
                 </text>
               </box>
@@ -105,43 +114,60 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
         <box
           flexDirection="row"
           gap={1}
-          backgroundColor={store.active === "thinking" ? theme.backgroundElement : undefined}
+          backgroundColor={themeV2.background.formfield({
+            focused: store.active === "thinking",
+            selected: store.thinking,
+          })}
           onMouseUp={() => {
             setStore("active", "thinking")
             setStore("thinking", !store.thinking)
           }}
         >
-          <text fg={store.active === "thinking" ? theme.primary : theme.textMuted}>
+          <text fg={themeV2.text.formfield({ focused: store.active === "thinking", selected: store.thinking })}>
             {store.thinking ? "[x]" : "[ ]"}
           </text>
-          <text fg={store.active === "thinking" ? theme.primary : theme.text}>Include thinking</text>
+          <text fg={themeV2.text.formfield({ focused: store.active === "thinking", selected: store.thinking })}>
+            Include thinking
+          </text>
         </box>
       </Show>
       <Show when={store.format === "json"}>
         <box
           flexDirection="row"
           gap={1}
-          backgroundColor={store.active === "debug" ? theme.backgroundElement : undefined}
+          backgroundColor={themeV2.background.formfield({
+            focused: store.active === "debug",
+            selected: store.debug,
+          })}
           onMouseUp={() => {
             setStore("active", "debug")
             setStore("debug", !store.debug)
           }}
         >
-          <text fg={store.active === "debug" ? theme.primary : theme.textMuted}>{store.debug ? "[x]" : "[ ]"}</text>
-          <text fg={store.active === "debug" ? theme.primary : theme.text}>Events (debug)</text>
+          <text fg={themeV2.text.formfield({ focused: store.active === "debug", selected: store.debug })}>
+            {store.debug ? "[x]" : "[ ]"}
+          </text>
+          <text fg={themeV2.text.formfield({ focused: store.active === "debug", selected: store.debug })}>
+            Events (debug)
+          </text>
         </box>
       </Show>
       <box flexDirection="row" justifyContent="flex-end" gap={1} paddingBottom={1}>
         <box
           paddingLeft={4}
           paddingRight={4}
-          backgroundColor={theme.backgroundElement}
+          backgroundColor={overlayTheme.background()}
           onMouseUp={() => confirm("copy")}
         >
-          <text fg={theme.text}>Copy</text>
+          <text fg={overlayTheme.text()}>Copy</text>
         </box>
-        <box paddingLeft={4} paddingRight={4} backgroundColor={theme.primary} onMouseUp={() => confirm("export")}>
-          <text fg={theme.selectedListItemText}>Export</text>
+        <box
+          paddingLeft={4}
+          paddingRight={4}
+          backgroundColor={themeV2.background.action({ focused: store.active === "export" })}
+          onMouseUp={() => confirm("export")}
+        >
+          <text fg={themeV2.text.action({ focused: store.active === "export" })}>Export</text>
         </box>
       </box>
     </box>
