@@ -1,6 +1,14 @@
-import { createEffect, For, onCleanup, Show, splitProps, type Accessor, type ComponentProps } from "solid-js"
+import {
+  createEffect,
+  createSignal,
+  For,
+  onCleanup,
+  Show,
+  splitProps,
+  type Accessor,
+  type ComponentProps,
+} from "solid-js"
 import { createStore } from "solid-js/store"
-import { Dynamic } from "solid-js/web"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
@@ -47,7 +55,7 @@ export function createPromptProjectController(input: {
   const [store, setStore] = createStore({ open: false, search: "", active: "" })
   let searchRef: HTMLInputElement | undefined
 
-  const selected = () => {
+  const current = () => {
     const key = pathKey(input.controls().directory)
     return input
       .controls()
@@ -57,6 +65,7 @@ export function createPromptProjectController(input: {
           (pathKey(project.worktree) === key || project.sandboxes?.some((sandbox) => pathKey(sandbox) === key)),
       )
   }
+  const selected = () => current() ?? input.controls().available[0]
   const projects = () => {
     const search = store.search.trim().toLowerCase()
     if (!search) return input.controls().available
@@ -92,8 +101,8 @@ export function createPromptProjectController(input: {
   }
   const select = (project: PromptProject) => {
     if (
-      pathKey(project.worktree) !== pathKey(selected()?.worktree ?? "") ||
-      project.server?.key !== selected()?.server?.key
+      pathKey(project.worktree) !== pathKey(current()?.worktree ?? "") ||
+      project.server?.key !== current()?.server?.key
     ) {
       input.controls().select(project.worktree, project.server?.key)
     }
@@ -116,6 +125,7 @@ export function createPromptProjectController(input: {
 
   return {
     selected,
+    empty: () => input.controls().available.length === 0,
     projects,
     servers,
     projectKey,
@@ -185,8 +195,27 @@ export function PromptProjectSelector(props: {
   controller: PromptProjectController
   placement?: "bottom" | "bottom-start"
 }) {
+  const [triggerReady, setTriggerReady] = createSignal(false)
   let contentRef: HTMLDivElement | undefined
+  let triggerFrame: number | undefined
   let restoreTrigger = true
+
+  // Floating UI requires a connected anchor; route transitions can construct this trigger before adoption.
+  const setTriggerRef = (element: HTMLButtonElement) => {
+    const ready = () => {
+      if (!element.isConnected) {
+        triggerFrame = requestAnimationFrame(ready)
+        return
+      }
+      triggerFrame = undefined
+      setTriggerReady(true)
+    }
+    ready()
+  }
+
+  onCleanup(() => {
+    if (triggerFrame !== undefined) cancelAnimationFrame(triggerFrame)
+  })
 
   const activeItem = () =>
     props.controller.active()
@@ -258,13 +287,13 @@ export function PromptProjectSelector(props: {
 
   return (
     <DropdownMenu
-      open={props.controller.open()}
+      open={triggerReady() && props.controller.open()}
       placement={props.placement ?? "bottom"}
       gutter={4}
       modal={false}
       onOpenChange={(open) => props.controller.setOpen(open)}
     >
-      <DropdownMenu.Trigger as={ProjectTrigger} controller={props.controller} />
+      <DropdownMenu.Trigger as={ProjectTrigger} ref={setTriggerRef} controller={props.controller} />
       <DropdownMenu.Portal>
         <DropdownMenu.Content
           ref={contentRef}
@@ -434,9 +463,7 @@ function ProjectTrigger(props: ComponentProps<"button"> & { controller: PromptPr
   const [local, rest] = splitProps(props, ["controller", "class", "classList", "onClick", "onKeyDown"])
   const project = () => local.controller.selected()
   return (
-    // Avoid an inert template clone that Floating UI can measure before browser adoption.
-    <Dynamic
-      component="button"
+    <button
       {...rest}
       data-action="prompt-project"
       type="button"
@@ -473,7 +500,7 @@ function ProjectTrigger(props: ComponentProps<"button"> & { controller: PromptPr
         {project() ? displayName(project()!) : local.controller.labels.new()}
       </span>
       <Icon name="chevron-down" size="small" class="shrink-0 text-v2-icon-icon-muted" />
-    </Dynamic>
+    </button>
   )
 }
 
