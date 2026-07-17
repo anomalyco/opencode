@@ -11,7 +11,7 @@ describe("State", () => {
     Effect.gen(function* () {
       let seen: string[] | undefined
       const state = State.create({
-        initial: () => ({ values: [] as string[] }),
+        initial: (): { values: string[] } => ({ values: [] }),
         draft: (draft) => ({ add: (item: string) => draft.values.push(item) }),
         finalize: () =>
           Effect.sync(() => {
