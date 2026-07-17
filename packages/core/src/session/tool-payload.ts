@@ -3,13 +3,16 @@ export * as ToolPayload from "./tool-payload"
 import { createHash } from "crypto"
 import { Effect, Schema } from "effect"
 import { eq, and } from "drizzle-orm"
-import { Body, Hash } from "@opencode-ai/schema/tool-payload"
+import { ToolPayload as ToolPayloadSchema } from "@opencode-ai/schema/tool-payload"
 import type { Database } from "../database/database"
 import { SessionToolPayloadTable } from "./sql"
 import type { SessionSchema } from "./schema"
 
-export { Hash, Body }
-export type { Hash, Body }
+export const Hash = ToolPayloadSchema.Hash
+export type Hash = ToolPayloadSchema.Hash
+
+export const Body = ToolPayloadSchema.Body
+export type Body = ToolPayloadSchema.Body
 
 /** UTF-8 byte ceiling for encoded durable tool event `data` after thinning. */
 export const MaxEventDataBytes = 256 * 1024
