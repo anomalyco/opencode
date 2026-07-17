@@ -11,7 +11,6 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { createLLMEventPublisher } from "@opencode-ai/core/session/runner/publish-llm-event"
 import { ToolPayload } from "@opencode-ai/core/session/tool-payload"
-import { assertDefined } from "./lib/assert"
 
 const sessionID = SessionV2.ID.make("ses_tool_event_test")
 const base64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB"
@@ -79,13 +78,15 @@ test("local tool success stores media in the payload blob and omits base64 from 
   await Effect.runPromise(publisher.publish(result))
 
   const success = published.find((event) => event.type === "session.tool.success.1")
-  assertDefined(success)
+  expect(success).toBeDefined()
+  if (!success) throw new Error("Expected session.tool.success.1")
   const data = Schema.decodeUnknownSync(SessionEvent.Tool.Success.data)(success.data)
-  assertDefined(data.payloadHash)
+  expect(data.payloadHash).toBeDefined()
   expect(JSON.stringify(success).includes(base64)).toBe(false)
   expect(success.data).not.toHaveProperty("result")
   expect(data.content).toEqual([{ type: "text", text: "Image read successfully" }])
 
+  if (!data.payloadHash) throw new Error("Expected payloadHash on thin success")
   const body = payloads.get(data.payloadHash)
   expect(body?.content).toEqual([
     { type: "text", text: "Image read successfully" },
@@ -99,10 +100,12 @@ test("provider-executed success keeps raw provider result in the payload blob on
   await Effect.runPromise(publisher.publish(LLMEvent.toolCall({ ...call, providerExecuted: true })))
   await Effect.runPromise(publisher.publish(LLMEvent.toolResult({ ...result, providerExecuted: true })))
   const success = published.find((event) => event.type === "session.tool.success.1")
-  assertDefined(success)
+  expect(success).toBeDefined()
+  if (!success) throw new Error("Expected session.tool.success.1")
   expect(success.data).not.toHaveProperty("result")
   const data = Schema.decodeUnknownSync(SessionEvent.Tool.Success.data)(success.data)
-  assertDefined(data.payloadHash)
+  expect(data.payloadHash).toBeDefined()
+  if (!data.payloadHash) throw new Error("Expected payloadHash on thin success")
   expect(payloads.get(data.payloadHash)?.result).toBeDefined()
 })
 
@@ -265,7 +268,7 @@ test("content-filter finish retains failure evidence until step closeout", async
     finish: "content-filter",
     tokens: { input: 8, output: 2, reasoning: 1 },
   })
-  assertDefined(settlement)
+  if (!settlement) throw new Error("Expected content-filter settlement")
   await Effect.runPromise(
     publisher.publishStepFailure({
       cost: Money.USD.make(1.25),
