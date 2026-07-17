@@ -55,7 +55,7 @@ const GLOBAL_FORM_SESSION_ID = "global"
 
 export async function runNonInteractivePrompt(input: Input) {
   const controller = new AbortController()
-  const stream = input.client.event.subscribe({ signal: controller.signal })[Symbol.asyncIterator]()
+  const stream = input.client.event.subscribe(undefined, { signal: controller.signal })[Symbol.asyncIterator]()
   const connected = await stream.next()
   if (connected.done) throw new Error("Event stream disconnected before prompt admission")
 

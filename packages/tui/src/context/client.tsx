@@ -22,13 +22,20 @@ type ManagedService = {
   restart: () => Promise<void>
 }
 
+export type EventInterest = {
+  readonly location?: {
+    readonly directory: string
+    readonly workspace?: string
+  }
+}
+
 type ClientEventMap = { [Type in OpenCodeEvent["type"]]: Extract<OpenCodeEvent, { type: Type }> }
 const connectTimeout = 2_000
 const connectionHistoryLimit = 50
 
 export const { use: useClient, provider: ClientProvider } = createSimpleContext({
   name: "Client",
-  init: (props: { api: OpenCodeClient; service?: ManagedService }) => {
+  init: (props: { api: OpenCodeClient; service?: ManagedService; interest?: EventInterest }) => {
     const log = useLog({ component: "client" })
     const abort = new AbortController()
     const history: ClientConnectionEvent[] = []
@@ -64,7 +71,9 @@ export const { use: useClient, provider: ClientProvider } = createSimpleContext(
           const error = await (async () => {
             record(attempt === 0 ? "connecting" : "reconnecting", attempt)
             log.info("event stream connecting", { attempt })
-            const iterator = api.event.subscribe({ signal: request.signal })[Symbol.asyncIterator]()
+            const iterator = api.event
+              .subscribe(props.interest, { signal: request.signal })
+              [Symbol.asyncIterator]()
             const first = await iterator.next()
             if (abort.signal.aborted || controller.signal.aborted) return undefined
             if (first.done)

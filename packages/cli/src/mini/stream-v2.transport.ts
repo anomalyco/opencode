@@ -832,7 +832,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         const connection = new AbortController()
         const abortConnection = () => connection.abort()
         controller.signal.addEventListener("abort", abortConnection, { once: true })
-        const stream = input.sdk.event.subscribe({ signal: connection.signal })[Symbol.asyncIterator]()
+        const stream = input.sdk.event.subscribe(undefined, { signal: connection.signal })[Symbol.asyncIterator]()
         try {
           const first = await stream.next()
           if (first.done || first.value.type !== "server.connected") throw new Error("Event stream disconnected")

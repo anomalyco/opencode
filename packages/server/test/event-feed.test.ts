@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { EventV2 } from "@opencode-ai/core/event"
+import { AbsolutePath } from "@opencode-ai/core/schema"
 import { OpenCodeEvent } from "@opencode-ai/protocol/groups/event"
 import { DateTime, Deferred, Effect, Exit, Fiber, Option, Schema, Stream } from "effect"
 import { it } from "../../core/test/lib/effect"
@@ -8,11 +9,22 @@ import { EventFeed } from "../src/event-feed"
 
 const Internal = EventV2.ephemeral({ type: "test.internal", schema: { value: Schema.String } })
 
-const event = (id: string): EventV2.Payload<typeof AgentV2.Event.Updated> => ({
+const event = (
+  id: string,
+  location?: { directory: string; workspaceID?: string },
+): EventV2.Payload<typeof AgentV2.Event.Updated> => ({
   id: EventV2.ID.make(`evt_${id}`),
   created: DateTime.makeUnsafe(Date.now()),
   type: AgentV2.Event.Updated.type,
   data: {},
+  ...(location
+    ? {
+        location: {
+          directory: AbsolutePath.make(location.directory),
+          ...(location.workspaceID !== undefined ? { workspaceID: location.workspaceID as never } : {}),
+        },
+      }
+    : {}),
 })
 
 const internal = (value: string): EventV2.Payload<typeof Internal> => ({
@@ -54,8 +66,8 @@ describe("EventFeed", () => {
           return event.type
         },
       })
-      const first = yield* feed.subscribe
-      const second = yield* feed.subscribe
+      const first = yield* feed.subscribe()
+      const second = yield* feed.subscribe()
       const left = yield* first.pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
       const right = yield* second.pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
 
@@ -76,8 +88,8 @@ describe("EventFeed", () => {
         capacity: 1,
         encode: (event) => event.id,
       })
-      const slow = yield* feed.subscribe
-      const fast = yield* feed.subscribe
+      const slow = yield* feed.subscribe()
+      const fast = yield* feed.subscribe()
       const first = yield* Deferred.make<void>()
       const second = yield* Deferred.make<void>()
       const received = new Array<string>()
@@ -117,7 +129,7 @@ describe("EventFeed", () => {
     Effect.gen(function* () {
       const source = makeSource()
       const feed = yield* EventFeed.make(source.observe, { capacity: 1, encode: (event) => event.type })
-      const stream = yield* feed.subscribe
+      const stream = yield* feed.subscribe()
 
       yield* source.publish(internal("one"))
       yield* source.publish(internal("two"))
@@ -136,13 +148,13 @@ describe("EventFeed", () => {
           return event.id
         },
       })
-      const current = yield* feed.subscribe
+      const current = yield* feed.subscribe()
       const failed = yield* current.pipe(Stream.runCollect, Effect.exit, Effect.forkScoped)
 
       yield* source.publish(event("bad"))
       const exit = yield* Fiber.join(failed)
 
-      const next = yield* feed.subscribe
+      const next = yield* feed.subscribe()
       const received = yield* next.pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
       yield* source.publish(event("good"))
 
@@ -152,4 +164,89 @@ describe("EventFeed", () => {
       expect(Array.from(yield* Fiber.join(received))).toEqual(["evt_good"])
     }),
   )
+
+  it.effect("delivers location-scoped events only to matching subscribers", () =>
+    Effect.gen(function* () {
+      const source = makeSource()
+      const feed = yield* EventFeed.make(source.observe, { encode: (event) => event.id })
+      const alpha = yield* feed.subscribe({ location: { directory: "/tmp/alpha" } })
+      const beta = yield* feed.subscribe({ location: { directory: "/tmp/beta" } })
+      const left = yield* alpha.pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+      const right = yield* beta.pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+
+      yield* source.publish(event("alpha", { directory: "/tmp/alpha" }))
+      yield* source.publish(event("beta", { directory: "/tmp/beta" }))
+
+      expect(Array.from(yield* Fiber.join(left))).toEqual(["evt_alpha"])
+      expect(Array.from(yield* Fiber.join(right))).toEqual(["evt_beta"])
+    }),
+  )
+
+  it.effect("keeps the unscoped feed global while scoped subscribers filter", () =>
+    Effect.gen(function* () {
+      const source = makeSource()
+      const feed = yield* EventFeed.make(source.observe, { encode: (event) => event.id })
+      const global = yield* feed.subscribe()
+      const scoped = yield* feed.subscribe({ location: { directory: "/tmp/alpha" } })
+      const all = yield* global.pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped)
+      const only = yield* scoped.pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+
+      yield* source.publish(event("alpha", { directory: "/tmp/alpha" }))
+      yield* source.publish(event("beta", { directory: "/tmp/beta" }))
+
+      expect(Array.from(yield* Fiber.join(all))).toEqual(["evt_alpha", "evt_beta"])
+      expect(Array.from(yield* Fiber.join(only))).toEqual(["evt_alpha"])
+    }),
+  )
+
+  it.effect("encodes once for multiple scoped subscribers that match the same event", () =>
+    Effect.gen(function* () {
+      let encodes = 0
+      const source = makeSource()
+      const feed = yield* EventFeed.make(source.observe, {
+        encode: (event) => {
+          encodes += 1
+          return event.id
+        },
+      })
+      const first = yield* feed.subscribe({ location: { directory: "/tmp/alpha" } })
+      const second = yield* feed.subscribe({ location: { directory: "/tmp/alpha" } })
+      const left = yield* first.pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+      const right = yield* second.pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+
+      yield* source.publish(event("shared", { directory: "/tmp/alpha" }))
+
+      expect([Array.from(yield* Fiber.join(left)), Array.from(yield* Fiber.join(right))]).toEqual([
+        ["evt_shared"],
+        ["evt_shared"],
+      ])
+      expect(encodes).toBe(1)
+    }),
+  )
+
+  it.effect("does not encode when no subscriber interest matches", () =>
+    Effect.gen(function* () {
+      let encodes = 0
+      const source = makeSource()
+      const feed = yield* EventFeed.make(source.observe, {
+        encode: (event) => {
+          encodes += 1
+          return event.id
+        },
+      })
+      yield* feed.subscribe({ location: { directory: "/tmp/alpha" } })
+      yield* source.publish(event("beta", { directory: "/tmp/beta" }))
+      expect(encodes).toBe(0)
+    }),
+  )
+
+  test("parses location interest from deepObject query params", () => {
+    const params = new URLSearchParams()
+    params.set("location[directory]", "/tmp/project")
+    params.set("location[workspace]", "ws_1")
+    expect(EventFeed.interestFromQuery(params)).toEqual({
+      location: { directory: "/tmp/project", workspace: "ws_1" },
+    })
+    expect(EventFeed.interestFromQuery(new URLSearchParams())).toBeUndefined()
+  })
 })

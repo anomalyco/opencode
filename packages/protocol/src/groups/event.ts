@@ -4,6 +4,7 @@ import { Location } from "@opencode-ai/schema/location"
 import type { Definition } from "@opencode-ai/schema/event"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
+import { LocationQuery, locationQueryOpenApi } from "./location.js"
 
 const fields = {
   id: Event.ID,
@@ -32,15 +33,18 @@ const make = <const Definitions extends ReadonlyArray<Definition>>(definitions: 
     group: HttpApiGroup.make("server.event")
       .add(
         HttpApiEndpoint.get("event.subscribe", "/api/event", {
+          query: LocationQuery,
           success: HttpApiSchema.StreamSse({ data: EventSchema }),
-        }).annotateMerge(
-          OpenApi.annotations({
-            identifier: "v2.event.subscribe",
-            summary: "Subscribe to events",
-            description:
-              "Subscribe to native event payloads for the server. Volatile by contract: a slow consumer overflows and fails the stream, and events during disconnection are missed.",
-          }),
-        ),
+        })
+          .annotateMerge(locationQueryOpenApi)
+          .annotateMerge(
+            OpenApi.annotations({
+              identifier: "v2.event.subscribe",
+              summary: "Subscribe to events",
+              description:
+                "Subscribe to native event payloads for the server. Omit location to receive the global public feed; pass location to narrow delivery to that directory (and optional workspace). Volatile by contract: a slow consumer overflows and fails the stream, and events during disconnection are missed.",
+            }),
+          ),
       )
       .annotateMerge(OpenApi.annotations({ title: "event", description: "Experimental event stream routes." })),
   }

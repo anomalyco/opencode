@@ -4542,6 +4542,12 @@ export type SkillListOutput = {
   data: Array<SkillInfo>
 }
 
+export type EventSubscribeInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
 export type EventSubscribeOutput = V2Event
 
 export type PtyListInput = {
