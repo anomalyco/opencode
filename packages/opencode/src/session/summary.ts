@@ -83,15 +83,13 @@ const layer = Layer.effect(
       let from: string | undefined
       let to: string | undefined
       for (const item of input.messages) {
-        if (!from) {
-          for (const part of item.parts) {
+        for (const part of item.parts) {
+          if (!from) {
             if (part.type === "step-start" && part.snapshot) {
               from = part.snapshot
-              break
             }
           }
-        }
-        for (const part of item.parts) {
+
           if (part.type === "step-finish" && part.snapshot) to = part.snapshot
         }
       }
