@@ -2,6 +2,7 @@
 import { $ } from "bun"
 import pkg from "../package.json"
 import { Script } from "@opencode-ai/script"
+import path from "path"
 import { fileURLToPath } from "url"
 
 const dir = fileURLToPath(new URL("..", import.meta.url))
@@ -26,16 +27,20 @@ async function publish(dir: string, name: string, version: string) {
   await $`npm publish *.tgz --access public --tag ${Script.channel}`.cwd(dir)
 }
 
+const binaryDirs: Record<string, string> = {}
 const binaries: Record<string, string> = {}
 for (const filepath of new Bun.Glob("*/package.json").scanSync({ cwd: "./dist" })) {
   const pkg = await Bun.file(`./dist/${filepath}`).json()
+  const dirName = path.dirname(filepath)
+  binaryDirs[pkg.name] = dirName
   binaries[pkg.name] = pkg.version
 }
 console.log("binaries", binaries)
 const version = Object.values(binaries)[0]
 
 const wrapperName = pkg.name
-const wrapperDir = `./dist/${wrapperName.replaceAll("/", "-")}`
+const wrapperDirName = wrapperName.replaceAll("/", "-")
+const wrapperDir = `./dist/${wrapperDirName}`
 await $`mkdir -p ${wrapperDir}/bin`
 await $`cp ./script/postinstall.mjs ${wrapperDir}/postinstall.mjs`
 await Bun.file(`${wrapperDir}/LICENSE`).write(await Bun.file("../../LICENSE").text())
@@ -76,8 +81,8 @@ await Bun.file(`${wrapperDir}/package.json`).write(
   ),
 )
 
-const tasks = Object.entries(binaries).map(async ([name]) => {
-  await publish(`./dist/${name}`, name, binaries[name])
+const tasks = Object.entries(binaryDirs).map(async ([name, dirName]) => {
+  await publish(`./dist/${dirName}`, name, binaries[name])
 })
 await Promise.all(tasks)
 await publish(wrapperDir, wrapperName, version)
