@@ -55,6 +55,8 @@ jobs:
         run: bun install
 
       - name: Build platform binaries
+        env:
+          OPENCODE_RELEASE: ""
         run: bun run --cwd packages/opencode build
 
       - name: Publish release
