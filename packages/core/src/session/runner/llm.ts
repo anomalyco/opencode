@@ -178,9 +178,10 @@ const layer = Layer.effect(
                             content: thin.content,
                             payloadHash,
                           }
+                          // Thin progress frames should always fit; over-budget is a defect.
                           yield* ToolPayload.assertEventDataBudget(data).pipe(
                             Effect.andThen(events.publish(SessionEvent.Tool.Progress, data)),
-                            Effect.catchTag("ToolPayload.OverBudgetError", () => Effect.void),
+                            Effect.orDie,
                           )
                         }),
                       ),

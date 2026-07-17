@@ -12,6 +12,7 @@ import type { MessageID, PartID, SessionV1 } from "../v1/session"
 import { WorkspaceV2 } from "../workspace"
 import { Timestamps } from "../database/schema.sql"
 import type { Instruction } from "@opencode-ai/schema/instruction"
+import type { ToolPayload } from "@opencode-ai/schema/tool-payload"
 import type { Session } from "@opencode-ai/schema/session"
 import type { SyntheticData, UserData } from "@opencode-ai/schema/session-pending"
 import type { RevertV1 } from "@opencode-ai/schema/session-revert"
@@ -180,7 +181,7 @@ export const SessionToolPayloadTable = sqliteTable(
       .$type<SessionSchema.ID>()
       .notNull()
       .references(() => SessionTable.id, { onDelete: "cascade" }),
-    hash: text().notNull(),
+    hash: text().$type<ToolPayload.Hash>().notNull(),
     value: text({ mode: "json" }).$type<Schema.Json>().notNull(),
   },
   (table) => [primaryKey({ columns: [table.session_id, table.hash] })],

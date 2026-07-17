@@ -732,14 +732,10 @@ const layer = Layer.effectDiscard(
     yield* events.project(SessionEvent.Tool.Input.Ended, (event) => run(db, event))
     yield* events.project(SessionEvent.Tool.Called, (event) => run(db, event))
     yield* events.project(SessionEvent.Tool.Progress, (event) =>
-      Effect.gen(function* () {
-        yield* run(db, yield* hydrateToolPayload(db, event))
-      }),
+      hydrateToolPayload(db, event).pipe(Effect.flatMap((hydrated) => run(db, hydrated))),
     )
     yield* events.project(SessionEvent.Tool.Success, (event) =>
-      Effect.gen(function* () {
-        yield* run(db, yield* hydrateToolPayload(db, event))
-      }),
+      hydrateToolPayload(db, event).pipe(Effect.flatMap((hydrated) => run(db, hydrated))),
     )
     yield* events.project(SessionEvent.Tool.Failed, (event) => run(db, event))
     yield* events.project(SessionEvent.Reasoning.Started, (event) => run(db, event))

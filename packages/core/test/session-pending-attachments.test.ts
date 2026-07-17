@@ -115,4 +115,52 @@ describe("SessionPending attachment bounding", () => {
       }
     }),
   )
+
+  it.effect("text-only admits omit payloadHash", () =>
+    Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      const events = yield* EventV2.Service
+      const sessionID = SessionSchema.ID.make("ses_pending_text")
+      const inputID = SessionMessage.ID.create()
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+        .onConflictDoNothing()
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: sessionID,
+          project_id: Project.ID.global,
+          slug: "pending-text",
+          directory: "/project",
+          title: "Pending text",
+          version: "test",
+        })
+        .run()
+        .pipe(Effect.orDie)
+
+      yield* SessionPending.admit(db, events, {
+        id: inputID,
+        sessionID,
+        input: {
+          type: "user",
+          delivery: "steer",
+          data: { text: "hello" },
+        },
+      })
+
+      const rows = yield* db
+        .select()
+        .from(EventTable)
+        .where(and(eq(EventTable.aggregate_id, sessionID), eq(EventTable.type, "session.input.admitted.1")))
+        .all()
+        .pipe(Effect.orDie)
+      expect(rows).toHaveLength(1)
+      const eventData = rows[0]!.data as { payloadHash?: string; input: { data: { text: string } } }
+      expect(eventData.payloadHash).toBeUndefined()
+      expect(eventData.input.data.text).toBe("hello")
+    }),
+  )
 })

@@ -3,16 +3,14 @@ export * as ToolPayload from "./tool-payload"
 import { createHash } from "crypto"
 import { Effect, Schema } from "effect"
 import { eq, and } from "drizzle-orm"
-import { ToolPayload as ToolPayloadSchema } from "@opencode-ai/schema/tool-payload"
+import { Body, Hash } from "@opencode-ai/schema/tool-payload"
 import type { Database } from "../database/database"
 import { SessionToolPayloadTable } from "./sql"
 import type { SessionSchema } from "./schema"
 
-export const Hash = ToolPayloadSchema.Hash
-export type Hash = ToolPayloadSchema.Hash
-
-export const Body = ToolPayloadSchema.Body
-export type Body = ToolPayloadSchema.Body
+export { Hash, Body }
+export type Hash = typeof Hash.Type
+export type Body = typeof Body.Type
 
 /** UTF-8 byte ceiling for encoded durable tool event `data` after thinning. */
 export const MaxEventDataBytes = 256 * 1024
@@ -35,8 +33,11 @@ export type Error = OverBudgetError | MissingError
 
 type DatabaseService = Database.Interface["db"]
 
+const encodeBody = Schema.encodeSync(Body)
+const decodeJson = Schema.decodeUnknownSync(Schema.Json)
+
 export function hash(value: Body): Hash {
-  return Hash.make(createHash("sha256").update(canonical(value as Schema.Json)).digest("hex"))
+  return Hash.make(createHash("sha256").update(canonical(decodeJson(encodeBody(value)))).digest("hex"))
 }
 
 export const insertJson = Effect.fn("ToolPayload.insertJson")(function* (
@@ -83,7 +84,7 @@ export const insert = Effect.fn("ToolPayload.insert")(function* (
   sessionID: SessionSchema.ID,
   body: Body,
 ) {
-  return yield* insertJson(db, sessionID, body as Schema.Json)
+  return yield* insertJson(db, sessionID, decodeJson(encodeBody(body)))
 })
 
 export const load = Effect.fn("ToolPayload.load")(function* (
@@ -129,7 +130,7 @@ function canonical(value: Schema.Json): string {
   if (value !== null && typeof value === "object")
     return `{${Object.entries(value)
       .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-      .map(([key, entry]) => `${JSON.stringify(key)}:${canonical(entry as Schema.Json)}`)
+      .map(([key, entry]) => `${JSON.stringify(key)}:${canonical(decodeJson(entry))}`)
       .join(",")}}`
   return JSON.stringify(value)
 }

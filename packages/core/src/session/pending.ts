@@ -52,6 +52,13 @@ export function stripAttachmentBytes(input: Message): Message {
   }
 }
 
+function hasAttachmentBytes(input: Message): boolean {
+  if (input.type !== "user" || !input.data.files?.length) return false
+  return input.data.files.some((file) => file.data.length > 0)
+}
+
+const decodeJson = Schema.decodeUnknownSync(Schema.Json)
+
 export class LifecycleConflict extends Schema.TaggedErrorClass<LifecycleConflict>()(
   "SessionPending.LifecycleConflict",
   {
@@ -173,18 +180,16 @@ export const admit = Effect.fn("SessionPending.admit")(function* (
   }
   const promoted = yield* promotedFromHistory(db, request.sessionID, request.id)
   if (promoted !== undefined) return promoted
-  const payloadHash = yield* ToolPayload.insertJson(
-    db,
-    request.sessionID,
-    encodeMessage(request.input) as Schema.Json,
-  )
   const thin = stripAttachmentBytes(request.input)
+  const payloadHash = hasAttachmentBytes(request.input)
+    ? yield* ToolPayload.insertJson(db, request.sessionID, decodeJson(encodeMessage(request.input)))
+    : undefined
   return yield* events
     .publish(SessionEvent.InputAdmitted, {
       inputID: request.id,
       sessionID: request.sessionID,
       input: thin,
-      payloadHash,
+      ...(payloadHash !== undefined ? { payloadHash } : {}),
     })
     .pipe(
       Effect.flatMap((event) => {
