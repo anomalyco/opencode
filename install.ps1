@@ -159,6 +159,66 @@ function Get-LatestFromNextcloud {
     return $null
 }
 
+# --- Property Helpers ------------------------------------------------------
+
+function Test-Property {
+    param([object]$Object, [string]$Name)
+    # Safe property check that works with PSCustomObject (JSON) and OrderedDictionary
+    if (-not $Object) { return $false }
+    try {
+        $val = $Object.$Name
+        return $null -ne $val
+    } catch {
+        # Check via PSObject properties as fallback
+        try {
+            return ($Object.PSObject.Properties.Name -contains $Name)
+        } catch {
+            return $false
+        }
+    }
+}
+
+function Get-Property {
+    param([object]$Object, [string]$Name)
+    if (Test-Property $Object $Name) { return $Object.$Name }
+    return $null
+}
+
+# --- Version Checks --------------------------------------------------------
+
+function Get-InstalledVersion {
+    param([string]$BinaryPath)
+
+    if (-not (Test-Path $BinaryPath)) { return $null }
+
+    try {
+        $ver = & $BinaryPath --version 2>&1
+        if ($ver -match '([\d.]+)') {
+            $versionStr = $matches[1]
+            Write-Info "Currently installed: v$versionStr"
+            return "v$versionStr"
+        }
+    } catch {
+        # Could not determine version
+    }
+    return $null
+}
+
+function Get-McpManifestVersion {
+    $mcpStampFile = Join-Path $env:USERPROFILE ".config\opencode\.mcp-manifest-version"
+    if (Test-Path $mcpStampFile) {
+        return (Get-Content $mcpStampFile -Raw).Trim()
+    }
+    return $null
+}
+
+function Set-McpManifestVersion {
+    param([string]$Version)
+    $mcpStampFile = Join-Path $env:USERPROFILE ".config\opencode\.mcp-manifest-version"
+    $null = New-Item -ItemType Directory -Path (Split-Path $mcpStampFile -Parent) -Force
+    Set-Content -Path $mcpStampFile -Value $Version -NoNewline
+}
+
 # --- Download Binary -------------------------------------------------------
 
 function Download-WithRetry {
@@ -447,18 +507,23 @@ function Main {
     Write-Success "git, node, npm -- all present"
 
     Write-Step "Installing opencode-fork"
-    $installParams = @{
-        Repo       = $OPENCODE_REPO
-        OutputDir  = $OPENCODE_DIR
-        AssetName  = "opencode"
-        BinaryName = "opencode"
-        Version    = $Version
+    $opencodeInstalled = $Version -and (Get-InstalledVersion -BinaryPath (Join-Path $OPENCODE_DIR "opencode.exe")) -eq $Version
+    if ($opencodeInstalled) {
+        Write-Success "opencode already at latest version ($Version), skipping."
+    } else {
+        $installParams = @{
+            Repo       = $OPENCODE_REPO
+            OutputDir  = $OPENCODE_DIR
+            AssetName  = "opencode"
+            BinaryName = "opencode"
+            Version    = $Version
+        }
+        if ($UseMirror) {
+            Write-Info "Downloading from Nextcloud mirror..."
+            $installParams.MirrorUrl = $NEXTCLOUD_MIRROR
+        }
+        Install-Binary @installParams
     }
-    if ($UseMirror) {
-        Write-Info "Downloading from Nextcloud mirror..."
-        $installParams.MirrorUrl = $NEXTCLOUD_MIRROR
-    }
-    Install-Binary @installParams
 
     Write-Step "Installing gentle-ai"
     $gentleVersion = Get-LatestVersion -Repo $GENTLE_REPO
@@ -466,7 +531,12 @@ function Main {
         Write-Warn "Cannot reach GitHub for gentle-ai. Trying anyway with known version..."
         $gentleVersion = "v2.1.5"  # last known stable
     }
-    Install-Binary -Repo $GENTLE_REPO -OutputDir $GENTLE_DIR -AssetName "gentle-ai" -BinaryName "gentle-ai" -Version $gentleVersion
+    $gentleInstalled = $gentleVersion -and (Get-InstalledVersion -BinaryPath (Join-Path $GENTLE_DIR "gentle-ai.exe")) -eq $gentleVersion
+    if ($gentleInstalled) {
+        Write-Success "gentle-ai already at latest version ($gentleVersion), skipping."
+    } else {
+        Install-Binary -Repo $GENTLE_REPO -OutputDir $GENTLE_DIR -AssetName "gentle-ai" -BinaryName "gentle-ai" -Version $gentleVersion
+    }
 
     Write-Step "Setting up PATH"
     if (-not $NoModifyPath) {
@@ -609,60 +679,149 @@ function Main {
     } else {
         $config = [ordered]@{}
     }
-    # Add MCP servers if not present
-    if (-not $config.mcp) { $config | Add-Member -NotePropertyName "mcp" -NotePropertyValue ([ordered]@{}) }
-    if (-not $config.mcp.context7) {
-        $config.mcp | Add-Member -NotePropertyName "context7" -NotePropertyValue ([ordered]@{
-            enabled = $true
-            type = "remote"
-            url = "https://mcp.context7.com/mcp"
-        })
-        Write-Success "Added context7 MCP server"
+    # Read MCP server manifest from repo
+    $mcpManifest = $null
+    $mcpManifestVersion = $null
+    $mcpManifestUrl = "https://raw.githubusercontent.com/ivanfernadezm99/opencode/dev/.opencode/mcp-servers.json"
+    try {
+        $mcpManifestJson = Invoke-RestMethod -Uri $mcpManifestUrl -UseBasicParsing -TimeoutSec 15 -Headers @{ "User-Agent" = "gentle-opencode-installer" }
+        $mcpManifest = $mcpManifestJson.servers
+        $mcpManifestVersion = $mcpManifestJson.version
+        Write-Info "Loaded MCP manifest from repo v$mcpManifestVersion ($($mcpManifest.PSObject.Properties.Name.Count) servers)"
+    } catch {
+        Write-Warn "Could not download MCP manifest from repo: $_"
+        Write-Warn "Falling back to built-in MCP servers"
     }
-    if (-not $config.mcp.engram) {
-        $engramPath = Join-Path $GENTLE_DIR "engram.exe"
-        $config.mcp | Add-Member -NotePropertyName "engram" -NotePropertyValue ([ordered]@{
-            command = @($engramPath, "mcp", "--tools=agent")
-            type = "local"
-        })
-        Write-Success "Added engram MCP server"
-    }
-    if (-not $config.mcp.playwright) {
-        $config.mcp | Add-Member -NotePropertyName "playwright" -NotePropertyValue ([ordered]@{
-            command = @("npx", "@anthropic-ai/mcp-playwright@latest")
-            type = "local"
-        })
-        Write-Success "Added playwright MCP server"
-    }
-    if (-not $config.mcp.codegraph) {
-        $config.mcp | Add-Member -NotePropertyName "codegraph" -NotePropertyValue ([ordered]@{
-            command = @("codegraph", "serve", "--mcp")
-            type = "local"
-            enabled = $true
-        })
-        Write-Success "Added codegraph MCP server"
-    }
-    # Write back
-    $config | ConvertTo-Json -Depth 10 | Set-Content $opencodeConfigFile -Encoding UTF8
-    Write-Success "MCP servers configured"
 
-    Write-Step "Installing Playwright and Chromium"
-    # Check if npx is available
-    if (Get-Command npx -ErrorAction SilentlyContinue) {
-        try {
-            Write-Info "Installing @anthropic-ai/mcp-playwright..."
-            $prevEA = $ErrorActionPreference
-            $ErrorActionPreference = "Continue"
-            & npx @anthropic-ai/mcp-playwright@latest install 2>&1 | Out-Null
-            $ErrorActionPreference = $prevEA
-            Write-Success "Playwright and Chromium installed"
-        } catch {
-            Write-Warn "Playwright install failed: $_"
-            Write-Warn "You can run 'npx @anthropic-ai/mcp-playwright@latest install' manually later."
-        }
+    # Check if MCP manifest has already been applied
+    $stampedVersion = Get-McpManifestVersion
+    if ($mcpManifestVersion -and $stampedVersion -eq $mcpManifestVersion) {
+        Write-Info "MCP manifest v$mcpManifestVersion already applied, skipping."
     } else {
-        Write-Warn "npx not found -- skipping Playwright install"
-        Write-Warn "Install Node.js first, then run: npx @anthropic-ai/mcp-playwright@latest install"
+        Write-Info "MCP manifest v$mcpManifestVersion is new (was v$($stampedVersion)), processing..."
+
+        # Ensure MCP section exists in config
+        if (-not $config.mcp) { $config | Add-Member -NotePropertyName "mcp" -NotePropertyValue ([ordered]@{}) }
+
+        # Install MCP servers from manifest (or fallback to built-in)
+        $mcpServers = if ($mcpManifest) { $mcpManifest } else {
+            # Built-in fallback if manifest is unreachable
+            [ordered]@{
+                context7 = [ordered]@{ enabled = $true; type = "remote"; url = "https://mcp.context7.com/mcp" }
+                engram = [ordered]@{ enabled = $true; type = "local"; command_template = @("{{GENTLE_BIN}}", "mcp", "--tools=agent") }
+                playwright = [ordered]@{ enabled = $true; type = "local"; command = @("npx", "@anthropic-ai/mcp-playwright@latest"); postinstall = "npx @anthropic-ai/mcp-playwright@latest install" }
+                codegraph = [ordered]@{ enabled = $true; type = "local"; command = @("codegraph", "serve", "--mcp") }
+            }
+        }
+
+        foreach ($serverName in $mcpServers.PSObject.Properties.Name) {
+            $serverDef = $mcpServers.$serverName
+
+            # Skip if already configured (preserve user overrides)
+            if ($config.mcp.$serverName) {
+                Write-Info "MCP server '$serverName' already configured, skipping."
+                continue
+            }
+
+            # Build server config
+            $serverConfig = [ordered]@{ type = $serverDef.type }
+
+            if ($serverDef.type -eq "remote") {
+                $serverConfig.url = $serverDef.url
+                $serverConfig.enabled = if (Test-Property $serverDef "enabled") { $serverDef.enabled } else { $true }
+            } else {
+                if (Test-Property $serverDef "command_template") {
+                    $resolvedCommand = $serverDef.command_template | ForEach-Object {
+                        $_ -replace "{{GENTLE_BIN}}", (Join-Path $GENTLE_DIR "engram.exe")
+                    }
+                    $serverConfig.command = [string[]]$resolvedCommand
+                } elseif (Test-Property $serverDef "command") {
+                    $serverConfig.command = [string[]]$serverDef.command
+                }
+                if (Test-Property $serverDef "enabled") { $serverConfig.enabled = $serverDef.enabled }
+            }
+
+            $config.mcp | Add-Member -NotePropertyName $serverName -NotePropertyValue $serverConfig
+            Write-Success "Added MCP server: $serverName"
+
+            # Run postinstall if defined
+            if (Test-Property $serverDef "postinstall" -and $serverDef.postinstall) {
+                Write-Info "Running postinstall for '$serverName'..."
+                try {
+                    $prevEA = $ErrorActionPreference
+                    $ErrorActionPreference = "Continue"
+                    cmd /c " $($serverDef.postinstall) " 2>&1 | Out-Null
+                    $ErrorActionPreference = $prevEA
+                    Write-Success "Postinstall for '$serverName' completed"
+                } catch {
+                    Write-Warn "Postinstall for '$serverName' failed: $_"
+                }
+            }
+        }
+
+        # ---- Scan installed skills for additional MCP dependencies ----
+        $skillsDir = Join-Path $env:USERPROFILE ".config\opencode\skills"
+        if (Test-Path $skillsDir) {
+            $skillMcpFiles = Get-ChildItem -Path $skillsDir -Recurse -Filter "mcp.json" -Depth 2 -ErrorAction SilentlyContinue
+            foreach ($mcpFile in $skillMcpFiles) {
+                try {
+                    $skillMcp = Get-Content $mcpFile.FullName -Raw | ConvertFrom-Json
+                    $skillName = $skillMcp.skill
+                    $dependsOn = $skillMcp.depends_on
+                    $inlineServers = $skillMcp.mcp_servers
+
+                    if (-not $dependsOn -and -not $inlineServers) { continue }
+
+                    Write-Info "Skill '$skillName' declares MCP dependencies: $($dependsOn -join ', ')"
+
+                    foreach ($dep in $dependsOn) {
+                        if ($config.mcp.$dep) {
+                            Write-Info "  MCP '$dep' already configured (required by '$skillName')"
+                            continue
+                        }
+                        if ($mcpManifest -and $mcpManifest.$dep) {
+                            $depDef = $mcpManifest.$dep
+                            $depConfig = [ordered]@{ type = $depDef.type }
+                            if ($depDef.type -eq "remote") {
+                                $depConfig.url = $depDef.url
+                            } elseif (Test-Property $depDef "command_template") {
+                                $resolved = $depDef.command_template | ForEach-Object {
+                                    $_ -replace "{{GENTLE_BIN}}", (Join-Path $GENTLE_DIR "engram.exe")
+                                }
+                                $depConfig.command = [string[]]$resolved
+                            } elseif (Test-Property $depDef "command") {
+                                $depConfig.command = [string[]]$depDef.command
+                            }
+                            if (Test-Property $depDef "enabled") { $depConfig.enabled = $depDef.enabled }
+                            $config.mcp | Add-Member -NotePropertyName $dep -NotePropertyValue $depConfig
+                            Write-Success "  Added MCP '$dep' (required by skill '$skillName')"
+                        } else {
+                            Write-Warn "  Skill '$skillName' requires MCP '$dep' but no definition found in manifest"
+                        }
+                    }
+
+                    if ($inlineServers) {
+                        foreach ($srvName in $inlineServers.PSObject.Properties.Name) {
+                            if ($config.mcp.$srvName) { continue }
+                            $config.mcp | Add-Member -NotePropertyName $srvName -NotePropertyValue $inlineServers.$srvName
+                            Write-Success "  Added inline MCP server '$srvName' from skill '$skillName'"
+                        }
+                    }
+                } catch {
+                    Write-Warn "  Could not parse mcp.json from $($mcpFile.FullName): $_"
+                }
+            }
+        }
+
+        # Write back
+        $config | ConvertTo-Json -Depth 10 | Set-Content $opencodeConfigFile -Encoding UTF8
+        Write-Success "MCP servers configured"
+
+        # Stamp manifest version so we don't re-process next time
+        if ($mcpManifestVersion) {
+            Set-McpManifestVersion -Version $mcpManifestVersion
+            Write-Info "MCP manifest v$mcpManifestVersion stamped."
+        }
     }
 
     Write-Step "Creating desktop shortcut"

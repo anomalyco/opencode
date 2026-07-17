@@ -1,0 +1,7 @@
+{
+  "skill": "redmine-time-entries",
+  "version": "1.0",
+  "description": "Redmine time entry automation via Playwright",
+  "depends_on": ["playwright"],
+  "mcp_servers": {}
+}

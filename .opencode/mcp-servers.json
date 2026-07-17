@@ -1,0 +1,36 @@
+{
+  "$schema": "https://opencode.ai/mcp-servers.json",
+  "description": "Declarative MCP server manifest for gentle-opencode fork",
+  "version": "1.1",
+  "servers": {
+    "context7": {
+      "description": "Documentation lookup for libraries and frameworks",
+      "required_by": ["_shared", "sdd-design", "sdd-spec", "sdd-apply", "sdd-verify"],
+      "enabled": true,
+      "type": "remote",
+      "url": "https://mcp.context7.com/mcp"
+    },
+    "engram": {
+      "description": "Persistent memory across sessions — stores decisions, bugs, discoveries",
+      "required_by": ["_shared", "gentle-orchestrator", "redmine-time-entries"],
+      "enabled": true,
+      "local": true,
+      "command_template": ["{{GENTLE_BIN}}", "mcp", "--tools=agent"]
+    },
+    "playwright": {
+      "description": "Browser automation — required by redmine-time-entries, playwright-navigator, and other browser-based skills",
+      "required_by": ["redmine-time-entries", "playwright-navigator", "whatsapp-scroll-extraction"],
+      "enabled": true,
+      "local": true,
+      "command": ["npx", "@anthropic-ai/mcp-playwright@latest"],
+      "postinstall": "npx @anthropic-ai/mcp-playwright@latest install"
+    },
+    "codegraph": {
+      "description": "Code intelligence and structural navigation — codebase indexing and symbol resolution",
+      "required_by": ["gentle-orchestrator", "_shared"],
+      "enabled": true,
+      "local": true,
+      "command": ["codegraph", "serve", "--mcp"]
+    }
+  }
+}
