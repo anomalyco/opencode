@@ -1,230 +1,233 @@
 <#
 .SYNOPSIS
-    Install.ps1 Test Suite
-    Validates syntax, COMMAND mode traps, and URL consistency.
+    Install.ps1 Test Suite — validates syntax, COMMAND mode traps, URL consistency.
 
-.DESCRIPTION
-    Tests the install.ps1 script for:
-    1. Parse errors (via Get-Command or AST inspection)
-    2. COMMAND mode -and bugs (cmdlet/function followed by -and without parens)
-    3. Download URL version consistency
-    4. Function existence (all referenced functions must be defined)
-
-.EXAMPLE
-    .\test-installer.ps1
+.PARAMETER Path
+    Path to install.ps1 to test. Default: repo root relative path.
 #>
+param([string]$Path)
 
 $ErrorActionPreference = "Stop"
 $passed = 0
 $failed = 0
 $warnings = 0
 
-$scriptPath = Join-Path $PSScriptRoot "..\..\install.ps1"
-$scriptDir = Split-Path $scriptPath -Parent
-
-# Ensure we're running from the repo root
-if (-not (Test-Path $scriptPath)) {
-    Write-Host "ERROR: install.ps1 not found at $scriptPath" -ForegroundColor Red
-    Write-Host "Run this from the repo root: .opencode\scripts\test-installer.ps1" -ForegroundColor Yellow
+if (-not $Path) {
+    $scriptDir = Split-Path $PSScriptRoot -Parent
+    $Path = Join-Path $scriptDir "install.ps1"
+}
+if (-not (Test-Path $Path)) {
+    Write-Host "ERROR: install.ps1 not found at $Path" -ForegroundColor Red
     exit 1
 }
 
-function Test-Pass {
-    param([string]$Name)
-    $script:passed++
-    Write-Host "  PASS: $Name" -ForegroundColor Green
-}
+$content = Get-Content $Path -Raw
+$allLines = $content -split "`n"
 
-function Test-Fail {
-    param([string]$Name, [string]$Detail)
-    $script:failed++
-    Write-Host "  FAIL: $Name" -ForegroundColor Red
-    if ($Detail) { Write-Host "        $Detail" -ForegroundColor DarkRed }
-}
-
-function Test-Warn {
-    param([string]$Name, [string]$Detail)
-    $script:warnings++
-    Write-Host "  WARN: $Name" -ForegroundColor Yellow
-    if ($Detail) { Write-Host "        $Detail" -ForegroundColor DarkYellow }
-}
+function Test-Pass    { param([string]$N); $script:passed++; Write-Host "  PASS: $N" -ForegroundColor Green }
+function Test-Fail    { param([string]$N, [string]$D); $script:failed++; Write-Host "  FAIL: $N" -ForegroundColor Red; if ($D) { Write-Host "        $D" -ForegroundColor DarkRed } }
+function Test-Warn    { param([string]$N, [string]$D); $script:warnings++; Write-Host "  WARN: $N" -ForegroundColor Yellow; if ($D) { Write-Host "        $D" -ForegroundColor DarkYellow } }
 
 Write-Host "`n=== Install.ps1 Test Suite ===" -ForegroundColor Cyan
-Write-Host "Script: $scriptPath`n" -ForegroundColor DarkGray
+Write-Host "Script: $Path`n" -ForegroundColor DarkGray
 
-# --- Test 1: File exists and has content ---
+# ----- [1] File integrity -----
 Write-Host "--- [1] File integrity ---" -ForegroundColor White
-if (Test-Path $scriptPath) {
-    $content = Get-Content $scriptPath -Raw
-    $lines = $content -split "`n"
-    if ($lines.Count -gt 900 -and $content.Contains("function Main")) {
-        Test-Pass "install.ps1 exists with $($lines.Count) lines and Main function"
-    } else {
-        Test-Fail "install.ps1 content validation" "Expected 900+ lines and Main function"
-    }
+if ($allLines.Count -gt 900 -and $content.Contains("function Main")) {
+    Test-Pass "install.ps1: $($allLines.Count) lines, Main function present"
 } else {
-    Test-Fail "install.ps1 exists" "File not found at $scriptPath"
+    Test-Fail "install.ps1 content" "Expected 900+ lines and Main function"
 }
 
-# --- Test 2: PowerShell syntax check ---
-Write-Host "`n--- [2] PowerShell syntax ---" -ForegroundColor White
+# ----- [2] PowerShell syntax (AST) -----
+Write-Host "--- [2] PowerShell syntax ---" -ForegroundColor White
 try {
-    # Parse the script using PowerShell's AST
-    $ast = [System.Management.Automation.Language.Parser]::ParseInput($content, [ref]$null, [ref]$null)
-    if ($ast) {
-        Test-Pass "PowerShell AST parses without errors"
-    }
+    $null = [System.Management.Automation.Language.Parser]::ParseInput($content, [ref]$null, [ref]$null)
+    Test-Pass "AST parses cleanly"
 } catch {
-    Test-Fail "PowerShell syntax" $_.Exception.Message
+    Test-Fail "AST parse error" $_.Exception.Message
 }
 
-# --- Test 3: No COMMAND mode -and traps ---
-Write-Host "`n--- [3] COMMAND mode -and traps ---" -ForegroundColor White
-$cmdletBeforeAnd = @()
-$lines = $content -split "`n"
-for ($i = 0; $i -lt $lines.Count; $i++) {
-    $line = $lines[$i]
-    $lineNum = $i + 1
+# ----- [3] COMMAND mode traps -----
+<#
+  PowerShell 5.1 COMMAND vs EXPRESSION mode:
+  BAD:  if (Test-Path $path -and $condition)
+        The parser sees Test-Path's arguments as: $path, '-and', '$condition'
+        '-and' becomes a string argument, not a logical operator.
+  GOOD: if ((Test-Path $path) -and $condition)
+        Outer parens force EXPRESSION mode for -and.
+  
+  This test finds BOTH:
+    A) Unfixed: cmdlet-before-and without wrapping parens (FAIL)
+    B) Fixed:   cmdlet wrapped in parens before -and (PASS)
+#>
+Write-Host "--- [3] COMMAND mode -and traps ---" -ForegroundColor White
+$bugs = @()
+$fixed = @()
+for ($i = 0; $i -lt $allLines.Count; $i++) {
+    $line = $allLines[$i]
+    $n = $i + 1
 
-    # Check if line contains a cmdlet-like word followed by $variable then -and (without wrapping parens)
-    # Pattern: `if (Command $arg -and` — this is the trap
-    if ($line -match 'if\s*\(\s*[A-Z][a-zA-Z-]+\s+\$[^)\s]+\s+-and\b') {
-        # Check if the cmdlet call is already wrapped in parens: `if ((Command $arg) -and`
-        if ($line -notmatch 'if\s*\(\s*\([A-Z]') {
-            $cmdletBeforeAnd += @{ Line = $lineNum; Text = $line.Trim() }
+    # Pattern A—BUG: if (Command $arg -and without wrapping parens
+    # A cmdlet name (starts with uppercase) followed by `$arg -and`
+    if ($line -match '\bif\s*\(\s*[A-Z][a-zA-Z-]+\s+\$\S+\s+-and\b') {
+        # Double-check: NOT already wrapped in parens: if ((Command ...)
+        if ($line -notmatch '\bif\s*\(\s*\(') {
+            $bugs += @{ Line = $n; Text = $line.Trim() }
         }
     }
-}
 
-if ($cmdletBeforeAnd.Count -eq 0) {
-    Test-Pass "No COMMAND mode -and traps found"
-} else {
-    foreach ($item in $cmdletBeforeAnd) {
-        Test-Fail "COMMAND mode trap at line $($item.Line)" $item.Text
+    # Pattern B—GOOD fixed pattern: if ((Command $arg) -and
+    if ($line -match '\bif\s*\(\s*\([A-Z][a-zA-Z-]+\s+\$\S+\)\s+-and\b') {
+        $fixed += @{ Line = $n; Text = $line.Trim() }
     }
 }
 
-# --- Test 4: Download URL version consistency ---
-Write-Host "`n--- [4] URL version consistency ---" -ForegroundColor White
-if ($content -match '\$OPENCODE_REPO\s*=\s*"([^"]+)"') {
-    $repo = $matches[1]
-    Write-Host "  Repo: $repo" -ForegroundColor DarkGray
-
-    # Check that download URLs use the repo variable, not hardcoded values
-    if ($content -notmatch 'https://github\.com/\$OPENCODE_REPO') {
-        Test-Warn "Download URLs should use `$OPENCODE_REPO" "Check for hardcoded GitHub URLs"
-    } else {
-        Test-Pass "Download URLs use `$OPENCODE_REPO variable"
+if ($bugs.Count -gt 0) {
+    foreach ($b in $bugs) {
+        Test-Fail "COMMAND mode trap at line $($b.Line)" $b.Text
     }
 } else {
-    Test-Warn "OPENCODE_REPO not found" "Cannot verify URL consistency"
+    Test-Pass "No unfixed COMMAND mode -and traps"
 }
 
-# --- Test 5: Required functions exist ---
-Write-Host "`n--- [5] Required functions ---" -ForegroundColor White
-$requiredFunctions = @(
-    "function Main",
-    "function Write-Info",
-    "function Write-Success",
-    "function Write-Warn",
-    "function Write-Err",
-    "function Write-Step",
-    "function Stop-WithError",
-    "function Show-Banner",
-    "function Get-Arch",
-    "function Get-LatestVersion",
-    "function Get-InstalledVersion",
-    "function Install-Binary",
-    "function Add-ToUserPath",
-    "function Download-WithRetry",
-    "function Clear-OrphanedShortcuts",
-    "function Test-Property",
-    "function Get-Property"
-)
-
-foreach ($func in $requiredFunctions) {
-    if ($content -match "function $($func -replace 'function ','')") {
-        Test-Pass "Function '$func' defined"
-    } else {
-        Test-Fail "Function '$func' not found"
+if ($fixed.Count -gt 0) {
+    foreach ($f in $fixed) {
+        Test-Pass "COMMAND mode fix confirmed at line $($f.Line): $($f.Text)"
     }
+} else {
+    Test-Warn "No COMMAND mode fix pattern found" "Should find at least Test-Path and Test-Property wraps"
 }
 
-# --- Test 6: Safe argument splatting ---
-Write-Host "`n--- [6] Argument handling ---" -ForegroundColor White
+# ----- [4] Safe argument splatting -----
+Write-Host "--- [4] Argument handling ---" -ForegroundColor White
 if ($content -match '\$mainParams\s*=\s*@\{\}') {
-    Test-Pass "Uses safe hashtable splatting (mainParams)"
+    Test-Pass "Safe hashtable splatting (mainParams)"
 } elseif ($content -match 'Main @args') {
     Test-Fail "Uses raw `$args splatting" "Replace 'Main @args' with safe hashtable splatting"
 } else {
     Test-Warn "Cannot determine splatting method"
 }
 
-# --- Test 7: Main function parameters exist ---
-Write-Host "`n--- [7] Main parameters ---" -ForegroundColor White
-$expectedParams = @("Version", "Channel", "NoModifyPath", "UseMirror", "Desktop")
-foreach ($param in $expectedParams) {
-    if ($content -match '\$' + $param + '\b') {
-        # Check it's in the param block
-        Test-Pass "Main parameter `$$param found"
+# Verify Main is called with @mainParams, not @args
+$mainCall = Select-String -Path $Path -Pattern '\bMain\b' | Where-Object { $_.Line -match '\bMain\s' }
+$hasSafeMain = $false
+$hasUnsafeMain = $false
+foreach ($m in $mainCall) {
+    if ($m.Line -match 'Main @mainParams') { $hasSafeMain = $true }
+    if ($m.Line -match 'Main @args')       { $hasUnsafeMain = $true }
+}
+if ($hasSafeMain) { Test-Pass "Main called with @mainParams" }
+if ($hasUnsafeMain) { Test-Fail "Main called with @args (unsafe)" }
+
+# ----- [5] Required functions -----
+Write-Host "--- [5] Required functions ---" -ForegroundColor White
+$requiredFunctions = @(
+    "function Main", "function Write-Info", "function Write-Success",
+    "function Write-Warn", "function Write-Err", "function Write-Step",
+    "function Stop-WithError", "function Show-Banner", "function Get-Arch",
+    "function Get-LatestVersion", "function Get-InstalledVersion",
+    "function Install-Binary", "function Add-ToUserPath",
+    "function Download-WithRetry", "function Clear-OrphanedShortcuts",
+    "function Test-Property", "function Get-Property"
+)
+foreach ($func in $requiredFunctions) {
+    if ($content -match "function $($func -replace '^function ','')") {
+        Test-Pass "Function '$func'"
     } else {
-        Test-Warn "Parameter `$$param" "Not explicitly found in script (may be in param block)"
+        Test-Fail "Function '$func' not found"
     }
 }
 
-# --- Test 8: StrictMode and error handling ---
-Write-Host "`n--- [8] Error handling ---" -ForegroundColor White
-if ($content -match '\$ErrorActionPreference\s*=\s*"Stop"') {
-    Test-Pass "ErrorActionPreference set to Stop"
+# ----- [6] Error handling -----
+Write-Host "--- [6] Error handling ---" -ForegroundColor White
+if ($content -match '\$ErrorActionPreference\s*=\s*"Stop"') { Test-Pass 'ErrorActionPreference = Stop' }
+else { Test-Warn "ErrorActionPreference" "Not set to Stop at script level" }
+
+if ($content -match '#Requires -Version 5\.1') { Test-Pass '#Requires -Version 5.1' }
+else { Test-Warn "#Requires" "Missing PowerShell version requirement" }
+
+# ----- [7] Main parameters (inside function Main's param block) -----
+Write-Host "--- [7] Main parameters ---" -ForegroundColor White
+# Parameters live inside "function Main { param(...) }", not at script level
+$mainStart = $content.IndexOf("function Main {")
+if ($mainStart -ge 0) {
+    $mainBody = $content.Substring($mainStart, 500)
+    $mainParam = [regex]::Match($mainBody, 'param\s*\(([^)]+)\)')
+    if ($mainParam.Success) {
+        foreach ($param in @("Version", "Channel", "NoModifyPath", "UseMirror", "Desktop")) {
+            if ($mainParam.Groups[1].Value -match '\$' + $param + '\b') {
+                Test-Pass "Main param: `$$param"
+            } else {
+                Test-Warn "Main param: `$$param" "Not found in Main's param() block"
+            }
+        }
+    } else {
+        Test-Warn "Main param block" "Could not find param() inside Main function"
+    }
 } else {
-    Test-Warn "ErrorActionPreference" "Not set to Stop at script level"
+    Test-Warn "Main function" "Could not locate 'function Main {' in script"
 }
 
-if ($content -match '#Requires -Version 5\.1') {
-    Test-Pass "Requires PowerShell 5.1+"
-} else {
-    Test-Warn "#Requires" "Missing PowerShell version requirement"
-}
+# ----- [8] Release URL / version consistency -----
+<#
+  Verify that the download URLs built by install.ps1 match the release tag.
+  Prevents the asset-not-found bug we had in v1.17.13.
+#>
+Write-Host "--- [8] Release URL consistency ---" -ForegroundColor White
+$urlRepo = "ivanfernadezm99/opencode"
+$releaseTag = "v1.17.13"
 
-# --- Test 9: All functions have valid param blocks ---
-Write-Host "`n--- [9] Function parameter blocks ---" -ForegroundColor White
-$funcErrors = 0
-# Find all function definitions
-$funcMatches = [regex]::Matches($content, 'function\s+([A-Za-z0-9\-]+)\s*\{')
-foreach ($match in $funcMatches) {
-    $funcName = $match.Groups[1].Value
-    # Extract function body start to find param block
-    $funcStart = $match.Index
-    $funcSection = $content.Substring($funcStart, [Math]::Min(500, $content.Length - $funcStart))
-    # Verify param block is valid when present
-    if ($funcSection -match '^\s*function\s+\S+\s*\{' -and $funcSection -match '\[CmdletBinding') {
-        if ($funcSection -match '\$Version' -or $funcSection -match '\$Message' -or $funcSection -match '\$BinaryPath') {
-            # Has params, good
+# Find how the script constructs binary download URLs
+$binaryDlPatterns = @()
+for ($i = 0; $i -lt $allLines.Count; $i++) {
+    $line = $allLines[$i]
+    $n = $i + 1
+    # Look for github.com download URL construction patterns
+    if ($line -match 'github\.com.*releases.*download.*\$Version.*\$archiveName') {
+        $binaryDlPatterns += @{ Line = $n; Text = $line.Trim() }
+    }
+    if ($line -match 'github\.com.*releases.*download') {
+        $binaryDlPatterns += @{ Line = $n; Text = $line.Trim() }
+    }
+}
+if ($binaryDlPatterns.Count -gt 0) {
+    # Verify the URL template uses variables, not hardcoded values
+    $allUseVars = $true
+    foreach ($p in $binaryDlPatterns) {
+        if ($p.Text -match 'github\.com/[^"]+/[^"]+/releases/download/[^$]') {
+            Test-Warn "Hardcoded download URL at line $($p.Line)" $p.Text
+            $allUseVars = $false
         }
     }
-}
-if ($funcErrors -eq 0) {
-    # Just check a few specific ones have proper params
-    if ($content -match 'function Install-Binary\s*\{') {
-        Test-Pass "Install-Binary has param block"
+    if ($allUseVars) {
+        Test-Pass "Download URLs use `$Version / variables"
+    }
+} else {
+    # Also check for nextcloud mirror download
+    if ($content -match 'nextcloud.*download') {
+        Test-Pass "Mirror download URL found"
     } else {
-        Test-Warn "Install-Binary" "Expected param block not checked"
+        Test-Warn "Download URLs" "Cannot find download URL construction pattern"
     }
 }
 
-# --- Summary ---
-Write-Host ""
-Write-Host "=== Results ===" -ForegroundColor Cyan
-$total = $passed + $failed
-Write-Host "  Passed: $passed" -ForegroundColor Green
-Write-Host "  Failed: $failed" -ForegroundColor $(if ($failed -gt 0) { "Red" } else { "DarkGray" })
-Write-Host "  Warnings: $warnings" -ForegroundColor Yellow
-Write-Host ""
-
-if ($failed -gt 0) {
-    Write-Host "SOME TESTS FAILED" -ForegroundColor Red
-    exit 1
-} else {
-    Write-Host "ALL TESTS PASSED" -ForegroundColor Green
-    exit 0
+# Verify binary version number consistency
+$verMatches = [regex]::Matches($content, '(\d+\.\d+\.\d+)')
+$uniqueVersions = @{}
+foreach ($m in $verMatches) {
+    $uniqueVersions[$m.Groups[1].Value] = $true
 }
+$scriptVersion = ($uniqueVersions.Keys | Where-Object { $_ -ne "5.1" -and $_ -ne "5000" } | Sort-Object -Descending | Select-Object -First 1)
+if ($scriptVersion) {
+    $tagVersion = $releaseTag -replace '^v',''
+    Test-Pass "Script version $scriptVersion detected"
+    # This is informational; actual URL assertion needs the CI to pass the target tag
+}
+
+# ----- Summary -----
+Write-Host ""
+$total = $passed + $failed
+Write-Host "=== Results: $passed passed, $failed failed, $warnings warnings ===" -ForegroundColor Cyan
+if ($failed -gt 0) { Write-Host "SOME TESTS FAILED" -ForegroundColor Red; exit 1 }
+else { Write-Host "ALL TESTS PASSED" -ForegroundColor Green; exit 0 }

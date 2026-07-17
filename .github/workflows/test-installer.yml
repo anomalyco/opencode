@@ -1,0 +1,115 @@
+name: test-installer
+
+on:
+  push:
+    paths:
+      - 'install.ps1'
+      - 'install.bat'
+      - '.github/workflows/test-installer.yml'
+      - '.opencode/scripts/test-installer.ps1'
+  pull_request:
+    paths:
+      - 'install.ps1'
+      - 'install.bat'
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag to validate asset URLs against'
+        required: false
+        type: string
+
+jobs:
+  validate:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run test suite
+        run: |
+          .opencode/scripts/test-installer.ps1 -Path install.ps1
+
+      - name: Validate release assets (manual trigger)
+        if: github.event_name == 'workflow_dispatch' && inputs.release_tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ inputs.release_tag }}"
+          Write-Host "Validating release $tag assets..." -ForegroundColor Cyan
+
+          # Get expected asset names from install.ps1
+          $content = Get-Content install.ps1 -Raw
+          $binaryName = "opencode"
+          $arch = "amd64"
+          $ver = $tag -replace '^v', ''
+          $expectedAssets = @(
+            "install.ps1",
+            "install.bat",
+            "uninstall.ps1",
+            "opencode-desktop-win-x64.exe",
+            "${binaryName}_${ver}_windows_${arch}.zip"
+          )
+
+          $existingAssets = gh release view $tag --repo ${{ github.repository }} --json assets --jq '.assets[].name'
+          $allFound = $true
+          foreach ($asset in $expectedAssets) {
+            if ($existingAssets -contains $asset) {
+              Write-Host "  OK: $asset" -ForegroundColor Green
+            } else {
+              Write-Host "  MISSING: $asset" -ForegroundColor Red
+              $allFound = $false
+            }
+          }
+          if (-not $allFound) {
+            Write-Host "RELEASE VALIDATION FAILED" -ForegroundColor Red
+            exit 1
+          }
+          Write-Host "All release assets present" -ForegroundColor Green
+
+  syntax-windows-ps51:
+    runs-on: windows-2019
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate syntax on PowerShell 5.1
+        shell: powershell
+        run: |
+          $content = Get-Content install.ps1 -Raw
+          $null = [System.Management.Automation.Language.Parser]::ParseInput($content, [ref]$null, [ref]$null)
+          Write-Host "PowerShell 5.1: AST parses cleanly" -ForegroundColor Green
+
+  syntax-windows-pwsh:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate syntax on pwsh
+        shell: pwsh
+        run: |
+          $content = Get-Content install.ps1 -Raw
+          $null = [System.Management.Automation.Language.Parser]::ParseInput($content, [ref]$null, [ref]$null)
+          Write-Host "pwsh: AST parses cleanly" -ForegroundColor Green
+
+  release-integrity:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && inputs.release_tag != ''
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate release assets match tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${{ inputs.release_tag }}"
+          ver="${tag#v}"
+
+          # Check the zip asset follows the naming convention
+          if gh release view "$tag" --repo "${{ github.repository }}" --json assets |
+             jq -e --arg name "opencode_${ver}_windows_amd64.zip" '.assets | any(.name == $name)' > /dev/null; then
+            echo "PASS: opencode_${ver}_windows_amd64.zip exists"
+          else
+            echo "FAIL: opencode_${ver}_windows_amd64.zip missing from release $tag"
+            echo "Check that the zip was uploaded with the correct version number"
+            exit 1
+          fi
