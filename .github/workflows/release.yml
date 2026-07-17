@@ -61,6 +61,8 @@ jobs:
 
       - name: Publish release
         if: ${{ github.event.inputs.dry_run != 'true' }}
+        env:
+          OPENCODE_SKIP_BINARIES: ${{ vars.OPENCODE_SKIP_BINARIES || '1' }}
         run: bun script/publish.ts
 
       - name: Dry-run publish

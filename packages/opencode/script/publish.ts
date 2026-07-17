@@ -60,6 +60,8 @@ await Bun.file(`${wrapperDir}/bin/${binName}.exe`).write(
   ].join("\n"),
 )
 
+const skipBinaries = process.env["OPENCODE_SKIP_BINARIES"] === "1"
+
 await Bun.file(`${wrapperDir}/package.json`).write(
   JSON.stringify(
     {
@@ -78,17 +80,21 @@ await Bun.file(`${wrapperDir}/package.json`).write(
       },
       os: ["darwin", "linux", "win32"],
       cpu: ["arm64", "x64"],
-      optionalDependencies: binaries,
+      optionalDependencies: skipBinaries ? {} : binaries,
     },
     null,
     2,
   ),
 )
 
-const tasks = Object.entries(binaryDirs).map(async ([name, dirName]) => {
-  await publish(`./dist/${dirName}`, name, binaries[name])
-})
-await Promise.all(tasks)
+if (!skipBinaries) {
+  const tasks = Object.entries(binaryDirs).map(async ([name, dirName]) => {
+    await publish(`./dist/${dirName}`, name, binaries[name])
+  })
+  await Promise.all(tasks)
+} else {
+  console.log("skipping binary package publishes (OPENCODE_SKIP_BINARIES=1)")
+}
 await publish(wrapperDir, wrapperName, version)
 
 const ghRepo = process.env.GH_REPO || (await $`git remote get-url origin`.text()).trim().replace(/^https:\/\/github\.com\//, "").replace(/\.git$/, "")
