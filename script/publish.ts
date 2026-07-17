@@ -8,7 +8,8 @@ console.log("=== publishing ===\n")
 
 const dir = fileURLToPath(new URL("..", import.meta.url))
 process.chdir(dir)
-const tag = Script.version.replace(/^v/, "")
+const releaseVersion = Script.version.replace(/^v/, "")
+const tag = releaseVersion
 
 const pkgjsons = await Array.fromAsync(
   new Bun.Glob("**/package.json").scan({
