@@ -8,19 +8,33 @@ import os from "os"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { PermissionModule } from "@/permission/module"
-import { MISSING_MODEL_MESSAGE } from "@/plugin/cruise-control/classifier"
 import { PermissionModule as PermissionModuleSchema } from "@opencode-ai/schema/permission-module"
-import { Config } from "@/config/config"
+import { InstanceRef } from "@/effect/instance-ref"
 
 export const Event = PermissionV1.Event
+
+export interface CruiseControlReview {
+  risk: "high" | "medium" | "low"
+  intent: "high" | "medium" | "low"
+  reason: string
+}
 
 export interface AskResult {
   /** Short cruise_control / module conclusion when a tool was auto-allowed. */
   conclusion?: string
+  /** Structured classifier assessment for the TUI-reviewed comment. */
+  cruiseControlReview?: CruiseControlReview
+}
+
+export interface AskInput extends PermissionV1.AskInput {
+  /** Relevant current user prompt for permission modules; never persisted or emitted. */
+  userPrompt?: string
+  /** Isolates learned module decisions to one workspace/session/prompt. */
+  cacheScope?: string
 }
 
 export interface Interface {
-  readonly ask: (input: PermissionV1.AskInput) => Effect.Effect<AskResult, PermissionV1.Error>
+  readonly ask: (input: AskInput) => Effect.Effect<AskResult, PermissionV1.Error>
   readonly reply: (input: PermissionV1.ReplyInput) => Effect.Effect<void, PermissionV1.NotFoundError>
   readonly list: () => Effect.Effect<ReadonlyArray<PermissionV1.Request>>
 }
@@ -49,6 +63,17 @@ export function evaluate(permission: string, pattern: string, ...rulesets: Permi
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Permission") {}
 
+function classifierLevel(value: unknown): value is CruiseControlReview["risk"] {
+  return value === "high" || value === "medium" || value === "low"
+}
+
+function cruiseControlReview(value: Record<string, unknown> | undefined): CruiseControlReview | undefined {
+  if (!value) return undefined
+  if (!classifierLevel(value.risk) || !classifierLevel(value.intent) || typeof value.reason !== "string")
+    return undefined
+  return { risk: value.risk, intent: value.intent, reason: value.reason }
+}
+
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -74,13 +99,15 @@ const layer = Layer.effect(
       }),
     )
 
-    const ask = Effect.fn("Permission.ask")(function* (input: PermissionV1.AskInput) {
+    const ask = Effect.fn("Permission.ask")(function* (input: AskInput) {
       const { approved, pending } = yield* InstanceState.get(state)
-      const { ruleset, ...request } = input
+      const { ruleset, userPrompt, ...request } = input
       let needsAsk = false
       const moduleIDs = new Set<string>()
       let metadata = request.metadata
       let conclusion: string | undefined
+      let review: CruiseControlReview | undefined
+      const instance = yield* InstanceRef
 
       const unrestricted = process.env.KANCODE_UNRESTRICTED_PERMISSION === "1"
 
@@ -112,15 +139,20 @@ const layer = Layer.effect(
       if (moduleIDs.size > 0) {
         const modules = yield* Effect.serviceOption(PermissionModule.Service)
         if (Option.isNone(modules)) {
-          yield* Effect.logError("permission module service unavailable; asking human", {
+          yield* Effect.logError("permission module service unavailable", {
             modules: [...moduleIDs],
             permission: request.permission,
           })
+          if (moduleIDs.has(PermissionModuleSchema.CRUISE_CONTROL)) {
+            return yield* new PermissionV1.DeniedError({
+              ruleset: ruleset.filter((rule) => Wildcard.match(request.permission, rule.permission)),
+              reason: "Cruise control is unavailable; denied",
+            })
+          }
           needsAsk = true
           metadata = {
             ...metadata,
-            warning:
-              "Permission module service unavailable; approve manually or restart KanCode. If using cruise_control, run /cruise-control-model.",
+            warning: "Permission module service unavailable; approve manually or restart KanCode.",
           }
         } else {
           const module = modules.value
@@ -130,53 +162,35 @@ const layer = Layer.effect(
               permission: request.permission,
               patterns: request.patterns,
               metadata: request.metadata,
+              userPrompt,
+              scope: instance?.directory,
+              cacheScope: input.cacheScope,
             })
             const reason = result.reason?.trim() || undefined
-            if (result.decision === "deny") {
+            const isCruiseControl = moduleID === PermissionModuleSchema.CRUISE_CONTROL
+            if (result.decision === "deny" || (isCruiseControl && result.decision === "ask")) {
               return yield* new PermissionV1.DeniedError({
                 ruleset: ruleset.filter((rule) => Wildcard.match(request.permission, rule.permission)),
-                reason,
+                reason: reason ?? (isCruiseControl ? "Cruise control denied the action" : undefined),
               })
             }
             if (result.decision === "ask") {
               needsAsk = true
-              if (reason === MISSING_MODEL_MESSAGE) {
-                metadata = {
-                  ...metadata,
-                  warning: MISSING_MODEL_MESSAGE,
-                }
-              } else if (reason) {
+              if (reason) {
                 metadata = {
                   ...metadata,
                   reason,
                 }
               }
-              if (moduleID === PermissionModuleSchema.CRUISE_CONTROL && typeof metadata.warning !== "string") {
-                const config = yield* Effect.serviceOption(Config.Service)
-                if (Option.isSome(config)) {
-                  const cfg = yield* config.value.get()
-                  const modelRef = cfg.permission_modules?.[PermissionModuleSchema.CRUISE_CONTROL]?.model?.trim()
-                  if (!modelRef) {
-                    metadata = {
-                      ...metadata,
-                      warning: MISSING_MODEL_MESSAGE,
-                    }
-                  }
-                } else {
-                  metadata = {
-                    ...metadata,
-                    warning: MISSING_MODEL_MESSAGE,
-                  }
-                }
-              }
               continue
             }
             if (reason) conclusion = reason
+            if (isCruiseControl) review = cruiseControlReview(result.metadata)
           }
         }
       }
 
-      if (!needsAsk) return { conclusion }
+      if (!needsAsk) return { conclusion, cruiseControlReview: review }
 
       const id = request.id ?? PermissionV1.ID.ascending()
       const info: PermissionV1.Request = {

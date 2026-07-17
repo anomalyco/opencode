@@ -1,5 +1,4 @@
 import { PermissionModule } from "@opencode-ai/schema/permission-module"
-import { managedAppDirectoryGlobs } from "./classifier"
 import PROMPT from "./prompt.txt"
 
 /** Builtin agent id `cruisecontrol` (display: CruiseControl). Distinct from classifier id `cruise_control`. */
@@ -16,7 +15,5 @@ export function cruiseControlPermissionConfig() {
     "*": PermissionModule.CRUISE_CONTROL,
     question: "allow" as const,
     plan_enter: "allow" as const,
-    // After "*": cruise_control so findLast prefers these over the module.
-    external_directory: Object.fromEntries(managedAppDirectoryGlobs().map((dir) => [dir, "allow" as const])),
   }
 }

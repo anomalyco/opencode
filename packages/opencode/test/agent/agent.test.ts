@@ -588,16 +588,16 @@ it.instance("KanCode config and data directory children are allowed for external
   }),
 )
 
-it.instance("cruisecontrol allows managed app directories without cruise_control module", () =>
+it.instance("cruisecontrol routes managed app directories through cruise_control rails", () =>
   Effect.gen(function* () {
     const agent = yield* load((svc) => svc.get("cruisecontrol"))
     expect(agent).toBeDefined()
     expect(
       Permission.evaluate("external_directory", path.join(Global.Path.config, "agents"), agent!.permission).action,
-    ).toBe("allow")
+    ).toBe(PermissionModule.CRUISE_CONTROL)
     expect(
       Permission.evaluate("external_directory", path.join(Global.Path.data, "tool-output"), agent!.permission).action,
-    ).toBe("allow")
+    ).toBe(PermissionModule.CRUISE_CONTROL)
     expect(Permission.evaluate("external_directory", "/some/other/path", agent!.permission).action).toBe(
       PermissionModule.CRUISE_CONTROL,
     )
@@ -706,15 +706,13 @@ it.instance("defaultAgent returns default when no default_agent config", () =>
   }),
 )
 
-it.instance(
-  "get aliases legacy build agent id to default",
-  () =>
-    Effect.gen(function* () {
-      const viaAlias = yield* load((svc) => svc.get("build"))
-      const viaName = yield* load((svc) => svc.get("default"))
-      expect(viaAlias?.name).toBe("default")
-      expect(viaAlias).toEqual(viaName)
-    }),
+it.instance("get aliases legacy build agent id to default", () =>
+  Effect.gen(function* () {
+    const viaAlias = yield* load((svc) => svc.get("build"))
+    const viaName = yield* load((svc) => svc.get("default"))
+    expect(viaAlias?.name).toBe("default")
+    expect(viaAlias).toEqual(viaName)
+  }),
 )
 
 it.instance(

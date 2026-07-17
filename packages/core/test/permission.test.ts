@@ -317,14 +317,16 @@ describe("PermissionV2", () => {
 
 describe("PermissionV2 modules", () => {
   function moduleLayer(
-    decide: (input: PermissionModule.DecideInput) => Effect.Effect<PermissionModule.Decision | PermissionModule.DecideResult>,
+    decide: (
+      input: PermissionModule.DecideInput,
+    ) => Effect.Effect<PermissionModule.Decision | PermissionModule.DecideResult>,
   ) {
     return Layer.succeed(
       PermissionModule.Service,
       PermissionModule.Service.of({
         decide: (input) => decide(input).pipe(Effect.map(PermissionModule.normalizeDecide)),
-        register: () => Effect.void,
-        registerSync: () => undefined,
+        register: () => Effect.succeed(() => {}),
+        registerSync: () => () => {},
         has: () => true,
       }),
     )
@@ -342,9 +344,24 @@ describe("PermissionV2 modules", () => {
     [[Location.node, current]],
   )
 
-  const itAllow = testEffect(Layer.mergeAll(base, moduleLayer(() => Effect.succeed("allow"))))
-  const itDeny = testEffect(Layer.mergeAll(base, moduleLayer(() => Effect.succeed("deny"))))
-  const itAsk = testEffect(Layer.mergeAll(base, moduleLayer(() => Effect.succeed("ask"))))
+  const itAllow = testEffect(
+    Layer.mergeAll(
+      base,
+      moduleLayer(() => Effect.succeed("allow")),
+    ),
+  )
+  const itDeny = testEffect(
+    Layer.mergeAll(
+      base,
+      moduleLayer(() => Effect.succeed("deny")),
+    ),
+  )
+  const itAsk = testEffect(
+    Layer.mergeAll(
+      base,
+      moduleLayer(() => Effect.succeed("ask")),
+    ),
+  )
 
   itAllow.effect("assert allows when ask+module returns allow", () =>
     Effect.gen(function* () {
@@ -376,7 +393,9 @@ describe("PermissionV2 modules", () => {
           : Effect.void,
       )
       yield* Effect.addFinalizer(() => unsubscribe)
-      const fiber = yield* service.assert(assertion({ action: "bash", resources: ["npm install"] })).pipe(Effect.forkScoped)
+      const fiber = yield* service
+        .assert(assertion({ action: "bash", resources: ["npm install"] }))
+        .pipe(Effect.forkScoped)
       const request = yield* Deferred.await(asked)
       expect(request.action).toBe("bash")
       yield* service.reply({ requestID: request.id, reply: "once" })

@@ -170,7 +170,14 @@ const layer = Layer.effect(
         if (!match || match.part.state.status !== "running") return
         const previous = isRecord(match.part.state.metadata) ? match.part.state.metadata : {}
         const cruise =
-          typeof previous.cruise_control === "string" ? { cruise_control: previous.cruise_control } : undefined
+          typeof previous.cruise_control === "string"
+            ? {
+                cruise_control: previous.cruise_control,
+                ...(isRecord(previous.cruise_control_review)
+                  ? { cruise_control_review: previous.cruise_control_review }
+                  : {}),
+              }
+            : undefined
         yield* session.updatePart({
           ...match.part,
           state: {

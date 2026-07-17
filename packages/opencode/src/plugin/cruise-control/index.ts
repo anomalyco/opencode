@@ -7,6 +7,7 @@ import { clearDynamicLists, decideCruiseControl, ensureDefaultInstructions } fro
 export {
   actionKey,
   applySafety,
+  buildClassifierMessages,
   CACHED_ALLOW_REASON,
   CACHED_DENY_REASON,
   CLASSIFIER_PREAMBLE,
@@ -15,6 +16,7 @@ export {
   DEFAULT_ALLOWLIST,
   DEFAULT_INSTRUCTIONS,
   destructiveReason,
+  decisionFromAssessment,
   ensureDefaultInstructions,
   hasCompleteInstructions,
   isManagedAppDirectoryPattern,
@@ -30,20 +32,16 @@ export {
   runClassifier,
   sessionTodoAllow,
   shortenReason,
-  type ClassifierDecision,
+  type ClassifierLevel,
   type ClassifierObject,
+  type CruiseControlDecision,
   type Decision,
   type DecideInput,
   type DecideResult,
   type Instructions,
 } from "./classifier"
 
-export {
-  AGENT_DESCRIPTION,
-  AGENT_ID,
-  AGENT_PROMPT,
-  cruiseControlPermissionConfig,
-} from "./agent"
+export { AGENT_DESCRIPTION, AGENT_ID, AGENT_PROMPT, cruiseControlPermissionConfig } from "./agent"
 
 /**
  * Built-in Cruise Control plugin: registers permission module `cruise_control`
@@ -79,15 +77,21 @@ export function createCruiseControlPlugin(bridge: EffectBridge.Shape): Plugin {
             permission: req.permission,
             patterns: req.patterns,
             metadata: req.metadata,
+            userPrompt: req.userPrompt,
+            cacheScope: req.cacheScope,
           }),
         )
-        return { decision: result.decision, reason: result.reason }
+        return {
+          decision: result.decision,
+          reason: result.reason,
+          ...("review" in result ? { metadata: result.review } : {}),
+        }
       },
     })
 
     return {
-      "chat.message": async () => {
-        clearDynamicLists()
+      "chat.message": async ({ sessionID }) => {
+        clearDynamicLists(`${input.directory}\0${sessionID}`)
       },
     }
   }

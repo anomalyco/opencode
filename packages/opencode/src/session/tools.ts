@@ -38,6 +38,43 @@ const SUPPORTED_MCP_RESOURCE_ATTACHMENT_MIMES = new Set([
   "image/webp",
 ])
 
+type PromptMessage = {
+  info: { role: string; id?: string }
+  parts: readonly {
+    type: string
+    text?: string
+    synthetic?: boolean
+    ignored?: boolean
+  }[]
+}
+
+/** Extract only explicit text from the latest user turn, excluding host-generated context. */
+export function currentUserPrompt(messages: readonly PromptMessage[]): string | undefined {
+  const current = messages.findLast((message) => message.info.role === "user")
+  if (!current) return undefined
+  const text = current.parts
+    .filter((part) => part.type === "text" && part.synthetic !== true && part.ignored !== true)
+    .map((part) => part.text?.trim() ?? "")
+    .filter(Boolean)
+    .join("\n\n")
+  return text || undefined
+}
+
+export function formatCruiseControlReview(review: Permission.CruiseControlReview): string {
+  return `Risk: ${review.risk} · Intent: ${review.intent} — ${review.reason}`
+}
+
+export function cruiseControlMetadata(result: Permission.AskResult): Record<string, unknown> | undefined {
+  const conclusion = result.cruiseControlReview
+    ? formatCruiseControlReview(result.cruiseControlReview)
+    : result.conclusion?.trim()
+  if (!conclusion) return undefined
+  return {
+    cruise_control: conclusion,
+    ...(result.cruiseControlReview ? { cruise_control_review: result.cruiseControlReview } : {}),
+  }
+}
+
 export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   agent: Agent.Info
   model: Provider.Model
@@ -55,6 +92,13 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   const mcp = yield* MCP.Service
   const truncate = yield* Truncate.Service
   const flags = yield* RuntimeFlags.Service
+  const userPrompt = currentUserPrompt(input.messages)
+  const currentUserMessage = input.messages.findLast((message) => message.info.role === "user")
+  const cacheScope = [
+    input.session.directory,
+    input.session.id,
+    currentUserMessage?.info.id ?? input.processor.message.id,
+  ].join("\0")
 
   const context = (args: Record<string, unknown>, options: ToolExecutionOptions): Tool.Context => ({
     sessionID: input.session.id,
@@ -67,8 +111,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
     metadata: (val) =>
       input.processor.updateToolCall(options.toolCallId, (match) => {
         if (!["running", "pending"].includes(match.state.status)) return match
-        const previous =
-          match.state.status === "running" && isRecord(match.state.metadata) ? match.state.metadata : {}
+        const previous = match.state.status === "running" && isRecord(match.state.metadata) ? match.state.metadata : {}
         return {
           ...match,
           state: {
@@ -87,9 +130,11 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
           sessionID: input.session.id,
           tool: { messageID: input.processor.message.id, callID: options.toolCallId },
           ruleset: Permission.merge(input.agent.permission, input.session.permission ?? []),
+          userPrompt,
+          cacheScope,
         })
-        const conclusion = result.conclusion?.trim()
-        if (!conclusion) return
+        const cruise = cruiseControlMetadata(result)
+        if (!cruise) return
         yield* input.processor.updateToolCall(options.toolCallId, (match) => {
           if (!["running", "pending"].includes(match.state.status)) return match
           const previous =
@@ -98,7 +143,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
             ...match,
             state: {
               title: match.state.status === "running" ? match.state.title : undefined,
-              metadata: { ...previous, cruise_control: conclusion },
+              metadata: { ...previous, ...cruise },
               status: "running",
               input: args,
               time: match.state.status === "running" ? match.state.time : { start: Date.now() },

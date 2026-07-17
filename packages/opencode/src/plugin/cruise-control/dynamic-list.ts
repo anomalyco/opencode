@@ -3,14 +3,15 @@
  *
  * Learned from successful classifier outcomes (after safety rails) so repeated
  * identical permission asks within the same user-prompt turn skip the LLM.
- * Cleared on each new user prompt via the `chat.message` plugin hook.
+ * Scoped by workspace/session/prompt and cleared only for the affected session
+ * on each new user prompt via the `chat.message` plugin hook.
  *
  * In-memory only (KanCode process state) — not written to kancode.json or a
  * state file, because the cache is intentionally short-lived per prompt.
  */
 
-export const CACHED_ALLOW_REASON = "Cached allow"
-export const CACHED_DENY_REASON = "Cached deny"
+export const CACHED_ALLOW_REASON = "Cached allow (no fresh model review)"
+export const CACHED_DENY_REASON = "Cached deny (no fresh model review)"
 
 export const DEFAULT_DYNAMIC_LIST_MAX_SIZE = 256
 
@@ -28,9 +29,14 @@ type ListStore = {
   deny: Map<string, true>
 }
 
-const store: ListStore = {
-  allow: new Map(),
-  deny: new Map(),
+const stores = new Map<string, ListStore>()
+
+function getStore(scope: string, create = false): ListStore | undefined {
+  const current = stores.get(scope)
+  if (current || !create) return current
+  const next = { allow: new Map<string, true>(), deny: new Map<string, true>() }
+  stores.set(scope, next)
+  return next
 }
 
 /** Stable key: permission + normalized patterns (+ optional command fingerprint). */
@@ -41,7 +47,9 @@ export function actionKey(
 ): string {
   const normalizedPatterns = patterns.map(normalizeToken).filter(Boolean).sort()
   const command = typeof metadata.command === "string" ? normalizeToken(metadata.command) : ""
-  return [permission.trim().toLowerCase(), ...normalizedPatterns, command ? `cmd:${command}` : ""].filter(Boolean).join("\0")
+  return [permission.trim().toLowerCase(), ...normalizedPatterns, command ? `cmd:${command}` : ""]
+    .filter(Boolean)
+    .join("\0")
 }
 
 function normalizeToken(raw: string): string {
@@ -75,8 +83,11 @@ function touch(map: Map<string, true>, key: string, limit: number) {
 export function lookupDynamic(
   key: string,
   opts: DynamicListOptions | undefined,
+  scope = "",
 ): DynamicListDecision | undefined {
   if (!dynamicListEnabled(opts)) return undefined
+  const store = getStore(scope)
+  if (!store) return undefined
   if (store.deny.has(key)) {
     touch(store.deny, key, maxSize(opts))
     return "deny"
@@ -89,15 +100,17 @@ export function lookupDynamic(
 }
 
 /**
- * Remember a final allow/deny after classifier + rails.
- * Does not store ask. Removes the key from the opposite list.
+ * Remember a final binary decision after classifier + rails.
+ * Removes the key from the opposite list.
  */
 export function rememberDynamic(
   key: string,
   decision: DynamicListDecision,
   opts: DynamicListOptions | undefined,
+  scope = "",
 ) {
   if (!dynamicListEnabled(opts)) return
+  const store = getStore(scope, true)!
   const limit = maxSize(opts)
   if (decision === "deny") {
     store.allow.delete(key)
@@ -108,24 +121,30 @@ export function rememberDynamic(
   touch(store.allow, key, limit)
 }
 
-/** Clear both lists — call on each new user prompt (`chat.message`). */
-export function clearDynamicLists() {
-  store.allow.clear()
-  store.deny.clear()
+/** Clear all lists, or only scopes belonging to one workspace/session prefix. */
+export function clearDynamicLists(scopePrefix?: string) {
+  if (scopePrefix === undefined) {
+    stores.clear()
+    return
+  }
+  for (const scope of stores.keys()) {
+    if (scope === scopePrefix || scope.startsWith(`${scopePrefix}\0`)) stores.delete(scope)
+  }
 }
 
 /** Test / diagnostics helpers. */
-export function dynamicListSnapshot() {
+export function dynamicListSnapshot(scope = "") {
+  const store = getStore(scope)
   return {
-    allow: [...store.allow.keys()],
-    deny: [...store.deny.keys()],
+    allow: [...(store?.allow.keys() ?? [])],
+    deny: [...(store?.deny.keys() ?? [])],
   }
 }
 
 /** Replace store contents (tests only). */
-export function resetDynamicListsForTests(next?: { allow?: string[]; deny?: string[] }) {
-  store.allow.clear()
-  store.deny.clear()
+export function resetDynamicListsForTests(next?: { allow?: string[]; deny?: string[] }, scope = "") {
+  stores.delete(scope)
+  const store = getStore(scope, true)!
   for (const key of next?.allow ?? []) store.allow.set(key, true)
   for (const key of next?.deny ?? []) store.deny.set(key, true)
 }

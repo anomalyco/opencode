@@ -58,7 +58,8 @@ export const Options = Schema.Struct({
       "Structured classifier instructions (background/allow/conditional/deny); seeded with defaults when unset",
   }),
   fallback: Fallback.pipe(optional).annotate({
-    description: "Outcome when classification fails or times out (default: ask)",
+    description:
+      "Requested outcome when classification fails or times out; built-in cruise_control always fails closed to deny",
   }),
   /** Max classify attempts including the first (default 3 when unset). Each attempt gets its own timeout_ms. */
   retries: NonNegativeInt.pipe(optional).annotate({
@@ -73,16 +74,15 @@ export const Options = Schema.Struct({
     description: "Per-attempt classifier deadline in milliseconds (default: 8000)",
   }),
   allowlist: Schema.Array(Schema.String).pipe(optional).annotate({
-    description:
-      "Permission keys the module may auto-allow; omit for built-in defaults, use [] to disable auto-allow",
+    description: "Permission keys the module may auto-allow; omit for built-in defaults, use [] to disable auto-allow",
   }),
   never_auto: Schema.Array(Schema.String).pipe(optional).annotate({
     description:
-      "Permission keys that must never resolve to allow from the module; omit or [] for no never_auto escalation (default)",
+      "Permission keys that must never resolve to allow from the module; built-in cruise_control denies candidate allows for these keys",
   }),
   dynamic_list: DynamicList.pipe(optional).annotate({
     description:
-      "Per-prompt learned allow/deny action lists (in-memory; cleared on each new user prompt). Reduces repeated classifier calls within one turn.",
+      "Workspace/session/prompt-scoped learned allow/deny action lists (in-memory; cleared on each new user prompt). Reduces repeated classifier calls within one turn.",
   }),
   parallel_classify: Schema.Boolean.pipe(optional).annotate({
     description:
@@ -97,7 +97,7 @@ export const Info = Schema.Record(Schema.String, Options).annotate({
 })
 export type Info = typeof Info.Type
 
-/** Host-facing module decision (ask remains for missing model, rails, timeout, fallback). */
+/** Generic host-facing module decision. Built-in cruise_control uses only allow or deny. */
 export const Decision = Schema.Literals(["allow", "deny", "ask"]).annotate({
   identifier: "PermissionModule.Decision",
 })

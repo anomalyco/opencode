@@ -56,12 +56,20 @@ export type PermissionModuleDecision =
   | "allow"
   | "deny"
   | "ask"
-  | { decision: "allow" | "deny" | "ask"; reason?: string }
+  | {
+      decision: "allow" | "deny" | "ask"
+      reason?: string
+      metadata?: Record<string, unknown>
+    }
 
 export type PermissionModuleDecideInput = {
   permission: string
   patterns: readonly string[]
   metadata: Record<string, unknown>
+  /** Relevant current user prompt when supplied by the host. */
+  userPrompt?: string
+  /** Host-defined cache scope for one user-prompt turn. */
+  cacheScope?: string
 }
 
 export type PermissionModuleRegistration = {

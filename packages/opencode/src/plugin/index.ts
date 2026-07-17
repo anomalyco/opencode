@@ -4,6 +4,8 @@ import type {
   PluginInput,
   Plugin as PluginInstance,
   PluginModule,
+  PermissionModuleDecideInput,
+  PermissionModuleRegistration,
   WorkspaceAdapter as PluginWorkspaceAdapter,
 } from "@opencode-ai/plugin"
 import { Config } from "@/config/config"
@@ -36,6 +38,44 @@ import * as Option from "effect/Option"
 
 type State = {
   hooks: Hooks[]
+}
+
+function validPermissionModuleDecision(value: unknown) {
+  if (value === "allow" || value === "deny" || value === "ask") return true
+  if (typeof value !== "object" || value === null || !("decision" in value)) return false
+  return value.decision === "allow" || value.decision === "deny" || value.decision === "ask"
+}
+
+export function runPluginPermissionModule(module: PermissionModuleRegistration, input: PermissionModuleDecideInput) {
+  return Effect.tryPromise({
+    try: () => module.decide(input),
+    catch: errorMessage,
+  }).pipe(
+    Effect.flatMap((raw) => {
+      if (validPermissionModuleDecision(raw)) {
+        return Effect.succeed(PermissionModule.normalizeDecide(raw))
+      }
+      return Effect.logError("plugin permission module returned invalid decision", {
+        module: module.id,
+      }).pipe(
+        Effect.as({
+          decision: "deny" as const,
+          reason: "Permission module returned an invalid decision; denied",
+        }),
+      )
+    }),
+    Effect.catch((error) =>
+      Effect.logError("plugin permission module failed", {
+        module: module.id,
+        error,
+      }).pipe(
+        Effect.as({
+          decision: "deny" as const,
+          reason: "Permission module failed; denied",
+        }),
+      ),
+    ),
+  )
 }
 
 // Hook names that follow the (input, output) => Promise<void> trigger pattern
@@ -133,6 +173,7 @@ const layer = Layer.effect(
     const state = yield* InstanceState.make<State>(
       Effect.fn("Plugin.state")(function* (ctx) {
         const hooks: Hooks[] = []
+        const moduleDisposers: Array<() => void> = []
         const bridge = yield* EffectBridge.make()
 
         function publishPluginError(message: string) {
@@ -165,19 +206,20 @@ const layer = Layer.effect(
               if (Option.isNone(modules)) {
                 throw new Error("permission module service unavailable; cannot register plugin permission modules")
               }
-              modules.value.registerSync({
-                id: module.id,
-                decide: (input) =>
-                  Effect.promise(async () => {
-                    const raw = await module.decide({
+              moduleDisposers.push(
+                modules.value.registerSync({
+                  id: module.id,
+                  scope: ctx.directory,
+                  decide: (input) =>
+                    runPluginPermissionModule(module, {
                       permission: input.permission,
                       patterns: input.patterns,
                       metadata: input.metadata,
-                    })
-                    if (typeof raw === "string") return { decision: raw }
-                    return { decision: raw.decision, reason: raw.reason }
-                  }),
-              })
+                      userPrompt: input.userPrompt,
+                      cacheScope: input.cacheScope,
+                    }),
+                }),
+              )
             },
           },
           get serverUrl(): URL {
@@ -206,7 +248,9 @@ const layer = Layer.effect(
             try: () => cruise(input),
             catch: errorMessage,
           }).pipe(
-            Effect.tapError((error) => Effect.logError("failed to load internal plugin", { name: "cruise-control", error })),
+            Effect.tapError((error) =>
+              Effect.logError("failed to load internal plugin", { name: "cruise-control", error }),
+            ),
             Effect.option,
           )
           if (init._tag === "Some") hooks.push(init.value)
@@ -295,6 +339,11 @@ const layer = Layer.effect(
           })
         })
         yield* Effect.addFinalizer(() => unsubscribe)
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => {
+            for (const dispose of moduleDisposers.splice(0)) dispose()
+          }),
+        )
 
         yield* Effect.addFinalizer(() =>
           Effect.forEach(

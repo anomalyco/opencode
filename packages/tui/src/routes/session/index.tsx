@@ -76,6 +76,7 @@ import { useClipboard } from "../../context/clipboard"
 import { nextThinkingMode, reasoningSummary, useThinkingMode, type ThinkingMode } from "../../context/thinking"
 import { getScrollAcceleration } from "../../util/scroll"
 import { collapseToolOutput } from "../../util/collapse-tool-output"
+import { cruiseControlConclusion } from "../../util/cruise-control"
 import { usePluginRuntime } from "../../plugin/runtime"
 import { DialogRetryAction } from "../../component/dialog-retry-action"
 import { getRevertDiffFiles } from "../../util/revert-diff"
@@ -1713,8 +1714,7 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
 
   const cruiseConclusion = createMemo(() => {
     if (props.part.state.status === "pending") return undefined
-    const value = props.part.state.metadata?.cruise_control
-    return typeof value === "string" && value.trim() ? value.trim() : undefined
+    return cruiseControlConclusion(props.part.state.metadata)
   })
 
   const toolprops = {
