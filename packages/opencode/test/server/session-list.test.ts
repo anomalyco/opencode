@@ -1,6 +1,7 @@
 import { afterEach, describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Database } from "@opencode-ai/core/database/database"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
@@ -14,9 +15,10 @@ import { testEffect } from "../lib/effect"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 
 const layer = (experimentalWorkspaces: boolean) =>
-  AppNodeBuilder.build(LayerNode.group([Database.node, SessionNs.node, SessionProjector.node]), [
-    [RuntimeFlags.node, RuntimeFlags.layer({ experimentalWorkspaces })],
-  ])
+  AppNodeBuilder.build(
+    LayerNode.group([Database.node, SessionNs.node, SessionProjector.node, CrossSpawnSpawner.node]),
+    [[RuntimeFlags.node, RuntimeFlags.layer({ experimentalWorkspaces })]],
+  )
 const it = testEffect(layer(false))
 const itWorkspaces = testEffect(layer(true))
 
