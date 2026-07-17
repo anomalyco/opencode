@@ -10,7 +10,7 @@ import { Agent } from "../agent/agent"
 import { deriveSubagentSessionPermission } from "../agent/subagent-permissions"
 import type { SessionPrompt } from "../session/prompt"
 import { Config } from "@/config/config"
-import { Effect, Exit, Schema, Scope } from "effect"
+import { Effect, Exit, Option, Schema, Scope } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Database } from "@opencode-ai/core/database/database"
@@ -46,7 +46,7 @@ const BaseParameterFields = {
   subagent_type: Schema.String.annotate({ description: "The type of specialized agent to use for this task" }),
   task_id: Schema.optional(Schema.String).annotate({
     description:
-      "This should only be set if you mean to resume a previous task (you can pass a prior task_id and the task will continue the same subagent session as before instead of creating a fresh one)",
+      "Resume a previous task by passing its session id (always starts with \"ses\", from a prior task result). Omit to create a fresh subagent session. Invalid or non-ses values are ignored.",
   }),
   command: Schema.optional(Schema.String).annotate({ description: "The command that triggered this task" }),
 }
@@ -133,8 +133,13 @@ export const TaskTool = Tool.define(
         return yield* Effect.fail(new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`))
       }
 
-      const session = params.task_id
-        ? yield* sessions.get(SessionID.make(params.task_id)).pipe(Effect.catchCause(() => Effect.succeed(undefined)))
+      // Models sometimes invent UUID task_ids. SessionID.make throws sync on bad
+      // prefixes, so soft-decode first — invalid ids create a new child session.
+      const resumeID = params.task_id
+        ? Option.getOrUndefined(Schema.decodeUnknownOption(SessionID)(params.task_id))
+        : undefined
+      const session = resumeID
+        ? yield* sessions.get(resumeID).pipe(Effect.catchCause(() => Effect.succeed(undefined)))
         : undefined
       const childPermission = deriveSubagentSessionPermission({
         parentSessionPermission: parent.permission ?? [],

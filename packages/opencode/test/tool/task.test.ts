@@ -388,6 +388,43 @@ describe("tool.task", () => {
     }),
   )
 
+  it.instance("execute ignores invalid task_id formats instead of crashing", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      let seen: SessionPrompt.PromptInput | undefined
+      const promptOps = stubOps({ text: "created-from-uuid", onPrompt: (input) => (seen = input) })
+
+      const result = yield* def.execute(
+        {
+          description: "inspect bug",
+          prompt: "look into the cache key path",
+          subagent_type: "general",
+          task_id: "94807773-1228-4079-ab53-a2de32e6a697",
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      const kids = yield* sessions.children(chat.id)
+      expect(kids).toHaveLength(1)
+      expect(result.metadata.sessionId).toMatch(/^ses/)
+      expect(result.output).toContain(`state="completed"`)
+      expect(result.output).toContain("created-from-uuid")
+      expect(seen?.sessionID).toBe(result.metadata.sessionId)
+    }),
+  )
+
   it.instance("prevents subagents from launching subagents by default", () =>
     Effect.gen(function* () {
       const sessions = yield* Session.Service
