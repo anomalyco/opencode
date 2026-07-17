@@ -117,6 +117,7 @@ const layer = Layer.effect(
       const ownedToolFibers: Array<Fiber.Fiber<void, ToolOutputStore.Error>> = []
       let needsContinuation = false
       const startSnapshot = yield* snapshots.capture()
+      const persistToolPayload = (body: ToolPayload.Body) => ToolPayload.insert(db, session.id, body)
       const publisher = createLLMEventPublisher(events, {
         sessionID: session.id,
         agent: agent.id,
@@ -126,7 +127,7 @@ const layer = Layer.effect(
         providerMetadataKey: model.route.providerMetadataKey ?? model.provider,
         snapshot: startSnapshot,
         assistantMessageID,
-        persistToolPayload: (body) => ToolPayload.insert(db, session.id, body),
+        persistToolPayload,
       })
       const publication = Semaphore.makeUnsafe(1)
       // Durable publishes are serialized so tool fibers and step settlement never interleave
@@ -168,7 +169,7 @@ const layer = Layer.effect(
                             structured: { ...update.structured },
                             content: [...update.content],
                           }
-                          const payloadHash = yield* ToolPayload.insert(db, session.id, body)
+                          const payloadHash = yield* persistToolPayload(body)
                           const thin = ToolPayload.preview(body)
                           const data = {
                             sessionID: session.id,
