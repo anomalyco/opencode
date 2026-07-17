@@ -89,7 +89,11 @@ await Bun.file(`${wrapperDir}/package.json`).write(
 
 if (!skipBinaries) {
   const tasks = Object.entries(binaryDirs).map(async ([name, dirName]) => {
-    await publish(`./dist/${dirName}`, name, binaries[name])
+    try {
+      await publish(`./dist/${dirName}`, name, binaries[name])
+    } catch (e: any) {
+      console.error(`failed to publish ${name}: ${e.stderr || e.message}`)
+    }
   })
   await Promise.all(tasks)
 } else {
