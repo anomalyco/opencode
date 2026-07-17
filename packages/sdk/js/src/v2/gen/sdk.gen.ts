@@ -398,6 +398,8 @@ import type {
   V2SessionFormReplyResponses,
   V2SessionFormStateErrors,
   V2SessionFormStateResponses,
+  V2SessionGenerateErrors,
+  V2SessionGenerateResponses,
   V2SessionGetErrors,
   V2SessionGetResponses,
   V2SessionInstructionsEntryListErrors,
@@ -6472,6 +6474,41 @@ export class Session3 extends HeyApiClient {
       url: "/api/session/{sessionID}/context",
       ...options,
       ...params,
+    })
+  }
+
+  /**
+   * Generate text from session context
+   *
+   * Generate transient text from the current session context without mutating session history.
+   */
+  public generate<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      prompt?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "body", key: "prompt" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<V2SessionGenerateResponses, V2SessionGenerateErrors, ThrowOnError>({
+      url: "/api/session/{sessionID}/generate",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 
