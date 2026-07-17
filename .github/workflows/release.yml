@@ -54,6 +54,9 @@ jobs:
       - name: Install dependencies
         run: bun install
 
+      - name: Build platform binaries
+        run: bun run --cwd packages/opencode build
+
       - name: Publish release
         if: ${{ github.event.inputs.dry_run != 'true' }}
         run: bun script/publish.ts
