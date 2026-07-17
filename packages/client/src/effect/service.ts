@@ -29,6 +29,17 @@ export const discover = Effect.fn("service.discover")(function* (options: Discov
   return (yield* discoverLocal(options))?.endpoint
 })
 
+/** Recognize an authenticated compatible service bound to an expected URL, including while it starts or fails. */
+export const incumbent = Effect.fn("service.incumbent")(function* (
+  options: DiscoverOptions & { readonly url: string },
+) {
+  const info = yield* read(options.file)
+  const found = info === undefined ? undefined : yield* probe({ ...info, url: options.url })
+  if (found === undefined || found.legacy) return undefined
+  if (options.version !== undefined && found.version !== options.version) return undefined
+  return { endpoint: found.endpoint, state: found.state }
+})
+
 const discoverLocal = Effect.fnUntraced(function* (options: DiscoverOptions) {
   const found = (yield* registered(options.file)).service
   if (found?.state !== "ready") return undefined
@@ -101,8 +112,15 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
       lastSpawn = Date.now()
     }
     return Option.none<LocalService>()
-  }).pipe(Effect.repeat({ until: Option.isSome, schedule: Schedule.spaced("1 second") }))
-  return Option.getOrThrow(found).endpoint
+  }).pipe(
+    Effect.repeat({
+      until: Option.isSome,
+      schedule: Schedule.max([Schedule.spaced("1 second"), Schedule.recurs(120)]),
+    }),
+  )
+  if (Option.isNone(found))
+    return yield* Effect.fail(new Error("Timed out waiting for the background service to start"))
+  return found.value.endpoint
 })
 
 function contenderFailure(contender: Contender) {
@@ -143,6 +161,7 @@ export const Info = Schema.Struct({
   url: Schema.String,
   pid: Schema.Int.check(Schema.isGreaterThan(0)),
   password: Schema.optional(Schema.String),
+  startedAt: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))),
 })
 
 const decode = Schema.decodeUnknownEffect(Schema.fromJsonString(Info))
@@ -273,4 +292,4 @@ const requestStop = Effect.fnUntraced(function* (service: LocalService) {
 })
 
 /** Effect-based local service lifecycle operations. */
-export const Service = { discover, ensure, stop, headers, Info }
+export const Service = { discover, incumbent, ensure, stop, headers, Info }

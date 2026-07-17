@@ -30,6 +30,12 @@ export function filename(channel = InstallationChannel) {
   return `service-${Hash.fast(channel)}.json`
 }
 
+export function defaultPort(channel = InstallationChannel) {
+  if (channel === "latest") return 0xc0de
+  if (channel === "local") return 0xc0df
+  return 10_000 + (Number.parseInt(Hash.fast(channel).slice(0, 8), 16) % 50_000)
+}
+
 export function versionBelongsToChannel(
   version: string | undefined,
   channel = InstallationChannel,

@@ -2,13 +2,7 @@ import { readFile } from "node:fs/promises"
 import { spawn, type ChildProcess } from "node:child_process"
 import { homedir } from "node:os"
 import { join } from "node:path"
-import type {
-  DiscoverOptions,
-  Endpoint,
-  Info,
-  EnsureOptions,
-  StopOptions,
-} from "../service.js"
+import type { DiscoverOptions, Endpoint, Info, EnsureOptions, StopOptions } from "../service.js"
 import type { ServiceHealth, ServiceStopResponse } from "./generated/types.js"
 
 export * from "../service.js"
@@ -38,6 +32,7 @@ async function discoverLocal(options: DiscoverOptions) {
 
 /** Ensure a healthy, compatible local service is running. */
 export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
+  const deadline = Date.now() + 120_000
   const contenders = new Set<Contender>()
   let announced = false
   let lastSpawn = 0
@@ -66,6 +61,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
   }
 
   while (true) {
+    if (Date.now() >= deadline) throw new Error("Timed out waiting for the background service to start")
     const registration = await registered(options.file, true)
 
     if (registration.service !== undefined) {
@@ -128,7 +124,9 @@ function fallback() {
 /** Create HTTP authentication headers for a service endpoint. */
 export function headers(endpoint: Endpoint) {
   if (endpoint.auth === undefined) return undefined
-  return { authorization: "Basic " + Buffer.from(endpoint.auth.username + ":" + endpoint.auth.password).toString("base64") }
+  return {
+    authorization: "Basic " + Buffer.from(endpoint.auth.username + ":" + endpoint.auth.password).toString("base64"),
+  }
 }
 
 async function read(file?: string) {
@@ -227,7 +225,8 @@ async function kill(service: LocalService, options: { readonly file?: string }) 
   const latest = await find(options)
   if (latest === undefined || !same(latest.info, service.info)) return
   signal(service.info.pid, "SIGKILL")
-  if (!(await waitUntilStopped(service.info.pid))) throw new Error(`Server process ${service.info.pid} is still running`)
+  if (!(await waitUntilStopped(service.info.pid)))
+    throw new Error(`Server process ${service.info.pid} is still running`)
 }
 
 async function requestStop(service: LocalService) {
