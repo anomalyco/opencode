@@ -2,30 +2,13 @@ import { afterEach, expect } from "bun:test"
 import { existsSync } from "node:fs"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Effect } from "effect"
-import { fileURLToPath } from "url"
 import { disposeAllInstances } from "../fixture/fixture"
-import { testEffect } from "../lib/effect"
 import { cliIt } from "../lib/cli-process"
-
-const it = testEffect(LayerNode.compile(FSUtil.node))
 
 afterEach(async () => {
   await disposeAllInstances()
 })
-
-it.live("session list skips InstanceBootstrap in source", () =>
-  Effect.gen(function* () {
-    const fs = yield* FSUtil.Service
-    const source = yield* fs.readFileString(fileURLToPath(new URL("../../src/cli/cmd/session.ts", import.meta.url)))
-    const list = source.slice(source.indexOf("SessionListCommand"), source.indexOf("formatSessionTable"))
-    expect(list).toContain("instance: false")
-    expect(list).toContain("fromDirectory")
-    expect(list).toContain("projectID")
-  }),
-)
 
 cliIt.live(
   "session list does not run InstanceBootstrap plugins",

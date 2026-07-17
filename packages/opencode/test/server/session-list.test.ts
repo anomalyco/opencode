@@ -5,7 +5,7 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Database } from "@opencode-ai/core/database/database"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { Session as SessionNs } from "@/session/session"
-import { disposeAllInstances, provideInstance, TestInstance } from "../fixture/fixture"
+import { disposeAllInstances, provideInstance, TestInstance, tmpdirScoped } from "../fixture/fixture"
 import { mkdir } from "fs/promises"
 import path from "path"
 import { SessionTable } from "@opencode-ai/core/session/sql"
@@ -239,6 +239,27 @@ describe("session.list", () => {
 
         expect(ids).toContain(root.id)
         expect(ids).not.toContain(child.id)
+      }),
+    { git: true },
+  )
+
+  it.instance(
+    "filters by projectID when projectID is provided",
+    () =>
+      Effect.gen(function* () {
+        const second = yield* tmpdirScoped({ git: true })
+
+        const first = yield* withSession({ title: "first-project-root" })
+        const firstChild = yield* withSession({ title: "first-project-child", parentID: first.id })
+        const other = yield* withSession({ title: "other-project-root" }).pipe(provideInstance(second))
+
+        const ids = (yield* SessionNs.Service.use((session) =>
+          session.list({ projectID: first.projectID, roots: true }),
+        )).map((session) => session.id)
+
+        expect(ids).toContain(first.id)
+        expect(ids).not.toContain(firstChild.id)
+        expect(ids).not.toContain(other.id)
       }),
     { git: true },
   )
