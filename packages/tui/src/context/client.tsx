@@ -5,6 +5,10 @@ import { createStore } from "solid-js/store"
 import { errorMessage } from "../util/error"
 import { createSimpleContext } from "./helper"
 import { useLog } from "./log"
+import { interestEqual, subscribeInput, type EventInterest } from "./event-interest"
+
+export type { EventInterest } from "./event-interest"
+export { interestEqual, subscribeInput } from "./event-interest"
 
 export type ClientConnectionStatus = "connected" | "connecting" | "reconnecting"
 export type ClientConnectionEvent = {
@@ -22,37 +26,9 @@ type ManagedService = {
   restart: () => Promise<void>
 }
 
-export type EventInterest = {
-  readonly location?: {
-    readonly directory: string
-    readonly workspace?: string
-  }
-  readonly sessions?: ReadonlyArray<string>
-}
-
 type ClientEventMap = { [Type in OpenCodeEvent["type"]]: Extract<OpenCodeEvent, { type: Type }> }
 const connectTimeout = 2_000
 const connectionHistoryLimit = 50
-
-function interestEqual(left?: EventInterest, right?: EventInterest) {
-  if (left === right) return true
-  if (!left || !right) return false
-  if (left.location?.directory !== right.location?.directory) return false
-  if (left.location?.workspace !== right.location?.workspace) return false
-  const a = left.sessions ?? []
-  const b = right.sessions ?? []
-  if (a.length !== b.length) return false
-  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false
-  return true
-}
-
-function subscribeInput(interest?: EventInterest) {
-  if (!interest) return undefined
-  return {
-    ...(interest.location ? { location: interest.location } : {}),
-    ...(interest.sessions && interest.sessions.length > 0 ? { session: [...interest.sessions] } : {}),
-  }
-}
 
 export const { use: useClient, provider: ClientProvider } = createSimpleContext({
   name: "Client",
