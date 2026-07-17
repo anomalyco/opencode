@@ -56,40 +56,90 @@ type SchemaResource = { readonly value: unknown; readonly root: unknown }
 const hiddenKeyword = { request: "readOnly", response: "writeOnly" } as const
 
 // Local `$defs`/`definitions` pointers resolve against the schema being projected;
-// other pointers resolve against the document and rebase local resolution onto the target.
+// other pointers resolve against the document and rebase local resolution onto the
+// target. Resolution is one hop at a time so that every link of a reference chain has
+// its own sibling declarations inspected; chains and cycles terminate in the callers'
+// cycle solver, which visits each hop object at most once.
 const resolveResource = (document: Document, resource: SchemaResource): SchemaResource => {
-  const next = (current: SchemaResource, seen: ReadonlySet<string>): SchemaResource => {
-    if (!isRecord(current.value)) return current
-    const ref = nonEmptyString(own(current.value, "$ref"))
-    if (ref === undefined || !ref.startsWith("#/") || seen.has(ref)) return current
-    const local = ref.startsWith("#/$defs/") || ref.startsWith("#/definitions/")
-    const target = resolvePointer(local ? current.root : document, ref)
-    if (target === undefined) return current
-    return next({ value: target, root: local ? current.root : target }, new Set([...seen, ref]))
-  }
-  return next(resource, new Set())
+  if (!isRecord(resource.value)) return resource
+  const ref = nonEmptyString(own(resource.value, "$ref"))
+  if (ref === undefined || !ref.startsWith("#/")) return resource
+  const local = ref.startsWith("#/$defs/") || ref.startsWith("#/definitions/")
+  const target = resolvePointer(local ? resource.root : document, ref)
+  if (target === undefined) return resource
+  return { value: target, root: local ? resource.root : target }
 }
 
-// Hidden-ness is memoized per schema object and direction so that diamond-shaped
+// Hidden-ness and hidden property names are reachability folds over `$ref` and
+// `allOf` edges, memoized per schema object and direction so that diamond-shaped
 // reference graphs (the same component referenced from many sites) stay linear;
-// path-scoped visited sets would re-traverse shared subtrees exponentially. Entries
-// are seeded before recursion so reference cycles terminate as not hidden. A schema
-// reachable under multiple resolution roots reuses the first root's result.
-type DirectionCache = {
-  readonly hidden: Map<unknown, boolean>
-  readonly names: Map<unknown, ReadonlySet<string>>
+// path-scoped visited sets would re-traverse shared subtrees exponentially.
+// Documents are assumed immutable once projected: mutating a document previously
+// passed to `fromSpec` yields stale cached results. A schema reachable under
+// multiple resolution roots reuses the first root's result.
+type Solver<T> = {
+  readonly values: Map<unknown, T>
+  // Discovery index per schema whose strongly connected component is unresolved.
+  readonly pending: Map<unknown, number>
+  readonly stack: Array<unknown>
 }
+type DirectionCache = {
+  readonly hidden: Solver<boolean>
+  readonly names: Solver<ReadonlySet<string>>
+}
+
+const emptySolver = <T>(): Solver<T> => ({ values: new Map(), pending: new Map(), stack: [] })
+
 const projectionCaches = new WeakMap<Document, Record<SchemaDirection, DirectionCache>>()
 
 const projectionCache = (document: Document, direction: SchemaDirection): DirectionCache => {
   const existing = projectionCaches.get(document)
   if (existing !== undefined) return existing[direction]
   const created = {
-    request: { hidden: new Map<unknown, boolean>(), names: new Map<unknown, ReadonlySet<string>>() },
-    response: { hidden: new Map<unknown, boolean>(), names: new Map<unknown, ReadonlySet<string>>() },
+    request: { hidden: emptySolver<boolean>(), names: emptySolver<ReadonlySet<string>>() },
+    response: { hidden: emptySolver<boolean>(), names: emptySolver<ReadonlySet<string>>() },
   }
   projectionCaches.set(document, created)
   return created[direction]
+}
+
+// Reference cycles are resolved with Tarjan's strongly connected components: every
+// member of a cycle reaches the same declarations, so the component root's value is
+// final for each member. A frame whose cycles close in a still-active ancestor
+// returns its provisional value uncached; only resolved components are cached, which
+// keeps results independent of property and traversal order.
+type CycleScope = { lowlink: number }
+
+const solveCycles = <T>(
+  solver: Solver<T>,
+  key: unknown,
+  provisional: T,
+  scope: CycleScope,
+  compute: (inner: CycleScope) => T,
+): T => {
+  const cached = solver.values.get(key)
+  if (cached !== undefined) return cached
+  const pending = solver.pending.get(key)
+  if (pending !== undefined) {
+    scope.lowlink = Math.min(scope.lowlink, pending)
+    return provisional
+  }
+  // Components pop as contiguous stack suffixes, so pending indices stay 0..size-1.
+  const index = solver.pending.size
+  const base = solver.stack.length
+  solver.pending.set(key, index)
+  solver.stack.push(key)
+  const inner: CycleScope = { lowlink: Infinity }
+  const value = compute(inner)
+  if (inner.lowlink < index) {
+    scope.lowlink = Math.min(scope.lowlink, inner.lowlink)
+    return value
+  }
+  for (const member of solver.stack.splice(base)) {
+    solver.pending.delete(member)
+    solver.values.set(member, value)
+  }
+  return value
 }
 
 // Most documents never use directional keywords; one cached linear scan lets
@@ -112,53 +162,61 @@ export const hasDirectionalSchemas = (document: Document): boolean => {
 
 // OpenAPI 3.1 allows keywords as siblings of `$ref`, so a schema's own declarations
 // are inspected before following the reference.
-const isHidden = (document: Document, resource: SchemaResource, direction: SchemaDirection): boolean => {
-  if (!isRecord(resource.value)) return false
-  if (own(resource.value, hiddenKeyword[direction]) === true) return true
-  const cache = projectionCache(document, direction).hidden
-  const cached = cache.get(resource.value)
-  if (cached !== undefined) return cached
-  cache.set(resource.value, false)
-  const target = resolveResource(document, resource)
-  const result =
-    asArray(own(resource.value, "allOf")).some((item) => isHidden(document, { ...resource, value: item }, direction)) ||
-    (target.value !== resource.value && isHidden(document, target, direction))
-  cache.set(resource.value, result)
-  return result
+const isHidden = (
+  document: Document,
+  resource: SchemaResource,
+  direction: SchemaDirection,
+  scope: CycleScope = { lowlink: Infinity },
+): boolean => {
+  const value = resource.value
+  if (!isRecord(value)) return false
+  if (own(value, hiddenKeyword[direction]) === true) return true
+  return solveCycles(projectionCache(document, direction).hidden, value, false, scope, (inner) => {
+    const target = resolveResource(document, resource)
+    return (
+      asArray(own(value, "allOf")).some((item) => isHidden(document, { ...resource, value: item }, direction, inner)) ||
+      (target.value !== value && isHidden(document, target, direction, inner))
+    )
+  })
 }
 
 // Hidden property names declared by a schema itself or inherited through `$ref` and
 // `allOf` composition, so sibling `required` lists stay consistent after projection.
-const hiddenNames = (document: Document, resource: SchemaResource, direction: SchemaDirection): ReadonlySet<string> => {
-  if (!isRecord(resource.value)) return new Set()
-  const cache = projectionCache(document, direction).names
-  const cached = cache.get(resource.value)
-  if (cached !== undefined) return cached
-  cache.set(resource.value, new Set())
-  const properties = own(resource.value, "properties")
-  const declared = isRecord(properties)
-    ? Object.entries(properties)
-        .filter(([, property]) => isHidden(document, { ...resource, value: property }, direction))
-        .map(([name]) => name)
-    : []
-  const composed = asArray(own(resource.value, "allOf")).flatMap((item) => [
-    ...hiddenNames(document, { ...resource, value: item }, direction),
-  ])
-  const target = resolveResource(document, resource)
-  const referenced = target.value === resource.value ? [] : hiddenNames(document, target, direction)
-  const result = new Set([...declared, ...composed, ...referenced])
-  cache.set(resource.value, result)
-  return result
+const hiddenNames = (
+  document: Document,
+  resource: SchemaResource,
+  direction: SchemaDirection,
+  scope: CycleScope = { lowlink: Infinity },
+): ReadonlySet<string> => {
+  const value = resource.value
+  if (!isRecord(value)) return new Set()
+  return solveCycles(projectionCache(document, direction).names, value, new Set(), scope, (inner) => {
+    const properties = own(value, "properties")
+    // Property hidden-ness runs in the separate hidden solver; each call completes
+    // fully before returning, so it never observes this solver's pending frames.
+    const declared = isRecord(properties)
+      ? Object.entries(properties)
+          .filter(([, property]) => isHidden(document, { ...resource, value: property }, direction))
+          .map(([name]) => name)
+      : []
+    const composed = asArray(own(value, "allOf")).flatMap((item) => [
+      ...hiddenNames(document, { ...resource, value: item }, direction, inner),
+    ])
+    const target = resolveResource(document, resource)
+    const referenced = target.value === value ? [] : hiddenNames(document, target, direction, inner)
+    return new Set([...declared, ...composed, ...referenced])
+  })
 }
 
+// `not` negates its subschema and `if`/`contains` select instances rather than
+// assert them, so removing hidden properties there would strengthen or shift the
+// assertion (a projected `not` can become unsatisfiable). Those subschemas pass
+// through unchanged; `then`/`else` are ordinary assertions and are still projected.
 const nestedSchemas = new Set([
   "items",
-  "contains",
   "additionalProperties",
   "unevaluatedProperties",
   "propertyNames",
-  "not",
-  "if",
   "then",
   "else",
 ])

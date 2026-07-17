@@ -530,6 +530,48 @@ describe("OpenAPI.fromSpec", () => {
     expect(base.required).toEqual(["name"])
   })
 
+  test("honors directional declarations on intermediate reference hops", () => {
+    const tool = toolAt(
+      OpenAPI.fromSpec({
+        baseUrl,
+        spec: {
+          ...singleOperation(
+            {
+              requestBody: {
+                required: true,
+                content: {
+                  "application/json": {
+                    schema: {
+                      type: "object",
+                      additionalProperties: false,
+                      required: ["secret", "name"],
+                      properties: {
+                        // Hidden only by the sibling declaration on the middle hop.
+                        secret: { $ref: "#/components/schemas/Middle" },
+                        name: { type: "string" },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            "post",
+          ),
+          components: {
+            schemas: {
+              Middle: { $ref: "#/components/schemas/Plain", readOnly: true },
+              Plain: { type: "string" },
+            },
+          },
+        },
+      }).tools,
+      "test",
+    )
+    if (!Tool.isDefinition(tool)) throw new Error("test was not generated")
+
+    expect(inputTypeScript(tool)).toBe("{ name: string }")
+  })
+
   test("projects cyclic component references without hanging", () => {
     const tool = toolAt(
       OpenAPI.fromSpec({
@@ -613,6 +655,124 @@ describe("OpenAPI.fromSpec", () => {
     expect(Object.keys(isRecord(leaf.properties) ? leaf.properties : {})).toEqual(["name"])
   })
 
+  test("resolves hiding through reference cycles regardless of evaluation order", () => {
+    // `Wrap` is hidden only through the cycle member `Loop`; evaluating a property that
+    // enters the cycle at `Loop` first must not freeze a provisional result for `Wrap`.
+    const schemas = {
+      Wrap: { allOf: [{ $ref: "#/components/schemas/Loop" }] },
+      Loop: { allOf: [{ $ref: "#/components/schemas/Wrap" }, { readOnly: true }] },
+    }
+    const body = (properties: Record<string, unknown>) => ({
+      required: true,
+      content: {
+        "application/json": {
+          schema: {
+            type: "object",
+            additionalProperties: false,
+            required: [...Object.keys(properties), "name"],
+            properties: { ...properties, name: { type: "string" } },
+          },
+        },
+      },
+    })
+    for (const properties of [
+      { a: { $ref: "#/components/schemas/Loop" }, b: { $ref: "#/components/schemas/Wrap" } },
+      { a: { $ref: "#/components/schemas/Wrap" }, b: { $ref: "#/components/schemas/Loop" } },
+    ]) {
+      const tool = toolAt(
+        OpenAPI.fromSpec({
+          baseUrl,
+          spec: { ...singleOperation({ requestBody: body(properties) }, "post"), components: { schemas } },
+        }).tools,
+        "test",
+      )
+      if (!Tool.isDefinition(tool)) throw new Error("test was not generated")
+
+      expect(inputTypeScript(tool)).toBe("{ name: string }")
+    }
+  })
+
+  test("keeps not, if, and contains subschemas unprojected", () => {
+    const tool = toolAt(
+      OpenAPI.fromSpec({
+        baseUrl,
+        spec: singleOperation(
+          {
+            requestBody: {
+              required: true,
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    additionalProperties: false,
+                    required: ["record"],
+                    properties: {
+                      record: {
+                        type: "object",
+                        // Removing `secret` here would turn `not` unsatisfiable and
+                        // flip which branch of `if` applies; both must pass through.
+                        not: { required: ["secret"], properties: { secret: { type: "string", readOnly: true } } },
+                        if: { required: ["kind"], properties: { kind: { type: "string", readOnly: true } } },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          "post",
+        ),
+      }).tools,
+      "test",
+    )
+    if (!Tool.isDefinition(tool) || !isRecord(tool.input)) throw new Error("test was not generated")
+    const properties = isRecord(tool.input.properties) ? tool.input.properties : {}
+    const record: Record<string, unknown> = isRecord(properties.record) ? properties.record : {}
+
+    expect(record.not).toEqual({ required: ["secret"], properties: { secret: { type: "string", readOnly: true } } })
+    expect(record.if).toEqual({ required: ["kind"], properties: { kind: { type: "string", readOnly: true } } })
+  })
+
+  test("does not hide properties whose direction is declared only in anyOf or oneOf alternatives", () => {
+    // Deliberate scope bound: alternatives may apply, so a directional declaration on
+    // one alternative does not hide the property; the annotation is preserved as-is.
+    const tool = toolAt(
+      OpenAPI.fromSpec({
+        baseUrl,
+        spec: singleOperation(
+          {
+            requestBody: {
+              required: true,
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    additionalProperties: false,
+                    required: ["choice", "pick"],
+                    properties: {
+                      choice: { anyOf: [{ type: "string", readOnly: true }, { type: "number" }] },
+                      pick: { oneOf: [{ type: "string", readOnly: true }, { type: "number" }] },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          "post",
+        ),
+      }).tools,
+      "test",
+    )
+    if (!Tool.isDefinition(tool) || !isRecord(tool.input)) throw new Error("test was not generated")
+    const properties = isRecord(tool.input.properties) ? tool.input.properties : {}
+    const choice: Record<string, unknown> = isRecord(properties.choice) ? properties.choice : {}
+    const pick: Record<string, unknown> = isRecord(properties.pick) ? properties.pick : {}
+
+    expect(Object.keys(properties)).toEqual(["choice", "pick"])
+    expect(choice.anyOf).toEqual([{ type: "string", readOnly: true }, { type: "number" }])
+    expect(pick.oneOf).toEqual([{ type: "string", readOnly: true }, { type: "number" }])
+  })
+
   test("does not misresolve shadowed local $defs when flattening body fields", () => {
     const tool = toolAt(
       OpenAPI.fromSpec({
@@ -693,7 +853,13 @@ describe("OpenAPI.fromSpec", () => {
               name: "filter",
               in: "query",
               required: true,
-              schema: { type: "object", properties: { value: inherited }, required: ["value"] },
+              schema: {
+                type: "object",
+                // The own annotation on `id` keeps projection active for the document,
+                // so `value` pins that prototype-inherited annotations are not read.
+                properties: { value: inherited, id: { type: "string", readOnly: true } },
+                required: ["value", "id"],
+              },
             },
           ],
         }),
