@@ -768,7 +768,10 @@ export interface SkillApi<E = never> {
 }
 
 type Endpoint19_0Request = Parameters<RawClient["server.event"]["event.subscribe"]>[0]
-export type Endpoint19_0Input = { readonly location?: Endpoint19_0Request["query"]["location"] }
+export type Endpoint19_0Input = {
+  readonly location?: Endpoint19_0Request["query"]["location"]
+  readonly session?: Endpoint19_0Request["query"]["session"]
+}
 export type Endpoint19_0Output = StreamValue<EffectValue<ReturnType<RawClient["server.event"]["event.subscribe"]>>>
 export type EventSubscribeOperation<E = never> = (input?: Endpoint19_0Input) => Stream.Stream<Endpoint19_0Output, E>
 

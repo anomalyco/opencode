@@ -249,4 +249,108 @@ describe("EventFeed", () => {
     })
     expect(EventFeed.interestFromQuery(new URLSearchParams())).toBeUndefined()
   })
+
+  test("parses repeated session interest from query params", () => {
+    const params = new URLSearchParams()
+    params.append("session", "ses_a")
+    params.append("session", "ses_b,ses_c")
+    expect(EventFeed.interestFromQuery(params)).toEqual({
+      sessions: ["ses_a", "ses_b", "ses_c"],
+    })
+  })
+
+  it.effect("delivers session-scoped events only to interested subscribers", () =>
+    Effect.gen(function* () {
+      const source = makeSource()
+      const feed = yield* EventFeed.make(source.observe, { encode: (event) => event.id })
+      const alpha = yield* feed.subscribe({
+        location: { directory: "/tmp/project" },
+        sessions: ["ses_a"],
+      })
+      const beta = yield* feed.subscribe({
+        location: { directory: "/tmp/project" },
+        sessions: ["ses_b"],
+      })
+      const left = yield* alpha.pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+      const right = yield* beta.pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+
+      yield* source.publish(sessionEvent("a", "ses_a", { directory: "/tmp/project" }))
+      yield* source.publish(sessionEvent("b", "ses_b", { directory: "/tmp/project" }))
+
+      expect(Array.from(yield* Fiber.join(left))).toEqual(["evt_a"])
+      expect(Array.from(yield* Fiber.join(right))).toEqual(["evt_b"])
+    }),
+  )
+
+  it.effect("keeps location-only events flowing when session interest is set", () =>
+    Effect.gen(function* () {
+      const source = makeSource()
+      const feed = yield* EventFeed.make(source.observe, { encode: (event) => event.id })
+      const stream = yield* feed.subscribe({
+        location: { directory: "/tmp/project" },
+        sessions: ["ses_a"],
+      })
+      const received = yield* stream.pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+      yield* source.publish(event("catalog", { directory: "/tmp/project" }))
+      expect(Array.from(yield* Fiber.join(received))).toEqual(["evt_catalog"])
+    }),
+  )
+
+  it.effect("fans out eleven concurrent clients by interest, encoding once per event", () =>
+    Effect.gen(function* () {
+      let encodes = 0
+      const source = makeSource()
+      const feed = yield* EventFeed.make(source.observe, {
+        encode: (event) => {
+          encodes += 1
+          return event.id
+        },
+      })
+      const fibers: Array<Fiber.Fiber<void, EventFeed.Error>> = []
+      const counts = Array.from({ length: 11 }, () => 0)
+      for (let i = 0; i < 11; i++) {
+        const index = i
+        // 0-4: disjoint sessions, 5-9: shared session, 10: location-only (overlapping)
+        const sessions = index < 5 ? [`ses_${index}`] : index < 10 ? ["ses_shared"] : undefined
+        const expected = index < 10 ? 1 : 2
+        const stream = yield* feed.subscribe({
+          location: { directory: "/tmp/project" },
+          ...(sessions ? { sessions } : {}),
+        })
+        fibers.push(
+          yield* stream.pipe(
+            Stream.take(expected),
+            Stream.runForEach(() => Effect.sync(() => (counts[index] += 1))),
+            Effect.forkScoped,
+          ),
+        )
+      }
+
+      for (let i = 0; i < 5; i++) {
+        yield* source.publish(sessionEvent(`s${i}`, `ses_${i}`, { directory: "/tmp/project" }))
+      }
+      yield* source.publish(sessionEvent("shared", "ses_shared", { directory: "/tmp/project" }))
+
+      for (const fiber of fibers) yield* Fiber.join(fiber)
+
+      expect(encodes).toBe(6)
+      expect(counts).toEqual([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2])
+    }),
+  )
+})
+
+const sessionEvent = (
+  id: string,
+  sessionID: string,
+  location: { directory: string; workspaceID?: string },
+): EventV2.Payload => ({
+  id: EventV2.ID.make(`evt_${id}`),
+  created: DateTime.makeUnsafe(Date.now()),
+  type: "session.renamed",
+  data: { sessionID, title: id },
+  durable: { aggregateID: sessionID, seq: EventV2.Seq.make(1), version: EventV2.Version.make(1) },
+  location: {
+    directory: AbsolutePath.make(location.directory),
+    ...(location.workspaceID !== undefined ? { workspaceID: location.workspaceID as never } : {}),
+  },
 })

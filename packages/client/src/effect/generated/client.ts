@@ -909,10 +909,13 @@ const Endpoint18_0 = (raw: RawClient["server.skill"]) => (input?: Endpoint18_0In
 const adaptGroup18 = (raw: RawClient["server.skill"]) => ({ list: Endpoint18_0(raw) })
 
 type Endpoint19_0Request = Parameters<RawClient["server.event"]["event.subscribe"]>[0]
-type Endpoint19_0Input = { readonly location?: Endpoint19_0Request["query"]["location"] }
+type Endpoint19_0Input = {
+  readonly location?: Endpoint19_0Request["query"]["location"]
+  readonly session?: Endpoint19_0Request["query"]["session"]
+}
 const Endpoint19_0 = (raw: RawClient["server.event"]) => (input?: Endpoint19_0Input) =>
   Stream.unwrap(
-    raw["event.subscribe"]({ query: { location: input?.["location"] } }).pipe(
+    raw["event.subscribe"]({ query: { location: input?.["location"], session: input?.["session"] } }).pipe(
       Effect.mapError(mapClientError),
       Effect.map((stream) => stream.pipe(Stream.mapError(mapClientError))),
     ),

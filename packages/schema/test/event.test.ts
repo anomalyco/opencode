@@ -49,4 +49,12 @@ describe("public event schemas", () => {
       aggregateID: "ses_test",
     })
   })
+
+  test("sessionIDOf reads durable aggregate or ephemeral data.sessionID", () => {
+    expect(Event.sessionIDOf({ durable: { aggregateID: "ses_durable" }, data: { sessionID: "ses_other" } })).toBe(
+      "ses_durable",
+    )
+    expect(Event.sessionIDOf({ data: { sessionID: "ses_ephemeral" } })).toBe("ses_ephemeral")
+    expect(Event.sessionIDOf({ data: {} })).toBeUndefined()
+  })
 })

@@ -1,7 +1,7 @@
 export * as EventFeed from "./event-feed"
 
 import { EventV2 } from "@opencode-ai/core/event"
-import { isOpenCodeEvent, OpenCodeEvent } from "@opencode-ai/protocol/groups/event"
+import { isOpenCodeEvent, OpenCodeEvent, sessionIDOf } from "@opencode-ai/protocol/groups/event"
 import { Cause, Context, Effect, Layer, Queue, Schema, Scope, Stream } from "effect"
 
 export const SubscriberCapacity = 4_096
@@ -31,9 +31,10 @@ export type LocationInterest = {
   readonly workspace?: string
 }
 
-/** Omit or leave empty for the global public feed; set location to narrow delivery. */
+/** Omit or leave empty for the global public feed; set location/sessions to narrow delivery. */
 export type Interest = {
   readonly location?: LocationInterest
+  readonly sessions?: ReadonlyArray<string>
 }
 
 export interface Interface {
@@ -49,22 +50,41 @@ export function frame(event: OpenCodeEvent) {
 }
 
 export function matchesInterest(event: EventV2.Payload, interest?: Interest): boolean {
-  const location = interest?.location
-  if (location === undefined) return true
+  if (interest === undefined) return true
   if (GlobalEventTypes.has(event.type)) return true
-  const ref = event.location
-  if (ref === undefined) return false
-  if (ref.directory !== location.directory) return false
-  if (location.workspace !== undefined && ref.workspaceID !== location.workspace) return false
+
+  const location = interest.location
+  if (location !== undefined) {
+    const ref = event.location
+    if (ref === undefined) return false
+    if (ref.directory !== location.directory) return false
+    if (location.workspace !== undefined && ref.workspaceID !== location.workspace) return false
+  }
+
+  const sessions = interest.sessions
+  if (sessions !== undefined && sessions.length > 0) {
+    const sessionID = sessionIDOf(event)
+    if (sessionID !== undefined) return sessions.includes(sessionID)
+  }
+
   return true
 }
 
 export function interestFromQuery(query: URLSearchParams): Interest | undefined {
   const directory = query.get("location[directory]") ?? undefined
   const workspace = query.get("location[workspace]") ?? undefined
-  if (directory === undefined && workspace === undefined) return undefined
-  if (directory === undefined) return undefined
-  return { location: { directory, ...(workspace !== undefined ? { workspace } : {}) } }
+  const sessions = query
+    .getAll("session")
+    .flatMap((value) => value.split(","))
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0)
+  if (directory === undefined && workspace === undefined && sessions.length === 0) return undefined
+  return {
+    ...(directory !== undefined
+      ? { location: { directory, ...(workspace !== undefined ? { workspace } : {}) } }
+      : {}),
+    ...(sessions.length > 0 ? { sessions } : {}),
+  }
 }
 
 type Subscriber = {

@@ -4,7 +4,19 @@ import { Location } from "@opencode-ai/schema/location"
 import type { Definition } from "@opencode-ai/schema/event"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
-import { LocationQuery, locationQueryOpenApi } from "./location.js"
+import { locationQueryOpenApi } from "./location.js"
+
+export const sessionIDOf = Event.sessionIDOf
+
+export const EventSubscribeQuery = Schema.Struct({
+  location: Schema.optional(
+    Schema.Struct({
+      directory: Schema.optional(Schema.String),
+      workspace: Schema.optional(Schema.String),
+    }),
+  ),
+  session: Schema.optional(Schema.Union([Schema.String, Schema.Array(Schema.String)])),
+}).annotate({ identifier: "EventSubscribeQuery" })
 
 const fields = {
   id: Event.ID,
@@ -33,7 +45,7 @@ const make = <const Definitions extends ReadonlyArray<Definition>>(definitions: 
     group: HttpApiGroup.make("server.event")
       .add(
         HttpApiEndpoint.get("event.subscribe", "/api/event", {
-          query: LocationQuery,
+          query: EventSubscribeQuery,
           success: HttpApiSchema.StreamSse({ data: EventSchema }),
         })
           .annotateMerge(locationQueryOpenApi)
@@ -42,7 +54,7 @@ const make = <const Definitions extends ReadonlyArray<Definition>>(definitions: 
               identifier: "v2.event.subscribe",
               summary: "Subscribe to events",
               description:
-                "Subscribe to native event payloads for the server. Omit location to receive the global public feed; pass location to narrow delivery to that directory (and optional workspace). Volatile by contract: a slow consumer overflows and fails the stream, and events during disconnection are missed.",
+                "Subscribe to native event payloads for the server. Omit query params for the global public feed. Pass location to narrow by directory/workspace, and optional repeated session IDs to further narrow session-scoped events. Volatile by contract: a slow consumer overflows and fails the stream, and events during disconnection are missed.",
             }),
           ),
       )

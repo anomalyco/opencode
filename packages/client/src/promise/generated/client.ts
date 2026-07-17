@@ -1356,7 +1356,7 @@ export function make(options: ClientOptions) {
           {
             method: "GET",
             path: `/api/event`,
-            query: { location: input?.["location"] },
+            query: { location: input?.["location"], session: input?.["session"] },
             successStatus: 200,
             declaredStatuses: [401, 400],
             empty: false,

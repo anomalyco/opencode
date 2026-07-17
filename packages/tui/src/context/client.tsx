@@ -27,11 +27,32 @@ export type EventInterest = {
     readonly directory: string
     readonly workspace?: string
   }
+  readonly sessions?: ReadonlyArray<string>
 }
 
 type ClientEventMap = { [Type in OpenCodeEvent["type"]]: Extract<OpenCodeEvent, { type: Type }> }
 const connectTimeout = 2_000
 const connectionHistoryLimit = 50
+
+function interestEqual(left?: EventInterest, right?: EventInterest) {
+  if (left === right) return true
+  if (!left || !right) return false
+  if (left.location?.directory !== right.location?.directory) return false
+  if (left.location?.workspace !== right.location?.workspace) return false
+  const a = left.sessions ?? []
+  const b = right.sessions ?? []
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false
+  return true
+}
+
+function subscribeInput(interest?: EventInterest) {
+  if (!interest) return undefined
+  return {
+    ...(interest.location ? { location: interest.location } : {}),
+    ...(interest.sessions && interest.sessions.length > 0 ? { session: [...interest.sessions] } : {}),
+  }
+}
 
 export const { use: useClient, provider: ClientProvider } = createSimpleContext({
   name: "Client",
@@ -40,6 +61,7 @@ export const { use: useClient, provider: ClientProvider } = createSimpleContext(
     const abort = new AbortController()
     const history: ClientConnectionEvent[] = []
     let api = props.api
+    let interest = props.interest
     const events = createGlobalEmitter<ClientEventMap>()
     const [connection, setConnection] = createStore<{
       status: ClientConnectionStatus
@@ -72,7 +94,7 @@ export const { use: useClient, provider: ClientProvider } = createSimpleContext(
             record(attempt === 0 ? "connecting" : "reconnecting", attempt)
             log.info("event stream connecting", { attempt })
             const iterator = api.event
-              .subscribe(props.interest, { signal: request.signal })
+              .subscribe(subscribeInput(interest), { signal: request.signal })
               [Symbol.asyncIterator]()
             const first = await iterator.next()
             if (abort.signal.aborted || controller.signal.aborted) return undefined
@@ -154,6 +176,11 @@ export const { use: useClient, provider: ClientProvider } = createSimpleContext(
       event: {
         on: events.on,
         listen: events.listen,
+        scope(next: EventInterest) {
+          if (interestEqual(interest, next)) return
+          interest = next
+          start()
+        },
       },
       connection: {
         status() {

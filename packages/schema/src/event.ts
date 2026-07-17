@@ -196,3 +196,16 @@ function readonlyMap<Key, Value>(map: Map<Key, Value>): ReadonlyMap<Key, Value> 
   })
   return result
 }
+
+/** Session identity from a durable aggregate or an ephemeral `data.sessionID` field. */
+export function sessionIDOf(event: {
+  readonly durable?: { readonly aggregateID: string }
+  readonly data?: unknown
+}): string | undefined {
+  if (event.durable?.aggregateID) return event.durable.aggregateID
+  if (event.data !== undefined && event.data !== null && typeof event.data === "object" && "sessionID" in event.data) {
+    const sessionID = (event.data as { readonly sessionID?: unknown }).sessionID
+    if (typeof sessionID === "string") return sessionID
+  }
+  return undefined
+}

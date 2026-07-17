@@ -32,6 +32,7 @@ import type { Plugin } from "@opencode-ai/plugin/v2/tui"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { createSimpleContext } from "./helper"
 import { useClient } from "./client"
+import { useRoute } from "./route"
 import { createEffect, createSignal, onCleanup } from "solid-js"
 
 export type DataSessionStatus = "idle" | "running"
@@ -142,6 +143,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
     })
 
     const client = useClient()
+    const route = useRoute()
     const [defaultLocation, setDefaultLocation] = createSignal<LocationRef>({
       directory: process.cwd(),
     })
@@ -1270,6 +1272,22 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
     createEffect(() => {
       if (client.connection.status() === "connected") return
       sync.invalidate()
+    })
+
+    createEffect(() => {
+      const location = defaultLocation()
+      const current = route.data
+      const sessions =
+        current.type === "session"
+          ? (store.session.family[resolveRoot(current.sessionID)] ?? [current.sessionID]).slice().sort()
+          : undefined
+      client.event.scope({
+        location: {
+          directory: location.directory,
+          ...(location.workspaceID ? { workspace: location.workspaceID } : {}),
+        },
+        ...(sessions && sessions.length > 0 ? { sessions } : {}),
+      })
     })
 
     onCleanup(

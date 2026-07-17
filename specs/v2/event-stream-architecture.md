@@ -42,7 +42,7 @@ With `N` connected TUIs, schema and wire encoding therefore ran `N` times for ev
 
 `liveBounded` was introduced before zero-argument `events.subscribe()` became the unified live interface. It stayed on deprecated `listen` because it provided a stronger contract than the shared unbounded Core PubSub: one slow subscriber could overflow and fail without blocking healthy subscribers.
 
-`GET /api/event` stays outside `LocationMiddleware` so omitting query params preserves the global public feed for unscoped clients. Callers may opt in to location interest via `location[directory]` / `location[workspace]` query params. The Server feed filters matched subscribers before queue offer while still encoding each accepted public event once. Installation lifecycle events (`installation.updated`, `installation.update-available`) and `global.disposed` always pass location filters. Changing interest requires reconnecting with a new query rather than overlapping streams.
+`GET /api/event` stays outside `LocationMiddleware` so omitting query params preserves the global public feed for unscoped clients. Callers may opt in to location interest via `location[directory]` / `location[workspace]` and optional repeated `session` query params. The Server feed filters matched subscribers before queue offer while still encoding each accepted public event once. Session interest narrows events that carry a session identity (`durable.aggregateID` or `data.sessionID`); location-scoped events without a session still deliver. Installation lifecycle events (`installation.updated`, `installation.update-available`) and `global.disposed` always pass interest filters. Changing interest requires reconnecting with a new query rather than overlapping streams.
 
 ## Delivery Law
 
