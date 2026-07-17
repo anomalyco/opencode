@@ -1,10 +1,11 @@
 import { TextAttributes } from "@opentui/core"
-import { For } from "solid-js"
+import { createSignal, For } from "solid-js"
 import { useTheme } from "../context/theme"
 import { DevTools } from "../devtools"
 
 export function DevToolsSidebar() {
   const { themeV2, mode, setMode } = useTheme().contextual("elevated")
+  const [modeHovered, setModeHovered] = createSignal(false)
 
   return (
     <box
@@ -25,16 +26,16 @@ export function DevToolsSidebar() {
         <box flexDirection="row">
           <text fg={themeV2.text.subdued()}>Mode</text>
           <box flexGrow={1} />
-          <text fg={themeV2.text()}>{mode()}</text>
-        </box>
-        <box
-          marginTop={1}
-          paddingLeft={1}
-          paddingRight={1}
-          backgroundColor={themeV2.background.action()}
-          onMouseUp={() => setMode(mode() === "dark" ? "light" : "dark")}
-        >
-          <text fg={themeV2.text.action()}>force {mode() === "dark" ? "light" : "dark"} mode</text>
+          <box
+            paddingLeft={1}
+            paddingRight={1}
+            backgroundColor={modeHovered() ? themeV2.background.action("hovered") : undefined}
+            onMouseOver={() => setModeHovered(true)}
+            onMouseOut={() => setModeHovered(false)}
+            onMouseUp={() => setMode(mode() === "dark" ? "light" : "dark")}
+          >
+            <text fg={themeV2.text()}>{mode()}</text>
+          </box>
         </box>
       </box>
       <For each={DevTools.data()}>
