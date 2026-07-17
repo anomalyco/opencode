@@ -203,9 +203,10 @@ export function sessionIDOf(event: {
   readonly data?: unknown
 }): string | undefined {
   if (event.durable?.aggregateID) return event.durable.aggregateID
-  if (event.data !== undefined && event.data !== null && typeof event.data === "object" && "sessionID" in event.data) {
-    const sessionID = (event.data as { readonly sessionID?: unknown }).sessionID
-    if (typeof sessionID === "string") return sessionID
-  }
+  const data = event.data
+  if (data === undefined || data === null || typeof data !== "object") return undefined
+  if (!("sessionID" in data)) return undefined
+  const sessionID = data.sessionID
+  if (typeof sessionID === "string") return sessionID
   return undefined
 }
