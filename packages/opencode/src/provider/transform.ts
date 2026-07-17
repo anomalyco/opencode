@@ -26,6 +26,21 @@ export function sanitizeSurrogates(content: string) {
   return content.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "\uFFFD")
 }
 
+// Bedrock's Converse API only allows document names containing alphanumerics,
+// whitespace, hyphens, parentheses, and square brackets, with no more than one
+// consecutive whitespace character. File parts can carry a filesystem path or a
+// synthetic URI (e.g. an MCP "slack-file://..." attachment), which the SDK turns
+// into the document name verbatim and Bedrock then rejects. Map disallowed
+// characters to a space and collapse, returning undefined when nothing valid
+// remains so the SDK falls back to its generated document name.
+function sanitizeBedrockDocumentName(filename: string): string | undefined {
+  const sanitized = filename
+    .replace(/[^a-zA-Z0-9\s()[\]-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+  return sanitized.length > 0 ? sanitized : undefined
+}
+
 // Maps npm package to the key the AI SDK expects for providerOptions
 function sdkKey(npm: string): string | undefined {
   switch (npm) {
@@ -181,7 +196,14 @@ function normalizeMessages(
           return true
         })
         if (filtered.length === 0) return undefined
-        return { ...msg, content: filtered }
+        return {
+          ...msg,
+          content: filtered.map((part) =>
+            part.type === "file" && typeof part.filename === "string"
+              ? { ...part, filename: sanitizeBedrockDocumentName(part.filename) }
+              : part,
+          ),
+        }
       })
       .filter((msg): msg is ModelMessage => msg !== undefined && msg.content !== "")
   }

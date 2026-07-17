@@ -1908,6 +1908,74 @@ describe("ProviderTransform.message - surrogate sanitization", () => {
   })
 })
 
+describe("ProviderTransform.message - Bedrock document name sanitization", () => {
+  const bedrockModel = {
+    id: "amazon-bedrock/amazon.nova-pro-v1",
+    providerID: "amazon-bedrock",
+    api: {
+      id: "amazon.nova-pro-v1:0",
+      url: "https://bedrock-runtime.us-east-1.amazonaws.com",
+      npm: "@ai-sdk/amazon-bedrock",
+    },
+    name: "Amazon Nova Pro",
+    capabilities: {
+      temperature: true,
+      reasoning: false,
+      attachment: true,
+      toolcall: true,
+      input: { text: true, audio: false, image: true, video: false, pdf: true },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: { input: 0.001, output: 0.002, cache: { read: 0.0001, write: 0.0002 } },
+    limit: { context: 300000, output: 8192 },
+    status: "active",
+    options: {},
+    headers: {},
+  } as any
+
+  const fileMessage = (filename: string) =>
+    [
+      {
+        role: "user",
+        content: [{ type: "file", data: "data:application/pdf;base64,AAAA", mediaType: "application/pdf", filename }],
+      },
+    ] as any[]
+
+  // Matches any character Bedrock's Converse document name rejects.
+  const invalid = /[^a-zA-Z0-9\s()[\]-]/
+
+  test("sanitizes a synthetic MCP attachment URI (issue #37191)", () => {
+    const result = ProviderTransform.message(fileMessage("slack-file://F0ABC123"), bedrockModel, {}) as any[]
+    const filename = result[0].content[0].filename
+    expect(filename).toBe("slack-file F0ABC123")
+    expect(invalid.test(filename)).toBe(false)
+  })
+
+  test("sanitizes an absolute filesystem path (issue #36113)", () => {
+    const result = ProviderTransform.message(fileMessage("/Users/foo/Downloads/SOP.pdf"), bedrockModel, {}) as any[]
+    const filename = result[0].content[0].filename
+    expect(filename).toBe("Users foo Downloads SOP pdf")
+    expect(invalid.test(filename)).toBe(false)
+  })
+
+  test("drops the filename when nothing valid remains so the SDK generates one", () => {
+    const result = ProviderTransform.message(fileMessage("://:/"), bedrockModel, {}) as any[]
+    expect(result[0].content[0].filename).toBeUndefined()
+  })
+
+  test("leaves filenames untouched for non-Bedrock providers", () => {
+    const anthropicModel = {
+      ...bedrockModel,
+      id: "anthropic/claude-sonnet-4",
+      providerID: "anthropic",
+      api: { id: "claude-sonnet-4", url: "https://api.anthropic.com", npm: "@ai-sdk/anthropic" },
+    }
+    const result = ProviderTransform.message(fileMessage("slack-file://F0ABC123"), anthropicModel, {}) as any[]
+    expect(result[0].content[0].filename).toBe("slack-file://F0ABC123")
+  })
+})
+
 describe("ProviderTransform.message - empty image handling", () => {
   const mockModel = {
     id: "anthropic/claude-3-5-sonnet",
