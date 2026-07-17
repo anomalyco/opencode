@@ -156,6 +156,48 @@ describe("ProviderTransform.options - setCacheKey", () => {
     expect(result.store).toBe(false)
   })
 
+  test("should set previousResponseId for openai provider", () => {
+    const openaiModel = {
+      ...mockModel,
+      providerID: "openai",
+      api: {
+        id: "gpt-4",
+        url: "https://api.openai.com",
+        npm: "@ai-sdk/openai",
+      },
+    }
+    const result = ProviderTransform.options({
+      model: openaiModel,
+      sessionID,
+      previousResponseId: "resp_123",
+    })
+    expect(result.previousResponseId).toBe("resp_123")
+  })
+
+  test("should not set previousResponseId when it is undefined", () => {
+    const openaiModel = {
+      ...mockModel,
+      providerID: "openai",
+      api: {
+        id: "gpt-4",
+        url: "https://api.openai.com",
+        npm: "@ai-sdk/openai",
+      },
+    }
+    const result = ProviderTransform.options({
+      model: openaiModel,
+      sessionID,
+    })
+    expect(result.previousResponseId).toBeUndefined()
+  })
+
+  test("should identify Responses API providers", () => {
+    for (const npm of ["@ai-sdk/openai", "@ai-sdk/amazon-bedrock/mantle", "@ai-sdk/azure", "@ai-sdk/github-copilot"]) {
+      expect(LLMRequestPrep.isResponsesApiModel({ api: { npm } } as any)).toBe(true)
+    }
+    expect(LLMRequestPrep.isResponsesApiModel({ api: { npm: "@ai-sdk/anthropic" } } as any)).toBe(false)
+  })
+
   test("should set store=false for xAI provider by default", () => {
     const xaiModel = {
       ...mockModel,
@@ -872,8 +914,8 @@ describe("ProviderTransform.providerOptions", () => {
       },
     })
 
-    expect(ProviderTransform.providerOptions(model, { reasoningEffort: "medium" })).toEqual({
-      openai: { forceReasoning: true, reasoningEffort: "medium" },
+    expect(ProviderTransform.providerOptions(model, { reasoningEffort: "medium", previousResponseId: "resp_123" })).toEqual({
+      openai: { forceReasoning: true, reasoningEffort: "medium", previousResponseId: "resp_123" },
     })
   })
 

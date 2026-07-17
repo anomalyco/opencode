@@ -33,6 +33,7 @@ type PrepareInput = {
   readonly plugin: Plugin.Interface
   readonly flags: RuntimeFlags.Info
   readonly isWorkflow: boolean
+  readonly previousResponseId?: string
 }
 
 export type Prepared = {
@@ -52,6 +53,12 @@ export type Prepared = {
 
 const mergeOptions = (target: Record<string, any>, source: Record<string, any> | undefined): Record<string, any> =>
   mergeDeep(target, source ?? {}) as Record<string, any>
+
+export function isResponsesApiModel(model: Pick<Provider.Model, "api">): boolean {
+  return ["@ai-sdk/openai", "@ai-sdk/amazon-bedrock/mantle", "@ai-sdk/azure", "@ai-sdk/github-copilot"].includes(
+    model.api.npm,
+  )
+}
 
 export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: PrepareInput) {
   const isOpenaiOauth = input.provider.id === "openai" && input.auth?.type === "oauth"
@@ -87,6 +94,7 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
         model: input.model,
         sessionID: input.sessionID,
         providerOptions: input.provider.options,
+        previousResponseId: input.previousResponseId,
       })
   const options = mergeOptions(mergeOptions(mergeOptions(base, input.model.options), input.agent.options), variant)
   if (
@@ -101,15 +109,17 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
   const messages =
     isOpenaiOauth || input.isWorkflow
       ? input.messages
-      : [
-          ...system.map(
-            (x): ModelMessage => ({
-              role: "system",
-              content: x,
-            }),
-          ),
-          ...input.messages,
-        ]
+      : input.previousResponseId && isResponsesApiModel(input.model)
+        ? input.messages.slice(-1)
+        : [
+            ...system.map(
+              (x): ModelMessage => ({
+                role: "system",
+                content: x,
+              }),
+            ),
+            ...input.messages,
+          ]
 
   const params = yield* input.plugin.trigger(
     "chat.params",

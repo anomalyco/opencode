@@ -1083,6 +1083,7 @@ const layer = Layer.effect(
         const ctx = yield* InstanceState.context
         let structured: unknown
         let step = 0
+        let previousResponseId: string | undefined
         const session = yield* sessions.get(sessionID).pipe(Effect.orDie)
 
         while (true) {
@@ -1147,6 +1148,7 @@ const layer = Layer.effect(
           }
 
           if (task?.type === "compaction") {
+            previousResponseId = undefined
             const result = yield* compaction.process({
               messages: msgs,
               parentID: lastUser.id,
@@ -1283,7 +1285,10 @@ const layer = Layer.effect(
               tools,
               model,
               toolChoice: format.type === "json_schema" ? "required" : undefined,
+              previousResponseId,
             })
+
+            previousResponseId = result === "continue" ? handle.responseId?.() : undefined
 
             if (structured !== undefined) {
               handle.message.structured = structured
