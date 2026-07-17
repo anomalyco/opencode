@@ -49,8 +49,10 @@ Her çalışma alanından yalnızca bir üye OpenCode Go'ya abone olabilir.
 
 Mevcut model listesi şunları içerir:
 
+- **Grok 4.5**
 - **GLM-5.2**
 - **GLM-5.1**
+- **Kimi K3**
 - **Kimi K2.7 Code**
 - **Kimi K2.6**
 - **MiMo-V2.5**
@@ -81,10 +83,12 @@ Aşağıdaki tablo, tipik Go kullanım modellerine dayalı tahmini bir istek say
 
 | Model             | 5 saatte bir istek | haftalık istek | aylık istek |
 | ----------------- | ------------------ | -------------- | ----------- |
+| Grok 4.5          | 80                 | 190            | 380         |
 | GLM-5.2           | 880                | 2,150          | 4,300       |
 | GLM-5.1           | 880                | 2,150          | 4,300       |
-| Kimi K2.6         | 1,150              | 2,880          | 5,750       |
+| Kimi K3           | 140                | 340            | 680         |
 | Kimi K2.7 Code    | 1,350              | 4,630          | 9,250       |
+| Kimi K2.6         | 1,150              | 2,880          | 5,750       |
 | MiMo-V2.5         | 30,100             | 75,200         | 150,400     |
 | MiMo-V2.5-Pro     | 3,250              | 8,150          | 16,300      |
 | MiniMax M3        | 3,200              | 8,000          | 16,000      |
@@ -97,8 +101,9 @@ Aşağıdaki tablo, tipik Go kullanım modellerine dayalı tahmini bir istek say
 
 Tahminler, gözlemlenen ortalama istek modellerine dayanır:
 
+- Grok 4.5 — İstek başına 1.100 girdi, 71.500 önbelleğe alınmış, 220 çıktı token'ı
 - GLM-5.2/5.1 — İstek başına 700 girdi, 52.000 önbelleğe alınmış, 150 çıktı token'ı
-- Kimi K2.7 Code/K2.6 — İstek başına 870 girdi, 55.000 önbelleğe alınmış, 200 çıktı token'ı
+- Kimi K3/K2.7/K2.6 — İstek başına 870 girdi, 55.000 önbelleğe alınmış, 200 çıktı token'ı
 - DeepSeek V4 Pro — İstek başına 750 girdi, 82.000 önbelleğe alınmış, 290 çıktı token'ı
 - DeepSeek V4 Flash — İstek başına 790 girdi, 68.000 önbelleğe alınmış, 280 çıktı token'ı
 - MiniMax M3 — İstek başına 510 girdi, 56.000 önbelleğe alınmış, 190 çıktı token'ı
@@ -109,26 +114,28 @@ Tahminler, gözlemlenen ortalama istek modellerine dayanır:
 - MiMo-V2.5 — İstek başına 830 girdi, 71.500 önbelleğe alınmış, 295 çıktı token'ı
 - MiMo-V2.5-Pro — İstek başına 790 girdi, 86.000 önbelleğe alınmış, 305 çıktı token'ı
 
-Tahminler ayrıca 1M token başına aşağıdaki fiyatlara da dayanır:
+Tahminler ayrıca 1M token başına aşağıdaki fiyatlara ve her modelle birlikte sunulan aylık kullanıma dayanır:
 
-| Model                        | Input | Output | Cached Read | Cached Write |
-| ---------------------------- | ----- | ------ | ----------- | ------------ |
-| GLM-5.2                      | $1.40 | $4.40  | $0.26       | -            |
-| GLM-5.1                      | $1.40 | $4.40  | $0.26       | -            |
-| Kimi K2.7 Code               | $0.95 | $4.00  | $0.19       | -            |
-| Kimi K2.6                    | $0.95 | $4.00  | $0.16       | -            |
-| MiMo V2.5                    | $0.14 | $0.28  | $0.0028     | -            |
-| MiMo V2.5 Pro                | $1.74 | $3.48  | $0.0145     | -            |
-| MiniMax M3                   | $0.30 | $1.20  | $0.06       | -            |
-| MiniMax M2.7                 | $0.30 | $1.20  | $0.06       | $0.375       |
-| MiniMax M2.5                 | $0.30 | $1.20  | $0.06       | $0.375       |
-| Qwen3.7 Max                  | $2.50 | $7.50  | $0.50       | $3.125       |
-| Qwen3.7 Plus (≤ 256K tokens) | $0.40 | $1.60  | $0.04       | $0.50        |
-| Qwen3.7 Plus (> 256K tokens) | $1.20 | $4.80  | $0.12       | $1.50        |
-| Qwen3.6 Plus (≤ 256K tokens) | $0.50 | $3.00  | $0.05       | $0.625       |
-| Qwen3.6 Plus (> 256K tokens) | $2.00 | $6.00  | $0.20       | $2.50        |
-| DeepSeek V4 Pro              | $1.74 | $3.48  | $0.0145     | -            |
-| DeepSeek V4 Flash            | $0.14 | $0.28  | $0.0028     | -            |
+| Model                        | Input | Output | Cached Read | Cached Write | Kullanım |
+| ---------------------------- | ----- | ------ | ----------- | ------------ | -------- |
+| Grok 4.5                     | $2.00 | $6.00  | $0.50       | -            | $15      |
+| GLM-5.2                      | $1.40 | $4.40  | $0.26       | -            | $60      |
+| GLM-5.1                      | $1.40 | $4.40  | $0.26       | -            | $60      |
+| Kimi K3                      | $3.00 | $15.00 | $0.30       | -            | $15      |
+| Kimi K2.7 Code               | $0.95 | $4.00  | $0.19       | -            | $60      |
+| Kimi K2.6                    | $0.95 | $4.00  | $0.16       | -            | $60      |
+| MiMo V2.5                    | $0.14 | $0.28  | $0.0028     | -            | $60      |
+| MiMo V2.5 Pro                | $1.74 | $3.48  | $0.0145     | -            | $15      |
+| MiniMax M3                   | $0.30 | $1.20  | $0.06       | -            | $60      |
+| MiniMax M2.7                 | $0.30 | $1.20  | $0.06       | $0.375       | $60      |
+| MiniMax M2.5                 | $0.30 | $1.20  | $0.06       | $0.375       | $60      |
+| Qwen3.7 Max                  | $2.50 | $7.50  | $0.50       | $3.125       | $60      |
+| Qwen3.7 Plus (≤ 256K tokens) | $0.40 | $1.60  | $0.04       | $0.50        | $60      |
+| Qwen3.7 Plus (> 256K tokens) | $1.20 | $4.80  | $0.12       | $1.50        | $60      |
+| Qwen3.6 Plus (≤ 256K tokens) | $0.50 | $3.00  | $0.05       | $0.625       | $60      |
+| Qwen3.6 Plus (> 256K tokens) | $2.00 | $6.00  | $0.20       | $2.50        | $60      |
+| DeepSeek V4 Pro              | $1.74 | $3.48  | $0.0145     | -            | $15      |
+| DeepSeek V4 Flash            | $0.14 | $0.28  | $0.0028     | -            | $60      |
 
 Mevcut kullanımınızı **<a href={console}>konsoldan</a>** takip edebilirsiniz.
 
@@ -146,14 +153,28 @@ Eğer Zen bakiyenizde kredileriniz varsa, konsoldan **Bakiye kullan (Use balance
 
 ---
 
+### Bazı modellerin kullanımı neden daha düşük?
+
+Go ile aylık 10$ ödersiniz ve size bunun 6 katı değerinde kullanım sunmayı hedefleriz.
+
+Çoğu modelde bunu toplu indirimler ve ayrılmış GPU kapasitesi sayesinde mümkün kılıyoruz. Ardından bu tasarrufları 6 katlık çarpanla size aktarıyoruz.
+
+Bazı modellerde ise model yeni olduğu veya herkese açık fiyatlandırması zaten indirimli olduğu için henüz indirim pazarlığı yapma ya da modeli daha düşük maliyetle barındırma fırsatımız olmadı.
+
+Bu modellerde bile model sağlayıcılarına doğrudan ödeme yaptığınız duruma kıyasla biraz daha fazla kullanım elde edersiniz; bu nedenle yukarıdaki tabloda kullanım çarpanları daha düşüktür.
+
+---
+
 ## Uç Noktalar
 
 Go modellerine aşağıdaki API uç noktaları aracılığıyla da erişebilirsiniz.
 
 | Model             | Model ID          | Uç Nokta                                         | AI SDK Paketi               |
 | ----------------- | ----------------- | ------------------------------------------------ | --------------------------- |
+| Grok 4.5          | grok-4.5          | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5.2           | glm-5.2           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5.1           | glm-5.1           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Kimi K3           | kimi-k3           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Kimi K2.7 Code    | kimi-k2.7-code    | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Kimi K2.6         | kimi-k2.6         | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Pro   | deepseek-v4-pro   | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
@@ -167,7 +188,7 @@ Go modellerine aşağıdaki API uç noktaları aracılığıyla da erişebilirsi
 | Qwen3.7 Plus      | qwen3.7-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus      | qwen3.6-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 
-OpenCode yapılandırmanızdaki [model id](/docs/config/#models) formatı `opencode-go/<model-id>` şeklindedir. Örneğin, Kimi K2.7 Code için yapılandırmanızda `opencode-go/kimi-k2.7-code` kullanmalısınız.
+OpenCode yapılandırmanızdaki [model id](/docs/config/#models) formatı `opencode-go/<model-id>` şeklindedir. Örneğin, Kimi K3 için yapılandırmanızda `opencode-go/kimi-k3` kullanmalısınız.
 
 ---
 
