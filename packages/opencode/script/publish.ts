@@ -82,6 +82,8 @@ const tasks = Object.entries(binaries).map(async ([name]) => {
 await Promise.all(tasks)
 await publish(wrapperDir, wrapperName, version)
 
+const ghRepo = process.env.GH_REPO || (await $`git remote get-url origin`.text()).trim().replace(/^https:\/\/github\.com\//, "").replace(/\.git$/, "")
+
 if (Script.release) {
-  await $`gh release edit v${Script.version} --draft=false --repo ${process.env.GH_REPO}`
+  await $`gh release edit v${Script.version} --draft=false --repo ${ghRepo}`
 }

@@ -212,7 +212,9 @@ if (Script.release) {
       await $`zip -r ../../${key}.zip *`.cwd(`dist/${key}/bin`)
     }
   }
-  await $`gh release upload v${Script.version} ./dist/*.zip ./dist/*.tar.gz --clobber --repo ${process.env.GH_REPO}`
+  const ghRepo = process.env.GH_REPO || (await $`git remote get-url origin`.text()).trim().replace(/^https:\/\/github\.com\//, "").replace(/\.git$/, "")
+  const releaseVersion = Script.version.replace(/^v/, "")
+  await $`gh release upload v${releaseVersion} ./dist/*.zip ./dist/*.tar.gz --clobber --repo ${ghRepo}`
 }
 
 export { binaries }

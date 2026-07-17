@@ -8,7 +8,8 @@ console.log("=== publishing ===\n")
 
 const dir = fileURLToPath(new URL("..", import.meta.url))
 process.chdir(dir)
-const tag = `v${Script.version}`
+const releaseVersion = Script.version.replace(/^v/, "")
+const tag = `v${releaseVersion}`
 
 const pkgjsons = await Array.fromAsync(
   new Bun.Glob("**/package.json").scan({
@@ -50,6 +51,8 @@ if (Script.release && !Script.preview) {
   await $`git push origin HEAD:dev --no-verify`
 }
 
+const ghRepo = process.env.GH_REPO || (await $`git remote get-url origin`.text()).trim().replace(/^https:\/\/github\.com\//, "").replace(/\.git$/, "")
+
 if (Script.release) {
-  await $`gh release edit ${tag} --draft=false --repo ${process.env.GH_REPO}`
+  await $`gh release edit ${tag} --draft=false --repo ${ghRepo}`
 }
