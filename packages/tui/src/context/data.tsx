@@ -426,6 +426,34 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
                   },
             )
           })
+          if (event.data.payloadHash)
+            void client.api.session.pending
+              .list({ sessionID: event.data.sessionID })
+              .then((pending) => {
+                setStore("session", "pending", event.data.sessionID, reconcile(pending))
+                const item = pending.find((entry) => entry.id === event.data.inputID)
+                if (!item || item.type === "compaction") return
+                message.update(event.data.sessionID, (draft, index) => {
+                  const position = index.get(item.id)
+                  const next =
+                    item.type === "user"
+                      ? {
+                          id: item.id,
+                          type: "user" as const,
+                          ...item.data,
+                          time: { created: item.timeCreated },
+                        }
+                      : {
+                          id: item.id,
+                          type: "synthetic" as const,
+                          ...item.data,
+                          time: { created: item.timeCreated },
+                        }
+                  if (position === undefined) return message.append(draft, index, next)
+                  draft[position] = next
+                })
+              })
+              .catch((error) => console.error("Failed to load admitted input with attachments", error))
           break
         case "session.instructions.updated":
           const instructions = event.metadata?.instructions
@@ -612,6 +640,17 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             match.state.structured = event.data.structured
             match.state.content = [...event.data.content]
           })
+          if (event.data.payloadHash)
+            void client.api.session
+              .message({ sessionID: event.data.sessionID, messageID: event.data.assistantMessageID })
+              .then((item) => {
+                message.update(event.data.sessionID, (draft, index) => {
+                  const position = index.get(item.id)
+                  if (position === undefined) return message.append(draft, index, item)
+                  draft[position] = item
+                })
+              })
+              .catch((error) => console.error("Failed to load tool progress message", error))
           break
         case "session.tool.success":
           message.update(event.data.sessionID, (draft, index) => {
@@ -631,6 +670,17 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             match.providerResultState = event.data.resultState
             match.time.completed = event.created
           })
+          if (event.data.payloadHash)
+            void client.api.session
+              .message({ sessionID: event.data.sessionID, messageID: event.data.assistantMessageID })
+              .then((item) => {
+                message.update(event.data.sessionID, (draft, index) => {
+                  const position = index.get(item.id)
+                  if (position === undefined) return message.append(draft, index, item)
+                  draft[position] = item
+                })
+              })
+              .catch((error) => console.error("Failed to load tool success message", error))
           break
         case "session.tool.failed":
           message.update(event.data.sessionID, (draft, index) => {

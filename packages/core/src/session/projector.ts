@@ -12,8 +12,10 @@ import { WorkspaceTable } from "../control-plane/workspace.sql"
 import { SessionMessage } from "./message"
 import { SessionMessageUpdater } from "./message-updater"
 import { SessionPending } from "./pending"
+import type { SessionSchema } from "./schema"
 import { WorkspaceV2 } from "../workspace"
 import { InstructionState } from "./instruction-state"
+import { ToolPayload } from "./tool-payload"
 import { MessageTable, PartTable, SessionPendingTable, SessionMessageTable, SessionTable } from "./sql"
 import type { DeepMutable } from "../schema"
 import { Slug } from "../util/slug"
@@ -317,6 +319,33 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
   yield* EventV2.reserveSequence(db, event.data.sessionID, event.data.parentSeq)
   yield* InstructionState.rebuild(db, event.data.sessionID)
 })
+
+function hydrateToolPayload<
+  E extends {
+    readonly data: {
+      readonly sessionID: SessionSchema.ID
+      readonly payloadHash?: ToolPayload.Hash
+      readonly structured: Record<string, unknown>
+      readonly content: ToolPayload.Body["content"]
+      readonly result?: unknown
+    }
+  },
+>(db: DatabaseService, event: E) {
+  return Effect.gen(function* () {
+    const payloadHash = event.data.payloadHash
+    if (!payloadHash) return event
+    const body = yield* ToolPayload.load(db, event.data.sessionID, payloadHash).pipe(Effect.orDie)
+    return {
+      ...event,
+      data: {
+        ...event.data,
+        structured: body.structured,
+        content: body.content,
+        ...(body.result !== undefined ? { result: body.result } : {}),
+      },
+    }
+  })
+}
 
 function run(db: DatabaseService, event: MessageEvent) {
   return Effect.gen(function* () {
@@ -647,11 +676,16 @@ const layer = Layer.effectDiscard(
       Effect.gen(function* () {
         if (event.durable === undefined)
           return yield* Effect.die(new Error("Durable Session event is missing aggregate sequence"))
+        const input = event.data.payloadHash
+          ? Schema.decodeUnknownSync(SessionPending.Message)(
+              yield* ToolPayload.loadJson(db, event.data.sessionID, event.data.payloadHash).pipe(Effect.orDie),
+            )
+          : event.data.input
         yield* SessionPending.projectAdmitted(db, {
           admittedSeq: event.durable.seq,
           id: event.data.inputID,
           sessionID: event.data.sessionID,
-          input: event.data.input,
+          input,
           timeCreated: event.created,
         })
       }),
@@ -697,8 +731,16 @@ const layer = Layer.effectDiscard(
     yield* events.project(SessionEvent.Tool.Input.Started, (event) => run(db, event))
     yield* events.project(SessionEvent.Tool.Input.Ended, (event) => run(db, event))
     yield* events.project(SessionEvent.Tool.Called, (event) => run(db, event))
-    yield* events.project(SessionEvent.Tool.Progress, (event) => run(db, event))
-    yield* events.project(SessionEvent.Tool.Success, (event) => run(db, event))
+    yield* events.project(SessionEvent.Tool.Progress, (event) =>
+      Effect.gen(function* () {
+        yield* run(db, yield* hydrateToolPayload(db, event))
+      }),
+    )
+    yield* events.project(SessionEvent.Tool.Success, (event) =>
+      Effect.gen(function* () {
+        yield* run(db, yield* hydrateToolPayload(db, event))
+      }),
+    )
     yield* events.project(SessionEvent.Tool.Failed, (event) => run(db, event))
     yield* events.project(SessionEvent.Reasoning.Started, (event) => run(db, event))
     yield* events.project(SessionEvent.Reasoning.Ended, (event) => run(db, event))

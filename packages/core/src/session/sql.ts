@@ -172,6 +172,20 @@ export const InstructionBlobTable = sqliteTable("instruction_blob", {
   value: text({ mode: "json" }).$type<Schema.Json>(),
 })
 
+/** Session-durable tool settlement bodies for thin tool events. */
+export const SessionToolPayloadTable = sqliteTable(
+  "session_tool_payload",
+  {
+    session_id: text()
+      .$type<SessionSchema.ID>()
+      .notNull()
+      .references(() => SessionTable.id, { onDelete: "cascade" }),
+    hash: text().notNull(),
+    value: text({ mode: "json" }).$type<Schema.Json>().notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.session_id, table.hash] })],
+)
+
 export const InstructionStateTable = sqliteTable("instruction_state", {
   session_id: text()
     .$type<SessionSchema.ID>()

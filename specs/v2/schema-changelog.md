@@ -26,7 +26,7 @@ Compatibility:
 Compatibility:
 
 - `20260709190621_session_pending_table` drops `session_input` (including consumed ledger rows, any in-flight pending work, and whatever historical index variant the database carried) and creates the empty `session_pending` table. V2 storage is beta; no compatibility or data retention is attempted.
-- Durable event names and payloads are unchanged; `session.input.admitted` still records the full admitted message including delivery.
+- Durable event names are unchanged. `session.input.admitted` records the admitted message including delivery; large file attachment bytes are stored in the session-scoped payload blob (`payloadHash`) and omitted from the event projection. Pending rows and message fetches still expose full attachment bytes.
 - Promise, Effect, and legacy JavaScript SDK surfaces are regenerated; `SessionInput*` generated schema names become `SessionPending*` while event-derived names keep their `session.input.*` vocabulary.
 
 ## 2026-07-05: Rename Session Context Contracts To Instructions

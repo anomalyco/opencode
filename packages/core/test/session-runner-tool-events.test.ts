@@ -10,12 +10,14 @@ import { SessionV2 } from "@opencode-ai/core/session"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { createLLMEventPublisher } from "@opencode-ai/core/session/runner/publish-llm-event"
+import { ToolPayload } from "@opencode-ai/core/session/tool-payload"
 
 const sessionID = SessionV2.ID.make("ses_tool_event_test")
 const base64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB"
 
 const capture = (providerMetadataKey = "anthropic") => {
   const published: Array<{ readonly type: string; readonly data: unknown }> = []
+  const payloads = new Map<string, ToolPayload.Body>()
   const events: Pick<EventV2.Interface, "publish"> = {
     publish: (definition, data) =>
       Effect.sync(() => {
@@ -31,6 +33,7 @@ const capture = (providerMetadataKey = "anthropic") => {
   }
   return {
     published,
+    payloads,
     publisher: createLLMEventPublisher(events, {
       sessionID,
       agent: AgentV2.ID.make("build"),
@@ -39,6 +42,12 @@ const capture = (providerMetadataKey = "anthropic") => {
         providerID: ProviderV2.ID.opencode,
       },
       providerMetadataKey,
+      persistToolPayload: (body) =>
+        Effect.sync(() => {
+          const hash = ToolPayload.hash(body)
+          payloads.set(hash, body)
+          return hash
+        }),
     }),
   }
 }
@@ -63,31 +72,38 @@ const result = LLMEvent.toolResult({
   },
 })
 
-test("local tool success serializes media base64 once and reconstructs from structured content", async () => {
-  const { published, publisher } = capture()
+test("local tool success stores media in the payload blob and omits base64 from the event", async () => {
+  const { published, payloads, publisher } = capture()
   await Effect.runPromise(publisher.publish(call))
   await Effect.runPromise(publisher.publish(result))
 
   const success = published.find((event) => event.type === "session.tool.success.1")
   expect(success).toBeDefined()
-  const serialized = JSON.stringify(success)
-  expect(serialized.split(base64)).toHaveLength(2)
+  const data = success?.data as {
+    payloadHash?: string
+    content: ReadonlyArray<{ type: string; text?: string }>
+  }
+  expect(data.payloadHash).toBeDefined()
+  expect(JSON.stringify(success).includes(base64)).toBe(false)
   expect(success?.data).not.toHaveProperty("result")
+  expect(data.content).toEqual([{ type: "text", text: "Image read successfully" }])
 
-  expect(success?.data).toMatchObject({
-    content: [
-      { type: "text", text: "Image read successfully" },
-      { type: "file", uri: `data:image/png;base64,${base64}`, mime: "image/png" },
-    ],
-  })
+  const body = payloads.get(data.payloadHash!)
+  expect(body?.content).toEqual([
+    { type: "text", text: "Image read successfully" },
+    { type: "file", uri: `data:image/png;base64,${base64}`, mime: "image/png", name: "pixel.png" },
+  ])
+  expect(Buffer.byteLength(JSON.stringify(data), "utf-8")).toBeLessThanOrEqual(ToolPayload.MaxEventDataBytes)
 })
 
-test("provider-executed success retains its raw provider result", async () => {
-  const { published, publisher } = capture()
+test("provider-executed success keeps raw provider result in the payload blob only", async () => {
+  const { published, payloads, publisher } = capture()
   await Effect.runPromise(publisher.publish(LLMEvent.toolCall({ ...call, providerExecuted: true })))
   await Effect.runPromise(publisher.publish(LLMEvent.toolResult({ ...result, providerExecuted: true })))
   const success = published.find((event) => event.type === "session.tool.success.1")
-  expect(success?.data).toHaveProperty("result")
+  expect(success?.data).not.toHaveProperty("result")
+  const hash = (success?.data as { payloadHash: string }).payloadHash
+  expect(payloads.get(hash)?.result).toBeDefined()
 })
 
 test("provider metadata is flattened using the route key", async () => {

@@ -22,6 +22,7 @@ import { Snapshot } from "./snapshot.js"
 import { TokenUsage } from "./token-usage.js"
 import { SessionPending } from "./session-pending.js"
 import { Project } from "./project.js"
+import { ToolPayload } from "./tool-payload.js"
 
 export { FileAttachment }
 
@@ -150,6 +151,8 @@ export const InputAdmitted = Event.durable({
     ...Base,
     inputID: SessionMessage.ID,
     input: SessionPending.Message,
+    /** When set, file attachment bytes live in the session payload blob; `input` is a descriptor preview. */
+    payloadHash: optional(ToolPayload.Hash),
   },
 })
 export type InputAdmitted = typeof InputAdmitted.Type
@@ -419,6 +422,8 @@ export namespace Tool {
       ...ToolBase,
       structured: Schema.Record(Schema.String, Schema.Unknown),
       content: Schema.Array(ToolContent),
+      /** When set, `structured`/`content` are previews; full body is in the session tool-payload blob. */
+      payloadHash: optional(ToolPayload.Hash),
     },
   })
   export type Progress = typeof Progress.Type
@@ -433,6 +438,8 @@ export namespace Tool {
       result: Schema.Unknown.pipe(optional),
       executed: Schema.Boolean,
       resultState: SessionMessage.ProviderState.pipe(optional),
+      /** When set, `structured`/`content`/`result` are previews; full body is in the session tool-payload blob. */
+      payloadHash: optional(ToolPayload.Hash),
     },
   })
   export type Success = typeof Success.Type

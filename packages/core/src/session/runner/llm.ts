@@ -20,6 +20,7 @@ import { SessionStore } from "../store"
 import { SessionTitle } from "../title"
 import { Service } from "./index"
 import { createLLMEventPublisher } from "./publish-llm-event"
+import { ToolPayload } from "../tool-payload"
 import { Snapshot } from "../../snapshot"
 import { makeLocationNode } from "../../effect/app-node"
 import { llmClient } from "../../effect/app-node-platform"
@@ -125,6 +126,7 @@ const layer = Layer.effect(
         providerMetadataKey: model.route.providerMetadataKey ?? model.provider,
         snapshot: startSnapshot,
         assistantMessageID,
+        persistToolPayload: (body) => ToolPayload.insert(db, session.id, body),
       })
       const publication = Semaphore.makeUnsafe(1)
       // Durable publishes are serialized so tool fibers and step settlement never interleave
@@ -161,12 +163,27 @@ const layer = Layer.effect(
                     call: event,
                     progress: (update) =>
                       serialized(
-                        events.publish(SessionEvent.Tool.Progress, {
-                          sessionID: session.id,
-                          assistantMessageID,
-                          callID: event.id,
-                          structured: { ...update.structured },
-                          content: [...update.content],
+                        Effect.gen(function* () {
+                          const body: ToolPayload.Body = {
+                            structured: { ...update.structured },
+                            content: [...update.content],
+                          }
+                          const payloadHash = yield* ToolPayload.insert(db, session.id, body)
+                          const thin = ToolPayload.preview(body)
+                          const data = {
+                            sessionID: session.id,
+                            assistantMessageID,
+                            callID: event.id,
+                            structured: thin.structured,
+                            content: thin.content,
+                            payloadHash,
+                          }
+                          const overBudget = yield* ToolPayload.assertEventDataBudget(data).pipe(
+                            Effect.as(false),
+                            Effect.catchTag("ToolPayload.OverBudgetError", () => Effect.succeed(true)),
+                          )
+                          if (overBudget) return
+                          yield* events.publish(SessionEvent.Tool.Progress, data)
                         }),
                       ),
                   }),

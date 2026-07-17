@@ -121,6 +121,10 @@ Tune capacity separately using observed:
 
 Add a byte budget only if measurements show event count is an inadequate memory safeguard.
 
+### Producer event-data budget (tool settlement)
+
+Large tool settlement bodies are not carried on the durable event or SSE frame. Core persists the full body in the session-scoped `session_tool_payload` table and publishes a thin `session.tool.success` / `session.tool.progress` projection (IDs, optional text preview, `payloadHash`). Projectors hydrate `session_message` from that blob. Encoded thin event `data` must stay within **256 KiB** UTF-8; settlement fails rather than truncating opaque payloads. Clients that need the full body use `GET /api/session/:sessionID/message/:messageID`. This is separate from `ToolOutputStore`, which only bounds the provider-facing text channel and must not be used as a durable event sidecar.
+
 ## Feed Lifecycle
 
 ### Server scope

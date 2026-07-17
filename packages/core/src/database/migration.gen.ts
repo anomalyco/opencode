@@ -55,5 +55,6 @@ export const migrations = (
     import("./migration/20260709190621_session_pending_table"),
     import("./migration/20260710025429_instruction_sync"),
     import("./migration/20260716020354_kv"),
+    import("./migration/20260718010000_session_tool_payload"),
   ])
 ).map((module) => module.default) satisfies DatabaseMigration.Migration[]

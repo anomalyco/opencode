@@ -10,6 +10,7 @@ import { Money } from "@opencode-ai/schema/money"
 import { AgentV2 } from "../../agent"
 import { Snapshot } from "../../snapshot"
 import { SessionUsage } from "../usage"
+import { ToolPayload } from "../tool-payload"
 
 type Input = {
   readonly sessionID: SessionSchema.ID
@@ -18,6 +19,8 @@ type Input = {
   readonly providerMetadataKey: string
   readonly snapshot?: Snapshot.ID
   readonly assistantMessageID?: SessionMessage.ID
+  /** Persist full tool settlement beside the durable log; required for thin tool events. */
+  readonly persistToolPayload: (body: ToolPayload.Body) => Effect.Effect<ToolPayload.Hash>
 }
 
 const record = (value: unknown): Record<string, unknown> =>
@@ -382,15 +385,39 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
           })
           return
         }
-        yield* events.publish(SessionEvent.Tool.Success, {
+        const body: ToolPayload.Body = {
+          structured: result.structured,
+          content: result.content,
+          ...(executed ? { result: event.result } : {}),
+        }
+        const payloadHash = yield* input.persistToolPayload(body)
+        const thin = ToolPayload.preview(body)
+        const data = {
           sessionID: input.sessionID,
           assistantMessageID: tool.assistantMessageID,
           callID: event.id,
-          ...result,
-          ...(executed ? { result: event.result } : {}),
+          structured: thin.structured,
+          content: thin.content,
           executed,
           resultState,
-        })
+          payloadHash,
+        }
+        const overBudget = yield* ToolPayload.assertEventDataBudget(data).pipe(
+          Effect.as(undefined as ToolPayload.OverBudgetError | undefined),
+          Effect.catchTag("ToolPayload.OverBudgetError", (error) => Effect.succeed(error)),
+        )
+        if (overBudget) {
+          yield* events.publish(SessionEvent.Tool.Failed, {
+            sessionID: input.sessionID,
+            assistantMessageID: tool.assistantMessageID,
+            callID: event.id,
+            error: { type: "unknown", message: overBudget.message },
+            executed,
+            resultState,
+          })
+          return
+        }
+        yield* events.publish(SessionEvent.Tool.Success, data)
         return
       }
       case "tool-error": {

@@ -1856,6 +1856,7 @@ export type SessionToolProgress = {
     callID: string
     structured: { [x: string]: any }
     content: Array<LLMToolContent>
+    payloadHash?: string
   }
 }
 
@@ -1875,6 +1876,7 @@ export type SessionToolSuccess = {
     result?: any
     executed: boolean
     resultState?: SessionMessageProviderState6
+    payloadHash?: string
   }
 }
 
@@ -2162,7 +2164,7 @@ export type SessionInputAdmitted = {
   type: "session.input.admitted"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
-  data: { sessionID: string; inputID: string; input: SessionPendingMessage }
+  data: { sessionID: string; inputID: string; input: SessionPendingMessage; payloadHash?: string }
 }
 
 export type SessionMessageInfo =

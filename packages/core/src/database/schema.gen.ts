@@ -245,6 +245,15 @@ export default {
         );
       `)
       yield* tx.run(`
+        CREATE TABLE \`session_tool_payload\` (
+          \`session_id\` text NOT NULL,
+          \`hash\` text NOT NULL,
+          \`value\` text NOT NULL,
+          PRIMARY KEY(\`session_id\`, \`hash\`),
+          FOREIGN KEY (\`session_id\`) REFERENCES \`session\`(\`id\`) ON DELETE cascade
+        );
+      `)
+      yield* tx.run(`
         CREATE TABLE \`session_share\` (
           \`session_id\` text PRIMARY KEY,
           \`id\` text NOT NULL,

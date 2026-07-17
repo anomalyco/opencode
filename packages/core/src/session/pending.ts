@@ -21,6 +21,7 @@ import { SessionEvent } from "./event"
 import { SessionMessage } from "./message"
 import { SessionSchema } from "./schema"
 import { SessionMessageTable, SessionPendingTable } from "./sql"
+import { ToolPayload } from "./tool-payload"
 
 type DatabaseService = Database.Interface["db"]
 
@@ -31,11 +32,25 @@ const encodeUser = Schema.encodeSync(UserData)
 const decodeSynthetic = Schema.decodeUnknownSync(SyntheticData)
 const encodeSynthetic = Schema.encodeSync(SyntheticData)
 const decodeAdmittedEvent = Schema.decodeUnknownOption(SessionEvent.InputAdmitted.data)
+const encodeMessage = Schema.encodeSync(Message)
+const decodeMessage = Schema.decodeUnknownSync(Message)
 const admittedEventType = Event.versionedType(
   SessionEvent.InputAdmitted.type,
   SessionEvent.InputAdmitted.durable.version,
 )
 const inboxLocks = KeyedMutex.makeUnsafe<SessionSchema.ID>()
+
+/** Drop inline attachment bytes from the durable event projection; full body lives in the payload blob. */
+export function stripAttachmentBytes(input: Message): Message {
+  if (input.type !== "user" || !input.data.files?.length) return input
+  return {
+    ...input,
+    data: {
+      ...input.data,
+      files: input.data.files.map((file) => ({ ...file, data: "" })),
+    },
+  }
+}
 
 export class LifecycleConflict extends Schema.TaggedErrorClass<LifecycleConflict>()(
   "SessionPending.LifecycleConflict",
@@ -126,15 +141,16 @@ const promotedFromHistory = Effect.fn("SessionPending.promotedFromHistory")(func
   for (const row of rows) {
     const decoded = decodeAdmittedEvent(row.data)
     if (decoded._tag !== "Some" || decoded.value.inputID !== id) continue
+    const input = decoded.value.payloadHash
+      ? decodeMessage(yield* ToolPayload.loadJson(db, sessionID, decoded.value.payloadHash).pipe(Effect.orDie))
+      : decoded.value.input
     const base = {
       admittedSeq: row.seq,
       id,
       sessionID,
       timeCreated: DateTime.makeUnsafe(row.created),
     }
-    return decoded.value.input.type === "user"
-      ? User.make({ ...base, ...decoded.value.input })
-      : Synthetic.make({ ...base, ...decoded.value.input })
+    return input.type === "user" ? User.make({ ...base, ...input }) : Synthetic.make({ ...base, ...input })
   }
   // A projected message without an admitted event in this aggregate (for
   // example fork-copied history) is not a retryable admission.
@@ -157,11 +173,18 @@ export const admit = Effect.fn("SessionPending.admit")(function* (
   }
   const promoted = yield* promotedFromHistory(db, request.sessionID, request.id)
   if (promoted !== undefined) return promoted
+  const payloadHash = yield* ToolPayload.insertJson(
+    db,
+    request.sessionID,
+    encodeMessage(request.input) as Schema.Json,
+  )
+  const thin = stripAttachmentBytes(request.input)
   return yield* events
     .publish(SessionEvent.InputAdmitted, {
       inputID: request.id,
       sessionID: request.sessionID,
-      input: request.input,
+      input: thin,
+      payloadHash,
     })
     .pipe(
       Effect.flatMap((event) => {
