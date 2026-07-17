@@ -336,8 +336,8 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                         <PluginRuntimeProvider value={pluginRuntime}>
                                           <ClientProvider
                                             api={api}
-                                            service={service}
                                             interest={{ location: { directory } }}
+                                            service={service}
                                           >
                                             <PermissionProvider>
                                               <DataProvider>
