@@ -267,7 +267,7 @@ function neutralAnchors(theme: Theme, mode: "light" | "dark") {
   const light: { step: HueStep; color: RGBA }[] = [
     { step: 100, color: theme.background },
     { step: 200, color: theme.backgroundPanel },
-    { step: 300, color: theme.backgroundElement },
+    { step: 300, color: theme.backgroundElement || theme.backgroundMenu },
     { step: 700, color: theme.textMuted },
     { step: 900, color: theme.text },
   ]
