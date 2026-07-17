@@ -1,7 +1,14 @@
 import { tmpdir } from "node:os"
 import { extname, join, resolve } from "node:path"
 import type { CliRenderer, Renderable } from "@opentui/core"
-import { createMockKeys, createMockMouse, type MockInput, type MockMouse } from "@opentui/core/testing"
+import {
+  createMockKeys,
+  createMockMouse,
+  KeyCodes,
+  type KeyInput,
+  type MockInput,
+  type MockMouse,
+} from "@opentui/core/testing"
 import { Config, Effect, FileSystem } from "effect"
 import type { SimulationProtocol } from "../protocol"
 import { SimulationRenderer } from "./renderer"
@@ -25,6 +32,15 @@ type RenderBuffer = {
 }
 
 const decoder = new TextDecoder()
+
+function isKeyCode(key: string): key is keyof typeof KeyCodes {
+  return Object.hasOwn(KeyCodes, key)
+}
+
+function keyInput(key: string): KeyInput {
+  const named = key.toUpperCase()
+  return isKeyCode(named) ? named : key
+}
 
 function children(renderable: Renderable) {
   return renderable.getChildren().filter((child): child is Renderable => "num" in child)
@@ -154,7 +170,7 @@ export const execute = Effect.fn("SimulationActions.execute")(function* (harness
       yield* Effect.tryPromise(() => harness.mockInput.typeText(action.text))
       break
     case "ui.press":
-      harness.mockInput.pressKey(action.key, action.modifiers)
+      harness.mockInput.pressKey(keyInput(action.key), action.modifiers)
       break
     case "ui.enter":
       harness.mockInput.pressEnter()
