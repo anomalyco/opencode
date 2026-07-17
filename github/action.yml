@@ -44,8 +44,10 @@ runs:
     - name: Get opencode version
       id: version
       shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
       run: |
-        VERSION=$(curl -sf https://api.github.com/repos/anomalyco/opencode/releases/latest | grep -o '"tag_name": *"[^"]*"' | cut -d'"' -f4)
+        VERSION=$(curl -sf -H "Authorization: Bearer $GH_TOKEN" https://api.github.com/repos/anomalyco/opencode/releases/latest | grep -o '"tag_name": *"[^"]*"' | cut -d'"' -f4 || true)
         echo "version=${VERSION:-latest}" >> $GITHUB_OUTPUT
 
     - name: Cache opencode
