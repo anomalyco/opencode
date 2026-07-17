@@ -10,9 +10,9 @@ registerOpencodeSpinner()
 export const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
 export function Spinner(props: { children?: JSX.Element; color?: RGBA }) {
-  const { theme } = useTheme()
+  const { themeV2 } = useTheme()
   const config = useConfig().data
-  const color = () => props.color ?? theme.textMuted
+  const color = () => props.color ?? themeV2.text.subdued()
   return (
     <Show
       when={config.animations ?? true}

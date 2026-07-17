@@ -2,13 +2,13 @@ import { Plugin } from "@opencode-ai/plugin/v2/tui"
 import { useTheme } from "../../context/theme"
 
 function View() {
-  const { theme } = useTheme()
+  const { themeV2 } = useTheme()
   return (
     <box>
-      <text fg={theme.text}>
+      <text fg={themeV2.text()}>
         <b>LSP</b>
       </text>
-      <text fg={theme.textMuted}>LSP status unavailable</text>
+      <text fg={themeV2.text.subdued()}>LSP status unavailable</text>
     </box>
   )
 }
