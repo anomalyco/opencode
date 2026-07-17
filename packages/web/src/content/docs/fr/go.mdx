@@ -49,8 +49,10 @@ Un seul membre par espace de travail peut s'abonner à OpenCode Go.
 
 La liste actuelle des modèles comprend :
 
+- **Grok 4.5**
 - **GLM-5.2**
 - **GLM-5.1**
+- **Kimi K3**
 - **Kimi K2.7 Code**
 - **Kimi K2.6**
 - **MiMo-V2.5**
@@ -81,10 +83,12 @@ Le tableau ci-dessous fournit une estimation du nombre de requêtes basée sur d
 
 | Model             | requêtes par 5 heures | requêtes par semaine | requêtes par mois |
 | ----------------- | --------------------- | -------------------- | ----------------- |
+| Grok 4.5          | 80                    | 190                  | 380               |
 | GLM-5.2           | 880                   | 2,150                | 4,300             |
 | GLM-5.1           | 880                   | 2,150                | 4,300             |
-| Kimi K2.6         | 1,150                 | 2,880                | 5,750             |
+| Kimi K3           | 140                   | 340                  | 680               |
 | Kimi K2.7 Code    | 1,350                 | 4,630                | 9,250             |
+| Kimi K2.6         | 1,150                 | 2,880                | 5,750             |
 | MiMo-V2.5         | 30,100                | 75,200               | 150,400           |
 | MiMo-V2.5-Pro     | 3,250                 | 8,150                | 16,300            |
 | MiniMax M3        | 3,200                 | 8,000                | 16,000            |
@@ -97,8 +101,9 @@ Le tableau ci-dessous fournit une estimation du nombre de requêtes basée sur d
 
 Les estimations sont basées sur les schémas de requêtes moyens observés :
 
+- Grok 4.5 — 1,100 tokens en entrée, 71,500 en cache, 220 tokens en sortie par requête
 - GLM-5.2/5.1 — 700 tokens en entrée, 52,000 en cache, 150 tokens en sortie par requête
-- Kimi K2.7 Code/K2.6 — 870 tokens en entrée, 55,000 en cache, 200 tokens en sortie par requête
+- Kimi K3/K2.7/K2.6 — 870 tokens en entrée, 55,000 en cache, 200 tokens en sortie par requête
 - DeepSeek V4 Pro — 750 tokens en entrée, 82,000 en cache, 290 tokens en sortie par requête
 - DeepSeek V4 Flash — 790 tokens en entrée, 68,000 en cache, 280 tokens en sortie par requête
 - MiniMax M3 — 510 tokens en entrée, 56,000 en cache, 190 tokens en sortie par requête
@@ -109,26 +114,28 @@ Les estimations sont basées sur les schémas de requêtes moyens observés :
 - MiMo-V2.5 — 830 tokens en entrée, 71,500 en cache, 295 tokens en sortie par requête
 - MiMo-V2.5-Pro — 790 tokens en entrée, 86,000 en cache, 305 tokens en sortie par requête
 
-Les estimations sont également basées sur les prix suivants par 1M tokens :
+Les estimations sont également basées sur les prix suivants par 1M tokens et sur l'utilisation mensuelle incluse avec chaque modèle :
 
-| Modèle                       | Input | Output | Cached Read | Cached Write |
-| ---------------------------- | ----- | ------ | ----------- | ------------ |
-| GLM-5.2                      | $1.40 | $4.40  | $0.26       | -            |
-| GLM-5.1                      | $1.40 | $4.40  | $0.26       | -            |
-| Kimi K2.7 Code               | $0.95 | $4.00  | $0.19       | -            |
-| Kimi K2.6                    | $0.95 | $4.00  | $0.16       | -            |
-| MiMo V2.5                    | $0.14 | $0.28  | $0.0028     | -            |
-| MiMo V2.5 Pro                | $1.74 | $3.48  | $0.0145     | -            |
-| MiniMax M3                   | $0.30 | $1.20  | $0.06       | -            |
-| MiniMax M2.7                 | $0.30 | $1.20  | $0.06       | $0.375       |
-| MiniMax M2.5                 | $0.30 | $1.20  | $0.06       | $0.375       |
-| Qwen3.7 Max                  | $2.50 | $7.50  | $0.50       | $3.125       |
-| Qwen3.7 Plus (≤ 256K tokens) | $0.40 | $1.60  | $0.04       | $0.50        |
-| Qwen3.7 Plus (> 256K tokens) | $1.20 | $4.80  | $0.12       | $1.50        |
-| Qwen3.6 Plus (≤ 256K tokens) | $0.50 | $3.00  | $0.05       | $0.625       |
-| Qwen3.6 Plus (> 256K tokens) | $2.00 | $6.00  | $0.20       | $2.50        |
-| DeepSeek V4 Pro              | $1.74 | $3.48  | $0.0145     | -            |
-| DeepSeek V4 Flash            | $0.14 | $0.28  | $0.0028     | -            |
+| Modèle                       | Input | Output | Cached Read | Cached Write | Utilisation |
+| ---------------------------- | ----- | ------ | ----------- | ------------ | ----------- |
+| Grok 4.5                     | $2.00 | $6.00  | $0.50       | -            | $15         |
+| GLM-5.2                      | $1.40 | $4.40  | $0.26       | -            | $60         |
+| GLM-5.1                      | $1.40 | $4.40  | $0.26       | -            | $60         |
+| Kimi K3                      | $3.00 | $15.00 | $0.30       | -            | $15         |
+| Kimi K2.7 Code               | $0.95 | $4.00  | $0.19       | -            | $60         |
+| Kimi K2.6                    | $0.95 | $4.00  | $0.16       | -            | $60         |
+| MiMo V2.5                    | $0.14 | $0.28  | $0.0028     | -            | $60         |
+| MiMo V2.5 Pro                | $1.74 | $3.48  | $0.0145     | -            | $15         |
+| MiniMax M3                   | $0.30 | $1.20  | $0.06       | -            | $60         |
+| MiniMax M2.7                 | $0.30 | $1.20  | $0.06       | $0.375       | $60         |
+| MiniMax M2.5                 | $0.30 | $1.20  | $0.06       | $0.375       | $60         |
+| Qwen3.7 Max                  | $2.50 | $7.50  | $0.50       | $3.125       | $60         |
+| Qwen3.7 Plus (≤ 256K tokens) | $0.40 | $1.60  | $0.04       | $0.50        | $60         |
+| Qwen3.7 Plus (> 256K tokens) | $1.20 | $4.80  | $0.12       | $1.50        | $60         |
+| Qwen3.6 Plus (≤ 256K tokens) | $0.50 | $3.00  | $0.05       | $0.625       | $60         |
+| Qwen3.6 Plus (> 256K tokens) | $2.00 | $6.00  | $0.20       | $2.50        | $60         |
+| DeepSeek V4 Pro              | $1.74 | $3.48  | $0.0145     | -            | $15         |
+| DeepSeek V4 Flash            | $0.14 | $0.28  | $0.0028     | -            | $60         |
 
 Vous pouvez suivre votre utilisation actuelle dans la **<a href={console}>console</a>**.
 
@@ -146,14 +153,28 @@ Si vous avez également des crédits sur votre solde Zen, vous pouvez activer l'
 
 ---
 
+### Pourquoi certains modèles offrent un volume d'utilisation inférieur
+
+Avec Go, vous payez 10 $/mois et nous cherchons à vous offrir un volume d'utilisation équivalant à 6 fois ce montant.
+
+Pour la plupart des modèles, nous y parvenons grâce à des remises sur volume et à une capacité GPU réservée. Nous vous faisons ensuite bénéficier de ces économies grâce à un coefficient multiplicateur de 6.
+
+Pour certains modèles, nous n'avons pas encore eu l'occasion de négocier une remise ou de les héberger à moindre coût, soit parce que le modèle est nouveau, soit parce que son tarif public est déjà réduit.
+
+Pour ces modèles, vous obtenez tout de même un peu plus que si vous payiez directement les fournisseurs de modèles ; c'est pourquoi leur multiplicateur d'utilisation est plus faible dans le tableau ci-dessus.
+
+---
+
 ## Points de terminaison
 
 Vous pouvez également accéder aux modèles Go via les points de terminaison d'API suivants.
 
 | Modèle            | ID de modèle      | Point de terminaison                             | Package AI SDK              |
 | ----------------- | ----------------- | ------------------------------------------------ | --------------------------- |
+| Grok 4.5          | grok-4.5          | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5.2           | glm-5.2           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5.1           | glm-5.1           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Kimi K3           | kimi-k3           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Kimi K2.7 Code    | kimi-k2.7-code    | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Kimi K2.6         | kimi-k2.6         | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Pro   | deepseek-v4-pro   | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
@@ -167,7 +188,7 @@ Vous pouvez également accéder aux modèles Go via les points de terminaison d'
 | Qwen3.7 Plus      | qwen3.7-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus      | qwen3.6-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 
-L'[ID de modèle](/docs/config/#models) dans votre configuration OpenCode utilise le format `opencode-go/<model-id>`. Par exemple, pour Kimi K2.7 Code, vous utiliseriez `opencode-go/kimi-k2.7-code` dans votre configuration.
+L'[ID de modèle](/docs/config/#models) dans votre configuration OpenCode utilise le format `opencode-go/<model-id>`. Par exemple, pour Kimi K3, vous utiliseriez `opencode-go/kimi-k3` dans votre configuration.
 
 ---
 
