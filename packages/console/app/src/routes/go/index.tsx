@@ -64,7 +64,7 @@ function LimitsGraph(props: { href: string }) {
   const baseline = 200
   const graph = [
     { id: "grok-4.5", name: "Grok 4.5", req: 80, d: "50ms" },
-    { id: "kimi-k3", name: "Kimi K3", req: 140, d: "75ms" },
+    { id: "kimi-k3", name: "Kimi K3", req: 280, baseReq: 140, d: "75ms" },
     { id: "glm-5.2", name: "GLM-5.2", req: 880, d: "100ms" },
     { id: "qwen3.7-max", name: "Qwen3.7 Max", req: 950, d: "110ms" },
     { id: "kimi-k2.7-code", name: "Kimi K2.7 Code", req: 1150, d: "150ms" },
@@ -152,12 +152,23 @@ function LimitsGraph(props: { href: string }) {
                   <rect
                     x={left}
                     y={gy(i()) - bh / 2}
-                    width={Math.max(0, x(ratio(m.req)) - left)}
+                    width={Math.max(0, x(ratio(m.baseReq ?? m.req)) - left)}
                     height={bh}
                     data-bar
                     data-kind="go"
                     data-model={m.id}
                   />
+                  {m.baseReq && (
+                    <rect
+                      x={x(ratio(m.baseReq)) + 2}
+                      y={gy(i()) - bh / 2}
+                      width={Math.max(0, x(ratio(m.req)) - x(ratio(m.baseReq)) - 2)}
+                      height={bh}
+                      data-bar
+                      data-kind="promo"
+                      data-model={m.id}
+                    />
+                  )}
                 </g>
               )}
             </For>

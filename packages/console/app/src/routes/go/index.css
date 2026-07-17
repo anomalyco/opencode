@@ -628,6 +628,10 @@ body {
         stroke: none;
       }
 
+      [data-bar][data-kind="promo"] {
+        fill: color-mix(in srgb, var(--bar-go) 50%, transparent);
+      }
+
       [data-val] {
         fill: var(--color-text-strong);
         font-size: 13px;
