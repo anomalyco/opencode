@@ -1586,16 +1586,16 @@ export function reasoningVariants(model: ModelsDev.Model, target: Provider.Model
   if (options.length === 0) return {}
 
   const effort = options.find((option) => option.type === "effort")
-  if (effort) return nonEmptyVariants(effortVariants(target, effort.values))
+  if (effort) return effortVariants(target, effort.values)
 
   const toggle = options.some((option) => option.type === "toggle")
   const budget = options.find((option) => option.type === "budget_tokens")
-  if (!budget) return toggle ? nonEmptyVariants(reasoningToggle(target)) : undefined
+  if (!budget) return toggle ? reasoningToggle(target) : {}
 
-  return nonEmptyVariants({
+  return {
     ...(toggle ? reasoningToggle(target) : {}),
     ...budgetVariants(target, budget.min, budget.max),
-  })
+  }
 }
 
 function effortVariants(model: Provider.Model, values: readonly unknown[]) {
@@ -1627,11 +1627,12 @@ function budgetVariants(model: Provider.Model, min?: number, max?: number) {
   )
 }
 
-function nonEmptyVariants(variants: NonNullable<Provider.Model["variants"]>): Provider.Model["variants"] {
-  return Object.keys(variants).length > 0 ? variants : undefined
-}
-
 function reasoningToggle(model: Provider.Model): NonNullable<Provider.Model["variants"]> {
+  if (model.api.npm === "@ai-sdk/anthropic" || model.api.npm === "@ai-sdk/google-vertex/anthropic")
+    return {
+      none: { thinking: { type: "disabled" } },
+      thinking: { thinking: { type: "adaptive" } },
+    }
   if (model.api.npm === "@ai-sdk/alibaba")
     return {
       none: { enableThinking: false },
@@ -1651,7 +1652,7 @@ function reasoningEffort(model: Provider.Model, effort: string) {
       return { reasoning: { effort } }
     case "@ai-sdk/anthropic":
     case "@ai-sdk/google-vertex/anthropic":
-      return anthropicEffort(model, effort)
+      return anthropicEffort(model, effort) ?? { effort }
     case "@ai-sdk/google":
     case "@ai-sdk/google-vertex":
       return { thinkingConfig: { includeThoughts: true, thinkingLevel: effort } }
