@@ -2,8 +2,31 @@
   "acme": {
     "id": "acme",
     "name": "Acme",
-    "env": ["ACME_API_KEY"],
-    "models": {}
+    "env": [
+      "ACME_API_KEY"
+    ],
+    "models": {
+      "deluxe": {
+        "id": "deluxe",
+        "name": "Deluxe",
+        "release_date": "2025-01-01",
+        "attachment": false,
+        "reasoning": true,
+        "efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ],
+        "temperature": true,
+        "tool_call": true,
+        "limit": {
+          "context": 200000,
+          "output": 64000
+        }
+      }
+    }
   },
   "local": {
     "id": "local",

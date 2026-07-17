@@ -51,6 +51,7 @@ export const Model = Schema.Struct({
   release_date: Schema.String,
   attachment: Schema.Boolean,
   reasoning: Schema.Boolean,
+  efforts: Schema.optional(Schema.Array(Schema.String)),
   temperature: Schema.Boolean,
   tool_call: Schema.Boolean,
   interleaved: Schema.optional(
@@ -174,6 +175,20 @@ function humanizeModelName(name: string): string {
   return parts.map((p) => specialCases[p.toLowerCase()] ?? capitalize(p)).join(" ")
 }
 
+// litellm's supports_reasoning implies the default low/medium/high effort
+// range; none/minimal and the exceptional xhigh/max tiers are opted into
+// per-model via their own supports_* flags in the litellm config.
+function reasoningEfforts(info: any): string[] | undefined {
+  if (!info.supports_reasoning) return undefined
+  const efforts: string[] = []
+  if (info.supports_none_reasoning_effort) efforts.push("none")
+  if (info.supports_minimal_reasoning_effort) efforts.push("minimal")
+  efforts.push("low", "medium", "high")
+  if (info.supports_xhigh_reasoning_effort) efforts.push("xhigh")
+  if (info.supports_max_reasoning_effort) efforts.push("max")
+  return efforts
+}
+
 function transformApiResponse(data: any): Model[] {
   if (!data?.data || !Array.isArray(data.data)) return []
 
@@ -196,6 +211,7 @@ function transformApiResponse(data: any): Model[] {
         release_date: "",
         attachment: info.supports_vision || info.supports_pdf_input || false,
         reasoning: info.supports_reasoning || false,
+        efforts: reasoningEfforts(info),
         temperature: true,
         tool_call: info.supports_function_calling || info.supports_tool_choice || false,
         cost: {

@@ -665,6 +665,13 @@ function googleThinkingVariants(model: Provider.Model): Record<string, Record<st
 export function variants(model: Provider.Model): Record<string, Record<string, any>> {
   if (!model.capabilities.reasoning) return {}
 
+  // Models fetched from the Mammouth API carry an explicit effort list derived
+  // from litellm's supports_* flags; litellm translates reasoning_effort to
+  // each upstream's native control, so it overrides the heuristics below.
+  if (model.efforts?.length) {
+    return Object.fromEntries(model.efforts.map((effort) => [effort, { reasoningEffort: effort }]))
+  }
+
   const id = model.id.toLowerCase()
   const glm52 = ["glm-5.2", "glm-5-2", "glm-5p2"].some(
     (name) => id.includes(name) || model.api.id.toLowerCase().includes(name),
