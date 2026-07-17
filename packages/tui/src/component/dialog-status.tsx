@@ -8,47 +8,41 @@ export type DialogStatusProps = {}
 
 export function DialogStatus() {
   const data = useData()
-  const { theme } = useTheme()
+  const { themeV2 } = useTheme().contextual("elevated")
   const dialog = useDialog()
 
   const mcp = createMemo(() => data.location.mcp.server.list() ?? [])
+  const color = (status: string) => {
+    if (status === "connected") return themeV2.text.feedback.success()
+    if (status === "failed") return themeV2.text.feedback.error()
+    if (status === "needs_auth") return themeV2.text.feedback.warning()
+    if (status === "needs_client_registration") return themeV2.text.feedback.error()
+    return themeV2.text.subdued()
+  }
   return (
     <box paddingLeft={2} paddingRight={2} gap={1} paddingBottom={1}>
       <box flexDirection="row" justifyContent="space-between">
-        <text fg={theme.text} attributes={TextAttributes.BOLD}>
+        <text fg={themeV2.text()} attributes={TextAttributes.BOLD}>
           Status
         </text>
-        <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>
+        <text fg={themeV2.text.subdued()} onMouseUp={() => dialog.clear()}>
           esc
         </text>
       </box>
-      <Show when={mcp().length > 0} fallback={<text fg={theme.text}>No MCP servers</text>}>
+      <Show when={mcp().length > 0} fallback={<text fg={themeV2.text()}>No MCP servers</text>}>
         <box>
-          <text fg={theme.text}>
+          <text fg={themeV2.text()}>
             {mcp().length} MCP server{mcp().length === 1 ? "" : "s"}
           </text>
           <For each={mcp()}>
             {(item) => (
               <box flexDirection="row" gap={1}>
-                <text
-                  flexShrink={0}
-                  style={{
-                    fg: (
-                      {
-                        connected: theme.success,
-                        failed: theme.error,
-                        disabled: theme.textMuted,
-                        needs_auth: theme.warning,
-                        needs_client_registration: theme.error,
-                      } as Record<string, typeof theme.success>
-                    )[item.status.status],
-                  }}
-                >
+                <text flexShrink={0} style={{ fg: color(item.status.status) }}>
                   •
                 </text>
-                <text fg={theme.text} wrapMode="word">
+                <text fg={themeV2.text()} wrapMode="word">
                   <b>{item.name}</b>{" "}
-                  <span style={{ fg: theme.textMuted }}>
+                  <span style={{ fg: themeV2.text.subdued() }}>
                     <Switch fallback={item.status.status}>
                       <Match when={item.status.status === "connected"}>Connected</Match>
                       <Match when={item.status.status === "failed" && item.status}>{(val) => val().error}</Match>
