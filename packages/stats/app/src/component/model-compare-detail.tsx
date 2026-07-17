@@ -1,4 +1,3 @@
-import "../routes/index.css"
 import { Link, Meta, Title } from "@solidjs/meta"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import {
@@ -263,9 +262,8 @@ export default function ModelCompareDetailPage(props: ModelCompareDetailPageProp
               }}
             />
           </Show>
-          <ComparisonRadar models={models()} catalogModels={catalog()?.models ?? []} />
           <div
-            data-component="compare-detail-table"
+            data-component="compare-detail-comparison"
             data-model-count={models().length}
             style={`--compare-detail-grid: ${comparisonDetailGridTemplate(models().length)}`}
           >
@@ -276,6 +274,7 @@ export default function ModelCompareDetailPage(props: ModelCompareDetailPageProp
             >
               <ComparisonPairSelector catalogModels={selectorModels()} models={models()} />
             </div>
+            <ComparisonRadar models={models()} catalogModels={catalog()?.models ?? []} />
             <div
               data-component="compare-detail-body-scroll"
               ref={(element) => (comparisonBodyScroll = element)}
