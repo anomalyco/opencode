@@ -262,7 +262,15 @@ export function TerminalPanelV2(props: { stacked?: boolean } = {}) {
                 onChange={(id) => terminal.open(id)}
                 class={newLayout() ? "!h-[52px] !flex-none" : "!h-auto !flex-none"}
               >
-                <Tabs.List ref={tabList} class={newLayout() ? undefined : "h-10 border-b border-border-weaker-base"}>
+                <Tabs.List
+                  ref={tabList}
+                  class={newLayout() ? undefined : "h-10 border-b border-border-weaker-base"}
+                  onPointerDown={(event: PointerEvent & { currentTarget: HTMLDivElement }) => {
+                    const active = document.activeElement
+                    if (event.target === active) return
+                    if (active instanceof HTMLInputElement && event.currentTarget.contains(active)) active.blur()
+                  }}
+                >
                   <For each={all()}>
                     {(pty, index) => (
                       <SortableTerminalTabV2 terminal={pty} index={index} newLayout={newLayout()} onClose={close} />

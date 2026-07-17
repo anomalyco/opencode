@@ -54,6 +54,7 @@ import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
+import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
@@ -1172,6 +1173,34 @@ export function ContextToolGroup(props: {
   )
 }
 
+function UserMessageComments(props: { comments: UserMessageComment[]; bounded: boolean }) {
+  const i18n = useI18n()
+  const [state, setState] = createStore({ expanded: false })
+  const comments = createMemo(() => (props.bounded && !state.expanded ? props.comments.slice(0, 5) : props.comments))
+
+  return (
+    <div data-slot="user-message-comments" data-bounded={props.bounded ? "true" : undefined}>
+      <For each={comments()}>
+        {(comment) => (
+          <CommentCardV2
+            comment={comment.comment}
+            path={comment.path}
+            selection={comment.selection}
+            title={comment.comment}
+            tooltip
+            wide
+          />
+        )}
+      </For>
+      <Show when={props.bounded && props.comments.length > 5 && !state.expanded}>
+        <ButtonV2 size="small" variant="ghost-muted" onClick={() => setState("expanded", true)}>
+          {i18n.t("ui.common.showMore")}
+        </ButtonV2>
+      </Show>
+    </div>
+  )
+}
+
 export function UserMessageDisplay(props: {
   message: UserMessage
   parts: PartType[]
@@ -1255,107 +1284,114 @@ export function UserMessageDisplay(props: {
       .finally(() => setState("busy", false))
   }
 
+  const renderAttachments = () => (
+    <Show when={attachments().length > 0}>
+      <div data-slot="user-message-attachments">
+        <For each={attachments()}>
+          {(file) => {
+            const type = kind(file)
+            const name = file.filename ?? i18n.t("ui.message.attachment.alt")
+
+            return (
+              <Show
+                when={newLayout() && type === "file"}
+                fallback={
+                  <div
+                    data-slot="user-message-attachment"
+                    data-type={type}
+                    data-clickable={type === "image" ? "true" : undefined}
+                    title={type === "file" ? name : undefined}
+                    onClick={() => {
+                      if (type === "image") openImagePreview(file.url, name)
+                    }}
+                  >
+                    <Show
+                      when={type === "image"}
+                      fallback={
+                        <div data-slot="user-message-attachment-file">
+                          <FileIcon node={{ path: name, type: "file" }} />
+                          <span data-slot="user-message-attachment-name">{name}</span>
+                        </div>
+                      }
+                    >
+                      <img data-slot="user-message-attachment-image" src={file.url} alt={name} />
+                    </Show>
+                  </div>
+                }
+              >
+                <AttachmentCardV2
+                  title={getFilename(name)}
+                  hover={name}
+                  clickable={!!props.actions?.openAttachment}
+                  onClick={() => props.actions?.openAttachment?.(file)}
+                >
+                  {typeLabel(name, file.mime)}
+                </AttachmentCardV2>
+              </Show>
+            )
+          }}
+        </For>
+      </div>
+    </Show>
+  )
+
   return (
     <div data-component="user-message" data-timeline-part-id={textPart()?.id}>
-      <Show when={attachments().length > 0 || messageComments().length > 0}>
-        <div data-slot="user-message-attachments">
-          <For each={messageComments()}>
-            {(comment) => (
-              <CommentCardV2
-                comment={comment.comment}
-                path={comment.path}
-                selection={comment.selection}
-                title={comment.comment}
-              />
-            )}
-          </For>
-          <For each={attachments()}>
-            {(file) => {
-              const type = kind(file)
-              const name = file.filename ?? i18n.t("ui.message.attachment.alt")
-
-              return (
-                <Show
-                  when={newLayout() && type === "file"}
-                  fallback={
-                    <div
-                      data-slot="user-message-attachment"
-                      data-type={type}
-                      data-clickable={type === "image" ? "true" : undefined}
-                      title={type === "file" ? name : undefined}
-                      onClick={() => {
-                        if (type === "image") openImagePreview(file.url, name)
-                      }}
-                    >
-                      <Show
-                        when={type === "image"}
-                        fallback={
-                          <div data-slot="user-message-attachment-file">
-                            <FileIcon node={{ path: name, type: "file" }} />
-                            <span data-slot="user-message-attachment-name">{name}</span>
-                          </div>
-                        }
-                      >
-                        <img data-slot="user-message-attachment-image" src={file.url} alt={name} />
-                      </Show>
-                    </div>
-                  }
-                >
-                  <AttachmentCardV2
-                    title={getFilename(name)}
-                    hover={name}
-                    clickable={!!props.actions?.openAttachment}
-                    onClick={() => props.actions?.openAttachment?.(file)}
-                  >
-                    {typeLabel(name, file.mime)}
-                  </AttachmentCardV2>
-                </Show>
-              )
-            }}
-          </For>
+      <Show when={!props.useV2Actions}>{renderAttachments()}</Show>
+      <Show
+        when={text()}
+        fallback={
+          <Show when={messageComments().length > 0}>
+            <UserMessageComments comments={messageComments()} bounded={false} />
+          </Show>
+        }
+      >
+        <div data-slot="user-message-body">
+          <div data-slot="user-message-text" data-comments={messageComments().length > 0 ? "true" : undefined}>
+            <HighlightedText text={text()} references={inlineFiles()} agents={agents()} />
+            <Show when={messageComments().length > 0}>
+              <UserMessageComments comments={messageComments()} bounded />
+            </Show>
+          </div>
         </div>
       </Show>
-      <Show when={text()}>
-        <>
-          <div data-slot="user-message-body">
-            <div data-slot="user-message-text">
-              <HighlightedText text={text()} references={inlineFiles()} agents={agents()} />
-            </div>
-          </div>
-          <div data-slot="user-message-copy-wrapper">
-            <Show when={metaHead() || metaTail()}>
-              <span data-slot="user-message-meta-wrap">
-                <Show when={metaHead()}>
-                  <span data-slot="user-message-meta" class="text-12-regular text-text-weak cursor-default">
-                    {metaHead()}
-                  </span>
-                </Show>
-                <Show when={metaHead() && metaTail()}>
-                  <span data-slot="user-message-meta-sep" class="text-12-regular text-text-weak cursor-default">
-                    {"\u00A0\u00B7\u00A0"}
-                  </span>
-                </Show>
-                <Show when={metaTail()}>
-                  <span data-slot="user-message-meta-tail" class="text-12-regular text-text-weak cursor-default">
-                    {metaTail()}
-                  </span>
-                </Show>
-              </span>
-            </Show>
-            <Show when={props.actions?.revert}>
-              <MessageActionButton
-                icon="reset"
-                label={i18n.t("ui.message.revertMessage")}
-                useV2={props.useV2Actions}
-                disabled={!!busy()}
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={(event) => {
-                  event.stopPropagation()
-                  revert()
-                }}
-                aria-label={i18n.t("ui.message.revertMessage")}
-              />
-            </Show>
+      <Show when={props.useV2Actions}>{renderAttachments()}</Show>
+      <Show when={text() || (props.useV2Actions && messageComments().length > 0)}>
+        <div data-slot="user-message-copy-wrapper">
+          <Show when={metaHead() || metaTail()}>
+            <span data-slot="user-message-meta-wrap">
+              <Show when={metaHead()}>
+                <span data-slot="user-message-meta" class="text-12-regular text-text-weak cursor-default">
+                  {metaHead()}
+                </span>
+              </Show>
+              <Show when={metaHead() && metaTail()}>
+                <span data-slot="user-message-meta-sep" class="text-12-regular text-text-weak cursor-default">
+                  {"\u00A0\u00B7\u00A0"}
+                </span>
+              </Show>
+              <Show when={metaTail()}>
+                <span data-slot="user-message-meta-tail" class="text-12-regular text-text-weak cursor-default">
+                  {metaTail()}
+                </span>
+              </Show>
+            </span>
+          </Show>
+          <Show when={props.actions?.revert}>
+            <MessageActionButton
+              icon="reset"
+              label={i18n.t("ui.message.revertMessage")}
+              useV2={props.useV2Actions}
+              disabled={!!busy()}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={(event) => {
+                event.stopPropagation()
+                revert()
+              }}
+              aria-label={i18n.t("ui.message.revertMessage")}
+            />
+          </Show>
+          <Show when={text()}>
             <MessageActionButton
               icon={copied() ? "check" : "copy"}
               label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyMessage")}
@@ -1367,8 +1403,8 @@ export function UserMessageDisplay(props: {
               }}
               aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyMessage")}
             />
-          </div>
-        </>
+          </Show>
+        </div>
       </Show>
     </div>
   )

@@ -757,7 +757,7 @@ function SessionFileViewV2(props: { tab: string }) {
           commentsUi.onLineNumberSelectionEnd(range)
         }}
         search={search}
-        class="select-text"
+        class="select-text [--opencode-diffs-bg:var(--v2-background-bg-base)]"
         media={{
           mode: "auto",
           path: path(),

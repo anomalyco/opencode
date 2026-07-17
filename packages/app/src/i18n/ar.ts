@@ -86,6 +86,7 @@ export const dict = {
   "command.session.unshare": "إلغاء مشاركة الجلسة",
   "command.session.unshare.description": "إيقاف مشاركة هذه الجلسة",
   "palette.search.placeholder": "البحث في الملفات والأوامر والجلسات",
+  "palette.search.placeholder.home": "البحث في الأوامر والجلسات",
   "palette.empty": "لا توجد نتائج",
   "palette.group.commands": "الأوامر",
   "palette.group.files": "الملفات",
@@ -735,9 +736,13 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "توسيع أجزاء أداة edit",
   "settings.general.row.editToolPartsExpanded.description":
     "إظهار أجزاء أدوات edit و write و patch موسعة بشكل افتراضي في الشريط الزمني",
-  "settings.general.row.newLayoutDesigns.title": "التخطيط والتصاميم الجديدة",
-  "settings.general.row.newLayoutDesigns.description":
-    "تمكين التخطيط والصفحة الرئيسية ومحرر الرسائل وواجهة الجلسة المعاد تصميمها",
+  "settings.general.row.newInterface.title": "التخطيط الجديد",
+  "settings.general.row.newInterface.badge": "جديد",
+  "settings.general.row.newInterface.description":
+    "استخدم علامات التبويب الجديدة وتخطيط الصفحة الرئيسية. يمكنك التبديل بين التخطيطات لفترة محدودة.",
+  "settings.general.row.newInterfaceNotice.title": "أنت تستخدم الآن التخطيط الجديد",
+  "settings.general.row.newInterfaceNotice.description": "التخطيط السابق لم يعد متاحًا",
+  "settings.general.row.newInterfaceNotice.dismiss": "رفض",
   "settings.general.row.pinchZoom.title": "التكبير بإيماءة القرص",
   "settings.general.row.pinchZoom.description": "السماح بإيماءة القرص على لوحة اللمس وإيماءة Ctrl-scroll للتكبير",
   "settings.general.row.wayland.title": "استخدام Wayland الأصلي",

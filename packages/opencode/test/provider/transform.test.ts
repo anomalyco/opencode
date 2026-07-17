@@ -3103,13 +3103,20 @@ describe("ProviderTransform.reasoningVariants", () => {
     ).toEqual({ high: { effort: "high" } })
   })
 
-  test("leaves legacy Anthropic effort options to budget fallback", () => {
+  test("uses explicit effort metadata for Anthropic-compatible models", () => {
     expect(
       ProviderTransform.reasoningVariants(
         model([{ type: "effort", values: ["high"] }]),
         target("@ai-sdk/anthropic", "claude-sonnet-4"),
       ),
-    ).toBeUndefined()
+    ).toEqual({ high: { effort: "high" } })
+
+    expect(
+      ProviderTransform.reasoningVariants(
+        model([{ type: "effort", values: ["max"] }]),
+        target("@ai-sdk/anthropic", "k3"),
+      ),
+    ).toEqual({ max: { effort: "max" } })
   })
 
   test("uses adaptive reasoning config for Anthropic models on Bedrock", () => {
@@ -3129,13 +3136,13 @@ describe("ProviderTransform.reasoningVariants", () => {
     })
   })
 
-  test("leaves legacy Anthropic Bedrock effort options to budget fallback", () => {
+  test("does not replace unsupported Anthropic Bedrock effort options with token budgets", () => {
     expect(
       ProviderTransform.reasoningVariants(
         model([{ type: "effort", values: ["high"] }]),
         target("@ai-sdk/amazon-bedrock", "anthropic.claude-sonnet-4-v1:0"),
       ),
-    ).toBeUndefined()
+    ).toEqual({})
   })
 
   test.each([
@@ -3256,10 +3263,13 @@ describe("ProviderTransform.reasoningVariants", () => {
     })
   })
 
-  test("leaves unsupported options for heuristic fallback", () => {
+  test("does not replace unsupported effort options with heuristic variants", () => {
     expect(
       ProviderTransform.reasoningVariants(model([{ type: "effort", values: ["high"] }]), target("@ai-sdk/perplexity")),
-    ).toBeUndefined()
+    ).toEqual({})
+  })
+
+  test("leaves unsupported toggle options for heuristic fallback", () => {
     expect(ProviderTransform.reasoningVariants(model([{ type: "toggle" }]), target("@ai-sdk/openai"))).toBeUndefined()
   })
 
@@ -3273,17 +3283,15 @@ describe("ProviderTransform.reasoningVariants", () => {
     expect(ProviderTransform.reasoningVariants(effort, target("@ai-sdk/gateway", "google/gemini-3-pro"))).toEqual({
       high: { thinkingConfig: { includeThoughts: true, thinkingLevel: "high" } },
     })
-    expect(
-      ProviderTransform.reasoningVariants(effort, target("@ai-sdk/github-copilot", "gemini-3-pro")),
-    ).toBeUndefined()
+    expect(ProviderTransform.reasoningVariants(effort, target("@ai-sdk/github-copilot", "gemini-3-pro"))).toEqual({})
   })
 
   test.each(["@ai-sdk/cohere", "@ai-sdk/perplexity", "@ai-sdk/vercel", "@ai-sdk/alibaba", "gitlab-ai-provider"])(
     "does not invent effort controls for %s",
     (npm) => {
-      expect(
-        ProviderTransform.reasoningVariants(model([{ type: "effort", values: ["high"] }]), target(npm)),
-      ).toBeUndefined()
+      expect(ProviderTransform.reasoningVariants(model([{ type: "effort", values: ["high"] }]), target(npm))).toEqual(
+        {},
+      )
     },
   )
 })
