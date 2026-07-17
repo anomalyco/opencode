@@ -1477,7 +1477,7 @@ test("models.dev normalization fills required response fields", () => {
   expect(model.release_date).toBe("")
 })
 
-test("models.dev reasoning options replace generated variants", () => {
+test("models.dev reasoning options replace generated variants and unsupported toggles fall back", () => {
   const provider = {
     id: "reasoning",
     name: "Reasoning",
@@ -1534,7 +1534,7 @@ test("models.dev reasoning options replace generated variants", () => {
     },
   })
   expect(models.empty.variants).toEqual({})
-  expect(models.fallback.variants).toEqual({})
+  expect(Object.keys(models.fallback.variants ?? {})).toEqual(["none", "low", "medium", "high", "xhigh"])
   expect(models.override.variants).toEqual({
     high: { thinkingConfig: { includeThoughts: true, thinkingLevel: "high" } },
   })

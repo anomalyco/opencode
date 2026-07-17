@@ -3173,20 +3173,6 @@ describe("ProviderTransform.reasoningVariants", () => {
   })
 
   test.each([
-    [
-      "@ai-sdk/anthropic",
-      {
-        none: { thinking: { type: "disabled" } },
-        thinking: { thinking: { type: "adaptive" } },
-      },
-    ],
-    [
-      "@ai-sdk/google-vertex/anthropic",
-      {
-        none: { thinking: { type: "disabled" } },
-        thinking: { thinking: { type: "adaptive" } },
-      },
-    ],
     ["@ai-sdk/alibaba", { none: { enableThinking: false }, high: { enableThinking: true } }],
     [
       "@ai-sdk/cohere",
@@ -3277,11 +3263,14 @@ describe("ProviderTransform.reasoningVariants", () => {
     })
   })
 
-  test("does not replace unsupported options with heuristic variants", () => {
+  test("does not replace unsupported effort options with heuristic variants", () => {
     expect(
       ProviderTransform.reasoningVariants(model([{ type: "effort", values: ["high"] }]), target("@ai-sdk/perplexity")),
     ).toEqual({})
-    expect(ProviderTransform.reasoningVariants(model([{ type: "toggle" }]), target("@ai-sdk/openai"))).toEqual({})
+  })
+
+  test("leaves unsupported toggle options for heuristic fallback", () => {
+    expect(ProviderTransform.reasoningVariants(model([{ type: "toggle" }]), target("@ai-sdk/openai"))).toBeUndefined()
   })
 
   test("uses model-family options for gateway and GitHub Copilot", () => {
