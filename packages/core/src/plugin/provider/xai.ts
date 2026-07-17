@@ -135,13 +135,16 @@ const device = {
     ).pipe(
       Effect.flatMap((value) =>
         Clock.currentTimeMillis.pipe(
-          Effect.map((created) => ({
-            mode: "auto" as const,
-            url: value.verification_uri_complete ?? value.verification_uri,
-            instructions: `Open ${value.verification_uri} on any device and enter code: ${value.user_code}`,
-            expiresAt: created + positiveSeconds(value.expires_in, 300) * 1000,
-            callback: poll(value).pipe(Effect.flatMap((tokens) => credential(deviceMethodID, tokens))),
-          })),
+          Effect.map((created) => {
+            const lifetime = positiveSeconds(value.expires_in, 0)
+            return {
+              mode: "auto" as const,
+              url: value.verification_uri_complete ?? value.verification_uri,
+              instructions: `Open ${value.verification_uri} on any device and enter code: ${value.user_code}`,
+              ...(lifetime ? { expiresAt: created + lifetime * 1000 } : {}),
+              callback: poll(value).pipe(Effect.flatMap((tokens) => credential(deviceMethodID, tokens))),
+            }
+          }),
         ),
       ),
     ),
