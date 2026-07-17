@@ -178,12 +178,10 @@ const layer = Layer.effect(
                             content: thin.content,
                             payloadHash,
                           }
-                          const overBudget = yield* ToolPayload.assertEventDataBudget(data).pipe(
-                            Effect.as(false),
-                            Effect.catchTag("ToolPayload.OverBudgetError", () => Effect.succeed(true)),
+                          yield* ToolPayload.assertEventDataBudget(data).pipe(
+                            Effect.andThen(events.publish(SessionEvent.Tool.Progress, data)),
+                            Effect.catchTag("ToolPayload.OverBudgetError", () => Effect.void),
                           )
-                          if (overBudget) return
-                          yield* events.publish(SessionEvent.Tool.Progress, data)
                         }),
                       ),
                   }),

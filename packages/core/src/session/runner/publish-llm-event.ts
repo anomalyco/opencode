@@ -402,22 +402,19 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
           resultState,
           payloadHash,
         }
-        const overBudget = yield* ToolPayload.assertEventDataBudget(data).pipe(
-          Effect.as(undefined as ToolPayload.OverBudgetError | undefined),
-          Effect.catchTag("ToolPayload.OverBudgetError", (error) => Effect.succeed(error)),
+        yield* ToolPayload.assertEventDataBudget(data).pipe(
+          Effect.andThen(events.publish(SessionEvent.Tool.Success, data)),
+          Effect.catchTag("ToolPayload.OverBudgetError", (error) =>
+            events.publish(SessionEvent.Tool.Failed, {
+              sessionID: input.sessionID,
+              assistantMessageID: tool.assistantMessageID,
+              callID: event.id,
+              error: { type: "unknown", message: error.message },
+              executed,
+              resultState,
+            }),
+          ),
         )
-        if (overBudget) {
-          yield* events.publish(SessionEvent.Tool.Failed, {
-            sessionID: input.sessionID,
-            assistantMessageID: tool.assistantMessageID,
-            callID: event.id,
-            error: { type: "unknown", message: overBudget.message },
-            executed,
-            resultState,
-          })
-          return
-        }
-        yield* events.publish(SessionEvent.Tool.Success, data)
         return
       }
       case "tool-error": {
