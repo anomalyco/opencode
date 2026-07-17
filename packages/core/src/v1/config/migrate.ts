@@ -68,6 +68,7 @@ export function migrate(info: typeof ConfigV1.Info.Type) {
     ),
     experimental: info.experimental?.policies && { policies: info.experimental.policies },
     providers: providers(info.provider),
+    subagent_depth: info.subagent_depth,
   }
 }
 
@@ -121,6 +122,7 @@ export function migrateAgent(info: ConfigAgentV1.Info) {
     steps: info.steps,
     disabled: info.disable,
     permissions: permissions(info.permission),
+    subagent_depth: info.subagent_depth,
   }
 }
 

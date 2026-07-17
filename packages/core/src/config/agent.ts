@@ -3,7 +3,7 @@ export * as ConfigAgent from "./agent"
 import { Schema } from "effect"
 import { Permission } from "@opencode-ai/schema/permission"
 import { ConfigProvider } from "./provider"
-import { PositiveInt } from "../schema"
+import { NonNegativeInt, PositiveInt } from "../schema"
 
 export const Color = Schema.Union([
   Schema.String.check(Schema.isPattern(/^#[0-9a-fA-F]{6}$/)),
@@ -22,4 +22,5 @@ export class Info extends Schema.Class<Info>("ConfigV2.Agent")({
   steps: PositiveInt.pipe(Schema.optional),
   disabled: Schema.Boolean.pipe(Schema.optional),
   permissions: Permission.Ruleset.pipe(Schema.optional),
+  subagent_depth: NonNegativeInt.pipe(Schema.optional),
 }) {}
