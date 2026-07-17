@@ -1331,6 +1331,19 @@ const layer = Layer.effect(
             Effect.ensuring(instruction.clear(handle.message.id)),
             Effect.onInterrupt(() => finalizeInterruptedAssistant),
           )
+          if (outcome === "break") {
+            const fresh = yield* MessageV2.filterCompactedEffect(sessionID).pipe(
+              Effect.provideService(Database.Service, database),
+            )
+            const pending = MessageV2.latest(fresh)
+            const answered =
+              pending.user &&
+              pending.assistant?.finish &&
+              !["tool-calls"].includes(pending.assistant.finish) &&
+              pending.assistant.parentID === pending.user.id
+            if (!answered) continue
+            break
+          }
           continue
         }
 

@@ -24,6 +24,9 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { isRecord } from "@/util/record"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { cruiseControlUserPrompt, currentUserPrompt } from "./cruise-control-prompt"
+
+export { cruiseControlUserPrompt, currentUserPrompt } from "./cruise-control-prompt"
 
 const MCP_RESOURCE_TOOLS = {
   list: "list_mcp_resources",
@@ -38,28 +41,6 @@ const SUPPORTED_MCP_RESOURCE_ATTACHMENT_MIMES = new Set([
   "image/png",
   "image/webp",
 ])
-
-type PromptMessage = {
-  info: { role: string; id?: string }
-  parts: readonly {
-    type: string
-    text?: string
-    synthetic?: boolean
-    ignored?: boolean
-  }[]
-}
-
-/** Extract only explicit text from the latest user turn, excluding host-generated context. */
-export function currentUserPrompt(messages: readonly PromptMessage[]): string | undefined {
-  const current = messages.findLast((message) => message.info.role === "user")
-  if (!current) return undefined
-  const text = current.parts
-    .filter((part) => part.type === "text" && part.synthetic !== true && part.ignored !== true)
-    .map((part) => part.text?.trim() ?? "")
-    .filter(Boolean)
-    .join("\n\n")
-  return text || undefined
-}
 
 export const formatCruiseControlReview = Permission.formatCruiseControlReview
 
@@ -94,7 +75,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   const mcp = yield* MCP.Service
   const truncate = yield* Truncate.Service
   const flags = yield* RuntimeFlags.Service
-  const userPrompt = currentUserPrompt(input.messages)
+  const userPrompt = cruiseControlUserPrompt(input.messages)
   const currentUserMessage = input.messages.findLast((message) => message.info.role === "user")
   const cacheScope = [
     input.session.directory,
@@ -127,31 +108,46 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
       }),
     ask: (req) =>
       Effect.gen(function* () {
-        const result = yield* permission.ask({
-          ...req,
-          sessionID: input.session.id,
-          tool: { messageID: input.processor.message.id, callID: options.toolCallId },
-          ruleset: Permission.merge(input.agent.permission, input.session.permission ?? []),
-          userPrompt,
-          cacheScope,
-        })
+        const attachCruiseMetadata = (cruise: Record<string, unknown>) =>
+          input.processor.updateToolCall(options.toolCallId, (match) => {
+            if (!["running", "pending"].includes(match.state.status)) return match
+            const previous =
+              match.state.status === "running" && isRecord(match.state.metadata) ? match.state.metadata : {}
+            return {
+              ...match,
+              state: {
+                title: match.state.status === "running" ? match.state.title : undefined,
+                metadata: { ...previous, ...cruise },
+                status: "running",
+                input: args,
+                time: match.state.status === "running" ? match.state.time : { start: Date.now() },
+              },
+            }
+          })
+
+        const result = yield* permission
+          .ask({
+            ...req,
+            sessionID: input.session.id,
+            tool: { messageID: input.processor.message.id, callID: options.toolCallId },
+            ruleset: Permission.merge(input.agent.permission, input.session.permission ?? []),
+            userPrompt,
+            cacheScope,
+          })
+          .pipe(
+            Effect.catchIf(
+              (error): error is PermissionV1.DeniedError => error instanceof PermissionV1.DeniedError,
+              (denied) =>
+                Effect.gen(function* () {
+                  const cruise = cruiseControlMetadataFromDenied(denied)
+                  if (cruise) yield* attachCruiseMetadata(cruise)
+                  return yield* Effect.fail(denied)
+                }),
+            ),
+          )
         const cruise = cruiseControlMetadata(result)
         if (!cruise) return
-        yield* input.processor.updateToolCall(options.toolCallId, (match) => {
-          if (!["running", "pending"].includes(match.state.status)) return match
-          const previous =
-            match.state.status === "running" && isRecord(match.state.metadata) ? match.state.metadata : {}
-          return {
-            ...match,
-            state: {
-              title: match.state.status === "running" ? match.state.title : undefined,
-              metadata: { ...previous, ...cruise },
-              status: "running",
-              input: args,
-              time: match.state.status === "running" ? match.state.time : { start: Date.now() },
-            },
-          }
-        })
+        yield* attachCruiseMetadata(cruise)
       }).pipe(Effect.orDie),
   })
 

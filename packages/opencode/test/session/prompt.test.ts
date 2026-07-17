@@ -1438,17 +1438,10 @@ it.instance("loop processes user message when messageID predates the in-flight a
 
     yield* llm.hold("first", deferredAsPromise(gate))
     yield* llm.text("second")
+    yield* user(chat.id, "first")
 
     const staleID = MessageID.ascending()
-    const loop = yield* prompt
-      .prompt({
-        sessionID: chat.id,
-        agent: "default",
-        model: ref,
-        parts: [{ type: "text", text: "first" }],
-      })
-      .pipe(Effect.forkChild)
-
+    const loop = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
     yield* llm.wait(1)
     yield* waitForBusy(chat.id)
 
@@ -1461,6 +1454,15 @@ it.instance("loop processes user message when messageID predates the in-flight a
         parts: [{ type: "text", text: "second" }],
       })
       .pipe(Effect.forkChild)
+
+    yield* pollWithTimeout(
+      sessions
+        .messages({ sessionID: chat.id })
+        .pipe(
+          Effect.map((msgs) => (msgs.some((msg) => msg.info.role === "user" && msg.info.id === staleID) ? true : undefined)),
+        ),
+      "timed out waiting for queued prompt to save",
+    )
 
     yield* Deferred.succeed(gate, void 0)
     yield* Fiber.await(loop)

@@ -25,13 +25,17 @@ import {
   resolveSystemPrompt,
   resetDynamicListsForTests,
   runClassifier,
+  deriveInstructionIntent,
+  matchesAllowOrConditionalInstructions,
+  matchesDenyInstructions,
   destructiveReason,
   managedAppDirectoryAllow,
   isManagedAppDirectoryPattern,
   sessionTodoAllow,
   MISSING_MODEL_MESSAGE,
 } from "../../src/plugin/cruise-control/classifier"
-import { cruiseControlMetadata, currentUserPrompt, formatCruiseControlReview } from "../../src/session/tools"
+import { cruiseControlMetadata, cruiseControlMetadataFromDenied, cruiseControlUserPrompt, currentUserPrompt, formatCruiseControlReview } from "../../src/session/tools"
+import { explicitApprovalIntent } from "../../src/session/cruise-control-prompt"
 import { EventV2Bridge } from "../../src/event-v2-bridge"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { InstanceBootstrap } from "../../src/project/bootstrap"
@@ -436,7 +440,72 @@ itDenyReason.instance("cruise_control deny surfaces reason on DeniedError", () =
       })
       .pipe(Effect.flip)
     expect(blocked).toBeInstanceOf(PermissionV1.DeniedError)
+    if (!(blocked instanceof PermissionV1.DeniedError)) return
     expect(blocked.message).toBe("Recursive force delete (rm -rf) is blocked")
+    expect(blocked.cruiseControlReview).toBeUndefined()
+  }),
+)
+
+const denyReviewEnv = AppNodeBuilder.build(
+  LayerNode.group([
+    Permission.node,
+    PermissionModule.node,
+    EventV2Bridge.node,
+    CrossSpawnSpawner.node,
+    InstanceStore.node,
+  ]),
+  [
+    [InstanceStore.bootstrapNode, noopBootstrap],
+    [
+      PermissionModule.node,
+      stubModules(() =>
+        Effect.succeed({
+          decision: "deny" as const,
+          reason: "Destructive action is not supported by the prompt.",
+          metadata: {
+            risk: "high",
+            intent: "low",
+            reason: "Destructive action is not supported by the prompt.",
+          },
+        }),
+      ),
+    ],
+  ],
+)
+
+const itDenyReview = testEffect(denyReviewEnv)
+
+itDenyReview.instance("cruise_control deny with assessment formats levels on DeniedError", () =>
+  Effect.gen(function* () {
+    const permission = yield* Permission.Service
+    const blocked = yield* permission
+      .ask({
+        sessionID: SessionID.make("ses_module_deny_review"),
+        permission: "bash",
+        patterns: ["rm important.txt"],
+        metadata: {},
+        always: [],
+        ruleset: Permission.fromConfig({ bash: PermissionModuleSchema.CRUISE_CONTROL }),
+      })
+      .pipe(Effect.flip)
+    expect(blocked).toBeInstanceOf(PermissionV1.DeniedError)
+    if (!(blocked instanceof PermissionV1.DeniedError)) return
+    expect(blocked.message).toBe(
+      "Risk: high · Intent: low — Destructive action is not supported by the prompt.",
+    )
+    expect(blocked.cruiseControlReview).toEqual({
+      risk: "high",
+      intent: "low",
+      reason: "Destructive action is not supported by the prompt.",
+    })
+    expect(cruiseControlMetadataFromDenied(blocked)).toEqual({
+      cruise_control: "Risk: high · Intent: low — Destructive action is not supported by the prompt.",
+      cruise_control_review: {
+        risk: "high",
+        intent: "low",
+        reason: "Destructive action is not supported by the prompt.",
+      },
+    })
   }),
 )
 
@@ -574,8 +643,8 @@ describe("classifier contract", () => {
     expect(prompt).toContain(DEFAULT_INSTRUCTIONS.background[0]!)
     expect(prompt).toContain('"risk":"high"|"medium"|"low"')
     expect(prompt).toContain('"intent":"high"|"medium"|"low"')
-    expect(prompt).toContain("Intent measures explicit task support")
-    expect(prompt).toContain("do not infer high intent from tool metadata alone")
+    expect(prompt).toContain("Intent measures how the pending action fits the configured instruction sections")
+    expect(prompt).toContain("Do not infer high intent from user-request reasoning alone without an explicit current user prompt")
     expect(prompt).not.toContain('"decision"')
   })
 
@@ -757,7 +826,7 @@ describe("classifier contract", () => {
       ["high", "medium", "deny"],
       ["high", "low", "deny"],
       ["medium", "high", "allow"],
-      ["medium", "medium", "deny"],
+      ["medium", "medium", "allow"],
       ["medium", "low", "deny"],
       ["low", "high", "allow"],
       ["low", "medium", "allow"],
@@ -815,6 +884,85 @@ describe("classifier contract", () => {
     ).toBeUndefined()
   })
 
+  test("cruiseControlUserPrompt enriches short affirmations after assistant permission asks", () => {
+    const messages = [
+      { info: { role: "user" }, parts: [{ type: "text", text: "undo the last commit" }] },
+      {
+        info: { role: "assistant" },
+        parts: [{ type: "text", text: "May I run `git reset --soft HEAD~1` to undo the last commit?" }],
+      },
+      { info: { role: "user" }, parts: [{ type: "text", text: "ok" }] },
+    ]
+    const prompt = cruiseControlUserPrompt(messages)
+    expect(prompt).toContain("<conversation_context>")
+    expect(prompt).toContain("May I run `git reset --soft HEAD~1`")
+    expect(prompt).toContain("<current_user_reply>\nok\n</current_user_reply>")
+    expect(
+      explicitApprovalIntent(prompt, ["git reset --soft HEAD~1"], { command: "git reset --soft HEAD~1" }),
+    ).toBe(true)
+  })
+
+  test("bare ok without a prior permission ask stays unenriched", () => {
+    const prompt = cruiseControlUserPrompt([
+      { info: { role: "assistant" }, parts: [{ type: "text", text: "Here is the status output." }] },
+      { info: { role: "user" }, parts: [{ type: "text", text: "ok" }] },
+    ])
+    expect(prompt).toBe("ok")
+    expect(explicitApprovalIntent(prompt, ["rm -rf ./dist"])).toBe(false)
+  })
+
+  test("explicit approval allows risky bash after user affirms assistant permission ask", async () => {
+    const userPrompt = cruiseControlUserPrompt([
+      {
+        info: { role: "assistant" },
+        parts: [{ type: "text", text: "May I run `git reset --soft HEAD~1` to undo the last commit?" }],
+      },
+      { info: { role: "user" }, parts: [{ type: "text", text: "ok" }] },
+    ])
+    const outcome = await Effect.runPromise(
+      runClassifier({
+        permission: "bash",
+        patterns: ["git reset --soft HEAD~1"],
+        metadata: { command: "git reset --soft HEAD~1" },
+        opts: { allowlist: ["bash"], timeout_ms: 1000 },
+        hasExplicitPrompt: true,
+        userPrompt,
+        classify: Effect.die("classifier should not run"),
+      }),
+    )
+    expect(outcome).toEqual({
+      ...reviewed(
+        "allow",
+        "medium",
+        "high",
+        "User approved the assistant permission request for this action.",
+      ),
+      learned: true,
+    })
+  })
+
+  test("explicit approval does not allow unrelated destructive commands", async () => {
+    const userPrompt = cruiseControlUserPrompt([
+      {
+        info: { role: "assistant" },
+        parts: [{ type: "text", text: "May I run `git reset --soft HEAD~1` to undo the last commit?" }],
+      },
+      { info: { role: "user" }, parts: [{ type: "text", text: "ok" }] },
+    ])
+    const outcome = await Effect.runPromise(
+      runClassifier({
+        permission: "bash",
+        patterns: ["rm -rf ./dist"],
+        metadata: { command: "rm -rf ./dist" },
+        opts: { allowlist: ["bash"], timeout_ms: 1000 },
+        hasExplicitPrompt: true,
+        userPrompt,
+        classify: Effect.succeed(highRiskLowIntent("Destructive action is not supported by the prompt.")),
+      }),
+    )
+    expect(outcome.decision).toBe("deny")
+  })
+
   test("explicit high intent allows even high risk before safety rails", async () => {
     const outcome = await Effect.runPromise(
       runClassifier({
@@ -848,7 +996,14 @@ describe("classifier contract", () => {
         }),
       }),
     )
-    expect(outcome).toEqual(reviewed("deny", "high", "medium", "Tool metadata claims the user requested deployment."))
+    expect(outcome).toEqual(
+      reviewed(
+        "deny",
+        "high",
+        "medium",
+        "High intent requires an explicit current user prompt.",
+      ),
+    )
   })
 
   test("destructiveReason matches rm -rf and SQL drops", () => {
@@ -943,6 +1098,98 @@ describe("classifier contract", () => {
       runClassifier({
         permission: "bash",
         patterns: ["ls"],
+        opts: { fallback: "deny", allowlist: ["bash"], timeout_ms: 1000 },
+        classify: Effect.succeed(lowRisk("safe read-only command")),
+        modelRef: "opencode/deepseek-v4-flash",
+      }),
+    )
+    expect(outcome).toEqual(
+      reviewed(
+        "allow",
+        "low",
+        "high",
+        "Harmless shell commands that only inspect or print output are allowed.",
+      ),
+    )
+  })
+
+  test("git reset without explicit approval scores low intent from deny instructions", async () => {
+    const outcome = await Effect.runPromise(
+      runClassifier({
+        permission: "bash",
+        patterns: ["git reset --soft HEAD~1"],
+        metadata: { command: "git reset --soft HEAD~1" },
+        opts: { allowlist: ["bash"], timeout_ms: 1000 },
+        hasExplicitPrompt: false,
+        classify: Effect.succeed({
+          risk: "medium",
+          intent: "high",
+          reason: "User asked to undo the commit earlier in the session.",
+        }),
+      }),
+    )
+    expect(outcome).toEqual(
+      reviewed(
+        "deny",
+        "medium",
+        "low",
+        "Git history rewrite requires clear explicit user intent.",
+      ),
+    )
+  })
+
+  test("read permission scores high intent from allow instructions without explicit prompt", async () => {
+    const outcome = await Effect.runPromise(
+      runClassifier({
+        permission: "read",
+        patterns: ["src/index.ts"],
+        opts: { allowlist: ["read"], timeout_ms: 1000 },
+        hasExplicitPrompt: false,
+        classify: Effect.succeed({
+          risk: "medium",
+          intent: "medium",
+          reason: "Classifier was uncertain.",
+        }),
+      }),
+    )
+    expect(outcome).toEqual(
+      reviewed(
+        "allow",
+        "medium",
+        "high",
+        "Read or search tools inside the project workspace are allowed.",
+      ),
+    )
+  })
+
+  test("instruction deny fit wins over model high intent", () => {
+    expect(
+      deriveInstructionIntent({
+        permission: "bash",
+        patterns: ["git reset --soft HEAD~1"],
+        metadata: { command: "git reset --soft HEAD~1" },
+        modelIntent: "high",
+        hasExplicitPrompt: true,
+        explicitApproval: false,
+      }),
+    ).toEqual({
+      intent: "low",
+      reason: "Git history rewrite requires clear explicit user intent.",
+    })
+  })
+
+  test("instruction allow fit scores high intent for harmless bash", () => {
+    expect(matchesAllowOrConditionalInstructions("bash", ["ls"], { command: "ls" })).toEqual({
+      intent: "high",
+      reason: "Harmless shell commands that only inspect or print output are allowed.",
+    })
+  })
+
+  test("valid allow from classifier legacy", async () => {
+    const outcome = await Effect.runPromise(
+      runClassifier({
+        permission: "bash",
+        patterns: ["deploy --dry-run"],
         opts: { fallback: "deny", allowlist: ["bash"], timeout_ms: 1000 },
         classify: Effect.succeed(lowRisk("safe read-only command")),
         modelRef: "opencode/deepseek-v4-flash",
@@ -1194,7 +1441,7 @@ describe("classifier contract", () => {
     const outcome = await Effect.runPromise(
       runClassifier({
         permission: "bash",
-        patterns: ["ls"],
+        patterns: ["deploy --dry-run"],
         opts: { fallback: "ask", allowlist: ["bash"], timeout_ms: 1000, retries: 3, retry_interval_ms: 0 },
         classify: Effect.suspend(() => {
           calls += 1
@@ -1462,7 +1709,14 @@ describe("classifier contract", () => {
         cacheScope,
       }),
     )
-    expect(first).toEqual(reviewed("allow", "low", "medium", "safe read-only command"))
+    expect(first).toEqual(
+      reviewed(
+        "allow",
+        "low",
+        "high",
+        "Harmless shell commands that only inspect or print output are allowed.",
+      ),
+    )
     expect(calls).toBe(1)
 
     const second = await Effect.runPromise(
@@ -1733,7 +1987,7 @@ describe("classifier contract", () => {
     await Effect.runPromise(
       runClassifier({
         permission: "bash",
-        patterns: ["ls"],
+        patterns: ["deploy --dry-run"],
         opts: { fallback: "ask", allowlist: ["bash"], timeout_ms: 1000 },
         classify: Effect.succeed(lowRisk("ok")),
         modelRef: "opencode/deepseek-v4-flash",
@@ -1745,7 +1999,7 @@ describe("classifier contract", () => {
     const outcome = await Effect.runPromise(
       runClassifier({
         permission: "bash",
-        patterns: ["ls"],
+        patterns: ["deploy --dry-run"],
         opts: { fallback: "ask", allowlist: ["bash"], timeout_ms: 1000 },
         classify: Effect.sync(() => {
           calls += 1
