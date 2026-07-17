@@ -146,13 +146,15 @@ jobs:
       - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
 
       - uses: ./.github/actions/setup-bun
+        with:
+          install-flags: --os=* --cpu=*
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "26.4.0"
 
       - name: Build
-        run: bun packages/cli/script/build-node.ts --target=${{ matrix.settings.target }} --outdir=dist/node
+        run: bun packages/cli/script/build-node.ts --target=${{ matrix.settings.target }} --skip-install --outdir=dist/node
         env:
           OPENCODE_VERSION: ${{ needs.version.outputs.version }}
           OPENCODE_RELEASE: ${{ needs.version.outputs.release }}
