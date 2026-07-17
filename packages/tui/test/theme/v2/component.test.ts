@@ -64,4 +64,5 @@ test("provides reactive property, variant, state, and context accessors", () => 
 
   setResolved(resolveTheme(selectTheme(DEFAULT_THEME, "dark")))
   expect(theme.text()).toBe(resolved().contexts["@context:elevated"]!.text.default)
+  expect(theme.decrease(theme.background.surface.offset(), 1)).toBe(resolved().hue.neutral[700])
 })

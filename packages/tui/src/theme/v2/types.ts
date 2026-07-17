@@ -21,6 +21,8 @@ export type FormfieldColor = Readonly<Record<ResolvedFormfieldState, RGBA>>
 
 export type ResolvedThemeView = {
   readonly hue: Hue
+  readonly increase: (color: RGBA, amount?: number) => RGBA
+  readonly decrease: (color: RGBA, amount?: number) => RGBA
   readonly text: {
     readonly default: RGBA
     readonly subdued: RGBA

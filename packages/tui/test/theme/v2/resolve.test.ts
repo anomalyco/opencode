@@ -15,6 +15,11 @@ test("resolves independent definitions and hue aliases", () => {
   expect(lightTheme.hue.accent).toBe(lightTheme.hue.blue)
   expect(lightTheme.hue.interactive).toBe(lightTheme.hue.blue)
   expect(lightTheme.hue.neutral).toBe(lightTheme.hue.gray)
+  expect(lightTheme.increase(lightTheme.hue.red[100])).toBe(lightTheme.hue.red[200])
+  expect(lightTheme.decrease(lightTheme.hue.red[200])).toBe(lightTheme.hue.red[100])
+  expect(lightTheme.contexts["@context:elevated"]?.increase(lightTheme.hue.red[100])).toBe(
+    lightTheme.hue.red[200],
+  )
   expect(lightTheme.text.default).toBeInstanceOf(RGBA)
   expect(darkTheme.background.default).toBeInstanceOf(RGBA)
   expect(lightTheme.background.surface.offset).toBe(lightTheme.hue.neutral[200])

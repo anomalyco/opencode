@@ -70,14 +70,15 @@ export function resolveTheme(definition: ThemeDefinition): ResolvedTheme {
 
 function resolveExpandedTheme(definition: ThemeDefinition): ResolvedTheme {
   const hue = resolveHue(definition.hue)
+  const hueSteps = compileHueSteps(hue)
   const base = tokens(definition)
-  const resolved = resolveView(base, hue)
+  const resolved = resolveView(base, hue, hueSteps)
   const contexts = Object.fromEntries(
     Object.entries(definition)
       .filter(([key]) => key.startsWith("@context:"))
       .map(([key, override]) => {
         const contextual = contextualize(base, override as ThemeTokensDefinition)
-        return [key, resolveView(contextual, hue)]
+        return [key, resolveView(contextual, hue, hueSteps)]
       }),
   )
 
@@ -138,9 +139,36 @@ function contextualActions(
   )
 }
 
-function resolveView(definition: ThemeTokensDefinition, hue: ResolvedThemeView["hue"]): ResolvedThemeView {
+function resolveView(
+  definition: ThemeTokensDefinition,
+  hue: ResolvedThemeView["hue"],
+  hueSteps: Pick<ResolvedThemeView, "increase" | "decrease">,
+): ResolvedThemeView {
   const source: Record<string, unknown> = { hue, ...definition }
-  return { ...(createResolver(source)(source, "theme") as ResolvedThemeView), hue }
+  return { ...(createResolver(source)(source, "theme") as ResolvedThemeView), hue, ...hueSteps }
+}
+
+function compileHueSteps(hue: ResolvedThemeView["hue"]): Pick<ResolvedThemeView, "increase" | "decrease"> {
+  const index = new Map(
+    Object.values(hue).flatMap((scale) =>
+      HueStep.literals.map((step, position) => [colorKey(scale[step]), { position, scale }] as const),
+    ),
+  )
+  const shift = (color: RGBA, amount: number) => {
+    const match = index.get(colorKey(color))
+    if (!match) return color
+    const offset = Number.isFinite(amount) ? Math.trunc(amount) : 0
+    const position = Math.max(0, Math.min(HueStep.literals.length - 1, match.position + offset))
+    return match.scale[HueStep.literals[position]]
+  }
+  return {
+    increase: (color, amount = 1) => shift(color, amount),
+    decrease: (color, amount = 1) => shift(color, -amount),
+  }
+}
+
+function colorKey(color: RGBA) {
+  return color.toInts().join(":")
 }
 
 function resolveHue(definition: HueDefinition) {
