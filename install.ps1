@@ -325,6 +325,8 @@ function Install-Binary {
         $destPath = Join-Path $OutputDir "$BinaryName.exe"
         Write-Info "Installing to $destPath..."
         Copy-Item -Path $binaryPath -Destination $destPath -Force
+        # Unblock if Windows marked it as from the internet (ZoneIdentifier)
+        try { Unblock-File -Path $destPath -ErrorAction SilentlyContinue } catch {}
         Write-Success "Installed $BinaryName $Version"
 
         return $destPath
@@ -636,8 +638,11 @@ function Main {
             git -C $tempDir remote add origin $repoUrl
             git -C $tempDir config core.sparseCheckout true
             New-Item -Path "$tempDir\.git\info" -Name "sparse-checkout" -ItemType File -Force | Out-Null
-            Set-Content "$tempDir\.git\info\sparse-checkout" ".opencode/skills/*"
-            Write-Info "Downloading skills from repo..."
+            Set-Content "$tempDir\.git\info\sparse-checkout" @"
+.opencode/skills/*
+.opencode/scripts/*
+"@
+            Write-Info "Downloading skills and tools from repo..."
             git -C $tempDir pull -q --depth 1 origin dev 2>$null
             $downloadedSkills = Join-Path $tempDir ".opencode\skills"
             if (Test-Path $downloadedSkills) {
@@ -822,6 +827,28 @@ function Main {
             Set-McpManifestVersion -Version $mcpManifestVersion
             Write-Info "MCP manifest v$mcpManifestVersion stamped."
         }
+    }
+
+    Write-Step "Installing credential manager (opencode-cred)"
+    $credBinDir = Join-Path $env:USERPROFILE ".config\opencode\bin"
+    $credScriptPath = Join-Path $credBinDir "opencode-cred.ps1"
+    $credUrl = "https://raw.githubusercontent.com/ivanfernadezm99/opencode/dev/.opencode/scripts/opencode-cred"
+
+    if (-not (Test-Path $credBinDir)) {
+        New-Item -ItemType Directory -Path $credBinDir -Force | Out-Null
+    }
+
+    try {
+        Write-Info "Downloading opencode-cred..."
+        Invoke-WebRequest -Uri $credUrl -OutFile $credScriptPath -UseBasicParsing -TimeoutSec 15 `
+            -Headers @{ "User-Agent" = "gentle-opencode-installer" }
+        # Unblock if Windows marked it as from the internet
+        try { Unblock-File -Path $credScriptPath -ErrorAction SilentlyContinue } catch {}
+        Write-Success "Installed opencode-cred to $credScriptPath"
+        Add-ToUserPath -Dir $credBinDir
+    } catch {
+        Write-Warn "Could not download opencode-cred: $_"
+        Write-Warn "Credential manager not installed. Skills can still use their own credential files."
     }
 
     Write-Step "Creating desktop shortcut"

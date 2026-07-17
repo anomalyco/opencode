@@ -25,37 +25,44 @@ Use when: user says "cargar horas", "load hours", "register time entries", "carg
 ✅ SIEMPRE: si el usuario no configuró creds, crear .credentials.example y parar
 ```
 
-### Cómo el usuario configura sus credenciales (sin exponerlas — FLUJO AUTOMÁTICO)
+### Cómo el usuario configura sus credenciales (sin exponerlas — 3 MÉTODOS SEGUROS)
 
-**La forma más segura (recomendada):** Ejecutá `load-hours.js` directamente. Si no hay credenciales:
+**Opción A — opencode-cred (RECOMENDADO, multi-skill):**
+Usá el administrador de credenciales del ecosistema:
+```bash
+opencode-cred set redmine
+```
+Esto abre un formulario en el navegador (localhost). Completás usuario/contraseña y se guardan en `~/.config/opencode/credentials/redmine.cred`. No pasa por el chat.
 
+**Opción B — Editor local (terminal):**
+Ejecutá `load-hours.js` directamente. Si no hay credenciales:
 1. El script detecta que `.credentials` no existe
-2. Te explica que es seguro (local, no pasa por el chat, no se sube a ningún lado)
-3. Te **abre el editor de texto** (`$EDITOR` o `nano`) con el archivo `.credentials.example`
-4. Ahí completás tu usuario y contraseña — **esto pasa en tu terminal local, no en el chat de la IA**
-5. Guardás y cerrás el editor
-6. El script verifica los datos, los guarda en `.credentials`, y continúa
+2. Te abre `nano` (o `$EDITOR`) con el template
+3. Completás usuario y contraseña — **en tu terminal, no en el chat**
+4. Guardás y cerrás
+5. El script verifica y continúa
 
-**¿Por qué es seguro?**
-- Tu usuario y contraseña **NUNCA** pasan por el contexto de la IA
-- **NUNCA** se muestran en el chat, logs, o bash history
-- El archivo `.credentials` queda en tu máquina, no se sube a ningún repo
-- Solo este script puede leerlo localmente
-- Si querés rotar la contraseña, borrás `.credentials` y repetís el proceso
-
-**Alternativa — Variables de entorno (sin archivo en disco):**
+**Opción C — Variables de entorno (sin archivo en disco):**
 ```bash
 export REDMINE_USER=tu_usuario
 export REDMINE_PASS=tu_contraseña
 ```
 `load-hours.js` las lee automáticamente.
 
+**¿Por qué es seguro?**
+- Las credenciales **NUNCA** pasan por el contexto de la IA
+- **NUNCA** se muestran en el chat, logs, o bash history
+- Los archivos quedan en tu máquina (permisos 600)
+- `opencode-cred` usa formulario en localhost, nada sale de tu PC
+
 ### Onboarding guard (AUTOMÁTICO — no requiere acción del orquestrador)
 
-El script `load-hours.js` maneja esto automáticamente:
-1. Busca `REDMINE_USER`/`REDMINE_PASS` en entorno
-2. Si no, busca `.credentials`
-3. Si no encuentra nada, **abre el editor automáticamente** para que configures (sin intervención del chat)
+El script `load-hours.js` o el orquestrador verifican automáticamente:
+1. ¿Existe `opencode-cred`? → `opencode-cred get redmine`
+2. ¿No? → busca `REDMINE_USER`/`REDMINE_PASS` en entorno
+3. ¿No? → busca `.credentials` en el directorio del skill
+4. Si no encuentra nada → el orquestrador lanza `opencode-cred serve redmine` (formulario en navegador)
+5. El usuario completa en el formulario local → se guarda → el skill continúa
 
 No es necesario ejecutar `setup.js` por separado ni hacer verificaciones manuales.
 
