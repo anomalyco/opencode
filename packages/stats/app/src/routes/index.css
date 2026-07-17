@@ -42,6 +42,11 @@
     U+2020-2022, U+2026, U+2030, U+2039-203A, U+2044, U+20AC, U+2122, U+2212, U+FB01-FB02;
 }
 
+body {
+  min-width: 320px;
+  margin: 0;
+}
+
 [data-page="stats"] {
   color-scheme: light;
   --color-background: #ffffff;
@@ -5321,10 +5326,8 @@
 
 [data-page="stats"] [data-component="comparison-card"] b {
   min-width: 0;
-  overflow: hidden;
   font: inherit;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 [data-page="stats"] [data-component="comparison-card"] i {
@@ -5772,9 +5775,7 @@
 }
 
 [data-page="stats"] [data-slot="compare-home-select-name"] {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 [data-page="stats"] [data-slot="compare-home-select-panel"][data-selected="true"] [data-slot="compare-home-plus"] {
@@ -5805,10 +5806,10 @@
 [data-page="stats"] [data-component="compare-home-card"] {
   position: relative;
   display: grid;
-  grid-template-rows: 62px 1px 20px 20px;
+  grid-template-rows: 62px 1px auto 20px;
   gap: 16px;
   min-width: 0;
-  height: 184px;
+  min-height: 184px;
   box-sizing: border-box;
   padding: 16px;
   overflow: hidden;
@@ -5890,10 +5891,11 @@
 [data-page="stats"] [data-slot="compare-home-card-models"] {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
   color: var(--stats-muted);
   font-weight: 400;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 [data-page="stats"] [data-slot="compare-home-card-models"] span {
@@ -6076,6 +6078,7 @@
   height: 800px;
   box-sizing: border-box;
   border-right: 1px solid var(--stats-line);
+  border-bottom: 1px solid var(--stats-line);
   border-left: 1px solid var(--stats-line);
   color: var(--stats-text);
   background: var(--stats-bg);
@@ -6113,11 +6116,9 @@
 
 [data-page="stats"] [data-slot="compare-radar-legend"] strong,
 [data-page="stats"] [data-slot="compare-radar-legend"] small {
-  overflow: hidden;
   font-size: 13px;
   line-height: 18px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 [data-page="stats"] [data-slot="compare-radar-legend"] strong {
@@ -6273,7 +6274,7 @@
   white-space: nowrap;
 }
 
-[data-page="stats"] [data-component="compare-detail-table"] {
+[data-page="stats"] [data-component="compare-detail-comparison"] {
   --compare-detail-label-column: 292px;
   --compare-detail-model-column-min: 360px;
   position: relative;
@@ -6330,10 +6331,10 @@
 }
 
 [data-page="stats"]
-  [data-component="compare-detail-table"][data-model-count="3"]
+  [data-component="compare-detail-comparison"][data-model-count="3"]
   [data-section="compare-detail-selector"],
 [data-page="stats"]
-  [data-component="compare-detail-table"][data-model-count="3"]
+  [data-component="compare-detail-comparison"][data-model-count="3"]
   [data-section="compare-detail-matrix"] {
   min-width: calc(
     var(--compare-detail-label-column) + var(--compare-detail-model-column-min) +
@@ -6342,10 +6343,10 @@
 }
 
 [data-page="stats"]
-  [data-component="compare-detail-table"][data-model-count="4"]
+  [data-component="compare-detail-comparison"][data-model-count="4"]
   [data-section="compare-detail-selector"],
 [data-page="stats"]
-  [data-component="compare-detail-table"][data-model-count="4"]
+  [data-component="compare-detail-comparison"][data-model-count="4"]
   [data-section="compare-detail-matrix"] {
   min-width: calc(
     var(--compare-detail-label-column) + var(--compare-detail-model-column-min) +
@@ -6355,10 +6356,10 @@
 }
 
 [data-page="stats"]
-  [data-component="compare-detail-table"][data-model-count="5"]
+  [data-component="compare-detail-comparison"][data-model-count="5"]
   [data-section="compare-detail-selector"],
 [data-page="stats"]
-  [data-component="compare-detail-table"][data-model-count="5"]
+  [data-component="compare-detail-comparison"][data-model-count="5"]
   [data-section="compare-detail-matrix"] {
   min-width: calc(
     var(--compare-detail-label-column) + var(--compare-detail-model-column-min) +
@@ -6368,10 +6369,10 @@
 }
 
 [data-page="stats"]
-  [data-component="compare-detail-table"][data-model-count="6"]
+  [data-component="compare-detail-comparison"][data-model-count="6"]
   [data-section="compare-detail-selector"],
 [data-page="stats"]
-  [data-component="compare-detail-table"][data-model-count="6"]
+  [data-component="compare-detail-comparison"][data-model-count="6"]
   [data-section="compare-detail-matrix"] {
   min-width: calc(
     var(--compare-detail-label-column) + var(--compare-detail-model-column-min) +
@@ -6427,13 +6428,11 @@
 
 [data-page="stats"] [data-slot="compare-detail-select-name"] {
   min-width: 0;
-  overflow: hidden;
   color: var(--stats-text);
   font-size: 13px;
   font-weight: 500;
   line-height: 18px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 [data-page="stats"] button[data-slot="compare-detail-select-model"] > svg {
@@ -6663,7 +6662,7 @@
     aspect-ratio: 1;
   }
 
-  [data-page="stats"] [data-component="compare-detail-table"] {
+  [data-page="stats"] [data-component="compare-detail-comparison"] {
     --compare-detail-label-column: 220px;
     --compare-detail-model-column-min: 320px;
   }
@@ -6754,7 +6753,7 @@
     margin-left: -6px;
   }
 
-  [data-page="stats"] [data-component="compare-detail-table"] {
+  [data-page="stats"] [data-component="compare-detail-comparison"] {
     --compare-detail-label-column: 188px;
     --compare-detail-model-column-min: 246px;
   }
@@ -6909,13 +6908,11 @@
 
 [data-page="stats"] [data-slot="compare-model-modal-row-main"] > span:last-child {
   min-width: 0;
-  overflow: hidden;
   color: var(--stats-text);
   font-size: 13px;
   font-weight: 500;
   line-height: 1.1;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 [data-page="stats"] [data-slot="compare-model-modal-badge"] {
@@ -6972,13 +6969,11 @@
 
 [data-page="stats"] [data-slot="compare-model-modal-detail-header"] strong {
   min-width: 0;
-  overflow: hidden;
   color: var(--stats-text);
   font-size: 13px;
   font-weight: 500;
   line-height: 1.1;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 [data-page="stats"] [data-slot="compare-model-modal-description"] {
@@ -7427,13 +7422,15 @@
 
 @media (min-width: 90rem) {
   [data-page="stats"] [data-slot="header-bar"] {
+    display: grid;
+    grid-template-columns: minmax(max-content, 1fr) auto minmax(max-content, 1fr);
     gap: 32px;
   }
 
   [data-page="stats"] [data-slot="brand"],
   [data-page="stats"] [data-component="section-nav"],
   [data-page="stats"] [data-slot="header-actions"] {
-    flex: 1 1 0;
+    min-width: 0;
   }
 
   [data-page="stats"] [data-slot="brand"] {

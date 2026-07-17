@@ -5,6 +5,7 @@ import { makeEventListener } from "@solid-primitives/event-listener"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { useLanguage } from "@/context/language"
+import { usePlatform } from "@/context/platform"
 
 type Mem = Performance & {
   memory?: {
@@ -107,8 +108,45 @@ function Cell(props: {
   )
 }
 
+function FocusCell(props: { active: boolean; inline?: boolean; onClick: () => void }) {
+  const content = () => (
+    <button
+      type="button"
+      aria-label="Force focus styles on all interactive elements"
+      aria-pressed={props.active}
+      classList={{
+        "flex min-w-0 items-center font-mono uppercase hover:bg-surface-raised-base focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-border-focus": true,
+        "min-h-[20px] w-fit flex-row justify-start gap-1.5 rounded px-1.5 py-0.5 text-left": !!props.inline,
+        "min-h-[42px] w-full flex-col justify-center rounded-[8px] px-0.5 py-1 text-center": !props.inline,
+        "bg-surface-raised-base text-text-strong": props.active,
+      }}
+      onClick={props.onClick}
+    >
+      <span class="text-[10px] leading-none font-black tracking-[0.04em] opacity-70">FOCUS</span>
+      <span classList={{ "leading-none font-bold": true, "text-[11px]": !!props.inline, "text-[13px]": !props.inline }}>
+        {props.active ? "ON" : "OFF"}
+      </span>
+    </button>
+  )
+
+  if (props.inline) {
+    return (
+      <TooltipV2 value="Force focus styles on all interactive elements" placement="top">
+        {content()}
+      </TooltipV2>
+    )
+  }
+
+  return (
+    <Tooltip value="Force focus styles on all interactive elements" placement="top">
+      {content()}
+    </Tooltip>
+  )
+}
+
 export function DebugBar(props: { inline?: boolean } = {}) {
   const language = useLanguage()
+  const platform = usePlatform()
   const location = useLocation()
   const routing = useIsRouting()
   const [state, setState] = createStore({
@@ -116,6 +154,7 @@ export function DebugBar(props: { inline?: boolean } = {}) {
     delay: undefined as number | undefined,
     fps: undefined as number | undefined,
     gap: undefined as number | undefined,
+    focus: false,
     heap: {
       limit: undefined as number | undefined,
       used: undefined as number | undefined,
@@ -142,6 +181,16 @@ export function DebugBar(props: { inline?: boolean } = {}) {
   }
   const longv = () => (state.long.count === undefined ? na() : `${time(state.long.block) ?? na()}/${state.long.count}`)
   const navv = () => (state.nav.pending ? "..." : (time(state.nav.dur) ?? na()))
+  const toggleFocus = async () => {
+    if (!platform.setForceFocus) return
+    const enabled = !state.focus
+    await platform.setForceFocus(enabled)
+    setState("focus", enabled)
+  }
+
+  onCleanup(() => {
+    if (state.focus) void platform.setForceFocus?.(false).catch(() => undefined)
+  })
 
   let prev = ""
   let start = 0
@@ -490,8 +539,11 @@ export function DebugBar(props: { inline?: boolean } = {}) {
           bad={bad(heap(), 0.8)}
           dim={state.heap.used === undefined}
           inline={props.inline}
-          wide
+          wide={!platform.setForceFocus}
         />
+        {platform.setForceFocus && (
+          <FocusCell active={state.focus} inline={props.inline} onClick={() => void toggleFocus()} />
+        )}
       </div>
     </aside>
   )

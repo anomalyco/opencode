@@ -149,7 +149,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 8px 12px;
+  padding: 10px 12px;
   padding-left: 8px;
   flex-shrink: 0;
   border-bottom: 1px solid var(--border-weaker-base, var(--v2-border-border-weak));
@@ -273,9 +273,37 @@
   flex: 1;
 }
 
-[data-component="session-review-v2"] [data-slot="session-review-v2-file-header"] [data-component="diff-changes"] {
+[data-component="session-review-v2"] [data-slot="session-review-v2-file-diff"] {
+  position: relative;
   flex-shrink: 0;
   margin-left: auto;
+  background-color: var(--v2-background-bg-base);
+
+  &::before {
+    content: "";
+    position: absolute;
+    top: -8px;
+    bottom: -8px;
+    right: 100%;
+    width: 16px;
+    z-index: 1;
+    pointer-events: none;
+    background: linear-gradient(90deg, transparent, var(--v2-background-bg-base));
+  }
+
+  &::after {
+    content: "";
+    position: absolute;
+    inset: -8px -16px -8px 0;
+    z-index: 0;
+    pointer-events: none;
+    background-color: var(--v2-background-bg-base);
+  }
+
+  [data-component="diff-changes"] {
+    position: relative;
+    z-index: 1;
+  }
 }
 
 [data-component="session-review-v2"] [data-slot="session-review-v2-file-status"] {

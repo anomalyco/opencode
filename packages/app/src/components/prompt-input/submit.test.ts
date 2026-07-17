@@ -1,5 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test"
-import type { Prompt } from "@/context/prompt"
+import { createStore } from "solid-js/store"
+import type { Prompt, PromptStore } from "@/context/prompt"
 import type { ModelSelection } from "@/context/local"
 
 let createPromptSubmit: typeof import("./submit").createPromptSubmit
@@ -31,7 +32,13 @@ let permissionServer = "server-a"
 let createSessionGate: Promise<void> | undefined
 
 const promptValue: Prompt = [{ type: "text", content: "ls", start: 0, end: 2 }]
+const [promptStore, setPromptStore] = createStore<PromptStore>({
+  prompt: promptValue,
+  cursor: 0,
+  context: { items: [] },
+})
 const prompt = {
+  store: [() => promptStore, setPromptStore] as [() => PromptStore, typeof setPromptStore],
   ready: Object.assign(() => true, { promise: Promise.resolve(true) }),
   current: () => promptValue,
   cursor: () => 0,
