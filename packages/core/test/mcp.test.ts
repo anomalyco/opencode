@@ -700,6 +700,51 @@ test("adds, disconnects, and reconnects MCP servers at runtime", async () => {
   )
 })
 
+test("serializes concurrent MCP lifecycle operations", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        yield* Effect.gen(function* () {
+          const service = yield* MCP.Service
+
+          // Whatever order the racing operations land in, the resulting state must be consistent.
+          yield* Effect.all(
+            [
+              service.connect("resources"),
+              service.connect("resources"),
+              service.disconnect("resources"),
+              service.connect("resources"),
+            ],
+            { concurrency: "unbounded", discard: true },
+          )
+          const status = (yield* service.servers()).find((server) => server.name === "resources")?.status
+          const tools = yield* service.tools()
+          expect(status?.status === "connected" || status?.status === "disabled").toBe(true)
+          if (status?.status === "disabled") expect(tools).toEqual([])
+          if (status?.status === "connected") expect(tools.length).toBeGreaterThan(0)
+
+          yield* service.disconnect("resources")
+          expect((yield* service.servers())[0]?.status).toEqual({ status: "disabled" })
+          expect(yield* service.tools()).toEqual([])
+          yield* service.connect("resources")
+          expect((yield* service.servers())[0]?.status).toEqual({ status: "connected" })
+          expect((yield* service.tools()).length).toBeGreaterThan(0)
+        }).pipe(
+          Effect.provide(
+            resourceMcpLayer(
+              new ConfigMCP.Local({
+                type: "local",
+                command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-output-schema.ts")],
+                disabled: true,
+              }),
+            ),
+          ),
+        )
+      }),
+    ),
+  )
+})
+
 it.effect("advertises MCP output schemas to Code Mode", () =>
   Effect.gen(function* () {
     const registry = yield* ToolRegistry.Service

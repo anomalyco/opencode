@@ -13,6 +13,7 @@ import { EventV2 } from "../event"
 import { Form } from "../form"
 import { Integration } from "../integration"
 import { IntegrationConnection } from "../integration/connection"
+import { KeyedMutex } from "../effect/keyed-mutex"
 import { Location } from "../location"
 import { waitForAbort } from "../process"
 import { MCPClient } from "./client"
@@ -173,6 +174,9 @@ export const layer = Layer.effect(
     )
     // Later config files win for duplicate server names; per-server timeout overrides globals.
     const runtime = new Map<ServerName, ServerEntry>()
+    // Serializes lifecycle operations per server. Anything taking this lock from a connection
+    // callback must stay forked: lifecycle operations close scopes while holding it, firing onClose.
+    const locks = KeyedMutex.makeUnsafe<ServerName>()
     const urlElicitations = new Map<string, Form.ID>()
     for (const entry of documents) {
       for (const [name, server] of Object.entries(entry.info.mcp?.servers ?? {})) {
@@ -415,36 +419,44 @@ export const layer = Layer.effect(
         ),
       )
 
-    const watch = (name: ServerName, entry: ServerEntry, connection: MCPClient.Connection) => {
-      connection.onClose(() => {
-        // A reconnect closes the previous scope, but the SDK may fire this onclose after the new
-        // connection is already assigned; ignore the stale close so it can't null out the live client.
-        if (entry.client !== connection) return
-        entry.client = undefined
-        entry.tools = undefined
-        entry.prompts = undefined
-        entry.status = { status: "failed", error: "Connection closed" }
-        fork(events.publish(McpEvent.ToolsChanged, { server: name }).pipe(Effect.ignore))
-        fork(events.publish(McpEvent.ResourcesChanged, { server: name }).pipe(Effect.ignore))
-        fork(events.publish(Command.Event.Updated, {}).pipe(Effect.ignore))
-        fork(events.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore))
-      })
-      connection.onLog((message) => fork(serverLog(name, message).pipe(Effect.ignore)))
-      connection.onToolsChanged(() => {
+    // Runs a connection callback under the server lock, dropping it if the connection is no longer
+    // the entry's live client, so late SDK callbacks cannot commit obsolete state.
+    const whenLive =
+      (name: ServerName, entry: ServerEntry, connection: MCPClient.Connection) =>
+      <E>(effect: Effect.Effect<void, E>) =>
         fork(
-          refreshTools(name, entry, connection).pipe(
-            Effect.andThen(events.publish(McpEvent.ToolsChanged, { server: name })),
+          Effect.suspend(() => (entry.client === connection ? effect : Effect.void)).pipe(
+            locks.withLock(name),
             Effect.ignore,
           ),
         )
-      })
-      connection.onPromptsChanged(() => {
-        fork(refreshPrompts(name, entry, connection).pipe(Effect.ignore))
-      })
-      connection.onResourcesChanged(() => {
-        if (entry.client !== connection) return
-        fork(events.publish(McpEvent.ResourcesChanged, { server: name }).pipe(Effect.ignore))
-      })
+
+    const watch = (name: ServerName, entry: ServerEntry, connection: MCPClient.Connection) => {
+      const live = whenLive(name, entry, connection)
+      connection.onClose(() =>
+        live(
+          Effect.gen(function* () {
+            entry.client = undefined
+            entry.tools = undefined
+            entry.prompts = undefined
+            entry.status = { status: "failed", error: "Connection closed" }
+            yield* events.publish(McpEvent.ToolsChanged, { server: name }).pipe(Effect.ignore)
+            yield* events.publish(McpEvent.ResourcesChanged, { server: name }).pipe(Effect.ignore)
+            yield* events.publish(Command.Event.Updated, {}).pipe(Effect.ignore)
+            yield* events.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore)
+          }),
+        ),
+      )
+      connection.onLog((message) => fork(serverLog(name, message).pipe(Effect.ignore)))
+      connection.onToolsChanged(() =>
+        live(
+          refreshTools(name, entry, connection).pipe(
+            Effect.andThen(events.publish(McpEvent.ToolsChanged, { server: name })),
+          ),
+        ),
+      )
+      connection.onPromptsChanged(() => live(refreshPrompts(name, entry, connection)))
+      connection.onResourcesChanged(() => live(events.publish(McpEvent.ResourcesChanged, { server: name })))
     }
 
     const serverLog = (server: ServerName, message: MCPClient.LogMessage) => {
@@ -490,7 +502,7 @@ export const layer = Layer.effect(
           yield* events.publish(McpEvent.ToolsChanged, { server: name }).pipe(Effect.ignore)
           yield* events.publish(McpEvent.ResourcesChanged, { server: name }).pipe(Effect.ignore)
           yield* events.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore)
-          fork(refreshPrompts(name, entry, result.value.connection).pipe(Effect.ignore))
+          whenLive(name, entry, result.value.connection)(refreshPrompts(name, entry, result.value.connection))
           return
         }
         yield* Scope.close(scope, Exit.void)
@@ -506,11 +518,12 @@ export const layer = Layer.effect(
 
     const stopServer = Effect.fnUntraced(function* (name: ServerName, entry: ServerEntry) {
       const scope = entry.scope
+      if (!scope) return
       entry.scope = undefined
       entry.client = undefined
       entry.tools = undefined
       entry.prompts = undefined
-      if (scope) yield* Scope.close(scope, Exit.void)
+      yield* Scope.close(scope, Exit.void)
       yield* events.publish(McpEvent.ToolsChanged, { server: name }).pipe(Effect.ignore)
       yield* events.publish(McpEvent.ResourcesChanged, { server: name }).pipe(Effect.ignore)
       yield* events.publish(Command.Event.Updated, {}).pipe(Effect.ignore)
@@ -523,7 +536,7 @@ export const layer = Layer.effect(
         Deferred.doneUnsafe(entry.startup, Exit.void)
         continue
       }
-      fork(startServer(name, entry))
+      fork(startServer(name, entry).pipe(locks.withLock(name)))
     }
 
     // Bring a server online (or back to needs_auth) when its integration's credential changes, so an
@@ -532,10 +545,15 @@ export const layer = Layer.effect(
       Effect.gen(function* () {
         const match = Array.from(runtime).find(([, entry]) => entry.integrationID === integrationID)
         if (!match) return
-        const [name, entry] = match
-        if (entry.status.status === "disabled") return
-        if (entry.scope) yield* stopServer(name, entry)
-        yield* startServer(name, entry)
+        const name = match[0]
+        yield* Effect.gen(function* () {
+          // add() may have replaced the entry while we waited for the lock.
+          const entry = runtime.get(name)
+          if (!entry || entry.integrationID !== integrationID) return
+          if (entry.status.status === "disabled") return
+          yield* stopServer(name, entry)
+          yield* startServer(name, entry)
+        }).pipe(locks.withLock(name))
       })
     fork(
       events.subscribe(Integration.Event.ConnectionUpdated).pipe(
@@ -545,10 +563,13 @@ export const layer = Layer.effect(
       ),
     )
 
-    const whenAllReady = Effect.forEach(runtime.values(), (entry) => Deferred.await(entry.startup), {
-      concurrency: "unbounded",
-      discard: true,
-    })
+    // Suspend so each await sees current entries; a bare Map iterator is exhausted after one run.
+    const whenAllReady = Effect.suspend(() =>
+      Effect.forEach(Array.from(runtime.values()), (entry) => Deferred.await(entry.startup), {
+        concurrency: "unbounded",
+        discard: true,
+      }),
+    )
     return Service.of({
       servers: Effect.fn("MCP.servers")(function* () {
         const entries = Array.from(runtime).toSorted(([a], [b]) => a.localeCompare(b))
@@ -563,40 +584,53 @@ export const layer = Layer.effect(
       }),
       add: Effect.fn("MCP.add")(function* (server, config) {
         const name = ServerName.make(server)
-        const previous = runtime.get(name)
-        if (previous) {
-          yield* stopServer(name, previous)
-          if (previous.integrationID) {
-            const integrationID = previous.integrationID
-            owned.delete(integrationID)
-            yield* integration.transform((draft) => draft.remove(integrationID)).pipe(Scope.provide(root))
+        yield* Effect.gen(function* () {
+          const previous = runtime.get(name)
+          if (previous) {
+            yield* stopServer(name, previous)
+            if (previous.integrationID) {
+              const integrationID = previous.integrationID
+              owned.delete(integrationID)
+              yield* integration.transform((draft) => draft.remove(integrationID)).pipe(Scope.provide(root))
+            }
           }
-        }
-        const entry: ServerEntry = {
-          config: { ...config, timeout: { ...timeout, ...config.timeout } },
-          status: { status: "pending" },
-          startup: Deferred.makeUnsafe<void>(),
-        }
-        runtime.set(name, entry)
-        yield* register(name, entry)
-        if (config.disabled) {
-          entry.status = { status: "disabled" }
-          Deferred.doneUnsafe(entry.startup, Exit.void)
-          yield* events.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore)
-          return
-        }
-        yield* startServer(name, entry)
+          const entry: ServerEntry = {
+            config: { ...config, timeout: { ...timeout, ...config.timeout } },
+            status: { status: "pending" },
+            startup: Deferred.makeUnsafe<void>(),
+          }
+          runtime.set(name, entry)
+          yield* Effect.gen(function* () {
+            yield* register(name, entry)
+            if (config.disabled) {
+              entry.status = { status: "disabled" }
+              yield* events.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore)
+              return
+            }
+            yield* startServer(name, entry)
+          }).pipe(
+            // Settle startup even when register fails or add is interrupted, so an entry that made it
+            // into runtime can never hang readers awaiting its startup.
+            Effect.ensuring(Effect.sync(() => Deferred.doneUnsafe(entry.startup, Exit.void))),
+          )
+        }).pipe(locks.withLock(name))
       }),
       connect: Effect.fn("MCP.connect")(function* (server) {
-        const target = yield* requireServer(server)
-        if (target.entry.scope) yield* stopServer(target.name, target.entry)
-        yield* startServer(target.name, target.entry)
+        const name = ServerName.make(server)
+        yield* Effect.gen(function* () {
+          const target = yield* requireServer(name)
+          yield* stopServer(name, target.entry)
+          yield* startServer(name, target.entry)
+        }).pipe(locks.withLock(name))
       }),
       disconnect: Effect.fn("MCP.disconnect")(function* (server) {
-        const target = yield* requireServer(server)
-        yield* stopServer(target.name, target.entry)
-        target.entry.status = { status: "disabled" }
-        yield* events.publish(McpEvent.StatusChanged, { server: target.name }).pipe(Effect.ignore)
+        const name = ServerName.make(server)
+        yield* Effect.gen(function* () {
+          const target = yield* requireServer(name)
+          yield* stopServer(name, target.entry)
+          target.entry.status = { status: "disabled" }
+          yield* events.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore)
+        }).pipe(locks.withLock(name))
       }),
       tools: Effect.fn("MCP.tools")(function* () {
         yield* whenAllReady
