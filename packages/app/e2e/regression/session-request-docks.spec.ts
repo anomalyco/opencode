@@ -70,6 +70,41 @@ test("shows a pending question dock", async ({ page }) => {
   expect((await reply).postDataJSON()).toEqual({ answers: [["Minimal"]] })
 })
 
+test("shows every question in the question pager", async ({ page }) => {
+  await mockServer(page, {
+    questions: [
+      {
+        id: "question-request",
+        sessionID,
+        questions: Array.from({ length: 4 }, (_, index) => ({
+          header: `Question ${index + 1}`,
+          question: `Question ${index + 1}?`,
+          options: [{ label: "Yes", description: "Continue" }],
+        })),
+      },
+    ],
+  })
+
+  await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
+  await expectSessionTitle(page, title)
+
+  const question = page.locator('[data-component="dock-prompt"][data-kind="question"]')
+  const segments = question.locator('[data-slot="question-progress-segment"]')
+  await expect(segments).toHaveCount(4)
+  await expect
+    .poll(() =>
+      segments.nth(1).evaluate((element) => ({
+        segment: getComputedStyle(element, "::after").backgroundColor,
+        expected: getComputedStyle(element).getPropertyValue("--v2-background-bg-layer-04").trim(),
+      })),
+    )
+    .toEqual({ segment: "rgb(219, 219, 219)", expected: "#dbdbdbff" })
+
+  await question.getByRole("button", { name: "Questions 3" }).click()
+  await expect(question.getByText("3 of 4 questions")).toBeVisible()
+  await expect(question.getByText("Question 3?", { exact: true })).toBeVisible()
+})
+
 test("shows a pending permission dock", async ({ page }) => {
   await mockServer(page, {
     permissions: [
