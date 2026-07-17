@@ -216,6 +216,8 @@ const layer = Layer.effect(
                       patterns: input.patterns,
                       metadata: input.metadata,
                       userPrompt: input.userPrompt,
+                      sessionContext: input.sessionContext,
+                      approvalPrompt: input.approvalPrompt,
                       cacheScope: input.cacheScope,
                     }),
                 }),

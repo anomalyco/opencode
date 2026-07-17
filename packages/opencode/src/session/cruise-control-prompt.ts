@@ -5,8 +5,25 @@ export type PromptMessage = {
     text?: string
     synthetic?: boolean
     ignored?: boolean
+    tool?: string
+    state?: {
+      status?: string
+      input?: Record<string, unknown>
+      output?: string
+      error?: string
+    }
   }[]
 }
+
+/** One entry in the classifier-visible session projection. */
+export type SessionViewEntry =
+  | { type: "user"; text: string }
+  | { type: "tool_call"; tool: string; input: Record<string, unknown> }
+
+/** Max entries kept from the end of the session (most recent). */
+const MAX_SESSION_ENTRIES = 40
+/** Cap serialized tool args so write/edit bodies cannot blow the classifier context. */
+const MAX_TOOL_INPUT_CHARS = 2000
 
 /** Extract only explicit text from the latest user turn, excluding host-generated context. */
 export function currentUserPrompt(messages: readonly PromptMessage[]): string | undefined {
@@ -22,6 +39,47 @@ function messageExplicitText(message: PromptMessage): string | undefined {
     .filter(Boolean)
     .join("\n\n")
   return text || undefined
+}
+
+function truncateToolInput(input: Record<string, unknown>): Record<string, unknown> {
+  const raw = JSON.stringify(input)
+  if (raw.length <= MAX_TOOL_INPUT_CHARS) return input
+  return { _truncated: `${raw.slice(0, MAX_TOOL_INPUT_CHARS)}...` }
+}
+
+/**
+ * Project session history for cruise_control.
+ *
+ * Visible: user messages (explicit text) and tool calls (name + input/args).
+ * Hidden: assistant text responses, reasoning/thinking, and tool results/output.
+ */
+export function cruiseControlSessionView(messages: readonly PromptMessage[]): SessionViewEntry[] {
+  const entries: SessionViewEntry[] = []
+
+  for (const message of messages) {
+    if (message.info.role === "user") {
+      const text = messageExplicitText(message)
+      if (text) entries.push({ type: "user", text })
+      continue
+    }
+
+    if (message.info.role !== "assistant") continue
+
+    for (const part of message.parts) {
+      if (part.type !== "tool") continue
+      const tool = part.tool?.trim()
+      if (!tool) continue
+      const input = part.state?.input
+      entries.push({
+        type: "tool_call",
+        tool,
+        input: input && typeof input === "object" && !Array.isArray(input) ? truncateToolInput(input) : {},
+      })
+    }
+  }
+
+  if (entries.length <= MAX_SESSION_ENTRIES) return entries
+  return entries.slice(-MAX_SESSION_ENTRIES)
 }
 
 const SHORT_AFFIRMATION =
@@ -44,8 +102,8 @@ export function looksLikePermissionAsk(text: string): boolean {
 }
 
 /**
- * Build cruise_control user prompt text from the latest turn.
- * Short affirmations after an assistant permission ask include delimited prior context.
+ * Host-only enrichment for short affirmations after an assistant permission ask.
+ * Must not be sent to the classifier LLM (assistant replies are not classifier-visible).
  */
 export function cruiseControlUserPrompt(messages: readonly PromptMessage[]): string | undefined {
   const currentText = currentUserPrompt(messages)
@@ -99,6 +157,7 @@ function pendingActionMentioned(
 /**
  * True when the user gave a short approval that clearly responds to the assistant's
  * permission ask for the pending action described in patterns/metadata.
+ * Uses host-only enriched prompt text; not classifier-visible session data.
  */
 export function explicitApprovalIntent(
   userPrompt: string | undefined,

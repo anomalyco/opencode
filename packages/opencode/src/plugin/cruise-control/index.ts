@@ -39,6 +39,8 @@ export function createCruiseControlPlugin(bridge: EffectBridge.Shape): Plugin {
             patterns: req.patterns,
             metadata: req.metadata,
             userPrompt: req.userPrompt,
+            sessionContext: req.sessionContext,
+            approvalPrompt: req.approvalPrompt,
             cacheScope: req.cacheScope,
           }),
         )

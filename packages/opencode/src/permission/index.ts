@@ -29,6 +29,16 @@ export interface AskResult {
 export interface AskInput extends PermissionV1.AskInput {
   /** Relevant current user prompt for permission modules; never persisted or emitted. */
   userPrompt?: string
+  /**
+   * Filtered session projection for classifiers (user messages + tool call name/args).
+   * Never persisted or emitted; must omit assistant text, reasoning, and tool results.
+   */
+  sessionContext?: readonly unknown[]
+  /**
+   * Host-only enriched prompt for deterministic affirmation matching.
+   * Never persisted, emitted, or forwarded to the classifier LLM.
+   */
+  approvalPrompt?: string
   /** Isolates learned module decisions to one workspace/session/prompt. */
   cacheScope?: string
 }
@@ -125,7 +135,7 @@ const layer = Layer.effect(
 
     const ask = Effect.fn("Permission.ask")(function* (input: AskInput) {
       const { approved, pending } = yield* InstanceState.get(state)
-      const { ruleset, userPrompt, ...request } = input
+      const { ruleset, userPrompt, sessionContext, approvalPrompt, ...request } = input
       let needsAsk = false
       const moduleIDs = new Set<string>()
       let metadata = request.metadata
@@ -187,6 +197,8 @@ const layer = Layer.effect(
               patterns: request.patterns,
               metadata: request.metadata,
               userPrompt,
+              sessionContext,
+              approvalPrompt,
               scope: instance?.directory,
               cacheScope: input.cacheScope,
             })

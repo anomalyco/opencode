@@ -24,9 +24,13 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { isRecord } from "@/util/record"
 import { RuntimeFlags } from "@/effect/runtime-flags"
-import { cruiseControlUserPrompt } from "./cruise-control-prompt"
+import { cruiseControlSessionView, cruiseControlUserPrompt, currentUserPrompt } from "./cruise-control-prompt"
 
-export { cruiseControlUserPrompt, currentUserPrompt } from "./cruise-control-prompt"
+export {
+  cruiseControlSessionView,
+  cruiseControlUserPrompt,
+  currentUserPrompt,
+} from "./cruise-control-prompt"
 
 const MCP_RESOURCE_TOOLS = {
   list: "list_mcp_resources",
@@ -75,7 +79,11 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   const mcp = yield* MCP.Service
   const truncate = yield* Truncate.Service
   const flags = yield* RuntimeFlags.Service
-  const userPrompt = cruiseControlUserPrompt(input.messages)
+  // Classifier-visible: current user text + filtered session (user msgs + tool call args).
+  // Host-only approvalPrompt may include a prior assistant permission ask for affirmations.
+  const userPrompt = currentUserPrompt(input.messages)
+  const sessionContext = cruiseControlSessionView(input.messages)
+  const approvalPrompt = cruiseControlUserPrompt(input.messages)
   const currentUserMessage = input.messages.findLast((message) => message.info.role === "user")
   const cacheScope = [
     input.session.directory,
@@ -132,6 +140,8 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
             tool: { messageID: input.processor.message.id, callID: options.toolCallId },
             ruleset: Permission.merge(input.agent.permission, input.session.permission ?? []),
             userPrompt,
+            sessionContext,
+            approvalPrompt,
             cacheScope,
           })
           .pipe(

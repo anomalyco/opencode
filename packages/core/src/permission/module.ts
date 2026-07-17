@@ -20,6 +20,16 @@ export interface DecideInput {
   metadata: Record<string, unknown>
   /** Relevant current user prompt when the host can provide it explicitly. */
   userPrompt?: string
+  /**
+   * Filtered session projection for classifiers (user messages + tool call name/args).
+   * Must not include assistant text, reasoning, or tool results.
+   */
+  sessionContext?: readonly unknown[]
+  /**
+   * Host-only enriched prompt used for deterministic affirmation matching.
+   * Must not be forwarded to the classifier LLM.
+   */
+  approvalPrompt?: string
   /** Host-defined execution scope used to select a scoped registration. */
   scope?: string
   /** Host-defined cache scope for one user-prompt turn. */

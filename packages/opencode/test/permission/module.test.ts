@@ -32,7 +32,14 @@ import {
   sessionTodoAllow,
   MISSING_MODEL_MESSAGE,
 } from "../../src/plugin/cruise-control/classifier"
-import { cruiseControlMetadata, cruiseControlMetadataFromDenied, cruiseControlUserPrompt, currentUserPrompt, formatCruiseControlReview } from "../../src/session/tools"
+import {
+  cruiseControlMetadata,
+  cruiseControlMetadataFromDenied,
+  cruiseControlSessionView,
+  cruiseControlUserPrompt,
+  currentUserPrompt,
+  formatCruiseControlReview,
+} from "../../src/session/tools"
 import { explicitApprovalIntent } from "../../src/session/cruise-control-prompt"
 import { EventV2Bridge } from "../../src/event-v2-bridge"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
@@ -508,6 +515,8 @@ itDenyReview.instance("cruise_control deny with assessment formats levels on Den
 )
 
 let forwardedUserPrompt: string | undefined
+let forwardedSessionContext: readonly unknown[] | undefined
+let forwardedApprovalPrompt: string | undefined
 let forwardedScope: string | undefined
 let forwardedCacheScope: string | undefined
 const promptContextEnv = AppNodeBuilder.build(
@@ -525,6 +534,8 @@ const promptContextEnv = AppNodeBuilder.build(
       stubModules((input) =>
         Effect.sync(() => {
           forwardedUserPrompt = input.userPrompt
+          forwardedSessionContext = input.sessionContext
+          forwardedApprovalPrompt = input.approvalPrompt
           forwardedScope = input.scope
           forwardedCacheScope = input.cacheScope
           return "allow" as const
@@ -547,9 +558,19 @@ itPromptContext.instance("permission forwards current user prompt to modules", (
       always: [],
       ruleset: Permission.fromConfig({ bash: PermissionModuleSchema.CRUISE_CONTROL }),
       userPrompt: "Deploy the current build to staging.",
+      sessionContext: [
+        { type: "user", text: "Deploy the current build to staging." },
+        { type: "tool_call", tool: "bash", input: { command: "npm run build" } },
+      ],
+      approvalPrompt: "Deploy the current build to staging.",
       cacheScope: "workspace\0session\0prompt",
     })
     expect(forwardedUserPrompt).toBe("Deploy the current build to staging.")
+    expect(forwardedSessionContext).toEqual([
+      { type: "user", text: "Deploy the current build to staging." },
+      { type: "tool_call", tool: "bash", input: { command: "npm run build" } },
+    ])
+    expect(forwardedApprovalPrompt).toBe("Deploy the current build to staging.")
     expect(forwardedScope).toBeTruthy()
     expect(forwardedCacheScope).toBe("workspace\0session\0prompt")
   }),
@@ -839,12 +860,14 @@ describe("classifier contract", () => {
       patterns: ["rm -rf ./dist"],
       metadata: { command: "rm -rf ./dist" },
       userPrompt: injected,
+      sessionContext: [{ type: "user", text: injected }],
       instructions: DEFAULT_INSTRUCTIONS,
     })
     expect(messages[0]).toEqual({ role: "system", content: resolveSystemPrompt(undefined) })
     expect(messages[1]?.role).toBe("user")
     const content = String(messages[1]?.content)
     expect(content).toContain('"user_prompt": "Delete build output.')
+    expect(content).toContain('"session_context": [')
     expect(content).toContain('"permission_request": {')
     expect(content).toContain("\\u003c/classifier_input\\u003e")
     expect(content.match(/<classifier_input>/g)).toHaveLength(1)
@@ -858,7 +881,9 @@ describe("classifier contract", () => {
       metadata: {},
       instructions: DEFAULT_INSTRUCTIONS,
     })
-    expect(String(messages[1]?.content)).toContain('"user_prompt": null')
+    const content = String(messages[1]?.content)
+    expect(content).toContain('"user_prompt": null')
+    expect(content).toContain('"session_context": []')
   })
 
   test("currentUserPrompt keeps explicit current text and excludes synthetic context", () => {
@@ -882,6 +907,57 @@ describe("classifier contract", () => {
     ).toBeUndefined()
   })
 
+  test("cruiseControlSessionView keeps user messages and tool call args only", () => {
+    const view = cruiseControlSessionView([
+      { info: { role: "user" }, parts: [{ type: "text", text: "inspect the repo" }] },
+      {
+        info: { role: "assistant" },
+        parts: [
+          { type: "reasoning", text: "I should check git status first." },
+          { type: "text", text: "I'll run git status." },
+          {
+            type: "tool",
+            tool: "bash",
+            state: {
+              status: "completed",
+              input: { command: "git status" },
+              output: "On branch main\nnothing to commit",
+            },
+          },
+        ],
+      },
+      {
+        info: { role: "user" },
+        parts: [
+          { type: "text", text: "ok, continue" },
+          { type: "text", text: "host reminder", synthetic: true },
+        ],
+      },
+      {
+        info: { role: "assistant" },
+        parts: [
+          {
+            type: "tool",
+            tool: "read",
+            state: {
+              status: "running",
+              input: { path: "README.md" },
+            },
+          },
+        ],
+      },
+    ])
+    expect(view).toEqual([
+      { type: "user", text: "inspect the repo" },
+      { type: "tool_call", tool: "bash", input: { command: "git status" } },
+      { type: "user", text: "ok, continue" },
+      { type: "tool_call", tool: "read", input: { path: "README.md" } },
+    ])
+    expect(JSON.stringify(view)).not.toContain("I should check")
+    expect(JSON.stringify(view)).not.toContain("I'll run git status")
+    expect(JSON.stringify(view)).not.toContain("nothing to commit")
+  })
+
   test("cruiseControlUserPrompt enriches short affirmations after assistant permission asks", () => {
     const messages = [
       { info: { role: "user" }, parts: [{ type: "text", text: "undo the last commit" }] },
@@ -898,6 +974,8 @@ describe("classifier contract", () => {
     expect(
       explicitApprovalIntent(prompt, ["git reset --soft HEAD~1"], { command: "git reset --soft HEAD~1" }),
     ).toBe(true)
+    // Host-only enrichment must not appear in classifier-visible session projection.
+    expect(JSON.stringify(cruiseControlSessionView(messages))).not.toContain("May I run")
   })
 
   test("bare ok without a prior permission ask stays unenriched", () => {
@@ -910,13 +988,13 @@ describe("classifier contract", () => {
   })
 
   test("explicit approval allows risky bash after user affirms assistant permission ask", async () => {
-    const userPrompt = cruiseControlUserPrompt([
+    const messages = [
       {
         info: { role: "assistant" },
         parts: [{ type: "text", text: "May I run `git reset --soft HEAD~1` to undo the last commit?" }],
       },
       { info: { role: "user" }, parts: [{ type: "text", text: "ok" }] },
-    ])
+    ]
     const outcome = await Effect.runPromise(
       runClassifier({
         permission: "bash",
@@ -924,7 +1002,8 @@ describe("classifier contract", () => {
         metadata: { command: "git reset --soft HEAD~1" },
         opts: { allowlist: ["bash"], timeout_ms: 1000 },
         hasExplicitPrompt: true,
-        userPrompt,
+        userPrompt: currentUserPrompt(messages),
+        approvalPrompt: cruiseControlUserPrompt(messages),
         classify: Effect.die("classifier should not run"),
       }),
     )
@@ -940,13 +1019,13 @@ describe("classifier contract", () => {
   })
 
   test("explicit approval does not allow unrelated destructive commands", async () => {
-    const userPrompt = cruiseControlUserPrompt([
+    const messages = [
       {
         info: { role: "assistant" },
         parts: [{ type: "text", text: "May I run `git reset --soft HEAD~1` to undo the last commit?" }],
       },
       { info: { role: "user" }, parts: [{ type: "text", text: "ok" }] },
-    ])
+    ]
     const outcome = await Effect.runPromise(
       runClassifier({
         permission: "bash",
@@ -954,7 +1033,8 @@ describe("classifier contract", () => {
         metadata: { command: "rm -rf ./dist" },
         opts: { allowlist: ["bash"], timeout_ms: 1000 },
         hasExplicitPrompt: true,
-        userPrompt,
+        userPrompt: currentUserPrompt(messages),
+        approvalPrompt: cruiseControlUserPrompt(messages),
         classify: Effect.succeed(highRiskLowIntent("Destructive action is not supported by the prompt.")),
       }),
     )
