@@ -1,4 +1,5 @@
 import { render, TimeToFirstDraw, useRenderer, useTerminalDimensions } from "@opentui/solid"
+import path from "path"
 import { registerOpencodeSpinner } from "./component/register-spinner"
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
 import { Deferred, Effect } from "effect"
@@ -538,6 +539,29 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         toast.show({ message: "Failed to fork session", variant: "error" })
       }
     })
+  })
+
+  // Auto-resume the most recent session for the current project path when
+  // `tui.auto_resume` is enabled and no explicit --continue/--session/--fork or
+  // initial route was supplied. The session list loads in the non-blocking
+  // phase, so we wait for "complete" before picking a match.
+  let autoResumed = false
+  createEffect(() => {
+    if (autoResumed || !tuiConfig.auto_resume) return
+    if (args.continue || args.sessionID || args.fork) return
+    if (startup.initialRoute !== undefined) return
+    if (sync.status !== "complete") return
+    const target = path.resolve(project.instance.directory() || process.cwd())
+    const match = sync.data.session
+      .toSorted((a, b) => b.time.updated - a.time.updated)
+      .find((session) => {
+        const directory = (session as { location?: { directory?: string } }).location?.directory ?? session.directory
+        if (!directory) return false
+        return path.resolve(directory) === target
+      })
+    if (!match) return
+    autoResumed = true
+    route.navigate({ type: "session", sessionID: match.id })
   })
 
   createEffect(

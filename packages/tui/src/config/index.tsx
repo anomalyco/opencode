@@ -63,6 +63,10 @@ export const Info = Schema.Struct({
   scroll_acceleration: Schema.optional(ScrollAcceleration),
   diff_style: Schema.optional(DiffStyle),
   mouse: Schema.optional(Schema.Boolean).annotate({ description: "Enable or disable mouse capture (default: true)" }),
+  auto_resume: Schema.optional(Schema.Boolean).annotate({
+    description:
+      "Automatically resume the most recent session for the current project path on startup (default: false). Has no effect when --continue, --session, --fork, or an initial route is supplied.",
+  }),
 })
 export type Info = Schema.Schema.Type<typeof Info>
 
@@ -78,6 +82,7 @@ export type Resolved = Omit<Info, "attention" | "keybinds" | "leader_timeout" | 
   keybinds: TuiKeybind.BindingLookupView
   leader_timeout: number
   mouse: boolean
+  auto_resume: boolean
 }
 
 export const ResolveOptions = Schema.Struct({
@@ -113,6 +118,7 @@ export function resolve(input: Info, options: ResolveOptions): Resolved {
     }),
     leader_timeout: input.leader_timeout ?? LeaderTimeoutDefault,
     mouse: input.mouse ?? true,
+    auto_resume: input.auto_resume ?? false,
   }
 }
 
