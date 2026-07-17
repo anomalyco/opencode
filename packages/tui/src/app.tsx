@@ -476,6 +476,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   })
 
   const args = useArgs()
+  const startupPrompt = args.prompt ? { input: args.prompt, parts: [] } : undefined
   onMount(() => {
     batch(() => {
       if (args.agent) local.agent.set(args.agent)
@@ -493,6 +494,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         route.navigate({
           type: "session",
           sessionID: args.sessionID,
+          prompt: startupPrompt,
         })
       }
     })
@@ -510,13 +512,13 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       if (args.fork) {
         void sdk.client.session.fork({ sessionID: match }).then((result) => {
           if (result.data?.id) {
-            route.navigate({ type: "session", sessionID: result.data.id })
+            route.navigate({ type: "session", sessionID: result.data.id, prompt: startupPrompt })
           } else {
             toast.show({ message: "Failed to fork session", variant: "error" })
           }
         })
       } else {
-        route.navigate({ type: "session", sessionID: match })
+        route.navigate({ type: "session", sessionID: match, prompt: startupPrompt })
       }
     }
   })
@@ -530,7 +532,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     forked = true
     void sdk.client.session.fork({ sessionID: args.sessionID }).then((result) => {
       if (result.data?.id) {
-        route.navigate({ type: "session", sessionID: result.data.id })
+        route.navigate({ type: "session", sessionID: result.data.id, prompt: startupPrompt })
       } else {
         toast.show({ message: "Failed to fork session", variant: "error" })
       }

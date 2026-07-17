@@ -12,6 +12,7 @@ import { useEditorContext } from "../context/editor"
 import { useTerminalDimensions } from "@opentui/solid"
 import { useTuiConfig } from "../config"
 import { HomeSessionDestinationProvider } from "./home/session-destination"
+import { createStartupPrompt } from "../component/prompt/startup"
 
 let once = false
 const placeholder = {
@@ -35,7 +36,7 @@ export function Home() {
     if (configured === "auto") return Math.max(75, Math.floor(dimensions().width * 0.7))
     return configured ?? 75
   })
-  let sent = false
+  const startupPrompt = createStartupPrompt(args.prompt ? { input: args.prompt, parts: [] } : undefined)
 
   onMount(() => {
     editor.clearSelection()
@@ -51,20 +52,14 @@ export function Home() {
       return
     }
     if (!args.prompt) return
-    r.set({ input: args.prompt, parts: [] })
+    startupPrompt.bind(r)
     once = true
   }
 
   // Wait for sync and model store to be ready before auto-submitting --prompt
   createEffect(() => {
     const r = ref()
-    if (sent) return
-    if (!r) return
-    if (!sync.ready || !local.model.ready) return
-    if (!args.prompt) return
-    if (r.current.input !== args.prompt) return
-    sent = true
-    r.submit()
+    startupPrompt.submitWhenReady(!!r && sync.ready && local.model.ready)
   })
 
   return (

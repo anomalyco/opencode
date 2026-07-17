@@ -27,6 +27,7 @@ import { Spinner } from "../../component/spinner"
 import { createSyntaxStyleMemo, generateSubtleSyntax, selectedForeground, useTheme } from "../../context/theme"
 import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA } from "@opentui/core"
 import { Prompt, type PromptRef } from "../../component/prompt"
+import { createStartupPrompt } from "../../component/prompt/startup"
 import type {
   AssistantMessage,
   Part,
@@ -275,6 +276,7 @@ export function Session() {
   const toast = useToast()
   const sdk = useSDK()
   const editor = useEditorContext()
+  const [sessionReady, setSessionReady] = createSignal(false)
 
   createEffect(() => {
     const sessionID = route.sessionID
@@ -304,6 +306,7 @@ export function Session() {
       }
       editor.reconnect(result.data.directory)
       await sync.session.sync(sessionID)
+      if (route.sessionID === sessionID) setSessionReady(true)
       if (route.sessionID === sessionID && scroll) scroll.scrollBy(100_000)
     })().catch((error) => {
       if (route.sessionID !== sessionID) return
@@ -333,16 +336,21 @@ export function Session() {
     }
   })
 
-  let seeded = false
   let scroll: ScrollBoxRenderable
   let prompt: PromptRef | undefined
+  const [startupRef, setStartupRef] = createSignal<PromptRef>()
+  const startupPrompt = createStartupPrompt(route.prompt)
   const bind = (r: PromptRef | undefined) => {
     prompt = r
     promptRef.set(r)
-    if (seeded || !route.prompt || !r) return
-    seeded = true
-    r.set(route.prompt)
+    setStartupRef(() => r)
+    startupPrompt.bind(r)
   }
+
+  createEffect(() => {
+    startupRef()
+    startupPrompt.submitWhenReady(sessionReady() && sync.ready && local.model.ready)
+  })
   const keymap = useOpencodeKeymap()
   const dialog = useDialog()
   const renderer = useRenderer()
