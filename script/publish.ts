@@ -39,10 +39,16 @@ console.log("\n=== kancode ===\n")
 await $`bun ./packages/opencode/script/publish.ts`
 
 if (Script.release && !Script.preview) {
-  await $`git commit -am "release: ${tag}"`
+  await $`git commit -am "release: ${tag}"`.nothrow()
   await $`git tag -d ${tag}`.nothrow()
   await $`git tag ${tag}`
-  await $`git push origin refs/tags/${tag} --force-with-lease --no-verify`
+  const isCI = !!process.env["GITHUB_ACTIONS"]
+  if (isCI) {
+    // Tag already exists on origin (it triggered this workflow). Just ensure local tag matches.
+    await $`git push origin ${tag} --force --no-verify`
+  } else {
+    await $`git push origin refs/tags/${tag} --force-with-lease --no-verify`
+  }
   await new Promise((resolve) => setTimeout(resolve, 5_000))
   await $`git fetch origin`
   await $`git checkout -B dev origin/dev`
