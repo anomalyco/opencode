@@ -142,7 +142,11 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
       continue
     }
 
-    const plugin = yield* load(operation).pipe(Effect.catchCause(() => Effect.succeed(undefined)))
+    const plugin = yield* load(operation).pipe(
+      Effect.catchCause((cause) =>
+        Effect.logWarning("failed to load plugin", { target: operation.target, cause }).pipe(Effect.as(undefined)),
+      ),
+    )
     if (!plugin) continue
     const previous = packages.get(operation.target)
     if (previous) enabled.delete(previous.id)

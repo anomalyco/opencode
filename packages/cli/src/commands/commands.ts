@@ -114,6 +114,10 @@ export const Commands = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCO
         }),
       ],
     }),
+    Spec.make("plugin", {
+      description: "Manage plugins",
+      commands: [Spec.make("list", { description: "List active plugins" })],
+    }),
     Spec.make("migrate", { description: "Migrate v1 data to v2" }),
     Spec.make("mini", {
       description: "Start the minimal interactive interface",
