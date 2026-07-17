@@ -6,6 +6,7 @@ import { setTimeout as sleep } from "node:timers/promises"
 import { createServer } from "http"
 import { OpenAIWebSocketPool } from "./ws-pool"
 import { OauthCallbackPage } from "@opencode-ai/core/oauth/page"
+import { CODEX_CHUNK_TIMEOUT, CODEX_HEADER_TIMEOUT, fetchCodexHTTP } from "./codex-http"
 
 const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
 const ISSUER = "https://auth.openai.com"
@@ -14,6 +15,7 @@ const OAUTH_PORT = 1455
 const OAUTH_POLLING_SAFETY_MARGIN_MS = 3000
 const ALLOWED_MODELS = new Set(["gpt-5.5", "gpt-5.3-codex-spark", "gpt-5.4", "gpt-5.4-mini"])
 const DISALLOWED_MODELS = new Set(["gpt-5.5-pro"])
+const MAX_REQUEST_BODY_BYTES = 16 * 1024 * 1024
 
 interface PkceCodes {
   verifier: string
@@ -75,6 +77,17 @@ export function extractAccountId(tokens: TokenResponse): string | undefined {
   return undefined
 }
 
+function requireRefreshToken(tokens: TokenResponse) {
+  if (!tokens.refresh_token) throw new Error("OAuth authorization did not return a refresh token")
+  return tokens.refresh_token
+}
+
+function requireAccessToken(tokens: TokenResponse) {
+  const access = tokens.access_token?.trim()
+  if (!access) throw new Error("OAuth refresh did not return a usable access token")
+  return access
+}
+
 function buildAuthorizeUrl(redirectUri: string, pkce: PkceCodes, state: string): string {
   const params = new URLSearchParams({
     response_type: "code",
@@ -94,7 +107,7 @@ function buildAuthorizeUrl(redirectUri: string, pkce: PkceCodes, state: string):
 interface TokenResponse {
   id_token: string
   access_token: string
-  refresh_token: string
+  refresh_token?: string
   expires_in?: number
 }
 
@@ -102,6 +115,59 @@ interface CodexAuthPluginOptions {
   issuer?: string
   codexApiEndpoint?: string
   experimentalWebSockets?: boolean
+  httpHeaderTimeout?: number
+  httpChunkTimeout?: number
+  websocketConnectTimeout?: number
+  websocketIdleTimeout?: number
+  websocketPoolFactory?: (options: {
+    httpFetch: typeof fetch
+    connectTimeout?: number
+    idleTimeout?: number
+  }) => ((input: RequestInfo | URL, init?: RequestInit) => Promise<Response>) & {
+    close: () => void
+    remove: (id: string) => void
+  }
+  codexHTTPTransport?: CodexHTTPTransport
+}
+
+interface CodexHTTPTransport {
+  (input: RequestInfo | URL, init: RequestInit | undefined, options: { headerTimeout: number; chunkTimeout: number }): Promise<Response>
+}
+
+async function readRequestBody(request: Request) {
+  if (request.method === "GET" || request.method === "HEAD" || !request.body) return undefined
+  const reader = request.body.getReader()
+  const chunks: Uint8Array[] = []
+  let size = 0
+  try {
+    while (true) {
+      const part = await Promise.race([
+        reader.read(),
+        new Promise<never>((_, reject) => {
+          const abort = () => reject(request.signal.reason ?? new DOMException("Aborted", "AbortError"))
+          request.signal.addEventListener("abort", abort, { once: true })
+          void reader.closed.finally(() => request.signal.removeEventListener("abort", abort)).catch(() => {})
+        }),
+      ])
+      if (part.done) return joinBytes(chunks)
+      size += part.value.byteLength
+      if (size > MAX_REQUEST_BODY_BYTES) {
+        void reader.cancel()
+        throw new Error(`Request body exceeds ${MAX_REQUEST_BODY_BYTES} bytes`)
+      }
+      chunks.push(part.value)
+    }
+  } catch (error) {
+    void reader.cancel()
+    throw error
+  }
+}
+
+
+function joinBytes(chunks: Uint8Array[]) {
+  const result = new Uint8Array(chunks.reduce((size, chunk) => size + chunk.byteLength, 0))
+  chunks.reduce((offset, chunk) => (result.set(chunk, offset), offset + chunk.byteLength), 0)
+  return result
 }
 
 async function exchangeCodeForTokens(code: string, redirectUri: string, pkce: PkceCodes): Promise<TokenResponse> {
@@ -321,8 +387,17 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
       provider: "openai",
       async loader(getAuth) {
         const auth = await getAuth()
+        const codexHTTPTransport = options.codexHTTPTransport ?? ((input, init, transportOptions) => fetchCodexHTTP(input, init, transportOptions))
+        const oauthHTTPFetch = ((input: RequestInfo | URL, init?: RequestInit) => codexHTTPTransport(input, init, {
+          headerTimeout: options.httpHeaderTimeout ?? CODEX_HEADER_TIMEOUT,
+          chunkTimeout: options.httpChunkTimeout ?? CODEX_CHUNK_TIMEOUT,
+        })) as typeof fetch
         const websocketFetch = options.experimentalWebSockets
-          ? OpenAIWebSocketPool.createWebSocketFetch({ httpFetch: fetch })
+          ? (options.websocketPoolFactory ?? OpenAIWebSocketPool.createWebSocketFetch)({
+              httpFetch: auth.type === "oauth" ? oauthHTTPFetch : fetch,
+              connectTimeout: options.websocketConnectTimeout ?? CODEX_HEADER_TIMEOUT,
+              idleTimeout: options.websocketIdleTimeout ?? CODEX_CHUNK_TIMEOUT,
+            })
           : undefined
         if (websocketFetch) {
           websocketFetches.push(websocketFetch)
@@ -337,80 +412,57 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
             }>
           | undefined
 
+        const awaitRefresh = async (signal: AbortSignal | undefined, failedAccess?: string) => {
+          const latest = await getAuth()
+          if (latest.type !== "oauth") throw new Error("OAuth credentials unavailable")
+          if (failedAccess && latest.access?.trim() && latest.access !== failedAccess) return Object.freeze({ access: latest.access.trim(), accountId: latest.accountId })
+          if (!refreshPromise) {
+            refreshPromise = refreshAccessToken(latest.refresh, issuer).then(async (tokens) => {
+              const access = requireAccessToken(tokens)
+              const accountId = extractAccountId(tokens) || latest.accountId
+              await input.client.auth.set({ path: { id: "openai" }, body: { type: "oauth", refresh: tokens.refresh_token?.trim() || latest.refresh, access, expires: Date.now() + (tokens.expires_in ?? 3600) * 1000, ...(accountId && { accountId }) } })
+              return Object.freeze({ access, accountId })
+            }).finally(() => { refreshPromise = undefined })
+          }
+          if (!signal) return refreshPromise
+          return Promise.race([
+            refreshPromise,
+            new Promise<never>((_, reject) => {
+              const abort = () => reject(signal.reason ?? new DOMException("Aborted", "AbortError"))
+              signal.addEventListener("abort", abort, { once: true })
+              void refreshPromise!.finally(() => signal.removeEventListener("abort", abort)).catch(() => {})
+            }),
+          ])
+        }
+
         return {
+          headerTimeout: false,
+          chunkTimeout: false,
           apiKey: OAUTH_DUMMY_KEY,
           async fetch(requestInput: RequestInfo | URL, init?: RequestInit) {
-            if (init?.headers) {
-              if (init.headers instanceof Headers) {
-                init.headers.delete("authorization")
-                init.headers.delete("Authorization")
-              } else if (Array.isArray(init.headers)) {
-                init.headers = init.headers.filter(([key]) => key.toLowerCase() !== "authorization")
-              } else {
-                delete init.headers["authorization"]
-                delete init.headers["Authorization"]
-              }
-            }
+            const request = new Request(requestInput, init)
+            const requestBody = await readRequestBody(request)
+            const snapshot = { url: new URL(request.url), method: request.method, headers: new Headers(request.headers), body: requestBody, signal: request.signal }
 
             const currentAuth = await getAuth()
             if (currentAuth.type !== "oauth")
-              return websocketFetch ? websocketFetch(requestInput, init) : fetch(requestInput, init)
+              return websocketFetch ? websocketFetch(snapshot.url, { ...init, method: snapshot.method, headers: snapshot.headers, body: snapshot.body }) : fetch(snapshot.url, { ...init, method: snapshot.method, headers: snapshot.headers, body: snapshot.body })
 
             const authWithAccount = currentAuth as typeof currentAuth & { accountId?: string }
 
-            if (!currentAuth.access || currentAuth.expires < Date.now()) {
-              if (!refreshPromise) {
-                refreshPromise = refreshAccessToken(currentAuth.refresh, issuer)
-                  .then(async (tokens) => {
-                    const accountId = extractAccountId(tokens) || authWithAccount.accountId
-                    await input.client.auth.set({
-                      path: { id: "openai" },
-                      body: {
-                        type: "oauth",
-                        refresh: tokens.refresh_token,
-                        access: tokens.access_token,
-                        expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
-                        ...(accountId && { accountId }),
-                      },
-                    })
-                    return {
-                      access: tokens.access_token,
-                      accountId,
-                    }
-                  })
-                  .finally(() => {
-                    refreshPromise = undefined
-                  })
-              }
+            let credentials = Object.freeze({ access: currentAuth.access?.trim() ?? "", accountId: authWithAccount.accountId })
+            if (!credentials.access || currentAuth.expires < Date.now()) credentials = await awaitRefresh(snapshot.signal)
 
-              const refreshed = await refreshPromise
-              currentAuth.access = refreshed.access
-              authWithAccount.accountId = refreshed.accountId
-            }
-
-            const headers = new Headers()
-            if (init?.headers) {
-              if (init.headers instanceof Headers) {
-                init.headers.forEach((value, key) => headers.set(key, value))
-              } else if (Array.isArray(init.headers)) {
-                for (const [key, value] of init.headers) {
-                  if (value !== undefined) headers.set(key, String(value))
-                }
-              } else {
-                for (const [key, value] of Object.entries(init.headers)) {
-                  if (value !== undefined) headers.set(key, String(value))
-                }
-              }
-            }
-            headers.set("authorization", `Bearer ${currentAuth.access}`)
-            if (authWithAccount.accountId) {
-              headers.set("ChatGPT-Account-Id", authWithAccount.accountId)
+            const headers = new Headers(snapshot.headers)
+            headers.delete("authorization")
+            headers.delete("chatgpt-account-id")
+            headers.set("authorization", `Bearer ${credentials.access}`)
+            if (credentials.accountId) {
+              headers.set("ChatGPT-Account-Id", credentials.accountId)
             }
 
             const parsed =
-              requestInput instanceof URL
-                ? requestInput
-                : new URL(typeof requestInput === "string" ? requestInput : requestInput.url)
+              snapshot.url
             const url =
               parsed.pathname.includes("/v1/responses") || parsed.pathname.includes("/chat/completions")
                 ? new URL(codexApiEndpoint)
@@ -418,11 +470,28 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
 
             const requestInit = {
               ...init,
-              body: init?.body,
+              method: snapshot.method,
+              body: snapshot.body,
               headers,
             }
-            if (websocketFetch && parsed.pathname.endsWith("/responses")) return websocketFetch(url, requestInit)
-            return fetch(url, OpenAIWebSocketPool.withoutInternalHeaders(requestInit))
+            const sendDirect = (target: URL, directInit: RequestInit) => fetch(target, OpenAIWebSocketPool.withoutInternalHeaders(directInit))
+            if (!parsed.pathname.includes("/v1/responses") && !parsed.pathname.includes("/chat/completions")) return sendDirect(snapshot.url, requestInit)
+            const send = (access: string, accountId: string | undefined) => {
+              const retryHeaders = new Headers(headers)
+              retryHeaders.set("authorization", `Bearer ${access}`)
+              if (accountId) retryHeaders.set("ChatGPT-Account-Id", accountId)
+              const selected = websocketFetch && parsed.pathname.endsWith("/responses") ? websocketFetch : fetchCodexHTTP
+              if (selected === websocketFetch) return selected(url, { ...requestInit, body: snapshot.body ? new TextDecoder().decode(snapshot.body) : undefined, headers: retryHeaders, signal: snapshot.signal })
+              return selected(url, OpenAIWebSocketPool.withoutInternalHeaders({ ...requestInit, headers: retryHeaders }), {
+                headerTimeout: options.httpHeaderTimeout ?? CODEX_HEADER_TIMEOUT,
+                chunkTimeout: options.httpChunkTimeout ?? CODEX_CHUNK_TIMEOUT,
+              })
+            }
+            const response = await send(credentials.access, credentials.accountId)
+            if (response.status !== 401 || init?.signal?.aborted) return response
+            void response.body?.cancel()
+            const refreshed = await awaitRefresh(snapshot.signal, credentials.access)
+            return send(refreshed.access, refreshed.accountId)
           },
         }
       },
@@ -448,7 +517,7 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
                 const accountId = extractAccountId(tokens)
                 return {
                   type: "success" as const,
-                  refresh: tokens.refresh_token,
+                  refresh: requireRefreshToken(tokens),
                   access: tokens.access_token,
                   expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
                   accountId,
@@ -523,7 +592,7 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
 
                     return {
                       type: "success" as const,
-                      refresh: tokens.refresh_token,
+                      refresh: requireRefreshToken(tokens),
                       access: tokens.access_token,
                       expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
                       accountId: extractAccountId(tokens),
