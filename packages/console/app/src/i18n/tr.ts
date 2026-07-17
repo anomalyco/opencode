@@ -102,10 +102,14 @@ export const dict = {
   "temp.logoDarkAlt": "opencode koyu logo",
 
   "home.banner.badge": "Yeni",
-  "home.banner.text": "Masaüstü uygulaması beta olarak mevcut",
-  "home.banner.platforms": "macOS, Windows ve Linux'ta",
+  "home.banner.text": "Masaüstü uygulamasında sekmelerle tanışın.",
+  "home.banner.platforms": "macOS, Windows ve Linux'ta kullanılabilir",
   "home.banner.downloadNow": "Şimdi indir",
   "home.banner.downloadBetaNow": "Masaüstü betayı şimdi indir",
+  "home.promo.title": "Masaüstü uygulamasında sekmelerle tanışın",
+  "home.promo.body": "Çalışmalarınızı ve etkin oturumlarınızı sekmelerle düzenleyin.",
+  "home.promo.cta": "Başlamak için en son sürümü indirin.",
+  "home.promo.close": "Masaüstü uygulaması duyurusunu kapat",
 
   "home.hero.title": "Açık kaynaklı yapay zeka kodlama ajanı",
   "home.hero.subtitle.a": "Ücretsiz modeller dahil veya herhangi bir sağlayıcıdan herhangi bir modeli bağlayın,",
@@ -253,7 +257,7 @@ export const dict = {
 
   "go.title": "OpenCode Go | Herkes için düşük maliyetli kodlama modelleri",
   "go.meta.description":
-    "Go ilk ay $5, sonrasında ayda 10$ fiyatıyla başlar; GLM-5.2, GLM-5.1, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro ve DeepSeek V4 Flash için cömert 5 saatlik istek limitleri sunar.",
+    "Go ilk ay $5, sonrasında ayda 10$ fiyatıyla başlar; Grok 4.5, GLM-5.2, GLM-5.1, Kimi K3, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro ve DeepSeek V4 Flash için cömert 5 saatlik istek limitleri sunar.",
   "go.hero.title": "Herkes için düşük maliyetli kodlama modelleri",
   "go.hero.body":
     "Go, dünya çapındaki programcılara ajan tabanlı kodlama getiriyor. En yetenekli açık kaynaklı modellere cömert limitler ve güvenilir erişim sunarak, maliyet veya erişilebilirlik konusunda endişelenmeden güçlü ajanlarla geliştirme yapmanızı sağlar.",
@@ -303,7 +307,7 @@ export const dict = {
   "go.problem.item2": "Cömert limitler ve güvenilir erişim",
   "go.problem.item3": "Mümkün olduğunca çok programcı için geliştirildi",
   "go.problem.item4":
-    "GLM-5.2, GLM-5.1, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro ve DeepSeek V4 Flash içerir",
+    "Grok 4.5, GLM-5.2, GLM-5.1, Kimi K3, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro ve DeepSeek V4 Flash içerir",
   "go.how.title": "Go nasıl çalışır?",
   "go.how.body":
     "Go ilk ay $5, sonrasında ayda 10$ fiyatıyla başlar. OpenCode veya herhangi bir ajanla kullanabilirsiniz.",
@@ -329,7 +333,7 @@ export const dict = {
   "go.faq.a2": "Go, aşağıda listelenen modelleri cömert limitler ve güvenilir erişimle sunar.",
   "go.faq.q3": "Go, Zen ile aynı mı?",
   "go.faq.a3":
-    "Hayır. Zen kullandıkça öde modelidir, Go ise ilk ay $5, sonrasında ayda 10$ fiyatıyla başlar; GLM-5.2, GLM-5.1, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro ve DeepSeek V4 Flash açık kaynak modellerine cömert limitler ve güvenilir erişim sunar.",
+    "Hayır. Zen kullandıkça öde modelidir, Go ise ilk ay $5, sonrasında ayda 10$ fiyatıyla başlar; Grok 4.5, GLM-5.2, GLM-5.1, Kimi K3, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro ve DeepSeek V4 Flash açık kaynak modellerine cömert limitler ve güvenilir erişim sunar.",
   "go.faq.q4": "Go ne kadar?",
   "go.faq.a4.p1.beforePricing": "Go'nun maliyeti",
   "go.faq.a4.p1.pricingLink": "İlk ay $5",
@@ -353,7 +357,7 @@ export const dict = {
 
   "go.faq.q9": "Ücretsiz modeller ve Go arasındaki fark nedir?",
   "go.faq.a9":
-    "Ücretsiz modeller, günlük 200 istek kotası ile Big Pickle ve o sırada mevcut olan promosyonel modelleri içerir. Go ise GLM-5.2, GLM-5.1, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro ve DeepSeek V4 Flash modellerini; yuvarlanan pencereler (5 saatlik, haftalık ve aylık) üzerinden uygulanan daha yüksek istek kotalarıyla içerir. Bu kotalar kabaca her 5 saatte 12$, haftada 30$ ve ayda 60$ değerine eşdeğerdir (gerçek istek sayıları modele ve kullanıma göre değişir).",
+    "Ücretsiz modeller, günlük 200 istek kotası ile Big Pickle ve o sırada mevcut olan promosyonel modelleri içerir. Go ise Grok 4.5, GLM-5.2, GLM-5.1, Kimi K3, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro ve DeepSeek V4 Flash modellerini; yuvarlanan pencereler (5 saatlik, haftalık ve aylık) üzerinden uygulanan daha yüksek istek kotalarıyla içerir. Bu kotalar kabaca her 5 saatte 12$, haftada 30$ ve ayda 60$ değerine eşdeğerdir (gerçek istek sayıları modele ve kullanıma göre değişir).",
 
   "zen.api.error.rateLimitExceeded": "İstek limiti aşıldı. Lütfen daha sonra tekrar deneyin.",
   "zen.api.error.modelNotSupported": "{{model}} modeli desteklenmiyor",
@@ -711,11 +715,11 @@ export const dict = {
 
   "download.title": "OpenCode | İndir",
   "download.meta.description": "OpenCode'u macOS, Windows ve Linux için indirin",
-  "download.hero.title": "OpenCode'u İndir",
+  "download.hero.title": "OpenCode Desktop'u İndir",
   "download.hero.subtitle": "macOS, Windows ve Linux için Beta olarak sunuluyor",
   "download.hero.button": "{{os}} için indir",
   "download.section.terminal": "OpenCode Terminal",
-  "download.section.desktop": "OpenCode Desktop (Beta)",
+  "download.section.desktop": "OpenCode Desktop",
   "download.section.extensions": "OpenCode Eklentileri",
   "download.section.integrations": "OpenCode Entegrasyonları",
   "download.action.download": "İndir",

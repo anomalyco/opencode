@@ -102,10 +102,14 @@ export const dict = {
   "temp.logoDarkAlt": "logo de opencode oscuro",
 
   "home.banner.badge": "Nuevo",
-  "home.banner.text": "Aplicación de escritorio disponible en beta",
-  "home.banner.platforms": "en macOS, Windows y Linux",
+  "home.banner.text": "Presentamos Tabs para Desktop.",
+  "home.banner.platforms": "Disponible en macOS, Windows y Linux",
   "home.banner.downloadNow": "Descargar ahora",
   "home.banner.downloadBetaNow": "Descargar la beta de escritorio ahora",
+  "home.promo.title": "Presentamos Tabs para Desktop",
+  "home.promo.body": "Organiza tu trabajo y tus sesiones activas con pestañas.",
+  "home.promo.cta": "Descarga la última versión para empezar.",
+  "home.promo.close": "Cerrar el anuncio de la aplicación Desktop",
 
   "home.hero.title": "El agente de codificación IA de código abierto",
   "home.hero.subtitle.a": "Modelos gratuitos incluidos o conecta cualquier modelo de cualquier proveedor,",
@@ -254,7 +258,7 @@ export const dict = {
 
   "go.title": "OpenCode Go | Modelos de programación de bajo coste para todos",
   "go.meta.description":
-    "Go comienza en $5 el primer mes, luego 10 $/mes, con generosos límites de solicitudes de 5 horas para GLM-5.2, GLM-5.1, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro y DeepSeek V4 Flash.",
+    "Go comienza en $5 el primer mes, luego 10 $/mes, con generosos límites de solicitudes de 5 horas para Grok 4.5, GLM-5.2, GLM-5.1, Kimi K3, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro y DeepSeek V4 Flash.",
   "go.hero.title": "Modelos de programación de bajo coste para todos",
   "go.hero.body":
     "Go lleva la programación agéntica a programadores de todo el mundo. Ofrece límites generosos y acceso fiable a los modelos de código abierto más capaces, para que puedas crear con agentes potentes sin preocuparte por el coste o la disponibilidad.",
@@ -304,7 +308,7 @@ export const dict = {
   "go.problem.item2": "Límites generosos y acceso fiable",
   "go.problem.item3": "Creado para tantos programadores como sea posible",
   "go.problem.item4":
-    "Incluye GLM-5.2, GLM-5.1, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro y DeepSeek V4 Flash",
+    "Incluye Grok 4.5, GLM-5.2, GLM-5.1, Kimi K3, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro y DeepSeek V4 Flash",
   "go.how.title": "Cómo funciona Go",
   "go.how.body": "Go comienza en $5 el primer mes, luego 10 $/mes. Puedes usarlo con OpenCode o cualquier agente.",
   "go.how.step1.title": "Crear una cuenta",
@@ -329,7 +333,7 @@ export const dict = {
   "go.faq.a2": "Go incluye los modelos que se indican abajo, con límites generosos y acceso confiable.",
   "go.faq.q3": "¿Es Go lo mismo que Zen?",
   "go.faq.a3":
-    "No. Zen es pago por uso, mientras que Go comienza en $5 el primer mes, luego 10 $/mes, con límites generosos y acceso fiable a los modelos de código abierto GLM-5.2, GLM-5.1, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro y DeepSeek V4 Flash.",
+    "No. Zen es pago por uso, mientras que Go comienza en $5 el primer mes, luego 10 $/mes, con límites generosos y acceso fiable a los modelos de código abierto Grok 4.5, GLM-5.2, GLM-5.1, Kimi K3, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro y DeepSeek V4 Flash.",
   "go.faq.q4": "¿Cuánto cuesta Go?",
   "go.faq.a4.p1.beforePricing": "Go cuesta",
   "go.faq.a4.p1.pricingLink": "$5 el primer mes",
@@ -353,7 +357,7 @@ export const dict = {
 
   "go.faq.q9": "¿Cuál es la diferencia entre los modelos gratuitos y Go?",
   "go.faq.a9":
-    "Los modelos gratuitos incluyen Big Pickle más modelos promocionales disponibles en el momento, con una cuota de 200 solicitudes/día. Go incluye GLM-5.2, GLM-5.1, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro y DeepSeek V4 Flash con cuotas de solicitud más altas aplicadas a través de ventanas móviles (5 horas, semanal y mensual), aproximadamente equivalente a 12 $ por 5 horas, 30 $ por semana y 60 $ por mes (los recuentos reales de solicitudes varían según el modelo y el uso).",
+    "Los modelos gratuitos incluyen Big Pickle más modelos promocionales disponibles en el momento, con una cuota de 200 solicitudes/día. Go incluye Grok 4.5, GLM-5.2, GLM-5.1, Kimi K3, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro y DeepSeek V4 Flash con cuotas de solicitud más altas aplicadas a través de ventanas móviles (5 horas, semanal y mensual), aproximadamente equivalente a 12 $ por 5 horas, 30 $ por semana y 60 $ por mes (los recuentos reales de solicitudes varían según el modelo y el uso).",
 
   "zen.api.error.rateLimitExceeded": "Límite de tasa excedido. Por favor, inténtalo de nuevo más tarde.",
   "zen.api.error.modelNotSupported": "Modelo {{model}} no soportado",
@@ -711,11 +715,11 @@ export const dict = {
 
   "download.title": "OpenCode | Descargar",
   "download.meta.description": "Descarga OpenCode para macOS, Windows y Linux",
-  "download.hero.title": "Descargar OpenCode",
+  "download.hero.title": "Descargar OpenCode Desktop",
   "download.hero.subtitle": "Disponible en Beta para macOS, Windows y Linux",
   "download.hero.button": "Descargar para {{os}}",
   "download.section.terminal": "OpenCode Terminal",
-  "download.section.desktop": "OpenCode Desktop (Beta)",
+  "download.section.desktop": "OpenCode Desktop",
   "download.section.extensions": "Extensiones OpenCode",
   "download.section.integrations": "Integraciones OpenCode",
   "download.action.download": "Descargar",

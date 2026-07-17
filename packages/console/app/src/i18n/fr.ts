@@ -100,10 +100,14 @@ export const dict = {
   "temp.logoDarkAlt": "opencode logo dark",
 
   "home.banner.badge": "Nouveau",
-  "home.banner.text": "Application desktop disponible en bêta",
-  "home.banner.platforms": "sur macOS, Windows et Linux",
+  "home.banner.text": "Découvrez Tabs pour Desktop.",
+  "home.banner.platforms": "Disponible sur macOS, Windows et Linux",
   "home.banner.downloadNow": "Télécharger maintenant",
   "home.banner.downloadBetaNow": "Télécharger la bêta desktop maintenant",
+  "home.promo.title": "Découvrez Tabs pour Desktop",
+  "home.promo.body": "Organisez votre travail et vos sessions actives avec des onglets.",
+  "home.promo.cta": "Téléchargez la dernière version pour commencer.",
+  "home.promo.close": "Fermer l’annonce de l’application Desktop",
 
   "home.hero.title": "L'agent de code IA open source",
   "home.hero.subtitle.a":
@@ -255,7 +259,7 @@ export const dict = {
 
   "go.title": "OpenCode Go | Modèles de code à faible coût pour tous",
   "go.meta.description":
-    "Go commence à $5 pour le premier mois, puis 10 $/mois, avec des limites de requêtes généreuses sur 5 heures pour GLM-5.2, GLM-5.1, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro et DeepSeek V4 Flash.",
+    "Go commence à $5 pour le premier mois, puis 10 $/mois, avec des limites de requêtes généreuses sur 5 heures pour Grok 4.5, GLM-5.2, GLM-5.1, Kimi K3, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro et DeepSeek V4 Flash.",
   "go.hero.title": "Modèles de code à faible coût pour tous",
   "go.hero.body":
     "Go apporte le codage agentique aux programmeurs du monde entier. Offrant des limites généreuses et un accès fiable aux modèles open source les plus capables, pour que vous puissiez construire avec des agents puissants sans vous soucier du coût ou de la disponibilité.",
@@ -304,7 +308,7 @@ export const dict = {
   "go.problem.item2": "Limites généreuses et accès fiable",
   "go.problem.item3": "Conçu pour autant de programmeurs que possible",
   "go.problem.item4":
-    "Inclut GLM-5.2, GLM-5.1, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro et DeepSeek V4 Flash",
+    "Inclut Grok 4.5, GLM-5.2, GLM-5.1, Kimi K3, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro et DeepSeek V4 Flash",
   "go.how.title": "Comment fonctionne Go",
   "go.how.body":
     "Go commence à $5 pour le premier mois, puis 10 $/mois. Vous pouvez l'utiliser avec OpenCode ou n'importe quel agent.",
@@ -330,7 +334,7 @@ export const dict = {
   "go.faq.a2": "Go inclut les modèles ci-dessous, avec des limites généreuses et un accès fiable.",
   "go.faq.q3": "Est-ce que Go est la même chose que Zen ?",
   "go.faq.a3":
-    "Non. Zen est un paiement à l'utilisation, tandis que Go commence à $5 pour le premier mois, puis 10 $/mois, avec des limites généreuses et un accès fiable aux modèles open source GLM-5.2, GLM-5.1, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro et DeepSeek V4 Flash.",
+    "Non. Zen est un paiement à l'utilisation, tandis que Go commence à $5 pour le premier mois, puis 10 $/mois, avec des limites généreuses et un accès fiable aux modèles open source Grok 4.5, GLM-5.2, GLM-5.1, Kimi K3, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro et DeepSeek V4 Flash.",
   "go.faq.q4": "Combien coûte Go ?",
   "go.faq.a4.p1.beforePricing": "Go coûte",
   "go.faq.a4.p1.pricingLink": "$5 le premier mois",
@@ -353,7 +357,7 @@ export const dict = {
     "Oui, vous pouvez utiliser Go avec n'importe quel agent. Suivez les instructions de configuration dans votre agent de code préféré.",
   "go.faq.q9": "Quelle est la différence entre les modèles gratuits et Go ?",
   "go.faq.a9":
-    "Les modèles gratuits incluent Big Pickle ainsi que des modèles promotionnels disponibles à ce moment-là, avec un quota de 200 requêtes/jour. Go inclut GLM-5.2, GLM-5.1, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro et DeepSeek V4 Flash avec des quotas de requêtes plus élevés appliqués sur des fenêtres glissantes (5 heures, hebdomadaire et mensuelle), à peu près équivalent à 12 $ par 5 heures, 30 $ par semaine et 60 $ par mois (le nombre réel de requêtes varie selon le modèle et l'utilisation).",
+    "Les modèles gratuits incluent Big Pickle ainsi que des modèles promotionnels disponibles à ce moment-là, avec un quota de 200 requêtes/jour. Go inclut Grok 4.5, GLM-5.2, GLM-5.1, Kimi K3, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro et DeepSeek V4 Flash avec des quotas de requêtes plus élevés appliqués sur des fenêtres glissantes (5 heures, hebdomadaire et mensuelle), à peu près équivalent à 12 $ par 5 heures, 30 $ par semaine et 60 $ par mois (le nombre réel de requêtes varie selon le modèle et l'utilisation).",
 
   "zen.api.error.rateLimitExceeded": "Limite de débit dépassée. Veuillez réessayer plus tard.",
   "zen.api.error.modelNotSupported": "Modèle {{model}} non pris en charge",
@@ -718,11 +722,11 @@ export const dict = {
 
   "download.title": "OpenCode | Téléchargement",
   "download.meta.description": "Téléchargez OpenCode pour macOS, Windows et Linux",
-  "download.hero.title": "Télécharger OpenCode",
+  "download.hero.title": "Télécharger OpenCode Desktop",
   "download.hero.subtitle": "Disponible en bêta pour macOS, Windows et Linux",
   "download.hero.button": "Télécharger pour {{os}}",
   "download.section.terminal": "OpenCode Terminal",
-  "download.section.desktop": "OpenCode Desktop (Bêta)",
+  "download.section.desktop": "OpenCode Desktop",
   "download.section.extensions": "Extensions OpenCode",
   "download.section.integrations": "Intégrations OpenCode",
   "download.action.download": "Télécharger",

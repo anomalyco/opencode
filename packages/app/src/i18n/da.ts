@@ -93,6 +93,7 @@ export const dict = {
   "command.session.unshare.description": "Stop med at dele denne session",
 
   "palette.search.placeholder": "Søg i filer, kommandoer og sessioner",
+  "palette.search.placeholder.home": "Søg i kommandoer og sessioner",
   "palette.empty": "Ingen resultater fundet",
   "palette.group.commands": "Kommandoer",
   "palette.group.files": "Filer",
@@ -804,9 +805,13 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Udvid edit-værktøjsdele",
   "settings.general.row.editToolPartsExpanded.description":
     "Vis edit-, write- og patch-værktøjsdele udvidet som standard i tidslinjen",
-  "settings.general.row.newLayoutDesigns.title": "Nyt layout og design",
-  "settings.general.row.newLayoutDesigns.description":
-    "Aktivér det nydesignede layout, startsiden, promptfeltet og sessionsbrugerfladen",
+  "settings.general.row.newInterface.title": "Nyt layout",
+  "settings.general.row.newInterface.badge": "Ny",
+  "settings.general.row.newInterface.description":
+    "Brug de nye faner og startsidens layout. Du kan skifte mellem layoutene i en begrænset periode.",
+  "settings.general.row.newInterfaceNotice.title": "Du bruger nu det nye layout",
+  "settings.general.row.newInterfaceNotice.description": "Det tidligere layout er ikke længere tilgængeligt",
+  "settings.general.row.newInterfaceNotice.dismiss": "Afvis",
   "settings.general.row.pinchZoom.title": "Knib for at zoome",
   "settings.general.row.pinchZoom.description": "Tillad knibebevægelser på pegefeltet og Ctrl-rulning for at zoome",
   "settings.general.row.wayland.title": "Brug native Wayland",

@@ -38,7 +38,7 @@ type PromptAttachmentsCoreInput = {
   getPathForFile?: (file: File) => string
 }
 
-type PromptAttachmentsInput = {
+export type PromptAttachmentsInput = {
   prompt: ReturnType<typeof usePrompt>
   editor: () => HTMLDivElement | undefined
   isDialogActive: () => boolean
