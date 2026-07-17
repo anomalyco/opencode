@@ -115,6 +115,9 @@ type PlatformBase = {
   /** Export collected diagnostic logs (desktop only) */
   exportDebugLogs?(): Promise<string>
 
+  /** Force focus styles on interactive elements through desktop devtools (desktop only) */
+  setForceFocus?(enabled: boolean): Promise<void>
+
   /** Record a fatal renderer error in platform logs (desktop only) */
   recordFatalRendererError?(error: FatalRendererErrorLog): Promise<void>
 }
