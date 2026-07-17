@@ -540,29 +540,33 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
-  it.effect("parses OpenAI-compatible reasoning content deltas", () =>
+  it.effect("parses and replays OpenAI-compatible reasoning fields", () =>
     Effect.gen(function* () {
-      const body = sseEvents(
-        { choices: [{ delta: { reasoning_content: "thinking" } }] },
-        { choices: [{ delta: { content: "Hello" } }] },
-        { choices: [{ delta: {}, finish_reason: "stop" }] },
-      )
+      const fields = ["reasoning_content", "reasoning", "reasoning_text"] as const
+      for (const field of fields) {
+        const response = yield* LLMClient.generate(request).pipe(
+          Effect.provide(
+            fixedResponse(
+              sseEvents(
+                { choices: [{ delta: { [field]: "thinking" } }] },
+                { choices: [{ delta: { content: "Hello" } }] },
+                { choices: [{ delta: {}, finish_reason: "stop" }] },
+              ),
+            ),
+          ),
+        )
 
-      const response = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse(body)))
+        expect(response.reasoning).toBe("thinking")
+        expect(response.text).toBe("Hello")
+        expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
+          openai: { reasoningField: field },
+        })
 
-      expect(response.reasoning).toBe("thinking")
-      expect(response.text).toBe("Hello")
-      expect(response.events).toMatchObject([
-        { type: "step-start", index: 0 },
-        { type: "reasoning-start", id: "reasoning-0" },
-        { type: "reasoning-delta", id: "reasoning-0", text: "thinking" },
-        { type: "reasoning-end", id: "reasoning-0" },
-        { type: "text-start", id: "text-0" },
-        { type: "text-delta", id: "text-0", text: "Hello" },
-        { type: "text-end", id: "text-0" },
-        { type: "step-finish", index: 0, reason: "stop" },
-        { type: "finish", reason: "stop" },
-      ])
+        const replay = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+          LLM.request({ model, messages: [response.message] }),
+        )
+        expect(replay.body.messages).toEqual([{ role: "assistant", content: "Hello", [field]: "thinking" }])
+      }
     }),
   )
 

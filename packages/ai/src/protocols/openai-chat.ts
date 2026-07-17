@@ -75,6 +75,8 @@ const OpenAIChatMessage = Schema.Union([
     content: Schema.NullOr(Schema.String),
     tool_calls: optionalArray(OpenAIChatAssistantToolCall),
     reasoning_content: Schema.optional(Schema.String),
+    reasoning: Schema.optional(Schema.String),
+    reasoning_text: Schema.optional(Schema.String),
   }),
   Schema.Struct({ role: Schema.Literal("tool"), tool_call_id: Schema.String, content: Schema.String }),
 ]).pipe(Schema.toTaggedUnion("role"))
@@ -145,6 +147,8 @@ type OpenAIChatToolCallDelta = Schema.Schema.Type<typeof OpenAIChatToolCallDelta
 const OpenAIChatDelta = Schema.Struct({
   content: optionalNull(Schema.String),
   reasoning_content: optionalNull(Schema.String),
+  reasoning: optionalNull(Schema.String),
+  reasoning_text: optionalNull(Schema.String),
   tool_calls: optionalNull(Schema.Array(OpenAIChatToolCallDelta)),
 })
 
@@ -166,6 +170,7 @@ export interface ParserState {
   readonly usage?: Usage
   readonly finishReason?: FinishReason
   readonly lifecycle: Lifecycle.State
+  readonly reasoningField?: "reasoning" | "reasoning_content" | "reasoning_text"
 }
 
 // =============================================================================
@@ -208,6 +213,12 @@ const lowerMedia = Effect.fn("OpenAIChat.lowerMedia")(function* (part: MediaPart
 const openAICompatibleReasoningContent = (native: unknown) =>
   isRecord(native) && typeof native.reasoning_content === "string" ? native.reasoning_content : undefined
 
+const reasoningField = (part: ReasoningPart) => {
+  const field = part.providerMetadata?.openai?.reasoningField
+  if (field === "reasoning" || field === "reasoning_content" || field === "reasoning_text") return field
+  return "reasoning_content"
+}
+
 const lowerUserMessage = Effect.fn("OpenAIChat.lowerUserMessage")(function* (message: OpenAIChatRequestMessage) {
   const content: Array<Schema.Schema.Type<typeof OpenAIChatUserContent>> = []
   for (const part of message.content) {
@@ -248,14 +259,20 @@ const lowerAssistantMessage = Effect.fn("OpenAIChat.lowerAssistantMessage")(func
       continue
     }
   }
+  const text = reasoning.map((part) => part.text).join("")
+  const field = reasoning[0] ? reasoningField(reasoning[0]) : "reasoning_content"
   return {
     role: "assistant" as const,
     content: content.length === 0 ? null : ProviderShared.joinText(content),
     tool_calls: toolCalls.length === 0 ? undefined : toolCalls,
     reasoning_content:
-      reasoning.length > 0
-        ? reasoning.map((part) => part.text).join("")
-        : openAICompatibleReasoningContent(message.native?.openaiCompatible),
+      reasoning.length === 0
+        ? openAICompatibleReasoningContent(message.native?.openaiCompatible)
+        : field === "reasoning_content"
+          ? text
+          : undefined,
+    reasoning: reasoning.length > 0 && field === "reasoning" ? text : undefined,
+    reasoning_text: reasoning.length > 0 && field === "reasoning_text" ? text : undefined,
   }
 })
 
@@ -400,6 +417,12 @@ const mapUsage = (usage: OpenAIChatEvent["usage"]): Usage | undefined => {
   })
 }
 
+const reasoningDelta = (delta: Schema.Schema.Type<typeof OpenAIChatDelta> | null | undefined) => {
+  if (delta?.reasoning_content) return { field: "reasoning_content", text: delta.reasoning_content } as const
+  if (delta?.reasoning) return { field: "reasoning", text: delta.reasoning } as const
+  if (delta?.reasoning_text) return { field: "reasoning_text", text: delta.reasoning_text } as const
+}
+
 const step = (state: ParserState, event: OpenAIChatEvent) =>
   Effect.gen(function* () {
     const events: LLMEvent[] = []
@@ -412,8 +435,12 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
 
     let lifecycle = state.lifecycle
 
-    if (delta?.reasoning_content)
-      lifecycle = Lifecycle.reasoningDelta(lifecycle, events, "reasoning-0", delta.reasoning_content)
+    const reasoning = reasoningDelta(delta)
+    const reasoningField = state.reasoningField ?? reasoning?.field
+    if (reasoning)
+      lifecycle = Lifecycle.reasoningDelta(lifecycle, events, "reasoning-0", reasoning.text, {
+        openai: { reasoningField: reasoningField ?? reasoning.field },
+      })
 
     if (delta?.content) {
       lifecycle = Lifecycle.reasoningEnd(lifecycle, events, "reasoning-0")
@@ -450,6 +477,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
         usage,
         finishReason,
         lifecycle,
+        reasoningField,
       },
       events,
     ] as const
@@ -482,7 +510,12 @@ export const protocol = Protocol.make({
   },
   stream: {
     event: Protocol.jsonEvent(OpenAIChatEvent),
-    initial: () => ({ tools: ToolStream.empty<number>(), toolCallEvents: [], lifecycle: Lifecycle.initial() }),
+    initial: () => ({
+      tools: ToolStream.empty<number>(),
+      toolCallEvents: [],
+      lifecycle: Lifecycle.initial(),
+      reasoningField: undefined,
+    }),
     step,
     onHalt: finishEvents,
   },

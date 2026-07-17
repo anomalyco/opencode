@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "metadata": {
+    "model": "anthropic/claude-sonnet-4.6",
+    "tags": [
+      "prefix:openai-compatible-chat",
+      "provider:vercel-ai-gateway",
+      "protocol:openai-chat",
+      "reasoning"
+    ],
+    "name": "vercel-ai-gateway-reasoning",
+    "recordedAt": "2026-07-18T11:28:42.077Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://ai-gateway.vercel.sh/v1/chat/completions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"anthropic/claude-sonnet-4.6\",\"messages\":[{\"role\":\"system\",\"content\":\"Think through the arithmetic, then reply with only the final integer.\"},{\"role\":\"user\",\"content\":\"What is 173 multiplied by 219?\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"max_tokens\":1536,\"temperature\":0,\"reasoning\":{\"enabled\":true,\"max_tokens\":1024}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "data: {\"id\":\"gen_01KXTFRJXJ8CKP0W3DKC3WC004\",\"object\":\"chat.completion.chunk\",\"created\":1784374121,\"model\":\"anthropic/claude-sonnet-4.6\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\"},\"logprobs\":null,\"finish_reason\":null}],\"system_fingerprint\":\"fp_zfth1fcyet\"}\n\ndata: {\"id\":\"gen_01KXTFRJXJ8CKP0W3DKC3WC004\",\"object\":\"chat.completion.chunk\",\"created\":1784374121,\"model\":\"anthropic/claude-sonnet-4.6\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning\":\"173\",\"reasoning_details\":[{\"type\":\"reasoning.text\",\"text\":\"173\",\"signature\":\"\",\"format\":\"anthropic-claude-v1\",\"index\":0}]},\"logprobs\":null,\"finish_reason\":null}],\"system_fingerprint\":\"fp_zfth1fcyet\"}\n\ndata: {\"id\":\"gen_01KXTFRJXJ8CKP0W3DKC3WC004\",\"object\":\"chat.completion.chunk\",\"created\":1784374121,\"model\":\"anthropic/claude-sonnet-4.6\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning\":\" × 219\\n\\n173 × 200 = 34,600\\n173 × 19 = 173 × 20 - 173 = 3,460\",\"reasoning_details\":[{\"type\":\"reasoning.text\",\"text\":\" × 219\\n\\n173 × 200 = 34,600\\n173 × 19 = 173 × 20 - 173 = 3,460\",\"signature\":\"\",\"format\":\"anthropic-claude-v1\",\"index\":0}]},\"logprobs\":null,\"finish_reason\":null}],\"system_fingerprint\":\"fp_zfth1fcyet\"}\n\ndata: {\"id\":\"gen_01KXTFRJXJ8CKP0W3DKC3WC004\",\"object\":\"chat.completion.chunk\",\"created\":1784374121,\"model\":\"anthropic/claude-sonnet-4.6\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning\":\" - 173 = 3,287\\n\\n34,600 + 3,287 = 37,887\",\"reasoning_details\":[{\"type\":\"reasoning.text\",\"text\":\" - 173 = 3,287\\n\\n34,600 + 3,287 = 37,887\",\"signature\":\"\",\"format\":\"anthropic-claude-v1\",\"index\":0}]},\"logprobs\":null,\"finish_reason\":null}],\"system_fingerprint\":\"fp_zfth1fcyet\"}\n\ndata: {\"id\":\"gen_01KXTFRJXJ8CKP0W3DKC3WC004\",\"object\":\"chat.completion.chunk\",\"created\":1784374121,\"model\":\"anthropic/claude-sonnet-4.6\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning\":\"\",\"reasoning_details\":[{\"type\":\"reasoning.text\",\"text\":\"\",\"signature\":\"EtgCCosBCA8YAipA0W4viH3kgBs43Cl5ewwVBPXTQElvzfbA2TLF4iSbKy9ZZDCSDjjAlF3Bs4ELEnP3vrrTuTioC6OB380lXQdyIDIRY2xhdWRlLXNvbm5ldC00LTY4AEIIdGhpbmtpbmdaJDNiOTNhNWRkLTczMDItNDgzZi1hZWFlLTM2MjA3NTU0OGFlMRIMKkQaBkOSYB8cgQNiGgwDinVmv/KYSAKQEsUiMPSSFWvVpNuyEyYC8HlxrEZsb5KEEETuMjAI2hcC3m/NwGR+PC7chh2JWwD7wyK+eyp6OoF973UNMHAsWsKykCSJv60aXeOiDomxdfR9CRWVtaroVTkhtL2FPgplBPZYr75XvS0l6If3fqCPKevNE5WaOsSaXNfnMCCKGX7A0Pkhs4NazmCnntWGOsW7J03bAQKzIZ+c+Yr0rSwmwvuiocDqzsSE8bOeVv4352EYAQ==\",\"format\":\"anthropic-claude-v1\",\"index\":0}]},\"logprobs\":null,\"finish_reason\":null}],\"system_fingerprint\":\"fp_zfth1fcyet\"}\n\ndata: {\"id\":\"gen_01KXTFRJXJ8CKP0W3DKC3WC004\",\"object\":\"chat.completion.chunk\",\"created\":1784374121,\"model\":\"anthropic/claude-sonnet-4.6\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"37,887\"},\"logprobs\":null,\"finish_reason\":null}],\"system_fingerprint\":\"fp_zfth1fcyet\"}\n\ndata: {\"id\":\"gen_01KXTFRJXJ8CKP0W3DKC3WC004\",\"object\":\"chat.completion.chunk\",\"created\":1784374121,\"model\":\"anthropic/claude-sonnet-4.6\",\"choices\":[{\"index\":0,\"delta\":{\"provider_metadata\":{\"anthropic\":{\"usage\":{\"input_tokens\":61,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":81,\"service_tier\":\"standard\",\"inference_geo\":\"global\",\"output_tokens_details\":{\"thinking_tokens\":73}},\"cacheCreationInputTokens\":0,\"stopSequence\":null,\"iterations\":null,\"container\":null,\"contextManagement\":null},\"gateway\":{\"routing\":{\"originalModelId\":\"anthropic/claude-sonnet-4.6\",\"resolvedProvider\":\"anthropic\",\"fallbacksAvailable\":[\"vertexAnthropic\",\"bedrock\"],\"planningReasoning\":\"System credentials planned for: anthropic, vertexAnthropic, bedrock. Total execution order: anthropic(system) → vertexAnthropic(system) → bedrock(system)\",\"canonicalSlug\":\"anthropic/claude-sonnet-4.6\",\"finalProvider\":\"anthropic\",\"modelAttemptCount\":1,\"modelAttempts\":[{\"canonicalSlug\":\"anthropic/claude-sonnet-4.6\",\"success\":true,\"providerAttemptCount\":1,\"providerAttempts\":[{\"provider\":\"anthropic\",\"credentialType\":\"system\",\"success\":true,\"startTime\":1784374119500,\"endTime\":1784374122066,\"providerRequestId\":\"req_011Cd9SjHykKUqTQ1S8cAG17\",\"statusCode\":200,\"providerResponseId\":\"msg_011Cd9SjLvMmTFY8Pyj8n336\"}]}],\"totalProviderAttemptCount\":1},\"cost\":\"0.001398\",\"marketCost\":\"0.001398\",\"surchargeCost\":\"0\",\"gatewayCost\":\"0.001398\",\"inferenceCost\":\"0.001398\",\"inputInferenceCost\":\"0.000183\",\"outputInferenceCost\":\"0.001215\",\"generationId\":\"gen_01KXTFRJXJ8CKP0W3DKC3WC004\"}}},\"logprobs\":null,\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":61,\"completion_tokens\":81,\"total_tokens\":142,\"cost\":0.001398,\"is_byok\":false,\"prompt_tokens_details\":{\"cached_tokens\":0,\"audio_tokens\":0,\"video_tokens\":0},\"cost_details\":{\"upstream_inference_cost\":null,\"upstream_inference_prompt_cost\":0,\"upstream_inference_completions_cost\":0},\"completion_tokens_details\":{\"reasoning_tokens\":26,\"reasoning_tokens_estimated\":true,\"image_tokens\":0},\"cache_creation_input_tokens\":0,\"market_cost\":0.001398,\"gateway_cost\":0.001398},\"system_fingerprint\":\"fp_zfth1fcyet\",\"generationId\":\"gen_01KXTFRJXJ8CKP0W3DKC3WC004\"}\n\ndata: [DONE]\n\n"
+      }
+    }
+  ]
+}
