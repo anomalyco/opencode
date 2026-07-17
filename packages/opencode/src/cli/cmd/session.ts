@@ -4,6 +4,7 @@ import { cmd } from "./cmd"
 import { effectCmd, fail } from "../effect-cmd"
 import { Session } from "@/session/session"
 import { SessionID } from "../../session/schema"
+import { Project } from "@/project/project"
 import { UI } from "../ui"
 import { Locale } from "@/util/locale"
 import { Flag } from "@opencode-ai/core/flag/flag"
@@ -70,6 +71,7 @@ export const SessionDeleteCommand = effectCmd({
 export const SessionListCommand = effectCmd({
   command: "list",
   describe: "list sessions",
+  instance: false,
   builder: (yargs) =>
     yargs
       .option("max-count", {
@@ -84,7 +86,10 @@ export const SessionListCommand = effectCmd({
         default: "table",
       }),
   handler: Effect.fn("Cli.session.list")(function* (args) {
-    const sessions = yield* Session.Service.use((svc) => svc.list({ roots: true, limit: args.maxCount }))
+    const { project } = yield* Project.Service.use((svc) => svc.fromDirectory(process.cwd()))
+    const sessions = yield* Session.Service.use((svc) =>
+      svc.list({ projectID: project.id, roots: true, limit: args.maxCount }),
+    )
 
     if (sessions.length === 0) return
 
