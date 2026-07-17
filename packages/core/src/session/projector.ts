@@ -315,6 +315,14 @@ const layer = Layer.effectDiscard(
         const messageID = event.data.part.messageID
         const sessionID = event.data.part.sessionID
         const data = partData(event.data.part)
+        const parent = yield* db
+          .select({ id: MessageTable.id })
+          .from(MessageTable)
+          .where(and(eq(MessageTable.id, messageID), eq(MessageTable.session_id, sessionID)))
+          .get()
+          .pipe(Effect.orDie)
+        // Abort cleanup can flush parts after undo/reprompt deleted the message.
+        if (!parent) return
         const row = yield* db.select().from(PartTable).where(eq(PartTable.id, id)).get().pipe(Effect.orDie)
         yield* db
           .insert(PartTable)

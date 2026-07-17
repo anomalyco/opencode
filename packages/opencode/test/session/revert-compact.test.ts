@@ -452,6 +452,45 @@ describe("revert + compact workflow", () => {
   )
 
   it.live(
+    "part updates after revert cleanup do not fail when message was removed",
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const session = yield* Session.Service
+          const revert = yield* SessionRevert.Service
+
+          const info = yield* session.create({})
+          const sid = info.id
+          const u1 = yield* user(sid)
+          yield* text(sid, u1.id, "first")
+          const a1 = yield* assistant(sid, u1.id, dir)
+          const u2 = yield* user(sid)
+          yield* text(sid, u2.id, "second")
+          const a2 = yield* assistant(sid, u2.id, dir)
+
+          yield* revert.revert({ sessionID: sid, messageID: u2.id })
+          const state = yield* session.get(sid)
+          yield* revert.cleanup(state)
+
+          // Abort-style flush that races with cleanup: writing a part for the
+          // deleted assistant must not throw (projector skips missing parents).
+          yield* session.updatePart({
+            id: PartID.ascending(),
+            messageID: a2.id,
+            sessionID: sid,
+            type: "patch",
+            hash: "deadbeef",
+            files: [],
+          })
+
+          const msgs = yield* session.messages({ sessionID: sid })
+          expect(msgs.map((m) => m.info.id)).toEqual([u1.id, a1.id])
+        }),
+      { git: true },
+    ),
+  )
+
+  it.live(
     "restore messages in sequential order",
     provideTmpdirInstance(
       (dir) =>

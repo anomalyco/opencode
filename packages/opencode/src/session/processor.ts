@@ -24,6 +24,7 @@ import { errorMessage } from "@/util/error"
 import { isRecord } from "@/util/record"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Database } from "@opencode-ai/core/database/database"
+import { NotFoundError } from "@/storage/storage"
 import { Usage, type LLMEvent } from "@opencode-ai/llm"
 
 const DOOM_LOOP_THRESHOLD = 3
@@ -547,6 +548,28 @@ const layer = Layer.effect(
       })
 
       const cleanup = Effect.fn("SessionProcessor.cleanup")(function* () {
+        // Undo/reprompt can delete this assistant message while abort cleanup is still
+        // flushing parts. Skip writes rather than dying on a foreign-key violation.
+        const alive = yield* MessageV2.get({
+          sessionID: ctx.sessionID,
+          messageID: ctx.assistantMessage.id,
+        }).pipe(
+          Effect.as(true),
+          Effect.catchIf(NotFoundError.isInstance, () => Effect.succeed(false)),
+          Effect.provideService(Database.Service, database),
+        )
+        if (!alive) {
+          yield* Effect.logInfo("processor cleanup skipped; assistant message removed", {
+            "session.id": ctx.sessionID,
+            messageID: ctx.assistantMessage.id,
+          })
+          ctx.snapshot = undefined
+          ctx.currentText = undefined
+          ctx.reasoningMap = {}
+          ctx.toolcalls = {}
+          return
+        }
+
         if (ctx.snapshot) {
           const patch = yield* snapshot.patch(ctx.snapshot)
           if (patch.files.length) {
