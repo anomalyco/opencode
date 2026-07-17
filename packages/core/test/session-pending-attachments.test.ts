@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { and, eq } from "drizzle-orm"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -9,6 +9,7 @@ import { EventTable } from "@opencode-ai/core/event/sql"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
+import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionPending } from "@opencode-ai/core/session/pending"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionSchema } from "@opencode-ai/core/session/schema"
@@ -75,11 +76,10 @@ describe("SessionPending attachment bounding", () => {
         .all()
         .pipe(Effect.orDie)
       expect(rows).toHaveLength(1)
-      const eventData = rows[0]!.data as {
-        payloadHash?: string
-        input: { type: string; data: { files?: Array<{ data: string }> } }
-      }
+      const eventData = Schema.decodeUnknownSync(SessionEvent.InputAdmitted.data)(rows[0]!.data)
       expect(eventData.payloadHash).toBeDefined()
+      expect(eventData.input.type).toBe("user")
+      if (eventData.input.type !== "user") throw new Error("Expected user input on admitted event")
       expect(eventData.input.data.files?.[0]?.data).toBe("")
       expect(JSON.stringify(eventData).includes(mega)).toBe(false)
 
@@ -158,8 +158,10 @@ describe("SessionPending attachment bounding", () => {
         .all()
         .pipe(Effect.orDie)
       expect(rows).toHaveLength(1)
-      const eventData = rows[0]!.data as { payloadHash?: string; input: { data: { text: string } } }
+      const eventData = Schema.decodeUnknownSync(SessionEvent.InputAdmitted.data)(rows[0]!.data)
       expect(eventData.payloadHash).toBeUndefined()
+      expect(eventData.input.type).toBe("user")
+      if (eventData.input.type !== "user") throw new Error("Expected user input on admitted event")
       expect(eventData.input.data.text).toBe("hello")
     }),
   )
