@@ -37,12 +37,10 @@ export type PromptInputControls = {
       open: () => void
     }
   }
-  newLayoutDesigns: boolean
 }
 
 export interface PromptInputProps {
   class?: string
-  variant?: "dock" | "new-session"
   state?: PromptInputState
   history?: PromptInputHistory
   submission?: PromptInputSubmission

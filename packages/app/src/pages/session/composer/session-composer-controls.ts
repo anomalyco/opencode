@@ -12,7 +12,6 @@ import type { QueryOptionsApi } from "@/context/server-sync"
 import { useServerSDK } from "@/context/server-sdk"
 import { serverName, ServerConnection, useServer } from "@/context/server"
 import { useSDK } from "@/context/sdk"
-import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
 import { useTabs } from "@/context/tabs"
 import { useProviders } from "@/hooks/use-providers"
@@ -27,7 +26,6 @@ export function createPromptInputController(input: {
   const layout = useLayout()
   const local = useLocal()
   const providers = useProviders()
-  const settings = useSettings()
   const sync = useSync()
   const sdk = useSDK()
   const view = layout.view(input.sessionKey)
@@ -54,7 +52,6 @@ export function createPromptInputController(input: {
       tabs: layout.tabs(input.sessionKey),
       reviewPanel: view.reviewPanel,
     },
-    newLayoutDesigns: settings.general.newLayoutDesigns(),
   }))
 }
 

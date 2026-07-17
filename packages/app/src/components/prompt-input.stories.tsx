@@ -75,7 +75,6 @@ function PromptInputExample() {
         open: () => setControls("reviewOpen", true),
       },
     },
-    newLayoutDesigns: true,
   }
   const addReviewComment = () => {
     const comment = controls.comments + 1
@@ -154,7 +153,6 @@ function PromptInputWithOpenDock() {
       },
       reviewPanel: { opened: () => false, open: () => {} },
     },
-    newLayoutDesigns: true,
   }
   const state = {
     blocked: () => false,

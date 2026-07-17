@@ -40,10 +40,7 @@ export type PromptInputV2ComposerProps = {
   onEditLoaded?: PromptInputProps["onEditLoaded"]
 }
 
-export type PromptInputV2ControllerProps = Omit<
-  PromptInputProps,
-  "variant" | "class" | "edit" | "onEditLoaded" | "submission"
->
+export type PromptInputV2ControllerProps = Omit<PromptInputProps, "class" | "edit" | "onEditLoaded" | "submission">
 export type PromptInputV2ComposerController = PromptInputV2Interaction & {
   readonly model: PromptInputProps["controls"]["model"]
 }
