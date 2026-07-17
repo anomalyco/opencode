@@ -6,7 +6,7 @@ import { Cause, Context, Effect, Layer, Queue, Schema, Scope, Stream } from "eff
 
 export const SubscriberCapacity = 4_096
 
-/** Core-published types that always pass location interest filters. */
+/** Core-published types that always pass interest filters (location and session). */
 export const GlobalEventTypes = new Set<string>([
   "installation.updated",
   "installation.update-available",
@@ -78,7 +78,9 @@ export function interestFromQuery(query: URLSearchParams): Interest | undefined 
     .flatMap((value) => value.split(","))
     .map((value) => value.trim())
     .filter((value) => value.length > 0)
-  if (directory === undefined && workspace === undefined && sessions.length === 0) return undefined
+  // Workspace interest requires a directory; alone it is an invalid location scope.
+  if (directory === undefined && workspace !== undefined) return undefined
+  if (directory === undefined && sessions.length === 0) return undefined
   return {
     ...(directory !== undefined
       ? { location: { directory, ...(workspace !== undefined ? { workspace } : {}) } }
@@ -110,14 +112,10 @@ export const make = Effect.fn("EventFeed.make")(function* (
   const publish = Effect.fnUntraced(function* (event: EventV2.Payload) {
     if (!isOpenCodeEvent(event)) return
     if (subscribers.size === 0) return
-    let matched = false
-    for (const subscriber of subscribers.values()) {
-      if (matchesInterest(event, subscriber.interest)) {
-        matched = true
-        break
-      }
-    }
-    if (!matched) return
+    const targets = Array.from(subscribers.values()).filter((subscriber) =>
+      matchesInterest(event, subscriber.interest),
+    )
+    if (targets.length === 0) return
     const encoded = yield* Effect.try({
       try: () => render(event),
       catch: (cause) => new EncodingError({ eventID: event.id, eventType: event.type, cause }),
@@ -131,8 +129,7 @@ export const make = Effect.fn("EventFeed.make")(function* (
       ),
     )
     if (encoded === undefined) return
-    for (const subscriber of Array.from(subscribers.values())) {
-      if (!matchesInterest(event, subscriber.interest)) continue
+    for (const subscriber of targets) {
       if (Queue.offerUnsafe(subscriber.queue, encoded)) continue
       subscribers.delete(subscriber.queue)
       Queue.failCauseUnsafe(subscriber.queue, Cause.fail(new SubscriberOverflowError({ capacity })))

@@ -4544,11 +4544,11 @@ export type SkillListOutput = {
 
 export type EventSubscribeInput = {
   readonly location?: {
-    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+    readonly location?: { readonly directory: string; readonly workspace?: string | undefined } | undefined
     readonly session?: string | ReadonlyArray<string> | ReadonlyArray<string> | undefined
   }["location"]
   readonly session?: {
-    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+    readonly location?: { readonly directory: string; readonly workspace?: string | undefined } | undefined
     readonly session?: string | ReadonlyArray<string> | ReadonlyArray<string> | undefined
   }["session"]
 }

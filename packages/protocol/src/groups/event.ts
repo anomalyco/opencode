@@ -11,7 +11,8 @@ export const sessionIDOf = Event.sessionIDOf
 export const EventSubscribeQuery = Schema.Struct({
   location: Schema.optional(
     Schema.Struct({
-      directory: Schema.optional(Schema.String),
+      /** Required when `location` is present; workspace alone is not a valid scope. */
+      directory: Schema.String,
       workspace: Schema.optional(Schema.String),
     }),
   ),

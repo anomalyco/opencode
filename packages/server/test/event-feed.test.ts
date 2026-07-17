@@ -258,6 +258,35 @@ describe("EventFeed", () => {
     })
   })
 
+  test("rejects workspace interest without a directory", () => {
+    const params = new URLSearchParams()
+    params.set("location[workspace]", "ws_1")
+    params.append("session", "ses_a")
+    expect(EventFeed.interestFromQuery(params)).toBeUndefined()
+  })
+
+  test("matchesInterest delivers global types to location-scoped subscribers", () => {
+    expect(
+      EventFeed.matchesInterest(
+        {
+          id: EventV2.ID.make("evt_global"),
+          created: DateTime.makeUnsafe(0),
+          type: "global.disposed",
+          data: {},
+        },
+        { location: { directory: "/tmp/project" } },
+      ),
+    ).toBe(true)
+  })
+
+  test("matchesInterest rejects workspace mismatches", () => {
+    expect(
+      EventFeed.matchesInterest(event("ws", { directory: "/tmp/project" }), {
+        location: { directory: "/tmp/project", workspace: "ws_other" },
+      }),
+    ).toBe(false)
+  })
+
   it.effect("delivers session-scoped events only to interested subscribers", () =>
     Effect.gen(function* () {
       const source = makeSource()
