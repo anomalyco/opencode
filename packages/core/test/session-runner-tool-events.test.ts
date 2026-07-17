@@ -77,17 +77,19 @@ test("local tool success stores media in the payload blob and omits base64 from 
   await Effect.runPromise(publisher.publish(call))
   await Effect.runPromise(publisher.publish(result))
 
-  const success = published.find((event) => event.type === "session.tool.success.1")
+  const successType = "session.tool.success.1"
+  const success = published.find((event) => event.type === successType)
   expect(success).toBeDefined()
-  if (!success) throw new Error("Expected session.tool.success.1")
+  if (!success) throw new Error(`Expected ${successType}`)
   const data = Schema.decodeUnknownSync(SessionEvent.Tool.Success.data)(success.data)
-  expect(data.payloadHash).toBeDefined()
+  const payloadHash = data.payloadHash
+  expect(payloadHash).toBeDefined()
+  if (!payloadHash) throw new Error("Expected payloadHash on thin success")
   expect(JSON.stringify(success).includes(base64)).toBe(false)
   expect(success.data).not.toHaveProperty("result")
   expect(data.content).toEqual([{ type: "text", text: "Image read successfully" }])
 
-  if (!data.payloadHash) throw new Error("Expected payloadHash on thin success")
-  const body = payloads.get(data.payloadHash)
+  const body = payloads.get(payloadHash)
   expect(body?.content).toEqual([
     { type: "text", text: "Image read successfully" },
     { type: "file", uri: `data:image/png;base64,${base64}`, mime: "image/png", name: "pixel.png" },
@@ -99,14 +101,16 @@ test("provider-executed success keeps raw provider result in the payload blob on
   const { published, payloads, publisher } = capture()
   await Effect.runPromise(publisher.publish(LLMEvent.toolCall({ ...call, providerExecuted: true })))
   await Effect.runPromise(publisher.publish(LLMEvent.toolResult({ ...result, providerExecuted: true })))
-  const success = published.find((event) => event.type === "session.tool.success.1")
+  const successType = "session.tool.success.1"
+  const success = published.find((event) => event.type === successType)
   expect(success).toBeDefined()
-  if (!success) throw new Error("Expected session.tool.success.1")
+  if (!success) throw new Error(`Expected ${successType}`)
   expect(success.data).not.toHaveProperty("result")
   const data = Schema.decodeUnknownSync(SessionEvent.Tool.Success.data)(success.data)
-  expect(data.payloadHash).toBeDefined()
-  if (!data.payloadHash) throw new Error("Expected payloadHash on thin success")
-  expect(payloads.get(data.payloadHash)?.result).toBeDefined()
+  const payloadHash = data.payloadHash
+  expect(payloadHash).toBeDefined()
+  if (!payloadHash) throw new Error("Expected payloadHash on thin success")
+  expect(payloads.get(payloadHash)?.result).toBeDefined()
 })
 
 test("provider metadata is flattened using the route key", async () => {

@@ -78,15 +78,16 @@ describe("SessionPending attachment bounding", () => {
       expect(rows).toHaveLength(1)
       const eventData = Schema.decodeUnknownSync(SessionEvent.InputAdmitted.data)(rows[0]!.data)
       expect(eventData.payloadHash).toBeDefined()
-      expect(eventData.input.type).toBe("user")
-      if (eventData.input.type !== "user") throw new Error("Expected user input on admitted event")
+      const inputType = "user"
+      expect(eventData.input.type).toBe(inputType)
+      if (eventData.input.type !== inputType) throw new Error(`Expected ${inputType} input on admitted event`)
       expect(eventData.input.data.files?.[0]?.data).toBe("")
       expect(JSON.stringify(eventData).includes(mega)).toBe(false)
 
       const pending = yield* SessionPending.list(db, sessionID)
       const row = pending.find((item) => item.id === inputID)
-      expect(row?.type).toBe("user")
-      if (row?.type === "user") expect(row.data.files?.[0]?.data).toBe(mega)
+      expect(row?.type).toBe(inputType)
+      if (row?.type === inputType) expect(row.data.files?.[0]?.data).toBe(mega)
     }),
   )
 
@@ -160,8 +161,9 @@ describe("SessionPending attachment bounding", () => {
       expect(rows).toHaveLength(1)
       const eventData = Schema.decodeUnknownSync(SessionEvent.InputAdmitted.data)(rows[0]!.data)
       expect(eventData.payloadHash).toBeUndefined()
-      expect(eventData.input.type).toBe("user")
-      if (eventData.input.type !== "user") throw new Error("Expected user input on admitted event")
+      const inputType = "user"
+      expect(eventData.input.type).toBe(inputType)
+      if (eventData.input.type !== inputType) throw new Error(`Expected ${inputType} input on admitted event`)
       expect(eventData.input.data.text).toBe("hello")
     }),
   )
