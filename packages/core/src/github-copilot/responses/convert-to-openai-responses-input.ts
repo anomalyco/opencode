@@ -38,6 +38,18 @@ export async function convertToOpenAIResponsesInput({
   const warnings: Array<SharedV3Warning> = []
   const processedApprovalIds = new Set<string>()
 
+  // The Responses API rejects a `function_call_output` / `local_shell_call_output`
+  // whose `call_id` has no matching `function_call` ("No tool call found for
+  // function call output with call_id ..."). Upstream history editing can orphan
+  // a tool result, so collect every tool-call id and drop outputs that dangle.
+  const knownToolCallIds = new Set<string>()
+  for (const message of prompt) {
+    if (message.role !== "assistant") continue
+    for (const part of message.content) {
+      if (part.type === "tool-call") knownToolCallIds.add(part.toolCallId)
+    }
+  }
+
   for (const { role, content } of prompt) {
     switch (role) {
       case "system": {
@@ -280,6 +292,14 @@ export async function convertToOpenAIResponsesInput({
             if (approvalId) {
               continue
             }
+          }
+
+          if (!knownToolCallIds.has(part.toolCallId)) {
+            warnings.push({
+              type: "other",
+              message: `Dropping orphaned tool result for ${part.toolName} (call_id ${part.toolCallId}) with no matching tool call`,
+            })
+            continue
           }
 
           if (hasLocalShellTool && part.toolName === "local_shell" && output.type === "json") {

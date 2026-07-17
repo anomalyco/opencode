@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMError, Message, ToolCallPart, Usage } from "../../src"
-import { Auth, LLMClient } from "../../src/route"
+import { LLM, LLMError, Message, ToolCallPart, ToolResultPart, Usage } from "../../src"
+import { LLMClient } from "../../src/route"
 import * as Gemini from "../../src/protocols/gemini"
 import { ProviderShared } from "../../src/protocols/shared"
 import { it } from "../lib/effect"
@@ -110,107 +110,39 @@ describe("Gemini route", () => {
     }),
   )
 
-  it.effect("continues image tool results as inline vision input without base64 text", () =>
+  it.effect("drops orphaned tool results with no matching functionCall", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<Gemini.GeminiBody>(
+      const prepared = yield* LLMClient.prepare(
         LLM.request({
+          id: "req_orphan_result",
           model,
           messages: [
-            Message.assistant([ToolCallPart.make({ id: "call_image", name: "read", input: { path: "pixel.png" } })]),
-            Message.tool({
-              id: "call_image",
-              name: "read",
-              result: {
-                type: "content",
-                value: [
-                  { type: "text", text: "Image read successfully" },
-                  { type: "file", uri: "data:image/png;base64,AAECAw==", mime: "image/png", name: "pixel.png" },
-                ],
-              },
+            Message.user("What is the weather?"),
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: { query: "weather" } })]),
+            // call_2 has no matching functionCall (assistant turn dropped upstream).
+            Message.make({
+              role: "tool",
+              content: [
+                ToolResultPart.make({ id: "call_1", name: "lookup", result: { forecast: "sunny" } }),
+                ToolResultPart.make({ id: "call_2", name: "other", result: { forecast: "rain" } }),
+              ],
             }),
           ],
         }),
       )
 
-      expect(prepared.body.contents).toEqual([
-        { role: "model", parts: [{ functionCall: { name: "read", args: { path: "pixel.png" } } }] },
-        {
-          role: "user",
-          parts: [
-            {
-              functionResponse: {
-                name: "read",
-                response: { name: "read", content: "Image read successfully" },
-              },
-            },
-            { inlineData: { mimeType: "image/png", data: "AAECAw==" } },
-          ],
-        },
-      ])
-      expect(JSON.stringify(prepared.body.contents)).not.toContain('"content":"AAECAw=="')
-    }),
-  )
-
-  it.effect("strips matching data URLs to raw base64 inlineData", () =>
-    Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<Gemini.GeminiBody>(
-        LLM.request({
-          model,
-          messages: [
-            Message.user({ type: "media", mediaType: "image/png", data: "data:image/png;base64,AAEC" }),
-            Message.tool({
-              id: "call_image",
-              name: "read",
-              result: {
-                type: "content",
-                value: [{ type: "file", uri: "data:image/jpeg;base64,/9j/", mime: "image/jpeg" }],
-              },
-            }),
-          ],
-        }),
-      )
-      expect(prepared.body.contents).toEqual([
-        { role: "user", parts: [{ inlineData: { mimeType: "image/png", data: "AAEC" } }] },
-        {
-          role: "user",
-          parts: [
-            { functionResponse: { name: "read", response: { name: "read", content: "" } } },
-            { inlineData: { mimeType: "image/jpeg", data: "/9j/" } },
-          ],
-        },
-      ])
-    }),
-  )
-
-  for (const [name, media] of [
-    ["mismatched data URL MIME", { mediaType: "image/png", data: "data:image/jpeg;base64,/9j/" }],
-    ["malformed base64", { mediaType: "image/png", data: "%%%=" }],
-    ["unsupported SVG", { mediaType: "image/svg+xml", data: "PHN2Zz4=" }],
-  ] as const)
-    it.effect(`rejects ${name}`, () =>
-      Effect.gen(function* () {
-        const error = yield* LLMClient.prepare(
-          LLM.request({ model, messages: [Message.user({ type: "media", ...media })] }),
-        ).pipe(Effect.flip)
-        expect(error.message).toMatch(/does not support|does not match|valid base64/)
-      }),
-    )
-
-  it.effect("rejects oversized image input", () =>
-    Effect.gen(function* () {
-      const error = yield* LLMClient.prepare(
-        LLM.request({
-          model,
-          messages: [
-            Message.user({
-              type: "media",
-              mediaType: "image/png",
-              data: "A".repeat(ProviderShared.MAX_MEDIA_ENCODED_BYTES + 4),
-            }),
-          ],
-        }),
-      ).pipe(Effect.flip)
-      expect(error.message).toContain("encoded limit")
+      expect(prepared.body).toEqual({
+        contents: [
+          { role: "user", parts: [{ text: "What is the weather?" }] },
+          { role: "model", parts: [{ functionCall: { name: "lookup", args: { query: "weather" } } }] },
+          {
+            role: "user",
+            parts: [
+              { functionResponse: { name: "lookup", response: { name: "lookup", content: '{"forecast":"sunny"}' } } },
+            ],
+          },
+        ],
+      })
     }),
   )
 

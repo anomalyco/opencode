@@ -205,6 +205,10 @@ const lowerToolCall = (part: ToolCallPart) => ({
 const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMRequest) {
   const contents: GeminiContent[] = []
 
+  // Gemini pairs `functionResponse` to a preceding `functionCall`. Upstream
+  // history editing can orphan a tool result, so drop any that would dangle.
+  const knownToolCalls = ProviderShared.toolCallIds(request.messages)
+
   for (const message of request.messages) {
     if (message.role === "system") {
       const part = yield* ProviderShared.wrappedSystemUpdate("Gemini", message)
@@ -266,6 +270,12 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
       }
       const content: ReadonlyArray<ToolContent> = part.result.value
       const text = content.filter((item) => item.type === "text").map((item) => item.text)
+      if (!knownToolCalls.has(part.id)) {
+        yield* Effect.logWarning("Gemini.lowerMessages: dropping orphaned tool result").pipe(
+          Effect.annotateLogs({ toolCallId: part.id, name: part.name }),
+        )
+        continue
+      }
       parts.push({
         functionResponse: {
           name: part.name,
@@ -281,7 +291,7 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
         parts.push({ inlineData: { mimeType: media.mime, data: media.base64 } })
       }
     }
-    contents.push({ role: "user", parts })
+    if (parts.length > 0) contents.push({ role: "user", parts })
   }
 
   return contents

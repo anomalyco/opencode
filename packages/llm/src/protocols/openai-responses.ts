@@ -346,24 +346,38 @@ const lowerToolResultOutput = Effect.fn("OpenAIResponses.lowerToolResultOutput")
 const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (request: LLMRequest) {
   const system: OpenAIResponsesInputItem[] =
     request.system.length === 0 ? [] : [{ role: "system", content: ProviderShared.joinText(request.system) }]
+
   const input: OpenAIResponsesInputItem[] = [...system]
+
   const store = OpenAIOptions.store(request)
+
+  // The Responses API rejects a `function_call_output` whose `call_id` has no
+  // matching `function_call` ("No tool call found for function call output with
+  // call_id ..."). Upstream history editing (dropped/errored assistant turns,
+  // compaction slicing) can orphan a tool result, so drop any output that would
+  // dangle.
+  const knownToolCalls = ProviderShared.toolCallIds(request.messages)
 
   for (const message of request.messages) {
     if (message.role === "system") {
       const part = yield* ProviderShared.wrappedSystemUpdate("OpenAI Responses", message)
       const previous = input.at(-1)
+
       if (previous && "role" in previous && previous.role === "user")
         input[input.length - 1] = {
           role: "user",
           content: [...previous.content, { type: "input_text", text: part.text }],
         }
       else input.push({ role: "user", content: [{ type: "input_text", text: part.text }] })
+
       continue
     }
 
     if (message.role === "user") {
-      input.push({ role: "user", content: yield* Effect.forEach(message.content, lowerUserContent) })
+      input.push({
+        role: "user",
+        content: yield* Effect.forEach(message.content, lowerUserContent),
+      })
       continue
     }
 
@@ -372,55 +386,83 @@ const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (requ
       const reasoningItems: Record<string, OpenAIResponsesReasoningReplay> = {}
       const reasoningReferences = new Set<string>()
       const hostedToolReferences = new Set<string>()
+
       const flushText = () => {
         if (content.length === 0) return
-        input.push({ role: "assistant", content: content.map((part) => ({ type: "output_text", text: part.text })) })
+        input.push({
+          role: "assistant",
+          content: content.map((part) => ({
+            type: "output_text",
+            text: part.text,
+          })),
+        })
         content.splice(0, content.length)
       }
+
       for (const part of message.content) {
         if (part.type === "text") {
           content.push(part)
           continue
         }
+
         if (part.type === "reasoning") {
           flushText()
+
           const reasoning = lowerReasoning(part)
           if (!reasoning) continue
+
           if (store !== false) {
-            if (!reasoningReferences.has(reasoning.id)) input.push({ type: "item_reference", id: reasoning.id })
+            if (!reasoningReferences.has(reasoning.id))
+              input.push({ type: "item_reference", id: reasoning.id })
+
             reasoningReferences.add(reasoning.id)
             continue
           }
+
           const existing = reasoningItems[reasoning.id]
+
           if (existing) {
             existing.summary.push(...reasoning.summary)
+
             if (typeof reasoning.encrypted_content === "string")
               existing.encrypted_content = reasoning.encrypted_content
+
             continue
           }
+
           const replay = {
             type: reasoning.type,
             summary: reasoning.summary,
             encrypted_content: reasoning.encrypted_content,
           }
+
           reasoningItems[reasoning.id] = replay
           input.push(replay)
           continue
         }
+
         if (part.type === "tool-call") {
           flushText()
+
           if (part.providerExecuted === true) continue
+
           input.push(lowerToolCall(part))
           continue
         }
+
         if (part.type === "tool-result" && part.providerExecuted === true) {
           flushText()
+
           const itemID = hostedToolItemID(part)
+
           if (store !== false && itemID && !hostedToolReferences.has(itemID))
             input.push({ type: "item_reference", id: itemID })
+
           if (itemID) hostedToolReferences.add(itemID)
+
           continue
         }
+
         return yield* ProviderShared.unsupportedContent("OpenAI Responses", "assistant", [
           "text",
           "reasoning",
@@ -428,6 +470,7 @@ const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (requ
           "tool-result",
         ])
       }
+
       flushText()
       continue
     }
@@ -435,6 +478,17 @@ const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (requ
     for (const part of message.content) {
       if (!ProviderShared.supportsContent(part, ["tool-result"]))
         return yield* ProviderShared.unsupportedContent("OpenAI Responses", "tool", ["tool-result"])
+
+      if (!knownToolCalls.has(part.id)) {
+        yield* Effect.logWarning("OpenAIResponses.lowerMessages: dropping orphaned tool result").pipe(
+          Effect.annotateLogs({
+            callId: part.id,
+            name: part.name,
+          }),
+        )
+        continue
+      }
+
       input.push({
         type: "function_call_output",
         call_id: part.id,
@@ -448,7 +502,10 @@ const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (requ
   // that state only on the last block, so filter after they have been joined.
   return store === false
     ? input.filter(
-        (item) => !("type" in item) || item.type !== "reasoning" || typeof item.encrypted_content === "string",
+        (item) =>
+          !("type" in item) ||
+          item.type !== "reasoning" ||
+          typeof item.encrypted_content === "string",
       )
     : input
 })

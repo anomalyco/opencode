@@ -222,6 +222,27 @@ export const toolResultText = (part: ToolResultPart) => {
   return encodeJson(part.result.value)
 }
 
+/**
+ * Collect the `id` of every tool-call in the request. Routes use this to drop
+ * orphaned tool results — a `tool-result` whose matching `tool-call` was
+ * removed upstream (errored/dropped assistant turns, history compaction
+ * slicing, provider-message normalization). Sending an unmatched result makes
+ * strict providers reject the entire request: OpenAI Responses returns "No
+ * tool call found for function call output with call_id ...", Anthropic and
+ * Bedrock reject a `tool_result` with no preceding `tool_use`. Well-formed
+ * history always emits the call before its result, so a request-wide id set is
+ * sufficient to validate pairing.
+ */
+export const toolCallIds = (messages: LLMRequest["messages"]): ReadonlySet<string> => {
+  const ids = new Set<string>()
+  for (const message of messages) {
+    for (const part of message.content) {
+      if (part.type === "tool-call") ids.add(part.id)
+    }
+  }
+  return ids
+}
+
 export const errorText = (error: unknown) => {
   if (error instanceof Error) return error.message
   if (typeof error === "string") return error

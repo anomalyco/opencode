@@ -305,6 +305,11 @@ const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (
 ) {
   const messages: BedrockMessage[] = []
 
+  // Bedrock rejects a `toolResult` block whose `toolUseId` has no matching
+  // `toolUse`. Upstream history editing (dropped/errored assistant turns,
+  // compaction slicing) can orphan a tool result, so drop any that would dangle.
+  const knownToolCalls = ProviderShared.toolCallIds(request.messages)
+
   for (const message of request.messages) {
     if (message.role === "system") {
       const part = yield* ProviderShared.wrappedSystemUpdate("Bedrock Converse", message)
@@ -372,7 +377,7 @@ const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (
       const cachePoint = BedrockCache.block(breakpoints, part.cache)
       if (cachePoint) content.push(cachePoint)
     }
-    messages.push({ role: "user", content })
+    if (content.length > 0) messages.push({ role: "user", content })
   }
 
   return messages

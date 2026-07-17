@@ -261,71 +261,132 @@ const lowerAssistantMessage = Effect.fn("OpenAIChat.lowerAssistantMessage")(func
   }
 })
 
-const lowerToolMessages = Effect.fn("OpenAIChat.lowerToolMessages")(function* (message: OpenAIChatRequestMessage) {
+const lowerToolMessages = Effect.fn("OpenAIChat.lowerToolMessages")(function* (
+  message: OpenAIChatRequestMessage,
+  knownToolCalls: ReadonlySet<string>,
+) {
   const messages: OpenAIChatMessage[] = []
   const images: Array<Schema.Schema.Type<typeof OpenAIChatUserContent>> = []
+
   for (const part of message.content) {
     if (!ProviderShared.supportsContent(part, ["tool-result"]))
       return yield* ProviderShared.unsupportedContent("OpenAI Chat", "tool", ["tool-result"])
-    if (part.result.type !== "content") {
-      messages.push({ role: "tool", tool_call_id: part.id, content: ProviderShared.toolResultText(part) })
+
+    if (!knownToolCalls.has(part.id)) {
+      yield* Effect.logWarning("OpenAIChat.lowerMessages: dropping orphaned tool result").pipe(
+        Effect.annotateLogs({
+          toolCallId: part.id,
+          name: part.name,
+        }),
+      )
       continue
     }
+
+    if (part.result.type !== "content") {
+      messages.push({
+        role: "tool",
+        tool_call_id: part.id,
+        content: ProviderShared.toolResultText(part),
+      })
+      continue
+    }
+
     const content: ReadonlyArray<ToolContent> = part.result.value
-    const text = content.filter((item) => item.type === "text").map((item) => item.text)
-    messages.push({ role: "tool", tool_call_id: part.id, content: text.join("\n") })
+    const text = content
+      .filter((item) => item.type === "text")
+      .map((item) => item.text)
+
+    messages.push({
+      role: "tool",
+      tool_call_id: part.id,
+      content: text.join("\n"),
+    })
+
     const files = content.filter((item) => item.type === "file")
+
     images.push(
       ...(yield* Effect.forEach(files, (item) =>
-        lowerMedia({ type: "media", mediaType: item.mime, data: item.uri, filename: item.name }),
+        lowerMedia({
+          type: "media",
+          mediaType: item.mime,
+          data: item.uri,
+          filename: item.name,
+        }),
       )),
     )
   }
+
   return { messages, images }
 })
 
-const lowerMessage = Effect.fn("OpenAIChat.lowerMessage")(function* (message: OpenAIChatRequestMessage) {
+const lowerMessage = Effect.fn("OpenAIChat.lowerMessage")(function* (
+  message: OpenAIChatRequestMessage,
+  knownToolCalls: ReadonlySet<string>,
+) {
   if (message.role === "user") return [yield* lowerUserMessage(message)]
   if (message.role === "assistant") return [yield* lowerAssistantMessage(message)]
-  return (yield* lowerToolMessages(message)).messages
+  return (yield* lowerToolMessages(message, knownToolCalls)).messages
 })
 
 const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: LLMRequest) {
   const system: OpenAIChatMessage[] =
     request.system.length === 0 ? [] : [{ role: "system", content: ProviderShared.joinText(request.system) }]
+
+  // The Chat API rejects a `tool` message whose `tool_call_id` has no matching
+  // `tool_calls` entry. Upstream history editing can orphan a tool result, so
+  // drop any that would dangle.
+  const knownToolCalls = ProviderShared.toolCallIds(request.messages)
+
   const messages = [...system]
   const pendingImages: Array<Schema.Schema.Type<typeof OpenAIChatUserContent>> = []
+
   const flushImages = () => {
     if (pendingImages.length === 0) return
     messages.push({ role: "user", content: pendingImages.splice(0) })
   }
+
   for (const message of request.messages) {
     if (message.role === "system") {
       const part = yield* ProviderShared.wrappedSystemUpdate("OpenAI Chat", message)
+
       if (pendingImages.length > 0) {
-        messages.push({ role: "user", content: [...pendingImages.splice(0), { type: "text", text: part.text }] })
+        messages.push({
+          role: "user",
+          content: [...pendingImages.splice(0), { type: "text", text: part.text }],
+        })
         continue
       }
+
       const previous = messages.at(-1)
-      if (previous?.role === "user" && typeof previous.content === "string")
-        messages[messages.length - 1] = { role: "user", content: `${previous.content}\n${part.text}` }
-      else if (previous?.role === "user" && Array.isArray(previous.content))
+
+      if (previous?.role === "user" && typeof previous.content === "string") {
+        messages[messages.length - 1] = {
+          role: "user",
+          content: `${previous.content}\n${part.text}`,
+        }
+      } else if (previous?.role === "user" && Array.isArray(previous.content)) {
         messages[messages.length - 1] = {
           role: "user",
           content: [...previous.content, { type: "text", text: part.text }],
         }
-      else messages.push({ role: "user", content: part.text })
+      } else {
+        messages.push({ role: "user", content: part.text })
+      }
+
       continue
     }
+
     if (message.role === "tool") {
-      const lowered = yield* lowerToolMessages(message)
+      const lowered = yield* lowerToolMessages(message, knownToolCalls)
       messages.push(...lowered.messages)
       pendingImages.push(...lowered.images)
       continue
     }
+
     flushImages()
-    messages.push(...(yield* lowerMessage(message)))
+    messages.push(...(yield* lowerMessage(message, knownToolCalls)))
   }
+
   flushImages()
   return messages
 })

@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
-import { LLM, LLMError, LLMEvent, Message, Model, ToolCallPart, Usage } from "../../src"
+import { LLM, LLMError, LLMEvent, Message, Model, ToolCallPart, ToolResultPart, Usage } from "../../src"
 import * as Azure from "../../src/providers/azure"
 import * as OpenAI from "../../src/providers/openai"
 import * as OpenAIChat from "../../src/protocols/openai-chat"
@@ -224,7 +224,51 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
-  it.effect("preserves structured tool errors for the model", () =>
+  it.effect("drops orphaned tool results with no matching tool_call", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare(
+        LLM.request({
+          id: "req_orphan_result",
+          model,
+          messages: [
+            Message.user("What is the weather?"),
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: { query: "weather" } })]),
+            // call_2 has no matching tool_call (assistant turn dropped upstream).
+            Message.make({
+              role: "tool",
+              content: [
+                ToolResultPart.make({ id: "call_1", name: "lookup", result: { forecast: "sunny" } }),
+                ToolResultPart.make({ id: "call_2", name: "lookup", result: { forecast: "rain" } }),
+              ],
+            }),
+          ],
+        }),
+      )
+
+      expect(prepared.body).toEqual({
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "user", content: "What is the weather?" },
+          {
+            role: "assistant",
+            content: null,
+            tool_calls: [
+              {
+                id: "call_1",
+                type: "function",
+                function: { name: "lookup", arguments: encodeJson({ query: "weather" }) },
+              },
+            ],
+          },
+          { role: "tool", tool_call_id: "call_1", content: encodeJson({ forecast: "sunny" }) },
+        ],
+        stream: true,
+        stream_options: { include_usage: true },
+      })
+    }),
+  )
+
+  it.effect("rejects unsupported user media content", () =>
     Effect.gen(function* () {
       const error = { error: { type: "unknown", message: "Tool execution interrupted" } }
       const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(

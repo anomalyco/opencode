@@ -2,7 +2,7 @@ import { EventStreamCodec } from "@smithy/eventstream-codec"
 import { fromUtf8, toUtf8 } from "@smithy/util-utf8"
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { CacheHint, LLM, Message, ToolCallPart, ToolChoice } from "../../src"
+import { CacheHint, LLM, Message, ToolCallPart, ToolChoice, ToolResultPart } from "../../src"
 import { LLMClient } from "../../src/route"
 import { AmazonBedrock } from "../../src/providers"
 import * as BedrockConverse from "../../src/protocols/bedrock-converse"
@@ -193,25 +193,22 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
-  it.effect("lowers image content in tool-result messages", () =>
+  it.effect("drops orphaned tool results with no matching toolUse", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare(
         LLM.request({
-          id: "req_tool_image",
+          id: "req_orphan_result",
           model,
           messages: [
-            Message.user("Capture the screen."),
-            Message.assistant([ToolCallPart.make({ id: "tool_1", name: "screenshot", input: {} })]),
-            Message.tool({
-              id: "tool_1",
-              name: "screenshot",
-              result: {
-                type: "content",
-                value: [
-                  { type: "text", text: "Screenshot captured." },
-                  { type: "file", uri: "data:image/png;base64,AAAA", mime: "image/png" },
-                ],
-              },
+            Message.user("What is the weather?"),
+            Message.assistant([ToolCallPart.make({ id: "tool_1", name: "lookup", input: { query: "weather" } })]),
+            // tool_2 has no matching toolUse (assistant turn dropped upstream).
+            Message.make({
+              role: "tool",
+              content: [
+                ToolResultPart.make({ id: "tool_1", name: "lookup", result: { forecast: "sunny" } }),
+                ToolResultPart.make({ id: "tool_2", name: "lookup", result: { forecast: "rain" } }),
+              ],
             }),
           ],
           cache: "none",
@@ -220,21 +217,15 @@ describe("Bedrock Converse route", () => {
 
       expect(prepared.body).toMatchObject({
         messages: [
-          { role: "user", content: [{ text: "Capture the screen." }] },
+          { role: "user", content: [{ text: "What is the weather?" }] },
           {
             role: "assistant",
-            content: [{ toolUse: { toolUseId: "tool_1", name: "screenshot", input: {} } }],
+            content: [{ toolUse: { toolUseId: "tool_1", name: "lookup", input: { query: "weather" } } }],
           },
           {
             role: "user",
             content: [
-              {
-                toolResult: {
-                  toolUseId: "tool_1",
-                  content: [{ text: "Screenshot captured." }, { image: { format: "png", source: { bytes: "AAAA" } } }],
-                  status: "success",
-                },
-              },
+              { toolResult: { toolUseId: "tool_1", content: [{ json: { forecast: "sunny" } }], status: "success" } },
             ],
           },
         ],

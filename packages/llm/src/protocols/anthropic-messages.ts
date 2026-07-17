@@ -422,6 +422,12 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
       continue
     }
 
+  // Anthropic rejects a `tool_result` block whose `tool_use_id` has no matching
+  // `tool_use`. Upstream history editing (dropped/errored assistant turns,
+  // compaction slicing) can orphan a tool result, so drop any that would dangle.
+  const knownToolCalls = ProviderShared.toolCallIds(request.messages)
+
+  for (const message of request.messages) {
     if (message.role === "user") {
       const content: AnthropicUserBlock[] = []
       for (const part of message.content) {
@@ -474,6 +480,12 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
     for (const part of message.content) {
       if (!ProviderShared.supportsContent(part, ["tool-result"]))
         return yield* ProviderShared.unsupportedContent("Anthropic Messages", "tool", ["tool-result"])
+      if (!knownToolCalls.has(part.id)) {
+        yield* Effect.logWarning("AnthropicMessages.lowerMessages: dropping orphaned tool result").pipe(
+          Effect.annotateLogs({ toolUseId: part.id, name: part.name }),
+        )
+        continue
+      }
       content.push({
         type: "tool_result",
         tool_use_id: part.id,
@@ -482,7 +494,7 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
         cache_control: cacheControl(breakpoints, part.cache),
       })
     }
-    messages.push({ role: "user", content })
+    if (content.length > 0) messages.push({ role: "user", content })
   }
 
   return messages

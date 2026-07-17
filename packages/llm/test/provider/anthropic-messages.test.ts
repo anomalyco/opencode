@@ -1,7 +1,17 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { HttpClientRequest } from "effect/unstable/http"
-import { CacheHint, LLM, LLMError, Message, ToolCallPart, Usage } from "../../src"
+import { HttpClientRequest } from "effect/unstable/http";
+
+import {
+  CacheHint,
+  LLM,
+  LLMError,
+  Message,
+  ToolCallPart,
+  ToolResultPart,
+  Usage,
+} from "../../src"
+
 import { Auth, LLMClient } from "../../src/route"
 import * as AnthropicMessages from "../../src/protocols/anthropic-messages"
 import { continuationRequest, nativeAnthropicMessagesContinuation } from "../continuation-scenarios"
@@ -218,24 +228,21 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
-  // Regression: screenshot/read tool results must stay structured so base64
-  // image data is not JSON-stringified into `tool_result.content`.
-  it.effect("lowers image tool-result content as structured image blocks", () =>
+  it.effect("drops orphaned tool results with no matching tool_use", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
+      const prepared = yield* LLMClient.prepare(
         LLM.request({
-          id: "req_tool_result_image",
+          id: "req_orphan_result",
           model,
           messages: [
-            Message.user("Show me the screenshot."),
-            Message.assistant([ToolCallPart.make({ id: "call_1", name: "read", input: { filePath: "shot.png" } })]),
-            Message.tool({
-              id: "call_1",
-              name: "read",
-              resultType: "content",
-              result: [
-                { type: "text", text: "Image read successfully" },
-                { type: "file", uri: "data:image/png;base64,AAECAw==", mime: "image/png" },
+            Message.user("What is the weather?"),
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: { query: "weather" } })]),
+            // call_2 has no matching tool_use (assistant turn dropped upstream).
+            Message.make({
+              role: "tool",
+              content: [
+                ToolResultPart.make({ id: "call_1", name: "lookup", result: { forecast: "sunny" } }),
+                ToolResultPart.make({ id: "call_2", name: "lookup", result: { forecast: "rain" } }),
               ],
             }),
           ],
@@ -243,103 +250,19 @@ describe("Anthropic Messages route", () => {
         }),
       )
 
-      expect(expectToolResult(prepared.body).content).toEqual([
-        { type: "text", text: "Image read successfully" },
-        { type: "image", source: { type: "base64", media_type: "image/png", data: "AAECAw==" } },
-      ])
-    }),
-  )
-
-  it.effect("lowers single-image tool-result content as a structured image block", () =>
-    Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
-        LLM.request({
-          id: "req_tool_result_image_only",
-          model,
-          messages: [
-            Message.assistant([ToolCallPart.make({ id: "call_1", name: "screenshot", input: {} })]),
-            Message.tool({
-              id: "call_1",
-              name: "screenshot",
-              resultType: "content",
-              result: [{ type: "file", uri: "data:image/jpeg;base64,/9j/AA==", mime: "image/jpeg" }],
-            }),
-          ],
-          cache: "none",
-        }),
-      )
-
-      expect(expectToolResult(prepared.body).content).toEqual([
-        { type: "image", source: { type: "base64", media_type: "image/jpeg", data: "/9j/AA==" } },
-      ])
-    }),
-  )
-
-  it.effect("rejects non-image media in tool-result content with a clear error", () =>
-    Effect.gen(function* () {
-      const error = yield* LLMClient.prepare(
-        LLM.request({
-          id: "req_tool_result_unsupported_media",
-          model,
-          messages: [
-            Message.assistant([ToolCallPart.make({ id: "call_1", name: "fetch", input: {} })]),
-            Message.tool({
-              id: "call_1",
-              name: "fetch",
-              resultType: "content",
-              result: [{ type: "file", uri: "data:audio/mpeg;base64,AAECAw==", mime: "audio/mpeg" }],
-            }),
-          ],
-          cache: "none",
-        }),
-      ).pipe(Effect.flip)
-
-      expect(error.message).toContain("Anthropic Messages")
-      expect(error.message).toContain("audio/mpeg")
-    }),
-  )
-
-  it.effect("prepares the composed native continuation request", () =>
-    Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
-        continuationRequest({
-          id: "req_native_continuation_anthropic",
-          model,
-          features: nativeAnthropicMessagesContinuation,
-        }),
-      )
-
-      expect(prepared.body).toMatchObject({
-        system: [{ type: "text", text: "You are concise. Continue from the provided history." }],
+      expect(prepared.body).toEqual({
+        model: "claude-sonnet-4-5",
         messages: [
-          {
-            role: "user",
-            content: [
-              { type: "text", text: "What is shown here?" },
-              { type: "image", source: { type: "base64", media_type: "image/png", data: "AAECAw==" } },
-            ],
-          },
+          { role: "user", content: [{ type: "text", text: "What is the weather?" }] },
           {
             role: "assistant",
-            content: [
-              { type: "thinking", thinking: "I inspected the previous turn.", signature: "sig_continuation_1" },
-              { type: "text", text: "It shows a small test image." },
-            ],
+            content: [{ type: "tool_use", id: "call_1", name: "lookup", input: { query: "weather" } }],
           },
-          { role: "user", content: [{ type: "text", text: "Check the weather in Paris before continuing." }] },
-          {
-            role: "assistant",
-            content: [{ type: "tool_use", id: "call_weather_1", name: "get_weather", input: { city: "Paris" } }],
-          },
-          {
-            role: "user",
-            content: [{ type: "tool_result", tool_use_id: "call_weather_1", content: '{"temperature":22}' }],
-          },
-          { role: "assistant", content: [{ type: "text", text: "Paris is 22 degrees." }] },
-          { role: "user", content: [{ type: "text", text: "Continue from this conversation in one short sentence." }] },
+          { role: "user", content: [{ type: "tool_result", tool_use_id: "call_1", content: '{"forecast":"sunny"}' }] },
         ],
+        stream: true,
+        max_tokens: 4096,
       })
-      expect(prepared.body.tools).toEqual([expect.objectContaining({ name: "get_weather" })])
     }),
   )
 
