@@ -45,21 +45,17 @@ export const resolve = (document: Document, value: unknown): unknown => {
   return next(value, new Set())
 }
 
-// Model-facing directional projection: `readOnly` properties are omitted from request
-// schemas and `writeOnly` properties from response schemas, with `required` kept
-// consistent. Runtime values pass through unchanged. Reference support is deliberately
-// bounded to JSON pointers (`#/...`); `$anchor` and nested `$id` resource scoping are
-// out of scope for an advisory schema.
+// Model-facing directional projection: request schemas omit `readOnly` properties,
+// response schemas omit `writeOnly` properties, and `required` stays consistent.
+// Runtime values pass through unchanged.
 type SchemaDirection = "request" | "response"
 type SchemaResource = { readonly value: unknown; readonly root: unknown }
 
 const hiddenKeyword = { request: "readOnly", response: "writeOnly" } as const
 
-// Local `$defs`/`definitions` pointers resolve against the schema being projected;
-// other pointers resolve against the document and rebase local resolution onto the
-// target. Resolution is one hop at a time so that every link of a reference chain has
-// its own sibling declarations inspected; chains and cycles terminate in the callers'
-// cycle solver, which visits each hop object at most once.
+// Resolves one `$ref` hop so every link of a chain has its own sibling declarations
+// inspected; cycles terminate in the callers' cycle solver. Local `$defs`/`definitions`
+// pointers resolve against the schema being projected, other pointers rebase onto the target.
 const resolveResource = (document: Document, resource: SchemaResource): SchemaResource => {
   if (!isRecord(resource.value)) return resource
   const ref = nonEmptyString(own(resource.value, "$ref"))
@@ -70,13 +66,9 @@ const resolveResource = (document: Document, resource: SchemaResource): SchemaRe
   return { value: target, root: local ? resource.root : target }
 }
 
-// Hidden-ness and hidden property names are reachability folds over `$ref` and
-// `allOf` edges, memoized per schema object and direction so that diamond-shaped
-// reference graphs (the same component referenced from many sites) stay linear;
-// path-scoped visited sets would re-traverse shared subtrees exponentially.
-// Documents are assumed immutable once projected: mutating a document previously
-// passed to `fromSpec` yields stale cached results. A schema reachable under
-// multiple resolution roots reuses the first root's result.
+// Hidden-ness and hidden names are memoized per schema object and direction so
+// diamond-shaped reference graphs stay linear. Documents are assumed immutable once
+// projected; a schema reachable under multiple resolution roots reuses the first result.
 type Solver<T> = {
   readonly values: Map<unknown, T>
   // Discovery index per schema whose strongly connected component is unresolved.
@@ -88,26 +80,24 @@ type DirectionCache = {
   readonly names: Solver<ReadonlySet<string>>
 }
 
-const emptySolver = <T>(): Solver<T> => ({ values: new Map(), pending: new Map(), stack: [] })
+const emptyCache = (): DirectionCache => ({
+  hidden: { values: new Map(), pending: new Map(), stack: [] },
+  names: { values: new Map(), pending: new Map(), stack: [] },
+})
 
 const projectionCaches = new WeakMap<Document, Record<SchemaDirection, DirectionCache>>()
 
 const projectionCache = (document: Document, direction: SchemaDirection): DirectionCache => {
   const existing = projectionCaches.get(document)
   if (existing !== undefined) return existing[direction]
-  const created = {
-    request: { hidden: emptySolver<boolean>(), names: emptySolver<ReadonlySet<string>>() },
-    response: { hidden: emptySolver<boolean>(), names: emptySolver<ReadonlySet<string>>() },
-  }
+  const created = { request: emptyCache(), response: emptyCache() }
   projectionCaches.set(document, created)
   return created[direction]
 }
 
-// Reference cycles are resolved with Tarjan's strongly connected components: every
-// member of a cycle reaches the same declarations, so the component root's value is
-// final for each member. A frame whose cycles close in a still-active ancestor
-// returns its provisional value uncached; only resolved components are cached, which
-// keeps results independent of property and traversal order.
+// Tarjan's strongly connected components: cycle members all reach the same
+// declarations, so the component root's value is final for every member. Only resolved
+// components are cached, keeping results independent of traversal order.
 type CycleScope = { lowlink: number }
 
 const solveCycles = <T>(
@@ -142,8 +132,7 @@ const solveCycles = <T>(
   return value
 }
 
-// Most documents never use directional keywords; one cached linear scan lets
-// projection and the doubled per-direction component normalization be skipped entirely.
+// Most documents have no directional keywords; one cached scan skips projection entirely.
 const directionalDocuments = new WeakMap<Document, boolean>()
 
 export const hasDirectionalSchemas = (document: Document): boolean => {
@@ -192,8 +181,6 @@ const hiddenNames = (
   if (!isRecord(value)) return new Set()
   return solveCycles(projectionCache(document, direction).names, value, new Set(), scope, (inner) => {
     const properties = own(value, "properties")
-    // Property hidden-ness runs in the separate hidden solver; each call completes
-    // fully before returning, so it never observes this solver's pending frames.
     const declared = isRecord(properties)
       ? Object.entries(properties)
           .filter(([, property]) => isHidden(document, { ...resource, value: property }, direction))
@@ -208,10 +195,8 @@ const hiddenNames = (
   })
 }
 
-// `not` negates its subschema and `if`/`contains` select instances rather than
-// assert them, so removing hidden properties there would strengthen or shift the
-// assertion (a projected `not` can become unsatisfiable). Those subschemas pass
-// through unchanged; `then`/`else` are ordinary assertions and are still projected.
+// `not`/`if`/`contains` subschemas pass through unprojected: they negate or select
+// rather than assert, so removing hidden properties would invert their semantics.
 const nestedSchemas = new Set([
   "items",
   "additionalProperties",
