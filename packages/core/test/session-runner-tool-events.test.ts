@@ -195,6 +195,31 @@ test("binary failure emits no success event", async () => {
   expect(published.some((event) => event.type === "session.tool.failed.1")).toBe(true)
 })
 
+test("over-budget thin success fails settlement instead of publishing success", async () => {
+  const { published, publisher } = capture()
+  await Effect.runPromise(publisher.publish(call))
+  await Effect.runPromise(
+    publisher.publish(
+      LLMEvent.toolResult({
+        ...result,
+        providerMetadata: {
+          anthropic: { pad: "x".repeat(ToolPayload.MaxEventDataBytes) },
+        },
+      }),
+    ),
+  )
+  expect(published.some((event) => event.type === "session.tool.success.1")).toBe(false)
+  const failed = published.find((event) => event.type === "session.tool.failed.1")
+  expect(failed).toBeDefined()
+  expect(failed?.data).toMatchObject({
+    callID: call.id,
+    error: {
+      type: "unknown",
+      message: expect.stringContaining(String(ToolPayload.MaxEventDataBytes)),
+    },
+  })
+})
+
 test("success event data can carry a provider-executed result", () => {
   const decoded = Schema.decodeUnknownSync(SessionEvent.Tool.Success.data)({
     sessionID,

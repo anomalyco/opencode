@@ -16,6 +16,7 @@ import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionTable, SessionMessageTable } from "@opencode-ai/core/session/sql"
+import { ToolPayload } from "@opencode-ai/core/session/tool-payload"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(LayerNode.compile(LayerNode.group([Database.node, EventV2.node, SessionProjector.node])))
@@ -146,6 +147,106 @@ describe("Tool.Progress", () => {
       expect(rows.map((row) => row.type)).toContain(EventV2.versionedType(SessionEvent.Tool.Progress.type, 1))
       expect(rows.map((row) => row.type)).toContain(EventV2.versionedType(SessionEvent.Tool.Success.type, 1))
       expect(rows.map((row) => row.type)).toContain(EventV2.versionedType(SessionEvent.Tool.Failed.type, 1))
+    }),
+  )
+
+  it.effect("hydrates thin tool success from the session payload blob into session_message", () =>
+    Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      const service = yield* EventV2.Service
+      const sessionID = SessionV2.ID.make("ses_tool_payload_hydrate")
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+        .onConflictDoNothing()
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: sessionID,
+          project_id: Project.ID.global,
+          slug: "payload-hydrate",
+          directory: "/project",
+          title: "payload-hydrate",
+          version: "test",
+        })
+        .run()
+        .pipe(Effect.orDie)
+
+      const mega = "m".repeat(2 * 1024 * 1024)
+      const body: ToolPayload.Body = {
+        structured: { mime: "application/octet-stream", bytes: mega.length },
+        content: [
+          { type: "text", text: "ready" },
+          { type: "file", uri: `data:application/octet-stream;base64,${mega}`, mime: "application/octet-stream" },
+        ],
+      }
+      const payloadHash = yield* ToolPayload.insert(db, sessionID, body)
+      const thin = ToolPayload.preview(body)
+      const assistantMessageID = SessionMessage.ID.create()
+
+      yield* service.publish(SessionEvent.Step.Started, {
+        sessionID,
+        assistantMessageID,
+        agent: AgentV2.ID.make("build"),
+        model,
+      })
+      yield* service.publish(SessionEvent.Tool.Input.Started, {
+        sessionID,
+        assistantMessageID,
+        callID: "call-hydrate",
+        name: "read",
+      })
+      yield* service.publish(SessionEvent.Tool.Called, {
+        sessionID,
+        assistantMessageID,
+        callID: "call-hydrate",
+        input: { path: "huge.bin" },
+        executed: false,
+      })
+      yield* service.publish(SessionEvent.Tool.Success, {
+        sessionID,
+        assistantMessageID,
+        callID: "call-hydrate",
+        structured: thin.structured,
+        content: thin.content,
+        executed: false,
+        payloadHash,
+      })
+
+      const row = yield* db
+        .select()
+        .from(SessionMessageTable)
+        .where(eq(SessionMessageTable.id, assistantMessageID))
+        .get()
+        .pipe(Effect.orDie)
+      if (!row) return yield* Effect.die("Missing projected assistant")
+      const assistant = Schema.decodeUnknownSync(SessionMessage.Assistant)({
+        ...row.data,
+        id: row.id,
+        type: row.type,
+      })
+      expect(assistant.content[0]).toMatchObject({
+        state: {
+          status: "completed",
+          structured: body.structured,
+          content: body.content,
+        },
+      })
+
+      const eventRows = yield* db
+        .select()
+        .from(EventTable)
+        .where(eq(EventTable.aggregate_id, sessionID))
+        .all()
+        .pipe(Effect.orDie)
+      const success = eventRows.find((item) => item.type === EventV2.versionedType(SessionEvent.Tool.Success.type, 1))
+      expect(success).toBeDefined()
+      expect(JSON.stringify(success!.data).includes(mega)).toBe(false)
+      expect(Buffer.byteLength(JSON.stringify(success!.data), "utf-8")).toBeLessThanOrEqual(
+        ToolPayload.MaxEventDataBytes,
+      )
     }),
   )
 })
