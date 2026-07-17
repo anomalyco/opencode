@@ -139,6 +139,7 @@ export function SessionReviewV2Sidebar(props: SessionReviewV2SidebarProps) {
             min={minWidth()}
             max={maxWidth()}
             onResize={(next) => props.onWidthChange?.(next)}
+            onDblClick={() => props.onWidthChange?.(SESSION_REVIEW_V2_SIDEBAR_WIDTH_DEFAULT)}
           />
         </div>
       </Show>

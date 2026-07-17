@@ -64,7 +64,7 @@ export type PromptScope = { draftID: string } | { dir: string; id?: string }
 
 export const DEFAULT_PROMPT: Prompt = [{ type: "text", content: "", start: 0, end: 0 }]
 
-type PromptStore = {
+export type PromptStore = {
   prompt: Prompt
   cursor?: number
   model?: PromptModel
@@ -189,6 +189,7 @@ function promptStore(initial?: InitialPrompt): PromptStore {
 function createPromptStateValue(store: PromptStore, setStore: SetStoreFunction<PromptStore>) {
   const actions = createPromptActions(setStore)
   const value = {
+    store: [() => store, setStore] as [Accessor<PromptStore>, SetStoreFunction<PromptStore>],
     current: () => store.prompt,
     cursor: createMemo(() => store.cursor),
     dirty: () => !isPromptEqual(store.prompt, DEFAULT_PROMPT),

@@ -37,6 +37,8 @@ export function InlineInputV2(props: InlineInputV2Props) {
     "style",
   ])
 
+  let input: HTMLInputElement | undefined
+
   return (
     <div
       data-component="inline-input-v2"
@@ -59,7 +61,15 @@ export function InlineInputV2(props: InlineInputV2Props) {
           : {}),
       }}
     >
-      <div data-slot="inline-input-v2-prefix">
+      <div
+        data-slot="inline-input-v2-prefix"
+        onMouseDown={(event) => {
+          if (local.disabled || event.button !== 0) return
+          // Keep focus on the input without using a native <label>, so external labels still work.
+          event.preventDefault()
+          input?.focus()
+        }}
+      >
         <span data-slot="inline-input-v2-prefix-text">{local.prefix}</span>
       </div>
       <div data-slot="inline-input-v2-divider" aria-hidden="true" />
@@ -67,6 +77,11 @@ export function InlineInputV2(props: InlineInputV2Props) {
         <div data-slot="inline-input-v2-value">
           <input
             {...inputProps}
+            ref={(el) => {
+              input = el
+              const ref = inputProps.ref
+              if (typeof ref === "function") ref(el)
+            }}
             type={inputProps.type ?? "text"}
             disabled={local.disabled}
             aria-invalid={local.invalid ? true : undefined}

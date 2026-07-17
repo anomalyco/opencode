@@ -937,6 +937,7 @@
         "@types/node": "catalog:",
         "@types/react": "18.0.25",
         "react": "18.2.0",
+        "react-dom": "18.2.0",
         "solid-js": "catalog:",
         "storybook": "^10.2.13",
         "storybook-solidjs-vite": "^10.0.9",
