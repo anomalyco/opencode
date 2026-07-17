@@ -1,10 +1,12 @@
 import { expect, test } from "bun:test"
 import { DEFAULT_THEMES, resolveTheme as resolveV1 } from "../../../src/theme"
 import { resolveThemeFile } from "../../../src/theme/v2/resolve"
+import { selectThemeMode, themeModes } from "../../../src/theme/v2/select"
 import { migrateV1 } from "../../../src/theme/v2/v1-migrate"
 
 test("migrates resolved V1 modes into literal V2 tokens", () => {
   const migrated = migrateV1(DEFAULT_THEMES.opencode)
+  if (!migrated.light || !migrated.dark) throw new Error("Expected both modes")
   const legacy = resolveV1(DEFAULT_THEMES.opencode, "light")
   const resolved = resolveThemeFile(migrated, "light")
 
@@ -61,6 +63,7 @@ test("infers chromatic hues, anchors light and dark colors, and aliases ambiguou
   source.theme.success = { light: "#ff6666", dark: "#450000" }
 
   const migrated = migrateV1(source)
+  if (!migrated.light || !migrated.dark) throw new Error("Expected both modes")
   const lightRed = migrated.light.hue?.red
   const darkRed = migrated.dark.hue?.red
   if (typeof lightRed !== "object" || typeof darkRed !== "object") throw new Error("Expected generated red scales")
@@ -92,6 +95,7 @@ test("builds and extrapolates gray from V1 surfaces and text without using menus
   const light = resolveV1(source, "light")
   const dark = resolveV1(source, "dark")
   const migrated = migrateV1(source)
+  if (!migrated.light || !migrated.dark) throw new Error("Expected both modes")
   const lightGray = migrated.light.hue?.gray
   const darkGray = migrated.dark.hue?.gray
   if (typeof lightGray !== "object" || typeof darkGray !== "object") throw new Error("Expected concrete gray scales")
@@ -114,8 +118,9 @@ test("builds and extrapolates gray from V1 surfaces and text without using menus
   source.theme.borderSubtle = "#ff00ff"
   source.theme.border = "#00ff00"
   source.theme.borderActive = "#00ffff"
-  expect(migrateV1(source).light.hue?.gray).toEqual(lightGray)
-  expect(migrateV1(source).dark.hue?.gray).toEqual(darkGray)
+  const withBorders = migrateV1(source)
+  expect(withBorders.light?.hue?.gray).toEqual(lightGray)
+  expect(withBorders.dark?.hue?.gray).toEqual(darkGray)
 })
 
 test("uses the default text reference for primary actions on transparent backgrounds", () => {
@@ -124,6 +129,7 @@ test("uses the default text reference for primary actions on transparent backgro
   source.theme.primary = { light: "#ffffff", dark: "#000000" }
   delete source.theme.selectedListItemText
   const migrated = migrateV1(source)
+  if (!migrated.light || !migrated.dark) throw new Error("Expected both modes")
 
   expect(migrated.light.text?.action?.primary?.default).toBe("$text.default")
   expect(migrated.dark.text?.action?.primary?.default).toBe("$text.default")
@@ -137,12 +143,42 @@ test("retains V1 circular reference errors", () => {
   expect(() => migrateV1(source)).toThrow("Circular color reference: one -> two -> one")
 })
 
-test("migrates every built-in V1 theme in both modes", () => {
+test("migrates every built-in V1 theme in its supported modes", () => {
   for (const source of Object.values(DEFAULT_THEMES)) {
     const migrated = migrateV1(source)
-    expect(resolveThemeFile(migrated, "light").text.default).toBeDefined()
-    expect(resolveThemeFile(migrated, "dark").text.default).toBeDefined()
+    for (const mode of themeModes(migrated)) {
+      expect(resolveThemeFile(migrated, mode).text.default).toBeDefined()
+    }
   }
+})
+
+test("collapses identical V1 backgrounds when both variants infer one mode", () => {
+  const dark = structuredClone(DEFAULT_THEMES.opencode)
+  dark.theme.background = "#111111"
+  dark.theme.text = "#eeeeee"
+  const migratedDark = migrateV1(dark)
+  expect(migratedDark.light).toBeUndefined()
+  expect(migratedDark.dark).toBeDefined()
+  expect(themeModes(migratedDark)).toEqual(["dark"])
+  expect(selectThemeMode(migratedDark, "light").mode).toBe("dark")
+
+  const light = structuredClone(DEFAULT_THEMES.opencode)
+  light.theme.background = "#eeeeee"
+  light.theme.text = "#111111"
+  const migratedLight = migrateV1(light)
+  expect(migratedLight.light).toBeDefined()
+  expect(migratedLight.dark).toBeUndefined()
+  expect(themeModes(migratedLight)).toEqual(["light"])
+  expect(selectThemeMode(migratedLight, "dark").mode).toBe("light")
+})
+
+test("keeps both modes when a shared background has different contrast", () => {
+  const source = structuredClone(DEFAULT_THEMES.opencode)
+  source.theme.background = "#808080"
+  source.theme.text = { light: "#111111", dark: "#eeeeee" }
+  const migrated = migrateV1(source)
+
+  expect(themeModes(migrated)).toEqual(["light", "dark"])
 })
 
 function hex(color: { toInts(): [number, number, number, number] }) {

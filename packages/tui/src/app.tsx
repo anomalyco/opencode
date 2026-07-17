@@ -420,7 +420,7 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
   const client = useClient()
   const toast = useToast()
   const themeState = useTheme()
-  const { themeV2, mode, setMode, locked, lock, unlock } = themeState
+  const { themeV2, mode, supports, setMode, locked, lock, unlock } = themeState
   const data = useData()
   const location = useLocation()
   const exit = useExit()
@@ -818,6 +818,7 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
         name: "theme.switch_mode",
         title: mode() === "dark" ? "Switch to light mode" : "Switch to dark mode",
         palette: undefined,
+        enabled: () => supports(mode() === "dark" ? "light" : "dark"),
         run: () => {
           setMode(mode() === "dark" ? "light" : "dark")
           dialog.clear()

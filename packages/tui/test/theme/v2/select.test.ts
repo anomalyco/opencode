@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import type { HueDefinition, ThemeDefinition, ThemeFile } from "../../../src/theme/v2"
-import { selectTheme, selectThemeMode } from "../../../src/theme/v2/select"
+import { selectTheme, selectThemeMode, supportsThemeMode, themeModes } from "../../../src/theme/v2/select"
 
 const hue = {} as HueDefinition
 const light = { hue, text: { default: "#111111", subdued: "#222222" } } satisfies ThemeDefinition
@@ -25,6 +25,27 @@ test("merges an expanded mode override over the other mode", () => {
   expect(selected.hue).toBeDefined()
   expect(selected.text?.default).toBe("#ffffff")
   expect(selected.text?.subdued).toBe("$text.default")
+})
+
+test("selects the available mode when the requested mode is missing", () => {
+  const lightOnly = { version: 2, light } satisfies ThemeFile
+  const darkOnly = { version: 2, dark } satisfies ThemeFile
+
+  expect(themeModes(lightOnly)).toEqual(["light"])
+  expect(themeModes(darkOnly)).toEqual(["dark"])
+  expect(supportsThemeMode(lightOnly, "light")).toBeTrue()
+  expect(supportsThemeMode(lightOnly, "dark")).toBeFalse()
+  expect(selectThemeMode(lightOnly, "dark")).toEqual({ theme: light, mode: "light", expanded: false })
+  expect(selectThemeMode(darkOnly, "light")).toEqual({ theme: dark, mode: "dark", expanded: false })
+})
+
+test("rejects a merge mode without its base mode", () => {
+  expect(() => selectThemeMode({ version: 2, light: { mergeMode: true } })).toThrow(
+    "light theme cannot merge without a dark theme",
+  )
+  expect(() => selectThemeMode({ version: 2, dark: { mergeMode: true } })).toThrow(
+    "dark theme cannot merge without a light theme",
+  )
 })
 
 test("rejects mutual mode merging", () => {

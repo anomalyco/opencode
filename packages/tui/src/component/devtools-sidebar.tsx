@@ -4,8 +4,10 @@ import { useTheme } from "../context/theme"
 import { DevTools } from "../devtools"
 
 export function DevToolsSidebar() {
-  const { themeV2, mode, setMode } = useTheme().contextual("elevated")
+  const { themeV2, mode, supports, setMode } = useTheme().contextual("elevated")
   const [modeHovered, setModeHovered] = createSignal(false)
+  const nextMode = () => (mode() === "dark" ? "light" : "dark")
+  const canSwitchMode = () => supports(nextMode())
 
   return (
     <box
@@ -29,12 +31,12 @@ export function DevToolsSidebar() {
           <box
             paddingLeft={1}
             paddingRight={1}
-            backgroundColor={modeHovered() ? themeV2.background.action("hovered") : undefined}
-            onMouseOver={() => setModeHovered(true)}
+            backgroundColor={modeHovered() && canSwitchMode() ? themeV2.background.action("hovered") : undefined}
+            onMouseOver={() => setModeHovered(canSwitchMode())}
             onMouseOut={() => setModeHovered(false)}
-            onMouseUp={() => setMode(mode() === "dark" ? "light" : "dark")}
+            onMouseUp={canSwitchMode() ? () => setMode(nextMode()) : undefined}
           >
-            <text fg={themeV2.text()}>{mode()}</text>
+            <text fg={canSwitchMode() ? themeV2.text() : themeV2.text.subdued()}>{mode()}</text>
           </box>
         </box>
       </box>

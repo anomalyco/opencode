@@ -41,3 +41,4 @@ export type {
   StatefulColor,
 } from "./types"
 export { migrateV1 } from "./v1-migrate"
+export { selectTheme, selectThemeMode, supportsThemeMode, themeModes } from "./select"

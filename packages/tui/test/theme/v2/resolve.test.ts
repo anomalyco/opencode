@@ -8,6 +8,19 @@ import { selectTheme } from "../../../src/theme/v2/select"
 const light = selectTheme(DEFAULT_THEME, "light")
 const dark = selectTheme(DEFAULT_THEME, "dark")
 
+test("resolves one-mode files with defaults for the available mode", () => {
+  const resolvedLight = resolveThemeFile({ version: 2, light: {} }, "dark")
+  const resolvedDark = resolveThemeFile({ version: 2, dark: {} }, "light")
+
+  expect(resolvedLight.background.default.equals(resolveTheme(light).background.default)).toBeTrue()
+  expect(resolvedDark.background.default.equals(resolveTheme(dark).background.default)).toBeTrue()
+})
+
+test("rejects theme files without a mode", () => {
+  // @ts-expect-error Runtime decoding also enforces the at-least-one-mode invariant.
+  expect(() => resolveThemeFile({ version: 2 })).toThrow("Invalid theme")
+})
+
 test("resolves independent definitions and hue aliases", () => {
   const lightTheme = resolveTheme(light)
   const darkTheme = resolveTheme(dark)
@@ -20,44 +33,32 @@ test("resolves independent definitions and hue aliases", () => {
   expect(lightTheme.hue.neutral[500].equals(lightTheme.hue.gray[500])).toBeTrue()
   expect(lightTheme.source(lightTheme.hue.blue[500])).toEqual({ hue: "blue", step: 500 })
   expect(lightTheme.source(lightTheme.hue.neutral[200])).toEqual({ hue: "neutral", step: 200 })
-  expect(lightTheme.source(lightTheme.background.surface.offset)).toEqual({ hue: "neutral", step: 200 })
+  expect(lightTheme.source(lightTheme.background.surface.offset)).toEqual({ hue: "neutral", step: 300 })
   expect(lightTheme.increase(lightTheme.hue.red[100])).toBe(lightTheme.hue.red[200])
   expect(lightTheme.decrease(lightTheme.hue.red[200])).toBe(lightTheme.hue.red[100])
-  expect(lightTheme.contexts["@context:elevated"]?.increase(lightTheme.hue.red[100])).toBe(
-    lightTheme.hue.red[200],
-  )
+  expect(lightTheme.contexts["@context:elevated"]?.increase(lightTheme.hue.red[100])).toBe(lightTheme.hue.red[200])
   expect(lightTheme.text.default).toBeInstanceOf(RGBA)
   expect(darkTheme.background.default).toBeInstanceOf(RGBA)
-  expect(lightTheme.background.surface.offset).toBe(lightTheme.hue.neutral[200])
-  expect(lightTheme.background.surface.overlay).toBe(lightTheme.hue.neutral[300])
+  expect(lightTheme.background.surface.offset).toBe(lightTheme.hue.neutral[300])
+  expect(lightTheme.background.surface.overlay).toBe(lightTheme.hue.neutral[400])
   expect(lightTheme.syntax.keyword).toBeInstanceOf(RGBA)
-  expect(lightTheme.text.action.primary.default).toBe(lightTheme.hue.neutral[100])
+  expect(lightTheme.text.action.primary.default).toBe(lightTheme.hue.neutral[200])
   expect(lightTheme.contexts["@context:elevated"]?.background.action.primary.default).toBe(
     lightTheme.hue.interactive[500],
   )
   expect(lightTheme.contexts["@context:elevated"]?.background.default).toBe(lightTheme.background.surface.offset)
-  expect(lightTheme.contexts["@context:elevated"]?.text.action.primary.default).toBe(
-    lightTheme.hue.neutral[100],
-  )
+  expect(lightTheme.contexts["@context:elevated"]?.text.action.primary.default).toBe(lightTheme.hue.neutral[100])
   expect(lightTheme.contexts["@context:overlay"]?.background.action.primary.default).toBe(
     lightTheme.hue.interactive[500],
   )
   expect(lightTheme.contexts["@context:overlay"]?.background.default).toBe(lightTheme.background.surface.overlay)
-  expect(lightTheme.contexts["@context:overlay"]?.text.action.primary.default).toBe(
-    lightTheme.hue.neutral[100],
-  )
+  expect(lightTheme.contexts["@context:overlay"]?.text.action.primary.default).toBe(lightTheme.hue.neutral[100])
   expect(darkTheme.contexts["@context:elevated"]?.background.action.primary.default).toBe(
     darkTheme.hue.interactive[400],
   )
-  expect(darkTheme.contexts["@context:elevated"]?.text.action.primary.default).toBe(
-    darkTheme.hue.neutral[100],
-  )
-  expect(darkTheme.contexts["@context:overlay"]?.background.action.primary.default).toBe(
-    darkTheme.hue.interactive[400],
-  )
-  expect(darkTheme.contexts["@context:overlay"]?.text.action.primary.default).toBe(
-    darkTheme.hue.neutral[900],
-  )
+  expect(darkTheme.contexts["@context:elevated"]?.text.action.primary.default).toBe(darkTheme.hue.neutral[200])
+  expect(darkTheme.contexts["@context:overlay"]?.background.action.primary.default).toBe(darkTheme.hue.interactive[400])
+  expect(darkTheme.contexts["@context:overlay"]?.text.action.primary.default).toBe(darkTheme.hue.neutral[200])
 })
 
 test("resolves base hue aliases and rejects circular hue aliases", () => {
@@ -65,10 +66,7 @@ test("resolves base hue aliases and rejects circular hue aliases", () => {
     ...light,
     hue: { ...light.hue, blue: "$hue.red", purple: "$hue.blue" },
   })
-  const overridden = resolveThemeFile(
-    { version: 2, light: { hue: { blue: "$hue.red" } }, dark: {} },
-    "light",
-  )
+  const overridden = resolveThemeFile({ version: 2, light: { hue: { blue: "$hue.red" } }, dark: {} }, "light")
 
   expect(aliased.hue.blue).not.toBe(aliased.hue.red)
   expect(aliased.hue.blue[500].equals(aliased.hue.red[500])).toBeTrue()
@@ -195,9 +193,7 @@ test("resolves elevated hover surfaces from direct colors", () => {
   )
 
   expect(theme.contexts["@context:elevated"]?.background.default.toInts()).toEqual([18, 52, 86, 255])
-  expect(theme.contexts["@context:elevated"]?.background.action.primary.hovered.toInts()).toEqual([
-    35, 69, 103, 255,
-  ])
+  expect(theme.contexts["@context:elevated"]?.background.action.primary.hovered.toInts()).toEqual([35, 69, 103, 255])
 })
 
 test("resolves transparent colors", () => {
@@ -268,12 +264,10 @@ test("rejects missing, base, and contextual reference cycles", () => {
 
 test("validates complete hues, resolved groups, and hue-only syntax", () => {
   expect(() =>
-    resolveTheme(
-      {
-        ...light,
-        hue: { ...light.hue, accent: "$hue.missing" },
-      } as unknown as ThemeDefinition,
-    ),
+    resolveTheme({
+      ...light,
+      hue: { ...light.hue, accent: "$hue.missing" },
+    } as unknown as ThemeDefinition),
   ).toThrow("$hue.missing")
   expect(() =>
     resolveTheme({

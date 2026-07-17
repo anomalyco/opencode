@@ -2,7 +2,7 @@ import { RGBA } from "@opentui/core"
 import { oklchToHex, rgbToOklch } from "@opencode-ai/ui/theme/color"
 import type { Theme, ThemeJson } from "../index"
 import { DEFAULT_THEME } from "./defaults"
-import type { ThemeFile } from "./index"
+import type { FileThemeDefinition, Mode, ThemeFile } from "./index"
 import { HueStep } from "./schema"
 
 type ThemeColor = Exclude<keyof Theme, "thinkingOpacity" | "_hasSelectedListItemText">
@@ -13,15 +13,33 @@ const minimumChroma = 0.03
 const lightThreshold = 0.6
 
 export function migrateV1(theme: ThemeJson): ThemeFile {
+  const light = resolveV1(theme, "light")
+  const dark = resolveV1(theme, "dark")
+  if (light.background.a > 0 && dark.background.a > 0 && light.background.equals(dark.background)) {
+    const lightMode = detectMode(light)
+    const darkMode = detectMode(dark)
+    if (lightMode === darkMode) {
+      if (lightMode === "light") return { version: 2, standalone: true, light: migrateMode(light, "light") }
+      return { version: 2, standalone: true, dark: migrateMode(dark, "dark") }
+    }
+  }
   return {
     version: 2,
     standalone: true,
-    light: migrateMode(resolveV1(theme, "light"), "light"),
-    dark: migrateMode(resolveV1(theme, "dark"), "dark"),
+    light: migrateMode(light, "light"),
+    dark: migrateMode(dark, "dark"),
   }
 }
 
-function migrateMode(theme: Theme, mode: "light" | "dark"): ThemeFile["light"] {
+function detectMode(theme: Theme): Mode {
+  return luminance(theme.text) > luminance(theme.background) ? "dark" : "light"
+}
+
+function luminance(color: RGBA) {
+  return 0.299 * color.r + 0.587 * color.g + 0.114 * color.b
+}
+
+function migrateMode(theme: Theme, mode: Mode): FileThemeDefinition {
   const color = (key: ThemeColor) => hex(theme[key])
   const selected = hex(selectedForeground(theme, theme.primary))
   const destructive = hex(selectedForeground(theme, theme.error))

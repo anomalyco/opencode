@@ -137,15 +137,35 @@ const BackgroundDefinition = Schema.Struct({
 export type BackgroundDefinition = Schema.Schema.Type<typeof BackgroundDefinition>
 
 export const SyntaxToken = Schema.Literals([
-  "comment", "keyword", "function", "variable", "string", "number", "type", "operator", "punctuation",
+  "comment",
+  "keyword",
+  "function",
+  "variable",
+  "string",
+  "number",
+  "type",
+  "operator",
+  "punctuation",
 ])
 export type SyntaxToken = Schema.Schema.Type<typeof SyntaxToken>
 export const SyntaxDefinition = Schema.Record(SyntaxToken, Schema.optionalKey(HueColorValue))
 export type SyntaxDefinition = Schema.Schema.Type<typeof SyntaxDefinition>
 
 export const MarkdownToken = Schema.Literals([
-  "text", "heading", "link", "linkText", "code", "blockQuote", "emphasis", "strong", "horizontalRule", "listItem",
-  "listEnumeration", "image", "imageText", "codeBlock",
+  "text",
+  "heading",
+  "link",
+  "linkText",
+  "code",
+  "blockQuote",
+  "emphasis",
+  "strong",
+  "horizontalRule",
+  "listItem",
+  "listEnumeration",
+  "image",
+  "imageText",
+  "codeBlock",
 ])
 export type MarkdownToken = Schema.Schema.Type<typeof MarkdownToken>
 export const MarkdownDefinition = Schema.Record(MarkdownToken, Schema.optionalKey(HueColorValue))
@@ -225,5 +245,8 @@ const FileMetadata = {
   version: Schema.Literal(2),
   standalone: Schema.optional(Schema.Boolean),
 }
-export const ThemeFile = Schema.Struct({ ...FileMetadata, light: ModeDefinition, dark: ModeDefinition })
+export const ThemeFile = Schema.Union([
+  Schema.Struct({ ...FileMetadata, light: ModeDefinition, dark: Schema.optional(ModeDefinition) }),
+  Schema.Struct({ ...FileMetadata, light: Schema.optional(ModeDefinition), dark: ModeDefinition }),
+])
 export type ThemeFile = Schema.Schema.Type<typeof ThemeFile>
