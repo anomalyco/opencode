@@ -84,6 +84,17 @@ const constant = (text: string) =>
   })
 
 describe("ToolRegistry", () => {
+  it.effect("rejects invalid dotted namespaces", () =>
+    Effect.gen(function* () {
+      const service = yield* ToolRegistry.Service
+      const error = yield* service.register({ echo: make() }, { namespace: "slack..admin" }).pipe(Effect.flip)
+
+      expect(error).toBeInstanceOf(Tool.RegistrationError)
+      expect(error.message).toBe('Invalid tool namespace: "slack..admin"')
+      expect((yield* service.materialize()).definitions).toEqual([])
+    }),
+  )
+
   it.effect("filters disabled tools with edit aliases and ordered wildcard precedence", () =>
     Effect.gen(function* () {
       const service = yield* ToolRegistry.Service

@@ -150,17 +150,23 @@ export const validateName = (name: string) =>
     ? Effect.void
     : Effect.fail(new RegistrationError({ name, message: `Invalid tool name: ${name}` }))
 
-export const registrationEntries = (tools: Readonly<Record<string, AnyTool>>, group?: string) =>
+export const registrationEntries = (tools: Readonly<Record<string, AnyTool>>, namespace?: string) =>
   Object.entries(tools).map(([name, tool]) => {
     const normalized = name.replace(/[^a-zA-Z0-9_-]/g, "_")
-    const parent = group?.replace(/[^a-zA-Z0-9_-]/g, "_")
     return {
-      key: parent === undefined ? normalized : `${parent}_${normalized}`,
+      key: namespace === undefined ? normalized : `${namespace.replaceAll(".", "_")}_${normalized}`,
       name: normalized,
-      group: parent,
+      namespace,
       tool,
     }
   })
+
+export const validateNamespace = (namespace: string) =>
+  namespace.split(".").every((segment) => /^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(segment))
+    ? Effect.void
+    : Effect.fail(
+        new RegistrationError({ name: namespace, message: `Invalid tool namespace: ${JSON.stringify(namespace)}` }),
+      )
 
 export const withPermission = <T extends AnyTool>(
   tool: T,
@@ -288,7 +294,7 @@ export interface ToolExecuteAfterEvent {
 }
 
 export interface RegisterOptions {
-  readonly group?: string
+  readonly namespace?: string
   /** Defaults to true. False exposes the tool directly to the provider. */
   readonly codemode?: boolean
 }

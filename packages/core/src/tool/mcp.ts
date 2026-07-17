@@ -13,10 +13,11 @@ import { Tools } from "./tools"
 import { ToolRegistry } from "./registry"
 
 /**
- * Registry group and permission action names for MCP tools.
+ * Registry namespace and permission action names for MCP tools.
  */
-export const group = (server: string) => server.replace(/[^a-zA-Z0-9_-]/g, "_")
-export const name = (server: string, tool: string) => `${group(server)}_${tool.replace(/[^a-zA-Z0-9_-]/g, "_")}`
+export const namespace = (server: string) => server.replace(/[^a-zA-Z0-9_-]/g, "_")
+export const name = (server: string, tool: string) =>
+  `${namespace(server)}_${tool.replace(/[^a-zA-Z0-9_-]/g, "_")}`
 
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
@@ -107,7 +108,7 @@ export const layer = Layer.effectDiscard(
         const next = yield* Scope.fork(scope)
         yield* Effect.forEach(
           groups,
-          ([group, record]) => tools.register(record, { group }),
+          ([server, record]) => tools.register(record, { namespace: namespace(server) }),
           {
             discard: true,
           },

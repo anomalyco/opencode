@@ -268,6 +268,7 @@ describe("MCP errors", () => {
 })
 
 test("MCP tool names match V1 sanitization", () => {
+  expect(McpTool.namespace("context 7")).toBe("context_7")
   expect(McpTool.name("context 7", "resolve.library/id")).toBe("context_7_resolve_library_id")
 })
 

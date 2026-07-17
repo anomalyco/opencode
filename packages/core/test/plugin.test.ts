@@ -274,7 +274,7 @@ describe("PluginV2", () => {
     }),
   )
 
-  it.effect("groups tool names and routes codemode registrations through execute", () =>
+  it.effect("namespaces tool names and routes codemode registrations through execute", () =>
     Effect.gen(function* () {
       const plugins = yield* PluginV2.Service
       const registry = yield* ToolRegistry.Service
@@ -291,8 +291,8 @@ describe("PluginV2", () => {
           ctx.tool
             .transform((draft) => {
               draft.add("plain", tool("Plain"), { codemode: false })
-              draft.add("look/up", tool("Lookup"), { group: "context 7", codemode: false })
-              draft.add("search", tool("Search"), { group: "context 7" })
+              draft.add("look/up", tool("Lookup"), { namespace: "context7", codemode: false })
+              draft.add("search", tool("Search"), { namespace: "context7" })
             })
             .pipe(Effect.orDie),
       })
@@ -301,7 +301,7 @@ describe("PluginV2", () => {
 
       expect((yield* registry.materialize()).definitions.map((tool) => tool.name)).toEqual([
         "plain",
-        "context_7_look_up",
+        "context7_look_up",
         "execute",
       ])
     }),

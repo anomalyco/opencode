@@ -46,3 +46,50 @@ test("execute preserves successful results with visible unhandled rejections", a
     },
   ])
 })
+
+test("execute supports callable namespace tools", async () => {
+  const callable = Tool.make({
+    description: "Administer Slack",
+    input: Schema.Struct({}),
+    output: Schema.String,
+    execute: () => Effect.succeed("admin"),
+  })
+  const child = Tool.make({
+    description: "Create a Slack resource",
+    input: Schema.Struct({}),
+    output: Schema.String,
+    execute: () => Effect.succeed("created"),
+  })
+  const execute = ExecuteTool.create(
+    new Map([
+      ["slack_admin", { tool: callable, name: "admin", namespace: "slack" }],
+      ["slack_admin_create", { tool: child, name: "create", namespace: "slack.admin" }],
+    ]),
+  )
+  const result = await Effect.runPromise(
+    Tool.settle(
+      execute,
+      {
+        type: "tool-call",
+        id: "call_execute",
+        name: "execute",
+        input: { code: "return [await tools.slack.admin({}), await tools.slack.admin.create({})]" },
+      },
+      {
+        sessionID: Session.ID.make("ses_execute"),
+        agent: Agent.ID.make("build"),
+        messageID: SessionMessage.ID.make("msg_execute"),
+        callID: "call_execute",
+        progress: () => Effect.void,
+      },
+    ),
+  )
+
+  expect(result.structured).toEqual({
+    toolCalls: [
+      { tool: "slack.admin", status: "completed" },
+      { tool: "slack.admin.create", status: "completed" },
+    ],
+  })
+  expect(result.content).toEqual([{ type: "text", text: '[\n  "admin",\n  "created"\n]' }])
+})
