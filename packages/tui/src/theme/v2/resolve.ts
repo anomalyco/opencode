@@ -141,33 +141,34 @@ function contextualActions(
 function resolveView(
   definition: ThemeTokensDefinition,
   hue: ResolvedThemeView["hue"],
-  hueSteps: Pick<ResolvedThemeView, "increase" | "decrease">,
+  hueSteps: Pick<ResolvedThemeView, "source" | "increase" | "decrease">,
 ): ResolvedThemeView {
   const source: Record<string, unknown> = { hue, ...definition }
   return { ...(createResolver(source)(source, "theme") as ResolvedThemeView), hue, ...hueSteps }
 }
 
-function compileHueSteps(hue: ResolvedThemeView["hue"]): Pick<ResolvedThemeView, "increase" | "decrease"> {
-  const index = new Map(
-    Object.values(hue).flatMap((scale) =>
-      HueStep.literals.map((step, position) => [colorKey(scale[step]), { position, scale }] as const),
-    ),
-  )
+function compileHueSteps(
+  hue: ResolvedThemeView["hue"],
+): Pick<ResolvedThemeView, "source" | "increase" | "decrease"> {
+  const index = new WeakMap<RGBA, { hue: keyof typeof hue; step: HueStep; position: number }>()
+  for (const [name, scale] of Object.entries(hue) as [keyof typeof hue, HueScale][]) {
+    HueStep.literals.forEach((step, position) => index.set(scale[step], { hue: name, step, position }))
+  }
   const shift = (color: RGBA, amount: number) => {
-    const match = index.get(colorKey(color))
+    const match = index.get(color)
     if (!match) return color
     const offset = Number.isFinite(amount) ? Math.trunc(amount) : 0
     const position = Math.max(0, Math.min(HueStep.literals.length - 1, match.position + offset))
-    return match.scale[HueStep.literals[position]]
+    return hue[match.hue][HueStep.literals[position]]
   }
   return {
+    source: (color) => {
+      const match = index.get(color)
+      return match ? { hue: match.hue, step: match.step } : undefined
+    },
     increase: (color, amount = 1) => shift(color, amount),
     decrease: (color, amount = 1) => shift(color, -amount),
   }
-}
-
-function colorKey(color: RGBA) {
-  return color.toInts().join(":")
 }
 
 function resolveHue(definition: HueDefinition) {
@@ -186,7 +187,8 @@ function resolveHue(definition: HueDefinition) {
     if (typeof value === "string") {
       const match = /^\$hue\.([^.]+)$/.exec(value)
       if (!match?.[1]) throw new Error(`Hue alias "${value}" must reference a hue scale`)
-      const result = resolve(match[1], [...stack, name])
+      const target = resolve(match[1], [...stack, name])
+      const result = Object.fromEntries(HueStep.literals.map((step) => [step, RGBA.clone(target[step])])) as HueScale
       cache.set(name, result)
       return result
     }

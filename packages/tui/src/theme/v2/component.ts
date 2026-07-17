@@ -77,6 +77,7 @@ export function createComponentTheme(current: Accessor<ResolvedThemeView>, mode:
 
   return {
     hue,
+    source: (color: RGBA) => current().source(color),
     increase: (color: RGBA, amount = 1) => current().increase(color, amount),
     decrease: (color: RGBA, amount = 1) => current().decrease(color, amount),
     raise: (color: RGBA) => (mode() === "light" ? current().increase(color) : current().decrease(color)),

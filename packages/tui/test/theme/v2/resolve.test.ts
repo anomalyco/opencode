@@ -12,9 +12,15 @@ test("resolves independent definitions and hue aliases", () => {
   const lightTheme = resolveTheme(light)
   const darkTheme = resolveTheme(dark)
 
-  expect(lightTheme.hue.accent).toBe(lightTheme.hue.blue)
-  expect(lightTheme.hue.interactive).toBe(lightTheme.hue.blue)
-  expect(lightTheme.hue.neutral).toBe(lightTheme.hue.gray)
+  expect(lightTheme.hue.accent).not.toBe(lightTheme.hue.blue)
+  expect(lightTheme.hue.accent[500].equals(lightTheme.hue.blue[500])).toBeTrue()
+  expect(lightTheme.hue.interactive).not.toBe(lightTheme.hue.blue)
+  expect(lightTheme.hue.interactive[500].equals(lightTheme.hue.blue[500])).toBeTrue()
+  expect(lightTheme.hue.neutral).not.toBe(lightTheme.hue.gray)
+  expect(lightTheme.hue.neutral[500].equals(lightTheme.hue.gray[500])).toBeTrue()
+  expect(lightTheme.source(lightTheme.hue.blue[500])).toEqual({ hue: "blue", step: 500 })
+  expect(lightTheme.source(lightTheme.hue.neutral[200])).toEqual({ hue: "neutral", step: 200 })
+  expect(lightTheme.source(lightTheme.background.surface.offset)).toEqual({ hue: "neutral", step: 200 })
   expect(lightTheme.increase(lightTheme.hue.red[100])).toBe(lightTheme.hue.red[200])
   expect(lightTheme.decrease(lightTheme.hue.red[200])).toBe(lightTheme.hue.red[100])
   expect(lightTheme.contexts["@context:elevated"]?.increase(lightTheme.hue.red[100])).toBe(
@@ -64,15 +70,40 @@ test("resolves base hue aliases and rejects circular hue aliases", () => {
     "light",
   )
 
-  expect(aliased.hue.blue).toBe(aliased.hue.red)
-  expect(aliased.hue.purple).toBe(aliased.hue.red)
-  expect(overridden.hue.blue).toBe(overridden.hue.red)
+  expect(aliased.hue.blue).not.toBe(aliased.hue.red)
+  expect(aliased.hue.blue[500].equals(aliased.hue.red[500])).toBeTrue()
+  expect(aliased.hue.purple).not.toBe(aliased.hue.blue)
+  expect(aliased.hue.purple[500].equals(aliased.hue.red[500])).toBeTrue()
+  expect(overridden.hue.blue).not.toBe(overridden.hue.red)
+  expect(overridden.hue.blue[500].equals(overridden.hue.red[500])).toBeTrue()
+  expect(aliased.source(aliased.hue.red[500])).toEqual({ hue: "red", step: 500 })
+  expect(aliased.source(aliased.hue.blue[500])).toEqual({ hue: "blue", step: 500 })
+  expect(aliased.source(aliased.hue.purple[500])).toEqual({ hue: "purple", step: 500 })
   expect(() =>
     resolveTheme({
       ...light,
       hue: { ...light.hue, red: "$hue.blue", blue: "$hue.red" },
     }),
   ).toThrow("Circular hue reference: red -> blue -> red")
+})
+
+test("steps by hue source when adjacent colors have equal values", () => {
+  if (typeof light.hue.gray !== "object") throw new Error("Expected a concrete gray scale")
+  const theme = resolveTheme({
+    ...light,
+    hue: {
+      ...light.hue,
+      gray: { ...light.hue.gray, 200: "#eee8d5", 300: "#eee8d5", 400: "#d3d7c6" },
+      neutral: "$hue.gray",
+    },
+  })
+
+  expect(theme.hue.neutral[200]).not.toBe(theme.hue.neutral[300])
+  expect(theme.hue.neutral[200].equals(theme.hue.neutral[300])).toBeTrue()
+  expect(theme.source(theme.hue.neutral[200])).toEqual({ hue: "neutral", step: 200 })
+  expect(theme.source(theme.hue.neutral[300])).toEqual({ hue: "neutral", step: 300 })
+  expect(theme.increase(theme.hue.neutral[200])).toBe(theme.hue.neutral[300])
+  expect(theme.increase(theme.hue.neutral[300])).toBe(theme.hue.neutral[400])
 })
 
 test("merges partial files with the selected OpenCode defaults", () => {
