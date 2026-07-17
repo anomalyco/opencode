@@ -19,6 +19,7 @@ import {
   createEffect,
   createMemo,
   createResource,
+  createUniqueId,
   For,
   Match,
   onCleanup,
@@ -31,6 +32,7 @@ import { Link } from "@/components/link"
 import { useServerSDK } from "@/context/server-sdk"
 import { useServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
+import { useSettings } from "@/context/settings"
 import { popularProviders, useProviders } from "@/hooks/use-providers"
 import { CustomProviderForm } from "./dialog-custom-provider"
 
@@ -50,11 +52,12 @@ export function useProviderConnectController(options: { onBack?: () => void } = 
 export const DialogConnectProvider: Component<{
   directory?: Accessor<string | undefined>
   controller?: ReturnType<typeof useProviderConnectController>
-  v2?: boolean
 }> = (props) => {
   const fallback = useProviderConnectController()
   const controller = props.controller ?? fallback
   const language = useLanguage()
+  const settings = useSettings()
+  const newLayout = settings.general.newLayoutDesigns
   const reset = controller.back
   const back = { current: reset }
   let focusHost: HTMLDivElement | undefined
@@ -64,11 +67,11 @@ export const DialogConnectProvider: Component<{
     controller.select(provider)
   }
 
-  function Content(contentProps: { v2?: boolean }) {
+  function Content() {
     return (
       <Switch>
         <Match when={controller.selected() === CUSTOM_ID}>
-          <CustomProviderForm autofocus={!contentProps.v2} />
+          <CustomProviderForm autofocus={!newLayout()} />
         </Match>
         <Match when={controller.selected() && controller.selected() !== CUSTOM_ID ? controller.selected() : undefined}>
           {(provider) => (
@@ -77,7 +80,6 @@ export const DialogConnectProvider: Component<{
               directory={props.directory}
               onBack={reset}
               setBack={(handler) => (back.current = handler)}
-              v2={contentProps.v2}
             />
           )}
         </Match>
@@ -85,19 +87,16 @@ export const DialogConnectProvider: Component<{
           <ProviderPicker
             directory={props.directory}
             onSelect={select}
-            onPrepare={contentProps.v2 ? holdFocus : undefined}
-            v2={contentProps.v2}
+            onPrepare={newLayout() ? holdFocus : undefined}
           />
         </Match>
       </Switch>
     )
   }
 
-  const v2 = props.v2 ?? (typeof document === "object" && document.body.hasAttribute("data-new-layout"))
-
   return (
     <Show
-      when={v2}
+      when={newLayout()}
       fallback={
         <Dialog
           class="h-full"
@@ -139,7 +138,7 @@ export const DialogConnectProvider: Component<{
         </DialogHeader>
         <DialogBody class="min-h-0 flex-1 overflow-hidden px-2 pb-2">
           <div ref={focusHost} tabIndex={-1} class="flex min-h-0 flex-1 flex-col outline-none">
-            <Content v2 />
+            <Content />
           </div>
         </DialogBody>
       </DialogV2>
@@ -151,9 +150,9 @@ function ProviderPicker(props: {
   directory?: Accessor<string | undefined>
   onSelect: (provider: string) => void
   onPrepare?: () => void
-  v2?: boolean
 }) {
-  if (props.v2)
+  const settings = useSettings()
+  if (settings.general.newLayoutDesigns())
     return <ProviderPickerV2 directory={props.directory} onSelect={props.onSelect} onPrepare={props.onPrepare} />
   const providers = useProviders(props.directory)
   const language = useLanguage()
@@ -392,12 +391,13 @@ function ProviderConnection(props: {
   directory?: Accessor<string | undefined>
   onBack: () => void
   setBack: (handler: () => void) => void
-  v2?: boolean
 }) {
   const dialog = useDialog()
   const serverSync = useServerSync()
   const serverSDK = useServerSDK()
   const language = useLanguage()
+  const settings = useSettings()
+  const newLayout = settings.general.newLayoutDesigns
   const providers = useProviders(props.directory)
 
   const alive = { value: true }
@@ -762,7 +762,7 @@ function ProviderConnection(props: {
   props.setBack(goBack)
 
   function MethodSelection() {
-    if (props.v2)
+    if (newLayout())
       return (
         <div class="flex flex-col gap-2">
           <div class="px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted">
@@ -827,14 +827,14 @@ function ProviderConnection(props: {
 
   function ApiAuthView() {
     let apiKey: HTMLInputElement | undefined
-    const errorID = `provider-${props.provider}-api-key-error`
+    const errorID = createUniqueId()
     const [formStore, setFormStore] = createStore({
       value: "",
       error: undefined as string | undefined,
     })
 
     onMount(() => {
-      if (!props.v2) return
+      if (!newLayout()) return
       apiKey?.focus({ preventScroll: true })
     })
 
@@ -862,7 +862,7 @@ function ProviderConnection(props: {
       await complete()
     }
 
-    if (props.v2)
+    if (newLayout())
       return (
         <div class="flex flex-col gap-5 px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted">
           <Show
@@ -938,7 +938,7 @@ function ProviderConnection(props: {
         </Switch>
         <form onSubmit={handleSubmit} class="flex flex-col items-start gap-4">
           <TextField
-            autofocus={!props.v2}
+            autofocus={!newLayout()}
             ref={apiKey}
             type="text"
             label={language.t("provider.connect.apiKey.label", { provider: provider().name })}
@@ -959,14 +959,14 @@ function ProviderConnection(props: {
 
   function OAuthCodeView() {
     let codeInput: HTMLInputElement | undefined
-    const errorID = `provider-${props.provider}-oauth-code-error`
+    const errorID = createUniqueId()
     const [formStore, setFormStore] = createStore({
       value: "",
       error: undefined as string | undefined,
     })
 
     onMount(() => {
-      if (!props.v2) return
+      if (!newLayout()) return
       codeInput?.focus({ preventScroll: true })
     })
 
@@ -998,7 +998,7 @@ function ProviderConnection(props: {
       setFormStore("error", formatError(result.error, language.t("provider.connect.oauth.code.invalid")))
     }
 
-    if (props.v2)
+    if (newLayout())
       return (
         <div class="flex flex-col gap-5 px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted">
           <div>
@@ -1047,7 +1047,7 @@ function ProviderConnection(props: {
         </div>
         <form onSubmit={handleSubmit} class="flex flex-col items-start gap-4">
           <TextField
-            autofocus={!props.v2}
+            autofocus={!newLayout()}
             ref={codeInput}
             type="text"
             label={language.t("provider.connect.oauth.code.label", { method: method()?.label ?? "" })}
@@ -1120,15 +1120,23 @@ function ProviderConnection(props: {
   }
 
   return (
-    <div class={props.v2 ? "flex min-h-0 flex-1 flex-col" : "flex flex-col gap-6 px-2.5 pb-3"}>
-      <div class={props.v2 ? "flex h-10 shrink-0 items-start gap-2 px-3" : "flex items-center gap-4 px-2.5"}>
+    <div class={newLayout() ? "flex min-h-0 flex-1 flex-col" : "flex flex-col gap-6 px-2.5 pb-3"}>
+      <div
+        class={
+          newLayout() ? "flex h-10 shrink-0 items-start gap-2 px-3" : "flex items-center gap-4 px-2.5"
+        }
+      >
         <ProviderIcon
           id={props.provider}
-          class={props.v2 ? "mt-0.5 size-4 shrink-0 text-v2-icon-icon-base" : "size-5 shrink-0 icon-strong-base"}
+          class={
+            newLayout()
+              ? "mt-0.5 size-4 shrink-0 text-v2-icon-icon-base"
+              : "size-5 shrink-0 icon-strong-base"
+          }
         />
         <div
           class={
-            props.v2
+            newLayout()
               ? "text-[15px] font-[530] leading-5 tracking-[-0.13px] text-v2-text-text-base"
               : "text-16-medium text-text-strong"
           }
@@ -1141,11 +1149,15 @@ function ProviderConnection(props: {
           </Switch>
         </div>
       </div>
-      <div class={props.v2 ? "flex min-h-0 flex-1 flex-col" : "flex flex-col gap-6 px-2.5 pb-10"}>
+      <div
+        class={
+          newLayout() ? "flex min-h-0 flex-1 flex-col" : "flex flex-col gap-6 px-2.5 pb-10"
+        }
+      >
         <div
           onKeyDown={handleKey}
-          tabIndex={props.v2 ? undefined : 0}
-          autofocus={!props.v2 && store.methodIndex === undefined ? true : undefined}
+          tabIndex={newLayout() ? undefined : 0}
+          autofocus={!newLayout() && store.methodIndex === undefined ? true : undefined}
         >
           <Switch>
             <Match when={loading()}>
