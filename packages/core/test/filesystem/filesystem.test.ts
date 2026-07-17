@@ -280,7 +280,7 @@ describe("FSUtil", () => {
         yield* filesys.writeFileString(path.join(tmp, "b.ts"), "b")
         yield* filesys.writeFileString(path.join(tmp, "c.json"), "c")
 
-        const result = yield* fs.glob("*.ts", { cwd: tmp })
+        const result = yield* fs.scan("*.ts", { cwd: tmp })
         expect(result.sort()).toEqual(["a.ts", "b.ts"])
       }),
     )
@@ -293,7 +293,7 @@ describe("FSUtil", () => {
         const tmp = yield* filesys.makeTempDirectoryScoped()
         yield* filesys.writeFileString(path.join(tmp, "file.txt"), "hello")
 
-        const result = yield* fs.glob("*.txt", { cwd: tmp, absolute: true })
+        const result = yield* fs.scan("*.txt", { cwd: tmp, absolute: true })
         expect(result).toEqual([path.join(tmp, "file.txt")])
       }),
     )

@@ -315,7 +315,7 @@ const layer = Layer.effect(
       if (input.icon?.url) return
 
       const matches = yield* fs
-        .glob("**/favicon.{ico,png,svg,jpg,jpeg,webp}", {
+        .scan("**/favicon.{ico,png,svg,jpg,jpeg,webp}", {
           cwd: input.worktree,
           absolute: true,
           include: "file",

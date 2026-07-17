@@ -50,11 +50,14 @@ export namespace EffectFlock {
   const BASE_DELAY_MS = 100
   const MAX_DELAY_MS = 2_000
 
-  const retrySchedule = (timeoutMs: number) => Schedule.exponential(BASE_DELAY_MS, 1.7).pipe(
-    Schedule.either(Schedule.spaced(Math.min(MAX_DELAY_MS, Math.max(BASE_DELAY_MS, Math.floor(timeoutMs / 10))))),
-    Schedule.jittered,
-    Schedule.while((meta) => meta.elapsed < timeoutMs),
-  )
+  const retrySchedule = (timeoutMs: number) =>
+    Schedule.min([
+      Schedule.exponential(BASE_DELAY_MS, 1.7),
+      Schedule.spaced(Math.min(MAX_DELAY_MS, Math.max(BASE_DELAY_MS, Math.floor(timeoutMs / 10)))),
+    ]).pipe(
+      Schedule.jittered,
+      Schedule.while((meta) => meta.elapsed < timeoutMs),
+    )
 
   // ---------------------------------------------------------------------------
   // Lock metadata schema

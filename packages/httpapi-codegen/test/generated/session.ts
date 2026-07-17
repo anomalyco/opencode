@@ -41,7 +41,7 @@ export const Group0 = HttpApiGroup.make("session", { topLevel: false })
     }),
   )
 
-type RawGroup = HttpApiClient.Client.Group<typeof Group0, "session", never, never>
+type RawGroup = HttpApiClient.Client.Group<typeof Group0, never, never>
 
 const Endpoint0DeclaredError = Schema.Never
 const mapEndpoint0Error = (error: unknown) =>

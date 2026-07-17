@@ -84,7 +84,7 @@ export const Plugin = {
                   const directory = path.dirname(skill.location)
                   const files =
                     path.basename(skill.location) === "SKILL.md"
-                      ? (yield* fs.glob("**/*", { cwd: directory, absolute: true, include: "file", dot: true }))
+                      ? (yield* fs.scan("**/*", { cwd: directory, absolute: true, include: "file", dot: true }))
                           .filter((file) => path.basename(file) !== "SKILL.md")
                           .toSorted()
                           .slice(0, FILE_LIMIT)

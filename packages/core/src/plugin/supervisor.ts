@@ -184,7 +184,7 @@ const load = Effect.fn("PluginSupervisor.load")(function* (operation: Extract<Op
 function discoverDirectory(fs: FSUtil.Interface, directory: string) {
   return Effect.gen(function* () {
     const files = yield* fs
-      .glob("{plugin,plugins}/*.{ts,js}", {
+      .scan("{plugin,plugins}/*.{ts,js}", {
         cwd: directory,
         absolute: true,
         include: "file",
