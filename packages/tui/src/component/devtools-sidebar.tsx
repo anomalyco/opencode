@@ -4,7 +4,7 @@ import { useTheme } from "../context/theme"
 import { DevTools } from "../devtools"
 
 export function DevToolsSidebar() {
-  const { themeV2 } = useTheme().contextual("elevated")
+  const { themeV2, mode, setMode } = useTheme().contextual("elevated")
 
   return (
     <box
@@ -16,6 +16,27 @@ export function DevToolsSidebar() {
       paddingRight={2}
       backgroundColor={themeV2.background()}
     >
+      <box flexShrink={0} marginBottom={1}>
+        <box marginBottom={1}>
+          <text fg={themeV2.text.action()} attributes={TextAttributes.BOLD}>
+            Theme
+          </text>
+        </box>
+        <box flexDirection="row">
+          <text fg={themeV2.text.subdued()}>Mode</text>
+          <box flexGrow={1} />
+          <text fg={themeV2.text()}>{mode()}</text>
+        </box>
+        <box
+          marginTop={1}
+          paddingLeft={1}
+          paddingRight={1}
+          backgroundColor={themeV2.background.action()}
+          onMouseUp={() => setMode(mode() === "dark" ? "light" : "dark")}
+        >
+          <text fg={themeV2.text.action()}>force {mode() === "dark" ? "light" : "dark"} mode</text>
+        </box>
+      </box>
       <For each={DevTools.data()}>
         {(group) => (
           <box flexShrink={0} marginBottom={1}>
