@@ -51,6 +51,13 @@ describe("command keybind helpers", () => {
     ).toBe(true)
   })
 
+  test("matchKeybind supports alternative shortcut combinations", () => {
+    const keybinds = parseKeybind("mod+j,ctrl+`")
+
+    expect(matchKeybind(keybinds, new KeyboardEvent("keydown", { key: "j", metaKey: true }))).toBe(true)
+    expect(matchKeybind(keybinds, new KeyboardEvent("keydown", { key: "`", ctrlKey: true }))).toBe(true)
+  })
+
   test("formatKeybind returns human readable output", () => {
     const display = formatKeybind("ctrl+alt+arrowup")
 
