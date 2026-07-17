@@ -93,6 +93,7 @@ export const dict = {
   "command.session.unshare.description": "Stop sharing this session",
 
   "palette.search.placeholder": "Search files, commands, and sessions",
+  "palette.search.placeholder.home": "Search commands and sessions",
   "palette.empty": "No results found",
   "palette.group.commands": "Commands",
   "palette.group.files": "Files",

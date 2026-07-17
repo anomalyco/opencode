@@ -93,6 +93,7 @@ export const dict = {
   "command.session.unshare.description": "Припинити поширення цієї сесії",
 
   "palette.search.placeholder": "Пошук файлів, команд і сесій",
+  "palette.search.placeholder.home": "Пошук команд і сесій",
   "palette.empty": "Результатів не знайдено",
   "palette.group.commands": "Команди",
   "palette.group.files": "Файли",
