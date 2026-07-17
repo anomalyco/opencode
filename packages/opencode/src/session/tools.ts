@@ -4,6 +4,7 @@ import { Provider } from "@/provider/provider"
 import { ProviderTransform } from "@/provider/transform"
 import { MCP } from "@/mcp"
 import { McpCatalog } from "@/mcp/catalog"
+import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Permission } from "@/permission"
 import { Tool } from "@/tool/tool"
 import { ToolJsonSchema } from "@/tool/json-schema"
@@ -60,19 +61,20 @@ export function currentUserPrompt(messages: readonly PromptMessage[]): string | 
   return text || undefined
 }
 
-export function formatCruiseControlReview(review: Permission.CruiseControlReview): string {
-  return `Risk: ${review.risk} · Intent: ${review.intent} — ${review.reason}`
-}
+export const formatCruiseControlReview = Permission.formatCruiseControlReview
 
 export function cruiseControlMetadata(result: Permission.AskResult): Record<string, unknown> | undefined {
-  const conclusion = result.cruiseControlReview
-    ? formatCruiseControlReview(result.cruiseControlReview)
-    : result.conclusion?.trim()
+  if (result.cruiseControlReview) return Permission.cruiseControlMetadataFromReview(result.cruiseControlReview)
+  const conclusion = result.conclusion?.trim()
   if (!conclusion) return undefined
-  return {
-    cruise_control: conclusion,
-    ...(result.cruiseControlReview ? { cruise_control_review: result.cruiseControlReview } : {}),
-  }
+  return { cruise_control: conclusion }
+}
+
+export function cruiseControlMetadataFromDenied(
+  error: PermissionV1.DeniedError,
+): Record<string, unknown> | undefined {
+  if (!error.cruiseControlReview) return undefined
+  return Permission.cruiseControlMetadataFromReview(error.cruiseControlReview)
 }
 
 export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {

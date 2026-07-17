@@ -1428,6 +1428,54 @@ it.instance("prompt submitted during an active run is included in the next LLM i
   }),
 )
 
+it.instance("loop processes user message when messageID predates the in-flight assistant", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const gate = yield* Deferred.make<void>()
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+
+    yield* llm.hold("first", deferredAsPromise(gate))
+    yield* llm.text("second")
+
+    const staleID = MessageID.ascending()
+    const loop = yield* prompt
+      .prompt({
+        sessionID: chat.id,
+        agent: "default",
+        model: ref,
+        parts: [{ type: "text", text: "first" }],
+      })
+      .pipe(Effect.forkChild)
+
+    yield* llm.wait(1)
+    yield* waitForBusy(chat.id)
+
+    yield* prompt
+      .prompt({
+        sessionID: chat.id,
+        messageID: staleID,
+        agent: "default",
+        model: ref,
+        parts: [{ type: "text", text: "second" }],
+      })
+      .pipe(Effect.forkChild)
+
+    yield* Deferred.succeed(gate, void 0)
+    yield* Fiber.await(loop)
+
+    expect(yield* llm.calls).toBe(2)
+
+    const msgs = yield* sessions.messages({ sessionID: chat.id })
+    const assistants = msgs.filter((msg) => msg.info.role === "assistant")
+    const last = assistants.at(-1)
+    if (!last || last.info.role !== "assistant") throw new Error("expected second assistant")
+    expect(last.info.parentID).toBe(staleID)
+    expect(last.parts.some((part) => part.type === "text" && part.text === "second")).toBe(true)
+  }),
+)
+
 it.instance("assertNotBusy fails with BusyError when loop running", () =>
   Effect.gen(function* () {
     const { llm } = yield* useServerConfig(providerCfg)

@@ -18,9 +18,16 @@ export class CorrectedError extends Schema.TaggedErrorClass<CorrectedError>()("P
   }
 }
 
+const CruiseControlReview = Schema.Struct({
+  risk: Schema.Literals(["high", "medium", "low"]),
+  intent: Schema.Literals(["high", "medium", "low"]),
+  reason: Schema.String,
+})
+
 export class DeniedError extends Schema.TaggedErrorClass<DeniedError>()("PermissionDeniedError", {
   ruleset: Schema.Any,
   reason: Schema.optionalKey(Schema.String),
+  cruiseControlReview: Schema.optionalKey(CruiseControlReview),
 }) {
   override get message() {
     const brief = this.reason?.trim()

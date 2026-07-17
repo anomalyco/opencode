@@ -167,7 +167,7 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
               ? prompt
               : {
                   ...prompt,
-                  messageID: prompt.messageID ?? queued?.messageID ?? MessageID.ascending(),
+                  messageID: prompt.messageID ?? MessageID.ascending(),
                 }
           state.active = sent
 
@@ -284,9 +284,11 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
       !prompt.command &&
       !isNewCommand(prompt.text)
     ) {
+      const queueKey = PartID.ascending()
       const queued: FooterQueuedPrompt = {
-        messageID: MessageID.ascending(),
-        partID: PartID.ascending(),
+        // Removal key only — session message IDs are minted when the turn starts.
+        messageID: queueKey,
+        partID: queueKey,
         prompt,
       }
       state.queued = [...state.queued, queued]

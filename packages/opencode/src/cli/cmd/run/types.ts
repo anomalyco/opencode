@@ -43,6 +43,7 @@ export type RunPrompt = {
 }
 
 export type FooterQueuedPrompt = {
+  /** Queue-local removal key — not the persisted session message id. */
   messageID: string
   partID: string
   prompt: RunPrompt

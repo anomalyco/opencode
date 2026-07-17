@@ -71,7 +71,31 @@ function cruiseControlReview(value: Record<string, unknown> | undefined): Cruise
   if (!value) return undefined
   if (!classifierLevel(value.risk) || !classifierLevel(value.intent) || typeof value.reason !== "string")
     return undefined
-  return { risk: value.risk, intent: value.intent, reason: value.reason }
+  const reason = value.reason.trim()
+  if (!reason) return undefined
+  return { risk: value.risk, intent: value.intent, reason }
+}
+
+export function formatCruiseControlReview(review: CruiseControlReview): string {
+  return `Risk: ${review.risk} · Intent: ${review.intent} — ${review.reason}`
+}
+
+export function cruiseControlMetadataFromReview(review: CruiseControlReview): Record<string, unknown> {
+  return {
+    cruise_control: formatCruiseControlReview(review),
+    cruise_control_review: review,
+  }
+}
+
+function cruiseControlDeniedReason(
+  assessment: CruiseControlReview | undefined,
+  reason: string | undefined,
+  isCruiseControl: boolean,
+): string | undefined {
+  if (assessment) return formatCruiseControlReview(assessment)
+  const brief = reason?.trim()
+  if (brief) return brief
+  return isCruiseControl ? "Cruise control denied the action" : undefined
 }
 
 const layer = Layer.effect(
@@ -169,9 +193,11 @@ const layer = Layer.effect(
             const reason = result.reason?.trim() || undefined
             const isCruiseControl = moduleID === PermissionModuleSchema.CRUISE_CONTROL
             if (result.decision === "deny" || (isCruiseControl && result.decision === "ask")) {
+              const assessment = isCruiseControl ? cruiseControlReview(result.metadata) : undefined
               return yield* new PermissionV1.DeniedError({
                 ruleset: ruleset.filter((rule) => Wildcard.match(request.permission, rule.permission)),
-                reason: reason ?? (isCruiseControl ? "Cruise control denied the action" : undefined),
+                reason: cruiseControlDeniedReason(assessment, reason, isCruiseControl),
+                ...(assessment ? { cruiseControlReview: assessment } : {}),
               })
             }
             if (result.decision === "ask") {

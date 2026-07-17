@@ -427,6 +427,45 @@ describe("run runtime queue", () => {
     expect(seen).toEqual(["one", "two"])
   })
 
+  test("assigns session message IDs when a queued turn starts, not when queued", async () => {
+    const ui = footer()
+    const seen: Array<string | undefined> = []
+    let wake: (() => void) | undefined
+    const gate = new Promise<void>((resolve) => {
+      wake = resolve
+    })
+
+    const task = runPromptQueue({
+      footer: ui.api,
+      run: async (input) => {
+        seen.push(input.messageID)
+        if (seen.length === 1) {
+          await gate
+          return
+        }
+
+        ui.api.close()
+      },
+    })
+
+    ui.submit("one")
+    ui.submit("two")
+    await Promise.resolve()
+
+    const event = ui.events.findLast((item) => item.type === "queued.prompts")
+    const queuedKey = event?.type === "queued.prompts" ? event.prompts[0]?.messageID : undefined
+    expect(queuedKey).toEqual(expect.any(String))
+    expect(seen).toEqual([expect.any(String)])
+    expect(seen[0]).not.toBe(queuedKey)
+
+    wake?.()
+    await task
+
+    expect(seen).toHaveLength(2)
+    expect(seen[1]).not.toBe(queuedKey)
+    expect(seen[1]).not.toBe(seen[0])
+  })
+
   test("close aborts the active run and drops pending queued work", async () => {
     const ui = footer()
     const seen: string[] = []
