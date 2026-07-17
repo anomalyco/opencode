@@ -29,20 +29,6 @@ function required<T>(value: T | undefined): T {
   return value
 }
 
-function eventually<A>(
-  effect: Effect.Effect<A>,
-  predicate: (value: A) => boolean,
-  remaining = 1000,
-): Effect.Effect<A, Error> {
-  return Effect.gen(function* () {
-    const value = yield* effect
-    if (predicate(value)) return value
-    if (remaining === 0) return yield* Effect.fail(new Error("Timed out waiting for value"))
-    yield* Effect.promise(() => Bun.sleep(1))
-    return yield* eventually(effect, predicate, remaining - 1)
-  })
-}
-
 function fakeSelectorSdk(calls: string[]) {
   const make = (method: string) => (id: string) => {
     calls.push(`${method}:${id}`)
@@ -219,12 +205,8 @@ describe("OpenAIPlugin", () => {
       })
       yield* addPlugin()
 
-      const eligible = required(
-        yield* eventually(
-          catalog.model.get(ProviderV2.ID.openai, ModelV2.ID.make("gpt-5.5")),
-          (model) => model?.cost.length === 0,
-        ),
-      )
+      const eligible = required(yield* catalog.model.get(ProviderV2.ID.openai, ModelV2.ID.make("gpt-5.5")))
+      expect(eligible.cost).toEqual([])
       expect(eligible.enabled).toBe(true)
       expect(required(yield* catalog.model.get(ProviderV2.ID.openai, ModelV2.ID.make("gpt-5.5-pro"))).enabled).toBe(
         false,
@@ -260,9 +242,6 @@ describe("OpenAIPlugin", () => {
         value: Credential.Key.make({ type: "key", key: "sk-test" }),
       })
       yield* addPlugin()
-      // The connection refresh is asynchronous; give it time to settle before
-      // asserting nothing was filtered.
-      yield* Effect.promise(() => Bun.sleep(25))
 
       expect(required(yield* catalog.model.get(ProviderV2.ID.openai, ModelV2.ID.make("gpt-5.5"))).enabled).toBe(true)
       expect(required(yield* catalog.model.get(ProviderV2.ID.openai, ModelV2.ID.make("gpt-4.1"))).enabled).toBe(true)
