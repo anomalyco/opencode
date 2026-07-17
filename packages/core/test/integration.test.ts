@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Cause, Duration, Effect, Exit, Fiber, Layer, Scope, Stream } from "effect"
+import { Cause, Clock, Duration, Effect, Exit, Fiber, Layer, Scope, Stream } from "effect"
 import * as TestClock from "effect/testing/TestClock"
 import { Credential } from "@opencode-ai/core/credential"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -411,6 +411,41 @@ describe("Integration", () => {
       })
       expect(closed).toBe(true)
       expect(yield* credentials.list(integrationID)).toEqual([])
+    }),
+  )
+
+  it.effect("uses provider-defined OAuth attempt expirations", () =>
+    Effect.gen(function* () {
+      const integrations = yield* Integration.Service
+      const integrationID = Integration.ID.make("openai")
+      const created = yield* Clock.currentTimeMillis
+      const expirations = [
+        created + Duration.toMillis(Duration.minutes(5)),
+        created + Duration.toMillis(Duration.minutes(20)),
+      ]
+
+      yield* Effect.forEach(expirations, (expiresAt, index) => {
+        const methodID = Integration.MethodID.make(`browser-${index}`)
+        return Effect.gen(function* () {
+          yield* integrations.transform((editor) =>
+            editor.method.update({
+              integrationID,
+              method: { id: methodID, type: "oauth", label: "Browser" },
+              authorize: () =>
+                Effect.succeed({
+                  mode: "auto" as const,
+                  url: "https://example.com/authorize",
+                  instructions: "Sign in",
+                  expiresAt,
+                  callback: Effect.never,
+                }),
+            }),
+          )
+
+          const attempt = yield* integrations.oauth.connect({ integrationID, methodID, inputs: {} })
+          expect(attempt.time).toEqual({ created, expires: expiresAt })
+        })
+      })
     }),
   )
 
