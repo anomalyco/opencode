@@ -185,11 +185,11 @@ const layer = Layer.effect(
       userText: string
       assistantText: string
       agent: string
-      model: { providerID: ProviderID; modelID: ModelID }
+      model: { providerID: ProviderV2.ID; modelID: ModelV2.ID }
       variant?: string
     }) {
       const ctx = yield* InstanceState.context
-      const userMsg: MessageV2.User = {
+      const userMsg: SessionV1.User = {
         id: MessageID.ascending(),
         role: "user",
         sessionID: input.sessionID,
@@ -210,7 +210,7 @@ const layer = Layer.effect(
         text: input.userText,
       })
 
-      const assistant: MessageV2.Assistant = {
+      const assistant: SessionV1.Assistant = {
         id: MessageID.ascending(),
         role: "assistant",
         sessionID: input.sessionID,
@@ -227,7 +227,7 @@ const layer = Layer.effect(
         finish: "stop",
       }
       yield* sessions.updateMessage(assistant)
-      const part: MessageV2.TextPart = {
+      const part: SessionV1.TextPart = {
         id: PartID.ascending(),
         type: "text",
         messageID: assistant.id,
@@ -255,8 +255,8 @@ const layer = Layer.effect(
       return content || undefined
     })
 
-    const normalizeLoopResult = Effect.fn("SessionPrompt.normalizeLoopResult")(function* (result: MessageV2.WithParts) {
-      const textPart = result.parts.findLast((part): part is MessageV2.TextPart => part.type === "text")
+    const normalizeLoopResult = Effect.fn("SessionPrompt.normalizeLoopResult")(function* (result: SessionV1.WithParts) {
+      const textPart = result.parts.findLast((part): part is SessionV1.TextPart => part.type === "text")
       if (!textPart) return { continueLoop: false, result }
       const parsed = extractLoopControl(textPart.text)
       if (parsed.text === textPart.text) return { continueLoop: false, result }
@@ -268,7 +268,7 @@ const layer = Layer.effect(
     const loopStep = Effect.fn("SessionPrompt.loopStep")(function* (input: {
       sessionID: SessionID
       agent: string
-      model: { providerID: ProviderID; modelID: ModelID }
+      model: { providerID: ProviderV2.ID; modelID: ModelV2.ID }
       variant?: string
       promptText: string
       parts?: CommandInput["parts"]
@@ -287,65 +287,58 @@ const layer = Layer.effect(
     const startLoop = Effect.fn("SessionPrompt.startLoop")(function* (input: {
       sessionID: SessionID
       agent: string
-      model: { providerID: ProviderID; modelID: ModelID }
+      model: { providerID: ProviderV2.ID; modelID: ModelV2.ID }
       variant?: string
       promptText: string
       intervalMs?: number
     }) {
       stopLoop(input.sessionID)
       let stopped = false
-      let timer: ReturnType<typeof setTimeout> | undefined
 
-      const schedule = (delayMs: number) => {
-        if (stopped) return
-        timer = setTimeout(() => {
-          void Effect.runPromiseExit(
-            loopStep({
-              sessionID: input.sessionID,
-              agent: input.agent,
-              model: input.model,
-              variant: input.variant,
-              promptText: input.promptText,
-            }).pipe(Effect.orDie),
-          ).then((exit) => {
-            if (stopped) return
-            if (Exit.isSuccess(exit)) {
-              const next = exit.value as { continueLoop: boolean }
-              if (!next.continueLoop) {
-                stopLoop(input.sessionID)
-                return
-              }
-              schedule(input.intervalMs ?? LOOP_SELF_PACED_DELAY_MS)
+      const delay = input.intervalMs ?? LOOP_SELF_PACED_DELAY_MS
+
+      const fiber = yield* Effect.gen(function* () {
+        while (!stopped) {
+          const exit = yield* loopStep({
+            sessionID: input.sessionID,
+            agent: input.agent,
+            model: input.model,
+            variant: input.variant,
+            promptText: input.promptText,
+          }).pipe(Effect.exit)
+
+          if (stopped) return
+
+          if (Exit.isSuccess(exit)) {
+            if (!exit.value.continueLoop) {
+              stopLoop(input.sessionID)
               return
             }
-
+          } else {
             const error = Cause.squash(exit.cause)
             if (error instanceof Session.BusyError) {
-              schedule(input.intervalMs ?? LOOP_SELF_PACED_DELAY_MS)
-              return
-            }
-
-            stopLoop(input.sessionID)
-            void Effect.runPromise(
-              bus.publish(Session.Event.Error, {
+              // continue waiting
+            } else {
+              stopLoop(input.sessionID)
+              yield* events.publish(Session.Event.Error, {
                 sessionID: input.sessionID,
                 error: new NamedError.Unknown({
                   message: error instanceof Error ? error.message : String(error),
                 }).toObject(),
-              }),
-            )
-          })
-        }, delayMs)
-      }
+              })
+              return
+            }
+          }
+
+          yield* Effect.sleep(delay)
+        }
+      }).pipe(Effect.forkIn(scope))
 
       activeLoops.set(input.sessionID, {
         stop: () => {
           stopped = true
-          if (timer) clearTimeout(timer)
         },
       })
-
-      schedule(input.intervalMs ?? LOOP_SELF_PACED_DELAY_MS)
     })
 
     const resolvePromptParts = Effect.fn("SessionPrompt.resolvePromptParts")(function* (template: string) {
@@ -1561,10 +1554,10 @@ const layer = Layer.effect(
         yield* events.publish(Session.Event.Error, { sessionID: input.sessionID, error: error.toObject() })
         throw error
       }
-      const agentName = cmd.agent ?? input.agent
+      const agentName = cmd.agent ?? input.agent ?? (yield* agents.defaultInfo()).name
 
       if (input.command === Command.Default.LOOP || input.command === Command.Default.PROACTIVE) {
-        const taskModel = input.model ? Provider.parseModel(input.model) : yield* lastModel(input.sessionID)
+        const taskModel = input.model ? Provider.parseModel(input.model) : yield* currentModel(input.sessionID)
         yield* getModel(taskModel.providerID, taskModel.modelID, input.sessionID)
         const parsed = parseLoopCommandArguments(input.arguments)
         if (parsed.action === "stop") {
@@ -1577,7 +1570,7 @@ const layer = Layer.effect(
             model: taskModel,
             variant: input.variant,
           }).pipe(Effect.orDie)
-          yield* bus.publish(Command.Event.Executed, {
+          yield* events.publish(Command.Event.Executed, {
             name: input.command,
             sessionID: input.sessionID,
             arguments: input.arguments,
@@ -1607,7 +1600,7 @@ const layer = Layer.effect(
         } else {
           stopLoop(input.sessionID)
         }
-        yield* bus.publish(Command.Event.Executed, {
+        yield* events.publish(Command.Event.Executed, {
           name: input.command,
           sessionID: input.sessionID,
           arguments: input.arguments,
