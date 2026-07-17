@@ -66,7 +66,7 @@ await publishDistribution({
 })
 await publishDistribution({
   root: "./dist/node",
-  name: "opencode2-node",
+  name: "opencode-node",
   binary: "opencode2-node",
   packagePrefix: "@opencode-ai/cli-node-",
 })
