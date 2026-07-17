@@ -458,15 +458,21 @@ export function make(input: {
     if (!snapshot.availableModes.some((mode) => mode.id === params.modeId)) {
       return yield* new ACPError.InvalidModeError({ mode: params.modeId })
     }
-    yield* session.setMode(params.sessionId, params.modeId)
-    return {}
+    const state = yield* session.setMode(params.sessionId, params.modeId)
+    return {
+      configOptions: configOptions(snapshot, {
+        model: state.model ?? selectDefaultModel(snapshot),
+        variant: state.variant,
+        modeId: state.modeId,
+      }),
+    }
   })
 
   const setSessionModel = Effect.fn("ACP.setSessionModel")(function* (params: SetSessionModelRequest) {
     const current = yield* session.get(params.sessionId)
     const snapshot = yield* configSnapshot(current)
     const selected = yield* parseSelectedModel(snapshot, params.modelId)
-    yield* session
+    const state = yield* session
       .setVariant(
         params.sessionId,
         Directory.variants(snapshot, selected.model)
@@ -474,7 +480,13 @@ export function make(input: {
           : undefined,
       )
       .pipe(Effect.andThen(session.setModel(params.sessionId, selected.model)))
-    return {}
+    return {
+      configOptions: configOptions(snapshot, {
+        model: state.model ?? selected.model,
+        variant: state.variant,
+        modeId: state.modeId,
+      }),
+    }
   })
 
   return {
