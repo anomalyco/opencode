@@ -1,0 +1,9 @@
+{
+  "baseUrl": "https://oneadmin.oneinfoconsulting.com",
+  "project": "service-delivery-2026",
+  "issueId": "15464",
+  "issueLabel": "Gestión Interna",
+  "defaultActivity": "Desarrollo",
+  "defaultHours": 8,
+  "headless": true
+}
