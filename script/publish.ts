@@ -54,5 +54,17 @@ if (Script.release && !Script.preview) {
 const ghRepo = process.env.GH_REPO || (await $`git remote get-url origin`.text()).trim().replace(/^https:\/\/github\.com\//, "").replace(/\.git$/, "")
 
 if (Script.release) {
-  await $`gh release edit ${tag} --draft=false --repo ${ghRepo}`
+  const view = await $`gh release view ${tag} --repo ${ghRepo}`.nothrow()
+  if (view.exitCode !== 0) {
+    console.log("creating release", tag)
+    await $`gh release create ${tag} --repo ${ghRepo} --generate-notes`
+    const archives = await Array.fromAsync(
+      new Bun.Glob("**/*.{zip,tar.gz}").scan({ cwd: "packages/opencode/dist" }),
+    )
+    if (archives.length > 0) {
+      await $`gh release upload ${tag} ${archives.map((a) => `packages/opencode/dist/${a}`).join(" ")} --clobber --repo ${ghRepo}`
+    }
+  } else {
+    await $`gh release edit ${tag} --draft=false --repo ${ghRepo}`
+  }
 }
