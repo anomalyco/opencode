@@ -426,34 +426,29 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
                   },
             )
           })
-          if (event.data.payloadHash)
+          if (event.data.payloadHash) {
+            const sessionID = event.data.sessionID
+            const inputID = event.data.inputID
             void client.api.session.pending
-              .list({ sessionID: event.data.sessionID })
+              .list({ sessionID })
               .then((pending) => {
-                setStore("session", "pending", event.data.sessionID, reconcile(pending))
-                const item = pending.find((entry) => entry.id === event.data.inputID)
+                setStore("session", "pending", sessionID, reconcile(pending))
+                const item = pending.find((entry) => entry.id === inputID)
                 if (!item || item.type === "compaction") return
-                message.update(event.data.sessionID, (draft, index) => {
+                const next = {
+                  id: item.id,
+                  type: item.type,
+                  ...item.data,
+                  time: { created: item.timeCreated },
+                }
+                message.update(sessionID, (draft, index) => {
                   const position = index.get(item.id)
-                  const next =
-                    item.type === "user"
-                      ? {
-                          id: item.id,
-                          type: "user" as const,
-                          ...item.data,
-                          time: { created: item.timeCreated },
-                        }
-                      : {
-                          id: item.id,
-                          type: "synthetic" as const,
-                          ...item.data,
-                          time: { created: item.timeCreated },
-                        }
                   if (position === undefined) return message.append(draft, index, next)
                   draft[position] = next
                 })
               })
               .catch((error) => console.error("Failed to load admitted input with attachments", error))
+          }
           break
         case "session.instructions.updated":
           const instructions = event.metadata?.instructions
