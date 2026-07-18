@@ -17,8 +17,8 @@ const generated = await import("./generate.ts")
 import { Script } from "@kancode/script"
 import pkg from "../package.json"
 
-// The unscoped binary name used for per-platform packages and binary files.
-const binName = pkg.name.includes("/") ? pkg.name.split("/").pop()! : pkg.name
+// Platform packages are `kancode-<os>-<arch>` (not derived from workspace `@kancode/cli`).
+const binName = Object.keys(pkg.bin ?? {})[0] ?? "kancode"
 
 const singleFlag = process.argv.includes("--single")
 const baselineFlag = process.argv.includes("--baseline")

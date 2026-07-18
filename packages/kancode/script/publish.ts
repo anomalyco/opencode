@@ -8,8 +8,9 @@ import { fileURLToPath } from "url"
 const dir = fileURLToPath(new URL("..", import.meta.url))
 process.chdir(dir)
 
-// The bin command name is the unscoped part of the package name.
-const binName = pkg.name.includes("/") ? pkg.name.split("/").pop()! : pkg.name
+// Workspace package is `@kancode/cli`; npm distribution stays `@puetsua/kancode` with `kancode` bin.
+const publishName = "@puetsua/kancode"
+const binName = Object.keys(pkg.bin ?? {})[0] ?? "kancode"
 
 async function published(name: string, version: string) {
   return (await $`npm view ${name}@${version} version`.nothrow()).exitCode === 0
@@ -38,23 +39,22 @@ for (const filepath of new Bun.Glob("*/package.json").scanSync({ cwd: "./dist" }
 console.log("binaries", binaries)
 const version = Object.values(binaries)[0]
 
-const wrapperName = pkg.name
-const wrapperDirName = wrapperName.replaceAll("/", "-")
+const wrapperDirName = publishName.replaceAll("/", "-")
 const wrapperDir = `./dist/${wrapperDirName}`
 await $`mkdir -p ${wrapperDir}/bin`
 await $`cp ./script/postinstall.mjs ${wrapperDir}/postinstall.mjs`
 await Bun.file(`${wrapperDir}/LICENSE`).write(await Bun.file("../../LICENSE").text())
 await Bun.file(`${wrapperDir}/bin/${binName}.exe`).write(
   [
-    `echo "Error: ${wrapperName}'s postinstall script was not run." >&2`,
+    `echo "Error: ${publishName}'s postinstall script was not run." >&2`,
     'echo "" >&2',
     'echo "This occurs when using --ignore-scripts during installation, or when using a" >&2',
     'echo "package manager like pnpm that does not run postinstall scripts by default." >&2',
     'echo "" >&2',
     'echo "To fix this, run the postinstall script manually:" >&2',
-    `echo "  cd node_modules/${wrapperName} && node postinstall.mjs" >&2`,
+    `echo "  cd node_modules/${publishName} && node postinstall.mjs" >&2`,
     'echo "" >&2',
-    `echo "Or reinstall ${wrapperName} without the --ignore-scripts flag." >&2`,
+    `echo "Or reinstall ${publishName} without the --ignore-scripts flag." >&2`,
     "exit 1",
     "",
   ].join("\n"),
@@ -65,7 +65,7 @@ const skipBinaries = process.env["OPENCODE_SKIP_BINARIES"] === "1"
 await Bun.file(`${wrapperDir}/package.json`).write(
   JSON.stringify(
     {
-      name: wrapperName,
+      name: publishName,
       bin: {
         [binName]: `./bin/${binName}.exe`,
       },
@@ -99,6 +99,6 @@ if (!skipBinaries) {
 } else {
   console.log("skipping binary package publishes (OPENCODE_SKIP_BINARIES=1)")
 }
-await publish(wrapperDir, wrapperName, version)
+await publish(wrapperDir, publishName, version)
 
 const ghRepo = process.env.GH_REPO || (await $`git remote get-url origin`.text()).trim().replace(/^https:\/\/github\.com\//, "").replace(/\.git$/, "")
