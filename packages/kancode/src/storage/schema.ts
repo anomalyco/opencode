@@ -1,5 +1,4 @@
 export { AccountTable, AccountStateTable, ControlAccountTable } from "@kancode/core/account/sql"
 export { ProjectTable } from "@kancode/core/project/sql"
 export { SessionTable, MessageTable, PartTable, TodoTable } from "@kancode/core/session/sql"
-export { SessionShareTable } from "@kancode/core/share/sql"
 export { WorkspaceTable } from "@kancode/core/control-plane/workspace.sql"

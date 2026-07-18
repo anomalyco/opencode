@@ -62,7 +62,6 @@ type RunLocalInput = {
   fetch: typeof globalThis.fetch
   resolveAgent: () => Promise<string | undefined>
   session: (sdk: RunInput["sdk"]) => Promise<{ id: string; title?: string } | undefined>
-  share: (sdk: RunInput["sdk"], sessionID: string) => Promise<void>
   createSession?: CreateSession
   agent: RunInput["agent"]
   model: RunInput["model"]
@@ -758,7 +757,6 @@ export async function runInteractiveLocalMode(input: RunLocalInput): Promise<voi
           throw new Error("Session not found")
         }
 
-        void input.share(sdk, next.id).catch(() => {})
         return {
           sessionID: next.id,
           sessionTitle: next.title,

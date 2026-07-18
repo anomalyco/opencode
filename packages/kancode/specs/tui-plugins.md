@@ -430,7 +430,7 @@ Current host slot names:
 - `session_prompt_right` with props `{ session_id }`
 - `home_bottom`
 - `home_footer`
-- `sidebar_title` with props `{ session_id, title, share_url? }`
+- `sidebar_title` with props `{ session_id, title }`
 - `sidebar_content` with props `{ session_id }`
 - `sidebar_footer` with props `{ session_id }`
 

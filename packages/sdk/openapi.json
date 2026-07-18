@@ -6832,170 +6832,6 @@
         ]
       }
     },
-    "/session/{sessionID}/share": {
-      "post": {
-        "tags": ["session"],
-        "operationId": "session.share",
-        "parameters": [
-          {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "pattern": "^ses"
-            },
-            "required": true
-          },
-          {
-            "name": "directory",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": false
-          },
-          {
-            "name": "workspace",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": false
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successfully shared session",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Session"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BadRequestError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "NotFoundError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/NotFoundError"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "InternalServerError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/effect_HttpApiError_InternalServerError"
-                }
-              }
-            }
-          }
-        },
-        "description": "Create a shareable link for a session, allowing others to view the conversation.",
-        "summary": "Share session",
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createOpencodeClient } from \"@kancode/sdk\n\nconst client = createOpencodeClient()\nawait client.session.share({\n  ...\n})"
-          }
-        ]
-      },
-      "delete": {
-        "tags": ["session"],
-        "operationId": "session.unshare",
-        "parameters": [
-          {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "pattern": "^ses"
-            },
-            "required": true
-          },
-          {
-            "name": "directory",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": false
-          },
-          {
-            "name": "workspace",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": false
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successfully unshared session",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Session"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BadRequestError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "NotFoundError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/NotFoundError"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "InternalServerError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/effect_HttpApiError_InternalServerError"
-                }
-              }
-            }
-          }
-        },
-        "description": "Remove the shareable link for a session, making it private again.",
-        "summary": "Unshare session",
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createOpencodeClient } from \"@kancode/sdk\n\nconst client = createOpencodeClient()\nawait client.session.unshare({\n  ...\n})"
-          }
-        ]
-      }
-    },
     "/session/{sessionID}/summarize": {
       "post": {
         "tags": ["session"],
@@ -15718,8 +15554,7 @@
       },
       "PermissionAction": {
         "type": "string",
-        "minLength": 1,
-        "description": "Static allow|deny|ask, or a registered permission module id such as cruise_control"
+        "minLength": 1
       },
       "PermissionRule": {
         "type": "object",
@@ -19804,7 +19639,6 @@
                             "enum": [
                               "session.list",
                               "session.new",
-                              "session.share",
                               "session.interrupt",
                               "session.compact",
                               "session.page.up",
@@ -20563,8 +20397,7 @@
       },
       "PermissionActionConfig": {
         "type": "string",
-        "minLength": 1,
-        "description": "ask | allow | deny | permission module id (e.g. cruise_control)"
+        "minLength": 1
       },
       "PermissionObjectConfig": {
         "type": "object",
@@ -21225,13 +21058,6 @@
               ]
             }
           },
-          "share": {
-            "type": "string",
-            "enum": ["manual", "auto", "disabled"]
-          },
-          "autoshare": {
-            "type": "boolean"
-          },
           "autoupdate": {
             "anyOf": [
               {
@@ -21271,6 +21097,9 @@
           "mode": {
             "type": "object",
             "properties": {
+              "default": {
+                "$ref": "#/components/schemas/AgentConfig"
+              },
               "build": {
                 "$ref": "#/components/schemas/AgentConfig"
               },
@@ -21286,6 +21115,9 @@
             "type": "object",
             "properties": {
               "plan": {
+                "$ref": "#/components/schemas/AgentConfig"
+              },
+              "default": {
                 "$ref": "#/components/schemas/AgentConfig"
               },
               "build": {
@@ -21447,6 +21279,9 @@
           "permission": {
             "$ref": "#/components/schemas/PermissionConfig"
           },
+          "permission_modules": {
+            "$ref": "#/components/schemas/PermissionModuleInfo"
+          },
           "tools": {
             "type": "object",
             "additionalProperties": {
@@ -21455,15 +21290,6 @@
           },
           "attachment": {
             "$ref": "#/components/schemas/AttachmentConfig"
-          },
-          "enterprise": {
-            "type": "object",
-            "properties": {
-              "url": {
-                "type": "string"
-              }
-            },
-            "additionalProperties": false
           },
           "tool_output": {
             "type": "object",
@@ -23260,7 +23086,6 @@
                     "enum": [
                       "session.list",
                       "session.new",
-                      "session.share",
                       "session.interrupt",
                       "session.compact",
                       "session.page.up",
@@ -24348,7 +24173,6 @@
                     "enum": [
                       "session.list",
                       "session.new",
-                      "session.share",
                       "session.interrupt",
                       "session.compact",
                       "session.page.up",
@@ -27026,6 +26850,127 @@
         "required": ["path"],
         "additionalProperties": false
       },
+      "PermissionModuleInstructions": {
+        "type": "object",
+        "properties": {
+          "background": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "allow": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "conditional": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "deny": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "PermissionModuleFallback": {
+        "type": "string",
+        "enum": ["ask", "deny"]
+      },
+      "PermissionModuleDynamicList": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "max_size": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false
+      },
+      "PermissionModuleOptions": {
+        "type": "object",
+        "properties": {
+          "model": {
+            "type": "string"
+          },
+          "instructions": {
+            "$ref": "#/components/schemas/PermissionModuleInstructions"
+          },
+          "fallback": {
+            "$ref": "#/components/schemas/PermissionModuleFallback"
+          },
+          "retries": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "retry_interval_ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "timeout_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": ["NaN"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["-Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
+          },
+          "allowlist": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "never_auto": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "dynamic_list": {
+            "$ref": "#/components/schemas/PermissionModuleDynamicList"
+          },
+          "parallel_classify": {
+            "type": "boolean"
+          },
+          "classify_gap_ms": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false
+      },
+      "PermissionModuleInfo": {
+        "type": "object",
+        "additionalProperties": {
+          "$ref": "#/components/schemas/PermissionModuleOptions"
+        }
+      },
       "PolicyEffect": {
         "type": "string",
         "enum": ["allow", "deny"]
@@ -27162,6 +27107,9 @@
           },
           "effect": {
             "$ref": "#/components/schemas/PermissionV2Effect"
+          },
+          "module": {
+            "type": "string"
           }
         },
         "required": ["action", "resource", "effect"],
@@ -32787,7 +32735,6 @@
                     "enum": [
                       "session.list",
                       "session.new",
-                      "session.share",
                       "session.interrupt",
                       "session.compact",
                       "session.page.up",

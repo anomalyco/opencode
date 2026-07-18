@@ -51,7 +51,6 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
               mode="single_winner"
               session_id={props.sessionID}
               title={session()!.title}
-              share_url={session()!.share?.url}
             >
               <box paddingRight={1}>
                 <text fg={theme.text}>
@@ -76,9 +75,6 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                       )}
                     </Show>
                   </text>
-                </Show>
-                <Show when={session()!.share?.url}>
-                  <text fg={theme.textMuted}>{session()!.share!.url}</text>
                 </Show>
               </box>
             </pluginRuntime.Slot>

@@ -45,8 +45,6 @@ import { Vcs } from "@/project/vcs"
 import { Workspace } from "@/control-plane/workspace"
 import { Worktree } from "@/worktree"
 import { Installation } from "@/installation"
-import { ShareNext } from "@/share/share-next"
-import { SessionShare } from "@/share/session"
 import { Npm } from "@kancode/core/npm"
 import { memoMap } from "@kancode/core/effect/memo-map"
 import { BackgroundJob } from "@/background/job"
@@ -105,8 +103,6 @@ export const AppLayer = AppNodeBuilderV1.build(
     Workspace.node,
     Worktree.node,
     Installation.node,
-    ShareNext.node,
-    SessionShare.node,
   ]),
 ).pipe(Layer.provideMerge(AppNodeBuilderV1.build(Ripgrep.node)), Layer.provideMerge(Observability.layer))
 

@@ -291,10 +291,6 @@ function normalizeComponentDescriptions(spec: OpenApiSpec) {
 
 function makePropertiesNullable(properties: Record<string, OpenApiSchema>) {
   for (const [key, value] of Object.entries(properties)) {
-    if (key === "share" && value.properties?.url) {
-      value.properties.url = nullable(value.properties.url)
-      continue
-    }
     if (key === "time" && value.properties) {
       makePropertiesNullable(value.properties)
       continue

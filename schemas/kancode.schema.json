@@ -676,12 +676,56 @@
         "stretch"
       ]
     },
+    "PermissionModule.Instructions": {
+      "type": "object",
+      "properties": {
+        "background": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "allow": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "conditional": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "deny": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
     "PermissionModule.Fallback": {
       "type": "string",
       "enum": [
         "ask",
         "deny"
       ]
+    },
+    "PermissionModule.DynamicList": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "max_size": {
+          "minimum": 0,
+          "type": "integer",
+          "maximum": 9007199254740991
+        }
+      },
+      "additionalProperties": false
     },
     "PermissionModule.Options": {
       "type": "object",
@@ -690,8 +734,21 @@
           "type": "string",
           "$ref": "https://models.dev/model-schema.json#/$defs/Model"
         },
+        "instructions": {
+          "$ref": "#/$defs/PermissionModule.Instructions"
+        },
         "fallback": {
           "$ref": "#/$defs/PermissionModule.Fallback"
+        },
+        "retries": {
+          "minimum": 0,
+          "type": "integer",
+          "maximum": 9007199254740991
+        },
+        "retry_interval_ms": {
+          "minimum": 0,
+          "type": "integer",
+          "maximum": 9007199254740991
         },
         "timeout_ms": {
           "anyOf": [
@@ -729,6 +786,17 @@
           "items": {
             "type": "string"
           }
+        },
+        "dynamic_list": {
+          "$ref": "#/$defs/PermissionModule.DynamicList"
+        },
+        "parallel_classify": {
+          "type": "boolean"
+        },
+        "classify_gap_ms": {
+          "minimum": 0,
+          "type": "integer",
+          "maximum": 9007199254740991
         }
       },
       "additionalProperties": false
@@ -960,19 +1028,6 @@
               }
             ]
           }
-        },
-        "share": {
-          "type": "string",
-          "enum": [
-            "manual",
-            "auto",
-            "disabled"
-          ],
-          "description": "Control sharing behavior:'manual' allows manual sharing via commands, 'auto' enables automatic sharing, 'disabled' disables all sharing"
-        },
-        "autoshare": {
-          "type": "boolean",
-          "description": "@deprecated Use 'share' field instead. Share newly created sessions automatically"
         },
         "autoupdate": {
           "anyOf": [
@@ -1236,16 +1291,6 @@
         "attachment": {
           "$ref": "#/$defs/AttachmentConfig",
           "description": "Attachment processing configuration, including image size limits and resizing behavior"
-        },
-        "enterprise": {
-          "type": "object",
-          "properties": {
-            "url": {
-              "type": "string",
-              "description": "Enterprise URL"
-            }
-          },
-          "additionalProperties": false
         },
         "tool_output": {
           "type": "object",

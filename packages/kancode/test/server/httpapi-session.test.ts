@@ -789,7 +789,7 @@ describe("session HttpApi", () => {
           }),
         ).toBe(true)
       }),
-    { git: true, config: { formatter: false, lsp: false, share: "disabled" } },
+    { git: true, config: { formatter: false, lsp: false } },
   )
 
   it.instance(
@@ -821,7 +821,7 @@ describe("session HttpApi", () => {
         expect(messages.status).toBe(200)
         expect(yield* getWorkspaceID(created.id)).toEqual({ workspaceID: workspace.id })
       }),
-    { git: true, config: { formatter: false, lsp: false, share: "disabled" } },
+    { git: true, config: { formatter: false, lsp: false } },
   )
 
   it.instance(
@@ -901,7 +901,7 @@ describe("session HttpApi", () => {
         const global = yield* requestJson<Session.Info[]>(`${ExperimentalPaths.session}?${globalQuery}`, { headers })
         expect(global.map((item) => item.id)).toContain(created.id)
       }),
-    { git: true, config: { formatter: false, lsp: false, share: "disabled" } },
+    { git: true, config: { formatter: false, lsp: false } },
   )
 
   it.instance(
@@ -926,7 +926,7 @@ describe("session HttpApi", () => {
           expect({ spelling, ids: listed.map((item) => item.id) }).toEqual({ spelling, ids: [created.id] })
         }
       }),
-    { git: true, config: { formatter: false, lsp: false, share: "disabled" } },
+    { git: true, config: { formatter: false, lsp: false } },
     { timeout: 15000 },
   )
 
@@ -948,7 +948,7 @@ describe("session HttpApi", () => {
         const listed = yield* requestJson<Session.Info[]>(`${SessionPaths.list}?${query}`, { headers })
         expect(listed.map((item) => item.id)).toContain(driveRootSession.id)
       }),
-    { git: true, config: { formatter: false, lsp: false, share: "disabled" } },
+    { git: true, config: { formatter: false, lsp: false } },
     { timeout: 15000 },
   )
 

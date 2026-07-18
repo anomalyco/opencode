@@ -1414,7 +1414,6 @@ export type GlobalEvent = {
           command:
             | "session.list"
             | "session.new"
-            | "session.share"
             | "session.interrupt"
             | "session.compact"
             | "session.page.up"
@@ -1917,8 +1916,6 @@ export type Config = {
         },
       ]
   >
-  share?: "manual" | "auto" | "disabled"
-  autoshare?: boolean
   /**
    * Automatically update to the latest version. Set to true to auto-update, false to disable, or 'notify' to show update notifications
    */
@@ -1930,12 +1927,14 @@ export type Config = {
   default_agent?: string
   username?: string
   mode?: {
+    default?: AgentConfig
     build?: AgentConfig
     plan?: AgentConfig
     [key: string]: AgentConfig | undefined
   }
   agent?: {
     plan?: AgentConfig
+    default?: AgentConfig
     build?: AgentConfig
     general?: AgentConfig
     explore?: AgentConfig
@@ -1995,13 +1994,11 @@ export type Config = {
   instructions?: Array<string>
   layout?: LayoutConfig
   permission?: PermissionConfig
+  permission_modules?: PermissionModuleInfo
   tools?: {
     [key: string]: boolean
   }
   attachment?: AttachmentConfig
-  enterprise?: {
-    url?: string
-  }
   tool_output?: {
     max_lines?: number
     max_bytes?: number
@@ -2609,7 +2606,6 @@ export type EventTuiCommandExecute = {
     command:
       | "session.list"
       | "session.new"
-      | "session.share"
       | "session.interrupt"
       | "session.compact"
       | "session.page.up"
@@ -2971,7 +2967,6 @@ export type EventTuiCommandExecute2 = {
     command:
       | "session.list"
       | "session.new"
-      | "session.share"
       | "session.interrupt"
       | "session.compact"
       | "session.page.up"
@@ -3831,6 +3826,38 @@ export type ConfigV2ReferenceLocal = {
   hidden?: boolean
 }
 
+export type PermissionModuleInstructions = {
+  background?: Array<string>
+  allow?: Array<string>
+  conditional?: Array<string>
+  deny?: Array<string>
+}
+
+export type PermissionModuleFallback = "ask" | "deny"
+
+export type PermissionModuleDynamicList = {
+  enabled?: boolean
+  max_size?: number
+}
+
+export type PermissionModuleOptions = {
+  model?: string
+  instructions?: PermissionModuleInstructions
+  fallback?: PermissionModuleFallback
+  retries?: number
+  retry_interval_ms?: number
+  timeout_ms?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  allowlist?: Array<string>
+  never_auto?: Array<string>
+  dynamic_list?: PermissionModuleDynamicList
+  parallel_classify?: boolean
+  classify_gap_ms?: number
+}
+
+export type PermissionModuleInfo = {
+  [key: string]: PermissionModuleOptions
+}
+
 export type PolicyEffect = "allow" | "deny"
 
 export type ConfigV2ExperimentalPolicy = {
@@ -3880,6 +3907,7 @@ export type PermissionV2Rule = {
   action: string
   resource: string
   effect: PermissionV2Effect
+  module?: string
 }
 
 export type PermissionV2Ruleset = Array<PermissionV2Rule>
@@ -5768,7 +5796,6 @@ export type TuiCommandExecute = {
     command:
       | "session.list"
       | "session.new"
-      | "session.share"
       | "session.interrupt"
       | "session.compact"
       | "session.page.up"
@@ -10018,82 +10045,6 @@ export type SessionInitResponses = {
 }
 
 export type SessionInitResponse = SessionInitResponses[keyof SessionInitResponses]
-
-export type SessionUnshareData = {
-  body?: never
-  path: {
-    sessionID: string
-  }
-  query?: {
-    directory?: string
-    workspace?: string
-  }
-  url: "/session/{sessionID}/share"
-}
-
-export type SessionUnshareErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-  /**
-   * NotFoundError
-   */
-  404: NotFoundError
-  /**
-   * InternalServerError
-   */
-  500: EffectHttpApiErrorInternalServerError
-}
-
-export type SessionUnshareError = SessionUnshareErrors[keyof SessionUnshareErrors]
-
-export type SessionUnshareResponses = {
-  /**
-   * Successfully unshared session
-   */
-  200: Session
-}
-
-export type SessionUnshareResponse = SessionUnshareResponses[keyof SessionUnshareResponses]
-
-export type SessionShareData = {
-  body?: never
-  path: {
-    sessionID: string
-  }
-  query?: {
-    directory?: string
-    workspace?: string
-  }
-  url: "/session/{sessionID}/share"
-}
-
-export type SessionShareErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-  /**
-   * NotFoundError
-   */
-  404: NotFoundError
-  /**
-   * InternalServerError
-   */
-  500: EffectHttpApiErrorInternalServerError
-}
-
-export type SessionShareError = SessionShareErrors[keyof SessionShareErrors]
-
-export type SessionShareResponses = {
-  /**
-   * Successfully shared session
-   */
-  200: Session
-}
-
-export type SessionShareResponse = SessionShareResponses[keyof SessionShareResponses]
 
 export type SessionSummarizeData = {
   body?: {
