@@ -542,7 +542,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   })
 
   // Auto-resume the most recent session for the current project path when
-  // `tui.auto_resume` is enabled and no explicit --continue/--session/--fork or
+  // `tui.auto_resume` is enabled (default) and no explicit --continue/--session/--fork or
   // initial route was supplied. The session list loads in the non-blocking
   // phase, so we wait for "complete" before picking a match.
   let autoResumed = false

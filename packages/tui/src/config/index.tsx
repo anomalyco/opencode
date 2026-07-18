@@ -65,7 +65,7 @@ export const Info = Schema.Struct({
   mouse: Schema.optional(Schema.Boolean).annotate({ description: "Enable or disable mouse capture (default: true)" }),
   auto_resume: Schema.optional(Schema.Boolean).annotate({
     description:
-      "Automatically resume the most recent session for the current project path on startup (default: false). Has no effect when --continue, --session, --fork, or an initial route is supplied.",
+      "Automatically resume the most recent session for the current project path on startup (default: true). Has no effect when --continue, --session, --fork, or an initial route is supplied.",
   }),
 })
 export type Info = Schema.Schema.Type<typeof Info>
@@ -118,7 +118,7 @@ export function resolve(input: Info, options: ResolveOptions): Resolved {
     }),
     leader_timeout: input.leader_timeout ?? LeaderTimeoutDefault,
     mouse: input.mouse ?? true,
-    auto_resume: input.auto_resume ?? false,
+    auto_resume: input.auto_resume ?? true,
   }
 }
 
