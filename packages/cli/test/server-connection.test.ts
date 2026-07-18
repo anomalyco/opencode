@@ -13,10 +13,40 @@ import { ServiceConfig } from "../src/services/service-config"
 const runReconnect = <A, E>(effect: Effect.Effect<A, E, FileSystem.FileSystem>) =>
   Effect.runPromise(effect.pipe(Effect.provide(NodeFileSystem.layer)))
 
-test("managed reconnect ensures the service on the first failure", async () => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-reconnect-"))
-  const starts: EnsureReason[] = []
+async function withTempRoot(prefix: string, body: (root: string) => Promise<void>) {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), prefix))
   try {
+    await body(root)
+  } finally {
+    await fs.rm(root, { recursive: true, force: true })
+  }
+}
+
+async function withHealthyRegisteredService(
+  prefix: string,
+  body: (input: { root: string; file: string; url: string }) => Promise<void>,
+) {
+  await withTempRoot(prefix, async (root) => {
+    const server = Bun.serve({
+      port: 0,
+      fetch() {
+        return Response.json({ healthy: true, version: "older", pid: process.pid })
+      },
+    })
+    const file = path.join(root, "service.json")
+    const url = server.url.toString()
+    await Bun.write(file, JSON.stringify({ url, pid: process.pid, version: "older" }))
+    try {
+      await body({ root, file, url })
+    } finally {
+      await server.stop(true)
+    }
+  })
+}
+
+test("managed reconnect ensures the service on the first failure", async () => {
+  await withTempRoot("opencode-service-reconnect-", async (root) => {
+    const starts: EnsureReason[] = []
     // Short-circuit ensure once it decides to spawn — we only need the reason.
     const exit = await runReconnect(
       ServerConnection.managedReconnect({
@@ -29,23 +59,11 @@ test("managed reconnect ensures the service on the first failure", async () => {
     )
     expect(Exit.isFailure(exit)).toBe(true)
     expect(starts).toEqual(["missing"])
-  } finally {
-    await fs.rm(root, { recursive: true, force: true })
-  }
+  })
 })
 
 test("managed reconnect reuses a healthy service from another version", async () => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-reconnect-version-"))
-  const server = Bun.serve({
-    port: 0,
-    fetch() {
-      return Response.json({ healthy: true, version: "older", pid: process.pid })
-    },
-  })
-  const file = path.join(root, "service.json")
-  const url = server.url.toString()
-  await Bun.write(file, JSON.stringify({ url, pid: process.pid, version: "older" }))
-  try {
+  await withHealthyRegisteredService("opencode-service-reconnect-version-", async ({ root, file, url }) => {
     const endpoint = await runReconnect(
       ServerConnection.managedReconnect({
         file,
@@ -54,25 +72,12 @@ test("managed reconnect reuses a healthy service from another version", async ()
       }),
     )
     expect(endpoint.url).toBe(url)
-  } finally {
-    await server.stop(true)
-    await fs.rm(root, { recursive: true, force: true })
-  }
+  })
 })
 
 test("concurrent managed reconnects reuse one healthy endpoint without spawning", async () => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-reconnect-herd-"))
-  const server = Bun.serve({
-    port: 0,
-    fetch() {
-      return Response.json({ healthy: true, version: "older", pid: process.pid })
-    },
-  })
-  const file = path.join(root, "service.json")
-  const url = server.url.toString()
-  await Bun.write(file, JSON.stringify({ url, pid: process.pid, version: "older" }))
-  const mustNotStart = path.join(root, "must-not-start")
-  try {
+  await withHealthyRegisteredService("opencode-service-reconnect-herd-", async ({ root, file, url }) => {
+    const mustNotStart = path.join(root, "must-not-start")
     const endpoints = await Promise.all(
       Array.from({ length: 7 }, () =>
         runReconnect(
@@ -89,10 +94,7 @@ test("concurrent managed reconnects reuse one healthy endpoint without spawning"
       () => true,
       () => false,
     )).toBe(false)
-  } finally {
-    await server.stop(true)
-    await fs.rm(root, { recursive: true, force: true })
-  }
+  })
 })
 
 test("resolution groups Effect-native lifecycle operations only for the managed service", async () => {
