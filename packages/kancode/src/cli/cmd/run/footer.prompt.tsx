@@ -8,7 +8,7 @@
 import { pathToFileURL } from "bun"
 import { StyledText, fg, type ColorInput, type KeyEvent, type TextareaRenderable } from "@opentui/core"
 import { useRenderer } from "@opentui/solid"
-import { normalizePromptContent } from "@kancode/tui/editor"
+import { ExternalEditorMissingError, normalizePromptContent } from "@kancode/tui/editor"
 import fuzzysort from "fuzzysort"
 import path from "path"
 import { createEffect, createMemo, createResource, createSignal, onCleanup, onMount, type Accessor } from "solid-js"
@@ -833,9 +833,13 @@ export function createPromptState(input: PromptInput): PromptState {
         ...(current.mode ? { mode: current.mode } : {}),
         ...(current.command ? { command: current.command } : {}),
       })
-    } catch {
+    } catch (error) {
       restore(current)
-      input.onStatus("failed to open editor")
+      input.onStatus(
+        error instanceof ExternalEditorMissingError
+          ? "set EDITOR or VISUAL to use /editor"
+          : "failed to open editor",
+      )
     }
   }
 

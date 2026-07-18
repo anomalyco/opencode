@@ -9,6 +9,17 @@ import { isZedRunning, resolveZedDbPath, resolveZedSelection } from "./editor-ze
 
 type EditorStdio = "inherit" | "pipe" | "ignore" | number | Stream
 
+export class ExternalEditorMissingError extends Error {
+  constructor() {
+    super("EDITOR or VISUAL is not set")
+    this.name = "ExternalEditorMissingError"
+  }
+}
+
+export function resolveExternalEditor() {
+  return process.env.VISUAL || process.env.EDITOR
+}
+
 export function normalizePromptContent(content: string) {
   if (content.endsWith("\r\n")) {
     const body = content.slice(0, -2)
@@ -24,8 +35,8 @@ export function normalizePromptContent(content: string) {
 }
 
 export async function openEditor(input: { value: string; renderer: CliRenderer; cwd?: string; stdin?: EditorStdio }) {
-  const editor = process.env.VISUAL || process.env.EDITOR
-  if (!editor) return
+  const editor = resolveExternalEditor()
+  if (!editor) throw new ExternalEditorMissingError()
   const file = path.join(os.tmpdir(), `${Date.now()}.md`)
   await writeFile(file, input.value)
   input.renderer.suspend()

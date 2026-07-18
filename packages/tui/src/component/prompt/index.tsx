@@ -26,7 +26,7 @@ import { useProject } from "../../context/project"
 import { useSync } from "../../context/sync"
 import { useEvent } from "../../context/event"
 import { editorSelectionKey, useEditorContext, type EditorSelection } from "../../context/editor"
-import { normalizePromptContent, openEditor } from "../../editor"
+import { ExternalEditorMissingError, normalizePromptContent, openEditor } from "../../editor"
 import { useExit } from "../../context/exit"
 import { promptOffsetWidth } from "../../prompt/display"
 import { createStore, produce, unwrap } from "solid-js/store"
@@ -450,14 +450,27 @@ export function Prompt(props: PromptProps) {
           const nonTextParts = store.prompt.parts.filter((p) => p.type !== "text")
 
           const value = text
-          const content = await openEditor({
-            renderer,
-            value,
-            cwd:
-              (project.instance.path().worktree === "/" ? undefined : project.instance.path().worktree) ||
-              project.instance.directory() ||
-              paths.cwd,
-          })
+          let content: string | undefined
+          try {
+            content = await openEditor({
+              renderer,
+              value,
+              cwd:
+                (project.instance.path().worktree === "/" ? undefined : project.instance.path().worktree) ||
+                project.instance.directory() ||
+                paths.cwd,
+            })
+          } catch (error) {
+            if (error instanceof ExternalEditorMissingError) {
+              toast.show({
+                message: "Set EDITOR or VISUAL to use the external editor",
+                variant: "warning",
+                duration: 4000,
+              })
+              return
+            }
+            throw error
+          }
           if (!content) return
           const normalized = normalizePromptContent(content)
 

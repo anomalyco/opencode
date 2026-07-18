@@ -43,7 +43,7 @@ import { webSearchProviderLabel } from "../../util/tool-display"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import { useSDK } from "../../context/sdk"
 import { useEditorContext } from "../../context/editor"
-import { openEditor } from "../../editor"
+import { ExternalEditorMissingError, openEditor } from "../../editor"
 import { useDialog } from "../../ui/dialog"
 import { DialogAlert } from "../../ui/dialog-alert"
 import { TodoItem } from "../../component/todo-item"
@@ -947,8 +947,16 @@ export function Session() {
 
             toast.show({ message: `Session exported to ${filename}`, variant: "success" })
           }
-        } catch {
-          toast.show({ message: "Failed to export session", variant: "error" })
+        } catch (error) {
+          if (error instanceof ExternalEditorMissingError) {
+            toast.show({
+              message: "Set EDITOR or VISUAL to use the external editor",
+              variant: "warning",
+              duration: 4000,
+            })
+          } else {
+            toast.show({ message: "Failed to export session", variant: "error" })
+          }
         }
         dialog.clear()
       },
