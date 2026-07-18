@@ -34,6 +34,7 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { McpCatalog } from "./catalog"
 import { McpEvent } from "@opencode-ai/schema/mcp-event"
 import { McpBrowser } from "./browser"
+import { McpTool } from "@opencode-ai/core/tool/mcp"
 
 const DEFAULT_TIMEOUT = 30_000
 const CLIENT_OPTIONS = {
@@ -446,6 +447,7 @@ const layer = Layer.effect(
         delete s.defs[name]
         delete s.instructions[name]
         s.status[name] = { status: "failed", error: "Connection closed" }
+        McpTool.Runtime.remove(name)
         bridge.fork(
           Effect.logWarning("MCP connection closed", { server: name }).pipe(
             Effect.andThen(events.publish(ToolsChanged, { server: name })),
@@ -467,6 +469,7 @@ const layer = Layer.effect(
         if (s.clients[name] !== client || s.status[name]?.status !== "connected") return
 
         s.defs[name] = listed
+        publishToRuntime(name, client, listed, timeout)
         await bridge.promise(events.publish(ToolsChanged, { server: name }).pipe(Effect.ignore))
       })
     }
@@ -583,10 +586,52 @@ const layer = Layer.effect(
       s.defs[name] = listed
       if (instructions) s.instructions[name] = instructions
       else delete s.instructions[name]
+      // Bridge into the core-side McpTool.Runtime registry so the v2
+      // SessionRunner (which reads from @opencode/v2/MCP, not
+      // @opencode/MCP) sees these tools on its next reconcile.
+      publishToRuntime(name, client, listed, timeout)
       watch(s, name, client, bridge, timeout)
       if (previous) yield* Effect.tryPromise(() => previous.close()).pipe(Effect.ignore)
       return s.status[name]
     })
+
+    const publishToRuntime = (
+      server: string,
+      client: MCPClient,
+      listed: MCPToolDef[],
+      timeout?: number,
+    ) => {
+      McpTool.Runtime.set(
+        server,
+        listed.map((def): McpTool.RuntimeToolEntry => ({
+          name: def.name,
+          description: def.description,
+          inputSchema: (def.inputSchema ?? {}) as never,
+          outputSchema: def.outputSchema as never,
+          execute: async (args) => {
+            const result = await withTimeout(
+              client.callTool({ name: def.name, arguments: args }),
+              timeout ?? DEFAULT_TIMEOUT,
+            )
+            const content = (result.content as ReadonlyArray<{ type: string; [k: string]: unknown }>).map(
+              (part) => {
+                if (part.type === "text") return { type: "text" as const, text: String(part.text ?? "") }
+                return {
+                  type: "file" as const,
+                  data: String(part.data ?? ""),
+                  mime: (part.mimeType as string | undefined) ?? undefined,
+                }
+              },
+            )
+            return {
+              isError: Boolean(result.isError),
+              structured: result.structuredContent,
+              content,
+            }
+          },
+        })),
+      )
+    }
 
     const status = Effect.fn("MCP.status")(function* () {
       const s = yield* InstanceState.get(state)
