@@ -1,6 +1,6 @@
 export * as Event from "./event.js"
 
-import { Schema, SchemaTransformation } from "effect"
+import { Option, Schema, SchemaTransformation } from "effect"
 import { optional } from "./schema.js"
 import { ascending } from "./identifier.js"
 import { Location } from "./location.js"
@@ -197,16 +197,14 @@ function readonlyMap<Key, Value>(map: Map<Key, Value>): ReadonlyMap<Key, Value> 
   return result
 }
 
+const SessionData = Schema.Struct({ sessionID: Schema.String })
+const decodeSessionData = Schema.decodeUnknownOption(SessionData)
+
 /** Session identity from a durable aggregate or an ephemeral `data.sessionID` field. */
 export function sessionIDOf(event: {
   readonly durable?: { readonly aggregateID: string }
   readonly data?: unknown
 }): string | undefined {
   if (event.durable?.aggregateID) return event.durable.aggregateID
-  const data = event.data
-  if (data === undefined || data === null || typeof data !== "object") return undefined
-  if (!("sessionID" in data)) return undefined
-  const sessionID = data.sessionID
-  if (typeof sessionID === "string") return sessionID
-  return undefined
+  return Option.getOrUndefined(decodeSessionData(event.data))?.sessionID
 }
