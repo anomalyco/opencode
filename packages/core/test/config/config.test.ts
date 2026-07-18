@@ -655,6 +655,7 @@ describe("Config", () => {
                       command: ["node", "./mcp/server.js"],
                       environment: { API_KEY: "secret" },
                       disabled: false,
+                      codemode: false,
                       timeout: { catalog: 10000 },
                     },
                     remote: {
@@ -663,6 +664,7 @@ describe("Config", () => {
                       headers: { Authorization: "Bearer token" },
                       oauth: { client_id: "client", scope: "read write", callback_port: 19876 },
                       disabled: true,
+                      codemode: false,
                       timeout: { startup: 15000 },
                     },
                   },
@@ -740,6 +742,7 @@ describe("Config", () => {
                   command: ["node", "./mcp/server.js"],
                   environment: { API_KEY: "secret" },
                   disabled: false,
+                  codemode: false,
                   timeout: { catalog: 10000 },
                 },
                 remote: {
@@ -748,6 +751,7 @@ describe("Config", () => {
                   headers: { Authorization: "Bearer token" },
                   oauth: { client_id: "client", scope: "read write", callback_port: 19876 },
                   disabled: true,
+                  codemode: false,
                   timeout: { startup: 15000 },
                 },
               },

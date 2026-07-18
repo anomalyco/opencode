@@ -232,6 +232,13 @@ const mcp = Layer.mock(MCP.Service, {
           required: ["ok"],
         },
       }),
+      new MCP.Tool({
+        server: MCP.ServerName.make("direct"),
+        name: "lookup",
+        codemode: false,
+        description: "Lookup",
+        inputSchema: { type: "object", properties: {} },
+      }),
     ]),
   callTool: (input) =>
     Effect.sync(() => {
@@ -763,6 +770,18 @@ it.effect("advertises MCP output schemas to Code Mode", () =>
     const execute = (yield* toolDefinitions(registry)).find((tool) => tool.name === "execute")
 
     expect(execute?.description).toContain("tools.demo.search(input: {}): Promise<{\n  ok: boolean,\n}>")
+  }),
+)
+
+it.effect("advertises MCP tools directly when Code Mode is disabled for the server", () =>
+  Effect.gen(function* () {
+    const registry = yield* ToolRegistry.Service
+    yield* waitForTool(registry, "direct_lookup")
+    const definitions = yield* toolDefinitions(registry)
+    const execute = definitions.find((tool) => tool.name === "execute")
+
+    expect(definitions.some((tool) => tool.name === "direct_lookup")).toBe(true)
+    expect(execute?.description).not.toContain("tools.direct.lookup")
   }),
 )
 

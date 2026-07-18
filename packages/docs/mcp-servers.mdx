@@ -75,6 +75,7 @@ A local server is a command that OpenCode starts using the MCP stdio transport.
 | `cwd` | No | Process working directory. Relative paths resolve from the workspace directory; the workspace is the default. |
 | `environment` | No | String environment variables added to the inherited OpenCode process environment. |
 | `disabled` | No | Set to `true` to prevent the server from connecting. Defaults to `false`. |
+| `codemode` | No | Set to `false` to expose the server's tools directly to the model instead of through Code Mode. Defaults to `true`. |
 | `timeout` | No | Per-server timeout overrides. |
 
 Use `{env:NAME}` to substitute an environment variable while loading config. Shell expressions such as `$NAME` are not expanded in JSON strings.
@@ -108,6 +109,7 @@ A remote server uses the MCP Streamable HTTP transport. Its `url` must be a vali
 | `headers` | No | String HTTP headers sent to the MCP endpoint. |
 | `oauth` | No | OAuth client settings, or `false` to disable OAuth support. |
 | `disabled` | No | Set to `true` to prevent the server from connecting. Defaults to `false`. |
+| `codemode` | No | Set to `false` to expose the server's tools directly to the model instead of through Code Mode. Defaults to `true`. |
 | `timeout` | No | Per-server timeout overrides. |
 
 Use `oauth: false` for a server that exclusively uses an API key or another header-based credential.
@@ -222,6 +224,22 @@ Timeouts are positive integer milliseconds. Configure defaults under `mcp.timeou
 OpenCode combines the server name and MCP tool name as `<server>_<tool>`. Characters other than letters, numbers, `_`, and `-` are replaced with `_`; for example, server `context 7` and tool `resolve.library/id` become `context_7_resolve_library_id`. MCP prompts appear as slash commands named `<server>:<prompt>` using the same normalization.
 
 Choose short server names that remain unique after normalization. Under the default Code Mode, MCP tools are grouped by the normalized server name.
+
+Set `codemode` to `false` on a server when its tools should remain on the provider's native tool list:
+
+```jsonc
+{
+  "mcp": {
+    "servers": {
+      "context7": {
+        "type": "remote",
+        "url": "https://mcp.context7.com/mcp",
+        "codemode": false
+      }
+    }
+  }
+}
+```
 
 Use permission actions to hide or deny a server's tools without stopping its connection:
 

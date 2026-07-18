@@ -16,8 +16,7 @@ import { ToolRegistry } from "./registry"
  * Registry namespace and permission action names for MCP tools.
  */
 export const namespace = (server: string) => server.replace(/[^a-zA-Z0-9_-]/g, "_")
-export const name = (server: string, tool: string) =>
-  `${namespace(server)}_${tool.replace(/[^a-zA-Z0-9_-]/g, "_")}`
+export const name = (server: string, tool: string) => `${namespace(server)}_${tool.replace(/[^a-zA-Z0-9_-]/g, "_")}`
 
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
@@ -33,11 +32,11 @@ export const layer = Layer.effectDiscard(
     // registry never has a gap where MCP tools disappear mid-swap.
     const reconcile = lock.withPermit(
       Effect.gen(function* () {
-        const groups = new Map<string, Record<string, Tool.AnyTool>>()
+        const groups = new Map<string, { tools: Record<string, Tool.AnyTool>; codemode: boolean }>()
         for (const tool of yield* mcp.tools()) {
-          const group = groups.get(tool.server) ?? {}
+          const group = groups.get(tool.server) ?? { tools: {}, codemode: tool.codemode !== false }
           const schema = (tool.inputSchema ?? {}) as JsonSchema.JsonSchema
-          group[tool.name] = Tool.withPermission(
+          group.tools[tool.name] = Tool.withPermission(
             Tool.make({
               description: tool.description ?? "",
               jsonSchema: {
@@ -108,7 +107,7 @@ export const layer = Layer.effectDiscard(
         const next = yield* Scope.fork(scope)
         yield* Effect.forEach(
           groups,
-          ([server, record]) => tools.register(record, { namespace: namespace(server) }),
+          ([server, group]) => tools.register(group.tools, { namespace: namespace(server), codemode: group.codemode }),
           {
             discard: true,
           },
