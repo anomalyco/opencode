@@ -1,4 +1,5 @@
 import * as Anthropic from "../../src/providers/anthropic"
+import * as AnthropicCompatible from "../../src/providers/anthropic-compatible"
 import { CloudflareAIGateway, CloudflareWorkersAI } from "../../src/providers/cloudflare"
 import * as Google from "../../src/providers/google"
 import * as OpenAI from "../../src/providers/openai"
@@ -17,6 +18,11 @@ const anthropic = Anthropic.configure({
 })
 const anthropicHaiku = anthropic.model("claude-haiku-4-5-20251001")
 const anthropicOpus = anthropic.model("claude-opus-4-7")
+const minimax = AnthropicCompatible.configure({
+  apiKey: process.env.MINIMAX_API_KEY ?? "fixture",
+  baseURL: "https://api.minimax.io/anthropic/v1",
+  provider: "minimax",
+}).model("MiniMax-M3")
 const google = Google.configure({ apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? "fixture" })
 const gemini = google.model("gemini-2.5-flash")
 const xai = XAI.configure({ apiKey: process.env.XAI_API_KEY ?? "fixture" })
@@ -107,6 +113,15 @@ describeRecordedGoldenScenarios([
       { id: "tool-loop", temperature: false },
       { id: "image-tool-result", temperature: false, maxTokens: 40 },
     ],
+  },
+  {
+    name: "MiniMax M3 Anthropic-compatible",
+    prefix: "anthropic-compatible-messages",
+    protocol: "anthropic-messages",
+    model: minimax,
+    requires: ["MINIMAX_API_KEY"],
+    options: { redact: { allowRequestHeaders: ["anthropic-version"] } },
+    scenarios: ["text", "tool-call", "tool-loop"],
   },
   {
     name: "Gemini 2.5 Flash",
