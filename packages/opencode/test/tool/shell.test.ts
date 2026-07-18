@@ -1112,7 +1112,7 @@ describe("tool.shell abort", () => {
         const updates: string[] = []
         const result = yield* run(
           {
-            command: `echo first && sleep 0.1 && echo second`,
+            command: `echo first && sleep 0.25 && echo second`,
           },
           {
             ...ctx,
@@ -1126,6 +1126,85 @@ describe("tool.shell abort", () => {
         expect(result.output).toContain("first")
         expect(result.output).toContain("second")
         expect(updates.length).toBeGreaterThan(1)
+      }),
+    ),
+  )
+
+  it.live("coalesces frequent metadata updates without losing output", () =>
+    runIn(
+      projectRoot,
+      Effect.gen(function* () {
+        const updates: string[] = []
+        const code = `for(let i=0;i<40;i++){process.stdout.write(i+String.fromCharCode(10));await Bun.sleep(10)}`
+        const result = yield* run(
+          {
+            command: `${bin} -e ${evalarg(code)}`,
+          },
+          {
+            ...ctx,
+            metadata: (input) =>
+              Effect.sync(() => {
+                updates.push(((input.metadata as { output?: string })?.output ?? "").trim())
+              }),
+          },
+        )
+
+        expect(result.output).toContain("0")
+        expect(result.output).toContain("39")
+        expect(updates.at(-1)).toContain("39")
+        expect(updates.length).toBeGreaterThan(1)
+        expect(updates.length).toBeLessThan(15)
+      }),
+    ),
+  )
+
+  it.live("flushes final output before returning and publishes nothing afterward", () =>
+    runIn(
+      projectRoot,
+      Effect.gen(function* () {
+        const updates: string[] = []
+        const result = yield* run(
+          { command: fill("bytes", 1) },
+          {
+            ...ctx,
+            metadata: (input) =>
+              Effect.sync(() => {
+                updates.push((input.metadata as { output?: string })?.output ?? "")
+              }),
+          },
+        )
+
+        expect(result.output).toBe("a")
+        expect(result.metadata.output).toBe("a")
+        expect(updates[0]).toBe("")
+        expect(updates.at(-1)).toBe("a")
+        const count = updates.length
+        yield* Effect.sleep("150 millis")
+        expect(updates).toHaveLength(count)
+      }),
+    ),
+  )
+
+  it.live("does not publish repeated metadata for a quiet command", () =>
+    runIn(
+      projectRoot,
+      Effect.gen(function* () {
+        const updates: string[] = []
+        const result = yield* run(
+          { command: fill("bytes", 0) },
+          {
+            ...ctx,
+            metadata: (input) =>
+              Effect.sync(() => {
+                updates.push((input.metadata as { output?: string })?.output ?? "")
+              }),
+          },
+        )
+
+        expect(result.output).toBe("(no output)")
+        expect(result.metadata.output).toBe("(no output)")
+        expect(result.metadata.exit).toBe(0)
+        expect(updates).toEqual([""])
       }),
     ),
   )

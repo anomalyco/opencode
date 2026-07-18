@@ -1,4 +1,4 @@
-import { Effect, Stream } from "effect"
+import { Effect, Fiber, Stream } from "effect"
 import os from "os"
 import { createWriteStream } from "node:fs"
 import * as Tool from "./tool"
@@ -446,6 +446,20 @@ export const ShellTool = Tool.define(
       let cut = false
       let expired = false
       let aborted = false
+      let outputVersion = 0
+      let publishedVersion = 0
+
+      const publish = Effect.fnUntraced(function* () {
+        if (publishedVersion === outputVersion) return
+        const version = outputVersion
+        const output = last
+        yield* ctx.metadata({
+          metadata: {
+            output,
+          },
+        })
+        publishedVersion = version
+      })
 
       const closeSink = Effect.fnUntraced(function* () {
         const stream = sink
@@ -483,7 +497,14 @@ export const ShellTool = Tool.define(
           yield* Effect.addFinalizer(closeSink)
           const handle = yield* spawner.spawn(cmd(input.shell, input.command, input.cwd, input.env))
 
-          yield* Effect.forkScoped(
+          const publisher = yield* Effect.gen(function* () {
+            while (true) {
+              yield* Effect.sleep("100 millis")
+              yield* publish()
+            }
+          }).pipe(Effect.forkScoped)
+
+          const output = yield* Effect.forkScoped(
             Stream.runForEach(Stream.decodeText(handle.all), (chunk) => {
               const size = Buffer.byteLength(chunk, "utf-8")
               list.push({ text: chunk, size })
@@ -496,6 +517,7 @@ export const ShellTool = Tool.define(
               }
 
               last = preview(last + chunk)
+              outputVersion++
 
               if (file) {
                 sink?.write(chunk)
@@ -511,22 +533,11 @@ export const ShellTool = Tool.define(
                         full = ""
                       }),
                     ),
-                    Effect.andThen(
-                      ctx.metadata({
-                        metadata: {
-                          output: last,
-                        },
-                      }),
-                    ),
                   )
                 }
               }
 
-              return ctx.metadata({
-                metadata: {
-                  output: last,
-                },
-              })
+              return Effect.void
             }),
           )
 
@@ -553,6 +564,13 @@ export const ShellTool = Tool.define(
             expired = true
             yield* handle.kill({ forceKillAfter: "3 seconds" }).pipe(Effect.orDie)
           }
+
+          yield* Fiber.await(output).pipe(
+            Effect.asVoid,
+            Effect.timeoutOrElse({ duration: "100 millis", orElse: () => Fiber.interrupt(output) }),
+          )
+          yield* Fiber.interrupt(publisher)
+          yield* publish()
 
           return exit.kind === "exit" ? exit.code : null
         }),
