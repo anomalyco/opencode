@@ -137,25 +137,23 @@ export const invokeGlobalMethod = (ref: GlobalMethodReference, args: Array<unkno
   return invokeJsonMethod(ref.name, args, node)
 }
 
-const invokeStringMethod = (value: string, name: string, args: Array<unknown>, node: AstNode): unknown => {
-  // Native argument coercion: includes(1) and slice("1") coerce like real JS. Opaque
-  // runtime references (functions, tools, un-awaited promises) still reject.
-  const data = (index: number): unknown => {
-    const arg = args[index]
-    if (containsOpaqueReference(arg)) {
-      throw new InterpreterRuntimeError(
-        `String.${name} expects argument ${index + 1} to be a data value.`,
-        node,
-        "InvalidDataValue",
-      )
-    }
-    return arg
+const requireDataArgument = (name: string, index: number, arg: unknown, node: AstNode): unknown => {
+  if (containsOpaqueReference(arg)) {
+    throw new InterpreterRuntimeError(
+      `String.${name} expects argument ${index + 1} to be a data value.`,
+      node,
+      "InvalidDataValue",
+    )
   }
-  const str = (index: number): string => coerceToString(data(index))
-  const num = (index: number): number => coerceToNumber(data(index))
+  return arg
+}
+
+const invokeStringMethod = (value: string, name: string, args: Array<unknown>, node: AstNode): unknown => {
+  // Coerce arguments like native JS; opaque runtime references still reject.
+  const str = (index: number): string => coerceToString(requireDataArgument(name, index, args[index], node))
+  const num = (index: number): number => coerceToNumber(requireDataArgument(name, index, args[index], node))
   const optNum = (index: number): number | undefined => (args[index] === undefined ? undefined : num(index))
   const optStr = (index: number): string | undefined => (args[index] === undefined ? undefined : str(index))
-  // Native TypeError parity: these methods refuse regular expressions.
   const rejectRegex = (): void => {
     if (args[0] instanceof CodeModeRegExp) {
       throw new InterpreterRuntimeError(
@@ -420,16 +418,9 @@ const invokeStringReplacer = <R>(
     if (name === "replace") value.replace(pattern.regex, collect)
     else value.replaceAll(pattern.regex, collect)
   } else {
-    // Same native argument coercion as the plain-replacement path in invokeStringMethod.
-    if (containsOpaqueReference(pattern)) {
-      throw new InterpreterRuntimeError(
-        `String.${name} expects argument 1 to be a data value.`,
-        node,
-        "InvalidDataValue",
-      )
-    }
-    if (name === "replace") value.replace(coerceToString(pattern), collect)
-    else value.replaceAll(coerceToString(pattern), collect)
+    const search = coerceToString(requireDataArgument(name, 0, pattern, node))
+    if (name === "replace") value.replace(search, collect)
+    else value.replaceAll(search, collect)
   }
 
   return Effect.gen(function* () {

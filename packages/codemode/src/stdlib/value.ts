@@ -68,8 +68,8 @@ export const coerceToNumber = (value: unknown): number => {
 }
 
 export const invokeCoercion = (ref: CoercionFunction, args: Array<unknown>, node: AstNode): unknown => {
-  // Native zero-argument behavior: Number() is 0 and String() is "", unlike Number(undefined).
-  // The other coercers already match native through the undefined-argument path below.
+  // Native: Number() is 0 and String() is "", unlike their undefined-argument forms; the
+  // other coercers match native through the undefined-argument path below.
   if (args.length === 0) {
     if (ref.name === "Number") return 0
     if (ref.name === "String") return ""

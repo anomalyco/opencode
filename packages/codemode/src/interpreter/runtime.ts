@@ -48,7 +48,7 @@ import { ScopeStack } from "./scope.js"
 import { arrayMethods, mapMethods, setMethods, spreadItems } from "../stdlib/collections.js"
 import { consoleMethods, formatConsoleMessage } from "../stdlib/console.js"
 import { dateMethods, dateStatics } from "../stdlib/date.js"
-import { jsonMethods } from "../stdlib/json.js"
+import { jsonStatics } from "../stdlib/json.js"
 import { mathConstants, mathMethods } from "../stdlib/math.js"
 import { numberConstants, numberMethods, numberStatics } from "../stdlib/number.js"
 import { objectMethodsPreservingIdentity, objectStatics } from "../stdlib/object.js"
@@ -86,12 +86,10 @@ import {
   CodeModeURLSearchParams,
 } from "../values.js"
 
-// Supported static members per global namespace. Property reads outside these sets are
-// undefined, matching native feature detection; namespaces without statics are omitted.
 const globalStaticMembers: Partial<Record<GlobalNamespaceName, Set<string>>> = {
   Object: objectStatics,
   Math: mathMethods,
-  JSON: jsonMethods,
+  JSON: jsonStatics,
   Array: arrayStatics,
   console: consoleMethods,
   Date: dateStatics,
@@ -1609,7 +1607,6 @@ export class Interpreter<R> {
         callable.settle(args[0])
         return undefined
       }
-      // Any undefined/null callee (unknown static members included) reports the native message.
       if (callable === undefined || callable === null) {
         throw new InterpreterRuntimeError(`${calleeDescription(callee)} is not a function.`, callee).as("TypeError")
       }
@@ -1910,17 +1907,20 @@ export class Interpreter<R> {
         return new ComputedValue(undefined)
       }
 
-      if (objectValue instanceof CoercionFunction && !(typeof key === "string" && isBlockedMember(key))) {
-        if (objectValue.name === "Number" && typeof key === "string" && numberConstants.has(key)) {
+      if (objectValue instanceof CoercionFunction) {
+        if (typeof key === "string" && isBlockedMember(key)) {
+          throw new InterpreterRuntimeError(`${objectValue.name}.${key} is not available in CodeMode.`, propertyNode)
+        }
+        if (typeof key !== "string") return new ComputedValue(undefined)
+        if (objectValue.name === "Number" && numberConstants.has(key)) {
           return new ComputedValue((Number as unknown as Record<string, number>)[key])
         }
-        if (objectValue.name === "Number" && typeof key === "string" && numberStatics.has(key)) {
+        if (objectValue.name === "Number" && numberStatics.has(key)) {
           return new GlobalMethodReference("Number", key)
         }
-        if (objectValue.name === "String" && typeof key === "string" && stringStatics.has(key)) {
+        if (objectValue.name === "String" && stringStatics.has(key)) {
           return new GlobalMethodReference("String", key)
         }
-        // Unknown static members read as undefined so feature detection works like native JS.
         return new ComputedValue(undefined)
       }
 

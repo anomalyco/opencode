@@ -670,7 +670,7 @@ describe("destructuring assignment", () => {
   })
 })
 
-describe("coercion parity: zero-argument Number() and String()", () => {
+describe("coercion parity: zero-argument coercion functions", () => {
   test("Number() is 0 and String() is empty, unlike their undefined-argument forms", async () => {
     expect(await value(`return Number()`)).toBe(0)
     expect(await value(`return String()`)).toBe("")
@@ -704,6 +704,25 @@ describe("coercion parity: global isFinite and isNaN", () => {
     expect(await value(`return typeof isFinite`)).toBe("function")
     expect(await value(`return typeof isNaN`)).toBe("function")
   })
+
+  test("work as array callbacks", async () => {
+    expect(await value(`return [1, "2", "x", Infinity].filter(isFinite)`)).toEqual([1, "2"])
+    expect(await value(`return ["1", "x"].map(isNaN)`)).toEqual([false, true])
+  })
+})
+
+describe("coercion parity: arrays coerce to numbers through their string form", () => {
+  test("arrays with objects become NaN instead of crashing on host ToPrimitive", async () => {
+    expect(await value(`let x = [{}]; x++; return Number.isNaN(x)`)).toBe(true)
+    expect(await value(`return isFinite([{}])`)).toBe(false)
+    expect(await value(`return "abc".slice([{}])`)).toBe("abc")
+  })
+
+  test("single-element and empty arrays match native Number()", async () => {
+    expect(await value(`return Number([5])`)).toBe(5)
+    expect(await value(`return Number([])`)).toBe(0)
+    expect(await value(`return Number.isNaN(Number([1, 2]))`)).toBe(true)
+  })
 })
 
 describe("coercion parity: String method arguments coerce like native JS", () => {
@@ -723,10 +742,17 @@ describe("coercion parity: String method arguments coerce like native JS", () =>
     expect(await value(`return "a1b".split(1)`)).toEqual(["a", "b"])
     expect(await value(`return "a,b".split(undefined)`)).toEqual(["a,b"])
     expect(await value(`return "a,b".split()`)).toEqual(["a,b"])
+    expect(await value(`return "a,b".split(undefined, 0)`)).toEqual([])
+    expect(await value(`return "a,b".split(undefined, 1)`)).toEqual(["a,b"])
   })
 
   test("replace coerces search and replacement values", async () => {
     expect(await value(`return "a1b".replace(1, 2)`)).toBe("a2b")
+    expect(await value(`return "a1b".replace(1, () => "x")`)).toBe("axb")
+  })
+
+  test("repeat rejections carry the native RangeError name", async () => {
+    expect(await value(`try { "a".repeat(-1) } catch (e) { return e.name }`)).toBe("RangeError")
   })
 
   test("includes, startsWith, and endsWith reject regular expressions with a TypeError", async () => {
@@ -738,6 +764,8 @@ describe("coercion parity: String method arguments coerce like native JS", () =>
   test("opaque runtime references still reject as data errors", async () => {
     const err = await error(`const f = () => 1; return "abc".includes(f)`)
     expect(err.message).toContain("data value")
+    const replacerErr = await error(`const f = () => 1; return "a".replace(f, () => "x")`)
+    expect(replacerErr.message).toContain("data value")
   })
 })
 
@@ -781,6 +809,11 @@ describe("coercion parity: unknown static members read as undefined", () => {
     expect(await value(`return Number.range === undefined`)).toBe(true)
     expect(await value(`return String.raw === undefined`)).toBe(true)
     expect(await value(`return isFinite.something === undefined`)).toBe(true)
+    expect(await value(`return console.group === undefined`)).toBe(true)
+    expect(await value(`return Date.moment === undefined`)).toBe(true)
+    expect(await value(`return JSON.rawJSON === undefined`)).toBe(true)
+    expect(await value(`return URL.createObjectURL === undefined`)).toBe(true)
+    expect(await value(`return Map.groupBy === undefined`)).toBe(true)
     expect(await value(`return Math.sumPrecise?.([1]) ?? "fallback"`)).toBe("fallback")
   })
 
@@ -798,49 +831,15 @@ describe("coercion parity: unknown static members read as undefined", () => {
     expect(await value(`try { Math.sumPrecise([1]) } catch (e) { return e.name + ": " + e.message }`)).toBe(
       "TypeError: Math.sumPrecise is not a function.",
     )
+    expect(await value(`try { Math["sumPrecise"]([1]) } catch (e) { return e.message }`)).toBe(
+      "Math.sumPrecise is not a function.",
+    )
   })
 
   test("blocked members still throw instead of reading as undefined", async () => {
     const err = await error(`return Math.constructor`)
     expect(err.message).toContain("not available")
-  })
-})
-
-describe("coercion parity: isFinite and isNaN as callbacks", () => {
-  test("filter with the coercing global predicates", async () => {
-    expect(await value(`return [1, "2", "x", Infinity].filter(isFinite)`)).toEqual([1, "2"])
-    expect(await value(`return ["1", "x"].map(isNaN)`)).toEqual([false, true])
-  })
-})
-
-describe("coercion parity: review-hardened edges", () => {
-  test("arrays containing objects coerce to NaN instead of crashing on host ToPrimitive", async () => {
-    expect(await value(`let x = [{}]; x++; return Number.isNaN(x)`)).toBe(true)
-    expect(await value(`return isFinite([{}])`)).toBe(false)
-    expect(await value(`return "abc".slice([{}])`)).toBe("abc")
-    expect(await value(`return Number([5])`)).toBe(5)
-    expect(await value(`return Number([])`)).toBe(0)
-    expect(await value(`return Number.isNaN(Number([1, 2]))`)).toBe(true)
-  })
-
-  test("replace with a callback replacer coerces the search value too", async () => {
-    expect(await value(`return "a1b".replace(1, () => "x")`)).toBe("axb")
-    const err = await error(`const f = () => 1; return "a".replace(f, () => "x")`)
-    expect(err.message).toContain("data value")
-  })
-
-  test("split(undefined, limit) honors a zero limit", async () => {
-    expect(await value(`return "a,b".split(undefined, 0)`)).toEqual([])
-    expect(await value(`return "a,b".split(undefined, 1)`)).toEqual(["a,b"])
-  })
-
-  test("repeat rejections carry the native RangeError name", async () => {
-    expect(await value(`try { "a".repeat(-1) } catch (e) { return e.name }`)).toBe("RangeError")
-  })
-
-  test("computed string keys still name the callee in the TypeError", async () => {
-    expect(await value(`try { Math["sumPrecise"]([1]) } catch (e) { return e.message }`)).toBe(
-      "Math.sumPrecise is not a function.",
-    )
+    const coercionErr = await error(`return Number.constructor`)
+    expect(coercionErr.message).toContain("Number.constructor is not available")
   })
 })
