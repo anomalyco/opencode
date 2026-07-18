@@ -2,6 +2,7 @@ import type { EventSubscribeOutput, OpenCodeClient } from "@opencode-ai/client/p
 import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { EOL } from "node:os"
 import { readFile } from "node:fs/promises"
+import { toolOutputText } from "./tool"
 import { UI } from "./ui"
 import type { MiniToolPart } from "./types"
 
@@ -274,10 +275,7 @@ export async function runNonInteractivePrompt(input: Input) {
           state: {
             status: "completed",
             input: current.input,
-            output: event.data.content
-              .filter((item) => item.type === "text")
-              .map((item) => item.text)
-              .join("\n"),
+            output: toolOutputText(current.tool, event.data.content),
             title: current.tool,
             metadata: {
               structured: event.data.structured,

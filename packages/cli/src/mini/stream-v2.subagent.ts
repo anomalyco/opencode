@@ -23,6 +23,7 @@ import type {
 } from "@opencode-ai/client/promise"
 import { Locale } from "@opencode-ai/tui/util/locale"
 import type { FooterSubagentDetail, FooterSubagentState, FooterSubagentTab, MiniToolPart, StreamCommit } from "./types"
+import { toolOutputText } from "./tool"
 
 const CHILD_MESSAGE_LIMIT = 80
 const CHILD_FRAME_LIMIT = 80
@@ -31,10 +32,6 @@ const FAMILY_LIST_LIMIT = 100
 const FALLBACK_LABEL = "Subagent"
 
 type V2Event = EventSubscribeOutput
-
-export function outputText(content: ReadonlyArray<{ type: string; text?: string }>) {
-  return content.flatMap((item) => (item.type === "text" && item.text ? [item.text] : [])).join("\n")
-}
 
 export function miniTool(input: {
   sessionID: string
@@ -82,7 +79,7 @@ export function miniTool(input: {
       state: {
         status: "completed",
         input: tool.state.input,
-        output: outputText(tool.state.content),
+        output: toolOutputText(tool.name, tool.state.content),
         title: tool.name,
         metadata: {
           structured: tool.state.structured,

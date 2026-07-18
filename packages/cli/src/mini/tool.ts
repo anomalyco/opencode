@@ -177,6 +177,12 @@ function text(v: unknown): string {
   return typeof v === "string" ? v : ""
 }
 
+export function toolOutputText(name: string, content: ReadonlyArray<{ type: string; text?: string }>) {
+  // V2 shell content appends model-only status after the user-visible command output.
+  if (name === "shell") return content.find((item) => item.type === "text")?.text ?? ""
+  return content.flatMap((item) => (item.type === "text" && item.text ? [item.text] : [])).join("\n")
+}
+
 function num(v: unknown): number | undefined {
   if (typeof v !== "number" || !Number.isFinite(v)) {
     return undefined

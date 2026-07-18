@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import path from "node:path"
 import { mergeInteractiveInput, mergeNonInteractiveInput, parseRunModel, pickRunModel } from "../src/mini"
-import { toolInlineInfo, toolView } from "../src/mini/tool"
+import { toolInlineInfo, toolOutputText, toolView } from "../src/mini/tool"
 
 async function cli(args: string[]) {
   const child = Bun.spawn([process.execPath, "run", "src/index.ts", ...args], {
@@ -34,6 +34,24 @@ describe("mini command", () => {
 
     expect(toolView(part.tool)).toEqual({ output: true, final: false })
     expect(toolInlineInfo(part)).toMatchObject({ icon: "$", title: "pwd", mode: "block" })
+  })
+
+  test("uses non-empty V2 shell output without the model-facing status", () => {
+    expect(
+      toolOutputText("shell", [
+        { type: "text", text: "mini-output\n" },
+        { type: "text", text: "Command exited with code 0." },
+      ]),
+    ).toBe("mini-output\n")
+  })
+
+  test("keeps empty V2 shell output empty", () => {
+    expect(
+      toolOutputText("shell", [
+        { type: "text", text: "" },
+        { type: "text", text: "Command exited with code 0." },
+      ]),
+    ).toBe("")
   })
 
   test("uses piped stdin as the initial prompt", () => {
