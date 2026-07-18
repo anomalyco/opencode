@@ -341,9 +341,12 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
     if (next < 0) next = list.length - 1
     if (next >= list.length) next = 0
     setLeftSelected(next)
-    // Preview-on-move: update the right pane to the highlighted provider without stealing focus.
+    // Preview-on-move: update the right pane to the highlighted entry without stealing focus.
     const entry = list[next]
     if (entry?.kind === "provider") setRightMode({ kind: "provider", providerID: entry.providerID })
+    else if (entry?.kind === "favorites") setRightMode({ kind: "favorites" })
+    else if (entry?.kind === "recents") setRightMode({ kind: "recents" })
+    else if (entry?.kind === "hidden") setRightMode({ kind: "hidden" })
     scrollLeftToSelection()
   }
 
@@ -440,15 +443,22 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
     ],
   }))
 
-  // Footer action keybindings (active in either pane).
-  useBindings(() => ({
-    bindings: shownActions().map((a) => ({
-      key: tuiConfig.keybinds.get(a.command)?.[0]?.key ?? a.command,
-      desc: a.title,
-      group: "Model dialog",
-      cmd: a.onTrigger,
-    })),
-  }))
+  // Footer action keybindings (active in either pane). Register as named
+  // commands so getCommandBindings resolves their labels for the footer.
+  useBindings(() => {
+    const visible = shownActions()
+    return {
+      commands: visible.map((a) => ({
+        name: a.command,
+        title: a.title,
+        category: "Model dialog",
+        run() {
+          a.onTrigger()
+        },
+      })),
+      bindings: visible.flatMap((a) => tuiConfig.keybinds.get(a.command)),
+    }
+  })
 
   // ----- Layout -----
   const title = () => props.title ?? "Select model"
@@ -488,6 +498,16 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
           placeholderColor={theme.textMuted}
         />
       </box>
+
+      {/* Focus hint */}
+      <text fg={theme.textMuted}>
+        <Show when={focusedPane() === "left"}>
+          <span>tab focus models · enter select provider</span>
+        </Show>
+        <Show when={focusedPane() === "right"}>
+          <span>tab focus providers · enter select model</span>
+        </Show>
+      </text>
 
       {/* Two panes */}
       <box flexDirection="row" gap={2} flexGrow={1}>
