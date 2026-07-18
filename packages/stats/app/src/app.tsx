@@ -5,7 +5,7 @@ import { Suspense } from "solid-js"
 import { I18nProvider, useI18n } from "./context/i18n"
 import { LanguageProvider } from "./context/language"
 import { strip } from "./lib/language"
-import "./app.css"
+import "./routes/index.css"
 
 function AppMeta() {
   const i18n = useI18n()

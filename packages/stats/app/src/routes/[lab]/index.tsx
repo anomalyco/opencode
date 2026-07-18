@@ -1,4 +1,3 @@
-import "../index.css"
 import { Meta, Title } from "@solidjs/meta"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import {

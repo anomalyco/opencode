@@ -41,6 +41,7 @@ import { useLocation, useNavigate, useParams, useSearchParams } from "@solidjs/r
 import { NewSessionView, SessionHeader } from "@/components/session"
 import { ErrorPage } from "@/pages/error"
 import { CommentsProvider, useComments } from "@/context/comments"
+import { useCommand } from "@/context/command"
 import { DirectoryDataProvider } from "@/pages/directory-layout"
 import { useServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
@@ -57,6 +58,7 @@ import { useSync } from "@/context/sync"
 import { useTabs } from "@/context/tabs"
 import { TerminalProvider, useTerminal } from "@/context/terminal"
 import { PromptInput } from "@/components/prompt-input"
+import { PromptInputV2Composer, usePromptInputV2Controller } from "@/components/prompt-input-v2"
 import { useSettingsCommand } from "@/components/settings-dialog"
 import { setCursorPosition } from "@/components/prompt-input/editor-dom"
 import { promptLength } from "@/components/prompt-input/history"
@@ -362,6 +364,7 @@ export default function Page() {
   const platform = usePlatform()
   const prompt = usePrompt()
   const comments = useComments()
+  const command = useCommand()
   const terminal = useTerminal()
   const [searchParams, setSearchParams] = useSearchParams<{ prompt?: string }>()
   const location = useLocation()
@@ -1135,6 +1138,14 @@ export default function Page() {
     review: reviewTab,
     fileBrowser: () => newSessionDesign() && isDesktop() && !!params.id,
   })
+  command.register("session-palette", () => [
+    {
+      id: "command.palette",
+      title: language.t("command.palette"),
+      hidden: true,
+      onSelect: () => command.trigger("file.open", "palette"),
+    },
+  ])
 
   const openReviewFile = createOpenReviewFile({
     showAllFiles,
@@ -2035,83 +2046,6 @@ export default function Page() {
 
   useUsageExceededDialogs()
 
-  const composerRegion = () => {
-    const controller = createSessionComposerRegionController({
-      state: composer,
-      sessionKey,
-      sessionID: () => params.id,
-      prompt,
-      ready: () => !store.deferRender && messagesReady(),
-      centered,
-      todo: {
-        collapsed: () => view().todoCollapsed.get(),
-        onToggle: () => view().todoCollapsed.set(!view().todoCollapsed.get()),
-      },
-      followup: () =>
-        params.id && !isChildSession()
-          ? {
-              items: followupDock(),
-              sending: sendingFollowup(),
-              onSend: (id) => void sendFollowup(params.id!, id, { manual: true }),
-              onEdit: editFollowup,
-            }
-          : undefined,
-      revert: () =>
-        rolled().length > 0
-          ? {
-              items: rolled(),
-              restoring: restoring(),
-              disabled: reverting(),
-              onRestore: restore,
-            }
-          : undefined,
-      onResponseSubmit: resumeScroll,
-      openParent: () => {
-        const id = info()?.parentID
-        if (!id) return
-        navigate(
-          params.serverKey
-            ? sessionHref(requireServerKey(params.serverKey), id)
-            : legacySessionHref(sdk().directory, id),
-        )
-      },
-      setPromptRef: (el) => {
-        inputRef = el
-      },
-      setDockRef: (el) => {
-        promptDock = el
-      },
-    })
-    return (
-      <SessionComposerRegion
-        controller={controller}
-        promptInput={
-          <PromptInput
-            controls={inputController()}
-            ref={(el) => {
-              inputRef = el
-            }}
-            newSessionWorktree={newSessionWorktree()}
-            onNewSessionWorktreeReset={() => setStore("newSessionWorktree", "main")}
-            onSubmit={() => {
-              comments.clear()
-              resumeScroll()
-            }}
-            edit={editingFollowup()}
-            onEditLoaded={clearFollowupEdit}
-            shouldQueue={queueEnabled}
-            onQueue={queueFollowup}
-            onAbort={() => {
-              const id = params.id
-              if (!id) return
-              setFollowup("paused", id, true)
-            }}
-          />
-        }
-      />
-    )
-  }
-
   const mobileTabs = (compact = false, bottom = false) => (
     <Tabs value={store.mobileTab} class="h-auto">
       <Tabs.List
@@ -2226,7 +2160,122 @@ export default function Page() {
         </Switch>
       </div>
 
-      <Show when={(params.id || !newSessionDesign()) && !mobileChanges()}>{(_) => composerRegion()}</Show>
+      <Show when={(params.id || !newSessionDesign()) && !mobileChanges()}>
+        {(_) => {
+          const controller = createSessionComposerRegionController({
+            state: composer,
+            sessionKey,
+            sessionID: () => params.id,
+            prompt,
+            ready: () => !store.deferRender && messagesReady(),
+            centered,
+            todo: {
+              collapsed: () => view().todoCollapsed.get(),
+              onToggle: () => view().todoCollapsed.set(!view().todoCollapsed.get()),
+            },
+            followup: () =>
+              params.id && !isChildSession()
+                ? {
+                    items: followupDock(),
+                    sending: sendingFollowup(),
+                    onSend: (id) => void sendFollowup(params.id!, id, { manual: true }),
+                    onEdit: editFollowup,
+                  }
+                : undefined,
+            revert: () =>
+              rolled().length > 0
+                ? {
+                    items: rolled(),
+                    restoring: restoring(),
+                    disabled: reverting(),
+                    onRestore: restore,
+                  }
+                : undefined,
+            onResponseSubmit: resumeScroll,
+            openParent: () => {
+              const id = info()?.parentID
+              if (!id) return
+              navigate(
+                params.serverKey
+                  ? sessionHref(requireServerKey(params.serverKey), id)
+                  : legacySessionHref(sdk().directory, id),
+              )
+            },
+            setPromptRef: (el) => {
+              inputRef = el
+            },
+            setDockRef: (el) => {
+              promptDock = el
+            },
+          })
+          return (
+            <SessionComposerRegion
+              controller={controller}
+              promptInput={
+                <Show
+                  when={newSessionDesign()}
+                  fallback={
+                    <PromptInput
+                      controls={inputController()}
+                      ref={(el) => {
+                        inputRef = el
+                      }}
+                      newSessionWorktree={newSessionWorktree()}
+                      onNewSessionWorktreeReset={() => setStore("newSessionWorktree", "main")}
+                      onSubmit={() => {
+                        comments.clear()
+                        resumeScroll()
+                      }}
+                      edit={editingFollowup()}
+                      onEditLoaded={clearFollowupEdit}
+                      shouldQueue={queueEnabled}
+                      onQueue={queueFollowup}
+                      onAbort={() => {
+                        const id = params.id
+                        if (!id) return
+                        setFollowup("paused", id, true)
+                      }}
+                    />
+                  }
+                >
+                  {(_) => {
+                    const controller = usePromptInputV2Controller({
+                      get controls() {
+                        return inputController()
+                      },
+                      ref: (el) => {
+                        inputRef = el
+                      },
+                      get newSessionWorktree() {
+                        return newSessionWorktree()
+                      },
+                      onNewSessionWorktreeReset: () => setStore("newSessionWorktree", "main"),
+                      onSubmit: () => {
+                        comments.clear()
+                        resumeScroll()
+                      },
+                      shouldQueue: queueEnabled,
+                      onQueue: queueFollowup,
+                      onAbort: () => {
+                        const id = params.id
+                        if (!id) return
+                        setFollowup("paused", id, true)
+                      },
+                    })
+                    return (
+                      <PromptInputV2Composer
+                        controller={controller}
+                        edit={editingFollowup()}
+                        onEditLoaded={clearFollowupEdit}
+                      />
+                    )
+                  }}
+                </Show>
+              }
+            />
+          )
+        }}
+      </Show>
       <Show when={!!params.id && mobileTabsBottom()}>{mobileTabs(true, true)}</Show>
     </>
   )
