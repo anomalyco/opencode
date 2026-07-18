@@ -23,6 +23,7 @@ const promoted: Array<{ directory: string; sessionID: string }> = []
 const sentShell: string[] = []
 const syncedDirectories: string[] = []
 const promotedDrafts: Array<{ draftID: string; server: string; sessionId: string }> = []
+const mutedErrorSounds: string[] = []
 
 let params: { id?: string } = {}
 let search: { draftId?: string } = {}
@@ -32,6 +33,8 @@ let permissionServer = "server-a"
 let createSessionGate: Promise<void> | undefined
 
 const promptValue: Prompt = [{ type: "text", content: "ls", start: 0, end: 2 }]
+let currentPrompt = promptValue
+let contextItems: PromptStore["context"]["items"] = []
 const [promptStore, setPromptStore] = createStore<PromptStore>({
   prompt: promptValue,
   cursor: 0,
@@ -40,7 +43,7 @@ const [promptStore, setPromptStore] = createStore<PromptStore>({
 const prompt = {
   store: [() => promptStore, setPromptStore] as [() => PromptStore, typeof setPromptStore],
   ready: Object.assign(() => true, { promise: Promise.resolve(true) }),
-  current: () => promptValue,
+  current: () => currentPrompt,
   cursor: () => 0,
   dirty: () => true,
   model: {
@@ -55,7 +58,7 @@ const prompt = {
     removeComment: () => undefined,
     updateComment: () => undefined,
     replaceComments: () => undefined,
-    items: () => [],
+    items: () => contextItems,
   },
   capture: () => prompt,
 }
@@ -140,6 +143,17 @@ beforeAll(async () => {
     })
     return { usePermission: () => ({ currentServerState: () => state(permissionServer) }) }
   })
+
+  mock.module("@/context/notification", () => ({
+    useNotification: () => ({
+      error: {
+        muteNextSound(sessionID: string) {
+          mutedErrorSounds.push(sessionID)
+          return () => undefined
+        },
+      },
+    }),
+  }))
 
   mock.module("@/context/server", () => ({
     useServer: () => ({ key: "server-key" }),
@@ -256,6 +270,7 @@ beforeEach(() => {
   optimisticSeeded.length = 0
   promoted.length = 0
   promotedDrafts.length = 0
+  mutedErrorSounds.length = 0
   params = {}
   search = {}
   sentShell.length = 0
@@ -264,10 +279,66 @@ beforeEach(() => {
   variant = undefined
   permissionServer = "server-a"
   createSessionGate = undefined
+  currentPrompt = promptValue
+  contextItems = []
   for (const key of Object.keys(storedSessions)) delete storedSessions[key]
 })
 
 describe("prompt submit worktree selection", () => {
+  const commentSubmit = (promptLength: number) =>
+    createPromptSubmit({
+      prompt,
+      info: () => ({ id: "session-1" }),
+      imageAttachments: () => [],
+      commentCount: () => 1,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: () => promptLength,
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      onSubmit: () => undefined,
+    })
+
+  test("mutes the error sound for a comment-only prompt", async () => {
+    params = { id: "session-1" }
+    currentPrompt = [{ type: "text", content: "", start: 0, end: 0 }]
+    contextItems = [
+      {
+        key: "comment-1",
+        type: "file",
+        path: "src/example.ts",
+        comment: "Please rename this",
+        commentID: "comment-1",
+        commentOrigin: "review",
+      },
+    ]
+    await commentSubmit(0).handleSubmit({ preventDefault: () => undefined } as unknown as Event)
+
+    expect(mutedErrorSounds).toEqual(["session-1"])
+  })
+
+  test("keeps error sounds enabled when the prompt includes text", async () => {
+    params = { id: "session-1" }
+    contextItems = [
+      {
+        key: "comment-1",
+        type: "file",
+        path: "src/example.ts",
+        comment: "Please rename this",
+        commentID: "comment-1",
+        commentOrigin: "review",
+      },
+    ]
+    await commentSubmit(2).handleSubmit({ preventDefault: () => undefined } as unknown as Event)
+
+    expect(mutedErrorSounds).toEqual([])
+  })
+
   test("reads the latest worktree accessor value per submit", async () => {
     const submit = createPromptSubmit({
       prompt,
