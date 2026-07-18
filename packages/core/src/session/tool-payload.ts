@@ -39,7 +39,11 @@ const encodeBody = Schema.encodeSync(Body)
 const decodeJson = Schema.decodeUnknownSync(Schema.Json)
 
 export function hash(value: Body): Hash {
-  return Hash.make(createHash("sha256").update(canonical(decodeJson(encodeBody(value)))).digest("hex"))
+  return Hash.make(
+    createHash("sha256")
+      .update(canonical(decodeJson(encodeBody(value))))
+      .digest("hex"),
+  )
 }
 
 export const insertJson = Effect.fn("ToolPayload.insertJson")(function* (
