@@ -255,6 +255,7 @@ export const dict = {
   "zen.privacy.exceptionsLink": "такими винятками",
 
   "go.title": "OpenCode Go | Недорогі моделі кодування для всіх",
+  "go.banner.text": "Kimi K3 отримує 2x ліміти використання протягом обмеженого часу",
   "go.meta.description":
     "Go починається від $5 за перший місяць, потім $10/місяць, зі щедрими 5-годинними лімітами запитів для Grok 4.5, GLM-5.2, GLM-5.1, Kimi K3, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro та DeepSeek V4 Flash.",
   "go.hero.title": "Недорогі моделі кодування для всіх",
@@ -273,7 +274,6 @@ export const dict = {
   "go.graph.go": "Go",
   "go.graph.label": "Запитів за 5 годин",
   "go.graph.usageLimits": "Ліміти використання",
-  "go.graph.tick": "{{n}}x",
   "go.graph.aria": "Запитів за 5 год: {{free}} vs {{go}}",
 
   "go.testimonials.brand.zen": "Zen",

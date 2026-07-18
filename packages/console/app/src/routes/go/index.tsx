@@ -61,10 +61,10 @@ function LimitsGraph(props: { href: string }) {
     onCleanup(() => observer.disconnect())
   })
 
-  const baseline = 200
+  const baseline = 100
   const graph = [
     { id: "grok-4.5", name: "Grok 4.5", req: 80, d: "50ms" },
-    { id: "kimi-k3", name: "Kimi K3", req: 280, baseReq: 140, d: "75ms" },
+    { id: "kimi-k3", name: "Kimi K3 (2x usage)", req: 280, baseReq: 140, d: "75ms" },
     { id: "glm-5.2", name: "GLM-5.2", req: 880, d: "100ms" },
     { id: "qwen3.7-max", name: "Qwen3.7 Max", req: 950, d: "110ms" },
     { id: "kimi-k2.7-code", name: "Kimi K2.7 Code", req: 1150, d: "150ms" },
@@ -80,7 +80,7 @@ function LimitsGraph(props: { href: string }) {
   const left = 40
   const right = 60
   const top = 18
-  const bottom = 44
+  const bottom = 18
   const plot = w - left - right
 
   const ratio = (n: number) => n / baseline
@@ -89,24 +89,6 @@ function LimitsGraph(props: { href: string }) {
   const base = 24
   const p = 2.2
   const x = (r: number) => left + base + Math.pow(log(r) / log(rmax), p) * (plot - base)
-  const ticks = [1, 5, 10, 25, 50, 100].filter((t) => t <= rmax)
-  const labels = (() => {
-    const set = new Set<number>()
-    let last = -Infinity
-    for (const t of ticks) {
-      if (t === 1) {
-        set.add(t)
-        last = x(t)
-        continue
-      }
-      const pos = x(t)
-      if (pos - last < 44) continue
-      set.add(t)
-      last = pos
-    }
-    return set
-  })()
-  const shown = ticks.filter((t) => labels.has(t))
   const bh = 8
   const gap = 20
   const step = bh + gap
@@ -116,7 +98,6 @@ function LimitsGraph(props: { href: string }) {
   const px = (n: number) => `${(n / w) * 100}%`
   const py = (n: number) => `${(n / h) * 100}%`
   const lx = px(left - 16)
-  const ty = py(h - 18)
 
   return (
     <figure
@@ -133,16 +114,6 @@ function LimitsGraph(props: { href: string }) {
           aria-hidden="true"
           style={{ height: `${h}px` }}
         >
-          <g data-slot="grid">
-            <For each={ticks}>
-              {(t) => (
-                <g>
-                  <line x1={x(t)} y1={top} x2={x(t)} y2={h - bottom} data-grid />
-                </g>
-              )}
-            </For>
-          </g>
-
           <line x1={left} y1={top} x2={left} y2={h - bottom} data-stub />
 
           <g data-slot="bars">
@@ -179,16 +150,6 @@ function LimitsGraph(props: { href: string }) {
           <span data-ylabel style={{ "--x": lx, "--y": py(my) } as any}>
             {i18n.t("go.graph.go")}
           </span>
-        </div>
-
-        <div data-slot="xlabels" aria-hidden="true">
-          <For each={shown}>
-            {(t) => (
-              <span data-xlabel style={{ "--x": px(x(t)), "--y": ty } as any}>
-                {i18n.t("go.graph.tick", { n: t })}
-              </span>
-            )}
-          </For>
         </div>
 
         <div data-slot="pills" aria-hidden="true">
@@ -251,6 +212,12 @@ export default function Home() {
 
         <div data-component="content">
           <section data-component="hero">
+            <div data-component="desktop-app-banner">
+              <span data-slot="badge">{i18n.t("home.banner.badge")}</span>
+              <div data-slot="content">
+                <span data-slot="text">{i18n.t("go.banner.text")}</span>
+              </div>
+            </div>
             <div data-slot="hero-copy">
               <img data-slot="zen logo light" src={goLogoLight} alt="" />
               <img data-slot="zen logo dark" src={goLogoDark} alt="" />
