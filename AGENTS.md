@@ -1,49 +1,42 @@
-# Agent rules (KanCode)
+# Agent principles (KanCode)
 
-Daily rules for agents. Package-level `AGENTS.md` files add package-specific detail.
+Repo-wide principles only. Package-level `AGENTS.md` owns package detail; `openspec/` owns planning workflow.
 
-## Product / fork
+## Product
 
-- Display name: **KanCode** (`kancode`). Workspace packages use `@kancode/*`; the app lives in `packages/kancode` (`@kancode/cli`). Effect service IDs use `@kancode/...`. Keep provider id `"opencode"` (OpenCode Zen) as the upstream provider identity — do not rename that catalog id.
-- TUI/CLI-focused. Do not assume web/desktop/console packages (`packages/app`, `packages/desktop`, `packages/web`, `packages/console`) still exist.
-- Default branch: `main` (diff against `main` / `origin/main`).
-- Config: project/worktree and user scope load `kancode.json(c)` only (no `opencode.json(c)`). Project dir is `.kancode/` only — no project `.opencode/` discovery. Use the built-in `import-opencode` skill to migrate skills/commands/agents/themes/plans from legacy `.opencode/`. User scope (XDG/global, `~/.kancode`, data/cache/state/tmp/managed) has no `~/.opencode` fallback. Honor `OPENCODE_*` and `KANCODE_*` (`KANCODE_*` wins).
+- Display name **KanCode** (`kancode`). Packages `@kancode/*`; app `@kancode/cli` in `packages/kancode`. Effect IDs `@kancode/...`.
+- Keep provider catalog/wire id `"opencode"` (OpenCode Zen) — do not rename it.
+- TUI/CLI product. Do not assume `packages/app|desktop|web|console` exist.
+- Default branch: `main`.
 
-## OpenSpec
+## Config
 
-Spec-driven planning lives under `openspec/`. Product scope for planning prompts: `openspec/config.yaml`.
+- Load `kancode.json(c)` only — never `opencode.json(c)`.
+- Project dir: `.kancode/` only — no project `.opencode/` discovery. Migrate legacy via built-in `import-opencode` skill.
+- User scope: `~/.kancode` (and XDG paths) — no `~/.opencode` fallback.
+- Honor `OPENCODE_*` and `KANCODE_*`; `KANCODE_*` wins.
 
-Workflow: **propose → apply → archive** (plus explore / update / sync when needed).
+## Boundaries
 
-- Slash commands: `.cursor/commands/` (`/opsx:*`)
-- Skills: `.cursor/skills/openspec-*`
+- Runtime: Schema → Core; Protocol → Server. Client may use Schema/Protocol, never Core/Server. `sdk-next` composes Client + Core + Server.
+- After public Protocol or Server `HttpApi` changes: regenerate from `packages/client` (`bun run generate`). Do not hand-edit `src/generated*`.
+- Legacy JS SDK build: `packages/sdk/js/script/build.ts`.
 
-Keep day-to-day coding rules here; do not duplicate full OpenSpec docs.
+## Git
 
-## Dependencies / codegen
+- Branches: ≤3 hyphenated words, no slashes or type prefixes (`session-recovery`, not `feat/foo`).
+- Commits / PR titles: `type(scope): summary` — `feat|fix|docs|chore|refactor|test`; scopes like `core`, `kancode`, `tui`, `sdk`, `plugin`, `server`, `cli`.
 
-- Runtime direction: Schema → Core and Protocol → Server. Client may depend on Schema and Protocol but never Core or Server; `sdk-next` composes Client, Core, and Server.
-- After public Protocol or Server `HttpApi` changes: `bun run generate` from `packages/client` (do not edit `src/generated` or `src/generated-effect`).
-- Legacy JS SDK: `./packages/sdk/js/script/build.ts`.
+## Code
 
-## Branch / commits
+- Early returns; avoid `else` and `let` reassignment.
+- No `any`; prefer inference. Prefer Bun APIs; avoid `try`/`catch` when possible.
+- No aliased or star imports; import named exports.
+- Prefer functional arrays; don’t extract single-use helpers. Inline single-use values.
+- Effect: bind services before calling (no nested `yield* (yield* …)`).
+- Drizzle fields: snake_case. Comments only for non-obvious constraints.
 
-- Branches: at most three hyphenated words, no slashes or type prefixes (`session-recovery`, not `feat/foo`).
-- Commits and PR titles: `type(scope): summary` — types `feat`, `fix`, `docs`, `chore`, `refactor`, `test`; optional scopes such as `core`, `opencode`, `tui`, `sdk`, `plugin`, `server`, `cli`.
+## Verify
 
-## Style (minimal)
-
-- Prefer early returns; avoid `else` and `let` reassignment
-- No `any`; prefer type inference over explicit annotations
-- Avoid `try`/`catch` where possible; prefer Bun APIs (`Bun.file()`)
-- No aliased or star imports; import namespace exports by name when needed
-- Prefer functional array methods; do not extract single-use helpers preemptively
-- Inline single-use values; avoid unnecessary destructuring
-- Effect: bind services to named variables before calling (no nested `yield* (yield* …)`)
-- Drizzle schema fields: snake_case
-- Comments only for non-obvious constraints
-
-## Tests / typecheck
-
-- Run tests from package directories (not repo root; guard `do-not-run-tests-from-root`). Prefer real implementation over mocks; avoid `globalThis` unless necessary.
-- Typecheck with `bun typecheck` from the package directory — never `tsc` directly.
+- Tests and `bun typecheck` run from the **package directory**, never repo root.
+- Prefer real implementation over mocks; avoid `globalThis` unless necessary. Never run `tsc` directly.

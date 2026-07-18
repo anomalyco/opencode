@@ -18,60 +18,21 @@
 
 ---
 
-### Getting started
-
-This fork is currently developed and run from source. Packaged releases (npm, Homebrew, Scoop, install scripts, desktop installers, etc.) are not published here yet.
-
-**Requirements:** [Bun](https://bun.sh) 1.3+
+### Install
 
 ```bash
-git clone https://github.com/puetsua/kancode.git
-cd kancode
-bun install
-bun dev
+npm i -g @puetsua/kancode
 ```
 
-`bun dev` starts the KanCode TUI. To run it against another directory:
+Then start the TUI:
 
 ```bash
-bun dev <directory>
-# or the repo root itself
-bun dev .
+kancode
+# or against another directory
+kancode <directory>
 ```
 
-The CLI script name is `kancode`.
+### Docs
 
-### Config compatibility
-
-KanCode loads KanCode config paths only (no project `.opencode/` discovery):
-
-| Kind | Preference |
-| --- | --- |
-| Project config files | `kancode.json(c)` only (`.jsonc` preferred over `.json`) — do **not** read `opencode.json(c)` |
-| Project dirs | `.kancode/` only — do **not** load project `.opencode/`. Use the built-in `import-opencode` skill to copy skills/commands/agents/themes/plans from a legacy `.opencode/` |
-| User scope (XDG/global, `~/.kancode`) | KanCode only: `kancode.json(c)` and `.kancode/` — do **not** read `opencode.json` or `~/.opencode` |
-| Env flags | Honor `OPENCODE_*`; `KANCODE_*` aliases map to the same flags (`KANCODE_*` wins when both set) |
-| XDG / data dirs | Config, data, cache, state, tmp, and managed paths always use `kancode` (create if missing) — no `opencode` fallback |
-
-Issues and feedback: [puetsua/kancode](https://github.com/puetsua/kancode/issues).
-
-Upstream OpenCode docs still describe shared features: [opencode.ai/docs](https://opencode.ai/docs).
-
-### Agents
-
-KanCode includes two built-in agents you can switch between with the `Tab` key.
-
-- **default** - Default, full-access agent for development work
-- **plan** - Read-only agent for analysis and code exploration
-  - Denies file edits by default
-  - Asks permission before running bash commands
-  - Ideal for exploring unfamiliar codebases or planning changes
-
-Also included is a **general** subagent for complex searches and multistep tasks.
-This is used internally and can be invoked using `@general` in messages.
-
-Learn more about [agents](https://opencode.ai/docs/agents) (upstream docs).
-
-### Documentation
-
-For shared configuration details, see the upstream [OpenCode docs](https://opencode.ai/docs). For this fork, prefer the README and `AGENTS.md` in the repo.
+- [Development](docs/development.md) — Bun install, `bun dev`, from-source workflow
+- [Config](docs/config.md) — KanCode config paths and env flags
