@@ -2275,9 +2275,13 @@ export default function Page() {
               )}
             </Show>
           ) : (
-            <SessionPanelFrame newLayout={false} raised={!!params.id}>
-              {sessionPanelContent()}
-            </SessionPanelFrame>
+            <Show when={sessionPanelKey() ?? "new"} keyed>
+              {(_) => (
+                <SessionPanelFrame newLayout={false} raised={!!params.id}>
+                  <ErrorBoundary fallback={sessionErrorFallback}>{sessionPanelContent()}</ErrorBoundary>
+                </SessionPanelFrame>
+              )}
+            </Show>
           )}
 
           <Show when={desktopSessionResizeOpen()}>
