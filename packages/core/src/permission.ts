@@ -170,6 +170,12 @@ const layer = Layer.effect(
       return { effect, rules: all }
     })
 
+    // Metadata is JSON-encoded; drop undefined values tools pass for absent optional inputs.
+    function metadata(value: AssertInput["metadata"]): Request["metadata"] {
+      if (!value) return value
+      return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined))
+    }
+
     function request(input: AssertInput): Request {
       return {
         id: input.id ?? ID.create(),
@@ -177,7 +183,7 @@ const layer = Layer.effect(
         action: input.action,
         resources: input.resources,
         save: input.save,
-        metadata: input.metadata,
+        metadata: metadata(input.metadata),
         source: input.source,
       }
     }

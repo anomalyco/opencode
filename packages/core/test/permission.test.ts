@@ -266,6 +266,17 @@ describe("PermissionV2", () => {
     }),
   )
 
+  it.effect("omits undefined metadata values from pending requests", () =>
+    Effect.gen(function* () {
+      yield* setup()
+      const service = yield* PermissionV2.Service
+      yield* service.ask(assertion({ metadata: { root: ".", path: undefined, limit: undefined } }))
+      const request = yield* service.get(PermissionV2.ID.create("per_test"))
+      expect(request?.metadata).toEqual({ root: "." })
+      expect(Object.keys(request?.metadata ?? {})).toEqual(["root"])
+    }),
+  )
+
   it.effect("defects when an asked permission is declined", () =>
     Effect.gen(function* () {
       yield* setup()
