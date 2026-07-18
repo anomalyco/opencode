@@ -85,6 +85,36 @@ test("stale session hydration does not overwrite live message parts", async () =
   }
 })
 
+test("completed assistant messages refresh the hydrated session diff", async () => {
+  await using tmp = await tmpdir()
+  await Bun.write(`${tmp.path}/kv.json`, "{}")
+
+  let diffs = 0
+  const changed = [{ file: "src/index.ts", additions: 1, deletions: 0 }]
+  const { app, emit, sync } = await mount((url) => {
+    if (url.pathname === `/session/${sessionID}`) return json(session)
+    if (url.pathname === `/session/${sessionID}/message` || url.pathname === `/session/${sessionID}/todo`) {
+      return json([])
+    }
+    if (url.pathname === `/session/${sessionID}/diff`) {
+      diffs++
+      return json(diffs === 1 ? [] : changed)
+    }
+    return undefined
+  }, tmp.path)
+
+  try {
+    await sync.session.sync(sessionID)
+    emit(global({ id: "evt_message", type: "message.updated", properties: { sessionID, info: assistant } }))
+    await wait(() => sync.data.session_diff[sessionID]?.length === 1)
+
+    expect(diffs).toBe(2)
+    expect(sync.data.session_diff[sessionID]).toEqual(changed)
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("orphan live deltas do not suppress hydrated parts", async () => {
   await using tmp = await tmpdir()
   await Bun.write(`${tmp.path}/kv.json`, "{}")

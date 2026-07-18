@@ -3,7 +3,7 @@ import * as path from "path"
 import { Effect } from "effect"
 import * as Tool from "./tool"
 import { LSP } from "@/lsp/lsp"
-import { createTwoFilesPatch } from "diff"
+import { createTwoFilesPatch, diffLines } from "diff"
 import DESCRIPTION from "./write.txt"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { FileSystem } from "@opencode-ai/core/filesystem"
@@ -14,6 +14,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { trimDiff } from "./edit"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import * as Bom from "@/util/bom"
+import { SessionFileChange } from "@/session/file-change"
 
 const MAX_PROJECT_DIAGNOSTICS_FILES = 5
 
@@ -49,8 +50,15 @@ export const WriteTool = Tool.define(
           const desiredBom = source.bom || next.bom
           const contentOld = source.text
           const contentNew = next.text
-
           const diff = trimDiff(createTwoFilesPatch(filepath, filepath, contentOld, contentNew))
+          const changes = diffLines(contentOld, contentNew)
+          const filediff = {
+            file: filepath,
+            patch: diff,
+            additions: changes.reduce((sum, change) => sum + (change.added ? change.count : 0), 0),
+            deletions: changes.reduce((sum, change) => sum + (change.removed ? change.count : 0), 0),
+            status: exists ? ("modified" as const) : ("added" as const),
+          }
           yield* ctx.ask({
             permission: "edit",
             patterns: [path.relative(instance.worktree, filepath)],
@@ -95,6 +103,10 @@ export const WriteTool = Tool.define(
               diagnostics,
               filepath,
               exists: exists,
+              filediff,
+              [SessionFileChange.metadataKey]: [
+                { file: filepath, existed: exists, content: contentOld, bom: source.bom },
+              ],
             },
             output,
           }

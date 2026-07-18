@@ -14,6 +14,7 @@ import DESCRIPTION from "./apply_patch.txt"
 import { FileSystem } from "@opencode-ai/core/filesystem"
 import { Format } from "../format"
 import * as Bom from "@/util/bom"
+import { SessionFileChange } from "@/session/file-change"
 
 export const Parameters = Schema.Struct({
   patchText: Schema.String.annotate({ description: "The full patch text that describes all changes to be made" }),
@@ -141,6 +142,11 @@ export const ApplyPatchTool = Tool.define(
 
             const movePath = hunk.move_path ? path.resolve(instance.directory, hunk.move_path) : undefined
             yield* assertExternalDirectoryEffect(ctx, movePath)
+            if (movePath && (yield* afs.existsSafe(movePath))) {
+              return yield* Effect.fail(
+                new Error(`apply_patch verification failed: Move destination exists: ${movePath}`),
+              )
+            }
 
             fileChanges.push({
               filePath,
@@ -297,6 +303,15 @@ export const ApplyPatchTool = Tool.define(
         metadata: {
           diff: totalDiff,
           files,
+          [SessionFileChange.metadataKey]: fileChanges.flatMap((change) => [
+            {
+              file: change.filePath,
+              existed: change.type !== "add",
+              content: change.oldContent,
+              bom: change.type === "add" ? false : change.bom,
+            },
+            ...(change.movePath ? [{ file: change.movePath, existed: false, content: "", bom: false }] : []),
+          ]),
           diagnostics,
         },
         output,

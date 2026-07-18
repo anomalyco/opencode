@@ -25,6 +25,8 @@ import { isRecord } from "@/util/record"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Database } from "@opencode-ai/core/database/database"
 import { Usage, type LLMEvent } from "@opencode-ai/llm"
+import { Storage } from "@/storage/storage"
+import { SessionFileChange } from "./file-change"
 
 const DOOM_LOOP_THRESHOLD = 3
 export type Result = "compact" | "stop" | "continue"
@@ -88,6 +90,7 @@ const layer = Layer.effect(
     const llm = yield* LLM.Service
     const permission = yield* Permission.Service
     const plugin = yield* Plugin.Service
+    const storage = yield* Storage.Service
     const summary = yield* SessionSummary.Service
     const scope = yield* Scope.Scope
     const status = yield* SessionStatus.Service
@@ -168,13 +171,19 @@ const layer = Layer.effect(
       ) {
         const match = yield* readToolCall(toolCallID)
         if (!match || match.part.state.status !== "running") return
+        const metadata = yield* SessionFileChange.persist({
+          storage,
+          sessionID: match.part.sessionID,
+          directory: (yield* session.get(match.part.sessionID).pipe(Effect.orDie)).directory,
+          metadata: output.metadata,
+        })
         yield* session.updatePart({
           ...match.part,
           state: {
             status: "completed",
             input: match.part.state.input,
             output: output.output,
-            metadata: output.metadata,
+            metadata,
             title: output.title,
             time: { start: match.part.state.time.start, end: Date.now() },
             attachments: output.attachments,
@@ -712,6 +721,7 @@ export const node = LayerNode.make({
     Image.node,
     EventV2Bridge.node,
     Database.node,
+    Storage.node,
   ],
 })
 

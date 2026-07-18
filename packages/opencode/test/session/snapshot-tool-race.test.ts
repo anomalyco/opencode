@@ -5,7 +5,7 @@
  * processes the tool call and executes the tool (e.g. apply_patch) before
  * the processor's start-step handler can capture a pre-tool snapshot.
  * Both the "before" and "after" snapshots end up with the same git tree
- * hash, so computeDiff returns empty and the session summary shows 0 files.
+ * hash, so computeDiff returns empty.
  *
  * This is a real bug: the snapshot system assumes it can capture state
  * before tools run by hooking into start-step, but the AI SDK executes
@@ -183,7 +183,106 @@ it.live("tool execution produces non-empty session diff (snapshot race)", () =>
         yield* Effect.sleep("100 millis")
       }
       expect(diff.length).toBeGreaterThan(0)
+      expect((yield* summary.diff({ sessionID: session.id })).length).toBeGreaterThan(0)
+
+      yield* llm.toolMatch((hit) => JSON.stringify(hit.body).includes("remove the file"), "bash", {
+        command: `rm ${filePath}`,
+      })
+      yield* llm.textMatch((hit) => JSON.stringify(hit.body).includes("bash"), "done")
+      yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "remove the file" }],
+      })
+      yield* prompt.loop({ sessionID: session.id })
+
+      expect(yield* summary.diff({ sessionID: session.id })).toEqual([])
     }),
     { git: true, config: providerCfg },
+  ),
+)
+
+it.live("session diff includes explicit edits and excludes build artifacts without git", () =>
+  provideTmpdirServer(
+    Effect.fnUntraced(function* ({ dir, llm }) {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const summary = yield* SessionSummary.Service
+      const session = yield* sessions.create({
+        title: "non-git edited files",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+
+      yield* llm.toolMatch((hit) => JSON.stringify(hit.body).includes("create source files"), "write", {
+        filePath: path.join(dir, "CMakeLists.txt"),
+        content: "project(hello)\n",
+      })
+      yield* llm.toolMatch((hit) => JSON.stringify(hit.body).includes("Wrote file successfully"), "write", {
+        filePath: path.join(dir, "main.cpp"),
+        content: "int main() { return 0; }\n",
+      })
+      yield* llm.toolMatch((hit) => JSON.stringify(hit.body).includes("main.cpp"), "bash", {
+        command: `mkdir -p ${path.join(dir, "build/CMakeFiles")} && echo artifact > ${path.join(dir, "build/CMakeFiles/output.o")}`,
+      })
+      yield* llm.textMatch((hit) => JSON.stringify(hit.body).includes("bash"), "done")
+      yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "create source files" }],
+      })
+      yield* prompt.loop({ sessionID: session.id })
+
+      const files = (yield* summary.diff({ sessionID: session.id })).map((item) => item.file)
+      expect(files).toEqual(["CMakeLists.txt", "main.cpp"])
+      expect(
+        (yield* sessions.messages({ sessionID: session.id }))
+          .flatMap((message) => message.parts)
+          .filter((part) => part.type === "tool")
+          .some((part) => JSON.stringify(part.state).includes("__opencode_file_baselines")),
+      ).toBe(false)
+    }),
+    { config: providerCfg },
+  ),
+)
+
+it.live("session diff removes files created and deleted by later agent steps", () =>
+  provideTmpdirServer(
+    Effect.fnUntraced(function* ({ dir, llm }) {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const summary = yield* SessionSummary.Service
+      const session = yield* sessions.create({
+        title: "create then delete",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+      const gitignore = path.join(dir, ".gitignore")
+
+      yield* llm.toolMatch((hit) => JSON.stringify(hit.body).includes("create files"), "write", {
+        filePath: gitignore,
+        content: "build/\n",
+      })
+      yield* llm.toolMatch((hit) => JSON.stringify(hit.body).includes("Wrote file successfully"), "write", {
+        filePath: path.join(dir, "main.cpp"),
+        content: "int main() { return 0; }\n",
+      })
+      yield* llm.toolMatch((hit) => JSON.stringify(hit.body).includes("main.cpp"), "bash", {
+        command: `rm ${gitignore}`,
+      })
+      yield* llm.textMatch((hit) => JSON.stringify(hit.body).includes("bash"), "done")
+      yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "create files" }],
+      })
+      yield* prompt.loop({ sessionID: session.id })
+
+      expect((yield* summary.diff({ sessionID: session.id })).map((item) => path.basename(item.file ?? ""))).toEqual([
+        "main.cpp",
+      ])
+    }),
+    { config: providerCfg },
   ),
 )

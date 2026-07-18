@@ -1,11 +1,16 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Effect, Layer, Context, Schema } from "effect"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
-import { EventV2Bridge } from "@/event-v2-bridge"
 import { Snapshot } from "@/snapshot"
 import { Session } from "./session"
 import { SessionID, MessageID } from "./schema"
 import { Config } from "@/config/config"
+import path from "path"
+import { FSUtil } from "@opencode-ai/core/fs-util"
+import { createTwoFilesPatch, diffLines } from "diff"
+import { Storage } from "@/storage/storage"
+import { SessionFileChange } from "./file-change"
+import * as Bom from "@/util/bom"
 
 function unquoteGitPath(input: string) {
   if (!input.startsWith('"')) return input
@@ -76,8 +81,9 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const sessions = yield* Session.Service
     const snapshot = yield* Snapshot.Service
-    const events = yield* EventV2Bridge.Service
     const config = yield* Config.Service
+    const fs = yield* FSUtil.Service
+    const storage = yield* Storage.Service
 
     const computeDiff = Effect.fn("SessionSummary.computeDiff")(function* (input: { messages: SessionV1.WithParts[] }) {
       let from: string | undefined
@@ -103,15 +109,6 @@ const layer = Layer.effect(
       sessionID: SessionID
       messageID: MessageID
     }) {
-      yield* sessions.setSummary({
-        sessionID: input.sessionID,
-        summary: {
-          additions: 0,
-          deletions: 0,
-          files: 0,
-        },
-      })
-      yield* events.publish(Session.Event.Diff, { sessionID: input.sessionID, diff: [] })
       if ((yield* config.get()).snapshot === false) return
       const all = yield* sessions.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)
       if (!all.length) return
@@ -127,10 +124,29 @@ const layer = Layer.effect(
     })
 
     const diff = Effect.fn("SessionSummary.diff")(function* (input: { sessionID: SessionID; messageID?: MessageID }) {
-      if (!input.messageID) return []
-      const message = (yield* sessions.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)).find(
-        (item) => item.info.id === input.messageID,
-      )
+      const messages = yield* sessions.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)
+      if (!input.messageID) {
+        const directory = (yield* sessions.get(input.sessionID).pipe(Effect.orDie)).directory
+        const tracked = yield* SessionFileChange.list(storage, input.sessionID)
+        if (tracked.length) {
+          const unique = new Map<string, SessionFileChange.Baseline>()
+          for (const baseline of tracked) {
+            if (!unique.has(baseline.path)) unique.set(baseline.path, baseline)
+          }
+          const current = yield* Effect.forEach(unique.values(), (baseline) =>
+            trackedDiff(fs, baseline, directory),
+          ).pipe(Effect.map((items) => items.flatMap((item) => (item ? [item] : []))))
+          const paths = new Set(unique.keys())
+          return [
+            ...editedFiles(messages, directory).filter((item) => item.file && !paths.has(item.file)),
+            ...current,
+          ].toSorted((a, b) => (a.file ?? "").localeCompare(b.file ?? ""))
+        }
+        const snapshotDiff = (yield* config.get()).snapshot === false ? [] : yield* computeDiff({ messages })
+        if (snapshotDiff.length) return snapshotDiff
+        return editedFiles(messages, directory)
+      }
+      const message = messages.find((item) => item.info.id === input.messageID)
       if (!message || message.info.role !== "user") return []
       const diffs = message.info.summary?.diffs ?? []
       return diffs.map((item) => {
@@ -154,7 +170,71 @@ export type DiffInput = Schema.Schema.Type<typeof DiffInput>
 export const node = LayerNode.make({
   service: Service,
   layer: layer,
-  deps: [Session.node, Snapshot.node, EventV2Bridge.node, Config.node],
+  deps: [Session.node, Snapshot.node, Config.node, FSUtil.node, Storage.node],
 })
+
+const trackedDiff = Effect.fnUntraced(function* (
+  fs: FSUtil.Interface,
+  baseline: SessionFileChange.Baseline,
+  directory: string,
+) {
+  if (baseline.content === undefined) return
+  const file = path.join(directory, baseline.path)
+  const exists = yield* fs.existsSafe(file)
+  const current = exists ? yield* Bom.readFile(fs, file).pipe(Effect.catch(() => Effect.succeed(undefined))) : undefined
+  if (exists && current === undefined) return
+  const content = current?.text ?? ""
+  const bom = current?.bom ?? false
+  if (baseline.existed === exists && baseline.content === content && baseline.bom === bom) return
+  const changes = diffLines(baseline.content, content)
+  return {
+    file: baseline.path,
+    patch: createTwoFilesPatch(file, file, baseline.content, content),
+    additions: changes.reduce((sum, change) => sum + (change.added ? change.count : 0), 0),
+    deletions: changes.reduce((sum, change) => sum + (change.removed ? change.count : 0), 0),
+    status: !baseline.existed ? "added" : !exists ? "deleted" : "modified",
+  } satisfies Snapshot.FileDiff
+})
+
+function editedFiles(messages: SessionV1.WithParts[], directory: string) {
+  const files = new Map<string, Snapshot.FileDiff>()
+  for (const part of messages.flatMap((message) => message.parts)) {
+    if (part.type !== "tool" || part.state.status !== "completed") continue
+    const metadata = part.state.metadata
+    if (!metadata || typeof metadata !== "object") continue
+    const records = Array.isArray(metadata.filediffs)
+      ? metadata.filediffs
+      : metadata.filediff
+        ? [metadata.filediff]
+        : Array.isArray(metadata.files)
+          ? metadata.files
+          : []
+    for (const record of records) {
+      if (!record || typeof record !== "object") continue
+      const source = record as Record<string, unknown>
+      const file = [source.file, source.filePath, source.movePath, source.relativePath].find(
+        (value): value is string => typeof value === "string",
+      )
+      if (!file) continue
+      const relative = path.isAbsolute(file) ? path.relative(directory, file).replaceAll("\\", "/") : file
+      if (relative.startsWith("../") || relative === "..") continue
+      const display = relative
+      const previous = files.get(display)
+      files.set(display, {
+        file: display,
+        patch: typeof source.patch === "string" ? source.patch : previous?.patch,
+        additions: (previous?.additions ?? 0) + (typeof source.additions === "number" ? source.additions : 0),
+        deletions: (previous?.deletions ?? 0) + (typeof source.deletions === "number" ? source.deletions : 0),
+        status:
+          source.status === "added" || source.type === "add"
+            ? "added"
+            : source.status === "deleted" || source.type === "delete"
+              ? "deleted"
+              : "modified",
+      })
+    }
+  }
+  return [...files.values()]
+}
 
 export * as SessionSummary from "./summary"

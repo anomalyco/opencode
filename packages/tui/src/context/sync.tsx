@@ -144,6 +144,7 @@ export const {
     const fullSyncedSessions = new Set<string>()
     const syncingSessions = new Map<string, Promise<void>>()
     const hydratingSessions = new Map<string, { messages: Set<string>; parts: Set<string> }>()
+    const diffRequests = new Map<string, number>()
     const touchMessage = (sessionID: string, messageID: string) => {
       hydratingSessions.get(sessionID)?.messages.add(messageID)
     }
@@ -165,6 +166,21 @@ export const {
       return sdk.client.session
         .list({ start: Date.now() - 30 * 24 * 60 * 60 * 1000, ...sessionListQuery() })
         .then((x) => (x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)))
+    }
+
+    function loadSessionDiff(sessionID: string) {
+      const request = (diffRequests.get(sessionID) ?? 0) + 1
+      diffRequests.set(sessionID, request)
+      return sdk.client.session.diff({ sessionID }).then((result) => ({ request, data: result.data ?? [] }))
+    }
+
+    function refreshSessionDiff(sessionID: string) {
+      void loadSessionDiff(sessionID)
+        .then((result) => {
+          if (diffRequests.get(sessionID) !== result.request) return
+          setStore("session_diff", sessionID, result.data)
+        })
+        .catch(() => undefined)
     }
 
     event.subscribe((event, { directory, workspace }) => {
@@ -261,6 +277,7 @@ export const {
           break
 
         case "session.diff":
+          diffRequests.set(event.properties.sessionID, (diffRequests.get(event.properties.sessionID) ?? 0) + 1)
           setStore("session_diff", event.properties.sessionID, event.properties.diff)
           break
 
@@ -313,6 +330,14 @@ export const {
         }
 
         case "message.updated": {
+          if (
+            event.properties.info.role === "assistant" &&
+            event.properties.info.time.completed &&
+            (fullSyncedSessions.has(event.properties.info.sessionID) ||
+              hydratingSessions.has(event.properties.info.sessionID))
+          ) {
+            refreshSessionDiff(event.properties.info.sessionID)
+          }
           touchMessage(event.properties.info.sessionID, event.properties.info.id)
           const messages = store.message[event.properties.info.sessionID]
           if (!messages) {
@@ -596,7 +621,7 @@ export const {
               sdk.client.session.get({ sessionID }, { throwOnError: true }),
               sdk.client.session.messages({ sessionID, limit: 100 }),
               sdk.client.session.todo({ sessionID }),
-              sdk.client.session.diff({ sessionID }),
+              loadSessionDiff(sessionID),
             ])
             setStore(
               produce((draft) => {
@@ -647,7 +672,7 @@ export const {
                 }
                 for (const message of removed) delete draft.part[message.id]
                 draft.message[sessionID] = visible
-                draft.session_diff[sessionID] = diff.data ?? []
+                if (diffRequests.get(sessionID) === diff.request) draft.session_diff[sessionID] = diff.data
               }),
             )
             fullSyncedSessions.add(sessionID)
