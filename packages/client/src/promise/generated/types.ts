@@ -4870,3 +4870,12 @@ export type DebugLocationEvictInput = {
 }
 
 export type DebugLocationEvictOutput = void
+
+export type DebugEventFeedOutput = {
+  active: number
+  opens: number
+  closes: number
+  serializedEvents: number
+  serializedBytes: number
+  overflows: number
+}

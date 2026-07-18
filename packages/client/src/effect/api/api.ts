@@ -997,8 +997,12 @@ export type Endpoint26_1Input = { readonly location?: Endpoint26_1Request["query
 export type Endpoint26_1Output = EffectValue<ReturnType<RawClient["server.debug"]["debug.location.evict"]>>
 export type DebugLocationEvictOperation<E = never> = (input?: Endpoint26_1Input) => Effect.Effect<Endpoint26_1Output, E>
 
+export type Endpoint26_2Output = EffectValue<ReturnType<RawClient["server.debug"]["debug.event-feed"]>>
+export type DebugEventFeedOperation<E = never> = () => Effect.Effect<Endpoint26_2Output, E>
+
 export interface DebugApi<E = never> {
   readonly location: { readonly list: DebugLocationListOperation<E>; readonly evict: DebugLocationEvictOperation<E> }
+  readonly "event-feed": DebugEventFeedOperation<E>
 }
 
 export interface AppApi<E = never> {

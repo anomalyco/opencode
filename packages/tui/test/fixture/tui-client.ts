@@ -20,22 +20,31 @@ export function createEventStream() {
     controllers: Set<ReadableStreamDefaultController<Uint8Array>>,
     queued: Uint8Array[],
     initial?: unknown,
+    signal?: AbortSignal,
   ) => {
     let current: ReadableStreamDefaultController<Uint8Array> | undefined
-    return new Response(
-      new ReadableStream<Uint8Array>({
-        start(controller) {
-          current = controller
-          controllers.add(controller)
-          if (initial) controller.enqueue(encoder.encode(`data: ${JSON.stringify(initial)}\n\n`))
-          for (const chunk of queued.splice(0)) controller.enqueue(chunk)
-        },
-        cancel() {
-          if (current) controllers.delete(current)
-        },
-      }),
-      { headers: { "content-type": "text/event-stream" } },
-    )
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        current = controller
+        controllers.add(controller)
+        if (initial) controller.enqueue(encoder.encode(`data: ${JSON.stringify(initial)}\n\n`))
+        for (const chunk of queued.splice(0)) controller.enqueue(chunk)
+      },
+      cancel() {
+        if (current) controllers.delete(current)
+      },
+    })
+    const onAbort = () => {
+      try {
+        current?.error(signal?.reason ?? new DOMException("Aborted", "AbortError"))
+      } catch {
+        // already closed
+      }
+      if (current) controllers.delete(current)
+    }
+    if (signal?.aborted) onAbort()
+    else signal?.addEventListener("abort", onAbort, { once: true })
+    return new Response(stream, { headers: { "content-type": "text/event-stream" } })
   }
   const send = (
     controllers: Set<ReadableStreamDefaultController<Uint8Array>>,
@@ -54,8 +63,8 @@ export function createEventStream() {
     emit(event: OpenCodeEvent) {
       send(v2, pending, event)
     },
-    v2() {
-      return response(v2, pending, { id: "evt_connected", type: "server.connected", data: {} })
+    v2(signal?: AbortSignal) {
+      return response(v2, pending, { id: "evt_connected", type: "server.connected", data: {} }, signal)
     },
     disconnect() {
       for (const controller of v2) controller.close()
@@ -74,7 +83,7 @@ export function createFetch(override?: FetchHandler, events?: ReturnType<typeof 
     if (url.pathname === "/session") session.push(url)
     const overridden = await override?.(url, request)
     if (overridden) return overridden
-    if (url.pathname === "/api/event" && events) return events.v2()
+    if (url.pathname === "/api/event" && events) return events.v2(request.signal)
 
     if (
       [

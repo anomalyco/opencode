@@ -1,15 +1,38 @@
+import { NodeHttpServerRequest } from "@effect/platform-node"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Effect, Stream } from "effect"
-import { HttpServerResponse } from "effect/unstable/http"
+import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { Api } from "../api"
 import { EventFeed } from "../event-feed"
+
+/** Bun may emit IncomingMessage aborted/close without ServerResponse.close — destroy so the fiber ends. */
+function bridgeClientDisconnect(request: HttpServerRequest.HttpServerRequest) {
+  return Effect.sync(() => {
+    try {
+      const incoming = NodeHttpServerRequest.toIncomingMessage(request)
+      const response = NodeHttpServerRequest.toServerResponse(request)
+      const destroy = () => {
+        if (!response.writableEnded && !response.destroyed) response.destroy()
+      }
+      if (incoming.aborted || incoming.destroyed) {
+        destroy()
+        return
+      }
+      incoming.once("aborted", destroy)
+      incoming.once("close", destroy)
+    } catch {
+      // Non-Node sources (tests using fromWeb) have no ServerResponse to bridge.
+    }
+  })
+}
 
 export const EventHandler = HttpApiBuilder.group(Api, "server.event", (handlers) =>
   Effect.gen(function* () {
     const feed = yield* EventFeed.Service
     return handlers.handleRaw("event.subscribe", (ctx) =>
       Effect.gen(function* () {
+        yield* bridgeClientDisconnect(ctx.request)
         const interest = EventFeed.interestFromQuery(new URL(ctx.request.url, "http://localhost").searchParams)
         const connected = {
           id: EventV2.ID.create(),

@@ -1186,8 +1186,12 @@ type Endpoint26_1Input = { readonly location?: Endpoint26_1Request["query"]["loc
 const Endpoint26_1 = (raw: RawClient["server.debug"]) => (input?: Endpoint26_1Input) =>
   raw["debug.location.evict"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError))
 
+const Endpoint26_2 = (raw: RawClient["server.debug"]) => () =>
+  raw["debug.event-feed"]({}).pipe(Effect.mapError(mapClientError))
+
 const adaptGroup26 = (raw: RawClient["server.debug"]) => ({
   location: { list: Endpoint26_0(raw), evict: Endpoint26_1(raw) },
+  "event-feed": Endpoint26_2(raw),
 })
 
 const adaptClient = (raw: RawClient) => ({

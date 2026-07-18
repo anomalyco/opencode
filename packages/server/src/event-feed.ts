@@ -37,8 +37,19 @@ export type Interest = {
   readonly sessions?: ReadonlyArray<string>
 }
 
+/** Content-free counters for leak detection — never includes event payloads. */
+export type Diagnostics = {
+  readonly active: number
+  readonly opens: number
+  readonly closes: number
+  readonly serializedEvents: number
+  readonly serializedBytes: number
+  readonly overflows: number
+}
+
 export interface Interface {
   readonly subscribe: (interest?: Interest) => Effect.Effect<Stream.Stream<string, Error>, never, Scope.Scope>
+  readonly diagnostics: () => Diagnostics
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/server/EventFeed") {}
@@ -101,6 +112,20 @@ export const make = Effect.fn("EventFeed.make")(function* (
   const capacity = options?.capacity ?? SubscriberCapacity
   const render = options?.encode ?? frame
   const subscribers = new Map<Queue.Queue<string, Error>, Subscriber>()
+  let opens = 0
+  let closes = 0
+  let serializedEvents = 0
+  let serializedBytes = 0
+  let overflows = 0
+
+  const diagnostics = (): Diagnostics => ({
+    active: subscribers.size,
+    opens,
+    closes,
+    serializedEvents,
+    serializedBytes,
+    overflows,
+  })
 
   const fail = (error: Error) =>
     Effect.sync(() => {
@@ -129,8 +154,11 @@ export const make = Effect.fn("EventFeed.make")(function* (
       ),
     )
     if (encoded === undefined) return
+    serializedEvents += 1
+    serializedBytes += Buffer.byteLength(encoded, "utf-8")
     for (const subscriber of targets) {
       if (Queue.offerUnsafe(subscriber.queue, encoded)) continue
+      overflows += 1
       subscribers.delete(subscriber.queue)
       Queue.failCauseUnsafe(subscriber.queue, Cause.fail(new SubscriberOverflowError({ capacity })))
     }
@@ -140,17 +168,21 @@ export const make = Effect.fn("EventFeed.make")(function* (
   yield* Effect.addFinalizer(() => unsubscribe)
 
   return Service.of({
+    diagnostics,
     subscribe: (interest) =>
       Effect.acquireRelease(
         Queue.dropping<string, Error>(capacity).pipe(
           Effect.tap((queue) =>
             Effect.sync(() => {
+              opens += 1
               subscribers.set(queue, { queue, interest })
             }),
           ),
         ),
         (queue) =>
-          Effect.sync(() => subscribers.delete(queue)).pipe(Effect.andThen(Queue.shutdown(queue)), Effect.asVoid),
+          Effect.sync(() => {
+            if (subscribers.delete(queue)) closes += 1
+          }).pipe(Effect.andThen(Queue.shutdown(queue)), Effect.asVoid),
       ).pipe(Effect.map(Stream.fromQueue)),
   })
 })

@@ -2,6 +2,7 @@ import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import { Effect, Option, RcMap } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { Api } from "../api"
+import { EventFeed } from "../event-feed"
 import { requestRef } from "../location"
 
 export const DebugHandler = HttpApiBuilder.group(Api, "server.debug", (handlers) =>
@@ -20,6 +21,13 @@ export const DebugHandler = HttpApiBuilder.group(Api, "server.debug", (handlers)
         // Resolve through requestRef so the key matches the shape the location
         // middleware cached the services under.
         yield* locations.invalidate(requestRef(ctx.request))
+      }),
+    )
+    .handle(
+      "debug.event-feed",
+      Effect.fn(function* () {
+        const feed = yield* EventFeed.Service
+        return feed.diagnostics()
       }),
     ),
 )

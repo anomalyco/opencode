@@ -363,6 +363,50 @@ describe("EventFeed", () => {
 
       expect(encodes).toBe(6)
       expect(counts).toEqual([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2])
+      expect(feed.diagnostics().active).toBe(11)
+      expect(feed.diagnostics().serializedEvents).toBe(6)
+    }),
+  )
+
+  it.effect("returns active subscriber count to baseline when scopes close after eleven-client churn", () =>
+    Effect.gen(function* () {
+      const source = makeSource()
+      const feed = yield* EventFeed.make(source.observe, { encode: (event) => event.id })
+      expect(feed.diagnostics()).toMatchObject({ active: 0, opens: 0, closes: 0 })
+
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          for (let i = 0; i < 11; i++) yield* feed.subscribe()
+          expect(feed.diagnostics().active).toBe(11)
+          expect(feed.diagnostics().opens).toBe(11)
+          yield* source.publish(event("diag"))
+          expect(feed.diagnostics().serializedEvents).toBe(1)
+          expect(feed.diagnostics().serializedBytes).toBeGreaterThan(0)
+        }),
+      )
+
+      expect(feed.diagnostics().active).toBe(0)
+      expect(feed.diagnostics().closes).toBe(11)
+      const dump = JSON.stringify(feed.diagnostics())
+      expect(dump.includes("evt_diag")).toBe(false)
+      expect(dump.includes("payload")).toBe(false)
+    }),
+  )
+
+  it.effect("counts overflows without retaining failed subscriber queues", () =>
+    Effect.gen(function* () {
+      const source = makeSource()
+      const feed = yield* EventFeed.make(source.observe, {
+        capacity: 1,
+        encode: (event) => event.id,
+      })
+      const slow = yield* feed.subscribe()
+      yield* source.publish(event("one"))
+      yield* source.publish(event("two"))
+      const exit = yield* slow.pipe(Stream.runCollect, Effect.exit)
+      expect(Exit.isFailure(exit)).toBeTrue()
+      expect(feed.diagnostics().overflows).toBe(1)
+      expect(feed.diagnostics().active).toBe(0)
     }),
   )
 })

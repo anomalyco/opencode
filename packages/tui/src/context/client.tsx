@@ -29,6 +29,8 @@ type ManagedService = {
 type ClientEventMap = { [Type in OpenCodeEvent["type"]]: Extract<OpenCodeEvent, { type: Type }> }
 const connectTimeout = 2_000
 const connectionHistoryLimit = 50
+const reconnectBaseMs = 1_000
+const reconnectJitterMs = 500
 
 export const { use: useClient, provider: ClientProvider } = createSimpleContext({
   name: "Client",
@@ -48,6 +50,8 @@ export const { use: useClient, provider: ClientProvider } = createSimpleContext(
       attempt: 0,
     })
     let stream: AbortController | undefined
+    let generation = 0
+    let running: Promise<void> | undefined
 
     function record(status: ClientConnectionEvent["data"]["status"], attempt: number, error?: string) {
       history.push({ type: "client.connection", created: Date.now(), data: { status, attempt, error } })
@@ -55,12 +59,16 @@ export const { use: useClient, provider: ClientProvider } = createSimpleContext(
     }
 
     function start() {
+      const gen = ++generation
       stream?.abort()
+      const previous = running
       const controller = new AbortController()
       stream = controller
-      void (async () => {
+      running = (async () => {
+        if (previous) await previous.catch(() => undefined)
+        if (gen !== generation || abort.signal.aborted || controller.signal.aborted) return
         let attempt = 0
-        while (!abort.signal.aborted && !controller.signal.aborted) {
+        while (!abort.signal.aborted && !controller.signal.aborted && gen === generation) {
           let connectedAt: number | undefined
           const request = new AbortController()
           const cancel = () => request.abort(controller.signal.reason)
@@ -68,12 +76,12 @@ export const { use: useClient, provider: ClientProvider } = createSimpleContext(
           controller.signal.addEventListener("abort", cancel, { once: true })
           const error = await (async () => {
             record(attempt === 0 ? "connecting" : "reconnecting", attempt)
-            log.info("event stream connecting", { attempt })
+            log.info("event stream connecting", { attempt, generation: gen })
             const iterator = api.event
               .subscribe(subscribeInput(interest), { signal: request.signal })
               [Symbol.asyncIterator]()
             const first = await iterator.next()
-            if (abort.signal.aborted || controller.signal.aborted) return undefined
+            if (abort.signal.aborted || controller.signal.aborted || gen !== generation) return undefined
             if (first.done)
               return request.signal.reason instanceof Error
                 ? request.signal.reason
@@ -83,12 +91,12 @@ export const { use: useClient, provider: ClientProvider } = createSimpleContext(
             clearTimeout(timeout)
             record("connected", attempt)
             connectedAt = Date.now()
-            log.info("event stream connected")
+            log.info("event stream connected", { generation: gen })
             events.emit(first.value.type, first.value)
             setConnection({ status: "connected", attempt: 0, error: undefined })
-            while (!abort.signal.aborted && !controller.signal.aborted) {
+            while (!abort.signal.aborted && !controller.signal.aborted && gen === generation) {
               const event = await iterator.next()
-              if (abort.signal.aborted || controller.signal.aborted) return undefined
+              if (abort.signal.aborted || controller.signal.aborted || gen !== generation) return undefined
               if (event.done) return new Error("Event stream disconnected")
               if ("durable" in event.value)
                 log.debug("event", {
@@ -106,13 +114,14 @@ export const { use: useClient, provider: ClientProvider } = createSimpleContext(
               clearTimeout(timeout)
               controller.signal.removeEventListener("abort", cancel)
             })
-          if (abort.signal.aborted || controller.signal.aborted) return
+          if (abort.signal.aborted || controller.signal.aborted || gen !== generation) return
           if (connectedAt !== undefined && Date.now() - connectedAt >= 1_000) attempt = 0
           attempt += 1
           const message = errorMessage(error)
           record("disconnected", attempt, message)
           log.info("event stream disconnected", {
             attempt,
+            generation: gen,
             error: message,
           })
           setConnection({ status: "reconnecting", attempt, error: message })
@@ -127,19 +136,20 @@ export const { use: useClient, provider: ClientProvider } = createSimpleContext(
                   error: errorMessage(error),
                 })
             })
-            if (abort.signal.aborted || controller.signal.aborted) return
+            if (abort.signal.aborted || controller.signal.aborted || gen !== generation) return
             if (next) {
               api = next.api
               if (attempt === 1) continue
             }
           }
-          await wait(1_000, controller.signal)
+          await wait(reconnectBaseMs + Math.floor(Math.random() * reconnectJitterMs), controller.signal)
         }
       })()
     }
 
     onMount(start)
     onCleanup(() => {
+      generation += 1
       abort.abort()
       stream?.abort()
       events.clear()
@@ -171,6 +181,9 @@ export const { use: useClient, provider: ClientProvider } = createSimpleContext(
         internal: {
           history() {
             return history.slice()
+          },
+          generation() {
+            return generation
           },
         },
       },

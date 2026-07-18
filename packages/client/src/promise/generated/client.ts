@@ -198,6 +198,7 @@ import type {
   DebugLocationListOutput,
   DebugLocationEvictInput,
   DebugLocationEvictOutput,
+  DebugEventFeedOutput,
 } from "./types"
 import { ClientError } from "./client-error"
 
@@ -293,6 +294,12 @@ export function make(options: ClientOptions) {
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
       let buffer = ""
+      const signal = requestOptions?.signal
+      const onAbort = () => {
+        void reader.cancel(signal?.reason).catch(() => undefined)
+      }
+      if (signal?.aborted) onAbort()
+      else signal?.addEventListener("abort", onAbort, { once: true })
       try {
         while (true) {
           let next
@@ -328,10 +335,16 @@ export function make(options: ClientOptions) {
           if (next.done) return
         }
       } finally {
+        signal?.removeEventListener("abort", onAbort)
         try {
           await reader.cancel()
         } catch {}
-        reader.releaseLock()
+        try {
+          reader.releaseLock()
+        } catch {}
+        try {
+          await response.body?.cancel()
+        } catch {}
       }
     },
   })
@@ -1671,6 +1684,17 @@ export function make(options: ClientOptions) {
             requestOptions,
           ),
       },
+      "event-feed": (requestOptions?: RequestOptions) =>
+        request<DebugEventFeedOutput>(
+          {
+            method: "GET",
+            path: `/api/debug/event-feed`,
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
     },
   }
 }

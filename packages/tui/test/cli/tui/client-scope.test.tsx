@@ -18,10 +18,10 @@ describe("ClientProvider event.scope", () => {
   test("reconnects the event stream when interest changes, not when it is unchanged", async () => {
     const events = createEventStream()
     const eventUrls: URL[] = []
-    const calls = createFetch((url) => {
+    const calls = createFetch((url, request) => {
       if (url.pathname !== "/api/event") return undefined
       eventUrls.push(url)
-      return events.v2()
+      return events.v2(request.signal)
     }, events)
 
     let client!: ReturnType<typeof useClient>
