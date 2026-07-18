@@ -959,10 +959,17 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
             }
           >
             <scrollbox
-              scrollbarOptions={{ visible: false }}
               scrollAcceleration={scrollAcceleration()}
               ref={(r: ScrollBoxRenderable) => (rightScroll = r)}
               maxHeight={listHeight()}
+              viewportOptions={{ paddingRight: 1 }}
+              verticalScrollbarOptions={{
+                paddingLeft: 1,
+                trackOptions: {
+                  backgroundColor: theme.backgroundElement,
+                  foregroundColor: theme.border,
+                },
+              }}
             >
               <For each={rightOptions()}>
                 {(option, index) => {
