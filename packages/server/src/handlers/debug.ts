@@ -26,7 +26,7 @@ export const DebugHandler = HttpApiBuilder.group(Api, "server.debug", (handlers)
     .handle(
       "debug.event-feed",
       Effect.fn(function* () {
-        const feed = yield* EventFeed.Service
+        const feed = Option.getOrThrow(yield* Effect.serviceOption(EventFeed.Service))
         return feed.diagnostics()
       }),
     ),
