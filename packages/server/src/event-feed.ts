@@ -1,8 +1,14 @@
 export * as EventFeed from "./event-feed"
 
 import { EventV2 } from "@opencode-ai/core/event"
-import { isOpenCodeEvent, OpenCodeEvent, sessionIDOf } from "@opencode-ai/protocol/groups/event"
-import { Cause, Context, Effect, Layer, Queue, Schema, Scope, Stream } from "effect"
+import { EventFeedDiagnostics } from "@opencode-ai/protocol/groups/debug"
+import {
+  EventSubscribeQuery,
+  isOpenCodeEvent,
+  OpenCodeEvent,
+  sessionIDOf,
+} from "@opencode-ai/protocol/groups/event"
+import { Cause, Context, Effect, Layer, Option, Queue, Schema, Scope, Stream } from "effect"
 
 export const SubscriberCapacity = 4_096
 
@@ -38,14 +44,7 @@ export type Interest = {
 }
 
 /** Content-free counters for leak detection — never includes event payloads. */
-export type Diagnostics = {
-  readonly active: number
-  readonly opens: number
-  readonly closes: number
-  readonly serializedEvents: number
-  readonly serializedBytes: number
-  readonly overflows: number
-}
+export type Diagnostics = typeof EventFeedDiagnostics.Type
 
 export interface Interface {
   readonly subscribe: (interest?: Interest) => Effect.Effect<Stream.Stream<string, Error>, never, Scope.Scope>
@@ -81,23 +80,57 @@ export function matchesInterest(event: EventV2.Payload, interest?: Interest): bo
   return true
 }
 
-export function interestFromQuery(query: URLSearchParams): Interest | undefined {
-  const directory = query.get("location[directory]") ?? undefined
-  const workspace = query.get("location[workspace]") ?? undefined
-  const sessions = query
+const decodeSubscribeQuery = Schema.decodeUnknownOption(EventSubscribeQuery)
+
+/** Map an already-decoded subscribe query into feed interest (HttpApi `ctx.query`). */
+export function interestFromSubscribeQuery(query: typeof EventSubscribeQuery.Type): Interest | undefined {
+  const sessions = normalizeSessions(query.session)
+  if (query.location === undefined && sessions.length === 0) return undefined
+  return {
+    ...(query.location
+      ? {
+          location: {
+            directory: query.location.directory,
+            ...(query.location.workspace !== undefined ? { workspace: query.location.workspace } : {}),
+          },
+        }
+      : {}),
+    ...(sessions.length > 0 ? { sessions } : {}),
+  }
+}
+
+/** Parse deepObject / repeated `session` search params through `EventSubscribeQuery`. */
+export function interestFromQuery(params: URLSearchParams): Interest | undefined {
+  const decoded = Option.getOrUndefined(decodeSubscribeQuery(subscribeQueryCandidate(params)))
+  if (decoded === undefined) return undefined
+  return interestFromSubscribeQuery(decoded)
+}
+
+function subscribeQueryCandidate(params: URLSearchParams) {
+  const directory = params.get("location[directory]") ?? undefined
+  const workspace = params.get("location[workspace]") ?? undefined
+  const sessions = params
     .getAll("session")
     .flatMap((value) => value.split(","))
     .map((value) => value.trim())
     .filter((value) => value.length > 0)
-  // Workspace interest requires a directory; alone it is an invalid location scope.
-  if (directory === undefined && workspace !== undefined) return undefined
-  if (directory === undefined && sessions.length === 0) return undefined
   return {
-    ...(directory !== undefined
-      ? { location: { directory, ...(workspace !== undefined ? { workspace } : {}) } }
+    ...(directory !== undefined || workspace !== undefined
+      ? {
+          location: {
+            ...(directory !== undefined ? { directory } : {}),
+            ...(workspace !== undefined ? { workspace } : {}),
+          },
+        }
       : {}),
-    ...(sessions.length > 0 ? { sessions } : {}),
+    ...(sessions.length === 0 ? {} : { session: sessions.length === 1 ? sessions[0] : sessions }),
   }
+}
+
+function normalizeSessions(session: typeof EventSubscribeQuery.Type.session): string[] {
+  if (session === undefined) return []
+  if (typeof session === "string") return session.trim() === "" ? [] : [session]
+  return session.map((value) => value.trim()).filter((value) => value.length > 0)
 }
 
 type Subscriber = {
