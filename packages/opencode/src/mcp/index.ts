@@ -227,7 +227,7 @@ const layer = Layer.effect(
             },
             catch: (e) => (e instanceof Error ? e : new Error(String(e))),
           }),
-        (t, exit) => (Exit.isFailure(exit) ? Effect.tryPromise(() => t.close()).pipe(Effect.ignore) : Effect.void),
+        (t, exit) => (Exit.isFailure(exit) ? stop(t) : Effect.void),
       )
     })
 
@@ -398,11 +398,7 @@ const layer = Layer.effect(
             defs: listed,
             instructions: mcpClient.getInstructions()?.trim(),
           } satisfies CreateResult
-        }).pipe(
-          Effect.catchCause((cause) =>
-            Effect.tryPromise(() => mcpClient.close()).pipe(Effect.ignore, Effect.andThen(Effect.failCause(cause))),
-          ),
-        )
+        }).pipe(Effect.catchCause((cause) => stop(mcpClient).pipe(Effect.andThen(Effect.failCause(cause)))))
       },
       Effect.map((result): CreateResult => result),
       Effect.catchCause((cause) => {
@@ -438,6 +434,59 @@ const layer = Layer.effect(
       Effect.scoped,
       Effect.catch(() => Effect.succeed([] as number[])),
     )
+
+    function running(pid: number) {
+      try {
+        process.kill(pid, 0)
+        return true
+      } catch (error) {
+        return !(error instanceof Error && "code" in error && error.code === "ESRCH")
+      }
+    }
+
+    const waitForExit = Effect.fnUntraced(function* (pids: readonly number[], timeout: number) {
+      const deadline = Date.now() + timeout
+      let active = pids.filter(running)
+      while (active.length > 0 && Date.now() < deadline) {
+        yield* Effect.sleep("25 millis")
+        active = active.filter(running)
+      }
+      return active
+    })
+
+    function signal(pids: readonly number[], value: NodeJS.Signals) {
+      for (const pid of pids.toReversed()) {
+        try {
+          process.kill(pid, value)
+        } catch {}
+      }
+    }
+
+    const stop = Effect.fnUntraced(function* (
+      target: MCPClient | StdioClientTransport | TransportWithAuth | undefined,
+    ) {
+      if (!target) return
+      const transport = target instanceof Client ? target.transport : target
+      const root = transport instanceof StdioClientTransport ? transport.pid : null
+      if (typeof root !== "number") {
+        yield* Effect.tryPromise(() => target.close()).pipe(Effect.ignore)
+        return
+      }
+      const children = yield* descendants(root)
+
+      if (children.length > 0) {
+        signal(children, "SIGTERM")
+        signal(yield* waitForExit(children, 500), "SIGKILL")
+      }
+
+      yield* Effect.tryPromise(() => target.close()).pipe(Effect.ignore)
+
+      const known = Array.from(new Set([root, ...children, ...(yield* descendants(root))]))
+      const remaining = yield* waitForExit(known, 250)
+      signal(remaining, "SIGKILL")
+      const survivors = yield* waitForExit(remaining, 1_000)
+      if (survivors.length > 0) yield* Effect.logWarning("MCP processes survived cleanup", { pids: survivors })
+    })
 
     function watch(s: State, name: string, client: MCPClient, bridge: EffectBridge.Shape, timeout?: number) {
       client.onclose = () => {
@@ -534,23 +583,7 @@ const layer = Layer.effect(
             s.clients = {}
             s.defs = {}
             s.instructions = {}
-            yield* Effect.forEach(
-              clients,
-              (client) =>
-                Effect.gen(function* () {
-                  const pid = client.transport instanceof StdioClientTransport ? client.transport.pid : null
-                  if (typeof pid === "number") {
-                    const pids = yield* descendants(pid)
-                    for (const dpid of pids) {
-                      try {
-                        process.kill(dpid, "SIGTERM")
-                      } catch {}
-                    }
-                  }
-                  yield* Effect.tryPromise(() => client.close()).pipe(Effect.ignore)
-                }),
-              { concurrency: "unbounded" },
-            )
+            yield* Effect.forEach(clients, stop, { concurrency: "unbounded" })
             pendingOAuthTransports.clear()
           }),
         )
@@ -565,7 +598,7 @@ const layer = Layer.effect(
       delete s.defs[name]
       delete s.instructions[name]
       if (!client) return Effect.void
-      return Effect.tryPromise(() => client.close()).pipe(Effect.ignore)
+      return stop(client)
     }
 
     const storeClient = Effect.fnUntraced(function* (
@@ -584,7 +617,7 @@ const layer = Layer.effect(
       if (instructions) s.instructions[name] = instructions
       else delete s.instructions[name]
       watch(s, name, client, bridge, timeout)
-      if (previous) yield* Effect.tryPromise(() => previous.close()).pipe(Effect.ignore)
+      if (previous) yield* stop(previous)
       return s.status[name]
     })
 
@@ -876,9 +909,7 @@ const layer = Layer.effect(
       const result = yield* startAuth(mcpName)
       if (!result.authorizationUrl) {
         const client = "client" in result ? result.client : undefined
-        const mcpConfig = yield* requireMcpConfig(mcpName).pipe(
-          Effect.tapError(() => Effect.tryPromise(() => client?.close() ?? Promise.resolve()).pipe(Effect.ignore)),
-        )
+        const mcpConfig = yield* requireMcpConfig(mcpName).pipe(Effect.tapError(() => stop(client)))
 
         const listed = client
           ? client.getServerCapabilities()?.tools
@@ -886,7 +917,7 @@ const layer = Layer.effect(
             : []
           : undefined
         if (!client || !listed) {
-          yield* Effect.tryPromise(() => client?.close() ?? Promise.resolve()).pipe(Effect.ignore)
+          yield* stop(client)
           return { status: "failed", error: "Failed to get tools" } satisfies Status
         }
 
