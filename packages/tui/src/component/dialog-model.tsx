@@ -1,13 +1,16 @@
-import { createMemo, createSignal } from "solid-js"
+import { createMemo, createSignal, Show } from "solid-js"
 import { useLocal } from "../context/local"
 import { map, pipe, flatMap, entries, filter, sortBy, take } from "remeda"
 import { DialogSelect } from "../ui/dialog-select"
 import { useDialog } from "../ui/dialog"
 import { createDialogProviderOptions, DialogProvider } from "./dialog-provider"
 import { DialogVariant } from "./dialog-variant"
+import { DialogModelTwoPane } from "./dialog-model-twopane"
+import { DialogNote } from "./dialog-note"
 import * as fuzzysort from "fuzzysort"
 import { useConnected } from "./use-connected"
 import { useSync } from "../context/sync"
+import { useTerminalDimensions } from "@opentui/solid"
 
 export function DialogModel(props: {
   providerID?: string
@@ -19,11 +22,13 @@ export function DialogModel(props: {
   const sync = useSync()
   const dialog = useDialog()
   const [query, setQuery] = createSignal("")
+  const dimensions = useTerminalDimensions()
 
   const connected = useConnected()
   const providers = createDialogProviderOptions()
 
   const showExtra = createMemo(() => connected() && !props.providerID)
+  const useTwoPane = createMemo(() => !props.providerID && dimensions().width >= 70)
 
   const options = createMemo(() => {
     const needle = query().trim()
@@ -79,6 +84,7 @@ export function DialogModel(props: {
             value: { providerID: provider.id, modelID: model },
             title: info.name ?? model,
             releaseDate: info.release_date,
+            contextSize: info.limit?.context ?? 0,
             description: favorites.some((item) => item.providerID === provider.id && item.modelID === model)
               ? "(Favorite)"
               : undefined,
@@ -122,11 +128,19 @@ export function DialogModel(props: {
       : []
 
     if (needle) {
+      const currentProviderID = local.model.current()?.providerID
+      const modelMatches = fuzzysort.go(needle, providerOptions, { keys: ["title", "category"] }).map((x) => x.obj)
+      // Boost options from the current model's provider ahead of equally-scored options,
+      // preserving fuzzysort's score order within each group.
+      const boosted = currentProviderID
+        ? sortBy(
+            modelMatches.map((obj, i) => ({ obj, i })),
+            [(item) => item.i, "asc"], // stable: lower index = better score
+            (item) => (item.obj.value.providerID === currentProviderID ? 0 : 1),
+          ).map((item) => item.obj)
+        : modelMatches
       return [
-        ...sortModelOptions(
-          fuzzysort.go(needle, providerOptions, { keys: ["title", "category"] }).map((x) => x.obj),
-          false,
-        ),
+        ...sortModelOptions(boosted, false),
         ...fuzzysort.go(needle, popularProviders, { keys: ["title"] }).map((x) => x.obj),
       ]
     }
@@ -165,43 +179,92 @@ export function DialogModel(props: {
   }
 
   return (
-    <DialogSelect<ReturnType<typeof options>[number]["value"]>
-      options={options()}
-      actions={[
-        {
-          command: "model.dialog.provider",
-          title: connected() ? "Connect provider" : "View all providers",
-          onTrigger() {
-            dialog.replace(() => <DialogProvider />)
-          },
-        },
-        {
-          command: "model.dialog.favorite",
-          title: "Favorite",
-          hidden: !connected(),
-          onTrigger: (option) => {
-            local.model.toggleFavorite(option.value as { providerID: string; modelID: string })
-          },
-        },
-      ]}
-      onFilter={setQuery}
-      flat={true}
-      skipFilter={true}
-      title={title()}
-      current={props.current ?? local.model.current()}
-    />
+    <Show when={useTwoPane()} fallback={<DialogSelectInner />}>
+      <DialogModelTwoPane title={title()} current={props.current ?? local.model.current()} onSelect={props.onSelect} />
+    </Show>
   )
+
+  function DialogSelectInner() {
+    return (
+      <DialogSelect<ReturnType<typeof options>[number]["value"]>
+        options={options()}
+        actions={[
+          {
+            command: "model.dialog.provider",
+            title: connected() ? "Connect provider" : "View all providers",
+            onTrigger() {
+              dialog.replace(() => <DialogProvider />)
+            },
+          },
+          {
+            command: "model.dialog.favorite",
+            title: "Favorite",
+            hidden: !connected(),
+            onTrigger: (option) => {
+              local.model.toggleFavorite(option.value as { providerID: string; modelID: string })
+            },
+          },
+          {
+            command: "model.dialog.hide",
+            title: "Hide",
+            hidden: !connected(),
+            onTrigger: (option) => {
+              local.model.toggleHidden(option.value as { providerID: string; modelID: string })
+            },
+          },
+          {
+            command: "model.dialog.note",
+            title: "Note",
+            hidden: !connected(),
+            onTrigger: (option) => {
+              dialog.replace(() => <DialogNote model={option.value as { providerID: string; modelID: string }} />)
+            },
+          },
+          {
+            command: "model.dialog.variant",
+            title: "Variants",
+            hidden: !connected(),
+            disabled: (option) => {
+              if (!option) return true
+              const value = option.value as { providerID: string; modelID: string }
+              const current = props.current ?? local.model.current()
+              if (!current) return true
+              if (value.providerID !== current.providerID || value.modelID !== current.modelID) return true
+              const provider = sync.data.provider.find((p) => p.id === value.providerID)
+              const info = provider?.models[value.modelID]
+              if (!info?.variants) return true
+              return Object.keys(info.variants).length === 0
+            },
+            onTrigger: () => {
+              dialog.replace(() => <DialogVariant />)
+            },
+          },
+        ]}
+        onFilter={setQuery}
+        flat={true}
+        skipFilter={true}
+        title={title()}
+        current={props.current ?? local.model.current()}
+      />
+    )
+  }
 }
 
-export function sortModelOptions<T extends { footer?: string; releaseDate: string | number; title: string }>(
-  options: T[],
-  newestFirst: boolean,
-) {
-  if (newestFirst) return sortBy(options, [(option) => option.releaseDate, "desc"], (option) => option.title)
+export function sortModelOptions<
+  T extends { footer?: string; releaseDate: string | number; contextSize?: number; title: string },
+>(options: T[], newestFirst: boolean) {
+  if (newestFirst)
+    return sortBy(
+      options,
+      [(option) => option.releaseDate, "desc"],
+      [(option) => option.contextSize ?? 0, "desc"],
+      (option) => option.title,
+    )
   return sortBy(
     options,
     (option) => option.footer !== "Free",
     [(option) => option.releaseDate, "desc"],
+    [(option) => option.contextSize ?? 0, "desc"],
     (option) => option.title,
   )
 }

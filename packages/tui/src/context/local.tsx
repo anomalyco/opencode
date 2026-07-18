@@ -51,7 +51,16 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const event = useEvent()
     const permission = usePermission()
 
+    // Populated inside createModel once the model store exists; reads the
+    // current hidden list whether or not the caller is in a reactive context.
+    let getHidden: () => { providerID: string; modelID: string }[] = () => []
+
+    function isHidden(model: { providerID: string; modelID: string }) {
+      return getHidden().some((item) => item.providerID === model.providerID && item.modelID === model.modelID)
+    }
+
     function isModelValid(model: { providerID: string; modelID: string }) {
+      if (isHidden(model)) return false
       const provider = sync.data.provider.find((item) => item.id === model.providerID)
       return !!provider?.models[model.modelID]
     }
@@ -143,13 +152,22 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           modelID: string
         }[]
         variant: Record<string, string | undefined>
+        hidden: {
+          providerID: string
+          modelID: string
+        }[]
+        notes: Record<string, string>
       }>({
         ready: false,
         model: {},
         recent: [],
         favorite: [],
         variant: {},
+        hidden: [],
+        notes: {},
       })
+
+      getHidden = () => modelStore.hidden
 
       const filePath = path.join(paths.state, "model.json")
       const state = {
@@ -166,6 +184,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           recent: modelStore.recent,
           favorite: modelStore.favorite,
           variant: modelStore.variant,
+          hidden: modelStore.hidden,
+          notes: modelStore.notes,
         })
       }
 
@@ -177,6 +197,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           if (Array.isArray(value.favorite)) setModelStore("favorite", value.favorite)
           if (typeof value.variant === "object" && value.variant !== null)
             setModelStore("variant", value.variant as Record<string, string | undefined>)
+          if (Array.isArray(value.hidden)) setModelStore("hidden", value.hidden)
+          if (typeof value.notes === "object" && value.notes !== null)
+            setModelStore("notes", value.notes as Record<string, string>)
         })
         .catch(() => {})
         .finally(() => {
@@ -245,6 +268,53 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         },
         favorite() {
           return modelStore.favorite
+        },
+        hidden() {
+          return modelStore.hidden
+        },
+        isHidden(model: { providerID: string; modelID: string }) {
+          return isHidden(model)
+        },
+        toggleHidden(model: { providerID: string; modelID: string }) {
+          batch(() => {
+            const exists = modelStore.hidden.some(
+              (x) => x.providerID === model.providerID && x.modelID === model.modelID,
+            )
+            if (exists) {
+              setModelStore(
+                "hidden",
+                modelStore.hidden.filter((x) => x.providerID !== model.providerID || x.modelID !== model.modelID),
+              )
+            } else {
+              setModelStore("hidden", [...modelStore.hidden, { providerID: model.providerID, modelID: model.modelID }])
+            }
+            save()
+            // Hiding the currently-running model does not change the active session.
+            const current = currentModel()
+            if (!exists && current && current.providerID === model.providerID && current.modelID === model.modelID) {
+              toast.show({
+                variant: "info",
+                message: "Hidden — won't appear in model lists. Current session unaffected.",
+                duration: 3500,
+              })
+            }
+          })
+        },
+        note(model: { providerID: string; modelID: string }) {
+          return modelStore.notes[`${model.providerID}/${model.modelID}`] ?? ""
+        },
+        setNote(model: { providerID: string; modelID: string }, text: string) {
+          batch(() => {
+            const key = `${model.providerID}/${model.modelID}`
+            if (text === "") {
+              const next = { ...modelStore.notes }
+              delete next[key]
+              setModelStore("notes", next)
+            } else {
+              setModelStore("notes", { ...modelStore.notes, [key]: text })
+            }
+            save()
+          })
         },
         parsed: createMemo(() => {
           const value = currentModel()
