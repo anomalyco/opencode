@@ -12,7 +12,6 @@ import { decode64 } from "@/utils/base64"
 import { EventSessionError } from "@opencode-ai/sdk/v2"
 import { Persist, persisted } from "@/utils/persist"
 import { playSoundById } from "@/utils/sound"
-import { createNotificationErrorSound } from "./notification-error-sound"
 import { useGlobal } from "./global"
 import { ServerConnection, useServer } from "./server"
 import { type DraftTab, useTabs } from "./tabs"
@@ -182,9 +181,6 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
     return {
       ready: () => selected().ready(),
       ensureServerState: ensure,
-      error: {
-        muteNextSound: (session: string) => selected().error.muteNextSound(session),
-      },
       session: {
         all: (session: string) => selected().session.all(session),
         unseen: (session: string) => selected().session.unseen(session),
@@ -235,7 +231,6 @@ function createServerNotificationState(input: {
   const [index, setIndex] = createStore<NotificationIndex>(buildNotificationIndex(store.list))
 
   const meta = { pruned: false, disposed: false }
-  const errorSound = createNotificationErrorSound()
 
   const updateUnseen = (scope: "session" | "project", key: string, unseen: Notification[]) => {
     setIndex(scope, "unseen", key, unseen)
@@ -332,7 +327,6 @@ function createServerNotificationState(input: {
 
   const handleSessionIdle = (directory: string, event: { properties: { sessionID?: string } }, time: number) => {
     const sessionID = event.properties.sessionID
-    errorSound.settle(sessionID)
     void lookup(directory, sessionID).then((session) => {
       if (meta.disposed) return
       if (!session) return
@@ -361,14 +355,13 @@ function createServerNotificationState(input: {
     directory: string,
     event: { properties: { sessionID?: string; error?: EventSessionError["properties"]["error"] } },
     time: number,
-    sound: boolean,
   ) => {
     const sessionID = event.properties.sessionID
     void lookup(directory, sessionID).then((session) => {
       if (meta.disposed) return
       if (session?.parentID) return
 
-      if (sound && settings.sounds.errorsEnabled()) {
+      if (settings.sounds.errorsEnabled()) {
         void playSoundById(settings.sounds.errors())
       }
 
@@ -401,22 +394,15 @@ function createServerNotificationState(input: {
       handleSessionIdle(directory, event, time)
       return
     }
-    const sessionID = event.properties.sessionID
-    handleSessionError(directory, event, time, errorSound.shouldPlay(sessionID))
+    handleSessionError(directory, event, time)
   })
   onCleanup(() => {
     meta.disposed = true
     unsub()
-    errorSound.dispose()
   })
 
   return {
     ready,
-    error: {
-      muteNextSound(session: string) {
-        return errorSound.muteNext(session)
-      },
-    },
     session: {
       all(session: string) {
         return index.session.all[session] ?? empty

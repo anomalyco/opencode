@@ -364,7 +364,6 @@ export default function Page() {
   const platform = usePlatform()
   const prompt = usePrompt()
   const comments = useComments()
-  const notification = useNotification()
   const command = useCommand()
   const terminal = useTerminal()
   const [searchParams, setSearchParams] = useSearchParams<{ prompt?: string }>()
@@ -1762,7 +1761,6 @@ export default function Page() {
         serverSync: serverSync(),
         draft: item,
         optimisticBusy: item.sessionDirectory === sdk().directory,
-        muteErrorSound: notification.error.muteNextSound,
       }).catch((err) => {
         setFollowup("failed", input.sessionID, input.id)
         fail(err)

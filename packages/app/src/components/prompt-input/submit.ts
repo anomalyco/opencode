@@ -10,7 +10,6 @@ import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { useLocal, type ModelSelection } from "@/context/local"
 import { usePermission } from "@/context/permission"
-import { useNotification } from "@/context/notification"
 import { type ContextItem, type ImageAttachmentPart, type Prompt, type usePrompt } from "@/context/prompt"
 import { useSDK, type DirectorySDK } from "@/context/sdk"
 import { useSync, type DirectorySync } from "@/context/sync"
@@ -47,7 +46,6 @@ type FollowupSendInput = {
   messageID?: string
   optimisticBusy?: boolean
   before?: () => Promise<boolean> | boolean
-  muteErrorSound?: (sessionID: string) => VoidFunction
 }
 
 const draftText = (prompt: Prompt) => prompt.map((part) => ("content" in part ? part.content : "")).join("")
@@ -106,10 +104,6 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
   }
 
   const messageID = input.messageID ?? Identifier.ascending("message")
-  const cancelErrorSoundMute =
-    text.trim().length === 0 && images.length === 0 && input.draft.context.some((item) => !!item.comment?.trim())
-      ? input.muteErrorSound?.(input.draft.sessionID)
-      : undefined
   const { requestParts, optimisticParts } = buildRequestParts({
     prompt: input.draft.prompt,
     context: input.draft.context,
@@ -151,7 +145,6 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
 
   try {
     if (!(await wait())) {
-      cancelErrorSoundMute?.()
       batch(() => {
         setIdle()
         remove()
@@ -169,7 +162,6 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
     })
     return true
   } catch (err) {
-    cancelErrorSoundMute?.()
     batch(() => {
       setIdle()
       remove()
@@ -209,7 +201,6 @@ export function createPromptSubmit(input: PromptSubmitInput) {
   const serverSync = useServerSync()
   const local = useLocal()
   const permission = usePermission()
-  const notification = useNotification()
   const prompt = input.prompt
   const layout = useLayout()
   const language = useLanguage()
@@ -589,7 +580,6 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       messageID,
       optimisticBusy: sessionDirectory === projectDirectory,
       before: waitForWorktree,
-      muteErrorSound: notification.error.muteNextSound,
     }).catch((err) => {
       pending.delete(pendingKey(session.id))
       if (sessionDirectory === projectDirectory) {
