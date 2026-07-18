@@ -7,7 +7,7 @@ import {
   type Renderable,
 } from "@opentui/core"
 import { useTerminalDimensions } from "@opentui/solid"
-import { batch, createMemo, createSignal, For, Show, type JSX } from "solid-js"
+import { batch, createEffect, createMemo, createSignal, For, Show, type JSX } from "solid-js"
 import { pipe, entries, filter, map, sortBy } from "remeda"
 import { useLocal } from "../context/local"
 import { useSync } from "../context/sync"
@@ -56,6 +56,8 @@ const PROVIDER_PIN_FIRST = (provider: Provider) => provider.id !== "opencode"
 export interface DialogModelTwoPaneProps {
   title?: string
   current?: ModelValue
+  /** Title-bar label for the active model (or unset fallback). */
+  currentLabel?: string
   onSelect?: (providerID: string, modelID: string) => void | Promise<void>
 }
 
@@ -104,6 +106,10 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
   const [focusedPane, setFocusedPane] = createSignal<Focus>("search")
   const [rightSelected, setRightSelected] = createSignal(0)
   const [query, setQuery] = createSignal("")
+  // Keyboard wins until a real mouse move — same pattern as dialog-select.
+  // Prevents hover from fighting arrow-key selection when the cursor sits
+  // over the list (including synthetic mouseover after layout reflow).
+  const [inputMode, setInputMode] = createSignal<"keyboard" | "mouse">("keyboard")
 
   // Open on Favorites; fall back to Recent when Favorites is empty.
   const initial = (() => {
@@ -206,11 +212,11 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
       opts?.favorite ??
       local.model.favorite().some((f) => f.providerID === provider.id && f.modelID === modelID)
     const note = local.model.note({ providerID: provider.id, modelID })
-    const current = props.current ?? local.model.current()
+    const current = props.current
     const row = modelRow(info, modelID, provider, listableModelsForProvider(provider), rowTheme, {
       favorite: isFavorite,
       note,
-      current: current?.providerID === provider.id && current?.modelID === modelID,
+      current: !!current && current.providerID === provider.id && current.modelID === modelID,
       subscription: isSubscriptionFor(provider.id),
       onSelect: () => commitSelect(provider.id, modelID),
     })
@@ -475,6 +481,7 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
   }
 
   function moveLeft(direction: 1 | -1) {
+    setInputMode("keyboard")
     const list = leftEntries()
     if (!list.length) return
     const next = leftSelected() + direction
@@ -490,6 +497,7 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
   }
 
   function moveRight(direction: 1 | -1) {
+    setInputMode("keyboard")
     const list = rightOptions()
     if (!list.length) return
     const next = rightSelected() + direction
@@ -504,9 +512,21 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
   }
 
   function focusProviders() {
+    setInputMode("keyboard")
     focusPane("left")
     previewLeft(leftSelected())
     scrollLeftToSelection()
+  }
+
+  function hoverLeft(index: number) {
+    setLeftSelected(index)
+    focusPane("left")
+    previewLeft(index)
+  }
+
+  function hoverRight(index: number) {
+    setRightSelected(index)
+    focusPane("right")
   }
 
   function activateLeft() {
@@ -565,14 +585,23 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
 
   // Tab: search -> models; from providers/models -> search.
   function tabForward() {
+    setInputMode("keyboard")
     if (focusedPane() === "search") focusPane("right")
     else focusSearch()
   }
 
   function tabBackward() {
+    setInputMode("keyboard")
     if (focusedPane() === "search") focusProviders()
     else focusSearch()
   }
+
+  // When the filter changes, layout can reflow under a stationary cursor and
+  // emit synthetic mouseover — keep keyboard mode so hover does not steal.
+  createEffect(() => {
+    query()
+    setInputMode("keyboard")
+  })
 
   function scrollChildIntoView(scroll: ScrollBoxRenderable, target: Renderable) {
     const y = target.y - scroll.y
@@ -626,6 +655,7 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
         desc: "Focus list",
         group: "Model dialog",
         cmd: () => {
+          setInputMode("keyboard")
           if (searching()) focusPane("right")
           else focusProviders()
         },
@@ -638,7 +668,15 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
     enabled: () => focusedPane() === "left" || focusedPane() === "right",
     bindings: [
       { key: "left", desc: "Focus providers pane", group: "Model dialog", cmd: focusProviders },
-      { key: "right", desc: "Focus models pane", group: "Model dialog", cmd: () => focusPane("right") },
+      {
+        key: "right",
+        desc: "Focus models pane",
+        group: "Model dialog",
+        cmd: () => {
+          setInputMode("keyboard")
+          focusPane("right")
+        },
+      },
     ],
   }))
 
@@ -700,7 +738,7 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
 
   // ----- Layout -----
   const title = () => props.title ?? "Select model"
-  const currentModel = () => props.current ?? local.model.current()
+  const currentModel = () => props.current
   const leftWidth = 24
   const listHeight = createMemo(() => dialogListHeight("xlarge", dimensions().height))
   const focusHint = createMemo(() => {
@@ -719,10 +757,17 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
   return (
     <box paddingLeft={4} paddingRight={4} paddingBottom={1} flexDirection="column" gap={1}>
       {/* Title bar */}
-      <box flexDirection="row" justifyContent="space-between">
-        <text fg={theme.text} attributes={TextAttributes.BOLD}>
-          {title()}
-        </text>
+      <box flexDirection="row" justifyContent="space-between" gap={1}>
+        <box flexDirection="row" justifyContent="space-between" flexGrow={1} gap={2}>
+          <text fg={theme.text} attributes={TextAttributes.BOLD}>
+            {title()}
+          </text>
+          <Show when={props.currentLabel}>
+            <text fg={theme.textMuted} wrapMode="none">
+              ● {props.currentLabel}
+            </text>
+          </Show>
+        </box>
         <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>
           esc
         </text>
@@ -733,6 +778,7 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
         <input
           onInput={(e: string) => {
             setQuery(e)
+            setInputMode("keyboard")
             if (focusedPane() !== "search") setFocusedPane("search")
           }}
           focusedBackgroundColor={theme.backgroundPanel}
@@ -784,19 +830,15 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
                     paddingLeft={1}
                     paddingRight={1}
                     backgroundColor={selected() ? theme.primary : RGBA.fromInts(0, 0, 0, 0)}
-                    onMouseUp={() => {
-                      setLeftSelected(row.index)
-                      focusPane("left")
-                      activateLeft()
-                    }}
+                    onMouseMove={() => setInputMode("mouse")}
+                    onMouseDown={() => hoverLeft(row.index)}
                     onMouseOver={() => {
-                      if (focusedPane() !== "left") focusPane("left")
-                      setLeftSelected(row.index)
-                      const entry = row.entry
-                      if (entry.kind === "provider") setRightMode({ kind: "provider", providerID: entry.providerID })
-                      else if (entry.kind === "favorites") setRightMode({ kind: "favorites" })
-                      else if (entry.kind === "recents") setRightMode({ kind: "recents" })
-                      else if (entry.kind === "hidden") setRightMode({ kind: "hidden" })
+                      if (inputMode() !== "mouse") return
+                      hoverLeft(row.index)
+                    }}
+                    onMouseUp={() => {
+                      hoverLeft(row.index)
+                      activateLeft()
                     }}
                   >
                     <text
@@ -854,14 +896,15 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
                       paddingLeft={1}
                       paddingRight={1}
                       backgroundColor={active() ? theme.primary : RGBA.fromInts(0, 0, 0, 0)}
-                      onMouseUp={() => {
-                        setRightSelected(idx)
-                        focusPane("right")
-                        option.onSelect?.(dialog)
-                      }}
+                      onMouseMove={() => setInputMode("mouse")}
+                      onMouseDown={() => hoverRight(idx)}
                       onMouseOver={() => {
-                        if (focusedPane() !== "right") focusPane("right")
-                        setRightSelected(idx)
+                        if (inputMode() !== "mouse") return
+                        hoverRight(idx)
+                      }}
+                      onMouseUp={() => {
+                        hoverRight(idx)
+                        option.onSelect?.(dialog)
                       }}
                     >
                       <RowContent

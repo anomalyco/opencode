@@ -644,6 +644,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
             <DialogModel
               title="Session title model"
               current={current}
+              currentFallback={sync.data.config.small_model ?? "small model / session model"}
               onSelect={async (providerID, modelID) => {
                 const model = `${providerID}/${modelID}`
                 await sdk.client.global.config

@@ -69,6 +69,7 @@ registerPermissionModuleCommands((ctx) => ({
       <DialogModel
         title="Cruise Control model"
         current={current}
+        currentFallback="unset"
         onSelect={async (providerID, modelID) => {
           const model = `${providerID}/${modelID}`
           const patch = {

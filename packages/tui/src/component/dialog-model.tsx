@@ -1,34 +1,58 @@
+import { TextAttributes } from "@opentui/core"
+import { useTerminalDimensions } from "@opentui/solid"
 import { createMemo, createSignal, Show } from "solid-js"
+import { map, pipe, flatMap, entries, filter, sortBy, take } from "remeda"
+import * as fuzzysort from "fuzzysort"
 import { useLocal } from "../context/local"
 import { useData } from "../context/data"
-import { map, pipe, flatMap, entries, filter, sortBy, take } from "remeda"
+import { useTheme } from "../context/theme"
+import { useSync } from "../context/sync"
 import { DialogSelect } from "../ui/dialog-select"
 import { useDialog } from "../ui/dialog"
+import { Locale } from "../util/locale"
 import { createDialogProviderOptions, DialogProvider } from "./dialog-provider"
 import { DialogVariant, listModelVariants } from "./dialog-variant"
 import { DialogModelTwoPane } from "./dialog-model-twopane"
 import { isSubscriptionProvider } from "../util/model-row"
 import { DialogNote } from "./dialog-note"
-import * as fuzzysort from "fuzzysort"
 import { useConnected } from "./use-connected"
-import { useSync } from "../context/sync"
-import { useTerminalDimensions } from "@opentui/solid"
 
 export function DialogModel(props: {
   providerID?: string
   title?: string
   current?: { providerID: string; modelID: string }
+  /** Shown in the title bar when `current` is unset (config pickers). */
+  currentFallback?: string
   onSelect?: (providerID: string, modelID: string) => void | Promise<void>
 }) {
   const local = useLocal()
   const sync = useSync()
   const data = useData()
   const dialog = useDialog()
+  const { theme } = useTheme()
   const [query, setQuery] = createSignal("")
   const dimensions = useTerminalDimensions()
 
   const connected = useConnected()
   const providers = createDialogProviderOptions()
+
+  // Custom onSelect means this dialog edits a config target, not the session
+  // model — do not fall back to local.model.current() when unset.
+  const selectionCurrent = createMemo(() => {
+    if (props.onSelect) return props.current
+    return props.current ?? local.model.current()
+  })
+
+  const selectionLabel = createMemo(() => {
+    const current = selectionCurrent()
+    if (current) {
+      const provider = sync.data.provider.find((item) => item.id === current.providerID)
+      const modelName = provider?.models[current.modelID]?.name ?? current.modelID
+      const providerName = provider?.name ?? current.providerID
+      return Locale.truncate(`${providerName} / ${modelName}`, 48)
+    }
+    return props.currentFallback
+  })
 
   // openai is subscription when connected via ChatGPT Pro/Plus OAuth.
   const openaiSubscription = createMemo(() => {
@@ -196,7 +220,12 @@ export function DialogModel(props: {
 
   return (
     <Show when={useTwoPane()} fallback={<DialogSelectInner />}>
-      <DialogModelTwoPane title={title()} current={props.current ?? local.model.current()} onSelect={props.onSelect} />
+      <DialogModelTwoPane
+        title={title()}
+        current={selectionCurrent()}
+        currentLabel={selectionLabel()}
+        onSelect={props.onSelect}
+      />
     </Show>
   )
 
@@ -256,7 +285,19 @@ export function DialogModel(props: {
         flat={true}
         skipFilter={true}
         title={title()}
-        current={props.current ?? local.model.current()}
+        titleView={
+          <box flexDirection="row" justifyContent="space-between" flexGrow={1} gap={2}>
+            <text fg={theme.text} attributes={TextAttributes.BOLD}>
+              {title()}
+            </text>
+            <Show when={selectionLabel()}>
+              <text fg={theme.textMuted} wrapMode="none">
+                ● {selectionLabel()}
+              </text>
+            </Show>
+          </box>
+        }
+        current={selectionCurrent()}
       />
     )
   }
