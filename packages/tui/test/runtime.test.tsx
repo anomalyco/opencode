@@ -1,13 +1,42 @@
+import path from "path"
 import { expect, test } from "bun:test"
 import { testRender } from "@opentui/solid"
-import { abbreviateHome } from "../src/runtime"
+import { abbreviateHome, splitDisplayPath } from "../src/runtime"
 import { TuiPathsProvider, useTuiPaths } from "../src/context/runtime"
 
 test("abbreviates paths within home boundaries", () => {
   expect(abbreviateHome("/home/test", "/home/test")).toBe("~")
-  expect(abbreviateHome("/home/test/project", "/home/test")).toBe("~/project")
+  expect(abbreviateHome("/home/test/project", "/home/test")).toBe("~" + path.sep + "project")
   expect(abbreviateHome("/home/tester/project", "/home/test")).toBe("/home/tester/project")
   expect(abbreviateHome("/tmp/project", "/home/test")).toBe("/tmp/project")
+})
+
+test("splits display paths without a leading separator on Windows roots", () => {
+  expect(splitDisplayPath("/home/test/project:main")).toEqual({
+    parent: "/home/test",
+    name: "project:main",
+    sep: "/",
+  })
+  expect(splitDisplayPath("D:\\Projects\\kancode:main")).toEqual({
+    parent: "D:\\Projects",
+    name: "kancode:main",
+    sep: "\\",
+  })
+  expect(splitDisplayPath("D:\\Projects\\kancode")).toEqual({
+    parent: "D:\\Projects",
+    name: "kancode",
+    sep: "\\",
+  })
+  expect(splitDisplayPath("kancode:main")).toEqual({
+    parent: "",
+    name: "kancode:main",
+    sep: "/",
+  })
+  expect(splitDisplayPath("/")).toEqual({
+    parent: "",
+    name: "/",
+    sep: "/",
+  })
 })
 
 test("provides focused immutable runtime inputs", async () => {
