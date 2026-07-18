@@ -411,7 +411,7 @@ const layer = Layer.effect(
                 sessionID,
                 reason: "manual",
                 error: Cause.hasInterruptsOnly(compacted.cause)
-                  ? { type: "aborted", message: "Compaction interrupted" }
+                  ? { type: "aborted", message: "Compaction cancelled" }
                   : { type: "compaction.failed", message: Cause.pretty(compacted.cause) },
                 inputID: unsettled.id,
               })

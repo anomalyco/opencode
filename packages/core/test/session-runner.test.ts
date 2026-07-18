@@ -1892,7 +1892,7 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("records interrupted manual compaction without surfacing an internal failure", () =>
+  it.effect("records cancelled manual compaction without surfacing an internal failure", () =>
     Effect.gen(function* () {
       const session = yield* setup
       response = reply.text("Earlier answer", "text-manual-interrupt-history")
@@ -1916,7 +1916,7 @@ describe("SessionRunnerLLM", () => {
         type: "compaction",
         status: "failed",
         reason: "manual",
-        error: { type: "aborted", message: "Compaction interrupted" },
+        error: { type: "aborted", message: "Compaction cancelled" },
       })
     }),
   )
