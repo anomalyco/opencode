@@ -5,6 +5,7 @@ import { isRecord } from "../util/record"
 import { useTuiPaths } from "./runtime"
 import { createSimpleContext } from "./helper"
 import { editorIntegration } from "../editor"
+import { resolveZedDbPath } from "../editor-zed"
 
 const MCP_PROTOCOL_VERSION = "2025-11-25"
 
@@ -128,7 +129,6 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
     const parsedPort = value ? Number.parseInt(value, 10) : undefined
     const port =
       parsedPort && Number.isInteger(parsedPort) && parsedPort > 0 && parsedPort <= 65535 ? parsedPort : undefined
-    const zedTerminal = process.env.ZED_TERM === "true" || process.env.TERM_PROGRAM?.toLowerCase() === "zed"
     const mentionListeners = new Set<(mention: EditorMention) => void>()
     const WebSocketImpl = props.WebSocketImpl ?? WebSocket
     const [store, setStore] = createStore<{
@@ -185,12 +185,8 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
 
       const connection = resolveEditorConnection(directory, port, editor.connection)
       if (!connection) {
-        if (!zedTerminal) {
-          setStore("status", "disabled")
-          scheduleReconnect()
-          return
-        }
-        if (!editor.selection) {
+        // No Claude/OpenCode IDE websocket — poll Zed's local DB when present.
+        if (!editor.selection || !resolveZedDbPath()) {
           setStore("status", "disabled")
           scheduleReconnect()
           return
@@ -330,7 +326,7 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
 
     return {
       enabled() {
-        return Boolean(resolveEditorConnection(directory, port, editor.connection) || (zedTerminal && editor.selection))
+        return Boolean(resolveEditorConnection(directory, port, editor.connection) || (editor.selection && resolveZedDbPath()))
       },
       connected() {
         return store.status === "connected"

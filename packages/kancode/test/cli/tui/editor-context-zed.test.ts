@@ -84,13 +84,40 @@ test("resolveZedDbPath skips candidates that cannot be stated", async () => {
   await symlink(loop, loop)
   const home = spyOn(os, "homedir").mockImplementation(() => tmp.path)
   const previous = process.env.OPENCODE_ZED_DB
+  const previousLocal = process.env.LOCALAPPDATA
   process.env.OPENCODE_ZED_DB = loop
+  process.env.LOCALAPPDATA = path.join(tmp.path, "Local")
 
   try {
     expect(resolveZedDbPath()).toBeUndefined()
   } finally {
     if (previous === undefined) delete process.env.OPENCODE_ZED_DB
     else process.env.OPENCODE_ZED_DB = previous
+    if (previousLocal === undefined) delete process.env.LOCALAPPDATA
+    else process.env.LOCALAPPDATA = previousLocal
+    home.mockRestore()
+  }
+})
+
+test("resolveZedDbPath finds the Windows Zed database under LOCALAPPDATA", async () => {
+  await using tmp = await tmpdir()
+  const dbPath = path.join(tmp.path, "Zed", "db", "0-stable", "db.sqlite")
+  await mkdir(path.dirname(dbPath), { recursive: true })
+  await Bun.write(dbPath, "")
+
+  const previousDb = process.env.OPENCODE_ZED_DB
+  const previousLocal = process.env.LOCALAPPDATA
+  const home = spyOn(os, "homedir").mockImplementation(() => path.join(tmp.path, "home"))
+  delete process.env.OPENCODE_ZED_DB
+  process.env.LOCALAPPDATA = tmp.path
+
+  try {
+    expect(resolveZedDbPath()).toBe(dbPath)
+  } finally {
+    if (previousDb === undefined) delete process.env.OPENCODE_ZED_DB
+    else process.env.OPENCODE_ZED_DB = previousDb
+    if (previousLocal === undefined) delete process.env.LOCALAPPDATA
+    else process.env.LOCALAPPDATA = previousLocal
     home.mockRestore()
   }
 })
