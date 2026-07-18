@@ -21,8 +21,10 @@ export function interestEqual(left?: EventInterest, right?: EventInterest) {
 /** Map TUI interest into the generated `event.subscribe` query shape. */
 export function subscribeInput(interest?: EventInterest) {
   if (!interest) return undefined
+  const location = interest.location
+  const session = interest.sessions && interest.sessions.length > 0 ? [...interest.sessions] : undefined
   return {
-    ...(interest.location ? { location: interest.location } : {}),
-    ...(interest.sessions && interest.sessions.length > 0 ? { session: [...interest.sessions] } : {}),
+    ...(location ? { location } : {}),
+    ...(session ? { session } : {}),
   }
 }

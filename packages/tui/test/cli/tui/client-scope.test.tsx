@@ -51,8 +51,8 @@ describe("ClientProvider event.scope", () => {
     const { app, client, eventUrls } = await mount({ location: { directory } })
     try {
       await wait(() => client.connection.status() === "connected" && eventUrls.length >= 1)
-      expect(eventUrls[0]!.searchParams.get("location[directory]")).toBe(directory)
-      expect(eventUrls[0]!.searchParams.getAll("session")).toEqual([])
+      expect(eventUrls[0]?.searchParams.get("location[directory]")).toBe(directory)
+      expect(eventUrls[0]?.searchParams.getAll("session")).toEqual([])
     } finally {
       app.renderer.destroy()
     }
@@ -65,8 +65,8 @@ describe("ClientProvider event.scope", () => {
 
       client.event.scope({ location: { directory }, sessions: ["ses_a"] })
       await wait(() => eventUrls.length >= 2)
-      expect(eventUrls[1]!.searchParams.get("location[directory]")).toBe(directory)
-      expect(eventUrls[1]!.searchParams.getAll("session")).toEqual(["ses_a"])
+      expect(eventUrls[1]?.searchParams.get("location[directory]")).toBe(directory)
+      expect(eventUrls[1]?.searchParams.getAll("session")).toEqual(["ses_a"])
     } finally {
       app.renderer.destroy()
     }
