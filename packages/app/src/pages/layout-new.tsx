@@ -1,7 +1,7 @@
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { useNavigate } from "@solidjs/router"
 import { DebugBar } from "@/components/debug-bar"
-import { HelpButton } from "@/components/help-button"
+import { TabsInfoPopup } from "@/components/help-button"
 import { Titlebar, type TitlebarUpdate } from "@/components/titlebar"
 import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
@@ -107,7 +107,7 @@ export default function NewLayout(props: ParentProps) {
         <Suspense>{props.children}</Suspense>
       </main>
       {import.meta.env.DEV && <DebugBar inline />}
-      <HelpButton />
+      <TabsInfoPopup />
       <ToastRegion v2 />
     </div>
   )

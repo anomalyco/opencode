@@ -10,7 +10,7 @@
   width: 256px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   padding: 12px;
 
   background: var(--v2-background-bg-base);
@@ -23,30 +23,37 @@
   pointer-events: none;
 
   transform-origin: var(--kb-hovercard-content-transform-origin);
-  /* Entrance: fade in while scaling up from 0.96 to 1.0. */
-  animation: sessionTabPopoverIn 150ms cubic-bezier(0.16, 1, 0.3, 1);
+  /* Entrance: instant (trying no animation — may revert to 120ms ease-out). */
+  animation: none;
 
   &:focus-visible,
   &:focus-within {
     outline: none;
   }
 
-  /* Exit: subtle fade + scale down, using the same ease-out curve as entry. */
+  /* Exit: instant (trying no animation — may revert to 80ms ease-out). */
   &[data-closed] {
-    animation: sessionTabPopoverOut 100ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    animation: none;
+  }
+
+  /* Warm streak (rapid tab hopping): appear/disappear instantly so the enter
+     and exit animations don't repeat on every tab. */
+  &[data-instant],
+  &[data-instant][data-closed] {
+    animation: none;
   }
 
   [data-slot="header"] {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
     width: 100%;
   }
 
   [data-slot="project"] {
     font-weight: 440;
     font-size: 13px;
-    line-height: 1;
+    line-height: 1.5;
     letter-spacing: -0.04px;
     color: var(--v2-text-text-muted);
   }
@@ -54,7 +61,7 @@
   [data-slot="title"] {
     font-weight: 530;
     font-size: 13px;
-    line-height: 1.2;
+    line-height: 1.5;
     letter-spacing: -0.04px;
     color: var(--v2-text-text-base);
     overflow-wrap: anywhere;
@@ -62,31 +69,18 @@
 
   [data-slot="row"] {
     display: flex;
-    align-items: center;
-    gap: 6px;
     width: 100%;
     min-width: 0;
-  }
-
-  [data-slot="icon"] {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    width: 16px;
-    height: 16px;
-    color: var(--v2-icon-icon-muted);
   }
 
   [data-slot="detail"] {
     flex: 1 0 0;
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    /* Wrap the full path onto the next line instead of clipping the end. */
+    overflow-wrap: anywhere;
     font-weight: 440;
     font-size: 13px;
-    line-height: 1;
+    line-height: 1.5;
     letter-spacing: -0.04px;
     color: var(--v2-text-text-muted);
   }

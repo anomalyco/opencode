@@ -17,14 +17,11 @@ import { createTabPromptState } from "@/context/prompt"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { canStartTabDrag, isTabCloseTarget } from "./titlebar-tab-gesture"
 
-const sortableTransition = { duration: 0 }
-
 function SessionTabSlot(props: {
   tab: SessionTab
   id: string
   index: () => number
   active: () => boolean
-  activeServerKey: ServerConnection.Key
   forceTruncate: boolean
   serverCtx: () => ServerCtx | undefined
   onNavigate: (element: HTMLDivElement) => void
@@ -43,6 +40,7 @@ function SessionTabSlot(props: {
   let ref!: HTMLDivElement
   const sdk = createMemo(() => props.serverCtx()?.sdk ?? null)
   const cachedSession = createMemo(() => props.serverCtx()?.sync.session.peek(props.tab.sessionId))
+  const persisted = createMemo(() => tabs.info[props.id])
   const [loadedSession] = createResource(
     () => {
       const ctx = props.serverCtx()
@@ -74,8 +72,10 @@ function SessionTabSlot(props: {
 
   createEffect(() => {
     const value = session()
+    if (!value) return
+    tabs.rememberSessionInfo(props.tab, value)
     const current = sdk()
-    if (!value || !current) return
+    if (!current) return
     createTabPromptState(tabs, props.tab, current.scope, {
       dir: base64Encode(value.directory),
       id: value.id,
@@ -89,7 +89,7 @@ function SessionTabSlot(props: {
       data-tab-key={props.id}
       data-active={props.active()}
       class="relative flex w-56 min-w-7 max-w-56 flex-shrink"
-      classList={{ hidden: !session() && !missingSession() }}
+      classList={{ hidden: !session() && !missingSession() && !persisted()?.title }}
     >
       <TabNavItem
         ref={(el) => {
@@ -98,7 +98,7 @@ function SessionTabSlot(props: {
         href={tabHref(props.tab)}
         server={props.tab.server}
         session={session}
-        fallbackTitle={missingSession() ? language.t("session.tab.unknown") : undefined}
+        fallbackTitle={persisted()?.title ?? (missingSession() ? language.t("session.tab.unknown") : undefined)}
         onTitleChange={(title) => {
           const value = session()
           const ctx = props.serverCtx()
@@ -112,7 +112,6 @@ function SessionTabSlot(props: {
         onNavigate={() => props.onNavigate(ref)}
         onClose={props.onClose}
         active={props.active()}
-        activeServer={props.tab.server === props.activeServerKey}
         forceTruncate={props.forceTruncate}
         dragging={sortable.isDragSource()}
       />
@@ -165,7 +164,6 @@ function DraftTabSlot(props: {
 export function TitlebarTabStrip(props: {
   tabs: Tab[]
   currentTab: () => Tab | undefined
-  activeServerKey: ServerConnection.Key
   forceTruncate: boolean
   onNavigate: (tab: Tab, el?: HTMLDivElement) => void
   onClose: (tab: Tab) => void
@@ -271,7 +269,6 @@ export function TitlebarTabStrip(props: {
                       id={id}
                       index={index}
                       active={() => props.currentTab() === tab}
-                      activeServerKey={props.activeServerKey}
                       forceTruncate={props.forceTruncate}
                       serverCtx={serverCtx}
                       onNavigate={(element) => {

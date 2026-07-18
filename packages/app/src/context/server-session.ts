@@ -14,13 +14,14 @@ import type {
 import { batch } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { diffs as cleanDiffs, message as cleanMessage } from "@/utils/diffs"
+import { sessionNotFoundError } from "@/utils/server-errors"
 import { rootSession } from "@/utils/session-route"
 import { dropSessionCaches, pickSessionCacheEvictions, SESSION_CACHE_LIMIT } from "./global-sync/session-cache"
 
 const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
 const cmpMessage = (a: Message, b: Message) => a.time.created - b.time.created || cmp(a.id, b.id)
 const SKIP_PARTS = new Set(["patch", "step-start", "step-finish"])
-const initialMessagePageSize = 2
+const initialMessagePageSize = 20
 const historyMessagePageSize = 200
 const sessionInfoLimit = 2_048
 const emptyIDs: ReadonlySet<string> = new Set()
@@ -52,6 +53,11 @@ type MessageLoadState = {
   orphanParents: Set<string>
   clearedMessageParts: Set<string>
 }
+
+type MessageLoadBaseline = Pick<
+  MessageLoadState,
+  "touchedMessages" | "retainedMessages" | "touchedParts" | "clearedMessageParts"
+>
 
 function mergeOptimisticPage(page: MessagePage, items: OptimisticItem[]) {
   if (items.length === 0) return { ...page, observed: [] as { messageID: string; parts: Part[] }[] }
@@ -235,7 +241,7 @@ export function createServerSession(client: OpencodeClient, options?: { retry?: 
     if (pending) return pending
     const active = generation(sessionID)
     const request = client.session.get({ sessionID }).then((result) => {
-      if (!result.data) throw new Error(`Session not found: ${sessionID}`)
+      if (!result.data) throw sessionNotFoundError(sessionID)
       if (generations.get(sessionID) !== active) return result.data
       return remember(result.data)
     })
@@ -346,7 +352,7 @@ export function createServerSession(client: OpencodeClient, options?: { retry?: 
     load.touchedParts.set(messageID, new Set([partID]))
   }
 
-  const resetMessageLoad = (sessionID: string, load: MessageLoadState) => {
+  const resetMessageLoad = (sessionID: string, load: MessageLoadState, baseline?: MessageLoadBaseline) => {
     load.touchedMessages.clear()
     load.retainedMessages.clear()
     load.touchedParts.clear()
@@ -379,7 +385,26 @@ export function createServerSession(client: OpencodeClient, options?: { retry?: 
       parts.forEach((partID) => touched.add(partID))
       load.touchedParts.set(messageID, touched)
     }
+    baseline?.touchedMessages.forEach((messageID) => load.touchedMessages.add(messageID))
+    baseline?.retainedMessages.forEach((messageID) => load.retainedMessages.add(messageID))
+    baseline?.clearedMessageParts.forEach((messageID) => load.clearedMessageParts.add(messageID))
+    baseline?.touchedParts.forEach((parts, messageID) => {
+      const touched = load.touchedParts.get(messageID) ?? new Set<string>()
+      parts.forEach((partID) => touched.add(partID))
+      load.touchedParts.set(messageID, touched)
+    })
   }
+
+  const messageLoadBaseline = (load: MessageLoadState, exclude: string): MessageLoadBaseline => ({
+    touchedMessages: new Set([...load.touchedMessages].filter((messageID) => messageID !== exclude)),
+    retainedMessages: new Set([...load.retainedMessages].filter((messageID) => messageID !== exclude)),
+    touchedParts: new Map(
+      [...load.touchedParts]
+        .filter(([messageID]) => messageID !== exclude)
+        .map(([messageID, parts]) => [messageID, new Set(parts)]),
+    ),
+    clearedMessageParts: new Set([...load.clearedMessageParts].filter((messageID) => messageID !== exclude)),
+  })
 
   const evict = (sessionIDs: string[]) => {
     if (sessionIDs.length === 0) return
@@ -456,6 +481,18 @@ export function createServerSession(client: OpencodeClient, options?: { retry?: 
       })),
       cursor: response.response.headers.get("x-next-cursor") ?? undefined,
       complete: !response.response.headers.get("x-next-cursor"),
+    }
+  }
+
+  const fetchMessage = async (sessionID: string, messageID: string, onAttempt?: () => void) => {
+    const response = await (options?.retry ?? retry)(() => {
+      onAttempt?.()
+      return client.session.message({ sessionID, messageID })
+    })
+    if (!response.data?.info?.id) throw new Error(`Message not found: ${messageID}`)
+    return {
+      message: cleanMessage(response.data.info),
+      parts: response.data.parts.filter((part) => !!part?.id).sort((a, b) => cmp(a.id, b.id)),
     }
   }
 
@@ -577,36 +614,79 @@ export function createServerSession(client: OpencodeClient, options?: { retry?: 
     messageLoads.set(sessionID, load)
     setMeta("loading", sessionID, true)
     let applied = false
-    await fetchMessages(sessionID, limit, before, () => resetMessageLoad(sessionID, load))
-      .then((page) => {
-        if (generations.get(sessionID) !== active) return
-        const first = page.session.reduce<Message | undefined>(
-          (oldest, message) => (!oldest || cmpMessage(message, oldest) < 0 ? message : oldest),
-          undefined,
-        )
-        const preserveUnfetched =
-          mode === "prepend" || (!page.complete && (!first || ((message: Message) => cmpMessage(message, first) < 0)))
-        applyMessagePage(
-          sessionID,
-          page,
-          messageLoads.get(sessionID) === load ? load : undefined,
-          preserveUnfetched,
-          mode !== "prepend",
-        )
-        applied = true
-      })
-      .finally(() => {
-        if (!applied && generations.get(sessionID) === active && messageLoads.get(sessionID) === load) {
-          for (const messageID of load.orphanParents) {
-            if (!orphanParts.get(sessionID)?.has(messageID)) continue
-            setData(produce((draft) => deleteMessageParts(draft, messageID)))
-            orphanParts.get(sessionID)?.delete(messageID)
-          }
-          if (orphanParts.get(sessionID)?.size === 0) orphanParts.delete(sessionID)
+    try {
+      const page = await fetchMessages(sessionID, limit, before, () => resetMessageLoad(sessionID, load))
+      const first = page.session.reduce<Message | undefined>(
+        (oldest, message) => (!oldest || cmpMessage(message, oldest) < 0 ? message : oldest),
+        undefined,
+      )
+      if (generations.get(sessionID) !== active) return
+
+      const parents = [] as Awaited<ReturnType<typeof fetchMessage>>[]
+      if (mode !== "prepend") {
+        const users = new Set([
+          ...page.session.filter((message) => message.role === "user").map((message) => message.id),
+          ...(data.message[sessionID] ?? [])
+            .filter((message) => {
+              if (message.role !== "user") return false
+              const item = optimistic.get(sessionID)?.get(message.id)
+              return load.touchedMessages.has(message.id) && (!item || item.confirmedMessage === true)
+            })
+            .map((message) => message.id),
+        ])
+        const parentIDs = [
+          ...new Set(
+            page.session.flatMap((message) =>
+              message.role === "assistant" && !users.has(message.parentID) ? [message.parentID] : [],
+            ),
+          ),
+        ]
+        for (const parentID of parentIDs) {
+          if (generations.get(sessionID) !== active) break
+          const parent = await fetchMessage(sessionID, parentID, () =>
+            resetMessageLoad(sessionID, load, messageLoadBaseline(load, parentID)),
+          )
+          if (parent.message.role !== "user") throw new Error(`Assistant parent is not a user message: ${parentID}`)
+          parents.push(parent)
         }
-        if (messageLoads.get(sessionID) === load) messageLoads.delete(sessionID)
-        if (generations.get(sessionID) === active) setMeta("loading", sessionID, false)
-      })
+      }
+      if (generations.get(sessionID) !== active) return
+      const result =
+        mode === "prepend"
+          ? page
+          : {
+              ...page,
+              session: merge(
+                page.session,
+                parents.map((parent) => parent.message),
+              ),
+              part: merge(
+                page.part,
+                parents.map((parent) => ({ id: parent.message.id, part: parent.parts })),
+              ),
+            }
+      const preserveUnfetched =
+        mode === "prepend" || (!result.complete && (!first || ((message: Message) => cmpMessage(message, first) < 0)))
+      applyMessagePage(
+        sessionID,
+        result,
+        messageLoads.get(sessionID) === load ? load : undefined,
+        preserveUnfetched,
+        mode !== "prepend",
+      )
+      applied = true
+    } finally {
+      if (!applied && generations.get(sessionID) === active && messageLoads.get(sessionID) === load) {
+        for (const messageID of load.orphanParents) {
+          if (!orphanParts.get(sessionID)?.has(messageID)) continue
+          setData(produce((draft) => deleteMessageParts(draft, messageID)))
+          orphanParts.get(sessionID)?.delete(messageID)
+        }
+        if (orphanParts.get(sessionID)?.size === 0) orphanParts.delete(sessionID)
+      }
+      if (messageLoads.get(sessionID) === load) messageLoads.delete(sessionID)
+      if (generations.get(sessionID) === active) setMeta("loading", sessionID, false)
+    }
   }
 
   const sync = (sessionID: string, options?: { force?: boolean; messageLimit?: number }) => {

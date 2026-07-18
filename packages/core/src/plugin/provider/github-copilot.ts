@@ -1,19 +1,11 @@
 import { Effect } from "effect"
 import { ModelV2 } from "../../model"
-import { define } from "../internal"
 import { ProviderV2 } from "../../provider"
+import type { PluginContext } from "@opencode-ai/plugin/v2/effect"
 
-function shouldUseResponses(modelID: string) {
-  // Copilot supports Responses for GPT-5 class models, except mini variants
-  // which still need the chat-completions endpoint.
-  const match = /^gpt-(\d+)/.exec(modelID)
-  if (!match) return false
-  return Number(match[1]) >= 5 && !modelID.startsWith("gpt-5-mini")
-}
-
-export const GithubCopilotPlugin = define({
+export const GithubCopilotPlugin = {
   id: "github-copilot",
-  effect: Effect.fn(function* (ctx) {
+  effect: Effect.fn(function* (ctx: PluginContext) {
     yield* ctx.catalog.transform(
       Effect.fn(function* (evt) {
         const item = evt.provider.get(ProviderV2.ID.githubCopilot)
@@ -39,10 +31,22 @@ export const GithubCopilotPlugin = define({
           evt.language = evt.sdk.languageModel(evt.model.api.id)
           return
         }
-        evt.language = shouldUseResponses(evt.model.api.id)
-          ? evt.sdk.responses(evt.model.api.id)
-          : evt.sdk.chat(evt.model.api.id)
+        if (evt.options.endpoint === "responses" && evt.sdk.responses) {
+          evt.language = evt.sdk.responses(evt.model.api.id)
+          return
+        }
+        if (evt.options.endpoint === "chat" && evt.sdk.chat) {
+          evt.language = evt.sdk.chat(evt.model.api.id)
+          return
+        }
+        const match = /^gpt-(\d+)/.exec(evt.model.api.id)
+        // Copilot supports Responses for GPT-5 class models, except mini variants
+        // which still need the chat-completions endpoint.
+        evt.language =
+          match && Number(match[1]) >= 5 && !evt.model.api.id.startsWith("gpt-5-mini") && evt.sdk.responses
+            ? evt.sdk.responses(evt.model.api.id)
+            : evt.sdk.chat(evt.model.api.id)
       }),
     )
   }),
-})
+}

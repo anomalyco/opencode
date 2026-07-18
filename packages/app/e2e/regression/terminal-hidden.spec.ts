@@ -7,7 +7,7 @@ const projectID = "proj_hidden_terminal_regression"
 const sessionID = "ses_hidden_terminal_regression"
 const title = "Hidden terminal regression"
 
-test("unmounts the terminal renderer while the pane is hidden", async ({ page }) => {
+test("unmounts the terminal panel while it is hidden", async ({ page }) => {
   await page.setViewportSize({ width: 1400, height: 900 })
   await mockOpenCodeServer(page, {
     directory,
@@ -64,13 +64,14 @@ test("unmounts the terminal renderer while the pane is hidden", async ({ page })
   await expect(page.locator('[data-component="terminal"]')).toBeVisible()
 
   await page.keyboard.press("Control+Backquote")
-  await expect(panel).toHaveAttribute("aria-hidden", "true")
+  await expect(panel).toHaveCount(0)
   await expect(page.locator('[data-component="terminal"]')).toHaveCount(0)
 
   await page.setViewportSize({ width: 1200, height: 700 })
   await expect(page.locator('[data-component="terminal"]')).toHaveCount(0)
 
   await page.keyboard.press("Control+Backquote")
+  await expect(panel).toBeVisible()
   await expect(page.locator('[data-component="terminal"]')).toBeVisible()
 })
 

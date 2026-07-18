@@ -97,44 +97,46 @@ export interface ToastV2Options {
 
 export function showToastV2(options: ToastV2Options | string) {
   const opts = typeof options === "string" ? { description: options } : options
-  const resolvedIcon = children(() => opts.icon)
-  return toaster.show((props) => (
-    <ToastV2 toastId={props.toastId} duration={opts.duration} persistent={opts.persistent}>
-      <div data-slot="toast-v2-header">
-        <Show when={resolvedIcon()}>
-          <ToastV2.Icon>{resolvedIcon()}</ToastV2.Icon>
+  return toaster.show((props) => {
+    const resolvedIcon = children(() => opts.icon)
+    return (
+      <ToastV2 toastId={props.toastId} duration={opts.duration} persistent={opts.persistent}>
+        <div data-slot="toast-v2-header">
+          <Show when={resolvedIcon()}>
+            <ToastV2.Icon>{resolvedIcon()}</ToastV2.Icon>
+          </Show>
+          <ToastV2.Content>
+            <Show when={opts.title}>
+              <ToastV2.Title>{opts.title}</ToastV2.Title>
+            </Show>
+            <Show when={opts.description}>
+              <ToastV2.Description>{opts.description}</ToastV2.Description>
+            </Show>
+          </ToastV2.Content>
+          <ToastV2.CloseButton />
+        </div>
+        <Show when={opts.actions?.length}>
+          <ToastV2.Actions>
+            {opts.actions!.map((action) => (
+              <ButtonV2
+                variant={action.variant === "secondary" ? "ghost" : "neutral"}
+                size="small"
+                data-action-variant={action.variant ?? "primary"}
+                onClick={() => {
+                  if (typeof action.onClick === "function") {
+                    action.onClick()
+                  }
+                  toaster.dismiss(props.toastId)
+                }}
+              >
+                {action.label}
+              </ButtonV2>
+            ))}
+          </ToastV2.Actions>
         </Show>
-        <ToastV2.Content>
-          <Show when={opts.title}>
-            <ToastV2.Title>{opts.title}</ToastV2.Title>
-          </Show>
-          <Show when={opts.description}>
-            <ToastV2.Description>{opts.description}</ToastV2.Description>
-          </Show>
-        </ToastV2.Content>
-        <ToastV2.CloseButton />
-      </div>
-      <Show when={opts.actions?.length}>
-        <ToastV2.Actions>
-          {opts.actions!.map((action) => (
-            <ButtonV2
-              variant={action.variant === "secondary" ? "ghost" : "neutral"}
-              size="small"
-              data-action-variant={action.variant ?? "primary"}
-              onClick={() => {
-                if (typeof action.onClick === "function") {
-                  action.onClick()
-                }
-                toaster.dismiss(props.toastId)
-              }}
-            >
-              {action.label}
-            </ButtonV2>
-          ))}
-        </ToastV2.Actions>
-      </Show>
-    </ToastV2>
-  ))
+      </ToastV2>
+    )
+  })
 }
 
 export interface ToastV2PromiseOptions<T, U = unknown> {

@@ -14,7 +14,7 @@
   font-style: normal;
   font-weight: 530;
   font-size: 13px;
-  line-height: 1;
+  line-height: 20px;
   color: var(--v2-text-text-base);
   text-shadow: none;
   font-variant-numeric: tabular-nums;
@@ -109,6 +109,29 @@
 }
 
 [data-component="button-v2"][data-variant="danger"]:is(:disabled, [data-state="disabled"]) {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+[data-component="button-v2"][data-variant="warning"] {
+  background-color: var(--v2-background-bg-button-neutral);
+  color: var(--v2-state-fg-warning);
+  box-shadow: var(--v2-elevation-button-neutral);
+}
+
+[data-component="button-v2"][data-variant="warning"]:is(:hover, [data-state="hover"]):not(:disabled) {
+  background-image:
+    linear-gradient(90deg, var(--v2-overlay-simple-overlay-hover) 0%, var(--v2-overlay-simple-overlay-hover) 100%),
+    linear-gradient(90deg, var(--v2-background-bg-button-neutral) 0%, var(--v2-background-bg-button-neutral) 100%);
+}
+
+[data-component="button-v2"][data-variant="warning"]:is(:active, [data-state="pressed"]):not(:disabled) {
+  background-image:
+    linear-gradient(90deg, var(--v2-overlay-simple-overlay-pressed) 0%, var(--v2-overlay-simple-overlay-pressed) 100%),
+    linear-gradient(90deg, var(--v2-background-bg-button-neutral) 0%, var(--v2-background-bg-button-neutral) 100%);
+}
+
+[data-component="button-v2"][data-variant="warning"]:is(:disabled, [data-state="disabled"]) {
   opacity: 0.5;
   cursor: not-allowed;
 }

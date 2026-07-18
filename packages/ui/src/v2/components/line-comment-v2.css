@@ -6,6 +6,7 @@
 
 [data-component="line-comment-v2"] {
   box-sizing: border-box;
+  font-family: var(--v2-font-family-sans);
   font-variant-numeric: tabular-nums;
   min-width: 0;
   width: 100%;
@@ -201,4 +202,57 @@
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
+}
+
+[data-component="line-comment-v2"][data-variant="editor"] [data-slot="line-comment-v2-mention-list"] {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 180px;
+  overflow: auto;
+  margin-top: 8px;
+  padding: 4px;
+  border: 0.5px solid var(--v2-border-border-muted);
+  border-radius: 6px;
+  background: var(--v2-background-bg-layer-02);
+}
+
+[data-component="line-comment-v2"][data-variant="editor"] [data-slot="line-comment-v2-mention-item"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--v2-text-text-base);
+  text-align: left;
+  cursor: pointer;
+}
+
+[data-component="line-comment-v2"][data-variant="editor"] [data-slot="line-comment-v2-mention-item"][data-active] {
+  background: var(--v2-background-bg-layer-03);
+}
+
+[data-component="line-comment-v2"][data-variant="editor"] [data-slot="line-comment-v2-mention-path"] {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 16px;
+}
+
+[data-component="line-comment-v2"][data-variant="editor"] [data-slot="line-comment-v2-mention-dir"] {
+  min-width: 0;
+  color: var(--v2-text-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+[data-component="line-comment-v2"][data-variant="editor"] [data-slot="line-comment-v2-mention-file"] {
+  color: var(--v2-text-text-base);
+  white-space: nowrap;
 }
