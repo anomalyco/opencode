@@ -5326,10 +5326,8 @@ body {
 
 [data-page="stats"] [data-component="comparison-card"] b {
   min-width: 0;
-  overflow: hidden;
   font: inherit;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 [data-page="stats"] [data-component="comparison-card"] i {
@@ -5777,9 +5775,7 @@ body {
 }
 
 [data-page="stats"] [data-slot="compare-home-select-name"] {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 [data-page="stats"] [data-slot="compare-home-select-panel"][data-selected="true"] [data-slot="compare-home-plus"] {
@@ -5810,10 +5806,10 @@ body {
 [data-page="stats"] [data-component="compare-home-card"] {
   position: relative;
   display: grid;
-  grid-template-rows: 62px 1px 20px 20px;
+  grid-template-rows: 62px 1px auto 20px;
   gap: 16px;
   min-width: 0;
-  height: 184px;
+  min-height: 184px;
   box-sizing: border-box;
   padding: 16px;
   overflow: hidden;
@@ -5895,10 +5891,11 @@ body {
 [data-page="stats"] [data-slot="compare-home-card-models"] {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
   color: var(--stats-muted);
   font-weight: 400;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 [data-page="stats"] [data-slot="compare-home-card-models"] span {
@@ -6119,11 +6116,9 @@ body {
 
 [data-page="stats"] [data-slot="compare-radar-legend"] strong,
 [data-page="stats"] [data-slot="compare-radar-legend"] small {
-  overflow: hidden;
   font-size: 13px;
   line-height: 18px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 [data-page="stats"] [data-slot="compare-radar-legend"] strong {
@@ -6433,13 +6428,11 @@ body {
 
 [data-page="stats"] [data-slot="compare-detail-select-name"] {
   min-width: 0;
-  overflow: hidden;
   color: var(--stats-text);
   font-size: 13px;
   font-weight: 500;
   line-height: 18px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 [data-page="stats"] button[data-slot="compare-detail-select-model"] > svg {
@@ -6915,13 +6908,11 @@ body {
 
 [data-page="stats"] [data-slot="compare-model-modal-row-main"] > span:last-child {
   min-width: 0;
-  overflow: hidden;
   color: var(--stats-text);
   font-size: 13px;
   font-weight: 500;
   line-height: 1.1;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 [data-page="stats"] [data-slot="compare-model-modal-badge"] {
@@ -6978,13 +6969,11 @@ body {
 
 [data-page="stats"] [data-slot="compare-model-modal-detail-header"] strong {
   min-width: 0;
-  overflow: hidden;
   color: var(--stats-text);
   font-size: 13px;
   font-weight: 500;
   line-height: 1.1;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 [data-page="stats"] [data-slot="compare-model-modal-description"] {
@@ -7433,13 +7422,15 @@ body {
 
 @media (min-width: 90rem) {
   [data-page="stats"] [data-slot="header-bar"] {
+    display: grid;
+    grid-template-columns: minmax(max-content, 1fr) auto minmax(max-content, 1fr);
     gap: 32px;
   }
 
   [data-page="stats"] [data-slot="brand"],
   [data-page="stats"] [data-component="section-nav"],
   [data-page="stats"] [data-slot="header-actions"] {
-    flex: 1 1 0;
+    min-width: 0;
   }
 
   [data-page="stats"] [data-slot="brand"] {
