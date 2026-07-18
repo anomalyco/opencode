@@ -368,10 +368,6 @@ function ApiMethod(props: ApiMethodProps) {
         ({
           opencode: (
             <box gap={1}>
-              <text fg={theme.textMuted}>
-                OpenCode Zen is an upstream provider. KanCode does not operate this service; connect a key only if you
-                already use it.
-              </text>
               <text fg={theme.text}>
                 Get a key at <span style={{ fg: theme.primary }}>https://opencode.ai/zen</span>
               </text>
