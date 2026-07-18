@@ -152,6 +152,35 @@ test("resolves directory autocomplete from the current browser root", async () =
   expect(directories).toEqual(["/repo", "/repo/src"])
 })
 
+test("lists the current directory when the search is empty", async () => {
+  const calls: string[] = []
+  const sdk = {
+    client: {
+      file: {
+        list: (input: { directory: string }) => {
+          calls.push(`list:${input.directory}`)
+          return Promise.resolve({
+            data: [
+              { name: "src", absolute: "/repo/src", type: "directory" },
+              { name: "README.md", absolute: "/repo/README.md", type: "file" },
+            ],
+          })
+        },
+      },
+      find: {
+        files: () => {
+          calls.push("find")
+          return Promise.resolve({ data: [] })
+        },
+      },
+    },
+  } as unknown as Parameters<typeof createDirectorySearch>[0]["sdk"]
+  const search = createDirectorySearch({ sdk, home: () => "/home/luke", base: () => "/repo" })
+
+  expect(await search("")).toEqual(["/repo/src"])
+  expect(calls).toEqual(["list:/repo"])
+})
+
 test("identifies the next directory level to preload", () => {
   expect(
     preloadTreeDirectories("src/", [

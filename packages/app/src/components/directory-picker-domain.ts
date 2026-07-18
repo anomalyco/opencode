@@ -368,7 +368,7 @@ export function createDirectorySearch(args: { sdk: ServerSDK; base: () => string
     const input = scoped(value)
     if (!input) return [] as string[]
     const raw = normalizePickerDrive(value)
-    const pathInput = raw.startsWith("~") || !!pickerRoot(raw) || raw.includes("/")
+    const pathInput = !raw || raw.startsWith("~") || !!pickerRoot(raw) || raw.includes("/")
     const query = normalizePickerDrive(input.path)
     if (!pathInput) {
       const results = await args.sdk.client.find
