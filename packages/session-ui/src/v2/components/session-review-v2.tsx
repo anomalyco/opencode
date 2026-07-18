@@ -165,15 +165,11 @@ export function SessionReviewV2(props: SessionReviewV2Props) {
   }
 
   const prev = () => {
-    const files = props.files
-    if (files.length === 0) return
-    return files[(fileIndex() - 1 + files.length) % files.length]
+    return props.files[fileIndex() - 1]
   }
 
   const next = () => {
-    const files = props.files
-    if (files.length === 0) return
-    return files[(fileIndex() + 1) % files.length]
+    return props.files[fileIndex() + 1]
   }
 
   const canCycle = () => props.files.length > 0
@@ -195,8 +191,10 @@ export function SessionReviewV2(props: SessionReviewV2Props) {
     const target = event.target
     if (target instanceof HTMLElement && (target.isContentEditable || target.closest("input, textarea, select"))) return
     if (!props.hasDiffs || !canCycle()) return
+    const file = event.key === "<" ? prev() : next()
+    if (!file) return
     event.preventDefault()
-    cycle(event.key === "<" ? prev() : next())
+    cycle(file)
   })
 
   const toolbarStart = () => (
@@ -217,6 +215,7 @@ export function SessionReviewV2(props: SessionReviewV2Props) {
       <div class="flex items-center">
         <TooltipV2
           openDelay={2000}
+          inactive={!prev()}
           value={
             <>
               {i18n.t("ui.sessionReviewV2.previousFile")}
@@ -229,13 +228,14 @@ export function SessionReviewV2(props: SessionReviewV2Props) {
             variant="ghost"
             size="small"
             class="session-review-v2-file-nav-button"
-            disabled={!canCycle()}
+            disabled={!prev()}
             onClick={() => cycle(prev())}
             aria-label={i18n.t("ui.sessionReviewV2.previousFile")}
           />
         </TooltipV2>
         <TooltipV2
           openDelay={2000}
+          inactive={!next()}
           value={
             <>
               {i18n.t("ui.sessionReviewV2.nextFile")}
@@ -248,7 +248,7 @@ export function SessionReviewV2(props: SessionReviewV2Props) {
             variant="ghost"
             size="small"
             class="session-review-v2-file-nav-button"
-            disabled={!canCycle()}
+            disabled={!next()}
             onClick={() => cycle(next())}
             aria-label={i18n.t("ui.sessionReviewV2.nextFile")}
           />

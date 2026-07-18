@@ -253,6 +253,7 @@ export const dict = {
   "zen.privacy.exceptionsLink": "following exceptions",
 
   "go.title": "OpenCode Go | Low cost coding models for everyone",
+  "go.banner.text": "Kimi K3 gets 2× usage limits for a limited time",
   "go.meta.description":
     "Go starts at $5 for your first month, then $10/month, with generous 5-hour request limits for Grok 4.5, GLM-5.2, GLM-5.1, Kimi K3, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro, and DeepSeek V4 Flash.",
   "go.hero.title": "Low cost coding models for everyone",
@@ -270,7 +271,6 @@ export const dict = {
   "go.graph.go": "Go",
   "go.graph.label": "Requests per 5 hour",
   "go.graph.usageLimits": "Usage limits",
-  "go.graph.tick": "{{n}}x",
   "go.graph.aria": "Requests per 5h: {{free}} vs {{go}}",
 
   "go.testimonials.brand.zen": "Zen",
@@ -777,6 +777,10 @@ export const dict = {
   "enterprise.faq.q4": "Is my data secure with OpenCode Enterprise?",
   "enterprise.faq.a4":
     "Yes. OpenCode does not store your code or context data. All processing happens locally or through direct API calls to your AI provider. With central config and SSO integration, your data remains secure within your organization's infrastructure.",
+  "enterprise.faq.q5": "Where can I find your security and compliance documentation?",
+  "enterprise.faq.a5.before":
+    "Our Trust Center has everything: SOC 2 Type 2 report, security policies, subprocessor list, and answers to common security questions. Visit",
+  "enterprise.faq.a5.after": "to review or request documents under NDA.",
 
   "brand.title": "OpenCode | Brand",
   "brand.meta.description": "OpenCode brand guidelines",
