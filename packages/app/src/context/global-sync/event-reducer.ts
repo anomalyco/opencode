@@ -146,15 +146,14 @@ export function applyDirectoryEvent(input: {
       const info = (event.properties as { info: Session }).info
       const result = Binary.search(input.store.session, info.id, (s) => s.id)
       if (info.time.archived) {
+        if (!result.found) break
         if (input.store.session[result.index]!.time.archived === info.time.archived) break
-        if (result.found) {
-          input.setStore(
-            "session",
-            produce((draft) => {
-              draft.splice(result.index, 1)
-            }),
-          )
-        }
+        input.setStore(
+          "session",
+          produce((draft) => {
+            draft.splice(result.index, 1)
+          }),
+        )
         cleanupSessionCaches(input.setStore, info.id, input.setSessionTodo)
         if (info.parentID) break
         input.setStore("sessionTotal", (value) => Math.max(0, value - 1))

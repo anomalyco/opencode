@@ -9,7 +9,16 @@ import { Font } from "@opencode-ai/ui/font"
 import { Splash } from "@opencode-ai/ui/logo"
 import { ThemeProvider } from "@opencode-ai/ui/theme/context"
 import { MetaProvider } from "@solidjs/meta"
-import { type BaseRouterProps, Navigate, Route, Router, useNavigate, useParams, useSearchParams } from "@solidjs/router"
+import {
+  type BaseRouterProps,
+  Navigate,
+  Route,
+  Router,
+  useLocation,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "@solidjs/router"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
 import { Effect } from "effect"
 import { base64Encode } from "@opencode-ai/core/util/encode"
@@ -29,6 +38,7 @@ import {
   Show,
 } from "solid-js"
 import { Dynamic } from "solid-js/web"
+import { makeEventListener } from "@solid-primitives/event-listener"
 import { CommandProvider, useCommand, type CommandOption } from "@/context/command"
 import { CommentsProvider } from "@/context/comments"
 import { FileProvider } from "@/context/file"
@@ -153,8 +163,7 @@ function LegacyTargetSessionRedirect() {
 }
 
 // Wraps the non-draft routes. They are gated on (and keyed to) the globally selected
-// server via ServerKey, then provide the server-scoped shell (Permission/Layout/
-// Notification/Models + the visual Layout) for that server.
+// server via ServerKey, then provide the server-scoped shell for that server.
 function SelectedServerProviders(props: ParentProps) {
   return (
     <ServerKey>
@@ -207,7 +216,7 @@ function ResolvedDraftRoute(props: { draft: DraftTab }) {
     <Show when={`${props.draft.server}\0${props.draft.directory}`} keyed>
       <ServerSDKProvider server={conn}>
         <ServerSyncProvider server={conn}>
-          <DraftServerScopedProviders directory={directory}>
+          <ModelsProvider directory={directory}>
             <SDKProvider directory={directory}>
               <DirectoryDataProvider directory={directory} server={serverKey}>
                 <DraftProviders>
@@ -215,7 +224,7 @@ function ResolvedDraftRoute(props: { draft: DraftTab }) {
                 </DraftProviders>
               </DirectoryDataProvider>
             </SDKProvider>
-          </DraftServerScopedProviders>
+          </ModelsProvider>
         </ServerSyncProvider>
       </ServerSDKProvider>
     </Show>
@@ -309,24 +318,21 @@ function DesktopCommands() {
 // Server-scoped providers shared by the legacy shell and the top-level new shell.
 type ServerScopedShellProps = ParentProps<{
   directory?: () => string | undefined
-  sessionID?: () => string | undefined
   serverScoped?: JSX.Element
 }>
 
 function ServerScopedProviders(props: ServerScopedShellProps) {
   return (
-    <PermissionProvider directory={props.directory}>
-      <LayoutProvider>
-        {props.serverScoped}
-        <ModelsProvider directory={props.directory}>{props.children}</ModelsProvider>
-      </LayoutProvider>
-    </PermissionProvider>
+    <LayoutProvider>
+      {props.serverScoped}
+      <ModelsProvider directory={props.directory}>{props.children}</ModelsProvider>
+    </LayoutProvider>
   )
 }
 
 function LegacyServerScopedShell(props: ServerScopedShellProps) {
   return (
-    <ServerScopedProviders directory={props.directory} sessionID={props.sessionID} serverScoped={props.serverScoped}>
+    <ServerScopedProviders directory={props.directory} serverScoped={props.serverScoped}>
       <LegacyLayout>{props.children}</LegacyLayout>
     </ServerScopedProviders>
   )
@@ -339,14 +345,6 @@ function NewAppLayout(props: ParentProps<{ serverScoped?: JSX.Element }>) {
         <NewLayout>{props.children}</NewLayout>
       </ServerScopedProviders>
     </SelectedServerProviders>
-  )
-}
-
-function DraftServerScopedProviders(props: ParentProps<{ directory?: () => string | undefined }>) {
-  return (
-    <PermissionProvider directory={props.directory}>
-      <ModelsProvider directory={props.directory}>{props.children}</ModelsProvider>
-    </PermissionProvider>
   )
 }
 
@@ -559,13 +557,15 @@ export function AppInterface(props: {
                 component={props.router ?? Router}
                 root={(routerProps) => (
                   <TabsProvider>
-                    <NotificationProvider>
-                      <ServerShell>
-                        <Show when={useSettings().general.newLayoutDesigns()} fallback={routerProps.children}>
-                          <NewAppLayout serverScoped={props.serverScoped}>{routerProps.children}</NewAppLayout>
-                        </Show>
-                      </ServerShell>
-                    </NotificationProvider>
+                    <PermissionProvider>
+                      <NotificationProvider>
+                        <ServerShell>
+                          <Show when={useSettings().general.newLayoutDesigns()} fallback={routerProps.children}>
+                            <NewAppLayout serverScoped={props.serverScoped}>{routerProps.children}</NewAppLayout>
+                          </Show>
+                        </ServerShell>
+                      </NotificationProvider>
+                    </PermissionProvider>
                   </TabsProvider>
                 )}
               >

@@ -1,4 +1,3 @@
-import "./index.css"
 import { Link, Meta, Title } from "@solidjs/meta"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { geoEquirectangular, geoPath } from "d3-geo"
@@ -194,6 +193,7 @@ export default function StatsHome() {
                   pairs={homeComparisonPairs(stats().leaderboard["All Users"]["2M"])}
                   title="Model Comparisons"
                   description="Popular model pairs from the leaderboard."
+                  variant="featured"
                 />
               </>
             )}

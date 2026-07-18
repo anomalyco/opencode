@@ -12,7 +12,7 @@ import { useSync } from "@/context/sync"
 import { useLanguage } from "@/context/language"
 import { useProviders } from "@/hooks/use-providers"
 import { useSDK } from "@/context/sdk"
-import { getSessionContext, getSessionTokenTotal } from "@/components/session/session-context-metrics"
+import { getSessionContext } from "@/components/session/session-context-metrics"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { useSettings } from "@/context/settings"
@@ -74,7 +74,6 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
   )
 
   const context = createMemo(() => getSessionContext(messages(), [...providers.all().values()]))
-  const tokens = createMemo(() => info()?.tokens)
   const cost = createMemo(() => {
     return usd().format(info()?.cost ?? 0)
   })
@@ -132,7 +131,7 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
       <ContextTooltipRow name={language.t("context.usage.usage")} value={`${context()?.usage ?? 0}%`} />
       <ContextTooltipRow
         name={language.t("context.usage.tokens")}
-        value={getSessionTokenTotal(tokens())?.toLocaleString(language.intl()) ?? "0"}
+        value={context()?.total.toLocaleString(language.intl()) ?? "0"}
       />
     </div>
   )

@@ -93,6 +93,7 @@ export const dict = {
   "command.session.unshare.description": "Прекратить публикацию сессии",
 
   "palette.search.placeholder": "Поиск файлов, команд и сессий",
+  "palette.search.placeholder.home": "Поиск команд и сессий",
   "palette.empty": "Ничего не найдено",
   "palette.group.commands": "Команды",
   "palette.group.files": "Файлы",
@@ -812,9 +813,13 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Разворачивать элементы инструмента edit",
   "settings.general.row.editToolPartsExpanded.description":
     "Показывать элементы инструментов edit, write и patch в ленте развернутыми по умолчанию",
-  "settings.general.row.newLayoutDesigns.title": "Новая компоновка и оформление",
-  "settings.general.row.newLayoutDesigns.description":
-    "Включить обновлённую компоновку, главную страницу, редактор запросов и интерфейс сессии",
+  "settings.general.row.newInterface.title": "Новая компоновка",
+  "settings.general.row.newInterface.badge": "Новое",
+  "settings.general.row.newInterface.description":
+    "Используйте новые вкладки и компоновку главной страницы. В течение ограниченного времени можно переключаться между вариантами компоновки.",
+  "settings.general.row.newInterfaceNotice.title": "Теперь вы используете новую компоновку",
+  "settings.general.row.newInterfaceNotice.description": "Прежняя компоновка больше недоступна",
+  "settings.general.row.newInterfaceNotice.dismiss": "Закрыть",
   "settings.general.row.pinchZoom.title": "Масштабирование щипком",
   "settings.general.row.pinchZoom.description":
     "Разрешить масштабирование жестом щипка на трекпаде и прокруткой с Ctrl",
