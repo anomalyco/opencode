@@ -200,8 +200,13 @@ export function Session() {
   })
 
   createEffect(() => {
-    const title = Locale.truncate(session()?.title ?? "", 50)
-    setEpilogue(sessionEpilogue({ title, sessionID: session()?.id }))
+    const current = session()
+    const title = Locale.truncate(current?.title ?? "", 50)
+    const sessionID = current?.id
+    setEpilogue(sessionEpilogue({ title, sessionID }))
+    // Persist the session they leave so `kancode -c` resumes it (not merely most-recently-updated).
+    const lastID = current?.parentID ?? sessionID
+    if (lastID && kv.get("last_session_id") !== lastID) kv.set("last_session_id", lastID)
   })
   onCleanup(() => setEpilogue())
   const children = createMemo(() => {

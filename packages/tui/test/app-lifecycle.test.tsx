@@ -119,6 +119,7 @@ test("app.exit prints the session epilogue after scoped cleanup", async () => {
     await task
 
     expect(stdout).toContain("Demo session")
+    expect(stdout).toContain("kancode -c")
     expect(stdout).toContain("kancode -s dummy")
   } finally {
     process.stdout.write = originalWrite

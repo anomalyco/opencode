@@ -62,6 +62,7 @@ import { DialogAlert } from "./ui/dialog-alert"
 import { DialogConfirm } from "./ui/dialog-confirm"
 import { ToastProvider, useToast } from "./ui/toast"
 import { isDefaultTitle } from "./util/session"
+import { resolveContinueSessionID } from "./util/continue-session"
 import { KVProvider, useKV } from "./context/kv"
 import * as Model from "./util/model"
 import { ArgsProvider, useArgs, type Args } from "./context/args"
@@ -141,6 +142,7 @@ const appBindingCommands = [
   "app.toggle.diffwrap",
   "app.toggle.paste_summary",
   "app.toggle.session_directory_filter",
+  "app.toggle.auto_resume",
 ] as const
 
 export type TuiInput = {
@@ -505,10 +507,10 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   let continued = false
   createEffect(() => {
     // When using -c, session list is loaded in blocking phase, so we can navigate at "partial"
-    if (continued || sync.status === "loading" || !args.continue) return
-    const match = sync.data.session
-      .toSorted((a, b) => b.time.updated - a.time.updated)
-      .find((x) => x.parentID === undefined)?.id
+    if (continued || sync.status === "loading" || !args.continue || !kv.ready) return
+    const match = resolveContinueSessionID(sync.data.session, {
+      lastID: kv.get("last_session_id"),
+    })
     if (match) {
       continued = true
       if (args.fork) {
@@ -541,27 +543,33 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     })
   })
 
-  // Auto-resume the most recent session for the current project path when
-  // `tui.auto_resume` is enabled (default) and no explicit --continue/--session/--fork or
-  // initial route was supplied. The session list loads in the non-blocking
-  // phase, so we wait for "complete" before picking a match.
-  let autoResumed = false
+  // Auto-resume the last exited session for the current project path when
+  // auto_resume is enabled (tui.json default, overridable via KV / command palette)
+  // and no explicit --continue/--session/--fork or initial route was supplied.
+  // Snapshot the preference once sync is ready — toggling it later must not navigate.
+  let autoResumeDecided = false
+  let autoResumeEnabled: boolean | undefined
   createEffect(() => {
-    if (autoResumed || !tuiConfig.auto_resume) return
-    if (args.continue || args.sessionID || args.fork) return
-    if (startup.initialRoute !== undefined) return
-    if (sync.status !== "complete") return
-    const target = path.resolve(project.instance.directory() || process.cwd())
-    const match = sync.data.session
-      .toSorted((a, b) => b.time.updated - a.time.updated)
-      .find((session) => {
-        const directory = (session as { location?: { directory?: string } }).location?.directory ?? session.directory
-        if (!directory) return false
-        return path.resolve(directory) === target
-      })
+    if (autoResumeDecided) return
+    if (args.continue || args.sessionID || args.fork || startup.initialRoute !== undefined) {
+      autoResumeDecided = true
+      return
+    }
+    if (sync.status !== "complete" || !kv.ready) return
+    if (autoResumeEnabled === undefined) {
+      autoResumeEnabled = kv.get("auto_resume", tuiConfig.auto_resume)
+    }
+    if (!autoResumeEnabled) {
+      autoResumeDecided = true
+      return
+    }
+    const match = resolveContinueSessionID(sync.data.session, {
+      lastID: kv.get("last_session_id"),
+      directory: project.instance.directory() || process.cwd(),
+    })
     if (!match) return
-    autoResumed = true
-    route.navigate({ type: "session", sessionID: match.id })
+    autoResumeDecided = true
+    route.navigate({ type: "session", sessionID: match })
   })
 
   createEffect(
@@ -1023,6 +1031,17 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         run: async () => {
           kv.set("session_directory_filter_enabled", !kv.get("session_directory_filter_enabled", true))
           await sync.session.refresh()
+          dialog.clear()
+        },
+      },
+      {
+        name: "app.toggle.auto_resume",
+        title: kv.get("auto_resume", tuiConfig.auto_resume)
+          ? "Disable auto-resume last session"
+          : "Enable auto-resume last session",
+        category: "System",
+        run: () => {
+          kv.set("auto_resume", !kv.get("auto_resume", tuiConfig.auto_resume))
           dialog.clear()
         },
       },
