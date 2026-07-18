@@ -4,6 +4,7 @@ import { Database } from "@opencode-ai/core/database/database"
 import { EventV2 } from "@opencode-ai/core/event"
 import { EventTable } from "@opencode-ai/core/event/sql"
 import { Global } from "@opencode-ai/core/global"
+import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -225,6 +226,7 @@ test("concurrent service processes elect one server", async () => {
     )
 
     expect(exited).toEqual(losers.map(() => true))
+    expect(losers.map((process) => process.exitCode)).toEqual(losers.map(() => 0))
     expect(winner?.exitCode).toBe(null)
     expect(new URL(info.url).port).toBe(String(port))
     expect(await Bun.file(registration + ".lock").exists()).toBe(false)
@@ -244,6 +246,7 @@ test("concurrent service processes elect one server", async () => {
         Bun.sleep(10_000).then(() => false),
       ])
       expect(contenderExited).toBe(true)
+      expect(contender.exitCode).toBe(0)
       expect((await waitForInfo(registration)).id).toBe(info.id)
     } finally {
       contender.kill("SIGTERM")
@@ -326,6 +329,96 @@ test("unrelated managed port occupancy reports an actionable conflict", async ()
   }
 }, 30_000)
 
+test("unresponsive managed port occupancy reports a bounded conflict", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-unresponsive-conflict-"))
+  const listener = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: () => new Promise<Response>(() => {}),
+  })
+  const registration = path.join(root, "state", "opencode", "service-local.json")
+  await fs.mkdir(path.join(root, "config", "opencode"), { recursive: true })
+  await fs.mkdir(path.dirname(registration), { recursive: true })
+  await fs.writeFile(
+    path.join(root, "config", "opencode", "service-local.json"),
+    JSON.stringify({ port: listener.port }),
+  )
+  const stale = {
+    id: "stale",
+    version: InstallationVersion,
+    url: "http://127.0.0.1:1",
+    pid: process.pid,
+    password: "stale",
+  }
+  await fs.writeFile(registration, JSON.stringify(stale))
+  const contender = Bun.spawn(
+    [process.execPath, path.join(import.meta.dir, "../src/index.ts"), "serve", "--service"],
+    {
+      env: serviceEnv(root),
+      stderr: "pipe",
+      stdout: "pipe",
+    },
+  )
+
+  try {
+    const exitCode = await Promise.race([contender.exited, Bun.sleep(30_000).then(() => undefined)])
+    expect(exitCode).not.toBeUndefined()
+    const output = (await new Response(contender.stdout).text()) + (await new Response(contender.stderr).text())
+    expect(output).toContain(`Managed service port ${listener.port} on 127.0.0.1 is already in use by another process`)
+    expect(await Bun.file(registration).json()).toEqual(stale)
+  } finally {
+    listener.stop(true)
+    contender.kill("SIGTERM")
+    await contender.exited
+    await fs.rm(root, { recursive: true, force: true })
+  }
+}, 45_000)
+
+test("port contender recognizes an incumbent registered during the bind race", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-bind-race-"))
+  const listener = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: () => Response.json({ healthy: true, version: InstallationVersion, pid: process.pid }, { status: 503 }),
+  })
+  const registration = path.join(root, "state", "opencode", "service-local.json")
+  const config = path.join(root, "config", "opencode", "service-local.json")
+  await fs.mkdir(path.dirname(config), { recursive: true })
+  await fs.writeFile(config, JSON.stringify({ port: listener.port }))
+  const contender = Bun.spawn(
+    [process.execPath, path.join(import.meta.dir, "../src/index.ts"), "serve", "--service"],
+    {
+      env: serviceEnv(root),
+      stderr: "pipe",
+      stdout: "pipe",
+    },
+  )
+
+  try {
+    const password = await waitForPassword(config)
+    const info = {
+      id: "incumbent",
+      version: InstallationVersion,
+      url: `http://127.0.0.1:${listener.port}`,
+      pid: process.pid,
+      password,
+    }
+    await fs.mkdir(path.dirname(registration), { recursive: true })
+    await fs.writeFile(registration, JSON.stringify(info))
+
+    expect(await contender.exited).toBe(0)
+    expect(await Bun.file(registration).json()).toEqual(info)
+    expect((await new Response(contender.stdout).text()) + (await new Response(contender.stderr).text())).not.toContain(
+      "already in use by another process",
+    )
+  } finally {
+    listener.stop(true)
+    contender.kill("SIGTERM")
+    await contender.exited
+    await fs.rm(root, { recursive: true, force: true })
+  }
+}, 30_000)
+
 test("stale dead registration is replaced after binding the selected port", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-stale-"))
   const port = await availablePort()
@@ -375,10 +468,12 @@ test("a failed service stays registered and owns the selected port until stopped
 
   try {
     const info = await waitForInfo(registration)
+    await waitForFailed(info)
     expect(owner.exitCode).toBe(null)
 
     const contender = Bun.spawn(command, { env, stderr: "pipe", stdout: "ignore" })
     expect(await Promise.race([contender.exited.then(() => true), Bun.sleep(10_000).then(() => false)])).toBe(true)
+    expect(contender.exitCode).toBe(0)
     expect((await waitForInfo(registration)).id).toBe(info.id)
     expect(owner.exitCode).toBe(null)
 
@@ -451,6 +546,18 @@ async function waitForFailed(info: Info) {
     await Bun.sleep(50)
   }
   throw new Error("Timed out waiting for service boot failure")
+}
+
+async function waitForPassword(file: string) {
+  for (let attempt = 0; attempt < 400; attempt++) {
+    const password = await Bun.file(file)
+      .json()
+      .then((value) => value.password)
+      .catch(() => undefined)
+    if (typeof password === "string") return password
+    await Bun.sleep(50)
+  }
+  throw new Error("Timed out waiting for service password")
 }
 
 async function availablePort() {

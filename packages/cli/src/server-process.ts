@@ -154,8 +154,8 @@ const register = Effect.fnUntraced(function* (
 const recognizeIncumbent = Effect.fnUntraced(function* (options: DiscoverOptions, hostname: string, port: number) {
   const found = yield* Service.incumbent({ ...options, url: serviceURL(hostname, port) }).pipe(
     Effect.filterOrFail((value) => value !== undefined),
-    Effect.retry(Schedule.max([Schedule.spaced("100 millis"), Schedule.recurs(60)])),
-    Effect.option,
+    Effect.retry(Schedule.spaced("100 millis")),
+    Effect.timeoutOption("6 seconds"),
   )
   return Option.isSome(found)
 })
