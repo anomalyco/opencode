@@ -140,6 +140,14 @@ const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProcess.Serv
 
     const upgradeFailure = (method: Method, result?: { code: number; stdout: string; stderr: string }) => {
       if (method === "choco") return "not running from an elevated command shell"
+      const combined = `${result?.stdout ?? ""}\n${result?.stderr ?? ""}`
+      // Windows (and some Unix) installs fail when the running binary cannot be replaced.
+      if (/EPERM|EBUSY|operation not permitted|resource busy|being used by another process/i.test(combined)) {
+        return (
+          "Upgrade failed: the KanCode binary is locked (often because KanCode is still running). " +
+          "Quit KanCode, then run `kancode upgrade` from a terminal."
+        )
+      }
       if (result) return `Upgrade failed for ${method} (exit code ${result.code}).`
       return `Upgrade failed for ${method}.`
     }

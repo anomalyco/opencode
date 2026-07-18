@@ -1142,7 +1142,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     const choice = await DialogConfirm.show(
       dialog,
       `Update Available`,
-      `A new release v${version} is available. Would you like to update now?`,
+      `A new release v${version} is available. Update now?\n\nOn Windows, quit KanCode first if the install fails (the running binary can be locked).`,
       "skip",
     )
 
@@ -1160,14 +1160,17 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     })
 
     const result = await sdk.client.global.upgrade({ target: version })
+    const upgradeError =
+      result.data && "success" in result.data && result.data.success === false
+        ? result.data.error
+        : result.error
+          ? errorMessage(result.error)
+          : !result.data?.success
+            ? "Update failed"
+            : undefined
 
-    if (result.error || !result.data?.success) {
-      toast.show({
-        variant: "error",
-        title: "Update Failed",
-        message: "Update failed",
-        duration: 10000,
-      })
+    if (upgradeError) {
+      await DialogAlert.show(dialog, "Update Failed", upgradeError)
       return
     }
 

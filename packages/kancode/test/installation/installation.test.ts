@@ -204,6 +204,30 @@ describe("installation", () => {
     testEffect(
       testLayer(
         () => jsonResponse({}),
+        (cmd) => {
+          if (cmd === "npm") {
+            return {
+              code: 1,
+              stderr: "npm error code EPERM\nnpm error Error: EPERM: operation not permitted, unlink 'kancode.exe'",
+            }
+          }
+          return ""
+        },
+      ),
+    ).effect("explains locked-binary failures without dumping raw npm output", () =>
+      Effect.gen(function* () {
+        const error = yield* Effect.flip(Installation.use.upgrade("npm", "9.9.9"))
+        expect(error).toBeInstanceOf(Installation.UpgradeFailedError)
+        expect(error.message).toContain("binary is locked")
+        expect(error.message).toContain("Quit KanCode")
+        expect(error.message).toContain("kancode upgrade")
+        expect(error.message).not.toContain("unlink")
+      }),
+    )
+
+    testEffect(
+      testLayer(
+        () => jsonResponse({}),
         () => "",
       ),
     ).effect("returns a clear typed error for unsupported curl installs", () =>

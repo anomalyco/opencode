@@ -103,11 +103,13 @@ export const globalHandlers = HttpApiBuilder.group(RootHttpApi, "global", (handl
         }
       }
       const target = ctx.payload.target || (yield* installation.latest(method))
+      // Return 200 with success:false so clients receive the typed error body
+      // (HTTP 500 made the SDK drop the message as a generic transport error).
       const result = yield* installation.upgrade(method, target).pipe(
         Effect.as({ status: 200, body: { success: true as const, version: target } }),
         Effect.catch((err) =>
           Effect.succeed({
-            status: 500,
+            status: 200,
             body: {
               success: false as const,
               error: err instanceof Error ? err.message : String(err),
