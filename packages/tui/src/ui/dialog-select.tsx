@@ -38,7 +38,7 @@ export interface DialogSelectProps<T> {
   preserveSelection?: boolean
   actions?: {
     command: string
-    title: string
+    title: string | ((option: DialogSelectOption<T> | undefined) => string)
     side?: "left" | "right"
     hidden?: boolean
     disabled?: boolean | ((option: DialogSelectOption<T> | undefined) => boolean)
@@ -65,6 +65,8 @@ export interface DialogSelectOption<T = any> {
   category?: string
   categoryView?: JSX.Element
   disabled?: boolean
+  /** Persistently de-emphasize the row (e.g. hidden models). */
+  muted?: boolean
   bg?: RGBA
   gutter?: () => JSX.Element
   margin?: JSX.Element
@@ -438,7 +440,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         },
         ...visible.map((item) => ({
           name: item.command,
-          title: item.title,
+          title: actionTitle(item),
           category: "Dialog",
           run() {
             if (props.locked) return
@@ -520,6 +522,10 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     return typeof item.disabled === "function" ? item.disabled(selected()) : item.disabled
   }
 
+  function actionTitle(item: Action) {
+    return typeof item.title === "function" ? item.title(selected()) : item.title
+  }
+
   function isActionFocused(item: VisibleAction) {
     if (props.locked) return false
     if (!isActionItem(item)) return false
@@ -539,6 +545,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     const item = action.item
     const active = createMemo(() => isActionFocused(item))
     const disabled = createMemo(() => isActionDisabled(item))
+    const title = createMemo(() => actionTitle(item))
     const fg = selectedForeground(theme)
     return (
       <box
@@ -550,7 +557,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           fg={disabled() ? theme.textMuted : active() ? fg : theme.text}
           attributes={active() ? TextAttributes.BOLD : undefined}
         >
-          {item.title}
+          {title()}
         </text>
         <text fg={disabled() ? theme.textMuted : active() ? fg : theme.textMuted}> {item.label}</text>
       </box>
@@ -693,7 +700,8 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                               description={option.description !== category ? option.description : undefined}
                               active={active()}
                               current={current()}
-                              muted={actionFocused()}
+                              muted={option.muted === true || actionFocused()}
+                              rowMuted={option.muted === true}
                               gutter={option.gutter}
                             />
                           </box>
@@ -738,6 +746,8 @@ function Option(props: {
   active?: boolean
   current?: boolean
   muted?: boolean
+  /** Persistent mute (hidden model); always uses muted color, unlike action-focus mute. */
+  rowMuted?: boolean
   footer?: JSX.Element | string
   titleWidth?: number
   truncateTitle?: boolean | "left"
@@ -748,6 +758,7 @@ function Option(props: {
   const fg = selectedForeground(theme)
   const text = createMemo(() => {
     if (props.active && !props.muted) return fg
+    if (props.rowMuted) return theme.textMuted
     if (props.muted && (props.active || props.current)) return theme.textMuted
     if (props.current) return theme.primary
     return theme.text

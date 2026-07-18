@@ -19,7 +19,13 @@ import { useTuiConfig } from "../config"
 import { useConnected } from "./use-connected"
 import { DialogProvider } from "./dialog-provider"
 import { DialogVariant, listModelVariants } from "./dialog-variant"
-import { isSameRightMode, resolveModelSelect, rightPaneContentKey, type RightMode } from "./dialog-model-flow"
+import {
+  isSameRightMode,
+  rankModelSearchMatches,
+  resolveModelSelect,
+  rightPaneContentKey,
+  type RightMode,
+} from "./dialog-model-flow"
 import { DialogNote } from "./dialog-note"
 import { isSubscriptionProvider, modelRow, type ModelRowTheme } from "../util/model-row"
 import { Locale } from "../util/locale"
@@ -330,17 +336,38 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
   }
 
   function searchAllModels(needle: string) {
-    const items: ListedModel[] = []
+    type SearchRow = ListedModel & {
+      title: string
+      category: string
+      value: ModelValue
+    }
+    const items: SearchRow[] = []
     for (const provider of pipe(sync.data.provider, sortBy(PROVIDER_PIN_FIRST, (p) => p.name))) {
       for (const [modelID, info] of entries(provider.models)) {
         if (info.status === "deprecated") continue
         if (provider.id === "opencode" && modelID.includes("-nano")) continue
-        const haystack = `${info.name ?? modelID} ${modelID} ${provider.name}`.toLowerCase()
-        if (!haystack.includes(needle)) continue
-        items.push({ provider, modelID, info })
+        items.push({
+          provider,
+          modelID,
+          info,
+          title: info.name ?? modelID,
+          category: provider.name,
+          value: { providerID: provider.id, modelID },
+        })
       }
     }
-    return rowsFromListed(items, true)
+    // Match narrow dialog ranking: fuzzysort + boost picker/session current provider.
+    // Do not re-sort with rowsFromListed — that wipes score order.
+    const ranked = rankModelSearchMatches(needle, items, props.current?.providerID)
+    return ranked.map((item) =>
+      buildModelRow(item.provider, item.modelID, item.info, {
+        showProvider: true,
+        muted: local.model.isHidden(item.value),
+        favorite: local.model
+          .favorite()
+          .some((f) => f.providerID === item.provider.id && f.modelID === item.modelID),
+      }),
+    )
   }
 
   function listProviderModels(provider: Provider) {
@@ -354,7 +381,7 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
   }
 
   const rightOptions = createMemo<ModelOption[]>(() => {
-    const needle = query().trim().toLowerCase()
+    const needle = query().trim()
     if (needle) return searchAllModels(needle)
 
     const mode = rightMode()
@@ -392,16 +419,21 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
     return listModelVariants(sync.data.provider, model).length > 0
   }
 
+  const configPicker = () => !!props.onSelect
+
   function openVariantPicker(model: ModelValue) {
     dialog.setSize("medium")
-    dialog.push(() => <DialogVariant model={model} onSelect={props.onSelect} />)
+    dialog.push(
+      () => <DialogVariant model={model} onSelect={props.onSelect} />,
+      () => dialog.setSize("xlarge"),
+    )
   }
 
   function commitSelect(providerID: string, modelID: string) {
     const action = resolveModelSelect({
       providerID,
       modelID,
-      configPicker: !!props.onSelect,
+      configPicker: configPicker(),
       hasVariants: modelHasVariants({ providerID, modelID }),
     })
     if (action.type === "callback") {
@@ -472,7 +504,8 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
       {
         command: "model.dialog.variant",
         title: "Variants",
-        hidden: !connected() || isHiddenMode() || !selectedHasVariants(),
+        // Config pickers ignore variant selection — hide the affordance.
+        hidden: !connected() || configPicker() || isHiddenMode() || !selectedHasVariants(),
         singleKey: true,
         onTrigger() {
           const opt = rightOptions()[rightSelected()]
@@ -663,10 +696,12 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
     setInputMode("keyboard")
   })
 
-  // After a nested dialog (Note) closes, this layer becomes active again.
-  // Keep the caret off the filter unless search is the focused pane.
+  // After a nested dialog (Note / Variants) closes, this layer becomes active again.
+  // Restore xlarge (Variants sets medium) and keep the caret off the filter
+  // unless search is the focused pane.
   createEffect(() => {
     if (!dialogActive()) return
+    dialog.setSize("xlarge")
     if (focusedPane() !== "search") blurSearch()
   })
 

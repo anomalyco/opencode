@@ -2,7 +2,9 @@ import { describe, expect, test } from "bun:test"
 import {
   boostCurrentProviderMatches,
   isSameRightMode,
+  rankModelSearchMatches,
   resolveModelSelect,
+  resolveSearchBoostProviderID,
   resolveSelectionCurrent,
   resolveVariantApply,
   rightPaneContentKey,
@@ -128,6 +130,36 @@ describe("model dialog user flow", () => {
     })
   })
 
+  describe("resolveSearchBoostProviderID", () => {
+    test("session picker boosts the live session provider", () => {
+      expect(
+        resolveSearchBoostProviderID({
+          configPicker: false,
+          sessionCurrent: { providerID: "openai", modelID: "gpt-4o" },
+        }),
+      ).toBe("openai")
+    })
+
+    test("config picker boosts picker current, not the session provider", () => {
+      expect(
+        resolveSearchBoostProviderID({
+          configPicker: true,
+          current: { providerID: "anthropic", modelID: "claude" },
+          sessionCurrent: { providerID: "openai", modelID: "gpt-4o" },
+        }),
+      ).toBe("anthropic")
+    })
+
+    test("config picker with unset current does not boost the session provider", () => {
+      expect(
+        resolveSearchBoostProviderID({
+          configPicker: true,
+          sessionCurrent: { providerID: "openai", modelID: "gpt-4o" },
+        }),
+      ).toBeUndefined()
+    })
+  })
+
   describe("boostCurrentProviderMatches", () => {
     const matches = [
       { title: "Claude", value: { providerID: "anthropic", modelID: "claude" } },
@@ -171,6 +203,30 @@ describe("model dialog user flow", () => {
 
       const wronglyResorted = sortModelOptions(boosted, false)
       expect(wronglyResorted.map((m) => m.title)).toEqual(["Loose hit free", "Exact hit"])
+    })
+  })
+
+  describe("rankModelSearchMatches", () => {
+    const options = [
+      { title: "Claude Sonnet", category: "Anthropic", value: { providerID: "anthropic", modelID: "claude" } },
+      { title: "GPT-4o", category: "OpenAI", value: { providerID: "openai", modelID: "gpt-4o" } },
+      { title: "GPT-4o mini", category: "OpenAI", value: { providerID: "openai", modelID: "gpt-4o-mini" } },
+      { title: "Gemini Flash", category: "Google", value: { providerID: "google", modelID: "gemini" } },
+    ]
+
+    test("ranks by fuzzysort relevance then boosts the current provider", () => {
+      const ranked = rankModelSearchMatches("gpt", options, "openai")
+      expect(ranked.map((m) => m.title)).toEqual(["GPT-4o", "GPT-4o mini"])
+    })
+
+    test("does not require an exact substring when fuzzysort matches", () => {
+      // Substring-only search would miss transposed/fuzzy hits; fuzzysort should not.
+      const ranked = rankModelSearchMatches("claud", options, undefined)
+      expect(ranked.some((m) => m.value.providerID === "anthropic")).toBe(true)
+    })
+
+    test("returns empty when nothing matches", () => {
+      expect(rankModelSearchMatches("zzzz-no-match", options, "openai")).toEqual([])
     })
   })
 

@@ -1,3 +1,4 @@
+import * as fuzzysort from "fuzzysort"
 import { sortBy } from "remeda"
 
 export type ModelRef = { providerID: string; modelID: string }
@@ -13,6 +14,18 @@ export function resolveSelectionCurrent(input: {
 }): ModelRef | undefined {
   if (input.configPicker) return input.current
   return input.current ?? input.sessionCurrent
+}
+
+/**
+ * Provider id used to boost search ranking. Config pickers boost `current`
+ * (the picker selection); session pickers boost the live session provider.
+ */
+export function resolveSearchBoostProviderID(input: {
+  configPicker: boolean
+  current?: ModelRef
+  sessionCurrent?: ModelRef
+}): string | undefined {
+  return resolveSelectionCurrent(input)?.providerID
 }
 
 export type ModelSelectAction =
@@ -60,7 +73,7 @@ export function resolveVariantApply(input: {
 }
 
 /**
- * After fuzzysort, boost matches from the active session provider while preserving
+ * After fuzzysort, boost matches from the active provider while preserving
  * score order within each group. Primary key is current-provider membership;
  * secondary key is original match index (better score first).
  */
@@ -74,6 +87,17 @@ export function boostCurrentProviderMatches<T extends { value: { providerID: str
     (item) => (item.obj.value.providerID === currentProviderID ? 0 : 1),
     [(item) => item.i, "asc"],
   ).map((item) => item.obj)
+}
+
+/**
+ * Shared model-dialog search ranking: fuzzysort relevance, then boost the
+ * picker/session current provider. Do not re-sort the result by free/date.
+ */
+export function rankModelSearchMatches<
+  T extends { title: string; category?: string; value: { providerID: string } },
+>(needle: string, options: T[], boostProviderID: string | undefined): T[] {
+  const matches = fuzzysort.go(needle, options, { keys: ["title", "category"] }).map((x) => x.obj)
+  return boostCurrentProviderMatches(matches, boostProviderID)
 }
 
 export type RightMode =

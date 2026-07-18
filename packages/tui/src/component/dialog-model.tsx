@@ -13,7 +13,12 @@ import { Locale } from "../util/locale"
 import { createDialogProviderOptions, DialogProvider } from "./dialog-provider"
 import { DialogVariant, listModelVariants } from "./dialog-variant"
 import { DialogModelTwoPane } from "./dialog-model-twopane"
-import { boostCurrentProviderMatches, resolveModelSelect, resolveSelectionCurrent } from "./dialog-model-flow"
+import {
+  rankModelSearchMatches,
+  resolveModelSelect,
+  resolveSearchBoostProviderID,
+  resolveSelectionCurrent,
+} from "./dialog-model-flow"
 import { isSubscriptionProvider } from "../util/model-row"
 import { DialogNote } from "./dialog-note"
 import { useConnected } from "./use-connected"
@@ -84,13 +89,21 @@ export function DialogModel(props: {
   const filterProviderID = createMemo(() => (useTwoPane() ? undefined : props.providerID))
   const showExtra = createMemo(() => connected() && !filterProviderID())
 
+  const configPicker = () => !!props.onSelect
+
   const options = createMemo(() => {
     const needle = query().trim()
     const showSections = showExtra() && needle.length === 0
-    const favorites = connected() ? local.model.favorite() : []
-    const recents = local.model.recent()
+    const favorites = connected() ? local.model.favorite().filter((item) => !local.model.isHidden(item)) : []
+    const recents = local.model.recent().filter((item) => !local.model.isHidden(item))
+    const hidden = connected()
+      ? local.model.hidden().filter((item) => {
+          const provider = sync.data.provider.find((p) => p.id === item.providerID)
+          return !!provider?.models[item.modelID]
+        })
+      : []
 
-    function toOptions(items: typeof favorites, category: string) {
+    function toOptions(items: typeof favorites, category: string, opts?: { muted?: boolean }) {
       if (!showSections) return []
       return items.flatMap((item) => {
         const provider = sync.data.provider.find((provider) => provider.id === item.providerID)
@@ -104,6 +117,7 @@ export function DialogModel(props: {
             title: model.name ?? item.modelID,
             description: provider.name,
             category,
+            muted: opts?.muted === true,
             disabled: provider.id === "opencode" && model.id.includes("-nano"),
             footer:
               isSubscriptionFor(provider.id) ? undefined : model.cost?.input === 0 ? "Free" : undefined,
@@ -122,6 +136,7 @@ export function DialogModel(props: {
       ),
       "Recent",
     )
+    const hiddenOptions = toOptions(hidden, "Hidden", { muted: true })
 
     const providerOptions = pipe(
       sync.data.provider,
@@ -135,23 +150,32 @@ export function DialogModel(props: {
           entries(),
           filter(([_, info]) => info.status !== "deprecated"),
           filter(([_, info]) => (filterProviderID() ? info.providerID === filterProviderID() : true)),
-          map(([model, info]) => ({
-            value: { providerID: provider.id, modelID: model },
-            title: info.name ?? model,
-            releaseDate: info.release_date,
-            contextSize: info.limit?.context ?? 0,
-            description: favorites.some((item) => item.providerID === provider.id && item.modelID === model)
-              ? "(Favorite)"
-              : undefined,
-            category: connected() ? provider.name : undefined,
-            disabled: provider.id === "opencode" && model.includes("-nano"),
-            footer:
-              isSubscriptionFor(provider.id) ? undefined : info.cost?.input === 0 ? "Free" : undefined,
-            onSelect() {
-              onSelect(provider.id, model)
-            },
-          })),
+          map(([model, info]) => {
+            const value = { providerID: provider.id, modelID: model }
+            const isHidden = local.model.isHidden(value)
+            return {
+              value,
+              title: info.name ?? model,
+              releaseDate: info.release_date,
+              contextSize: info.limit?.context ?? 0,
+              muted: isHidden,
+              description: isHidden
+                ? "(Hidden)"
+                : favorites.some((item) => item.providerID === provider.id && item.modelID === model)
+                  ? "(Favorite)"
+                  : undefined,
+              category: connected() ? provider.name : undefined,
+              disabled: provider.id === "opencode" && model.includes("-nano"),
+              footer:
+                isSubscriptionFor(provider.id) ? undefined : info.cost?.input === 0 ? "Free" : undefined,
+              onSelect() {
+                onSelect(provider.id, model)
+              },
+            }
+          }),
           filter((option) => {
+            // Hidden models belong under the Hidden section when sections are shown.
+            if (showSections && option.muted) return false
             if (!showSections) return true
             if (
               favorites.some(
@@ -184,17 +208,20 @@ export function DialogModel(props: {
       : []
 
     if (needle) {
-      // Keep fuzzysort relevance order; only boost the active session provider.
+      // Keep fuzzysort relevance order; boost picker/session current provider.
       // Do not re-sort with sortModelOptions — that wipes score ranking.
-      const modelMatches = fuzzysort.go(needle, providerOptions, { keys: ["title", "category"] }).map((x) => x.obj)
-      const boosted = boostCurrentProviderMatches(modelMatches, local.model.current()?.providerID)
+      const boostProviderID = resolveSearchBoostProviderID({
+        configPicker: configPicker(),
+        current: props.current,
+        sessionCurrent: local.model.current(),
+      })
       return [
-        ...boosted,
+        ...rankModelSearchMatches(needle, providerOptions, boostProviderID),
         ...fuzzysort.go(needle, popularProviders, { keys: ["title"] }).map((x) => x.obj),
       ]
     }
 
-    return [...favoriteOptions, ...recentOptions, ...providerOptions, ...popularProviders]
+    return [...favoriteOptions, ...recentOptions, ...providerOptions, ...hiddenOptions, ...popularProviders]
   })
 
   const provider = createMemo(() =>
@@ -208,11 +235,20 @@ export function DialogModel(props: {
     return value.name
   })
 
+  function openVariantPicker(model: { providerID: string; modelID: string }) {
+    dialog.setSize("medium")
+    // Narrow stays medium; onClose keeps size stable if a future nested dialog changes it.
+    dialog.push(
+      () => <DialogVariant model={model} onSelect={props.onSelect} />,
+      () => dialog.setSize("medium"),
+    )
+  }
+
   function onSelect(providerID: string, modelID: string) {
     const action = resolveModelSelect({
       providerID,
       modelID,
-      configPicker: !!props.onSelect,
+      configPicker: configPicker(),
       hasVariants: listModelVariants(sync.data.provider, { providerID, modelID }).length > 0,
     })
     if (action.type === "callback") {
@@ -220,8 +256,7 @@ export function DialogModel(props: {
       return
     }
     if (action.type === "open-variants") {
-      dialog.setSize("medium")
-      dialog.push(() => <DialogVariant model={action.model} onSelect={props.onSelect} />)
+      openVariantPicker(action.model)
       return
     }
     local.model.set(action.model, { recent: true })
@@ -262,7 +297,12 @@ export function DialogModel(props: {
           },
           {
             command: "model.dialog.hide",
-            title: "Hide",
+            title: (option) => {
+              if (!option) return "Hide"
+              const value = option.value as { providerID: string; modelID: string }
+              // Match two-pane: Hidden-section / muted rows show Unhide.
+              return option.muted === true || local.model.isHidden(value) ? "Unhide" : "Hide"
+            },
             hidden: !connected(),
             onTrigger: (option) => {
               local.model.toggleHidden(option.value as { providerID: string; modelID: string })
@@ -279,16 +319,15 @@ export function DialogModel(props: {
           {
             command: "model.dialog.variant",
             title: "Variants",
-            hidden: !connected(),
+            // Config pickers ignore variant selection — hide the affordance.
+            hidden: !connected() || configPicker(),
             disabled: (option) => {
               if (!option) return true
               const value = option.value as { providerID: string; modelID: string }
               return listModelVariants(sync.data.provider, value).length === 0
             },
             onTrigger: (option) => {
-              const value = option.value as { providerID: string; modelID: string }
-              dialog.setSize("medium")
-              dialog.push(() => <DialogVariant model={value} onSelect={props.onSelect} />)
+              openVariantPicker(option.value as { providerID: string; modelID: string })
             },
           },
         ]}
