@@ -51,9 +51,15 @@ if (Script.release && !Script.preview) {
   }
   await new Promise((resolve) => setTimeout(resolve, 5_000))
   await $`git fetch origin`
-  await $`git checkout -B dev origin/dev`
+  // Forks may not have a long-lived `dev` branch; create one from HEAD when missing.
+  const hasDev = (await $`git rev-parse --verify origin/dev`.nothrow()).exitCode === 0
+  if (hasDev) {
+    await $`git checkout -B dev origin/dev`
+  } else {
+    await $`git checkout -B dev`
+  }
   await prepareReleaseFiles()
-  await $`git commit -am "sync release versions for ${tag}"`
+  await $`git commit -am "sync release versions for ${tag}"`.nothrow()
   await $`git push origin HEAD:dev --no-verify`
 }
 
