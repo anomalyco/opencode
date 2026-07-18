@@ -1,7 +1,7 @@
 import path from "path"
 import fs from "fs/promises"
 import { describe, expect } from "bun:test"
-import { Effect, Fiber, Layer, PubSub, Schema, Stream } from "effect"
+import { Effect, Fiber, Layer, PubSub, Schedule, Schema, Stream } from "effect"
 import { FastCheck } from "effect/testing"
 import { Config } from "@opencode-ai/core/config"
 import { ConfigModel } from "@opencode-ai/core/config/model"
@@ -28,6 +28,7 @@ import { tmpdir } from "../fixture/tmpdir"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(Layer.empty)
+const describeWatcher = Watcher.hasNativeBinding() && !process.env.CI ? describe : describe.skip
 const selection = Schema.decodeUnknownSync(ConfigModel.Selection)
 
 const emptyCredentialNode = makeGlobalNode({
@@ -181,6 +182,93 @@ describe("Config", () => {
             ),
           )
       }),
+    ),
+  )
+
+  it.live("publishes updates for config-backed files inside config directories", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const global = path.join(tmp.path, "global")
+          const project = path.join(tmp.path, "project")
+          yield* Effect.promise(() => Promise.all([fs.mkdir(global), fs.mkdir(project)]))
+          const updates = yield* PubSub.unbounded<Watcher.Update>()
+          const watcher = Layer.succeed(
+            Watcher.Service,
+            Watcher.Service.of({
+              subscribe: () => Stream.fromPubSub(updates),
+            }),
+          )
+
+          return yield* Effect.gen(function* () {
+            const events = yield* EventV2.Service
+            yield* Effect.forEach(
+              [
+                { type: "create" as const, path: path.join(global, "commands", "review.md") },
+                { type: "update" as const, path: path.join(global, "agents", "reviewer.md") },
+                { type: "delete" as const, path: path.join(global, "plugins", "local.ts") },
+              ],
+              (update) =>
+                Effect.gen(function* () {
+                  const changed = yield* events
+                    .subscribe(ConfigSchema.Event.Updated)
+                    .pipe(Stream.take(1), Stream.runCollect, Effect.timeout("2 seconds"), Effect.forkScoped)
+                  yield* Effect.sleep("10 millis")
+                  yield* PubSub.publish(updates, update satisfies Watcher.Update)
+                  expect(yield* Fiber.join(changed)).toHaveLength(1)
+                }),
+              { discard: true },
+            )
+          }).pipe(Effect.provide(testLayer(project, global, project, undefined, watcher)))
+        }),
+      ),
+    ),
+  )
+
+  it.live("coalesces config directory updates from one editor save", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const global = path.join(tmp.path, "global")
+          const project = path.join(tmp.path, "project")
+          yield* Effect.promise(() => Promise.all([fs.mkdir(global), fs.mkdir(project)]))
+          const updates = yield* PubSub.unbounded<Watcher.Update>()
+          const watcher = Layer.succeed(
+            Watcher.Service,
+            Watcher.Service.of({
+              subscribe: () => Stream.fromPubSub(updates),
+            }),
+          )
+
+          return yield* Effect.gen(function* () {
+            const events = yield* EventV2.Service
+            const changed: (typeof ConfigSchema.Event.Updated.Type)[] = []
+            yield* events.subscribe(ConfigSchema.Event.Updated).pipe(
+              Stream.runForEach((event) => Effect.sync(() => changed.push(event))),
+              Effect.forkScoped({ startImmediately: true }),
+            )
+            yield* Effect.sleep("10 millis")
+
+            yield* Effect.forEach(
+              [
+                { type: "delete" as const, path: path.join(global, "commands", "review.md") },
+                { type: "create" as const, path: path.join(global, "commands", "release.md") },
+              ],
+              (update) => PubSub.publish(updates, update satisfies Watcher.Update),
+              { discard: true },
+            )
+            yield* Effect.sleep("250 millis")
+
+            expect(changed).toHaveLength(1)
+          }).pipe(Effect.provide(testLayer(project, global, project, undefined, watcher)))
+        }),
+      ),
     ),
   )
 
@@ -1229,5 +1317,41 @@ describe("Config", () => {
         })
       }),
     ),
+  )
+})
+
+describeWatcher("Config native watcher", () => {
+  it.live(
+    "publishes updates for files created inside config directories",
+    () =>
+      Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      ).pipe(
+        Effect.flatMap((tmp) =>
+          Effect.gen(function* () {
+            const global = path.join(tmp.path, "global")
+            const project = path.join(tmp.path, "project")
+            const commands = path.join(global, "commands")
+            yield* Effect.promise(() => Promise.all([fs.mkdir(commands, { recursive: true }), fs.mkdir(project)]))
+
+            return yield* Effect.gen(function* () {
+              const config = yield* Config.Service
+              const events = yield* EventV2.Service
+              yield* config.entries()
+              const changed = yield* events
+                .subscribe(ConfigSchema.Event.Updated)
+                .pipe(Stream.take(1), Stream.runCollect, Effect.timeout("5 seconds"), Effect.forkScoped)
+
+              const writes = yield* Effect.suspend(() =>
+                Effect.promise(() => fs.writeFile(path.join(commands, "review.md"), `Review files ${Math.random()}`)),
+              ).pipe(Effect.repeat(Schedule.spaced("50 millis")), Effect.forkScoped)
+
+              expect(yield* Fiber.join(changed).pipe(Effect.ensuring(Fiber.interrupt(writes)))).toHaveLength(1)
+            }).pipe(Effect.provide(testLayer(project, global, project)))
+          }),
+        ),
+      ),
+    10_000,
   )
 })
