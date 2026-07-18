@@ -256,11 +256,13 @@ const copyBounded = (
   return copied
 }
 
-// "raw" keeps undefined in place, "nullify" turns every undefined into null, and "json"
-// mirrors JSON.stringify: undefined object values drop and undefined array elements become null.
-export type CopyOutMode = "raw" | "nullify" | "json"
+// "json" mirrors JSON.stringify (undefined object values drop, undefined array elements become
+// null, a bare undefined passes through): use it wherever data leaves as JSON, like tool
+// arguments and stringify-style formatting. "nullify" turns every undefined, including a bare
+// one, into null: use it for program results, where the consumer must never see undefined.
+export type CopyOutMode = "json" | "nullify"
 
-export const copyOut = (value: unknown, mode: CopyOutMode = "raw"): unknown => {
+export const copyOut = (value: unknown, mode: CopyOutMode): unknown => {
   if (value === undefined && mode === "nullify") return null
   if (typeof value === "number" && !Number.isFinite(value)) {
     return null

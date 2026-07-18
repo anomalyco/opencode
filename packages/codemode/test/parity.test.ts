@@ -258,11 +258,11 @@ describe("H1: NaN/Infinity flow as intermediates and normalize to null at the bo
 
   test("copyOut normalizes non-finite numbers to null (the shared return + tool-arg boundary)", () => {
     // Tool-call arguments funnel through copyOut too, so this one function pins both boundaries.
-    expect(ToolRuntime.copyOut(NaN)).toBeNull()
-    expect(ToolRuntime.copyOut(Infinity)).toBeNull()
-    expect(ToolRuntime.copyOut(-Infinity)).toBeNull()
-    expect(ToolRuntime.copyOut(42)).toBe(42)
-    expect(ToolRuntime.copyOut({ a: NaN, b: [Infinity, 1] })).toEqual({ a: null, b: [null, 1] })
+    expect(ToolRuntime.copyOut(NaN, "json")).toBeNull()
+    expect(ToolRuntime.copyOut(Infinity, "json")).toBeNull()
+    expect(ToolRuntime.copyOut(-Infinity, "nullify")).toBeNull()
+    expect(ToolRuntime.copyOut(42, "json")).toBe(42)
+    expect(ToolRuntime.copyOut({ a: NaN, b: [Infinity, 1] }, "json")).toEqual({ a: null, b: [null, 1] })
   })
 })
 

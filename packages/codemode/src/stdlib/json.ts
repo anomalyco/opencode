@@ -18,7 +18,7 @@ export const invokeJsonMethod = (name: string, args: Array<unknown>, node: AstNo
       }
       const space = args[2]
       const indent = typeof space === "number" || typeof space === "string" ? space : undefined
-      return JSON.stringify(copyOut(copyIn(args[0], "JSON.stringify value")), null, indent)
+      return JSON.stringify(copyOut(copyIn(args[0], "JSON.stringify value"), "json"), null, indent)
     }
     case "parse": {
       const text = args[0]

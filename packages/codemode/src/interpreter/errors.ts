@@ -44,7 +44,7 @@ export const normalizeError = (error: unknown): Diagnostic => {
       message = (value as { message: string }).message
     } else {
       try {
-        message = JSON.stringify(copyOut(value)) ?? String(value)
+        message = JSON.stringify(copyOut(value, "json")) ?? String(value)
       } catch {
         message = String(value)
       }
