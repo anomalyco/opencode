@@ -5,6 +5,7 @@ import { Schema } from "effect"
 import { resolve, ConfigProvider, Info, useConfig, type Interface } from "../src/config"
 import { settings } from "../src/component/dialog-config"
 import { TuiKeybind } from "../src/config/keybind"
+import { CommandMap, Definitions } from "../src/config/v1/keybind"
 
 const decodeInfo = Schema.decodeUnknownSync(Info)
 
@@ -71,6 +72,21 @@ test("uses command IDs as keybind keys", () => {
       .filter((key) => key !== "leader")
       .every((key) => key.includes(".")),
   ).toBe(true)
+})
+
+test("preserves supported v1 keybind defaults", () => {
+  const legacy = Object.fromEntries(
+    Object.entries(Definitions).flatMap(([name, item]) => {
+      const command = CommandMap[name as keyof typeof CommandMap] ?? name
+      if (command === "app.heap_snapshot") return []
+      return [[command, item.default]]
+    }),
+  )
+  const current = Object.fromEntries(
+    Object.entries(TuiKeybind.Definitions).map(([name, item]) => [name, item.default]),
+  )
+
+  expect(current).toMatchObject(legacy)
 })
 
 test("accepts every v2-only named command ID", () => {

@@ -1,5 +1,6 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { Global } from "@opencode-ai/core/global"
+import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { Effect, Option } from "effect"
 import { expect, mock, test } from "bun:test"
 import { Config } from "../src/config"
@@ -16,20 +17,16 @@ test("mini handler passes resolved CLI keybinds to the runtime", async () => {
       return Promise.resolve()
     },
   }))
-  const server = await import("../src/services/server")
-  mock.module("../src/services/server", () => ({
-    ...server,
-    Server: {
-      ...server.Server,
-      resolve: () => Effect.succeed({ endpoint: { url: "http://127.0.0.1" } }),
-    },
-  }))
   const handler = (await import("../src/commands/handlers/mini")).default
+  const server = Bun.serve({
+    port: 0,
+    fetch: () => Response.json({ healthy: true, version: InstallationVersion, pid: process.pid }),
+  })
 
   try {
     await Effect.runPromise(
       handler({
-        server: Option.none(),
+        server: Option.some(server.url.toString()),
         standalone: false,
         continue: false,
         session: Option.none(),
@@ -62,6 +59,7 @@ test("mini handler passes resolved CLI keybinds to the runtime", async () => {
     expect(config?.leader_timeout).toBe(321)
     expect(config?.keybinds.get("composer.subagent.interrupt")).toMatchObject([{ key: "ctrl+i" }])
   } finally {
+    server.stop(true)
     mock.restore()
   }
 })
