@@ -19,7 +19,7 @@ ultimate source of truth.
 - [x] Top-level `await` and `return` through the program's implicit async-function scope.
 - [x] Explicit `return`, final top-level expression as a REPL-style result, and `null` when no value is produced.
 - [x] Program results use JSON-like boundaries, with `undefined` and non-finite numbers normalized to `null`. Tool
-      arguments remain subject to their schema and the outbound-handling gap listed below.
+      arguments follow JSON serialization semantics before their schema applies (see the tools section).
 - [x] Live Date, RegExp, Map, Set, URL, and URLSearchParams values inside CodeMode.
 - [x] Tool calls through the host-provided `tools` tree only.
 - [x] The global `search(...)` built-in: synchronous tool discovery that counts as an admitted tool call and is
@@ -157,8 +157,11 @@ ultimate source of truth.
 - [x] Dotted tool names are canonicalized into namespace paths; a path can be both callable and a namespace, and the
       last definition supplied for a canonical path wins.
 - [x] Tool path segments may be named `constructor`, `prototype`, or `__proto__` because paths use inert Map keys.
-- [ ] Reject `undefined` and non-finite numbers in outbound tool arguments before render-only and OpenAPI tools run;
-      retain null normalization for program results and JSON serialization.
+- [x] Outbound tool arguments follow JSON serialization semantics, like `JSON.stringify`: object properties with
+      `undefined` values are dropped, `undefined` array elements and non-finite numbers become `null`, and sparse
+      arrays densify. Tools never receive `undefined` inside their input object, though a bare `tools.t(undefined)`
+      argument still reaches schema decoding as `undefined`. Program results keep the stricter
+      normalization where every `undefined` becomes `null`.
 - [ ] Tokenize and case-fold non-ASCII tool paths, descriptions, and queries for tool search.
 
 ## Objects and properties

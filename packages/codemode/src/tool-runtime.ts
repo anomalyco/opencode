@@ -118,8 +118,7 @@ export class ToolRuntimeError extends Error {
   }
 }
 
-const isDefinition = <R>(value: Definition<R> | Tools<R>): value is Definition<R> =>
-  isToolDefinition<R>(value)
+const isDefinition = <R>(value: Definition<R> | Tools<R>): value is Definition<R> => isToolDefinition<R>(value)
 
 const runHost = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, ToolError, R> =>
   effect.pipe(
@@ -257,18 +256,29 @@ const copyBounded = (
   return copied
 }
 
-export const copyOut = (value: unknown, undefinedAsNull = false): unknown => {
-  if (value === undefined && undefinedAsNull) return null
+// "raw" keeps undefined in place, "nullify" turns every undefined into null, and "json"
+// mirrors JSON.stringify: undefined object values drop and undefined array elements become null.
+export type CopyOutMode = "raw" | "nullify" | "json"
+
+export const copyOut = (value: unknown, mode: CopyOutMode = "raw"): unknown => {
+  if (value === undefined && mode === "nullify") return null
   if (typeof value === "number" && !Number.isFinite(value)) {
     return null
   }
   if (Array.isArray(value)) {
     // Array.from densifies holes so sparse arrays normalize at the boundary like JSON does.
-    return Array.from(value, (item) => copyOut(item, undefinedAsNull))
+    return Array.from(value, (item) => {
+      const copied = copyOut(item, mode)
+      return copied === undefined && mode === "json" ? null : copied
+    })
   }
 
   if (value !== null && typeof value === "object" && !(value instanceof ToolReference)) {
-    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, copyOut(item, undefinedAsNull)]))
+    return Object.fromEntries(
+      Object.entries(value)
+        .map(([key, item]) => [key, copyOut(item, mode)] as const)
+        .filter(([, item]) => !(item === undefined && mode === "json")),
+    )
   }
 
   return value
@@ -696,13 +706,13 @@ export const make = <R>(
         invokeDefinition(
           "search",
           searchTool,
-          args.map((arg) => copyOut(copyIn(arg, "Arguments for tool 'search'"))),
+          args.map((arg) => copyOut(copyIn(arg, "Arguments for tool 'search'"), "json")),
         ),
       ),
     invoke: (path, args) =>
       Effect.gen(function* () {
         const name = canonicalSegments(path).join(".")
-        const externalArgs = args.map((arg) => copyOut(copyIn(arg, `Arguments for tool '${name}'`)))
+        const externalArgs = args.map((arg) => copyOut(copyIn(arg, `Arguments for tool '${name}'`), "json"))
         const tool = resolve(root, path)
         return yield* invokeDefinition(name, tool, externalArgs)
       }),

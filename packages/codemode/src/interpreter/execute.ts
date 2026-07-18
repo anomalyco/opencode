@@ -52,7 +52,7 @@ export const executeWithLimits = <const Provided extends Record<string, unknown>
             logs,
           )
           const value = yield* interpreter.run(program)
-          const result = copyOut(copyIn(value, "Execution result"), true) as DataValue
+          const result = copyOut(copyIn(value, "Execution result"), "nullify") as DataValue
           returned = { value: result, promises }
           const warnings = yield* promises.interrupt()
           return {

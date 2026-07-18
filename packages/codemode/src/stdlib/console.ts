@@ -89,7 +89,7 @@ const formatConsoleTable = (value: unknown, columnsArgument: unknown): string =>
 const consoleTableColumns = (value: unknown): ReadonlyArray<string> | undefined => {
   if (value === undefined) return undefined
   if (containsRuntimeReference(value)) return undefined
-  const columns = copyOut(copyIn(value, "console.table columns"), true)
+  const columns = copyOut(copyIn(value, "console.table columns"), "nullify")
   return Array.isArray(columns) ? columns.map((column) => String(column)) : undefined
 }
 

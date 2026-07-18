@@ -453,6 +453,56 @@ describe("CodeMode schema flexibility", () => {
     expect(observed).toStrictEqual([{ id: 42 }])
   })
 
+  test("outbound tool arguments follow JSON serialization semantics", async () => {
+    const observed: Array<unknown> = []
+    const call = Tool.make({
+      description: "Observe raw input",
+      input: { type: "object" },
+      run: (input) =>
+        Effect.sync(() => {
+          observed.push(input)
+          return "ok"
+        }),
+    })
+    const runtime = CodeMode.make({ tools: { adapter: { call } } })
+
+    const result = await Effect.runPromise(
+      runtime.execute(
+        `return await tools.adapter.call({ q: undefined, limit: 0 / 0, rate: 1 / 0, items: [1, undefined, 2], holes: [1, , 3] })`,
+      ),
+    )
+    expect(result.ok).toBe(true)
+    const received = observed[0] as Record<string, unknown>
+    expect(received).toStrictEqual({ limit: null, rate: null, items: [1, null, 2], holes: [1, null, 3] })
+    // The undefined-valued property is dropped like JSON.stringify, not delivered as undefined.
+    expect(Object.hasOwn(received, "q")).toBe(false)
+  })
+
+  test("dropping undefined values lets optionalKey schemas accept conditional arguments", async () => {
+    const observed: Array<unknown> = []
+    const find = Tool.make({
+      description: "Find things",
+      input: Schema.Struct({ query: Schema.optionalKey(Schema.String), limit: Schema.optionalKey(Schema.Number) }),
+      run: (input) =>
+        Effect.sync(() => {
+          observed.push(input)
+          return "ok"
+        }),
+    })
+    const runtime = CodeMode.make({ tools: { things: { find } } })
+
+    // The `cond ? value : undefined` idiom: optionalKey rejects a present undefined, so the
+    // JSON boundary must drop the key before the schema decodes.
+    const result = await Effect.runPromise(
+      runtime.execute(`return await tools.things.find({ query: undefined, limit: 5 })`),
+    )
+    expect(result.ok).toBe(true)
+    expect(observed).toStrictEqual([{ limit: 5 }])
+
+    const search = await Effect.runPromise(runtime.execute(`return (await search({ query: undefined })).items.length`))
+    expect(search.ok).toBe(true)
+  })
+
   test("renders JSON Schema outputs and $defs references", async () => {
     const lookup = Tool.make({
       description: "Look up a user",

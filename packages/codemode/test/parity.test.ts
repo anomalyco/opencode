@@ -266,6 +266,18 @@ describe("H1: NaN/Infinity flow as intermediates and normalize to null at the bo
   })
 })
 
+describe("copyOut undefined handling per boundary mode", () => {
+  test("json mode mirrors JSON.stringify for undefined", () => {
+    expect(ToolRuntime.copyOut({ q: undefined, keep: 1 }, "json")).toStrictEqual({ keep: 1 })
+    expect(ToolRuntime.copyOut([1, undefined, 2], "json")).toStrictEqual([1, null, 2])
+    expect(ToolRuntime.copyOut({ nested: { a: undefined, b: [undefined] } }, "json")).toStrictEqual({
+      nested: { b: [null] },
+    })
+    expect(ToolRuntime.copyOut(undefined, "json")).toBeUndefined()
+    expect(ToolRuntime.copyOut({ a: undefined }, "nullify")).toStrictEqual({ a: null })
+  })
+})
+
 describe("Error values and instanceof", () => {
   test("new Error carries name/message and is instanceof Error", async () => {
     expect(await value(`const e = new Error("boom"); return [e instanceof Error, e.name, e.message]`)).toEqual([
