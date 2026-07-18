@@ -474,14 +474,11 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
     },
     view: {
       placeholder: designPlaceholder,
-      agent:
-        props.controls.agents.options.length > 0
-          ? {
-              options: () => props.controls.agents.options.map((name) => ({ id: name, label: name })),
-              current: () => props.controls.agents.current,
-              onSelect: props.controls.agents.select,
-            }
-          : undefined,
+      agent: {
+        options: () => props.controls.agents.options.map((name) => ({ id: name, label: name })),
+        current: () => props.controls.agents.current,
+        onSelect: props.controls.agents.select,
+      },
       variant: {
         options: () => variants().map((value) => ({ id: value, label: value })),
         current: () => props.controls.model.selection.variant.current() ?? "default",
