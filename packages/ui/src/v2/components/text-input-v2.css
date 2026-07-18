@@ -98,6 +98,7 @@
 
 [data-component="text-input-v2"] [data-slot="text-input-v2-input"]::placeholder {
   color: var(--v2-text-text-faint);
+  user-select: none;
 }
 
 [data-component="text-input-v2"] [data-slot="text-input-v2-input"][type="search"]::-webkit-search-cancel-button {

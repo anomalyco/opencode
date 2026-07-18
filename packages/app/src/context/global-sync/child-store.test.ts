@@ -221,4 +221,56 @@ describe("createChildStoreManager", () => {
       dispose()
     }
   })
+
+  test("keeps non-bootstrapping children passive until a real directory access", () => {
+    let manager: ReturnType<typeof createChildStoreManager> | undefined
+    const offset = querySingles.length
+    const bootstraps: string[] = []
+
+    const dispose = createOwner((owner) => {
+      manager = createChildStoreManager({
+        owner,
+        scope: ServerScope.local,
+        persist,
+        isBooting: () => false,
+        isLoadingSessions: () => false,
+        onBootstrap(directory) {
+          bootstraps.push(directory)
+        },
+        onMcp() {},
+        onDispose() {},
+        translate: (key) => key,
+        queryOptions: queryOptionsApi,
+        global: { provider },
+      })
+    })
+
+    try {
+      if (!manager) throw new Error("manager required")
+      const [store] = manager.child("/project", { bootstrap: false })
+      const queries = querySingles.slice(offset)
+
+      expect(queries).toHaveLength(6)
+      expect(queries[0]?.().enabled).toBe(false)
+      expect(queries[3]?.().enabled).toBe(false)
+      expect(queries[4]?.().enabled).toBe(false)
+      expect(queries[5]?.().enabled).toBe(false)
+      expect(store.path.directory).toBe("/project")
+      expect(store.provider_ready).toBe(false)
+      expect(store.lsp_ready).toBe(false)
+      expect(bootstraps).toEqual([])
+
+      manager.child("/project")
+      expect(queries[0]?.().enabled).toBe(true)
+      expect(queries[3]?.().enabled).toBe(true)
+      expect(queries[4]?.().enabled).toBe(true)
+      expect(queries[5]?.().enabled).toBe(true)
+      expect(bootstraps).toEqual(["/project"])
+
+      manager.child("/project", { bootstrap: false })
+      expect(queries[0]?.().enabled).toBe(true)
+    } finally {
+      dispose()
+    }
+  })
 })

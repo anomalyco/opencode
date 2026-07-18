@@ -92,6 +92,8 @@ You can also access our models through the following API endpoints.
 | Gemini 3.5 Flash       | gemini-3.5-flash       | `https://opencode.ai/zen/v1/models/gemini-3.5-flash` | `@ai-sdk/google`            |
 | Gemini 3.1 Pro         | gemini-3.1-pro         | `https://opencode.ai/zen/v1/models/gemini-3.1-pro`   | `@ai-sdk/google`            |
 | Gemini 3 Flash         | gemini-3-flash         | `https://opencode.ai/zen/v1/models/gemini-3-flash`   | `@ai-sdk/google`            |
+| Grok 4.5               | grok-4.5               | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
+| Grok Build 0.1         | grok-build-0.1         | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | Qwen3.7 Max            | qwen3.7-max            | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
 | Qwen3.7 Plus           | qwen3.7-plus           | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus           | qwen3.6-plus           | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
@@ -107,8 +109,6 @@ You can also access our models through the following API endpoints.
 | Kimi K2.5              | kimi-k2.5              | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | Kimi K2.6              | kimi-k2.6              | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | Kimi K2.7 Code         | kimi-k2.7-code         | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
-| Grok 4.5               | grok-4.5               | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
-| Grok Build 0.1         | grok-build-0.1         | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | Big Pickle             | big-pickle             | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | MiMo-V2.5 Free         | mimo-v2.5-free         | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | North Mini Code Free   | north-mini-code-free   | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
@@ -157,9 +157,6 @@ We support a pay-as-you-go model. Below are the prices **per 1M tokens**.
 | Qwen3.5 Plus                      | $0.20  | $1.20   | $0.02       | $0.25        |
 | DeepSeek V4 Pro                   | $1.74  | $3.48   | $0.145      | -            |
 | DeepSeek V4 Flash                 | $0.14  | $0.28   | $0.028      | -            |
-| Grok 4.5 (≤ 200K tokens)          | $2.00  | $6.00   | $0.50       | -            |
-| Grok 4.5 (> 200K tokens)          | $4.00  | $12.00  | $1.00       | -            |
-| Grok Build 0.1                    | $1.00  | $2.00   | $0.20       | -            |
 | Claude Fable 5                    | $10.00 | $50.00  | $1.00       | $12.50       |
 | Claude Opus 4.8                   | $5.00  | $25.00  | $0.50       | $6.25        |
 | Claude Opus 4.7                   | $5.00  | $25.00  | $0.50       | $6.25        |
@@ -174,6 +171,9 @@ We support a pay-as-you-go model. Below are the prices **per 1M tokens**.
 | Gemini 3.1 Pro (≤ 200K tokens)    | $2.00  | $12.00  | $0.20       | -            |
 | Gemini 3.1 Pro (> 200K tokens)    | $4.00  | $18.00  | $0.40       | -            |
 | Gemini 3 Flash                    | $0.50  | $3.00   | $0.05       | -            |
+| Grok 4.5 (≤ 200K tokens)          | $2.00  | $6.00   | $0.50       | -            |
+| Grok 4.5 (> 200K tokens)          | $4.00  | $12.00  | $1.00       | -            |
+| Grok Build 0.1                    | $1.00  | $2.00   | $0.20       | -            |
 | GPT 5.6 Sol (≤ 272K tokens)       | $5.00  | $30.00  | $0.50       | $6.25        |
 | GPT 5.6 Sol (> 272K tokens)       | $10.00 | $45.00  | $1.00       | $12.50       |
 | GPT 5.6 Terra (≤ 272K tokens)     | $2.50  | $15.00  | $0.25       | $3.125       |
