@@ -1,4 +1,5 @@
 import { SyntaxStyle, RGBA, type TerminalColors } from "@opentui/core"
+import alterspective from "./assets/alterspective.json" with { type: "json" }
 import aura from "./assets/aura.json" with { type: "json" }
 import ayu from "./assets/ayu.json" with { type: "json" }
 import carbonfox from "./assets/carbonfox.json" with { type: "json" }
@@ -128,6 +129,7 @@ export type ThemeJson = {
 }
 
 export const DEFAULT_THEMES: Record<string, ThemeJson> = {
+  alterspective,
   aura,
   ayu,
   catppuccin,
