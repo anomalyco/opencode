@@ -17,6 +17,10 @@ const AgentSchema = Schema.StructWithRest(
     }),
     temperature: Schema.optional(Schema.Finite),
     top_p: Schema.optional(Schema.Finite),
+    tool_choice: Schema.optional(Schema.Literals(["auto", "required", "none"])).annotate({
+      description:
+        "Force the model's tool-choice behavior for this agent. \"required\" forces a tool call every turn; \"none\" forbids tool calls; \"auto\" (default) lets the model decide. Useful for models that under-invoke tools by default (e.g. Kimi K3 under MCP flows).",
+    }),
     prompt: Schema.optional(Schema.String),
     tools: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)).annotate({
       description: "@deprecated Use 'permission' field instead",
@@ -48,6 +52,7 @@ const KNOWN_KEYS = new Set([
   "description",
   "temperature",
   "top_p",
+  "tool_choice",
   "mode",
   "hidden",
   "color",

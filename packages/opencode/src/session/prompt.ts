@@ -81,6 +81,12 @@ IMPORTANT:
 
 const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested structured output. You MUST use the StructuredOutput tool to provide your final response. Do NOT respond with plain text - you MUST call the StructuredOutput tool with your answer formatted according to the schema.`
 
+// Session-keyed per-turn tool-choice override. Set by `prompt()` when
+// PromptInput.toolChoice is provided; cleared after the loop consumes
+// it. Not persisted — a crashed daemon forgets it, next turn falls
+// back to agent config or the default.
+const pendingToolChoice = new Map<SessionID, "auto" | "required" | "none">()
+
 function mcpResourceBase64Size(value: string) {
   const trimmed = value.replace(/\s/g, "")
   const padding = trimmed.endsWith("==") ? 2 : trimmed.endsWith("=") ? 1 : 0
@@ -1066,6 +1072,15 @@ const layer = Layer.effect(
         yield* sessions.setPermission({ sessionID: session.id, permission: permissions })
       }
 
+      // Per-turn tool-choice override — read by the loop at request-build
+      // time (see below). Cleared when the loop exits so the next turn
+      // reverts to agent config or the default.
+      if (input.toolChoice !== undefined) {
+        pendingToolChoice.set(input.sessionID, input.toolChoice)
+      } else {
+        pendingToolChoice.delete(input.sessionID)
+      }
+
       if (input.noReply === true) return message
       return yield* loop({ sessionID: input.sessionID })
     })
@@ -1126,6 +1141,7 @@ const layer = Layer.effect(
               })
             }
             yield* Effect.logInfo("exiting loop", { "session.id": sessionID })
+            pendingToolChoice.delete(sessionID)
             break
           }
 
@@ -1282,7 +1298,10 @@ const layer = Layer.effect(
               ],
               tools,
               model,
-              toolChoice: format.type === "json_schema" ? "required" : undefined,
+              toolChoice:
+                pendingToolChoice.get(sessionID) ??
+                agent.toolChoice ??
+                (format.type === "json_schema" ? "required" : undefined),
             })
 
             if (structured !== undefined) {
@@ -1507,6 +1526,10 @@ export const PromptInput = Schema.Struct({
       "@deprecated tools and permissions have been merged, you can set permissions on the session itself now",
   }),
   format: Schema.optional(SessionV1.Format),
+  toolChoice: Schema.optional(Schema.Literals(["auto", "required", "none"])).annotate({
+    description:
+      "Override the model tool-choice for this turn. \"required\" forces the model to emit a tool call; \"none\" forbids tool calls; \"auto\" is the model's default. Precedence: request > agent config > default (\"required\" for json_schema output, otherwise unset).",
+  }),
   system: Schema.optional(Schema.String),
   variant: Schema.optional(Schema.String),
   parts: Schema.Array(
