@@ -22,10 +22,19 @@ async function publish(dir: string, name: string, version: string) {
   if (process.platform !== "win32") await $`chmod -R 755 .`.cwd(dir)
   if (await published(name, version)) {
     console.log(`already published ${name}@${version}`)
-    return
+    return true
   }
-  await $`bun pm pack`.cwd(dir)
-  await $`npm publish *.tgz --access public --tag ${Script.channel}`.cwd(dir)
+  try {
+    await $`bun pm pack`.cwd(dir)
+    await $`npm publish *.tgz --access public --tag ${Script.channel}`.cwd(dir)
+    // Trust a successful publish. Re-querying npm immediately races registry/CDN lag
+    // and can false-fail the missing-binary gate.
+    return true
+  } catch (e: any) {
+    console.error(`failed to publish ${name}: ${e.stderr || e.message}`)
+    // Publish may have succeeded on the server even if the client errored; confirm.
+    return await published(name, version)
+  }
 }
 
 const binaryDirs: Record<string, string> = {}
@@ -73,12 +82,8 @@ const missingBinaries: string[] = []
 
 if (!skipBinaries) {
   const tasks = Object.entries(binaryDirs).map(async ([name, dirName]) => {
-    try {
-      await publish(`./dist/${dirName}`, name, binaries[name])
-    } catch (e: any) {
-      console.error(`failed to publish ${name}: ${e.stderr || e.message}`)
-    }
-    if (await published(name, binaries[name])) {
+    const ok = await publish(`./dist/${dirName}`, name, binaries[name])
+    if (ok) {
       availableBinaries[name] = binaries[name]
       return
     }
@@ -129,6 +134,8 @@ await Bun.file(`${wrapperDir}/package.json`).write(
   ),
 )
 
-await publish(wrapperDir, publishName, version)
+if (!(await publish(wrapperDir, publishName, version))) {
+  throw new Error(`failed to publish ${publishName}@${version}`)
+}
 
 const ghRepo = process.env.GH_REPO || (await $`git remote get-url origin`.text()).trim().replace(/^https:\/\/github\.com\//, "").replace(/\.git$/, "")
