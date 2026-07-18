@@ -245,7 +245,6 @@ const TIPS: Tip[] = [
   "Run {highlight}kancode upgrade{/highlight} to update to the latest version",
   "Run {highlight}kancode auth list{/highlight} to see all configured providers",
   "Run {highlight}kancode agent create{/highlight} for guided agent creation",
-  "Run {highlight}kancode github install{/highlight} to set up the GitHub workflow",
   'Use {highlight}"theme": "system"{/highlight} to match your terminal\'s colors',
   "Create JSON theme files in {highlight}.kancode/themes/{/highlight} directory",
   "Themes support dark/light variants for both modes",

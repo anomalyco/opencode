@@ -30,7 +30,6 @@
   },
   "devDependencies": {
     "@babel/core": "7.28.4",
-    "@octokit/webhooks-types": "7.6.1",
     "@kancode/core": "workspace:*",
     "@kancode/http-recorder": "workspace:*",
     "@kancode/script": "workspace:*",
@@ -52,8 +51,6 @@
     "why-is-node-running": "3.2.2"
   },
   "dependencies": {
-    "@actions/core": "1.11.1",
-    "@actions/github": "6.0.1",
     "@agentclientprotocol/sdk": "0.21.0",
     "@ai-sdk/alibaba": "1.0.17",
     "@ai-sdk/amazon-bedrock": "4.0.112",
