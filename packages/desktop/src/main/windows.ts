@@ -76,6 +76,7 @@ export function setBackgroundColor(color: string) {
   BrowserWindow.getAllWindows().forEach((win) => {
     win.setBackgroundColor(color)
     if (process.platform === "darwin") win.invalidateShadow()
+    if (process.platform === "linux") updateTitlebar(win)
   })
 }
 
@@ -103,7 +104,7 @@ function defaultBackgroundColor() {
 function overlay(theme: Partial<TitlebarTheme> = {}, zoom = 1) {
   const mode = theme.mode ?? tone()
   return {
-    color: "#00000000",
+    color: process.platform === "linux" ? (backgroundColor ?? defaultBackgroundColor()) : "#00000000",
     symbolColor: mode === "dark" ? "white" : "black",
     height: Math.max(titlebarHeight, Math.round(titlebarHeight * zoom)),
   }
@@ -122,7 +123,7 @@ export function setTitlebar(win: BrowserWindow, theme: Partial<TitlebarTheme> = 
 }
 
 export function updateTitlebar(win: BrowserWindow) {
-  if (process.platform !== "win32") return
+  if (process.platform !== "win32" && process.platform !== "linux") return
   win.setTitleBarOverlay(overlay(titlebarThemes.get(win), win.webContents.getZoomFactor()))
 }
 
@@ -187,7 +188,7 @@ export function createMainWindow(id: string = randomUUID()) {
           trafficLightPosition: { x: 14, y: 14 },
         }
       : {}),
-    ...(process.platform === "win32"
+    ...(process.platform === "win32" || process.platform === "linux"
       ? {
           frame: false,
           titleBarStyle: "hidden" as const,
