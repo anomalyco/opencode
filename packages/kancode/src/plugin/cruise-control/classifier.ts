@@ -94,6 +94,7 @@ export const DEFAULT_ALLOWLIST = [
   "webfetch",
   "websearch",
   "todowrite",
+  "session_rename",
   "skill",
   "task",
   // Classifier/dynamic-cache candidate allows still pass authoritative configured rails.
@@ -131,6 +132,7 @@ export const DEFAULT_INSTRUCTIONS: Instructions = {
     "Allow access to KanCode managed app directories under the user's resolved config, data, cache, state, and tmp roots.",
     "Allow routine edits and writes that are clearly scoped to the current project task.",
     "Allow todowrite when patterns or metadata show session scope (session task list state, not a filesystem write).",
+    "Allow session_rename when patterns or metadata show session scope (session display title only, not a filesystem write).",
     "Allow web fetch or search when the request is clearly for documentation or public reference material.",
   ],
   conditional: [
@@ -139,6 +141,7 @@ export const DEFAULT_INSTRUCTIONS: Instructions = {
     "Allow external_directory only when the path is clearly inside KanCode managed app directories.",
     "Allow edit, write, or apply_patch outside the obvious task scope only when user intent is explicit in the current user prompt.",
     "Do not treat todowrite as a filesystem write; deny only if metadata clearly indicates a different destructive intent.",
+    "Do not treat session_rename as a filesystem write; deny only if metadata clearly indicates a different destructive intent.",
     "Deny when a command mixes a mostly safe operation with a clearly destructive flag or target.",
   ],
   deny: [
@@ -347,6 +350,23 @@ export function sessionTodoAllow(
   return "Session todo list update is allowed"
 }
 
+/**
+ * Deterministic allow for session-scoped session_rename (display title only, not filesystem).
+ * Requires an explicit session pattern or scope metadata — bare `*` without metadata still
+ * goes to the LLM so broad/unscoped requests are not silently auto-allowed.
+ */
+export function sessionRenameAllow(
+  permission: string,
+  patterns: readonly string[],
+  metadata?: Record<string, unknown>,
+): string | undefined {
+  if (permission !== "session_rename") return undefined
+  const scopedPattern = patterns.some((pattern) => pattern === "session" || pattern.startsWith("ses_"))
+  const scopedMeta = metadata?.scope === "session" || metadata?.kind === "session_title"
+  if (!scopedPattern && !scopedMeta) return undefined
+  return "Session title update is allowed"
+}
+
 export { destructiveReason } from "./destructive"
 export { deriveInstructionIntent } from "./instruction-intent"
 
@@ -463,7 +483,7 @@ function unavailableReason(attempts: number): string {
  * `opts.retry_interval_ms` is the delay between attempts (default 2000; 0 = immediate).
  * Missing-model is handled before this path and is not retried.
  *
- * Evaluate order: destructive deny → managed/session-todo candidate allow through rails →
+ * Evaluate order: destructive deny → managed/session-todo/session-rename candidate allow through rails →
  * dynamic deny → dynamic allow (still rails-checked) → LLM classify
  * (serialized with `classify_gap_ms` between calls unless `parallel_classify: true`) →
  * derive binary decision → applySafety → remember final model-derived allow/deny.
@@ -511,6 +531,19 @@ export const runClassifier = Effect.fn("CruiseControl.runClassifier")(function* 
     const decision = applySafety("allow", input.permission, input.opts)
     const reason = decision === "allow" ? sessionTodo : "Denied by cruise_control safety rails"
     yield* Effect.logInfo("cruise_control session todo decision", {
+      permission: input.permission,
+      patterns: input.patterns,
+      decision,
+      reason,
+    })
+    return { decision, reason }
+  }
+
+  const sessionRename = sessionRenameAllow(input.permission, input.patterns, input.metadata)
+  if (sessionRename) {
+    const decision = applySafety("allow", input.permission, input.opts)
+    const reason = decision === "allow" ? sessionRename : "Denied by cruise_control safety rails"
+    yield* Effect.logInfo("cruise_control session rename decision", {
       permission: input.permission,
       patterns: input.patterns,
       decision,

@@ -32,6 +32,7 @@ import {
   managedAppDirectoryAllow,
   isManagedAppDirectoryPattern,
   sessionTodoAllow,
+  sessionRenameAllow,
   MISSING_MODEL_MESSAGE,
 } from "../../src/plugin/cruise-control/classifier"
 import {
@@ -1161,6 +1162,17 @@ describe("classifier contract", () => {
     expect(sessionTodoAllow("write", ["session"], { scope: "session" })).toBeUndefined()
   })
 
+  test("sessionRenameAllow requires session pattern or scope metadata", () => {
+    expect(sessionRenameAllow("session_rename", ["session"], { scope: "session", kind: "session_title" })).toBe(
+      "Session title update is allowed",
+    )
+    expect(sessionRenameAllow("session_rename", ["*"], { scope: "session" })).toBe("Session title update is allowed")
+    expect(sessionRenameAllow("session_rename", ["session"], {})).toBe("Session title update is allowed")
+    expect(sessionRenameAllow("session_rename", ["*"], {})).toBeUndefined()
+    expect(sessionRenameAllow("session_rename", ["*"])).toBeUndefined()
+    expect(sessionRenameAllow("todowrite", ["session"], { scope: "session" })).toBeUndefined()
+  })
+
   test("never_auto blocks managed app directory candidate allow", () => {
     expect(
       applySafety("allow", "external_directory", {
@@ -1345,6 +1357,28 @@ describe("classifier contract", () => {
     expect(outcome).toEqual({
       decision: "allow",
       reason: "Session todo list update is allowed",
+    })
+  })
+
+  test("session-scoped session_rename allow skips classifier", async () => {
+    let called = false
+    const outcome = await Effect.runPromise(
+      runClassifier({
+        permission: "session_rename",
+        patterns: ["session"],
+        metadata: { sessionID: "ses_test", scope: "session", kind: "session_title", title: "Renamed" },
+        opts: { fallback: "ask", allowlist: ["session_rename"], timeout_ms: 1000 },
+        classify: Effect.sync(() => {
+          called = true
+          return highRiskLowIntent("should not run")
+        }),
+        modelRef: "opencode/deepseek-v4-flash",
+      }),
+    )
+    expect(called).toBe(false)
+    expect(outcome).toEqual({
+      decision: "allow",
+      reason: "Session title update is allowed",
     })
   })
 

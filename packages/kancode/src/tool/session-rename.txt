@@ -1,0 +1,18 @@
+Rename the current session's display title.
+
+## When to use
+- The user explicitly asks to rename, retitle, or name the session
+- Mid-session, a short stable title clearly improves how the session will be found later (topic settled, not still exploring)
+
+## When NOT to use
+- Do not rename on every turn or after each small topic shift
+- Do not invent a title just to "look busy" when the user did not ask and the default/auto title is still fine
+- Do not use this for todos, plans, or file edits — it only changes the session title
+
+## Arguments
+- `title` (string, required) — the new session title. Keep it short and descriptive (under ~100 characters). Leading/trailing whitespace is trimmed.
+
+## Rules
+- Affects only the current session (the one executing this tool)
+- Prefer the user's requested wording when they give a name
+- After renaming, confirm the new title briefly in your reply

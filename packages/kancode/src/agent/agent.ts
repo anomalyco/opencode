@@ -204,6 +204,7 @@ const layer = Layer.effect(
               defaults,
               Permission.fromConfig({
                 todowrite: "deny",
+                session_rename: "deny",
               }),
               user,
             ),
