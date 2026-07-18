@@ -24,6 +24,9 @@ const sourcemapsFlag = process.argv.includes("--sourcemaps")
 const plugin = createSolidTransformPlugin()
 const skipEmbedWebUi = process.argv.includes("--skip-embed-web-ui")
 
+const filterOsIndex = process.argv.indexOf("--filter-os")
+const filterOs = filterOsIndex >= 0 ? process.argv[filterOsIndex + 1]?.split(",") : undefined
+
 const createEmbeddedWebUIBundle = async () => {
   console.log(`Building Web UI to embed in the binary`)
   const appDir = path.join(import.meta.dirname, "../../app")
@@ -113,7 +116,7 @@ const allTargets: {
   },
 ]
 
-const targets = singleFlag
+const targets = (singleFlag
   ? allTargets.filter((item) => {
       if (item.os !== process.platform || item.arch !== process.arch) {
         return false
@@ -133,6 +136,7 @@ const targets = singleFlag
       return true
     })
   : allTargets
+).filter((item) => !filterOs || filterOs.includes(item.os))
 
 await $`rm -rf dist`
 

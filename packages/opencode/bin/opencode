@@ -186,14 +186,66 @@ function findBinary(startDir) {
   }
 }
 
-const resolved = envPath || (fs.existsSync(cached) ? cached : findBinary(scriptDir))
-if (!resolved) {
+function findAllBinaries(startDir) {
+  const found = []
+  let current = startDir
+  const seen = new Set()
+  for (;;) {
+    const modules = path.join(current, "node_modules")
+    if (fs.existsSync(modules)) {
+      for (const name of names) {
+        const candidate = path.join(modules, name, "bin", binary)
+        if (fs.existsSync(candidate) && !seen.has(candidate)) {
+          seen.add(candidate)
+          found.push(candidate)
+        }
+      }
+    }
+    const parent = path.dirname(current)
+    if (parent === current) break
+    current = parent
+  }
+  return found
+}
+
+function verifyBinary(binaryPath) {
+  try {
+    const result = childProcess.spawnSync(binaryPath, ["--version"], {
+      encoding: "utf8",
+      stdio: "ignore",
+      timeout: 5000,
+    })
+    return result.status === 0
+  } catch {
+    return false
+  }
+}
+
+function tryRun(binaryPath) {
+  if (verifyBinary(binaryPath)) {
+    run(binaryPath)
+    return true
+  }
+  return false
+}
+
+;(function main() {
+  const resolved = envPath || (fs.existsSync(cached) ? cached : null)
+  if (resolved && tryRun(resolved)) return
+
+  if (resolved) {
+    console.error("The installed opencode binary is not compatible with this system. Attempting fallback...")
+  }
+
+  const candidates = findAllBinaries(scriptDir)
+  for (const candidate of candidates) {
+    if (tryRun(candidate)) return
+  }
+
   console.error(
     "It seems that your package manager failed to install the right version of the opencode CLI for your platform. You can try manually installing " +
       names.map((n) => `\"${n}\"`).join(" or ") +
       " package",
   )
   process.exit(1)
-}
-
-run(resolved)
+})()
