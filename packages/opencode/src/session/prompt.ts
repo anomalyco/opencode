@@ -61,9 +61,22 @@ import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionReminders } from "./reminders"
 import { SessionTools } from "./tools"
 import { LLMEvent } from "@opencode-ai/llm"
+import { similarity as outputSimilarity } from "@/loop/loop"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
+
+// fork: loop detection — if consecutive assistant turns produce near-identical
+// output with no tool calls, the agent is stuck in a text loop (e.g. endlessly
+// "Thinking...").  Bigram similarity >= 0.92 means virtually the same content.
+// After 3 consecutive near-identical turns with no tools, break the loop.
+const LoopSimilarityThreshold = 0.92
+const LoopMaxStreak = 3
+
+// fork: sub-agent step limit — a sub-agent (session with parentID) gets a
+// default step cap to prevent it from running indefinitely. The agent's own
+// steps setting takes precedence if explicitly configured.
+const DefaultSubAgentSteps = 50
 
 const decodeMessageInfo = Schema.decodeUnknownExit(SessionV1.Info)
 const decodeMessagePart = Schema.decodeUnknownExit(SessionV1.Part)
@@ -1137,6 +1150,9 @@ export const layer = Layer.effect(
         const ctx = yield* InstanceState.context
         let structured: unknown
         let step = 0
+        // fork: loop detection state — track near-identical output across turns
+        let lastOutputText: string | undefined
+        let loopStreak = 0
         const session = yield* sessions.get(sessionID).pipe(Effect.orDie)
 
         while (true) {
@@ -1229,7 +1245,9 @@ export const layer = Layer.effect(
             yield* events.publish(Session.Event.Error, { sessionID, error: error.toObject() })
             throw error
           }
-          const maxSteps = agent.steps ?? Infinity
+          // fork: apply default step limit for sub-agents to prevent infinite loops
+          const defaultSteps = session.parentID ? DefaultSubAgentSteps : Infinity
+          const maxSteps = agent.steps ?? defaultSteps
           const isLastStep = step >= maxSteps
           msgs = yield* SessionReminders.apply({ messages: msgs, agent, session }).pipe(
             Effect.provideService(RuntimeFlags.Service, flags),
@@ -1394,6 +1412,47 @@ export const layer = Layer.effect(
             Effect.onInterrupt(() => finalizeInterruptedAssistant),
           )
           if (outcome === "break") break
+          // fork: loop detection — check if this turn produced near-identical
+          // output to the previous turn with no tool calls, which means the
+          // agent is stuck in a text loop (e.g. endlessly "Thinking...")
+          {
+            const currentParts = yield* MessageV2.parts(handle.message.id).pipe(
+              Effect.provideService(Database.Service, database),
+            )
+            const currentText = currentParts
+              .filter((p): p is Extract<SessionV1.Part, { type: "text" }> => p.type === "text")
+              .map((p) => p.text)
+              .join(" ")
+            const currentHasToolCalls = currentParts.some(
+              (p) => p.type === "tool" && !isOrphanedInterruptedTool(p),
+            )
+            if (lastOutputText !== undefined && !currentHasToolCalls) {
+              const sim = outputSimilarity(currentText, lastOutputText)
+              if (sim >= LoopSimilarityThreshold) {
+                loopStreak++
+                if (loopStreak >= LoopMaxStreak) {
+                  yield* Effect.logWarning("agent loop detected — breaking", {
+                    "session.id": sessionID,
+                    step,
+                    similarity: sim,
+                    streak: loopStreak,
+                  })
+                  handle.message.error = new NamedError.Unknown({
+                    message: `Agent appears stuck in a loop — ${loopStreak} consecutive turns produced near-identical output with no progress`,
+                  }).toObject()
+                  handle.message.time.completed = Date.now()
+                  yield* sessions.updateMessage(handle.message)
+                  yield* events.publish(Session.Event.Error, { sessionID, error: handle.message.error })
+                  break
+                }
+              } else {
+                loopStreak = 0
+              }
+            } else {
+              loopStreak = 0
+            }
+            lastOutputText = currentText
+          }
           continue
         }
 

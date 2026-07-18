@@ -55,6 +55,13 @@ const OPENAI_HEADER_TIMEOUT_DEFAULT = 10_000
 // error instead of an indefinite hang. A user-configured headerTimeout for
 // that provider always wins — this is only the fallback.
 const LOCAL_PROVIDER_HEADER_TIMEOUT_DEFAULT = 180_000
+// fork: SSE stream chunk timeout for local providers — if no chunk arrives
+// within this window, the stream is aborted. Catches a model that accepted
+// the request and started streaming but then hung (e.g. endlessly generating
+// "Thinking..." tokens with no actual output). 120s is generous for a slow
+// local model but catches truly stuck streams. User-configured chunkTimeout
+// always wins.
+const LOCAL_PROVIDER_CHUNK_TIMEOUT_DEFAULT = 120_000
 
 function wrapSSE(res: Response, ms: number, ctl: AbortController) {
   if (typeof ms !== "number" || ms <= 0) return res
@@ -2047,7 +2054,11 @@ export const layer = Layer.effect(
         if (existing) return existing
 
         const customFetch = options["fetch"]
-        const chunkTimeout = options["chunkTimeout"]
+        // fork: default chunk timeout for local providers — catches a model
+        // that started streaming but then hung (e.g. endlessly "Thinking...")
+        const chunkTimeout =
+          options["chunkTimeout"] ??
+          (model.api.npm === "@ai-sdk/openai-compatible" ? LOCAL_PROVIDER_CHUNK_TIMEOUT_DEFAULT : undefined)
         // fork: default local/llama-skein providers to a header timeout when
         // the user hasn't set one (?? only falls through on null/undefined,
         // so an explicit `headerTimeout: false` opt-out is preserved).

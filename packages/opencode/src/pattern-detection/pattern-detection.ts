@@ -20,7 +20,7 @@ interface HistoryEntry {
 }
 
 const defaultConfig: PatternDetectionConfig = {
-  enabled: false,
+  enabled: true,
   maxRepetitions: 5,
   timeWindow: 5 * 60 * 1000,
   similarityThreshold: 0.7,

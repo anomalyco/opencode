@@ -30,8 +30,10 @@ const id = "task"
 // legitimate subagent task may make several round trips (multiple tool
 // calls, possibly more than one cold model load) before producing a final
 // result; this only needs to catch a task that is genuinely stuck, not cap
-// normal multi-step work.
-const SUBAGENT_TASK_TIMEOUT_MS = 20 * 60 * 1000
+// normal multi-step work. Reduced from 20min to 10min — with loop detection
+// and chunk timeouts in place, 10min is a generous backstop for a stuck agent
+// while still allowing legitimate multi-step subagent work to complete.
+const SUBAGENT_TASK_TIMEOUT_MS = 10 * 60 * 1000
 const BACKGROUND_DESCRIPTION = [
   "Background mode: background=true launches the subagent asynchronously and returns immediately.",
   "Foreground is the default; use it when you need the result before continuing.",
