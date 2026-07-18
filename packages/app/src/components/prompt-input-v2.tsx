@@ -3,6 +3,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { Icon } from "@opencode-ai/ui/v2/icon"
+import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import type { Prompt, ReferenceInfo } from "@opencode-ai/sdk/v2/client"
@@ -43,6 +44,10 @@ export type PromptInputV2ComposerProps = {
 export type PromptInputV2ControllerProps = Omit<PromptInputProps, "class" | "edit" | "onEditLoaded" | "submission">
 export type PromptInputV2ComposerController = PromptInputV2Interaction & {
   readonly model: PromptInputProps["controls"]["model"]
+  readonly permission: {
+    accepting: () => boolean
+    toggle: () => void
+  }
 }
 
 export function PromptInputV2Composer(props: PromptInputV2ComposerProps) {
@@ -71,6 +76,18 @@ export function PromptInputV2Composer(props: PromptInputV2ComposerProps) {
             onUnpaidClick={() =>
               dialog.show(() => <DialogSelectModelUnpaidV2 model={props.controller.model.selection} />)
             }
+          />
+        }
+        permissionControl={
+          <PromptInputV2PermissionControl
+            accepting={props.controller.permission.accepting()}
+            title={language.t(
+              props.controller.permission.accepting()
+                ? "command.permissions.autoaccept.disable"
+                : "command.permissions.autoaccept.enable",
+            )}
+            keybind={command.keybindParts("permissions.autoaccept")}
+            onToggle={props.controller.permission.toggle}
           />
         }
       />
@@ -256,6 +273,20 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
     if (!id) return permission.isAutoAcceptingDirectory(sdk().directory)
     return permission.isAutoAccepting(id, sdk().directory)
   })
+  const toggleAutoAccept = () => {
+    const id = props.controls.session.id
+    if (id) permission.toggleAutoAccept(id, sdk().directory)
+    else permission.toggleAutoAcceptDirectory(sdk().directory)
+
+    showToast({
+      title: accepting()
+        ? language.t("toast.permissions.autoaccept.on.title")
+        : language.t("toast.permissions.autoaccept.off.title"),
+      description: accepting()
+        ? language.t("toast.permissions.autoaccept.on.description")
+        : language.t("toast.permissions.autoaccept.off.description"),
+    })
+  }
   const submission = createPromptSubmit({
     prompt,
     info,
@@ -465,7 +496,40 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
     },
   })
   Object.defineProperty(controller, "model", { get: () => props.controls.model })
+  Object.defineProperty(controller, "permission", { get: () => ({ accepting, toggle: toggleAutoAccept }) })
   return controller as PromptInputV2ComposerController
+}
+
+function PromptInputV2PermissionControl(props: {
+  accepting: boolean
+  title: string
+  keybind: string[]
+  onToggle: () => void
+}) {
+  return (
+    <TooltipV2
+      placement="top"
+      gutter={4}
+      value={
+        <>
+          {props.title}
+          <KeybindV2 keys={props.keybind} variant="neutral" />
+        </>
+      }
+    >
+      <IconButtonV2
+        data-action="prompt-permissions"
+        type="button"
+        icon={<Icon name="shield" />}
+        variant="ghost-muted"
+        size="large"
+        classList={{ "text-icon-success-base": props.accepting }}
+        onClick={props.onToggle}
+        aria-label={props.title}
+        aria-pressed={props.accepting}
+      />
+    </TooltipV2>
+  )
 }
 
 function PromptInputV2ModelControl(props: {

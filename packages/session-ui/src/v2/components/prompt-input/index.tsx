@@ -38,6 +38,7 @@ export type PromptInputV2Props = {
   readOnly?: boolean
   class?: string
   modelControl?: JSX.Element
+  permissionControl?: JSX.Element
 }
 
 export function PromptInputV2(props: PromptInputV2Props) {
@@ -232,6 +233,7 @@ export function PromptInputV2(props: PromptInputV2Props) {
                 </Show>
               )}
             </Show>
+            {props.permissionControl}
           </div>
           <PromptInputV2SubmitButton
             mode={state.mode}
