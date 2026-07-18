@@ -18,6 +18,8 @@ import { SessionTable } from "@opencode-ai/core/session/sql"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(AppNodeBuilder.build(LayerNode.group([Database.node, EventV2.node, SessionProjector.node])))
+const inputType = "user" as const
+const strippedBytes = ""
 
 describe("SessionPending attachment bounding", () => {
   it.effect("admits a large attachment without putting base64 on the durable event", () =>
@@ -50,7 +52,7 @@ describe("SessionPending attachment bounding", () => {
         id: inputID,
         sessionID,
         input: {
-          type: "user",
+          type: inputType,
           delivery: "steer",
           data: {
             text: "see file",
@@ -66,8 +68,12 @@ describe("SessionPending attachment bounding", () => {
         },
       })
 
-      expect(admitted.type).toBe("user")
-      if (admitted.type === "user") expect(admitted.data.files?.[0]?.data).toBe(mega)
+      type AdmittedUser = Extract<typeof admitted, { type: typeof inputType }>
+      const admittedUser = Option.getOrThrowWith(
+        Option.liftPredicate(admitted, (value): value is AdmittedUser => value.type === inputType),
+        () => new Error(`Expected ${inputType} admitted input`),
+      )
+      expect(admittedUser.data.files?.[0]?.data).toBe(mega)
 
       const rows = yield* db
         .select()
@@ -78,26 +84,24 @@ describe("SessionPending attachment bounding", () => {
       expect(rows).toHaveLength(1)
       const eventData = Schema.decodeUnknownSync(SessionEvent.InputAdmitted.data)(rows[0]!.data)
       expect(eventData.payloadHash).toBeDefined()
-      const inputType = "user"
+
+      type UserInput = Extract<typeof eventData.input, { type: typeof inputType }>
       const input = Option.getOrThrowWith(
-        Option.liftPredicate(eventData.input, (value): value is Extract<typeof eventData.input, { type: "user" }> =>
-          value.type === inputType,
-        ),
+        Option.liftPredicate(eventData.input, (value): value is UserInput => value.type === inputType),
         () => new Error(`Expected ${inputType} input on admitted event`),
       )
-      expect(input.data.files?.[0]?.data).toBe("")
+      expect(input.data.files?.[0]?.data).toBe(strippedBytes)
       expect(JSON.stringify(eventData).includes(mega)).toBe(false)
 
       const pending = yield* SessionPending.list(db, sessionID)
-      const pendingRow = Option.getOrThrowWith(
-        Option.fromUndefinedOr(pending.find((item) => item.id === inputID)),
-        () => new Error(`Expected pending input ${inputID}`),
-      )
+      type UserPending = Extract<(typeof pending)[number], { type: typeof inputType }>
       const row = Option.getOrThrowWith(
-        Option.liftPredicate(pendingRow, (value): value is Extract<(typeof pending)[number], { type: "user" }> =>
-          value.type === inputType,
+        Option.fromUndefinedOr(pending.find((item) => item.id === inputID)).pipe(
+          Option.flatMap((pendingRow) =>
+            Option.liftPredicate(pendingRow, (value): value is UserPending => value.type === inputType),
+          ),
         ),
-        () => new Error(`Expected ${inputType} pending input`),
+        () => new Error(`Expected ${inputType} pending input ${inputID}`),
       )
       expect(row.data.files?.[0]?.data).toBe(mega)
     }),
@@ -106,7 +110,7 @@ describe("SessionPending attachment bounding", () => {
   it.effect("stripAttachmentBytes clears only file data fields", () =>
     Effect.sync(() => {
       const stripped = SessionPending.stripAttachmentBytes({
-        type: "user",
+        type: inputType,
         delivery: "steer",
         data: {
           text: "hi",
@@ -120,15 +124,13 @@ describe("SessionPending attachment bounding", () => {
           ],
         },
       })
-      const inputType = "user"
+      type UserInput = Extract<typeof stripped, { type: typeof inputType }>
       const input = Option.getOrThrowWith(
-        Option.liftPredicate(stripped, (value): value is Extract<typeof stripped, { type: "user" }> =>
-          value.type === inputType,
-        ),
+        Option.liftPredicate(stripped, (value): value is UserInput => value.type === inputType),
         () => new Error(`Expected ${inputType} input`),
       )
       expect(input.data.text).toBe("hi")
-      expect(input.data.files?.[0]?.data).toBe("")
+      expect(input.data.files?.[0]?.data).toBe(strippedBytes)
       expect(input.data.files?.[0]?.name).toBe("a.txt")
     }),
   )
@@ -162,7 +164,7 @@ describe("SessionPending attachment bounding", () => {
         id: inputID,
         sessionID,
         input: {
-          type: "user",
+          type: inputType,
           delivery: "steer",
           data: { text: "hello" },
         },
@@ -177,11 +179,10 @@ describe("SessionPending attachment bounding", () => {
       expect(rows).toHaveLength(1)
       const eventData = Schema.decodeUnknownSync(SessionEvent.InputAdmitted.data)(rows[0]!.data)
       expect(eventData.payloadHash).toBeUndefined()
-      const inputType = "user"
+
+      type UserInput = Extract<typeof eventData.input, { type: typeof inputType }>
       const input = Option.getOrThrowWith(
-        Option.liftPredicate(eventData.input, (value): value is Extract<typeof eventData.input, { type: "user" }> =>
-          value.type === inputType,
-        ),
+        Option.liftPredicate(eventData.input, (value): value is UserInput => value.type === inputType),
         () => new Error(`Expected ${inputType} input on admitted event`),
       )
       expect(input.data.text).toBe("hello")
