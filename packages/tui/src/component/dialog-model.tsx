@@ -6,6 +6,7 @@ import { useDialog } from "../ui/dialog"
 import { createDialogProviderOptions, DialogProvider } from "./dialog-provider"
 import { DialogVariant } from "./dialog-variant"
 import { DialogModelTwoPane } from "./dialog-model-twopane"
+import { isSubscriptionProvider } from "../util/model-row"
 import { DialogNote } from "./dialog-note"
 import * as fuzzysort from "fuzzysort"
 import { useConnected } from "./use-connected"
@@ -51,7 +52,8 @@ export function DialogModel(props: {
             description: provider.name,
             category,
             disabled: provider.id === "opencode" && model.id.includes("-nano"),
-            footer: model.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
+            footer:
+              isSubscriptionProvider(provider.id) ? undefined : model.cost?.input === 0 ? "Free" : undefined,
             onSelect: () => {
               onSelect(provider.id, model.id)
             },
@@ -90,7 +92,8 @@ export function DialogModel(props: {
               : undefined,
             category: connected() ? provider.name : undefined,
             disabled: provider.id === "opencode" && model.includes("-nano"),
-            footer: info.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
+            footer:
+              isSubscriptionProvider(provider.id) ? undefined : info.cost?.input === 0 ? "Free" : undefined,
             onSelect() {
               onSelect(provider.id, model)
             },

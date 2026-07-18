@@ -18,8 +18,24 @@ export interface ModelRowOptions {
   favorite?: boolean
   note?: string
   current?: boolean
-  subscription?: boolean
   onSelect?: () => void
+}
+
+// Providers whose usage is covered by a flat subscription rather than
+// per-token metering. Cost tokens are hidden for these providers since the
+// catalog's per-token prices don't reflect what the user actually pays.
+// (opencode Zen is pay-as-you-go, so it is NOT here — its free endpoints
+// surface as "Free" via the per-model cost check below.)
+const SUBSCRIPTION_PROVIDERS = new Set(["github-copilot", "opencode-go"])
+
+function isSubscriptionProvider(providerID: string) {
+  return SUBSCRIPTION_PROVIDERS.has(providerID)
+}
+export { isSubscriptionProvider }
+
+// A model on a metered provider is free when its per-token input cost is 0.
+function isFreeModel(model: ModelShape) {
+  return (model.cost?.input ?? 0) === 0
 }
 
 // Compose the right-aligned footer token: cost · context · ★ · ✎note.
@@ -27,6 +43,7 @@ export interface ModelRowOptions {
 // shrink the title's `titleWidth` to avoid collision.
 function footerTokens(
   model: ModelShape,
+  provider: Provider,
   opts: ModelRowOptions,
   theme: ModelRowTheme,
 ): { view: JSX.Element; width: number } {
@@ -35,8 +52,9 @@ function footerTokens(
   const note = opts.note ? "✎" : ""
 
   const pieces: { text: string; color: RGBA }[] = []
-  if (opts.subscription) {
-    // Subscription providers (e.g. opencode) don't show per-token pricing.
+  if (isSubscriptionProvider(provider.id)) {
+    // Subscription providers: no per-token pricing to display.
+  } else if (isFreeModel(model)) {
     pieces.push({ text: "Free", color: theme.success })
   } else {
     const cost = humanizeCost(model.cost?.input ?? 0)
@@ -62,14 +80,15 @@ function footerTokens(
 }
 
 // Provider header: name + visible-model count + price range.
-// Subscription providers omit the price range (all-inclusive).
+// Subscription providers omit the price range (flat fee, not per-token).
 function providerHeader(provider: Provider, visibleModels: ModelShape[], theme: ModelRowTheme): JSX.Element {
-  const subscription = provider.id === "opencode"
-  const inputs = subscription ? [] : visibleModels.map((m) => m.cost?.input ?? 0).filter((n) => n > 0)
+  const paidInputs = isSubscriptionProvider(provider.id)
+    ? []
+    : visibleModels.map((m) => m.cost?.input ?? 0).filter((n) => n > 0)
   let range = ""
-  if (inputs.length > 0) {
-    const min = Math.min(...inputs)
-    const max = Math.max(...inputs)
+  if (paidInputs.length > 0) {
+    const min = Math.min(...paidInputs)
+    const max = Math.max(...paidInputs)
     range = min === max ? humanizeCost(min) : `${humanizeCost(min)}–${humanizeCost(max)}`
   }
   return (
@@ -94,8 +113,7 @@ export function modelRow(
   theme: ModelRowTheme,
   opts: ModelRowOptions & { onSelect: () => void },
 ): DialogSelectOption<{ providerID: string; modelID: string }> {
-  const subscription = provider.id === "opencode"
-  const { view: footerView, width: footerWidth } = footerTokens(model, { ...opts, subscription }, theme)
+  const { view: footerView, width: footerWidth } = footerTokens(model, provider, opts, theme)
   const capLine = capabilityLine(model)
   // Default title budget from DialogSelect.Option is 61; reserve room for the footer + 3 (padding).
   const titleWidth = Math.max(20, 61 - footerWidth - 1)
