@@ -5,7 +5,7 @@ import { map, pipe, flatMap, entries, filter, sortBy, take } from "remeda"
 import { DialogSelect } from "../ui/dialog-select"
 import { useDialog } from "../ui/dialog"
 import { createDialogProviderOptions, DialogProvider } from "./dialog-provider"
-import { DialogVariant } from "./dialog-variant"
+import { DialogVariant, listModelVariants } from "./dialog-variant"
 import { DialogModelTwoPane } from "./dialog-model-twopane"
 import { isSubscriptionProvider } from "../util/model-row"
 import { DialogNote } from "./dialog-note"
@@ -184,17 +184,13 @@ export function DialogModel(props: {
       void props.onSelect(providerID, modelID)
       return
     }
-    local.model.set({ providerID, modelID }, { recent: true })
-    const list = local.model.variant.list()
-    const cur = local.model.variant.selected()
-    if (cur === "default" || (cur && list.includes(cur))) {
-      dialog.clear()
+    const model = { providerID, modelID }
+    if (listModelVariants(sync.data.provider, model).length > 0) {
+      dialog.setSize("medium")
+      dialog.push(() => <DialogVariant model={model} onSelect={props.onSelect} />)
       return
     }
-    if (list.length > 0) {
-      dialog.replace(() => <DialogVariant />)
-      return
-    }
+    local.model.set(model, { recent: true })
     dialog.clear()
   }
 
@@ -247,16 +243,12 @@ export function DialogModel(props: {
             disabled: (option) => {
               if (!option) return true
               const value = option.value as { providerID: string; modelID: string }
-              const current = props.current ?? local.model.current()
-              if (!current) return true
-              if (value.providerID !== current.providerID || value.modelID !== current.modelID) return true
-              const provider = sync.data.provider.find((p) => p.id === value.providerID)
-              const info = provider?.models[value.modelID]
-              if (!info?.variants) return true
-              return Object.keys(info.variants).length === 0
+              return listModelVariants(sync.data.provider, value).length === 0
             },
-            onTrigger: () => {
-              dialog.replace(() => <DialogVariant />)
+            onTrigger: (option) => {
+              const value = option.value as { providerID: string; modelID: string }
+              dialog.setSize("medium")
+              dialog.push(() => <DialogVariant model={value} onSelect={props.onSelect} />)
             },
           },
         ]}

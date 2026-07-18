@@ -3,7 +3,7 @@ import { TextAttributes } from "@opentui/core"
 import { createMemo, createResource, createSignal, onMount, Show } from "solid-js"
 import path from "path"
 import { DialogSelect, type DialogSelectOption } from "../ui/dialog-select"
-import { useDialog } from "../ui/dialog"
+import { dialogListHeight, useDialog } from "../ui/dialog"
 import { useSDK } from "../context/sdk"
 import { useTheme } from "../context/theme"
 import { useSync } from "../context/sync"
@@ -279,9 +279,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
     if (await removedCurrent(deletingCurrent)) return
   }
 
-  const fullHeight = createMemo(() =>
-    Math.max(8, Math.min(16, dimensions().height - Math.floor(dimensions().height / 4) - 2)),
-  )
+  const fullHeight = createMemo(() => dialogListHeight("xlarge", dimensions().height))
 
   return (
     <box minHeight={showError() ? 5 : fullHeight()}>

@@ -3,8 +3,9 @@ export * as Database from "./database"
 import { EffectDrizzleSqlite } from "@kancode/effect-drizzle-sqlite"
 import { layer as sqliteLayer } from "#sqlite"
 import { Context, Effect, Layer } from "effect"
+import { existsSync, renameSync } from "fs"
 import { Global } from "../global"
-import { Flag } from "../flag/flag"
+import { envAlias, Flag } from "../flag/flag"
 import { isAbsolute, join } from "path"
 import { DatabaseMigration } from "./migration"
 import { InstallationChannel } from "../installation/version"
@@ -40,18 +41,52 @@ export function layerFromPath(filename: string) {
   return layer.pipe(Layer.provide(sqliteLayer({ filename })))
 }
 
+function useSharedDatabaseName() {
+  const disableChannelDb = envAlias("DISABLE_CHANNEL_DB")?.toLowerCase()
+  return (
+    ["latest", "beta", "prod"].includes(InstallationChannel) ||
+    disableChannelDb === "1" ||
+    disableChannelDb === "true"
+  )
+}
+
+function channelSuffix() {
+  return InstallationChannel.replace(/[^a-zA-Z0-9._-]/g, "-")
+}
+
+function databaseBasename(prefix: string) {
+  if (useSharedDatabaseName()) return `${prefix}.db`
+  return `${prefix}-${channelSuffix()}.db`
+}
+
+/** Default on-disk name: the app's persistent SQLite store. */
+export function filename() {
+  return databaseBasename("storage")
+}
+
+const LEGACY_PREFIXES = ["kancode", "opencode"] as const
+
+/** One-time rename from older branded filenames so existing installs keep data. */
+export function adoptLegacyDatabase(from: string, to: string) {
+  if (from === to || existsSync(to) || !existsSync(from)) return
+  renameSync(from, to)
+  for (const suffix of ["-wal", "-shm"]) {
+    const source = `${from}${suffix}`
+    if (!existsSync(source) || existsSync(`${to}${suffix}`)) continue
+    renameSync(source, `${to}${suffix}`)
+  }
+}
+
 export function path() {
   if (Flag.OPENCODE_DB) {
     if (Flag.OPENCODE_DB === ":memory:" || isAbsolute(Flag.OPENCODE_DB)) return Flag.OPENCODE_DB
     return join(Global.Path.data, Flag.OPENCODE_DB)
   }
-  if (
-    ["latest", "beta", "prod"].includes(InstallationChannel) ||
-    process.env.OPENCODE_DISABLE_CHANNEL_DB === "1" ||
-    process.env.OPENCODE_DISABLE_CHANNEL_DB === "true"
-  )
-    return join(Global.Path.data, "opencode.db")
-  return join(Global.Path.data, `opencode-${InstallationChannel.replace(/[^a-zA-Z0-9._-]/g, "-")}.db`)
+  const next = join(Global.Path.data, filename())
+  for (const prefix of LEGACY_PREFIXES) {
+    adoptLegacyDatabase(join(Global.Path.data, databaseBasename(prefix)), next)
+  }
+  return next
 }
 
 export const node = makeGlobalNode({ service: Service, layer: layerFromPath(path()), deps: [] })

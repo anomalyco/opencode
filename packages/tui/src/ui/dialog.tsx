@@ -8,9 +8,33 @@ import { Flag } from "@kancode/core/flag/flag"
 import { useBindings, useOpencodeModeStack } from "../keymap"
 import { useClipboard } from "../context/clipboard"
 
+export type DialogSize = "medium" | "large" | "xlarge"
+
+/** Dialog panel width as a fraction of the terminal (clamped to terminal-4). */
+export function dialogWidth(size: DialogSize, terminalWidth: number) {
+  const max = Math.max(20, terminalWidth - 4)
+  if (size === "xlarge") return max
+  if (size === "large") return Math.min(max, Math.max(40, Math.floor(terminalWidth * 0.8)))
+  return Math.min(max, Math.max(32, Math.floor(terminalWidth * 0.6)))
+}
+
+/** Top inset so the panel sits near the top and can grow with the terminal. */
+export function dialogPaddingTop(size: DialogSize, terminalHeight: number) {
+  const ratio = size === "xlarge" ? 0.05 : size === "large" ? 0.08 : 0.1
+  return Math.max(1, Math.floor(terminalHeight * ratio))
+}
+
+/**
+ * Suggested max height for scrollable dialog lists.
+ * `chrome` covers title/filter/footer/padding inside the panel.
+ */
+export function dialogListHeight(size: DialogSize, terminalHeight: number, chrome = 10) {
+  return Math.max(8, terminalHeight - dialogPaddingTop(size, terminalHeight) - chrome)
+}
+
 export function Dialog(
   props: ParentProps<{
-    size?: "medium" | "large" | "xlarge"
+    size?: DialogSize
     onClose: () => void
   }>,
 ) {
@@ -19,11 +43,7 @@ export function Dialog(
   const renderer = useRenderer()
 
   let dismiss = false
-  const width = () => {
-    if (props.size === "xlarge") return 116
-    if (props.size === "large") return 88
-    return 60
-  }
+  const size = () => props.size ?? "medium"
 
   return (
     <box
@@ -42,7 +62,7 @@ export function Dialog(
       alignItems="center"
       position="absolute"
       zIndex={3000}
-      paddingTop={dimensions().height / 4}
+      paddingTop={dialogPaddingTop(size(), dimensions().height)}
       left={0}
       top={0}
       backgroundColor={RGBA.fromInts(0, 0, 0, 150)}
@@ -55,7 +75,7 @@ export function Dialog(
           dismiss = false
           e.stopPropagation()
         }}
-        width={width()}
+        width={dialogWidth(size(), dimensions().width)}
         maxWidth={dimensions().width - 2}
         backgroundColor={theme.backgroundPanel}
         paddingTop={1}
@@ -72,7 +92,7 @@ function init() {
       element: JSX.Element
       onClose?: () => void
     }[],
-    size: "medium" as "medium" | "large" | "xlarge",
+    size: "medium" as DialogSize,
   })
 
   const renderer = useRenderer()
@@ -102,6 +122,17 @@ function init() {
     }, 1)
   }
 
+  function pop() {
+    if (renderer.getSelection()) {
+      renderer.clearSelection()
+    }
+    const current = store.stack.at(-1)
+    current?.onClose?.()
+    setStore("stack", store.stack.slice(0, -1))
+    if (store.stack.length === 0) setStore("size", "medium")
+    refocus()
+  }
+
   useBindings(() => ({
     enabled: store.stack.length > 0 && !renderer.getSelection()?.getSelectedText(),
     bindings: [
@@ -109,29 +140,13 @@ function init() {
         key: "escape",
         desc: "Close dialog",
         group: "Dialog",
-        cmd: () => {
-          if (renderer.getSelection()) {
-            renderer.clearSelection()
-          }
-          const current = store.stack.at(-1)
-          current?.onClose?.()
-          setStore("stack", store.stack.slice(0, -1))
-          refocus()
-        },
+        cmd: pop,
       },
       {
         key: "ctrl+c",
         desc: "Close dialog",
         group: "Dialog",
-        cmd: () => {
-          if (renderer.getSelection()) {
-            renderer.clearSelection()
-          }
-          const current = store.stack.at(-1)
-          current?.onClose?.()
-          setStore("stack", store.stack.slice(0, -1))
-          refocus()
-        },
+        cmd: pop,
       },
     ],
   }))
@@ -146,6 +161,21 @@ function init() {
         setStore("stack", [])
       })
       refocus()
+    },
+    pop,
+    /** Push a dialog on top of the current one. Escape/pop returns to the previous. */
+    push(input: any, onClose?: () => void) {
+      if (store.stack.length === 0) {
+        focus = renderer.currentFocusedRenderable
+        focus?.blur()
+      }
+      setStore("stack", [
+        ...store.stack,
+        {
+          element: input,
+          onClose,
+        },
+      ])
     },
     replace(input: any, onClose?: () => void) {
       if (store.stack.length === 0) {
@@ -169,7 +199,7 @@ function init() {
     get size() {
       return store.size
     },
-    setSize(size: "medium" | "large" | "xlarge") {
+    setSize(size: DialogSize) {
       setStore("size", size)
     },
   }

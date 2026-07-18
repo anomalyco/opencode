@@ -120,7 +120,7 @@ export const Definitions = {
   stash_delete: keybind("ctrl+d", "Delete stash entry"),
   model_provider_list: keybind("ctrl+a", "Open provider list from model dialog"),
   model_favorite_toggle: keybind("ctrl+f", "Toggle model favorite status"),
-  model_hide_toggle: keybind("f", "Toggle model hidden status"),
+  model_hide_toggle: keybind("h", "Toggle model hidden status"),
   model_note_edit: keybind("n", "Edit model note"),
   model_variant_list: keybind("v", "List model variants"),
   model_list: keybind("<leader>m", "List available models"),
