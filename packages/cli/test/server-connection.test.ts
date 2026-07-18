@@ -1,13 +1,99 @@
 import { NodeFileSystem } from "@effect/platform-node"
+import type { EnsureReason } from "@opencode-ai/client/effect/service"
 import { Global } from "@opencode-ai/core/global"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { expect, test } from "bun:test"
-import { Effect, FileSystem, Scope } from "effect"
+import { Effect, Exit, FileSystem, Scope } from "effect"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { ServerConnection } from "../src/services/server-connection"
 import { ServiceConfig } from "../src/services/service-config"
+
+const runReconnect = <A, E>(effect: Effect.Effect<A, E, FileSystem.FileSystem>) =>
+  Effect.runPromise(effect.pipe(Effect.provide(NodeFileSystem.layer)))
+
+test("managed reconnect ensures the service on the first failure", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-reconnect-"))
+  const starts: EnsureReason[] = []
+  try {
+    // Short-circuit ensure once it decides to spawn — we only need the reason.
+    const exit = await runReconnect(
+      ServerConnection.managedReconnect({
+        file: path.join(root, "service.json"),
+        onStart: (reason) => {
+          starts.push(reason)
+          throw new Error("service ensure invoked")
+        },
+      }).pipe(Effect.exit),
+    )
+    expect(Exit.isFailure(exit)).toBe(true)
+    expect(starts).toEqual(["missing"])
+  } finally {
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})
+
+test("managed reconnect reuses a healthy service from another version", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-reconnect-version-"))
+  const server = Bun.serve({
+    port: 0,
+    fetch() {
+      return Response.json({ healthy: true, version: "older", pid: process.pid })
+    },
+  })
+  const file = path.join(root, "service.json")
+  const url = server.url.toString()
+  await Bun.write(file, JSON.stringify({ url, pid: process.pid, version: "older" }))
+  try {
+    const endpoint = await runReconnect(
+      ServerConnection.managedReconnect({
+        file,
+        version: "newer",
+        command: [path.join(root, "must-not-start")],
+      }),
+    )
+    expect(endpoint.url).toBe(url)
+  } finally {
+    await server.stop(true)
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})
+
+test("concurrent managed reconnects reuse one healthy endpoint without spawning", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-reconnect-herd-"))
+  const server = Bun.serve({
+    port: 0,
+    fetch() {
+      return Response.json({ healthy: true, version: "older", pid: process.pid })
+    },
+  })
+  const file = path.join(root, "service.json")
+  const url = server.url.toString()
+  await Bun.write(file, JSON.stringify({ url, pid: process.pid, version: "older" }))
+  const mustNotStart = path.join(root, "must-not-start")
+  try {
+    const endpoints = await Promise.all(
+      Array.from({ length: 7 }, () =>
+        runReconnect(
+          ServerConnection.managedReconnect({
+            file,
+            version: "newer",
+            command: [mustNotStart],
+          }),
+        ),
+      ),
+    )
+    expect(endpoints.map((endpoint) => endpoint.url)).toEqual(Array.from({ length: 7 }, () => url))
+    expect(await fs.stat(mustNotStart).then(
+      () => true,
+      () => false,
+    )).toBe(false)
+  } finally {
+    await server.stop(true)
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})
 
 test("resolution groups Effect-native lifecycle operations only for the managed service", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-server-resolution-"))

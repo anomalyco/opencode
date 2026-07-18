@@ -265,10 +265,12 @@ describe("useEvent", () => {
     try {
       await wait(() => client.connection.status() === "connected")
       events.disconnect()
+      // Ensure-on-first-failure still runs on attempt 1 after pre-ensure spread
+      // (0–500ms). Allow two ensure spreads before requiring the second call.
       await Promise.race([
-        wait(() => calls === 2),
-        Bun.sleep(500).then(() => {
-          throw new Error("resolved event stream did not retry immediately")
+        wait(() => calls === 2, 2_500),
+        Bun.sleep(2_500).then(() => {
+          throw new Error("resolved event stream did not retry after ensure spread")
         }),
       ])
       await Bun.sleep(200)
@@ -279,10 +281,12 @@ describe("useEvent", () => {
   })
 
   test("cancels pending endpoint resolution on cleanup", async () => {
+    let started = false
     let aborted = false
     const { app, events, client } = await mount(
-      (signal) =>
-        new Promise((_, reject) => {
+      (signal) => {
+        started = true
+        return new Promise((_, reject) => {
           signal.addEventListener(
             "abort",
             () => {
@@ -291,12 +295,14 @@ describe("useEvent", () => {
             },
             { once: true },
           )
-        }),
+        })
+      },
     )
 
     await wait(() => client.connection.status() === "connected")
     events.disconnect()
-    await wait(() => client.connection.status() === "reconnecting")
+    // Pre-ensure spread runs before reconnect; wait until ensure is in flight.
+    await wait(() => started, 2_500)
     app.renderer.destroy()
     await wait(() => aborted)
   })

@@ -32,6 +32,16 @@ const connectionHistoryLimit = 50
 const reconnectBaseMs = 1_000
 const reconnectJitterMs = 500
 
+/** Post-ensure SSE retry backoff: base + jitter so N clients do not phase-lock. */
+export function reconnectBackoffMs(random = Math.random) {
+  return reconnectBaseMs + Math.floor(random() * reconnectJitterMs)
+}
+
+/** Pre-ensure spread so N reconnecting TUIs do not stampede Service.ensure together. */
+export function reconnectEnsureSpreadMs(random = Math.random) {
+  return Math.floor(random() * reconnectJitterMs)
+}
+
 export const { use: useClient, provider: ClientProvider } = createSimpleContext({
   name: "Client",
   init: (props: { api: OpenCodeClient; service?: ManagedService; interest?: EventInterest }) => {
@@ -125,9 +135,12 @@ export const { use: useClient, provider: ClientProvider } = createSimpleContext(
             error: message,
           })
           setConnection({ status: "reconnecting", attempt, error: message })
-          // Re-resolve the transport before retrying: the server may have
-          // moved (service restarted on a new port) or need starting. Static
-          // transports (--server, standalone) resolve to the same address.
+          // Spread ensure calls across reconnecting clients, then re-resolve the
+          // transport. Static transports (--server, standalone) resolve to the
+          // same address. Attempt 1 still ensures immediately after the spread
+          // (ensure-on-first-failure) and skips the post-ensure backoff.
+          await wait(reconnectEnsureSpreadMs(), controller.signal)
+          if (abort.signal.aborted || controller.signal.aborted || gen !== generation) return
           if (props.service) {
             const next = await props.service.reconnect(controller.signal).catch((error) => {
               if (!controller.signal.aborted)
@@ -142,7 +155,7 @@ export const { use: useClient, provider: ClientProvider } = createSimpleContext(
               if (attempt === 1) continue
             }
           }
-          await wait(reconnectBaseMs + Math.floor(Math.random() * reconnectJitterMs), controller.signal)
+          await wait(reconnectBackoffMs(), controller.signal)
         }
       })()
     }

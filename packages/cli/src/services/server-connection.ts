@@ -49,10 +49,12 @@ export const resolve = Effect.fn("cli.server-connection.resolve")(function* (arg
   } satisfies Resolved
 })
 
+/** Passive reconnect: ensure-running with no version replacement authority. */
+export const managedReconnect = (options: EnsureOptions) => Service.ensure({ ...options, version: undefined })
+
 function managedService(options: EnsureOptions) {
-  const reconnectOptions = { ...options, version: undefined }
   return {
-    reconnect: () => Service.ensure(reconnectOptions),
+    reconnect: () => managedReconnect(options),
     restart: () =>
       Effect.gen(function* () {
         yield* Service.stop(options)
