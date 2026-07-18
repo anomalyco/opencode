@@ -18,6 +18,11 @@ import { DialogNote } from "./dialog-note"
 import { useConnected } from "./use-connected"
 
 export function DialogModel(props: {
+  /**
+   * After connect: open the model dialog on this provider.
+   * Wide terminals use the two-pane picker focused on it; narrow terminals
+   * filter the single-pane list to that provider's models.
+   */
   providerID?: string
   title?: string
   current?: { providerID: string; modelID: string }
@@ -70,8 +75,10 @@ export function DialogModel(props: {
     return isSubscriptionProvider(providerID)
   }
 
-  const showExtra = createMemo(() => connected() && !props.providerID)
-  const useTwoPane = createMemo(() => !props.providerID && dimensions().width >= 70)
+  const useTwoPane = createMemo(() => dimensions().width >= 70)
+  // Narrow post-connect: filter to the new provider. Wide: full dialog (two-pane).
+  const filterProviderID = createMemo(() => (useTwoPane() ? undefined : props.providerID))
+  const showExtra = createMemo(() => connected() && !filterProviderID())
 
   const options = createMemo(() => {
     const needle = query().trim()
@@ -123,7 +130,7 @@ export function DialogModel(props: {
           provider.models,
           entries(),
           filter(([_, info]) => info.status !== "deprecated"),
-          filter(([_, info]) => (props.providerID ? info.providerID === props.providerID : true)),
+          filter(([_, info]) => (filterProviderID() ? info.providerID === filterProviderID() : true)),
           map(([model, info]) => ({
             value: { providerID: provider.id, modelID: model },
             title: info.name ?? model,
@@ -156,7 +163,7 @@ export function DialogModel(props: {
               return false
             return true
           }),
-          (options) => sortModelOptions(options, props.providerID !== undefined),
+          (options) => sortModelOptions(options, filterProviderID() !== undefined),
         ),
       ),
     )
@@ -194,7 +201,7 @@ export function DialogModel(props: {
   })
 
   const provider = createMemo(() =>
-    props.providerID ? sync.data.provider.find((item) => item.id === props.providerID) : null,
+    filterProviderID() ? sync.data.provider.find((item) => item.id === filterProviderID()) : null,
   )
 
   const title = createMemo(() => {
@@ -222,10 +229,11 @@ export function DialogModel(props: {
   return (
     <Show when={useTwoPane()} fallback={<DialogSelectInner />}>
       <DialogModelTwoPane
-        title={title()}
+        title={props.title ?? "Select model"}
         current={selectionCurrent()}
         currentLabel={selectionLabel()}
         onSelect={props.onSelect}
+        initialProviderID={props.providerID}
       />
     </Show>
   )

@@ -58,6 +58,8 @@ export interface DialogModelTwoPaneProps {
   current?: ModelValue
   /** Title-bar label for the active model (or unset fallback). */
   currentLabel?: string
+  /** Open with this provider selected in the left pane (e.g. after /connect). */
+  initialProviderID?: string
   onSelect?: (providerID: string, modelID: string) => void | Promise<void>
 }
 
@@ -112,14 +114,40 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
   const [inputMode, setInputMode] = createSignal<"keyboard" | "mouse">("keyboard")
   const dialogActive = useDialogLayerActive()
 
+  function countListableModels(provider: Provider) {
+    let n = 0
+    for (const [modelID, info] of entries(provider.models)) {
+      if (info.status === "deprecated") continue
+      if (provider.id === "opencode" && modelID.includes("-nano")) continue
+      n++
+    }
+    return n
+  }
+
   // Open on Favorites; fall back to Recent when Favorites is empty.
+  // After connect, prefer the provider the user just added.
   // Counts use visible (non-hidden) refs — same as the left-pane badges.
   const initial = (() => {
     const favorites = connected()
       ? local.model.favorite().filter((item) => !local.model.isHidden(item))
       : []
-    if (favorites.length) return { mode: { kind: "favorites" } as RightMode, left: 0 }
     const recents = local.model.recent().filter((item) => !local.model.isHidden(item))
+
+    if (props.initialProviderID) {
+      // Groups occupy left indices 0..2; providers follow (only those with models).
+      let left = 3
+      for (const provider of pipe(sync.data.provider, sortBy(PROVIDER_PIN_FIRST, (p) => p.name))) {
+        if (countListableModels(provider) === 0) continue
+        if (provider.id === props.initialProviderID) {
+          return {
+            mode: { kind: "provider", providerID: props.initialProviderID } as RightMode,
+            left,
+          }
+        }
+        left++
+      }
+    }
+    if (favorites.length) return { mode: { kind: "favorites" } as RightMode, left: 0 }
     if (recents.length) return { mode: { kind: "recents" } as RightMode, left: 1 }
     return { mode: { kind: "favorites" } as RightMode, left: 0 }
   })()
@@ -184,16 +212,6 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
     }
     return rows
   })
-
-  function countListableModels(provider: Provider) {
-    let n = 0
-    for (const [modelID, info] of entries(provider.models)) {
-      if (info.status === "deprecated") continue
-      if (provider.id === "opencode" && modelID.includes("-nano")) continue
-      n++
-    }
-    return n
-  }
 
   function leftEntryTitle(entry: LeftEntry): string {
     switch (entry.kind) {
@@ -836,7 +854,15 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
           <scrollbox
             scrollbarOptions={{ visible: false }}
             scrollAcceleration={scrollAcceleration()}
-            ref={(r: ScrollBoxRenderable) => (leftScroll = r)}
+            ref={(r: ScrollBoxRenderable) => {
+              leftScroll = r
+              if (props.initialProviderID) {
+                setTimeout(() => {
+                  if (!leftScroll) return
+                  scrollLeftToSelection()
+                }, 1)
+              }
+            }}
             maxHeight={listHeight()}
           >
             <For each={leftRows()}>
