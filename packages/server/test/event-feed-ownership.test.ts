@@ -1,8 +1,12 @@
-import { describe, expect, test } from "bun:test"
+import { NodeHttpServer } from "@effect/platform-node"
 import { EventV2 } from "@opencode-ai/core/event"
-import { Effect, Fiber, Stream } from "effect"
+import { describe, expect } from "bun:test"
+import { Context, Effect, Fiber, Layer, Stream } from "effect"
+import { HttpServer, HttpServerRequest } from "effect/unstable/http"
+import { createServer } from "node:http"
 import { it } from "../../core/test/lib/effect"
 import { EventFeed } from "../src/event-feed"
+import { subscribeResponse } from "../src/handlers/event"
 
 function makeSource() {
   let subscriber: EventV2.Subscriber | undefined
@@ -15,6 +19,14 @@ function makeSource() {
         })
       }),
     publish: (event: EventV2.Payload) => Effect.suspend(() => (subscriber ? subscriber(event) : Effect.void)),
+  }
+}
+
+async function wait(fn: () => boolean, timeout = 3000) {
+  const start = Date.now()
+  while (!fn()) {
+    if (Date.now() - start > timeout) throw new Error("timed out waiting for condition")
+    await Bun.sleep(10)
   }
 }
 
@@ -41,51 +53,44 @@ describe("EventFeed ownership", () => {
     }),
   )
 
-  test("real network abort closes the response body stream", async () => {
-    let closed = false
-    const server = Bun.serve({
-      port: 0,
-      fetch(request) {
-        let current: ReadableStreamDefaultController<Uint8Array> | undefined
-        const stream = new ReadableStream<Uint8Array>({
-          start(controller) {
-            current = controller
-            controller.enqueue(new TextEncoder().encode('data: {"type":"server.connected","data":{}}\n\n'))
-          },
-          cancel() {
-            closed = true
-          },
-        })
-        request.signal.addEventListener(
-          "abort",
-          () => {
-            closed = true
-            try {
-              current?.close()
-            } catch {
-              // already closed by the client disconnect
-            }
-          },
-          { once: true },
-        )
-        return new Response(stream, { headers: { "content-type": "text/event-stream" } })
-      },
-    })
+  it.live(
+    "aborting a real Node HTTP client returns EventFeed.active to baseline",
+    () =>
+      Effect.gen(function* () {
+        const source = makeSource()
+        const feed = yield* EventFeed.make(source.observe)
+        const baseline = feed.diagnostics().active
 
-    try {
-      const controller = new AbortController()
-      const response = await fetch(`http://127.0.0.1:${server.port}/api/event`, { signal: controller.signal })
-      expect(response.ok).toBe(true)
-      const reader = response.body!.getReader()
-      await reader.read()
-      controller.abort()
-      await reader.closed.catch(() => undefined)
-      await Bun.sleep(50)
-      expect(closed).toBe(true)
-    } finally {
-      await server.stop(true)
-    }
-  })
+        const context = yield* Layer.build(NodeHttpServer.layer(createServer, { host: "127.0.0.1", port: 0 }))
+        const server = Context.get(context, HttpServer.HttpServer)
+        yield* server
+          .serve(HttpServerRequest.HttpServerRequest.use((request) => subscribeResponse(feed, request, {})))
+          .pipe(Effect.forkScoped)
+
+        const base = HttpServer.formatAddress(server.address)
+        const controller = new AbortController()
+        const response = yield* Effect.promise(() => fetch(`${base}/api/event`, { signal: controller.signal }))
+        expect(response.ok).toBe(true)
+        expect(response.body).toBeDefined()
+        const reader = response.body?.getReader()
+        expect(reader).toBeDefined()
+        if (!reader) throw new Error("expected event stream body reader")
+
+        yield* Effect.promise(() => reader.read())
+        expect(feed.diagnostics().active).toBe(baseline + 1)
+
+        controller.abort()
+        // Bun may never settle `reader.closed` after abort; cancel and watch feed release.
+        yield* Effect.promise(() => reader.cancel().catch(() => undefined))
+        yield* Effect.promise(() => wait(() => feed.diagnostics().active === baseline))
+
+        expect(feed.diagnostics().active).toBe(baseline)
+        expect(feed.diagnostics().closes).toBeGreaterThanOrEqual(1)
+        const dump = JSON.stringify(feed.diagnostics())
+        expect(dump.includes("payload")).toBe(false)
+      }),
+    15_000,
+  )
 
   it.effect("eleven sequential subscribe scopes never accumulate active subscribers", () =>
     Effect.gen(function* () {
