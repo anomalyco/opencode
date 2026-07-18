@@ -350,8 +350,8 @@ const layer = Layer.effect(
 
       for (let attempt = 0; attempt <= maxRetries; attempt++) {
         if (attempt > 0) {
-          // Exponential backoff: 1s, 2s
-          yield* Effect.sleep(`${Math.pow(2, attempt - 1)}s`)
+          // Exponential backoff: 1000ms, 2000ms
+          yield* Effect.sleep(`${Math.pow(2, attempt - 1) * 1000} millis`)
           yield* Effect.logWarning("Retrying MCP connection", { key, attempt })
         }
 
