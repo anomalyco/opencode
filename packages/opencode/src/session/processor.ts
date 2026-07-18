@@ -117,13 +117,10 @@ const layer = Layer.effect(
       let responseId: string | undefined
 
       const responseIdFromMetadata = (metadata: unknown) => {
-        if (!metadata || typeof metadata !== "object") return undefined
+        if (!isRecord(metadata)) return undefined
         for (const value of Object.values(metadata)) {
-          if (!isRecord(value)) continue
-          const id = value.responseId
-          if (typeof id === "string") return id
+          if (isRecord(value) && typeof value.responseId === "string") return value.responseId
         }
-        return undefined
       }
 
       const parse = (e: unknown) =>

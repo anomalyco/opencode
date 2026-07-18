@@ -156,48 +156,6 @@ describe("ProviderTransform.options - setCacheKey", () => {
     expect(result.store).toBe(false)
   })
 
-  test("should set previousResponseId for openai provider", () => {
-    const openaiModel = {
-      ...mockModel,
-      providerID: "openai",
-      api: {
-        id: "gpt-4",
-        url: "https://api.openai.com",
-        npm: "@ai-sdk/openai",
-      },
-    }
-    const result = ProviderTransform.options({
-      model: openaiModel,
-      sessionID,
-      previousResponseId: "resp_123",
-    })
-    expect(result.previousResponseId).toBe("resp_123")
-  })
-
-  test("should not set previousResponseId when it is undefined", () => {
-    const openaiModel = {
-      ...mockModel,
-      providerID: "openai",
-      api: {
-        id: "gpt-4",
-        url: "https://api.openai.com",
-        npm: "@ai-sdk/openai",
-      },
-    }
-    const result = ProviderTransform.options({
-      model: openaiModel,
-      sessionID,
-    })
-    expect(result.previousResponseId).toBeUndefined()
-  })
-
-  test("should identify Responses API providers", () => {
-    for (const npm of ["@ai-sdk/openai", "@ai-sdk/amazon-bedrock/mantle", "@ai-sdk/azure", "@ai-sdk/github-copilot"]) {
-      expect(LLMRequestPrep.isResponsesApiModel({ api: { npm } } as any)).toBe(true)
-    }
-    expect(LLMRequestPrep.isResponsesApiModel({ api: { npm: "@ai-sdk/anthropic" } } as any)).toBe(false)
-  })
-
   test("should set store=false for xAI provider by default", () => {
     const xaiModel = {
       ...mockModel,
@@ -458,6 +416,66 @@ describe("ProviderTransform.options - gpt-5 textVerbosity", () => {
     expect(result.reasoningSummary).toBe("auto")
     expect(result.include).toEqual(["reasoning.encrypted_content"])
     expect(result.textVerbosity).toBe("low")
+  })
+
+  test("Bedrock Mantle continues stored responses with only new messages", async () => {
+    const model = {
+      ...createGpt5Model("openai.gpt-5.5"),
+      id: "amazon-bedrock/openai.gpt-5.5",
+      providerID: "amazon-bedrock",
+      api: {
+        id: "openai.gpt-5.5",
+        url: "https://bedrock-mantle.us-east-2.api.aws/openai/v1",
+        npm: "@ai-sdk/amazon-bedrock/mantle",
+      },
+      options: { store: true },
+    }
+    const input = {
+      user: {
+        id: "msg_user-test",
+        sessionID,
+        role: "user",
+        time: { created: Date.now() },
+        agent: "test",
+        model: { providerID: "amazon-bedrock", modelID: "openai.gpt-5.5" },
+      } as any,
+      sessionID,
+      model,
+      agent: { name: "test", mode: "primary", options: {}, permission: [] } as any,
+      system: ["Stay concise"],
+      messages: [
+        { role: "user", content: "First turn" },
+        { role: "assistant", content: "First reply" },
+        { role: "user", content: "Follow-up" },
+      ],
+      tools: {},
+      provider: { id: "amazon-bedrock", options: {} } as any,
+      auth: undefined,
+      plugin: {
+        trigger: (_name: string, _input: unknown, output: unknown) => Effect.succeed(output),
+        list: () => Effect.succeed([]),
+        init: () => Effect.void,
+      } as any,
+      flags: { outputTokenMax: 32_000, client: "test" } as any,
+      isWorkflow: false,
+      previousResponseId: "resp_123",
+    } as any
+    const result = await Effect.runPromise(LLMRequestPrep.prepare(input))
+
+    expect(result.params.options.previousResponseId).toBe("resp_123")
+    expect(result.messages.at(-1)).toEqual({ role: "user", content: "Follow-up" })
+    expect(result.messages.some((message) => message.role === "system" && message.content.includes("Stay concise"))).toBe(
+      true,
+    )
+    expect(JSON.stringify(result.messages)).not.toContain("First turn")
+    expect(JSON.stringify(result.messages)).not.toContain("First reply")
+
+    const stateless = await Effect.runPromise(
+      LLMRequestPrep.prepare({ ...input, model: { ...model, options: { store: false } } }),
+    )
+    expect(stateless.params.options.previousResponseId).toBeUndefined()
+    expect(JSON.stringify(stateless.messages)).toContain("First turn")
+    expect(JSON.stringify(stateless.messages)).toContain("First reply")
   })
 
   test("openai-compatible gpt-5 models omit Responses-only reasoningSummary", () => {
@@ -914,8 +932,8 @@ describe("ProviderTransform.providerOptions", () => {
       },
     })
 
-    expect(ProviderTransform.providerOptions(model, { reasoningEffort: "medium", previousResponseId: "resp_123" })).toEqual({
-      openai: { forceReasoning: true, reasoningEffort: "medium", previousResponseId: "resp_123" },
+    expect(ProviderTransform.providerOptions(model, { reasoningEffort: "medium" })).toEqual({
+      openai: { forceReasoning: true, reasoningEffort: "medium" },
     })
   })
 

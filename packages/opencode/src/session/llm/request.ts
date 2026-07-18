@@ -54,12 +54,6 @@ export type Prepared = {
 const mergeOptions = (target: Record<string, any>, source: Record<string, any> | undefined): Record<string, any> =>
   mergeDeep(target, source ?? {}) as Record<string, any>
 
-export function isResponsesApiModel(model: Pick<Provider.Model, "api">): boolean {
-  return ["@ai-sdk/openai", "@ai-sdk/amazon-bedrock/mantle", "@ai-sdk/azure", "@ai-sdk/github-copilot"].includes(
-    model.api.npm,
-  )
-}
-
 export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: PrepareInput) {
   const isOpenaiOauth = input.provider.id === "openai" && input.auth?.type === "oauth"
   const system = [
@@ -94,9 +88,10 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
         model: input.model,
         sessionID: input.sessionID,
         providerOptions: input.provider.options,
-        previousResponseId: input.previousResponseId,
       })
   const options = mergeOptions(mergeOptions(mergeOptions(base, input.model.options), input.agent.options), variant)
+  const previousResponseId = input.previousResponseId && options.store === true ? input.previousResponseId : undefined
+  if (previousResponseId) options.previousResponseId = previousResponseId
   if (
     input.model.api.npm === "@ai-sdk/azure" &&
     (input.provider.options.useCompletionUrls || input.model.options.useCompletionUrls || options.useCompletionUrls)
@@ -106,20 +101,21 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
   }
   if (isOpenaiOauth) options.instructions = system.join("\n")
 
+  const previousAssistant = previousResponseId
+    ? input.messages.findLastIndex((message) => message.role === "assistant")
+    : -1
   const messages =
     isOpenaiOauth || input.isWorkflow
       ? input.messages
-      : input.previousResponseId && isResponsesApiModel(input.model)
-        ? input.messages.slice(-1)
-        : [
-            ...system.map(
-              (x): ModelMessage => ({
-                role: "system",
-                content: x,
-              }),
-            ),
-            ...input.messages,
-          ]
+      : [
+          ...system.map(
+            (x): ModelMessage => ({
+              role: "system",
+              content: x,
+            }),
+          ),
+          ...input.messages.slice(previousAssistant + 1),
+        ]
 
   const params = yield* input.plugin.trigger(
     "chat.params",
