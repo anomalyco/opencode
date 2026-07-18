@@ -13,7 +13,7 @@ import { useLocal } from "../context/local"
 import { useSync } from "../context/sync"
 import { useData } from "../context/data"
 import { useTheme, selectedForeground } from "../context/theme"
-import { dialogListHeight, useDialog } from "../ui/dialog"
+import { dialogListHeight, useDialog, useDialogLayerActive } from "../ui/dialog"
 import { useBindings, formatKeyBindings, useKeymapSelector } from "../keymap"
 import { useTuiConfig } from "../config"
 import { useConnected } from "./use-connected"
@@ -110,6 +110,7 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
   // Prevents hover from fighting arrow-key selection when the cursor sits
   // over the list (including synthetic mouseover after layout reflow).
   const [inputMode, setInputMode] = createSignal<"keyboard" | "mouse">("keyboard")
+  const dialogActive = useDialogLayerActive()
 
   // Open on Favorites; fall back to Recent when Favorites is empty.
   // Counts use visible (non-hidden) refs — same as the left-pane badges.
@@ -214,7 +215,7 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
   }
 
   // ----- Right pane options -----
-  type ModelOption = DialogSelectOption<ModelValue> & { muted?: boolean }
+  type ModelOption = DialogSelectOption<ModelValue> & { muted?: boolean; note?: string }
 
   const searching = createMemo(() => query().trim().length > 0)
 
@@ -242,10 +243,10 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
     })
     const titleParts = [row.title]
     if (opts?.showProvider) titleParts.push(provider.name)
-    if (note) titleParts.push(Locale.truncateMiddle(note, 24))
     return {
       ...row,
       title: titleParts.join(" · "),
+      note: note ? Locale.truncateMiddle(note, 24) : undefined,
       muted: opts?.muted === true,
     }
   }
@@ -447,7 +448,7 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
         singleKey: true,
         onTrigger() {
           const opt = rightOptions()[rightSelected()]
-          if (opt) dialog.replace(() => <DialogNote model={opt.value} />)
+          if (opt) dialog.push(() => <DialogNote model={opt.value} />)
         },
       },
       {
@@ -621,6 +622,13 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
     setInputMode("keyboard")
   })
 
+  // After a nested dialog (Note) closes, this layer becomes active again.
+  // Keep the caret off the filter unless search is the focused pane.
+  createEffect(() => {
+    if (!dialogActive()) return
+    if (focusedPane() !== "search") blurSearch()
+  })
+
   function scrollChildIntoView(scroll: ScrollBoxRenderable, target: Renderable) {
     const y = target.y - scroll.y
     // Use the full row height so multi-line model rows aren't clipped at the bottom.
@@ -657,16 +665,18 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
   })
 
   // ----- Keybindings -----
+  // Gate on dialogActive so a covered layer (e.g. under Note) cannot steal keys.
   useBindings(() => ({
+    enabled: () => dialogActive(),
     bindings: [
       { key: "tab", desc: "Focus search or models", group: "Model dialog", cmd: tabForward },
       { key: "shift+tab", desc: "Focus search or providers", group: "Model dialog", cmd: tabBackward },
     ],
   }))
 
-  // From search: ↓ enters models when filtering, otherwise providers.
+  // From search: ↓ enters results when filtering has matches; otherwise providers.
   useBindings(() => ({
-    enabled: () => focusedPane() === "search",
+    enabled: () => dialogActive() && focusedPane() === "search",
     bindings: [
       {
         key: "down",
@@ -674,7 +684,7 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
         group: "Model dialog",
         cmd: () => {
           setInputMode("keyboard")
-          if (searching()) focusPane("right")
+          if (searching() && rightOptions().length > 0) focusPane("right")
           else focusProviders()
         },
       },
@@ -683,7 +693,7 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
 
   // Arrow Left/Right switch between left and right panes (from either pane).
   useBindings(() => ({
-    enabled: () => focusedPane() === "left" || focusedPane() === "right",
+    enabled: () => dialogActive() && (focusedPane() === "left" || focusedPane() === "right"),
     bindings: [
       { key: "left", desc: "Focus providers pane", group: "Model dialog", cmd: focusProviders },
       {
@@ -700,7 +710,7 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
 
   // Left pane: up/down move, enter activates.
   useBindings(() => ({
-    enabled: () => focusedPane() === "left",
+    enabled: () => dialogActive() && focusedPane() === "left",
     bindings: [
       { key: "up", desc: "Previous provider", group: "Model dialog", cmd: () => moveLeft(-1) },
       { key: "down", desc: "Next provider", group: "Model dialog", cmd: () => moveLeft(1) },
@@ -710,7 +720,7 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
 
   // Right pane: up/down move, enter selects model.
   useBindings(() => ({
-    enabled: () => focusedPane() === "right",
+    enabled: () => dialogActive() && focusedPane() === "right",
     bindings: [
       { key: "up", desc: "Previous model", group: "Model dialog", cmd: () => moveRight(-1) },
       { key: "down", desc: "Next model", group: "Model dialog", cmd: () => moveRight(1) },
@@ -729,6 +739,7 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
   useBindings(() => {
     const visible = modifierActions()
     return {
+      enabled: () => dialogActive(),
       commands: visible.map((a) => ({
         name: a.command,
         title: a.title,
@@ -742,7 +753,7 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
   })
 
   useBindings(() => ({
-    enabled: () => focusedPane() === "right",
+    enabled: () => dialogActive() && focusedPane() === "right",
     commands: singleKeyActions().map((a) => ({
       name: a.command,
       title: a.title,
@@ -762,7 +773,9 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
   const focusHint = createMemo(() => {
     switch (focusedPane()) {
       case "search":
-        return searching() ? "tab models · ↓ results" : "tab models · ↓ providers"
+        return searching() && rightOptions().length > 0
+          ? "tab models · ↓ results"
+          : "tab models · ↓ providers"
       case "left":
         return "tab search · ←/→ pane · ↑ search · enter open"
       case "right":
@@ -984,7 +997,7 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
 
 // Render a model row's title + footer + details, matching DialogSelect.Option's look.
 function RowContent(props: {
-  option: DialogSelectOption<ModelValue>
+  option: DialogSelectOption<ModelValue> & { note?: string }
   active: boolean
   current: boolean
   muted: boolean
@@ -997,6 +1010,11 @@ function RowContent(props: {
     if (props.current) return theme.primary
     return theme.text
   })
+  const noteColor = createMemo(() => {
+    if (props.active) return fg
+    if (props.muted) return theme.textMuted
+    return theme.info
+  })
   return (
     <box flexDirection="column">
       <box flexDirection="row" gap={1}>
@@ -1005,15 +1023,21 @@ function RowContent(props: {
             ●
           </text>
         </Show>
-        <text
-          flexGrow={1}
-          fg={text()}
-          attributes={props.active && !props.muted ? TextAttributes.BOLD : undefined}
-          overflow="hidden"
-          wrapMode="none"
-        >
-          {props.option.title}
-        </text>
+        <box flexGrow={1} flexDirection="row" overflow="hidden">
+          <text
+            fg={text()}
+            attributes={props.active && !props.muted ? TextAttributes.BOLD : undefined}
+            wrapMode="none"
+          >
+            {props.option.title}
+          </text>
+          <Show when={props.option.note}>
+            <text fg={noteColor()} wrapMode="none">
+              {" · "}
+              {props.option.note}
+            </text>
+          </Show>
+        </box>
         <Show when={props.option.footer}>
           <box flexShrink={0}>
             <Show

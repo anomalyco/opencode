@@ -1,5 +1,16 @@
 import { useRenderer, useTerminalDimensions } from "@opentui/solid"
-import { batch, createContext, createEffect, onCleanup, Show, useContext, type JSX, type ParentProps } from "solid-js"
+import {
+  batch,
+  createContext,
+  createEffect,
+  For,
+  onCleanup,
+  Show,
+  useContext,
+  type Accessor,
+  type JSX,
+  type ParentProps,
+} from "solid-js"
 import { useTheme } from "../context/theme"
 import { MouseButton, Renderable, RGBA } from "@opentui/core"
 import { createStore } from "solid-js/store"
@@ -128,9 +139,17 @@ function init() {
     }
     const current = store.stack.at(-1)
     current?.onClose?.()
-    setStore("stack", store.stack.slice(0, -1))
-    if (store.stack.length === 0) setStore("size", "medium")
-    refocus()
+    const next = store.stack.slice(0, -1)
+    setStore("stack", next)
+    if (next.length === 0) {
+      setStore("size", "medium")
+      // Only return focus to the prompt when the whole stack is gone.
+      // Popping a nested dialog (e.g. note → model) must not focus the
+      // obscured prompt underneath the remaining dialog.
+      refocus()
+      return
+    }
+    renderer.currentFocusedRenderable?.blur()
   }
 
   useBindings(() => ({
@@ -209,6 +228,13 @@ export type DialogContext = ReturnType<typeof init>
 
 const ctx = createContext<DialogContext>()
 
+/** True when this dialog layer is the top of the stack (receives keys). */
+const layerActiveCtx = createContext<Accessor<boolean>>()
+
+export function useDialogLayerActive() {
+  return useContext(layerActiveCtx) ?? (() => true)
+}
+
 export function DialogProvider(props: ParentProps) {
   const value = init()
   const renderer = useRenderer()
@@ -244,7 +270,20 @@ export function DialogProvider(props: ParentProps) {
       >
         <Show when={value.stack.length}>
           <Dialog onClose={() => value.clear()} size={value.size}>
-            {value.stack.at(-1)!.element}
+            {/* Keep underlying layers mounted so push/pop preserves state and
+                avoids remount lag. Only the top layer is visible / active. */}
+            <For each={value.stack}>
+              {(item, index) => {
+                const active = () => index() === value.stack.length - 1
+                return (
+                  <layerActiveCtx.Provider value={active}>
+                    <box visible={active()} flexGrow={1} flexDirection="column">
+                      {item.element}
+                    </box>
+                  </layerActiveCtx.Provider>
+                )
+              }}
+            </For>
           </Dialog>
         </Show>
       </box>

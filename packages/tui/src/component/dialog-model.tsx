@@ -263,7 +263,7 @@ export function DialogModel(props: {
             title: "Note",
             hidden: !connected(),
             onTrigger: (option) => {
-              dialog.replace(() => <DialogNote model={option.value as { providerID: string; modelID: string }} />)
+              dialog.push(() => <DialogNote model={option.value as { providerID: string; modelID: string }} />)
             },
           },
           {

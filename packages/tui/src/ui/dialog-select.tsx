@@ -14,7 +14,7 @@ import { createStore } from "solid-js/store"
 import { useTerminalDimensions } from "@opentui/solid"
 import * as fuzzysort from "fuzzysort"
 import { isDeepEqual } from "remeda"
-import { dialogListHeight, useDialog, type DialogContext } from "./dialog"
+import { dialogListHeight, useDialog, useDialogLayerActive, type DialogContext } from "./dialog"
 import { Locale } from "../util/locale"
 import { getScrollAcceleration } from "../util/scroll"
 import { useTuiConfig } from "../config"
@@ -83,6 +83,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   type VisibleAction = (Action & { label: string }) | FooterHint
 
   const dialog = useDialog()
+  const dialogActive = useDialogLayerActive()
   const { theme } = useTheme()
   const tuiConfig = useTuiConfig()
   const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
@@ -371,7 +372,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     const visible = shownActions()
 
     return {
-      enabled: !props.locked,
+      enabled: () => dialogActive() && !props.locked,
       commands: [
         {
           name: "dialog.select.prev",

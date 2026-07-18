@@ -2,16 +2,18 @@ import { TextAttributes } from "@opentui/core"
 import { createSignal } from "solid-js"
 import { useLocal } from "../context/local"
 import { useTheme } from "../context/theme"
-import { useDialog } from "../ui/dialog"
+import { useDialog, useDialogLayerActive } from "../ui/dialog"
 import { useBindings } from "../keymap"
 
 export function DialogNote(props: { model: { providerID: string; modelID: string }; title?: string }) {
   const local = useLocal()
   const dialog = useDialog()
+  const dialogActive = useDialogLayerActive()
   const { theme } = useTheme()
   const [text, setText] = createSignal(local.model.note(props.model))
 
   useBindings(() => ({
+    enabled: () => dialogActive(),
     bindings: [
       {
         key: "return",
@@ -19,7 +21,7 @@ export function DialogNote(props: { model: { providerID: string; modelID: string
         group: "Dialog",
         cmd: () => {
           local.model.setNote(props.model, text())
-          dialog.clear()
+          dialog.pop()
         },
       },
     ],
@@ -31,7 +33,7 @@ export function DialogNote(props: { model: { providerID: string; modelID: string
         <text attributes={TextAttributes.BOLD} fg={theme.text}>
           {props.title ?? "Note"}
         </text>
-        <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>
+        <text fg={theme.textMuted} onMouseUp={() => dialog.pop()}>
           esc
         </text>
       </box>
