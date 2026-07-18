@@ -19,6 +19,7 @@ import { useTuiConfig } from "../config"
 import { useConnected } from "./use-connected"
 import { DialogProvider } from "./dialog-provider"
 import { DialogVariant, listModelVariants } from "./dialog-variant"
+import { isSameRightMode, resolveModelSelect, rightPaneContentKey, type RightMode } from "./dialog-model-flow"
 import { DialogNote } from "./dialog-note"
 import { isSubscriptionProvider, modelRow, type ModelRowTheme } from "../util/model-row"
 import { Locale } from "../util/locale"
@@ -36,12 +37,6 @@ type LeftEntry =
   | { kind: "connect" }
 
 type LeftRow = { kind: "header"; title: string } | { kind: "item"; entry: LeftEntry; index: number }
-
-type RightMode =
-  | { kind: "provider"; providerID: string }
-  | { kind: "hidden" }
-  | { kind: "favorites" }
-  | { kind: "recents" }
 
 interface Action {
   command: string
@@ -403,16 +398,21 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
   }
 
   function commitSelect(providerID: string, modelID: string) {
-    if (props.onSelect) {
-      void props.onSelect(providerID, modelID)
+    const action = resolveModelSelect({
+      providerID,
+      modelID,
+      configPicker: !!props.onSelect,
+      hasVariants: modelHasVariants({ providerID, modelID }),
+    })
+    if (action.type === "callback") {
+      void props.onSelect?.(action.providerID, action.modelID)
       return
     }
-    const model = { providerID, modelID }
-    if (modelHasVariants(model)) {
-      openVariantPicker(model)
+    if (action.type === "open-variants") {
+      openVariantPicker(action.model)
       return
     }
-    local.model.set(model, { recent: true })
+    local.model.set(action.model, { recent: true })
     dialog.clear()
   }
 
@@ -511,10 +511,32 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
   function previewLeft(index: number) {
     const entry = leftEntries()[index]
     if (!entry) return
-    if (entry.kind === "provider") setRightMode({ kind: "provider", providerID: entry.providerID })
-    else if (entry.kind === "favorites") setRightMode({ kind: "favorites" })
-    else if (entry.kind === "recents") setRightMode({ kind: "recents" })
-    else if (entry.kind === "hidden") setRightMode({ kind: "hidden" })
+    // Skip no-op mode writes so hovering the same provider does not rebuild a
+    // long model list (e.g. OpenRouter) or reset scroll under the cursor.
+    if (entry.kind === "provider") {
+      const next: RightMode = { kind: "provider", providerID: entry.providerID }
+      if (!isSameRightMode(rightMode(), next)) setRightMode(next)
+      return
+    }
+    if (entry.kind === "favorites") {
+      if (!isSameRightMode(rightMode(), { kind: "favorites" })) setRightMode({ kind: "favorites" })
+      return
+    }
+    if (entry.kind === "recents") {
+      if (!isSameRightMode(rightMode(), { kind: "recents" })) setRightMode({ kind: "recents" })
+      return
+    }
+    if (entry.kind === "hidden") {
+      if (!isSameRightMode(rightMode(), { kind: "hidden" })) setRightMode({ kind: "hidden" })
+    }
+  }
+
+  function resetRightViewport() {
+    setRightSelected(0)
+    // Layout reflow under a stationary cursor can emit synthetic mouseover on
+    // the new long list — stay in keyboard mode until a real mouse move.
+    setInputMode("keyboard")
+    if (rightScroll && !rightScroll.isDestroyed) rightScroll.scrollTo(0)
   }
 
   function moveLeft(direction: 1 | -1) {
@@ -570,26 +592,27 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
     const entry = leftEntries()[leftSelected()]
     if (!entry) return
     if (entry.kind === "favorites") {
-      setRightMode({ kind: "favorites" })
-      setRightSelected(0)
+      if (!isSameRightMode(rightMode(), { kind: "favorites" })) setRightMode({ kind: "favorites" })
+      resetRightViewport()
       focusPane("right")
       return
     }
     if (entry.kind === "recents") {
-      setRightMode({ kind: "recents" })
-      setRightSelected(0)
+      if (!isSameRightMode(rightMode(), { kind: "recents" })) setRightMode({ kind: "recents" })
+      resetRightViewport()
       focusPane("right")
       return
     }
     if (entry.kind === "hidden") {
-      setRightMode({ kind: "hidden" })
-      setRightSelected(0)
+      if (!isSameRightMode(rightMode(), { kind: "hidden" })) setRightMode({ kind: "hidden" })
+      resetRightViewport()
       focusPane("right")
       return
     }
     if (entry.kind === "provider") {
-      setRightMode({ kind: "provider", providerID: entry.providerID })
-      setRightSelected(0)
+      const next: RightMode = { kind: "provider", providerID: entry.providerID }
+      if (!isSameRightMode(rightMode(), next)) setRightMode(next)
+      resetRightViewport()
       focusPane("right")
       return
     }
@@ -668,15 +691,19 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
     if (target) scrollChildIntoView(rightScroll, target)
   }
 
-  // Reset selection when the right-pane mode or search query changes. When a
-  // model is hidden/removed, keep the cursor index so it lands on the next model.
+  // Reset selection + scroll when the right-pane mode or search query changes.
+  // Long providers (OpenRouter) keep a deep scroll offset otherwise, so the
+  // highlighted row (index 0) is off-screen after hovering another provider.
+  // When a model is hidden/removed, keep the cursor index so it lands on the next model.
   createMemo(() => {
-    const mode = rightMode()
-    const modeKey = !mode ? "" : mode.kind === "provider" ? `provider:${mode.providerID}` : mode.kind
-    const key = searching() ? `search:${query().trim().toLowerCase()}` : modeKey
+    const key = rightPaneContentKey({
+      mode: rightMode(),
+      searching: searching(),
+      query: query(),
+    })
     if (key !== lastRightModeKey) {
       lastRightModeKey = key
-      setRightSelected(0)
+      resetRightViewport()
     }
     const len = rightOptions().length
     if (len > 0 && rightSelected() >= len) setRightSelected(len - 1)
@@ -938,10 +965,10 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
               maxHeight={listHeight()}
             >
               <For each={rightOptions()}>
-                {(option) => {
-                  const idx = rightOptions().indexOf(option)
+                {(option, index) => {
+                  // Use For's index — avoid indexOf on long lists (OpenRouter).
                   const active = createMemo(
-                    () => rightSelected() === idx && focusedPane() === "right",
+                    () => rightSelected() === index() && focusedPane() === "right",
                   )
                   const current = createMemo(() => {
                     const c = currentModel()
@@ -954,13 +981,13 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
                       paddingRight={1}
                       backgroundColor={active() ? theme.primary : RGBA.fromInts(0, 0, 0, 0)}
                       onMouseMove={() => setInputMode("mouse")}
-                      onMouseDown={() => hoverRight(idx)}
+                      onMouseDown={() => hoverRight(index())}
                       onMouseOver={() => {
                         if (inputMode() !== "mouse") return
-                        hoverRight(idx)
+                        hoverRight(index())
                       }}
                       onMouseUp={() => {
-                        hoverRight(idx)
+                        hoverRight(index())
                         option.onSelect?.(dialog)
                       }}
                     >

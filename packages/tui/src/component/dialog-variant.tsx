@@ -4,6 +4,7 @@ import { useSync } from "../context/sync"
 import { useTheme } from "../context/theme"
 import { DialogSelect } from "../ui/dialog-select"
 import { useDialog } from "../ui/dialog"
+import { resolveVariantApply } from "./dialog-model-flow"
 
 export function listModelVariants(
   providers: { id: string; models: Record<string, { variants?: Record<string, unknown> }> }[],
@@ -33,16 +34,26 @@ export function DialogVariant(props: {
 
   const options = createMemo(() => {
     const apply = (variant: string | undefined) => {
-      if (props.model) {
+      const action = resolveVariantApply({
+        model: props.model,
+        configPicker: !!props.onSelect,
+        variant,
+      })
+      if (action.type === "config-callback") {
+        // Config pickers only report the model; do not mutate the session model.
+        void props.onSelect?.(action.model.providerID, action.model.modelID)
+        dialog.clear()
+        return
+      }
+      if (action.type === "set-model-and-variant") {
         // Set model first so variant.set targets the chosen model, then close the stack.
-        local.model.set(props.model, { recent: true })
-        local.model.variant.set(variant)
-        if (props.onSelect) void props.onSelect(props.model.providerID, props.model.modelID)
+        local.model.set(action.model, { recent: true })
+        local.model.variant.set(action.variant)
         dialog.clear()
         return
       }
       dialog.clear()
-      local.model.variant.set(variant)
+      local.model.variant.set(action.variant)
     }
 
     return [

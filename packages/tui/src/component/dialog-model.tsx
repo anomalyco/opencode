@@ -13,6 +13,7 @@ import { Locale } from "../util/locale"
 import { createDialogProviderOptions, DialogProvider } from "./dialog-provider"
 import { DialogVariant, listModelVariants } from "./dialog-variant"
 import { DialogModelTwoPane } from "./dialog-model-twopane"
+import { boostCurrentProviderMatches, resolveModelSelect, resolveSelectionCurrent } from "./dialog-model-flow"
 import { isSubscriptionProvider } from "../util/model-row"
 import { DialogNote } from "./dialog-note"
 import { useConnected } from "./use-connected"
@@ -43,10 +44,13 @@ export function DialogModel(props: {
 
   // Custom onSelect means this dialog edits a config target, not the session
   // model — do not fall back to local.model.current() when unset.
-  const selectionCurrent = createMemo(() => {
-    if (props.onSelect) return props.current
-    return props.current ?? local.model.current()
-  })
+  const selectionCurrent = createMemo(() =>
+    resolveSelectionCurrent({
+      configPicker: !!props.onSelect,
+      current: props.current,
+      sessionCurrent: local.model.current(),
+    }),
+  )
 
   const selectionLabel = createMemo(() => {
     const current = selectionCurrent()
@@ -180,19 +184,12 @@ export function DialogModel(props: {
       : []
 
     if (needle) {
-      const currentProviderID = local.model.current()?.providerID
+      // Keep fuzzysort relevance order; only boost the active session provider.
+      // Do not re-sort with sortModelOptions — that wipes score ranking.
       const modelMatches = fuzzysort.go(needle, providerOptions, { keys: ["title", "category"] }).map((x) => x.obj)
-      // Boost options from the current model's provider ahead of equally-scored options,
-      // preserving fuzzysort's score order within each group.
-      const boosted = currentProviderID
-        ? sortBy(
-            modelMatches.map((obj, i) => ({ obj, i })),
-            [(item) => item.i, "asc"], // stable: lower index = better score
-            (item) => (item.obj.value.providerID === currentProviderID ? 0 : 1),
-          ).map((item) => item.obj)
-        : modelMatches
+      const boosted = boostCurrentProviderMatches(modelMatches, local.model.current()?.providerID)
       return [
-        ...sortModelOptions(boosted, false),
+        ...boosted,
         ...fuzzysort.go(needle, popularProviders, { keys: ["title"] }).map((x) => x.obj),
       ]
     }
@@ -212,17 +209,22 @@ export function DialogModel(props: {
   })
 
   function onSelect(providerID: string, modelID: string) {
-    if (props.onSelect) {
-      void props.onSelect(providerID, modelID)
+    const action = resolveModelSelect({
+      providerID,
+      modelID,
+      configPicker: !!props.onSelect,
+      hasVariants: listModelVariants(sync.data.provider, { providerID, modelID }).length > 0,
+    })
+    if (action.type === "callback") {
+      void props.onSelect?.(action.providerID, action.modelID)
       return
     }
-    const model = { providerID, modelID }
-    if (listModelVariants(sync.data.provider, model).length > 0) {
+    if (action.type === "open-variants") {
       dialog.setSize("medium")
-      dialog.push(() => <DialogVariant model={model} onSelect={props.onSelect} />)
+      dialog.push(() => <DialogVariant model={action.model} onSelect={props.onSelect} />)
       return
     }
-    local.model.set(model, { recent: true })
+    local.model.set(action.model, { recent: true })
     dialog.clear()
   }
 

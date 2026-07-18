@@ -141,7 +141,14 @@ export function createDialogProviderOptions() {
           category: provider.category,
           gutter: connected && onboarded() ? () => <text fg={theme.success}>✓</text> : undefined,
           async onSelect() {
-            if (consoleManaged) return
+            if (consoleManaged) {
+              toast.show({
+                message: `Managed by ${sync.data.console_state.activeOrgName ?? "Console"}`,
+                variant: "info",
+                duration: 2500,
+              })
+              return
+            }
 
             const methods = sync.data.provider_auth[providerID] ?? [
               {
