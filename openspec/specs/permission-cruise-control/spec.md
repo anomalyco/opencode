@@ -112,9 +112,16 @@ The `cruise_control` module SHALL maintain separate in-memory allow and deny act
 
 The `cruise_control` module SHALL honor `permission_modules.cruise_control.parallel_classify`. When the option is `false` or omitted (default), concurrent LLM classify calls MUST be serialized so only one classify runs at a time. When `true`, concurrent classify calls MAY run in parallel. Deterministic rails (destructive deny, managed-directory allow) and dynamic-list hits MUST NOT wait on the classify queue.
 
+When serialize mode is active, the module SHALL honor `permission_modules.cruise_control.classify_gap_ms` as the minimum delay between successive LLM classify calls (default 250 when unset; `0` means no gap). The gap MUST NOT apply when `parallel_classify` is `true`.
+
 #### Scenario: Default serializes concurrent classify
 - **WHEN** multiple tools need cruise_control LLM classification in one turn and `parallel_classify` is unset or `false`
 - **THEN** only one classify LLM call runs at a time
+
+#### Scenario: Classify gap between successive calls
+- **WHEN** multiple tools need cruise_control LLM classification in one turn and `parallel_classify` is unset or `false`
+- **AND** `classify_gap_ms` is unset or a positive value
+- **THEN** each classify LLM call after the first waits at least that many milliseconds after the previous classify finishes (default 250 when unset)
 
 #### Scenario: Parallel classify when enabled
 - **WHEN** `permission_modules.cruise_control.parallel_classify` is `true` and multiple classify calls are pending

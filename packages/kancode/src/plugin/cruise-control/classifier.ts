@@ -49,6 +49,38 @@ const DEFAULT_RETRY_INTERVAL_MS = 2000
  * Rails and dynamic-list hits run before acquiring this permit.
  */
 const classifyLock = Semaphore.makeUnsafe(1)
+/** Minimum gap between successive serialized LLM classify calls (skips the first). */
+export const DEFAULT_CLASSIFY_GAP_MS = 250
+/** Wall-clock end of the last serialized classify (including gap bookkeeping). */
+let lastClassifyAt = 0
+
+/** Test helper: clear serialized-classify gap clock. */
+export function resetClassifyGapForTests() {
+  lastClassifyAt = 0
+}
+
+/**
+ * Serialize classify and insert a short pause before each call after the first,
+ * so concurrent tool permissions do not hammer the classifier model back-to-back.
+ */
+function withSerializedClassify<A, E, R>(
+  effect: Effect.Effect<A, E, R>,
+  gapMs: number,
+): Effect.Effect<A, E, R> {
+  return classifyLock.withPermits(1)(
+    Effect.gen(function* () {
+      const wait = Math.max(0, lastClassifyAt + gapMs - Date.now())
+      if (wait > 0) yield* Effect.sleep(Duration.millis(wait))
+      return yield* effect
+    }).pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          lastClassifyAt = Date.now()
+        }),
+      ),
+    ),
+  )
+}
 /** Used when `allowlist` is omitted from config. Explicit `allowlist: []` still blocks auto-allow. */
 export const DEFAULT_ALLOWLIST = [
   "read",
@@ -433,8 +465,8 @@ function unavailableReason(attempts: number): string {
  *
  * Evaluate order: destructive deny → managed/session-todo candidate allow through rails →
  * dynamic deny → dynamic allow (still rails-checked) → LLM classify
- * (serialized unless `parallel_classify: true`) → derive binary decision → applySafety →
- * remember final model-derived allow/deny.
+ * (serialized with `classify_gap_ms` between calls unless `parallel_classify: true`) →
+ * derive binary decision → applySafety → remember final model-derived allow/deny.
  *
  * Used by cruise_control and exposed for contract tests.
  */
@@ -538,9 +570,11 @@ export const runClassifier = Effect.fn("CruiseControl.runClassifier")(function* 
   const timeoutMs = input.opts?.timeout_ms ?? DEFAULT_TIMEOUT_MS
   const maxAttempts = input.opts?.retries ?? DEFAULT_RETRIES
   const retryIntervalMs = input.opts?.retry_interval_ms ?? DEFAULT_RETRY_INTERVAL_MS
+  const classifyGapMs = input.opts?.classify_gap_ms ?? DEFAULT_CLASSIFY_GAP_MS
   const started = Date.now()
-  // Default false: one LLM classify at a time across concurrent tool permission decides.
-  const classify = input.opts?.parallel_classify === true ? input.classify : classifyLock.withPermits(1)(input.classify)
+  // Default false: one LLM classify at a time, with classify_gap_ms between successive calls.
+  const classify =
+    input.opts?.parallel_classify === true ? input.classify : withSerializedClassify(input.classify, classifyGapMs)
 
   const classifyOnce = classify.pipe(
     Effect.map((result) => {

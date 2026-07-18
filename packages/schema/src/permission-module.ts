@@ -83,6 +83,10 @@ export const Options = Schema.Struct({
     description:
       "When true, allow concurrent cruise_control LLM classify calls. When false or omitted (default), serialize classify so only one runs at a time. Deterministic rails and dynamic-list hits bypass the queue.",
   }),
+  classify_gap_ms: NonNegativeInt.pipe(optional).annotate({
+    description:
+      "Minimum delay in milliseconds between successive serialized LLM classify calls (default: 250). Use 0 for no gap. Ignored when parallel_classify is true.",
+  }),
 }).annotate({ identifier: "PermissionModule.Options" })
 
 /** Top-level map of permission module id → options. */

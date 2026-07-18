@@ -307,8 +307,9 @@ clear on each new user prompt (`chat.message`) and are not persisted to disk.
 
 By default (`parallel_classify: false` or omitted), concurrent cruise_control LLM classify
 calls are serialized so only one runs at a time when multiple tools need classification
-in one turn. Set `parallel_classify: true` to allow concurrent classify. Deterministic
-rails and dynamic-list hits bypass that queue. Example:
+in one turn. A short pause (`classify_gap_ms`, default 250; use `0` for none) is inserted
+between successive serialized calls. Set `parallel_classify: true` to allow concurrent
+classify (gap ignored). Deterministic rails and dynamic-list hits bypass that queue. Example:
 
 ```json
 {
@@ -316,6 +317,7 @@ rails and dynamic-list hits bypass that queue. Example:
     "cruise_control": {
       "model": "opencode/deepseek-v4-flash",
       "parallel_classify": false,
+      "classify_gap_ms": 250,
       "dynamic_list": { "enabled": true, "max_size": 256 },
       "instructions": {
         "background": ["The user works in a local project with KanCode."],

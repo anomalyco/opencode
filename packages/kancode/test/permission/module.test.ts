@@ -15,7 +15,9 @@ import {
   clearDynamicLists,
   decideCruiseControl,
   decisionFromAssessment,
+  DEFAULT_CLASSIFY_GAP_MS,
   DEFAULT_INSTRUCTIONS,
+  resetClassifyGapForTests,
   ensureDefaultInstructions,
   hasCompleteInstructions,
   mergeInstructionsDefaults,
@@ -1587,6 +1589,7 @@ describe("classifier contract", () => {
   })
 
   test("parallel_classify false (default) serializes concurrent classify", async () => {
+    resetClassifyGapForTests()
     let active = 0
     let maxActive = 0
     const classify = Effect.gen(function* () {
@@ -1602,6 +1605,7 @@ describe("classifier contract", () => {
       timeout_ms: 2000,
       retries: 1,
       parallel_classify: false,
+      classify_gap_ms: 0,
     }
     const [a, b] = await Effect.runPromise(
       Effect.all(
@@ -1629,7 +1633,89 @@ describe("classifier contract", () => {
     expect(maxActive).toBe(1)
   })
 
+  test("serialized classify inserts gap between successive calls", async () => {
+    resetClassifyGapForTests()
+    const gapMs = 120
+    const starts: number[] = []
+    const classify = Effect.sync(() => {
+      starts.push(Date.now())
+      return lowRisk("ok")
+    })
+    const opts = {
+      fallback: "ask" as const,
+      allowlist: ["bash"],
+      timeout_ms: 2000,
+      retries: 1,
+      parallel_classify: false,
+      classify_gap_ms: gapMs,
+    }
+    await Effect.runPromise(
+      Effect.all(
+        [
+          runClassifier({
+            permission: "bash",
+            patterns: ["ls"],
+            opts,
+            classify,
+            modelRef: "opencode/deepseek-v4-flash",
+          }),
+          runClassifier({
+            permission: "bash",
+            patterns: ["pwd"],
+            opts,
+            classify,
+            modelRef: "opencode/deepseek-v4-flash",
+          }),
+        ],
+        { concurrency: "unbounded" },
+      ),
+    )
+    expect(starts).toHaveLength(2)
+    expect(starts[1]! - starts[0]!).toBeGreaterThanOrEqual(gapMs - 20)
+  })
+
+  test("classify_gap_ms 0 skips pause between serialized calls", async () => {
+    resetClassifyGapForTests()
+    const starts: number[] = []
+    const classify = Effect.sync(() => {
+      starts.push(Date.now())
+      return lowRisk("ok")
+    })
+    const opts = {
+      fallback: "ask" as const,
+      allowlist: ["bash"],
+      timeout_ms: 2000,
+      retries: 1,
+      parallel_classify: false,
+      classify_gap_ms: 0,
+    }
+    await Effect.runPromise(
+      Effect.all(
+        [
+          runClassifier({
+            permission: "bash",
+            patterns: ["ls"],
+            opts,
+            classify,
+            modelRef: "opencode/deepseek-v4-flash",
+          }),
+          runClassifier({
+            permission: "bash",
+            patterns: ["pwd"],
+            opts,
+            classify,
+            modelRef: "opencode/deepseek-v4-flash",
+          }),
+        ],
+        { concurrency: "unbounded" },
+      ),
+    )
+    expect(starts).toHaveLength(2)
+    expect(starts[1]! - starts[0]!).toBeLessThan(DEFAULT_CLASSIFY_GAP_MS)
+  })
+
   test("parallel_classify omitted defaults to serialized classify", async () => {
+    resetClassifyGapForTests()
     let active = 0
     let maxActive = 0
     const classify = Effect.gen(function* () {
@@ -1639,7 +1725,13 @@ describe("classifier contract", () => {
       active -= 1
       return lowRisk("ok")
     })
-    const opts = { fallback: "ask" as const, allowlist: ["bash"], timeout_ms: 2000, retries: 1 }
+    const opts = {
+      fallback: "ask" as const,
+      allowlist: ["bash"],
+      timeout_ms: 2000,
+      retries: 1,
+      classify_gap_ms: 0,
+    }
     await Effect.runPromise(
       Effect.all(
         [
@@ -1723,6 +1815,7 @@ describe("classifier contract", () => {
       timeout_ms: 5000,
       retries: 1,
       parallel_classify: false,
+      classify_gap_ms: 0,
     }
     const fiber = Effect.runFork(
       runClassifier({
