@@ -98,6 +98,16 @@ export type EditorMention = Schema.Schema.Type<typeof EditorMentionSchema>
 export type EditorLabelState = "pending" | "sent" | "none"
 type EditorServerInfo = Schema.Schema.Type<typeof EditorServerInfoSchema>
 
+export function editorSourceLabel(input: {
+  source?: EditorSelection["source"]
+  serverName?: string
+}) {
+  if (input.source === "zed") return "Zed"
+  const name = input.serverName?.trim()
+  if (name) return name
+  return "Editor"
+}
+
 type EditorConnection = {
   url: string
   authToken?: string
@@ -343,6 +353,13 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
       labelState(): EditorLabelState {
         if (!store.selection) return "none"
         return store.selectionSent ? "sent" : "pending"
+      },
+      sourceLabel() {
+        if (!store.selection) return
+        return editorSourceLabel({
+          source: store.selection.source,
+          serverName: store.server?.serverInfo?.name,
+        })
       },
       onMention(listener: (mention: EditorMention) => void) {
         mentionListeners.add(listener)

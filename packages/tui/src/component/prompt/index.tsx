@@ -204,7 +204,11 @@ export function Prompt(props: PromptProps) {
   const editorFileLabelDisplay = createMemo(() => {
     const file = editorFileLabel()
     if (!file) return
-    return Locale.truncateMiddle(file, Math.max(12, Math.min(48, Math.floor(dimensions().width / 3))))
+    const source = editor.sourceLabel()
+    const max = Math.max(12, Math.min(48, Math.floor(dimensions().width / 3)))
+    if (!source) return Locale.truncateMiddle(file, max)
+    const budget = Math.max(8, max - source.length - 3)
+    return `${source} · ${Locale.truncateMiddle(file, budget)}`
   })
   const editorContextLabelState = createMemo(() => editor.labelState())
   const [auto, setAuto] = createSignal<AutocompleteRef>()

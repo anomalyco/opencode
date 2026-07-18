@@ -225,6 +225,7 @@ test("useEditorContext clears selection when reconnecting", async () => {
     serverInfo: { name: "test", version: "0.0.0" },
   })
   expect(mounted.editor.selection()).toEqual(expectedSelection(path.join(startupDirectory, "file.ts")))
+  expect(mounted.editor.sourceLabel()).toBe("test")
   expect(mounted.editor.labelState()).toBe("pending")
   mounted.editor.markSelectionSent()
   expect(mounted.editor.labelState()).toBe("sent")
