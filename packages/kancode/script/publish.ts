@@ -60,7 +60,48 @@ await Bun.file(`${wrapperDir}/bin/${binName}.exe`).write(
   ].join("\n"),
 )
 
-const skipBinaries = process.env["OPENCODE_SKIP_BINARIES"] === "1"
+const skipBinaries =
+  process.env["KANCODE_SKIP_BINARIES"] === "1" || process.env["OPENCODE_SKIP_BINARIES"] === "1"
+// Default: refuse to publish the wrapper unless every platform binary is on the registry.
+// Override with KANCODE_ALLOW_MISSING_BINARIES=1 (or OPENCODE_*) for emergency / partial publishes.
+const allowMissingBinaries =
+  process.env["KANCODE_ALLOW_MISSING_BINARIES"] === "1" ||
+  process.env["OPENCODE_ALLOW_MISSING_BINARIES"] === "1"
+
+const availableBinaries: Record<string, string> = {}
+const missingBinaries: string[] = []
+
+if (!skipBinaries) {
+  const tasks = Object.entries(binaryDirs).map(async ([name, dirName]) => {
+    try {
+      await publish(`./dist/${dirName}`, name, binaries[name])
+    } catch (e: any) {
+      console.error(`failed to publish ${name}: ${e.stderr || e.message}`)
+    }
+    if (await published(name, binaries[name])) {
+      availableBinaries[name] = binaries[name]
+      return
+    }
+    missingBinaries.push(name)
+  })
+  await Promise.all(tasks)
+
+  if (missingBinaries.length > 0) {
+    const list = missingBinaries.map((name) => `${name}@${binaries[name]}`).join(", ")
+    if (!allowMissingBinaries) {
+      throw new Error(
+        [
+          `Refusing to publish ${publishName}@${version}: platform binaries missing from npm: ${list}.`,
+          "Configure OIDC trusted publishing for each package, then re-run.",
+          "To override (partial publish), set KANCODE_ALLOW_MISSING_BINARIES=1.",
+        ].join("\n"),
+      )
+    }
+    console.warn(`allowing missing binaries (KANCODE_ALLOW_MISSING_BINARIES=1): ${list}`)
+  }
+} else {
+  console.log("skipping binary package publishes (KANCODE_SKIP_BINARIES=1)")
+}
 
 await Bun.file(`${wrapperDir}/package.json`).write(
   JSON.stringify(
@@ -80,25 +121,14 @@ await Bun.file(`${wrapperDir}/package.json`).write(
       },
       os: ["darwin", "linux", "win32"],
       cpu: ["arm64", "x64"],
-      optionalDependencies: skipBinaries ? {} : binaries,
+      // Only advertise binaries that are actually installable from the registry.
+      optionalDependencies: skipBinaries ? {} : availableBinaries,
     },
     null,
     2,
   ),
 )
 
-if (!skipBinaries) {
-  const tasks = Object.entries(binaryDirs).map(async ([name, dirName]) => {
-    try {
-      await publish(`./dist/${dirName}`, name, binaries[name])
-    } catch (e: any) {
-      console.error(`failed to publish ${name}: ${e.stderr || e.message}`)
-    }
-  })
-  await Promise.all(tasks)
-} else {
-  console.log("skipping binary package publishes (OPENCODE_SKIP_BINARIES=1)")
-}
 await publish(wrapperDir, publishName, version)
 
 const ghRepo = process.env.GH_REPO || (await $`git remote get-url origin`.text()).trim().replace(/^https:\/\/github\.com\//, "").replace(/\.git$/, "")

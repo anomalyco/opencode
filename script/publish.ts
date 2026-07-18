@@ -29,7 +29,8 @@ async function prepareReleaseFiles() {
 }
 
 if (Script.release && !Script.preview) {
-  await $`git fetch origin --tags`
+  // --force: tag may have been moved by a previous release attempt on the same version.
+  await $`git fetch origin --tags --force`
   await $`git switch --detach`
 }
 

@@ -13,6 +13,14 @@ on:
         description: "Dry run (do not publish or push)"
         type: boolean
         default: false
+      allow_missing_binaries:
+        description: "Allow publishing @puetsua/kancode even if some platform binary packages failed"
+        type: boolean
+        default: false
+      skip_binaries:
+        description: "Skip publishing platform binary packages entirely"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -67,7 +75,9 @@ jobs:
       - name: Publish release
         if: ${{ github.event.inputs.dry_run != 'true' }}
         env:
-          OPENCODE_SKIP_BINARIES: ${{ vars.OPENCODE_SKIP_BINARIES || '0' }}
+          # Inputs override repo vars. Default is strict: missing binaries fail the release.
+          KANCODE_SKIP_BINARIES: ${{ github.event.inputs.skip_binaries == 'true' && '1' || vars.KANCODE_SKIP_BINARIES || vars.OPENCODE_SKIP_BINARIES || '0' }}
+          KANCODE_ALLOW_MISSING_BINARIES: ${{ github.event.inputs.allow_missing_binaries == 'true' && '1' || vars.KANCODE_ALLOW_MISSING_BINARIES || vars.OPENCODE_ALLOW_MISSING_BINARIES || '0' }}
         run: bun script/publish.ts
 
       - name: Dry-run publish
@@ -75,3 +85,5 @@ jobs:
         run: bun script/publish.ts
         env:
           OPENCODE_RELEASE: ""
+          KANCODE_SKIP_BINARIES: ${{ github.event.inputs.skip_binaries == 'true' && '1' || vars.KANCODE_SKIP_BINARIES || vars.OPENCODE_SKIP_BINARIES || '0' }}
+          KANCODE_ALLOW_MISSING_BINARIES: ${{ github.event.inputs.allow_missing_binaries == 'true' && '1' || vars.KANCODE_ALLOW_MISSING_BINARIES || vars.OPENCODE_ALLOW_MISSING_BINARIES || '0' }}
