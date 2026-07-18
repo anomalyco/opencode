@@ -411,8 +411,7 @@ export function applyDirectoryEvent(input: {
     }
     case "issue.created":
     case "issue.updated":
-    case "issue.deleted":
-    case "issue.progressed": {
+    case "issue.deleted": {
       input.refreshTodo?.()
       break
     }

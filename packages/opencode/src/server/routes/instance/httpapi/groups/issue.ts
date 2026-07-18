@@ -32,7 +32,7 @@ export const IssueRecord = Schema.Struct({
   linear_project_id: Schema.optional(Schema.NullOr(Schema.String)),
   position: Schema.Number,
   last_pushed_at: Schema.optional(Schema.NullOr(Schema.Number)),
-  linear_updated_at: Schema.optional(Schema.NullOr(Schema.Number)),
+  last_pulled_at: Schema.optional(Schema.NullOr(Schema.Number)),
   cloud_shadow: Schema.optional(Schema.NullOr(Schema.Record(Schema.String, Schema.Unknown))),
   time_created: Schema.Number,
   time_updated: Schema.Number,
@@ -55,7 +55,7 @@ export const IssuePartial = Schema.Struct({
   linear_project_id: Schema.optional(Schema.NullOr(Schema.String)),
   position: Schema.optional(Schema.Number),
   last_pushed_at: Schema.optional(Schema.NullOr(Schema.Number)),
-  linear_updated_at: Schema.optional(Schema.NullOr(Schema.Number)),
+  last_pulled_at: Schema.optional(Schema.NullOr(Schema.Number)),
   cloud_shadow: Schema.optional(Schema.NullOr(Schema.Record(Schema.String, Schema.Unknown))),
 })
 
@@ -125,6 +125,7 @@ export const SyncPullResponse = Schema.Struct({
   pulled: Schema.Number,
   updated: Schema.Number,
   skipped: Schema.Number,
+  deleted: Schema.Number,
   failed: Schema.Number,
   ids: Schema.Array(Schema.String),
   errors: Schema.Array(
@@ -149,10 +150,10 @@ export const SyncPushResponse = Schema.Struct({
 
 export const IssuePaths = {
   list: root,
-  get: `${root}/{id}`,
+  get: `${root}/:id`,
   create: root,
-  update: `${root}/{id}`,
-  delete: `${root}/{id}`,
+  update: `${root}/:id`,
+  delete: `${root}/:id`,
   reorder: `${root}/reorder`,
   autoProgressStart: `${root}/auto-progress/start`,
   autoProgressStop: `${root}/auto-progress/stop`,
@@ -218,7 +219,7 @@ export const IssueApi = HttpApi.make("issue")
             description: "Update fields on an existing issue.",
           }),
         ),
-        HttpApiEndpoint.delete("delete", IssuePaths.delete, {
+        HttpApiEndpoint.delete("remove", IssuePaths.delete, {
           params: { id: Schema.String },
           query: WorkspaceRoutingQuery,
           success: described(Schema.Boolean, "Deleted"),

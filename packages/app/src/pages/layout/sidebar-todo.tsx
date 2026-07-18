@@ -1,4 +1,5 @@
-import { createMemo, For, Show, type Accessor, type JSX } from "solid-js"
+import { createMemo, createSignal, For, Show, type Accessor, type JSX } from "solid-js"
+import { createStore } from "solid-js/store"
 import { useServerSDK } from "@/context/server-sdk"
 import { useServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
@@ -40,12 +41,41 @@ const statusClass = (s: string): string => {
   }
 }
 
-const labelHue = (name: string): number => {
-  let h = 0
-  for (let i = 0; i < name.length; i++) {
-    h = (h * 31 + name.charCodeAt(i)) >>> 0
+/**
+ * Linear official label colors as HSL components (mirrors Linear workspace
+ * label settings). Used for chip rendering in the sidebar and label toggles
+ * in the edit dialog.
+ */
+export const LABEL_COLORS: Record<string, { h: number; s: number; l: number }> = {
+  Bug: { h: 0, s: 79, l: 63 },
+  Feature: { h: 267, s: 95, l: 76 },
+  Improvement: { h: 209, s: 97, l: 65 },
+  "ready-for-agent": { h: 234, s: 57, l: 60 },
+}
+
+const labelHue = (name: string): number =>
+  name.split("").reduce((acc, c) => (acc * 31 + c.charCodeAt(0)) >>> 0, 0) % 360
+
+/**
+ * Derive chip {bg, text, border} colors for a label.
+ * Known labels use Linear's official palette; unknown labels fall back to
+ * a hash-derived hue (preserves distinguishable coloring for custom labels).
+ */
+export const labelChipColors = (name: string): { bg: string; text: string; border: string } => {
+  const known = LABEL_COLORS[name]
+  if (known) {
+    return {
+      bg: `hsl(${known.h} ${known.s}% 95%)`,
+      text: `hsl(${known.h} ${known.s}% 35%)`,
+      border: `hsl(${known.h} ${known.s}% 82%)`,
+    }
   }
-  return h % 360
+  const h = labelHue(name)
+  return {
+    bg: `hsl(${h} 65% 95%)`,
+    text: `hsl(${h} 65% 30%)`,
+    border: `hsl(${h} 65% 80%)`,
+  }
 }
 
 /**
@@ -204,56 +234,85 @@ export const SidebarTodo = (props: { directory: Accessor<string> }): JSX.Element
     return childStore.workspace_todo ?? []
   })
 
-  const sorted = createMemo(() => {
-    return [...todos()].sort((a, b) => {
-      const s = STATUS_ORDER.indexOf(statusOf(a)) - STATUS_ORDER.indexOf(statusOf(b))
-      if (s !== 0) return s
-      const p = priorityOrder.indexOf(priorityOf(a)) - priorityOrder.indexOf(priorityOf(b))
-      if (p !== 0) return p
-      return Number(a.position) - Number(b.position)
-    })
-  })
+  // Sort comparator: status → priority → position (within same parent scope).
+  const sortBy = (a: IssueType, b: IssueType): number => {
+    const s = STATUS_ORDER.indexOf(statusOf(a)) - STATUS_ORDER.indexOf(statusOf(b))
+    if (s !== 0) return s
+    const p = priorityOrder.indexOf(priorityOf(a)) - priorityOrder.indexOf(priorityOf(b))
+    if (p !== 0) return p
+    return Number(a.position) - Number(b.position)
+  }
 
-  const l1 = createMemo(() => sorted().filter((i) => i.level === 0))
+  // L1 and L2 are sorted independently — position is scoped per parent.
+  const l1 = createMemo(() =>
+    todos()
+      .filter((i) => i.level === 0)
+      .sort(sortBy),
+  )
   const l2ByParent = createMemo(() => {
     const map = new Map<string, IssueType[]>()
-    for (const i of sorted()) {
+    for (const i of todos()) {
       if (i.level === 1 && i.parent_id) {
         const list = map.get(i.parent_id) ?? []
         list.push(i)
         map.set(i.parent_id, list)
       }
     }
+    for (const list of map.values()) list.sort(sortBy)
     return map
   })
 
-  const showCreateDialog = (parentId?: string) => {
-    void import("@/components/dialog-edit-todo").then((x) => {
-      dialog.show(() =>
-        x.DialogEditTodo({
-          directory: props.directory(),
-          mode: "create",
-          parentId,
-        }),
-      )
-    })
+  // Collapse state: L1 items with sub-todos are collapsed by default.
+  // expanded[id] === true means expanded; absent/undefined means collapsed.
+  const [expanded, setExpanded] = createStore<Record<string, boolean>>({})
+  const toggleExpand = (id: string) => setExpanded(id, !expanded[id])
+  const isExpanded = (id: string): boolean => expanded[id] === true
+
+  // Inline delete confirmation: when set, the row shows confirm/cancel
+  // buttons instead of the normal × button. Avoids Kobalte Dialog overlay
+  // event interception issues.
+  const [confirmDeleteId, setConfirmDeleteId] = createSignal<string | null>(null)
+
+  const showCreateDialog = async (parentId?: string) => {
+    const { DialogEditTodo } = await import("@/components/dialog-edit-todo")
+    dialog.show(() =>
+      DialogEditTodo({
+        directory: props.directory(),
+        mode: "create",
+        parentId,
+      }),
+    )
   }
 
-  const showEditDialog = (todo: IssueType) => {
-    void import("@/components/dialog-edit-todo").then((x) => {
-      dialog.show(() =>
-        x.DialogEditTodo({
-          directory: props.directory(),
-          mode: "edit",
-          todo,
-        }),
-      )
-    })
+  const showEditDialog = async (todo: IssueType) => {
+    const { DialogEditTodo } = await import("@/components/dialog-edit-todo")
+    dialog.show(() =>
+      DialogEditTodo({
+        directory: props.directory(),
+        mode: "edit",
+        todo,
+      }),
+    )
   }
 
-  const removeIssue = async (e: MouseEvent, issue: IssueType) => {
+  const removeIssue = (e: MouseEvent, issue: IssueType) => {
     e.stopPropagation()
-    const res = await sdk().client.issue.delete({ id: issue.id, directory: props.directory() })
+    setConfirmDeleteId(issue.id)
+  }
+
+  const confirmDelete = (e: MouseEvent, issue: IssueType) => {
+    e.stopPropagation()
+    setConfirmDeleteId(null)
+    void doDelete(issue.id)
+  }
+
+  const cancelDelete = (e: MouseEvent) => {
+    e.stopPropagation()
+    setConfirmDeleteId(null)
+  }
+
+  const doDelete = async (id: string) => {
+    const res = await sdk().client.issue.delete({ id, directory: props.directory() })
     if (res.error) {
       showToast({ variant: "error", title: language.t("sidebar.issue.toast.deleteFailed") })
       return
@@ -317,6 +376,38 @@ export const SidebarTodo = (props: { directory: Accessor<string> }): JSX.Element
         role="button"
         tabIndex={0}
       >
+        {/* Expand/collapse chevron — only for L1 items that have L2 sub-todos.
+            Default is collapsed; clicking toggles the sub-todo list visibility. */}
+        <Show when={!isL2 && (l2ByParent().get(issue.id) ?? []).length > 0}>
+          <button
+            type="button"
+            class="shrink-0 size-4 flex items-center justify-center text-text-weaker hover:text-text-base transition-colors pt-0.5"
+            onClick={(e) => {
+              e.stopPropagation()
+              toggleExpand(issue.id)
+            }}
+            aria-label={
+              isExpanded(issue.id) ? language.t("sidebar.issue.collapse") : language.t("sidebar.issue.expand")
+            }
+            title={isExpanded(issue.id) ? language.t("sidebar.issue.collapse") : language.t("sidebar.issue.expand")}
+          >
+            <svg
+              width="8"
+              height="8"
+              viewBox="0 0 8 8"
+              fill="none"
+              class={`transition-transform ${isExpanded(issue.id) ? "rotate-90" : ""}`}
+            >
+              <path
+                d="M3 1.5L6 4L3 6.5"
+                stroke="currentColor"
+                stroke-width="1"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </button>
+        </Show>
         <div class="flex items-start pt-0.5">
           <StatusCheckbox status={status} title={status} />
         </div>
@@ -384,19 +475,22 @@ export const SidebarTodo = (props: { directory: Accessor<string> }): JSX.Element
             <Show when={hasLabels}>
               <div class="flex items-center gap-0.5 shrink-0">
                 <For each={labels}>
-                  {(label) => (
-                    <span
-                      class="shrink-0 text-9-regular px-1 py-0 rounded-md border whitespace-nowrap"
-                      style={{
-                        "background-color": `hsl(${labelHue(label)} 65% 95%)`,
-                        color: `hsl(${labelHue(label)} 65% 30%)`,
-                        "border-color": `hsl(${labelHue(label)} 65% 80%)`,
-                      }}
-                      title={label}
-                    >
-                      {labelAbbrev(label)}
-                    </span>
-                  )}
+                  {(label) => {
+                    const c = labelChipColors(label)
+                    return (
+                      <span
+                        class="shrink-0 text-9-regular px-1 py-0 rounded-md border whitespace-nowrap"
+                        style={{
+                          "background-color": c.bg,
+                          color: c.text,
+                          "border-color": c.border,
+                        }}
+                        title={label}
+                      >
+                        {labelAbbrev(label)}
+                      </span>
+                    )
+                  }}
                 </For>
               </div>
             </Show>
@@ -450,15 +544,37 @@ export const SidebarTodo = (props: { directory: Accessor<string> }): JSX.Element
                 </button>
               </Show>
               <Show when={!hasLinearBadge}>
-                <button
-                  type="button"
-                  class="size-4 flex items-center justify-center text-9-regular text-text-weak hover:text-text-base hover:bg-surface-strong-base rounded-md transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                  onClick={(e) => removeIssue(e, issue)}
-                  aria-label={language.t("common.delete")}
-                  title={language.t("common.delete")}
+                <Show
+                  when={confirmDeleteId() === issue.id}
+                  fallback={
+                    <button
+                      type="button"
+                      class="size-4 flex items-center justify-center text-9-regular text-text-weak hover:text-text-base hover:bg-surface-strong-base rounded-md transition-all"
+                      onClick={(e) => removeIssue(e, issue)}
+                      aria-label={language.t("common.delete")}
+                      title={language.t("common.delete")}
+                    >
+                      ×
+                    </button>
+                  }
                 >
-                  ×
-                </button>
+                  <div class="flex items-center gap-1">
+                    <button
+                      type="button"
+                      class="px-1.5 h-4 flex items-center justify-center text-9-regular text-on-accent-base bg-accent-danger-base hover:bg-accent-danger-strong rounded text-white transition-colors"
+                      onClick={(e) => confirmDelete(e, issue)}
+                    >
+                      {language.t("common.delete")}
+                    </button>
+                    <button
+                      type="button"
+                      class="px-1.5 h-4 flex items-center justify-center text-9-regular text-text-weak hover:text-text-base bg-surface-strong-base rounded transition-colors"
+                      onClick={cancelDelete}
+                    >
+                      {language.t("common.cancel")}
+                    </button>
+                  </div>
+                </Show>
               </Show>
             </div>
           </div>
@@ -487,7 +603,7 @@ export const SidebarTodo = (props: { directory: Accessor<string> }): JSX.Element
   }
 
   return (
-    <div class="shrink-0 px-3 py-2 border-t border-border-weak-base">
+    <div class="flex-1 min-h-0 px-3 py-2 overflow-y-auto">
       <div class="flex items-center gap-2 mb-1.5">
         <Icon name="task" size="small" class="text-icon-base shrink-0" />
         <span class="text-13-medium text-text-strong flex-1 min-w-0 truncate whitespace-nowrap">
@@ -508,13 +624,13 @@ export const SidebarTodo = (props: { directory: Accessor<string> }): JSX.Element
         when={todos().length > 0}
         fallback={<div class="text-11-regular text-text-base py-2">{language.t("sidebar.issue.empty")}</div>}
       >
-        <div class="flex flex-col gap-0.5 max-h-80 overflow-y-auto no-scrollbar">
+        <div class="flex flex-col gap-0.5">
           <For each={l1()}>
             {(parent) => (
               <div class="flex flex-col gap-0.5">
                 {renderRow(parent)}
-                <Show when={(l2ByParent().get(parent.id) ?? []).length > 0}>
-                  <div class="flex flex-col gap-0.5 pl-3">
+                <Show when={(l2ByParent().get(parent.id) ?? []).length > 0 && isExpanded(parent.id)}>
+                  <div class="flex flex-col gap-0.5 pl-[22px]">
                     <For each={l2ByParent().get(parent.id) ?? []}>{(kid) => renderRow(kid, true)}</For>
                   </div>
                 </Show>

@@ -141,12 +141,12 @@ Investigation confirmed Linear MCP does **not** expose a per-field diff tool (th
 For issues with a `linear_issue_id` (Linear-sourced), pull now follows a **cloud-wins reconcile** model. The pull walks every Linear issue returned by `list_issues` for the configured project and applies one of three paths:
 
 1. **Not linked locally** → INSERT a new row (unchanged from D5).
-2. **Linked, stored `linear_updated_at` === cloud `updatedAt`** → SKIP (truly unchanged).
-3. **Linked, `linear_updated_at` differs or is null** → UPDATE the local row's Linear-sourced fields from the cloud and refresh the stored watermark.
+2. **Linked, stored `last_pulled_at` === cloud `updatedAt`** → SKIP (truly unchanged).
+3. **Linked, `last_pulled_at` differs or is null** → UPDATE the local row's Linear-sourced fields from the cloud and refresh the stored watermark.
 
-A new `IssueTable.linear_updated_at` column (integer Unix ms, nullable) stores the mirror of Linear's cloud-side `updatedAt` captured at the last pull. It is the change-detection watermark. It is null for local-only issues and for rows pulled before this amendment; a null watermark is treated as "needs reconcile" so the first post-migration pull seeds the watermark from the cloud.
+A new `IssueTable.last_pulled_at` column (integer Unix ms, nullable) stores the mirror of Linear's cloud-side `updatedAt` captured at the last pull. It is the change-detection watermark. It is null for local-only issues and for rows pulled before this amendment; a null watermark is treated as "needs reconcile" so the first post-migration pull seeds the watermark from the cloud.
 
-**Fields overwritten from cloud on reconcile (Linear-sourced fields):** `title`, `content`, `description`, `status` (from `statusType`), `priority` (from `priority.value`), `labels`, `due_date`, `assignee_id`, and `linear_updated_at` itself.
+**Fields overwritten from cloud on reconcile (Linear-sourced fields):** `title`, `content`, `description`, `status` (from `statusType`), `priority` (from `priority.value`), `labels`, `due_date`, `assignee_id`, and `last_pulled_at` itself.
 
 **Fields NEVER overwritten by pull (local-only concerns):** `id`, `directory`, `parent_id`, `level`, `position`, `last_pushed_at`, `time_created`, `time_updated`. These are either immutable, locally-owned hierarchy/ordering, or push-tracking state that pull must not reset.
 
@@ -166,11 +166,11 @@ Cloud-wins for Linear-sourced fields. If the user edited a linked issue locally 
 
 - D5's "active set" and project-scoping semantics (pull still fetches the configured project's issues).
 - D6's "pull always runs; no 'already up to date' skip at the operation level" — the pull still always runs; per-issue SKIP is a legitimate "unchanged" outcome, not an operation-level shortcut.
-- D8's push contract — push remains the inverse with its own `last_pushed_at` watermark; pull refreshing `linear_updated_at` does not reset `last_pushed_at`.
+- D8's push contract — push remains the inverse with its own `last_pushed_at` watermark; pull refreshing `last_pulled_at` does not reset `last_pushed_at`.
 
 ### Migration
 
-`migration/20260708183506_add_issue_linear_updated_at/migration.sql` adds the nullable `linear_updated_at` integer column to `issue`. Existing rows have `linear_updated_at = null` and are reconciled on the next pull.
+`migration/20260708183506_add_issue_linear_updated_at/migration.sql` originally added the nullable `linear_updated_at` integer column to `issue`; `migration/20260717043303_rename_linear_updated_at_to_last_pulled_at/migration.sql` renames it to `last_pulled_at` (see Amendment 2026-07-17 — Column rename). Existing rows have `last_pulled_at = null` and are reconciled on the next pull.
 
 ## Amendment 2026-07-10 — Status system refactor: dynamic Linear workflow states + `status_type`
 
@@ -204,7 +204,7 @@ The local `Issue.Status` is now a **plain string** storing the Linear workflow s
 - D5's pull contract (cloud-wins reconcile, project-scoping, active set).
 - D6's "pull always runs" rule.
 - D8's push contract (field-level merge, `last_pushed_at` watermark).
-- The `IssueTable.linear_updated_at` watermark from the 2026-07-09 amendment.
+- The `IssueTable.last_pulled_at` watermark from the 2026-07-09 amendment.
 
 ## Amendment 2026-07-11 — Remove `status_type`, AutoProgress uses Linear status names directly
 
@@ -245,7 +245,7 @@ More fundamentally, the 4-value classification was an unnecessary indirection. L
 - D5's pull contract (cloud-wins reconcile, project-scoping, active set).
 - D6's "pull always runs" rule.
 - D8's push contract (field-level merge, `last_pushed_at` watermark).
-- The `IssueTable.linear_updated_at` watermark from the 2026-07-09 amendment.
+- The `IssueTable.last_pulled_at` watermark from the 2026-07-09 amendment.
 - The 7 Linear default status names and the `Issue.DEFAULT_STATUS = "Backlog"` fallback.
 
 ## Amendment 2026-07-11 — D8 修订：bulk push 会为 local-only issues 创建 Linear issue
@@ -268,7 +268,7 @@ D8 修订为：**bulk push 会为 local-only issues 创建 Linear issue。** 具
 
 - `SyncPush.push({ directory })` 遍历所有 issue，按 `linear_issue_id` 是否为 null 分为 UPDATE 和 CREATE 两个 cohort
 - CREATE cohort 调用 `save_issue` without `id`，Linear 创建新 issue
-- 成功后，本地行存储 `linear_issue_id`（返回的标识符）、`linear_project_id`/`linear_team_id`（UUID，优先从 `save_issue` 响应解析，回退到 binding 配置的 UUID）、`linear_updated_at`（种子水印）、`last_pushed_at`
+- 成功后，本地行存储 `linear_issue_id`（返回的标识符）、`linear_project_id`/`linear_team_id`（UUID，优先从 `save_issue` 响应解析，回退到 binding 配置的 UUID）、`last_pulled_at`（种子水印）、`last_pushed_at`
 - `SyncPush.pushOne({ directory, id })` 同样支持 CREATE 路径（单行推送）
 - D10 的 "Bulk-publish on first push is allowed" 不再是例外，而是标准行为
 
@@ -280,3 +280,90 @@ D8 原文中的 "It does not create new Linear issues" 句被删除。单行 "Pu
 - D8 的 `last_pushed_at` 水位线机制
 - D8 的 "local truth wins for pushed fields" 原则
 - CREATE 路径的 `verifyLinearIssue` 硬化（G1）：UPDATE 前验证 linked issue 仍属于配置的 project/team，防止意外跨项目写入
+
+## Amendment 2026-07-12 — 移除 issue.progressed 事件
+
+**Status:** Accepted (2026-07-12)
+**Supersedes:** ADR-0002 中对 `Issue.Progressed` 事件的全部引用（D7 中 "Issue.Progressed 事件 payload 为 { directory, from, to, reason }" 的描述）。
+
+### Context
+
+`issue.progressed` 事件在内核中定义于 `Issue.Event.Progressed`，由 `Issue.Service.update`、`Issue.Service.patchStatus` 和 `AutoProgress.advance` 共 5 处 publish。前端 `event-reducer.ts` 的 `case "issue.progressed"` 与 `issue.updated` fall-through 共用，仅调用 `refreshTodo()`，不消费任何 progressed 专属字段（`from`/`to`/`reason`）。
+
+`LinearSyncHistory` 组件曾有计划通过 `issue.progressed` 事件驱动同步进度百分比显示（TODO 注释 `plan-T17`），但该进度显示设计已被移除，`progress` signal 永远为 0%，从未被写入。
+
+事件本身不携带前端需要的增量信息（前端通过 `issue.updated` 全量重拉即可获得最新状态），且 `auto-progress.ts` 中的 3 处 publish 与 `patchStatus` 内部的 publish 存在重复发布问题。
+
+### Decision
+
+**移除 `issue.progressed` 事件及其全部相关逻辑：**
+
+- `issue.ts`：删除 `Progressed` 事件定义、`Event` 对象中的导出、`inventory` 中的引用、`update` 和 `patchStatus` 中的 2 处 publish
+- `auto-progress.ts`：删除 3 处 publish（Rule 1 L1 完成、Rule 2 L1 提升、Rule 2 L2 并行提升），移除 `events` 参数和 `EventV2Bridge` 依赖
+- `event-reducer.ts`：删除 `case "issue.progressed":`，保留 `issue.created/updated/deleted` 三个 case
+- `linear-sync-history.tsx`：删除 `progress` signal、`setProgress`、进度显示 UI 和 `TODO plan-T17` 注释
+
+### What this does NOT change
+
+- `issue.created`/`issue.updated`/`issue.deleted` 三个事件保持不变
+- `AutoProgress` 引擎的规则逻辑（Rule 1 + Rule 2）不变，只是不再发布独立的进度事件
+- `patchStatus` 方法仍然存在并正常工作，状态变更通过 `issue.updated` 事件通知前端
+- 前端 `refreshTodo()` 全量重拉机制不变
+
+## Amendment 2026-07-17 — D6 revised: cloud-side deletion now implemented via Linear API
+
+**Status:** Accepted (2026-07-17)
+**Supersedes:** the "deletion by an explicit 'remove from local' action that lands in a follow-up ADR" clause of D6.
+
+### Context
+
+D6 originally deferred deletion handling to a follow-up ADR because the Linear MCP server did not expose an archive/delete Issue tool. The clause read: "deletion by an explicit 'remove from local' action that lands in a follow-up ADR." At the time, the only options were to ignore cloud-side deletions entirely or to design a separate "remove from local" UI action.
+
+Investigation during implementation found that Linear's `list_issues` (Linear MCP) returns archived issues by default (`includeArchived` defaults to true) and marks them with a non-null `archivedAt` timestamp. Linear's "delete" is semantically "archive" — the issue is soft-deleted on the cloud side but still queryable. This is sufficient to detect cloud-side deletion without a dedicated MCP archive tool.
+
+### Decision
+
+**Cloud-side deletion is now implemented in `SyncPull.pull`, not deferred.** The pull reconciles cloud-side archives into local deletions:
+
+- For each linked local issue (`linear_issue_id` is not null), check whether the issue still exists in the cloud active set (non-archived, `archivedAt` is null).
+- If the issue is archived or absent on Linear, the local row is deleted via `Issue.delete` (which also cascades to L2 children whose `parent_id` points to the deleted issue).
+- The count is reported in `SyncPull.Result.deleted`.
+- This sync is skipped when the batch `list_issues` call failed, to avoid spurious local deletions from a partial cloud list.
+
+Cloud-side deletion is **pull-only**. There is no push-side deletion (the kernel does not archive Linear issues when a local linked issue is deleted). Local deletion of a Linear-sourced issue removes the local row only; the Linear issue remains on the cloud. This is intentional — the user's local truth wins for the local row, and Linear's truth wins for the cloud row.
+
+### What this does NOT change
+
+- D5's pull reconcile (cloud-wins for field-level updates on linked issues) is unchanged.
+- D6's "no 'already up to date' skip" rule is unchanged — the pull still always runs.
+- D6's UI text rule is unchanged — the result speaks via counts, including `deleted`.
+- The `SyncPull.Result.deleted` field already existed in the schema; it is now populated by real deletions instead of always being 0.
+
+## Amendment 2026-07-17 — Column rename: `linear_updated_at` → `last_pulled_at`
+
+**Status:** Accepted (2026-07-17)
+**Supersedes:** All references to `IssueTable.linear_updated_at` as a column name in this ADR (semantics unchanged; only the name changes).
+
+### Context
+
+The `linear_updated_at` column was introduced in the 2026-07-09 amendment as the pull-side change-detection watermark. The name was inconsistent with the push-side counterpart `last_pushed_at`: the former followed a `<source>_<action>_at` pattern while the latter followed a `last_<action>_at` pattern. Round-2 code review flagged the asymmetry as a readability hazard — readers expected the two columns to mirror each other's naming, and the `linear_` prefix was redundant given the column already lives on the Linear-linked `IssueTable`.
+
+### Decision
+
+The column is renamed from `linear_updated_at` to `last_pulled_at`. This aligns with `last_pushed_at` semantically (`last_<action>_at` for both push and pull watermarks) and drops the redundant source-qualified prefix.
+
+- Drizzle schema (`issue.sql.ts`): `linear_updated_at: integer()` → `last_pulled_at: integer()`
+- Zod schema, row mapping, create/update methods, and comments in `issue.ts` updated
+- `sync-pull.ts` (9 references in field names, comparisons, JSDoc) and `sync-push.ts` (2 references in post-push DB writes) updated
+- HTTP API schemas (`Issue`, `IssuePartial`) in `server/routes/instance/httpapi/groups/issue.ts` updated
+- SDK regenerated via `./script/generate.ts` (both `packages/sdk/openapi.json` and `packages/sdk/js/src/v2/gen/*.gen.ts`)
+- Migration `20260717043303_rename_linear_updated_at_to_last_pulled_at` (both the active TS migration in `packages/core/src/database/migration/` and the Drizzle Kit snapshot in `packages/opencode/migration/`) executes `ALTER TABLE \`issue\` RENAME COLUMN \`linear_updated_at\` TO \`last_pulled_at\`;` — SQLite preserves data and nullability. The TS migration is **idempotent**: it checks `PRAGMA table_info(\`issue\`)` for the existence of `linear_updated_at` before renaming, so fresh installs that never had the old column are not affected.
+- Base migration `20260621201623_add_issue_table` was amended to create `last_pulled_at` directly (instead of `linear_updated_at`), so fresh installs get the final column name without needing the rename.
+- Historical migration `20260708183506_add_issue_linear_updated_at` is left untouched (immutable history); the new migration carries the rename forward for existing installs
+
+### What this does NOT change
+
+- The column's semantic role (pull-side change-detection watermark storing cloud-side `updatedAt` at the time of the last pull)
+- The pull reconcile logic (cloud-wins for Linear-sourced fields, three-state decision: INSERT/SKIP/UPDATE)
+- The push contract (`last_pushed_at` watermark, field-level merge)
+- The historical migration file name `20260708183506_add_issue_linear_updated_at` (immutable history; only its effect is renamed by the new migration)

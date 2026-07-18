@@ -11,6 +11,8 @@ import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import { useServerSDK } from "@/context/server-sdk"
 import { useServerSync } from "@/context/server-sync"
+import { labelChipColors } from "@/pages/layout/sidebar-todo"
+import { DatePicker } from "@/components/date-picker"
 
 // Align with Linear App's Issue entity (PRD): title, description, status,
 // priority, labels, due_date. The kernel's IssueTable already stores all of
@@ -221,7 +223,10 @@ export const DialogEditTodo: Component<DialogEditTodoProps> = (props) => {
         status: store.status,
         priority: store.priority,
         labels: store.labels,
-        due_date: store.due_date || undefined,
+        // SDK type is `due_date?: string` (nullable not emitted by Effect OpenAPI
+        // generator). Cast to satisfy the type while preserving `null` at runtime
+        // so the server clears the field (server checks `!== undefined`).
+        due_date: (store.due_date || null) as string | undefined,
         assignee_id: store.assignee_id || undefined,
       }
 
@@ -600,12 +605,14 @@ export const DialogEditTodo: Component<DialogEditTodoProps> = (props) => {
 
             {/* Due date + Labels multi-select */}
             <div class="grid grid-cols-2 gap-3">
-              <TextField
-                type="date"
-                label={language.t("dialog.todo.field.dueDate")}
-                value={store.due_date}
-                onChange={(v) => setStore("due_date", v)}
-              />
+              <div class="flex flex-col gap-1.5">
+                <label class="text-12-medium text-text-weak">{language.t("dialog.todo.field.dueDate")}</label>
+                <DatePicker
+                  value={store.due_date}
+                  onChange={(v) => setStore("due_date", v)}
+                  label={language.t("dialog.todo.field.dueDate")}
+                />
+              </div>
 
               <div class="flex flex-col gap-1.5">
                 <label class="text-12-medium text-text-weak">{language.t("dialog.todo.field.labels")}</label>
@@ -613,14 +620,20 @@ export const DialogEditTodo: Component<DialogEditTodoProps> = (props) => {
                   <For each={LABEL_OPTIONS}>
                     {(label) => {
                       const selected = () => store.labels.includes(label)
+                      const c = () => labelChipColors(label)
                       return (
                         <button
                           type="button"
-                          class={`text-11-regular px-2 py-1 rounded-md border transition-colors ${
+                          class="text-11-regular px-2 py-1 rounded-md border transition-colors"
+                          style={
                             selected()
-                              ? "bg-surface-info-base/30 text-text-strong border-border-interactive-base"
-                              : "bg-surface-base text-text-weaker border-border-base hover:border-border-interactive-base"
-                          }`}
+                              ? { "background-color": c().bg, color: c().text, "border-color": c().border }
+                              : undefined
+                          }
+                          classList={{
+                            "bg-surface-base text-text-weaker border-border-base hover:border-border-interactive-base":
+                              !selected(),
+                          }}
                           onClick={() => toggleLabel(label)}
                           aria-pressed={selected()}
                         >

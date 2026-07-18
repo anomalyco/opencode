@@ -82,8 +82,6 @@ import {
 } from "./layout/sidebar-workspace"
 import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from "./layout/sidebar-project"
 import { SidebarContent } from "./layout/sidebar-shell"
-import { SidebarTodo } from "./layout/sidebar-todo"
-import { SidebarLinear } from "./layout/sidebar-linear"
 
 export default function LegacyLayout(props: ParentProps) {
   const serverSDK = useServerSDK()
@@ -2183,8 +2181,6 @@ export default function LegacyLayout(props: ParentProps) {
                   </>
                 </Show>
               </div>
-              <SidebarTodo directory={worktree} />
-              <SidebarLinear directory={worktree} />
             </>
           )}
         </Show>
@@ -2346,13 +2342,14 @@ export default function LegacyLayout(props: ParentProps) {
             <div
               classList={{
                 "absolute inset-0": true,
-                "xl:inset-y-0 xl:right-0 xl:left-[var(--main-left)]": true,
+                "xl:inset-y-0 xl:right-[var(--main-right,0px)] xl:left-[var(--main-left)]": true,
                 "z-20": true,
                 "transition-[left] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[left] motion-reduce:transition-none":
                   !state.sizing,
               }}
               style={{
                 "--main-left": layout.sidebar.opened() ? `${side()}px` : "4rem",
+                "--main-right": "0px",
               }}
             >
               <main

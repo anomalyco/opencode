@@ -2453,7 +2453,7 @@
                           }
                         ]
                       },
-                      "linear_updated_at": {
+                      "last_pulled_at": {
                         "anyOf": [
                           {
                             "type": "number"
@@ -2759,7 +2759,7 @@
                           }
                         ]
                       },
-                      "linear_updated_at": {
+                      "last_pulled_at": {
                         "anyOf": [
                           {
                             "type": "number"
@@ -3704,6 +3704,29 @@
                         }
                       ]
                     },
+                    "deleted": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["NaN"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["Infinity"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["-Infinity"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["Infinity", "-Infinity", "NaN"]
+                        }
+                      ]
+                    },
                     "failed": {
                       "anyOf": [
                         {
@@ -3750,7 +3773,7 @@
                       }
                     }
                   },
-                  "required": ["pulled", "updated", "skipped", "failed", "ids", "errors"],
+                  "required": ["pulled", "updated", "skipped", "deleted", "failed", "ids", "errors"],
                   "additionalProperties": false,
                   "description": "Pull result"
                 }
@@ -24164,7 +24187,7 @@
               }
             ]
           },
-          "linear_updated_at": {
+          "last_pulled_at": {
             "anyOf": [
               {
                 "type": "number"

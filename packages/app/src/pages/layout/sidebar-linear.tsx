@@ -234,28 +234,36 @@ export const SidebarLinear = (props: { directory: Accessor<string> }): JSX.Eleme
       return
     }
 
-    const data = res.data as { pulled: number; updated: number; skipped: number; failed: number } | undefined
+    const data = res.data as
+      | { pulled: number; updated: number; skipped: number; deleted: number; failed: number }
+      | undefined
     const pulled = data?.pulled ?? 0
     const updated = data?.updated ?? 0
     const skipped = data?.skipped ?? 0
+    const deleted = data?.deleted ?? 0
     const failed = data?.failed ?? 0
 
     serverSync().todo.refresh(props.directory())
 
-    syncHist.record({ type: "pull", count: pulled + updated + skipped, status: failed > 0 ? "error" : "success" })
+    syncHist.record({
+      type: "pull",
+      count: pulled + updated + skipped + deleted,
+      status: failed > 0 ? "error" : "success",
+    })
 
     if (failed > 0) {
       showToast({
         variant: "error",
-        title: language.t("sidebar.linear.pullPartialFailed").replace("{count}", String(failed)),
+        title: language.t("sidebar.linear.pullPartialFailed").replace("{{count}}", String(failed)),
       })
       return
     }
     const summary = language
       .t("sidebar.linear.pullSuccess")
-      .replace("{pulled}", String(pulled))
-      .replace("{updated}", String(updated))
-      .replace("{skipped}", String(skipped))
+      .replace("{{pulled}}", String(pulled))
+      .replace("{{updated}}", String(updated))
+      .replace("{{skipped}}", String(skipped))
+      .replace("{{deleted}}", String(deleted))
     showToast({ variant: "success", title: summary })
   }
 
@@ -295,16 +303,15 @@ export const SidebarLinear = (props: { directory: Accessor<string> }): JSX.Eleme
       const firstError = data?.errors?.[0]?.message ?? ""
       showToast({
         variant: "error",
-        title: firstError
-          ? `${language.t("sidebar.linear.pushPartialFailed").replace("{count}", String(failed))}: ${firstError}`
-          : language.t("sidebar.linear.pushPartialFailed").replace("{count}", String(failed)),
+        title: language.t("sidebar.linear.pushPartialFailed").replace("{{count}}", String(failed)),
+        description: firstError || undefined,
       })
       return
     }
     if (pushed > 0) {
       showToast({
         variant: "success",
-        title: language.t("sidebar.linear.pushSuccess").replace("{count}", String(pushed)),
+        title: language.t("sidebar.linear.pushSuccess").replace("{{count}}", String(pushed)),
       })
       return
     }

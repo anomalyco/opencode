@@ -2013,7 +2013,7 @@ export class Issue extends HeyApiClient {
         linear_project_id?: string
         position?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
         last_pushed_at?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-        linear_updated_at?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        last_pulled_at?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
         cloud_shadow?: {
           [key: string]: unknown
         }
@@ -2136,7 +2136,7 @@ export class Issue extends HeyApiClient {
         linear_project_id?: string
         position?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
         last_pushed_at?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-        linear_updated_at?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        last_pulled_at?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
         cloud_shadow?: {
           [key: string]: unknown
         }

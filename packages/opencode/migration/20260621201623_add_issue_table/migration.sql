@@ -16,7 +16,7 @@ CREATE TABLE `issue` (
 	`linear_project_id` text,
 	`position` integer NOT NULL,
 	`last_pushed_at` integer,
-	`linear_updated_at` integer,
+	`last_pulled_at` integer,
 	`cloud_shadow` text,
 	`time_created` integer NOT NULL,
 	`time_updated` integer NOT NULL

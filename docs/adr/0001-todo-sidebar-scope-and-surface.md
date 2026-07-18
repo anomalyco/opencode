@@ -109,3 +109,63 @@ The full design is in **ADR-0002** (next file in this round).
 ## Notes for the next round
 
 Issue 2 — the "Already up to date (1 already synced)" phantom — is a downstream symptom of the same root cause. The fake handlers in `sidebar-linear.tsx` were the only thing the user could click. Once D4 (real kernel routes) lands, the phantom disappears naturally. The bug class to call out in ADR-0002 is: **any UI handler that simulates an effect rather than calling the kernel is a defect**, not a stub. We should add a lint rule or a "no-op handler" code-review checklist item to catch future instances.
+
+## Amendment 2026-07-12 — Priority i18n keys 不需要中文翻译
+
+**Status:** Accepted (2026-07-12)
+
+### Context
+
+`sidebar.issue.priority.*` (none/urgent/high/medium/low) 这 5 个 i18n key 被 `sidebar-todo.tsx` 和 `dialog-edit-todo.tsx` 通过 `language.t(\`sidebar.issue.priority.${p}\`)` 调用，但在所有 locale 文件中缺失，导致 UI 显示原始 key 字符串而非本地化文案。
+
+### Decision
+
+**Priority 值不需要中文翻译（也不需要其他语言翻译）。** 这些值是 Linear 标准术语，全球通用，直接显示英文即可。仅在 `en.ts` 中定义英文值作为 fallback，不添加到其他 locale 文件。
+
+i18n key 定义（仅 en.ts）：
+
+- `sidebar.issue.priority.none` = "None"
+- `sidebar.issue.priority.urgent` = "Urgent"
+- `sidebar.issue.priority.high` = "High"
+- `sidebar.issue.priority.medium` = "Medium"
+- `sidebar.issue.priority.low` = "Low"
+
+### Rationale
+
+Priority 值是 Linear App 原生使用的英文术语，在所有语言中保持一致。与 status（Linear 团队可自定义状态名，需动态获取）不同，priority 是固定的 5 个值，不需要本地化。
+
+## Amendment 2026-07-17 — Linear GraphQL HTTP bypass for null-field clearing
+
+**Status:** Accepted (2026-07-17)
+**Supersedes:** the "Linear MCP is the integration point; the agent layer needs no code changes" clause in §Context, limited to the null-field-clearing case described below.
+
+### Context
+
+ADR-0001 §Context and §Decision state that "Linear MCP is the integration point" and that "code changes are confined to: kernel data model, server routes, SDK regeneration, and the Desktop UI sidebar slot." A direct Linear HTTP client in the kernel was therefore out of scope.
+
+During implementation, a concrete limitation in the Linear MCP `save_issue` tool was discovered: its `inputSchema` declares `dueDate` as a pure `string` (no `null` in `anyOf`). This means:
+
+- Passing `dueDate: null` is rejected by MCP-level Zod validation.
+- Passing `dueDate: ""` is silently ignored by Linear (the field is not cleared).
+- The underlying Linear GraphQL `issueUpdate` mutation DOES accept `dueDate: null` to clear the field.
+
+As a result, users cannot clear a due date (or other fields with the same schema limitation) via the MCP path alone. The local row would show an empty due date, but the Linear issue would retain the old value, causing sync drift on the next pull.
+
+### Decision
+
+**A direct Linear GraphQL HTTP client is allowed in the kernel, but ONLY for clearing fields that the Linear MCP `save_issue` tool cannot clear due to its schema declaring the field as a non-nullable `string`.** The bypass:
+
+- Lives in `packages/opencode/src/issue/sync-push.ts` as `clearDueDateViaGraphQL`.
+- Uses `HttpClient.HttpClient` (Effect's HTTP client) — not raw `fetch`.
+- Authenticates via the `LINEAR_API_KEY` environment variable.
+- Calls `POST https://api.linear.app/graphql` with `mutation issueUpdate(id, input: { dueDate: null })`.
+- Is invoked from the push path ONLY when `due_date` is in the dirty field set AND the local value is empty — the MCP `save_issue` call is still made for all other fields first.
+
+This is a **narrow, justified exception** to the MCP-only integration rule. It does not open the door to arbitrary Linear HTTP calls. Any future field-clearing bypass must be documented here with the same justification (MCP schema rejects `null`, GraphQL accepts it).
+
+### What this does NOT change
+
+- The Linear MCP server remains the integration point for all create/update/read operations that the MCP schema supports.
+- The agent layer still needs no code changes — agents discover Linear tools through the existing MCP system.
+- The bypass is kernel-internal; the Desktop UI and SDK are unaware of it.
+- All other Linear interactions (list, get, save_issue for non-null fields, list_users, list_issue_statuses) go through MCP.

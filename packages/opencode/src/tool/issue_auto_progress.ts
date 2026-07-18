@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect"
-import * as Tool from "./tool"
+import { Tool } from "./tool"
 import DESCRIPTION from "./issue_auto_progress.txt"
 import { AutoProgress } from "../issue/auto-progress"
 import { context } from "@/project/instance-context"

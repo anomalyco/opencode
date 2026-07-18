@@ -21,7 +21,7 @@ export const IssueTable = sqliteTable(
     linear_project_id: text(),
     position: integer().notNull(),
     last_pushed_at: integer(),
-    linear_updated_at: integer(),
+    last_pulled_at: integer(),
     cloud_shadow: text(),
     ...Timestamps,
   },

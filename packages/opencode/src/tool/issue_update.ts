@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect"
-import * as Tool from "./tool"
+import { Tool } from "./tool"
 import DESCRIPTION from "./issue_update.txt"
 import { Issue } from "../issue/issue"
 import { context } from "@/project/instance-context"

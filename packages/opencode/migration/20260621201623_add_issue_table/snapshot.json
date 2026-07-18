@@ -496,7 +496,7 @@
       "autoincrement": false,
       "default": null,
       "generated": null,
-      "name": "linear_updated_at",
+      "name": "last_pulled_at",
       "entityType": "columns",
       "table": "issue"
     },

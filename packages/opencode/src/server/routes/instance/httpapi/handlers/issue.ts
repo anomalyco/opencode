@@ -1,4 +1,4 @@
-import * as InstanceState from "@/effect/instance-state"
+import { InstanceState } from "@/effect/instance-state"
 import { Issue } from "@/issue/issue"
 import { AutoProgress } from "@/issue/auto-progress"
 import { LinearBinding } from "@/issue/linear-binding"
@@ -7,7 +7,7 @@ import { SyncPush } from "@/issue/sync-push"
 import { LinearMcpClient, LinearMcpError } from "@/issue/mcp-client"
 import { USER, TEAM, PROJECT, ISSUE } from "@/issue/tool-names"
 import { MCP } from "@/mcp"
-import { Effect, Exit } from "effect"
+import { Effect, Exit, Schema, Option } from "effect"
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
 import { LinearBindingSetPayload, IssueCreatePayload, IssueUpdatePayload } from "../groups/issue"
@@ -17,6 +17,8 @@ type LinearStatusRaw = { id: string; name: string; color?: string }
 type LinearTeamRaw = { id: string; name: string; key?: string }
 type LinearProjectRaw = { id: string; name: string; state?: string }
 
+const decodeJson = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
+
 const parseContent = (raw: unknown): unknown => {
   if (!raw || typeof raw !== "object") return raw
   const r = raw as Record<string, unknown>
@@ -25,7 +27,8 @@ const parseContent = (raw: unknown): unknown => {
     if (typeof item !== "object" || !item) continue
     const c = item as Record<string, unknown>
     if (c.type === "text" && typeof c.text === "string") {
-      return JSON.parse(c.text)
+      const parsed = Option.getOrUndefined(decodeJson(c.text))
+      if (parsed !== undefined) return parsed
     }
   }
   return raw
@@ -137,11 +140,33 @@ export const issueHandlers = HttpApiBuilder.group(InstanceHttpApi, "issue", (han
     const linearBinding = yield* LinearBinding.Service
     const mcp = yield* MCP.Service
 
+    // Cached fallback client created from LINEAR_API_KEY env var. Lives in
+    // the layer closure so it's reused across requests. Set to null on
+    // first failure so we don't keep retrying a broken env-var path on
+    // every call. Cleared only by process restart.
+    let envClient: LinearMcpClient | null = null
+    let envClientFailed = false
+
     const getLinearClient = Effect.fn("IssueHttpApi.getLinearClient")(function* () {
+      // Path A: Linear MCP registered in opencode.jsonc → use the project's
+      // already-connected MCP client.
       const clients = yield* mcp.clients()
       const raw = clients["linear"]
-      if (!raw) return undefined
-      return LinearMcpClient.wrap(raw)
+      if (raw) return LinearMcpClient.wrap(raw)
+      // Path B: no MCP registration; fall back to a direct connection
+      // using LINEAR_API_KEY. After one failure (missing env var or
+      // connection error) we stop retrying — the user must fix env/config
+      // and restart the server.
+      if (envClient) return envClient
+      if (envClientFailed) return undefined
+      const exit = yield* LinearMcpClient.create().pipe(Effect.exit)
+      if (Exit.isFailure(exit)) {
+        envClientFailed = true
+        yield* Effect.logWarning(`[IssueHttpApi.getLinearClient] LinearMcpClient.create failed: ${String(exit)}`)
+        return undefined
+      }
+      envClient = exit.value
+      return envClient
     })
 
     const list = Effect.fn("IssueHttpApi.list")(function* () {
@@ -174,7 +199,7 @@ export const issueHandlers = HttpApiBuilder.group(InstanceHttpApi, "issue", (han
       return yield* issue.update({ directory, id: ctx.params.id, patch: patch as Partial<Issue.Info> })
     })
 
-    const remove = Effect.fn("IssueHttpApi.delete")(function* (ctx: { params: { id: string } }) {
+    const remove = Effect.fn("IssueHttpApi.remove")(function* (ctx: { params: { id: string } }) {
       const directory = yield* InstanceState.directory
       yield* issue.delete({ directory, id: ctx.params.id })
       return true
@@ -266,8 +291,27 @@ export const issueHandlers = HttpApiBuilder.group(InstanceHttpApi, "issue", (han
       const directory = yield* InstanceState.directory
       const client = yield* getLinearClient()
       if (!client) return yield* Effect.fail(new HttpApiError.BadRequest({}))
+      // The Linear MCP client is resolved per-request via `getLinearClient()`
+      // (Path A: shared project MCP client; Path B: env-var fallback). Because
+      // the client identity depends on per-request resolution (which may even
+      // return undefined, in which case we bail above), it cannot be supplied
+      // by a layer-level middleware. A middleware would have to either run
+      // `getLinearClient()` itself (re-implementing the per-request branching
+      // and the missing-client short-circuit) or always provide *some* client,
+      // which would force every Issue route to pay the Linear connection cost
+      // even when the route does not talk to Linear. `Effect.provideService`
+      // here keeps the Linear dependency scoped to exactly the two routes
+      // (`syncPull`, `syncPush`) that need it, with no impact on the other
+      // Issue routes in this same handler module.
       return yield* SyncPull.pull({ directory }).pipe(
         Effect.provideService(SyncPull.Client, client),
+        Effect.catchDefect((defect: unknown) =>
+          Effect.gen(function* () {
+            yield* Effect.logError(`[IssueHttpApi.syncPull] defect: ${String(defect)}`)
+            return yield* Effect.fail(new SyncPull.Error({ message: String(defect) }))
+          }),
+        ),
+        Effect.tapError((error) => Effect.logError(`[IssueHttpApi.syncPull] error: ${String(error)}`)),
         Effect.mapError(() => new HttpApiError.BadRequest({})),
       )
     })
@@ -276,8 +320,19 @@ export const issueHandlers = HttpApiBuilder.group(InstanceHttpApi, "issue", (han
       const directory = yield* InstanceState.directory
       const client = yield* getLinearClient()
       if (!client) return yield* Effect.fail(new HttpApiError.BadRequest({}))
+      // See `syncPull` above for the rationale on per-request
+      // `Effect.provideService` vs. layer-level middleware. The Linear client
+      // is request-scoped, may be undefined (handled by the early return
+      // above), and must not be forced on routes that do not call Linear.
       return yield* SyncPush.push({ directory, issueIds: "all" }).pipe(
         Effect.provideService(SyncPush.Client, client),
+        Effect.catchDefect((defect: unknown) =>
+          Effect.gen(function* () {
+            yield* Effect.logError(`[IssueHttpApi.syncPush] defect: ${String(defect)}`)
+            return yield* Effect.fail(new SyncPush.Error({ message: String(defect) }))
+          }),
+        ),
+        Effect.tapError((error) => Effect.logError(`[IssueHttpApi.syncPush] error: ${String(error)}`)),
         Effect.mapError(() => new HttpApiError.BadRequest({})),
       )
     })
@@ -287,7 +342,7 @@ export const issueHandlers = HttpApiBuilder.group(InstanceHttpApi, "issue", (han
       .handle("get", get)
       .handle("create", create)
       .handle("update", update)
-      .handle("delete", remove)
+      .handle("remove", remove)
       .handle("reorder", reorder)
       .handle("autoProgressStart", autoProgressStart)
       .handle("autoProgressStop", autoProgressStop)
