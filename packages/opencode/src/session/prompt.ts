@@ -1083,6 +1083,10 @@ const layer = Layer.effect(
         const ctx = yield* InstanceState.context
         let structured: unknown
         let step = 0
+        // Consecutive provider context-overflow -> compaction cycles with no
+        // successful turn in between. Bounds the overflow-compaction retry so a
+        // summary that fails to shrink the request cannot loop forever.
+        let overflowCompactions = 0
         const session = yield* sessions.get(sessionID).pipe(Effect.orDie)
 
         while (true) {
@@ -1318,6 +1322,17 @@ const layer = Layer.effect(
 
             if (result === "stop") return "break" as const
             if (result === "compact") {
+              overflowCompactions++
+              if (overflowCompactions > 2) {
+                handle.message.error = new SessionV1.ContextOverflowError({
+                  message:
+                    "Context still exceeds the model limit after repeated compaction attempts. Stopping to avoid a compaction loop.",
+                }).toObject()
+                handle.message.finish = "error"
+                yield* sessions.updateMessage(handle.message)
+                yield* events.publish(Session.Event.Error, { sessionID, error: handle.message.error })
+                return "break" as const
+              }
               yield* compaction.create({
                 sessionID,
                 agent: lastUser.agent,
@@ -1325,6 +1340,8 @@ const layer = Layer.effect(
                 auto: true,
                 overflow: !handle.message.finish,
               })
+            } else {
+              overflowCompactions = 0
             }
             return "continue" as const
           }).pipe(
