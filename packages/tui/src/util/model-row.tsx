@@ -18,6 +18,7 @@ export interface ModelRowOptions {
   favorite?: boolean
   note?: string
   current?: boolean
+  subscription?: boolean
   onSelect?: () => void
 }
 
@@ -29,16 +30,19 @@ function footerTokens(
   opts: ModelRowOptions,
   theme: ModelRowTheme,
 ): { view: JSX.Element; width: number } {
-  const cost = humanizeCost(model.cost?.input ?? 0)
-  const out = humanizeCost(model.cost?.output ?? 0)
-  const costText = `${cost}/${out}`
-  const free = model.cost?.input === 0
   const ctx = humanizeContext(model.limit?.context ?? 0)
   const star = opts.favorite ? "★" : ""
   const note = opts.note ? "✎" : ""
 
   const pieces: { text: string; color: RGBA }[] = []
-  pieces.push({ text: costText, color: free ? theme.success : theme.textMuted })
+  if (opts.subscription) {
+    // Subscription providers (e.g. opencode) don't show per-token pricing.
+    pieces.push({ text: "Free", color: theme.success })
+  } else {
+    const cost = humanizeCost(model.cost?.input ?? 0)
+    const out = humanizeCost(model.cost?.output ?? 0)
+    pieces.push({ text: `${cost}/${out}`, color: theme.textMuted })
+  }
   if (ctx) pieces.push({ text: ctx, color: theme.textMuted })
   if (star) pieces.push({ text: star, color: theme.warning })
   if (note) pieces.push({ text: note, color: theme.info })
@@ -58,8 +62,10 @@ function footerTokens(
 }
 
 // Provider header: name + visible-model count + price range.
+// Subscription providers omit the price range (all-inclusive).
 function providerHeader(provider: Provider, visibleModels: ModelShape[], theme: ModelRowTheme): JSX.Element {
-  const inputs = visibleModels.map((m) => m.cost?.input ?? 0).filter((n) => n > 0)
+  const subscription = provider.id === "opencode"
+  const inputs = subscription ? [] : visibleModels.map((m) => m.cost?.input ?? 0).filter((n) => n > 0)
   let range = ""
   if (inputs.length > 0) {
     const min = Math.min(...inputs)
@@ -88,7 +94,8 @@ export function modelRow(
   theme: ModelRowTheme,
   opts: ModelRowOptions & { onSelect: () => void },
 ): DialogSelectOption<{ providerID: string; modelID: string }> {
-  const { view: footerView, width: footerWidth } = footerTokens(model, opts, theme)
+  const subscription = provider.id === "opencode"
+  const { view: footerView, width: footerWidth } = footerTokens(model, { ...opts, subscription }, theme)
   const capLine = capabilityLine(model)
   // Default title budget from DialogSelect.Option is 61; reserve room for the footer + 3 (padding).
   const titleWidth = Math.max(20, 61 - footerWidth - 1)

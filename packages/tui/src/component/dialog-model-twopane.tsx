@@ -40,6 +40,8 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
   const connected = useConnected()
   const providerOptions = createDialogProviderOptions()
 
+  dialog.setSize("xlarge")
+
   const rowTheme: ModelRowTheme = {
     text: theme.text,
     textMuted: theme.textMuted,
@@ -274,11 +276,19 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
     ],
   }))
 
-  // Right pane forwards Tab back to the left when no footer action is focused.
-  // We register a parent binding that fires only when the right pane is focused.
+  // Right pane: Tab returns to the left pane; Shift+Tab also returns.
+  // These override DialogSelect's footer-action tab cycling so Tab consistently
+  // moves pane focus. Footer actions remain reachable via their own keys
+  // (ctrl+a, ctrl+f, f, n, v) and Enter submits.
   useBindings(() => ({
     enabled: () => focusedPane() === "right",
     bindings: [
+      {
+        key: "tab",
+        desc: "Focus providers pane",
+        group: "Model dialog",
+        cmd: () => setFocusedPane("left"),
+      },
       {
         key: "shift+tab",
         desc: "Focus providers pane",

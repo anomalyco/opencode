@@ -369,6 +369,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     const visible = shownActions()
 
     return {
+      enabled: !props.locked,
       commands: [
         {
           name: "dialog.select.prev",
