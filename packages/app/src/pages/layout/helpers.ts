@@ -87,6 +87,20 @@ export function homeProjectDirectories(result: string | string[] | null) {
   return Array.isArray(result) ? result : [result]
 }
 
+export function newSessionDirectory(
+  projects: { worktree: string }[],
+  selected?: string,
+  last?: string,
+  fallback?: string,
+) {
+  return (
+    projects.find((project) => project.worktree === selected)?.worktree ??
+    projects.find((project) => project.worktree === last)?.worktree ??
+    projects[0]?.worktree ??
+    fallback
+  )
+}
+
 export function homeSessionServerStatus(active: boolean, status: () => { working: boolean; tint?: string }) {
   if (!active) return { working: false, tint: undefined }
   return status()

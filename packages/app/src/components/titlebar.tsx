@@ -372,16 +372,15 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                 return
               }
 
-              // Last resort: use server-registered projects from sync data when
-              // no projects have been opened yet (fresh web start)
               const conn = global.servers.list()[0] ?? server.current
-              if (conn) {
-                const ctx = global.ensureServerCtx(conn)
-                const registered = ctx.sync.data.project[0]
-                if (registered) {
-                  tabs.newDraft({ server: ServerConnection.key(conn), directory: registered.worktree }, "")
-                }
-              }
+              if (!conn) return
+              const ctx = global.ensureServerCtx(conn)
+              const directory = ctx.sync.data.path.directory
+              if (!directory) return
+
+              ctx.projects.open(directory)
+              ctx.projects.touch(directory)
+              tabs.newDraft({ server: ServerConnection.key(conn), directory }, "")
             }
             const toggleHome = () => tabs.toggleHome({ home: layout.route().type === "home", current: currentTab() })
 
