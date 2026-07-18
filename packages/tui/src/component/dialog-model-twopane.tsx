@@ -3,6 +3,7 @@ import { createMemo, createSignal, For, Show } from "solid-js"
 import { pipe, entries, filter, flatMap, map, sortBy } from "remeda"
 import { useLocal } from "../context/local"
 import { useSync } from "../context/sync"
+import { useData } from "../context/data"
 import { useTheme } from "../context/theme"
 import { useDialog } from "../ui/dialog"
 import { DialogSelect, type DialogSelectOption, type DialogSelectRef } from "../ui/dialog-select"
@@ -35,6 +36,7 @@ const PROVIDER_PIN_FIRST = (provider: Provider) => provider.id !== "opencode"
 export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
   const local = useLocal()
   const sync = useSync()
+  const data = useData()
   const dialog = useDialog()
   const { theme } = useTheme()
   const connected = useConnected()
@@ -49,6 +51,24 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
     warning: theme.warning,
     info: theme.info,
     accent: theme.accent,
+  }
+
+  // openai is subscription when connected via ChatGPT Pro/Plus OAuth, and
+  // metered when connected via API key. Detect by reading the active
+  // integration connection's credential label/id.
+  const openaiSubscription = createMemo(() => {
+    const integrations = data.location.integration.list() ?? []
+    const openai = integrations.find((item) => item.id === "openai")
+    if (!openai) return false
+    return openai.connections.some(
+      (conn) => conn.type === "credential" && /^chatgpt-(browser|headless)$/.test(conn.id),
+    )
+  })
+
+  // Whether a given provider should hide per-token cost (subscription).
+  function isSubscriptionFor(providerID: string) {
+    if (providerID === "openai") return openaiSubscription()
+    return false
   }
 
   const [focusedPane, setFocusedPane] = createSignal<"left" | "right">("left")
@@ -139,6 +159,7 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
             favorite: isFavorite,
             note,
             current: current?.providerID === provider.id && current?.modelID === modelID,
+            subscription: isSubscriptionFor(provider.id),
             onSelect: () => commitSelect(provider.id, modelID),
           })
         },
@@ -158,6 +179,7 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
         return [
           modelRow(info, item.modelID, provider, visiblePeers, rowTheme, {
             note,
+            subscription: isSubscriptionFor(provider.id),
             onSelect: () => commitSelect(item.providerID, item.modelID),
           }),
         ]
@@ -177,6 +199,7 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
             favorite: mode.kind === "favorites",
             note,
             current: current?.providerID === item.providerID && current?.modelID === item.modelID,
+            subscription: isSubscriptionFor(provider.id),
             onSelect: () => commitSelect(item.providerID, item.modelID),
           }),
         ]

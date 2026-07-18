@@ -18,6 +18,10 @@ export interface ModelRowOptions {
   favorite?: boolean
   note?: string
   current?: boolean
+  // Override: treat this row as subscription (hide cost) even if the provider
+  // id isn't in SUBSCRIPTION_PROVIDERS. Used for providers like `openai` whose
+  // subscription vs metered status depends on the active auth method.
+  subscription?: boolean
   onSelect?: () => void
 }
 
@@ -26,7 +30,7 @@ export interface ModelRowOptions {
 // catalog's per-token prices don't reflect what the user actually pays.
 // (opencode Zen is pay-as-you-go, so it is NOT here — its free endpoints
 // surface as "Free" via the per-model cost check below.)
-const SUBSCRIPTION_PROVIDERS = new Set(["github-copilot", "opencode-go"])
+const SUBSCRIPTION_PROVIDERS = new Set(["github-copilot", "opencode-go", "ollama-cloud"])
 
 function isSubscriptionProvider(providerID: string) {
   return SUBSCRIPTION_PROVIDERS.has(providerID)
@@ -50,9 +54,10 @@ function footerTokens(
   const ctx = humanizeContext(model.limit?.context ?? 0)
   const star = opts.favorite ? "★" : ""
   const note = opts.note ? "✎" : ""
+  const subscription = isSubscriptionProvider(provider.id) || opts.subscription === true
 
   const pieces: { text: string; color: RGBA }[] = []
-  if (isSubscriptionProvider(provider.id)) {
+  if (subscription) {
     // Subscription providers: no per-token pricing to display.
   } else if (isFreeModel(model)) {
     pieces.push({ text: "Free", color: theme.success })

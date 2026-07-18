@@ -1,5 +1,6 @@
 import { createMemo, createSignal, Show } from "solid-js"
 import { useLocal } from "../context/local"
+import { useData } from "../context/data"
 import { map, pipe, flatMap, entries, filter, sortBy, take } from "remeda"
 import { DialogSelect } from "../ui/dialog-select"
 import { useDialog } from "../ui/dialog"
@@ -21,12 +22,28 @@ export function DialogModel(props: {
 }) {
   const local = useLocal()
   const sync = useSync()
+  const data = useData()
   const dialog = useDialog()
   const [query, setQuery] = createSignal("")
   const dimensions = useTerminalDimensions()
 
   const connected = useConnected()
   const providers = createDialogProviderOptions()
+
+  // openai is subscription when connected via ChatGPT Pro/Plus OAuth.
+  const openaiSubscription = createMemo(() => {
+    const integrations = data.location.integration.list() ?? []
+    const openai = integrations.find((item) => item.id === "openai")
+    if (!openai) return false
+    return openai.connections.some(
+      (conn) => conn.type === "credential" && /^chatgpt-(browser|headless)$/.test(conn.id),
+    )
+  })
+
+  function isSubscriptionFor(providerID: string) {
+    if (providerID === "openai") return openaiSubscription()
+    return isSubscriptionProvider(providerID)
+  }
 
   const showExtra = createMemo(() => connected() && !props.providerID)
   const useTwoPane = createMemo(() => !props.providerID && dimensions().width >= 70)
@@ -53,7 +70,7 @@ export function DialogModel(props: {
             category,
             disabled: provider.id === "opencode" && model.id.includes("-nano"),
             footer:
-              isSubscriptionProvider(provider.id) ? undefined : model.cost?.input === 0 ? "Free" : undefined,
+              isSubscriptionFor(provider.id) ? undefined : model.cost?.input === 0 ? "Free" : undefined,
             onSelect: () => {
               onSelect(provider.id, model.id)
             },
@@ -93,7 +110,7 @@ export function DialogModel(props: {
             category: connected() ? provider.name : undefined,
             disabled: provider.id === "opencode" && model.includes("-nano"),
             footer:
-              isSubscriptionProvider(provider.id) ? undefined : info.cost?.input === 0 ? "Free" : undefined,
+              isSubscriptionFor(provider.id) ? undefined : info.cost?.input === 0 ? "Free" : undefined,
             onSelect() {
               onSelect(provider.id, model)
             },
