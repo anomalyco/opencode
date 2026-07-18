@@ -1,5 +1,5 @@
 import { TextAttributes, type RGBA } from "@opentui/core"
-import type { JSX } from "solid-js"
+import { Show, type JSX } from "solid-js"
 import type { Provider } from "@kancode/sdk/v2"
 import type { DialogSelectOption } from "../ui/dialog-select"
 import { Locale } from "./locale"
@@ -43,18 +43,16 @@ function footerTokens(
   if (star) pieces.push({ text: star, color: theme.warning })
   if (note) pieces.push({ text: note, color: theme.info })
 
-  const width = pieces.reduce((acc, p) => acc + p.text.length + 1, -1)
+  // Visible width: sum of piece lengths + 1 space between each.
+  const width = pieces.reduce((acc, p, i) => acc + p.text.length + (i > 0 ? 1 : 0), 0)
   return {
     width,
     view: (
-      <text>
+      <box flexDirection="row">
         {pieces.map((p, i) => (
-          <>
-            {i > 0 ? <span> </span> : null}
-            <span style={{ fg: p.color }}>{p.text}</span>
-          </>
+          <text fg={p.color}>{i > 0 ? ` ${p.text}` : p.text}</text>
         ))}
-      </text>
+      </box>
     ),
   }
 }
@@ -69,11 +67,15 @@ function providerHeader(provider: Provider, visibleModels: ModelShape[], theme: 
     range = min === max ? humanizeCost(min) : `${humanizeCost(min)}–${humanizeCost(max)}`
   }
   return (
-    <text>
-      <span style={{ fg: theme.accent, attributes: TextAttributes.BOLD }}>{provider.name}</span>
-      <span style={{ fg: theme.textMuted }}> · {visibleModels.length}</span>
-      {range ? <span style={{ fg: theme.textMuted }}> · {range}</span> : null}
-    </text>
+    <box flexDirection="row">
+      <text fg={theme.accent} attributes={TextAttributes.BOLD}>
+        {provider.name}
+      </text>
+      <text fg={theme.textMuted}> · {visibleModels.length}</text>
+      <Show when={range}>
+        <text fg={theme.textMuted}> · {range}</text>
+      </Show>
+    </box>
   )
 }
 

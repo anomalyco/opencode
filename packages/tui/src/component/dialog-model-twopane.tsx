@@ -313,7 +313,7 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
           {leftEntryTitle(props.entry)}
         </text>
         <Show when={count() !== undefined}>
-          <text fg={selected() ? theme.selectedListItemText : theme.textMuted}> {count()}</text>
+          <text fg={selected() ? theme.selectedListItemText : theme.textMuted}> {String(count())}</text>
         </Show>
       </box>
     )
