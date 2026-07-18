@@ -2,7 +2,6 @@ import { TextAttributes, type RGBA } from "@opentui/core"
 import { Show, type JSX } from "solid-js"
 import type { Provider } from "@kancode/sdk/v2"
 import type { DialogSelectOption } from "../ui/dialog-select"
-import { Locale } from "./locale"
 import { capabilityLine, humanizeContext, humanizeCost, type ModelShape } from "./model"
 
 export interface ModelRowTheme {
@@ -42,7 +41,7 @@ function isFreeModel(model: ModelShape) {
   return (model.cost?.input ?? 0) === 0
 }
 
-// Compose the right-aligned footer token: cost · context · ★ · ✎note.
+// Compose the right-aligned footer token: cost · context · ★.
 // Returns the JSX element and the visible character width so the caller can
 // shrink the title's `titleWidth` to avoid collision.
 function footerTokens(
@@ -53,7 +52,6 @@ function footerTokens(
 ): { view: JSX.Element; width: number } {
   const ctx = humanizeContext(model.limit?.context ?? 0)
   const star = opts.favorite ? "★" : ""
-  const note = opts.note ? "✎" : ""
   const subscription = isSubscriptionProvider(provider.id) || opts.subscription === true
 
   const pieces: { text: string; color: RGBA }[] = []
@@ -68,7 +66,6 @@ function footerTokens(
   }
   if (ctx) pieces.push({ text: ctx, color: theme.textMuted })
   if (star) pieces.push({ text: star, color: theme.warning })
-  if (note) pieces.push({ text: note, color: theme.info })
 
   // Visible width: sum of piece lengths + 1 space between each.
   const width = pieces.reduce((acc, p, i) => acc + p.text.length + (i > 0 ? 1 : 0), 0)
@@ -122,18 +119,12 @@ export function modelRow(
   const capLine = capabilityLine(model)
   // Default title budget from DialogSelect.Option is 61; reserve room for the footer + 3 (padding).
   const titleWidth = Math.max(20, 61 - footerWidth - 1)
-  const noteText = opts.note ? Locale.truncateMiddle(opts.note, 24) : undefined
   return {
     value: { providerID: provider.id, modelID },
     title: model.name ?? modelID,
     titleWidth,
     truncateTitle: true,
-    footer: (
-      <box flexDirection="row" gap={1}>
-        {footerView}
-        {noteText ? <text fg={theme.info}>{noteText}</text> : null}
-      </box>
-    ),
+    footer: footerView,
     details: capLine ? [capLine] : undefined,
     categoryView: providerHeader(provider, visiblePeers, theme),
     onSelect: opts.onSelect,

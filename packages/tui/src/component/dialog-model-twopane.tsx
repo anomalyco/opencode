@@ -214,9 +214,12 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
       subscription: isSubscriptionFor(provider.id),
       onSelect: () => commitSelect(provider.id, modelID),
     })
+    const titleParts = [row.title]
+    if (opts?.showProvider) titleParts.push(provider.name)
+    if (note) titleParts.push(Locale.truncateMiddle(note, 24))
     return {
       ...row,
-      title: opts?.showProvider ? `${row.title} · ${provider.name}` : row.title,
+      title: titleParts.join(" · "),
       muted: opts?.muted === true,
     }
   }
