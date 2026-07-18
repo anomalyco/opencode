@@ -28,9 +28,9 @@ import { fromRow } from "./session/info"
 import { SessionRunner } from "./session/runner/index"
 import { SessionStore } from "./session/store"
 import { SessionExecution } from "./session/execution"
+import { MessageDecodeError, NotFoundError } from "./session/error"
 import { makeGlobalNode } from "./effect/app-node"
 import { LocationServiceMap } from "./location-service-map"
-import { MessageDecodeError } from "./session/error"
 import { SessionEvent } from "./session/event"
 import { SessionPending } from "./session/pending"
 import { SessionGenerate } from "./session/generate"
@@ -108,10 +108,6 @@ type ForkInput = {
   messageID?: SessionMessage.ID
 }
 
-export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Session.NotFoundError", {
-  sessionID: SessionSchema.ID,
-}) {}
-
 export class OperationUnavailableError extends Schema.TaggedErrorClass<OperationUnavailableError>()(
   "Session.OperationUnavailableError",
   {
@@ -119,7 +115,7 @@ export class OperationUnavailableError extends Schema.TaggedErrorClass<Operation
   },
 ) {}
 
-export { MessageDecodeError } from "./session/error"
+export { MessageDecodeError, NotFoundError }
 
 export class PromptConflictError extends Schema.TaggedErrorClass<PromptConflictError>()("Session.PromptConflictError", {
   sessionID: SessionSchema.ID,
@@ -1033,8 +1029,7 @@ const SHELL_MAX_CAPTURE_BYTES = 1024 * 1024
 export const node = makeGlobalNode({
   service: Service,
   layer: layer.pipe(Layer.orDie),
-  // Defer the execution node across the Session/runner module cycle until the graph is compiled.
-  deps: () => [
+  deps: [
     Job.node,
     Database.node,
     EventV2.node,

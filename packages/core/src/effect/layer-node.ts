@@ -74,7 +74,7 @@ type MakeInput<
   T extends Tag | undefined = undefined,
 > = NodeIdentity & {
   readonly layer: Implementation
-  readonly deps: (Items | (() => Items)) & CheckDependencies<Implementation, NoInfer<Items>>
+  readonly deps: Items & CheckDependencies<Implementation, NoInfer<Items>>
   readonly tag?: T
 }
 
@@ -90,9 +90,7 @@ export function make<
     name: input.service !== undefined ? input.service.key : input.name,
     service: input.service,
     implementation: input.layer,
-    get dependencies() {
-      return typeof input.deps === "function" ? input.deps() : input.deps
-    },
+    dependencies: input.deps,
     tag: input.tag,
   }
 }

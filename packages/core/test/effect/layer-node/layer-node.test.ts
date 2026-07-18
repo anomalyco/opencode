@@ -37,12 +37,6 @@ describe("layer node", () => {
     expect(await Effect.runPromise(program)).toBe("hello production")
   })
 
-  test("resolves lazy dependencies when compiling", async () => {
-    const greeting = make({ service: Greeting, layer: greetingLayer, deps: () => [value] })
-    const program = Effect.map(Greeting, (item) => item.value).pipe(Effect.provide(build(greeting)))
-    expect(await Effect.runPromise(program)).toBe("hello production")
-  })
-
   test("exposes roots but hides transitive dependencies", () => {
     const layer = build(LayerNode.group([greeting]))
     const check: Layer.Layer<Greeting> = layer

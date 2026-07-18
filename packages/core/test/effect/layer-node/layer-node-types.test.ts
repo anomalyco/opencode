@@ -32,7 +32,6 @@ const b = make({ service: B, layer: bLayer, deps: [a] })
 const c = make({ service: C, layer: cLayer, deps: [a, b] })
 const failing = make({ service: A, layer: failingA, deps: [] })
 const dependent = make({ service: B, layer: bLayer, deps: [failing] })
-make({ service: B, layer: bLayer, deps: () => [a] })
 const inputA = LayerNode.unbound(A, tags.values.app)
 const inputDependent = make({ service: B, layer: bLayer, deps: [inputA] })
 
@@ -46,9 +45,6 @@ make({ service: A, name: "a", layer: aLayer, deps: [] })
 
 // @ts-expect-error B requires A
 make({ service: B, layer: bLayer, deps: [] })
-
-// @ts-expect-error Lazy dependencies must still provide A
-make({ service: B, layer: bLayer, deps: () => [] })
 
 // @ts-expect-error C requires A and B
 make({ service: C, layer: cLayer, deps: [a] })

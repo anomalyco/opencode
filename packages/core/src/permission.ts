@@ -6,7 +6,8 @@ import { Permission } from "@opencode-ai/schema/permission"
 import { EventV2 } from "./event"
 import { Location } from "./location"
 import { AgentV2 } from "./agent"
-import { SessionV2 } from "./session"
+import { SessionErrors } from "./session/error"
+import { SessionSchema } from "./session/schema"
 import { SessionStore } from "./session/store"
 import { Wildcard } from "./util/wildcard"
 import { PermissionSaved } from "./permission/saved"
@@ -98,11 +99,11 @@ export function merge(...rulesets: Permission.Ruleset[]): Permission.Ruleset {
 }
 
 export interface Interface {
-  readonly ask: (input: AssertInput) => Effect.Effect<AskResult, SessionV2.NotFoundError>
-  readonly assert: (input: AssertInput) => Effect.Effect<void, Error | SessionV2.NotFoundError>
+  readonly ask: (input: AssertInput) => Effect.Effect<AskResult, SessionErrors.NotFoundError>
+  readonly assert: (input: AssertInput) => Effect.Effect<void, Error | SessionErrors.NotFoundError>
   readonly reply: (input: ReplyInput) => Effect.Effect<void, NotFoundError>
   readonly get: (id: ID) => Effect.Effect<Request | undefined>
-  readonly forSession: (sessionID: SessionV2.ID) => Effect.Effect<ReadonlyArray<Request>>
+  readonly forSession: (sessionID: SessionSchema.ID) => Effect.Effect<ReadonlyArray<Request>>
   readonly list: () => Effect.Effect<ReadonlyArray<Request>>
 }
 
@@ -142,9 +143,12 @@ const layer = Layer.effect(
       )
     })
 
-    const configured = Effect.fn("PermissionV2.configured")(function* (sessionID: SessionV2.ID, agentID?: AgentV2.ID) {
+    const configured = Effect.fn("PermissionV2.configured")(function* (
+      sessionID: SessionSchema.ID,
+      agentID?: AgentV2.ID,
+    ) {
       const session = yield* sessions.get(sessionID)
-      if (!session) return yield* new SessionV2.NotFoundError({ sessionID })
+      if (!session) return yield* new SessionErrors.NotFoundError({ sessionID })
       const agent = yield* agents.resolve(agentID ?? session.agent)
       return agent?.permissions ?? missingAgentPermissions
     })
@@ -301,7 +305,7 @@ const layer = Layer.effect(
       return pending.get(id)?.request
     })
 
-    const forSession = Effect.fn("PermissionV2.forSession")(function* (sessionID: SessionV2.ID) {
+    const forSession = Effect.fn("PermissionV2.forSession")(function* (sessionID: SessionSchema.ID) {
       return Array.from(pending.values(), (item) => item.request).filter((request) => request.sessionID === sessionID)
     })
 
