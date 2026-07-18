@@ -124,20 +124,43 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
     const owner = getOwner()
     const states = new Map<ServerScope, { dispose: () => void; state: NotificationState }>()
 
+    const EMPTY: NotificationState = {
+      ready: () => false,
+      session: {
+        all: () => [],
+        unseen: () => [],
+        unseenCount: () => 0,
+        unseenHasError: () => false,
+        markViewed: () => {},
+      },
+      project: {
+        all: () => [],
+        unseen: () => [],
+        unseenCount: () => 0,
+        unseenHasError: () => false,
+        markViewed: () => {},
+      },
+    }
+
     const activeServer = createMemo(() => {
       if (params.serverKey) return requireServerKey(params.serverKey)
       if (search.draftId) {
         const draft = tabs.store.find((tab): tab is DraftTab => tab.type === "draft" && tab.draftID === search.draftId)
         if (draft) return draft.server
       }
-      return server.key
+      const key = server.key
+      const servers = global.servers.list()
+      if (servers.length > 0 && !servers.some((c) => ServerConnection.key(c) === key)) {
+        return ServerConnection.key(servers[0])
+      }
+      return key
     })
     const activeDirectory = createMemo(() => decode64(params.dir))
     const activeSession = createMemo(() => params.id)
 
     const ensure = (key: ServerConnection.Key) => {
       const conn = global.servers.list().find((item) => ServerConnection.key(item) === key)
-      if (!conn) throw new Error(`Notification server not found: ${key}`)
+      if (!conn) return EMPTY
       const ctx = global.ensureServerCtx(conn)
       const existing = states.get(ctx.sdk.scope)
       if (existing) return existing.state
