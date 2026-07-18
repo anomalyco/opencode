@@ -159,3 +159,12 @@ const table = sqliteTable("session", {
 - Keep delivery vocabulary explicit. Prompts steer by default and promote at the next safe provider-turn boundary while the current drain requires continuation. An explicit `queue` input remains pending until the Session would otherwise become idle; promote one queued input at that boundary, then reevaluate continuation before promoting another. Promoting any new user input resets the selected agent's provider-turn allowance; a batch of steers resets it once.
 - Keep EventV2 replay owner claims separate from clustered Session execution ownership.
 - Keep the System Context algebra, registry, and built-ins in `src/system-context`; keep Context Source producers with their observed domains, and keep Session History selection plus Context Epoch persistence Session-owned.
+
+## Fork-local (Alterspective) notes
+
+This repo is the Alterspective fork (`origin` = `Alter-Igor/opencode`, `upstream` = `anomalyco/opencode`). We work fork-locally: no upstream PRs; keep every local change small and in low-churn files so `git fetch upstream && git merge upstream/dev` stays clean. After any upstream sync: `bun install`, `bun typecheck` from package dirs, `bun test` from `packages/core` and `packages/opencode` (some tests fail on Windows pre-existing — compare against the pre-merge baseline before blaming the sync).
+
+- **Our patches**: `packages/opencode/src/provider/vision-proxy.ts` (vision proxy middleware for text-only models), wired via `wrapLanguageModel` middleware in `packages/opencode/src/session/llm.ts`. Regression test: `packages/opencode/test/provider/vision-proxy.test.ts` — run it after every upstream sync.
+- **Windows env**: `turbo.json` `globalPassThroughEnv` includes `NODIST_PREFIX`/`NODIST_X64` — required so the Nodist node shim works under turbo's strict env-mode (the pre-push hook's 30-package typecheck fails without it). Do not remove.
+- **Symlinks**: Windows has no symlink privilege here, so repo symlinks check out as text placeholders. The two typecheck-blocking ones (`packages/app/src/custom-elements.d.ts`, `packages/enterprise/src/custom-elements.d.ts`) are replaced with local hardlinks hidden via `git update-index --skip-worktree` (list them: `git ls-files -v | Select-String '^S'`). ~60 asset symlinks (favicons etc.) remain placeholders — harmless for typecheck/TUI, but app/web builds serving those assets need Developer Mode enabled first.
+- The remediation plan and full revalidation evidence live in `specs/arch-remediation-plan.md`.
