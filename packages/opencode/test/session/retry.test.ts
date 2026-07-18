@@ -18,10 +18,10 @@ const providerID = ProviderV2.ID.make("test")
 const retryProvider = "test"
 const it = testEffect(LayerNode.compile(LayerNode.group([SessionStatus.node, CrossSpawnSpawner.node])))
 
-function apiError(headers?: Record<string, string>): SessionV1.APIError {
+function apiError(headers?: Record<string, string>, message = "boom"): SessionV1.APIError {
   return Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
     new SessionV1.APIError({
-      message: "boom",
+      message,
       isRetryable: true,
       responseHeaders: headers,
     }).toObject(),
@@ -113,6 +113,37 @@ describe("session.retry.delay", () => {
         attempt: 2,
         message: "boom",
       })
+    }),
+  )
+
+  it.effect("policy stops after the maximum retry attempts", () =>
+    Effect.gen(function* () {
+      const attempts: number[] = []
+      const failures: SessionV1.APIError[] = []
+
+      const failure = yield* Effect.gen(function* () {
+        const current = apiError({ "retry-after-ms": "0" }, `boom ${failures.length + 1}`)
+        failures.push(current)
+        return yield* Effect.fail(current)
+      }).pipe(
+        Effect.retry(
+          SessionRetry.policy({
+            provider: "test",
+            parse: Schema.decodeUnknownSync(SessionV1.APIError.Schema),
+            set: (info) => Effect.sync(() => attempts.push(info.attempt)),
+          }),
+        ),
+        Effect.flip,
+      )
+
+      const first = failures[0]
+      const terminal = failures.at(-1)
+      if (!first || !terminal) throw new Error("expected retry failures")
+      expect(failure).not.toBe(first)
+      expect(failure).toBe(terminal)
+      expect(failure.data.message).toBe(`boom ${SessionRetry.RETRY_MAX_ATTEMPTS + 1}`)
+      expect(attempts).toEqual(Array.from({ length: SessionRetry.RETRY_MAX_ATTEMPTS }, (_, index) => index + 1))
+      expect(failures).toHaveLength(SessionRetry.RETRY_MAX_ATTEMPTS + 1)
     }),
   )
 })
@@ -239,6 +270,22 @@ describe("session.retry.retryable", () => {
 
     expect(SessionRetry.retryable(error, retryProvider)).toBeUndefined()
   })
+
+  test.each(["ENOTFOUND", "ECONNREFUSED"])(
+    "does not retry permanent transport code %s even when the API error is retryable",
+    (code) => {
+      const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
+        new SessionV1.APIError({
+          message: "Connection failed",
+          isRetryable: true,
+          statusCode: 503,
+          metadata: { code },
+        }).toObject(),
+      )
+
+      expect(SessionRetry.retryable(error, retryProvider)).toBeUndefined()
+    },
+  )
 
   test("retries ZlibError decompression failures", () => {
     const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { APICallError } from "ai"
 import { MessageV2 } from "../../src/session/message-v2"
+import { SessionRetry } from "../../src/session/retry"
 import { ProviderTransform } from "@/provider/transform"
 import type { Provider } from "@/provider/provider"
 
@@ -1551,6 +1552,130 @@ describe("session.message-v2.fromError", () => {
     const result = MessageV2.fromError(zlibError, { providerID, aborted: true })
 
     expect(result.name).toBe("MessageAbortedError")
+  })
+
+  test("classifies user-cancelled AbortError as AbortedError when ctx.aborted is true", () => {
+    const err = new DOMException("Aborted", "AbortError")
+    const result = MessageV2.fromError(err, { providerID, aborted: true })
+    expect(result.name).toBe("MessageAbortedError")
+  })
+
+  test("classifies a bare AbortError as a cancel regardless of ctx.aborted", () => {
+    // A bare AbortError only comes from controller.abort() with no reason —
+    // i.e. a user/parent cancel. Transport timeouts surface as their own
+    // specific errors (TimeoutError/HeaderTimeoutError/ResponseStreamError),
+    // so a bare AbortError must NOT be reclassified as retryable — otherwise
+    // a cancel races the failure channel and gets retried.
+    const err = new DOMException("The operation was aborted", "AbortError")
+    const result = MessageV2.fromError(err, { providerID })
+    expect(result.name).toBe("MessageAbortedError")
+  })
+
+  test("classifies TimeoutError DOMException as retryable APIError", () => {
+    // AbortSignal.timeout() in modern fetch surfaces as TimeoutError.
+    const err = new DOMException("The operation timed out", "TimeoutError")
+    const result = MessageV2.fromError(err, { providerID })
+    expect(SessionV1.APIError.isInstance(result)).toBe(true)
+    expect((result as SessionV1.APIError).data.isRetryable).toBe(true)
+  })
+
+  test.each([
+    ["ETIMEDOUT", "Network error (ETIMEDOUT)"],
+    ["EAI_AGAIN", "Network error (EAI_AGAIN)"],
+    ["EHOSTUNREACH", "Network error (EHOSTUNREACH)"],
+    ["ENETUNREACH", "Network error (ENETUNREACH)"],
+    ["EPIPE", "Network error (EPIPE)"],
+    ["UND_ERR_CONNECT_TIMEOUT", "Network error (UND_ERR_CONNECT_TIMEOUT)"],
+    ["UND_ERR_HEADERS_TIMEOUT", "Network error (UND_ERR_HEADERS_TIMEOUT)"],
+    ["UND_ERR_BODY_TIMEOUT", "Network error (UND_ERR_BODY_TIMEOUT)"],
+    ["UND_ERR_SOCKET", "Network error (UND_ERR_SOCKET)"],
+  ])("classifies %s SystemError as retryable APIError", (code, expectedMessage) => {
+    const err = Object.assign(new Error(`${code} from test`), { code })
+    const result = MessageV2.fromError(err, { providerID })
+    expect(SessionV1.APIError.isInstance(result)).toBe(true)
+    expect((result as SessionV1.APIError).data.isRetryable).toBe(true)
+    expect((result as SessionV1.APIError).data.message).toBe(expectedMessage)
+  })
+
+  test("classifies a fetch failure with a transient cause as retryable", () => {
+    const cause = Object.assign(new Error("read ECONNRESET"), { code: "ECONNRESET" })
+    const wrapper = Object.assign(new TypeError("fetch failed", { cause }), { code: "ERR_FETCH_FAILED" })
+    const result = MessageV2.fromError(wrapper, { providerID })
+    expect(SessionV1.APIError.isInstance(result)).toBe(true)
+    expect((result as SessionV1.APIError).data.metadata?.code).toBe("ECONNRESET")
+  })
+
+  test.each([
+    ["ENOTFOUND", "getaddrinfo"],
+    ["ECONNREFUSED", "connect"],
+  ])("overrides retryable APICallError caused by %s", (code, syscall) => {
+    const cause = Object.assign(new Error(`${syscall} ${code} api.invalid`), { code, syscall })
+    const wrapper = Object.assign(new TypeError("fetch failed", { cause }), { code: "ERR_FETCH_FAILED" })
+    const error = new APICallError({
+      message: "Cannot connect to API",
+      url: "https://api.invalid/v1/messages",
+      requestBodyValues: { model: "test" },
+      cause: wrapper,
+      isRetryable: true,
+    })
+
+    const result = MessageV2.fromError(error, { providerID })
+    expect(SessionV1.APIError.isInstance(result)).toBe(true)
+    if (!SessionV1.APIError.isInstance(result)) throw new Error("expected APIError")
+    expect(result.data.isRetryable).toBe(false)
+    expect(result.data.metadata).toMatchObject({ code, syscall, url: "https://api.invalid/v1/messages" })
+    expect(SessionRetry.retryable(result, "test")).toBeUndefined()
+  })
+
+  test("gives a nested permanent code precedence over a transient wrapper", () => {
+    const cause = Object.assign(new Error("getaddrinfo ENOTFOUND api.invalid"), { code: "ENOTFOUND" })
+    const wrapper = Object.assign(new Error("socket reset", { cause }), { code: "ECONNRESET" })
+    const result = MessageV2.fromError(wrapper, { providerID })
+    expect(result.name).toBe("UnknownError")
+  })
+
+  test("stops traversing cyclic error causes", () => {
+    const first = Object.assign(new Error("first wrapper"), { code: "ERR_FIRST" })
+    const second = Object.assign(new Error("second wrapper", { cause: first }), { code: "ERR_SECOND" })
+    first.cause = second
+    const result = MessageV2.fromError(first, { providerID })
+    expect(result.name).toBe("UnknownError")
+  })
+
+  test("bounds deeply nested error causes", () => {
+    const cause = Object.assign(new Error("read ECONNRESET"), { code: "ECONNRESET" })
+    const wrapper = Array.from({ length: 32 }, (_, index) => index).reduce<Error>(
+      (current, index) => new Error(`wrapper ${index}`, { cause: current }),
+      cause,
+    )
+    const result = MessageV2.fromError(wrapper, { providerID })
+    expect(result.name).toBe("UnknownError")
+  })
+
+  test.each(["socket hang up", "SSE read timed out", "other side closed", "terminated"])(
+    "classifies '%s' bare Error message as retryable APIError",
+    (message) => {
+      const result = MessageV2.fromError(new Error(message), { providerID })
+      expect(SessionV1.APIError.isInstance(result)).toBe(true)
+      expect((result as SessionV1.APIError).data.isRetryable).toBe(true)
+    },
+  )
+
+  test.each([
+    "fetch failed",
+    "Failed to fetch account configuration",
+    "network error: certificate has expired",
+    "Network request failed because access is forbidden",
+    "connect error: invalid provider base URL",
+    "request terminated because the API key is invalid",
+  ])("does not treat '%s' as a transient transport error", (message) => {
+    const result = MessageV2.fromError(new Error(message), { providerID })
+    expect(result.name).toBe("UnknownError")
+  })
+
+  test("leaves unrelated Error messages classified as Unknown", () => {
+    const result = MessageV2.fromError(new Error("Some unrelated bug"), { providerID })
+    expect(result.name).toBe("UnknownError")
   })
 })
 

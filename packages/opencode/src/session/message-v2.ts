@@ -600,17 +600,78 @@ export function latest(msgs: WithParts[]) {
   return { user, assistant, finished, tasks }
 }
 
+// Transport failures that can recover without changing the request. Keep
+// permanent endpoint failures such as ENOTFOUND and ECONNREFUSED out of this
+// list so a bad provider configuration surfaces immediately.
+const TRANSIENT_SYS_CODES = new Set([
+  "ECONNRESET",
+  "ETIMEDOUT",
+  "EAI_AGAIN",
+  "EHOSTUNREACH",
+  "ENETUNREACH",
+  "EPIPE",
+  "UND_ERR_CONNECT_TIMEOUT",
+  "UND_ERR_HEADERS_TIMEOUT",
+  "UND_ERR_BODY_TIMEOUT",
+  "UND_ERR_SOCKET",
+])
+const PERMANENT_SYS_CODES = new Set(["ENOTFOUND", "ECONNREFUSED"])
+const CAUSE_MAX_DEPTH = 8
+
+export function isPermanentTransportCode(code: unknown) {
+  return typeof code === "string" && PERMANENT_SYS_CODES.has(code)
+}
+
+// Exact messages emitted for a prematurely closed transport. Generic text
+// such as "network error" or "fetch failed" cannot distinguish a transient
+// disconnect from a permanent DNS, TLS, authentication, or endpoint failure.
+const TRANSIENT_MESSAGES = new Set(["socket hang up", "sse read timed out", "other side closed", "terminated"])
+
+function classifyTransportError(error: unknown) {
+  const seen = new Set<Error>()
+  let current = error
+  let transient: SystemError | undefined
+  for (let depth = 0; depth < CAUSE_MAX_DEPTH; depth++) {
+    if (!(current instanceof Error) || seen.has(current)) break
+    seen.add(current)
+    const code = "code" in current && typeof current.code === "string" ? current.code : undefined
+    if (isPermanentTransportCode(code)) return { type: "permanent" as const, error: current as SystemError }
+    if (!transient && code && TRANSIENT_SYS_CODES.has(code)) transient = current as SystemError
+    current = current.cause
+  }
+  if (transient) return { type: "transient" as const, error: transient }
+  return undefined
+}
+
 export function fromError(
   e: unknown,
   ctx: { providerID: ProviderV2.ID; aborted?: boolean },
 ): NonNullable<Assistant["error"]> {
+  const transport = classifyTransportError(e)
+  const transient = transport?.type === "transient" ? transport.error : undefined
+  const permanent = transport?.type === "permanent" ? transport.error : undefined
+  const sysCode = transient?.code
   switch (true) {
     case e instanceof DOMException && e.name === "AbortError":
-      return new AbortedError(
-        { message: e.message },
-        {
-          cause: e,
-        },
+      // A *bare* AbortError only ever originates from `controller.abort()`
+      // with no reason — i.e. a user/parent cancel (see provider.ts fetch
+      // wrapper + processor onInterrupt). Every transport timeout we control
+      // aborts with a *specific* reason and therefore surfaces as its own
+      // identifiable error instead: AbortSignal.timeout() -> "TimeoutError"
+      // DOMException (next case), the header-timeout -> HeaderTimeoutError,
+      // and the SSE chunk-timeout -> ResponseStreamError ("SSE read timed
+      // out"). Those are all classified retryable on their own below, so we
+      // do NOT need to second-guess a bare AbortError here. Classifying by
+      // error identity (rather than the externally-set `ctx.aborted` flag,
+      // which races the abort propagating through the failure channel) keeps
+      // a genuine cancel from being retried.
+      return new AbortedError({ message: e.message }, { cause: e }).toObject()
+    case e instanceof DOMException && e.name === "TimeoutError":
+      // Modern fetch surfaces AbortSignal.timeout() as a DOMException with
+      // name "TimeoutError" rather than "AbortError". Always retryable.
+      return new APIError(
+        { message: e.message || "Request timed out", isRetryable: true, metadata: { code: "TimeoutError" } },
+        { cause: e },
       ).toObject()
     case OutputLengthError.isInstance(e):
       return e
@@ -622,15 +683,15 @@ export function fromError(
         },
         { cause: e },
       ).toObject()
-    case (e as SystemError)?.code === "ECONNRESET":
+    case typeof sysCode === "string" && TRANSIENT_SYS_CODES.has(sysCode):
       return new APIError(
         {
-          message: "Connection reset by server",
+          message: sysCode === "ECONNRESET" ? "Connection reset by server" : `Network error (${sysCode})`,
           isRetryable: true,
           metadata: {
-            code: (e as SystemError).code ?? "",
-            syscall: (e as SystemError).syscall ?? "",
-            message: (e as SystemError).message ?? "",
+            code: sysCode ?? "",
+            syscall: transient?.syscall ?? "",
+            message: transient?.message ?? "",
           },
         },
         { cause: e },
@@ -692,11 +753,23 @@ export function fromError(
         {
           message: parsed.message,
           statusCode: parsed.statusCode,
-          isRetryable: parsed.isRetryable,
+          isRetryable: permanent ? false : parsed.isRetryable,
           responseHeaders: parsed.responseHeaders,
           responseBody: parsed.responseBody,
-          metadata: parsed.metadata,
+          metadata: permanent
+            ? {
+                ...parsed.metadata,
+                code: permanent.code ?? "",
+                syscall: permanent.syscall ?? "",
+                message: permanent.message ?? "",
+              }
+            : parsed.metadata,
         },
+        { cause: e },
+      ).toObject()
+    case e instanceof Error && TRANSIENT_MESSAGES.has(e.message.toLowerCase()):
+      return new APIError(
+        { message: e.message, isRetryable: true, metadata: { code: "NETWORK_ERROR", message: e.message } },
         { cause: e },
       ).toObject()
     case e instanceof Error:
