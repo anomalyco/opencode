@@ -103,7 +103,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Pr
 
 type GitResult = { code: number; text: string; stderr: string }
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
@@ -463,28 +463,21 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(
-  Layer.provide(EventV2Bridge.defaultLayer),
-  Layer.provide(ProjectV2.defaultLayer),
-  Layer.provide(ProjectDirectories.defaultLayer),
-  Layer.provide(AppProcess.defaultLayer),
-  Layer.provide(CrossSpawnSpawner.defaultLayer),
-  Layer.provide(FSUtil.defaultLayer),
-  Layer.provide(Database.defaultLayer),
-  Layer.provide(RuntimeFlags.defaultLayer),
-)
-
 export const use = serviceUse(Service)
 
-export const node = LayerNode.make(layer, [
-  FSUtil.node,
-  AppProcess.node,
-  CrossSpawnSpawner.node,
-  ProjectV2.node,
-  ProjectDirectories.node,
-  EventV2Bridge.node,
-  RuntimeFlags.node,
-  Database.node,
-])
+export const node = LayerNode.make({
+  service: Service,
+  layer: layer,
+  deps: [
+    FSUtil.node,
+    AppProcess.node,
+    CrossSpawnSpawner.node,
+    ProjectV2.node,
+    ProjectDirectories.node,
+    EventV2Bridge.node,
+    RuntimeFlags.node,
+    Database.node,
+  ],
+})
 
 export * as Project from "./project"

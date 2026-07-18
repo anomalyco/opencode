@@ -15,6 +15,7 @@ import { Database } from "../../database/database"
 import { EventV2 } from "../../event"
 import { Location } from "../../location"
 import { ModelV2 } from "../../model"
+import { PermissionV2 } from "../../permission"
 import { ProviderV2 } from "../../provider"
 import { QuestionV2 } from "../../question"
 import { SystemContext } from "../../system-context/index"
@@ -36,6 +37,8 @@ import { createLLMEventPublisher } from "./publish-llm-event"
 import { toLLMMessages } from "./to-llm-message"
 import { MAX_STEPS_PROMPT } from "./max-steps"
 import { Snapshot } from "../../snapshot"
+import { makeLocationNode } from "../../effect/app-node"
+import { llmClient } from "../../effect/app-node-platform"
 
 /**
  * Runs one durable coding-agent Session until it settles.
@@ -87,7 +90,7 @@ import { Snapshot } from "../../snapshot"
  * explicit loop starts the next provider turn after local settlement. Configured agent step limits bound the loop.
  */
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const events = yield* EventV2.Service
@@ -138,9 +141,13 @@ export const layer = Layer.effect(
     const awaitToolFibers = (fibers: FiberSet.FiberSet<void, ToolOutputStore.Error>) =>
       Effect.raceFirst(FiberSet.join(fibers), FiberSet.awaitEmpty(fibers))
 
-    // Match V1: dismissing a question halts the loop instead of becoming model-facing tool output.
-    const isQuestionRejected = (cause: Cause.Cause<unknown>) =>
-      cause.reasons.some((reason) => Cause.isDieReason(reason) && reason.defect instanceof QuestionV2.RejectedError)
+    // Match V1: declining a user prompt halts the loop instead of becoming model-facing tool output.
+    const isUserDeclined = (cause: Cause.Cause<unknown>) =>
+      cause.reasons.some(
+        (reason) =>
+          Cause.isDieReason(reason) &&
+          (reason.defect instanceof PermissionV2.DeclinedError || reason.defect instanceof QuestionV2.RejectedError),
+      )
 
     type TurnTransition =
       // Automatic compaction completed; rebuild the request from compacted history.
@@ -287,7 +294,7 @@ export const layer = Layer.effect(
           }
           if (stream._tag === "Failure" && Cause.hasInterrupts(stream.cause)) yield* FiberSet.clear(toolFibers)
           const settled = yield* restore(awaitToolFibers(toolFibers)).pipe(Effect.exit)
-          if (settled._tag === "Failure" && isQuestionRejected(settled.cause)) {
+          if (settled._tag === "Failure" && isUserDeclined(settled.cause)) {
             yield* FiberSet.clear(toolFibers)
             yield* withPublication(publisher.failUnsettledTools("Tool execution interrupted"))
             return yield* Effect.interrupt
@@ -333,7 +340,8 @@ export const layer = Layer.effect(
           if (stream._tag === "Success" && !publisher.hasProviderError())
             yield* withPublication(publisher.failUnsettledTools("Provider did not return a tool result", true))
           if (stream._tag === "Failure") return yield* Effect.failCause(stream.cause)
-          if (settled._tag === "Failure") return yield* Effect.failCause(settled.cause)
+          if (settled._tag === "Failure" && Cause.hasInterrupts(settled.cause))
+            return yield* Effect.failCause(settled.cause)
           return { needsContinuation: !publisher.hasProviderError() && needsContinuation, step: currentStep }
         }),
       )
@@ -403,4 +411,22 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer
+export const node = makeLocationNode({
+  service: Service,
+  layer,
+  deps: [
+    EventV2.node,
+    llmClient,
+    AgentV2.node,
+    ToolRegistry.node,
+    SessionRunnerModel.node,
+    SessionStore.node,
+    Location.node,
+    SystemContextRegistry.node,
+    SkillGuidance.node,
+    ReferenceGuidance.node,
+    Config.node,
+    Snapshot.node,
+    Database.node,
+  ],
+})

@@ -1,5 +1,6 @@
 export * as Snapshot from "./snapshot"
 
+import { makeLocationNode } from "./effect/app-node"
 import path from "path"
 import { Context, Effect, Layer, Schema } from "effect"
 import { Config } from "./config"
@@ -82,7 +83,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Snapshot") {}
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const config = yield* Config.Service
@@ -227,6 +228,12 @@ export const layer = Layer.effect(
 )
 
 export const locationLayer = layer.pipe(Layer.provideMerge(Config.locationLayer))
+
+export const node = makeLocationNode({
+  service: Service,
+  layer,
+  deps: [Config.node, FSUtil.node, Git.node, Global.node, Location.node],
+})
 
 export const noopLayer = Layer.succeed(
   Service,

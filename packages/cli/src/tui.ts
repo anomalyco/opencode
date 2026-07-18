@@ -1,6 +1,7 @@
 import { run } from "@opencode-ai/tui"
 import { TuiConfig } from "@opencode-ai/tui/config"
 import { Effect } from "effect"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Global } from "@opencode-ai/core/global"
 
 export function runTui(transport: { url: string; headers: RequestInit["headers"] }) {
@@ -14,7 +15,7 @@ export function runTui(transport: { url: string; headers: RequestInit["headers"]
       async start() {},
       async dispose() {},
     },
-  }).pipe(Effect.provide(Global.defaultLayer))
+  }).pipe(Effect.provide(AppNodeBuilder.build(Global.node)))
 }
 
 const legacyDefaults: Record<string, unknown> = {

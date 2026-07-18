@@ -1,7 +1,6 @@
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
-import { Dialog } from "@opencode-ai/ui/v2/dialog-v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
@@ -29,11 +28,7 @@ export function AddServerMenu(props: { onAddServer: () => void }) {
   const dialog = useDialog()
   const language = useLanguage()
   const openAddWsl = () => {
-    dialog.push(() => (
-      <Dialog title={language.t("wsl.server.add")} size="large" fit class="settings-v2-wsl-dialog">
-        <DialogAddWslServer />
-      </Dialog>
-    ))
+    dialog.push(() => <DialogAddWslServer />)
   }
   return (
     <Show

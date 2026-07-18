@@ -37,6 +37,6 @@ The existing public `generate(Api, { directory })` operation writes the rich Eff
 
 Generation formats TypeScript with Prettier before writing. Output paths are flat, unique, and checked against traversal, reserved manifest names, and existing symbolic links.
 
-Generated source starts with one self-contained module per `HttpApiGroup`, plus root client and index modules. Schema dependencies may be duplicated across group modules. Cross-group schema partitioning is deferred until measured output or bundle cost requires it.
+Portable Effect output uses one self-contained module per `HttpApiGroup`, plus root client and index modules. Promise output uses shared type and client modules, while imported Effect output keeps adapters in the root client module. Schema dependencies may be duplicated across portable Effect group modules. Cross-group schema partitioning is deferred until measured output or bundle cost requires it.
 
-Codegen preserves group and endpoint identifiers exactly. The composed remote `HttpApi` owns public names such as `session` and `get`; the generator performs no prefix stripping, casing conversion, or public-name annotation mapping.
+Codegen preserves transport identifiers internally. `compile` may explicitly map consumer-facing group names, and endpoint operation IDs are projected to their final dot-delimited segment. The generator performs no other implicit product-specific naming or public-name annotation mapping.

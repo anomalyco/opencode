@@ -1,12 +1,13 @@
 import { describe, expect } from "bun:test"
-import { Cause, Effect, Exit, Layer, Schema } from "effect"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { Cause, Effect, Exit, Schema } from "effect"
 import { Agent } from "../../src/agent/agent"
 import { MessageID, SessionID } from "../../src/session/schema"
 import { Tool } from "@/tool/tool"
 import { Truncate } from "@/tool/truncate"
 import { testEffect } from "../lib/effect"
 
-const it = testEffect(Layer.mergeAll(Truncate.defaultLayer, Agent.defaultLayer))
+const it = testEffect(LayerNode.compile(LayerNode.group([Truncate.node, Agent.node])))
 
 const params = Schema.Struct({ input: Schema.String })
 

@@ -349,6 +349,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
                 id: event.data.reasoningID,
                 text: "",
                 providerMetadata: event.data.providerMetadata,
+                time: { created: event.data.timestamp },
               }),
             ),
           )
@@ -365,6 +366,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
           const match = latestReasoning(draft, event.data.reasoningID)
           if (match) {
             match.text = event.data.text
+            match.time = { created: match.time?.created ?? event.data.timestamp, completed: event.data.timestamp }
             if (event.data.providerMetadata !== undefined) match.providerMetadata = event.data.providerMetadata
           }
         })

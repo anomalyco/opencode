@@ -48,6 +48,42 @@ You can customize the base URL for any provider by setting the `baseURL` option.
 
 ---
 
+#### Hiding models
+
+You can hide specific models from the `/models` picker for a provider using the `blacklist` option. This is useful when a provider exposes models you don't want to use or select.
+
+```json title="opencode.json" {6}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "anthropic": {
+      "blacklist": ["claude-opus-4-20250514"]
+    }
+  }
+}
+```
+
+The inverse `whitelist` option hides every model except the ones listed.
+
+```json title="opencode.json" {6}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "anthropic": {
+      "whitelist": ["claude-sonnet-4-20250514"]
+    }
+  }
+}
+```
+
+Both options take an array of model IDs — the same IDs shown in the `/models` picker.
+
+- `blacklist` removes the listed models from the picker.
+- `whitelist` keeps only the listed models and hides the rest.
+- You can combine them: `whitelist` narrows the set, then `blacklist` removes entries from it.
+
+---
+
 ## OpenCode Zen
 
 OpenCode Zen is a list of models provided by the OpenCode team that have been

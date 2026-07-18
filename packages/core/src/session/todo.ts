@@ -2,15 +2,15 @@ export * as SessionTodo from "./todo"
 
 import { asc, eq } from "drizzle-orm"
 import { Context, Effect, Layer } from "effect"
-import { SessionTodo, SessionTodoInfo } from "@opencode-ai/schema/session-todo"
+import { SessionTodo } from "@opencode-ai/schema/session-todo"
 import { Database } from "../database/database"
+import { makeLocationNode } from "../effect/app-node"
 import { EventV2 } from "../event"
 import { SessionSchema } from "./schema"
 import { TodoTable } from "./sql"
 
-export const Info = SessionTodoInfo
+export const Info = SessionTodo.Info
 export type Info = typeof Info.Type
-
 export const Event = SessionTodo.Event
 
 export interface Interface {
@@ -23,7 +23,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SessionTodo") {}
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const { db } = yield* Database.Service
@@ -75,4 +75,4 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(EventV2.defaultLayer), Layer.provide(Database.defaultLayer))
+export const node = makeLocationNode({ service: Service, layer, deps: [EventV2.node, Database.node] })

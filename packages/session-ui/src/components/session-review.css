@@ -21,7 +21,7 @@
 
   [data-slot="session-review-header"] {
     z-index: 120;
-    background-color: var(--background-stronger);
+    background-color: var(--v2-background-bg-base);
     height: 40px;
     padding-bottom: 8px;
     flex-shrink: 0;
@@ -211,7 +211,7 @@
 
   [data-slot="session-review-large-diff"] {
     padding: 12px;
-    background: var(--background-stronger);
+    background: var(--v2-background-bg-base);
   }
 
   [data-slot="session-review-large-diff-title"] {
@@ -233,5 +233,15 @@
     display: flex;
     gap: 8px;
     margin-top: 10px;
+  }
+}
+
+body:not([data-new-layout]) [data-component="session-review"] {
+  [data-slot="session-review-header"] {
+    background-color: var(--background-stronger);
+  }
+
+  [data-slot="session-review-large-diff"] {
+    background: var(--background-stronger);
   }
 }

@@ -127,7 +127,7 @@ test.describe("smoke: session timeline", () => {
     await page.addInitScript(
       ({ dirBase64, sourceID, targetID }) => {
         localStorage.setItem(
-          "opencode.global.dat:tabs",
+          "opencode.window.browser.dat:tabs",
           JSON.stringify(
             [sourceID, targetID].map((sessionId) => ({
               type: "session",
@@ -253,7 +253,7 @@ test.describe("smoke: session timeline", () => {
     await page.addInitScript(
       ({ dirBase64, sourceID, targetID }) => {
         localStorage.setItem(
-          "opencode.global.dat:tabs",
+          "opencode.window.browser.dat:tabs",
           JSON.stringify(
             [sourceID, targetID].map((sessionId) => ({
               type: "session",
@@ -736,5 +736,5 @@ async function switchTitlebarSession(page: Page, sessionID: string, title: strin
 }
 
 async function expectSessionReady(page: Page) {
-  await expectAppVisible(page.getByRole("textbox", { name: /Ask anything/i }))
+  await expectAppVisible(page.getByRole("textbox", { name: "Prompt" }))
 }

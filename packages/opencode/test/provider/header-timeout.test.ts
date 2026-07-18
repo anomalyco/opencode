@@ -1,8 +1,9 @@
 import { afterEach, expect } from "bun:test"
 import { createServer, type Server } from "node:http"
 import { streamText } from "ai"
-import { Effect, Layer } from "effect"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { Effect } from "effect"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { disposeAllInstances, provideTmpdirInstance } from "../fixture/fixture"
@@ -18,7 +19,7 @@ afterEach(async () => {
 })
 
 const it = testEffect(
-  Layer.mergeAll(Provider.defaultLayer, Env.defaultLayer, Plugin.defaultLayer, CrossSpawnSpawner.defaultLayer),
+  LayerNode.compile(LayerNode.group([Provider.node, Env.node, Plugin.node, CrossSpawnSpawner.node])),
 )
 
 it.live("headerTimeout does not abort delayed SSE body after headers arrive", () =>

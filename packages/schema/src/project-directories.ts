@@ -8,4 +8,3 @@ const Updated = define({
   schema: { projectID: Project.ID },
 })
 export const Event = { Updated, Definitions: inventory(Updated) }
-export const ProjectDirectoriesEvent = Event

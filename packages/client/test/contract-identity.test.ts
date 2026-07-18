@@ -19,8 +19,7 @@ import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { Workspace } from "@opencode-ai/schema/workspace"
 import { Api } from "@opencode-ai/server/api"
 import { compile, emitPromise } from "@opencode-ai/httpapi-codegen"
-import { HttpApi } from "effect/unstable/httpapi"
-import { SessionGroup } from "../src/contract"
+import { ClientApi, endpointNames, groupNames, omitEndpoints } from "../src/contract"
 
 test("Core and Server reuse the authoritative Schema and Protocol values", () => {
   expect(AgentV2.ID).toBe(Agent.ID)
@@ -31,17 +30,16 @@ test("Core and Server reuse the authoritative Schema and Protocol values", () =>
   expect(CoreSessionMessage.Message).toBe(SessionMessage.Message)
   expect(CorePrompt).toBe(Prompt)
   expect(Api.groups["server.session"].identifier).toBe("server.session")
-  expect(SessionGroup.identifier).toBe(Api.groups["server.session"].identifier)
+  expect(Object.keys(ClientApi.groups)).toEqual(Object.keys(Api.groups))
   expect(Session.ID.create()).toStartWith("ses_")
   expect(Project.ID.global).toBe("global")
   expect(Provider.ID.anthropic).toBe("anthropic")
   expect(Workspace.ID.create()).toStartWith("wrk_")
 })
 
-test("client and Server Session contracts generate identically", () => {
-  const options = { groupNames: { "server.session": "sessions" } }
-  const server = compile(HttpApi.make("server").add(Api.groups["server.session"]), options)
-  const client = compile(HttpApi.make("client").add(SessionGroup), options)
+test("client and Server contracts generate identically", () => {
+  const server = compile(Api, { groupNames, endpointNames, omitEndpoints })
+  const client = compile(ClientApi, { groupNames, endpointNames, omitEndpoints })
 
   expect(emitPromise(client)).toEqual(emitPromise(server))
 })

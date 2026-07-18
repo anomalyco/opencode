@@ -38,6 +38,8 @@ export function TerminalPanel() {
   const close = () => view().terminal.close()
   let root: HTMLDivElement | undefined
 
+  onCleanup(() => terminal.cancelFocus())
+
   const [store, setStore] = createStore({
     autoCreated: false,
     activeDraggable: undefined as string | undefined,
@@ -285,7 +287,7 @@ export function TerminalPanel() {
                         icon="plus-small"
                         variant="ghost"
                         iconSize="large"
-                        onClick={terminal.new}
+                        onClick={() => terminal.new()}
                         aria-label={language.t("command.terminal.new")}
                       />
                     </TooltipKeybind>
@@ -293,7 +295,7 @@ export function TerminalPanel() {
                 </Tabs.List>
               </Tabs>
               <div class="flex-1 min-h-0 relative">
-                <Show when={terminal.active()} keyed>
+                <Show when={opened() && terminal.active()} keyed>
                   {(id) => {
                     const ops = terminal.bind()
                     return (
@@ -303,6 +305,7 @@ export function TerminalPanel() {
                             <Terminal
                               pty={pty()}
                               autoFocus={opened()}
+                              onAutoFocus={() => terminal.consumeFocus(id)}
                               onConnect={() => markTerminalConnected(terminalRecoveryKey(pty()), id, ops.trim)}
                               onCleanup={ops.update}
                               onConnectError={() => recoverTerminal(terminalRecoveryKey(pty()), id, ops.clone)}

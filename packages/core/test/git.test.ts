@@ -3,13 +3,14 @@ import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
 import { Effect } from "effect"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Git } from "@opencode-ai/core/git"
 import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
 import { branch, commit, gitRemote } from "./fixture/git"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
-const it = testEffect(Git.defaultLayer)
+const it = testEffect(LayerNode.compile(Git.node))
 
 describe("Git", () => {
   it.live("clones a remote and reads checkout metadata", () =>

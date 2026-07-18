@@ -1,5 +1,6 @@
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
-import { Dialog, DialogFooter } from "@opencode-ai/ui/v2/dialog-v2"
+import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitle } from "@opencode-ai/ui/v2/dialog-v2"
+import { DividerV2 } from "@opencode-ai/ui/v2/divider-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { type Component, Show, createEffect, createSignal, onCleanup, onMount } from "solid-js"
@@ -52,8 +53,12 @@ export const DialogServerV2: Component<{
   }
 
   return (
-    <Dialog title={title()} fit class="settings-v2-server-dialog">
-      <div class="flex w-full min-w-0 flex-1 flex-col px-4">
+    <Dialog fit class="settings-v2-server-dialog">
+      <DialogHeader hideClose={true}>
+        <DialogTitle>{title()}</DialogTitle>
+      </DialogHeader>
+      <DividerV2 />
+      <DialogBody class="flex w-full min-w-0 flex-1 flex-col px-4 pt-4 pb-2">
         <div class="flex w-full min-w-0 flex-col gap-6">
           <div class="flex w-full min-w-0 flex-col gap-2">
             <label class="settings-v2-server-dialog-label">{language.t("dialog.server.add.url")}</label>
@@ -115,7 +120,7 @@ export const DialogServerV2: Component<{
             </div>
           </div>
         </div>
-      </div>
+      </DialogBody>
       <DialogFooter>
         <ButtonV2 variant="neutral" disabled={controller.formBusy()} onClick={() => dialog.close()}>
           {language.t("common.cancel")}

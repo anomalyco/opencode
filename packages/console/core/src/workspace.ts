@@ -11,6 +11,9 @@ import { Key } from "./key"
 import { and, eq, isNull, sql } from "drizzle-orm"
 
 export namespace Workspace {
+  export const Region = z.enum(["us", "eu", "sg", "cn"])
+  export type Region = z.infer<typeof Region>
+
   export const create = fn(
     z.object({
       name: z.string().min(1),
@@ -57,19 +60,38 @@ export namespace Workspace {
 
   export const update = fn(
     z.object({
-      name: z.string().min(1).max(255),
+      name: z.string().min(1).max(255).optional(),
+      region: z.array(Region).min(1).optional(),
     }),
-    async ({ name }) => {
+    async (input) => {
       Actor.assertAdmin()
       const workspaceID = Actor.workspace()
       return await Database.use((tx) =>
         tx
           .update(WorkspaceTable)
           .set({
-            name,
+            ...("name" in input ? { name: input.name } : {}),
+            ...("region" in input ? { region: input.region } : {}),
           })
           .where(eq(WorkspaceTable.id, workspaceID)),
       )
+    },
+  )
+
+  export const setDefaultRegion = fn(
+    z.object({
+      country: z.string().optional(),
+    }),
+    async (input) => {
+      const region: Workspace.Region[] =
+        input.country?.toUpperCase() === "CN" ? ["us", "eu", "sg", "cn"] : ["us", "eu", "sg"]
+      await Database.use((tx) =>
+        tx
+          .update(WorkspaceTable)
+          .set({ region })
+          .where(and(eq(WorkspaceTable.id, Actor.workspace()), isNull(WorkspaceTable.region))),
+      )
+      return region
     },
   )
 

@@ -1,6 +1,8 @@
 import { Context, Effect, Layer } from "effect"
 import { Info, Ref, response } from "@opencode-ai/schema/location"
 import { Project } from "./project"
+import { LayerNode } from "./effect/layer-node"
+import { makeLocationNode, tags } from "./effect/app-node"
 
 export * as Location from "./location"
 
@@ -12,7 +14,9 @@ export interface Interface extends Info {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Location") {}
 
-export const layer = (ref: Ref) =>
+export const node = LayerNode.unbound(Service, tags.values.location)
+
+const layer = (ref: Ref) =>
   Layer.effect(
     Service,
     Effect.gen(function* () {
@@ -26,3 +30,10 @@ export const layer = (ref: Ref) =>
       })
     }),
   )
+
+export const boundNode = (ref: Ref) =>
+  makeLocationNode({
+    service: Service,
+    layer: layer(ref),
+    deps: [Project.node],
+  })

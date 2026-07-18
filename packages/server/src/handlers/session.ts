@@ -1,5 +1,5 @@
 import { SessionV2 } from "@opencode-ai/core/session"
-import { DateTime, Effect } from "effect"
+import { DateTime, Effect, Stream } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { Api } from "../api"
 import { SessionsCursor } from "@opencode-ai/protocol/groups/session"
@@ -14,6 +14,7 @@ import {
 import { AbsolutePath } from "@opencode-ai/core/schema"
 
 const DefaultSessionsLimit = 50
+const DefaultSessionHistoryLimit = 50
 
 export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handlers) =>
   Effect.gen(function* () {
@@ -73,6 +74,16 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
               model: ctx.payload.model,
               location: ctx.payload.location ?? { directory: AbsolutePath.make(process.cwd()) },
             }),
+          }
+        }),
+      )
+      .handle(
+        "session.active",
+        Effect.fn(function* () {
+          return {
+            data: Object.fromEntries(
+              Array.from(yield* session.active, (sessionID) => [sessionID, { type: "running" as const }]),
+            ),
           }
         }),
       )
@@ -316,6 +327,58 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
               }),
             ),
           }
+        }),
+      )
+      .handle(
+        "session.history",
+        Effect.fn(function* (ctx) {
+          return yield* session
+            .history({
+              sessionID: ctx.params.sessionID,
+              after: ctx.query.after,
+              limit: ctx.query.limit ?? DefaultSessionHistoryLimit,
+            })
+            .pipe(
+              Effect.map((page) => ({
+                data: page.events,
+                hasMore: page.hasMore,
+              })),
+              Effect.catchTag(
+                "Session.NotFoundError",
+                (error) =>
+                  new SessionNotFoundError({
+                    sessionID: error.sessionID,
+                    message: `Session not found: ${error.sessionID}`,
+                  }),
+              ),
+            )
+        }),
+      )
+      .handle(
+        "session.events",
+        Effect.fn((ctx) =>
+          Effect.succeed(
+            session.events({ sessionID: ctx.params.sessionID, after: ctx.query.after }).pipe(Stream.orDie),
+          ),
+        ),
+      )
+      .handle(
+        "session.interrupt",
+        Effect.fn(function* (ctx) {
+          yield* session.interrupt(ctx.params.sessionID)
+          return HttpApiSchema.NoContent.make()
+        }),
+      )
+      .handle(
+        "session.message",
+        Effect.fn(function* (ctx) {
+          const message = yield* session.message(ctx.params)
+          if (message) return { data: message }
+          return yield* new MessageNotFoundError({
+            sessionID: ctx.params.sessionID,
+            messageID: ctx.params.messageID,
+            message: `Message not found: ${ctx.params.messageID}`,
+          })
         }),
       )
   }),

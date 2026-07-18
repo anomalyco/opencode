@@ -13,6 +13,8 @@ This document breaks the legacy configuration schema into small review groups. W
 
 Use one v2 config schema for now. Some fields, such as `autoupdate`, are intended for global/user configuration, but there is not yet enough benefit to enforce that with separate global and location schemas. Revisit this if more scope-sensitive fields survive the review.
 
+V2 core discovers config documents named `opencode.json` or `opencode.jsonc` in the global config directory, ancestor project directories, and `.opencode` config directories. The legacy `config.json` filename is not supported in V2.
+
 ## Group 1: File Metadata
 
 Small fields describing the config file itself rather than application behavior.
@@ -304,23 +306,25 @@ Rename legacy `permission` to `permissions` and expose the normalized ordered ru
 
 External protocol and server integration configuration.
 
-| Field | Current Purpose                       | Status   | Notes                                                                                                                                             |
-| ----- | ------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `mcp` | MCP server definitions and enablement | redesign | Keep opencode's explicit local/remote server entry format, nested under `mcp.servers`; use `disabled` for inactive entries and move timeout here. |
+| Field | Current Purpose                       | Status   | Notes                                                                                                                                                      |
+| ----- | ------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mcp` | MCP server definitions and enablement | redesign | Keep opencode's explicit local/remote server entry format, nested under `mcp.servers`; use `disabled` for inactive entries and move timeout defaults here. |
 
-Keep the opencode MCP server entry format instead of adopting the common `mcpServers` copy/paste shape. Local servers remain explicit `type: "local"` entries with command arrays and `environment`; remote servers remain explicit `type: "remote"` entries with `url`, `headers`, and optional `oauth`. Nest the server map under `mcp.servers` so protocol-wide settings such as default timeout can live under the same subsystem.
+Keep the opencode MCP server entry format instead of adopting the common `mcpServers` copy/paste shape. Local servers remain explicit `type: "local"` entries with command arrays and `environment`; remote servers remain explicit `type: "remote"` entries with `url`, `headers`, and optional `oauth`. Nest the server map under `mcp.servers` so protocol-wide settings such as timeout defaults can live under the same subsystem.
+
+MCP timeouts have separate startup and request budgets, expressed in milliseconds. `startup` covers establishing the transport and completing MCP initialization. `request` applies independently to each post-initialization MCP request. A server may override either default without repeating the other.
 
 ```jsonc
 {
   "mcp": {
-    "timeout": 5000,
+    "timeout": { "startup": 30000, "request": 300000 },
     "servers": {
       "github": {
         "type": "local",
         "command": ["npx", "-y", "@github/github-mcp-server"],
         "environment": { "GITHUB_TOKEN": "{env:GITHUB_TOKEN}" },
         "disabled": false,
-        "timeout": 10000,
+        "timeout": { "startup": 60000 },
       },
       "docs": {
         "type": "remote",
@@ -334,6 +338,7 @@ Keep the opencode MCP server entry format instead of adopting the common `mcpSer
           "redirect_uri": "http://127.0.0.1:19876/mcp/oauth/callback",
         },
         "disabled": false,
+        "timeout": { "request": 600000 },
       },
     },
   },
@@ -375,7 +380,7 @@ Fields that should not be ported by inertia; each needs an explicit justificatio
 | `experimental.openTelemetry`         | Enable AI SDK telemetry spans           | remove   | Do not port; observability is process-level and should use standard OpenTelemetry environment or declarative configuration. |
 | `experimental.primary_tools`         | Restrict tools to primary agents        | remove   | Do not port obsolete gating; agent tool access is configured through permissions.                                           |
 | `experimental.continue_loop_on_deny` | Continue loop after denied tool call    | remove   | Do not port legacy denied-tool loop behavior.                                                                               |
-| `experimental.mcp_timeout`           | MCP request timeout                     | redesign | Move to `mcp.timeout` for the default and `mcp.servers.<name>.timeout` for per-server overrides.                            |
+| `experimental.mcp_timeout`           | MCP request timeout                     | redesign | Move to `mcp.timeout.request` for the default and `mcp.servers.<name>.timeout.request` for per-server overrides.            |
 
 ## Review Order
 

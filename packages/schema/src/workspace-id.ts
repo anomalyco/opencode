@@ -1,10 +1,10 @@
 import { Schema } from "effect"
 import { ascending } from "./identifier"
-import { withStatics } from "./schema"
+import { statics } from "./schema"
 
 export const WorkspaceID = Schema.String.check(Schema.isStartsWith("wrk")).pipe(
   Schema.brand("WorkspaceV2.ID"),
-  withStatics((schema) => {
+  statics((schema) => {
     const create = () => schema.make("wrk_" + ascending())
     return {
       ascending: (id?: string) => {

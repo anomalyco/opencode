@@ -4,6 +4,7 @@ import { LLMClient } from "@opencode-ai/llm/route"
 import { DateTime, Effect } from "effect"
 import { Headers } from "effect/unstable/http"
 import { Credential } from "@opencode-ai/core/credential"
+import { Integration } from "@opencode-ai/core/integration"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ProjectV2 } from "@opencode-ai/core/project"
@@ -288,6 +289,27 @@ describe("SessionRunnerModel", () => {
 
       expect(headers.authorization).toBe("Bearer stored-secret")
       expect(resolved.route.defaults.http?.body).toEqual({ tenant: "work" })
+    }),
+  )
+
+  it.effect("does not project OAuth account metadata into the request body", () =>
+    Effect.gen(function* () {
+      const resolved = yield* SessionRunnerModel.fromCatalogModel(
+        ModelV2.Info.make({
+          ...model({ type: "aisdk", package: "@ai-sdk/openai", url: "https://openai.example/v1" }),
+          request: { headers: {}, body: {} },
+        }),
+        Credential.OAuth.make({
+          type: "oauth",
+          methodID: Integration.MethodID.make("device"),
+          access: "secret",
+          refresh: "refresh",
+          expires: Date.now() + 60_000,
+          metadata: { server: "https://console.example", orgID: "org_123" },
+        }),
+      )
+
+      expect(resolved.route.defaults.http?.body).toEqual({})
     }),
   )
 

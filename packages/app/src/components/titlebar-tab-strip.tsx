@@ -1,18 +1,11 @@
-import {
-  createEffect,
-  createMemo,
-  createResource,
-  createRoot,
-  createSignal,
-  For,
-  onCleanup,
-  onMount,
-  Show,
-} from "solid-js"
-import { Portal } from "solid-js/web"
-import { createStore } from "solid-js/store"
-import { makeEventListener } from "@solid-primitives/event-listener"
+import { createEffect, createMemo, createResource, createRoot, For, onCleanup, onMount } from "solid-js"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
+import { DragDropProvider, PointerSensor } from "@dnd-kit/solid"
+import { isSortable, useSortable } from "@dnd-kit/solid/sortable"
+import { Accessibility, AutoScroller, Feedback, PointerActivationConstraints } from "@dnd-kit/dom"
+import { RestrictToHorizontalAxis } from "@dnd-kit/abstract/modifiers"
+import { RestrictToElement } from "@dnd-kit/dom/modifiers"
+import { arrayMove } from "@dnd-kit/helpers"
 import { tabHref, tabKey, type SessionTab, type Tab } from "@/context/tabs"
 import { ServerConnection } from "@/context/server"
 import { DraftTabItem, TabNavItem } from "@/components/titlebar-tab-nav"
@@ -22,45 +15,32 @@ import { useCommand } from "@/context/command"
 import { useTabs } from "@/context/tabs"
 import { createTabPromptState } from "@/context/prompt"
 import { base64Encode } from "@opencode-ai/core/util/encode"
-import {
-  captureTabPointerDown,
-  canStartTabDrag,
-  createTabDragPreview,
-  isPrimaryPointerPressed,
-  isTabCloseTarget,
-} from "./titlebar-tab-gesture"
-import {
-  ACTIVATION_DISTANCE,
-  autoscrollSpeed,
-  captureTabDragLayout,
-  clampFloaterLeft,
-  draftOrderChanged,
-  insertIndexFromVirtualLayout,
-  movePlaceholder,
-  pointerDistance,
-  syncLayoutScroll,
-  type TabDragLayout,
-} from "@/components/titlebar-tab-drag"
+import { canStartTabDrag, isTabCloseTarget } from "./titlebar-tab-gesture"
 
 function SessionTabSlot(props: {
   tab: SessionTab
   id: string
+  index: () => number
   active: () => boolean
-  activeServerKey: ServerConnection.Key
   forceTruncate: boolean
-  dragActive: boolean
-  dragged: () => boolean
-  pressed: () => boolean
   serverCtx: () => ServerCtx | undefined
-  suppressNavigation: () => boolean
-  onPointerDown: (event: PointerEvent) => void
   onNavigate: (element: HTMLDivElement) => void
   onClose: () => void
 }) {
   const tabs = useTabs()
+  const language = useLanguage()
+  const sortable = useSortable({
+    get id() {
+      return props.id
+    },
+    get index() {
+      return props.index()
+    },
+  })
   let ref!: HTMLDivElement
   const sdk = createMemo(() => props.serverCtx()?.sdk ?? null)
   const cachedSession = createMemo(() => props.serverCtx()?.sync.session.peek(props.tab.sessionId))
+  const persisted = createMemo(() => tabs.info[props.id])
   const [loadedSession] = createResource(
     () => {
       const ctx = props.serverCtx()
@@ -69,6 +49,7 @@ function SessionTabSlot(props: {
     ({ id, ctx }) => ctx.sync.session.resolve(id).catch(() => undefined),
   )
   const session = createMemo(() => cachedSession() ?? loadedSession())
+  const missingSession = createMemo(() => !!props.serverCtx() && !loadedSession.loading && !session())
   let prefetched = false
 
   createEffect(() => {
@@ -91,8 +72,10 @@ function SessionTabSlot(props: {
 
   createEffect(() => {
     const value = session()
+    if (!value) return
+    tabs.rememberSessionInfo(props.tab, value)
     const current = sdk()
-    if (!value || !current) return
+    if (!current) return
     createTabPromptState(tabs, props.tab, current.scope, {
       dir: base64Encode(value.directory),
       id: value.id,
@@ -101,20 +84,21 @@ function SessionTabSlot(props: {
 
   return (
     <div
+      ref={sortable.ref}
       data-titlebar-tab-slot
       data-tab-key={props.id}
-      class="flex min-w-0 max-w-56 flex-1 basis-0"
-      classList={{
-        hidden: !session(),
-        "pointer-events-none": props.dragActive,
-      }}
-      onPointerDown={props.onPointerDown}
+      data-active={props.active()}
+      class="relative flex w-56 min-w-7 max-w-56 flex-shrink"
+      classList={{ hidden: !session() && !missingSession() && !persisted()?.title }}
     >
       <TabNavItem
-        ref={ref}
+        ref={(el) => {
+          ref = el
+        }}
         href={tabHref(props.tab)}
         server={props.tab.server}
         session={session}
+        fallbackTitle={persisted()?.title ?? (missingSession() ? language.t("session.tab.unknown") : undefined)}
         onTitleChange={(title) => {
           const value = session()
           const ctx = props.serverCtx()
@@ -128,11 +112,50 @@ function SessionTabSlot(props: {
         onNavigate={() => props.onNavigate(ref)}
         onClose={props.onClose}
         active={props.active()}
-        activeServer={props.tab.server === props.activeServerKey}
         forceTruncate={props.forceTruncate}
-        suppressNavigation={props.suppressNavigation}
-        pressed={props.pressed()}
-        hidden={props.dragged()}
+        dragging={sortable.isDragSource()}
+      />
+    </div>
+  )
+}
+
+function DraftTabSlot(props: {
+  tab: Extract<Tab, { type: "draft" }>
+  id: string
+  index: () => number
+  active: () => boolean
+  title: string
+  onNavigate: (element: HTMLDivElement) => void
+  onClose: () => void
+}) {
+  const sortable = useSortable({
+    get id() {
+      return props.id
+    },
+    get index() {
+      return props.index()
+    },
+  })
+  let ref!: HTMLDivElement
+
+  return (
+    <div
+      ref={sortable.ref}
+      data-titlebar-tab-slot
+      data-tab-key={props.id}
+      data-active={props.active()}
+      class="relative flex w-56 min-w-7 max-w-56 flex-shrink"
+    >
+      <DraftTabItem
+        ref={(el) => {
+          ref = el
+        }}
+        href={tabHref(props.tab)}
+        title={props.title}
+        onNavigate={() => props.onNavigate(ref)}
+        onClose={props.onClose}
+        active={props.active()}
+        dragging={sortable.isDragSource()}
       />
     </div>
   )
@@ -141,7 +164,6 @@ function SessionTabSlot(props: {
 export function TitlebarTabStrip(props: {
   tabs: Tab[]
   currentTab: () => Tab | undefined
-  activeServerKey: ServerConnection.Key
   forceTruncate: boolean
   onNavigate: (tab: Tab, el?: HTMLDivElement) => void
   onClose: (tab: Tab) => void
@@ -150,51 +172,11 @@ export function TitlebarTabStrip(props: {
 }) {
   const global = useGlobal()
   const language = useLanguage()
-  const [drag, setDrag] = createStore({
-    active: false,
-    draggedId: undefined as string | undefined,
-    placeholderIndex: 0,
-    draftOrder: [] as string[],
-    initialOrder: [] as string[],
-    draggedWidth: 0,
-    pointerX: 0,
-    grabOffsetX: 0,
-    floaterTop: 0,
-  })
-
-  const [gesture, setGesture] = createStore({
-    pending: undefined as
-      | {
-          id: string
-          startX: number
-          startY: number
-          grabOffsetX: number
-          grabOffsetY: number
-          pointerId: number
-          width: number
-          element: HTMLDivElement
-        }
-      | undefined,
-  })
-
-  const [suppressNavigation, setSuppressNavigation] = createSignal(false)
-  const [pressedId, setPressedId] = createSignal<string | undefined>()
-  const [stripScrollLeft, setStripScrollLeft] = createSignal(0)
   let scrollRef!: HTMLDivElement
   let listRef!: HTMLDivElement
-  let dragLayout: TabDragLayout | undefined
-  let dragPointerId: number | undefined
-  let autoscrollFrame: number | undefined
   let resizeFrame: number | undefined
-  let dragPreview: HTMLDivElement | undefined
 
   const tabIds = () => props.tabs.map(tabKey)
-
-  const displayTabs = createMemo(() => {
-    if (!drag.active || drag.draftOrder.length === 0) return props.tabs
-    const byKey = new Map(props.tabs.map((tab) => [tabKey(tab), tab]))
-    return drag.draftOrder.map((key) => byKey.get(key)).filter((tab): tab is Tab => !!tab)
-  })
 
   function refreshOverflow() {
     if (!scrollRef) return
@@ -208,217 +190,14 @@ export function TitlebarTabStrip(props: {
       resizeFrame = requestAnimationFrame(() => {
         resizeFrame = undefined
         refreshOverflow()
-        if (!drag.active || !listRef) return
-        dragLayout = captureTabDragLayout(listRef, drag.draftOrder)
-        updateInsertIndex()
       })
     },
   )
 
-  function syncScroll() {
-    if (!scrollRef || !listRef || !dragLayout) return
-    syncLayoutScroll(listRef, dragLayout)
-    setStripScrollLeft(scrollRef.scrollLeft)
-    updateInsertIndex()
-  }
-
-  function stopAutoscroll() {
-    if (autoscrollFrame === undefined) return
-    cancelAnimationFrame(autoscrollFrame)
-    autoscrollFrame = undefined
-  }
-
-  function tickAutoscroll() {
-    if (!drag.active || !scrollRef) return
-
-    const strip = scrollRef.getBoundingClientRect()
-    const speed = autoscrollSpeed(drag.pointerX, strip.left, strip.right)
-
-    if (speed !== 0) {
-      scrollRef.scrollLeft += speed
-      syncScroll()
-    }
-
-    autoscrollFrame = requestAnimationFrame(tickAutoscroll)
-  }
-
-  function startAutoscroll() {
-    stopAutoscroll()
-    autoscrollFrame = requestAnimationFrame(tickAutoscroll)
-  }
-
-  function applyPlaceholderIndex(nextIndex: number) {
-    const id = drag.draggedId
-    if (!id) return
-    const next = movePlaceholder(drag.draftOrder, id, nextIndex)
-    setDrag({
-      draftOrder: next,
-      placeholderIndex: nextIndex,
-    })
-  }
-
-  function updateInsertIndex() {
-    if (!drag.active || !dragLayout) return
-    const draggedId = drag.draggedId
-    if (!draggedId) return
-    const nextIndex = insertIndexFromVirtualLayout(
-      drag.pointerX,
-      drag.draftOrder,
-      draggedId,
-      drag.placeholderIndex,
-      dragLayout,
-    )
-    if (nextIndex === drag.placeholderIndex) return
-    applyPlaceholderIndex(nextIndex)
-  }
-
-  function startDrag(id: string) {
-    const order = tabIds()
-    const index = order.indexOf(id)
-    const pending = gesture.pending
-    if (index === -1 || !pending || !listRef || !scrollRef) return
-
-    dragLayout = captureTabDragLayout(listRef, order)
-    dragPreview = createTabDragPreview(pending.element)
-    dragPointerId = pending.pointerId
-    setGesture("pending", undefined)
-
-    setDrag({
-      active: true,
-      draggedId: id,
-      placeholderIndex: index,
-      draftOrder: order,
-      initialOrder: order,
-      draggedWidth: pending.width,
-      pointerX: pending.startX,
-      grabOffsetX: pending.grabOffsetX,
-      floaterTop: pending.startY - pending.grabOffsetY,
-    })
-    setPressedId(undefined)
-    setStripScrollLeft(scrollRef.scrollLeft)
-    startAutoscroll()
-  }
-
-  function endDrag(commit: boolean) {
-    const initial = drag.initialOrder
-    const final = drag.draftOrder
-    const moved = drag.active
-
-    if (commit && moved && draftOrderChanged(initial, final)) {
-      props.onReorder(final)
-    }
-
-    if (moved) setSuppressNavigation(true)
-
-    setDrag({
-      active: false,
-      draggedId: undefined,
-      placeholderIndex: 0,
-      draftOrder: [],
-      initialOrder: [],
-      draggedWidth: 0,
-      pointerX: 0,
-      grabOffsetX: 0,
-      floaterTop: 0,
-    })
-
-    dragLayout = undefined
-    dragPreview = undefined
-    dragPointerId = undefined
-    setGesture("pending", undefined)
-    setPressedId(undefined)
-    stopAutoscroll()
-    refreshOverflow()
-    requestAnimationFrame(() => setSuppressNavigation(false))
-  }
-
-  function onPointerDown(id: string, event: PointerEvent) {
-    if (event.button !== 0 || drag.active) return
-    if (!canStartTabDrag(event.pointerType)) return
-    if (isTabCloseTarget(event.target)) return
-    const tabEl = (event.currentTarget as HTMLElement).querySelector<HTMLDivElement>("[data-titlebar-tab]")
-    if (!tabEl) return
-    if (!tabEl.querySelector('[data-slot="tab-link"]')) return
-    const tab = props.tabs.find((item) => tabKey(item) === id)
-    if (!tab) return
-    const pointer = captureTabPointerDown(tabEl, event.clientX, event.clientY)
-    setSuppressNavigation(true)
-    props.onNavigate(tab, tabEl)
-    setPressedId(id)
-    setGesture("pending", {
-      id,
-      pointerId: event.pointerId,
-      ...pointer,
-    })
-  }
-
-  function onPointerMove(event: PointerEvent) {
-    const pending = gesture.pending
-    if (pending && event.pointerId !== pending.pointerId) return
-    if (drag.active && dragPointerId !== undefined && event.pointerId !== dragPointerId) return
-    if (!isPrimaryPointerPressed(event.buttons)) {
-      if (drag.active) endDrag(true)
-      if (pending) {
-        setGesture("pending", undefined)
-        setPressedId(undefined)
-        requestAnimationFrame(() => setSuppressNavigation(false))
-      }
-      return
-    }
-
-    if (pending && !drag.active) {
-      if (pointerDistance(pending.startX, pending.startY, event.clientX, event.clientY) < ACTIVATION_DISTANCE) return
-      startDrag(pending.id)
-    }
-
-    if (!drag.active) return
-
-    setDrag("pointerX", event.clientX)
-    syncScroll()
-  }
-
-  function onPointerUp(event: PointerEvent) {
-    if (drag.active) {
-      if (dragPointerId !== undefined && event.pointerId !== dragPointerId) return
-      setDrag("pointerX", event.clientX)
-      syncScroll()
-      endDrag(true)
-      return
-    }
-
-    const pending = gesture.pending
-    if (pending && event.pointerId !== pending.pointerId) return
-
-    setGesture("pending", undefined)
-    setPressedId(undefined)
-    requestAnimationFrame(() => setSuppressNavigation(false))
-  }
-
-  function onPointerCancel(event: PointerEvent) {
-    if (drag.active) {
-      if (dragPointerId !== undefined && event.pointerId !== dragPointerId) return
-      endDrag(false)
-      return
-    }
-
-    if (!gesture.pending) return
-    if (gesture.pending.pointerId !== event.pointerId) return
-    setGesture("pending", undefined)
-    setPressedId(undefined)
-    requestAnimationFrame(() => setSuppressNavigation(false))
-  }
-
   onMount(() => {
-    const cleanups = [
-      makeEventListener(window, "pointermove", onPointerMove),
-      makeEventListener(window, "pointerup", onPointerUp),
-      makeEventListener(window, "pointercancel", onPointerCancel),
-    ]
     refreshOverflow()
-    onCleanup(() => cleanups.forEach((cleanup) => cleanup()))
   })
 
-  onCleanup(stopAutoscroll)
   onCleanup(() => {
     if (resizeFrame !== undefined) cancelAnimationFrame(resizeFrame)
   })
@@ -429,50 +208,54 @@ export function TitlebarTabStrip(props: {
     refreshOverflow()
   })
 
-  createEffect(() => {
-    if (!drag.active || !scrollRef) return
-    onCleanup(makeEventListener(scrollRef, "scroll", syncScroll))
-  })
-
-  const floaterStyle = () => {
-    stripScrollLeft()
-    const strip = scrollRef?.getBoundingClientRect()
-    const left = strip
-      ? clampFloaterLeft(drag.pointerX - drag.grabOffsetX, drag.draggedWidth, strip.left, strip.right)
-      : drag.pointerX - drag.grabOffsetX
-
-    return {
-      position: "fixed" as const,
-      top: `${drag.floaterTop}px`,
-      left: `${left}px`,
-      width: `${drag.draggedWidth}px`,
-      "z-index": "10000",
-      "pointer-events": "none" as const,
-    }
-  }
-
-  const draggedTab = createMemo(() => {
-    const id = drag.draggedId
-    if (!id) return
-    return props.tabs.find((tab) => tabKey(tab) === id)
-  })
-
   return (
-    <>
-      <div data-slot="titlebar-tabs" class="relative min-w-0 flex-1">
-        <div
-          data-slot="titlebar-tabs-scroll"
-          class="flex min-w-0 flex-row items-center gap-1.5 overflow-x-auto no-scrollbar [app-region:no-drag]"
-          ref={scrollRef}
+    <div data-slot="titlebar-tabs" class="relative min-w-0">
+      <div
+        data-slot="titlebar-tabs-scroll"
+        class="flex min-w-0 flex-row items-center gap-1.5 overflow-x-auto no-scrollbar [app-region:no-drag]"
+        ref={scrollRef}
+      >
+        <DragDropProvider
+          sensors={[
+            PointerSensor.configure({
+              activationConstraints: [new PointerActivationConstraints.Distance({ value: 4 })],
+              preventActivation: (event) =>
+                !canStartTabDrag(event.pointerType) ||
+                isTabCloseTarget(event.target) ||
+                (event.target instanceof Element && !!event.target.closest('[contenteditable="true"]')),
+            }),
+          ]}
+          modifiers={[RestrictToHorizontalAxis, RestrictToElement.configure({ element: () => listRef })]}
+          plugins={(defaults) => [
+            ...defaults.filter((plugin) => plugin !== Accessibility),
+            AutoScroller.configure({ acceleration: 8, threshold: { x: 0.05, y: 0 } }),
+            Feedback.configure({ dropAnimation: null }),
+          ]}
+          onDragStart={(event) => {
+            const source = event.operation.source
+            if (!source) return
+            const tab = props.tabs.find((item) => tabKey(item) === source.id.toString())
+            if (!tab) return
+            const tabEl = source.element?.querySelector<HTMLDivElement>("[data-titlebar-tab]")
+            props.onNavigate(tab, tabEl ?? undefined)
+          }}
+          onDragEnd={(event) => {
+            const current = tabIds()
+            const source = event.operation.source
+            if (event.canceled || !isSortable(source)) return
+
+            const { initialIndex, index } = source
+            if (initialIndex !== index) {
+              props.onReorder(arrayMove(current, source.initialIndex, source.index))
+            }
+          }}
         >
           <div data-titlebar-tab-list class="flex w-full min-w-0 flex-row items-center" ref={listRef}>
-            <For each={displayTabs()}>
+            <For each={props.tabs}>
               {(tab, index) => {
                 const id = tabKey(tab)
                 let ref!: HTMLDivElement
                 useTabShortcut(index, () => props.onNavigate(tab, ref))
-
-                const dragged = () => drag.active && drag.draggedId === id
                 const serverCtx = createMemo(() => {
                   if (tab.type !== "session") return
                   const conn = global.servers.list().find((item) => ServerConnection.key(item) === tab.server)
@@ -484,75 +267,49 @@ export function TitlebarTabStrip(props: {
                     <SessionTabSlot
                       tab={tab}
                       id={id}
+                      index={index}
                       active={() => props.currentTab() === tab}
-                      activeServerKey={props.activeServerKey}
                       forceTruncate={props.forceTruncate}
-                      dragActive={drag.active}
-                      dragged={dragged}
-                      pressed={() => pressedId() === id}
                       serverCtx={serverCtx}
-                      suppressNavigation={() => suppressNavigation()}
-                      onPointerDown={(event) => {
-                        if (dragged()) return
-                        onPointerDown(id, event)
+                      onNavigate={(element) => {
+                        ref = element
+                        props.onNavigate(tab, element)
                       }}
-                      onNavigate={(element) => props.onNavigate(tab, element)}
                       onClose={() => props.onClose(tab)}
                     />
                   )
                 }
 
                 return (
-                  <div
-                    data-titlebar-tab-slot
-                    data-tab-key={id}
-                    class="flex min-w-0 max-w-56 flex-1 basis-0"
-                    classList={{
-                      "pointer-events-none": drag.active,
+                  <DraftTabSlot
+                    tab={tab}
+                    id={id}
+                    index={index}
+                    active={() => props.currentTab() === tab}
+                    title={language.t("command.session.new")}
+                    onNavigate={(element) => {
+                      ref = element
+                      props.onNavigate(tab, element)
                     }}
-                    onPointerDown={(event) => {
-                      if (dragged()) return
-                      onPointerDown(id, event)
-                    }}
-                  >
-                    <DraftTabItem
-                      ref={ref}
-                      href={tabHref(tab)}
-                      title={language.t("command.session.new")}
-                      onNavigate={() => props.onNavigate(tab, ref)}
-                      onClose={() => props.onClose(tab)}
-                      suppressNavigation={() => suppressNavigation()}
-                      active={props.currentTab() === tab}
-                      pressed={pressedId() === id}
-                      hidden={dragged()}
-                    />
-                  </div>
+                    onClose={() => props.onClose(tab)}
+                  />
                 )
               }}
             </For>
           </div>
-        </div>
-        <div
-          data-slot="titlebar-tabs-fade-left"
-          aria-hidden="true"
-          class="pointer-events-none absolute inset-y-0 left-0 z-10 w-6 bg-[linear-gradient(to_right,var(--v2-background-bg-deep),transparent)]"
-        />
-        <div
-          data-slot="titlebar-tabs-fade-right"
-          aria-hidden="true"
-          class="pointer-events-none absolute inset-y-0 right-0 z-10 w-6 bg-[linear-gradient(to_left,var(--v2-background-bg-deep),transparent)]"
-        />
+        </DragDropProvider>
       </div>
-      <Show when={drag.active && draggedTab() && dragPreview}>
-        {(_) => (
-          <Portal>
-            <div data-titlebar-tab-preview style={floaterStyle()}>
-              {dragPreview}
-            </div>
-          </Portal>
-        )}
-      </Show>
-    </>
+      <div
+        data-slot="titlebar-tabs-fade-left"
+        aria-hidden="true"
+        class="pointer-events-none absolute inset-y-0 left-0 z-10 w-6 bg-[linear-gradient(to_right,var(--v2-background-bg-deep),transparent)]"
+      />
+      <div
+        data-slot="titlebar-tabs-fade-right"
+        aria-hidden="true"
+        class="pointer-events-none absolute inset-y-0 right-0 z-10 w-6 bg-[linear-gradient(to_left,var(--v2-background-bg-deep),transparent)]"
+      />
+    </div>
   )
 }
 

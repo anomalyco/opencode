@@ -1,16 +1,18 @@
 import { describe, expect } from "bun:test"
 import { Effect, Exit, Layer, Scope } from "effect"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Global } from "@opencode-ai/core/global"
 import { Reference } from "@opencode-ai/core/reference"
 import { Repository } from "@opencode-ai/core/repository"
 import { RepositoryCache } from "@opencode-ai/core/repository-cache"
-import { EventV2 } from "@opencode-ai/core/event"
 import { it } from "./lib/effect"
 
 const cache = Layer.mock(RepositoryCache.Service, {
   ensure: () => Effect.die("unexpected Git materialization"),
 })
+const referenceLayer = AppNodeBuilder.build(Reference.node, [[RepositoryCache.node, cache]])
 
 describe("Reference", () => {
   it.effect("registers normalized sources for the owning scope", () =>
@@ -32,12 +34,7 @@ describe("Reference", () => {
 
       yield* Scope.close(scope, Exit.void)
       expect(yield* references.list()).toEqual([])
-    }).pipe(
-      Effect.provide(Reference.layer),
-      Effect.provide(cache),
-      Effect.provide(EventV2.defaultLayer),
-      Effect.provide(Global.defaultLayer),
-    ),
+    }).pipe(Effect.provide(referenceLayer)),
   )
 
   it.effect("derives Git paths without exposing cache operations", () =>
@@ -54,13 +51,7 @@ describe("Reference", () => {
           source,
         }),
       ])
-    }).pipe(
-      Effect.scoped,
-      Effect.provide(Reference.layer),
-      Effect.provide(cache),
-      Effect.provide(EventV2.defaultLayer),
-      Effect.provide(Global.defaultLayer),
-    ),
+    }).pipe(Effect.scoped, Effect.provide(referenceLayer)),
   )
 
   it.effect("preserves configured Git descriptions", () =>
@@ -82,12 +73,6 @@ describe("Reference", () => {
           source,
         }),
       ])
-    }).pipe(
-      Effect.scoped,
-      Effect.provide(Reference.layer),
-      Effect.provide(cache),
-      Effect.provide(EventV2.defaultLayer),
-      Effect.provide(Global.defaultLayer),
-    ),
+    }).pipe(Effect.scoped, Effect.provide(referenceLayer)),
   )
 })

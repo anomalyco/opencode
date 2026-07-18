@@ -36,8 +36,6 @@ import type { SystemError } from "bun"
 import type { Provider } from "@/provider/provider"
 import { Effect, Schema } from "effect"
 
-export const node = LayerNode.group([Database.node])
-
 /** Error shape thrown by Bun's fetch() when gzip/br decompression fails mid-stream */
 interface FetchDecompressionError extends Error {
   code: "ZlibError"
@@ -733,3 +731,4 @@ export function fromError(
 }
 
 export * as MessageV2 from "./message-v2"
+export const node = LayerNode.group([Database.node])

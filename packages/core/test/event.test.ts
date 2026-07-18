@@ -1,11 +1,13 @@
 import { describe, expect } from "bun:test"
-import { Cause, DateTime, Deferred, Effect, Exit, Fiber, Layer, Schema, Stream } from "effect"
+import { Cause, DateTime, Deferred, Effect, Exit, Fiber, Layer, Option, Schema, Stream } from "effect"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Event } from "@opencode-ai/schema/event"
 import { Session } from "@opencode-ai/schema/session"
 import { SessionEvent } from "@opencode-ai/schema/session-event"
 import { SessionV1 } from "@opencode-ai/schema/session-v1"
 import { Database } from "@opencode-ai/core/database/database"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventSequenceTable, EventTable } from "@opencode-ai/core/event/sql"
 import { Location } from "@opencode-ai/core/location"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -76,9 +78,10 @@ const durableData = (sessionID: Session.ID, text: string) => ({
   messageID: SessionV1.MessageID.ascending(`msg_${text}`),
 })
 
-const eventLayer = Layer.mergeAll(EventV2.layerWith().pipe(Layer.provide(Database.defaultLayer)), Database.defaultLayer)
-const it = testEffect(eventLayer.pipe(Layer.provideMerge(locationLayer)))
-const itWithoutLocation = testEffect(eventLayer)
+const it = testEffect(
+  AppNodeBuilder.build(LayerNode.group([Database.node, EventV2.node, Location.node]), [[Location.node, locationLayer]]),
+)
+const itWithoutLocation = testEffect(AppNodeBuilder.build(LayerNode.group([Database.node, EventV2.node])))
 
 describe("EventV2", () => {
   it.effect("publishes events with the current location", () =>
@@ -285,6 +288,69 @@ describe("EventV2", () => {
     }),
   )
 
+  it.effect("notifies global listeners only after a durable event is committed", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const { db } = yield* Database.Service
+      const aggregateID = EventV2.ID.create()
+      const observed = new Array<{ id: string; seq: number }>()
+      yield* events.listen((event) =>
+        event.type !== SyncMessage.type
+          ? Effect.void
+          : db
+              .select({ id: EventTable.id, seq: EventTable.seq })
+              .from(EventTable)
+              .where(eq(EventTable.id, event.id))
+              .get()
+              .pipe(
+                Effect.orDie,
+                Effect.tap((row) =>
+                  Effect.sync(() => {
+                    if (row) observed.push(row)
+                  }),
+                ),
+                Effect.asVoid,
+              ),
+      )
+
+      const event = yield* events.publish(SyncMessage, { id: aggregateID, text: "committed" })
+      if (!event.durable) throw new Error("Expected durable event metadata")
+
+      expect(observed).toEqual([{ id: event.id, seq: event.durable.seq }])
+    }),
+  )
+
+  it.effect("ends only an overflowing bounded subscriber without blocking other listeners", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const consuming = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      const slowStream = yield* EventV2.allBounded(events, 1)
+      const fastStream = yield* EventV2.allBounded(events, 8)
+      const slow = yield* slowStream.pipe(
+        Stream.runForEach(() => Deferred.succeed(consuming, undefined).pipe(Effect.andThen(Deferred.await(release)))),
+        Effect.forkScoped,
+      )
+      const fast = yield* fastStream.pipe(Stream.take(4), Stream.runCollect, Effect.forkScoped)
+
+      yield* events.publish(Message, { text: "one" })
+      yield* Deferred.await(consuming)
+      yield* events.publish(Message, { text: "two" })
+      yield* events.publish(Message, { text: "overflow" })
+      const last = yield* events.publish(Message, { text: "still delivered" })
+      yield* Deferred.succeed(release, undefined)
+
+      const slowExit = yield* Fiber.await(slow)
+      expect(Exit.findErrorOption(slowExit).pipe(Option.getOrUndefined)).toBeInstanceOf(EventV2.SubscriberOverflowError)
+      expect(Array.from(yield* Fiber.join(fast))).toEqual([
+        expect.objectContaining({ data: { text: "one" } }),
+        expect.objectContaining({ data: { text: "two" } }),
+        expect.objectContaining({ data: { text: "overflow" } }),
+        last,
+      ])
+    }),
+  )
+
   it.effect("preserves observer interruption", () =>
     Effect.gen(function* () {
       const events = yield* EventV2.Service
@@ -399,7 +465,7 @@ describe("EventV2", () => {
           pause
             ? Deferred.succeed(readStarted, undefined).pipe(Effect.andThen(Deferred.await(continueRead)))
             : Effect.void,
-      }).pipe(Layer.provide(Database.defaultLayer))
+      }).pipe(Layer.provide(LayerNode.compile(Database.node)))
 
       yield* Effect.gen(function* () {
         const events = yield* EventV2.Service
@@ -414,7 +480,7 @@ describe("EventV2", () => {
         expect(Array.from(yield* Fiber.join(fiber)).map((event) => [event.durable?.seq, event.data])).toEqual([
           [0, durableData(aggregateID, "during handoff")],
         ])
-      }).pipe(Effect.provide(Layer.mergeAll(Database.defaultLayer, eventLayer)))
+      }).pipe(Effect.provide(Layer.merge(LayerNode.compile(Database.node), eventLayer)))
     }),
   )
 

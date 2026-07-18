@@ -1,8 +1,9 @@
 export * as Pty from "./pty"
 
+import { makeLocationNode } from "./effect/app-node"
 import type { Disp, Proc } from "#pty"
 import { Context, Effect, Layer, Schema, Types } from "effect"
-import { PtyEvent, PtyInfo, Pty } from "@opencode-ai/schema/pty"
+import { Pty } from "@opencode-ai/schema/pty"
 import { Config } from "./config"
 import { EventV2 } from "./event"
 import { Location } from "./location"
@@ -35,8 +36,7 @@ type Active = {
   listeners: Disp[]
 }
 
-export const Info = PtyInfo
-
+export const Info = Pty.Info
 export type Info = Types.DeepMutable<typeof Info.Type>
 
 export const CreateInput = Pty.CreateInput
@@ -46,6 +46,8 @@ export type CreateInput = Types.DeepMutable<typeof CreateInput.Type>
 export const UpdateInput = Pty.UpdateInput
 
 export type UpdateInput = Types.DeepMutable<typeof UpdateInput.Type>
+
+export const Event = Pty.Event
 
 export type AttachInput = {
   // Absolute output cursor to replay from. -1 tails from the current end; omitted replays the full retained buffer.
@@ -75,8 +77,6 @@ export class ExitedError extends Schema.TaggedErrorClass<ExitedError>()("Pty.Exi
   ptyID: PtyID,
 }) {}
 
-export const Event = PtyEvent
-
 export interface Interface {
   readonly list: () => Effect.Effect<Info[]>
   readonly get: (id: PtyID) => Effect.Effect<Info, NotFoundError>
@@ -89,7 +89,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Pty") {}
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const events = yield* EventV2.Service
@@ -314,3 +314,5 @@ export const layer = Layer.effect(
 )
 
 export const locationLayer = layer.pipe(Layer.provide(Config.locationLayer))
+
+export const node = makeLocationNode({ service: Service, layer, deps: [EventV2.node, Location.node, Config.node] })

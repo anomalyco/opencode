@@ -102,10 +102,14 @@ export const dict = {
   "temp.logoDarkAlt": "opencode logo dark",
 
   "home.banner.badge": "Ny",
-  "home.banner.text": "Desktop-app tilgængelig i beta",
-  "home.banner.platforms": "på macOS, Windows og Linux",
+  "home.banner.text": "Introduktion af Tabs til Desktop.",
+  "home.banner.platforms": "Tilgængelig på macOS, Windows og Linux",
   "home.banner.downloadNow": "Download nu",
   "home.banner.downloadBetaNow": "Download desktop-betaen nu",
+  "home.promo.title": "Introduktion af Tabs til Desktop",
+  "home.promo.body": "Organiser dit arbejde og aktive sessioner med faner.",
+  "home.promo.cta": "Download den nyeste version for at komme i gang.",
+  "home.promo.close": "Luk meddelelsen om Desktop-appen",
 
   "home.hero.title": "Den open source AI-kodningsagent",
   "home.hero.subtitle.a": "Gratis modeller inkluderet, eller forbind enhver model fra enhver udbyder,",
@@ -250,9 +254,9 @@ export const dict = {
   "zen.privacy.exceptionsLink": "følgende undtagelser",
 
   "go.title": "OpenCode Go | Kodningsmodeller til lav pris for alle",
-  "go.banner.text": "MiniMax M3 får tredoblet brugsgrænse i en begrænset periode",
+  "go.banner.text": "Kimi K3 får fordoblet brugsgrænse i en begrænset periode",
   "go.meta.description":
-    "Go starter ved $5 for den første måned, derefter $10/måned, med generøse 5-timers anmodningsgrænser for GLM-5.2, GLM-5.1, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro og DeepSeek V4 Flash.",
+    "Go starter ved $5 for den første måned, derefter $10/måned, med generøse 5-timers anmodningsgrænser for Grok 4.5, GLM-5.2, GLM-5.1, Kimi K3, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro og DeepSeek V4 Flash.",
   "go.hero.title": "Kodningsmodeller til lav pris for alle",
   "go.hero.body":
     "Go bringer agentisk kodning til programmører over hele verden. Med generøse grænser og pålidelig adgang til de mest kapable open source-modeller, så du kan bygge med kraftfulde agenter uden at bekymre dig om omkostninger eller tilgængelighed.",
@@ -269,7 +273,6 @@ export const dict = {
   "go.graph.go": "Go",
   "go.graph.label": "Forespørgsler pr. 5 timer",
   "go.graph.usageLimits": "Brugsgrænser",
-  "go.graph.tick": "{{n}}x",
   "go.graph.aria": "Forespørgsler pr. 5t: {{free}} vs {{go}}",
 
   "go.testimonials.brand.zen": "Zen",
@@ -301,7 +304,7 @@ export const dict = {
   "go.problem.item2": "Generøse grænser og pålidelig adgang",
   "go.problem.item3": "Bygget til så mange programmører som muligt",
   "go.problem.item4":
-    "Inkluderer GLM-5.2, GLM-5.1, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro og DeepSeek V4 Flash",
+    "Inkluderer Grok 4.5, GLM-5.2, GLM-5.1, Kimi K3, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro og DeepSeek V4 Flash",
   "go.how.title": "Hvordan Go virker",
   "go.how.body":
     "Go starter ved $5 for den første måned, derefter $10/måned. Du kan bruge det med OpenCode eller enhver agent.",
@@ -327,7 +330,7 @@ export const dict = {
   "go.faq.a2": "Go inkluderer modellerne nedenfor med generøse grænser og pålidelig adgang.",
   "go.faq.q3": "Er Go det samme som Zen?",
   "go.faq.a3":
-    "Nej. Zen er pay-as-you-go, mens Go starter ved $5 for den første måned, derefter $10/måned, med generøse grænser og pålidelig adgang til open source-modellerne GLM-5.2, GLM-5.1, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro og DeepSeek V4 Flash.",
+    "Nej. Zen er pay-as-you-go, mens Go starter ved $5 for den første måned, derefter $10/måned, med generøse grænser og pålidelig adgang til open source-modellerne Grok 4.5, GLM-5.2, GLM-5.1, Kimi K3, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro og DeepSeek V4 Flash.",
   "go.faq.q4": "Hvad koster Go?",
   "go.faq.a4.p1.beforePricing": "Go koster",
   "go.faq.a4.p1.pricingLink": "$5 første måned",
@@ -350,7 +353,7 @@ export const dict = {
 
   "go.faq.q9": "Hvad er forskellen på gratis modeller og Go?",
   "go.faq.a9":
-    "Gratis modeller inkluderer Big Pickle plus salgsfremmende modeller tilgængelige på det tidspunkt, med en kvote på 200 forespørgsler/dag. Go inkluderer GLM-5.2, GLM-5.1, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro og DeepSeek V4 Flash med højere anmodningskvoter håndhævet over rullende vinduer (5-timers, ugentlig og månedlig), nogenlunde svarende til $12 pr. 5 timer, $30 pr. uge og $60 pr. måned (faktiske anmodningstal varierer efter model og brug).",
+    "Gratis modeller inkluderer Big Pickle plus salgsfremmende modeller tilgængelige på det tidspunkt, med en kvote på 200 forespørgsler/dag. Go inkluderer Grok 4.5, GLM-5.2, GLM-5.1, Kimi K3, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro og DeepSeek V4 Flash med højere anmodningskvoter håndhævet over rullende vinduer (5-timers, ugentlig og månedlig), nogenlunde svarende til $12 pr. 5 timer, $30 pr. uge og $60 pr. måned (faktiske anmodningstal varierer efter model og brug).",
 
   "zen.api.error.rateLimitExceeded": "Hastighedsgrænse overskredet. Prøv venligst igen senere.",
   "zen.api.error.modelNotSupported": "Model {{model}} understøttes ikke",
@@ -373,6 +376,8 @@ export const dict = {
   "zen.api.error.userMonthlyLimitReached":
     "Du har nået din månedlige forbrugsgrænse på ${{amount}}. Administrer dine grænser her: {{membersUrl}}",
   "zen.api.error.modelDisabled": "Modellen er deaktiveret",
+  "zen.api.error.regionNotAllowed":
+    "Denne model hostes i Kina. Hvis du vil bruge denne model, skal du aktivere den i dine indstillinger: {{consoleGoUrl}}",
   "zen.api.error.trialEnded":
     "Den gratis kampagne for {{model}} er afsluttet. Du kan fortsætte med at bruge modellen ved at abonnere på OpenCode Go - {{link}}",
 
@@ -652,6 +657,9 @@ export const dict = {
   "workspace.lite.subscription.useBalance": "Brug din tilgængelige saldo, når du har nået forbrugsgrænserne",
   "workspace.lite.subscription.selectProvider":
     'Vælg "OpenCode Go" som udbyder i din opencode-konfiguration for at bruge Go-modeller.',
+  "workspace.lite.providers.title": "Udbydere",
+  "workspace.lite.providers.description": "Styr, hvilke udbydere der bruges til routing.",
+  "workspace.lite.providers.useChina": "Aktivér modeller hostet i Kina",
   "workspace.lite.black.message":
     "Du abonnerer i øjeblikket på OpenCode Black eller er på venteliste. Afmeld venligst først, hvis du vil skifte til Go.",
   "workspace.lite.other.message":
@@ -702,11 +710,11 @@ export const dict = {
 
   "download.title": "OpenCode | Download",
   "download.meta.description": "Download OpenCode til macOS, Windows og Linux",
-  "download.hero.title": "Download OpenCode",
+  "download.hero.title": "Download OpenCode Desktop",
   "download.hero.subtitle": "Tilgængelig i beta til macOS, Windows og Linux",
   "download.hero.button": "Download til {{os}}",
   "download.section.terminal": "OpenCode Terminal",
-  "download.section.desktop": "OpenCode Desktop (Beta)",
+  "download.section.desktop": "OpenCode Desktop",
   "download.section.extensions": "OpenCode Extensions",
   "download.section.integrations": "OpenCode Integrations",
   "download.action.download": "Download",

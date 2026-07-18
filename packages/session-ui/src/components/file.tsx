@@ -456,11 +456,18 @@ function useAnnotationRerender<A>(opts: {
   current: () => AnnotationTarget<A> | undefined
   annotations: () => A[]
 }) {
+  const applied = new WeakSet<AnnotationTarget<A>>()
   createEffect(() => {
     opts.viewer.rendered()
     const active = opts.current()
     if (!active) return
-    active.setLineAnnotations(opts.annotations())
+    const annotations = opts.annotations()
+    // renderViewer always draws with empty annotations, so skip the extra rerender
+    // when this instance has nothing applied and nothing to apply.
+    if (annotations.length === 0 && !applied.has(active)) return
+    if (annotations.length === 0) applied.delete(active)
+    else applied.add(active)
+    active.setLineAnnotations(annotations)
     active.rerender()
     requestAnimationFrame(() => opts.viewer.find.refresh({ reset: true }))
   })

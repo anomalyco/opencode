@@ -1,5 +1,6 @@
-import { Permission } from "@opencode-ai/schema/permission"
+import { Agent } from "@opencode-ai/schema/agent"
 import { Location } from "@opencode-ai/schema/location"
+import { Permission } from "@opencode-ai/schema/permission"
 import { PermissionSaved } from "@opencode-ai/schema/permission-saved"
 import { Project } from "@opencode-ai/schema/project"
 import { Session } from "@opencode-ai/schema/session"
@@ -59,6 +60,32 @@ export const makePermissionGroup = <
     // Effect applies group middleware only to endpoints already added; session endpoints use session placement below.
     .middleware(locationMiddleware)
     .add(
+      HttpApiEndpoint.post("session.permission.create", "/api/session/:sessionID/permission", {
+        params: { sessionID: Session.ID },
+        payload: Schema.Struct({
+          id: Permission.ID.pipe(Schema.optional),
+          action: Permission.Request.fields.action,
+          resources: Permission.Request.fields.resources,
+          save: Permission.Request.fields.save,
+          metadata: Permission.Request.fields.metadata,
+          source: Permission.Request.fields.source,
+          agent: Agent.ID.pipe(Schema.optional),
+        }),
+        success: Schema.Struct({
+          data: Schema.Struct({ id: Permission.ID, effect: Permission.Effect }),
+        }),
+        error: SessionNotFoundError,
+      })
+        .middleware(sessionLocationMiddleware)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "v2.session.permission.create",
+            summary: "Create permission request",
+            description: "Evaluate and, when approval is required, create a permission request for a session.",
+          }),
+        ),
+    )
+    .add(
       HttpApiEndpoint.get("session.permission.list", "/api/session/:sessionID/permission", {
         params: { sessionID: Session.ID },
         success: Schema.Struct({ data: Schema.Array(Permission.Request) }),
@@ -70,6 +97,21 @@ export const makePermissionGroup = <
             identifier: "v2.session.permission.list",
             summary: "List session permission requests",
             description: "Retrieve pending permission requests owned by a session.",
+          }),
+        ),
+    )
+    .add(
+      HttpApiEndpoint.get("session.permission.get", "/api/session/:sessionID/permission/:requestID", {
+        params: { sessionID: Session.ID, requestID: Permission.ID },
+        success: Schema.Struct({ data: Permission.Request }),
+        error: [SessionNotFoundError, PermissionNotFoundError],
+      })
+        .middleware(sessionLocationMiddleware)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "v2.session.permission.get",
+            summary: "Get permission request",
+            description: "Retrieve a pending permission request owned by a session.",
           }),
         ),
     )

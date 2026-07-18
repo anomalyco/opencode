@@ -4,6 +4,7 @@ import { Script } from "@opencode-ai/script"
 import { $ } from "bun"
 import { rm } from "node:fs/promises"
 import { fileURLToPath } from "node:url"
+import { pack } from "./pack"
 
 process.chdir(fileURLToPath(new URL("..", import.meta.url)))
 
@@ -18,8 +19,7 @@ if ((await $`npm view ${pkg.name}@${pkg.version} version`.nothrow()).exitCode ==
 try {
   await $`bun run typecheck`
   await $`bun run test`
-  await rm(tarball, { force: true })
-  await $`bun pm pack`
+  await pack()
   await $`npm publish ${tarball} --access public --tag ${Script.channel}`
 } finally {
   await rm(tarball, { force: true })

@@ -7,6 +7,7 @@ import { Credential } from "../../credential"
 import { InstallationVersion } from "../../installation/version"
 import { Integration } from "../../integration"
 import { ModelV2 } from "../../model"
+import { OauthCallbackPage } from "../../oauth/page"
 import { ProviderV2 } from "../../provider"
 import type { PluginInternal } from "../internal"
 
@@ -58,17 +59,21 @@ const browser = {
         const value = url.searchParams.get("code")
         if (error) {
           Effect.runFork(Deferred.fail(code, new Error(error)))
-          response.writeHead(400, { "Content-Type": "text/html" }).end(errorPage(error))
+          response
+            .writeHead(400, { "Content-Type": "text/html" })
+            .end(OauthCallbackPage.error(error, { provider: "ChatGPT" }))
           return
         }
         if (!value || url.searchParams.get("state") !== state) {
           const message = value ? "Invalid OAuth state" : "Missing authorization code"
           Effect.runFork(Deferred.fail(code, new Error(message)))
-          response.writeHead(400, { "Content-Type": "text/html" }).end(errorPage(message))
+          response
+            .writeHead(400, { "Content-Type": "text/html" })
+            .end(OauthCallbackPage.error(message, { provider: "ChatGPT" }))
           return
         }
         Effect.runFork(Deferred.succeed(code, value))
-        response.writeHead(200, { "Content-Type": "text/html" }).end(successPage)
+        response.writeHead(200, { "Content-Type": "text/html" }).end(OauthCallbackPage.success({ provider: "ChatGPT" }))
       })
       yield* Effect.callback<void, Error>((resume) => {
         server.once("error", (error) => resume(Effect.fail(error)))
@@ -285,8 +290,3 @@ function claim(token: string) {
     return
   }
 }
-
-const successPage =
-  "<!doctype html><title>OpenCode</title><h1>Authorization successful</h1><p>You can close this window.</p>"
-const errorPage = (message: string) =>
-  `<!doctype html><title>OpenCode</title><h1>Authorization failed</h1><p>${message.replace(/[&<>"']/g, "")}</p>`

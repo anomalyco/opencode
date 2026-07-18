@@ -3,7 +3,13 @@ import { createEffect, createMemo, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { Todo } from "@opencode-ai/sdk/v2"
 import { useServerSync } from "@/context/global-sync"
-import { SessionComposerRegion, createSessionComposerState } from "@/pages/session/composer"
+import { PromptInput } from "@/components/prompt-input"
+import { usePrompt } from "@/context/prompt"
+import {
+  SessionComposerRegion,
+  createSessionComposerController,
+  createSessionComposerRegionController,
+} from "@/pages/session/composer"
 
 export default {
   title: "UI/Todo Panel Motion",
@@ -60,13 +66,11 @@ const controls = {
     paid: true,
     loading: false,
   },
-  projects: { available: [], directory: "/tmp/story", select: () => {}, add: () => {} },
   session: {
     id: "story-session",
     tabs: { active: () => undefined, all: () => [], open: () => {}, setActive: () => {} },
     reviewPanel: { opened: () => false, open: () => {} },
   },
-  newLayoutDesigns: true,
 }
 
 const css = `
@@ -149,6 +153,7 @@ const css = `
 export const Playground = {
   render: () => {
     const global = useServerSync()
+    const prompt = usePrompt()
     const [cfg, setCfg] = createStore({
       open: true,
       collapsed: false,
@@ -188,7 +193,7 @@ export const Playground = {
     const countMask = () => cfg.countMask
     const countMaskHeight = () => cfg.countMaskHeight
     const countWidthDuration = () => cfg.countWidthDuration
-    const state = createSessionComposerState({ closeMs: () => Math.round(dockCloseDuration() * 1000) })
+    const state = createSessionComposerController({ closeMs: () => Math.round(dockCloseDuration() * 1000) })
     let frame
     let scrollRef
 
@@ -217,7 +222,6 @@ export const Playground = {
 
     const collapsed = () => cfg.collapsed
     const setCollapsed = (value: boolean) => setCfg("collapsed", value)
-
     const openDock = () => {
       clear()
       setCfg("open", true)
@@ -281,36 +285,30 @@ export const Playground = {
 
                 <div>
                   <SessionComposerRegion
-                    state={state}
-                    sessionKey="story-session"
-                    sessionID="story-session"
-                    controls={controls}
-                    promptInput={{
-                      submission: { abort: () => {}, handleSubmit: (event) => event.preventDefault() },
-                      ref: () => {},
-                      newSessionWorktree: "",
-                      onNewSessionWorktreeReset: () => {},
-                    }}
-                    todo={{ collapsed: collapsed(), onToggle: () => setCollapsed(!collapsed()) }}
-                    ready
-                    centered={false}
-                    onResponseSubmit={pin}
-                    setPromptDockRef={() => {}}
-                    dockOpenVisualDuration={dockOpenDuration()}
-                    dockOpenBounce={dockOpenBounce()}
-                    dockCloseVisualDuration={dockCloseDuration()}
-                    dockCloseBounce={dockCloseBounce()}
-                    drawerExpandVisualDuration={drawerExpandDuration()}
-                    drawerExpandBounce={drawerExpandBounce()}
-                    drawerCollapseVisualDuration={drawerCollapseDuration()}
-                    drawerCollapseBounce={drawerCollapseBounce()}
-                    subtitleDuration={subtitleDuration()}
-                    subtitleTravel={subtitleAuto() ? undefined : subtitleTravel()}
-                    subtitleEdge={subtitleAuto() ? undefined : subtitleEdge()}
-                    countDuration={countDuration()}
-                    countMask={countMask()}
-                    countMaskHeight={countMaskHeight()}
-                    countWidthDuration={countWidthDuration()}
+                    controller={createSessionComposerRegionController({
+                      state,
+                      sessionKey: () => "story-session",
+                      sessionID: () => "story-session",
+                      prompt,
+                      ready: () => true,
+                      centered: () => false,
+                      todo: { collapsed, onToggle: () => setCollapsed(!collapsed()) },
+                      followup: () => undefined,
+                      revert: () => undefined,
+                      onResponseSubmit: pin,
+                      openParent: () => {},
+                      setPromptRef: () => {},
+                      setDockRef: () => {},
+                    })}
+                    promptInput={
+                      <PromptInput
+                        controls={controls}
+                        submission={{ abort: () => {}, handleSubmit: (event) => event.preventDefault() }}
+                        ref={() => {}}
+                        newSessionWorktree=""
+                        onNewSessionWorktreeReset={() => {}}
+                      />
+                    }
                   />
                 </div>
               </div>

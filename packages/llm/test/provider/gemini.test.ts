@@ -347,10 +347,10 @@ describe("Gemini route", () => {
         { type: "step-start", index: 0 },
         { type: "reasoning-start", id: "reasoning-0" },
         { type: "reasoning-delta", id: "reasoning-0", text: "thinking" },
+        { type: "reasoning-end", id: "reasoning-0" },
         { type: "text-start", id: "text-0" },
         { type: "text-delta", id: "text-0", text: "Hello" },
         { type: "text-delta", id: "text-0", text: "!" },
-        { type: "reasoning-end", id: "reasoning-0" },
         { type: "text-end", id: "text-0" },
         { type: "step-finish", index: 0, reason: "stop", usage, providerMetadata: undefined },
         {
@@ -399,6 +399,9 @@ describe("Gemini route", () => {
         providerMetadata: { google: { thoughtSignature: "thought_sig" } },
       })
       expect(toolCall).toMatchObject({ providerMetadata: { google: { thoughtSignature: "tool_sig" } } })
+      expect(response.events.findIndex((event) => event.type === "reasoning-end")).toBeLessThan(
+        response.events.findIndex((event) => event.type === "tool-call"),
+      )
 
       const prepared = yield* LLMClient.prepare<Gemini.GeminiBody>(
         LLM.request({

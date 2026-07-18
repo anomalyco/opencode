@@ -11,7 +11,9 @@ const opencode = yield * OpenCode.create()
 const session = yield * opencode.sessions.get({ sessionID })
 ```
 
-It also exposes local-only `tools.register(...)`. Closing the owning Effect Scope releases router resources, location services, fibers, and scoped tool registrations.
+It also exports `Tool` and exposes local-only `tools.register(...)`, replacing the former `@opencode-ai/core/public` facade. Registration uses Core's host-level `ApplicationTools` service shared by the host's Locations; each Location retains its own `ToolRegistry` for overlay, lookup, and settlement. Closing the owning Effect Scope releases router resources, location services, fibers, and scoped tool registrations.
+
+`sessions.events({ sessionID, after })` replays durable events after the optional aggregate sequence, then emits newly committed durable events. `sessions.interrupt(...)` targets execution owned by this host, and `sessions.message(...)` retrieves one projected Session message.
 
 The same constructor is available as a service Layer:
 

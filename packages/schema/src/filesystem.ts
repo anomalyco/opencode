@@ -1,6 +1,7 @@
 export * as FileSystem from "./filesystem"
 
 import { Schema } from "effect"
+import { optional } from "./schema"
 import { define, inventory } from "./event"
 import { NonNegativeInt, PositiveInt, RelativePath } from "./schema"
 
@@ -21,7 +22,7 @@ export const Submatch = Schema.Struct({
   text: Schema.String,
   start: NonNegativeInt,
   end: NonNegativeInt,
-})
+}).annotate({ identifier: "FileSystem.Submatch" })
 
 export interface Match extends Schema.Schema.Type<typeof Match> {}
 export const Match = Schema.Struct({
@@ -34,6 +35,6 @@ export const Match = Schema.Struct({
 
 export class FindInput extends Schema.Class<FindInput>("FileSystem.FindInput")({
   query: Schema.String,
-  type: Schema.Literals(["file", "directory"]).pipe(Schema.optional),
-  limit: PositiveInt.pipe(Schema.optional),
+  type: Schema.Literals(["file", "directory"]).pipe(optional),
+  limit: PositiveInt.pipe(optional),
 }) {}

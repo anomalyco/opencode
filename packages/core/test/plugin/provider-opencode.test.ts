@@ -2,6 +2,7 @@ import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Credential } from "@opencode-ai/core/credential"
+import { EventV2 } from "@opencode-ai/core/event"
 import { Integration } from "@opencode-ai/core/integration"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
@@ -16,13 +17,31 @@ const it = testEffect(PluginTestLayer)
 const addPlugin = Effect.fn(function* () {
   const plugin = yield* PluginV2.Service
   const host = yield* PluginHost.make(plugin)
+  const events = yield* EventV2.Service
   const integration = yield* Integration.Service
-  yield* OpencodePlugin.effect(host).pipe(Effect.provideService(Integration.Service, integration))
+  yield* OpencodePlugin.effect(host).pipe(
+    Effect.provideService(EventV2.Service, events),
+    Effect.provideService(Integration.Service, integration),
+  )
 })
 
 function required<T>(value: T | undefined): T {
   if (value === undefined) throw new Error("Expected value")
   return value
+}
+
+function eventually<A>(
+  effect: Effect.Effect<A>,
+  predicate: (value: A) => boolean,
+  remaining = 1000,
+): Effect.Effect<A, Error> {
+  return Effect.gen(function* () {
+    const value = yield* effect
+    if (predicate(value)) return value
+    if (remaining === 0) return yield* Effect.fail(new Error("Timed out waiting for value"))
+    yield* Effect.promise(() => Bun.sleep(1))
+    return yield* eventually(effect, predicate, remaining - 1)
+  })
 }
 
 function withEnv<A, E, R>(vars: Record<string, string | undefined>, effect: () => Effect.Effect<A, E, R>) {
@@ -67,11 +86,14 @@ describe("OpencodePlugin", () => {
     Effect.acquireUseRelease(
       Effect.sync(() => {
         const authorization: Array<string | null> = []
+        const gate = Promise.withResolvers<void>()
         return {
           authorization,
+          release: gate.resolve,
           server: Bun.serve({
             port: 0,
-            fetch: (request) => {
+            fetch: async (request) => {
+              await gate.promise
               authorization.push(request.headers.get("authorization"))
               const origin = new URL(request.url).origin
               return Response.json({
@@ -110,7 +132,7 @@ describe("OpencodePlugin", () => {
           }),
         }
       }),
-      ({ authorization, server }) =>
+      ({ authorization, release, server }) =>
         Effect.gen(function* () {
           const credentials = yield* Credential.Service
           const catalog = yield* Catalog.Service
@@ -128,8 +150,15 @@ describe("OpencodePlugin", () => {
           })
 
           yield* addPlugin()
+          expect(authorization).toEqual([])
+          release()
 
-          const provider = required(yield* catalog.provider.get(ProviderV2.ID.make("remote")))
+          const provider = required(
+            yield* eventually(
+              catalog.provider.get(ProviderV2.ID.make("remote")),
+              (item) => item?.integrationID === Integration.ID.make("opencode"),
+            ),
+          )
           expect(provider).toMatchObject({
             name: "Remote",
             integrationID: "opencode",

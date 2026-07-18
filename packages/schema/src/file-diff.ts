@@ -1,12 +1,13 @@
 export * as FileDiff from "./file-diff"
 
 import { Schema } from "effect"
+import { optional } from "./schema"
 
 export const Info = Schema.Struct({
-  file: Schema.optional(Schema.String),
-  patch: Schema.optional(Schema.String),
+  file: optional(Schema.String),
+  patch: optional(Schema.String),
   additions: Schema.Finite,
   deletions: Schema.Finite,
-  status: Schema.optional(Schema.Literals(["added", "deleted", "modified"])),
+  status: optional(Schema.Literals(["added", "deleted", "modified"])),
 }).annotate({ identifier: "SnapshotFileDiff" })
-export type Info = typeof Info.Type
+export interface Info extends Schema.Schema.Type<typeof Info> {}

@@ -42,12 +42,14 @@ describe("ConfigProviderOptionsV1", () => {
     expect(
       lowerer.request({
         reasoningEffort: "high",
+        reasoningSummary: "auto",
+        reasoning: { encryptedContent: true },
         textVerbosity: "low",
         text: { outputFormat: "plain" },
         nestedValue: { camelCase: true },
       }),
     ).toEqual({
-      reasoning_effort: "high",
+      reasoning: { encrypted_content: true, effort: "high", summary: "auto" },
       text: { output_format: "plain", verbosity: "low" },
       nested_value: { camel_case: true },
     })
@@ -138,8 +140,8 @@ describe("ConfigProviderOptionsV1", () => {
       body: { trace: true },
       settings: { resourceName: "resource" },
     })
-    expect(lowerer.request({ reasoningEffort: "high", textVerbosity: "low" })).toEqual({
-      reasoning_effort: "high",
+    expect(lowerer.request({ reasoningEffort: "high", reasoningSummary: "auto", textVerbosity: "low" })).toEqual({
+      reasoning: { effort: "high", summary: "auto" },
       text: { verbosity: "low" },
     })
   })

@@ -327,6 +327,78 @@ Recent work
     ])
   })
 
+  test("drops provider-native continuation metadata from failed assistant turns", () => {
+    const messages = toLLMMessages(
+      [
+        SessionMessage.Assistant.make({
+          id: id("assistant-failed"),
+          type: "assistant",
+          agent: "build",
+          model: { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") },
+          content: [
+            SessionMessage.AssistantReasoning.make({
+              type: "reasoning",
+              id: "reasoning-failed",
+              text: "Partial thought",
+              providerMetadata: { openai: { itemId: "rs_failed", reasoningEncryptedContent: null } },
+            }),
+            SessionMessage.AssistantTool.make({
+              type: "tool",
+              id: "hosted-failed",
+              name: "web_search",
+              provider: {
+                executed: true,
+                metadata: { openai: { itemId: "call_failed" } },
+                resultMetadata: { openai: { itemId: "result_failed" } },
+              },
+              state: SessionMessage.ToolStateError.make({
+                status: "error",
+                input: { query: "Effect" },
+                error: { type: "unknown", message: "Provider turn interrupted" },
+                content: [],
+                structured: {},
+              }),
+              time: { created, completed: created },
+            }),
+          ],
+          finish: "error",
+          error: { type: "unknown", message: "Provider turn interrupted" },
+          time: { created, completed: created },
+        }),
+      ],
+      model,
+    )
+
+    expect(messages[0]?.content).toEqual([
+      { type: "reasoning", text: "Partial thought", providerMetadata: undefined },
+      {
+        type: "tool-call",
+        id: "hosted-failed",
+        name: "web_search",
+        input: { query: "Effect" },
+        providerExecuted: true,
+        providerMetadata: undefined,
+      },
+      {
+        type: "tool-result",
+        id: "hosted-failed",
+        name: "web_search",
+        result: {
+          type: "error",
+          value: {
+            error: { type: "unknown", message: "Provider turn interrupted" },
+            content: [],
+            structured: {},
+          },
+        },
+        providerExecuted: true,
+        cache: undefined,
+        metadata: undefined,
+        providerMetadata: undefined,
+      },
+    ])
+  })
+
   test("drops provider-native continuation metadata after a model switch", () => {
     const messages = toLLMMessages(
       [

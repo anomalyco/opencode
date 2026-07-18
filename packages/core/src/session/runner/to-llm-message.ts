@@ -70,17 +70,28 @@ const toolResult = (tool: SessionMessage.AssistantTool, providerMetadata: Provid
 const assistant = (message: SessionMessage.Assistant, model: Model) => {
   const sameModel =
     String(message.model.providerID) === String(model.provider) && String(message.model.id) === String(model.id)
+  const reuseProviderMetadata = sameModel && message.error === undefined
   const content = message.content.flatMap((item): ContentPart[] => {
     if (item.type === "text") return [{ type: "text", text: item.text }]
     if (item.type === "reasoning")
       return sameModel
-        ? [{ type: "reasoning", text: item.text, providerMetadata: item.providerMetadata }]
+        ? [
+            {
+              type: "reasoning",
+              text: item.text,
+              providerMetadata: reuseProviderMetadata ? item.providerMetadata : undefined,
+            },
+          ]
         : item.text.length > 0
           ? [{ type: "text", text: item.text }]
           : []
-    const call = toolCall(item, sameModel ? item.provider?.metadata : undefined)
-    const result = toolResult(item, sameModel ? (item.provider?.resultMetadata ?? item.provider?.metadata) : undefined)
-    return item.provider?.executed === true && result ? [call, result] : [call]
+    const call = toolCall(item, reuseProviderMetadata ? item.provider?.metadata : undefined)
+    if (item.provider?.executed !== true) return [call]
+    const result = toolResult(
+      item,
+      reuseProviderMetadata ? (item.provider.resultMetadata ?? item.provider.metadata) : undefined,
+    )
+    return result ? [call, result] : [call]
   })
   const meaningful = content.filter((part) => {
     if (part.type === "text") return part.text !== ""
@@ -89,7 +100,9 @@ const assistant = (message: SessionMessage.Assistant, model: Model) => {
   })
   const results = message.content
     .filter((item): item is SessionMessage.AssistantTool => item.type === "tool" && item.provider?.executed !== true)
-    .map((item) => toolResult(item, sameModel ? (item.provider?.resultMetadata ?? item.provider?.metadata) : undefined))
+    .map((item) =>
+      toolResult(item, reuseProviderMetadata ? (item.provider?.resultMetadata ?? item.provider?.metadata) : undefined),
+    )
     .filter((message) => message !== undefined)
     .map(Message.tool)
   if (meaningful.length === 0) return results

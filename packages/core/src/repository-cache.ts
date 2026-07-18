@@ -5,6 +5,7 @@ import { Git } from "./git"
 import { Global } from "./global"
 import { Repository } from "./repository"
 import { AbsolutePath } from "./schema"
+import { makeGlobalNode } from "./effect/app-node"
 import { EffectFlock } from "./util/effect-flock"
 
 export type Result = {
@@ -120,7 +121,7 @@ export const validateBranch = Effect.fn("RepositoryCache.validateBranch")(functi
   })
 })
 
-export const layer: Layer.Layer<Service, never, FSUtil.Service | Git.Service | EffectFlock.Service | Global.Service> =
+const layer: Layer.Layer<Service, never, FSUtil.Service | Git.Service | EffectFlock.Service | Global.Service> =
   Layer.effect(
     Service,
     Effect.gen(function* () {
@@ -222,12 +223,11 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Git.Service | E
     }),
   )
 
-export const defaultLayer: Layer.Layer<Service> = layer.pipe(
-  Layer.provide(EffectFlock.defaultLayer),
-  Layer.provide(FSUtil.defaultLayer),
-  Layer.provide(Git.defaultLayer),
-  Layer.provide(Global.defaultLayer),
-)
+export const node = makeGlobalNode({
+  service: Service,
+  layer,
+  deps: [EffectFlock.node, FSUtil.node, Git.node, Global.node],
+})
 
 function statusForRepository(input: { reuse: boolean; refresh?: boolean; branchMatches?: boolean }) {
   if (!input.reuse) return "cloned" as const

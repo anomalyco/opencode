@@ -3,21 +3,13 @@ import {
   AbsolutePath,
   DateTimeUtcFromMillis,
   NonNegativeInt,
-  optionalOmitUndefined,
+  optional,
   PositiveInt,
   RelativePath,
-  withStatics,
+  statics,
 } from "@opencode-ai/schema/schema"
 
-export {
-  AbsolutePath,
-  DateTimeUtcFromMillis,
-  NonNegativeInt,
-  optionalOmitUndefined,
-  PositiveInt,
-  RelativePath,
-  withStatics,
-}
+export { AbsolutePath, DateTimeUtcFromMillis, NonNegativeInt, optional, PositiveInt, RelativePath, statics }
 
 /**
  * Strip `readonly` from a nested type. Stand-in for `effect`'s `Types.DeepMutable`

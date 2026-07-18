@@ -12,7 +12,10 @@ import { ModelV2 } from "../model"
 import { PluginV2 } from "../plugin"
 import { ProviderV2 } from "../provider"
 import { Reference } from "../reference"
+import type { DeepMutable } from "../schema"
 import { SkillV2 } from "../skill"
+
+const mutable = <T>(value: T) => value as DeepMutable<T>
 
 export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Interface) {
   const agents = yield* AgentV2.Service
@@ -30,8 +33,8 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
       transform: (callback) =>
         agents.transform((draft) =>
           callback({
-            list: draft.list,
-            get: (id) => draft.get(AgentV2.ID.make(id)),
+            list: () => mutable(draft.list()),
+            get: (id) => mutable(draft.get(AgentV2.ID.make(id))),
             default: (id) => draft.default(id === undefined ? undefined : AgentV2.ID.make(id)),
             update: (id, update) => draft.update(AgentV2.ID.make(id), update),
             remove: (id) => draft.remove(AgentV2.ID.make(id)),
@@ -42,7 +45,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
       sdk: (callback) =>
         aisdk.hook.sdk((event) => {
           const output = {
-            model: event.model,
+            model: mutable(event.model),
             package: event.package,
             options: event.options,
             sdk: event.sdk,
@@ -55,7 +58,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
       language: (callback) =>
         aisdk.hook.language((event) => {
           const output = {
-            model: event.model,
+            model: mutable(event.model),
             sdk: event.sdk,
             options: event.options,
             language: event.language,
@@ -72,13 +75,14 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
         catalog.transform((draft) =>
           callback({
             provider: {
-              list: draft.provider.list,
-              get: (id) => draft.provider.get(ProviderV2.ID.make(id)),
+              list: () => mutable(draft.provider.list()),
+              get: (id) => mutable(draft.provider.get(ProviderV2.ID.make(id))),
               update: (id, update) => draft.provider.update(ProviderV2.ID.make(id), update),
               remove: (id) => draft.provider.remove(ProviderV2.ID.make(id)),
             },
             model: {
-              get: (providerID, modelID) => draft.model.get(ProviderV2.ID.make(providerID), ModelV2.ID.make(modelID)),
+              get: (providerID, modelID) =>
+                mutable(draft.model.get(ProviderV2.ID.make(providerID), ModelV2.ID.make(modelID))),
               update: (providerID, modelID, update) =>
                 draft.model.update(ProviderV2.ID.make(providerID), ModelV2.ID.make(modelID), update),
               remove: (providerID, modelID) =>
@@ -108,12 +112,12 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
       transform: (callback) =>
         integration.transform((draft) =>
           callback({
-            list: draft.list,
-            get: (id) => draft.get(Integration.ID.make(id)),
+            list: () => mutable(draft.list()),
+            get: (id) => mutable(draft.get(Integration.ID.make(id))),
             update: (id, update) => draft.update(Integration.ID.make(id), update),
             remove: (id) => draft.remove(Integration.ID.make(id)),
             method: {
-              list: (id) => draft.method.list(Integration.ID.make(id)),
+              list: (id) => mutable(draft.method.list(Integration.ID.make(id))),
               update: (input) => {
                 if ("authorize" in input) {
                   const methodID = Integration.MethodID.make(input.method.id)

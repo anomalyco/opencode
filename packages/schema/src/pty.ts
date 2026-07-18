@@ -1,17 +1,21 @@
 export * as Pty from "./pty"
 
 import { Schema } from "effect"
+import { optional } from "./schema"
 import { define, inventory } from "./event"
 import { ascending } from "./identifier"
-import { NonNegativeInt, PositiveInt } from "./schema"
-import { withStatics } from "./schema"
+import { NonNegativeInt, PositiveInt, statics } from "./schema"
 
 const IDSchema = Schema.String.check(Schema.isStartsWith("pty")).pipe(Schema.brand("PtyID"))
 
 export const ID = IDSchema.pipe(
-  withStatics((schema: typeof IDSchema) => ({
-    ascending: (id?: string) => schema.make(id ?? "pty_" + ascending()),
-  })),
+  statics((schema: typeof IDSchema) => {
+    const create = () => schema.make("pty_" + ascending())
+    return {
+      create,
+      ascending: (id?: string) => (id === undefined ? create() : schema.make(id)),
+    }
+  }),
 )
 export type ID = typeof ID.Type
 
@@ -23,33 +27,32 @@ export const Info = Schema.Struct({
   cwd: Schema.String,
   status: Schema.Literals(["running", "exited"]),
   pid: NonNegativeInt,
-  exitCode: Schema.optional(NonNegativeInt),
+  exitCode: optional(NonNegativeInt),
 }).annotate({ identifier: "Pty" })
-export const PtyInfo = Info
+export interface Info extends Schema.Schema.Type<typeof Info> {}
 
 const Created = define({ type: "pty.created", schema: { info: Info } })
 const Updated = define({ type: "pty.updated", schema: { info: Info } })
 const Exited = define({ type: "pty.exited", schema: { id: ID, exitCode: NonNegativeInt } })
 const Deleted = define({ type: "pty.deleted", schema: { id: ID } })
 export const Event = { Created, Updated, Exited, Deleted, Definitions: inventory(Created, Updated, Exited, Deleted) }
-export const PtyEvent = Event
 
 export const CreateInput = Schema.Struct({
-  command: Schema.optional(Schema.String),
-  args: Schema.optional(Schema.Array(Schema.String)),
-  cwd: Schema.optional(Schema.String),
-  title: Schema.optional(Schema.String),
-  env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+  command: optional(Schema.String),
+  args: optional(Schema.Array(Schema.String)),
+  cwd: optional(Schema.String),
+  title: optional(Schema.String),
+  env: optional(Schema.Record(Schema.String, Schema.String)),
 })
-export type CreateInput = typeof CreateInput.Type
+export interface CreateInput extends Schema.Schema.Type<typeof CreateInput> {}
 
 export const UpdateInput = Schema.Struct({
-  title: Schema.optional(Schema.String),
-  size: Schema.optional(
+  title: optional(Schema.String),
+  size: optional(
     Schema.Struct({
       rows: PositiveInt,
       cols: PositiveInt,
     }),
   ),
 })
-export type UpdateInput = typeof UpdateInput.Type
+export interface UpdateInput extends Schema.Schema.Type<typeof UpdateInput> {}

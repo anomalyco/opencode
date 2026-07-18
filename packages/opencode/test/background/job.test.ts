@@ -1,9 +1,10 @@
 import { describe, expect } from "bun:test"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Deferred, Effect } from "effect"
 import { BackgroundJob } from "@/background/job"
 import { testEffect } from "../lib/effect"
 
-const it = testEffect(BackgroundJob.defaultLayer)
+const it = testEffect(LayerNode.compile(BackgroundJob.node))
 
 describe("background.job", () => {
   it.instance("tracks started jobs through completion", () =>

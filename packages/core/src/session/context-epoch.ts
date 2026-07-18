@@ -9,7 +9,7 @@ import { ContextSnapshotDecodeError } from "./error"
 import { SessionEvent } from "./event"
 import { SessionHistory } from "./history"
 import { SessionInput } from "./input"
-import { SessionMessageID } from "./message-id"
+import { SessionMessage } from "./message"
 import { SessionSchema } from "./schema"
 import { SessionContextEpochTable } from "./sql"
 
@@ -71,7 +71,7 @@ const prepareOnce = Effect.fnUntraced(function* (
 
   yield* events.publish(
     SessionEvent.ContextUpdated,
-    { sessionID, messageID: SessionMessageID.ID.create(), timestamp: yield* DateTime.now, text: result.text },
+    { sessionID, messageID: SessionMessage.ID.create(), timestamp: yield* DateTime.now, text: result.text },
     { commit: () => advance(db, sessionID, result.snapshot).pipe(Effect.orDie) },
   )
   return { baseline: stored.baseline, baselineSeq: stored.baseline_seq }
