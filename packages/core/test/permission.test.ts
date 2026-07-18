@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Cause, Deferred, Effect, Fiber, Layer } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Layer } from "effect"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -263,6 +263,36 @@ describe("PermissionV2", () => {
       yield* Fiber.join(fiber)
       expect(yield* service.list()).toEqual([])
       expect(yield* service.get(request.id)).toBeUndefined()
+    }),
+  )
+
+  it.effect("serializes competing replies for the same permission", () =>
+    Effect.gen(function* () {
+      yield* setup()
+      const { service, request } = yield* waitForRequest()
+      const events = yield* EventV2.Service
+      const replies = new Array<PermissionV2.Reply>()
+      const unsubscribe = yield* events.listen((event) => {
+        if (event.type !== PermissionV2.Event.Replied.type) return Effect.void
+        return Effect.sync(() => {
+          replies.push((event.data as { readonly reply: PermissionV2.Reply }).reply)
+        }).pipe(Effect.andThen(Effect.promise(() => Bun.sleep(10))))
+      })
+      yield* Effect.addFinalizer(() => unsubscribe)
+
+      const exits = yield* Effect.all(
+        [
+          service.reply({ requestID: request.id, reply: "once" }).pipe(Effect.exit),
+          service.reply({ requestID: request.id, reply: "reject" }).pipe(Effect.exit),
+        ],
+        { concurrency: "unbounded" },
+      )
+
+      expect(exits.filter(Exit.isSuccess)).toHaveLength(1)
+      expect(exits.filter(Exit.isFailure)).toHaveLength(1)
+      if (Exit.isFailure(exits[0])) expect(exits[0].cause.toString()).toContain("PermissionV2.NotFoundError")
+      if (Exit.isFailure(exits[1])) expect(exits[1].cause.toString()).toContain("PermissionV2.NotFoundError")
+      expect(replies).toHaveLength(1)
     }),
   )
 

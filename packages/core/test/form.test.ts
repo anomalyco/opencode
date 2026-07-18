@@ -343,4 +343,34 @@ describe("Form", () => {
       expect(yield* service.state(formID)).toEqual({ status: "answered", answer: { name: "Ava" } })
     }),
   )
+
+  it.effect("serializes competing settlements for the same form", () =>
+    Effect.gen(function* () {
+      const service = yield* Form.Service
+      const events = yield* EventV2.Service
+      yield* service.create(input)
+      const terminal = new Array<string>()
+      const unsubscribe = yield* events.listen((event) => {
+        if (event.type !== Form.Event.Replied.type && event.type !== Form.Event.Cancelled.type) return Effect.void
+        return Effect.sync(() => {
+          terminal.push(event.type)
+        }).pipe(Effect.andThen(Effect.promise(() => Bun.sleep(10))))
+      })
+      yield* Effect.addFinalizer(() => unsubscribe)
+
+      const exits = yield* Effect.all(
+        [
+          service.reply({ id: formID, answer: { name: "Ava" } }).pipe(Effect.exit),
+          service.cancel(formID).pipe(Effect.exit),
+        ],
+        { concurrency: "unbounded" },
+      )
+
+      expect(exits.filter(Exit.isSuccess)).toHaveLength(1)
+      expect(exits.filter(Exit.isFailure)).toHaveLength(1)
+      if (Exit.isFailure(exits[0])) expect(exits[0].cause.toString()).toContain("Form.AlreadySettledError")
+      if (Exit.isFailure(exits[1])) expect(exits[1].cause.toString()).toContain("Form.AlreadySettledError")
+      expect(terminal).toHaveLength(1)
+    }),
+  )
 })

@@ -3,6 +3,7 @@ export * as QuestionV2 from "./question"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Context, Deferred, Effect, Layer, Schema } from "effect"
 import { Question } from "@opencode-ai/schema/question"
+import { KeyedMutex } from "./effect/keyed-mutex"
 import { EventV2 } from "./event"
 import { SessionSchema } from "./session/schema"
 
@@ -77,6 +78,7 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const events = yield* EventV2.Service
     const pending = new Map<ID, Pending>()
+    const settlements = KeyedMutex.makeUnsafe<ID>()
 
     yield* Effect.addFinalizer(() =>
       Effect.forEach(pending.values(), (item) => Deferred.fail(item.deferred, new RejectedError()), {
@@ -121,7 +123,7 @@ const layer = Layer.effect(
           })
           yield* Deferred.succeed(existing.deferred, input.answers)
           pending.delete(input.requestID)
-        }),
+        }).pipe(settlements.withLock(input.requestID)),
       ),
     )
 
@@ -136,7 +138,7 @@ const layer = Layer.effect(
           })
           yield* Deferred.fail(existing.deferred, new RejectedError())
           pending.delete(requestID)
-        }),
+        }).pipe(settlements.withLock(requestID)),
       ),
     )
 
