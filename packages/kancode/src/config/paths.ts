@@ -8,25 +8,31 @@ import { unique } from "remeda"
 import * as Effect from "effect/Effect"
 import { FSUtil } from "@kancode/core/fs-util"
 
-/** OpenCode project basenames (jsonc preferred over json within the family). */
+/** Legacy OpenCode basenames kept for one-time migration scans only. */
 export const OPENCODE_CONFIG_FILE_CANDIDATES = ["opencode.jsonc", "opencode.json"] as const
 
-/** KanCode project basenames (jsonc preferred over json within the family). */
+/** KanCode project/user basenames (jsonc preferred over json within the family). */
 export const KANCODE_CONFIG_FILE_CANDIDATES = ["kancode.jsonc", "kancode.json"] as const
 
-/**
- * Project-scope basenames for discovery/scans.
- * Prefer KanCode names first for writable helpers; merge load order is OpenCode then KanCode.
- */
-export const CONFIG_FILE_CANDIDATES = [...KANCODE_CONFIG_FILE_CANDIDATES, ...OPENCODE_CONFIG_FILE_CANDIDATES] as const
+/** Project-scope basenames for config load and writable helpers. */
+export const CONFIG_FILE_CANDIDATES = [...KANCODE_CONFIG_FILE_CANDIDATES] as const
 
-/** User-scope (XDG/global, home) basenames: KanCode only — no opencode.json fallback. */
+/** User-scope (XDG/global, home) basenames: KanCode only. */
 export const USER_CONFIG_FILE_CANDIDATES = ["kancode.jsonc", "kancode.json"] as const
 
-/** Project dirs: load `.opencode` then `.kancode` so KanCode wins on merge conflict. */
-export const PROJECT_DIR_TARGETS = [".opencode", ".kancode"] as const
+/**
+ * Migration scans may still find legacy OpenCode filenames so tui keys can be
+ * extracted. Runtime project load does not use this list.
+ */
+export const MIGRATION_CONFIG_FILE_CANDIDATES = [
+  ...KANCODE_CONFIG_FILE_CANDIDATES,
+  ...OPENCODE_CONFIG_FILE_CANDIDATES,
+] as const
 
-/** User-scope home project dir: `.kancode` only — do not discover `~/.opencode`. */
+/** Project config dir: `.kancode` only — project `.opencode` is not discovered. */
+export const PROJECT_DIR_TARGETS = [".kancode"] as const
+
+/** User-scope home project dir: `.kancode` only. */
 export const USER_DIR_TARGETS = [".kancode"] as const
 
 export function preferredConfigFile(dir: string, candidates: readonly string[] = CONFIG_FILE_CANDIDATES) {
@@ -42,23 +48,17 @@ export function preferredUserConfigFile(dir: string) {
 }
 
 /**
- * Project-scope files in one directory, merge order: OpenCode first, then KanCode
- * (KanCode overrides). Within each family, jsonc wins over json (one file per family).
+ * Project-scope config files in one directory (at most one: jsonc preferred over json).
  */
 export function projectConfigFilesInDirectory(dir: string) {
-  const files: string[] = []
-  const opencode = preferredConfigFile(dir, OPENCODE_CONFIG_FILE_CANDIDATES)
-  if (opencode) files.push(opencode)
-  const kancode = preferredConfigFile(dir, KANCODE_CONFIG_FILE_CANDIDATES)
-  if (kancode) files.push(kancode)
-  return files
+  const file = preferredConfigFile(dir, KANCODE_CONFIG_FILE_CANDIDATES)
+  return file ? [file] : []
 }
 
 /**
  * Path to mutate for config writes. Without `project`, treats `baseDir` as
- * user/global scope (KanCode filenames only). With `project: true`, dual-reads
- * KanCode/OpenCode names and also checks `.kancode/` then `.opencode/`.
- * Defaults to `kancode.json` so writers do not create a shadowed OpenCode file.
+ * user/global scope. With `project: true`, checks root then `.kancode/` for an
+ * existing KanCode config file. Defaults to `kancode.json`.
  */
 export function resolveWritableConfigFile(baseDir: string, opts?: { project?: boolean }) {
   if (opts?.project) {
@@ -66,8 +66,6 @@ export function resolveWritableConfigFile(baseDir: string, opts?: { project?: bo
     if (root) return root
     const kancode = preferredConfigFile(path.join(baseDir, ".kancode"))
     if (kancode) return kancode
-    const opencode = preferredConfigFile(path.join(baseDir, ".opencode"))
-    if (opencode) return opencode
     return path.join(baseDir, "kancode.json")
   }
   const root = preferredUserConfigFile(baseDir)
@@ -75,20 +73,13 @@ export function resolveWritableConfigFile(baseDir: string, opts?: { project?: bo
   return path.join(baseDir, "kancode.json")
 }
 
-/**
- * Project config dir for writes: reuse existing `.kancode` or `.opencode`,
- * otherwise create `.kancode`.
- */
+/** Project config dir for writes: always `.kancode`. */
 export function resolveWritableProjectDir(baseDir: string) {
-  const kancode = path.join(baseDir, ".kancode")
-  if (existsSync(kancode)) return kancode
-  const opencode = path.join(baseDir, ".opencode")
-  if (existsSync(opencode)) return opencode
-  return kancode
+  return path.join(baseDir, ".kancode")
 }
 
 export function isProjectConfigDir(dir: string) {
-  return dir.endsWith(".opencode") || dir.endsWith(".kancode") || dir === Flag.OPENCODE_CONFIG_DIR
+  return dir.endsWith(".kancode") || dir === Flag.OPENCODE_CONFIG_DIR
 }
 
 export const files = Effect.fn("ConfigPaths.projectFiles")(function* (
@@ -105,8 +96,7 @@ export const files = Effect.fn("ConfigPaths.projectFiles")(function* (
 })
 
 /**
- * Walk up project ancestry and include both OpenCode and KanCode config files
- * per directory (merge-include; OpenCode then KanCode so KanCode wins).
+ * Walk up project ancestry and include KanCode config files per directory.
  */
 export const configFiles = Effect.fn("ConfigPaths.configFiles")(function* (directory: string, worktree?: string) {
   const afs = yield* FSUtil.Service
@@ -137,7 +127,7 @@ export const directories = Effect.fn("ConfigPaths.directories")(function* (direc
           stop: worktree,
         })
       : []),
-    // User-scope home: `.kancode` only (never `~/.opencode`).
+    // User-scope home: `.kancode` only.
     ...(yield* afs.up({
       targets: [...USER_DIR_TARGETS],
       start: Global.Path.home,
@@ -151,9 +141,9 @@ export function fileInDirectory(dir: string, name: string) {
   return [path.join(dir, `${name}.json`), path.join(dir, `${name}.jsonc`)]
 }
 
-/** All KanCode/OpenCode config paths in a directory (for project migration scans). */
+/** All KanCode/legacy OpenCode config paths in a directory (for migration scans). */
 export function appConfigFilesInDirectory(dir: string) {
-  return CONFIG_FILE_CANDIDATES.map((name) => path.join(dir, name))
+  return MIGRATION_CONFIG_FILE_CANDIDATES.map((name) => path.join(dir, name))
 }
 
 /** User-scope config paths only (global/XDG migration scans). */

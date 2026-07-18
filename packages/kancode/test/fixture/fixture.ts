@@ -94,7 +94,7 @@ export async function tmpdir<T>(options?: TmpDirOptions<T>) {
   }
   if (options?.config) {
     await Bun.write(
-      path.join(dirpath, "opencode.json"),
+      path.join(dirpath, "kancode.json"),
       JSON.stringify({
         $schema: "https://raw.githubusercontent.com/puetsua/kancode/main/schemas/kancode.schema.json",
         ...options.config,
@@ -153,7 +153,7 @@ export function tmpdirScoped<E = never, R = never>(options?: {
       const resolved = typeof options.config === "function" ? options.config() : options.config
       yield* Effect.promise(() =>
         fs.writeFile(
-          path.join(dir, "opencode.json"),
+          path.join(dir, "kancode.json"),
           JSON.stringify({ $schema: "https://raw.githubusercontent.com/puetsua/kancode/main/schemas/kancode.schema.json", ...resolved }),
         ),
       )

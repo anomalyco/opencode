@@ -7,7 +7,7 @@ Daily rules for agents. Package-level `AGENTS.md` files add package-specific det
 - Display name: **KanCode** (`kancode`). Workspace packages use `@kancode/*`; the app lives in `packages/kancode` (`@kancode/cli`). Effect service IDs use `@kancode/...`. Keep provider id `"opencode"` (OpenCode Zen) as the upstream provider identity — do not rename that catalog id.
 - TUI/CLI-focused. Do not assume web/desktop/console packages (`packages/app`, `packages/desktop`, `packages/web`, `packages/console`) still exist.
 - Default branch: `main` (diff against `main` / `origin/main`).
-- Config: project/worktree **merge-includes** `opencode.json(c)` then `kancode.json(c)` (KanCode wins) and both `.opencode/` / `.kancode/` (`.kancode` wins). **User scope** (XDG/global, `~/.kancode`, data/cache/state/tmp/managed) is KanCode-only — no OpenCode user fallback. Honor `OPENCODE_*` and `KANCODE_*` (`KANCODE_*` wins).
+- Config: project/worktree and user scope load `kancode.json(c)` only (no `opencode.json(c)`). Project dir is `.kancode/` only — no project `.opencode/` discovery. Use the built-in `import-opencode` skill to migrate skills/commands/agents/themes/plans from legacy `.opencode/`. User scope (XDG/global, `~/.kancode`, data/cache/state/tmp/managed) has no `~/.opencode` fallback. Honor `OPENCODE_*` and `KANCODE_*` (`KANCODE_*` wins).
 
 ## OpenSpec
 

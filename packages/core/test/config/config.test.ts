@@ -171,13 +171,13 @@ describe("Config", () => {
           yield* Effect.promise(() =>
             Promise.all([
               fs.writeFile(
-                path.join(tmp.path, "opencode.json"),
+                path.join(tmp.path, "kancode.json"),
                 JSON.stringify({ $schema: "base", providers: { base: provider } }),
               ),
               fs.writeFile(
-                path.join(tmp.path, "opencode.jsonc"),
+                path.join(tmp.path, "kancode.jsonc"),
                 `{
-                  // Preferred over opencode.json in the same directory.
+                  // Preferred over kancode.json in the same directory.
                   "$schema": "last",
                   "providers": { "last": ${JSON.stringify(provider)} },
                 }`,
@@ -189,12 +189,12 @@ describe("Config", () => {
             const documents = (yield* config.entries()).filter((entry) => entry.type === "document")
 
             expect(documents).toHaveLength(1)
-            expect(documents[0]?.path).toBe(path.join(tmp.path, "opencode.jsonc"))
+            expect(documents[0]?.path).toBe(path.join(tmp.path, "kancode.jsonc"))
             expect(documents[0]?.info.$schema).toBe("last")
             expect(documents[0]?.info.providers?.last).toBeInstanceOf(ConfigProvider.Info)
 
             yield* Effect.promise(() =>
-              fs.writeFile(path.join(tmp.path, "opencode.jsonc"), JSON.stringify({ $schema: "changed" })),
+              fs.writeFile(path.join(tmp.path, "kancode.jsonc"), JSON.stringify({ $schema: "changed" })),
             )
             expect(
               (yield* config.entries())
@@ -236,7 +236,7 @@ describe("Config", () => {
     ).pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
-          const file = path.join(tmp.path, "opencode.json")
+          const file = path.join(tmp.path, "kancode.json")
           const contents = JSON.stringify({
             shell: "/bin/zsh",
             experimental: { policies: [{ effect: "deny", action: "provider.use", resource: "openai" }] },
@@ -271,7 +271,7 @@ describe("Config", () => {
         Effect.gen(function* () {
           yield* Effect.promise(() =>
             fs.writeFile(
-              path.join(tmp.path, "opencode.json"),
+              path.join(tmp.path, "kancode.json"),
               JSON.stringify({
                 shell: "/bin/bash",
                 model: "anthropic/claude",
@@ -459,7 +459,7 @@ describe("Config", () => {
         Effect.gen(function* () {
           yield* Effect.promise(() =>
             fs.writeFile(
-              path.join(tmp.path, "opencode.json"),
+              path.join(tmp.path, "kancode.json"),
               JSON.stringify({
                 reference: {
                   local: { path: "../library" },
@@ -495,7 +495,7 @@ describe("Config", () => {
         Effect.gen(function* () {
           yield* Effect.promise(() =>
             fs.writeFile(
-              path.join(tmp.path, "opencode.json"),
+              path.join(tmp.path, "kancode.json"),
               JSON.stringify({
                 shell: "/bin/zsh",
                 default_agent: "reviewer",
@@ -673,8 +673,8 @@ describe("Config", () => {
         Effect.gen(function* () {
           yield* Effect.promise(() =>
             Promise.all([
-              fs.writeFile(path.join(tmp.path, "opencode.json"), JSON.stringify({ $schema: "base" })),
-              fs.writeFile(path.join(tmp.path, "opencode.jsonc"), "{ invalid"),
+              fs.writeFile(path.join(tmp.path, "kancode.json"), JSON.stringify({ $schema: "base" })),
+              fs.writeFile(path.join(tmp.path, "kancode.jsonc"), "{ invalid"),
             ]),
           )
           return yield* Effect.gen(function* () {
@@ -705,7 +705,7 @@ describe("Config", () => {
               }),
             )
             await fs.writeFile(
-              path.join(tmp.path, "opencode.json"),
+              path.join(tmp.path, "kancode.json"),
               JSON.stringify({
                 experimental: { policies: [{ effect: "allow", action: "provider.use", resource: "openai" }] },
               }),
@@ -722,7 +722,7 @@ describe("Config", () => {
     ),
   )
 
-  it.live("loads global, ancestor, and .opencode configuration up to the project boundary", () =>
+  it.live("loads global, ancestor, and .kancode configuration up to the project boundary", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
@@ -736,19 +736,24 @@ describe("Config", () => {
           yield* Effect.promise(async () => {
             await fs.mkdir(global, { recursive: true })
             await fs.mkdir(directory, { recursive: true })
-            await fs.mkdir(path.join(root, ".opencode"), { recursive: true })
+            await fs.mkdir(path.join(root, ".kancode"), { recursive: true })
+            await fs.mkdir(path.join(directory, ".kancode"), { recursive: true })
             await fs.mkdir(path.join(directory, ".opencode"), { recursive: true })
             await Promise.all([
-              fs.writeFile(path.join(tmp.path, "opencode.json"), JSON.stringify({ $schema: "outside" })),
+              fs.writeFile(path.join(tmp.path, "kancode.json"), JSON.stringify({ $schema: "outside" })),
               fs.writeFile(path.join(global, "kancode.json"), JSON.stringify({ $schema: "global" })),
               fs.writeFile(path.join(global, "opencode.json"), JSON.stringify({ $schema: "global-opencode-ignored" })),
-              fs.writeFile(path.join(root, "opencode.json"), JSON.stringify({ $schema: "root" })),
-              fs.writeFile(path.join(parent, "opencode.jsonc"), JSON.stringify({ $schema: "parent" })),
-              fs.writeFile(path.join(directory, "opencode.json"), JSON.stringify({ $schema: "directory" })),
-              fs.writeFile(path.join(root, ".opencode", "opencode.json"), JSON.stringify({ $schema: "root-dot" })),
+              fs.writeFile(path.join(root, "kancode.json"), JSON.stringify({ $schema: "root" })),
+              fs.writeFile(path.join(parent, "kancode.jsonc"), JSON.stringify({ $schema: "parent" })),
+              fs.writeFile(path.join(directory, "kancode.json"), JSON.stringify({ $schema: "directory" })),
+              fs.writeFile(path.join(root, ".kancode", "kancode.json"), JSON.stringify({ $schema: "root-dot" })),
               fs.writeFile(
-                path.join(directory, ".opencode", "opencode.jsonc"),
+                path.join(directory, ".kancode", "kancode.jsonc"),
                 JSON.stringify({ $schema: "directory-dot" }),
+              ),
+              fs.writeFile(
+                path.join(directory, ".opencode", "kancode.json"),
+                JSON.stringify({ $schema: "opencode-ignored" }),
               ),
             ])
           })
@@ -760,8 +765,8 @@ describe("Config", () => {
 
             expect(entries.filter((entry) => entry.type === "directory").map((entry) => entry.path)).toEqual([
               AbsolutePath.make(global),
-              AbsolutePath.make(path.join(root, ".opencode")),
-              AbsolutePath.make(path.join(directory, ".opencode")),
+              AbsolutePath.make(path.join(root, ".kancode")),
+              AbsolutePath.make(path.join(directory, ".kancode")),
             ])
             expect(documents.map((document) => document.info.$schema)).toEqual([
               "global",
@@ -778,9 +783,9 @@ describe("Config", () => {
               "parent",
               "directory",
               "root-dot",
-              AbsolutePath.make(path.join(root, ".opencode")),
+              AbsolutePath.make(path.join(root, ".kancode")),
               "directory-dot",
-              AbsolutePath.make(path.join(directory, ".opencode")),
+              AbsolutePath.make(path.join(directory, ".kancode")),
             ])
           }).pipe(
             Effect.provide(
@@ -795,7 +800,7 @@ describe("Config", () => {
     ),
   )
 
-  it.live("merges kancode.json over opencode.json and loads both project dirs", () =>
+  it.live("loads kancode.json from .kancode only and ignores .opencode and opencode.json", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
@@ -816,8 +821,8 @@ describe("Config", () => {
               fs.writeFile(path.join(directory, "kancode.json"), JSON.stringify({ $schema: "dir-kancode" })),
               fs.writeFile(path.join(directory, "opencode.json"), JSON.stringify({ $schema: "dir-opencode" })),
               fs.writeFile(
-                path.join(directory, ".opencode", "opencode.json"),
-                JSON.stringify({ $schema: "dot-opencode" }),
+                path.join(directory, ".opencode", "kancode.json"),
+                JSON.stringify({ $schema: "dot-opencode-ignored" }),
               ),
               fs.writeFile(
                 path.join(directory, ".kancode", "kancode.json"),
@@ -833,14 +838,11 @@ describe("Config", () => {
 
             expect(entries.filter((entry) => entry.type === "directory").map((entry) => entry.path)).toEqual([
               AbsolutePath.make(global),
-              AbsolutePath.make(path.join(directory, ".opencode")),
               AbsolutePath.make(path.join(directory, ".kancode")),
             ])
             expect(documents.map((document) => document.info.$schema)).toEqual([
               "global-kancode",
-              "dir-opencode",
               "dir-kancode",
-              "dot-opencode",
               "dot-kancode",
             ])
             expect(Config.latest(entries, "$schema")).toBe("dot-kancode")

@@ -41,12 +41,12 @@ CLI 腳本名稱為 `kancode`。
 
 ### 設定相容性
 
-KanCode 會繼續讀取 OpenCode 設定：
+KanCode 僅載入 KanCode 設定路徑（不探索專案 `.opencode/`）：
 
 | 類型 | 優先順序 |
 | --- | --- |
-| 專案設定檔 | 兩者都存在時一併載入：先 `opencode.json(c)`，再疊上 `kancode.json(c)`（衝突時 KanCode 勝出；同家族內 `.jsonc` 優先於 `.json`） |
-| 專案目錄 | 同時載入 `.opencode/` 與 `.kancode/`；衝突時 `.kancode` 優先 |
+| 專案設定檔 | 僅 `kancode.json(c)`（同家族內 `.jsonc` 優先於 `.json`）— **不**讀取 `opencode.json(c)` |
+| 專案目錄 | 僅 `.kancode/` — **不**載入專案 `.opencode/`。可用內建 `import-opencode` skill 從舊的 `.opencode/` 匯入 skills／commands／agents／themes／plans |
 | 使用者範圍（XDG／全域、`~/.kancode`） | 僅 KanCode：`kancode.json(c)` 與 `.kancode/` — **不**讀取 `opencode.json` 或 `~/.opencode` |
 | 環境變數 | 繼續支援 `OPENCODE_*`；`KANCODE_*` 為同義別名（兩者都設時以 `KANCODE_*` 為準） |
 | XDG / 資料目錄 | config、data、cache、state、tmp、managed 一律使用 `kancode`（不存在則建立）— 不回退到 `opencode` |

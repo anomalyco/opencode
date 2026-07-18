@@ -37,20 +37,24 @@ already-loaded config until then.
 
 ## Where files live
 
-| Scope                         | Path                                                                                                                      |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| Project config                | `./opencode.json`, `./opencode.jsonc`, or `.opencode/opencode.json` (opencode walks up from the cwd to the worktree root) |
-| Global config                 | `~/.config/opencode/opencode.json` (NOT `~/.opencode/`)                                                                   |
-| Project agents                | `.opencode/agent/<name>.md` or `.opencode/agents/<name>.md`                                                               |
-| Global agents                 | `~/.config/opencode/agent(s)/<name>.md`                                                                                   |
-| Project commands              | `.opencode/command/<name>.md` or `.opencode/commands/<name>.md`                                                           |
-| Global commands               | `~/.config/opencode/command(s)/<name>.md`                                                                                 |
-| Project skills                | `.opencode/skill(s)/<name>/SKILL.md`                                                                                      |
-| Global skills                 | `~/.config/opencode/skill(s)/<name>/SKILL.md`                                                                             |
-| External skills (auto-loaded) | `~/.claude/skills/<name>/SKILL.md`, `~/.agents/skills/<name>/SKILL.md`                                                    |
+| Scope                         | Path                                                                                                      |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Project config                | `./kancode.json`, `./kancode.jsonc`, or `.kancode/kancode.json` (walks up from cwd to the worktree root) |
+| Global config                 | XDG/global KanCode config dir `kancode.json` (home project dir is `~/.kancode/`, not `~/.opencode/`)      |
+| Project agents                | `.kancode/agent/<name>.md` or `.kancode/agents/<name>.md`                                                 |
+| Global agents                 | global KanCode config `agent(s)/<name>.md`                                                                |
+| Project commands              | `.kancode/command/<name>.md` or `.kancode/commands/<name>.md`                                             |
+| Global commands               | global KanCode config `command(s)/<name>.md`                                                              |
+| Project skills                | `.kancode/skill(s)/<name>/SKILL.md`                                                                       |
+| Global skills                 | global KanCode config `skill(s)/<name>/SKILL.md`                                                          |
+| External skills (auto-loaded) | `~/.claude/skills/<name>/SKILL.md`, `~/.agents/skills/<name>/SKILL.md`                                    |
+
+KanCode does **not** load project `.opencode/` at runtime. To copy skills,
+commands, agents, themes, or plans from a legacy `.opencode/` directory into
+`.kancode/`, use the `import-opencode` skill.
 
 Configs from each scope are deep-merged. Project overrides global. Unknown
-top-level keys in `opencode.json` are rejected with `ConfigInvalidError`.
+top-level keys in `kancode.json` are rejected with `ConfigInvalidError`.
 
 ## opencode.json
 

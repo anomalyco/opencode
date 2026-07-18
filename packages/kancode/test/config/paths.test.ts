@@ -30,13 +30,11 @@ describe("ConfigPaths writable helpers", () => {
     expect(ConfigPaths.resolveWritableConfigFile(dir)).toBe(path.join(dir, "kancode.json"))
   })
 
-  test("resolveWritableConfigFile project scope checks .kancode then .opencode", async () => {
+  test("resolveWritableConfigFile project scope uses .kancode only", async () => {
     const dir = await tmp()
     await fs.mkdir(path.join(dir, ".opencode"))
-    await Bun.write(path.join(dir, ".opencode", "opencode.json"), "{}")
-    expect(ConfigPaths.resolveWritableConfigFile(dir, { project: true })).toBe(
-      path.join(dir, ".opencode", "opencode.json"),
-    )
+    await Bun.write(path.join(dir, ".opencode", "kancode.json"), "{}")
+    expect(ConfigPaths.resolveWritableConfigFile(dir, { project: true })).toBe(path.join(dir, "kancode.json"))
 
     await fs.mkdir(path.join(dir, ".kancode"))
     await Bun.write(path.join(dir, ".kancode", "kancode.json"), "{}")
@@ -45,19 +43,19 @@ describe("ConfigPaths writable helpers", () => {
     )
   })
 
-  test("resolveWritableConfigFile project scope falls back to opencode.json at root", async () => {
+  test("resolveWritableConfigFile project scope ignores opencode.json at root", async () => {
     const dir = await tmp()
     await Bun.write(path.join(dir, "opencode.json"), "{}")
-    expect(ConfigPaths.resolveWritableConfigFile(dir, { project: true })).toBe(path.join(dir, "opencode.json"))
+    expect(ConfigPaths.resolveWritableConfigFile(dir, { project: true })).toBe(path.join(dir, "kancode.json"))
   })
 
-  test("resolveWritableProjectDir prefers .kancode, reuses .opencode, else creates .kancode", async () => {
+  test("resolveWritableProjectDir always returns .kancode", async () => {
     const empty = await tmp()
     expect(ConfigPaths.resolveWritableProjectDir(empty)).toBe(path.join(empty, ".kancode"))
 
     const legacy = await tmp()
     await fs.mkdir(path.join(legacy, ".opencode"))
-    expect(ConfigPaths.resolveWritableProjectDir(legacy)).toBe(path.join(legacy, ".opencode"))
+    expect(ConfigPaths.resolveWritableProjectDir(legacy)).toBe(path.join(legacy, ".kancode"))
 
     const both = await tmp()
     await fs.mkdir(path.join(both, ".opencode"))
@@ -73,22 +71,25 @@ describe("ConfigPaths writable helpers", () => {
     expect(ConfigPaths.preferredUserConfigFile(dir)).toBe(path.join(dir, "kancode.json"))
   })
 
-  test("projectConfigFilesInDirectory merges OpenCode then KanCode", async () => {
+  test("projectConfigFilesInDirectory loads KanCode only", async () => {
     const dir = await tmp()
     await Bun.write(path.join(dir, "opencode.json"), "{}")
-    expect(ConfigPaths.projectConfigFilesInDirectory(dir)).toEqual([path.join(dir, "opencode.json")])
+    expect(ConfigPaths.projectConfigFilesInDirectory(dir)).toEqual([])
 
     await Bun.write(path.join(dir, "kancode.json"), "{}")
-    expect(ConfigPaths.projectConfigFilesInDirectory(dir)).toEqual([
-      path.join(dir, "opencode.json"),
-      path.join(dir, "kancode.json"),
-    ])
+    expect(ConfigPaths.projectConfigFilesInDirectory(dir)).toEqual([path.join(dir, "kancode.json")])
 
     await Bun.write(path.join(dir, "kancode.jsonc"), "{}")
     await Bun.write(path.join(dir, "opencode.jsonc"), "{}")
-    expect(ConfigPaths.projectConfigFilesInDirectory(dir)).toEqual([
-      path.join(dir, "opencode.jsonc"),
-      path.join(dir, "kancode.jsonc"),
-    ])
+    expect(ConfigPaths.projectConfigFilesInDirectory(dir)).toEqual([path.join(dir, "kancode.jsonc")])
+  })
+
+  test("PROJECT_DIR_TARGETS is .kancode only", () => {
+    expect(ConfigPaths.PROJECT_DIR_TARGETS).toEqual([".kancode"])
+  })
+
+  test("isProjectConfigDir rejects .opencode", () => {
+    expect(ConfigPaths.isProjectConfigDir("/repo/.kancode")).toBe(true)
+    expect(ConfigPaths.isProjectConfigDir("/repo/.opencode")).toBe(false)
   })
 })

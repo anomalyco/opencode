@@ -115,11 +115,13 @@ async function backupAndStripLegacy(file: string, source: string) {
 async function opencodeFiles(input: { directories: string[]; cwd: string }) {
   const files = [
     ...ConfigPaths.userConfigFilesInDirectory(Global.Path.config),
-    ...(await Filesystem.findUp([...ConfigPaths.CONFIG_FILE_CANDIDATES], input.cwd, undefined, { rootFirst: true })),
+    ...(await Filesystem.findUp([...ConfigPaths.MIGRATION_CONFIG_FILE_CANDIDATES], input.cwd, undefined, {
+      rootFirst: true,
+    })),
   ]
   for (const dir of unique(input.directories)) {
     // User-scope home `.kancode` and global XDG: KanCode filenames only.
-    // Project `.opencode`/`.kancode` and CONFIG_DIR: dual-read.
+    // Project migration scans may still find legacy opencode.json(c).
     const userScope =
       dir === Global.Path.config || (dir.endsWith(".kancode") && path.dirname(dir) === Global.Path.home)
     files.push(

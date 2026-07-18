@@ -11,7 +11,7 @@ context: |
   - User-facing name is KanCode; binary is `kancode` only (no `opencode` bin alias).
   - Workspace npm packages are `@kancode/*` (app: `@kancode/cli` in `packages/kancode`). Do not reintroduce `@opencode-ai/*` package names.
   - Effect service IDs use `@kancode/...`. SDK namespace is `KanCode` (not `OpenCode`).
-  - Project config: merge-include opencode.json(c) then kancode.json(c) (KanCode wins); dual-read .opencode/ and .kancode/ (.kancode wins).
+  - Project config: kancode.json(c) only; project dir .kancode/ only (no project .opencode/ load). Use import-opencode skill to migrate skills/commands/agents/themes/plans from legacy .opencode/.
   - User scope (XDG/global, ~/.kancode, data/cache/state/tmp/managed): KanCode only — no .opencode / opencode.json / opencode-dir fallback.
   - Env: OPENCODE_* still honored; KANCODE_* aliases win when both set.
   - XDG: config/data/cache/state/tmp always kancode (create if missing).

@@ -334,14 +334,12 @@ function patchDir(input: PatchInput) {
   if (input.global) return input.config ?? Global.Path.config
   const git = input.vcs === "git" && input.worktree !== "/"
   const root = git ? input.worktree : input.directory
-  return path.join(root, ".opencode")
+  return path.join(root, ".kancode")
 }
 
-function patchName(kind: Kind, global?: boolean): "kancode" | "opencode" | "tui" {
+function patchName(kind: Kind, _global?: boolean): "kancode" | "tui" {
   if (kind === "tui") return "tui"
-  // User/global scope: KanCode filenames only. Project `.opencode` may keep opencode.jsonc.
-  if (global) return "kancode"
-  return "opencode"
+  return "kancode"
 }
 
 async function patchOne(

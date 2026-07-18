@@ -2,7 +2,7 @@
 
 ## Purpose
 
-User-facing KanCode branding plus dual-read compatibility for config files, project dirs, env flags, and XDG/data paths so existing OpenCode configs keep working while new installs prefer KanCode names.
+User-facing KanCode branding plus KanCode-only config paths (project and user), env flag aliases, and XDG/data paths. Legacy project `.opencode/` is not loaded at runtime; users migrate selected content via the `import-opencode` skill.
 
 ## Requirements
 
@@ -31,18 +31,17 @@ The package bin entries SHALL expose `kancode` as the command name and MUST NOT 
 - **THEN** `kancode` launches this application
 - **AND** there is no `opencode` bin entry that launches KanCode
 
-### Requirement: Config File Merge-Include With KanCode Precedence (Project Scope)
+### Requirement: Project Scope Config Is KanCode Only
 
-Project and worktree config loading SHALL accept `kancode.json` / `kancode.jsonc` and `opencode.json` / `opencode.jsonc`. When both KanCode and OpenCode config filenames exist in the same directory, the system MUST load and merge both (OpenCode first, then KanCode). KanCode MUST win on conflicting keys. Within each filename family, `.jsonc` is preferred over `.json` (at most one file per family).
+Project and worktree config loading SHALL accept only `kancode.json` / `kancode.jsonc`. The system MUST NOT read `opencode.json` / `opencode.jsonc` at project scope. Within the KanCode filename family, `.jsonc` is preferred over `.json` (at most one file per directory).
 
-#### Scenario: Merge both when present
-- **WHEN** a project directory contains both `kancode.json` and `opencode.json`
-- **THEN** both files are loaded
-- **AND** keys from `kancode.json` override conflicting keys from `opencode.json`
+#### Scenario: KanCode config loads
+- **WHEN** a project directory contains `kancode.json`
+- **THEN** config is loaded from `kancode.json`
 
-#### Scenario: OpenCode alone still works
+#### Scenario: OpenCode config filename is ignored
 - **WHEN** a project directory has `opencode.json` and no `kancode.json` / `kancode.jsonc`
-- **THEN** config is loaded from `opencode.json`
+- **THEN** that file is not loaded as project config
 
 ### Requirement: User Scope Is KanCode Only
 
@@ -56,18 +55,21 @@ User-scope config discovery and load (XDG/global config directory, home `~/.kanc
 - **WHEN** the user's home directory has both `~/.opencode/` and `~/.kancode/`
 - **THEN** only `~/.kancode/` is discovered as a user-scope config directory
 
-### Requirement: Project Directory Dual-Read With KanCode Precedence
+### Requirement: Project Directory Is .kancode Only
 
-Project config directories SHALL be discovered for both `.kancode` and `.opencode`. When both exist at the same path level, content from `.kancode` MUST take precedence on conflicting keys after merge. Config files inside each discovered project directory follow the project merge-include rules (OpenCode then KanCode).
+Project config directories SHALL be discovered for `.kancode` only. The system MUST NOT discover or load project `.opencode/` at runtime. Config files inside `.kancode/` follow the KanCode-only filename rules. Users MAY migrate skills, commands, agents, themes, or plans from a legacy `.opencode/` directory into `.kancode/` using the built-in `import-opencode` skill.
 
-#### Scenario: Both project dirs are discovered
-- **WHEN** a project has `.opencode/` and `.kancode/` directories
-- **THEN** both are loaded as config directories
-- **AND** `.kancode` wins on conflicting merged settings
+#### Scenario: .kancode is discovered
+- **WHEN** a project has a `.kancode/` directory
+- **THEN** that directory is loaded as a project config directory
 
-#### Scenario: Legacy .opencode alone still works
-- **WHEN** a project has only `.opencode/`
-- **THEN** that directory is still discovered and loaded
+#### Scenario: Project .opencode is ignored
+- **WHEN** a project has only `.opencode/` (and no `.kancode/`)
+- **THEN** that directory is not discovered as a project config directory
+
+#### Scenario: Import skill is available
+- **WHEN** skills are listed for a session
+- **THEN** a built-in `import-opencode` skill is available to copy selected `.opencode/` content into `.kancode/`
 
 ### Requirement: Env Flag Aliases
 

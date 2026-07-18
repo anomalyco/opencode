@@ -147,7 +147,7 @@ afterEach(async () => {
 })
 
 const writeManagedSettingsEffect = (settings: object, filename?: string) =>
-  FSUtil.use.writeWithDirs(path.join(managedConfigDir, filename ?? "opencode.json"), JSON.stringify(settings))
+  FSUtil.use.writeWithDirs(path.join(managedConfigDir, filename ?? "kancode.json"), JSON.stringify(settings))
 
 async function writeConfig(dir: string, config: object, name = "kancode.json") {
   await Filesystem.write(path.join(dir, name), JSON.stringify(config))
@@ -202,7 +202,7 @@ const withConfigTree = <A, E, R>(
       [
         input.global ? writeConfigEffect(global, schemaConfig(input.global)) : undefined,
         input.project ? writeConfigEffect(directory, schemaConfig(input.project)) : undefined,
-        input.local ? writeConfigEffect(path.join(directory, ".opencode"), schemaConfig(input.local)) : undefined,
+        input.local ? writeConfigEffect(path.join(directory, ".kancode"), schemaConfig(input.local)) : undefined,
       ].filter((effect): effect is Effect.Effect<void, FSUtil.Error, FSUtil.Service> => effect !== undefined),
       { concurrency: "unbounded" },
     )
@@ -453,7 +453,7 @@ it.instance("loads JSONC config file", () =>
   Effect.gen(function* () {
     const test = yield* TestInstance
     yield* FSUtil.use.writeWithDirs(
-      path.join(test.directory, "opencode.jsonc"),
+      path.join(test.directory, "kancode.jsonc"),
       `{
         // This is a comment
         "$schema": "https://raw.githubusercontent.com/puetsua/kancode/main/schemas/kancode.schema.json",
@@ -477,7 +477,7 @@ it.instance("jsonc overrides json in the same directory", () =>
         model: "base",
         username: "base",
       },
-      "opencode.jsonc",
+      "kancode.jsonc",
     )
     yield* writeConfigEffect(
       test.directory,
@@ -485,7 +485,7 @@ it.instance("jsonc overrides json in the same directory", () =>
         $schema: "https://raw.githubusercontent.com/puetsua/kancode/main/schemas/kancode.schema.json",
         model: "override",
       },
-      "opencode.json",
+      "kancode.json",
     )
     const config = yield* Config.use.get()
     expect(config.model).toBe("base")
@@ -493,7 +493,7 @@ it.instance("jsonc overrides json in the same directory", () =>
   }),
 )
 
-it.instance("merges opencode.json then kancode.json in the same directory", () =>
+it.instance("ignores opencode.json when kancode.json is present", () =>
   Effect.gen(function* () {
     const test = yield* TestInstance
     yield* writeConfigEffect(
@@ -515,7 +515,8 @@ it.instance("merges opencode.json then kancode.json in the same directory", () =
     )
     const config = yield* Config.use.get()
     expect(config.model).toBe("from-kancode")
-    expect(config.username).toBe("opencode-user")
+    // opencode.json username must not be merged; default username may still apply.
+    expect(config.username).not.toBe("opencode-user")
   }),
 )
 
@@ -543,14 +544,14 @@ it.instance("preserves env variables when adding $schema to config", () =>
       const test = yield* TestInstance
       // Config without $schema - should trigger auto-add
       yield* FSUtil.use.writeWithDirs(
-        path.join(test.directory, "opencode.json"),
+        path.join(test.directory, "kancode.json"),
         JSON.stringify({ username: "{env:PRESERVE_VAR}" }),
       )
       const config = yield* Config.use.get()
       expect(config.username).toBe("secret_value")
 
       // Read the file to verify the env variable was preserved
-      const content = yield* FSUtil.use.readFileString(path.join(test.directory, "opencode.json"))
+      const content = yield* FSUtil.use.readFileString(path.join(test.directory, "kancode.json"))
       expect(content).toContain("{env:PRESERVE_VAR}")
       expect(content).not.toContain("secret_value")
       expect(content).toContain("$schema")
@@ -642,7 +643,7 @@ it.instance("validates config schema and throws on invalid fields", () =>
 it.instance("throws error for invalid JSON", () =>
   Effect.gen(function* () {
     const test = yield* TestInstance
-    yield* FSUtil.use.writeWithDirs(path.join(test.directory, "opencode.json"), "{ invalid json }")
+    yield* FSUtil.use.writeWithDirs(path.join(test.directory, "kancode.json"), "{ invalid json }")
     const exit = yield* Config.use.get().pipe(Effect.exit)
     expect(Exit.isFailure(exit)).toBe(true)
   }),
@@ -774,11 +775,11 @@ it.instance("accepts the deprecated reference field", () =>
   }),
 )
 
-it.instance("loads config from .opencode directory", () =>
+it.instance("loads config from .kancode directory", () =>
   Effect.gen(function* () {
     const test = yield* TestInstance
     yield* FSUtil.use.writeWithDirs(
-      path.join(test.directory, ".opencode", "agent", "test.md"),
+      path.join(test.directory, ".kancode", "agent", "test.md"),
       `---
 model: test/model
 ---
@@ -800,7 +801,7 @@ it.instance("agent markdown permission config preserves user key order", () =>
   Effect.gen(function* () {
     const test = yield* TestInstance
     yield* FSUtil.use.writeWithDirs(
-      path.join(test.directory, ".opencode", "agent", "ordered.md"),
+      path.join(test.directory, ".kancode", "agent", "ordered.md"),
       `---
 permission:
   bash: allow
@@ -815,11 +816,11 @@ Ordered permissions`,
   }),
 )
 
-it.instance("loads agents from .opencode/agents (plural)", () =>
+it.instance("loads agents from .kancode/agents (plural)", () =>
   Effect.gen(function* () {
     const test = yield* TestInstance
     yield* FSUtil.use.writeWithDirs(
-      path.join(test.directory, ".opencode", "agents", "helper.md"),
+      path.join(test.directory, ".kancode", "agents", "helper.md"),
       `---
 model: test/model
 mode: subagent
@@ -828,7 +829,7 @@ Helper agent prompt`,
     )
 
     yield* FSUtil.use.writeWithDirs(
-      path.join(test.directory, ".opencode", "agents", "nested", "child.md"),
+      path.join(test.directory, ".kancode", "agents", "nested", "child.md"),
       `---
 model: test/model
 mode: subagent
@@ -854,11 +855,11 @@ Nested agent prompt`,
   }),
 )
 
-it.instance("loads commands from .opencode/command (singular)", () =>
+it.instance("loads commands from .kancode/command (singular)", () =>
   Effect.gen(function* () {
     const test = yield* TestInstance
     yield* FSUtil.use.writeWithDirs(
-      path.join(test.directory, ".opencode", "command", "hello.md"),
+      path.join(test.directory, ".kancode", "command", "hello.md"),
       `---
 description: Test command
 ---
@@ -866,7 +867,7 @@ Hello from singular command`,
     )
 
     yield* FSUtil.use.writeWithDirs(
-      path.join(test.directory, ".opencode", "command", "nested", "child.md"),
+      path.join(test.directory, ".kancode", "command", "nested", "child.md"),
       `---
 description: Nested command
 ---
@@ -887,11 +888,11 @@ Nested command template`,
   }),
 )
 
-it.instance("loads commands from .opencode/commands (plural)", () =>
+it.instance("loads commands from .kancode/commands (plural)", () =>
   Effect.gen(function* () {
     const test = yield* TestInstance
     yield* FSUtil.use.writeWithDirs(
-      path.join(test.directory, ".opencode", "commands", "hello.md"),
+      path.join(test.directory, ".kancode", "commands", "hello.md"),
       `---
 description: Test command
 ---
@@ -899,7 +900,7 @@ Hello from plural commands`,
     )
 
     yield* FSUtil.use.writeWithDirs(
-      path.join(test.directory, ".opencode", "commands", "nested", "child.md"),
+      path.join(test.directory, ".kancode", "commands", "nested", "child.md"),
       `---
 description: Nested command
 ---
@@ -1071,7 +1072,7 @@ it.instance("does not error when only custom agent is a subagent", () =>
   Effect.gen(function* () {
     const test = yield* TestInstance
     yield* FSUtil.use.writeWithDirs(
-      path.join(test.directory, ".opencode", "agent", "helper.md"),
+      path.join(test.directory, ".kancode", "agent", "helper.md"),
       `---
 model: test/model
 mode: subagent
@@ -1248,7 +1249,7 @@ it.instance(
 it.instance("managed jsonc settings override managed json settings", () =>
   Effect.gen(function* () {
     yield* writeManagedSettingsEffect({ model: "managed/json" })
-    yield* writeManagedSettingsEffect({ model: "managed/jsonc" }, "opencode.jsonc")
+    yield* writeManagedSettingsEffect({ model: "managed/jsonc" }, "kancode.jsonc")
 
     const config = yield* Config.use.get()
     expect(config.model).toBe("managed/jsonc")
@@ -1407,12 +1408,12 @@ it.instance("project config can override MCP server enabled status", () =>
           },
         },
       },
-      "opencode.json",
+      "kancode.json",
     )
-    // Higher-precedence local `.opencode` layer enables just jira.
-    yield* FSUtil.use.ensureDir(path.join(test.directory, ".opencode"))
+    // Higher-precedence local `.kancode` layer enables just jira.
+    yield* FSUtil.use.ensureDir(path.join(test.directory, ".kancode"))
     yield* writeConfigEffect(
-      path.join(test.directory, ".opencode"),
+      path.join(test.directory, ".kancode"),
       {
         $schema: "https://raw.githubusercontent.com/puetsua/kancode/main/schemas/kancode.schema.json",
         mcp: {
@@ -1423,7 +1424,7 @@ it.instance("project config can override MCP server enabled status", () =>
           },
         },
       },
-      "opencode.jsonc",
+      "kancode.jsonc",
     )
 
     const config = yield* Config.use.get()
@@ -1458,11 +1459,11 @@ it.instance("MCP config deep merges preserving base config properties", () =>
           },
         },
       },
-      "opencode.json",
+      "kancode.json",
     )
-    yield* FSUtil.use.ensureDir(path.join(test.directory, ".opencode"))
+    yield* FSUtil.use.ensureDir(path.join(test.directory, ".kancode"))
     yield* writeConfigEffect(
-      path.join(test.directory, ".opencode"),
+      path.join(test.directory, ".kancode"),
       {
         $schema: "https://raw.githubusercontent.com/puetsua/kancode/main/schemas/kancode.schema.json",
         mcp: {
@@ -1473,7 +1474,7 @@ it.instance("MCP config deep merges preserving base config properties", () =>
           },
         },
       },
-      "opencode.jsonc",
+      "kancode.jsonc",
     )
 
     const config = yield* Config.use.get()
@@ -1488,7 +1489,7 @@ it.instance("MCP config deep merges preserving base config properties", () =>
   }),
 )
 
-it.instance("local .opencode config can override MCP from project config", () =>
+it.instance("local .kancode config can override MCP from project config", () =>
   Effect.gen(function* () {
     const test = yield* TestInstance
     yield* writeConfigEffect(test.directory, {
@@ -1501,9 +1502,9 @@ it.instance("local .opencode config can override MCP from project config", () =>
         },
       },
     })
-    yield* FSUtil.use.ensureDir(path.join(test.directory, ".opencode"))
+    yield* FSUtil.use.ensureDir(path.join(test.directory, ".kancode"))
     yield* writeConfigEffect(
-      path.join(test.directory, ".opencode"),
+      path.join(test.directory, ".kancode"),
       {
         $schema: "https://raw.githubusercontent.com/puetsua/kancode/main/schemas/kancode.schema.json",
         mcp: {
@@ -1514,7 +1515,7 @@ it.instance("local .opencode config can override MCP from project config", () =>
           },
         },
       },
-      "opencode.json",
+      "kancode.json",
     )
 
     const config = yield* Config.use.get()
@@ -1809,7 +1810,7 @@ describe("deduplicatePluginOrigins", () => {
   })
 
   test("keeps path plugins separate from package plugins", () => {
-    const plugins = ["oh-my-opencode@2.4.3", "file:///project/.opencode/plugin/oh-my-opencode.js"]
+    const plugins = ["oh-my-opencode@2.4.3", "file:///project/.kancode/plugin/oh-my-opencode.js"]
 
     const result = dedupe(plugins)
 
@@ -1817,11 +1818,11 @@ describe("deduplicatePluginOrigins", () => {
   })
 
   test("deduplicates direct path plugins by exact spec", () => {
-    const plugins = ["file:///project/.opencode/plugin/demo.ts", "file:///project/.opencode/plugin/demo.ts"]
+    const plugins = ["file:///project/.kancode/plugin/demo.ts", "file:///project/.kancode/plugin/demo.ts"]
 
     const result = dedupe(plugins)
 
-    expect(result).toEqual(["file:///project/.opencode/plugin/demo.ts"])
+    expect(result).toEqual(["file:///project/.kancode/plugin/demo.ts"])
   })
 
   test("preserves order of remaining plugins", () => {
@@ -1838,7 +1839,7 @@ describe("deduplicatePluginOrigins", () => {
       Effect.gen(function* () {
         const test = yield* TestInstance
         yield* FSUtil.use.writeWithDirs(
-          path.join(test.directory, ".opencode", "plugin", "my-plugin.js"),
+          path.join(test.directory, ".kancode", "plugin", "my-plugin.js"),
           "export default {}",
         )
 
@@ -1866,14 +1867,14 @@ describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
     { config: { model: "project/model", username: "project-user" } },
   )
 
-  it.instance("skips project .opencode/ directories when flag is set", () =>
+  it.instance("skips project .kancode/ directories when flag is set", () =>
     withProcessEnv(
       "OPENCODE_DISABLE_PROJECT_CONFIG",
       "true",
       Effect.gen(function* () {
         const test = yield* TestInstance
         yield* FSUtil.use.writeWithDirs(
-          path.join(test.directory, ".opencode", "command", "test-cmd.md"),
+          path.join(test.directory, ".kancode", "command", "test-cmd.md"),
           "# Test Command\nThis is a test command.",
         )
         const directories = yield* Config.use.directories()

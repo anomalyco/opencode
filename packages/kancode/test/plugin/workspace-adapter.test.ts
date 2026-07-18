@@ -71,7 +71,7 @@ describe("plugin.workspace", () => {
 
       yield* Effect.promise(() =>
         Bun.write(
-          path.join(dir, "opencode.json"),
+          path.join(dir, "kancode.json"),
           JSON.stringify(
             {
               $schema: "https://raw.githubusercontent.com/puetsua/kancode/main/schemas/kancode.schema.json",
