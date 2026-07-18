@@ -437,7 +437,10 @@ describe("ShellTool", () => {
                 progress: (update) =>
                   Effect.gen(function* () {
                     if (update.structured.truncated !== true) return
-                    if (update.content[0]?.type !== "text") return
+                    const content = update.content[0]
+                    if (content?.type !== "text") return
+                    if (content.text.indexOf("\n\n[output truncated; full output saved to:") !== ShellTool.MAX_CAPTURE_BYTES)
+                      return
                     yield* Deferred.succeed(observed, update)
                     yield* Effect.promise(() => fs.writeFile(releasePath, ""))
                   }),
