@@ -31,7 +31,7 @@
         },
         "mdnsDomain": {
           "type": "string",
-          "description": "Custom domain name for mDNS service (default: opencode.local)"
+          "description": "Custom domain name for mDNS service (default: kancode.local)"
         },
         "cors": {
           "type": "array",

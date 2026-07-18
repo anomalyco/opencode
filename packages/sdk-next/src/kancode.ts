@@ -32,7 +32,7 @@ export const create = Effect.fn("KanCode.create")(function* () {
   const fetch = Object.assign((input: RequestInfo | URL, init?: RequestInit) => web.handler(new Request(input, init)), {
     preconnect: () => undefined,
   }) satisfies typeof globalThis.fetch
-  const client = yield* KanCode.make({ baseUrl: "http://opencode.local" }).pipe(
+  const client = yield* KanCode.make({ baseUrl: "http://kancode.local" }).pipe(
     Effect.provide(FetchHttpClient.layer),
     Effect.provideService(FetchHttpClient.Fetch, fetch),
   )
