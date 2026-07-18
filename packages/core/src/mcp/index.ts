@@ -209,7 +209,12 @@ export const layer = Layer.effect(
       entry.integrationID = integrationID
       owned.add(integrationID)
       const methodID = Integration.MethodID.make(suffix)
-      entry.registration = yield* integration
+      // Each registration gets its own child scope so disposal detaches it from the root scope
+      // entirely; registering directly on root would accumulate a dead finalizer per replaced or
+      // removed server for the lifetime of the layer.
+      const scope = yield* Scope.fork(root)
+      entry.registration = { dispose: Scope.close(scope, Exit.void) }
+      yield* integration
         .transform((draft) => {
           draft.update(integrationID, (ref) => {
             ref.name = name
@@ -220,7 +225,7 @@ export const layer = Layer.effect(
             authorize: () => MCPOAuth.authorize({ name, config: remote, methodID }),
           })
         })
-        .pipe(Scope.provide(root))
+        .pipe(Scope.provide(scope))
     })
     yield* Effect.forEach(runtime, ([name, entry]) => register(name, entry), { discard: true })
 
