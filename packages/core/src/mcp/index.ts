@@ -482,6 +482,10 @@ export const layer = Layer.effect(
 
     const startServer = (name: ServerName, entry: ServerEntry) =>
       Effect.gen(function* () {
+        // Announce the handshake so connect() and credential reconnects don't show a stale
+        // disabled/failed status for the duration of the connection attempt.
+        entry.status = { status: "pending" }
+        yield* events.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore)
         const scope = yield* Scope.fork(root)
         entry.scope = scope
         const authProvider = yield* connectProvider(entry)
