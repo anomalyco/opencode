@@ -1892,6 +1892,35 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("records interrupted manual compaction without surfacing an internal failure", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      response = reply.text("Earlier answer", "text-manual-interrupt-history")
+      yield* admit(session, "Earlier question")
+      yield* session.resume(sessionID)
+
+      const streamed = yield* Deferred.make<void>()
+      const partial = fragmentFixture("text", "text-manual-interrupt-summary", ["Partial summary"])
+      responseStream = Stream.concat(
+        Stream.fromIterable(partial.partialEvents),
+        Stream.fromEffect(Deferred.succeed(streamed, undefined)).pipe(Stream.flatMap(() => Stream.never)),
+      )
+      const compaction = yield* session.compact({ sessionID })
+      const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      yield* Deferred.await(streamed)
+      yield* session.interrupt(sessionID)
+
+      yield* Fiber.await(run)
+      expect(yield* SessionPending.compaction((yield* Database.Service).db, sessionID)).toBeUndefined()
+      expect((yield* session.messages({ sessionID })).find((message) => message.id === compaction.id)).toMatchObject({
+        type: "compaction",
+        status: "failed",
+        reason: "manual",
+        error: { type: "aborted", message: "Compaction interrupted" },
+      })
+    }),
+  )
+
   it.effect("settles an admitted manual compaction when pre-start resolution throws", () =>
     Effect.gen(function* () {
       const session = yield* setup

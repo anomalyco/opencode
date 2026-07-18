@@ -1440,9 +1440,10 @@ function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type:
   const ctx = use()
   const { themeV2, syntax } = useTheme()
   const status = () => props.message.status
-  const text = () => (props.message.status === "failed" ? props.message.error.message : props.message.summary)
+  const interrupted = () => props.message.status === "failed" && props.message.error.type === "aborted"
+  const text = () => (props.message.status === "failed" ? (interrupted() ? "" : props.message.error.message) : props.message.summary)
   const content = createMemo(() => text().trim())
-  const color = () => (status() === "failed" ? themeV2.text.feedback.error() : themeV2.text.subdued())
+  const color = () => (status() === "failed" && !interrupted() ? themeV2.text.feedback.error() : themeV2.text.subdued())
   return (
     <box>
       <box flexDirection="row" alignItems="center">
@@ -1454,11 +1455,14 @@ function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type:
                 <spinner frames={SPINNER_FRAMES} interval={80} color={color()} />
               </Show>
             </Match>
-            <Match when={status() === "failed"}>
+            <Match when={status() === "failed" && !interrupted()}>
               <text fg={color()}>✗</text>
             </Match>
           </Switch>
           <text fg={color()}>Compaction</text>
+          <Show when={interrupted()}>
+            <text fg={color()}>· interrupted</text>
+          </Show>
         </box>
         <box border={["top"]} borderColor={color()} flexGrow={1} />
       </box>

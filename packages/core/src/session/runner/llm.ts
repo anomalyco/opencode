@@ -410,7 +410,9 @@ const layer = Layer.effect(
               yield* events.publish(SessionEvent.Compaction.Failed, {
                 sessionID,
                 reason: "manual",
-                error: { type: "compaction.failed", message: Cause.pretty(compacted.cause) },
+                error: Cause.hasInterruptsOnly(compacted.cause)
+                  ? { type: "aborted", message: "Compaction interrupted" }
+                  : { type: "compaction.failed", message: Cause.pretty(compacted.cause) },
                 inputID: unsettled.id,
               })
             return yield* Effect.failCause(compacted.cause)
