@@ -277,6 +277,38 @@ describe("PatchTool", () => {
     ),
   )
 
+  it.live("approves a relative external target before reading update content", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => Promise.all([tmpdir(), tmpdir()])),
+      ([active, outside]) => {
+        reset()
+        const target = path.join(outside.path, "external.txt")
+        const relative = path.relative(active.path, target)
+        return Effect.promise(() => fs.writeFile(target, "before\n")).pipe(
+          Effect.andThen(
+            withTool(active.path, (registry) =>
+              Effect.gen(function* () {
+                expect(
+                  yield* executeTool(
+                    registry,
+                    call(`*** Begin Patch\n*** Update File: ${relative}\n@@\n-before\n+after\n*** End Patch`),
+                  ),
+                ).toMatchObject({ type: "text" })
+                expect(assertions.map((input) => input.action)).toEqual(["external_directory", "edit"])
+                expect(readsBeforeEditApproval).toBe(0)
+                expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("after\n")
+              }),
+            ),
+          ),
+        )
+      },
+      ([active, outside]) =>
+        Effect.promise(() =>
+          Promise.all([active[Symbol.asyncDispose](), outside[Symbol.asyncDispose]()]).then(() => undefined),
+        ),
+    ),
+  )
+
   it.live("approves one external directory scope for multiple files under the same parent", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => Promise.all([tmpdir(), tmpdir()])),
