@@ -85,6 +85,6 @@ Both runtimes converge on the same `LLMEvent` stream consumed by the session pro
 Safety boundary:
 
 - AI SDK remains the default.
-- `OPENCODE_EXPERIMENTAL_NATIVE_LLM=true` or the umbrella `OPENCODE_EXPERIMENTAL=true` opts in. Native is not a global replacement.
+- Only the dedicated flag `OPENCODE_EXPERIMENTAL_NATIVE_LLM=true` opts in. The umbrella `OPENCODE_EXPERIMENTAL=true` does NOT enable native LLM (see `src/effect/runtime-flags.ts` `experimentalNativeLlm`, which is a standalone `bool(...)` not wired to the umbrella). Native is not a global replacement.
 - Native execution currently supports OpenAI, opencode-managed OpenAI-compatible, and Anthropic API-key paths backed by `@ai-sdk/openai`, `@ai-sdk/openai-compatible`, or `@ai-sdk/anthropic` catalog entries.
 - Unsupported providers, OpenAI OAuth, and missing API-key cases fall back to AI SDK.
