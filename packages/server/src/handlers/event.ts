@@ -10,7 +10,8 @@ export const EventHandler = HttpApiBuilder.group(Api, "server.event", (handlers)
     const feed = yield* EventFeed.Service
     return handlers.handleRaw("event.subscribe", (ctx) =>
       Effect.gen(function* () {
-        const interest = EventFeed.interestFromQuery(new URL(ctx.request.url, "http://localhost").searchParams)
+        // handleRaw still Schema-decodes query; map into feed interest without re-parsing the URL.
+        const interest = EventFeed.interestFromSubscribeQuery(ctx.query)
         const connected = {
           id: EventV2.ID.create(),
           type: "server.connected",

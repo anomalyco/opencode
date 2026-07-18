@@ -265,6 +265,20 @@ describe("EventFeed", () => {
     expect(EventFeed.interestFromQuery(params)).toBeUndefined()
   })
 
+  test("maps a decoded EventSubscribeQuery into feed interest", () => {
+    expect(EventFeed.interestFromSubscribeQuery({})).toBeUndefined()
+    expect(
+      EventFeed.interestFromSubscribeQuery({
+        location: { directory: "/tmp/project", workspace: "ws_1" },
+        session: ["ses_a", "ses_b"],
+      }),
+    ).toEqual({
+      location: { directory: "/tmp/project", workspace: "ws_1" },
+      sessions: ["ses_a", "ses_b"],
+    })
+    expect(EventFeed.interestFromSubscribeQuery({ session: "ses_a" })).toEqual({ sessions: ["ses_a"] })
+  })
+
   test("matchesInterest delivers global types to location-scoped subscribers", () => {
     expect(
       EventFeed.matchesInterest(
