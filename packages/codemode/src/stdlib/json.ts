@@ -2,6 +2,8 @@ import { type AstNode, InterpreterRuntimeError, supportedSyntaxMessage } from ".
 import { typeofValue } from "../interpreter/references.js"
 import { copyIn, copyOut } from "../tool-runtime.js"
 
+export const jsonMethods = new Set(["parse", "stringify"])
+
 export const invokeJsonMethod = (name: string, args: Array<unknown>, node: AstNode): unknown => {
   switch (name) {
     case "stringify": {

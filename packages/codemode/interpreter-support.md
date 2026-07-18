@@ -80,7 +80,7 @@ ultimate source of truth.
 - [x] Expression and block function bodies.
 - [x] User callbacks for the supported Array, Map, Set, URLSearchParams, sort, string-replacement, and `Array.from`
       mapper APIs, with one shared acceptance rule everywhere including promise reactions.
-- [x] `Boolean`, `Number`, `String`, `parseInt`, `parseFloat`, and URI helpers as callbacks.
+- [x] `Boolean`, `Number`, `String`, `parseInt`, `parseFloat`, `isFinite`, `isNaN`, and URI helpers as callbacks.
 - [x] Built-in method references as callbacks, such as `values.map(Math.abs)`, `records.map(JSON.stringify)`,
       `items.forEach(console.log)`, and `Promise.resolve(-1).then(Math.abs)`. Extra callback arguments a built-in
       does not consume are ignored, like JS; consumed arguments stay strictly validated (`Math.floor` still rejects a
@@ -210,9 +210,12 @@ ultimate source of truth.
 - [x] `localeCompare`; locale and options arguments are currently ignored.
 - [x] `toString`, `length`, numeric indexing, spread, and `for...of` by Unicode code point.
 - [x] Static `String.fromCharCode` and `String.fromCodePoint`.
-- [ ] Native argument coercion for supported String methods; for example, `includes(1)` and `slice("1")` currently
-      reject instead of coercing.
-- [ ] Native no-argument parity for `match()` and `search()`.
+- [x] Native argument coercion for supported String methods; for example, `includes(1)` and `slice("1")` coerce like
+      native JS, `split(undefined)` returns the whole string, and `includes`/`startsWith`/`endsWith` reject regular
+      expressions with a native-style `TypeError`. Opaque runtime references still reject as data errors, and
+      `repeat` still requires a finite non-negative count.
+- [x] Native no-argument parity for `match()`, `matchAll()`, and `search()`; all behave as an empty pattern. Present
+      arguments must still be a regular expression or string pattern.
 
 ## Numbers and Math
 
@@ -226,13 +229,16 @@ ultimate source of truth.
 - [x] Math methods: `random`, `max`, `min`, `abs`, `acos`, `acosh`, `asin`, `asinh`, `atan`, `atan2`, `atanh`,
       `floor`, `ceil`, `round`, `trunc`, `sign`, `sqrt`, `cbrt`, `pow`, `hypot`, `cos`, `cosh`, `sin`, `sinh`,
       `tan`, `tanh`, `log`, `log2`, `log10`, `log1p`, `exp`, `expm1`, `f16round`, `fround`, `clz32`, and `imul`.
-- [ ] Native zero-argument behavior for `Number()` and `String()`; they currently do not produce `0` and `""`.
-- [ ] `++` and `--` must use CodeMode numeric coercion and reject opaque runtime references; they currently call host
-      `Number(...)` directly.
-- [ ] Unknown static members must read as `undefined` for feature detection; some currently appear callable or throw
-      during property access.
+- [x] Native zero-argument behavior for `Number()` and `String()`: they produce `0` and `""`, while
+      `Number(undefined)` stays `NaN` and `String(undefined)` stays `"undefined"`.
+- [x] `++` and `--` use CodeMode numeric coercion (numeric strings increment, plain data objects become `NaN`, Dates
+      use their epoch time) and reject opaque runtime references as data errors.
+- [x] Unknown static members on global namespaces and on `Number`/`String`/the coercion functions read as `undefined`
+      for feature detection. Calling any undefined value reports a native-style `TypeError` naming the callee, for
+      example `Math.sumPrecise is not a function.` Blocked members (`constructor`, `__proto__`, ...) still throw,
+      and unknown `Promise` statics keep their descriptive error.
 - [ ] `Math.sumPrecise`.
-- [ ] Global coercing `isFinite` and `isNaN`.
+- [x] Global coercing `isFinite` and `isNaN`; opaque runtime references reject as data errors, like `Number(...)`.
 
 ## JSON and console
 

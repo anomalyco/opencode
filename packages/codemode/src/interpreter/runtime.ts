@@ -10,6 +10,7 @@ import {
   ErrorConstructorReference,
   GlobalMethodReference,
   GlobalNamespace,
+  type GlobalNamespaceName,
   getArray,
   getBoolean,
   getNode,
@@ -34,7 +35,7 @@ import {
   UriFunction,
 } from "./model.js"
 import { caughtErrorValue, constructErrorValue } from "./errors.js"
-import { type CallbackRunner, invokeArrayFrom, invokeGlobalMethod, invokeIntrinsic } from "./methods.js"
+import { arrayStatics, type CallbackRunner, invokeArrayFrom, invokeGlobalMethod, invokeIntrinsic } from "./methods.js"
 import {
   constructPromise,
   invokePromiseInstanceMethod,
@@ -46,10 +47,11 @@ import { containsOpaqueReference, isRuntimeReference, rejectCircularInsertion, t
 import { ScopeStack } from "./scope.js"
 import { arrayMethods, mapMethods, setMethods, spreadItems } from "../stdlib/collections.js"
 import { consoleMethods, formatConsoleMessage } from "../stdlib/console.js"
-import { dateMethods } from "../stdlib/date.js"
-import { mathConstants } from "../stdlib/math.js"
+import { dateMethods, dateStatics } from "../stdlib/date.js"
+import { jsonMethods } from "../stdlib/json.js"
+import { mathConstants, mathMethods } from "../stdlib/math.js"
 import { numberConstants, numberMethods, numberStatics } from "../stdlib/number.js"
-import { objectMethodsPreservingIdentity } from "../stdlib/object.js"
+import { objectMethodsPreservingIdentity, objectStatics } from "../stdlib/object.js"
 import { promiseStatics } from "../stdlib/promise.js"
 import { escapeRegexHint, regexpMethods, regexpProperties, regexFailureReason } from "../stdlib/regexp.js"
 import { stringMethods, stringStatics } from "../stdlib/string.js"
@@ -57,6 +59,7 @@ import {
   urlMethods,
   urlProperties,
   urlSearchParamsMethods,
+  urlStatics,
   urlWritableProperties,
   invokeUriFunction,
   uriArgument,
@@ -82,6 +85,34 @@ import {
   CodeModeURL,
   CodeModeURLSearchParams,
 } from "../values.js"
+
+// Supported static members per global namespace. Property reads outside these sets are
+// undefined, matching native feature detection; namespaces without statics are omitted.
+const globalStaticMembers: Partial<Record<GlobalNamespaceName, Set<string>>> = {
+  Object: objectStatics,
+  Math: mathMethods,
+  JSON: jsonMethods,
+  Array: arrayStatics,
+  console: consoleMethods,
+  Date: dateStatics,
+  URL: urlStatics,
+}
+
+const calleeDescription = (callee: AstNode): string => {
+  if (callee.type === "Identifier") return getString(callee, "name")
+  if (callee.type === "MemberExpression") {
+    const object = getNode(callee, "object")
+    const property = getNode(callee, "property")
+    const key =
+      callee.computed !== true && property.type === "Identifier"
+        ? getString(property, "name")
+        : property.type === "Literal" && typeof property.value === "string"
+          ? property.value
+          : undefined
+    if (object.type === "Identifier" && key !== undefined) return `${getString(object, "name")}.${key}`
+  }
+  return "The called value"
+}
 
 const instanceofValue = (lhs: unknown, rhs: unknown, node: AstNode): boolean => {
   if (rhs instanceof ErrorConstructorReference) {
@@ -199,6 +230,8 @@ export class Interpreter<R> {
     globalScope.set("console", { mutable: false, value: new GlobalNamespace("console") })
     globalScope.set("parseInt", { mutable: false, value: new CoercionFunction("parseInt") })
     globalScope.set("parseFloat", { mutable: false, value: new CoercionFunction("parseFloat") })
+    globalScope.set("isFinite", { mutable: false, value: new CoercionFunction("isFinite") })
+    globalScope.set("isNaN", { mutable: false, value: new CoercionFunction("isNaN") })
     globalScope.set("Date", { mutable: false, value: new GlobalNamespace("Date") })
     globalScope.set("RegExp", { mutable: false, value: new GlobalNamespace("RegExp") })
     globalScope.set("Map", { mutable: false, value: new GlobalNamespace("Map") })
@@ -1454,10 +1487,23 @@ export class Interpreter<R> {
       throw new InterpreterRuntimeError(`Unsupported update operator '${operator}'.`, node)
     }
 
+    // CodeMode numeric coercion, not host Number(): null-prototype data objects would make
+    // the host throw during ToPrimitive, and opaque runtime references must reject clearly.
+    const operand = (current: unknown): number => {
+      if (containsOpaqueReference(current)) {
+        throw new InterpreterRuntimeError(
+          `'${operator}' requires a data value in CodeMode.`,
+          argument,
+          "InvalidDataValue",
+        )
+      }
+      return coerceToNumber(current)
+    }
+
     if (argument.type === "Identifier") {
       return Effect.sync(() => {
         const name = getString(argument, "name")
-        const current = Number(this.scopes.get(name, argument))
+        const current = operand(this.scopes.get(name, argument))
         const next = current + increment
         this.scopes.set(name, next, argument)
         return prefix ? next : current
@@ -1466,7 +1512,7 @@ export class Interpreter<R> {
 
     if (argument.type === "MemberExpression") {
       return this.modifyMember(argument, (current) => {
-        const value = Number(current)
+        const value = operand(current)
         const next = value + increment
         return Effect.succeed({ write: true, next, result: prefix ? next : value })
       })
@@ -1562,6 +1608,10 @@ export class Interpreter<R> {
       if (callable instanceof PromiseCapabilityFunction) {
         callable.settle(args[0])
         return undefined
+      }
+      // Any undefined/null callee (unknown static members included) reports the native message.
+      if (callable === undefined || callable === null) {
+        throw new InterpreterRuntimeError(`${calleeDescription(callee)} is not a function.`, callee).as("TypeError")
       }
       throw new InterpreterRuntimeError("Only tools are callable in CodeMode.", callee)
     })
@@ -1833,16 +1883,18 @@ export class Interpreter<R> {
       }
 
       if (objectValue instanceof GlobalNamespace) {
-        if (typeof key !== "string" || isBlockedMember(key)) {
-          throw new InterpreterRuntimeError(
-            `${objectValue.name}.${String(key)} is not available in CodeMode.`,
-            propertyNode,
-          )
+        if (typeof key === "string" && isBlockedMember(key)) {
+          throw new InterpreterRuntimeError(`${objectValue.name}.${key} is not available in CodeMode.`, propertyNode)
         }
+        if (typeof key !== "string") return new ComputedValue(undefined)
         if (objectValue.name === "Math" && mathConstants.has(key)) {
           return new ComputedValue((Math as unknown as Record<string, number>)[key])
         }
-        return new GlobalMethodReference(objectValue.name, key)
+        if (globalStaticMembers[objectValue.name]?.has(key)) {
+          return new GlobalMethodReference(objectValue.name, key)
+        }
+        // Unknown static members read as undefined so feature detection works like native JS.
+        return new ComputedValue(undefined)
       }
 
       if (typeof objectValue === "string") {
@@ -1858,12 +1910,18 @@ export class Interpreter<R> {
         return new ComputedValue(undefined)
       }
 
-      if (objectValue instanceof CoercionFunction && typeof key === "string" && !isBlockedMember(key)) {
-        if (objectValue.name === "Number" && numberConstants.has(key)) {
+      if (objectValue instanceof CoercionFunction && !(typeof key === "string" && isBlockedMember(key))) {
+        if (objectValue.name === "Number" && typeof key === "string" && numberConstants.has(key)) {
           return new ComputedValue((Number as unknown as Record<string, number>)[key])
         }
-        if (objectValue.name === "Number" && numberStatics.has(key)) return new GlobalMethodReference("Number", key)
-        if (objectValue.name === "String" && stringStatics.has(key)) return new GlobalMethodReference("String", key)
+        if (objectValue.name === "Number" && typeof key === "string" && numberStatics.has(key)) {
+          return new GlobalMethodReference("Number", key)
+        }
+        if (objectValue.name === "String" && typeof key === "string" && stringStatics.has(key)) {
+          return new GlobalMethodReference("String", key)
+        }
+        // Unknown static members read as undefined so feature detection works like native JS.
+        return new ComputedValue(undefined)
       }
 
       if (objectValue instanceof CodeModeDate) {

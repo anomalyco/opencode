@@ -19,6 +19,8 @@ export const escapeRegexHint =
   'To match special characters like ( ) [ ] { } + * ? . literally, escape them with a backslash (e.g. "\\\\(") or test for them with String.includes instead.'
 
 export const toHostRegex = (arg: unknown, method: string, node: AstNode, extraFlags = ""): RegExp => {
+  // Native no-argument parity: match()/search() behave as if given an empty pattern.
+  if (arg === undefined) return new RegExp("", extraFlags)
   if (arg instanceof CodeModeRegExp) return arg.regex
   if (typeof arg === "string") {
     try {

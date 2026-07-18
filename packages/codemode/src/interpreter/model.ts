@@ -105,7 +105,7 @@ export class GlobalMethodReference {
 }
 
 export class CoercionFunction {
-  constructor(readonly name: "Number" | "String" | "Boolean" | "parseInt" | "parseFloat") {}
+  constructor(readonly name: "Number" | "String" | "Boolean" | "parseInt" | "parseFloat" | "isFinite" | "isNaN") {}
 }
 
 export class UriFunction {

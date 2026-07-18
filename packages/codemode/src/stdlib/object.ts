@@ -6,6 +6,8 @@ import { boundedData, coerceToString } from "./value.js"
 
 export const objectMethodsPreservingIdentity = new Set(["assign", "values", "entries", "fromEntries"])
 
+export const objectStatics = new Set(["keys", "values", "entries", "hasOwn", "is", "assign", "fromEntries"])
+
 export const invokeObjectMethod = (name: string, args: Array<unknown>, node: AstNode): unknown => {
   const requireObject = (): Record<string, unknown> => {
     const input = args[0]

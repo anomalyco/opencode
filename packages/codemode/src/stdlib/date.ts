@@ -23,6 +23,8 @@ export const dateMethods = new Set([
   "getTimezoneOffset",
 ])
 
+export const dateStatics = new Set(["now", "parse", "UTC"])
+
 export const invokeDateStatic = (name: string, args: Array<unknown>, node: AstNode): number => {
   switch (name) {
     case "now":
