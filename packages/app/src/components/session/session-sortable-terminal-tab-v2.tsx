@@ -211,7 +211,17 @@ export function SortableTerminalTabV2(props: {
           <MenuV2.Context.Trigger class="relative" as="div">
             <Tabs.Trigger
               value={props.terminal.id}
-              onClick={focus}
+              onMouseDown={(e) => {
+                // Switch on mousedown to shave the press-release delay off tab switches.
+                if (e.button !== 0) return
+                if (store.editing) return
+                focus()
+              }}
+              onClick={(e) => {
+                // Mouse navigation already happened on mousedown; detail 0 means keyboard activation.
+                if (e.detail > 0) return
+                focus()
+              }}
               closeButton={
                 <IconButton
                   icon="close-small"

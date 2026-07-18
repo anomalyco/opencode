@@ -69,7 +69,7 @@ import { MessageTimeline } from "@/pages/session/timeline/message-timeline"
 import { createTimelineModel } from "@/pages/session/timeline/model"
 import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/pages/session/review-tab"
 import { useSessionLayout } from "@/pages/session/session-layout"
-import { syncSessionModel } from "@/pages/session/session-model-helpers"
+import { restorePromptModel, syncPromptModel, syncSessionModel } from "@/pages/session/session-model-helpers"
 import {
   clampSessionPanelWidth,
   SESSION_PANEL_WIDTH_MIN,
@@ -483,7 +483,7 @@ export default function Page() {
     if (desktopSessionResizeOpen()) return `${sessionPanelResizedWidth()}px`
     return `calc(100% - ${layout.fileTree.width()}px)`
   })
-  const centered = createMemo(() => isDesktop() && !desktopReviewOpen())
+  const centered = createMemo(() => isDesktop() && (newSessionDesign() || !desktopReviewOpen()))
   const desktopV2PanelLayout = createMemo(() =>
     sessionPanelLayout({
       review: desktopV2ReviewOpen(),
@@ -556,6 +556,17 @@ export default function Page() {
       },
     ),
   )
+
+  let restoredModelSession: string | undefined
+  createEffect(() => {
+    const id = params.id
+    if (!id || !prompt.ready() || !local.session.ready()) return
+    if (restoredModelSession !== id) {
+      restoredModelSession = id
+      if (restorePromptModel(local, prompt)) return
+    }
+    syncPromptModel(local, prompt)
+  })
 
   createEffect(
     on(
@@ -1304,7 +1315,7 @@ export default function Page() {
   const reviewPanelV2Rendered = createMemo<boolean>((prev) => prev || !store.deferRender, false)
 
   const reviewPanelV2 = () => (
-    <div class="flex flex-col h-full overflow-hidden bg-background-stronger contain-strict">
+    <div class="flex flex-col h-full overflow-hidden bg-v2-background-bg-base contain-strict">
       <Show when={reviewPanelV2Rendered()}>
         <ReviewPanelV2 {...reviewPanelV2Props()} />
       </Show>

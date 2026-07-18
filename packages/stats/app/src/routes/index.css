@@ -87,6 +87,11 @@
   display: none !important;
 }
 
+[data-page="stats"][data-layout="compare-detail"] {
+  /* The table contains its own wide rows; keep the page itself out of the horizontal scroll chain. */
+  overflow-x: visible;
+}
+
 [data-page="stats"] section[id],
 [data-page="stats"] [data-component="leaderboard"][id] {
   scroll-margin-top: 88px;
@@ -5852,7 +5857,6 @@
 }
 
 [data-page="stats"] [data-slot="compare-home-card-head"] b {
-  position: relative;
   display: grid;
   place-items: center;
   width: 32px;
@@ -5863,32 +5867,10 @@
   box-shadow: 0 1px 1.5px #0000000f;
 }
 
-[data-page="stats"] [data-slot="compare-home-card-head"] b::before {
-  position: absolute;
-  top: 8px;
-  left: 8px;
-  width: 3px;
-  height: 3px;
-  content: "";
-  background: currentColor;
-  box-shadow:
-    7px 0 currentColor,
-    0 7px currentColor;
-  color: var(--stats-muted);
-}
-
-[data-page="stats"] [data-slot="compare-home-card-head"] b::after {
-  position: absolute;
-  right: 5px;
-  bottom: 5px;
-  width: 12px;
-  height: 12px;
-  box-sizing: border-box;
-  content: "";
-  background:
-    radial-gradient(circle at 4px 4px, transparent 2.5px, var(--stats-muted) 2.75px 4px, transparent 4.25px),
-    linear-gradient(var(--stats-muted) 0 0) 7px 8px / 5px 1.5px no-repeat;
-  transform: rotate(45deg);
+[data-page="stats"] [data-slot="compare-home-card-head"] b svg {
+  display: block;
+  width: 16px;
+  height: 16px;
 }
 
 [data-page="stats"] [data-slot="compare-home-card-divider"] {
@@ -5921,6 +5903,858 @@
   align-items: center;
   gap: 8px;
   min-width: 0;
+}
+
+[data-page="stats"] [data-section="compare-detail-hero"] {
+  position: relative;
+  display: grid;
+  align-content: end;
+  gap: 24px;
+  min-height: 316px;
+  box-sizing: border-box;
+  padding: 128px 40px 40px;
+  color: var(--stats-text);
+}
+
+[data-page="stats"] [data-slot="compare-detail-hero-grid"] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 24px;
+  align-items: center;
+}
+
+[data-page="stats"] [data-section="compare-detail-hero"] h1 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+  margin: 0;
+  color: var(--stats-text);
+  font-size: 40px;
+  font-weight: 500;
+  line-height: 60px;
+  letter-spacing: 0;
+}
+
+[data-page="stats"] [data-slot="compare-detail-actions"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+[data-page="stats"] button[data-slot="compare-detail-action"],
+[data-page="stats"] a[data-slot="compare-detail-action"] {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 32px;
+  box-sizing: border-box;
+  padding: 0 12px 0 8px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  color: var(--stats-text);
+  background: var(--stats-bg);
+  box-shadow:
+    0 0 0 0.5px color-mix(in srgb, var(--stats-text) 14%, transparent),
+    0 1px 1.5px color-mix(in srgb, #000000 10%, transparent);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.1;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+[data-page="stats"] button[data-slot="compare-detail-action"]::before,
+[data-page="stats"] a[data-slot="compare-detail-action"]::before {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 16px;
+  background: linear-gradient(to bottom, rgb(255 255 255 / 7%), transparent);
+  content: "";
+  pointer-events: none;
+}
+
+[data-page="stats"] [data-slot="compare-detail-action"] > * {
+  position: relative;
+  z-index: 1;
+}
+
+[data-page="stats"] button[data-slot="compare-detail-action"][aria-pressed] {
+  gap: 12px;
+}
+
+[data-page="stats"] button[data-slot="compare-detail-action"]:hover,
+[data-page="stats"] button[data-slot="compare-detail-action"]:focus-visible,
+[data-page="stats"] a[data-slot="compare-detail-action"]:hover,
+[data-page="stats"] a[data-slot="compare-detail-action"]:focus-visible {
+  background: var(--stats-layer);
+  outline: none;
+  text-decoration: none;
+}
+
+[data-page="stats"] button[data-slot="compare-detail-action"]:disabled {
+  color: var(--stats-muted);
+  background: var(--stats-bg);
+  cursor: not-allowed;
+}
+
+[data-page="stats"] button[data-slot="compare-detail-action"][data-active="true"] {
+  color: var(--stats-text);
+  background: var(--stats-bg);
+}
+
+[data-page="stats"] [data-slot="compare-detail-highlight-icon"] {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  width: 31px;
+  height: 16px;
+  box-sizing: border-box;
+  padding: 1px;
+  overflow: hidden;
+  background: var(--stats-line-strong);
+}
+
+[data-page="stats"] [data-slot="compare-detail-highlight-icon"] i {
+  flex: 0 0 14px;
+  width: 14px;
+  height: 14px;
+  background: transparent;
+}
+
+[data-page="stats"]
+  [data-slot="compare-detail-action"][aria-pressed="true"]
+  [data-slot="compare-detail-highlight-icon"] {
+  background: var(--stats-accent);
+}
+
+[data-page="stats"]
+  [data-slot="compare-detail-action"][aria-pressed="false"]
+  [data-slot="compare-detail-highlight-icon"]
+  i:first-child,
+[data-page="stats"]
+  [data-slot="compare-detail-action"][aria-pressed="true"]
+  [data-slot="compare-detail-highlight-icon"]
+  i:last-child {
+  background: #fafafa;
+  box-shadow:
+    0 0 0 0.5px rgb(0 0 0 / 12%),
+    0 1px 2px -1px rgb(0 0 0 / 8%),
+    0 2px 4px rgb(0 0 0 / 4%);
+}
+
+[data-page="stats"] [data-slot="compare-detail-action"] [data-slot="compare-home-plus"] {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
+  line-height: 16px;
+}
+
+[data-page="stats"] [data-section="compare-radar"] {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 800px minmax(0, 1fr);
+  width: 100%;
+  height: 800px;
+  box-sizing: border-box;
+  border-right: 1px solid var(--stats-line);
+  border-left: 1px solid var(--stats-line);
+  color: var(--stats-text);
+  background: var(--stats-bg);
+}
+
+[data-page="stats"] [data-slot="compare-radar-legend"] {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+  margin: 0;
+  padding: 40px;
+  list-style: none;
+}
+
+[data-page="stats"] [data-slot="compare-radar-legend"] li {
+  display: grid;
+  grid-template-columns: 6px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  min-width: 0;
+}
+
+[data-page="stats"] [data-slot="compare-radar-legend"] li > i {
+  width: 6px;
+  height: 6px;
+  margin-top: 6px;
+}
+
+[data-page="stats"] [data-slot="compare-radar-legend"] li > span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+[data-page="stats"] [data-slot="compare-radar-legend"] strong,
+[data-page="stats"] [data-slot="compare-radar-legend"] small {
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-page="stats"] [data-slot="compare-radar-legend"] strong {
+  color: var(--stats-text);
+  font-weight: 500;
+}
+
+[data-page="stats"] [data-slot="compare-radar-legend"] small {
+  color: var(--stats-muted);
+  font-weight: 400;
+}
+
+[data-page="stats"] [data-slot="compare-radar-chart"] {
+  position: relative;
+  width: 800px;
+  height: 800px;
+}
+
+[data-page="stats"] [data-slot="compare-radar-plot"] {
+  position: absolute;
+  inset: 17.5%;
+}
+
+[data-page="stats"] [data-slot="compare-radar-plot"] svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+[data-page="stats"] [data-slot="compare-radar-grid"] polygon,
+[data-page="stats"] [data-slot="compare-radar-grid"] line {
+  fill: none;
+  stroke: var(--stats-line);
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+}
+
+[data-page="stats"] [data-slot="compare-radar-area"],
+[data-page="stats"] [data-slot="compare-radar-line"] {
+  stroke: currentColor;
+  stroke-width: 1.5px;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+[data-page="stats"] [data-slot="compare-radar-area"] {
+  fill: currentColor;
+  fill-opacity: 0.09;
+}
+
+[data-page="stats"] [data-slot="compare-radar-line"] {
+  fill: none;
+}
+
+[data-page="stats"] [data-slot="compare-radar-point"] {
+  fill: currentColor;
+  stroke: currentColor;
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+}
+
+[data-page="stats"] [data-slot="compare-radar-point-hit"] {
+  fill: transparent;
+  cursor: pointer;
+}
+
+[data-page="stats"] [data-slot="compare-radar-axis"] {
+  position: absolute;
+  top: var(--compare-radar-axis-y);
+  left: var(--compare-radar-axis-x);
+  max-width: 160px;
+  color: var(--stats-text);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 20px;
+  text-align: center;
+  cursor: pointer;
+  transform: translate(var(--compare-radar-axis-translate-x), -50%);
+  white-space: nowrap;
+}
+
+[data-page="stats"] [data-slot="compare-radar-axis"]:focus-visible {
+  outline: none;
+}
+
+[data-page="stats"] [data-slot="compare-radar-axis-label"] {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  box-sizing: border-box;
+  padding: 0 8px;
+  margin: 0 -8px;
+}
+
+[data-page="stats"] [data-slot="compare-radar-axis"][data-active="true"] [data-slot="compare-radar-axis-label"] {
+  background: var(--stats-layer-2);
+}
+
+[data-page="stats"] [data-slot="compare-radar-axis"]:focus-visible [data-slot="compare-radar-axis-label"] {
+  outline: 1px solid var(--stats-text);
+  outline-offset: 2px;
+}
+
+[data-page="stats"] [data-slot="compare-radar-tooltip"] {
+  position: absolute;
+  z-index: 5;
+  top: var(--compare-radar-tooltip-y);
+  left: clamp(104px, var(--compare-radar-tooltip-x), calc(100% - 104px));
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 192px;
+  box-sizing: border-box;
+  padding: 8px;
+  color: var(--stats-text);
+  background: var(--stats-layer);
+  box-shadow:
+    0 0 0 0.5px color-mix(in srgb, var(--stats-text) 12%, transparent),
+    0 4px 8px color-mix(in srgb, #000000 8%, transparent),
+    0 8px 16px color-mix(in srgb, #000000 4%, transparent);
+  pointer-events: none;
+  transform: translate(-50%, var(--compare-radar-tooltip-translate-y));
+}
+
+[data-page="stats"] [data-slot="compare-radar-tooltip"] strong,
+[data-page="stats"] [data-slot="compare-radar-tooltip"] p {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0;
+}
+
+[data-page="stats"] [data-slot="compare-radar-tooltip"] strong {
+  color: var(--stats-text);
+  font-weight: 500;
+  line-height: 12px;
+}
+
+[data-page="stats"] [data-slot="compare-radar-tooltip"] p {
+  color: var(--stats-muted);
+  font-weight: 400;
+  line-height: 16px;
+}
+
+[data-page="stats"] [data-slot="compare-radar-data"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+[data-page="stats"] [data-component="compare-detail-table"] {
+  --compare-detail-label-column: 292px;
+  --compare-detail-model-column-min: 360px;
+  position: relative;
+}
+
+[data-page="stats"] [data-component="compare-detail-heading-scroll"] {
+  position: sticky;
+  top: 72px;
+  z-index: 9;
+  overflow-x: auto;
+  overscroll-behavior-x: none;
+  background: var(--stats-bg);
+  scrollbar-width: none;
+}
+
+[data-page="stats"] [data-component="compare-detail-heading-scroll"]::-webkit-scrollbar {
+  display: none;
+}
+
+[data-page="stats"] [data-component="compare-detail-body-scroll"] {
+  overflow-x: auto;
+  overscroll-behavior-x: none;
+}
+
+[data-page="stats"] [data-section="compare-detail-selector"],
+[data-page="stats"] [data-section="compare-detail-matrix"] {
+  min-width: calc(
+    var(--compare-detail-label-column) + var(--compare-detail-model-column-min) + var(--compare-detail-model-column-min)
+  );
+}
+
+[data-page="stats"] [data-section="compare-detail-selector"] {
+  position: relative;
+  height: 98px;
+  min-height: 98px;
+  box-sizing: border-box;
+  border: 0;
+}
+
+[data-page="stats"] [data-section="compare-detail-selector"]::after {
+  position: absolute;
+  z-index: 5;
+  inset: 0;
+  border-top: 1px solid var(--stats-line);
+  border-bottom: 1px solid var(--stats-line);
+  content: "";
+  pointer-events: none;
+}
+
+[data-page="stats"] [data-component="compare-detail-selector-grid"] {
+  display: grid;
+  grid-template-columns: var(--compare-detail-grid);
+  height: 100%;
+}
+
+[data-page="stats"]
+  [data-component="compare-detail-table"][data-model-count="3"]
+  [data-section="compare-detail-selector"],
+[data-page="stats"]
+  [data-component="compare-detail-table"][data-model-count="3"]
+  [data-section="compare-detail-matrix"] {
+  min-width: calc(
+    var(--compare-detail-label-column) + var(--compare-detail-model-column-min) +
+      var(--compare-detail-model-column-min) + var(--compare-detail-model-column-min)
+  );
+}
+
+[data-page="stats"]
+  [data-component="compare-detail-table"][data-model-count="4"]
+  [data-section="compare-detail-selector"],
+[data-page="stats"]
+  [data-component="compare-detail-table"][data-model-count="4"]
+  [data-section="compare-detail-matrix"] {
+  min-width: calc(
+    var(--compare-detail-label-column) + var(--compare-detail-model-column-min) +
+      var(--compare-detail-model-column-min) + var(--compare-detail-model-column-min) +
+      var(--compare-detail-model-column-min)
+  );
+}
+
+[data-page="stats"]
+  [data-component="compare-detail-table"][data-model-count="5"]
+  [data-section="compare-detail-selector"],
+[data-page="stats"]
+  [data-component="compare-detail-table"][data-model-count="5"]
+  [data-section="compare-detail-matrix"] {
+  min-width: calc(
+    var(--compare-detail-label-column) + var(--compare-detail-model-column-min) +
+      var(--compare-detail-model-column-min) + var(--compare-detail-model-column-min) +
+      var(--compare-detail-model-column-min) + var(--compare-detail-model-column-min)
+  );
+}
+
+[data-page="stats"]
+  [data-component="compare-detail-table"][data-model-count="6"]
+  [data-section="compare-detail-selector"],
+[data-page="stats"]
+  [data-component="compare-detail-table"][data-model-count="6"]
+  [data-section="compare-detail-matrix"] {
+  min-width: calc(
+    var(--compare-detail-label-column) + var(--compare-detail-model-column-min) +
+      var(--compare-detail-model-column-min) + var(--compare-detail-model-column-min) +
+      var(--compare-detail-model-column-min) + var(--compare-detail-model-column-min) +
+      var(--compare-detail-model-column-min)
+  );
+}
+
+[data-page="stats"] [data-slot="compare-detail-selector-spacer"] {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  min-width: 0;
+  box-sizing: border-box;
+  border-right: 1px solid var(--stats-line);
+  border-left: 1px solid var(--stats-line);
+  background: var(--stats-bg);
+}
+
+[data-page="stats"] button[data-slot="compare-detail-select-model"] {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 0 40px;
+  border: 0;
+  appearance: none;
+  border-radius: 0;
+  color: var(--stats-text);
+  background: var(--stats-bg);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+[data-page="stats"] button[data-slot="compare-detail-select-model"][data-column]:not([data-column="0"]) {
+  border-left: 1px solid var(--stats-line);
+}
+
+[data-page="stats"] button[data-slot="compare-detail-select-model"][data-last="true"] {
+  border-right: 1px solid var(--stats-line);
+}
+
+[data-page="stats"] button[data-slot="compare-detail-select-model"]:hover,
+[data-page="stats"] button[data-slot="compare-detail-select-model"]:focus-visible {
+  background: var(--stats-layer);
+  outline: none;
+}
+
+[data-page="stats"] [data-slot="compare-detail-select-name"] {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--stats-text);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-page="stats"] button[data-slot="compare-detail-select-model"] svg {
+  flex: 0 0 auto;
+  color: var(--stats-muted);
+}
+
+[data-page="stats"] [data-section="compare-detail-matrix"] {
+  position: relative;
+  color: var(--stats-text);
+  border-bottom: 1px solid var(--stats-line);
+}
+
+[data-page="stats"] [data-component="compare-detail-matrix"] {
+  position: relative;
+}
+
+[data-page="stats"] [data-slot="compare-detail-group"] {
+  display: grid;
+  grid-template-columns: var(--compare-detail-grid);
+}
+
+[data-page="stats"] [data-slot="compare-detail-group"] + [data-slot="compare-detail-group"] {
+  border-top: 1px solid var(--stats-line);
+}
+
+[data-page="stats"] [data-slot="compare-detail-label"],
+[data-page="stats"] [data-slot="compare-detail-value"] {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  min-height: 56px;
+  box-sizing: border-box;
+  padding: 0 40px;
+  font-size: 14px;
+  line-height: 24px;
+}
+
+[data-page="stats"] [data-slot="compare-detail-label"] {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  border-right: 1px solid var(--stats-line);
+  border-left: 1px solid var(--stats-line);
+  color: var(--stats-muted);
+  background: var(--stats-bg);
+  font-weight: 400;
+}
+
+[data-page="stats"] [data-slot="compare-detail-value"][data-column]:not([data-column="0"]) {
+  border-left: 1px solid var(--stats-line);
+}
+
+[data-page="stats"] [data-slot="compare-detail-value"][data-last="true"] {
+  border-right: 1px solid var(--stats-line);
+}
+
+[data-page="stats"] [data-slot="compare-detail-label"][data-spacer="true"],
+[data-page="stats"] [data-slot="compare-detail-value"][data-spacer="true"] {
+  min-height: 40px;
+  padding: 0;
+}
+
+[data-page="stats"] [data-slot="compare-detail-label"][data-heading="true"] {
+  gap: 12px;
+  color: var(--stats-text);
+  font-weight: 500;
+}
+
+[data-page="stats"] [data-slot="compare-detail-label"][data-heading="true"] strong {
+  font-weight: 600;
+}
+
+[data-page="stats"] [data-slot="compare-detail-label"][data-heading="true"] span {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 8px;
+  color: var(--stats-muted);
+  background: var(--stats-layer-2);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+[data-page="stats"] [data-slot="compare-detail-value"] {
+  justify-content: flex-end;
+  color: var(--stats-text);
+  font-weight: 400;
+  text-align: right;
+}
+
+[data-page="stats"] [data-slot="compare-detail-value"][data-best="true"] {
+  background: color-mix(in srgb, #198b43 8%, transparent);
+}
+
+[data-page="stats"] [data-slot="compare-detail-value-main"],
+[data-page="stats"] [data-slot="compare-detail-value-link"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  min-width: 0;
+}
+
+[data-page="stats"] [data-slot="compare-detail-value-link"] {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--stats-text) 30%, transparent);
+  text-underline-offset: 2px;
+}
+
+[data-page="stats"] [data-slot="compare-detail-unit"] {
+  color: var(--stats-muted);
+}
+
+[data-page="stats"] [data-slot="compare-detail-trend"] {
+  display: inline-flex;
+  align-items: center;
+  height: 16px;
+  padding: 0 5px;
+  color: var(--stats-muted);
+  background: var(--stats-layer-2);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+[data-page="stats"] [data-slot="compare-detail-trend"][data-trend="up"] {
+  color: #198b43;
+  background: #e2f8e9;
+}
+
+[data-page="stats"] [data-slot="compare-detail-trend"][data-trend="down"] {
+  color: #c93737;
+  background: #fae8e8;
+}
+
+[data-page="stats"] [data-slot="compare-detail-boolean"] {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+[data-page="stats"] [data-slot="compare-detail-boolean"][data-value="true"] {
+  color: #198b43;
+  background: #e2f8e9;
+}
+
+[data-page="stats"] [data-slot="compare-detail-boolean"][data-value="false"] {
+  color: #c93737;
+  background: #fae8e8;
+}
+
+[data-page="stats"] [data-slot="compare-detail-value"][data-chart="true"] {
+  display: grid;
+  align-content: center;
+  gap: 12px;
+  min-height: 102px;
+}
+
+[data-page="stats"] [data-slot="compare-detail-bars"] {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  width: 100%;
+  height: 40px;
+}
+
+[data-page="stats"] [data-slot="compare-detail-bars"] i {
+  flex: 1 1 0;
+  min-width: 2px;
+  max-width: 6px;
+  background: color-mix(in srgb, var(--stats-text) 18%, transparent);
+}
+
+[data-page="stats"] [data-slot="compare-detail-bar-dates"] {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  color: var(--stats-muted);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 14px;
+}
+
+[data-page="stats"] [data-slot="compare-detail-no-chart"] {
+  justify-self: end;
+  color: var(--stats-muted);
+  font-size: 12px;
+}
+
+@media (max-width: 80rem) {
+  [data-page="stats"] [data-section="compare-detail-hero"] {
+    min-height: 280px;
+    padding: 104px 32px 40px;
+  }
+
+  [data-page="stats"] [data-slot="compare-detail-hero-grid"] {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  [data-page="stats"] [data-slot="compare-detail-actions"] {
+    justify-content: flex-start;
+  }
+
+  [data-page="stats"] [data-section="compare-radar"] {
+    grid-template-columns: minmax(180px, 208px) minmax(0, 1fr);
+  }
+
+  [data-page="stats"] [data-slot="compare-radar-legend"] {
+    padding-right: 24px;
+    padding-left: 32px;
+  }
+
+  [data-page="stats"] [data-slot="compare-radar-chart"] {
+    align-self: center;
+    width: min(100%, 800px);
+    height: auto;
+    aspect-ratio: 1;
+  }
+
+  [data-page="stats"] [data-component="compare-detail-table"] {
+    --compare-detail-label-column: 220px;
+    --compare-detail-model-column-min: 320px;
+  }
+
+  [data-page="stats"] button[data-slot="compare-detail-select-model"],
+  [data-page="stats"] [data-slot="compare-detail-label"],
+  [data-page="stats"] [data-slot="compare-detail-value"] {
+    padding-right: 32px;
+    padding-left: 32px;
+  }
+}
+
+@media (max-width: 60rem) {
+  [data-page="stats"] [data-section="compare-detail-hero"] {
+    gap: 20px;
+    min-height: 316px;
+    padding: 72px 24px 40px;
+  }
+
+  [data-page="stats"] [data-section="compare-detail-hero"] h1 {
+    gap: 12px;
+    font-size: 32px;
+    line-height: 42px;
+  }
+
+  [data-page="stats"] [data-slot="compare-detail-actions"] {
+    flex-wrap: wrap;
+  }
+
+  [data-page="stats"] [data-section="compare-radar"] {
+    grid-template-columns: minmax(0, 1fr);
+    height: auto;
+    padding: 32px 24px 24px;
+  }
+
+  [data-page="stats"] [data-slot="compare-radar-legend"] {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 16px 32px;
+    padding: 0 0 16px;
+  }
+
+  [data-page="stats"] [data-slot="compare-radar-legend"] li {
+    flex: 1 1 180px;
+  }
+
+  [data-page="stats"] [data-slot="compare-radar-chart"] {
+    justify-self: center;
+    width: min(100%, 720px);
+  }
+}
+
+@media (max-width: 40rem) {
+  [data-page="stats"] [data-section="compare-detail-hero"] h1 {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  [data-page="stats"] [data-slot="compare-detail-action"] {
+    width: 100%;
+  }
+
+  [data-page="stats"] [data-section="compare-radar"] {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  [data-page="stats"] [data-slot="compare-radar-legend"] {
+    gap: 12px;
+  }
+
+  [data-page="stats"] [data-slot="compare-radar-legend"] li {
+    flex-basis: 140px;
+  }
+
+  [data-page="stats"] [data-slot="compare-radar-axis"] {
+    left: var(--compare-radar-axis-mobile-x);
+    max-width: 104px;
+    font-size: 13px;
+    line-height: 16px;
+    white-space: normal;
+  }
+
+  [data-page="stats"] [data-slot="compare-radar-axis-label"] {
+    padding-right: 6px;
+    padding-left: 6px;
+    margin-right: -6px;
+    margin-left: -6px;
+  }
+
+  [data-page="stats"] [data-component="compare-detail-table"] {
+    --compare-detail-label-column: 188px;
+    --compare-detail-model-column-min: 246px;
+  }
+
+  [data-page="stats"] button[data-slot="compare-detail-select-model"],
+  [data-page="stats"] [data-slot="compare-detail-label"],
+  [data-page="stats"] [data-slot="compare-detail-value"] {
+    padding-right: 24px;
+    padding-left: 24px;
+  }
 }
 
 [data-page="stats"] [data-component="compare-model-modal-scrim"] {
