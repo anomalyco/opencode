@@ -1,5 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import { describe, expect, test } from "bun:test"
+import type { OpenCodeEvent } from "@opencode-ai/client"
 import { testRender } from "@opentui/solid"
 import { onMount } from "solid-js"
 import { ClientProvider, useClient } from "../../../src/context/client"
@@ -71,6 +72,59 @@ describe("ClientProvider stream ownership", () => {
     }
   })
 
+  test("event IDs from a prior generation are not delivered after interest reconnect", async () => {
+    const events = createEventStream()
+    const calls = createFetch((url, request) => {
+      if (url.pathname !== "/api/event") return undefined
+      return events.v2(request.signal)
+    }, events)
+
+    const seen: Array<{ id: string; generation: number }> = []
+    let client!: ReturnType<typeof useClient>
+    let done!: () => void
+    const ready = new Promise<void>((resolve) => {
+      done = resolve
+    })
+
+    const app = await testRender(() => (
+      <TestTuiContexts>
+        <ClientProvider api={createApi(calls.fetch)} interest={{ location: { directory } }}>
+          <Probe
+            onReady={(ctx) => {
+              client = ctx
+              client.event.on("vcs.branch.updated", (event) => {
+                seen.push({ id: event.id, generation: client.connection.internal.generation() })
+              })
+              done()
+            }}
+          />
+        </ClientProvider>
+      </TestTuiContexts>
+    ))
+
+    try {
+      await ready
+      await wait(() => client.connection.status() === "connected")
+      const generation = client.connection.internal.generation()
+      events.emit(vcs("before"))
+      await wait(() => seen.some((entry) => entry.id === "evt_vcs_before"))
+
+      client.event.scope({ location: { directory }, sessions: ["ses_next"] })
+      await wait(
+        () =>
+          client.connection.status() === "connected" && client.connection.internal.generation() > generation,
+      )
+      const next = client.connection.internal.generation()
+      events.emit(vcs("after"))
+      await wait(() => seen.some((entry) => entry.id === "evt_vcs_after"))
+
+      expect(seen.filter((entry) => entry.id === "evt_vcs_before")).toEqual([{ id: "evt_vcs_before", generation }])
+      expect(seen.filter((entry) => entry.id === "evt_vcs_after")).toEqual([{ id: "evt_vcs_after", generation: next }])
+    } finally {
+      app.renderer.destroy()
+    }
+  })
+
   test("teardown leaves zero active event streams", async () => {
     const events = createEventStream()
     let concurrent = 0
@@ -119,4 +173,13 @@ function Probe(props: { onReady: (client: ReturnType<typeof useClient>) => void 
   const client = useClient()
   onMount(() => props.onReady(client))
   return <box />
+}
+
+function vcs(branch: string): OpenCodeEvent {
+  return {
+    id: `evt_vcs_${branch}`,
+    created: 0,
+    type: "vcs.branch.updated",
+    data: { branch },
+  }
 }
