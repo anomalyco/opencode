@@ -59,9 +59,11 @@ export function ShellTab(props: { sessionID: string }) {
         group: "Composer",
         bind: "up",
         run() {
-          const list = entries()
-          if (list.length === 0) return
-          setStore("selected", (prev) => (prev - 1 + list.length) % list.length)
+          if (store.selected === 0) {
+            composer.close()
+            return
+          }
+          setStore("selected", (prev) => prev - 1)
         },
       },
       {

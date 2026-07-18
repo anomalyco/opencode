@@ -160,9 +160,11 @@ export function SubagentsTab(props: { sessionID: string }) {
         group: "Composer",
         bind: "up",
         run() {
-          const list = entries()
-          if (list.length === 0) return
-          moveTo((store.selected - 1 + list.length) % list.length, true)
+          if (store.selected === 0) {
+            composer.close()
+            return
+          }
+          moveTo(store.selected - 1, true)
         },
       },
       {

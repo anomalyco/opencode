@@ -22,6 +22,7 @@ interface Tab {
 const ComposerContext = createContext<{
   register: (tab: Tab) => () => void
   active: (id: string) => boolean
+  close: () => void
 }>()
 
 export function useComposerTab() {
@@ -73,6 +74,7 @@ export function Composer(props: ComposerProps) {
     active(id: string) {
       return props.open && store.active === id
     },
+    close,
   }
 
   const keymap = Keymap.use()
