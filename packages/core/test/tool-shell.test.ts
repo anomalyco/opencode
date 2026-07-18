@@ -2,7 +2,7 @@ import fs from "fs/promises"
 import { realpathSync } from "node:fs"
 import path from "path"
 import { describe, expect, test } from "bun:test"
-import { DateTime, Duration, Effect, Fiber, Layer, Scope, Stream } from "effect"
+import { DateTime, Deferred, Duration, Effect, Fiber, Layer, Scope, Stream } from "effect"
 import { Money } from "@opencode-ai/schema/money"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -166,10 +166,10 @@ const overflowCommand = (bytes: number) =>
   isWindows
     ? `[Console]::Out.Write(('x' * ${bytes})); Start-Sleep -Milliseconds 100`
     : `head -c ${bytes} /dev/zero | tr '\\0' 'x'`
-const progressOverflowCommand = (bytes: number) =>
+const progressOverflowCommand = (bytes: number, release: string) =>
   isWindows
-    ? `[Console]::Out.Write(('x' * ${bytes})); Start-Sleep -Milliseconds 1500`
-    : `head -c ${bytes} /dev/zero | tr '\\0' 'x'; sleep 1.5`
+    ? `[Console]::Out.Write(('x' * ${bytes})); while (!(Test-Path -LiteralPath '${release}')) { Start-Sleep -Milliseconds 50 }`
+    : `head -c ${bytes} /dev/zero | tr '\\0' 'x'; while [ ! -e '${release}' ]; do sleep 0.05; done`
 
 const withSession = <A, E, R>(directory: string, body: (registry: ToolRegistry.Interface) => Effect.Effect<A, E, R>) =>
   Effect.gen(function* () {
@@ -417,33 +417,46 @@ describe("ShellTool", () => {
     ),
   )
 
-  it.live("reports bounded output progress for a running command", () =>
-    Effect.acquireUseRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => {
-        reset()
-        const bytes = ShellTool.MAX_CAPTURE_BYTES + 1024
-        return withSession(tmp.path, (registry) =>
-          Effect.gen(function* () {
-            const progress: ToolRegistry.Progress[] = []
-            yield* settleTool(registry, {
-              ...call({ command: progressOverflowCommand(bytes) }, "call-progress"),
-              progress: (update) => Effect.sync(() => progress.push(update)),
-            })
+  it.live(
+    "reports bounded output progress for a running command",
+    () =>
+      Effect.acquireUseRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => {
+          reset()
+          const release = "shell-progress-release"
+          const releasePath = path.join(tmp.path, release)
+          return withSession(tmp.path, (registry) =>
+            Effect.gen(function* () {
+              const observed = yield* Deferred.make<ToolRegistry.Progress>()
+              yield* settleTool(registry, {
+                ...call(
+                  { command: progressOverflowCommand(ShellTool.MAX_CAPTURE_BYTES + 1024, release) },
+                  "call-progress",
+                ),
+                progress: (update) =>
+                  Effect.gen(function* () {
+                    if (update.structured.truncated !== true) return
+                    if (update.content[0]?.type !== "text") return
+                    yield* Deferred.succeed(observed, update)
+                    yield* Effect.promise(() => fs.writeFile(releasePath, ""))
+                  }),
+              })
 
-            expect(progress).toHaveLength(1)
-            expect(progress[0]?.structured).toEqual({ truncated: true })
-            const content = progress[0]?.content[0]
-            expect(content?.type).toBe("text")
-            if (content?.type !== "text") return
-            expect(content.text.indexOf("\n\n[output truncated; full output saved to:")).toBe(
-              ShellTool.MAX_CAPTURE_BYTES,
-            )
-          }),
-        )
-      },
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
-    ),
+              const progress = yield* Deferred.await(observed)
+              expect(progress.structured).toEqual({ truncated: true })
+              const content = progress.content[0]
+              expect(content?.type).toBe("text")
+              if (content?.type !== "text") return
+              expect(content.text.indexOf("\n\n[output truncated; full output saved to:")).toBe(
+                ShellTool.MAX_CAPTURE_BYTES,
+              )
+            }).pipe(Effect.ensuring(Effect.promise(() => fs.writeFile(releasePath, "")).pipe(Effect.ignore))),
+          )
+        },
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+      ),
+    { timeout: 15_000 },
   )
 
   it.live("returns a useful timeout settlement", () =>
