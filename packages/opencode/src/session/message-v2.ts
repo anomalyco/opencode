@@ -360,6 +360,9 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
             })
         }
         if (part.type === "reasoning") {
+          // A provider can open and close a reasoning stream without emitting a delta.
+          // Replaying that empty step creates an assistant message with no usable content.
+          if (part.text === "" && !part.metadata) continue
           if (differentModel) {
             if (part.text.trim().length > 0)
               assistantMessage.parts.push({

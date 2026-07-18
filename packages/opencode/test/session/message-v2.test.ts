@@ -1151,6 +1151,53 @@ describe("session.message-v2.toModelMessage", () => {
     ])
   })
 
+  test("does not replay an empty assistant step between duplicate step-start boundaries", async () => {
+    const assistantID = "m-assistant"
+    const kimiModel: Provider.Model = {
+      ...model,
+      id: ModelV2.ID.make("kimi-k3"),
+      providerID: ProviderV2.ID.make("opencode-go"),
+      api: {
+        id: "kimi-k3",
+        url: "https://opencode.ai/zen/go/v1",
+        npm: "@ai-sdk/openai-compatible",
+      },
+      capabilities: {
+        ...model.capabilities,
+        reasoning: true,
+        interleaved: { field: "reasoning_content" },
+      },
+    }
+
+    const input: SessionV1.WithParts[] = [
+      {
+        info: assistantInfo(assistantID, "m-parent", undefined, {
+          providerID: kimiModel.providerID,
+          modelID: kimiModel.api.id,
+        }),
+        parts: [
+          { ...basePart(assistantID, "p1"), type: "step-start" },
+          { ...basePart(assistantID, "p2"), type: "reasoning", text: "" },
+          { ...basePart(assistantID, "p3"), type: "step-start" },
+          { ...basePart(assistantID, "p4"), type: "reasoning", text: "thinking" },
+          { ...basePart(assistantID, "p5"), type: "text", text: "answer" },
+        ] satisfies SessionV1.Part[],
+      },
+    ]
+
+    expect(ProviderTransform.message(await MessageV2.toModelMessages(input, kimiModel), kimiModel, {})).toStrictEqual([
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "answer" }],
+        providerOptions: {
+          openaiCompatible: {
+            reasoning_content: "thinking",
+          },
+        },
+      },
+    ])
+  })
+
   test("drops messages that only contain step-start parts", async () => {
     const assistantID = "m-assistant"
 
