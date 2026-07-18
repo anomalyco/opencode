@@ -332,7 +332,8 @@ export function NewHome() {
     () =>
       selectedProject() ??
       projects().find((project) => project.worktree === focusedServerCtx()?.projects.last()) ??
-      projects()[0],
+      projects()[0] ??
+      focusedSync().data.project[0] as LocalProject | undefined,
   )
   const directories = (project: LocalProject) => [project.worktree, ...(project.sandboxes ?? [])]
   const projectDirectories = createMemo(() => {

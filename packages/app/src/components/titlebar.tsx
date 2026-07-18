@@ -367,9 +367,21 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                 const project = global.ensureServerCtx(conn).projects.list()[0]
                 return project ? [{ server: ServerConnection.key(conn), project }] : []
               })[0]
-              if (!fallback) return
+              if (fallback) {
+                tabs.newDraft({ server: fallback.server, directory: fallback.project.worktree }, "")
+                return
+              }
 
-              tabs.newDraft({ server: fallback.server, directory: fallback.project.worktree }, "")
+              // Last resort: use server-registered projects from sync data when
+              // no projects have been opened yet (fresh web start)
+              const conn = global.servers.list()[0] ?? server.current
+              if (conn) {
+                const ctx = global.ensureServerCtx(conn)
+                const registered = ctx.sync.data.project[0]
+                if (registered) {
+                  tabs.newDraft({ server: ServerConnection.key(conn), directory: registered.worktree }, "")
+                }
+              }
             }
             const toggleHome = () => tabs.toggleHome({ home: layout.route().type === "home", current: currentTab() })
 
