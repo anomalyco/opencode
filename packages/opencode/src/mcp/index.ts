@@ -344,29 +344,53 @@ const layer = Layer.effect(
       const [cmd, ...args] = mcp.command
       const baseDir = yield* InstanceState.directory
       const cwd = mcp.cwd ? path.resolve(baseDir, mcp.cwd) : baseDir
-      const transport = new StdioClientTransport({
-        stderr: "pipe",
-        command: cmd,
-        args,
-        cwd,
-        env: {
-          ...process.env,
-          ...(cmd === "opencode" ? { BUN_BE_BUN: "1" } : {}),
-          ...mcp.environment,
-        },
-      })
-
       const connectTimeout = mcp.timeout ?? DEFAULT_TIMEOUT
-      return yield* connectTransport(transport, connectTimeout).pipe(
-        Effect.map((client): { client: MCPClient | undefined; status: Status } => ({
-          client,
-          status: { status: "connected" },
-        })),
-        Effect.catch((error): Effect.Effect<{ client: MCPClient | undefined; status: Status }> => {
-          const msg = error instanceof Error ? error.message : String(error)
-          return Effect.succeed({ client: undefined, status: { status: "failed", error: msg } })
-        }),
-      )
+      const maxRetries = 2
+      let lastError: unknown
+
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        if (attempt > 0) {
+          // Exponential backoff: 1s, 2s
+          yield* Effect.sleep(`${Math.pow(2, attempt - 1)}s`)
+          yield* Effect.logWarning("Retrying MCP connection", { key, attempt })
+        }
+
+        // Create a fresh transport per attempt — connectTransport closes it on failure
+        const transport = new StdioClientTransport({
+          stderr: "pipe",
+          command: cmd,
+          args,
+          cwd,
+          env: {
+            ...process.env,
+            ...(cmd === "opencode" ? { BUN_BE_BUN: "1" } : {}),
+            ...mcp.environment,
+          },
+        })
+
+        // Drain the stderr PassThrough stream to prevent the OS pipe buffer
+        // from filling up and blocking/killing the child process. The MCP SDK
+        // creates a PassThrough for stderr but never reads from it — on Windows
+        // the 4KB pipe buffer fills up within seconds for chatty servers.
+        transport.stderr?.on("data", () => {})
+
+        const result = yield* connectTransport(transport, connectTimeout).pipe(
+          Effect.map((client): { client: MCPClient | undefined; status: Status } => ({
+            client,
+            status: { status: "connected" },
+          })),
+          Effect.catch((error): Effect.Effect<{ client: MCPClient | undefined; status: Status }> => {
+            lastError = error
+            const msg = error instanceof Error ? error.message : String(error)
+            return Effect.succeed({ client: undefined, status: { status: "failed", error: msg } })
+          }),
+        )
+
+        if (result.client) return result
+      }
+
+      const msg = lastError instanceof Error ? lastError.message : String(lastError)
+      return { client: undefined, status: { status: "failed", error: msg } } as { client: MCPClient | undefined; status: Status }
     })
 
     const create = Effect.fn("MCP.create")(
@@ -525,7 +549,7 @@ const layer = Layer.effect(
                 watch(s, key, result.mcpClient, bridge, mcp.timeout)
               }
             }),
-          { concurrency: "unbounded" },
+          { concurrency: 4 },
         )
 
         yield* Effect.addFinalizer(() =>
@@ -549,7 +573,7 @@ const layer = Layer.effect(
                   }
                   yield* Effect.tryPromise(() => client.close()).pipe(Effect.ignore)
                 }),
-              { concurrency: "unbounded" },
+              { concurrency: 4 },
             )
             pendingOAuthTransports.clear()
           }),
