@@ -7,7 +7,7 @@
     <strong>KanCode</strong>
   </a>
 </p>
-<p align="center">開源的 AI Coding Agent（TUI / CLI）。OpenCode fork，並維持雙讀相容設定。</p>
+<p align="center">開源的 AI Coding Agent（TUI / CLI）。OpenCode fork，設定僅使用 KanCode 路徑（<code>kancode.json(c)</code>、<code>.kancode/</code>）。</p>
 
 <p align="center">MIT 授權 · 歸因見 <a href="LICENSE">LICENSE</a> 與 <a href="NOTICE">NOTICE</a>。</p>
 

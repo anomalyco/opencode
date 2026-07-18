@@ -1,3 +1,5 @@
+> **Superseded** — current source of truth is `openspec/specs/branding-compat` (KanCode-only: `kancode.json(c)`, `.kancode/`; no dual-read / project `.opencode/` load). This archive records the original dual-read proposal.
+
 ## Why
 
 This fork is already named KanCode (`puetsua/kancode`), but most user-facing surfaces still say OpenCode and point at anomalyco/opencode.ai. Users need clear KanCode branding while keeping existing OpenCode configs, env flags, and data directories working without migration pain.

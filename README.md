@@ -7,7 +7,7 @@
     <strong>KanCode</strong>
   </a>
 </p>
-<p align="center">The open source AI coding agent (TUI / CLI). Fork of OpenCode with dual-read config compatibility.</p>
+<p align="center">The open source AI coding agent (TUI / CLI). Fork of OpenCode with KanCode-only config (<code>kancode.json(c)</code>, <code>.kancode/</code>).</p>
 
 <p align="center">MIT licensed · See <a href="LICENSE">LICENSE</a> and <a href="NOTICE">NOTICE</a> for attribution.</p>
 

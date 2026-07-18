@@ -1,3 +1,5 @@
+> **Superseded (config surface)** — live permission specs under `openspec/specs/permission-*` assume KanCode-only config (`kancode.json(c)`, `.kancode/`), not project dual-read / `opencode.json(c)`. Prefer those live specs over dual-read wording in this archive.
+
 ## Why
 
 Permission decisions today are a closed `allow | ask | deny` ruleset. Power users want smarter auto-gating inspired by Copilot Autopilot / Claude Code auto mode: a cheap classifier model that permit/denies tool calls without blocking the human on every ask. KanCode already lets users bring their own models; extending permission config with named **permission modules** (built-in `cruise_control`, plugin-provided customs like `puetsua_permit`) is the natural next step without throwing away existing rules.

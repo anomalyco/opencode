@@ -1,7 +1,9 @@
 # model-user-state Specification
 
 ## Purpose
-TBD - created by archiving change model-selection-ui. Update Purpose after archive.
+
+Per-user TUI model personalization in `state/model.json`: `recent`, `favorite`, `variant`, plus `hidden` and `notes`. Hidden models are gated out of validity/fallback/`cycleFavorite`; notes are free-text annotations keyed by `providerID/modelID`.
+
 ## Requirements
 ### Requirement: Model User State Persistence Shape
 

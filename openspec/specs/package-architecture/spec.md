@@ -24,6 +24,15 @@ Editable workspace packages SHALL use the `@kancode/*` npm scope (app package `@
 - **THEN** the dependency name uses `@kancode/<name>`
 - **AND** it does not introduce `@opencode-ai/<name>` for an in-repo package
 
+### Requirement: Published CLI npm Identity
+
+The CLI app package in the workspace SHALL remain `@kancode/cli` (`packages/kancode`). The published npm distribution name SHALL be `@puetsua/kancode` with bin `kancode`. Planning and release docs MUST NOT treat the workspace name and the published npm name as interchangeable without stating both.
+
+#### Scenario: Install docs match published name
+- **WHEN** user-facing install instructions name the npm package
+- **THEN** they use `@puetsua/kancode` and the `kancode` binary
+- **AND** they do not claim the published name is `@kancode/cli`
+
 ### Requirement: Runtime Dependency Direction
 
 Runtime dependencies SHALL follow this direction: Schema depends on nothing above it in the stack; Core and Protocol sit above Schema; Server depends on Core and Protocol. Client runtime code MAY depend on Schema and Protocol but MUST NOT depend on Core or Server. `sdk-next` MAY compose Client, Core, and Server.

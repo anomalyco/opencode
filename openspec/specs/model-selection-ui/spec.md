@@ -1,7 +1,9 @@
 # model-selection-ui Specification
 
 ## Purpose
-TBD - created by archiving change model-selection-ui. Update Purpose after archive.
+
+TUI `/models` dialog: two-pane layout for unscoped selection (Favorites / Recent / Hidden / providers), rich per-row metadata, hide/note/variant footer actions, and narrow-terminal single-column fallback. Provider-scoped flows stay single-column.
+
 ## Requirements
 ### Requirement: Two-Pane Model Dialog For Unscoped Model Selection
 

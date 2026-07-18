@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Named permission classifier modules (built-in and plugin-registered) that can be selected as V1 permission actions or V2 `ask`+`module` rules, with fail-closed evaluation and audit.
+Named permission classifier modules (built-in and plugin-registered) that can be selected as V1 permission actions or V2 `ask`+`module` rules, with fail-closed evaluation and auditable structured logging (no dedicated audit store required).
 
 ## Requirements
 
@@ -36,7 +36,7 @@ The system SHALL load per-module options from a top-level `permission_modules` m
 
 ### Requirement: Permission Module Registry
 
-The system SHALL provide a permission module registry that includes first-party built-in modules and MAY include modules registered by plugins. Lookup of an unknown module ID at decision time MUST fail closed to `deny` and MUST emit an auditable record of the failure.
+The system SHALL provide a permission module registry that includes first-party built-in modules and MAY include modules registered by plugins. Lookup of an unknown module ID at decision time MUST fail closed to `deny` and MUST emit an auditable structured log of the failure (a dedicated audit store is not required).
 
 #### Scenario: Built-in cruise_control is registered
 - **WHEN** the process starts with default plugins
@@ -49,7 +49,7 @@ The system SHALL provide a permission module registry that includes first-party 
 #### Scenario: Unknown module fails closed
 - **WHEN** a matching rule action is `"not_a_real_module"` and no such module is registered
 - **THEN** the permission decision is `deny`
-- **AND** an audit record notes the unknown module
+- **AND** an auditable structured log notes the unknown module
 
 #### Scenario: Reserved ID registration rejected
 - **WHEN** a plugin attempts to register a module with ID `allow`, `ask`, or `deny`
@@ -84,7 +84,7 @@ V2 permission rules SHALL keep `effect` as the closed set `allow | deny | ask` a
 - **WHEN** a V2 rule has `effect: "allow"` and also sets `module`
 - **THEN** the effect is allow without invoking the module
 
-### Requirement: Safety And Audit For Modules
+### Requirement: Safety And Auditable Logging For Modules
 
 Permission modules MUST fail closed on classifier/provider errors. Auto-allow from a module MUST respect configured allowlists and never-auto lists. Classifier or module decisions that allow a tool MUST NOT persist as durable “always” approvals unless the human explicitly replies `always` in the ask UI.
 
@@ -92,6 +92,7 @@ Permission modules MUST fail closed on classifier/provider errors. Auto-allow fr
 - **WHEN** `cruise_control` (or another module with the same policy) has an empty allowlist and the classifier would return allow
 - **THEN** the effective decision is not allow (uses `fallback` or deny/ask per module policy)
 
-#### Scenario: Audit records module decision
+#### Scenario: Structured log records module decision
 - **WHEN** a module produces a decision for a tool permission
-- **THEN** a session-local audit record includes module id, decision, permission key, and latency or error without logging secret values
+- **THEN** a session-local auditable structured log includes module id, decision, permission key, and latency or error without logging secret values
+- **AND** a dedicated audit store is not required
