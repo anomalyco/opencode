@@ -4,8 +4,8 @@ import { makeLocationNode } from "./effect/app-node"
 import path from "path"
 import { type ParseError, parse } from "jsonc-parser"
 import { Context, Effect, Layer, Option, Schema } from "effect"
-import { Permission } from "@opencode-ai/schema/permission"
-import { PermissionModule } from "@opencode-ai/schema/permission-module"
+import { Permission } from "@kancode/schema/permission"
+import { PermissionModule } from "@kancode/schema/permission-module"
 import { FSUtil } from "./fs-util"
 import { Global } from "./global"
 import { Location } from "./location"
@@ -135,7 +135,7 @@ export interface Interface {
   readonly entries: () => Effect.Effect<Entry[]>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Config") {}
+export class Service extends Context.Service<Service, Interface>()("@kancode/v2/Config") {}
 
 const layer = Layer.effect(
   Service,

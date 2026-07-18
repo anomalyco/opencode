@@ -6,7 +6,7 @@
  */
 export * as WriteTool from "./write"
 
-import { ToolFailure } from "@opencode-ai/llm"
+import { ToolFailure } from "@kancode/llm"
 import { Effect, Layer, Schema } from "effect"
 import { makeLocationNode } from "../effect/app-node"
 import { FileMutation } from "../file-mutation"

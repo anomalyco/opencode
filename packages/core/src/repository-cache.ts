@@ -92,7 +92,7 @@ export interface Interface {
   readonly ensure: (input: EnsureInput) => Effect.Effect<Result, Error>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/RepositoryCache") {}
+export class Service extends Context.Service<Service, Interface>()("@kancode/RepositoryCache") {}
 
 export function isError(error: unknown): error is Error {
   return (

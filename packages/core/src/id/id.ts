@@ -1,4 +1,4 @@
-import { create as createIdentifier } from "@opencode-ai/schema/identifier"
+import { create as createIdentifier } from "@kancode/schema/identifier"
 
 const prefixes = {
   job: "job",

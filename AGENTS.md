@@ -4,7 +4,7 @@ Daily rules for agents. Package-level `AGENTS.md` files add package-specific det
 
 ## Product / fork
 
-- Display name: **KanCode** (`kancode`). Keep `@opencode-ai/*` package names, `packages/opencode`, Effect service IDs, and provider id `"opencode"` (OpenCode Zen) unless an explicit rename is requested.
+- Display name: **KanCode** (`kancode`). Workspace packages use `@kancode/*`; the app lives in `packages/kancode` (`@kancode/cli`). Effect service IDs use `@kancode/...`. Keep provider id `"opencode"` (OpenCode Zen) as the upstream provider identity — do not rename that catalog id.
 - TUI/CLI-focused. Do not assume web/desktop/console packages (`packages/app`, `packages/desktop`, `packages/web`, `packages/console`) still exist.
 - Default branch: `main` (diff against `main` / `origin/main`).
 - Config: project/worktree **merge-includes** `opencode.json(c)` then `kancode.json(c)` (KanCode wins) and both `.opencode/` / `.kancode/` (`.kancode` wins). **User scope** (XDG/global, `~/.kancode`, data/cache/state/tmp/managed) is KanCode-only — no OpenCode user fallback. Honor `OPENCODE_*` and `KANCODE_*` (`KANCODE_*` wins).

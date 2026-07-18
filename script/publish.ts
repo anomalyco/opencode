@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { Script } from "@opencode-ai/script"
+import { Script } from "@kancode/script"
 import { $ } from "bun"
 import { fileURLToPath } from "url"
 
@@ -36,7 +36,7 @@ if (Script.release && !Script.preview) {
 await prepareReleaseFiles()
 
 console.log("\n=== kancode ===\n")
-await $`bun ./packages/opencode/script/publish.ts`
+await $`bun ./packages/kancode/script/publish.ts`
 
 if (Script.release && !Script.preview) {
   await $`git commit -am "release: ${tag}"`.nothrow()
@@ -65,10 +65,10 @@ if (Script.release) {
     console.log("creating release", tag)
     await $`gh release create ${tag} --repo ${ghRepo} --generate-notes`
     const archives = await Array.fromAsync(
-      new Bun.Glob("**/*.{zip,tar.gz}").scan({ cwd: "packages/opencode/dist" }),
+      new Bun.Glob("**/*.{zip,tar.gz}").scan({ cwd: "packages/kancode/dist" }),
     )
     if (archives.length > 0) {
-      await $`gh release upload ${tag} ${archives.map((a) => `packages/opencode/dist/${a}`).join(" ")} --clobber --repo ${ghRepo}`
+      await $`gh release upload ${tag} ${archives.map((a) => `packages/kancode/dist/${a}`).join(" ")} --clobber --repo ${ghRepo}`
     }
   } else {
     await $`gh release edit ${tag} --draft=false --repo ${ghRepo}`

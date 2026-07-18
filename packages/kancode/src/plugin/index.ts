@@ -1,0 +1,403 @@
+import { LayerNode } from "@kancode/core/effect/layer-node"
+import type {
+  Hooks,
+  PluginInput,
+  Plugin as PluginInstance,
+  PluginModule,
+  PermissionModuleDecideInput,
+  PermissionModuleRegistration,
+  WorkspaceAdapter as PluginWorkspaceAdapter,
+} from "@kancode/plugin"
+import { Config } from "@/config/config"
+import { createOpencodeClient } from "@kancode/sdk"
+import { ServerAuth } from "@/server/auth"
+import { CodexAuthPlugin } from "./openai/codex"
+import { Session } from "@/session/session"
+import { NamedError } from "@kancode/core/util/error"
+import { CopilotAuthPlugin } from "./github-copilot/copilot"
+import { gitlabAuthPlugin as GitlabAuthPlugin } from "opencode-gitlab-auth"
+import { PoeAuthPlugin } from "opencode-poe-auth"
+import { CloudflareAIGatewayAuthPlugin, CloudflareWorkersAuthPlugin } from "./cloudflare"
+import { AzureAuthPlugin } from "./azure"
+import { DigitalOceanAuthPlugin } from "./digitalocean"
+import { XaiAuthPlugin } from "./xai"
+import { SnowflakeCortexAuthPlugin } from "./snowflake-cortex"
+import { Effect, Layer, Context } from "effect"
+import { EffectBridge } from "@/effect/bridge"
+import { InstanceState } from "@/effect/instance-state"
+import { errorMessage } from "@/util/error"
+import { PluginLoader } from "./loader"
+import { parsePluginSpecifier, readPluginId, readV1Plugin, resolvePluginId } from "./shared"
+import { registerAdapter } from "@/control-plane/adapters"
+import type { WorkspaceAdapter } from "@/control-plane/types"
+import { RuntimeFlags } from "@/effect/runtime-flags"
+import { EventV2Bridge } from "@/event-v2-bridge"
+import { InstallationChannel } from "@kancode/core/installation/version"
+import { PermissionModule } from "@kancode/core/permission/module"
+import * as Option from "effect/Option"
+
+type State = {
+  hooks: Hooks[]
+}
+
+function validPermissionModuleDecision(value: unknown) {
+  if (value === "allow" || value === "deny" || value === "ask") return true
+  if (typeof value !== "object" || value === null || !("decision" in value)) return false
+  return value.decision === "allow" || value.decision === "deny" || value.decision === "ask"
+}
+
+export function runPluginPermissionModule(module: PermissionModuleRegistration, input: PermissionModuleDecideInput) {
+  return Effect.tryPromise({
+    try: () => module.decide(input),
+    catch: errorMessage,
+  }).pipe(
+    Effect.flatMap((raw) => {
+      if (validPermissionModuleDecision(raw)) {
+        return Effect.succeed(PermissionModule.normalizeDecide(raw))
+      }
+      return Effect.logError("plugin permission module returned invalid decision", {
+        module: module.id,
+      }).pipe(
+        Effect.as({
+          decision: "deny" as const,
+          reason: "Permission module returned an invalid decision; denied",
+        }),
+      )
+    }),
+    Effect.catch((error) =>
+      Effect.logError("plugin permission module failed", {
+        module: module.id,
+        error,
+      }).pipe(
+        Effect.as({
+          decision: "deny" as const,
+          reason: "Permission module failed; denied",
+        }),
+      ),
+    ),
+  )
+}
+
+// Hook names that follow the (input, output) => Promise<void> trigger pattern
+type TriggerName = {
+  [K in keyof Hooks]-?: NonNullable<Hooks[K]> extends (input: any, output: any) => Promise<void> ? K : never
+}[keyof Hooks]
+
+export interface Interface {
+  readonly trigger: <
+    Name extends TriggerName,
+    Input = Parameters<Required<Hooks>[Name]>[0],
+    Output = Parameters<Required<Hooks>[Name]>[1],
+  >(
+    name: Name,
+    input: Input,
+    output: Output,
+  ) => Effect.Effect<Output>
+  readonly list: () => Effect.Effect<Hooks[]>
+  readonly init: () => Effect.Effect<void>
+}
+
+export class Service extends Context.Service<Service, Interface>()("@kancode/Plugin") {}
+
+export function experimentalWebSocketsEnabled(input: { enabled: boolean; channel?: string }) {
+  return input.enabled || ["local", "dev", "beta"].includes(input.channel ?? InstallationChannel)
+}
+
+// Built-in plugins that are directly imported (not installed from npm).
+// Cruise Control is loaded lazily below to avoid a Provider ↔ Plugin cycle.
+function internalPlugins(flags: RuntimeFlags.Info): PluginInstance[] {
+  return [
+    // Temporary rollout: pre-release builds use WebSockets by default; releases require explicit opt-in.
+    (input) =>
+      CodexAuthPlugin(input, {
+        experimentalWebSockets: experimentalWebSocketsEnabled({ enabled: flags.experimentalWebSockets }),
+      }),
+    CopilotAuthPlugin,
+    GitlabAuthPlugin,
+    PoeAuthPlugin,
+    CloudflareWorkersAuthPlugin,
+    CloudflareAIGatewayAuthPlugin,
+    AzureAuthPlugin,
+    DigitalOceanAuthPlugin,
+    SnowflakeCortexAuthPlugin,
+    XaiAuthPlugin,
+  ]
+}
+
+function isServerPlugin(value: unknown): value is PluginInstance {
+  return typeof value === "function"
+}
+
+function getServerPlugin(value: unknown) {
+  if (isServerPlugin(value)) return value
+  if (!value || typeof value !== "object" || !("server" in value)) return
+  if (!isServerPlugin(value.server)) return
+  return value.server
+}
+
+function getLegacyPlugins(mod: Record<string, unknown>) {
+  const seen = new Set<unknown>()
+  const result: PluginInstance[] = []
+
+  for (const entry of Object.values(mod)) {
+    if (seen.has(entry)) continue
+    seen.add(entry)
+    const plugin = getServerPlugin(entry)
+    if (!plugin) throw new TypeError("Plugin export is not a function")
+    result.push(plugin)
+  }
+
+  return result
+}
+
+async function applyPlugin(load: PluginLoader.Loaded, input: PluginInput, hooks: Hooks[]) {
+  const plugin = readV1Plugin(load.mod, load.spec, "server", "detect")
+  if (plugin) {
+    await resolvePluginId(load.source, load.spec, load.target, readPluginId(plugin.id, load.spec), load.pkg)
+    hooks.push(await (plugin as PluginModule).server(input, load.options))
+    return
+  }
+
+  for (const server of getLegacyPlugins(load.mod)) {
+    hooks.push(await server(input, load.options))
+  }
+}
+
+const layer = Layer.effect(
+  Service,
+  Effect.gen(function* () {
+    const events = yield* EventV2Bridge.Service
+    const config = yield* Config.Service
+    const flags = yield* RuntimeFlags.Service
+
+    const state = yield* InstanceState.make<State>(
+      Effect.fn("Plugin.state")(function* (ctx) {
+        const hooks: Hooks[] = []
+        const moduleDisposers: Array<() => void> = []
+        const bridge = yield* EffectBridge.make()
+
+        function publishPluginError(message: string) {
+          bridge.fork(events.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() }))
+        }
+
+        const { Server } = yield* Effect.promise(() => import("../server/server"))
+
+        const serverUrl = Server.url
+        const client = createOpencodeClient({
+          baseUrl: serverUrl?.toString() ?? "http://localhost:4096",
+          directory: ctx.directory,
+          headers: ServerAuth.headers(),
+          ...(serverUrl ? {} : { fetch: async (...args) => Server.Default().app.fetch(...args) }),
+        })
+        const cfg = yield* config.get()
+        const modules = yield* Effect.serviceOption(PermissionModule.Service)
+        const input: PluginInput = {
+          client,
+          project: ctx.project,
+          worktree: ctx.worktree,
+          directory: ctx.directory,
+          experimental_workspace: {
+            register(type: string, adapter: PluginWorkspaceAdapter) {
+              registerAdapter(ctx.project.id, type, adapter as WorkspaceAdapter)
+            },
+          },
+          permission: {
+            registerModule(module) {
+              if (Option.isNone(modules)) {
+                throw new Error("permission module service unavailable; cannot register plugin permission modules")
+              }
+              moduleDisposers.push(
+                modules.value.registerSync({
+                  id: module.id,
+                  scope: ctx.directory,
+                  decide: (input) =>
+                    runPluginPermissionModule(module, {
+                      permission: input.permission,
+                      patterns: input.patterns,
+                      metadata: input.metadata,
+                      userPrompt: input.userPrompt,
+                      sessionContext: input.sessionContext,
+                      approvalPrompt: input.approvalPrompt,
+                      cacheScope: input.cacheScope,
+                    }),
+                }),
+              )
+            },
+          },
+          get serverUrl(): URL {
+            return Server.url ?? new URL("http://localhost:4096")
+          },
+          // @ts-expect-error
+          $: typeof Bun === "undefined" ? undefined : Bun.$,
+        }
+
+        for (const plugin of flags.disableDefaultPlugins ? [] : internalPlugins(flags)) {
+          const init = yield* Effect.tryPromise({
+            try: () => plugin(input),
+            catch: errorMessage,
+          }).pipe(
+            Effect.tapError((error) => Effect.logError("failed to load internal plugin", { name: plugin.name, error })),
+            Effect.option,
+          )
+          if (init._tag === "Some") hooks.push(init.value)
+        }
+
+        if (!flags.disableDefaultPlugins) {
+          // Lazy import: classifier depends on Provider, which depends on Plugin.
+          const { createCruiseControlPlugin } = yield* Effect.promise(() => import("./cruise-control"))
+          const cruise = createCruiseControlPlugin(bridge)
+          const init = yield* Effect.tryPromise({
+            try: () => cruise(input),
+            catch: errorMessage,
+          }).pipe(
+            Effect.tapError((error) =>
+              Effect.logError("failed to load internal plugin", { name: "cruise-control", error }),
+            ),
+            Effect.option,
+          )
+          if (init._tag === "Some") hooks.push(init.value)
+        }
+
+        const plugins = flags.pure ? [] : (cfg.plugin_origins ?? [])
+        if (flags.pure && cfg.plugin_origins?.length) {
+        }
+        if (plugins.length) yield* config.waitForDependencies()
+
+        const loaded = yield* Effect.promise(() =>
+          PluginLoader.loadExternal({
+            items: plugins,
+            kind: "server",
+            report: {
+              start(candidate) {},
+              missing(candidate, _retry, message) {},
+              error(candidate, _retry, stage, error, resolved) {
+                const spec = candidate.plan.spec
+                const cause = error instanceof Error ? (error.cause ?? error) : error
+                const message = stage === "load" ? errorMessage(error) : errorMessage(cause)
+
+                if (stage === "install") {
+                  const parsed = parsePluginSpecifier(spec)
+                  publishPluginError(`Failed to install plugin ${parsed.pkg}@${parsed.version}: ${message}`)
+                  return
+                }
+
+                if (stage === "compatibility") {
+                  publishPluginError(`Plugin ${spec} skipped: ${message}`)
+                  return
+                }
+
+                if (stage === "entry") {
+                  publishPluginError(`Failed to load plugin ${spec}: ${message}`)
+                  return
+                }
+
+                publishPluginError(`Failed to load plugin ${spec}: ${message}`)
+              },
+            },
+          }),
+        )
+        for (const load of loaded) {
+          if (!load) continue
+
+          // Keep plugin execution sequential so hook registration and execution
+          // order remains deterministic across plugin runs.
+          yield* Effect.tryPromise({
+            try: () => applyPlugin(load, input, hooks),
+            catch: (err) => {
+              const message = errorMessage(err)
+              return message
+            },
+          }).pipe(
+            Effect.tapError((error) => Effect.logError("failed to load plugin", { path: load.spec, error })),
+            Effect.catch(() => {
+              // TODO: make proper events for this
+              // events.publish(Session.Event.Error, {
+              //   error: new NamedError.Unknown({
+              //     message: `Failed to load plugin ${load.spec}: ${message}`,
+              //   }).toObject(),
+              // })
+              return Effect.void
+            }),
+          )
+        }
+
+        // Notify plugins of current config
+        for (const hook of hooks) {
+          yield* Effect.tryPromise({
+            try: () => Promise.resolve((hook as any).config?.(cfg)),
+            catch: errorMessage,
+          }).pipe(
+            Effect.tapError((error) => Effect.logError("plugin config hook failed", { error })),
+            Effect.ignore,
+          )
+        }
+
+        const unsubscribe = yield* events.listen((event) => {
+          if (event.location?.directory !== ctx.directory) return Effect.void
+          return Effect.sync(() => {
+            for (const hook of hooks) {
+              void hook["event"]?.({ event: { id: event.id, type: event.type, properties: event.data } as any })
+            }
+          })
+        })
+        yield* Effect.addFinalizer(() => unsubscribe)
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => {
+            for (const dispose of moduleDisposers.splice(0)) dispose()
+          }),
+        )
+
+        yield* Effect.addFinalizer(() =>
+          Effect.forEach(
+            hooks,
+            (hook) =>
+              Effect.tryPromise({
+                try: () => Promise.resolve(hook.dispose?.()),
+                catch: errorMessage,
+              }).pipe(
+                Effect.tapError((error) => Effect.logError("plugin dispose hook failed", { error })),
+                Effect.ignore,
+              ),
+            { discard: true },
+          ),
+        )
+
+        return { hooks }
+      }),
+    )
+
+    const trigger = Effect.fn("Plugin.trigger")(function* <
+      Name extends TriggerName,
+      Input = Parameters<Required<Hooks>[Name]>[0],
+      Output = Parameters<Required<Hooks>[Name]>[1],
+    >(name: Name, input: Input, output: Output) {
+      if (!name) return output
+      const s = yield* InstanceState.get(state)
+      for (const hook of s.hooks) {
+        const fn = hook[name] as any
+        if (!fn) continue
+        yield* Effect.promise(async () => fn(input, output))
+      }
+      return output
+    })
+
+    const list = Effect.fn("Plugin.list")(function* () {
+      const s = yield* InstanceState.get(state)
+      return s.hooks
+    })
+
+    const init = Effect.fn("Plugin.init")(function* () {
+      yield* InstanceState.get(state)
+    })
+
+    return Service.of({ trigger, list, init })
+  }),
+)
+
+export const node = LayerNode.make({
+  service: Service,
+  layer: layer,
+  deps: [EventV2Bridge.node, Config.node, RuntimeFlags.node],
+})
+
+export * as Plugin from "."

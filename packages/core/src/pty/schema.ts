@@ -1,1 +1,1 @@
-export { ID as PtyID } from "@opencode-ai/schema/pty"
+export { ID as PtyID } from "@kancode/schema/pty"

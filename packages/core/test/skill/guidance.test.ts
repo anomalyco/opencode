@@ -1,12 +1,12 @@
 import path from "path"
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
-import { AgentV2 } from "@opencode-ai/core/agent"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { AbsolutePath } from "@opencode-ai/core/schema"
-import { SkillV2 } from "@opencode-ai/core/skill"
-import { SystemContext } from "@opencode-ai/core/system-context"
-import { SkillGuidance } from "@opencode-ai/core/skill/guidance"
+import { AgentV2 } from "@kancode/core/agent"
+import { AppNodeBuilder } from "@kancode/core/effect/app-node-builder"
+import { AbsolutePath } from "@kancode/core/schema"
+import { SkillV2 } from "@kancode/core/skill"
+import { SystemContext } from "@kancode/core/system-context"
+import { SkillGuidance } from "@kancode/core/skill/guidance"
 import { it } from "../lib/effect"
 
 const primary = AgentV2.ID.make("default")

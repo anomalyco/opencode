@@ -1,6 +1,6 @@
 ## Context
 
-KanCode permissions are a closed `allow | ask | deny` ruleset with last-match-wins wildcards. Production TUI/CLI still runs **V1** (`permission: { bash: "ask" }` → `{ permission, pattern, action }` rules in `packages/opencode/src/permission`). **V2** Core uses `permissions: [{ action, resource, effect }]` in `packages/core/src/permission.ts`. Both evaluate the same way: find last matching rule, default to ask.
+KanCode permissions are a closed `allow | ask | deny` ruleset with last-match-wins wildcards. Production TUI/CLI still runs **V1** (`permission: { bash: "ask" }` → `{ permission, pattern, action }` rules in `packages/kancode/src/permission`). **V2** Core uses `permissions: [{ action, resource, effect }]` in `packages/core/src/permission.ts`. Both evaluate the same way: find last matching rule, default to ask.
 
 There is no module registry today. The closest seams are:
 

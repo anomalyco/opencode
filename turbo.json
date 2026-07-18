@@ -13,15 +13,15 @@
       "outputs": [],
       "passThroughEnv": ["*"]
     },
-    "@opencode-ai/core#test": {
+    "@kancode/core#test": {
       "dependsOn": ["^build"],
       "outputs": []
     },
-    "@opencode-ai/ui#test": {
+    "@kancode/ui#test": {
       "dependsOn": ["^build"],
       "outputs": []
     },
-    "@opencode-ai/tui#test": {
+    "@kancode/tui#test": {
       "dependsOn": ["^build"],
       "outputs": []
     }

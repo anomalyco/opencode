@@ -13,8 +13,8 @@ import { Slug } from "../util/slug"
 import { EventV2 } from "../event"
 import { Database } from "../database/database"
 import { Location } from "../location"
-import { Event } from "@opencode-ai/schema/project-directories"
-import { ProjectCopy } from "@opencode-ai/schema/project-copy"
+import { Event } from "@kancode/schema/project-directories"
+import { ProjectCopy } from "@kancode/schema/project-copy"
 
 export const StrategyID = ProjectCopy.StrategyID
 export type StrategyID = typeof StrategyID.Type
@@ -105,7 +105,7 @@ export interface Interface {
   readonly refresh: (input: RefreshInput) => Effect.Effect<RefreshResult, Error>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/ProjectCopy") {}
+export class Service extends Context.Service<Service, Interface>()("@kancode/ProjectCopy") {}
 
 export const refreshAfterBoot = Effect.gen(function* () {
   const location = yield* Location.Service

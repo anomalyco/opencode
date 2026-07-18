@@ -62,7 +62,7 @@ jobs:
       - name: Build platform binaries
         env:
           OPENCODE_RELEASE: ""
-        run: bun run --cwd packages/opencode build
+        run: bun run --cwd packages/kancode build
 
       - name: Publish release
         if: ${{ github.event.inputs.dry_run != 'true' }}

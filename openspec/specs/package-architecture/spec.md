@@ -8,12 +8,21 @@ Capture the live Bun monorepo package set and dependency direction so OpenSpec c
 
 ### Requirement: Workspace Packages Match the TUI Monorepo
 
-The workspace SHALL include the in-scope packages needed for TUI/CLI operation: `opencode`, `tui`, `cli`, `ui`, `core`, `server`, `client`, `protocol`, `schema`, `sdk` (`packages/sdk/js`), `sdk-next`, `plugin`, `llm`, `codemode`, `effect-drizzle-sqlite`, `http-recorder`, `httpapi-codegen`, and `script`.
+The workspace SHALL include the in-scope packages needed for TUI/CLI operation: `kancode` (`@kancode/cli`), `tui`, `ui`, `core`, `server`, `client`, `protocol`, `schema`, `sdk` (`packages/sdk/js`), `sdk-next`, `plugin`, `llm`, `codemode`, `effect-drizzle-sqlite`, `http-recorder`, `httpapi-codegen`, and `script`.
 
 #### Scenario: Inventory reflects current packages
 - **WHEN** a change lists affected packages
 - **THEN** it names packages that exist under `packages/` in this repository
 - **AND** it does not assume pruned packages such as `app`, `desktop`, `web`, or `console` still exist
+
+### Requirement: Workspace Packages Use KanCode npm Scope
+
+Editable workspace packages SHALL use the `@kancode/*` npm scope (app package `@kancode/cli` in `packages/kancode`). Effect service IDs SHALL use `@kancode/...`. The generated/client SDK namespace SHALL be `KanCode`. The repository MUST NOT reintroduce `@opencode-ai/*` package names for workspace packages. The upstream provider catalog id `"opencode"` (OpenCode Zen) MAY remain unchanged.
+
+#### Scenario: New workspace dependency uses KanCode scope
+- **WHEN** a change adds or renames a workspace package dependency
+- **THEN** the dependency name uses `@kancode/<name>`
+- **AND** it does not introduce `@opencode-ai/<name>` for an in-repo package
 
 ### Requirement: Runtime Dependency Direction
 

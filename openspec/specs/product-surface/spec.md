@@ -8,7 +8,7 @@ Define the supported product surfaces for this TUI/CLI-focused KanCode fork afte
 
 ### Requirement: TUI and CLI Are the Primary Product Surfaces
 
-The product SHALL be delivered as a terminal user interface (TUI) and related CLI entrypoints under the KanCode product name. Interactive development SHALL start with `bun dev` from the repo root (or equivalent package scripts under `packages/opencode`), which launches the KanCode TUI.
+The product SHALL be delivered as a terminal user interface (TUI) and related CLI entrypoints under the KanCode product name. Interactive development SHALL start with `bun dev` from the repo root (or equivalent package scripts under `packages/kancode`), which launches the KanCode TUI.
 
 #### Scenario: Local development starts the TUI
 - **WHEN** a developer runs `bun dev` from the repository root
@@ -26,9 +26,9 @@ The repository MUST NOT treat pruned non-TUI packages as current product surface
 
 ### Requirement: Shared UI Package Supports TUI Not Standalone Web App
 
-The `@opencode-ai/ui` package MAY provide shared UI primitives and themes used by the TUI stack. It MUST NOT be treated as a standalone web application product surface in this fork.
+The `@kancode/ui` package MAY provide shared UI primitives and themes used by the TUI stack. It MUST NOT be treated as a standalone web application product surface in this fork.
 
 #### Scenario: UI package is a library dependency
-- **WHEN** a change references `@opencode-ai/ui`
+- **WHEN** a change references `@kancode/ui`
 - **THEN** it treats the package as a shared library for terminal/UI components
 - **AND** it does not introduce a separate web app entry product

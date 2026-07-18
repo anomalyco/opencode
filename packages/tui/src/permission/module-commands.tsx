@@ -1,4 +1,4 @@
-import type { Config } from "@opencode-ai/sdk/v2"
+import type { Config } from "@kancode/sdk/v2"
 import { DialogModel } from "../component/dialog-model"
 import { parseModel } from "../context/local"
 import type { useSDK } from "../context/sdk"

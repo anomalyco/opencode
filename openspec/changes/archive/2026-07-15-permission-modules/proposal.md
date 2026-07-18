@@ -45,7 +45,7 @@ Non-goals / not in this change:
 
 - `packages/schema` — widen V1 action / V2 rule shapes for module IDs; regenerate client/SDK after Protocol HttpApi changes if any
 - `packages/core` — V1 config schema (`ConfigPermissionV1`), V2 `Permission` assert path, migrate helpers
-- `packages/opencode` — V1 `Permission.ask` / `fromConfig`, agent merge, tool ask wiring
+- `packages/kancode` — V1 `Permission.ask` / `fromConfig`, agent merge, tool ask wiring
 - `packages/plugin` — replace unused `permission.ask` hook with a permission-module registration API
 - `packages/tui` / CLI — surface classifier pending/audit optionally; keep existing `auto` mode separate
 - Config files: project `kancode.json(c)` / `opencode.json(c)` dual-read; user scope KanCode-only; env override story for module options TBD in design

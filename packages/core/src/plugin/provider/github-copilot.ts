@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import { ModelV2 } from "../../model"
 import { ProviderV2 } from "../../provider"
-import type { PluginContext } from "@opencode-ai/plugin/v2/effect"
+import type { PluginContext } from "@kancode/plugin/v2/effect"
 
 export const GithubCopilotPlugin = {
   id: "github-copilot",

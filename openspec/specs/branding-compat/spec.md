@@ -22,13 +22,14 @@ The product SHALL present itself as KanCode in user-facing surfaces including th
 - **WHEN** the TUI builds a new-issue URL for a crash or error report
 - **THEN** the URL targets `puetsua/kancode` (or the configured GitHub remote for this fork)
 
-### Requirement: Binary Prefers kancode With opencode Alias
+### Requirement: Binary Name Is kancode Only
 
-The package bin entries SHALL prefer `kancode` as the primary command name and MUST keep `opencode` as an alias that launches the same entrypoint.
+The package bin entries SHALL expose `kancode` as the command name and MUST NOT register `opencode` as an alias for this fork's entrypoint.
 
-#### Scenario: Both bin names resolve
-- **WHEN** either `kancode` or `opencode` is invoked from an installed package bin
-- **THEN** the same application entrypoint runs
+#### Scenario: Installed bin is kancode
+- **WHEN** the package is installed and its bin entries are inspected
+- **THEN** `kancode` launches this application
+- **AND** there is no `opencode` bin entry that launches KanCode
 
 ### Requirement: Config File Merge-Include With KanCode Precedence (Project Scope)
 

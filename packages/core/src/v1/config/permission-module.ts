@@ -1,6 +1,6 @@
 export * as ConfigPermissionModule from "./permission-module"
 
-import { PermissionModule } from "@opencode-ai/schema/permission-module"
+import { PermissionModule } from "@kancode/schema/permission-module"
 
 /** Wire-safe permission module options (re-export schema contracts). */
 export const Options = PermissionModule.Options

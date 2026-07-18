@@ -39,7 +39,7 @@ bun dev <directory>
 bun dev .
 ```
 
-The CLI script name is `kancode`; `opencode` remains an alias/shim when installed as a package bin.
+The CLI script name is `kancode`.
 
 ### Config compatibility
 

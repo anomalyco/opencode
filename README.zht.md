@@ -37,7 +37,7 @@ bun dev <directory>
 bun dev .
 ```
 
-CLI 腳本名稱為 `kancode`；安裝為 package bin 時仍保留 `opencode` 作為別名。
+CLI 腳本名稱為 `kancode`。
 
 ### 設定相容性
 

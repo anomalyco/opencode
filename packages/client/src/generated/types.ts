@@ -1,4 +1,4 @@
-import type { OpenCodeEventEncoded } from "@opencode-ai/protocol/groups/event"
+import type { KanCodeEventEncoded } from "@kancode/protocol/groups/event"
 
 export type JsonValue =
   | null
@@ -144,6 +144,7 @@ export type AgentsListOutput = {
       readonly action: string
       readonly resource: string
       readonly effect: "allow" | "deny" | "ask"
+      readonly module?: string
     }>
   }>
 }
@@ -2538,7 +2539,7 @@ export type SkillsListOutput = {
   }>
 }
 
-export type EventsSubscribeOutput = OpenCodeEventEncoded
+export type EventsSubscribeOutput = KanCodeEventEncoded
 
 export type PtysListInput = {
   readonly location?: {

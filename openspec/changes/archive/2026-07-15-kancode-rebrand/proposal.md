@@ -15,7 +15,7 @@ This fork is already named KanCode (`puetsua/kancode`), but most user-facing sur
 - Keep LICENSE attribution intact
 
 Non-goals / not in this change:
-- Renaming `@opencode-ai/*` packages or the `packages/opencode` folder
+- Renaming `@kancode/*` packages or the `packages/kancode` folder
 - Renaming Effect service IDs
 - Renaming the upstream provider id `"opencode"` (OpenCode Zen)
 - Restoring web/desktop/console surfaces
@@ -33,7 +33,7 @@ Non-goals / not in this change:
 
 ## Impact
 
-- `packages/opencode` (bin, CLI help, config loaders, prompts, ACP, uninstall/install copy)
+- `packages/kancode` (bin, CLI help, config loaders, prompts, ACP, uninstall/install copy)
 - `packages/tui` (title, tips, error URLs, provider dialogs)
 - `packages/core` (XDG app name / Global paths, Flag env aliases)
 - Root `README.md` / `README.zht.md`, `AGENTS.md`, `openspec/config.yaml`

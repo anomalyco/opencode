@@ -1,14 +1,14 @@
 import { expect, test } from "bun:test"
 import { DateTime, Effect, Stream } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/unstable/http"
-import { AbsolutePath, Agent, Location, Model, OpenCode, Prompt, Session, SessionMessage } from "../src/effect"
+import { AbsolutePath, Agent, Location, Model, KanCode, Prompt, Session, SessionMessage } from "../src/effect"
 
 test("sessions.get returns the decoded Effect projection", async () => {
   const httpClient = HttpClient.make((request) =>
     Effect.succeed(HttpClientResponse.fromWeb(request, Response.json(session))),
   )
   const result = await Effect.gen(function* () {
-    const client = yield* OpenCode.make({ baseUrl: "http://localhost:3000" })
+    const client = yield* KanCode.make({ baseUrl: "http://localhost:3000" })
     return yield* client.sessions.get({ sessionID: Session.ID.make("ses_test") })
   }).pipe(Effect.provideService(HttpClient.HttpClient, httpClient), Effect.runPromise)
 
@@ -29,7 +29,7 @@ test("events.subscribe exposes and decodes the native Effect event stream", asyn
     ),
   )
   const events = await Effect.gen(function* () {
-    const client = yield* OpenCode.make({ baseUrl: "http://localhost:3000" })
+    const client = yield* KanCode.make({ baseUrl: "http://localhost:3000" })
     return yield* client.events.subscribe().pipe(Stream.runCollect)
   }).pipe(Effect.provideService(HttpClient.HttpClient, httpClient), Effect.runPromise)
 
@@ -52,7 +52,7 @@ test("events.subscribe terminates on Effect protocol decode failures", async () 
     ),
   )
   const error = await Effect.gen(function* () {
-    const client = yield* OpenCode.make({ baseUrl: "http://localhost:3000" })
+    const client = yield* KanCode.make({ baseUrl: "http://localhost:3000" })
     return yield* client.events.subscribe().pipe(Stream.runCollect, Effect.flip)
   }).pipe(Effect.provideService(HttpClient.HttpClient, httpClient), Effect.runPromise)
 
@@ -111,7 +111,7 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
     )
   })
   const result = await Effect.gen(function* () {
-    const client = yield* OpenCode.make({ baseUrl: "http://localhost:3000" })
+    const client = yield* KanCode.make({ baseUrl: "http://localhost:3000" })
     const page = yield* client.sessions.list({ limit: 10 })
     const active = yield* client.sessions.active()
     const created = yield* client.sessions.create({
@@ -184,7 +184,7 @@ test("sessions.history retains the typed SessionNotFoundError", async () => {
     ),
   )
   const error = await Effect.gen(function* () {
-    const client = yield* OpenCode.make({ baseUrl: "http://localhost:3000" })
+    const client = yield* KanCode.make({ baseUrl: "http://localhost:3000" })
     return yield* client.sessions
       .history({
         sessionID: Session.ID.make("ses_missing"),

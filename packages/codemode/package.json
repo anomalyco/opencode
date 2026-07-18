@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode-ai/codemode",
+  "name": "@kancode/codemode",
   "version": "1.17.20",
   "description": "Effect-native confined code execution over schema-described tools",
   "private": true,

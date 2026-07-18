@@ -376,7 +376,7 @@ function, not a plain object literal, and the function returns an object
 (return `{}` if there is nothing to register).
 
 ```ts
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@kancode/plugin"
 
 export default (async ({ client, project, directory, $, permission }) => {
   permission.registerModule({

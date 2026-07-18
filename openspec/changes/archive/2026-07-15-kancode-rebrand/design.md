@@ -1,6 +1,6 @@
 ## Context
 
-KanCode is a TUI/CLI-focused fork of OpenCode (`puetsua/kancode`). Package names (`@opencode-ai/*`, `packages/opencode`) and the provider id `"opencode"` (OpenCode Zen) stay as-is. User-facing strings, config discovery, env aliases, and XDG paths need a dual-brand compatibility layer so existing OpenCode users keep working while new installs prefer KanCode names.
+KanCode is a TUI/CLI-focused fork of OpenCode (`puetsua/kancode`). Package names (`@kancode/*`, `packages/kancode`) and the provider id `"opencode"` (OpenCode Zen) stay as-is. User-facing strings, config discovery, env aliases, and XDG paths need a dual-brand compatibility layer so existing OpenCode users keep working while new installs prefer KanCode names.
 
 ## Goals / Non-Goals
 
@@ -61,7 +61,7 @@ No automatic copy/migrate from legacy OpenCode dirs; users can move dirs manuall
 Leave as OpenCode where they are product/provider/schema/package identity:
 
 - Provider id `"opencode"` / OpenCode Zen
-- `@opencode-ai/*` package names and Effect `@opencode/...` service IDs
+- `@kancode/*` package names and Effect `@kancode/...` service IDs
 - Config `$schema` `https://opencode.ai/config.json` (and tui schema URL)
 - Upstream install/update URLs that still refer to anomalyco packaging until this fork publishes releases
 - Tree-sitter wasm URLs under anomalyco (technical assets, not product branding)

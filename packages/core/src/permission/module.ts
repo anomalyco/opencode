@@ -1,7 +1,7 @@
 export * as PermissionModule from "./module"
 
 import { Context, Effect, Layer, Schema } from "effect"
-import { PermissionModule as PermissionModuleSchema } from "@opencode-ai/schema/permission-module"
+import { PermissionModule as PermissionModuleSchema } from "@kancode/schema/permission-module"
 
 export type Decision = PermissionModuleSchema.Decision
 
@@ -87,7 +87,7 @@ export interface Interface {
   readonly has: (id: string, scope?: string) => boolean
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/PermissionModule") {}
+export class Service extends Context.Service<Service, Interface>()("@kancode/PermissionModule") {}
 
 const RESERVED = new Set<string>(["allow", "ask", "deny"])
 

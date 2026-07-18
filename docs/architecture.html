@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>KanCode Architecture</title>
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs"
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: "base",
+      themeVariables: {
+        primaryColor: "#d4e4d7",
+        primaryTextColor: "#1a241c",
+        primaryBorderColor: "#3d5a45",
+        secondaryColor: "#e8dfd0",
+        tertiaryColor: "#f4f0e8",
+        lineColor: "#4a5c4e",
+        fontFamily: "IBM Plex Sans, system-ui, sans-serif",
+      },
+      flowchart: { curve: "basis", padding: 16 },
+      sequence: { actorMargin: 28, messageMargin: 36 },
+    })
+  </script>
+  <style>
+    @import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Fraunces:opsz,wght@9..144,500;9..144,650&display=swap");
+
+    :root {
+      --ink: #1a241c;
+      --ink-muted: #4a5c4e;
+      --paper: #f3efe6;
+      --paper-2: #e9e3d6;
+      --leaf: #2f5d3a;
+      --leaf-soft: #d4e4d7;
+      --clay: #9c4a2a;
+      --rule: #c9c0ae;
+      --card: #faf7f0;
+      --mono: "IBM Plex Mono", ui-monospace, monospace;
+      --sans: "IBM Plex Sans", system-ui, sans-serif;
+      --display: "Fraunces", Georgia, serif;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      font: 400 16px/1.55 var(--sans);
+      background:
+        radial-gradient(ellipse 80% 50% at 10% -10%, #dce8df 0%, transparent 55%),
+        radial-gradient(ellipse 60% 40% at 100% 0%, #e8dcc8 0%, transparent 50%),
+        linear-gradient(180deg, var(--paper) 0%, #ebe5d8 100%);
+      min-height: 100vh;
+    }
+
+    a { color: var(--leaf); text-underline-offset: 3px; }
+    a:hover { color: var(--clay); }
+
+    .wrap {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 2.5rem 1.25rem 4rem;
+    }
+
+    header.hero {
+      padding: 1.5rem 0 2rem;
+      border-bottom: 1px solid var(--rule);
+      margin-bottom: 2rem;
+    }
+    .eyebrow {
+      font: 500 0.75rem/1 var(--mono);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--ink-muted);
+      margin: 0 0 0.75rem;
+    }
+    h1 {
+      font: 650 clamp(2rem, 5vw, 2.75rem)/1.15 var(--display);
+      margin: 0 0 0.75rem;
+      letter-spacing: -0.02em;
+    }
+    .lede {
+      font-size: 1.05rem;
+      color: var(--ink-muted);
+      max-width: 42rem;
+      margin: 0;
+    }
+
+    nav.toc {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem 1rem;
+      margin: 1.5rem 0 0;
+      font: 500 0.85rem/1.2 var(--sans);
+    }
+    nav.toc a {
+      color: var(--ink-muted);
+      text-decoration: none;
+      border-bottom: 1px solid transparent;
+    }
+    nav.toc a:hover {
+      color: var(--leaf);
+      border-bottom-color: var(--leaf);
+    }
+
+    section {
+      margin: 2.75rem 0;
+    }
+    h2 {
+      font: 650 1.45rem/1.25 var(--display);
+      margin: 0 0 0.85rem;
+      letter-spacing: -0.01em;
+    }
+    h3 {
+      font: 600 1.05rem/1.3 var(--sans);
+      margin: 1.5rem 0 0.6rem;
+    }
+    p { margin: 0 0 0.85rem; }
+    ul, ol { margin: 0 0 1rem; padding-left: 1.25rem; }
+    li { margin: 0.25rem 0; }
+    code, .mono {
+      font-family: var(--mono);
+      font-size: 0.88em;
+    }
+    code {
+      background: var(--paper-2);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+    }
+
+    .callout {
+      background: var(--leaf-soft);
+      border-left: 3px solid var(--leaf);
+      padding: 0.9rem 1rem;
+      margin: 1rem 0 1.25rem;
+      border-radius: 0 6px 6px 0;
+    }
+    .callout p:last-child { margin-bottom: 0; }
+
+    .diagram {
+      background: var(--card);
+      border: 1px solid var(--rule);
+      border-radius: 8px;
+      padding: 1rem;
+      margin: 1rem 0 1.5rem;
+      overflow-x: auto;
+    }
+    .diagram .mermaid { display: flex; justify-content: center; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+      margin: 0.75rem 0 1.25rem;
+      background: var(--card);
+      border: 1px solid var(--rule);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    th, td {
+      text-align: left;
+      padding: 0.65rem 0.75rem;
+      vertical-align: top;
+      border-bottom: 1px solid var(--rule);
+    }
+    th {
+      background: var(--paper-2);
+      font-weight: 600;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--ink-muted);
+    }
+    tr:last-child td { border-bottom: 0; }
+    td:first-child code { white-space: nowrap; }
+
+    .grid-2 {
+      display: grid;
+      gap: 1rem;
+      grid-template-columns: 1fr;
+    }
+    @media (min-width: 720px) {
+      .grid-2 { grid-template-columns: 1fr 1fr; }
+    }
+    .tile {
+      background: var(--card);
+      border: 1px solid var(--rule);
+      border-radius: 8px;
+      padding: 1rem 1.1rem;
+    }
+    .tile h3 { margin-top: 0; }
+    .tile p:last-child { margin-bottom: 0; }
+
+    footer {
+      margin-top: 3rem;
+      padding-top: 1.25rem;
+      border-top: 1px solid var(--rule);
+      font-size: 0.85rem;
+      color: var(--ink-muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="hero">
+      <p class="eyebrow">KanCode · docs/architecture</p>
+      <h1>Architecture</h1>
+      <p class="lede">
+        KanCode is a TUI/CLI AI coding agent — a Bun monorepo fork of OpenCode with
+        Effect-domain services, typed HttpApi, dual LLM backends, and KanCode-branded
+        user config while keeping OpenCode project compatibility.
+      </p>
+      <nav class="toc" aria-label="Table of contents">
+        <a href="#overview">Overview</a>
+        <a href="#layers">Package layers</a>
+        <a href="#packages">Packages</a>
+        <a href="#runtime">Runtime</a>
+        <a href="#llm">LLM</a>
+        <a href="#tools">Tools &amp; permissions</a>
+        <a href="#config">Config</a>
+        <a href="#codegen">Codegen</a>
+        <a href="#stack">Stack</a>
+        <a href="#layout">kancode layout</a>
+      </nav>
+    </header>
+
+    <section id="overview">
+      <h2>Product overview</h2>
+      <div class="callout">
+        <p>
+          <strong>Mental model:</strong> Bun TUI/CLI shell
+          (<code>packages/kancode</code> → bin <code>kancode</code>) around Effect
+          domain Core + typed Protocol/Server API, with Schema contracts, dual LLM
+          backends, Drizzle SQLite persistence, and OpenCode-compatible project config
+          under a KanCode-only user home.
+        </p>
+      </div>
+      <div class="grid-2">
+        <div class="tile">
+          <h3>Surfaces</h3>
+          <p>Primary UX is the terminal TUI (<code>bun dev</code>). CLI commands cover
+            run, serve, MCP, ACP, models, session, db, and plugins. There is no
+            app / desktop / web / console package in this fork.</p>
+        </div>
+        <div class="tile">
+          <h3>Agents</h3>
+          <p><code>default</code> — full-access development.
+            <code>plan</code> — read-only exploration (denies edits; asks before bash).
+            <code>@general</code> — internal multistep subagent.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="layers">
+      <h2>Package dependency layers</h2>
+      <p>
+        Runtime direction: <strong>Schema → Core</strong> and
+        <strong>Schema → Protocol → Server</strong>. Client may depend on Schema and
+        Protocol but never Core or Server at runtime.
+        <code>sdk-next</code> composes Client, Core, and Server for an in-process host.
+      </p>
+      <div class="diagram">
+        <pre class="mermaid">
+flowchart TB
+  subgraph contracts["Contracts"]
+    Schema["@kancode/schema"]
+  end
+  subgraph domain["Domain / API"]
+    Core["@kancode/core"]
+    Protocol["@kancode/protocol"]
+    LLM["@kancode/llm"]
+    Server["@kancode/server"]
+  end
+  subgraph clients["Clients / Hosts"]
+    Client["@kancode/client"]
+    SdkNext["@kancode/sdk-next"]
+    App["@kancode/cli<br/>packages/kancode"]
+    TUI["@kancode/tui"]
+  end
+  Schema --> Core
+  Schema --> Protocol
+  Schema --> LLM
+  Protocol --> Server
+  Core --> Server
+  Schema --> Client
+  Protocol --> Client
+  Client --> SdkNext
+  Core --> SdkNext
+  Server --> SdkNext
+  Server --> App
+  Core --> App
+  LLM --> App
+  TUI --> App
+        </pre>
+      </div>
+    </section>
+
+    <section id="packages">
+      <h2>Package map</h2>
+      <p>Workspace: <code>packages/*</code> plus legacy <code>packages/sdk/js</code>. Workspace packages use <code>@kancode/*</code>; the app is <code>@kancode/cli</code> in <code>packages/kancode</code>.</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Package</th>
+            <th>Role</th>
+            <th>Depends on</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>kancode</code> (<code>@kancode/cli</code>)</td>
+            <td>App entry: CLI, TUI launch, HTTP listen, session/tool/config orchestration</td>
+            <td>tui, server, protocol, schema, llm, plugin, sdk, codemode, core</td>
+          </tr>
+          <tr>
+            <td><code>tui</code></td>
+            <td>Solid + OpenTUI terminal UI (chat, prompts, themes)</td>
+            <td>core, plugin, sdk, ui</td>
+          </tr>
+          <tr>
+            <td><code>ui</code></td>
+            <td>Shared UI primitives / themes / icons for TUI</td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td><code>core</code></td>
+            <td>Domain runtime: DB, sessions, tool registry, permissions, PTY, projects, migrations</td>
+            <td>schema, llm, plugin, effect-drizzle-sqlite</td>
+          </tr>
+          <tr>
+            <td><code>schema</code></td>
+            <td>Browser-safe wire/storage contracts (Effect Schema); no runtime services</td>
+            <td>effect</td>
+          </tr>
+          <tr>
+            <td><code>protocol</code></td>
+            <td>Typed HttpApi groups (session, pty, permission, …)</td>
+            <td>schema</td>
+          </tr>
+          <tr>
+            <td><code>server</code></td>
+            <td>Effect HttpApi handlers + middleware over Core</td>
+            <td>core, protocol</td>
+          </tr>
+          <tr>
+            <td><code>client</code></td>
+            <td>Generated Promise + Effect HTTP clients from Server HttpApi</td>
+            <td>schema, protocol (codegen: server)</td>
+          </tr>
+          <tr>
+            <td><code>sdk-next</code></td>
+            <td>In-process Effect host: Server router in-memory; tools + session APIs</td>
+            <td>client, core, server</td>
+          </tr>
+          <tr>
+            <td><code>sdk</code> (legacy)</td>
+            <td>JS SDK under <code>packages/sdk/js</code> (OpenAPI / hey-api style)</td>
+            <td>standalone</td>
+          </tr>
+          <tr>
+            <td><code>llm</code></td>
+            <td>Schema-first LLM core: Protocol × Endpoint × Auth × Framing routes</td>
+            <td>schema</td>
+          </tr>
+          <tr>
+            <td><code>plugin</code></td>
+            <td>Plugin SDK (hooks, tools, TUI, Effect/Promise APIs)</td>
+            <td>sdk</td>
+          </tr>
+          <tr>
+            <td><code>codemode</code></td>
+            <td>Confined JS execution over host-supplied schema tools (no ambient FS/net)</td>
+            <td>effect</td>
+          </tr>
+          <tr>
+            <td><code>effect-drizzle-sqlite</code></td>
+            <td>Generic Effect ↔ Drizzle SQLite adapter (no domain tables)</td>
+            <td>drizzle-orm, effect</td>
+          </tr>
+          <tr>
+            <td><code>httpapi-codegen</code></td>
+            <td>Build-time: HttpApi → Promise/Effect client source</td>
+            <td>effect</td>
+          </tr>
+          <tr>
+            <td><code>http-recorder</code></td>
+            <td>Record/replay Effect HTTP traffic (test VCR cassettes)</td>
+            <td>Effect platform</td>
+          </tr>
+          <tr>
+            <td><code>script</code></td>
+            <td>Shared release / version helpers</td>
+            <td>—</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="runtime">
+      <h2>Runtime: request path</h2>
+      <p>
+        User prompts enter through TUI or CLI, hit the HttpApi server (or in-memory
+        sdk-next transport), then Session + Processor. Persistence is Core SQLite.
+        LLM events converge on one stream whether AI SDK or native runtime handled the turn.
+      </p>
+      <div class="diagram">
+        <pre class="mermaid">
+sequenceDiagram
+  participant User
+  participant TUI as TUI / CLI
+  participant HTTP as HttpApi Server
+  participant Sess as Session + Processor
+  participant LLM as LLM.Service
+  participant Native as @kancode/llm
+  participant AISDK as AI SDK
+  participant Tools as ToolRegistry
+  participant DB as Core SQLite
+
+  User->>TUI: prompt
+  TUI->>HTTP: sessions.prompt / events
+  HTTP->>Sess: execute turn
+  Sess->>DB: load/persist events+messages
+  Sess->>LLM: stream
+  alt native flag + supported
+    LLM->>Native: LLMClient.stream
+    Native-->>Sess: LLMEvent
+  else default / fallback
+    LLM->>AISDK: streamText
+    AISDK-->>Sess: LLMEvent via adapter
+  end
+  Sess->>Tools: settle tool calls
+  Tools-->>Sess: results
+  Sess-->>TUI: SSE / events
+        </pre>
+      </div>
+
+      <h3>Entry points</h3>
+      <table>
+        <thead>
+          <tr><th>Entry</th><th>How</th><th>Role</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>CLI</td>
+            <td><code>packages/kancode/src/index.ts</code>, bin <code>kancode</code></td>
+            <td>yargs: run, serve, tui, mcp, acp, models, session, db, plugin, …</td>
+          </tr>
+          <tr>
+            <td>Dev TUI</td>
+            <td>root <code>bun dev</code></td>
+            <td>Interactive KanCode TUI</td>
+          </tr>
+          <tr>
+            <td>TUI package</td>
+            <td><code>@kancode/tui</code></td>
+            <td>Solid/OpenTUI UI; talks to server via SDK</td>
+          </tr>
+          <tr>
+            <td>HTTP server</td>
+            <td><code>kancode serve</code></td>
+            <td>Effect HTTP + <code>@kancode/server</code> handlers</td>
+          </tr>
+          <tr>
+            <td>Embedded host</td>
+            <td><code>@kancode/sdk-next</code></td>
+            <td>Same router in-memory (no network)</td>
+          </tr>
+          <tr>
+            <td>Code Mode</td>
+            <td><code>@kancode/codemode</code> via tool</td>
+            <td>Model-authored JS that only calls host tools</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="llm">
+      <h2>LLM routing</h2>
+      <p>
+        <code>packages/kancode/src/session/llm.ts</code> owns auth, config, model
+        resolution, plugins, and runtime selection. Adapters live under
+        <code>session/llm/</code>:
+      </p>
+      <ul>
+        <li><code>ai-sdk.ts</code> — AI SDK <code>fullStream</code> → shared <code>LLMEvent</code>s (default)</li>
+        <li><code>native-request.ts</code> — session input → <code>@kancode/llm</code> <code>LLMRequest</code></li>
+        <li><code>native-runtime.ts</code> — gate, tool bridge, <code>LLMClient</code> handoff</li>
+      </ul>
+      <p>
+        Native path is opt-in via <code>OPENCODE_EXPERIMENTAL_NATIVE_LLM=true</code>
+        (or umbrella experimental). Supports selected OpenAI / OpenAI-compatible /
+        Anthropic API-key routes; unsupported cases fall back to AI SDK.
+        Tool execution stays opencode/core-owned on both paths.
+      </p>
+      <div class="diagram">
+        <pre class="mermaid">
+flowchart TB
+  Proc["Session processor"] --> Svc["LLM.Service"]
+  Svc --> Gate{"experimental<br/>native LLM?"}
+  Gate -->|yes + supported| Native["native-runtime<br/>LLMClient.stream"]
+  Gate -->|no / unsupported| AISDK["AI SDK<br/>streamText"]
+  Native --> Ev["LLMEvent stream"]
+  AISDK --> Adapt["ai-sdk.ts adapter"]
+  Adapt --> Ev
+  Ev --> Proc
+        </pre>
+      </div>
+      <p>
+        Inside <code>@kancode/llm</code>, a route is Protocol × Endpoint × Auth × Framing.
+        Provider facades (OpenAI, Anthropic, Azure, Bedrock, …) configure those axes
+        before model selection. OpenAI-compatible hosts reuse <code>OpenAIChat.protocol</code>.
+      </p>
+    </section>
+
+    <section id="tools">
+      <h2>Tools, permissions, database</h2>
+      <div class="grid-2">
+        <div class="tile">
+          <h3>Tools</h3>
+          <p>
+            Canonical type: <code>Tool.make</code> in <code>packages/core/src/tool/</code>.
+            Application registrations are process-scoped; location-scoped registry
+            overlays win. Built-ins (bash, edit, write, grep, glob, LSP, plan, …)
+            live under <code>packages/kancode/src/tool/</code>. Settlement and model-output
+            bounding happen in the registry; authorization stays in each leaf via
+            <code>PermissionV2</code>.
+          </p>
+        </div>
+        <div class="tile">
+          <h3>Permissions</h3>
+          <p>
+            Schema contracts for permission modules and saved decisions; Core owns
+            SQL and runtime modules. Agents like <code>plan</code> deny edits and ask
+            before bash through config rules.
+          </p>
+        </div>
+      </div>
+      <div class="tile" style="margin-top: 1rem">
+        <h3>Database</h3>
+        <p>
+          Owned by <code>@kancode/core</code>: Drizzle schemas (<code>*.sql.ts</code>),
+          migrations under <code>packages/core/src/database/migration/</code>, SQLite via
+          Bun/Node with <code>@kancode/effect-drizzle-sqlite</code> as the Effect adapter.
+          Session / message / event / project / credential tables evolve through dated migrations.
+        </p>
+      </div>
+    </section>
+
+    <section id="config">
+      <h2>Config merge</h2>
+      <p>
+        Project scope dual-reads OpenCode then KanCode (KanCode wins). User / XDG /
+        home scope is KanCode-only — no <code>~/.opencode</code> fallback.
+        Env: honor <code>OPENCODE_*</code>; <code>KANCODE_*</code> aliases win when both are set.
+      </p>
+      <div class="diagram">
+        <pre class="mermaid">
+flowchart LR
+  A["opencode.json(c)"] --> M["file merge"]
+  B["kancode.json(c)"] --> M
+  C[".opencode/*"] --> M2["dir merge"]
+  D[".kancode/*"] --> M2
+  M --> M2
+  M2 --> E["effective Config<br/>KanCode wins"]
+        </pre>
+      </div>
+      <table>
+        <thead>
+          <tr><th>Scope</th><th>Behavior</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Project files</td>
+            <td><code>opencode.json(c)</code> then <code>kancode.json(c)</code>; <code>.jsonc</code> preferred within a family</td>
+          </tr>
+          <tr>
+            <td>Project dirs</td>
+            <td><code>.opencode/</code> then <code>.kancode/</code>; <code>.kancode</code> wins on conflict</td>
+          </tr>
+          <tr>
+            <td>User / XDG</td>
+            <td>KanCode only: <code>kancode.json(c)</code>, <code>~/.kancode</code>, XDG <code>…/kancode</code></td>
+          </tr>
+          <tr>
+            <td>Data paths</td>
+            <td>Always <code>kancode</code> under data / cache / state / tmp / managed</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="codegen">
+      <h2>Codegen flow</h2>
+      <p>
+        After public Protocol or Server <code>HttpApi</code> changes, run
+        <code>bun run generate</code> from <code>packages/client</code>. Do not hand-edit
+        <code>src/generated</code> or <code>src/generated-effect</code>.
+      </p>
+      <div class="diagram">
+        <pre class="mermaid">
+flowchart TB
+  P["Protocol HttpApi groups"] --> S["Server Api"]
+  S --> Gen["packages/client<br/>bun run generate"]
+  Gen --> HP["httpapi-codegen"]
+  HP --> Promise["src/generated/"]
+  HP --> Effect["src/generated-effect/"]
+  Promise --> Client["@kancode/client"]
+  Effect --> Client
+  Effect --> SdkNext["sdk-next<br/>in-memory transport"]
+  Legacy["script/generate.ts"] --> SdkJs["packages/sdk/js<br/>legacy OpenAPI client"]
+        </pre>
+      </div>
+    </section>
+
+    <section id="stack">
+      <h2>Tech stack</h2>
+      <table>
+        <thead>
+          <tr><th>Layer</th><th>Choice</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Runtime / monorepo</td><td>Bun 1.3+, workspaces, Turbo</td></tr>
+          <tr><td>Effects</td><td>Effect 4.0 beta (+ platform-node, unstable HttpApi)</td></tr>
+          <tr><td>Database</td><td>Drizzle 1.0 RC + SQLite; Effect SQL adapter</td></tr>
+          <tr><td>LLM</td><td>Vercel AI SDK (default) + <code>@kancode/llm</code> (native)</td></tr>
+          <tr><td>TUI</td><td>OpenTUI + SolidJS</td></tr>
+          <tr><td>Contracts</td><td>Effect Schema (Zod at some plugin/legacy edges)</td></tr>
+          <tr><td>Integrations</td><td>MCP, ACP, LSP</td></tr>
+          <tr><td>Tooling</td><td>oxlint, Prettier, <code>bun typecheck</code>, turbo</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="layout">
+      <h2><code>packages/kancode/src</code> layout</h2>
+      <table>
+        <thead>
+          <tr><th>Directory</th><th>Role</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>cli/</code></td><td>yargs commands, network options</td></tr>
+          <tr><td><code>session/</code></td><td>Session service, processor, prompt, LLM adapters, compaction, status</td></tr>
+          <tr><td><code>server/</code></td><td>HTTP listen, instance HttpApi assembly, projectors</td></tr>
+          <tr><td><code>config/</code></td><td>Load/merge opencode + kancode configs</td></tr>
+          <tr><td><code>tool/</code></td><td>Built-in tools + registry glue</td></tr>
+          <tr><td><code>plugin/</code></td><td>Built-in / provider plugins</td></tr>
+          <tr><td><code>project/</code></td><td>Instance / project / workspace bootstrap</td></tr>
+          <tr><td><code>provider/</code></td><td>Provider catalog / auth (AI SDK path)</td></tr>
+          <tr><td><code>permission/</code></td><td>Product permission UX / modules</td></tr>
+          <tr><td><code>mcp/</code>, <code>lsp/</code>, <code>acp/</code></td><td>Protocol integrations</td></tr>
+          <tr><td><code>agent/</code>, <code>command/</code>, <code>skill/</code></td><td>Agents, slash commands, skills</td></tr>
+          <tr><td><code>effect/</code></td><td>Runtime flags, instance state, bridges</td></tr>
+          <tr><td><code>bus/</code>, <code>background/</code>, <code>question/</code></td><td>Events, jobs, user questions</td></tr>
+        </tbody>
+      </table>
+      <p>
+        Spec-driven planning lives under <code>openspec/</code>
+        (propose → apply → archive). Day-to-day agent rules: root <code>AGENTS.md</code>
+        and per-package <code>AGENTS.md</code> files.
+      </p>
+    </section>
+
+    <footer>
+      Generated from the KanCode monorepo structure.
+      Prefer <code>AGENTS.md</code> and <code>openspec/</code> for living rules;
+      this page is a navigable architecture snapshot.
+      Upstream feature docs: <a href="https://opencode.ai/docs">opencode.ai/docs</a>.
+    </footer>
+  </div>
+</body>
+</html>
