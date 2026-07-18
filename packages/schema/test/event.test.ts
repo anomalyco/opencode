@@ -56,5 +56,7 @@ describe("public event schemas", () => {
     )
     expect(Event.sessionIDOf({ data: { sessionID: "ses_ephemeral" } })).toBe("ses_ephemeral")
     expect(Event.sessionIDOf({ data: {} })).toBeUndefined()
+    expect(Event.sessionIDOf({ data: { sessionID: 1 } })).toBeUndefined()
+    expect(Event.sessionIDOf({ data: null })).toBeUndefined()
   })
 })
