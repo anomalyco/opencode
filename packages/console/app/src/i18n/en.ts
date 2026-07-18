@@ -777,6 +777,10 @@ export const dict = {
   "enterprise.faq.q4": "Is my data secure with OpenCode Enterprise?",
   "enterprise.faq.a4":
     "Yes. OpenCode does not store your code or context data. All processing happens locally or through direct API calls to your AI provider. With central config and SSO integration, your data remains secure within your organization's infrastructure.",
+  "enterprise.faq.q5": "Where can I find your security and compliance documentation?",
+  "enterprise.faq.a5.before":
+    "Our Trust Center has everything: SOC 2 Type 2 report, security policies, subprocessor list, and answers to common security questions. Visit",
+  "enterprise.faq.a5.after": "to review or request documents under NDA.",
 
   "brand.title": "OpenCode | Brand",
   "brand.meta.description": "OpenCode brand guidelines",
