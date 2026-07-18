@@ -49,9 +49,10 @@ export function DialogModel(props: {
       const provider = sync.data.provider.find((item) => item.id === current.providerID)
       const modelName = provider?.models[current.modelID]?.name ?? current.modelID
       const providerName = provider?.name ?? current.providerID
-      return Locale.truncate(`${providerName} / ${modelName}`, 48)
+      return Locale.truncate(`current: ${modelName} · ${providerName}`, 56)
     }
-    return props.currentFallback
+    if (!props.currentFallback) return undefined
+    return `current: ${props.currentFallback}`
   })
 
   // openai is subscription when connected via ChatGPT Pro/Plus OAuth.
@@ -286,13 +287,13 @@ export function DialogModel(props: {
         skipFilter={true}
         title={title()}
         titleView={
-          <box flexDirection="row" justifyContent="space-between" flexGrow={1} gap={2}>
-            <text fg={theme.text} attributes={TextAttributes.BOLD}>
+          <box flexDirection="row" flexGrow={1} gap={2} overflow="hidden">
+            <text fg={theme.text} attributes={TextAttributes.BOLD} wrapMode="none">
               {title()}
             </text>
             <Show when={selectionLabel()}>
               <text fg={theme.textMuted} wrapMode="none">
-                ● {selectionLabel()}
+                {selectionLabel()}
               </text>
             </Show>
           </box>

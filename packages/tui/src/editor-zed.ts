@@ -205,6 +205,47 @@ export function isZedTerminal() {
   return process.env.ZED_TERM === "true" || process.env.TERM_PROGRAM?.toLowerCase() === "zed"
 }
 
+// Zed leaves active-editor rows in db.sqlite after quit. Only treat the DB as
+// live while a Zed process is actually running.
+let zedRunningCache: { at: number; value: boolean } | undefined
+
+export function isZedRunning() {
+  const now = Date.now()
+  if (zedRunningCache && now - zedRunningCache.at < 2000) return zedRunningCache.value
+  const value = detectZedRunning()
+  zedRunningCache = { at: now, value }
+  return value
+}
+
+/** Test helper — clears the short-lived process-check cache. */
+export function resetZedRunningCache() {
+  zedRunningCache = undefined
+}
+
+function detectZedRunning() {
+  try {
+    if (process.platform === "win32") {
+      const result = Bun.spawnSync(["tasklist", "/FI", "IMAGENAME eq zed.exe", "/NH"], {
+        stdout: "pipe",
+        stderr: "pipe",
+      })
+      return Buffer.from(result.stdout).toString().toLowerCase().includes("zed.exe")
+    }
+
+    // macOS process is often "Zed"; Linux packages may use "zed" or "zed-editor".
+    for (const name of ["zed", "Zed", "zed-editor"]) {
+      const result = Bun.spawnSync(["pgrep", "-x", name], {
+        stdout: "pipe",
+        stderr: "pipe",
+      })
+      if (result.exitCode === 0 && Buffer.from(result.stdout).toString().trim().length > 0) return true
+    }
+    return false
+  } catch {
+    return false
+  }
+}
+
 function isFile(item: string) {
   try {
     return statSync(item).isFile()

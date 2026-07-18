@@ -112,10 +112,13 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
   const [inputMode, setInputMode] = createSignal<"keyboard" | "mouse">("keyboard")
 
   // Open on Favorites; fall back to Recent when Favorites is empty.
+  // Counts use visible (non-hidden) refs — same as the left-pane badges.
   const initial = (() => {
-    const favorites = connected() ? local.model.favorite() : []
+    const favorites = connected()
+      ? local.model.favorite().filter((item) => !local.model.isHidden(item))
+      : []
     if (favorites.length) return { mode: { kind: "favorites" } as RightMode, left: 0 }
-    const recents = local.model.recent()
+    const recents = local.model.recent().filter((item) => !local.model.isHidden(item))
     if (recents.length) return { mode: { kind: "recents" } as RightMode, left: 1 }
     return { mode: { kind: "favorites" } as RightMode, left: 0 }
   })()
@@ -127,12 +130,29 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
   let input: InputRenderable | undefined
   let lastRightModeKey = ""
 
+  // Favorites / Recent exclude hidden and catalog-missing refs so the left
+  // count matches the right-pane list. Hidden models live only under Hidden.
+  function visibleModelRefs(items: ModelValue[]) {
+    return items.filter((item) => {
+      if (local.model.isHidden(item)) return false
+      const provider = sync.data.provider.find((p) => p.id === item.providerID)
+      return !!provider?.models[item.modelID]
+    })
+  }
+
+  function visibleHiddenRefs() {
+    return local.model.hidden().filter((item) => {
+      const provider = sync.data.provider.find((p) => p.id === item.providerID)
+      return !!provider?.models[item.modelID]
+    })
+  }
+
   // ----- Left pane entries -----
   // Groups (Favorites / Recent / Hidden) always appear; providers follow.
   const leftEntries = createMemo<LeftEntry[]>(() => {
-    const favorites = connected() ? local.model.favorite() : []
-    const recents = local.model.recent()
-    const hidden = local.model.hidden()
+    const favorites = connected() ? visibleModelRefs(local.model.favorite()) : []
+    const recents = visibleModelRefs(local.model.recent())
+    const hidden = visibleHiddenRefs()
     const entries: LeftEntry[] = [
       { kind: "favorites", count: favorites.length },
       { kind: "recents", count: recents.length },
@@ -331,26 +351,24 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
       return listProviderModels(provider)
     }
     if (mode.kind === "hidden") {
-      return local.model.hidden().flatMap((item) => {
-        const provider = sync.data.provider.find((p) => p.id === item.providerID)
-        if (!provider) return []
-        const info = provider.models[item.modelID]
-        if (!info) return []
+      return visibleHiddenRefs().flatMap((item) => {
+        const provider = sync.data.provider.find((p) => p.id === item.providerID)!
+        const info = provider.models[item.modelID]!
         return [buildModelRow(provider, item.modelID, info, { showProvider: true, muted: true })]
       })
     }
-    // favorites / recents
-    const items = mode.kind === "favorites" ? local.model.favorite() : local.model.recent()
+    // favorites / recents — exclude hidden (they belong under Hidden)
+    const items =
+      mode.kind === "favorites"
+        ? visibleModelRefs(local.model.favorite())
+        : visibleModelRefs(local.model.recent())
     return items.flatMap((item) => {
-      const provider = sync.data.provider.find((p) => p.id === item.providerID)
-      if (!provider) return []
-      const info = provider.models[item.modelID]
-      if (!info) return []
+      const provider = sync.data.provider.find((p) => p.id === item.providerID)!
+      const info = provider.models[item.modelID]!
       return [
         buildModelRow(provider, item.modelID, info, {
           favorite: mode.kind === "favorites",
           showProvider: true,
-          muted: local.model.isHidden(item),
         }),
       ]
     })
@@ -758,13 +776,13 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
     <box paddingLeft={4} paddingRight={4} paddingBottom={1} flexDirection="column" gap={1}>
       {/* Title bar */}
       <box flexDirection="row" justifyContent="space-between" gap={1}>
-        <box flexDirection="row" justifyContent="space-between" flexGrow={1} gap={2}>
-          <text fg={theme.text} attributes={TextAttributes.BOLD}>
+        <box flexDirection="row" flexGrow={1} gap={2} overflow="hidden">
+          <text fg={theme.text} attributes={TextAttributes.BOLD} wrapMode="none">
             {title()}
           </text>
           <Show when={props.currentLabel}>
             <text fg={theme.textMuted} wrapMode="none">
-              ● {props.currentLabel}
+              {props.currentLabel}
             </text>
           </Show>
         </box>
@@ -955,11 +973,11 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
   }
 
   function emptyRightMessage() {
+    if (searching()) return "No models match your search."
     const mode = rightMode()
     if (mode?.kind === "favorites") return "No favorites yet. Select a model and press ctrl+f to favorite it."
     if (mode?.kind === "recents") return "No recent models."
     if (mode?.kind === "hidden") return "No hidden models."
-    if (query().trim()) return "No models match your search."
     return "No models found."
   }
 }

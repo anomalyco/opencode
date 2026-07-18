@@ -5,7 +5,7 @@ import { isRecord } from "../util/record"
 import { useTuiPaths } from "./runtime"
 import { createSimpleContext } from "./helper"
 import { editorIntegration } from "../editor"
-import { resolveZedDbPath } from "../editor-zed"
+import { isZedRunning, resolveZedDbPath } from "../editor-zed"
 
 const MCP_PROTOCOL_VERSION = "2025-11-25"
 
@@ -185,8 +185,14 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
 
       const connection = resolveEditorConnection(directory, port, editor.connection)
       if (!connection) {
-        // No Claude/OpenCode IDE websocket — poll Zed's local DB when present.
-        if (!editor.selection || !resolveZedDbPath()) {
+        // No Claude/OpenCode IDE websocket — poll Zed's local DB when Zed is live.
+        // The DB file (and active-editor rows) remain after quit, so require a
+        // running Zed process before treating selections as current.
+        if (!editor.selection || !resolveZedDbPath() || !isZedRunning()) {
+          if (store.selection?.source === "zed") {
+            lastZedSelectionKey = undefined
+            setSelection(undefined)
+          }
           setStore("status", "disabled")
           scheduleReconnect()
           return
@@ -326,7 +332,10 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
 
     return {
       enabled() {
-        return Boolean(resolveEditorConnection(directory, port, editor.connection) || (editor.selection && resolveZedDbPath()))
+        return Boolean(
+          resolveEditorConnection(directory, port, editor.connection) ||
+            (editor.selection && resolveZedDbPath() && isZedRunning()),
+        )
       },
       connected() {
         return store.status === "connected"

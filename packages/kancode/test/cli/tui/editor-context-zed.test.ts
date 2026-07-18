@@ -3,7 +3,14 @@ import { mkdir, symlink } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, expect, spyOn, test } from "bun:test"
-import { isZedTerminal, offsetToPosition, resolveZedDbPath, resolveZedSelection } from "@kancode/tui/editor-zed"
+import {
+  isZedRunning,
+  isZedTerminal,
+  offsetToPosition,
+  resetZedRunningCache,
+  resolveZedDbPath,
+  resolveZedSelection,
+} from "@kancode/tui/editor-zed"
 import { tmpdir } from "../../fixture/fixture"
 
 const originalZedTerm = process.env.ZED_TERM
@@ -133,6 +140,38 @@ test("isZedTerminal only returns true for Zed terminal environments", () => {
   process.env.ZED_TERM = "false"
   process.env.TERM_PROGRAM = "zed"
   expect(isZedTerminal()).toBeTrue()
+})
+
+test("isZedRunning is false when no Zed process is listed", () => {
+  resetZedRunningCache()
+  const spawn = spyOn(Bun, "spawnSync").mockImplementation((() => ({
+    exitCode: 1,
+    stdout: Buffer.from(""),
+    stderr: Buffer.from(""),
+  })) as typeof Bun.spawnSync)
+
+  try {
+    expect(isZedRunning()).toBeFalse()
+  } finally {
+    spawn.mockRestore()
+    resetZedRunningCache()
+  }
+})
+
+test("isZedRunning is true when a Zed process is listed", () => {
+  resetZedRunningCache()
+  const spawn = spyOn(Bun, "spawnSync").mockImplementation((() =>
+    process.platform === "win32"
+      ? { exitCode: 0, stdout: Buffer.from("zed.exe                     1234 Console"), stderr: Buffer.from("") }
+      : { exitCode: 0, stdout: Buffer.from("1234\n"), stderr: Buffer.from("") },
+  ) as typeof Bun.spawnSync)
+
+  try {
+    expect(isZedRunning()).toBeTrue()
+  } finally {
+    spawn.mockRestore()
+    resetZedRunningCache()
+  }
 })
 
 test("resolveZedSelection returns active editor selection", async () => {
