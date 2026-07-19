@@ -5,6 +5,7 @@ import {
   createServerProjects,
   migrateCanonicalLocalServerState,
   nextServerAfterRemoval,
+  resolveSidebarHydration,
   resolveServerList,
   ServerConnection,
 } from "./server"
@@ -93,6 +94,50 @@ test("active server removal falls back across built-in and persisted servers", (
       ServerConnection.Key.make("sidecar"),
     ),
   ).toBe(ServerConnection.Key.make("sidecar"))
+})
+
+describe("resolveSidebarHydration", () => {
+  const local = {
+    projects: [{ worktree: "/local", expanded: true }],
+    lastProject: "/local",
+  }
+
+  test("ignores a server response when the sidebar changed while it was loading", () => {
+    expect(
+      resolveSidebarHydration({
+        startedRevision: 2,
+        currentRevision: 3,
+        local,
+        remote: { projects: [{ worktree: "/remote", expanded: true }] },
+      }),
+    ).toEqual({ type: "ignore" })
+  })
+
+  test("seeds an empty server from existing browser state", () => {
+    expect(
+      resolveSidebarHydration({
+        startedRevision: 2,
+        currentRevision: 2,
+        local,
+        remote: { projects: [] },
+      }),
+    ).toEqual({ type: "save", state: local })
+  })
+
+  test("hydrates a fresh browser from populated server state", () => {
+    const remote = {
+      projects: [{ worktree: "/remote", expanded: false }],
+      lastProject: "/remote",
+    }
+    expect(
+      resolveSidebarHydration({
+        startedRevision: 0,
+        currentRevision: 0,
+        local: { projects: [] },
+        remote,
+      }),
+    ).toEqual({ type: "load", state: remote })
+  })
 })
 
 describe("createServerProjects", () => {

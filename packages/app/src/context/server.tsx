@@ -264,6 +264,19 @@ export function nextServerAfterRemoval(
   return next ? ServerConnection.key(next) : fallback
 }
 
+export function resolveSidebarHydration(input: {
+  startedRevision: number
+  currentRevision: number
+  local: { projects: StoredProject[]; lastProject?: string }
+  remote: { projects: StoredProject[]; lastProject?: string }
+}) {
+  if (input.startedRevision !== input.currentRevision) return { type: "ignore" as const }
+  if (input.remote.projects.length === 0 && input.local.projects.length > 0) {
+    return { type: "save" as const, state: input.local }
+  }
+  return { type: "load" as const, state: input.remote }
+}
+
 function sidebarProjectPersistence(input: { conn: ServerConnection.Any | undefined; scope: ServerScope }) {
   if (!input.conn || input.conn.type !== "http") return
   const client = createSdkForServer({ server: input.conn.http, throwOnError: true }).project
@@ -340,9 +353,11 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     )
 
     const scope = (key = state.active) => ServerScope.fromServerKey(key, props.canonicalLocalServer)
-    const saveSidebar = (targetScope: ServerScope, state: { projects: StoredProject[]; lastProject?: string }) => {
+    const sidebarRevision = new Map<ServerScope, number>()
+    const saveSidebar = (targetScope: ServerScope, sidebar: { projects: StoredProject[]; lastProject?: string }) => {
+      sidebarRevision.set(targetScope, (sidebarRevision.get(targetScope) ?? 0) + 1)
       const conn = allServers().find((server) => scope(ServerConnection.key(server)) === targetScope)
-      return sidebarProjectPersistence({ conn, scope: targetScope })?.save(state)
+      return sidebarProjectPersistence({ conn, scope: targetScope })?.save(sidebar)
     }
 
     const projects = createServerProjects({ scope, store, setStore, onChange: saveSidebar })
@@ -366,13 +381,29 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
           const persistence = sidebarProjectPersistence({ conn, scope: scope(ServerConnection.key(conn)) })
           if (!persistence) return
           const key = ServerConnection.key(conn)
+          const targetScope = scope(key)
+          const startedRevision = sidebarRevision.get(targetScope) ?? 0
           persistence
             .load()
-            .then((state) => {
-              if (!state) return
+            .then((remote) => {
+              if (!remote) return
               if (ServerConnection.key(current() ?? conn) !== key) return
-              setStore("projects", scope(key), state.projects)
-              if (state.lastProject) setStore("lastProject", scope(key), state.lastProject)
+              const result = resolveSidebarHydration({
+                startedRevision,
+                currentRevision: sidebarRevision.get(targetScope) ?? 0,
+                local: {
+                  projects: store.projects[targetScope] ?? [],
+                  lastProject: store.lastProject[targetScope],
+                },
+                remote,
+              })
+              if (result.type === "ignore") return
+              if (result.type === "save") {
+                saveSidebar(targetScope, result.state)
+                return
+              }
+              setStore("projects", targetScope, result.state.projects)
+              if (result.state.lastProject) setStore("lastProject", targetScope, result.state.lastProject)
             })
             .catch(() => undefined)
         },
