@@ -7,6 +7,7 @@ import { EventV2Bridge } from "@/event-v2-bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { Global } from "@kancode/core/global"
 import { SkillPlugin } from "@kancode/core/plugin/skill"
+import { SkillV2 } from "@kancode/core/skill"
 import { Permission } from "@/permission"
 import { FSUtil } from "@kancode/core/fs-util"
 import { Config } from "@/config/config"
@@ -20,9 +21,35 @@ import { escapeHtml } from "@/util/html"
 
 const CLAUDE_EXTERNAL_DIR = ".claude"
 const AGENTS_EXTERNAL_DIR = ".agents"
+const CURSOR_EXTERNAL_DIR = ".cursor"
+const CODEX_EXTERNAL_DIR = ".codex"
+const KILO_EXTERNAL_DIR = ".kilo"
+const OPENCODE_EXTERNAL_DIR = ".opencode"
 const EXTERNAL_SKILL_PATTERN = "skills/**/SKILL.md"
 const OPENCODE_SKILL_PATTERN = "{skill,skills}/**/SKILL.md"
 const SKILL_PATTERN = "**/SKILL.md"
+
+// External skill roots KanCode scans in addition to .kancode/. Ordered so
+// that origin labels stay stable. .kancode is intentionally absent here — it
+// is the "no origin tag" default. .opencode is a skills-only exception to
+// the no-project-.opencode-discovery rule; config and other resources stay
+// KanCode-only. See openspec/config.yaml.
+const EXTERNAL_DIRS = [
+  CLAUDE_EXTERNAL_DIR,
+  AGENTS_EXTERNAL_DIR,
+  CURSOR_EXTERNAL_DIR,
+  CODEX_EXTERNAL_DIR,
+  KILO_EXTERNAL_DIR,
+  OPENCODE_EXTERNAL_DIR,
+] as const
+
+// Glob pattern to scan inside each external dir. .opencode legacy layout
+// used both `skill/` (singular) and `skills/` (plural); all other external
+// dirs use the `skills/` convention.
+const PATTERN_BY_DIR: Record<string, string> = {
+  ...Object.fromEntries(EXTERNAL_DIRS.map((d) => [d, EXTERNAL_SKILL_PATTERN])),
+  [OPENCODE_EXTERNAL_DIR]: OPENCODE_SKILL_PATTERN,
+}
 
 // Built-in skills that ship with KanCode. customize-opencode covers config
 // shapes; import-opencode migrates legacy project `.opencode/` content.
@@ -184,13 +211,17 @@ const discoverSkills = Effect.fnUntraced(function* (
 
   const externalDirs: string[] = []
   if (!disableExternalSkills) {
-    if (!disableClaudeCodeSkills) externalDirs.push(CLAUDE_EXTERNAL_DIR)
-    externalDirs.push(AGENTS_EXTERNAL_DIR)
+    for (const dir of EXTERNAL_DIRS) {
+      // .claude is gated by disableClaudeCodeSkills; every other external
+      // dir is always scanned (when external skills are enabled at all).
+      if (dir === CLAUDE_EXTERNAL_DIR && disableClaudeCodeSkills) continue
+      externalDirs.push(dir)
+    }
 
     for (const dir of externalDirs) {
       const root = path.join(global.home, dir)
       if (!(yield* fsys.isDir(root))) continue
-      yield* scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "global" })
+      yield* scan(state, root, PATTERN_BY_DIR[dir] ?? EXTERNAL_SKILL_PATTERN, { dot: true, scope: "global" })
     }
 
     const upDirs = yield* fsys
@@ -198,7 +229,9 @@ const discoverSkills = Effect.fnUntraced(function* (
       .pipe(Effect.catch(() => Effect.succeed([] as string[])))
 
     for (const root of upDirs) {
-      yield* scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "project" })
+      // The walked-up dir's basename identifies which external root it is.
+      const dir = path.basename(root)
+      yield* scan(state, root, PATTERN_BY_DIR[dir] ?? EXTERNAL_SKILL_PATTERN, { dot: true, scope: "project" })
     }
   }
 
@@ -347,7 +380,11 @@ export function fmt(list: Info[], opts: { verbose: boolean }) {
     "## Available Skills",
     ...described
       .toSorted((a, b) => a.name.localeCompare(b.name))
-      .map((skill) => `- **${skill.name}**: ${skill.description}`),
+      .map((skill) => {
+        const tag = SkillV2.origin(skill.location)
+        const desc = tag ? `[${tag}] ${skill.description}` : skill.description
+        return `- **${skill.name}**: ${desc}`
+      }),
   ].join("\n")
 }
 

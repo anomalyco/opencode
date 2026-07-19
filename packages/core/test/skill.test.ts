@@ -122,4 +122,52 @@ describe("SkillV2", () => {
       ),
     ),
   )
+
+  describe("origin", () => {
+    // Sanity: path.sep is the only separator used by origin(), so the same
+    // expected substrings work on both posix and win32.
+    const sep = path.sep
+
+    it.effect("returns 'built-in' for the built-in sentinel", () =>
+      Effect.sync(() => {
+        expect(SkillV2.origin("<built-in>")).toBe("built-in")
+      }),
+    )
+
+    it.effect("returns the external dir label for project and global skill paths", () =>
+      Effect.sync(() => {
+        const cases: Array<[string, string]> = [
+          [path.join("/home", "me", ".claude", "skills", "agent-browser", "SKILL.md"), ".claude"],
+          [path.join("/proj", ".agents", "skills", "deploy", "SKILL.md"), ".agents"],
+          [path.join("/proj", ".cursor", "skills", "rules", "SKILL.md"), ".cursor"],
+          [path.join("/proj", ".codex", "skills", "rules", "SKILL.md"), ".codex"],
+          [path.join("/proj", ".kilo", "skills", "rules", "SKILL.md"), ".kilo"],
+          [path.join("/proj", ".opencode", "skills", "rules", "SKILL.md"), ".opencode"],
+          // Legacy OpenCode layout under .opencode uses skill/ (singular).
+          [path.join("/proj", ".opencode", "skill", "rules", "SKILL.md"), ".opencode"],
+        ]
+        for (const [loc, expected] of cases) {
+          expect(SkillV2.origin(loc)).toBe(expected)
+        }
+      }),
+    )
+
+    it.effect("returns '' for .kancode, config-dir, and custom skills.paths locations", () =>
+      Effect.sync(() => {
+        const cases = [
+          path.join("/proj", ".kancode", "skill", "rules", "SKILL.md"),
+          path.join("/proj", ".kancode", "skills", "rules", "SKILL.md"),
+          // Pulled-from-URL skills land under a cache hash dir; not an external dir.
+          path.join("/home", "me", ".cache", "kancode", "skills", "1a2b3c", "deploy", "SKILL.md"),
+          // Arbitrary custom skills.paths location.
+          path.join("/abs", "custom", "skills", "deploy", "SKILL.md"),
+        ]
+        for (const loc of cases) {
+          expect(SkillV2.origin(loc)).toBe("")
+        }
+        // Sanity that sep-based assertions actually exercised a real separator.
+        expect(sep).toBeTruthy()
+      }),
+    )
+  })
 })

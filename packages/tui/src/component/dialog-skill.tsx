@@ -5,6 +5,7 @@ import { useDialog } from "../ui/dialog"
 import { useSDK } from "../context/sdk"
 import { useTheme } from "../context/theme"
 import { errorMessage } from "../util/error"
+import { SkillV2 } from "@kancode/core/skill"
 
 export type DialogSkillProps = {
   onSelect: (skill: string) => void
@@ -36,16 +37,24 @@ export function DialogSkill(props: DialogSkillProps) {
     if (showError()) return []
     const list = skills() ?? []
     const maxWidth = Math.max(0, ...list.map((s) => s.name.length))
-    return list.map((skill) => ({
-      title: skill.name.padEnd(maxWidth),
-      description: skill.description?.replace(/\s+/g, " ").trim(),
-      value: skill.name,
-      category: "Skills",
-      onSelect: () => {
-        props.onSelect(skill.name)
-        dialog.clear()
-      },
-    }))
+    return list.map((skill) => {
+      // Prefix the skill's origin dir onto the description so users can see
+      // whether a skill came from .agents, .claude, .cursor, etc. .kancode /
+      // built-in / custom-path skills return "" and show no prefix.
+      const tag = SkillV2.origin(skill.location)
+      const desc = skill.description?.replace(/\s+/g, " ").trim()
+      const description = tag ? `[${tag}]${desc ? ` ${desc}` : ""}` : desc
+      return {
+        title: skill.name.padEnd(maxWidth),
+        description,
+        value: skill.name,
+        category: "Skills",
+        onSelect: () => {
+          props.onSelect(skill.name)
+          dialog.clear()
+        },
+      }
+    })
   })
 
   return (

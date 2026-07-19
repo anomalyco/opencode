@@ -30,6 +30,33 @@ export type Info = Skill.Info
 export const available = (skills: ReadonlyArray<Info>, agent: AgentV2.Info) =>
   skills.filter((skill) => PermissionV2.evaluate("skill", skill.name, agent.permissions).effect !== "deny")
 
+// External project/global dirs KanCode scans for skills, in addition to .kancode/.
+// .kancode is intentionally absent here — it is the "no origin tag" default.
+// .opencode is a skills-only exception to the no-project-.opencode-discovery
+// rule; config and other resources stay KanCode-only. See openspec/config.yaml.
+export const EXTERNAL_DIRS = [".claude", ".agents", ".cursor", ".codex", ".kilo", ".opencode"] as const
+const ORIGIN_BY_DIR: Record<string, string> = {
+  ".claude": ".claude",
+  ".agents": ".agents",
+  ".cursor": ".cursor",
+  ".codex": ".codex",
+  ".kilo": ".kilo",
+  ".opencode": ".opencode",
+}
+
+// Classifies a skill location into an origin label. Returns "" for
+// .kancode, config-dir, and custom `skills.paths` skills (hidden by design).
+export function origin(location: string): string {
+  if (location === "<built-in>") return "built-in"
+  const sep = path.sep
+  for (const dir of EXTERNAL_DIRS) {
+    if (location.includes(`${sep}${dir}${sep}skills${sep}`)) return ORIGIN_BY_DIR[dir]
+    // Legacy OpenCode layout under .opencode uses `skill/` (singular).
+    if (dir === ".opencode" && location.includes(`${sep}.opencode${sep}skill${sep}`)) return ".opencode"
+  }
+  return ""
+}
+
 const Frontmatter = Schema.Struct({
   name: Schema.String.pipe(Schema.optional),
   description: Schema.String.pipe(Schema.optional),
