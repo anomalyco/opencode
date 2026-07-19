@@ -33,9 +33,9 @@ import { IssueAddTool } from "./issue_add"
 import { IssueUpdateTool } from "./issue_update"
 import { IssueDeleteTool } from "./issue_delete"
 import { IssueReorderTool } from "./issue_reorder"
-import { IssueAutoProgressTool } from "./issue_auto_progress"
+import { IssueArchiveTool } from "./issue_archive"
+import { IssueListTool } from "./issue_list"
 import { Issue } from "@/issue/issue"
-import { AutoProgress } from "@/issue/auto-progress"
 import { Glob } from "@opencode-ai/core/util/glob"
 import path from "path"
 import { pathToFileURL } from "url"
@@ -120,7 +120,8 @@ const layer = Layer.effect(
     const issueUpdate = yield* IssueUpdateTool
     const issueDelete = yield* IssueDeleteTool
     const issueReorder = yield* IssueReorderTool
-    const issueAutoProgress = yield* IssueAutoProgressTool
+    const issueArchive = yield* IssueArchiveTool
+    const issueList = yield* IssueListTool
     const agent = yield* Agent.Service
     const codeMode = flags.experimentalCodeMode ? yield* Effect.promise(() => import("./code-mode")) : undefined
     const codeModeTool = codeMode ? yield* codeMode.CodeModeTool : undefined
@@ -230,7 +231,8 @@ const layer = Layer.effect(
           issueUpdate: Tool.init(issueUpdate),
           issueDelete: Tool.init(issueDelete),
           issueReorder: Tool.init(issueReorder),
-          issueAutoProgress: Tool.init(issueAutoProgress),
+          issueArchive: Tool.init(issueArchive),
+          issueList: Tool.init(issueList),
           patch: Tool.init(patchtool),
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
@@ -258,7 +260,8 @@ const layer = Layer.effect(
             tool.issueUpdate,
             tool.issueDelete,
             tool.issueReorder,
-            tool.issueAutoProgress,
+            tool.issueArchive,
+            tool.issueList,
             tool.patch,
             ...(tool.execute ? [tool.execute] : []),
             ...(flags.experimentalLspTool ? [tool.lsp] : []),
@@ -467,7 +470,6 @@ export const node = LayerNode.make({
     Database.node,
     Ripgrep.node,
     Issue.node,
-    AutoProgress.node,
   ],
 })
 

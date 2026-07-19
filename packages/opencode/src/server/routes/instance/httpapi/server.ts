@@ -17,7 +17,6 @@ import { Format } from "@/format"
 import { Git } from "@/git"
 import { Installation } from "@/installation"
 import { Issue } from "@/issue/issue"
-import { AutoProgress } from "@/issue/auto-progress"
 import { LinearBinding } from "@/issue/linear-binding"
 import { LSP } from "@/lsp/lsp"
 import { MCP } from "@/mcp"
@@ -264,7 +263,6 @@ const app = LayerNode.group([
   Worktree.node,
   Installation.node,
   Issue.node,
-  AutoProgress.node,
   LinearBinding.node,
   ShareNext.node,
   SessionShare.node,
