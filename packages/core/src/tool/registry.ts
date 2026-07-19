@@ -245,11 +245,30 @@ const registryLayer = Layer.effect(
         }
         const execute =
           codemode.size > 0 && !whollyDisabled("execute", rules) ? ExecuteTool.create(codemode) : undefined
+        // Build each tool definition defensively. A plugin can register a structurally
+        // invalid tool (missing description, undecodable input schema, opaque object from
+        // a different module copy, etc.) that only fails when its definition is read.
+        // Throwing here used to break every model step in the Location because no
+        // definition list could be produced. Isolate the bad tool: log once and omit it
+        // so the rest of the catalog stays usable. See
+        // https://github.com/anomalyco/opencode/issues/35963
+        const definitions: ToolDefinition[] = []
+        for (const [name, registration] of direct) {
+          try {
+            definitions.push(definition(name, registration.tool))
+          } catch (error) {
+            yield* Effect.logWarning("failed to materialize tool definition; skipping", {
+              tool: name,
+              error: error instanceof Error ? error.message : String(error),
+            })
+            // Drop the bad registration so later materializations and settle() do not
+            // surface it as a usable tool.
+            direct.delete(name)
+          }
+        }
+        if (execute) definitions.push(definition("execute", execute))
         return {
-          definitions: [
-            ...Array.from(direct, ([name, registration]) => definition(name, registration.tool)),
-            ...(execute ? [definition("execute", execute)] : []),
-          ],
+          definitions,
           settle: (input) => {
             if (input.call.name === "execute" && execute) return settleTool(input, execute)
             const registration = direct.get(input.call.name)
