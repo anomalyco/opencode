@@ -283,6 +283,17 @@ export const githubInstall = Effect.fn("Cli.github.install")(function* () {
         const installation = await getInstallation()
         if (installation) return s.stop("GitHub app already installed")
 
+        // Start a local HTTP server to receive the browser callback.
+        // This ensures the CLI waits for the user to complete the GitHub App
+        // installation in the browser before polling — preventing the hang where
+        // polling starts before the user even switches to the browser window.
+        const { startCallbackServer, waitForCallback } = await import("@/util/callback-server")
+        const server = startCallbackServer()
+        const callbackPromise = waitForCallback(server, {
+          path: "/github-install-callback",
+          timeoutMs: 300_000, // 5 minutes
+        })
+
         // Open browser
         const url = "https://github.com/apps/opencode-agent"
         const command =
@@ -298,25 +309,27 @@ export const githubInstall = Effect.fn("Cli.github.install")(function* () {
           }
         })
 
-        // Wait for installation
-        s.message("Waiting for GitHub app to be installed")
-        const MAX_RETRIES = 120
-        let retries = 0
-        do {
-          const installation = await getInstallation()
-          if (installation) break
+        // Wait for user to complete GitHub App installation in the browser.
+        // The server receives the redirect after the user installs the app,
+        // which unblocks the CLI so it can verify with getInstallation().
+        s.message("Waiting for GitHub app to be installed - complete it in your browser")
+        try {
+          await callbackPromise
+        } catch {
+          server.close()
+          s.stop("GitHub app authorization timed out. Please try again.")
+          throw new UI.CancelledError()
+        }
 
-          if (retries > MAX_RETRIES) {
-            s.stop(
-              `Failed to detect GitHub app installation. Make sure to install the app for the \`${app.owner}/${app.repo}\` repository.`,
-            )
-            throw new UI.CancelledError()
-          }
+        // Verify installation completed
+        const installed = await getInstallation()
+        if (!installed) {
+          server.close()
+          s.stop(`Failed to detect GitHub app installation. Make sure to install the app for the \`${app.owner}/${app.repo}\` repository.`)
+          throw new UI.CancelledError()
+        }
 
-          retries++
-          await sleep(1000)
-        } while (true) // oxlint-disable-line no-constant-condition
-
+        server.close()
         s.stop("Installed GitHub app")
 
         async function getInstallation() {
