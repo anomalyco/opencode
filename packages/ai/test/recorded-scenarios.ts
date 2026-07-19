@@ -120,29 +120,8 @@ export const runWeatherToolLoop = (request: LLMRequest) =>
     throw new Error("Weather tool loop exceeded 10 steps")
   })
 
-const assistantContent = (events: ReadonlyArray<LLMEvent>) => {
-  const content: ContentPart[] = []
-  for (const event of events) {
-    if (event.type === "text-delta" || event.type === "reasoning-delta") {
-      const type = event.type === "text-delta" ? "text" : "reasoning"
-      const last = content.at(-1)
-      if (last?.type === type) {
-        content[content.length - 1] = { ...last, text: `${last.text}${event.text}` }
-      } else {
-        content.push({ type, text: event.text })
-      }
-      continue
-    }
-    if (event.type === "text-end" || event.type === "reasoning-end") {
-      const type = event.type === "text-end" ? "text" : "reasoning"
-      const last = content.at(-1)
-      if (last?.type === type) content[content.length - 1] = { ...last, providerMetadata: event.providerMetadata }
-      continue
-    }
-    if (event.type === "tool-call") content.push(event)
-  }
-  return content
-}
+const assistantContent = (events: ReadonlyArray<LLMEvent>) =>
+  events.reduce(LLMResponse.reduce, LLMResponse.empty()).message.content
 
 export const expectFinish = (
   events: ReadonlyArray<LLMEvent>,

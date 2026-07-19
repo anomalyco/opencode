@@ -1,10 +1,12 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMEvent } from "../../src"
+import { LLM, LLMEvent, LLMResponse } from "../../src"
+import { OpenAIChat } from "../../src/protocols/openai-chat"
 import * as OpenAICompatible from "../../src/providers/openai-compatible"
 import * as OpenRouter from "../../src/providers/openrouter"
 import { LLMClient } from "../../src/route"
 import { recordedTests } from "../recorded-test"
+import { expectWeatherToolLoop, goldenWeatherToolLoopRequest, runWeatherToolLoop } from "../recorded-scenarios"
 
 const cases = [
   {
@@ -15,6 +17,7 @@ const cases = [
     }).model("anthropic/claude-sonnet-4.6"),
     requires: ["OPENROUTER_API_KEY"],
     cassette: "openrouter-reasoning",
+    structured: true,
   },
   {
     name: "Vercel AI Gateway",
@@ -26,6 +29,7 @@ const cases = [
     }).model("anthropic/claude-sonnet-4.6"),
     requires: ["AI_GATEWAY_API_KEY"],
     cassette: "vercel-ai-gateway-reasoning",
+    structured: true,
   },
 ] as const
 
@@ -57,11 +61,85 @@ for (const item of cases) {
           expect(response.text.replaceAll(",", "").trim()).toBe("37887")
           expect(response.reasoning.length).toBeGreaterThan(0)
           expect(response.events.some(LLMEvent.is.reasoningDelta)).toBe(true)
-          expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
-            openai: { reasoningField: "reasoning" },
-          })
+          const metadata = response.message.content.find((part) => part.type === "reasoning")?.providerMetadata
+          expect(metadata?.openai?.reasoningField).toBe(item.structured ? "reasoning" : "reasoning_content")
+          expect(Array.isArray(metadata?.openai?.reasoningDetails)).toBe(item.structured)
+          if (!item.structured) return
+          const details = metadata?.openai?.reasoningDetails
+          if (!Array.isArray(details)) return
+          expect(
+            details.some(
+              (detail) =>
+                typeof detail === "object" &&
+                detail !== null &&
+                "signature" in detail &&
+                typeof detail.signature === "string" &&
+                detail.signature.length > 0,
+            ),
+          ).toBe(true)
+
+          const replay = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+            LLM.request({ model: item.model, messages: [response.message] }),
+          )
+          expect(replay.body.messages).toMatchObject([
+            { role: "assistant", content: response.text, reasoning: response.reasoning },
+          ])
+          const replayDetails =
+            replay.body.messages[0]?.role === "assistant" ? replay.body.messages[0].reasoning_details : undefined
+          expect(Array.isArray(replayDetails)).toBe(true)
+          if (!Array.isArray(replayDetails)) return
+          if (item.name === "Vercel AI Gateway") expect(replayDetails).toEqual(details)
+          if (item.name === "OpenRouter") {
+            expect(replayDetails).toHaveLength(1)
+            expect(replayDetails).not.toEqual(details)
+            expect(replayDetails[0]).toMatchObject({
+              type: "reasoning.text",
+              text: response.reasoning,
+              signature: expect.any(String),
+            })
+          }
         }),
       30_000,
+    )
+
+    recorded.effect.with(
+      "continues signed reasoning through a tool loop",
+      { cassette: `${item.cassette}-tool-loop`, tags: ["continuation", "tool", "tool-loop"] },
+      () =>
+        Effect.gen(function* () {
+          const events = yield* runWeatherToolLoop(
+            goldenWeatherToolLoopRequest({
+              id: `${item.cassette}-tool-loop`,
+              model: item.model,
+              maxTokens: 1536,
+              temperature: false,
+            }),
+          )
+
+          expectWeatherToolLoop(events)
+          expect(
+            LLMResponse.text({
+              events: events.slice(events.findIndex(LLMEvent.is.stepFinish) + 1),
+            }).trim(),
+          ).toMatch(/^Paris is sunny\.?$/)
+          const details = events
+            .filter(LLMEvent.is.reasoningEnd)
+            .map((event) => event.providerMetadata?.openai?.reasoningDetails)
+            .find(Array.isArray)
+          expect(Array.isArray(details)).toBe(item.structured)
+          if (!item.structured || !Array.isArray(details)) return
+          expect(
+            details.some(
+              (detail) =>
+                typeof detail === "object" &&
+                detail !== null &&
+                "signature" in detail &&
+                typeof detail.signature === "string" &&
+                detail.signature.length > 0,
+            ),
+          ).toBe(true)
+        }),
+      60_000,
     )
   })
 }

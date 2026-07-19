@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "metadata": {
+    "model": "anthropic/claude-sonnet-4.6",
+    "tags": [
+      "prefix:openai-compatible-chat",
+      "provider:openrouter",
+      "protocol:openai-chat",
+      "reasoning",
+      "continuation",
+      "tool",
+      "tool-loop"
+    ],
+    "name": "openrouter-reasoning-tool-loop",
+    "recordedAt": "2026-07-18T18:02:15.859Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"anthropic/claude-sonnet-4.6\",\"messages\":[{\"role\":\"system\",\"content\":\"Use the get_weather tool exactly once. After the tool result, reply exactly: Paris is sunny.\"},{\"role\":\"user\",\"content\":\"What is the weather in Paris?\"}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false}}}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"max_tokens\":1536,\"reasoning\":{\"max_tokens\":1024}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": ": OPENROUTER PROCESSING\n\n: OPENROUTER PROCESSING\n\ndata: {\"id\":\"gen-1784397732-OaggEWvVIDtBtcPF4n0O\",\"object\":\"chat.completion.chunk\",\"created\":1784397732,\"model\":\"anthropic/claude-sonnet-4.6\",\"provider\":\"Anthropic\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\",\"role\":\"assistant\",\"reasoning\":\"The user wants\",\"reasoning_details\":[{\"type\":\"reasoning.text\",\"text\":\"The user wants\",\"format\":\"anthropic-claude-v1\",\"index\":0}]},\"finish_reason\":null,\"native_finish_reason\":null}]}\n\n: OPENROUTER PROCESSING\n\ndata: {\"id\":\"gen-1784397732-OaggEWvVIDtBtcPF4n0O\",\"object\":\"chat.completion.chunk\",\"created\":1784397732,\"model\":\"anthropic/claude-sonnet-4.6\",\"provider\":\"Anthropic\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\",\"role\":\"assistant\",\"reasoning\":\" to know the weather in Paris. I'll use the get_weather tool.\",\"reasoning_details\":[{\"type\":\"reasoning.text\",\"text\":\" to know the weather in Paris. I'll use the get_weather tool.\",\"format\":\"anthropic-claude-v1\",\"index\":0}]},\"finish_reason\":null,\"native_finish_reason\":null}]}\n\ndata: {\"id\":\"gen-1784397732-OaggEWvVIDtBtcPF4n0O\",\"object\":\"chat.completion.chunk\",\"created\":1784397732,\"model\":\"anthropic/claude-sonnet-4.6\",\"provider\":\"Anthropic\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\",\"role\":\"assistant\",\"reasoning_details\":[{\"type\":\"reasoning.text\",\"signature\":\"ErkCCosBCA8YAipAjKnRKpxkZ4eHrMPJ63IWEOYPSzb+XSHyG+vLK+2ks2O9T4N9M37Xn2kausQSH1rfsrdmKxgUlBg6yUFRgMVR7DIRY2xhdWRlLXNvbm5ldC00LTY4AEIIdGhpbmtpbmdaJDRjMGYwNDZmLTI1ZmQtNDVmYi1iZmIzLWEwOGE4ZTI0OWNhNxIMNFb5O6pb4nX0HojdGgyL5h+CAIpsxpdM1QgiMGm/i3ST6F5mAhxB+Uez0Cm95ra9yvQkrzHaA/AmWoXpdmPlczSn1S1RDk2IqeA57Spbf7JT44jygtLQt6yZmGzoTBHn3VkwaNZsuuAtbdo4B5QJXooa/AoKKs54QZ2kfS640vsv5flQVCg7CoQCFuLKjIeLMO7MnxVyuskXJr1DgesTa7I0ScF53U9JGhgB\",\"format\":\"anthropic-claude-v1\",\"index\":0}]},\"finish_reason\":null,\"native_finish_reason\":null}]}\n\ndata: {\"id\":\"gen-1784397732-OaggEWvVIDtBtcPF4n0O\",\"object\":\"chat.completion.chunk\",\"created\":1784397732,\"model\":\"anthropic/claude-sonnet-4.6\",\"provider\":\"Anthropic\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Sure! Let me check the weather in Paris for you right now!\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}\n\ndata: {\"id\":\"gen-1784397732-OaggEWvVIDtBtcPF4n0O\",\"object\":\"chat.completion.chunk\",\"created\":1784397732,\"model\":\"anthropic/claude-sonnet-4.6\",\"provider\":\"Anthropic\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"role\":\"assistant\",\"tool_calls\":[{\"index\":0,\"id\":\"toolu_01PaChhcyw3yu2P2bDS2bgAA\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"\"}}]},\"finish_reason\":null,\"native_finish_reason\":null}]}\n\ndata: {\"id\":\"gen-1784397732-OaggEWvVIDtBtcPF4n0O\",\"object\":\"chat.completion.chunk\",\"created\":1784397732,\"model\":\"anthropic/claude-sonnet-4.6\",\"provider\":\"Anthropic\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"role\":\"assistant\",\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"\"}}]},\"finish_reason\":null,\"native_finish_reason\":null}]}\n\ndata: {\"id\":\"gen-1784397732-OaggEWvVIDtBtcPF4n0O\",\"object\":\"chat.completion.chunk\",\"created\":1784397732,\"model\":\"anthropic/claude-sonnet-4.6\",\"provider\":\"Anthropic\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"role\":\"assistant\",\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\\\"city\\\": \\\"Paris\"}}]},\"finish_reason\":null,\"native_finish_reason\":null}]}\n\ndata: {\"id\":\"gen-1784397732-OaggEWvVIDtBtcPF4n0O\",\"object\":\"chat.completion.chunk\",\"created\":1784397732,\"model\":\"anthropic/claude-sonnet-4.6\",\"provider\":\"Anthropic\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"role\":\"assistant\",\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"\\\"}\"}}]},\"finish_reason\":null,\"native_finish_reason\":null}]}\n\ndata: {\"id\":\"gen-1784397732-OaggEWvVIDtBtcPF4n0O\",\"object\":\"chat.completion.chunk\",\"created\":1784397732,\"model\":\"anthropic/claude-sonnet-4.6\",\"provider\":\"Anthropic\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\",\"role\":\"assistant\",\"reasoning\":null},\"finish_reason\":\"tool_calls\",\"native_finish_reason\":\"tool_use\"}]}\n\ndata: {\"id\":\"gen-1784397732-OaggEWvVIDtBtcPF4n0O\",\"object\":\"chat.completion.chunk\",\"created\":1784397732,\"model\":\"anthropic/claude-sonnet-4.6\",\"provider\":\"Anthropic\",\"service_tier\":\"default\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\",\"role\":\"assistant\"},\"finish_reason\":\"tool_calls\",\"native_finish_reason\":\"tool_use\"}],\"usage\":{\"prompt_tokens\":623,\"completion_tokens\":95,\"total_tokens\":718,\"cost\":0.003294,\"is_byok\":false,\"prompt_tokens_details\":{\"cached_tokens\":0,\"cache_write_tokens\":0,\"audio_tokens\":0,\"video_tokens\":0},\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"cost_details\":{\"upstream_inference_cost\":0.003294,\"upstream_inference_prompt_cost\":0.001869,\"upstream_inference_completions_cost\":0.001425},\"completion_tokens_details\":{\"reasoning_tokens\":19,\"image_tokens\":0,\"audio_tokens\":0}}}\n\ndata: [DONE]\n\n"
+      }
+    },
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"anthropic/claude-sonnet-4.6\",\"messages\":[{\"role\":\"system\",\"content\":\"Use the get_weather tool exactly once. After the tool result, reply exactly: Paris is sunny.\"},{\"role\":\"user\",\"content\":\"What is the weather in Paris?\"},{\"role\":\"assistant\",\"content\":\"Sure! Let me check the weather in Paris for you right now!\",\"tool_calls\":[{\"id\":\"toolu_01PaChhcyw3yu2P2bDS2bgAA\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"Paris\\\"}\"}}],\"reasoning\":\"The user wants to know the weather in Paris. I'll use the get_weather tool.\",\"reasoning_details\":[{\"type\":\"reasoning.text\",\"text\":\"The user wants to know the weather in Paris. I'll use the get_weather tool.\",\"format\":\"anthropic-claude-v1\",\"index\":0,\"signature\":\"ErkCCosBCA8YAipAjKnRKpxkZ4eHrMPJ63IWEOYPSzb+XSHyG+vLK+2ks2O9T4N9M37Xn2kausQSH1rfsrdmKxgUlBg6yUFRgMVR7DIRY2xhdWRlLXNvbm5ldC00LTY4AEIIdGhpbmtpbmdaJDRjMGYwNDZmLTI1ZmQtNDVmYi1iZmIzLWEwOGE4ZTI0OWNhNxIMNFb5O6pb4nX0HojdGgyL5h+CAIpsxpdM1QgiMGm/i3ST6F5mAhxB+Uez0Cm95ra9yvQkrzHaA/AmWoXpdmPlczSn1S1RDk2IqeA57Spbf7JT44jygtLQt6yZmGzoTBHn3VkwaNZsuuAtbdo4B5QJXooa/AoKKs54QZ2kfS640vsv5flQVCg7CoQCFuLKjIeLMO7MnxVyuskXJr1DgesTa7I0ScF53U9JGhgB\"}]},{\"role\":\"tool\",\"tool_call_id\":\"toolu_01PaChhcyw3yu2P2bDS2bgAA\",\"content\":\"{\\\"temperature\\\":22,\\\"condition\\\":\\\"sunny\\\"}\"}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false}}}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"max_tokens\":1536,\"reasoning\":{\"max_tokens\":1024}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": ": OPENROUTER PROCESSING\n\n: OPENROUTER PROCESSING\n\ndata: {\"id\":\"gen-1784397734-HY78YkUzZ8xIXuimN9bb\",\"object\":\"chat.completion.chunk\",\"created\":1784397734,\"model\":\"anthropic/claude-sonnet-4.6\",\"provider\":\"Anthropic\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Paris\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}\n\ndata: {\"id\":\"gen-1784397734-HY78YkUzZ8xIXuimN9bb\",\"object\":\"chat.completion.chunk\",\"created\":1784397734,\"model\":\"anthropic/claude-sonnet-4.6\",\"provider\":\"Anthropic\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" is sunny.\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}\n\ndata: {\"id\":\"gen-1784397734-HY78YkUzZ8xIXuimN9bb\",\"object\":\"chat.completion.chunk\",\"created\":1784397734,\"model\":\"anthropic/claude-sonnet-4.6\",\"provider\":\"Anthropic\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\",\"role\":\"assistant\"},\"finish_reason\":\"stop\",\"native_finish_reason\":\"end_turn\"}]}\n\ndata: {\"id\":\"gen-1784397734-HY78YkUzZ8xIXuimN9bb\",\"object\":\"chat.completion.chunk\",\"created\":1784397734,\"model\":\"anthropic/claude-sonnet-4.6\",\"provider\":\"Anthropic\",\"service_tier\":\"default\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\",\"role\":\"assistant\"},\"finish_reason\":\"stop\",\"native_finish_reason\":\"end_turn\"}],\"usage\":{\"prompt_tokens\":739,\"completion_tokens\":7,\"total_tokens\":746,\"cost\":0.002322,\"is_byok\":false,\"prompt_tokens_details\":{\"cached_tokens\":0,\"cache_write_tokens\":0,\"audio_tokens\":0,\"video_tokens\":0},\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"cost_details\":{\"upstream_inference_cost\":0.002322,\"upstream_inference_prompt_cost\":0.002217,\"upstream_inference_completions_cost\":0.000105},\"completion_tokens_details\":{\"reasoning_tokens\":0,\"image_tokens\":0,\"audio_tokens\":0}}}\n\ndata: [DONE]\n\n"
+      }
+    }
+  ]
+}

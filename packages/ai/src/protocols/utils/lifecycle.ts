@@ -44,7 +44,7 @@ export const reasoningDelta = (
   providerMetadata?: ProviderMetadata,
 ): State => {
   const started = reasoningStart(state, events, id, providerMetadata)
-  events.push(LLMEvent.reasoningDelta({ id, text }))
+  events.push(LLMEvent.reasoningDelta({ id, text, providerMetadata }))
   return started
 }
 

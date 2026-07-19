@@ -570,6 +570,404 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("preserves and replays reasoning details alongside scalar reasoning", () =>
+    Effect.gen(function* () {
+      const details = [
+        { type: "reasoning.text", text: "thinking", format: "anthropic-claude-v1", index: 0 },
+        { type: "reasoning.encrypted", data: "opaque", format: "anthropic-claude-v1", index: 1 },
+      ]
+      const response = yield* LLMClient.generate(
+        LLM.updateRequest(request, {
+          tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
+        }),
+      ).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { choices: [{ delta: { reasoning: "thinking", reasoning_details: [details[0]] } }] },
+              { choices: [{ delta: { reasoning_details: [details[1]] } }] },
+              {
+                choices: [
+                  {
+                    delta: {
+                      tool_calls: [
+                        { index: 0, id: "call_1", function: { name: "lookup", arguments: '{"query":"weather"}' } },
+                      ],
+                    },
+                    finish_reason: "tool_calls",
+                  },
+                ],
+              },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.reasoning).toBe("thinking")
+      expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
+        openai: { reasoningField: "reasoning", reasoningDetails: details },
+      })
+
+      const replay = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+        LLM.request({ model, messages: [response.message] }),
+      )
+      expect(replay.body.messages).toEqual([
+        {
+          role: "assistant",
+          content: null,
+          reasoning: "thinking",
+          reasoning_details: details,
+          tool_calls: [
+            {
+              id: "call_1",
+              type: "function",
+              function: { name: "lookup", arguments: '{"query":"weather"}' },
+            },
+          ],
+        },
+      ])
+    }),
+  )
+
+  it.effect("uses reasoning details as display fallback without inventing a scalar replay field", () =>
+    Effect.gen(function* () {
+      const details = [
+        { type: "reasoning.summary", summary: "thinking", format: "openai-responses-v1", index: 0 },
+        { type: "reasoning.encrypted", data: "opaque", format: "openai-responses-v1", index: 1 },
+      ]
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { choices: [{ delta: { reasoning_details: [details[0]] } }] },
+              { choices: [{ delta: { reasoning_details: [details[1]] } }] },
+              { choices: [{ delta: { content: "Hello" } }] },
+              { choices: [{ delta: {}, finish_reason: "stop" }] },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.reasoning).toBe("thinking")
+      expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
+        openai: { reasoningDetails: details },
+      })
+
+      const replay = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+        LLM.request({ model, messages: [response.message] }),
+      )
+      expect(replay.body.messages).toEqual([{ role: "assistant", content: "Hello", reasoning_details: details }])
+    }),
+  )
+
+  it.effect("prefers scalar reasoning when reasoning details arrive first", () =>
+    Effect.gen(function* () {
+      const details = [{ type: "reasoning.text", text: "thinking", format: "anthropic-claude-v1", index: 0 }]
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { choices: [{ delta: { reasoning_details: details } }] },
+              { choices: [{ delta: { reasoning: "thinking" } }] },
+              { choices: [{ delta: { content: "Hello" } }] },
+              { choices: [{ delta: {}, finish_reason: "stop" }] },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.reasoning).toBe("thinking")
+      expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
+        openai: { reasoningField: "reasoning", reasoningDetails: details },
+      })
+    }),
+  )
+
+  it.effect("uses scalar reasoning independently from details-first text", () =>
+    Effect.gen(function* () {
+      const details = [{ type: "reasoning.text", text: "think", format: "unknown", index: 0 }]
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { choices: [{ delta: { reasoning_details: details } }] },
+              { choices: [{ delta: { reasoning: "ing" } }] },
+              { choices: [{ delta: { content: "Hello" } }] },
+              { choices: [{ delta: {}, finish_reason: "stop" }] },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.reasoning).toBe("ing")
+      expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
+        openai: { reasoningField: "reasoning", reasoningDetails: details },
+      })
+    }),
+  )
+
+  it.effect("keeps scalar reasoning authoritative when later details contain text", () =>
+    Effect.gen(function* () {
+      const details = [{ type: "reasoning.text", text: "detail-only", format: "unknown", index: 0 }]
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { choices: [{ delta: { reasoning: "scalar" } }] },
+              { choices: [{ delta: { reasoning_details: details } }] },
+              { choices: [{ delta: { content: "Hello" } }] },
+              { choices: [{ delta: {}, finish_reason: "stop" }] },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.reasoning).toBe("scalar")
+      expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
+        openai: { reasoningField: "reasoning", reasoningDetails: details },
+      })
+    }),
+  )
+
+  it.effect("keeps late scalar reasoning authoritative after content starts", () =>
+    Effect.gen(function* () {
+      const details = [{ type: "reasoning.text", text: "detail", format: "unknown", index: 0 }]
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { choices: [{ delta: { reasoning_details: details } }] },
+              { choices: [{ delta: { content: "Hello" } }] },
+              { choices: [{ delta: { reasoning: "scalar" } }] },
+              { choices: [{ delta: {}, finish_reason: "stop" }] },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.reasoning).toBe("scalar")
+      expect(response.events.filter(LLMEvent.is.reasoningStart)).toHaveLength(1)
+      expect(response.events.filter(LLMEvent.is.reasoningEnd)).toHaveLength(1)
+      expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
+        openai: { reasoningField: "reasoning", reasoningDetails: details },
+      })
+    }),
+  )
+
+  it.effect("treats an explicitly empty scalar reasoning field as authoritative", () =>
+    Effect.gen(function* () {
+      const details = [{ type: "reasoning.text", text: "detail", format: "unknown", index: 0 }]
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { choices: [{ delta: { reasoning_details: details } }] },
+              { choices: [{ delta: { reasoning: "" } }] },
+              { choices: [{ delta: { content: "Hello" } }] },
+              { choices: [{ delta: {}, finish_reason: "stop" }] },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.reasoning).toBe("")
+      expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
+        openai: { reasoningField: "reasoning", reasoningDetails: details },
+      })
+    }),
+  )
+
+  it.effect("preserves an explicitly empty reasoning details array", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { choices: [{ delta: { reasoning_details: [] } }] },
+              { choices: [{ delta: { content: "Hello" } }] },
+              { choices: [{ delta: {}, finish_reason: "stop" }] },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.reasoning).toBe("")
+      expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
+        openai: { reasoningDetails: [] },
+      })
+
+      const replay = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+        LLM.request({ model, messages: [response.message] }),
+      )
+      expect(replay.body.messages).toEqual([{ role: "assistant", content: "Hello", reasoning_details: [] }])
+    }),
+  )
+
+  it.effect("attaches signature-only details that arrive after content", () =>
+    Effect.gen(function* () {
+      const details = [
+        { type: "reasoning.text", text: "thinking", format: "anthropic-claude-v1", index: 0 },
+        { type: "reasoning.text", signature: "signed", format: "anthropic-claude-v1", index: 0 },
+      ]
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { choices: [{ delta: { reasoning: "thinking", reasoning_details: [details[0]] } }] },
+              { choices: [{ delta: { content: "Hello" } }] },
+              { choices: [{ delta: { reasoning_details: [details[1]] } }] },
+              { choices: [{ delta: {}, finish_reason: "stop" }] },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.reasoning).toBe("thinking")
+      expect(response.message.content.filter((part) => part.type === "reasoning")).toHaveLength(1)
+      expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
+        openai: { reasoningField: "reasoning", reasoningDetails: details },
+      })
+      expect(response.events.filter(LLMEvent.is.reasoningStart)).toHaveLength(1)
+      expect(response.events.filter(LLMEvent.is.reasoningDelta)).toHaveLength(1)
+      expect(response.events.filter(LLMEvent.is.reasoningEnd)).toHaveLength(1)
+      expect(response.events.filter(LLMEvent.is.reasoningEnd).at(-1)?.providerMetadata).toEqual({
+        openai: { reasoningField: "reasoning", reasoningDetails: details },
+      })
+
+      const replay = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+        LLM.request({ model, messages: [response.message] }),
+      )
+      expect(replay.body.messages).toEqual([
+        { role: "assistant", content: "Hello", reasoning: "thinking", reasoning_details: details },
+      ])
+    }),
+  )
+
+  it.effect("preserves metadata-only reasoning when the stream ends", () =>
+    Effect.gen(function* () {
+      const details = [{ type: "reasoning.encrypted", data: "opaque", format: "openai-responses-v1", index: 0 }]
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { choices: [{ delta: { reasoning_details: details } }] },
+              { choices: [{ delta: {}, finish_reason: "stop" }] },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.message.content).toEqual([
+        { type: "reasoning", text: "", providerMetadata: { openai: { reasoningDetails: details } } },
+      ])
+      expect(response.events.filter(LLMEvent.is.reasoningStart)).toHaveLength(1)
+      expect(response.events.filter(LLMEvent.is.reasoningEnd)).toHaveLength(1)
+
+      const replay = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+        LLM.request({ model, messages: [response.message] }),
+      )
+      expect(replay.body.messages).toEqual([{ role: "assistant", content: null, reasoning_details: details }])
+    }),
+  )
+
+  it.effect("flushes details-only display reasoning when the stream ends", () =>
+    Effect.gen(function* () {
+      const details = [{ type: "reasoning.summary", summary: "summary", format: "openai-responses-v1", index: 0 }]
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { choices: [{ delta: { reasoning_details: details } }] },
+              { choices: [{ delta: {}, finish_reason: "stop" }] },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.reasoning).toBe("summary")
+      expect(response.message.content).toEqual([
+        { type: "reasoning", text: "summary", providerMetadata: { openai: { reasoningDetails: details } } },
+      ])
+    }),
+  )
+
+  it.effect("replays details from multiple reasoning parts in order", () =>
+    Effect.gen(function* () {
+      const first = { type: "reasoning.text", text: "first", signature: "signed-0", index: 0 }
+      const second = { type: "reasoning.text", text: "second", signature: "signed-1", index: 1 }
+      const replay = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([
+              {
+                type: "reasoning",
+                text: "first",
+                providerMetadata: { openai: { reasoningDetails: [first] } },
+              },
+              {
+                type: "reasoning",
+                text: "second",
+                providerMetadata: { openai: { reasoningField: "reasoning", reasoningDetails: [second] } },
+              },
+            ]),
+          ],
+        }),
+      )
+
+      expect(replay.body.messages).toEqual([
+        { role: "assistant", content: null, reasoning: "firstsecond", reasoning_details: [first, second] },
+      ])
+    }),
+  )
+
+  it.effect("retains scalar replay for mixed structured reasoning parts", () =>
+    Effect.gen(function* () {
+      const detail = { type: "reasoning.encrypted", data: "opaque", index: 0 }
+      const replay = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([
+              {
+                type: "reasoning",
+                text: "A",
+                providerMetadata: { openai: { reasoningDetails: [detail] } },
+              },
+              { type: "reasoning", text: "B" },
+            ]),
+          ],
+        }),
+      )
+
+      expect(replay.body.messages).toEqual([
+        { role: "assistant", content: null, reasoning_content: "AB", reasoning_details: [detail] },
+      ])
+    }),
+  )
+
+  it.effect("replays native scalar reasoning alongside native details", () =>
+    Effect.gen(function* () {
+      const details = [{ type: "reasoning.encrypted", data: "opaque", index: 0 }]
+      const replay = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+        LLM.request({
+          model,
+          messages: [
+            Message.make({
+              role: "assistant",
+              content: [{ type: "reasoning", text: "thinking" }],
+              native: { openaiCompatible: { reasoning_content: "thinking", reasoning_details: details } },
+            }),
+          ],
+        }),
+      )
+
+      expect(replay.body.messages).toEqual([
+        { role: "assistant", content: null, reasoning_content: "thinking", reasoning_details: details },
+      ])
+    }),
+  )
+
   it.effect("assembles streamed tool call input", () =>
     Effect.gen(function* () {
       const body = sseEvents(
