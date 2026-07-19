@@ -344,6 +344,10 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
               onMouseOut={() => setTabHover(null)}
               onMouseUp={() => {
                 if (renderer.getSelection()?.getSelectedText()) return
+                if (confirm()) {
+                  submit()
+                  return
+                }
                 selectTab(questions().length)
               }}
             >
@@ -484,10 +488,37 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
         paddingLeft={2}
         paddingRight={3}
         paddingBottom={1}
+        backgroundColor={confirm() ? theme.backgroundElement : undefined}
         justifyContent="space-between"
       >
+        <Show when={confirm()}>
+          <box flexDirection="row" gap={1} flexShrink={0}>
+            <box
+              paddingLeft={1}
+              paddingRight={1}
+              backgroundColor={theme.accent}
+              onMouseUp={() => {
+                if (renderer.getSelection()?.getSelectedText()) return
+                submit()
+              }}
+            >
+              <text fg={selectedForeground(theme, theme.accent)}>Submit</text>
+            </box>
+            <box
+              paddingLeft={1}
+              paddingRight={1}
+              backgroundColor={theme.backgroundMenu}
+              onMouseUp={() => {
+                if (renderer.getSelection()?.getSelectedText()) return
+                reject()
+              }}
+            >
+              <text fg={theme.textMuted}>Dismiss</text>
+            </box>
+          </box>
+        </Show>
         <box flexDirection="row" gap={2}>
-          <Show when={!single()}>
+          <Show when={!single() && !confirm()}>
             <text fg={theme.text}>
               {"⇆"} <span style={{ fg: theme.textMuted }}>tab</span>
             </text>
