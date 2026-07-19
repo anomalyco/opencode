@@ -150,14 +150,12 @@ export const ToolInputEnd = Schema.Struct({
 }).annotate({ identifier: "LLM.Event.ToolInputEnd" })
 export type ToolInputEnd = Schema.Schema.Type<typeof ToolInputEnd>
 
-/** A local tool call that could not be decoded. `raw` is diagnostic-only. */
+/** A local tool call whose final input could not be decoded. */
 export const ToolInputError = Schema.Struct({
   type: Schema.tag("tool-input-error"),
   id: ToolCallID,
   name: Schema.String,
   raw: Schema.String,
-  message: Schema.String,
-  providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Event.ToolInputError" })
 export type ToolInputError = Schema.Schema.Type<typeof ToolInputError>
 

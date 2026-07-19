@@ -642,8 +642,6 @@ function streamPartEvents(
                   id: event.toolCallId,
                   name: event.toolName,
                   raw: event.input,
-                  message: error.reason.message,
-                  providerMetadata: providerMetadata(event.providerMetadata),
                 }),
               ]),
         ),

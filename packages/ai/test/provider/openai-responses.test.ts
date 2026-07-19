@@ -1290,8 +1290,6 @@ describe("OpenAI Responses route", () => {
         id: "call_1",
         name: "lookup",
         raw: '{"query":"partial',
-        message: "Invalid JSON input for openai-responses tool call lookup",
-        providerMetadata: { openai: { itemId: "item_1" } },
       })
       expect(response.finishReason).toBe("tool-calls")
       expect(response.events.some(LLMEvent.is.toolCall)).toBeFalse()

@@ -4180,7 +4180,6 @@ describe("SessionRunnerLLM", () => {
             id: "call-malformed",
             name: "echo",
             raw,
-            message: "Invalid JSON input for test tool call echo",
           }),
           LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
           LLMEvent.finish({ reason: "tool-calls" }),
@@ -4278,7 +4277,6 @@ describe("SessionRunnerLLM", () => {
             id: "call-malformed",
             name: "echo",
             raw: '{"text":"partial',
-            message: "Invalid JSON input for test tool call echo",
           }),
           LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
           LLMEvent.finish({ reason: "tool-calls" }),
@@ -4321,7 +4319,6 @@ describe("SessionRunnerLLM", () => {
           id: "call-malformed",
           name: "echo",
           raw: '{"text":"partial',
-          message: "Invalid JSON input for test tool call echo",
         }),
         LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
         LLMEvent.finish({ reason: "tool-calls" }),
@@ -4387,7 +4384,7 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("replaces malformed input diagnosis with a later provider failure", () =>
+  it.effect("records a provider failure after malformed input", () =>
     Effect.gen(function* () {
       const session = yield* setup
       yield* admit(session, "Fail after malformed input")
@@ -4402,7 +4399,6 @@ describe("SessionRunnerLLM", () => {
           id: "call-malformed",
           name: "echo",
           raw: '{"text":"partial',
-          message: "Invalid JSON input for test tool call echo",
         }),
       ]).pipe(Stream.concat(Stream.fail(failure)))
 
@@ -4432,7 +4428,6 @@ describe("SessionRunnerLLM", () => {
           id,
           name: "echo",
           raw: '{"text":"partial',
-          message: "Invalid JSON input for test tool call echo",
         }),
         LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
         LLMEvent.finish({ reason: "tool-calls" }),
@@ -4468,7 +4463,6 @@ describe("SessionRunnerLLM", () => {
           id,
           name: "echo",
           raw: '{"text":"partial',
-          message: "Invalid JSON input for test tool call echo",
         }),
         LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
         LLMEvent.finish({ reason: "tool-calls" }),
@@ -4572,6 +4566,24 @@ describe("SessionRunnerLLM", () => {
         "session.step.failed.1",
       ])
       expect(events[2]?.data.error).toMatchObject({ type: "unknown", message: "unexpected tool defect" })
+    }),
+  )
+
+  it.effect("preserves the provider failure when tool output persistence also fails", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      yield* admit(session, "Storage fails while provider fails")
+      response = [
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.toolCall({ id: "call-store-provider-error", name: "storefail", input: {} }),
+        LLMEvent.providerError({ message: "Provider unavailable" }),
+      ]
+
+      expect(yield* session.resume(sessionID).pipe(Effect.exit)).toMatchObject({ _tag: "Failure" })
+
+      expect(requireAssistant(yield* session.context(sessionID))).toMatchObject({
+        error: { type: "provider.unknown", message: "Provider unavailable" },
+      })
     }),
   )
 

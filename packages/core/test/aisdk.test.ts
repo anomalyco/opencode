@@ -296,7 +296,6 @@ it.effect("emits malformed AI SDK tool input without executing it", () =>
       id: "call_1",
       name: "lookup",
       raw,
-      message: "Invalid JSON input for aisdk tool call lookup",
     })
     expect(response.events.some(LLMEvent.is.toolInputEnd)).toBeTrue()
     expect(response.events.some(LLMEvent.is.toolCall)).toBeFalse()

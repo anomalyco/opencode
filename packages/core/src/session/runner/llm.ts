@@ -259,7 +259,7 @@ const layer = Layer.effect(
                 step: currentStep,
               })
             }
-            yield* serialized(publisher.failAssistant(error, true))
+            yield* serialized(publisher.failAssistant(error))
           }
           // Provider error events only arrive from the stream, so the flag is final here.
           const providerFailed = publisher.hasProviderError()
@@ -280,7 +280,7 @@ const layer = Layer.effect(
           if (settled._tag === "Failure") yield* FiberSet.clear(toolFibers)
           if (userDeclined || streamInterrupted || toolsInterrupted) {
             yield* serialized(publisher.failUnsettledTools({ type: "aborted", message: "Tool execution interrupted" }))
-            yield* serialized(publisher.failAssistant({ type: "aborted", message: "Step interrupted" }, true))
+            yield* serialized(publisher.failAssistant({ type: "aborted", message: "Step interrupted" }))
           }
           // A settled tool fiber failure is one of two things. A defect from a tool
           // implementation becomes a failed tool call the model can read, and the step still
@@ -293,7 +293,7 @@ const layer = Layer.effect(
             const failure = infraError ?? Cause.squash(settledFailure)
             const error = toSessionError(failure)
             yield* serialized(publisher.failUnsettledTools(error))
-            if (infraError !== undefined) yield* serialized(publisher.failAssistant(error, true))
+            if (infraError !== undefined) yield* serialized(publisher.failAssistant(error))
           }
 
           // Fail unresolved calls before the terminal step event. Local calls have joined, so
@@ -321,13 +321,10 @@ const layer = Layer.effect(
               : false
           if (hostedResultMissing && !publisher.stepSettlement())
             yield* serialized(
-              publisher.failAssistant(
-                {
-                  type: "tool.result-missing",
-                  message: "Provider did not return a tool result",
-                },
-                true,
-              ),
+              publisher.failAssistant({
+                type: "tool.result-missing",
+                message: "Provider did not return a tool result",
+              }),
             )
 
           const stepFailure = publisher.stepFailure()

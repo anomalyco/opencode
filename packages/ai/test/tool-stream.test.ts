@@ -81,7 +81,6 @@ describe("ToolStream", () => {
             id: "call_1",
             name: "lookup",
             raw: '{"query":"partial',
-            message: "Invalid JSON input for test-route tool call lookup",
           },
         ],
       })
@@ -112,7 +111,6 @@ describe("ToolStream", () => {
             id: "call_invalid",
             name: "lookup",
             raw: '{"query":"partial',
-            message: "Invalid JSON input for test-route tool call lookup",
           },
         ],
       })

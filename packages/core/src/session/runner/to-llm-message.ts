@@ -137,11 +137,10 @@ const assistant = (message: SessionMessage.Assistant, model: ModelV2.Ref, provid
           ? [{ type: "text", text: item.text }]
           : []
     const reuseToolProviderMetadata =
-      sameModel &&
-      (message.error === undefined ||
-        (item.executed === true &&
-          (item.state.status === "completed" ||
-            (item.state.status === "error" && item.state.result !== undefined))))
+      reuseProviderMetadata ||
+      (sameModel &&
+        item.executed === true &&
+        (item.state.status === "completed" || (item.state.status === "error" && item.state.result !== undefined)))
     const call = toolCall(
       item,
       reuseToolProviderMetadata ? providerMetadata(providerMetadataKey, item.providerState) : undefined,

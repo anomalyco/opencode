@@ -262,11 +262,11 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
     return failed
   })
 
-  const failAssistant = Effect.fnUntraced(function* (error: SessionError.Error, replace = false) {
+  const failAssistant = Effect.fnUntraced(function* (error: SessionError.Error) {
     yield* flush()
     yield* failTools(error, "uncalled")
     yield* startAssistant()
-    if (replace || stepFailure === undefined) stepFailure = error
+    if (stepFailure === undefined) stepFailure = error
   })
 
   const publishStepFailure = Effect.fnUntraced(function* (details?: {
@@ -458,7 +458,7 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
         stepSettlement = { finish: event.reason, tokens: SessionUsage.tokens(event.usage) }
         if (event.reason === "content-filter") {
           providerFailed = true
-          yield* failAssistant({ type: "provider.content-filter", message: "Provider blocked the response" }, true)
+          yield* failAssistant({ type: "provider.content-filter", message: "Provider blocked the response" })
           return
         }
         return
@@ -466,7 +466,7 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
         return
       case "provider-error":
         providerFailed = true
-        yield* failAssistant({ type: "provider.unknown", message: event.message }, true)
+        yield* failAssistant({ type: "provider.unknown", message: event.message })
         return
     }
   })

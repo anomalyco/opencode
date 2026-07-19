@@ -84,8 +84,6 @@ const toolCall = (route: string, tool: PendingTool, inputOverride?: string) => {
               id: tool.id,
               name: tool.name,
               raw,
-              message: error.reason.message,
-              providerMetadata: tool.providerMetadata,
             }),
           ),
     ),

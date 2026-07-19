@@ -104,7 +104,6 @@ describe("LLMResponse reducer", () => {
         id: "call_1",
         name: "lookup",
         raw: '{"query":"partial',
-        message: "Invalid JSON input",
       }),
     ])
 
