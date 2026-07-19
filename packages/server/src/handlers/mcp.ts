@@ -27,6 +27,22 @@ export const McpHandler = HttpApiBuilder.group(Api, "server.mcp", (handlers) =>
         }),
       )
       .handle(
+        "mcp.add",
+        Effect.fn(function* (ctx) {
+          const service = yield* MCP.Service
+          yield* service.add(ctx.params.server, ctx.payload.config)
+          return HttpApiSchema.NoContent.make()
+        }),
+      )
+      .handle(
+        "mcp.remove",
+        Effect.fn(function* (ctx) {
+          const service = yield* MCP.Service
+          yield* notFound(service.remove(ctx.params.server))
+          return HttpApiSchema.NoContent.make()
+        }),
+      )
+      .handle(
         "mcp.connect",
         Effect.fn(function* (ctx) {
           const service = yield* MCP.Service
