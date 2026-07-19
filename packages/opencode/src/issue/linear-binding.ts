@@ -1,5 +1,4 @@
 import { Effect, Layer, Context, Schema, Option } from "effect"
-import z from "zod"
 import { define, inventory } from "@opencode-ai/schema/event"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -25,17 +24,16 @@ const decodeJson = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
  *     atomically (temp file + rename) on every set(). Lives inside the
  *     workspace directory so macOS TCC does not apply.
  */
-export const Binding = z.object({
-  teamId: z.string().describe("Linear team UUID (resolved from list_teams)"),
-  teamName: z.string().describe("Linear team name (user-friendly; unique in Linear)"),
-  projectId: z.string().describe("Linear project UUID (resolved from list_projects)"),
-  projectName: z.string().optional().describe("Linear project name (for display)"),
-  projectUrl: z
-    .string()
-    .optional()
-    .describe("Full Linear project URL (legacy; kept for deep-linking but not used for ID resolution)"),
-})
-export type Binding = z.infer<typeof Binding>
+export const Binding = Schema.Struct({
+  teamId: Schema.String.annotate({ description: "Linear team UUID (resolved from list_teams)" }),
+  teamName: Schema.String.annotate({ description: "Linear team name (user-friendly; unique in Linear)" }),
+  projectId: Schema.String.annotate({ description: "Linear project UUID (resolved from list_projects)" }),
+  projectName: Schema.optional(Schema.String).annotate({ description: "Linear project name (for display)" }),
+  projectUrl: Schema.optional(Schema.String).annotate({
+    description: "Full Linear project URL (legacy; kept for deep-linking but not used for ID resolution)",
+  }),
+}).annotate({ identifier: "LinearBinding" })
+export type Binding = Schema.Schema.Type<typeof Binding>
 
 /**
  * Event published when the binding is updated. The desktop UI's event
@@ -56,14 +54,15 @@ export const Event = { Updated, Definitions: inventory(Updated) }
  * File layout for `<workspace>/.opencode/linear-binding.json`.
  * `updatedAt` is for human inspection; the service does not parse it back.
  */
-const FileSchema = z.object({
-  teamId: z.string(),
-  teamName: z.string(),
-  projectId: z.string(),
-  projectName: z.string().optional(),
-  projectUrl: z.string().optional(),
-  updatedAt: z.string().optional(),
+const FileSchema = Schema.Struct({
+  teamId: Schema.String,
+  teamName: Schema.String,
+  projectId: Schema.String,
+  projectName: Schema.optional(Schema.String),
+  projectUrl: Schema.optional(Schema.String),
+  updatedAt: Schema.optional(Schema.String),
 })
+const decodeFile = Schema.decodeUnknownOption(FileSchema)
 
 export interface Interface {
   readonly get: () => Effect.Effect<Binding | null>
@@ -105,19 +104,25 @@ export const layer = Layer.effect(
         const file = bindingFilePath(directory)
         const exists = yield* fs.existsSafe(file)
         if (!exists) return null
-        const content = yield* fs.readFileString(file).pipe(Effect.catch(() => Effect.succeed(null)))
+        const content = yield* fs.readFileString(file).pipe(
+          // File vanished between existsSafe and readFileString (race) or
+          // read error — treat as missing. Effect.catch only catches
+          // recoverable errors; defects (Interrupt/Die) propagate.
+          Effect.catch(() => Effect.succeed(null)),
+        )
         if (!content || content.trim() === "{}") return null
         const json = Option.getOrUndefined(decodeJson(content))
         if (!json) return null
-        const parsed = FileSchema.safeParse(json)
-        if (!parsed.success) return null
-        const b = parsed.data
+        // `decodeFile` returns Option<Binding-shaped row>; `None` covers both
+        // decode failures and missing required fields.
+        const parsed = Option.getOrUndefined(decodeFile(json))
+        if (!parsed) return null
         return {
-          teamId: b.teamId,
-          teamName: b.teamName,
-          projectId: b.projectId,
-          ...(b.projectName ? { projectName: b.projectName } : {}),
-          ...(b.projectUrl ? { projectUrl: b.projectUrl } : {}),
+          teamId: parsed.teamId,
+          teamName: parsed.teamName,
+          projectId: parsed.projectId,
+          ...(parsed.projectName !== undefined ? { projectName: parsed.projectName } : {}),
+          ...(parsed.projectUrl !== undefined ? { projectUrl: parsed.projectUrl } : {}),
         }
       })
 

@@ -2,7 +2,7 @@ import { Effect, Schema } from "effect"
 import { Tool } from "./tool"
 import DESCRIPTION from "./issue_reorder.txt"
 import { Issue } from "../issue/issue"
-import { context } from "@/project/instance-context"
+import { InstanceState } from "@/effect/instance-state"
 
 const Parameters = Schema.Struct({
   ids: Schema.Array(Schema.String).annotate({
@@ -12,6 +12,7 @@ const Parameters = Schema.Struct({
 
 type Metadata = {
   count: number
+  reordered: boolean
 }
 
 /** Reorder workspace-scoped issues by providing the full id list in the new order */
@@ -25,13 +26,12 @@ export const IssueReorderTool = Tool.define(
       parameters: Parameters,
       execute: (params: Schema.Schema.Type<typeof Parameters>, _ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const directory = context.use().directory
+          const directory = yield* InstanceState.directory
           yield* issue.reorder({ directory, ids: [...params.ids] })
-
           return {
             title: `issue_reorder: ${params.ids.length} issues`,
             output: JSON.stringify({ reordered: true, count: params.ids.length }, null, 2),
-            metadata: { count: params.ids.length } satisfies Metadata,
+            metadata: { count: params.ids.length, reordered: true } as Metadata,
           }
         }),
     }

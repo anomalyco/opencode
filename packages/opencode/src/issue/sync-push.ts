@@ -1,7 +1,7 @@
 import { Context, Effect, Schema, Option } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { ISSUE } from "./tool-names"
-import { LinearMcpClient } from "./mcp-client"
+import { LinearMcpClient, LinearMcpError } from "./mcp-client"
 import { Issue } from "./issue"
 import { LinearBinding } from "@/issue/linear-binding"
 import { Database } from "@opencode-ai/core/database/database"
@@ -54,7 +54,7 @@ const decodeJson = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
 export const Client = Context.Service<LinearMcpClient>("@opencode/SyncPush/Client")
 
 /** Fatal error when push cannot proceed at all (e.g., missing config). */
-export class Error extends Schema.TaggedErrorClass<Error>()("SyncPushError", {
+export class SyncPushError extends Schema.TaggedErrorClass<SyncPushError>()("SyncPushError", {
   message: Schema.String,
   issueID: Schema.optional(Schema.String),
   cause: Schema.optional(Schema.Defect()),
@@ -168,7 +168,14 @@ const verifyLinearIssue = Effect.fn("SyncPush.verifyLinearIssue")(function* (inp
   const client = yield* Client
   const raw = yield* client
     .callTool(ISSUE.GET, { id: input.linearId })
-    .pipe(Effect.catch((e: unknown) => Effect.succeed({ _verifyError: true, message: String(e) })))
+    .pipe(
+      // Catch only the expected LinearMcpError; let Interrupt/Die defects
+      // propagate (per packages/core/src/tool/AGENTS.md). A lookup failure
+      // is reported as `_verifyError` so the caller can skip the push.
+      Effect.catchTag("LinearMcpError", (e) =>
+        Effect.succeed({ _verifyError: true, message: e.message }),
+      ),
+    )
 
   if (typeof raw === "object" && raw !== null && "_verifyError" in raw) {
     return "lookup_failed" as VerifyOutcome
@@ -293,7 +300,7 @@ const mcpErrorMessage = (raw: unknown): string | undefined => {
 const clearDueDateViaGraphQL = Effect.fn("SyncPush.clearDueDateViaGraphQL")(function* (input: { linearId: string }) {
   const key = process.env.LINEAR_API_KEY
   if (!key) {
-    return yield* Effect.fail(new Error({ message: "LINEAR_API_KEY not set for GraphQL fallback" }))
+    return yield* Effect.fail(new LinearMcpError({ message: "LINEAR_API_KEY not set for GraphQL fallback" }))
   }
 
   const mutation = `mutation($id: String!, $input: IssueUpdateInput!) {
@@ -316,7 +323,9 @@ const clearDueDateViaGraphQL = Effect.fn("SyncPush.clearDueDateViaGraphQL")(func
 
   const response = yield* http
     .execute(request)
-    .pipe(Effect.mapError((e) => new Error({ message: `GraphQL clearDueDate failed: ${String(e)}`, cause: e })))
+    .pipe(
+      Effect.mapError((e) => new LinearMcpError({ message: `GraphQL clearDueDate failed: ${String(e)}`, cause: e })),
+    )
 
   const data = (yield* response.json) as {
     data?: { issueUpdate?: { success: boolean } }
@@ -324,11 +333,13 @@ const clearDueDateViaGraphQL = Effect.fn("SyncPush.clearDueDateViaGraphQL")(func
   }
   if (data.errors && data.errors.length > 0) {
     return yield* Effect.fail(
-      new Error({ message: `GraphQL clearDueDate errors: ${data.errors.map((e) => e.message).join(", ")}` }),
+      new LinearMcpError({ message: `GraphQL clearDueDate errors: ${data.errors.map((e) => e.message).join(", ")}` }),
     )
   }
   if (!data.data?.issueUpdate?.success) {
-    return yield* Effect.fail(new Error({ message: `GraphQL clearDueDate did not succeed for ${input.linearId}` }))
+    return yield* Effect.fail(
+      new LinearMcpError({ message: `GraphQL clearDueDate did not succeed for ${input.linearId}` }),
+    )
   }
 })
 
@@ -336,20 +347,15 @@ const clearDueDateViaGraphQL = Effect.fn("SyncPush.clearDueDateViaGraphQL")(func
  * Compare an issue's current local content fields against its
  * `cloud_shadow` snapshot and return the names of the fields that differ.
  * An empty result means the local row matches the last-known cloud state
- * (nothing to push for a field-level merge). Used by both `push` (batch)
- * and `pushOne`.
+ * (nothing to push for a field-level merge). Used by the `push` batch
+ * path; the previous `pushOne` single-row entry point was folded into
+ * `push({ issueIds: [id] })` (ADR-0002 D8-revised).
  */
 const diffShadow = (issue: Issue.Info, shadow: Record<string, unknown>): Issue.ShadowField[] => {
-  const changed: Issue.ShadowField[] = []
-  for (const f of Issue.SHADOW_FIELDS) {
-    const local = issue[f]
-    const cloud = shadow[f]
-    // labels is an array — compare by JSON string to ignore order? No,
-    // order matters for Linear (labels are a set, but we compare exactly).
-    // Use JSON.stringify for deep equality across strings/arrays/null.
-    if (JSON.stringify(local) !== JSON.stringify(cloud)) changed.push(f)
-  }
-  return changed
+  // labels is an array — compare by JSON string to ignore order? No,
+  // order matters for Linear (labels are a set, but we compare exactly).
+  // Use JSON.stringify for deep equality across strings/arrays/null.
+  return Issue.SHADOW_FIELDS.filter((f) => JSON.stringify(issue[f]) !== JSON.stringify(shadow[f]))
 }
 
 /**
@@ -409,13 +415,20 @@ export const push = Effect.fn("SyncPush.push")(function* (input: { directory: st
   const binding = yield* bindingSvc.get()
 
   if (!binding?.projectId || !binding?.teamId) {
-    return yield* Effect.fail(new Error({ message: "Linear binding missing projectId or teamId" }))
+    return yield* Effect.fail(new SyncPushError({ message: "Linear binding missing projectId or teamId" }))
   }
   const cfg = binding
 
   const issueSvc = yield* Issue.Service
   const { db } = yield* Database.Service
-  const all = yield* issueSvc.get({ directory: input.directory })
+  // Load with include_archived=true so that issues archived locally
+  // (status ∈ {Done, Canceled, Duplicate}) are still pushed to Linear.
+  // Their status field is part of SHADOW_FIELDS, so the field-level diff
+  // will detect the change and `save_issue` will sync the new workflow
+  // state to Linear. Without this, archiving an issue locally would make
+  // it invisible to push (silently skipped) — the user's "Push" click
+  // would do nothing for that issue.
+  const all = yield* issueSvc.get({ directory: input.directory, include_archived: true })
 
   const issueIdSet = input.issueIds === "all" || !input.issueIds ? null : new Set(input.issueIds)
   const issues = issueIdSet ? all.filter((i) => issueIdSet.has(i.id)) : all
@@ -425,11 +438,10 @@ export const push = Effect.fn("SyncPush.push")(function* (input: { directory: st
   const localOnly = issues.filter((i) => !i.linear_issue_id)
   // Linked: only push rows whose content fields actually differ from the
   // last-known cloud snapshot. This is a field-level dirty check — it
-  // catches changes that bump `time_updated` (user edits) AND changes
-  // that don't (e.g., AutoProgress `patchStatus` only writes the
-  // `status` column, leaving `time_updated` untouched but `cloud_shadow`
-  // stale). The previous `last_pushed_at < time_updated` filter missed
-  // the latter class, causing AutoProgress status changes to never
+  // catches all content changes regardless of whether they bump
+  // `time_updated` (e.g., user edits) or not. The previous
+  // `last_pushed_at < time_updated` filter missed status-only writes
+  // that left `time_updated` untouched, causing status changes to never
   // propagate via batch push. When the shadow matches the local state,
   // there is genuinely nothing to push — skip silently (no spurious
   // "pushed" count, no Linear API call that would bump `updatedAt` and
@@ -514,7 +526,12 @@ export const push = Effect.fn("SyncPush.push")(function* (input: { directory: st
 
         const raw = yield* client
           .callTool(ISSUE.SAVE, saveArgs)
-          .pipe(Effect.catch((e: unknown) => Effect.succeed({ _error: true, message: String(e) })))
+          .pipe(
+            // Catch only LinearMcpError; defects propagate (AGENTS.md).
+            Effect.catchTag("LinearMcpError", (e) =>
+              Effect.succeed({ _error: true, message: e.message }),
+            ),
+          )
 
         if (typeof raw === "object" && raw !== null && "_error" in raw) {
           const msg = String((raw as Record<string, unknown>).message ?? "unknown MCP error")
@@ -551,7 +568,9 @@ export const push = Effect.fn("SyncPush.push")(function* (input: { directory: st
         const dueDateCleared = dirtyFields.includes("due_date") && !issue.due_date
         if (dueDateCleared) {
           const clearResult = yield* clearDueDateViaGraphQL({ linearId }).pipe(
-            Effect.catch((e: unknown) => Effect.succeed({ _error: true, message: String(e) })),
+            Effect.catchTag("LinearMcpError", (e) =>
+              Effect.succeed({ _error: true, message: e.message }),
+            ),
           )
           if (typeof clearResult === "object" && clearResult !== null && "_error" in clearResult) {
             const msg = String((clearResult as Record<string, unknown>).message ?? "unknown GraphQL error")
@@ -613,7 +632,12 @@ export const push = Effect.fn("SyncPush.push")(function* (input: { directory: st
 
         const raw = yield* client
           .callTool(ISSUE.SAVE, saveArgs)
-          .pipe(Effect.catch((e: unknown) => Effect.succeed({ _error: true, message: String(e) })))
+          .pipe(
+            // Catch only LinearMcpError; defects propagate (AGENTS.md).
+            Effect.catchTag("LinearMcpError", (e) =>
+              Effect.succeed({ _error: true, message: e.message }),
+            ),
+          )
 
         if (typeof raw === "object" && raw !== null && "_error" in raw) {
           const msg = String((raw as Record<string, unknown>).message ?? "unknown MCP error")
@@ -638,9 +662,16 @@ export const push = Effect.fn("SyncPush.push")(function* (input: { directory: st
         }
 
         // Patch the local row with the new linear_issue_id and advance
-        // last_pushed_at so future pushes treat it as up-to-date. Use the
-        // Issue.Service (not a raw DB write) so an `issue.updated` bus
-        // event fires and the desktop UI refreshes to show the new link.
+        // last_pushed_at so future pushes treat it as up-to-date. Uses a
+        // raw DB write (matching the UPDATE path above) instead of
+        // `issueSvc.update` to avoid publishing `issue.updated` events
+        // during a batch push (the desktop UI refreshes via
+        // `serverSync().todo.refresh(directory)` after the push completes
+        // in sidebar-linear.tsx handleSync). Historically this also
+        // bypassed the now-removed `IssueArchivedError` guard; the guard
+        // is gone (ADR-0001 Amendment 2026-07-19 §D17), but the raw-write
+        // pattern is retained because push is a batch operation that
+        // should not fan out N bus events.
         //
         // Store the projectId/teamId UUIDs from the Linear response — NOT
         // the config values, which may be slugs (e.g.
@@ -651,10 +682,9 @@ export const push = Effect.fn("SyncPush.push")(function* (input: { directory: st
         // edits only (ADR-0002 §D5/D8). Bumping it on push would mask
         // subsequent local dirty checks.
         const stamp = Date.now()
-        yield* issueSvc.update({
-          directory: input.directory,
-          id: issue.id,
-          patch: {
+        yield* db
+          .update(IssueTable)
+          .set({
             linear_issue_id: parsed.id,
             linear_team_id: parsed.teamId ?? cfg.teamId!,
             linear_project_id: parsed.projectId ?? null,
@@ -663,9 +693,11 @@ export const push = Effect.fn("SyncPush.push")(function* (input: { directory: st
             // doesn't immediately re-reconcile (Linear bumped updatedAt
             // when it created the issue).
             last_pulled_at: stamp,
-            cloud_shadow: Issue.buildShadow(issue),
-          },
-        })
+            cloud_shadow: JSON.stringify(Issue.buildShadow(issue)),
+          })
+          .where(and(eq(IssueTable.directory, input.directory), eq(IssueTable.id, issue.id)))
+          .run()
+          .pipe(Effect.orDie)
 
         ids.push(parsed.id)
       }),

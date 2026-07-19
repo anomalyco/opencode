@@ -71,8 +71,15 @@ export const IssueReorderPayload = Schema.Struct({
   ids: Schema.Array(Schema.String),
 })
 
-export const AutoProgressStatusResponse = Schema.Struct({
-  status: Schema.Literals(["idle", "running"]),
+export const IssueOutcome = Schema.Literals(["done", "canceled", "duplicate"])
+
+export const IssueArchivePayload = Schema.Struct({
+  outcome: IssueOutcome,
+})
+
+export const IssueListQuery = Schema.Struct({
+  ...WorkspaceRoutingQueryFields,
+  include_archived: Schema.optional(Schema.Boolean),
 })
 
 export const LinearBindingRecord = Schema.Struct({
@@ -155,9 +162,7 @@ export const IssuePaths = {
   update: `${root}/:id`,
   delete: `${root}/:id`,
   reorder: `${root}/reorder`,
-  autoProgressStart: `${root}/auto-progress/start`,
-  autoProgressStop: `${root}/auto-progress/stop`,
-  autoProgressStatus: `${root}/auto-progress/status`,
+  archive: `${root}/:id/archive`,
   linearBindingGet: `${root}/linear/binding`,
   linearBindingSet: `${root}/linear/binding`,
   linearTeams: `${root}/linear/teams`,
@@ -173,18 +178,19 @@ export const IssueApi = HttpApi.make("issue")
     HttpApiGroup.make("issue")
       .add(
         HttpApiEndpoint.get("list", IssuePaths.list, {
-          query: WorkspaceRoutingQuery,
+          query: IssueListQuery,
           success: described(Schema.Array(IssueRecord), "Issue list"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "issue.list",
             summary: "List issues",
-            description: "List all issues (workspace-scoped todos) for the current project directory.",
+            description:
+              "List all issues (workspace-scoped todos) for the current project directory. Set include_archived=true to include Archived (Done/Canceled/Duplicate) issues; default returns only Active issues.",
           }),
         ),
         HttpApiEndpoint.get("get", IssuePaths.get, {
           params: { id: Schema.String },
-          query: WorkspaceRoutingQuery,
+          query: IssueListQuery,
           success: described(IssueRecord, "Issue"),
           error: HttpApiError.NotFound,
         }).annotateMerge(
@@ -243,34 +249,18 @@ export const IssueApi = HttpApi.make("issue")
             description: "Reorder issues by providing a list of issue IDs in the new order.",
           }),
         ),
-        HttpApiEndpoint.post("autoProgressStart", IssuePaths.autoProgressStart, {
+        HttpApiEndpoint.post("archive", IssuePaths.archive, {
+          params: { id: Schema.String },
           query: WorkspaceRoutingQuery,
-          success: described(Schema.Boolean, "Started"),
+          payload: IssueArchivePayload,
+          success: described(IssueRecord, "Archived issue"),
+          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
         }).annotateMerge(
           OpenApi.annotations({
-            identifier: "issue.autoProgressStart",
-            summary: "Start auto-progress",
-            description: "Start the L1/L2 auto-progress engine for a workspace directory.",
-          }),
-        ),
-        HttpApiEndpoint.post("autoProgressStop", IssuePaths.autoProgressStop, {
-          query: WorkspaceRoutingQuery,
-          success: described(Schema.Boolean, "Stopped"),
-        }).annotateMerge(
-          OpenApi.annotations({
-            identifier: "issue.autoProgressStop",
-            summary: "Stop auto-progress",
-            description: "Stop the L1/L2 auto-progress engine for a workspace directory.",
-          }),
-        ),
-        HttpApiEndpoint.get("autoProgressStatus", IssuePaths.autoProgressStatus, {
-          query: WorkspaceRoutingQuery,
-          success: described(AutoProgressStatusResponse, "Status"),
-        }).annotateMerge(
-          OpenApi.annotations({
-            identifier: "issue.autoProgressStatus",
-            summary: "Auto-progress status",
-            description: "Whether the L1/L2 auto-progress engine is currently running for a workspace directory.",
+            identifier: "issue.archive",
+            summary: "Archive issue",
+            description:
+              "Archive a single issue by setting its status to a terminal state (Done/Canceled/Duplicate). Idempotent: archiving an already-archived issue returns it as-is without state change. Does NOT cascade — L1 archive leaves its L2 status unchanged.",
           }),
         ),
         HttpApiEndpoint.get("linearBindingGet", IssuePaths.linearBindingGet, {

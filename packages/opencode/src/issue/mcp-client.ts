@@ -1,15 +1,24 @@
 import { Effect, Schema } from "effect"
-import { NamedError } from "@opencode-ai/core/util/error"
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
 import { CallToolResultSchema } from "@modelcontextprotocol/sdk/types.js"
 import type { Tool as MCPTool } from "@modelcontextprotocol/sdk/types.js"
 
-export const LinearMcpError = NamedError.create("LinearMcpError", {
+/**
+ * Typed error for all Linear MCP failures (connection, tool call, GraphQL
+ * fallback). Uses `Schema.TaggedErrorClass` per packages/opencode/AGENTS.md
+ * "Use `Schema.TaggedErrorClass` for typed errors" so it carries a `_tag`
+ * field and can be caught precisely with `Effect.catchTag("LinearMcpError", …)`,
+ * letting defects (Interrupt/Die) propagate.
+ *
+ * Fields `message` and `cause` are accessed directly on the instance
+ * (`e.message`, `e.cause`), matching the `Schema.TaggedErrorClass` pattern
+ * used by `packages/opencode/src/image/image.ts`.
+ */
+export class LinearMcpError extends Schema.TaggedErrorClass<LinearMcpError>()("LinearMcpError", {
   message: Schema.String,
   cause: Schema.optional(Schema.Unknown),
-})
-export type LinearMcpError = InstanceType<typeof LinearMcpError>
+}) {}
 
 /** Options for creating a LinearMcpClient */
 export interface Opts {

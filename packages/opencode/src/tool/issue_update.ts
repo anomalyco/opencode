@@ -2,13 +2,17 @@ import { Effect, Schema } from "effect"
 import { Tool } from "./tool"
 import DESCRIPTION from "./issue_update.txt"
 import { Issue } from "../issue/issue"
-import { context } from "@/project/instance-context"
+import { InstanceState } from "@/effect/instance-state"
 
 const Parameters = Schema.Struct({
   id: Schema.String.annotate({ description: "Unique identifier of the issue to update" }),
   title: Schema.optional(Schema.String).annotate({ description: "Short label" }),
   content: Schema.optional(Schema.String).annotate({ description: "Brief description shown in list rows" }),
   description: Schema.optional(Schema.String).annotate({ description: "Rich-text markdown body" }),
+  status: Schema.optional(Schema.String).annotate({
+    description:
+      "Linear workflow state name (e.g., 'Backlog', 'Todo', 'In Progress', 'In Review', 'Done', 'Canceled', 'Duplicate'). Can be used to transition any issue — including Archived ones — between statuses.",
+  }),
   priority: Schema.optional(Schema.Literals(["none", "urgent", "high", "medium", "low"])).annotate({
     description: "Priority: none, urgent, high, medium, low",
   }),
@@ -25,8 +29,19 @@ const Parameters = Schema.Struct({
 })
 
 type Metadata = {
-  issue: Issue.Info
+  issue?: Issue.Info
 }
+
+/**
+ * Discriminated union for the update outcome, mirroring `issue_delete.ts`.
+ * `Tool.define` requires the execute Effect to have error channel `never`,
+ * so typed errors (`IssueNotFoundError`, `IssueHierarchyError`) are caught
+ * via `Effect.catchTag` and folded into this union. Defects (Interrupt/Die)
+ * propagate naturally.
+ */
+type UpdateOutcome =
+  | { ok: true; issue: Issue.Info }
+  | { ok: false; reason: "hierarchy" | "not_found"; detail: string }
 
 /** Partially update a workspace-scoped issue by id */
 export const IssueUpdateTool = Tool.define(
@@ -39,25 +54,61 @@ export const IssueUpdateTool = Tool.define(
       parameters: Parameters,
       execute: (params: Schema.Schema.Type<typeof Parameters>, _ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const directory = context.use().directory
-          const patch: Partial<Issue.Info> = {}
-          if (params.title !== undefined) patch.title = params.title
-          if (params.content !== undefined) patch.content = params.content
-          if (params.description !== undefined) patch.description = params.description
-          if (params.priority !== undefined) patch.priority = params.priority
-          if (params.due_date !== undefined) patch.due_date = params.due_date
-          if (params.assignee_id !== undefined) patch.assignee_id = params.assignee_id
-          if (params.parent_id !== undefined) patch.parent_id = params.parent_id
-          if (params.level !== undefined) patch.level = params.level
-          if (params.labels !== undefined) patch.labels = [...params.labels]
-          if (params.position !== undefined) patch.position = params.position
+          const directory = yield* InstanceState.directory
+          // Construct the patch as an object literal (not via mutation) because
+          // `Issue.Info` is inferred as `readonly` from `Schema.Schema.Type` —
+          // field assignment on a `Partial<Issue.Info>` would fail typecheck.
+          // Conditional spreads produce a fresh mutable object each call.
+          const patch: Partial<Issue.Info> = {
+            ...(params.title !== undefined ? { title: params.title } : {}),
+            ...(params.content !== undefined ? { content: params.content } : {}),
+            ...(params.description !== undefined ? { description: params.description } : {}),
+            ...(params.status !== undefined ? { status: params.status } : {}),
+            ...(params.priority !== undefined ? { priority: params.priority } : {}),
+            ...(params.due_date !== undefined ? { due_date: params.due_date } : {}),
+            ...(params.assignee_id !== undefined ? { assignee_id: params.assignee_id } : {}),
+            ...(params.parent_id !== undefined ? { parent_id: params.parent_id } : {}),
+            ...(params.level !== undefined ? { level: params.level } : {}),
+            ...(params.labels !== undefined ? { labels: [...params.labels] } : {}),
+            ...(params.position !== undefined ? { position: params.position } : {}),
+          }
 
-          const updated = yield* issue.update({ directory, id: params.id, patch })
+          const outcome = yield* issue
+            .update({ directory, id: params.id, patch })
+            .pipe(
+              Effect.map((updated): UpdateOutcome => ({ ok: true, issue: updated })),
+              Effect.catchTag("Issue.HierarchyError", (e) =>
+                Effect.succeed<UpdateOutcome>({
+                  ok: false,
+                  reason: "hierarchy",
+                  detail: e.reason,
+                }),
+              ),
+              Effect.catchTag("Issue.NotFoundError", (e) =>
+                Effect.succeed<UpdateOutcome>({
+                  ok: false,
+                  reason: "not_found",
+                  detail: e.context ?? e.id,
+                }),
+              ),
+            )
+
+          if (!outcome.ok) {
+            return {
+              title: `issue_update: ${params.id} failed (${outcome.reason})`,
+              output: JSON.stringify(
+                { updated: false, error: outcome.detail, reason: outcome.reason },
+                null,
+                2,
+              ),
+              metadata: {} as Metadata,
+            }
+          }
 
           return {
-            title: `issue_update: ${updated.title}`,
-            output: JSON.stringify(updated, null, 2),
-            metadata: { issue: updated } satisfies Metadata,
+            title: `issue_update: ${outcome.issue.title}`,
+            output: JSON.stringify(outcome.issue, null, 2),
+            metadata: { issue: outcome.issue } as Metadata,
           }
         }),
     }

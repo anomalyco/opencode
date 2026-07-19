@@ -1,10 +1,9 @@
 import { InstanceState } from "@/effect/instance-state"
 import { Issue } from "@/issue/issue"
-import { AutoProgress } from "@/issue/auto-progress"
 import { LinearBinding } from "@/issue/linear-binding"
 import { SyncPull } from "@/issue/sync-pull"
 import { SyncPush } from "@/issue/sync-push"
-import { LinearMcpClient, LinearMcpError } from "@/issue/mcp-client"
+import { LinearMcpClient } from "@/issue/mcp-client"
 import { USER, TEAM, PROJECT, ISSUE } from "@/issue/tool-names"
 import { MCP } from "@/mcp"
 import { Effect, Exit, Schema, Option } from "effect"
@@ -136,16 +135,18 @@ const parseProjects = (raw: unknown): LinearProjectRaw[] => {
 export const issueHandlers = HttpApiBuilder.group(InstanceHttpApi, "issue", (handlers) =>
   Effect.gen(function* () {
     const issue = yield* Issue.Service
-    const autoProgress = yield* AutoProgress.Service
     const linearBinding = yield* LinearBinding.Service
     const mcp = yield* MCP.Service
 
     // Cached fallback client created from LINEAR_API_KEY env var. Lives in
-    // the layer closure so it's reused across requests. Set to null on
-    // first failure so we don't keep retrying a broken env-var path on
-    // every call. Cleared only by process restart.
-    let envClient: LinearMcpClient | null = null
-    let envClientFailed = false
+    // the layer closure so it's reused across requests. Wrapped in a single
+    // mutable ref object so the outer scope only needs one `const` binding
+    // (per AGENTS.md "avoid `let` where `const` suffices"). The ref is
+    // mutated in place; cleared only by process restart.
+    const envClientRef: { client: LinearMcpClient | null; failed: boolean } = {
+      client: null,
+      failed: false,
+    }
 
     const getLinearClient = Effect.fn("IssueHttpApi.getLinearClient")(function* () {
       // Path A: Linear MCP registered in opencode.jsonc → use the project's
@@ -157,26 +158,29 @@ export const issueHandlers = HttpApiBuilder.group(InstanceHttpApi, "issue", (han
       // using LINEAR_API_KEY. After one failure (missing env var or
       // connection error) we stop retrying — the user must fix env/config
       // and restart the server.
-      if (envClient) return envClient
-      if (envClientFailed) return undefined
+      if (envClientRef.client) return envClientRef.client
+      if (envClientRef.failed) return undefined
       const exit = yield* LinearMcpClient.create().pipe(Effect.exit)
       if (Exit.isFailure(exit)) {
-        envClientFailed = true
+        envClientRef.failed = true
         yield* Effect.logWarning(`[IssueHttpApi.getLinearClient] LinearMcpClient.create failed: ${String(exit)}`)
         return undefined
       }
-      envClient = exit.value
-      return envClient
+      envClientRef.client = exit.value
+      return envClientRef.client
     })
 
-    const list = Effect.fn("IssueHttpApi.list")(function* () {
+    const list = Effect.fn("IssueHttpApi.list")(function* (ctx: { query?: { include_archived?: boolean } }) {
       const directory = yield* InstanceState.directory
-      return yield* issue.get({ directory })
+      return yield* issue.get({ directory, include_archived: ctx.query?.include_archived ?? false })
     })
 
-    const get = Effect.fn("IssueHttpApi.get")(function* (ctx: { params: { id: string } }) {
+    const get = Effect.fn("IssueHttpApi.get")(function* (ctx: {
+      params: { id: string }
+      query?: { include_archived?: boolean }
+    }) {
       const directory = yield* InstanceState.directory
-      const issues = yield* issue.get({ directory })
+      const issues = yield* issue.get({ directory, include_archived: ctx.query?.include_archived ?? false })
       const found = issues.find((i) => i.id === ctx.params.id)
       if (!found) return yield* Effect.fail(new HttpApiError.NotFound({}))
       return found
@@ -186,7 +190,14 @@ export const issueHandlers = HttpApiBuilder.group(InstanceHttpApi, "issue", (han
       const directory = yield* InstanceState.directory
       const issueData = { ...ctx.payload.issue }
       if (issueData.labels) issueData.labels = [...issueData.labels]
-      return yield* issue.create({ directory, issue: issueData as Partial<Issue.Info> })
+      return yield* issue.create({ directory, issue: issueData as Partial<Issue.Info> }).pipe(
+        Effect.catchTag("Issue.HierarchyError", () => Effect.fail(new HttpApiError.BadRequest({}))),
+        // NotFoundError here means the just-inserted row was not visible
+        // to `publish()` (race or DB consistency issue). Surface as 500
+        // semantically, but the API group only allows BadRequest, so
+        // BadRequest is the closest fit (indicates a request-time anomaly).
+        Effect.catchTag("Issue.NotFoundError", () => Effect.fail(new HttpApiError.BadRequest({}))),
+      )
     })
 
     const update = Effect.fn("IssueHttpApi.update")(function* (ctx: {
@@ -196,12 +207,20 @@ export const issueHandlers = HttpApiBuilder.group(InstanceHttpApi, "issue", (han
       const directory = yield* InstanceState.directory
       const patch = { ...ctx.payload.patch }
       if (patch.labels) patch.labels = [...patch.labels]
-      return yield* issue.update({ directory, id: ctx.params.id, patch: patch as Partial<Issue.Info> })
+      return yield* issue.update({ directory, id: ctx.params.id, patch: patch as Partial<Issue.Info> }).pipe(
+        Effect.catchTag("Issue.NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
+        Effect.catchTag("Issue.HierarchyError", () => Effect.fail(new HttpApiError.BadRequest({}))),
+      )
     })
 
     const remove = Effect.fn("IssueHttpApi.remove")(function* (ctx: { params: { id: string } }) {
       const directory = yield* InstanceState.directory
-      yield* issue.delete({ directory, id: ctx.params.id })
+      yield* issue
+        .delete({ directory, id: ctx.params.id })
+        .pipe(
+          Effect.catchTag("Issue.NotArchivedError", () => Effect.fail(new HttpApiError.BadRequest({}))),
+          Effect.catchTag("Issue.NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
+        )
       return true
     })
 
@@ -211,22 +230,14 @@ export const issueHandlers = HttpApiBuilder.group(InstanceHttpApi, "issue", (han
       return true
     })
 
-    const autoProgressStart = Effect.fn("IssueHttpApi.autoProgressStart")(function* () {
+    const archive = Effect.fn("IssueHttpApi.archive")(function* (ctx: {
+      params: { id: string }
+      payload: { outcome: "done" | "canceled" | "duplicate" }
+    }) {
       const directory = yield* InstanceState.directory
-      yield* autoProgress.start(directory)
-      return true
-    })
-
-    const autoProgressStop = Effect.fn("IssueHttpApi.autoProgressStop")(function* () {
-      const directory = yield* InstanceState.directory
-      yield* autoProgress.stop(directory)
-      return true
-    })
-
-    const autoProgressStatus = Effect.fn("IssueHttpApi.autoProgressStatus")(function* () {
-      const directory = yield* InstanceState.directory
-      const status = yield* autoProgress.status(directory)
-      return { status }
+      return yield* issue.archive({ directory, id: ctx.params.id, outcome: ctx.payload.outcome }).pipe(
+        Effect.catchTag("Issue.NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
+      )
     })
 
     const linearBindingGet = Effect.fn("IssueHttpApi.linearBindingGet")(function* () {
@@ -308,7 +319,7 @@ export const issueHandlers = HttpApiBuilder.group(InstanceHttpApi, "issue", (han
         Effect.catchDefect((defect: unknown) =>
           Effect.gen(function* () {
             yield* Effect.logError(`[IssueHttpApi.syncPull] defect: ${String(defect)}`)
-            return yield* Effect.fail(new SyncPull.Error({ message: String(defect) }))
+            return yield* Effect.fail(new SyncPull.SyncPullError({ message: String(defect) }))
           }),
         ),
         Effect.tapError((error) => Effect.logError(`[IssueHttpApi.syncPull] error: ${String(error)}`)),
@@ -329,7 +340,7 @@ export const issueHandlers = HttpApiBuilder.group(InstanceHttpApi, "issue", (han
         Effect.catchDefect((defect: unknown) =>
           Effect.gen(function* () {
             yield* Effect.logError(`[IssueHttpApi.syncPush] defect: ${String(defect)}`)
-            return yield* Effect.fail(new SyncPush.Error({ message: String(defect) }))
+            return yield* Effect.fail(new SyncPush.SyncPushError({ message: String(defect) }))
           }),
         ),
         Effect.tapError((error) => Effect.logError(`[IssueHttpApi.syncPush] error: ${String(error)}`)),
@@ -344,9 +355,7 @@ export const issueHandlers = HttpApiBuilder.group(InstanceHttpApi, "issue", (han
       .handle("update", update)
       .handle("remove", remove)
       .handle("reorder", reorder)
-      .handle("autoProgressStart", autoProgressStart)
-      .handle("autoProgressStop", autoProgressStop)
-      .handle("autoProgressStatus", autoProgressStatus)
+      .handle("archive", archive)
       .handle("linearBindingGet", linearBindingGet)
       .handle("linearBindingSet", linearBindingSet)
       .handle("linearTeams", linearTeams)

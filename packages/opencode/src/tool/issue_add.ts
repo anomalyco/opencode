@@ -2,7 +2,7 @@ import { Effect, Schema } from "effect"
 import { Tool } from "./tool"
 import DESCRIPTION from "./issue_add.txt"
 import { Issue } from "../issue/issue"
-import { context } from "@/project/instance-context"
+import { InstanceState } from "@/effect/instance-state"
 
 const Parameters = Schema.Struct({
   title: Schema.String.annotate({ description: "Short label; falls back to content if empty" }),
@@ -31,8 +31,20 @@ const Parameters = Schema.Struct({
 })
 
 type Metadata = {
-  issue: Issue.Info
+  issue?: Issue.Info
 }
+
+/**
+ * Discriminated union for the create outcome, mirroring the pattern in
+ * `issue_delete.ts`. `Tool.define` requires the execute Effect to have
+ * error channel `never`, so typed errors (`IssueHierarchyError`,
+ * `IssueNotFoundError`) are caught via `Effect.catchTag` and folded into
+ * this union, then converted to a tool output. Defects (Interrupt/Die)
+ * propagate naturally.
+ */
+type CreateOutcome =
+  | { ok: true; issue: Issue.Info }
+  | { ok: false; reason: "hierarchy" | "not_found"; detail: string }
 
 /** Create a single workspace-scoped issue (todo) and return it */
 export const IssueAddTool = Tool.define(
@@ -45,27 +57,57 @@ export const IssueAddTool = Tool.define(
       parameters: Parameters,
       execute: (params: Schema.Schema.Type<typeof Parameters>, _ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const directory = context.use().directory
-          const created = yield* issue.create({
-            directory,
-            issue: {
-              title: params.title,
-              content: params.content ?? params.title,
-              description: params.description ?? "",
-              status: params.status ?? Issue.DEFAULT_STATUS,
-              priority: params.priority ?? "none",
-              parent_id: params.parent_id ?? null,
-              level: params.level ?? (params.parent_id ? 1 : 0),
-              due_date: params.due_date ?? null,
-              assignee_id: params.assignee_id ?? null,
-              labels: params.labels ? [...params.labels] : [],
-            },
-          })
+          const directory = yield* InstanceState.directory
+          const outcome = yield* issue
+            .create({
+              directory,
+              issue: {
+                title: params.title,
+                content: params.content ?? params.title,
+                description: params.description ?? "",
+                status: params.status ?? Issue.DEFAULT_STATUS,
+                priority: params.priority ?? "none",
+                parent_id: params.parent_id ?? null,
+                level: params.level ?? (params.parent_id ? 1 : 0),
+                due_date: params.due_date ?? null,
+                assignee_id: params.assignee_id ?? null,
+                labels: params.labels ? [...params.labels] : [],
+              },
+            })
+            .pipe(
+              Effect.map((created): CreateOutcome => ({ ok: true, issue: created })),
+              Effect.catchTag("Issue.HierarchyError", (e) =>
+                Effect.succeed<CreateOutcome>({
+                  ok: false,
+                  reason: "hierarchy",
+                  detail: e.reason,
+                }),
+              ),
+              Effect.catchTag("Issue.NotFoundError", (e) =>
+                Effect.succeed<CreateOutcome>({
+                  ok: false,
+                  reason: "not_found",
+                  detail: e.context ?? e.id,
+                }),
+              ),
+            )
+
+          if (!outcome.ok) {
+            return {
+              title: `issue_add: ${params.title} failed (${outcome.reason})`,
+              output: JSON.stringify(
+                { created: false, error: outcome.detail, reason: outcome.reason },
+                null,
+                2,
+              ),
+              metadata: {} as Metadata,
+            }
+          }
 
           return {
-            title: `issue_add: ${created.title}`,
-            output: JSON.stringify(created, null, 2),
-            metadata: { issue: created } satisfies Metadata,
+            title: `issue_add: ${outcome.issue.title}`,
+            output: JSON.stringify(outcome.issue, null, 2),
+            metadata: { issue: outcome.issue } satisfies Metadata,
           }
         }),
     }
