@@ -48,24 +48,16 @@ export const protocol = Protocol.make({
             if (message.role !== "assistant") return message
             const source = sourceAssistants[assistantIndex++]
             if (!Array.isArray(message.reasoning_details)) return message
-            const detailParts =
-              source?.content.filter(
-                (part) => part.type === "reasoning" && Array.isArray(part.providerMetadata?.openai?.reasoningDetails),
-              ).length ?? 0
-            if (detailParts > 1)
-              return {
-                ...message,
-                reasoning_details: source?.content.flatMap((part) => {
-                  if (part.type !== "reasoning") return []
-                  const details = part.providerMetadata?.openai?.reasoningDetails
-                  return Array.isArray(details) ? mergeReasoningTextDetails(details) : []
-                }),
-              }
-            // OpenRouter streams one logical signed block as text fragments followed by its signature.
-            // Replaying those wire fragments separately is rejected as an invalid thinking signature.
+            const reasoning = source?.content
+              .filter((part) => part.type === "reasoning")
+              .map((part) => part.text)
+              .join("")
             return {
               ...message,
-              reasoning_details: mergeReasoningTextDetails(message.reasoning_details),
+              reasoning_content: undefined,
+              reasoning_text: undefined,
+              reasoning: reasoning && message.reasoning_details.length > 0 ? reasoning : undefined,
+              reasoning_details: mergeReasoningDetails(message.reasoning_details),
             }
           })
           return {
@@ -92,75 +84,26 @@ const bodyOptions = (input: unknown) => {
   }
 }
 
-const reasoningTextKeys = new Set(["type", "id", "index", "format", "text", "signature"])
-
-const mergeReasoningTextDetails = (details: ReadonlyArray<unknown>) =>
-  details.reduce<unknown[]>((merged, detail) => {
-    const previous = merged.at(-1)
-    const previousID = isRecord(previous) && typeof previous.id === "string" && previous.id ? previous.id : undefined
-    const detailID = isRecord(detail) && typeof detail.id === "string" && detail.id ? detail.id : undefined
-    const sameID = previousID !== undefined && detailID !== undefined && previousID === detailID
-    const sameIndex =
-      isRecord(previous) &&
-      isRecord(detail) &&
-      typeof previous.index === "number" &&
-      previous.index === detail.index &&
-      typeof previous.format === "string" &&
-      previous.format === detail.format
-    const conflictingIdentity =
-      isRecord(previous) &&
-      isRecord(detail) &&
-      ((previousID !== undefined && detailID !== undefined && previousID !== detailID) ||
-        (!sameID && previous.index !== undefined && detail.index !== undefined && previous.index !== detail.index) ||
-        (!sameID && previous.format !== undefined && detail.format !== undefined && previous.format !== detail.format))
-    const conflictingExtra =
-      isRecord(previous) &&
-      isRecord(detail) &&
-      Object.keys(previous).some(
-        (key) =>
-          !reasoningTextKeys.has(key) &&
-          previous[key] !== undefined &&
-          detail[key] !== undefined &&
-          !sameDetailValue(previous[key], detail[key]),
-      )
+const mergeReasoningDetails = (details: ReadonlyArray<unknown>) =>
+  details.reduce<unknown[]>((result, detail) => {
+    const previous = result.at(-1)
     if (
       !isRecord(previous) ||
-      !isRecord(detail) ||
       previous.type !== "reasoning.text" ||
-      detail.type !== "reasoning.text" ||
-      (!sameID && !sameIndex) ||
-      conflictingIdentity ||
-      conflictingExtra ||
-      (typeof previous.signature === "string" && previous.signature.length > 0) ||
-      (previous.signature && detail.signature && previous.signature !== detail.signature)
+      !isRecord(detail) ||
+      detail.type !== "reasoning.text"
     ) {
-      merged.push(detail)
-      return merged
+      result.push(detail)
+      return result
     }
-    const definedDetail = Object.fromEntries(Object.entries(detail).filter((entry) => entry[1] !== undefined))
-    merged[merged.length - 1] = {
+    result[result.length - 1] = {
       ...previous,
-      ...definedDetail,
       text: `${typeof previous.text === "string" ? previous.text : ""}${typeof detail.text === "string" ? detail.text : ""}`,
-      ...(previousID ? { id: previousID } : {}),
-      ...(previous.index !== undefined ? { index: previous.index } : {}),
-      ...(previous.signature ? { signature: previous.signature } : {}),
-      ...(previous.format !== undefined ? { format: previous.format } : {}),
+      signature: previous.signature || detail.signature,
+      format: previous.format || detail.format,
     }
-    return merged
+    return result
   }, [])
-
-const sameDetailValue = (left: unknown, right: unknown): boolean => {
-  if (Object.is(left, right)) return true
-  if (Array.isArray(left) && Array.isArray(right))
-    return left.length === right.length && left.every((value, index) => sameDetailValue(value, right[index]))
-  if (!isRecord(left) || !isRecord(right)) return false
-  const keys = Object.keys(left)
-  return (
-    keys.length === Object.keys(right).length &&
-    keys.every((key) => Object.hasOwn(right, key) && sameDetailValue(left[key], right[key]))
-  )
-}
 
 export const route = Route.make({
   id: ADAPTER,

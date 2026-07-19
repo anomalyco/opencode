@@ -660,76 +660,7 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
-  it.effect("prefers scalar reasoning when reasoning details arrive first", () =>
-    Effect.gen(function* () {
-      const details = [{ type: "reasoning.text", text: "thinking", format: "anthropic-claude-v1", index: 0 }]
-      const response = yield* LLMClient.generate(request).pipe(
-        Effect.provide(
-          fixedResponse(
-            sseEvents(
-              { choices: [{ delta: { reasoning_details: details } }] },
-              { choices: [{ delta: { reasoning: "thinking" } }] },
-              { choices: [{ delta: { content: "Hello" } }] },
-              { choices: [{ delta: {}, finish_reason: "stop" }] },
-            ),
-          ),
-        ),
-      )
-
-      expect(response.reasoning).toBe("thinking")
-      expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
-        openai: { reasoningField: "reasoning", reasoningDetails: details },
-      })
-    }),
-  )
-
-  it.effect("uses scalar reasoning independently from details-first text", () =>
-    Effect.gen(function* () {
-      const details = [{ type: "reasoning.text", text: "think", format: "unknown", index: 0 }]
-      const response = yield* LLMClient.generate(request).pipe(
-        Effect.provide(
-          fixedResponse(
-            sseEvents(
-              { choices: [{ delta: { reasoning_details: details } }] },
-              { choices: [{ delta: { reasoning: "ing" } }] },
-              { choices: [{ delta: { content: "Hello" } }] },
-              { choices: [{ delta: {}, finish_reason: "stop" }] },
-            ),
-          ),
-        ),
-      )
-
-      expect(response.reasoning).toBe("ing")
-      expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
-        openai: { reasoningField: "reasoning", reasoningDetails: details },
-      })
-    }),
-  )
-
-  it.effect("keeps scalar reasoning authoritative when later details contain text", () =>
-    Effect.gen(function* () {
-      const details = [{ type: "reasoning.text", text: "detail-only", format: "unknown", index: 0 }]
-      const response = yield* LLMClient.generate(request).pipe(
-        Effect.provide(
-          fixedResponse(
-            sseEvents(
-              { choices: [{ delta: { reasoning: "scalar" } }] },
-              { choices: [{ delta: { reasoning_details: details } }] },
-              { choices: [{ delta: { content: "Hello" } }] },
-              { choices: [{ delta: {}, finish_reason: "stop" }] },
-            ),
-          ),
-        ),
-      )
-
-      expect(response.reasoning).toBe("scalar")
-      expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
-        openai: { reasoningField: "reasoning", reasoningDetails: details },
-      })
-    }),
-  )
-
-  it.effect("keeps late scalar reasoning authoritative after content starts", () =>
+  it.effect("ignores scalar reasoning after content starts", () =>
     Effect.gen(function* () {
       const details = [{ type: "reasoning.text", text: "detail", format: "unknown", index: 0 }]
       const response = yield* LLMClient.generate(request).pipe(
@@ -745,32 +676,9 @@ describe("OpenAI Chat route", () => {
         ),
       )
 
-      expect(response.reasoning).toBe("scalar")
+      expect(response.reasoning).toBe("detail")
       expect(response.events.filter(LLMEvent.is.reasoningStart)).toHaveLength(1)
       expect(response.events.filter(LLMEvent.is.reasoningEnd)).toHaveLength(1)
-      expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
-        openai: { reasoningField: "reasoning", reasoningDetails: details },
-      })
-    }),
-  )
-
-  it.effect("treats an explicitly empty scalar reasoning field as authoritative", () =>
-    Effect.gen(function* () {
-      const details = [{ type: "reasoning.text", text: "detail", format: "unknown", index: 0 }]
-      const response = yield* LLMClient.generate(request).pipe(
-        Effect.provide(
-          fixedResponse(
-            sseEvents(
-              { choices: [{ delta: { reasoning_details: details } }] },
-              { choices: [{ delta: { reasoning: "" } }] },
-              { choices: [{ delta: { content: "Hello" } }] },
-              { choices: [{ delta: {}, finish_reason: "stop" }] },
-            ),
-          ),
-        ),
-      )
-
-      expect(response.reasoning).toBe("")
       expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
         openai: { reasoningField: "reasoning", reasoningDetails: details },
       })
