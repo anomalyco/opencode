@@ -294,11 +294,15 @@ const lowerAssistantMessage = Effect.fn("OpenAIChat.lowerAssistantMessage")(func
     if (nativeReasoning !== undefined) return "reasoning_content"
     if (!fullyStructured) return "reasoning_content"
   })()
+  const reasoningContent = (() => {
+    if (reasoning.length === 0) return nativeReasoning
+    if (field === "reasoning_content") return text
+  })()
   return {
     role: "assistant" as const,
     content: content.length === 0 ? null : ProviderShared.joinText(content),
     tool_calls: toolCalls.length === 0 ? undefined : toolCalls,
-    reasoning_content: reasoning.length === 0 ? nativeReasoning : field === "reasoning_content" ? text : undefined,
+    reasoning_content: reasoningContent,
     reasoning: reasoning.length > 0 && field === "reasoning" ? text : undefined,
     reasoning_text: reasoning.length > 0 && field === "reasoning_text" ? text : undefined,
     reasoning_details: details,
