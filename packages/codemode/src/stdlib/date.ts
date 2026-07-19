@@ -45,7 +45,7 @@ export const invokeDateMethod = (value: CodeModeDate, name: string, node: AstNod
     case "valueOf":
       return value.time
     case "toISOString":
-      if (!Number.isFinite(value.time)) throw new InterpreterRuntimeError("Invalid time value.", node)
+      if (!Number.isFinite(value.time)) throw new InterpreterRuntimeError("Invalid time value.", node).as("RangeError")
       return hosted.toISOString()
     case "toJSON":
       return Number.isFinite(value.time) ? hosted.toISOString() : null

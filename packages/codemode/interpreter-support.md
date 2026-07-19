@@ -91,8 +91,8 @@ ultimate source of truth.
       like JS.
 - [x] Tool references and detached `Promise` statics are rejected as callbacks with a hint to wrap them in an
       arrow function.
-- [ ] Stop automatically awaiting promise-returning string replacers; match JavaScript's synchronous callback-result
-      coercion.
+- [x] Promise-returning string replacers are coerced synchronously to `"[object Promise]"`, like JavaScript; they are
+      not automatically awaited.
 - [x] The optional `thisArg` of iteration methods is accepted and ignored: CodeMode functions have no `this`, so
       ignoring it matches JS arrow-function semantics exactly.
 - [ ] `this` in non-arrow CodeMode functions and callbacks.
@@ -199,8 +199,8 @@ ultimate source of truth.
 - [ ] `Array.prototype.toSpliced`.
 - [ ] Canonical array/string index parsing: a key such as `"01"` must remain an ordinary property key rather than
       aliasing index `1`.
-- [ ] `Array.prototype.sort` and `toSorted` must preserve trailing holes; they currently turn holes into own
-      `undefined` elements.
+- [x] `Array.prototype.sort` preserves trailing holes, while `toSorted` densifies holes into `undefined` elements,
+      like JavaScript.
 
 ## Strings
 
@@ -267,10 +267,9 @@ ultimate source of truth.
 - [x] Date values serialize to ISO strings; invalid dates serialize to `null`.
 - [ ] Date setters.
 - [ ] `Date.prototype.toUTCString` and its `toGMTString` alias.
-- [ ] Native one-argument Date coercion; unsupported boolean/object inputs currently become invalid dates instead of
-      being coerced.
+- [x] Native one-argument Date coercion for supported values, including booleans, null, arrays, and plain objects.
 - [ ] Native Date loose-equality and default primitive-coercion semantics.
-- [ ] Native `RangeError` branding for invalid `toISOString()` calls.
+- [x] Native `RangeError` branding for invalid `toISOString()` calls.
 
 ## Regular expressions
 

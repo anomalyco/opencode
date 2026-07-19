@@ -1138,9 +1138,9 @@ export class Interpreter<R> {
     if (args.length === 1) {
       const arg = args[0]
       if (arg instanceof CodeModeDate) return new CodeModeDate(arg.time)
-      if (typeof arg === "number") return new CodeModeDate(new Date(arg).getTime())
       if (typeof arg === "string") return new CodeModeDate(Date.parse(arg))
-      return new CodeModeDate(Number.NaN)
+      if (arg !== null && typeof arg === "object") return new CodeModeDate(Date.parse(coerceToString(arg)))
+      return new CodeModeDate(new Date(coerceToNumber(arg)).getTime())
     }
     const parts = args.map((arg) => coerceToNumber(arg))
     return new CodeModeDate(new Date(...(parts as [number, number])).getTime())
