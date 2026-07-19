@@ -15,7 +15,7 @@
   "mcp": {
     "synapse-coder": {
       "type": "remote",
-      "url": "https://synapse-coder-mcp-staging.greenbay-703e5a45.australiaeast.azurecontainerapps.io/mcp",
+      "url": "https://staging.synapse-coder-mcp.alterspective.com.au/mcp",
       "headers": {
         "Authorization": "Bearer {env:SYNAPSE_CODER_STAGING_BEARER_TOKEN}",
       },

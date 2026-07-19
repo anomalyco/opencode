@@ -24,7 +24,8 @@ const LANGUAGE_MAP: Record<string, string> = {
 }
 
 const EDIT_TOOLS = new Set(["edit", "write", "apply_patch"])
-const SYNAPSE_URL = "https://synapse-coder-mcp-staging.greenbay-703e5a45.australiaeast.azurecontainerapps.io/mcp"
+const SYNAPSE_URL =
+  process.env.SYNAPSE_CODER_URL ?? "https://staging.synapse-coder-mcp.alterspective.com.au/mcp"
 const QUEUE_PATH = ".opencode/synapse-coder-queue.json"
 const PROMPT_MARKER_PATH = ".opencode/synapse-coder-prompted"
 const MAX_QUEUE = 100
