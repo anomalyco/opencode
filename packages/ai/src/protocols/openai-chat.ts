@@ -165,11 +165,6 @@ export const OpenAIChatEvent = Schema.Struct({
 })
 export type OpenAIChatEvent = Schema.Schema.Type<typeof OpenAIChatEvent>
 type OpenAIChatRequestMessage = LLMRequest["messages"][number]
-interface ReasoningDetails {
-  readonly value: ReadonlyArray<unknown>
-  readonly previous?: ReasoningDetails
-}
-
 export interface ParserState {
   readonly tools: ToolStream.State<number>
   readonly toolCallEvents: ReadonlyArray<LLMEvent>
@@ -177,7 +172,9 @@ export interface ParserState {
   readonly finishReason?: FinishReason
   readonly lifecycle: Lifecycle.State
   readonly reasoningField?: "reasoning" | "reasoning_content" | "reasoning_text"
-  readonly reasoningDetails?: ReasoningDetails
+  readonly reasoningDetails: Array<unknown>
+  readonly reasoningDetailsObserved: boolean
+  readonly reasoningEmitted: boolean
 }
 
 // =============================================================================
@@ -232,12 +229,6 @@ const reasoningDetails = (parts: ReadonlyArray<ReasoningPart>, native: unknown) 
   })
   if (parts.some((part) => Array.isArray(part.providerMetadata?.openai?.reasoningDetails))) return observed
   if (isRecord(native) && Array.isArray(native.reasoning_details)) return native.reasoning_details
-}
-
-const accumulatedReasoningDetails = (details: ReasoningDetails | undefined) => {
-  const chunks: Array<ReadonlyArray<unknown>> = []
-  for (let current = details; current; current = current.previous) chunks.push(current.value)
-  return chunks.reverse().flat()
 }
 
 const lowerUserMessage = Effect.fn("OpenAIChat.lowerUserMessage")(function* (message: OpenAIChatRequestMessage) {
@@ -464,6 +455,17 @@ const detailText = (details: ReadonlyArray<unknown>) => {
   if (text.length > 0) return text.join("")
 }
 
+const hasReasoningDetail = (details: ReadonlyArray<unknown>) =>
+  details.some(
+    (detail) =>
+      isRecord(detail) &&
+      ((detail.type === "reasoning.text" &&
+        (detail.text === undefined || detail.text === null || typeof detail.text === "string") &&
+        (detail.signature === undefined || detail.signature === null || typeof detail.signature === "string")) ||
+        (detail.type === "reasoning.summary" && typeof detail.summary === "string") ||
+        (detail.type === "reasoning.encrypted" && typeof detail.data === "string")),
+  )
+
 const reasoningMetadata = (field: ParserState["reasoningField"], details?: ReadonlyArray<unknown>) => ({
   openai: {
     ...(field ? { reasoningField: field } : {}),
@@ -484,22 +486,31 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
     let lifecycle = state.lifecycle
 
     const reasoning = reasoningDelta(delta)
-    const reasoningField = state.reasoningField ?? reasoning?.field
+    const reasoningField = state.reasoningField ?? (!state.lifecycle.text.has("text-0") ? reasoning?.field : undefined)
     const detailDelta = Array.isArray(delta?.reasoning_details) ? delta.reasoning_details : undefined
-    const reasoningDetails =
-      detailDelta === undefined ? state.reasoningDetails : { value: detailDelta, previous: state.reasoningDetails }
+    if (detailDelta !== undefined) state.reasoningDetails.push(...detailDelta)
+    const reasoningDetailsObserved = state.reasoningDetailsObserved || detailDelta !== undefined
     const deltaMetadata = reasoningMetadata(reasoningField)
-    const text = detailDelta?.length ? detailText(detailDelta) : reasoning?.text
+    const text = detailDelta?.length && hasReasoningDetail(detailDelta) ? detailText(detailDelta) : reasoning?.text
     if (!state.lifecycle.text.has("text-0") && text !== undefined)
       lifecycle = Lifecycle.reasoningDelta(lifecycle, events, "reasoning-0", text, deltaMetadata)
     else if (
-      reasoningDetails !== undefined &&
+      reasoningDetailsObserved &&
       !lifecycle.reasoning.has("reasoning-0") &&
       (Boolean(delta?.content) || toolDeltas.length > 0)
     )
       lifecycle = Lifecycle.reasoningStart(lifecycle, events, "reasoning-0", deltaMetadata)
+    const reasoningEmitted = state.reasoningEmitted || lifecycle.reasoning.has("reasoning-0")
 
-    if (delta?.content) lifecycle = Lifecycle.textDelta(lifecycle, events, "text-0", delta.content)
+    if (delta?.content) {
+      lifecycle = Lifecycle.reasoningEnd(
+        lifecycle,
+        events,
+        "reasoning-0",
+        reasoningMetadata(reasoningField, reasoningDetailsObserved ? state.reasoningDetails : undefined),
+      )
+      lifecycle = Lifecycle.textDelta(lifecycle, events, "text-0", delta.content)
+    }
 
     for (const tool of toolDeltas) {
       const result = ToolStream.appendOrStart(
@@ -530,7 +541,9 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
         finishReason,
         lifecycle,
         reasoningField,
-        reasoningDetails,
+        reasoningDetails: state.reasoningDetails,
+        reasoningDetailsObserved,
+        reasoningEmitted,
       },
       events,
     ] as const
@@ -542,10 +555,10 @@ const finishEvents = (state: ParserState): ReadonlyArray<LLMEvent> => {
   const reason = state.finishReason === "stop" && hasToolCalls ? "tool-calls" : state.finishReason
   const metadata = reasoningMetadata(
     state.reasoningField,
-    state.reasoningDetails === undefined ? undefined : accumulatedReasoningDetails(state.reasoningDetails),
+    state.reasoningDetailsObserved ? state.reasoningDetails : undefined,
   )
   const started =
-    state.reasoningDetails !== undefined
+    state.reasoningDetailsObserved && !state.reasoningEmitted
       ? Lifecycle.reasoningStart(state.lifecycle, events, "reasoning-0", reasoningMetadata(state.reasoningField))
       : state.lifecycle
   const ended = Lifecycle.reasoningEnd(started, events, "reasoning-0", metadata)
@@ -577,7 +590,9 @@ export const protocol = Protocol.make({
       toolCallEvents: [],
       lifecycle: Lifecycle.initial(),
       reasoningField: undefined,
-      reasoningDetails: undefined,
+      reasoningDetails: [],
+      reasoningDetailsObserved: false,
+      reasoningEmitted: false,
     }),
     step,
     onHalt: finishEvents,

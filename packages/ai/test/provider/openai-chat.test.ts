@@ -680,7 +680,7 @@ describe("OpenAI Chat route", () => {
       expect(response.events.filter(LLMEvent.is.reasoningStart)).toHaveLength(1)
       expect(response.events.filter(LLMEvent.is.reasoningEnd)).toHaveLength(1)
       expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
-        openai: { reasoningField: "reasoning", reasoningDetails: details },
+        openai: { reasoningDetails: details },
       })
     }),
   )
@@ -741,6 +741,9 @@ describe("OpenAI Chat route", () => {
       expect(response.events.filter(LLMEvent.is.reasoningEnd).at(-1)?.providerMetadata).toEqual({
         openai: { reasoningField: "reasoning", reasoningDetails: details },
       })
+      expect(response.events.findIndex(LLMEvent.is.reasoningEnd)).toBeLessThan(
+        response.events.findIndex(LLMEvent.is.textStart),
+      )
 
       const replay = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
         LLM.request({ model, messages: [response.message] }),

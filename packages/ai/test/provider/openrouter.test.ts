@@ -96,4 +96,70 @@ describe("OpenRouter", () => {
       ])
     }),
   )
+
+  it.effect("filters unsigned signed-format details and duplicate continuation state", () =>
+    Effect.gen(function* () {
+      const encrypted = { type: "reasoning.encrypted", id: "state", data: "opaque", format: "openai-responses-v1" }
+      const prepared = yield* LLMClient.prepare<OpenRouter.OpenRouterBody>(
+        LLM.request({
+          model: OpenRouter.configure({ apiKey: "test-key" }).model("anthropic/claude-sonnet-4.6"),
+          messages: [
+            Message.assistant([
+              {
+                type: "reasoning",
+                text: "Thinking",
+                providerMetadata: {
+                  openai: {
+                    reasoningField: "reasoning",
+                    reasoningDetails: [
+                      { type: "reasoning.text", text: "discard", id: 42 },
+                      {
+                        type: "reasoning.text",
+                        text: "Thinking",
+                        signature: "signed",
+                        format: "anthropic-claude-v1",
+                      },
+                      encrypted,
+                      encrypted,
+                      { type: "reasoning.text", text: "unsigned", format: "anthropic-claude-v1" },
+                    ],
+                  },
+                },
+              },
+            ]),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "assistant",
+          content: null,
+          reasoning: "Thinking",
+          reasoning_details: [
+            {
+              type: "reasoning.text",
+              text: "Thinking",
+              signature: "signed",
+              format: "anthropic-claude-v1",
+            },
+            encrypted,
+          ],
+        },
+      ])
+    }),
+  )
+
+  it.effect("omits scalar reasoning without continuation details", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenRouter.OpenRouterBody>(
+        LLM.request({
+          model: OpenRouter.configure({ apiKey: "test-key" }).model("anthropic/claude-sonnet-4.6"),
+          messages: [Message.assistant({ type: "reasoning", text: "Thinking" })],
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([{ role: "assistant", content: null }])
+    }),
+  )
 })

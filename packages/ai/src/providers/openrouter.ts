@@ -12,6 +12,14 @@ import { isRecord } from "../protocols/shared"
 export const profile = OpenAICompatibleProfiles.profiles.openrouter
 export const id = ProviderID.make(profile.provider)
 const ADAPTER = "openrouter"
+const REASONING_FORMATS = new Set([
+  "unknown",
+  "openai-responses-v1",
+  "azure-openai-responses-v1",
+  "xai-responses-v1",
+  "anthropic-claude-v1",
+  "google-gemini-v1",
+])
 
 export interface OpenRouterOptions {
   readonly [key: string]: unknown
@@ -43,21 +51,24 @@ export const protocol = Protocol.make({
       OpenAIChat.protocol.body.from(request).pipe(
         Effect.map((body) => {
           const sourceAssistants = request.messages.filter((message) => message.role === "assistant")
+          const seenReasoningDetails = new Set<string>()
           let assistantIndex = 0
           const messages = body.messages.map((message) => {
             if (message.role !== "assistant") return message
             const source = sourceAssistants[assistantIndex++]
-            if (!Array.isArray(message.reasoning_details)) return message
             const reasoning = source?.content
               .filter((part) => part.type === "reasoning")
               .map((part) => part.text)
               .join("")
+            const reasoningDetails = Array.isArray(message.reasoning_details)
+              ? normalizeReasoningDetails(message.reasoning_details, seenReasoningDetails)
+              : undefined
             return {
               ...message,
               reasoning_content: undefined,
               reasoning_text: undefined,
-              reasoning: reasoning && message.reasoning_details.length > 0 ? reasoning : undefined,
-              reasoning_details: mergeReasoningDetails(message.reasoning_details),
+              reasoning: reasoning && reasoningDetails && reasoningDetails.length > 0 ? reasoning : undefined,
+              reasoning_details: reasoningDetails,
             }
           })
           return {
@@ -84,26 +95,63 @@ const bodyOptions = (input: unknown) => {
   }
 }
 
-const mergeReasoningDetails = (details: ReadonlyArray<unknown>) =>
-  details.reduce<unknown[]>((result, detail) => {
-    const previous = result.at(-1)
-    if (
-      !isRecord(previous) ||
-      previous.type !== "reasoning.text" ||
-      !isRecord(detail) ||
-      detail.type !== "reasoning.text"
-    ) {
-      result.push(detail)
+const normalizeReasoningDetails = (details: ReadonlyArray<unknown>, seen: Set<string>) =>
+  details
+    .filter((detail) => {
+      if (!isRecord(detail)) return false
+      if (detail.id !== undefined && detail.id !== null && typeof detail.id !== "string") return false
+      if (
+        detail.format !== undefined &&
+        detail.format !== null &&
+        (typeof detail.format !== "string" || !REASONING_FORMATS.has(detail.format))
+      )
+        return false
+      if (detail.index !== undefined && (typeof detail.index !== "number" || !Number.isFinite(detail.index)))
+        return false
+      if (detail.type === "reasoning.summary") return typeof detail.summary === "string"
+      if (detail.type === "reasoning.encrypted") return typeof detail.data === "string"
+      if (detail.type !== "reasoning.text") return false
+      if (detail.text !== undefined && detail.text !== null && typeof detail.text !== "string") return false
+      return detail.signature === undefined || detail.signature === null || typeof detail.signature === "string"
+    })
+    .reduce<unknown[]>((result, detail) => {
+      const previous = result.at(-1)
+      if (
+        !isRecord(previous) ||
+        previous.type !== "reasoning.text" ||
+        !isRecord(detail) ||
+        detail.type !== "reasoning.text"
+      ) {
+        result.push(detail)
+        return result
+      }
+      result[result.length - 1] = {
+        ...previous,
+        text: `${typeof previous.text === "string" ? previous.text : ""}${typeof detail.text === "string" ? detail.text : ""}`,
+        signature: previous.signature || detail.signature,
+        format: previous.format || detail.format,
+      }
       return result
-    }
-    result[result.length - 1] = {
-      ...previous,
-      text: `${typeof previous.text === "string" ? previous.text : ""}${typeof detail.text === "string" ? detail.text : ""}`,
-      signature: previous.signature || detail.signature,
-      format: previous.format || detail.format,
-    }
-    return result
-  }, [])
+    }, [])
+    .filter((detail) => {
+      if (!isRecord(detail)) return false
+      if (detail.type === "reasoning.text") {
+        const format = typeof detail.format === "string" ? detail.format : "anthropic-claude-v1"
+        if ((format === "anthropic-claude-v1" || format === "google-gemini-v1") && !detail.signature) return false
+      }
+      const key = (() => {
+        if (detail.type === "reasoning.summary" && typeof detail.summary === "string") return detail.summary
+        if (detail.type === "reasoning.encrypted" && typeof detail.data === "string")
+          return typeof detail.id === "string" && detail.id ? detail.id : detail.data
+        if (detail.type === "reasoning.text") {
+          if (typeof detail.text === "string" && detail.text) return detail.text
+          if (typeof detail.signature === "string" && detail.signature) return detail.signature
+        }
+      })()
+      if (key === undefined || seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
 
 export const route = Route.make({
   id: ADAPTER,
