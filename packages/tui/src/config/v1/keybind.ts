@@ -123,8 +123,8 @@ export const Definitions = {
   mcp_list: keybind("none", "List MCP servers"),
   provider_connect: keybind("none", "Connect integration"),
   agent_list: keybind("<leader>a", "List agents"),
-  agent_cycle: keybind("tab", "Next agent"),
-  agent_cycle_reverse: keybind("shift+tab", "Previous agent"),
+  agent_cycle: keybind("shift+tab", "Next agent"),
+  agent_cycle_reverse: keybind("none", "Previous agent"),
   variant_cycle: keybind("ctrl+t", "Cycle model variants"),
   variant_list: keybind("none", "List model variants"),
 
