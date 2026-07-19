@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { ConfigProvider, Effect, Schema } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
-import { LLM } from "../../src"
+import { LLM, LLMEvent } from "../../src"
 import { CloudflareAIGateway, CloudflareWorkersAI } from "../../src/providers/cloudflare"
 import { LLMClient } from "../../src/route"
 import { it } from "../lib/effect"
@@ -80,6 +80,50 @@ describe("Cloudflare", () => {
       )
 
       expect(response.text).toBe("Hello")
+    }),
+  )
+
+  it.effect("preserves reasoning details for AI Gateway continuation", () =>
+    Effect.gen(function* () {
+      const model = CloudflareAIGateway.configure({
+        accountId: "test-account",
+        gatewayId: "test-gateway",
+        apiKey: "test-token",
+      }).model("anthropic/claude-sonnet-4.6")
+      const details = [
+        { type: "reasoning.text", text: "Think", format: "anthropic-claude-v1", index: 0 },
+        { type: "reasoning.text", text: "ing", format: "anthropic-claude-v1", index: 0 },
+        { type: "reasoning.text", signature: "signed", format: "anthropic-claude-v1", index: 0 },
+      ]
+      const response = yield* LLM.generate(LLM.request({ model, prompt: "Say hello." })).pipe(
+        Effect.provide(
+          dynamicResponse((input) =>
+            Effect.succeed(
+              input.respond(
+                sseEvents(
+                  deltaChunk({ reasoning: "Think", reasoning_details: [details[0]] }),
+                  deltaChunk({ reasoning: "ing", reasoning_details: [details[1]] }),
+                  deltaChunk({ reasoning_details: [details[2]] }),
+                  deltaChunk({ content: "Hello" }),
+                  deltaChunk({}, "stop"),
+                ),
+                { headers: { "content-type": "text/event-stream" } },
+              ),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.reasoning).toBe("Thinking")
+      expect(response.events.filter(LLMEvent.is.reasoningDelta)).toHaveLength(3)
+      expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
+        openai: { reasoningField: "reasoning", reasoningDetails: details },
+      })
+
+      const replay = yield* LLMClient.prepare(LLM.request({ model, messages: [response.message] }))
+      expect(replay.body.messages).toEqual([
+        { role: "assistant", content: "Hello", reasoning: "Thinking", reasoning_details: details },
+      ])
     }),
   )
 
