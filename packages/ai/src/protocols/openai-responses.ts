@@ -208,6 +208,7 @@ const OpenAIResponsesStreamItem = Schema.Struct({
   server_label: Schema.optional(Schema.String),
   output: Schema.optional(Schema.Unknown),
   result: Schema.optional(Schema.String),
+  output_format: Schema.optional(Schema.Literals(["png", "jpeg", "webp"])),
   error: Schema.optional(Schema.Unknown),
   encrypted_content: optionalNull(Schema.String),
 })
@@ -602,7 +603,13 @@ const hostedToolResult = (item: OpenAIResponsesStreamItem) => {
   if (item.type === "image_generation_call" && item.result)
     return {
       type: "content" as const,
-      value: [{ type: "file" as const, uri: `data:image/png;base64,${item.result}`, mime: "image/png" }],
+      value: [
+        {
+          type: "file" as const,
+          uri: `data:image/${item.output_format ?? "png"};base64,${item.result}`,
+          mime: `image/${item.output_format ?? "png"}`,
+        },
+      ],
     }
   return isError ? { type: "error" as const, value: item.error } : { type: "json" as const, value: item }
 }
