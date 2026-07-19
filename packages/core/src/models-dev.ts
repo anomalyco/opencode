@@ -77,9 +77,14 @@ type SourceProvider = {
   readonly models: Readonly<Record<string, SourceModel>>
 }
 
+type SnapshotModel = ModelV2.Info & {
+  readonly capabilities: ModelV2.Info["capabilities"] &
+    Partial<Pick<SourceModel, "temperature" | "reasoning" | "attachment" | "interleaved">>
+}
+
 export type Snapshot = {
   readonly info: ProviderV2.Info
-  readonly models: readonly ModelV2.Info[]
+  readonly models: readonly SnapshotModel[]
   readonly environment: readonly string[]
 }
 
@@ -93,7 +98,7 @@ function normalize(input: Record<string, SourceProvider>): readonly Snapshot[] {
       package: ProviderV2.aisdk(item.npm),
       ...(item.api ? { settings: { baseURL: item.api } } : {}),
     } satisfies ProviderV2.Info
-    const models: ModelV2.Info[] = []
+    const models: SnapshotModel[] = []
     for (const model of Object.values(item.models)) {
       const baseCost = cost(model.cost)
       const variants = reasoningVariants(item, model)
@@ -492,7 +497,7 @@ function modelInfo(
     readonly request?: NonNullable<NonNullable<SourceModel["experimental"]>["modes"]>[string]["provider"]
     readonly variants?: NonNullable<ModelV2.Info["variants"]>
   } = {},
-): ModelV2.Info {
+): SnapshotModel {
   return {
     id,
     modelID: ModelV2.ID.make(model.id),
@@ -503,6 +508,10 @@ function modelInfo(
     settings: model.provider?.api ? { baseURL: model.provider.api } : undefined,
     capabilities: {
       tools: model.tool_call,
+      temperature: model.temperature,
+      reasoning: model.reasoning,
+      attachment: model.attachment,
+      interleaved: model.interleaved,
       input: [...(model.modalities?.input ?? [])],
       output: [...(model.modalities?.output ?? [])],
     },
