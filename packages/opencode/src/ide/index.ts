@@ -1,6 +1,5 @@
 import { EventV2 } from "@opencode-ai/core/event"
 import { Schema } from "effect"
-import { NamedError } from "@opencode-ai/core/util/error"
 import { Process } from "@/util/process"
 
 const SUPPORTED_IDES = [
@@ -20,11 +19,19 @@ export const Event = {
   }),
 }
 
-export const AlreadyInstalledError = NamedError.create("AlreadyInstalledError", {})
+export class AlreadyInstalledError extends Schema.TaggedErrorClass<AlreadyInstalledError>()("AlreadyInstalledError", {}) {
+  override get message() {
+    return "The IDE is already installed."
+  }
+}
 
-export const InstallFailedError = NamedError.create("InstallFailedError", {
+export class InstallFailedError extends Schema.TaggedErrorClass<InstallFailedError>()("InstallFailedError", {
   stderr: Schema.String,
-})
+}) {
+  override get message() {
+    return `Failed to install IDE: ${this.stderr}`
+  }
+}
 
 export function ide() {
   if (process.env["TERM_PROGRAM"] === "vscode") {

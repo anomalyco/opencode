@@ -75,9 +75,13 @@ export const BrowserOpenFailed = EventV2.define({
   },
 })
 
-export const Failed = NamedError.create("MCPFailed", {
+export class Failed extends Schema.TaggedErrorClass<Failed>()("MCPFailed", {
   name: Schema.String,
-})
+}) {
+  override get message() {
+    return `MCP operation failed for ${this.name}`
+  }
+}
 
 export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("MCP.NotFoundError", {
   name: Schema.String,
