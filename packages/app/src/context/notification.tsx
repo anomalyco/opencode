@@ -125,7 +125,7 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
     const states = new Map<ServerScope, { dispose: () => void; state: NotificationState }>()
 
     const EMPTY: NotificationState = {
-      ready: () => false,
+      ready: Object.assign(() => false, { promise: undefined }),
       session: {
         all: () => [],
         unseen: () => [],
