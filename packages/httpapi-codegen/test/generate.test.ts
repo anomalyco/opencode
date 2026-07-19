@@ -1060,19 +1060,19 @@ describe("HttpApiCodegen.generate", () => {
   })
 
   test("preserves required empty struct payloads in imported Effect adapters", () => {
-    const output = emitEffectImported(
-      compileContract(
-        api(
-          HttpApiEndpoint.post("empty", "/session", {
-            payload: Schema.Struct({}),
-            success: Schema.String,
-          }),
-        ),
+    const contract = compileContract(
+      api(
+        HttpApiEndpoint.post("empty", "/session", {
+          payload: Schema.Struct({}),
+          success: Schema.String,
+        }),
       ),
-      { module: "@example/api", api: "Api" },
     )
+    const effect = emitEffectImported(contract, { module: "@example/api", api: "Api" })
+    const promise = emitPromise(contract)
 
-    expect(output.files.find((file) => file.path === "client.ts")?.content).toContain("payload: { }")
+    expect(effect.files.find((file) => file.path === "client.ts")?.content).toContain("payload: { }")
+    expect(promise.files.find((file) => file.path === "client.ts")?.content).toContain("body: { }")
   })
 
   test("uses no argument when an operation has no input fields", () => {

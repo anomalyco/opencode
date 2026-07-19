@@ -712,7 +712,9 @@ function renderPromiseClient(groups: ReadonlyArray<Group>) {
       const part = (source: InputField["source"]) => {
         const inputs = endpoint.input.filter((field) => field.source === source)
         return inputs.length === 0
-          ? undefined
+          ? source === "payload" && endpoint.payloads.length > 0
+            ? "{ }"
+            : undefined
           : isOpaquePayload(endpoint) && source === "payload"
             ? access(inputs[0].name)
             : `{ ${inputs.map((field) => `${JSON.stringify(field.name)}: ${access(field.name)}`).join(", ")} }`
