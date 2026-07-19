@@ -32,6 +32,16 @@ export function parseModel(model: string) {
   }
 }
 
+export function resolveEarlyModel(input: {
+  argsModel?: string
+  configModel?: string
+  recent: { providerID: string; modelID: string }[]
+}): { providerID: string; modelID: string } | undefined {
+  if (input.argsModel) return parseModel(input.argsModel)
+  if (input.configModel) return parseModel(input.configModel)
+  return input.recent[0]
+}
+
 export function recentModels(
   model: { providerID: string; modelID: string },
   recent: { providerID: string; modelID: string }[],
@@ -153,12 +163,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           modelID: string
         }[]
         variant: Record<string, string | undefined>
+        labels: Record<string, { providerName: string; modelName: string }>
       }>({
         ready: false,
         model: {},
         recent: [],
         favorite: [],
         variant: {},
+        labels: {},
       })
 
       const filePath = path.join(paths.state, "model.json")
@@ -176,6 +188,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           recent: modelStore.recent,
           favorite: modelStore.favorite,
           variant: modelStore.variant,
+          labels: modelStore.labels,
         })
       }
 
@@ -187,6 +200,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           if (Array.isArray(value.favorite)) setModelStore("favorite", value.favorite)
           if (typeof value.variant === "object" && value.variant !== null)
             setModelStore("variant", value.variant as Record<string, string | undefined>)
+          if (typeof value.labels === "object" && value.labels !== null)
+            setModelStore("labels", value.labels as Record<string, { providerName: string; modelName: string }>)
         })
         .catch(() => {})
         .finally(() => {
@@ -195,6 +210,16 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         })
 
       const fallbackModel = createMemo(() => {
+        const catalogLoading = sync.data.provider.length === 0 && sync.status === "loading"
+        if (catalogLoading) {
+          const early = resolveEarlyModel({
+            argsModel: args.model,
+            configModel: sync.data.config.model,
+            recent: modelStore.recent,
+          })
+          if (early) return early
+        }
+
         if (args.model) {
           const { providerID, modelID } = parseModel(args.model)
           if (isModelValid({ providerID, modelID })) {
@@ -233,19 +258,40 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         }
       })
 
-      const currentModel = createMemo(() => {
+      const validatedModel = createMemo(() => {
         const a = agent.current()
-        return (
-          getFirstValidModel(
-            () => a && modelStore.model[a.name],
-            () => a && a.model,
-            fallbackModel,
-          ) ?? undefined
+        return getFirstValidModel(
+          () => a && modelStore.model[a.name],
+          () => a && a.model,
+          fallbackModel,
         )
+      })
+
+      const currentModel = createMemo(() => {
+        const validated = validatedModel()
+        if (validated) return validated
+        // While the catalog is still loading, surface the optimistic model
+        // (from config/recent) so the indicator is populated at first paint.
+        if (sync.data.provider.length === 0 && sync.status === "loading") return fallbackModel()
+        return undefined
+      })
+
+      createEffect(() => {
+        const value = currentModel()
+        if (!value) return
+        const provider = sync.data.provider.find((item) => item.id === value.providerID)
+        const info = provider?.models[value.modelID]
+        if (!provider?.name || !info?.name) return
+        const key = `${value.providerID}/${value.modelID}`
+        const cached = modelStore.labels[key]
+        if (cached && cached.providerName === provider.name && cached.modelName === info.name) return
+        setModelStore("labels", key, { providerName: provider.name, modelName: info.name })
+        save()
       })
 
       return {
         current: currentModel,
+        validated: validatedModel,
         get ready() {
           return modelStore.ready
         },
@@ -266,9 +312,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           }
           const provider = sync.data.provider.find((item) => item.id === value.providerID)
           const info = provider?.models[value.modelID]
+          const cached = modelStore.labels[`${value.providerID}/${value.modelID}`]
           return {
-            provider: provider?.name ?? value.providerID,
-            model: info?.name ?? value.modelID,
+            provider: provider?.name ?? cached?.providerName ?? value.providerID,
+            model: info?.name ?? cached?.modelName ?? value.modelID,
             reasoning: info?.capabilities?.reasoning ?? false,
           }
         }),
