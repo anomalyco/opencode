@@ -134,7 +134,7 @@ describe("Image", () => {
           headers: { "x-default": "yes" },
           http: { body: { labels: { deployment: "test" } }, query: { api: "v1" } },
           image: {
-            providerOptions: { imageSize: "2K", thinkingLevel: "High", includeThoughts: true },
+            providerOptions: { imageSize: "2K", thinkingLevel: "HIGH", includeThoughts: true },
           },
         }).image("gemini-3.1-flash-image"),
         prompt: "A robot tending a rooftop garden",
@@ -156,18 +156,65 @@ describe("Image", () => {
       expect(response.images.map((image) => image.mediaType)).toEqual(["image/png", "image/jpeg", "image/webp"])
       expect(response.images[0].providerMetadata).toMatchObject({ google: { thoughtSignature: "signature-1" } })
       expect(response.images[1].providerMetadata).toMatchObject({
-        google: { candidateIndex: 0, partIndex: 2, finishReason: "STOP" },
+        google: { candidateIndex: 0, partIndex: 3, finishReason: "STOP" },
       })
       expect(response.images[2].providerMetadata).toMatchObject({ google: { candidateIndex: 7, partIndex: 0 } })
       expect(response.usage?.inputTokens).toBe(5)
       expect(response.usage?.outputTokens).toBe(10)
       expect(response.usage?.reasoningTokens).toBe(3)
+      expect(response.usage?.providerMetadata).toMatchObject({ google: { serviceTier: "STANDARD" } })
       expect(response.providerMetadata).toEqual({
         google: {
           modelVersion: "gemini-3.1-flash-image",
           responseId: "response-1",
           promptFeedback: undefined,
-          text: ["planning"],
+          candidates: [
+            {
+              index: 0,
+              finishReason: "STOP",
+              finishMessage: undefined,
+              safetyRatings: [{ category: "safe" }],
+              citationMetadata: undefined,
+              groundingMetadata: undefined,
+              parts: [
+                {
+                  type: "inlineData",
+                  mediaType: "image/png",
+                  thought: undefined,
+                  thoughtSignature: "signature-1",
+                },
+                { type: "text", text: "planning", thought: true, thoughtSignature: "text-signature" },
+                {
+                  type: "inlineData",
+                  mediaType: "image/png",
+                  thought: true,
+                  thoughtSignature: "draft-signature",
+                },
+                {
+                  type: "inlineData",
+                  mediaType: "image/jpeg",
+                  thought: undefined,
+                  thoughtSignature: undefined,
+                },
+              ],
+            },
+            {
+              index: 7,
+              finishReason: undefined,
+              finishMessage: undefined,
+              safetyRatings: undefined,
+              citationMetadata: undefined,
+              groundingMetadata: undefined,
+              parts: [
+                {
+                  type: "inlineData",
+                  mediaType: "image/webp",
+                  thought: undefined,
+                  thoughtSignature: undefined,
+                },
+              ],
+            },
+          ],
         },
       })
     }).pipe(
@@ -189,7 +236,7 @@ describe("Image", () => {
                     responseModalities: ["IMAGE"],
                     imageConfig: { aspectRatio: "16:9", imageSize: "2K" },
                     seed: 42,
-                    thinkingConfig: { thinkingLevel: "High", includeThoughts: true },
+                    thinkingConfig: { thinkingLevel: "HIGH", includeThoughts: true },
                   },
                   labels: { deployment: "test" },
                   safetySettings: [],
@@ -204,7 +251,12 @@ describe("Image", () => {
                               inlineData: { mimeType: "image/png", data: "AQID" },
                               thoughtSignature: "signature-1",
                             },
-                            { text: "planning", thought: true },
+                            { text: "planning", thought: true, thoughtSignature: "text-signature" },
+                            {
+                              inlineData: { mimeType: "image/png", data: "CgsM" },
+                              thought: true,
+                              thoughtSignature: "draft-signature",
+                            },
                             { inlineData: { mimeType: "image/jpeg", data: "BAUG" } },
                           ],
                         },
@@ -221,6 +273,7 @@ describe("Image", () => {
                       candidatesTokenCount: 7,
                       thoughtsTokenCount: 3,
                       totalTokenCount: 15,
+                      serviceTier: "STANDARD",
                     },
                     modelVersion: "gemini-3.1-flash-image",
                     responseId: "response-1",
@@ -251,6 +304,84 @@ describe("Image", () => {
       Effect.provide(
         ImageClient.layer.pipe(
           Layer.provide(dynamicResponse(() => Effect.die("invalid request should not reach the provider"))),
+        ),
+      ),
+    ),
+  )
+
+  it.effect("rejects Imagen model IDs locally", () =>
+    Image.generate({
+      model: Google.configure({ apiKey: "test" }).image("imagen-4.0-generate-001"),
+      prompt: "A robot tending a rooftop garden",
+    }).pipe(
+      Effect.flip,
+      Effect.tap((error) =>
+        Effect.sync(() => {
+          expect(error.reason._tag).toBe("InvalidRequest")
+          expect(error.message).toContain("does not support Imagen model ID")
+        }),
+      ),
+      Effect.provide(
+        ImageClient.layer.pipe(
+          Layer.provide(dynamicResponse(() => Effect.die("invalid model should not reach the provider"))),
+        ),
+      ),
+    ),
+  )
+
+  it.effect("includes Google diagnostics when no final image is returned", () =>
+    Image.generate({
+      model: Google.configure({ apiKey: "test", baseURL: "https://generativelanguage.test/v1beta" }).image(
+        "gemini-3.1-flash-image",
+      ),
+      prompt: "A robot tending a rooftop garden",
+    }).pipe(
+      Effect.flip,
+      Effect.tap((error) =>
+        Effect.sync(() => {
+          expect(error.reason._tag).toBe("InvalidProviderOutput")
+          if (error.reason._tag !== "InvalidProviderOutput") return
+          expect(error.reason.message).toContain("finish reasons: IMAGE_SAFETY")
+          expect(error.reason.providerMetadata).toEqual({
+            google: {
+              promptFeedback: { blockReason: "SAFETY" },
+              candidates: [
+                {
+                  index: 0,
+                  finishReason: "IMAGE_SAFETY",
+                  finishMessage: "The generated image was blocked by safety filters.",
+                  safetyRatings: [{ category: "HARM_CATEGORY_DANGEROUS_CONTENT", blocked: true }],
+                  citationMetadata: undefined,
+                  groundingMetadata: undefined,
+                  parts: [{ type: "text", text: "blocked", thought: false, thoughtSignature: undefined }],
+                },
+              ],
+            },
+          })
+        }),
+      ),
+      Effect.provide(
+        ImageClient.layer.pipe(
+          Layer.provide(
+            dynamicResponse((input) =>
+              Effect.succeed(
+                input.respond(
+                  JSON.stringify({
+                    candidates: [
+                      {
+                        content: { parts: [{ text: "blocked", thought: false }] },
+                        finishReason: "IMAGE_SAFETY",
+                        finishMessage: "The generated image was blocked by safety filters.",
+                        safetyRatings: [{ category: "HARM_CATEGORY_DANGEROUS_CONTENT", blocked: true }],
+                      },
+                    ],
+                    promptFeedback: { blockReason: "SAFETY" },
+                  }),
+                  { headers: { "content-type": "application/json" } },
+                ),
+              ),
+            ),
+          ),
         ),
       ),
     ),

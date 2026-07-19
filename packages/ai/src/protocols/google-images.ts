@@ -9,15 +9,25 @@ import {
   type ImageRoute,
 } from "../image"
 import { Auth, type Definition as AuthDefinition } from "../route/auth"
-import { InvalidProviderOutputReason, LLMError, Usage, mergeHttpOptions, mergeJsonRecords } from "../schema"
+import {
+  InvalidProviderOutputReason,
+  LLMError,
+  Usage,
+  mergeHttpOptions,
+  mergeJsonRecords,
+  type ProviderMetadata,
+} from "../schema"
 import { ProviderShared } from "./shared"
 
 const ADAPTER = "google-images"
 export const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 
+export const GoogleThinkingLevel = Schema.Literals(["MINIMAL", "LOW", "MEDIUM", "HIGH"])
+export type GoogleThinkingLevel = Schema.Schema.Type<typeof GoogleThinkingLevel>
+
 export interface GoogleImageOptions {
   readonly imageSize?: string
-  readonly thinkingLevel?: string
+  readonly thinkingLevel?: GoogleThinkingLevel
   readonly includeThoughts?: boolean
 }
 
@@ -39,7 +49,7 @@ const GoogleImageBody = Schema.Struct({
     seed: Schema.optional(Schema.Number),
     thinkingConfig: Schema.optional(
       Schema.Struct({
-        thinkingLevel: Schema.optional(Schema.String),
+        thinkingLevel: Schema.optional(GoogleThinkingLevel),
         includeThoughts: Schema.optional(Schema.Boolean),
       }),
     ),
@@ -47,15 +57,18 @@ const GoogleImageBody = Schema.Struct({
 })
 export type GoogleImageBody = Schema.Schema.Type<typeof GoogleImageBody>
 
-const GoogleUsage = Schema.Struct({
-  cachedContentTokenCount: Schema.optional(Schema.Number),
-  thoughtsTokenCount: Schema.optional(Schema.Number),
-  promptTokenCount: Schema.optional(Schema.Number),
-  candidatesTokenCount: Schema.optional(Schema.Number),
-  totalTokenCount: Schema.optional(Schema.Number),
-  promptTokensDetails: Schema.optional(Schema.Unknown),
-  candidatesTokensDetails: Schema.optional(Schema.Unknown),
-})
+const GoogleUsage = Schema.StructWithRest(
+  Schema.Struct({
+    cachedContentTokenCount: Schema.optional(Schema.Number),
+    thoughtsTokenCount: Schema.optional(Schema.Number),
+    promptTokenCount: Schema.optional(Schema.Number),
+    candidatesTokenCount: Schema.optional(Schema.Number),
+    totalTokenCount: Schema.optional(Schema.Number),
+    promptTokensDetails: Schema.optional(Schema.Unknown),
+    candidatesTokensDetails: Schema.optional(Schema.Unknown),
+  }),
+  [Schema.Record(Schema.String, Schema.Unknown)],
+)
 
 const GoogleImageResponse = Schema.Struct({
   candidates: Schema.optional(
@@ -80,6 +93,7 @@ const GoogleImageResponse = Schema.Struct({
           }),
         ),
         finishReason: Schema.optional(Schema.String),
+        finishMessage: Schema.optional(Schema.String),
         safetyRatings: Schema.optional(Schema.Unknown),
         citationMetadata: Schema.optional(Schema.Unknown),
         groundingMetadata: Schema.optional(Schema.Unknown),
@@ -126,11 +140,11 @@ const body = (request: ImageRequest): GoogleImageBody => {
   }
 }
 
-const invalidOutput = (message: string) =>
+const invalidOutput = (message: string, providerMetadata?: ProviderMetadata) =>
   new LLMError({
     module: ADAPTER,
     method: "generate",
-    reason: new InvalidProviderOutputReason({ message, route: ADAPTER }),
+    reason: new InvalidProviderOutputReason({ message, route: ADAPTER, providerMetadata }),
   })
 
 const applyQuery = (url: string, query: Record<string, string> | undefined) => {
@@ -159,6 +173,10 @@ export const model = (input: ModelInput) => {
   const route: ImageRoute = {
     id: ADAPTER,
     generate: Effect.fn("GoogleImages.generate")(function* (request: ImageRequest, execute) {
+      if (/^imagen(?:-|$)/i.test(request.model.id))
+        return yield* ProviderShared.invalidRequest(
+          `Google Images uses Gemini generateContent and does not support Imagen model ID ${request.model.id}`,
+        )
       if (request.count !== undefined)
         return yield* ProviderShared.invalidRequest("Google Images does not support the common count option")
       if (request.size !== undefined)
@@ -192,9 +210,34 @@ export const model = (input: ModelInput) => {
         Effect.mapError(() => invalidOutput("Google Images returned an invalid response")),
       )
       const candidates = decoded.candidates ?? []
+      const candidateMetadata = candidates.map((candidate, candidateIndex) => ({
+        index: candidate.index ?? candidateIndex,
+        finishReason: candidate.finishReason,
+        finishMessage: candidate.finishMessage,
+        safetyRatings: candidate.safetyRatings,
+        citationMetadata: candidate.citationMetadata,
+        groundingMetadata: candidate.groundingMetadata,
+        parts: (candidate.content?.parts ?? []).map((part) =>
+          part.inlineData === undefined
+            ? {
+                type: "text",
+                text: part.text,
+                thought: part.thought,
+                thoughtSignature: part.thoughtSignature,
+              }
+            : {
+                type: "inlineData",
+                mediaType: part.inlineData.mimeType,
+                thought: part.thought,
+                thoughtSignature: part.thoughtSignature,
+              },
+        ),
+      }))
       const encoded = candidates.flatMap((candidate, candidateIndex) =>
         (candidate.content?.parts ?? []).flatMap((part, partIndex) =>
-          part.inlineData === undefined ? [] : [{ candidate, candidateIndex, partIndex, inlineData: part.inlineData }],
+          part.inlineData === undefined || part.thought === true
+            ? []
+            : [{ candidate, candidateIndex, partIndex, inlineData: part.inlineData }],
         ),
       )
       const images = yield* Effect.forEach(encoded, (item) =>
@@ -224,7 +267,22 @@ export const model = (input: ModelInput) => {
           ),
         ),
       )
-      if (images.length === 0) return yield* invalidOutput("Google Images returned no images")
+      if (images.length === 0) {
+        const finishReasons = candidates.flatMap((candidate) =>
+          candidate.finishReason === undefined ? [] : [candidate.finishReason],
+        )
+        return yield* invalidOutput(
+          `Google Images returned no final images${
+            finishReasons.length === 0 ? "" : ` (finish reasons: ${finishReasons.join(", ")})`
+          }; inspect reason.providerMetadata.google for prompt feedback and candidate details`,
+          {
+            google: {
+              promptFeedback: decoded.promptFeedback,
+              candidates: candidateMetadata,
+            },
+          },
+        )
+      }
       const usage = decoded.usageMetadata
       const outputTokens =
         usage?.candidatesTokenCount === undefined
@@ -252,9 +310,7 @@ export const model = (input: ModelInput) => {
             modelVersion: decoded.modelVersion,
             responseId: decoded.responseId,
             promptFeedback: decoded.promptFeedback,
-            text: candidates.flatMap((candidate) =>
-              (candidate.content?.parts ?? []).flatMap((part) => (part.text === undefined ? [] : [part.text])),
-            ),
+            candidates: candidateMetadata,
           },
         },
       })

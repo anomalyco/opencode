@@ -81,6 +81,37 @@ yield *
   })
 ```
 
+Google's current Gemini image models use the same direct API:
+
+```ts
+import { Google } from "@opencode-ai/ai/providers"
+
+const googleProgram = Effect.gen(function* () {
+  const response = yield* Image.generate({
+    model: Google.configure({
+      apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
+      image: {
+        providerOptions: { imageSize: "2K", thinkingLevel: "HIGH", includeThoughts: true },
+      },
+    }).image("gemini-3.1-flash-image"),
+    prompt: "A robot tending a rooftop garden",
+    aspectRatio: "16:9",
+    seed: 42,
+    providerOptions: { google: { imageSize: "2K" } },
+  })
+
+  return response.images
+})
+```
+
+`Google.configure(...).image(...)` is limited to Gemini `generateContent` image models (the Nano Banana family,
+including `gemini-2.5-flash-image`, `gemini-3-pro-image`, and `gemini-3.1-flash-image` plus their preview
+variants). Imagen model IDs use a different API and are rejected locally. Google provider options are `imageSize`,
+`thinkingLevel` (`MINIMAL`, `LOW`, `MEDIUM`, or `HIGH`), and `includeThoughts`; request-level options override the
+configured defaults. The API does not support a requested image count or exact pixel dimensions, so `count` and
+`size` are rejected; use `aspectRatio` and the provider-specific `imageSize` tier instead. This route performs one
+direct `Image.generate` request and does not provide conversational image continuation.
+
 Conversational image generation remains part of the LLM interaction. OpenAI Responses exposes it through its hosted image tool:
 
 ```ts
