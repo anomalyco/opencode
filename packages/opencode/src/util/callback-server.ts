@@ -1,52 +1,20 @@
-/**
- * @fileOverview
- * @path: packages/opencode/src/util/callback-server.ts
- * @layer: SERVICE
- * @role: Short-lived HTTP server that waits for a browser OAuth/install callback
- * @owner: CLI
- */
-
-/**
- * @dependencies
- * internal: none
- * external:
- * - node:http
- */
-
-/**
- * @flow
- * startCallbackServer(path) -> binds on 127.0.0.1:0 (OS-assigned port)
- * -> caller opens browser with redirect_uri=http://127.0.0.1:{port}{path}
- * -> browser hits {path} after user completes auth
- * -> server serves HTML_SUCCESS, resolves internal promise
- * -> waitForCallback resolves (Promise.race with timeout)
- * -> caller calls server.close()
- */
-
-/**
- * @performance
- * - Uses port 0 (OS-assigned) — no hard-coded port collision risk
- * - No polling; purely event-driven via Promise
- */
-
-/**
- * @security
- * - Bound only to 127.0.0.1 — not reachable from outside localhost
- * - No CORS headers; no cross-origin access
- */
-
-/**
- * @scalability
- * - Single-use server; closed immediately after callback fires
- */
-
-/**
- * @verdict
- * status: CLEAN
- * priority: LOW
- */
-
 import http from "node:http"
+
+/**
+ * Short-lived HTTP server that waits for a browser-based callback
+ * (e.g. GitHub App installation redirect) and resolves a promise
+ * when the browser hits the configured path.
+ *
+ * Binds on 127.0.0.1:0 so the OS picks a free port (no collisions).
+ * No internal polling — the exposed `promise` resolves purely from
+ * the inbound HTTP request.
+ *
+ * Usage:
+ *   const server = startCallbackServer("/github-install-callback")
+ *   const url = `http://127.0.0.1:${server.port}/github-install-callback`
+ *   // open browser with redirect_uri=url
+ *   await waitForCallback(server, { timeoutMs: 300_000 })
+ */
 
 const HTML_SUCCESS = `<!DOCTYPE html>
 <html lang="en">
@@ -91,52 +59,37 @@ const HTML_SUCCESS = `<!DOCTYPE html>
 </html>`
 
 export interface CallbackServer {
-  /** The OS-assigned port the server is listening on. */
+  /** OS-assigned port the server is listening on. */
   readonly port: number
-  /** A promise that resolves when the browser hits the callback path. */
+  /** Resolves when the browser hits the configured callback path. */
   readonly promise: Promise<void>
-  /** Shuts down the server. Safe to call multiple times. */
+  /** Stops the server. Safe to call multiple times. */
   close(): void
 }
 
-/**
- * Starts a short-lived HTTP server on 127.0.0.1 with an OS-assigned port.
- *
- * The server exposes a `promise` that resolves when the browser hits `path`.
- * The caller is responsible for including the callback URL in whatever link
- * it opens in the browser, e.g.:
- *   `http://127.0.0.1:${server.port}/github-install-callback`
- *
- * @param path - The URL path to listen on (e.g. "/github-install-callback")
- */
 export function startCallbackServer(path: string): CallbackServer {
   let _resolve!: () => void
   let _reject!: (err: Error) => void
-  // The promise that resolves when the real browser hits `path`.
-  // No internal polling — this is purely event-driven.
+
   const _promise = new Promise<void>((res, rej) => {
     _resolve = res
     _reject = rej
   })
-  // Prevent Node from crashing if nobody awaits the promise before the
-  // server is closed externally (e.g. on SIGINT).
+  // Suppress unhandled-rejection if nobody awaits before close()
   _promise.catch(() => {})
 
   let resolved = false
 
   const server = http.createServer((req, res) => {
-    const url = new URL(req.url ?? "/", `http://127.0.0.1:${currentPort()}`)
+    const port = (server.address() as { port: number } | null)?.port ?? 0
+    const url = new URL(req.url ?? "/", `http://127.0.0.1:${port}`)
 
     if (url.pathname === path) {
-      res.writeHead(200, {
-        "Content-Type": "text/html; charset=utf-8",
-        "Cache-Control": "no-store",
-      })
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" })
       res.end(HTML_SUCCESS)
-
       if (!resolved) {
         resolved = true
-        // Give the browser 500ms to render before closing the server
+        // Small delay lets the browser render the page before the socket closes
         setTimeout(() => {
           server.close()
           _resolve()
@@ -145,26 +98,16 @@ export function startCallbackServer(path: string): CallbackServer {
       return
     }
 
-    // Any other path → 404
     res.writeHead(404)
     res.end("Not found")
   })
 
-  // Port 0 lets the OS pick a free port — no collision risk
   server.listen(0, "127.0.0.1")
-
-  server.on("error", (err) => {
-    _reject(err)
-  })
-
-  function currentPort(): number {
-    const addr = server.address()
-    return typeof addr === "object" && addr !== null ? addr.port : 0
-  }
+  server.on("error", (err) => _reject(err))
 
   return {
     get port() {
-      return currentPort()
+      return (server.address() as { port: number } | null)?.port ?? 0
     },
     get promise() {
       return _promise
@@ -180,23 +123,15 @@ export function startCallbackServer(path: string): CallbackServer {
 }
 
 /**
- * Returns a promise that resolves when the browser hits the callback server,
- * or rejects after `timeoutMs` (default: 5 minutes).
- *
- * No polling. Races `server.promise` against a timeout.
+ * Races `server.promise` against a timeout.
+ * Rejects with an error if the timeout fires before the browser callback.
  */
-export function waitForCallback(
-  server: CallbackServer,
-  opts: { timeoutMs?: number } = {},
-): Promise<void> {
-  const timeoutMs = opts.timeoutMs ?? 300_000
+export function waitForCallback(server: CallbackServer, opts: { timeoutMs?: number } = {}): Promise<void> {
+  const ms = opts.timeoutMs ?? 300_000
   return Promise.race([
     server.promise,
     new Promise<void>((_, reject) =>
-      setTimeout(
-        () => reject(new Error(`GitHub app authorization timed out after ${timeoutMs / 1000}s`)),
-        timeoutMs,
-      ),
+      setTimeout(() => reject(new Error(`GitHub app authorization timed out after ${ms / 1000}s`)), ms),
     ),
   ])
 }
