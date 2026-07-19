@@ -244,6 +244,63 @@ describe("SessionRunCoordinator", () => {
     ),
   )
 
+  it.effect("defers wakes received while paused until release", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const started = yield* Deferred.make<void>()
+        const interrupted = yield* Deferred.make<void>()
+        const resumed = yield* Deferred.make<void>()
+        let runs = 0
+        const coordinator = yield* SessionRunCoordinator.make({
+          drain: () =>
+            Effect.sync(() => ++runs).pipe(
+              Effect.flatMap((run) =>
+                run === 1
+                  ? Deferred.succeed(started, undefined).pipe(
+                      Effect.andThen(Effect.never),
+                      Effect.onInterrupt(() => Deferred.succeed(interrupted, undefined)),
+                    )
+                  : Deferred.succeed(resumed, undefined),
+              ),
+            ),
+        })
+
+        const first = yield* coordinator.run("session").pipe(Effect.forkChild)
+        yield* Deferred.await(started)
+        const release = yield* coordinator.pause("session")
+        yield* Deferred.await(interrupted)
+        yield* coordinator.wake("session")
+        yield* Effect.yieldNow
+
+        expect(runs).toBe(1)
+        yield* release
+        yield* Deferred.await(resumed)
+        expect(runs).toBe(2)
+        expect(yield* Fiber.await(first)).toMatchObject({ _tag: "Failure" })
+      }),
+    ),
+  )
+
+  it.effect("defers resumes received while paused until release", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const started = yield* Deferred.make<void>()
+        const coordinator = yield* SessionRunCoordinator.make({
+          drain: () => Deferred.succeed(started, undefined),
+        })
+
+        const release = yield* coordinator.pause("session")
+        const resumed = yield* coordinator.run("session").pipe(Effect.forkChild)
+        yield* Effect.yieldNow
+
+        expect(Array.from(yield* coordinator.active)).toEqual([])
+        yield* release
+        yield* Deferred.await(started)
+        yield* Fiber.join(resumed)
+      }),
+    ),
+  )
+
   it.effect("runs a wake registered during interruption cleanup", () =>
     Effect.scoped(
       Effect.gen(function* () {

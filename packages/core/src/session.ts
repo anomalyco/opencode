@@ -359,29 +359,33 @@ const layer = Layer.effect(
       }),
       prompt: Effect.fn("V2Session.prompt")((input) =>
         Effect.uninterruptible(
-          Effect.gen(function* () {
-            yield* result.get(input.sessionID)
-            const prompt = resolvePrompt(input.prompt)
-            const messageID = input.id ?? SessionMessage.ID.create()
-            const delivery = input.delivery ?? "steer"
-            const expected = { sessionID: input.sessionID, messageID, prompt, delivery }
-            const admitted = yield* SessionInput.admit(db, events, {
-              id: messageID,
-              sessionID: input.sessionID,
-              prompt,
-              delivery,
-            }).pipe(
-              Effect.catchDefect((defect) =>
-                defect instanceof SessionInput.LifecycleConflict
-                  ? new PromptConflictError({ sessionID: input.sessionID, messageID })
-                  : Effect.die(defect),
-              ),
-            )
-            if (!SessionInput.equivalent(admitted, expected))
-              return yield* new PromptConflictError({ sessionID: input.sessionID, messageID })
-            if (input.resume !== false) yield* execution.wake(admitted.sessionID)
-            return admitted
-          }),
+          execution.withLock(input.sessionID)(
+            Effect.gen(function* () {
+              const session = yield* result.get(input.sessionID)
+              if (session.revert)
+                yield* SessionRevert.commit(session).pipe(Effect.provideService(EventV2.Service, events))
+              const prompt = resolvePrompt(input.prompt)
+              const messageID = input.id ?? SessionMessage.ID.create()
+              const delivery = input.delivery ?? "steer"
+              const expected = { sessionID: input.sessionID, messageID, prompt, delivery }
+              const admitted = yield* SessionInput.admit(db, events, {
+                id: messageID,
+                sessionID: input.sessionID,
+                prompt,
+                delivery,
+              }).pipe(
+                Effect.catchDefect((defect) =>
+                  defect instanceof SessionInput.LifecycleConflict
+                    ? new PromptConflictError({ sessionID: input.sessionID, messageID })
+                    : Effect.die(defect),
+                ),
+              )
+              if (!SessionInput.equivalent(admitted, expected))
+                return yield* new PromptConflictError({ sessionID: input.sessionID, messageID })
+              if (input.resume !== false) yield* execution.wake(admitted.sessionID)
+              return admitted
+            }),
+          ),
         ),
       ),
       shell: Effect.fn("V2Session.shell")(function* () {
@@ -424,31 +428,51 @@ const layer = Layer.effect(
       }),
       active: execution.active,
       resume: Effect.fn("V2Session.resume")(function* (sessionID) {
-        yield* result.get(sessionID)
-        yield* execution.resume(sessionID)
+        yield* execution.withLock(sessionID)(
+          Effect.gen(function* () {
+            const session = yield* result.get(sessionID)
+            if (session.revert) return
+            yield* execution.resume(sessionID)
+          }),
+        )
       }),
       interrupt: Effect.fn("V2Session.interrupt")((sessionID) =>
         Effect.uninterruptible(execution.interrupt(sessionID)),
       ),
       revert: {
         stage: Effect.fn("V2Session.revert.stage")(function* (input) {
-          const session = yield* result.get(input.sessionID)
-          return yield* SessionRevert.stage({ session, messageID: input.messageID, files: input.files }).pipe(
-            Effect.provideService(Database.Service, database),
-            Effect.provideService(EventV2.Service, events),
-            Effect.provide(locations.get(session.location)),
+          return yield* execution.exclusive(
+            input.sessionID,
+            Effect.gen(function* () {
+              const session = yield* result.get(input.sessionID)
+              return yield* SessionRevert.stage({ session, messageID: input.messageID, files: input.files }).pipe(
+                Effect.provideService(Database.Service, database),
+                Effect.provideService(EventV2.Service, events),
+                Effect.provide(locations.get(session.location)),
+              )
+            }),
           )
         }),
         clear: Effect.fn("V2Session.revert.clear")(function* (sessionID) {
-          const session = yield* result.get(sessionID)
-          yield* SessionRevert.clear(session).pipe(
-            Effect.provideService(EventV2.Service, events),
-            Effect.provide(locations.get(session.location)),
+          yield* execution.exclusive(
+            sessionID,
+            Effect.gen(function* () {
+              const session = yield* result.get(sessionID)
+              yield* SessionRevert.clear(session).pipe(
+                Effect.provideService(EventV2.Service, events),
+                Effect.provide(locations.get(session.location)),
+              )
+            }),
           )
         }),
         commit: Effect.fn("V2Session.revert.commit")(function* (sessionID) {
-          const session = yield* result.get(sessionID)
-          yield* SessionRevert.commit(session).pipe(Effect.provideService(EventV2.Service, events))
+          yield* execution.exclusive(
+            sessionID,
+            Effect.gen(function* () {
+              const session = yield* result.get(sessionID)
+              yield* SessionRevert.commit(session).pipe(Effect.provideService(EventV2.Service, events))
+            }),
+          )
         }),
       },
     })

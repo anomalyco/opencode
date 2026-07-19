@@ -15,6 +15,12 @@ export interface Interface {
   readonly wake: (sessionID: SessionSchema.ID) => Effect.Effect<void>
   /** Interrupt active work owned by this process. Idle interruption is a no-op. */
   readonly interrupt: (sessionID: SessionSchema.ID) => Effect.Effect<void>
+  /** Serializes short Session state transitions without interrupting active work. */
+  readonly withLock: (
+    sessionID: SessionSchema.ID,
+  ) => <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
+  /** Interrupts active work and prevents new drains while the effect runs. */
+  readonly exclusive: <A, E, R>(sessionID: SessionSchema.ID, effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
 }
 
 /** Routes execution from a Session ID to the runner owned by that Session's Location. */
@@ -30,5 +36,7 @@ export const noopLayer = Layer.succeed(
     resume: () => Effect.void,
     wake: () => Effect.void,
     interrupt: () => Effect.void,
+    withLock: () => (effect) => effect,
+    exclusive: (_sessionID, effect) => effect,
   }),
 )

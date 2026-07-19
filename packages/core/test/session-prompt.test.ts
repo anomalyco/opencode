@@ -40,6 +40,8 @@ const execution = Layer.succeed(
       Effect.sync(() => {
         wakeCalls.push(sessionID)
       }),
+    withLock: () => (effect) => effect,
+    exclusive: (_sessionID, effect) => effect,
   }),
 )
 const it = testEffect(
@@ -482,6 +484,52 @@ describe("SessionV2.prompt", () => {
 
       expect(retried).toMatchObject({ id: messageID, prompt: { text: "Historical queued prompt" } })
       expect(yield* admitted(messageID)).toMatchObject({ delivery: "queue" })
+    }),
+  )
+
+  it.effect("commits a staged revert before admitting a new prompt", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      const boundary = SessionMessage.ID.create()
+      const reverted = SessionMessage.ID.create()
+      yield* events.publish(SessionEvent.Prompted, {
+        sessionID,
+        messageID: boundary,
+        timestamp: yield* DateTime.now,
+        prompt: Prompt.make({ text: "Keep this prompt" }),
+        delivery: "steer",
+      })
+      yield* events.publish(SessionEvent.Prompted, {
+        sessionID,
+        messageID: reverted,
+        timestamp: yield* DateTime.now,
+        prompt: Prompt.make({ text: "Discard this prompt" }),
+        delivery: "steer",
+      })
+      yield* events.publish(SessionEvent.RevertEvent.Staged, {
+        sessionID,
+        timestamp: yield* DateTime.now,
+        revert: { messageID: boundary },
+      })
+
+      const admitted = yield* session.prompt({
+        sessionID,
+        prompt: Prompt.make({ text: "Prompt after revert" }),
+        resume: false,
+      })
+      const { db } = yield* Database.Service
+      const stored = yield* db
+        .select({ revert: SessionTable.revert })
+        .from(SessionTable)
+        .where(eq(SessionTable.id, sessionID))
+        .get()
+        .pipe(Effect.orDie)
+
+      expect(yield* session.messages({ sessionID })).toMatchObject([{ id: boundary, text: "Keep this prompt" }])
+      expect(stored?.revert).toBeNull()
+      expect(yield* SessionInput.find(db, admitted.id)).toMatchObject({ prompt: { text: "Prompt after revert" } })
     }),
   )
 
