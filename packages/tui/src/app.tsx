@@ -1132,6 +1132,14 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     })
   })
 
+  event.on("installation.updated", (evt) => {
+    toast.show({
+      variant: "success",
+      message: `Updated to ${evt.properties.version}. Restart to use the new version.`,
+      duration: 10000,
+    })
+  })
+
   event.on("installation.update-available", async (evt) => {
     console.log("installation.update-available", evt)
     const version = evt.properties.version
