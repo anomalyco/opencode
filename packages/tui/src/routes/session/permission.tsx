@@ -432,7 +432,7 @@ export function PermissionPrompt(props: { request: PermissionV2Request; director
           const body = (
             <Prompt
               title="Permission required"
-              semanticLabel={`Permission required: ${current.title}`}
+              semanticLabel={permissionSemanticLabel(props.request.action, current.title)}
               instance={props.request.id}
               header={header()}
               body={current.body}
@@ -474,6 +474,10 @@ export function PermissionPrompt(props: { request: PermissionV2Request; director
       </Match>
     </Switch>
   )
+}
+
+export function permissionSemanticLabel(action: string, title?: string) {
+  return `Permission required: ${title ?? action}`
 }
 
 function RejectPrompt(props: {
