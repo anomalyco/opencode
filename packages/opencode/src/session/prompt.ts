@@ -61,7 +61,11 @@ import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionReminders } from "./reminders"
 import { SessionTools } from "./tools"
 import { LLMEvent } from "@opencode-ai/llm"
-import { similarity as outputSimilarity } from "@/loop/loop"
+// NOT from "@/loop/loop": loop.ts imports SessionPrompt from this module, and
+// importing it back creates a cycle that leaves SessionPrompt.node undefined
+// inside loop.ts's module-scope LayerNode.make — the app graph then crashes
+// every boot ("undefined is not an object (evaluating 'e.dependencies')").
+import { similarity as outputSimilarity } from "@/loop/similarity"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false

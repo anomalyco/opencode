@@ -108,29 +108,13 @@ export class Service extends Context.Service<Service, Interface>()(
 	"@opencode/Loop",
 ) {}
 
-// Sørensen–Dice coefficient over character bigrams: cheap, dependency-free,
-// and forgiving of small formatting drift between otherwise-repeated
-// iteration output. 1 = identical, 0 = nothing in common.
-function normalize(text: string) {
-	return text.trim().toLowerCase().replace(/\s+/g, " ");
-}
-function bigrams(text: string) {
-	const grams = new Set<string>();
-	for (let i = 0; i < text.length - 1; i++) grams.add(text.slice(i, i + 2));
-	return grams;
-}
-export function similarity(a: string, b: string): number {
-	const na = normalize(a);
-	const nb = normalize(b);
-	if (na === nb) return 1;
-	if (!na || !nb) return 0;
-	const ga = bigrams(na);
-	const gb = bigrams(nb);
-	if (ga.size === 0 || gb.size === 0) return 0;
-	let intersection = 0;
-	for (const gram of ga) if (gb.has(gram)) intersection++;
-	return (2 * intersection) / (ga.size + gb.size);
-}
+// similarity lives in ./similarity (import-free module) so session/prompt.ts
+// can use it WITHOUT importing this module — this file imports SessionPrompt,
+// and a prompt.ts -> loop.ts import is a cycle that leaves SessionPrompt.node
+// undefined in the LayerNode.make() call below (boot crash, black TUI).
+// Re-exported for existing callers.
+export { similarity } from "./similarity";
+import { similarity } from "./similarity";
 
 function promptHead(prompt: string) {
 	const trimmed = prompt.trim();

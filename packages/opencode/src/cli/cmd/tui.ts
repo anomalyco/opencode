@@ -127,6 +127,16 @@ export const TuiThreadCommand = cmd({
       const cwd = Filesystem.resolve(process.cwd())
 
       const worker = new Worker(file)
+      // fork: a worker that dies (module-eval crash, OOM kill) used to leave
+      // every pending RPC call unresolved — the TUI sat on a black screen
+      // forever with the real error swallowed. Surface the error and exit;
+      // nothing works without the server worker.
+      worker.addEventListener("error", (event) => {
+        const detail = (event as ErrorEvent).message ?? String((event as ErrorEvent).error ?? "unknown error")
+        UI.error(`opencode server worker crashed during startup: ${detail}`)
+        UI.error("The TUI cannot run without its server worker. Run `opencode run` for a full stack trace, or check the log file.")
+        process.exit(1)
+      })
       const client = Rpc.client<typeof rpc>(worker)
       const reload = () => {
         client.call("reload", undefined).catch(() => {})

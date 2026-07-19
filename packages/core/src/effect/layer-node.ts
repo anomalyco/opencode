@@ -66,6 +66,15 @@ export function buildLayer<A, E>(node: Node<A, E>, options?: { readonly replacem
   const ids = new Map<AnyNode, number>()
 
   const visit = (input: AnyNode): RuntimeLayer => {
+    if (!input) {
+      const parent = stack[stack.length - 1]
+      const at = parent ? ` (dependency of ${parent.kind}#${ids.get(parent)})` : ""
+      throw new Error(
+        `Undefined node in app graph${at}. This is almost always a circular import: ` +
+          `a module's LayerNode.make(...) evaluated while one of its dependencies' modules ` +
+          `was still initializing, so that dependency's .node export was undefined.`,
+      )
+    }
     const node = replacements.get(input) ?? input
     const cached = cache.get(node)
     if (cached) return cached
