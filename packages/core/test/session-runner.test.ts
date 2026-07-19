@@ -4164,7 +4164,7 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("continues once after malformed local tool input without exposing raw arguments", () =>
+  it.effect("continues after malformed local tool input without exposing raw arguments", () =>
     Effect.gen(function* () {
       const session = yield* setup
       yield* admit(session, "Recover malformed tool input")
@@ -4226,7 +4226,6 @@ describe("SessionRunnerLLM", () => {
           message.type === "assistant" && message.content.some((item) => item.type === "tool"),
       )
       expect(failed).toMatchObject({
-        error: { type: "provider.invalid-output", message: "Invalid JSON input for test tool call echo" },
         content: [
           {
             type: "tool",
@@ -4244,10 +4243,11 @@ describe("SessionRunnerLLM", () => {
         ],
       })
       if (!failed) throw new Error("Malformed tool assistant missing")
+      expect(failed.error).toBeUndefined()
       expect((yield* recordedStepSettlementEvents(sessionID, failed.id)).map((event) => event.type)).toEqual([
         "session.step.started.1",
         "session.tool.failed.1",
-        "session.step.failed.1",
+        "session.step.ended.1",
       ])
       const database = (yield* Database.Service).db
       const durable = yield* database
@@ -4422,7 +4422,7 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("does not reset the malformed recovery budget after a valid tool step", () =>
+  it.effect("continues after repeated malformed tool input", () =>
     Effect.gen(function* () {
       const session = yield* setup
       yield* admit(session, "Keep producing malformed tools")
@@ -4444,16 +4444,43 @@ describe("SessionRunnerLLM", () => {
         reply.stop(),
       ]
 
-      expect(yield* session.resume(sessionID).pipe(Effect.flip)).toMatchObject({
-        error: {
-          type: "provider.invalid-output",
-          message: "Invalid JSON input for test tool call echo",
-        },
-      })
+      yield* session.resume(sessionID)
 
-      expect(requests).toHaveLength(3)
+      expect(requests).toHaveLength(4)
       expect(executions).toEqual(["valid"])
-      expect((yield* recordedEventTypes(sessionID)).filter((type) => type === "session.step.failed.1")).toHaveLength(2)
+      expect((yield* recordedEventTypes(sessionID)).filter((type) => type === "session.step.failed.1")).toHaveLength(0)
+    }),
+  )
+
+  it.effect("does not continue malformed tool input past the agent step limit", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      const agents = yield* AgentV2.Service
+      yield* agents.transform((editor) =>
+        editor.update(AgentV2.ID.make("build"), (agent) => {
+          agent.steps = 2
+        }),
+      )
+      yield* admit(session, "Stop malformed tools at the step limit")
+      const malformed = (id: string) => [
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.toolInputError({
+          id,
+          name: "echo",
+          raw: '{"text":"partial',
+          message: "Invalid JSON input for test tool call echo",
+        }),
+        LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
+        LLMEvent.finish({ reason: "tool-calls" }),
+      ]
+      responses = [malformed("call-first"), malformed("call-at-limit")]
+
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(2)
+      expect(requests[0]?.toolChoice).toBeUndefined()
+      expect(requests[1]?.toolChoice).toMatchObject({ type: "none" })
+      expect((yield* recordedEventTypes(sessionID)).filter((type) => type === "session.tool.failed.1")).toHaveLength(2)
     }),
   )
 

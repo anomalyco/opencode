@@ -80,7 +80,6 @@ const layer = Layer.effect(
       sessionID: SessionSchema.ID,
       promotion: SessionPending.Delivery | undefined,
       step: number,
-      recoverMalformedToolInput: boolean,
       recoverOverflow?: typeof compaction.compact,
       assistantMessageID?: SessionMessage.ID,
     ) {
@@ -144,6 +143,10 @@ const layer = Layer.effect(
               }
             }
             yield* publish(event)
+            if (LLMEvent.is.toolInputError(event)) {
+              if (prepared.resolveToolCall(event.name).type === "settle") needsContinuation = true
+              return
+            }
             if (event.type !== "tool-call" || event.providerExecuted) return
             const tool = prepared.resolveToolCall(event.name)
             if (tool.type === "reject") {
@@ -340,27 +343,15 @@ const layer = Layer.effect(
             )
           }
 
-          const recoveredMalformedToolInput =
-            recoverMalformedToolInput &&
-            publisher.hasMalformedToolInput() &&
-            stream._tag === "Success" &&
-            stepSettlement !== undefined &&
-            !providerFailed &&
-            !streamInterrupted &&
-            !userDeclined &&
-            !toolsInterrupted &&
-            infraError === undefined
-
           if (stream._tag === "Failure") return yield* Effect.failCause(stream.cause)
           if (userDeclined) return yield* Effect.interrupt
           if ((toolsInterrupted || infraError !== undefined) && settledFailure)
             return yield* Effect.failCause(settledFailure)
           if (toolsInterrupted && settled._tag === "Failure") return yield* Effect.failCause(settled.cause)
-          if (stepFailure && !recoveredMalformedToolInput) return yield* new StepFailedError({ error: stepFailure })
+          if (stepFailure) return yield* new StepFailedError({ error: stepFailure })
           return {
             _tag: "Completed",
-            needsContinuation: needsContinuation || recoveredMalformedToolInput,
-            malformedToolInput: recoveredMalformedToolInput,
+            needsContinuation,
             step: currentStep,
           } as const
         }),
@@ -371,7 +362,6 @@ const layer = Layer.effect(
       sessionID: SessionSchema.ID,
       promotion: SessionPending.Delivery | undefined,
       step: number,
-      recoverMalformedToolInput: boolean,
     ) {
       // Compaction restarts rebuild the request from compacted history without re-promoting.
       // Overflow recovery is one-shot: a post-compaction attempt must not recover another
@@ -382,14 +372,7 @@ const layer = Layer.effect(
       let assistantMessageID: SessionMessage.ID | undefined
       while (true) {
         const attempt = yield* Effect.suspend(() =>
-          attemptStep(
-            sessionID,
-            currentPromotion,
-            currentStep,
-            recoverMalformedToolInput,
-            recoverOverflow,
-            assistantMessageID,
-          ),
+          attemptStep(sessionID, currentPromotion, currentStep, recoverOverflow, assistantMessageID),
         ).pipe(
           Effect.tapError((error) =>
             error instanceof SessionRunnerRetry.RetryableFailure
@@ -414,7 +397,6 @@ const layer = Layer.effect(
         if (attempt._tag === "Completed")
           return {
             needsContinuation: attempt.needsContinuation,
-            malformedToolInput: attempt.malformedToolInput,
             step: attempt.step,
           }
         if (attempt._tag === "RestartAfterOverflowCompaction") recoverOverflow = undefined
@@ -474,18 +456,12 @@ const layer = Layer.effect(
       while (shouldRun) {
         let needsContinuation = true
         let step = 1
-        let canRecoverMalformedToolInput = true
         // Repeat steps while continuation is needed. A step needs continuation only
         // when it recorded local tool calls whose results the model has not yet seen;
         // a provider error suppresses it. Pending steers also continue the loop so
         // interjections are answered before the session goes idle.
         while (needsContinuation) {
-          const result = yield* runStep(
-            input.sessionID,
-            promotion,
-            step,
-            canRecoverMalformedToolInput,
-          )
+          const result = yield* runStep(input.sessionID, promotion, step)
           // Steer/queue promotion inside runStep has already made the pending input a visible
           // user message by this point, so the first-user-message check below is reliable.
           if (!titleAttempted.has(input.sessionID)) {
@@ -493,7 +469,6 @@ const layer = Layer.effect(
             forkTitle(title.generateForFirstPrompt(yield* getSession(input.sessionID)).pipe(Effect.ignore))
           }
           needsContinuation = result.needsContinuation
-          if (result.malformedToolInput) canRecoverMalformedToolInput = false
           step = result.step + 1
           if (needsContinuation) {
             yield* runPendingCompaction(input.sessionID)

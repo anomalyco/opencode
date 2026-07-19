@@ -61,7 +61,6 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
   let stepFailed = false
   let providerFailed = false
   let retryEvidence = false
-  let malformedToolInput = false
   let stepFailure: SessionError.Error | undefined
   let stepSettlement:
     | {
@@ -216,7 +215,6 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
     readonly id: string
     readonly name: string
     readonly raw: string
-    readonly message: string
   }) {
     if (!tools.has(event.id)) yield* startToolInput(event)
     const tool = tools.get(event.id)
@@ -226,7 +224,6 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
       return yield* Effect.die(new Error(`Tool input name changed for ${event.id}: ${tool.name} -> ${event.name}`))
     if (toolInput.has(event.id)) yield* endToolInput(event, event.raw)
     tool.settled = true
-    malformedToolInput = true
     yield* events.publish(SessionEvent.Tool.Failed, {
       sessionID: input.sessionID,
       assistantMessageID: tool.assistantMessageID,
@@ -237,7 +234,6 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
       },
       executed: false,
     })
-    if (stepFailure === undefined) stepFailure = { type: "provider.invalid-output", message: event.message }
   })
 
   const flush = Effect.fn("SessionRunner.flush")(function* () {
@@ -482,7 +478,6 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
     publishStepFailure,
     failUnsettledTools,
     hasProviderError: () => providerFailed,
-    hasMalformedToolInput: () => malformedToolInput,
     hasRetryEvidence: () => retryEvidence,
     stepFailure: () => stepFailure,
     stepSettlement: () => stepSettlement,
