@@ -2482,6 +2482,14 @@ export type ProviderNotFoundError = {
 export const isProviderNotFoundError = (value: unknown): value is ProviderNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ProviderNotFoundError"
 
+export type McpServerNotFoundError = {
+  readonly _tag: "McpServerNotFoundError"
+  readonly server: string
+  readonly message: string
+}
+export const isMcpServerNotFoundError = (value: unknown): value is McpServerNotFoundError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "McpServerNotFoundError"
+
 export type FormNotFoundError = { readonly _tag: "FormNotFoundError"; readonly id: string; readonly message: string }
 export const isFormNotFoundError = (value: unknown): value is FormNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "FormNotFoundError"
@@ -3460,6 +3468,24 @@ export type McpListOutput = {
   location: { directory: string; workspaceID?: string; project: { id: string; directory: string } }
   data: Array<McpServer>
 }
+
+export type McpConnectInput = {
+  readonly server: { readonly server: string }["server"]
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type McpConnectOutput = void
+
+export type McpDisconnectInput = {
+  readonly server: { readonly server: string }["server"]
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type McpDisconnectOutput = void
 
 export type McpResourceCatalogInput = {
   readonly location?: {

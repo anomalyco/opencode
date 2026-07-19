@@ -1,8 +1,12 @@
 import { MCP } from "@opencode-ai/core/mcp/index"
+import { McpServerNotFoundError } from "@opencode-ai/protocol/errors"
 import { Effect } from "effect"
-import { HttpApiBuilder } from "effect/unstable/httpapi"
+import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { Api } from "../api"
 import { response } from "../location"
+
+const notFound = <A, R>(effect: Effect.Effect<A, MCP.NotFoundError, R>) =>
+  effect.pipe(Effect.mapError((error) => new McpServerNotFoundError({ server: error.server, message: error.message })))
 
 export const McpHandler = HttpApiBuilder.group(Api, "server.mcp", (handlers) =>
   Effect.gen(function* () {
@@ -20,6 +24,22 @@ export const McpHandler = HttpApiBuilder.group(Api, "server.mcp", (handlers) =>
                 ),
               ),
           )
+        }),
+      )
+      .handle(
+        "mcp.connect",
+        Effect.fn(function* (ctx) {
+          const service = yield* MCP.Service
+          yield* notFound(service.connect(ctx.params.server))
+          return HttpApiSchema.NoContent.make()
+        }),
+      )
+      .handle(
+        "mcp.disconnect",
+        Effect.fn(function* (ctx) {
+          const service = yield* MCP.Service
+          yield* notFound(service.disconnect(ctx.params.server))
+          return HttpApiSchema.NoContent.make()
         }),
       )
       .handle(

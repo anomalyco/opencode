@@ -1,5 +1,6 @@
 import { createEffect, createMemo, createSignal, onMount, Show } from "solid-js"
 import { useData } from "../context/data"
+import { useClient } from "../context/client"
 import { Keymap } from "../context/keymap"
 import { pipe, sortBy } from "remeda"
 import { DialogSelect } from "../ui/dialog-select"
@@ -64,9 +65,12 @@ function statusMeta(status: McpServer["status"], themeV2: ComponentTheme) {
 export function DialogMcp() {
   const data = useData()
   const dialog = useDialog()
+  const client = useClient()
+  const toast = useToast()
   const { themeV2 } = useTheme().contextual("elevated")
   const [focused, setFocused] = createSignal<string>()
   const [detail, setDetail] = createSignal<McpServer>()
+  const [busy, setBusy] = createSignal(false)
 
   onMount(() => {
     dialog.setSize("large")
@@ -115,6 +119,19 @@ export function DialogMcp() {
     setDetail(server)
   }
 
+  // Connected servers disconnect; everything else (disabled, failed, needs_auth) retries a
+  // connection. The mcp.status.changed event refreshes the list, so no manual sync is needed.
+  const toggle = (name: string) => {
+    if (busy()) return
+    const server = servers().find((entry) => entry.name === name)
+    if (!server || server.status.status === "pending") return
+    setBusy(true)
+    const current = data.location.default()
+    const input = { server: name, location: { directory: current.directory, workspace: current.workspaceID } }
+    const call = server.status.status === "connected" ? client.api.mcp.disconnect(input) : client.api.mcp.connect(input)
+    void call.catch(toast.error).finally(() => setBusy(false))
+  }
+
   return (
     <box>
       <Show
@@ -127,6 +144,17 @@ export function DialogMcp() {
             preserveSelection
             onMove={(option) => setFocused(option.value as string)}
             onSelect={(option) => open(option.value as string)}
+            actions={[
+              {
+                title: "toggle",
+                command: "dialog.mcp.toggle",
+                hidden: busy(),
+                onTrigger: (option) => {
+                  setFocused(option.value as string)
+                  toggle(option.value as string)
+                },
+              },
+            ]}
             footer={
               <Show when={focusedError()}>
                 <text fg={themeV2.text.subdued()}>enter to view error</text>

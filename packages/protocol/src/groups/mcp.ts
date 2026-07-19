@@ -1,7 +1,8 @@
 import { Mcp } from "@opencode-ai/schema/mcp"
 import { Location } from "@opencode-ai/schema/location"
 import { Schema } from "effect"
-import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
+import { McpServerNotFoundError } from "../errors.js"
 import { LocationQuery, locationQueryOpenApi } from "./location.js"
 
 export const McpGroup = HttpApiGroup.make("server.mcp")
@@ -16,6 +17,38 @@ export const McpGroup = HttpApiGroup.make("server.mcp")
           identifier: "v2.mcp.list",
           summary: "List MCP servers",
           description: "Retrieve configured MCP servers and their connection status.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.post("mcp.connect", "/api/mcp/:server/connect", {
+      params: { server: Schema.String },
+      query: LocationQuery,
+      success: HttpApiSchema.NoContent,
+      error: McpServerNotFoundError,
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.mcp.connect",
+          summary: "Connect MCP server",
+          description: "Connect an MCP server at runtime, overriding a disabled configuration until restart.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.post("mcp.disconnect", "/api/mcp/:server/disconnect", {
+      params: { server: Schema.String },
+      query: LocationQuery,
+      success: HttpApiSchema.NoContent,
+      error: McpServerNotFoundError,
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.mcp.disconnect",
+          summary: "Disconnect MCP server",
+          description: "Disconnect an MCP server at runtime, removing its tools until reconnected.",
         }),
       ),
   )
