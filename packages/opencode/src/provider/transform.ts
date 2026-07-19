@@ -26,6 +26,23 @@ export function sanitizeSurrogates(content: string) {
   return content.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "\uFFFD")
 }
 
+// Kimi family endpoints are Moonshot's Anthropic-compatible API
+// (api.moonshot.ai/cn, api.kimi.com) and model families (kimi-*, moonshot-*).
+// Detection drives endpoint-specific request shaping (e.g. adaptive thinking
+// effort), so it matches on provider, model, and endpoint URL alike.
+export function isKimiFamily(model: Provider.Model): boolean {
+  const providerID = model.providerID?.toLowerCase() ?? ""
+  if (providerID.includes("kimi") || providerID.includes("moonshot")) return true
+  const apiID = model.api.id?.toLowerCase() ?? ""
+  if (apiID.includes("kimi") || apiID.includes("moonshot")) return true
+  const modelID = model.id?.toLowerCase() ?? ""
+  if (modelID.includes("kimi") || modelID.includes("moonshot")) return true
+  const url = model.api.url?.toLowerCase() ?? ""
+  return ["api.kimi.com", "api.moonshot.ai", "api.moonshot.cn", "api.moonshotai.cn"].some((host) =>
+    url.includes(host),
+  )
+}
+
 // Maps npm package to the key the AI SDK expects for providerOptions
 function sdkKey(npm: string): string | undefined {
   switch (npm) {
@@ -707,6 +724,17 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
       max: { effort: "max" },
     }
   }
+  // Kimi family models on the Anthropic protocol implement the adaptive
+  // thinking contract (thinking.type="adaptive" + output_config.effort), so
+  // expose effort levels instead of budget-token variants.
+  if (isKimiFamily(model) && model.api.npm === "@ai-sdk/anthropic") {
+    return Object.fromEntries(
+      ["low", "medium", "high", "xhigh", "max"].flatMap((effort) => {
+        const settings = anthropicEffort(model, effort)
+        return settings ? [[effort, settings]] : []
+      }),
+    )
+  }
   if (
     id.includes("deepseek-chat") ||
     id.includes("deepseek-reasoner") ||
@@ -1173,15 +1201,19 @@ export function options(input: {
     result["thinking"] = { type: "adaptive" }
   }
 
-  // Enable thinking by default for kimi models using anthropic SDK
+  // Enable adaptive thinking by default for kimi family models using the
+  // anthropic SDK. Moonshot's Anthropic-compatible endpoints implement the
+  // adaptive contract (thinking.type="adaptive" + output_config.effort,
+  // including xhigh and the display field), so effort is passed instead of
+  // budget tokens. Always request "summarized" so reasoning text is returned
+  // and can round-trip on replayed messages.
   if (
     (input.model.api.npm === "@ai-sdk/anthropic" || input.model.api.npm === "@ai-sdk/google-vertex/anthropic") &&
-    (modelId.includes("k2p") || modelId.includes("kimi-k2.") || modelId.includes("kimi-k2p"))
+    isKimiFamily(input.model) &&
+    input.model.capabilities.reasoning
   ) {
-    result["thinking"] = {
-      type: "enabled",
-      budgetTokens: Math.min(16_000, Math.floor(input.model.limit.output / 2 - 1)),
-    }
+    result["thinking"] = { type: "adaptive", display: "summarized" }
+    result["effort"] = "high"
   }
 
   // Enable thinking for reasoning models on alibaba-cn (DashScope).
@@ -1705,6 +1737,15 @@ function reasoningEffort(model: Provider.Model, effort: string) {
 
 function anthropicEffort(model: Provider.Model, effort: string) {
   if (["opus-4-5", "opus-4.5"].some((value) => model.api.id.includes(value))) return { effort }
+  // Kimi family endpoints implement the adaptive contract (verified against
+  // api.moonshot.cn/anthropic); always request "summarized" so reasoning text
+  // is returned and can round-trip on replayed messages.
+  if (isKimiFamily(model)) {
+    return {
+      thinking: { type: "adaptive", display: "summarized" },
+      effort,
+    }
+  }
   if (!anthropicAdaptiveEfforts(model.api.id)) return
   return {
     thinking: {

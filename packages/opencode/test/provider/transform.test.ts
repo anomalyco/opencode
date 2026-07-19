@@ -3119,6 +3119,19 @@ describe("ProviderTransform.reasoningVariants", () => {
     ).toEqual({ max: { effort: "max" } })
   })
 
+  test("maps models.dev effort options to adaptive thinking for kimi family targets", () => {
+    expect(
+      ProviderTransform.reasoningVariants(
+        model([{ type: "effort", values: ["low", "high", "max"] }]),
+        target("@ai-sdk/anthropic", "kimi-k3"),
+      ),
+    ).toEqual({
+      low: { thinking: { type: "adaptive", display: "summarized" }, effort: "low" },
+      high: { thinking: { type: "adaptive", display: "summarized" }, effort: "high" },
+      max: { thinking: { type: "adaptive", display: "summarized" }, effort: "max" },
+    })
+  })
+
   test("uses adaptive reasoning config for Anthropic models on Bedrock", () => {
     expect(
       ProviderTransform.reasoningVariants(
@@ -5134,5 +5147,117 @@ describe("ProviderTransform.providerOptions - ai-gateway-provider", () => {
     // which @ai-sdk/openai-compatible never reads, silently dropping reasoningEffort.
     const result = ProviderTransform.providerOptions(createModel(), { reasoningEffort: "high" })
     expect(result).toEqual({ openaiCompatible: { reasoningEffort: "high" } })
+  })
+})
+
+describe("ProviderTransform.options - kimi family adaptive thinking", () => {
+  const createModel = (overrides: Record<string, any> = {}) =>
+    ({
+      id: "moonshotai/kimi-k2-thinking",
+      providerID: "moonshotai",
+      api: {
+        id: "kimi-k2-thinking",
+        url: "https://api.moonshot.ai/anthropic",
+        npm: "@ai-sdk/anthropic",
+      },
+      name: "Kimi K2 Thinking",
+      capabilities: {
+        temperature: true,
+        reasoning: true,
+        attachment: false,
+        toolcall: true,
+        input: { text: true, audio: false, image: false, video: false, pdf: false },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: { input: 0.001, output: 0.002, cache: { read: 0.0001, write: 0.0002 } },
+      limit: { context: 262144, output: 262144 },
+      status: "active",
+      options: {},
+      headers: {},
+      ...overrides,
+    }) as any
+
+  test("uses adaptive thinking with effort instead of budget tokens", () => {
+    const result = ProviderTransform.options({ model: createModel(), sessionID: "s1", providerOptions: {} })
+    expect(result.thinking).toEqual({ type: "adaptive", display: "summarized" })
+    expect(result.effort).toBe("high")
+    expect(JSON.stringify(result)).not.toContain("budgetTokens")
+  })
+
+  test("does not enable thinking for kimi models without reasoning capability", () => {
+    const model = createModel()
+    model.capabilities.reasoning = false
+    const result = ProviderTransform.options({ model, sessionID: "s1", providerOptions: {} })
+    expect(result.thinking).toBeUndefined()
+  })
+
+  test("does not set thinking defaults for non-kimi anthropic models", () => {
+    const model = createModel({
+      id: "anthropic/claude-sonnet-4-5",
+      providerID: "anthropic",
+      api: {
+        id: "claude-sonnet-4-5",
+        url: "https://api.anthropic.com",
+        npm: "@ai-sdk/anthropic",
+      },
+    })
+    const result = ProviderTransform.options({ model, sessionID: "s1", providerOptions: {} })
+    expect(result.thinking).toBeUndefined()
+    expect(result.effort).toBeUndefined()
+  })
+
+  test("does not set adaptive thinking for kimi on openai-compatible", () => {
+    const model = createModel()
+    model.api = {
+      id: "kimi-k2-thinking",
+      url: "https://api.moonshot.ai/v1",
+      npm: "@ai-sdk/openai-compatible",
+    }
+    const result = ProviderTransform.options({ model, sessionID: "s1", providerOptions: {} })
+    expect(result.thinking).toBeUndefined()
+  })
+})
+
+describe("ProviderTransform.variants - kimi family adaptive thinking", () => {
+  const createModel = (npm: string) =>
+    ({
+      id: "moonshotai/kimi-k2-thinking",
+      providerID: "moonshotai",
+      api: {
+        id: "kimi-k2-thinking",
+        url: "https://api.moonshot.ai/anthropic",
+        npm,
+      },
+      name: "Kimi K2 Thinking",
+      capabilities: {
+        temperature: true,
+        reasoning: true,
+        attachment: false,
+        toolcall: true,
+        input: { text: true, audio: false, image: false, video: false, pdf: false },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: { input: 0.001, output: 0.002, cache: { read: 0.0001, write: 0.0002 } },
+      limit: { context: 262144, output: 262144 },
+      status: "active",
+      options: {},
+      headers: {},
+    }) as any
+
+  test("exposes effort levels instead of budget variants on the anthropic protocol", () => {
+    const result = ProviderTransform.variants(createModel("@ai-sdk/anthropic"))
+    expect(Object.keys(result)).toEqual(["low", "medium", "high", "xhigh", "max"])
+    for (const effort of Object.keys(result)) {
+      expect(result[effort]).toEqual({
+        thinking: { type: "adaptive", display: "summarized" },
+        effort,
+      })
+    }
+  })
+
+  test("keeps openai-compatible kimi without thinking variants", () => {
+    expect(ProviderTransform.variants(createModel("@ai-sdk/openai-compatible"))).toEqual({})
   })
 })
