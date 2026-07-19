@@ -5,7 +5,6 @@ import { Portal, useRenderer, useTerminalDimensions, type JSX } from "@opentui/s
 import type { TextareaRenderable } from "@opentui/core"
 import { useTheme } from "../../context/theme"
 import type { PermissionV2Request } from "@opencode-ai/client"
-import { SimulationSemantics } from "@opencode-ai/simulation/frontend/semantics"
 import { useClient } from "../../context/client"
 import { SplitBorder } from "../../ui/border"
 import { useData } from "../../context/data"
@@ -16,6 +15,7 @@ import { getScrollAcceleration } from "../../util/scroll"
 import { useConfig } from "../../config"
 import { Keymap } from "../../context/keymap"
 import { usePathFormatter } from "../../context/path-format"
+import { SimulationSemantics } from "../../simulation/semantics"
 
 type PermissionStage = "permission" | "always" | "reject"
 

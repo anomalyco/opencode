@@ -1,5 +1,3 @@
-export * as SimulationSemantics from "./semantics"
-
 import type { Renderable } from "@opentui/core"
 import type { SimulationProtocol } from "../protocol"
 
@@ -8,10 +6,15 @@ import type { SimulationProtocol } from "../protocol"
 // from the live render tree.
 export type Definition = Omit<SimulationProtocol.Frontend.SemanticNode, "id" | "element" | "parent">
 
-const definitions = new WeakMap<Renderable, () => Definition>()
+const key = Symbol.for("opencode.simulation.semantics")
 
-export const bind = (definition: () => Definition) => (renderable: Renderable) => {
-  definitions.set(renderable, definition)
+const bind = (definition: () => Definition) => (renderable: Renderable) => {
+  Object.defineProperty(renderable, key, { value: definition, configurable: true })
 }
 
-export const read = (renderable: Renderable) => definitions.get(renderable)
+export const read = (renderable: Renderable) => {
+  const definition: unknown = Reflect.get(renderable, key)
+  return typeof definition === "function" ? (definition as () => Definition) : undefined
+}
+
+export const SimulationSemantics = { bind, read }
