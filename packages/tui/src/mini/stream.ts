@@ -71,18 +71,15 @@ function traceCommit(commit: StreamCommit) {
     part: commit.part
       ? {
           id: commit.part.id,
-          sessionID: commit.part.sessionID,
-          messageID: commit.part.messageID,
-          callID: commit.part.callID,
-          tool: commit.part.tool,
+          tool: commit.part.name,
           state: {
             status: commit.part.state.status,
-            title: "title" in commit.part.state ? summarize(commit.part.state.title) : undefined,
-            error: "error" in commit.part.state ? summarize(commit.part.state.error) : undefined,
-            time: "time" in commit.part.state ? summarize(commit.part.state.time) : undefined,
             input: summarize(commit.part.state.input),
-            metadata: "metadata" in commit.part.state ? summarize(commit.part.state.metadata) : undefined,
+            structured: "structured" in commit.part.state ? summarize(commit.part.state.structured) : undefined,
+            content: "content" in commit.part.state ? summarize(commit.part.state.content) : undefined,
+            error: "error" in commit.part.state ? summarize(commit.part.state.error) : undefined,
           },
+          time: commit.part.time,
         }
       : undefined,
   }
@@ -106,22 +103,26 @@ export function traceSubagentState(state: FooterSubagentState) {
       action: item.action,
       resources: item.resources,
       source: item.source,
+      tool: item.tool
+        ? {
+            id: item.tool.id,
+            name: item.tool.name,
+            status: item.tool.state.status,
+            input: summarize(item.tool.state.input),
+          }
+        : undefined,
       metadata: item.metadata
         ? {
             keys: Object.keys(item.metadata),
-            input: summarize(item.metadata.input),
           }
         : undefined,
     })),
-    questions: state.questions.map((item) => ({
+    forms: state.forms.map((item) => ({
       id: item.id,
       sessionID: item.sessionID,
-      questions: item.questions.map((question) => ({
-        header: question.header,
-        question: question.question,
-        options: question.options.length,
-        multiple: question.multiple,
-      })),
+      title: item.title,
+      fields: item.fields.map((field) => ({ key: field.key, type: field.type })),
+      location: item.location,
     })),
   }
 }

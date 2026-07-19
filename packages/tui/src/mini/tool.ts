@@ -1,6 +1,6 @@
 // Per-tool display rules shared across `opencode run` output paths.
 //
-// Each known tool (shell, edit, write, task, etc.) has a ToolRule that controls
+// Each known tool (shell, edit, write, subagent, etc.) has a ToolRule that controls
 // five display hooks:
 //
 //   view       → visibility policy for progress/final scrollback entries and
@@ -15,9 +15,10 @@
 import os from "os"
 import path from "path"
 import stripAnsi from "strip-ansi"
+import type { SessionMessageAssistantTool } from "@opencode-ai/client/promise"
 import { LANGUAGE_EXTENSIONS } from "../util/filetype"
 import { Locale } from "../util/locale"
-import type { MiniToolPart, RunEntryBody, StreamCommit, ToolSnapshot } from "./types"
+import type { RunEntryBody, StreamCommit, ToolSnapshot } from "./types"
 
 export type { MiniToolPart } from "./types"
 
@@ -32,10 +33,9 @@ export type ToolPhase = "start" | "progress" | "final"
 export type ToolDict = Record<string, unknown>
 
 type PatchFile = {
-  type?: string
-  relativePath?: string
-  filePath?: string
-  movePath?: string
+  status?: string
+  file?: string
+  from?: string
   patch?: string
   deletions?: number
 }
@@ -43,11 +43,9 @@ type PatchFile = {
 type ToolInput = ToolDict & {
   path?: string
   pattern?: string
-  filePath?: string
-  filepath?: string
   url?: string
   query?: string
-  subagent_type?: string
+  agent?: string
   description?: string
   name?: string
   operation?: string
@@ -71,6 +69,7 @@ type ToolMetadata = ToolDict & {
 }
 
 export type ToolFrame = {
+  directory?: string
   raw: string
   name: string
   input: ToolDict
@@ -78,6 +77,11 @@ export type ToolFrame = {
   state: ToolDict
   status: string
   error: string
+  output: string
+  time: {
+    start?: number
+    end?: number
+  }
 }
 
 export type ToolInline = {
@@ -93,6 +97,7 @@ export type ToolPermissionInfo = {
   title: string
   lines: string[]
   diff?: string
+  patch?: string
   file?: string
 }
 
@@ -103,12 +108,14 @@ export type ToolProps = {
 }
 
 type ToolPermissionProps = {
+  directory?: string
   input: ToolInput
   metadata: ToolMetadata
   patterns: string[]
 }
 
 type ToolPermissionCtx = {
+  directory?: string
   input: ToolDict
   meta: ToolDict
   patterns: string[]
@@ -121,7 +128,7 @@ type ToolName =
   | "edit"
   | "patch"
   | "batch"
-  | "task"
+  | "subagent"
   | "question"
   | "read"
   | "glob"
@@ -163,6 +170,7 @@ function props(frame: ToolFrame): ToolProps {
 
 function permission(ctx: ToolPermissionCtx): ToolPermissionProps {
   return {
+    directory: ctx.directory,
     input: ctx.input,
     metadata: ctx.meta,
     patterns: ctx.patterns,
@@ -181,8 +189,85 @@ function text(v: unknown): string {
 
 export function toolOutputText(name: string, content: ReadonlyArray<{ type: string; text?: string }>) {
   // V2 shell content appends model-only status after the user-visible command output.
-  if (name === "shell") return content.find((item) => item.type === "text")?.text ?? ""
+  if (canonicalToolName(name) === "shell") return content.find((item) => item.type === "text")?.text ?? ""
   return content.flatMap((item) => (item.type === "text" && item.text ? [item.text] : [])).join("\n")
+}
+
+export function canonicalToolName(name: string) {
+  if (name === "bash") return "shell"
+  if (name === "task") return "subagent"
+  if (name === "apply_patch") return "patch"
+  return name
+}
+
+function normalizeInput(name: string, value: unknown) {
+  const input = dict(value)
+  const path = typeof input.path === "string" ? input.path : text(input.filePath) || text(input.filepath)
+  const agent = typeof input.agent === "string" ? input.agent : text(input.subagent_type)
+  return {
+    ...input,
+    ...(["read", "write", "edit", "lsp"].includes(name) && path ? { path } : {}),
+    ...(name === "subagent" && agent ? { agent } : {}),
+  }
+}
+
+function normalizeFile(value: unknown): PatchFile | undefined {
+  const file = dict(value)
+  const name = text(file.file) || text(file.relativePath) || text(file.filePath)
+  if (!name) return
+  const legacy = text(file.type)
+  const status =
+    text(file.status) ||
+    (legacy === "add"
+      ? "added"
+      : legacy === "delete"
+        ? "deleted"
+        : legacy === "update"
+          ? "modified"
+          : legacy === "move"
+            ? "moved"
+            : legacy)
+  const patch = typeof file.patch === "string" ? file.patch : text(file.diff) || undefined
+  const deletions = num(file.deletions)
+  return {
+    ...file,
+    file: name,
+    ...(status === "moved" && text(file.filePath) ? { from: text(file.filePath) } : {}),
+    ...(status ? { status } : {}),
+    ...(patch === undefined ? {} : { patch }),
+    ...(deletions === undefined ? {} : { deletions }),
+  }
+}
+
+function normalizeStructured(name: string, value: unknown) {
+  const structured = dict(value)
+  const files = list(structured.files).flatMap((item) => {
+    const file = normalizeFile(item)
+    return file ? [file] : []
+  })
+  const sessionID = text(structured.sessionID) || text(structured.sessionId)
+  return {
+    ...structured,
+    ...(["edit", "patch"].includes(name) && Array.isArray(structured.files) ? { files } : {}),
+    ...(name === "subagent" && sessionID ? { sessionID } : {}),
+    ...(name === "shell" && num(structured.exit) === undefined && num(structured.exitCode) !== undefined
+      ? { exit: num(structured.exitCode) }
+      : {}),
+  }
+}
+
+export function normalizeTool(tool: SessionMessageAssistantTool): SessionMessageAssistantTool {
+  const name = canonicalToolName(tool.name)
+  if (tool.state.status === "streaming") return { ...tool, name }
+  return {
+    ...tool,
+    name,
+    state: {
+      ...tool.state,
+      input: normalizeInput(name, tool.state.input),
+      structured: normalizeStructured(name, tool.state.structured),
+    },
+  } as SessionMessageAssistantTool
 }
 
 function num(v: unknown): number | undefined {
@@ -217,10 +302,9 @@ function info(data: ToolDict, skip: string[] = []): string {
   return `[${list.map(([key, val]) => `${key}=${String(val)}`).join(", ")}]`
 }
 
-function span(state: ToolDict): string {
-  const time = dict(state.time)
-  const start = num(time.start)
-  const end = num(time.end)
+function span(frame: ToolFrame): string {
+  const start = frame.time.start
+  const end = frame.time.end
   if (start === undefined || end === undefined || end <= start) {
     return ""
   }
@@ -268,7 +352,7 @@ function fallbackFinal(ctx: ToolFrame): string {
     return ctx.raw.trim()
   }
 
-  const time = span(ctx.state)
+  const time = span(ctx)
   if (!time) {
     return `${ctx.name} completed`
   }
@@ -276,12 +360,12 @@ function fallbackFinal(ctx: ToolFrame): string {
   return `${ctx.name} completed · ${time}`
 }
 
-export function toolPath(input?: string, opts: { home?: boolean } = {}): string {
+export function toolPath(input?: string, opts: { home?: boolean; directory?: string } = {}): string {
   if (!input) {
     return ""
   }
 
-  const cwd = process.cwd()
+  const cwd = opts.directory ?? process.cwd()
   const home = os.homedir()
   const abs = path.isAbsolute(input) ? input : path.resolve(cwd, input)
   const rel = path.relative(cwd, abs)
@@ -301,8 +385,12 @@ export function toolPath(input?: string, opts: { home?: boolean } = {}): string 
   return abs.replaceAll("\\", "/")
 }
 
+function displayPath(p: ToolProps, input?: string, opts: { home?: boolean } = {}) {
+  return toolPath(input, { ...opts, directory: p.frame.directory })
+}
+
 function fallbackInline(ctx: ToolFrame): ToolInline {
-  const title = text(ctx.state.title) || (Object.keys(ctx.input).length > 0 ? JSON.stringify(ctx.input) : "Unknown")
+  const title = Object.keys(ctx.input).length > 0 ? JSON.stringify(ctx.input) : "Unknown"
 
   return {
     icon: "⚙",
@@ -317,7 +405,7 @@ function count(n: number, label: string): string {
 function runGlob(p: ToolProps): ToolInline {
   const root = p.input.path ?? ""
   const title = `Glob "${p.input.pattern ?? ""}"`
-  const suffix = root ? `in ${toolPath(root)}` : ""
+  const suffix = root ? `in ${displayPath(p, root)}` : ""
   const matches = p.metadata.count
   const description = matches === undefined ? suffix : `${suffix}${suffix ? " · " : ""}${count(matches, "match")}`
   return {
@@ -330,7 +418,7 @@ function runGlob(p: ToolProps): ToolInline {
 function runGrep(p: ToolProps): ToolInline {
   const root = p.input.path ?? ""
   const title = `Grep "${p.input.pattern ?? ""}"`
-  const suffix = root ? `in ${toolPath(root)}` : ""
+  const suffix = root ? `in ${displayPath(p, root)}` : ""
   const matches = p.metadata.matches
   const description = matches === undefined ? suffix : `${suffix}${suffix ? " · " : ""}${count(matches, "match")}`
   return {
@@ -344,13 +432,13 @@ function runList(p: ToolProps): ToolInline {
   const dir = text(dict(p.input).path)
   return {
     icon: "→",
-    title: dir ? `List ${toolPath(dir)}` : "List",
+    title: dir ? `List ${displayPath(p, dir)}` : "List",
   }
 }
 
 function runRead(p: ToolProps): ToolInline {
-  const file = toolPath(p.input.filePath)
-  const description = info(p.frame.input, ["filePath"]) || undefined
+  const file = displayPath(p, p.input.path)
+  const description = info(p.frame.input, ["path"]) || undefined
   return {
     icon: "→",
     title: `Read ${file}`,
@@ -361,9 +449,9 @@ function runRead(p: ToolProps): ToolInline {
 function runWrite(p: ToolProps): ToolInline {
   return {
     icon: "←",
-    title: `Write ${toolPath(p.input.filePath)}`,
+    title: `Write ${displayPath(p, p.input.path)}`,
     mode: "block",
-    body: p.frame.status === "completed" ? text(p.frame.state.output) : undefined,
+    body: p.frame.status === "completed" ? p.frame.output : undefined,
   }
 }
 
@@ -376,11 +464,12 @@ function runWebfetch(p: ToolProps): ToolInline {
 }
 
 function runEdit(p: ToolProps): ToolInline {
+  const file = list<PatchFile>(p.metadata.files)[0]
   return {
     icon: "←",
-    title: `Edit ${toolPath(p.input.filePath)}`,
+    title: `Edit ${displayPath(p, p.input.path)}`,
     mode: "block",
-    body: p.metadata.diff,
+    body: file?.patch ?? p.metadata.diff,
   }
 }
 
@@ -393,12 +482,12 @@ function runWebSearch(p: ToolProps): ToolInline {
 }
 
 function runTask(p: ToolProps): ToolInline {
-  const kind = Locale.titlecase(p.input.subagent_type || "unknown")
+  const kind = Locale.titlecase(p.input.agent || "unknown")
   const desc = p.input.description
   const icon = p.frame.status === "error" ? "✗" : p.frame.status === "running" ? "•" : "✓"
   return {
     icon,
-    title: desc || `${kind} Task`,
+    title: desc || `${kind} Subagent`,
     description: desc ? `${kind} Agent` : undefined,
   }
 }
@@ -436,9 +525,9 @@ function runQuestion(p: ToolProps): ToolInline {
 function runInvalid(p: ToolProps): ToolInline {
   return {
     icon: "✗",
-    title: text(p.frame.state.title) || "Invalid Tool",
+    title: "Invalid Tool",
     mode: "block",
-    body: p.frame.status === "completed" ? text(p.frame.state.output) : undefined,
+    body: p.frame.status === "completed" ? p.frame.output : undefined,
   }
 }
 
@@ -446,23 +535,23 @@ function runBatch(p: ToolProps): ToolInline {
   const calls = list(dict(p.input).tool_calls).length
   return {
     icon: "#",
-    title: text(p.frame.state.title) || (calls > 0 ? `Batch ${calls} tool${calls === 1 ? "" : "s"}` : "Batch"),
+    title: calls > 0 ? `Batch ${calls} tool${calls === 1 ? "" : "s"}` : "Batch",
     mode: "block",
-    body: p.frame.status === "completed" ? text(p.frame.state.output) : undefined,
+    body: p.frame.status === "completed" ? p.frame.output : undefined,
   }
 }
 
 function lspTitle(
   input: {
     operation?: string
-    filePath?: string
+    path?: string
     line?: number
     character?: number
   },
-  opts: { home?: boolean } = {},
+  opts: { home?: boolean; directory?: string } = {},
 ): string {
   const op = input.operation || "request"
-  const file = input.filePath ? toolPath(input.filePath, opts) : ""
+  const file = input.path ? toolPath(input.path, opts) : ""
   const line = typeof input.line === "number" ? input.line : undefined
   const char = typeof input.character === "number" ? input.character : undefined
   const pos = line !== undefined && char !== undefined ? `:${line}:${char}` : ""
@@ -476,37 +565,35 @@ function lspTitle(
 function runLsp(p: ToolProps): ToolInline {
   return {
     icon: "→",
-    title: text(p.frame.state.title) || lspTitle(p.input),
+    title: lspTitle(p.input, { directory: p.frame.directory }),
   }
 }
 
 function runPlanExit(p: ToolProps): ToolInline {
   return {
     icon: "→",
-    title: text(p.frame.state.title) || "Switching to build agent",
+    title: "Switching to build agent",
     mode: "block",
-    body: p.frame.status === "completed" ? text(p.frame.state.output) : undefined,
+    body: p.frame.status === "completed" ? p.frame.output : undefined,
   }
 }
 
-function patchTitle(file: PatchFile): string {
-  const rel = file.relativePath
-  const from = file.filePath
-  if (file.type === "add") {
-    return `# Created ${rel || toolPath(from)}`
+function patchTitle(file: PatchFile, directory?: string): string {
+  if (file.status === "added") {
+    return `# Created ${toolPath(file.file, { directory })}`
   }
-  if (file.type === "delete") {
-    return `# Deleted ${rel || toolPath(from)}`
+  if (file.status === "deleted") {
+    return `# Deleted ${toolPath(file.file, { directory })}`
   }
-  if (file.type === "move") {
-    return `# Moved ${toolPath(from)} -> ${rel || toolPath(file.movePath)}`
+  if (file.status === "moved") {
+    return `# Moved ${toolPath(file.from, { directory })} -> ${toolPath(file.file, { directory })}`
   }
 
-  return `# Patched ${rel || toolPath(from)}`
+  return `# Patched ${toolPath(file.file, { directory })}`
 }
 
 function snapWrite(p: ToolProps): ToolSnapshot | undefined {
-  const file = p.input.filePath || ""
+  const file = p.input.path || ""
   const content = p.input.content || ""
   if (!file && !content) {
     return undefined
@@ -514,15 +601,16 @@ function snapWrite(p: ToolProps): ToolSnapshot | undefined {
 
   return {
     kind: "code",
-    title: `# Wrote ${toolPath(file)}`,
+    title: `# Wrote ${displayPath(p, file)}`,
     content,
     file,
   }
 }
 
 function snapEdit(p: ToolProps): ToolSnapshot | undefined {
-  const file = p.input.filePath || ""
-  const diff = p.metadata.diff || ""
+  const item = list<PatchFile>(p.metadata.files)[0]
+  const file = item?.file || p.input.path || ""
+  const diff = item?.patch || p.metadata.diff || ""
   if (!file || !diff.trim()) {
     return undefined
   }
@@ -531,7 +619,7 @@ function snapEdit(p: ToolProps): ToolSnapshot | undefined {
     kind: "diff",
     items: [
       {
-        title: `# Edited ${toolPath(file)}`,
+        title: `# Edited ${displayPath(p, file)}`,
         diff,
         file,
       },
@@ -555,10 +643,10 @@ function snapPatch(p: ToolProps): ToolSnapshot | undefined {
       return []
     }
 
-    const name = file.movePath || file.filePath || file.relativePath
+    const name = file.file
     return [
       {
-        title: patchTitle(file),
+        title: patchTitle(file, p.frame.directory),
         diff,
         file: name,
         deletions: typeof file.deletions === "number" ? file.deletions : 0,
@@ -566,7 +654,7 @@ function snapPatch(p: ToolProps): ToolSnapshot | undefined {
     ]
   })
 
-  if (items.length === 0) {
+  if (items.length !== files.length) {
     return undefined
   }
 
@@ -577,14 +665,13 @@ function snapPatch(p: ToolProps): ToolSnapshot | undefined {
 }
 
 function snapTask(p: ToolProps): ToolSnapshot {
-  const kind = Locale.titlecase(p.input.subagent_type || "general")
+  const kind = Locale.titlecase(p.input.agent || "general")
   const desc = p.input.description
-  const title = text(p.frame.state.title)
-  const rows = [desc || title].filter((item): item is string => Boolean(item))
+  const rows = [desc].filter((item): item is string => Boolean(item))
 
   return {
     kind: "task",
-    title: `# ${kind} Task`,
+    title: `# ${kind} Subagent`,
     rows,
     tail: "",
   }
@@ -610,7 +697,7 @@ function snapQuestion(p: ToolProps): ToolSnapshot {
 function scrollBashStart(p: ToolProps): string {
   const cmd = p.input.command ?? ""
   const wd = p.input.workdir ?? ""
-  const formatted = wd && wd !== "." ? toolPath(wd) : ""
+  const formatted = wd && wd !== "." ? displayPath(p, wd) : ""
   const dir = formatted === "." ? "" : formatted
   if (cmd && !dir) {
     return `$ ${cmd}`
@@ -636,7 +723,7 @@ function scrollBashProgress(p: ToolProps): string {
   }
 
   const wdRaw = (p.input.workdir ?? "").trim()
-  const wd = wdRaw ? toolPath(wdRaw) : ""
+  const wd = wdRaw ? displayPath(p, wdRaw) : ""
   const lines = out.split("\n")
   const first = (lines[0] || "").trim()
   const second = (lines[1] || "").trim()
@@ -662,7 +749,7 @@ function scrollShellFinal(p: ToolProps): string {
   }
 
   const code = p.metadata.exit ?? num(p.frame.meta.exitCode) ?? num(p.frame.meta.exit_code)
-  const time = span(p.frame.state)
+  const time = span(p.frame)
   if (code === undefined) {
     if (!time) {
       return "shell completed"
@@ -675,8 +762,8 @@ function scrollShellFinal(p: ToolProps): string {
 }
 
 function scrollReadStart(p: ToolProps): string {
-  const file = toolPath(p.input.filePath)
-  const extra = info(p.frame.input, ["filePath"])
+  const file = displayPath(p, p.input.path)
+  const extra = info(p.frame.input, ["path"])
   const tail = extra ? ` ${extra}` : ""
   return `→ Read ${file}${tail}`.trim()
 }
@@ -693,24 +780,19 @@ function scrollPatchStart(_: ToolProps): string {
   return ""
 }
 
-function patchLine(file: PatchFile): string {
-  const type = file.type
-  const rel = file.relativePath
-  const from = file.filePath
-
-  if (type === "add") {
-    return `+ Created ${rel || toolPath(from)}`
+function patchLine(file: PatchFile, directory?: string): string {
+  if (file.status === "added") {
+    return `+ Created ${toolPath(file.file, { directory })}`
   }
 
-  if (type === "delete") {
-    return `- Deleted ${rel || toolPath(from)}`
+  if (file.status === "deleted") {
+    return `- Deleted ${toolPath(file.file, { directory })}`
+  }
+  if (file.status === "moved") {
+    return `→ Moved ${toolPath(file.from, { directory })} → ${toolPath(file.file, { directory })}`
   }
 
-  if (type === "move") {
-    return `→ Moved ${toolPath(from)} → ${rel || toolPath(file.movePath)}`
-  }
-
-  return `~ Patched ${rel || toolPath(from)}`
+  return `~ Patched ${toolPath(file.file, { directory })}`
 }
 
 function scrollPatchFinal(p: ToolProps): string {
@@ -720,7 +802,7 @@ function scrollPatchFinal(p: ToolProps): string {
 
   const files = list<PatchFile>(p.frame.meta.files)
   if (files.length === 0) {
-    const time = span(p.frame.state)
+    const time = span(p.frame)
     if (!time) {
       return "patch"
     }
@@ -728,9 +810,9 @@ function scrollPatchFinal(p: ToolProps): string {
     return `patch · ${time}`
   }
 
-  const show_updates = !files.some((file) => file?.type && file.type !== "update")
-  const shown = files.filter((file) => show_updates || file.type !== "update")
-  const rows = shown.slice(0, 6).map(patchLine)
+  const showModified = !files.some((file) => file?.status && file.status !== "modified")
+  const shown = files.filter((file) => showModified || file.status !== "modified")
+  const rows = shown.slice(0, 6).map((file) => patchLine(file, p.frame.directory))
   if (shown.length > 6) {
     rows.push(`... and ${shown.length - 6} more`)
   }
@@ -739,7 +821,7 @@ function scrollPatchFinal(p: ToolProps): string {
     return rows.join("\n")
   }
 
-  return patchLine(files[0]!)
+  return patchLine(files[0]!, p.frame.directory)
 }
 
 function scrollTaskStart(_: ToolProps): string {
@@ -769,13 +851,13 @@ function scrollTaskFinal(p: ToolProps): string {
     return fail(p.frame)
   }
 
-  const kind = Locale.titlecase(p.input.subagent_type || "general")
-  const row = p.input.description || text(p.frame.state.title)
+  const kind = Locale.titlecase(p.input.agent || "general")
+  const row = p.input.description
   if (!row) {
-    return `# ${kind} Task`
+    return `# ${kind} Subagent`
   }
 
-  return `# ${kind} Task\n${row}`
+  return `# ${kind} Subagent\n${row}`
 }
 
 function scrollQuestionStart(_: ToolProps): string {
@@ -785,7 +867,7 @@ function scrollQuestionStart(_: ToolProps): string {
 function scrollQuestionFinal(p: ToolProps): string {
   const q = p.input.questions ?? []
   const a = p.metadata.answers ?? []
-  const time = span(p.frame.state)
+  const time = span(p.frame)
   if (q.length === 0) {
     if (!time) {
       return "0 questions"
@@ -810,7 +892,7 @@ function scrollQuestionFinal(p: ToolProps): string {
 }
 
 function scrollLspStart(p: ToolProps): string {
-  return `→ ${lspTitle(p.input)}`
+  return `→ ${lspTitle(p.input, { directory: p.frame.directory })}`
 }
 
 function scrollSkillStart(p: ToolProps): string {
@@ -825,7 +907,7 @@ function scrollGlobStart(p: ToolProps): string {
     return head
   }
 
-  return `${head} in ${toolPath(dir)}`
+  return `${head} in ${displayPath(p, dir)}`
 }
 
 function scrollGlobFinal(p: ToolProps): string {
@@ -840,7 +922,7 @@ function scrollGrepStart(p: ToolProps): string {
     return head
   }
 
-  return `${head} in ${toolPath(dir)}`
+  return `${head} in ${displayPath(p, dir)}`
 }
 
 function scrollListStart(p: ToolProps): string {
@@ -849,7 +931,7 @@ function scrollListStart(p: ToolProps): string {
     return "→ List"
   }
 
-  return `→ List ${toolPath(dir)}`
+  return `→ List ${displayPath(p, dir)}`
 }
 
 function scrollWebfetchStart(p: ToolProps): string {
@@ -872,23 +954,24 @@ function scrollWebSearchStart(p: ToolProps): string {
 }
 
 function permEdit(p: ToolPermissionProps): ToolPermissionInfo {
-  const input = p.input as { filePath?: string; filepath?: string; diff?: string }
-  const file = input.filePath || input.filepath || p.patterns[0] || ""
+  const file = p.input.path || p.patterns[0] || ""
+  const diff = (list<PatchFile>(p.metadata.files)[0]?.patch ?? text(p.metadata.diff)) || undefined
   return {
     icon: "→",
-    title: `Edit ${toolPath(file, { home: true })}`,
+    title: `Edit ${toolPath(file, { home: true, directory: p.directory })}`,
     lines: [],
-    diff: p.metadata.diff ?? input.diff,
+    diff,
+    patch: diff ? undefined : text(p.input.patchText) || undefined,
     file,
   }
 }
 
 function permRead(p: ToolPermissionProps): ToolPermissionInfo {
-  const file = p.input.filePath || p.patterns[0] || ""
+  const file = p.input.path || p.patterns[0] || ""
   return {
     icon: "→",
-    title: `Read ${toolPath(file, { home: true })}`,
-    lines: file ? [`Path: ${toolPath(file, { home: true })}`] : [],
+    title: `Read ${toolPath(file, { home: true, directory: p.directory })}`,
+    lines: file ? [`Path: ${toolPath(file, { home: true, directory: p.directory })}`] : [],
   }
 }
 
@@ -914,8 +997,8 @@ function permList(p: ToolPermissionProps): ToolPermissionInfo {
   const dir = text(dict(p.input).path) || p.patterns[0] || ""
   return {
     icon: "→",
-    title: `List ${toolPath(dir, { home: true })}`,
-    lines: dir ? [`Path: ${toolPath(dir, { home: true })}`] : [],
+    title: `List ${toolPath(dir, { home: true, directory: p.directory })}`,
+    lines: dir ? [`Path: ${toolPath(dir, { home: true, directory: p.directory })}`] : [],
   }
 }
 
@@ -929,11 +1012,11 @@ function permBash(p: ToolPermissionProps): ToolPermissionInfo {
 }
 
 function permTask(p: ToolPermissionProps): ToolPermissionInfo {
-  const type = p.input.subagent_type || "general"
+  const type = p.input.agent || "general"
   const desc = p.input.description
   return {
     icon: "#",
-    title: `${Locale.titlecase(type)} Task`,
+    title: `${Locale.titlecase(type)} Subagent`,
     lines: desc ? [`◉ ${desc}`] : [],
   }
 }
@@ -958,16 +1041,16 @@ function permWebSearch(p: ToolPermissionProps): ToolPermissionInfo {
 }
 
 function permLsp(p: ToolPermissionProps): ToolPermissionInfo {
-  const file = p.input.filePath || ""
+  const file = p.input.path || ""
   const line = typeof p.input.line === "number" ? p.input.line : undefined
   const char = typeof p.input.character === "number" ? p.input.character : undefined
   const pos = line !== undefined && char !== undefined ? `${line}:${char}` : undefined
   return {
     icon: "→",
-    title: lspTitle(p.input, { home: true }),
+    title: lspTitle(p.input, { home: true, directory: p.directory }),
     lines: [
       ...(p.input.operation ? [`Operation: ${p.input.operation}`] : []),
-      ...(file ? [`Path: ${toolPath(file, { home: true })}`] : []),
+      ...(file ? [`Path: ${toolPath(file, { home: true, directory: p.directory })}`] : []),
       ...(pos ? [`Position: ${pos}`] : []),
     ],
   }
@@ -1045,7 +1128,7 @@ const TOOL_RULES = {
       start: () => "",
     },
   },
-  task: {
+  subagent: {
     view: {
       output: false,
       final: true,
@@ -1184,29 +1267,52 @@ function rule(name?: string): AnyToolRule | undefined {
   return TOOL_RULES[name]
 }
 
-function frame(part: MiniToolPart): ToolFrame {
-  const state = dict(part.state)
+function frame(part: SessionMessageAssistantTool, directory?: string): ToolFrame {
+  const tool = normalizeTool(part)
+  if (tool.state.status === "streaming")
+    return {
+      directory,
+      raw: tool.state.input,
+      name: tool.name,
+      input: {},
+      meta: {},
+      state: dict(tool.state),
+      status: tool.state.status,
+      error: "",
+      output: "",
+      time: { start: tool.time.created },
+    }
+  const output = toolOutputText(tool.name, tool.state.content)
   return {
-    raw: "",
-    name: part.tool,
-    input: dict(state.input),
-    meta: "metadata" in part.state ? dict(part.state.metadata) : {},
-    state,
-    status: text(state.status),
-    error: text(state.error),
+    directory,
+    raw: output,
+    name: tool.name,
+    input: normalizeInput(tool.name, tool.state.input),
+    meta: normalizeStructured(tool.name, tool.state.structured),
+    state: dict(tool.state),
+    status: tool.state.status,
+    error: tool.state.status === "error" ? tool.state.error.message : "",
+    output,
+    time: {
+      start: tool.time.ran ?? tool.time.created,
+      end: tool.time.completed,
+    },
   }
 }
 
 export function toolFrame(commit: StreamCommit, raw: string): ToolFrame {
-  const state = dict(commit.part?.state)
+  const current = commit.part ? frame(commit.part, commit.directory) : undefined
   return {
+    directory: commit.directory,
     raw,
-    name: commit.tool || commit.part?.tool || "tool",
-    input: dict(state.input),
-    meta: commit.part?.state && "metadata" in commit.part.state ? dict(commit.part.state.metadata) : {},
-    state,
-    status: commit.toolState ?? text(state.status),
-    error: (commit.toolError ?? "").trim(),
+    name: canonicalToolName(commit.tool || current?.name || "tool"),
+    input: current?.input ?? {},
+    meta: current?.meta ?? {},
+    state: current?.state ?? {},
+    status: commit.toolState ?? current?.status ?? "",
+    error: (commit.toolError ?? current?.error ?? "").trim(),
+    output: current?.output ?? raw,
+    time: current?.time ?? {},
   }
 }
 
@@ -1215,13 +1321,13 @@ function runShell(p: ToolProps): ToolInline {
     icon: "$",
     title: p.input.command || "",
     mode: "block",
-    body: p.frame.status === "completed" ? text(p.frame.state.output).trim() : undefined,
+    body: p.frame.status === "completed" ? p.frame.output.trim() : undefined,
   }
 }
 
 export function toolView(name?: string): ToolView {
   return (
-    rule(name)?.view ?? {
+    rule(name ? canonicalToolName(name) : undefined)?.view ?? {
       output: true,
       final: true,
     }
@@ -1234,12 +1340,12 @@ export function toolStructuredFinal(commit: StreamCommit): boolean {
     commit.kind === "tool" &&
     commit.phase === "final" &&
     state === "completed" &&
-    Boolean(toolView(commit.tool ?? commit.part?.tool).snap)
+    Boolean(toolView(commit.tool ?? commit.part?.name).snap)
   )
 }
 
-export function toolInlineInfo(part: MiniToolPart): ToolInline {
-  const ctx = frame(part)
+export function toolInlineInfo(part: SessionMessageAssistantTool, directory?: string): ToolInline {
+  const ctx = frame(part, directory)
   const draw = rule(ctx.name)?.run
   try {
     if (draw) {
@@ -1284,14 +1390,23 @@ export function toolPermissionInfo(
   input: ToolDict,
   meta: ToolDict,
   patterns: string[],
+  directory?: string,
 ): ToolPermissionInfo | undefined {
-  const draw = rule(name)?.permission
+  const normalized = canonicalToolName(name)
+  const draw = rule(normalized)?.permission
   if (!draw) {
     return undefined
   }
 
   try {
-    return draw(permission({ input, meta, patterns }))
+    return draw(
+      permission({
+        directory,
+        input: normalizeInput(normalized, input),
+        meta: normalizeStructured(normalized, meta),
+        patterns,
+      }),
+    )
   } catch {
     return undefined
   }
@@ -1345,6 +1460,47 @@ function structuredBody(commit: StreamCommit, raw: string): RunEntryBody | undef
   }
 }
 
+const STRUCTURED_FALLBACK_DEPTH = 4
+const STRUCTURED_FALLBACK_ITEMS = 20
+const STRUCTURED_FALLBACK_LENGTH = 4_096
+
+function structuredFallback(value: ToolDict): RunEntryBody | undefined {
+  if (Object.keys(value).length === 0) return
+  const seen = new WeakSet<object>()
+  const bounded = (item: unknown, depth: number): unknown => {
+    if (!item || typeof item !== "object") {
+      if (typeof item === "bigint") return String(item)
+      return item
+    }
+    if (seen.has(item)) return "[circular]"
+    if (depth >= STRUCTURED_FALLBACK_DEPTH) return Array.isArray(item) ? "[items omitted]" : "[properties omitted]"
+    seen.add(item)
+    if (Array.isArray(item)) {
+      const result = item.slice(0, STRUCTURED_FALLBACK_ITEMS).map((entry) => bounded(entry, depth + 1))
+      if (item.length > STRUCTURED_FALLBACK_ITEMS) result.push(`[${item.length - STRUCTURED_FALLBACK_ITEMS} more items]`)
+      return result
+    }
+    const entries = Object.entries(item)
+    const result = Object.fromEntries(
+      entries.slice(0, STRUCTURED_FALLBACK_ITEMS).map(([key, entry]) => [key, bounded(entry, depth + 1)]),
+    )
+    if (entries.length > STRUCTURED_FALLBACK_ITEMS)
+      result["..."] = `[${entries.length - STRUCTURED_FALLBACK_ITEMS} more properties]`
+    return result
+  }
+  const content = JSON.stringify(bounded(value, 0), null, 2)
+  if (!content) return
+  const suffix = "\n... [truncated]"
+  return {
+    type: "code",
+    content:
+      content.length <= STRUCTURED_FALLBACK_LENGTH
+        ? content
+        : content.slice(0, STRUCTURED_FALLBACK_LENGTH - suffix.length) + suffix,
+    filetype: "json",
+  }
+}
+
 function shellOutput(command: string, raw: string): string | undefined {
   const body = stripAnsi(raw).replace(/^\n+/, "").replace(/\n+$/, "")
   if (!body) {
@@ -1379,13 +1535,13 @@ export function toolEntryBody(commit: StreamCommit, raw: string): RunEntryBody |
   const ctx = toolFrame(commit, raw)
   const view = toolView(ctx.name)
 
-  if (ctx.name === "task") {
+  if (ctx.name === "subagent") {
     if (commit.phase === "start") {
       return undefined
     }
 
     if (commit.phase === "final" && ctx.status === "completed") {
-      const result = taskResult(text(ctx.state.output))
+      const result = taskResult(ctx.output)
       if (result) {
         return markdownBody(result)
       }
@@ -1411,6 +1567,10 @@ export function toolEntryBody(commit: StreamCommit, raw: string): RunEntryBody |
 
     if (toolStructuredFinal(commit)) {
       return structuredBody(commit, raw) ?? textBody(toolScroll("final", ctx))
+    }
+
+    if (!rule(ctx.name) && !ctx.output.trim()) {
+      return structuredFallback(ctx.meta) ?? textBody(toolScroll("final", ctx))
     }
   }
 

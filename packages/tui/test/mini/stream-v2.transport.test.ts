@@ -5,8 +5,10 @@ import { pathToFileURL } from "node:url"
 import {
   OpenCode,
   type EventSubscribeOutput,
+  type FormInfo,
   type MessageListOutput,
   type OpenCodeClient,
+  type PermissionV2Request,
 } from "@opencode-ai/client/promise"
 import { createSessionTransport } from "../../src/mini/stream-v2.transport"
 import type { FooterApi, FooterEvent, StreamCommit } from "../../src/mini/types"
@@ -47,6 +49,14 @@ function feed() {
 
 function ok<T>(data: T) {
   return Promise.resolve(data)
+}
+
+function defer<T = void>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  const promise = new Promise<T>((done) => {
+    resolve = done
+  })
+  return { promise, resolve }
 }
 
 function connected(id = "evt_connected") {
@@ -110,11 +120,35 @@ function footer() {
 
 type SessionMessages = MessageListOutput["data"]
 
+function form(id: string, sessionID: string, title = id): FormInfo {
+  return {
+    id,
+    sessionID,
+    title,
+    fields: [
+      {
+        key: "answer",
+        type: "string",
+        options: [{ value: "yes", label: "Yes" }],
+        custom: true,
+      },
+    ],
+  }
+}
+
+function eventForm(info: FormInfo): Extract<RunV2Event, { type: "form.created" }>["data"]["form"] {
+  return info as Extract<RunV2Event, { type: "form.created" }>["data"]["form"]
+}
+
 function sdk(input: {
   streams: ReturnType<typeof feed>[]
   active?: () => Record<string, { type: "running" }>
   messages?: Record<string, SessionMessages>
   sessions?: Array<{ id: string; parentID?: string; title?: string; agent?: string; time: { updated: number } }>
+  forms?: Record<string, FormInfo[]>
+  globals?: FormInfo[]
+  globalLocation?: { directory: string; workspaceID?: string }
+  permissions?: Record<string, PermissionV2Request[]>
 }) {
   const client = OpenCode.make({ baseUrl: "https://opencode.test" })
   let subscription = 0
@@ -134,9 +168,23 @@ function sdk(input: {
       cursor: {},
     }),
   )
-  spyOn(client.permission, "list").mockImplementation(() => ok([]))
-  spyOn(client.question, "list").mockImplementation(() => ok([]))
+  spyOn(client.permission, "list").mockImplementation((request) => ok(input.permissions?.[request.sessionID] ?? []))
+  spyOn(client.form, "list").mockImplementation((request) => ok(input.forms?.[request.sessionID] ?? []))
+  spyOn(client.form.request, "list").mockImplementation(() =>
+    ok({
+      location: {
+        directory: input.globalLocation?.directory ?? "/tmp",
+        workspaceID: input.globalLocation?.workspaceID,
+        project: { id: "proj_1", directory: input.globalLocation?.directory ?? "/tmp" },
+      },
+      data: input.globals ?? [],
+    }),
+  )
   spyOn(client.session, "active").mockImplementation(() => ok(input.active?.() ?? {}))
+  spyOn(client.session, "message").mockImplementation((request) => {
+    const message = input.messages?.[request.sessionID]?.find((item) => item.id === request.messageID)
+    return message ? (ok(message) as never) : Promise.reject(new Error(`message not found: ${request.messageID}`))
+  })
   spyOn(client.session, "switchAgent").mockImplementation(() => ok(undefined))
   spyOn(client.session, "switchModel").mockImplementation(() => ok(undefined))
   // The generated methods have conditional return types for throwOnError; the
@@ -170,6 +218,232 @@ afterEach(() => {
 })
 
 describe("V2 mini transport", () => {
+  test("recursively hydrates blockers for direct and transitive descendants", async () => {
+    const events = feed()
+    events.push(connected())
+    const client = sdk({
+      streams: [events],
+      sessions: [
+        { id: "ses_child", parentID: "ses_1", title: "Child", time: { updated: 2 } },
+        { id: "ses_grandchild", parentID: "ses_child", title: "Grandchild", time: { updated: 1 } },
+      ],
+      forms: {
+        ses_child: [form("frm_child", "ses_child")],
+        ses_grandchild: [form("frm_grandchild", "ses_grandchild")],
+      },
+    })
+    const ui = footer()
+    const transport = await createSessionTransport({
+      sdk: client,
+      sessionID: "ses_1",
+      thinking: false,
+      limits: () => ({}),
+      footer: ui.api,
+    })
+    const snapshots = ui.events.flatMap((event) => (event.type === "stream.subagent" ? [event.state] : []))
+
+    expect(snapshots.at(-1)?.tabs.map((item) => item.sessionID)).toEqual(["ses_child", "ses_grandchild"])
+    expect(snapshots.at(-1)?.forms.map((item) => item.id)).toEqual(["frm_child", "frm_grandchild"])
+    expect(
+      ui.events.find(
+        (event) => event.type === "stream.view" && event.view.type === "form" && event.view.request.id === "frm_child",
+      ),
+    ).toMatchObject({
+      type: "stream.view",
+      view: { type: "form", request: { id: "frm_child", sessionID: "ses_child" } },
+    })
+    transport.settleForm?.("ses_child", "frm_child")
+    expect(ui.events.at(-1)).toMatchObject({
+      type: "stream.view",
+      view: { type: "form", request: { id: "frm_grandchild", sessionID: "ses_grandchild" } },
+    })
+    await transport.close()
+  })
+
+  test("resolves a pre-existing child permission from its exact source message at startup", async () => {
+    const events = feed()
+    events.push(connected())
+    const sourceMessage = {
+      id: "msg_child_source",
+      type: "assistant" as const,
+      agent: "build",
+      model: { providerID: "test", id: "model" },
+      content: [
+        {
+          type: "tool" as const,
+          id: "call_child_source",
+          name: "shell",
+          state: {
+            status: "running" as const,
+            input: { command: "git status --short" },
+            structured: {},
+            content: [],
+          },
+          time: { created: 1, ran: 1 },
+        },
+      ],
+      time: { created: 1 },
+    }
+    const permission: PermissionV2Request = {
+      id: "per_child_startup",
+      sessionID: "ses_child",
+      action: "shell",
+      resources: ["git status --short"],
+      source: { type: "tool", messageID: "msg_child_source", callID: "call_child_source" },
+    }
+    const client = sdk({
+      streams: [events],
+      sessions: [{ id: "ses_child", parentID: "ses_1", title: "Child", time: { updated: 1 } }],
+      permissions: { ses_child: [permission] },
+      messages: {
+        ses_child: [sourceMessage],
+      },
+    })
+    const releaseSource = defer<void>()
+    let sourceLookups = 0
+    spyOn(client.session, "message").mockImplementation(async () => {
+      sourceLookups++
+      if (sourceLookups === 1) throw new Error("source temporarily unavailable")
+      await releaseSource.promise
+      return sourceMessage as never
+    })
+    const ui = footer()
+    const transport = await createSessionTransport({
+      sdk: client,
+      sessionID: "ses_1",
+      thinking: false,
+      limits: () => ({}),
+      footer: ui.api,
+    })
+
+    while (sourceLookups < 2) await Bun.sleep(0)
+    expect(
+      ui.events.some(
+        (event) =>
+          event.type === "stream.view" && event.view.type === "permission" && event.view.request.id === permission.id,
+      ),
+    ).toBe(false)
+    releaseSource.resolve()
+    while (
+      !ui.events.some(
+        (event) =>
+          event.type === "stream.view" && event.view.type === "permission" && event.view.request.id === permission.id,
+      )
+    )
+      await Bun.sleep(0)
+
+    expect(client.session.message).toHaveBeenCalledWith(
+      { sessionID: "ses_child", messageID: "msg_child_source" },
+      { signal: expect.any(AbortSignal) },
+    )
+    expect(
+      ui.events.find(
+        (event) =>
+          event.type === "stream.view" && event.view.type === "permission" && event.view.request.id === permission.id,
+      ),
+    ).toMatchObject({
+      view: {
+        request: {
+          tool: {
+            id: "call_child_source",
+            name: "shell",
+            state: { status: "running", input: { command: "git status --short" } },
+          },
+        },
+      },
+    })
+    expect(client.message.list).not.toHaveBeenCalledWith(
+      expect.objectContaining({ sessionID: "ses_child" }),
+      expect.anything(),
+    )
+    await transport.close()
+  })
+
+  test("reduces nested form owners idempotently and filters global events by complete location", async () => {
+    const events = feed()
+    events.push(connected())
+    const client = sdk({
+      streams: [events],
+      sessions: [{ id: "ses_child", parentID: "ses_1", title: "Child", time: { updated: 1 } }],
+      globalLocation: { directory: "/work", workspaceID: "wrk_1" },
+    })
+    const ui = footer()
+    const transport = await createSessionTransport({
+      sdk: client,
+      location: { directory: "/work", workspaceID: "wrk_1" },
+      sessionID: "ses_1",
+      thinking: false,
+      limits: () => ({}),
+      footer: ui.api,
+    })
+    const child = form("frm_child_live", "ses_child")
+    events.push({ id: "evt_child_form", created: 1, type: "form.created", data: { form: eventForm(child) } })
+    events.push({ id: "evt_child_form_retry", created: 2, type: "form.created", data: { form: eventForm(child) } })
+    while (
+      !ui.events.some(
+        (event) => event.type === "stream.view" && event.view.type === "form" && event.view.request.id === child.id,
+      )
+    )
+      await Bun.sleep(0)
+    const childSnapshots = ui.events.flatMap((event) => (event.type === "stream.subagent" ? [event.state] : []))
+    expect(childSnapshots.at(-1)?.forms.filter((item) => item.id === child.id)).toHaveLength(1)
+
+    events.push({
+      id: "evt_child_form_done",
+      created: 3,
+      type: "form.replied",
+      data: { id: child.id, sessionID: "ses_child", answer: { answer: "yes" } },
+    })
+    const global = form("frm_global_live", "global")
+    events.push({
+      id: "evt_global_wrong",
+      created: 4,
+      type: "form.created",
+      location: { directory: "/work", workspaceID: "wrk_other" },
+      data: { form: eventForm(global) },
+    })
+    await Bun.sleep(0)
+    expect(
+      ui.events.some(
+        (event) => event.type === "stream.view" && event.view.type === "form" && event.view.request.id === global.id,
+      ),
+    ).toBe(false)
+    events.push({
+      id: "evt_global_right",
+      created: 5,
+      type: "form.created",
+      location: { directory: "/work", workspaceID: "wrk_1" },
+      data: { form: eventForm(global) },
+    })
+    while (
+      !ui.events.some(
+        (event) => event.type === "stream.view" && event.view.type === "form" && event.view.request.id === global.id,
+      )
+    )
+      await Bun.sleep(0)
+    expect(ui.events.at(-1)).toMatchObject({
+      type: "stream.view",
+      view: {
+        type: "form",
+        request: { id: "frm_global_live", location: { directory: "/work", workspaceID: "wrk_1" } },
+      },
+    })
+    const beforeCancel = ui.events.filter((event) => event.type === "stream.view").length
+    events.push({
+      id: "evt_global_done",
+      created: 6,
+      type: "form.cancelled",
+      location: { directory: "/work", workspaceID: "wrk_1" },
+      data: { id: global.id, sessionID: "global" },
+    })
+    while (ui.events.filter((event) => event.type === "stream.view").length === beforeCancel) await Bun.sleep(0)
+    expect(ui.events.filter((event) => event.type === "stream.view").at(-1)).toEqual({
+      type: "stream.view",
+      view: { type: "prompt" },
+    })
+    await transport.close()
+  })
+
   test("hydrates projection, reduces live output, and completes on settlement", async () => {
     const events = feed()
     events.push(connected())
@@ -333,7 +607,7 @@ describe("V2 mini transport", () => {
     const remoteList = spyOn(client.file, "list")
     const transport = await createSessionTransport({
       sdk: client,
-      directory: "/remote/project",
+      location: { directory: "/remote/project" },
       sessionID: "ses_1",
       thinking: false,
       limits: () => ({}),
@@ -653,6 +927,179 @@ describe("V2 mini transport", () => {
     await turn
 
     expect(ui.commits.filter((item) => item.kind === "user" && item.messageID === "msg_prompt")).toHaveLength(1)
+    await transport.close()
+  })
+
+  test("replaces the client for buffered hydration, descendants, turns, and interrupts", async () => {
+    const firstEvents = feed()
+    const secondEvents = feed()
+    firstEvents.push(connected("evt_connected_1"))
+    secondEvents.push(connected("evt_connected_2"))
+    const first = sdk({ streams: [firstEvents] })
+    const second = sdk({
+      streams: [secondEvents],
+      sessions: [{ id: "ses_child", parentID: "ses_1", title: "Child", time: { updated: 2 } }],
+      forms: { ses_child: [form("frm_child", "ses_child")] },
+    })
+    const firstPrompt = spyOn(first.session, "prompt")
+    const firstInterrupt = spyOn(first.session, "interrupt")
+    spyOn(first.message, "list").mockImplementation(() =>
+      ok({
+        data: [
+          {
+            id: "msg_assistant",
+            type: "assistant",
+            agent: "build",
+            model: { providerID: "test", id: "model" },
+            content: [{ type: "text", text: "partial" }],
+            time: { created: 1 },
+          },
+        ],
+        cursor: {},
+      }),
+    )
+    let releaseHydration!: () => void
+    let replacementHydrating = false
+    const hydration = new Promise<void>((resolve) => {
+      releaseHydration = resolve
+    })
+    let releaseCatalog!: () => void
+    let refreshes = 0
+    const catalog = new Promise<void>((resolve) => {
+      releaseCatalog = resolve
+    })
+    spyOn(second.message, "list").mockImplementation(async (request) => {
+      if (request.sessionID !== "ses_1") return ok({ data: [], cursor: {} })
+      replacementHydrating = true
+      await hydration
+      return ok({
+        data: [
+          {
+            id: "msg_assistant",
+            type: "assistant",
+            agent: "build",
+            model: { providerID: "test", id: "model" },
+            content: [{ type: "text", text: "partial replacement" }],
+            time: { created: 1 },
+          },
+        ],
+        cursor: {},
+      })
+    })
+    const current: OpenCodeClient[] = []
+    const ui = footer()
+    const transport = await createSessionTransport({
+      sdk: first,
+      reconnect: async () => second,
+      onClient: (client) => current.push(client),
+      sessionID: "ses_1",
+      thinking: false,
+      replay: true,
+      limits: () => ({}),
+      footer: ui.api,
+      onCatalogRefresh: () => {
+        refreshes++
+        if (refreshes === 2) return catalog
+      },
+    })
+
+    firstEvents.close()
+    while (!replacementHydrating) await Bun.sleep(0)
+    await expect(
+      transport.runPromptTurn({
+        agent: undefined,
+        model: undefined,
+        variant: undefined,
+        prompt: { messageID: "msg_blocked", text: "blocked", parts: [] },
+        files: [],
+        includeFiles: true,
+      }),
+    ).rejects.toThrow("Event stream is reconnecting")
+    secondEvents.push({
+      id: "evt_buffered_text",
+      created: 2,
+      type: "session.text.delta",
+      data: {
+        sessionID: "ses_1",
+        assistantMessageID: "msg_assistant",
+        ordinal: 0,
+        delta: " replacement",
+      },
+    })
+    let resized = false
+    const resize = transport.replayOnResize({
+      localRows: () => [],
+      reset: async () => {
+        resized = true
+      },
+    })
+    releaseHydration()
+    while (
+      !ui.events.some(
+        (event) => event.type === "stream.view" && event.view.type === "form" && event.view.request.id === "frm_child",
+      )
+    )
+      await Bun.sleep(0)
+    while (refreshes < 2) await Bun.sleep(0)
+    await resize
+    expect(resized).toBe(false)
+    await expect(
+      transport.runPromptTurn({
+        agent: undefined,
+        model: undefined,
+        variant: undefined,
+        prompt: { messageID: "msg_catalog_blocked", text: "blocked", parts: [] },
+        files: [],
+        includeFiles: true,
+      }),
+    ).rejects.toThrow("Event stream is reconnecting")
+    releaseCatalog()
+    await Bun.sleep(0)
+
+    expect(current).toEqual([second])
+    expect(first.event.subscribe).toHaveBeenCalledTimes(1)
+    expect(second.event.subscribe).toHaveBeenCalledTimes(1)
+    expect(second.session.list).toHaveBeenCalled()
+    expect(second.form.list).toHaveBeenCalledWith({ sessionID: "ses_child" }, { signal: expect.any(AbortSignal) })
+    expect(ui.commits.filter((commit) => commit.messageID === "msg_assistant").map((commit) => commit.text)).toEqual([
+      "partial",
+      " replacement",
+    ])
+
+    const prompt = spyOn(second.session, "prompt").mockImplementation((request) => {
+      queueMicrotask(() => {
+        secondEvents.push({
+          id: "evt_replacement_prompt",
+          created: 3,
+          type: "session.input.promoted",
+          durable: durable("ses_1", 1),
+          data: { sessionID: "ses_1", inputID: "msg_replacement" },
+        })
+        secondEvents.push({
+          id: "evt_replacement_settled",
+          created: 4,
+          type: "session.execution.succeeded",
+          durable: durable("ses_1", 2),
+          data: { sessionID: "ses_1" },
+        })
+      })
+      return ok({ data: promptAdmission(request) }) as never
+    })
+    await transport.runPromptTurn({
+      agent: undefined,
+      model: undefined,
+      variant: undefined,
+      prompt: { messageID: "msg_replacement", text: "replacement prompt", parts: [] },
+      files: [],
+      includeFiles: true,
+    })
+    const interrupt = spyOn(second.session, "interrupt").mockImplementation(() => ok(undefined))
+    await transport.interruptActiveTurn()
+
+    expect(prompt).toHaveBeenCalled()
+    expect(interrupt).toHaveBeenCalledWith({ sessionID: "ses_1" })
+    expect(firstPrompt).not.toHaveBeenCalled()
+    expect(firstInterrupt).not.toHaveBeenCalled()
     await transport.close()
   })
 
@@ -1230,6 +1677,7 @@ describe("V2 mini transport", () => {
     const ui = footer()
     const transport = await createSessionTransport({
       sdk: client,
+      location: { directory: "/session", workspaceID: "work-1" },
       sessionID: "ses_1",
       thinking: false,
       limits: () => ({}),
@@ -1264,8 +1712,159 @@ describe("V2 mini transport", () => {
     await Bun.sleep(0)
 
     expect(ui.commits).toContainEqual(
-      expect.objectContaining({ kind: "tool", phase: "start", partID: "prt_call_read", tool: "read" }),
+      expect.objectContaining({
+        kind: "tool",
+        phase: "start",
+        partID: "prt_call_read",
+        tool: "read",
+        directory: "/session",
+      }),
     )
+    await transport.close()
+  })
+
+  test("tracks repeated root call IDs independently across assistant messages", async () => {
+    const events = feed()
+    events.push(connected())
+    const client = sdk({ streams: [events] })
+    const ui = footer()
+    const transport = await createSessionTransport({
+      sdk: client,
+      sessionID: "ses_1",
+      thinking: false,
+      limits: () => ({}),
+      footer: ui.api,
+    })
+
+    for (const [index, messageID] of ["msg_tool_one", "msg_tool_two"].entries()) {
+      events.push({
+        id: `evt_repeated_input_${index}`,
+        created: index * 3 + 1,
+        type: "session.tool.input.started",
+        durable: durable("ses_1", index * 3),
+        data: { sessionID: "ses_1", assistantMessageID: messageID, callID: "call_repeated", name: "read" },
+      })
+      events.push({
+        id: `evt_repeated_called_${index}`,
+        created: index * 3 + 2,
+        type: "session.tool.called",
+        durable: durable("ses_1", index * 3 + 1),
+        data: {
+          sessionID: "ses_1",
+          assistantMessageID: messageID,
+          callID: "call_repeated",
+          input: { path: `${index + 1}.txt` },
+          executed: true,
+        },
+      })
+      events.push({
+        id: `evt_repeated_success_${index}`,
+        created: index * 3 + 3,
+        type: "session.tool.success",
+        durable: durable("ses_1", index * 3 + 2),
+        data: {
+          sessionID: "ses_1",
+          assistantMessageID: messageID,
+          callID: "call_repeated",
+          structured: {},
+          content: [],
+          executed: true,
+        },
+      })
+    }
+    await Bun.sleep(0)
+
+    const commits = ui.commits.filter((item) => item.part?.id === "call_repeated")
+    expect(commits.map((item) => [item.messageID, item.phase])).toEqual([
+      ["msg_tool_one", "start"],
+      ["msg_tool_one", "final"],
+      ["msg_tool_two", "start"],
+      ["msg_tool_two", "final"],
+    ])
+    expect(
+      commits
+        .filter((item) => item.phase === "final")
+        .map((item) => (item.part?.state.status === "streaming" ? undefined : item.part?.state.input)),
+    ).toEqual([{ path: "1.txt" }, { path: "2.txt" }])
+    await transport.close()
+  })
+
+  test("reduces root tool progress and preserves it on failure", async () => {
+    const events = feed()
+    events.push(connected())
+    const client = sdk({ streams: [events] })
+    const ui = footer()
+    const transport = await createSessionTransport({
+      sdk: client,
+      sessionID: "ses_1",
+      thinking: false,
+      limits: () => ({}),
+      footer: ui.api,
+    })
+    events.push({
+      id: "evt_progress_input",
+      created: 1,
+      type: "session.tool.input.started",
+      durable: durable("ses_1"),
+      data: {
+        sessionID: "ses_1",
+        assistantMessageID: "msg_progress",
+        callID: "call_progress",
+        name: "shell",
+      },
+    })
+    events.push({
+      id: "evt_progress_called",
+      created: 2,
+      type: "session.tool.called",
+      durable: durable("ses_1", 1),
+      data: {
+        sessionID: "ses_1",
+        assistantMessageID: "msg_progress",
+        callID: "call_progress",
+        input: { command: "printf partial && false" },
+        executed: true,
+      },
+    })
+    events.push({
+      id: "evt_progress",
+      created: 3,
+      type: "session.tool.progress",
+      durable: durable("ses_1", 2),
+      data: {
+        sessionID: "ses_1",
+        assistantMessageID: "msg_progress",
+        callID: "call_progress",
+        structured: { checkpoint: 1 },
+        content: [{ type: "text", text: "partial" }],
+      },
+    })
+    events.push({
+      id: "evt_progress_failed",
+      created: 4,
+      type: "session.tool.failed",
+      durable: durable("ses_1", 3),
+      data: {
+        sessionID: "ses_1",
+        assistantMessageID: "msg_progress",
+        callID: "call_progress",
+        error: { type: "unknown", message: "boom" },
+        executed: true,
+      },
+    })
+    await Bun.sleep(0)
+
+    const commits = ui.commits.filter((item) => item.part?.id === "call_progress")
+    expect(commits.map((item) => [item.phase, item.text, item.toolState])).toEqual([
+      ["start", "running shell", "running"],
+      ["progress", "partial", "running"],
+      ["final", "boom", "error"],
+    ])
+    expect(commits.at(-1)?.part?.state).toMatchObject({
+      status: "error",
+      structured: { checkpoint: 1 },
+      content: [{ type: "text", text: "partial" }],
+    })
     await transport.close()
   })
 
@@ -1436,7 +2035,7 @@ describe("V2 mini transport", () => {
     await transport.close()
   })
 
-  test.skip("runs a shell turn through v2.session.shell and renders live output", async () => {
+  test("runs a shell turn through v2.session.shell and renders live output", async () => {
     const events = feed()
     events.push(connected())
     const client = sdk({ streams: [events] })
@@ -1507,7 +2106,7 @@ describe("V2 mini transport", () => {
 
     expect(request).toMatchObject({ sessionID: "ses_1", command: "ls", id: expect.stringMatching(/^evt_/) })
     expect(ui.commits.filter((item) => item.shell)).toMatchObject([
-      { phase: "start", tool: "bash", toolState: "running", shell: { callID: "sh_shell", command: "ls" } },
+      { phase: "start", tool: "shell", toolState: "running", shell: { callID: "sh_shell", command: "ls" } },
       { phase: "progress", text: "file.txt", toolState: "completed", shell: { callID: "sh_shell", command: "ls" } },
     ])
     expect(ui.events).toContainEqual({ type: "stream.patch", patch: { phase: "running", status: "running shell" } })
@@ -2053,7 +2652,10 @@ describe("V2 mini transport", () => {
     let refreshes = 0
     const transport = await createSessionTransport({
       sdk: client,
-      directory: "/project",
+      location: {
+        directory: "/project",
+        workspaceID: "work-1",
+      },
       sessionID: "ses_1",
       thinking: false,
       limits: () => ({}),
@@ -2070,12 +2672,25 @@ describe("V2 mini transport", () => {
       "skill.updated",
       "reference.updated",
     ] as const)
-      events.push({ id: `evt_${type}`, created: 0, type, location: { directory: "/project" }, data: {} })
+      events.push({
+        id: `evt_${type}`,
+        created: 0,
+        type,
+        location: { directory: "/project", workspaceID: "work-1" },
+        data: {},
+      })
     events.push({
       id: "evt_foreign_catalog",
       created: 0,
       type: "catalog.updated",
       location: { directory: "/other" },
+      data: {},
+    })
+    events.push({
+      id: "evt_foreign_workspace_catalog",
+      created: 0,
+      type: "catalog.updated",
+      location: { directory: "/project", workspaceID: "work-2" },
       data: {},
     })
     while (refreshes < 7) await Bun.sleep(0)
@@ -2128,6 +2743,175 @@ describe("V2 mini transport", () => {
     await Bun.sleep(0)
 
     expect(ui.commits.filter((item) => item.text === '→ Skill "tigerstyle"')).toHaveLength(1)
+    await transport.close()
+  })
+
+  test("discovers current subagents from progress and reduces descendant tool state", async () => {
+    const events = feed()
+    events.push(connected())
+    const client = sdk({ streams: [events], messages: { ses_child_progress: [] } })
+    const ui = footer()
+    const transport = await createSessionTransport({
+      sdk: client,
+      sessionID: "ses_1",
+      thinking: false,
+      limits: () => ({}),
+      footer: ui.api,
+    })
+    const states = () => ui.events.flatMap((event) => (event.type === "stream.subagent" ? [event.state] : []))
+    events.push({
+      id: "evt_subagent_input",
+      created: 1,
+      type: "session.tool.input.started",
+      durable: durable("ses_1"),
+      data: {
+        sessionID: "ses_1",
+        assistantMessageID: "msg_subagent",
+        callID: "call_subagent",
+        name: "subagent",
+      },
+    })
+    events.push({
+      id: "evt_subagent_called",
+      created: 2,
+      type: "session.tool.called",
+      durable: durable("ses_1", 1),
+      data: {
+        sessionID: "ses_1",
+        assistantMessageID: "msg_subagent",
+        callID: "call_subagent",
+        input: { agent: "explore", description: "Inspect progress", prompt: "inspect" },
+        executed: true,
+      },
+    })
+    events.push({
+      id: "evt_subagent_progress",
+      created: 3,
+      type: "session.tool.progress",
+      durable: durable("ses_1", 2),
+      data: {
+        sessionID: "ses_1",
+        assistantMessageID: "msg_subagent",
+        callID: "call_subagent",
+        structured: { sessionID: "ses_child_progress", status: "running" },
+        content: [],
+      },
+    })
+    while (!states().some((state) => state.tabs.some((tab) => tab.sessionID === "ses_child_progress")))
+      await Bun.sleep(0)
+    expect(states().at(-1)?.tabs).toMatchObject([
+      {
+        sessionID: "ses_child_progress",
+        label: "Explore",
+        description: "Inspect progress",
+        status: "running",
+        background: undefined,
+      },
+    ])
+
+    transport.selectSubagent("ses_child_progress")
+    while (!states().at(-1)?.details.ses_child_progress) await Bun.sleep(0)
+    events.push({
+      id: "evt_child_tool_input",
+      created: 4,
+      type: "session.tool.input.started",
+      durable: durable("ses_child_progress"),
+      data: {
+        sessionID: "ses_child_progress",
+        assistantMessageID: "msg_child_tool",
+        callID: "call_child_shell",
+        name: "shell",
+      },
+    })
+    events.push({
+      id: "evt_child_tool_called",
+      created: 5,
+      type: "session.tool.called",
+      durable: durable("ses_child_progress", 1),
+      data: {
+        sessionID: "ses_child_progress",
+        assistantMessageID: "msg_child_tool",
+        callID: "call_child_shell",
+        input: { command: "printf child && false" },
+        executed: true,
+      },
+    })
+    events.push({
+      id: "evt_child_tool_progress",
+      created: 6,
+      type: "session.tool.progress",
+      durable: durable("ses_child_progress", 2),
+      data: {
+        sessionID: "ses_child_progress",
+        assistantMessageID: "msg_child_tool",
+        callID: "call_child_shell",
+        structured: { checkpoint: "child" },
+        content: [{ type: "text", text: "child partial" }],
+      },
+    })
+    events.push({
+      id: "evt_child_permission",
+      created: 7,
+      type: "permission.v2.asked",
+      data: {
+        id: "per_child",
+        sessionID: "ses_child_progress",
+        action: "shell",
+        resources: ["printf child && false"],
+        source: { type: "tool", messageID: "msg_child_tool", callID: "call_child_shell" },
+      },
+    })
+    events.push({
+      id: "evt_child_tool_failed",
+      created: 8,
+      type: "session.tool.failed",
+      durable: durable("ses_child_progress", 3),
+      data: {
+        sessionID: "ses_child_progress",
+        assistantMessageID: "msg_child_tool",
+        callID: "call_child_shell",
+        error: { type: "unknown", message: "child boom" },
+        executed: true,
+      },
+    })
+    while (
+      !states()
+        .at(-1)
+        ?.details.ses_child_progress?.commits.some(
+          (item) => item.part?.id === "call_child_shell" && item.toolState === "error",
+        )
+    )
+      await Bun.sleep(0)
+
+    const commits = states().at(-1)?.details.ses_child_progress?.commits ?? []
+    expect(
+      commits
+        .filter((item) => item.part?.id === "call_child_shell")
+        .map((item) => [item.phase, item.text, item.toolState]),
+    ).toEqual([
+      ["progress", "child partial", "running"],
+      ["final", "child boom", "error"],
+    ])
+    expect(
+      commits.find((item) => item.part?.id === "call_child_shell" && item.toolState === "error")?.part?.state,
+    ).toMatchObject({
+      status: "error",
+      structured: { checkpoint: "child" },
+      content: [{ type: "text", text: "child partial" }],
+    })
+    expect(
+      ui.events.find(
+        (event) =>
+          event.type === "stream.view" && event.view.type === "permission" && event.view.request.id === "per_child",
+      ),
+    ).toMatchObject({
+      view: {
+        request: {
+          sessionID: "ses_child_progress",
+          tool: { id: "call_child_shell", state: { input: { command: "printf child && false" } } },
+        },
+      },
+    })
     await transport.close()
   })
 
@@ -2466,7 +3250,7 @@ describe("V2 mini transport", () => {
               {
                 type: "tool" as const,
                 id: "call_overlap",
-                name: "bash",
+                name: "shell",
                 state: {
                   status: "completed" as const,
                   input: { command: "projected" },
@@ -2533,7 +3317,7 @@ describe("V2 mini transport", () => {
         executed: true,
       },
     })
-    inputStarted("call_overlap", "bash", 3)
+    inputStarted("call_overlap", "shell", 3)
     called("call_overlap", { command: "stale" }, 4)
     await Bun.sleep(0)
     const beforeHydration = states().length
@@ -2548,7 +3332,7 @@ describe("V2 mini transport", () => {
       part: { state: { input: { pattern: "needle" } } },
     })
     expect(commits.find((item) => item.partID === "prt_call_overlap")).toMatchObject({
-      tool: "bash",
+      tool: "shell",
       toolState: "completed",
       part: { state: { input: { command: "projected" } } },
     })
@@ -2739,7 +3523,10 @@ describe("V2 mini transport", () => {
       footer: ui.api,
     })
     const states = ui.events.flatMap((event) => (event.type === "stream.subagent" ? [event.state] : []))
-    expect(client.session.list).toHaveBeenCalledWith({ parentID: "ses_1", limit: 100, order: "desc" })
+    expect(client.session.list).toHaveBeenCalledWith(
+      { parentID: "ses_1", limit: 100, order: "desc" },
+      { signal: expect.any(AbortSignal) },
+    )
     expect(states.at(-1)?.tabs).toMatchObject([
       {
         sessionID: "ses_child_old",

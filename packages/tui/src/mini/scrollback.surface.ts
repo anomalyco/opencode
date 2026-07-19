@@ -87,6 +87,7 @@ export class RunScrollbackStream {
   private rendered: StreamCommit | undefined
   private active: ActiveEntry | undefined
   private diffStyle: RunDiffStyle | undefined
+  private diffWrap: "word" | "none" | undefined
   private sessionID?: () => string | undefined
   private treeSitterClient: TreeSitterClient | undefined
   private wrote: boolean
@@ -98,12 +99,14 @@ export class RunScrollbackStream {
     options: {
       wrote?: boolean
       diffStyle?: RunDiffStyle
+      diffWrap?: "word" | "none"
       sessionID?: () => string | undefined
       treeSitterClient?: TreeSitterClient
       onThemeRelease?: (theme: RunTheme) => void
     } = {},
   ) {
     this.diffStyle = options.diffStyle
+    this.diffWrap = options.diffWrap
     this.sessionID = options.sessionID
     this.treeSitterClient = options.treeSitterClient
     this.wrote = options.wrote ?? false
@@ -397,6 +400,7 @@ export class RunScrollbackStream {
         theme: this.theme,
         opts: {
           diffStyle: this.diffStyle,
+          diffWrap: this.diffWrap,
         },
       }),
     )

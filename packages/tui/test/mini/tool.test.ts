@@ -1,39 +1,75 @@
 import { describe, expect, test } from "bun:test"
-import { toolInlineInfo, toolOutputText, toolView } from "../../src/mini/tool"
+import { normalizeTool, toolOutputText } from "../../src/mini/tool"
 
 describe("Mini tool presentation", () => {
-  test("renders the renamed shell tool with the shell rule", () => {
-    const part = {
-      id: "part-shell",
-      sessionID: "session-shell",
-      messageID: "message-shell",
-      callID: "call-shell",
-      tool: "shell",
-      state: {
-        status: "pending" as const,
-        input: { command: "pwd" },
-      },
-    } as const
-
-    expect(toolView(part.tool)).toEqual({ output: true, final: false })
-    expect(toolInlineInfo(part)).toMatchObject({ icon: "$", title: "pwd", mode: "block" })
-  })
-
-  test("uses non-empty V2 shell output without the model-facing status", () => {
+  test("uses V2 shell output without the model-facing status", () => {
     expect(
       toolOutputText("shell", [
         { type: "text", text: "mini-output\n" },
         { type: "text", text: "Command exited with code 0." },
       ]),
     ).toBe("mini-output\n")
-  })
 
-  test("keeps empty V2 shell output empty", () => {
     expect(
       toolOutputText("shell", [
         { type: "text", text: "" },
         { type: "text", text: "Command exited with code 0." },
       ]),
     ).toBe("")
+  })
+
+  test("normalizes only persisted tool aliases into current fields", () => {
+    expect(
+      normalizeTool({
+        type: "tool",
+        id: "call-patch",
+        name: "apply_patch",
+        state: {
+          status: "completed",
+          input: { patchText: "*** Begin Patch\n*** End Patch" },
+          structured: {
+            files: [
+              {
+                type: "update",
+                filePath: "/tmp/project/src/a.ts",
+                relativePath: "src/a.ts",
+                diff: "@@ -1 +1 @@\n-old\n+new",
+              },
+            ],
+          },
+          content: [{ type: "text", text: "patched" }],
+        },
+        time: { created: 1, ran: 1, completed: 2 },
+      }),
+    ).toMatchObject({
+      name: "patch",
+      state: {
+        structured: {
+          files: [
+            {
+              status: "modified",
+              file: "src/a.ts",
+              patch: "@@ -1 +1 @@\n-old\n+new",
+            },
+          ],
+        },
+        content: [{ type: "text", text: "patched" }],
+      },
+    })
+
+    expect(
+      normalizeTool({
+        type: "tool",
+        id: "call-subagent",
+        name: "task",
+        state: {
+          status: "running",
+          input: { subagent_type: "explore", description: "Inspect" },
+          structured: {},
+          content: [],
+        },
+        time: { created: 1, ran: 1 },
+      }),
+    ).toMatchObject({ name: "subagent", state: { input: { agent: "explore" } } })
   })
 })

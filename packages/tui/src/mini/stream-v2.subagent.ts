@@ -18,122 +18,73 @@
 import type {
   EventSubscribeOutput,
   OpenCodeClient,
+  PermissionV2Request,
   SessionMessageAssistantTool,
   SessionMessageInfo,
 } from "@opencode-ai/client/promise"
 import { Locale } from "../util/locale"
-import type { FooterSubagentDetail, FooterSubagentState, FooterSubagentTab, MiniToolPart, StreamCommit } from "./types"
-import { toolOutputText } from "./tool"
+import type {
+  FooterSubagentDetail,
+  FooterSubagentState,
+  FooterSubagentTab,
+  MiniFormRequest,
+  MiniPermissionRequest,
+  StreamCommit,
+} from "./types"
+import { canonicalToolName, normalizeTool, toolOutputText, toolView } from "./tool"
 
 const CHILD_MESSAGE_LIMIT = 80
 const CHILD_FRAME_LIMIT = 80
 const CHILD_EVENT_BUFFER_LIMIT = 64
 const FAMILY_LIST_LIMIT = 100
+const FAMILY_DISCOVERY_CONCURRENCY = 8
+const BLOCKER_RETRY_INITIAL_MS = 50
+const BLOCKER_RETRY_MAX_MS = 2_000
 const FALLBACK_LABEL = "Subagent"
 
 type V2Event = EventSubscribeOutput
 
-export function miniTool(input: {
-  sessionID: string
-  messageID: string
-  tool: SessionMessageAssistantTool
-}): MiniToolPart {
-  const tool = input.tool
-  const providerCall =
-    tool.executed === undefined && tool.providerState === undefined
-      ? undefined
-      : { executed: tool.executed, state: tool.providerState }
-  const providerResult =
-    tool.executed === undefined && tool.providerResultState === undefined
-      ? undefined
-      : { executed: tool.executed, state: tool.providerResultState }
-  const base = {
-    id: `prt_${tool.id}`,
-    sessionID: input.sessionID,
-    messageID: input.messageID,
-    type: "tool" as const,
-    callID: tool.id,
-    tool: tool.name,
-  }
-  if (tool.state.status === "streaming") {
-    return {
-      ...base,
-      state: { status: "pending", input: {}, raw: tool.state.input },
-    }
-  }
-  if (tool.state.status === "running") {
-    return {
-      ...base,
-      state: {
-        status: "running",
-        input: tool.state.input,
-        title: tool.name,
-        metadata: { structured: tool.state.structured, content: tool.state.content, providerCall },
-        time: { start: tool.time.ran ?? tool.time.created },
-      },
-    }
-  }
-  if (tool.state.status === "completed") {
-    return {
-      ...base,
-      state: {
-        status: "completed",
-        input: tool.state.input,
-        output: toolOutputText(tool.name, tool.state.content),
-        title: tool.name,
-        metadata: {
-          structured: tool.state.structured,
-          content: tool.state.content,
-          result: tool.state.result,
-          providerCall,
-          providerResult,
-        },
-        time: { start: tool.time.ran ?? tool.time.created, end: tool.time.completed ?? tool.time.created },
-      },
-    }
-  }
-  return {
-    ...base,
-    state: {
-      status: "error",
-      input: tool.state.input,
-      error: tool.state.error.message,
-      metadata: {
-        structured: tool.state.structured,
-        content: tool.state.content,
-        result: tool.state.result,
-        providerCall,
-        providerResult,
-      },
-      time: { start: tool.time.ran ?? tool.time.created, end: tool.time.completed ?? tool.time.created },
-    },
-  }
-}
-
-export function toolCommit(part: MiniToolPart, phase: "start" | "progress" | "final"): StreamCommit {
+export function toolCommit(
+  input: SessionMessageAssistantTool,
+  messageID: string,
+  phase: "start" | "progress" | "final",
+  value?: string,
+  directory?: string,
+  version = 0,
+): StreamCommit {
+  const part = normalizeTool(input)
   const status = part.state.status
+  const output = status === "streaming" ? "" : toolOutputText(part.name, part.state.content)
+  const partial = status === "error" && phase === "progress" && value !== undefined
   const text =
-    status === "running"
-      ? part.tool === "task"
-        ? "running task"
-        : `running ${part.tool}`
+    status === "running" || partial
+      ? (value ?? (part.name === "subagent" ? "running subagent" : `running ${part.name}`))
       : status === "completed"
-        ? part.state.output
+        ? (value ?? output)
         : status === "error"
-          ? part.state.error
+          ? part.state.error.message
           : ""
   return {
     kind: "tool",
     source: "tool",
     text,
     phase,
-    messageID: part.messageID,
-    partID: part.id,
-    tool: part.tool,
+    messageID,
+    partID: `prt_${part.id}${version > 0 ? `:snapshot:${version}` : ""}`,
+    tool: part.name,
+    directory,
     part,
-    toolState: status === "error" ? "error" : status === "completed" ? "completed" : "running",
-    toolError: status === "error" ? part.state.error : undefined,
+    toolState: status === "error" && !partial ? "error" : status === "completed" ? "completed" : "running",
+    toolError: status === "error" && !partial ? part.state.error.message : undefined,
   }
+}
+
+export function toolFinalPhase(part: SessionMessageAssistantTool) {
+  const tool = normalizeTool(part)
+  if (tool.state.status !== "completed") return "final" as const
+  return toolView(tool.name).output && toolOutputText(tool.name, tool.state.content)
+    ? ("progress" as const)
+    : ("final" as const)
 }
 
 type Frame = {
@@ -142,10 +93,9 @@ type Frame = {
 }
 
 type ToolTrack = {
-  name: string
-  input: Record<string, unknown>
-  started: number
-  providerState?: Record<string, unknown>
+  messageID: string
+  part: SessionMessageAssistantTool
+  output: string
 }
 
 type ChildState = {
@@ -163,25 +113,48 @@ type ChildState = {
   reasoning: Map<string, string>
   projectedReasoning: Map<string, string>
   tools: Map<string, ToolTrack>
+  toolSources: Map<string, SessionMessageAssistantTool>
   finishedTools: Set<string>
+  permissions: MiniPermissionRequest[]
+  forms: MiniFormRequest[]
   messageIDs: Set<string>
   prompts: Map<string, string>
   hydrated: boolean
+  detailStale: boolean
+  blockersHydrated: boolean
 }
 
 export type SubagentTrackerInput = {
-  sdk: OpenCodeClient
   sessionID: string
   thinking: boolean
+  directory?: string
+  signal: AbortSignal
   emit: () => void
 }
 
 export type SubagentTracker = {
-  main(event: V2Event): void
-  foreign(sessionID: string, event: V2Event): void
-  hydrate(next: { messages: SessionMessageInfo[]; active: Record<string, unknown> }): Promise<void>
-  select(sessionID: string | undefined): void
+  main(sdk: OpenCodeClient, event: V2Event, signal?: AbortSignal): void
+  foreign(sdk: OpenCodeClient, sessionID: string, event: V2Event, signal?: AbortSignal): void
+  hydrate(next: {
+    sdk: OpenCodeClient
+    messages: SessionMessageInfo[]
+    active: Record<string, unknown>
+    signal?: AbortSignal
+    reconnect?: boolean
+  }): Promise<void>
+  ready(): Promise<void>
+  select(sdk: OpenCodeClient, sessionID: string | undefined): void
   snapshot(): FooterSubagentState
+  settleForm(sessionID: string, formID: string): void
+  close(): void
+}
+
+type DiscoveryJob = {
+  sdk: OpenCodeClient
+  sessionID: string
+  signal: AbortSignal
+  task: Promise<void>
+  resolve: () => void
 }
 
 function record(value: unknown): Record<string, unknown> | undefined {
@@ -193,6 +166,21 @@ function text(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined
   const next = value.trim()
   return next || undefined
+}
+
+function sourceKey(messageID: string, callID: string) {
+  return `${messageID}\u0000${callID}`
+}
+
+function permissionTool(request: PermissionV2Request, tools: Map<string, SessionMessageAssistantTool>) {
+  if (request.source?.type !== "tool") return request
+  const tool = tools.get(sourceKey(request.source.messageID, request.source.callID))
+  return tool ? { ...request, tool } : request
+}
+
+function blockerCategory(event: V2Event): "permission" | "form" | undefined {
+  if (event.type === "permission.v2.asked" || event.type === "permission.v2.replied") return "permission"
+  if (event.type === "form.created" || event.type === "form.replied" || event.type === "form.cancelled") return "form"
 }
 
 function childSessionID(structured: Record<string, unknown> | undefined) {
@@ -223,8 +211,8 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
   // Live subagent tool calls in the parent, so tool.success structured output
   // can be joined with the call's input metadata.
   const pendingCalls = new Map<string, Record<string, unknown>>()
-  // Foreign sessions already resolved through session.get. Non-children stay
-  // cached so unrelated concurrent sessions are checked at most once.
+  // Recently resolved non-family sessions. Retention is bounded so unrelated
+  // process activity cannot grow tracker state for the lifetime of the TUI.
   const checked = new Set<string>()
   // Foreign events buffered while a session.get discovery is in flight, so a
   // fast child (including its settled event) is not lost mid-discovery.
@@ -232,11 +220,22 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
   const hydrationEvents = new Map<string, V2Event[]>()
   const hydrationOverflow = new Set<string>()
   const hydrations = new Map<string, Promise<void>>()
+  const blockerEvents = new Map<string, V2Event[]>()
+  const blockerHydrations = new Map<string, Promise<void>>()
+  const blockerRetryTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  const blockerRetryAttempts = new Map<string, number>()
+  const discoveryJobs = new Map<string, DiscoveryJob>()
+  const discoveryQueue: DiscoveryJob[] = []
+  let activeDiscoveries = 0
   let selected: string | undefined
+  let blockerEpoch = 0
+  let closed = false
+  const active = (signal = input.signal) => !closed && !input.signal.aborted && !signal.aborted
   const fragmentKey = (messageID: string, partID: string) => `${messageID}\u0000${partID}`
 
-  const ensureChild = (sessionID: string): ChildState => {
+  const admitChild = (sessionID: string): ChildState | undefined => {
     const existing = children.get(sessionID)
+    if (!existing && children.size >= FAMILY_LIST_LIMIT) return
     const child: ChildState = existing ?? {
       sessionID,
       label: FALLBACK_LABEL,
@@ -244,17 +243,22 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       status: "running",
       background: false,
       callIDs: new Set(),
-      lastUpdatedAt: Date.now(),
+      lastUpdatedAt: 0,
       frames: [],
       text: new Map(),
       projectedText: new Map(),
       reasoning: new Map(),
       projectedReasoning: new Map(),
       tools: new Map(),
+      toolSources: new Map(),
       finishedTools: new Set(),
+      permissions: [],
+      forms: [],
       messageIDs: new Set(),
       prompts: new Map(),
       hydrated: false,
+      detailStale: false,
+      blockersHydrated: false,
     }
     if (!existing) children.set(sessionID, child)
     // Adopting a child while its session.get discovery is still in flight:
@@ -311,20 +315,32 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
   }
 
   const childTool = (child: ChildState, item: SessionMessageAssistantTool, messageID: string) => {
-    const part = miniTool({
-      sessionID: child.sessionID,
-      messageID,
-      tool: item,
-    })
-    if (item.state.status === "streaming") return
-    child.callIDs.add(item.id)
-    if (item.state.status === "running") {
-      setFrame(child, `tool:${item.id}`, toolCommit(part, "start"))
+    const part = normalizeTool(item)
+    const key = sourceKey(messageID, part.id)
+    const frame = `tool:${key}`
+    child.toolSources.set(key, part)
+    if (part.state.status === "streaming") {
+      child.tools.set(key, { messageID, part, output: "" })
       return
     }
-    child.finishedTools.add(item.id)
-    child.tools.delete(item.id)
-    setFrame(child, `tool:${item.id}`, toolCommit(part, "final"))
+    const current = child.tools.get(key)
+    const output = toolOutputText(part.name, part.state.content)
+    child.callIDs.add(key)
+    if (part.state.status === "running") {
+      if (!current || current.part.state.status === "streaming")
+        setFrame(child, frame, toolCommit(part, messageID, "start", undefined, input.directory))
+      if (output) setFrame(child, frame, toolCommit(part, messageID, "progress", output, input.directory))
+      child.tools.set(key, { messageID, part, output })
+      return
+    }
+    child.finishedTools.add(key)
+    child.tools.delete(key)
+    if (part.state.status === "error" && output) {
+      setFrame(child, frame, toolCommit(part, messageID, "progress", output, input.directory))
+      setFrame(child, `${frame}:final`, toolCommit(part, messageID, "final", undefined, input.directory))
+      return
+    }
+    setFrame(child, frame, toolCommit(part, messageID, toolFinalPhase(part), undefined, input.directory))
   }
 
   const rebuild = (child: ChildState, messages: SessionMessageInfo[]) => {
@@ -334,6 +350,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
     child.reasoning.clear()
     child.projectedReasoning.clear()
     child.finishedTools.clear()
+    child.toolSources.clear()
     child.messageIDs.clear()
     child.callIDs.clear()
     for (const message of messages) {
@@ -392,15 +409,17 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
     }
   }
 
-  const hydrateChild = (child: ChildState): Promise<void> => {
+  const hydrateChild = (sdk: OpenCodeClient, child: ChildState, signal = input.signal): Promise<void> => {
+    if (!active(signal)) return Promise.resolve()
     const existing = hydrations.get(child.sessionID)
     if (existing) return existing
     const pendingPrompts = new Map(child.prompts)
     const pendingTools = new Map(child.tools)
     let retry = false
-    const task = input.sdk.message
-      .list({ sessionID: child.sessionID, limit: CHILD_MESSAGE_LIMIT, order: "desc" })
+    const task = sdk.message
+      .list({ sessionID: child.sessionID, limit: CHILD_MESSAGE_LIMIT, order: "desc" }, { signal })
       .then((response) => {
+        if (!active(signal)) return
         const buffered = hydrationEvents.get(child.sessionID) ?? []
         hydrationEvents.delete(child.sessionID)
         if (hydrationOverflow.delete(child.sessionID)) {
@@ -413,11 +432,13 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
           if (!child.prompts.has(id)) child.prompts.set(id, prompt)
         }
         rebuild(child, structuredClone(response.data).toReversed() as SessionMessageInfo[])
+        child.permissions = child.permissions.map((request) => permissionTool(request, child.toolSources))
         for (const [id, tool] of pendingTools) {
           if (!child.finishedTools.has(id) && !child.tools.has(id)) child.tools.set(id, tool)
         }
         for (const event of buffered) reduce(child, event)
         child.hydrated = true
+        child.detailStale = false
         notifyDetail(child)
       })
       .catch(() => {
@@ -426,35 +447,218 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       })
       .finally(() => {
         hydrations.delete(child.sessionID)
-        if (retry) queueMicrotask(() => void hydrateChild(child))
+        if (retry && active(signal)) queueMicrotask(() => void hydrateChild(sdk, child, signal))
       })
     hydrations.set(child.sessionID, task)
     return task
   }
 
-  const discover = (sessionID: string) => {
-    if (checked.has(sessionID) || children.has(sessionID) || sessionID === input.sessionID) return
-    checked.add(sessionID)
-    if (!pendingEvents.has(sessionID)) pendingEvents.set(sessionID, [])
-    void input.sdk.session
-      .get({ sessionID })
-      .then((session) => {
-        const buffered = pendingEvents.get(sessionID) ?? []
-        pendingEvents.delete(sessionID)
-        if (session.parentID !== input.sessionID) return
-        const child = ensureChild(sessionID)
-        if (session.agent) child.label = Locale.titlecase(session.agent)
-        child.title = session.title
-        for (const event of buffered) reduce(child, event)
-        touch(child)
+  const blockerCurrent = (child: ChildState, epoch: number, signal = input.signal) =>
+    active(signal) && epoch === blockerEpoch && children.get(child.sessionID) === child
+
+  const resolvePermissionTools = async (
+    sdk: OpenCodeClient,
+    child: ChildState,
+    permissions: PermissionV2Request[],
+    epoch: number,
+    signal = input.signal,
+  ) => {
+    const messageIDs = [
+      ...new Set(
+        permissions.flatMap((request) => {
+          if (request.source?.type !== "tool") return []
+          const key = sourceKey(request.source.messageID, request.source.callID)
+          return child.toolSources.has(key) ? [] : [request.source.messageID]
+        }),
+      ),
+    ]
+    for (let offset = 0; offset < messageIDs.length; offset += FAMILY_DISCOVERY_CONCURRENCY) {
+      const batch = messageIDs.slice(offset, offset + FAMILY_DISCOVERY_CONCURRENCY)
+      const messages = await Promise.allSettled(
+        batch.map((messageID) => sdk.session.message({ sessionID: child.sessionID, messageID }, { signal })),
+      )
+      if (!blockerCurrent(child, epoch, signal)) return permissions
+      if (
+        messages.some(
+          (result, index) =>
+            result.status !== "fulfilled" || result.value.type !== "assistant" || result.value.id !== batch[index],
+        )
+      )
+        throw new Error("Permission source message is unavailable")
+      for (const [index, result] of messages.entries()) {
+        if (result.status !== "fulfilled" || result.value.type !== "assistant" || result.value.id !== batch[index])
+          continue
+        for (const item of result.value.content) {
+          if (item.type !== "tool") continue
+          child.toolSources.set(sourceKey(result.value.id, item.id), normalizeTool(item))
+        }
+      }
+    }
+    if (
+      permissions.some(
+        (request) =>
+          request.source?.type === "tool" &&
+          !child.toolSources.has(sourceKey(request.source.messageID, request.source.callID)),
+      )
+    )
+      throw new Error("Permission source tool is unavailable")
+    return permissions.map((request) => permissionTool(request, child.toolSources))
+  }
+
+  const replayBlockerEvents = (child: ChildState, category: "permission" | "form") => {
+    for (const event of blockerEvents.get(child.sessionID) ?? []) {
+      if (blockerCategory(event) === category) reduce(child, event)
+    }
+  }
+
+  function scheduleBlockerRetry(sdk: OpenCodeClient, child: ChildState, epoch: number, signal = input.signal) {
+    if (!blockerCurrent(child, epoch, signal) || child.blockersHydrated || blockerRetryTimers.has(child.sessionID))
+      return
+    const attempt = blockerRetryAttempts.get(child.sessionID) ?? 0
+    const delay = Math.min(BLOCKER_RETRY_INITIAL_MS * 2 ** Math.min(attempt, 30), BLOCKER_RETRY_MAX_MS)
+    blockerRetryAttempts.set(child.sessionID, attempt + 1)
+    const timer = setTimeout(() => {
+      if (blockerRetryTimers.get(child.sessionID) !== timer) return
+      blockerRetryTimers.delete(child.sessionID)
+      if (blockerCurrent(child, epoch, signal) && !child.blockersHydrated)
+        void hydrateBlockers(sdk, child, epoch, signal)
+    }, delay)
+    blockerRetryTimers.set(child.sessionID, timer)
+  }
+
+  function hydrateBlockers(
+    sdk: OpenCodeClient,
+    child: ChildState,
+    epoch = blockerEpoch,
+    signal = input.signal,
+  ): Promise<void> {
+    if (!blockerCurrent(child, epoch, signal) || child.blockersHydrated) return Promise.resolve()
+    const existing = blockerHydrations.get(child.sessionID)
+    if (existing) return existing
+    const timer = blockerRetryTimers.get(child.sessionID)
+    if (timer) clearTimeout(timer)
+    blockerRetryTimers.delete(child.sessionID)
+    const tasks = [
+      sdk.permission.list({ sessionID: child.sessionID }, { signal }).then(async (permissions) => {
+        if (!blockerCurrent(child, epoch, signal)) return
+        const resolved = await resolvePermissionTools(sdk, child, permissions, epoch, signal)
+        if (!blockerCurrent(child, epoch, signal)) return
+        child.permissions = resolved
+        replayBlockerEvents(child, "permission")
         input.emit()
-        void hydrateChild(child)
+      }),
+      sdk.form.list({ sessionID: child.sessionID }, { signal }).then((forms) => {
+        if (!blockerCurrent(child, epoch, signal)) return
+        child.forms = forms
+        replayBlockerEvents(child, "form")
+        input.emit()
+      }),
+    ]
+    const task = Promise.allSettled(tasks)
+      .then((results) => {
+        if (!blockerCurrent(child, epoch, signal)) return
+        blockerEvents.delete(child.sessionID)
+        child.blockersHydrated = results.every((result) => result.status === "fulfilled")
+        if (child.blockersHydrated) blockerRetryAttempts.delete(child.sessionID)
       })
-      .catch(() => {
-        // Allow a later event to retry discovery after transient failures.
-        pendingEvents.delete(sessionID)
-        checked.delete(sessionID)
+      .finally(() => {
+        blockerHydrations.delete(child.sessionID)
+        if (blockerCurrent(child, epoch, signal) && !child.blockersHydrated)
+          scheduleBlockerRetry(sdk, child, epoch, signal)
       })
+    blockerHydrations.set(child.sessionID, task)
+    return task
+  }
+
+  const resetBlockerHydration = () => {
+    blockerEpoch++
+    for (const timer of blockerRetryTimers.values()) clearTimeout(timer)
+    blockerRetryTimers.clear()
+    blockerRetryAttempts.clear()
+    blockerEvents.clear()
+    return blockerEpoch
+  }
+
+  const rememberChecked = (sessionID: string) => {
+    checked.delete(sessionID)
+    checked.add(sessionID)
+    if (checked.size <= FAMILY_LIST_LIMIT) return
+    const oldest = checked.values().next().value
+    if (oldest) checked.delete(oldest)
+  }
+
+  const runDiscovery = async (job: DiscoveryJob) => {
+    try {
+      const lineage = []
+      const visited = new Set<string>()
+      let session = await job.sdk.session.get({ sessionID: job.sessionID }, { signal: job.signal })
+      while (lineage.length < FAMILY_LIST_LIMIT && !visited.has(session.id)) {
+        if (!active(job.signal)) return
+        visited.add(session.id)
+        lineage.push(session)
+        if (session.parentID === input.sessionID || (session.parentID && children.has(session.parentID))) {
+          const buffered = pendingEvents.get(job.sessionID) ?? []
+          pendingEvents.delete(job.sessionID)
+          for (const item of lineage.toReversed()) {
+            const child = admitChild(item.id)
+            if (!child) break
+            if (item.agent) child.label = Locale.titlecase(item.agent)
+            child.title = item.title
+            touch(child, item.time.updated)
+          }
+          const child = children.get(job.sessionID)
+          if (!child) return
+          const blockers = hydrateBlockers(job.sdk, child, blockerEpoch, job.signal)
+          blockerEvents.set(
+            job.sessionID,
+            buffered.filter((event) => blockerCategory(event) !== undefined),
+          )
+          for (const event of buffered) reduce(child, event)
+          input.emit()
+          void blockers
+          void hydrateChild(job.sdk, child, job.signal)
+          return
+        }
+        if (!session.parentID || visited.has(session.parentID)) break
+        session = await job.sdk.session.get({ sessionID: session.parentID }, { signal: job.signal })
+      }
+      pendingEvents.delete(job.sessionID)
+      rememberChecked(job.sessionID)
+    } catch {
+      // A later event may retry discovery after a transient lookup failure.
+      pendingEvents.delete(job.sessionID)
+    }
+  }
+
+  const pumpDiscoveries = () => {
+    while (activeDiscoveries < FAMILY_DISCOVERY_CONCURRENCY) {
+      const job = discoveryQueue.shift()
+      if (!job) return
+      activeDiscoveries++
+      void runDiscovery(job).finally(() => {
+        activeDiscoveries--
+        if (discoveryJobs.get(job.sessionID) === job) discoveryJobs.delete(job.sessionID)
+        job.resolve()
+        pumpDiscoveries()
+      })
+    }
+  }
+
+  const discover = (sdk: OpenCodeClient, sessionID: string, signal = input.signal) => {
+    if (!active(signal) || children.size >= FAMILY_LIST_LIMIT) return Promise.resolve()
+    if (checked.has(sessionID) || children.has(sessionID) || sessionID === input.sessionID) return Promise.resolve()
+    const existing = discoveryJobs.get(sessionID)
+    if (existing) return existing.task
+    let resolve!: () => void
+    const task = new Promise<void>((done) => {
+      resolve = done
+    })
+    const job = { sdk, sessionID, signal, task, resolve }
+    discoveryJobs.set(sessionID, job)
+    pendingEvents.set(sessionID, [])
+    discoveryQueue.push(job)
+    pumpDiscoveries()
+    return task
   }
 
   const reduce = (child: ChildState, event: V2Event) => {
@@ -566,30 +770,82 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       return
     }
     if (event.type === "session.tool.input.started") {
-      if (child.finishedTools.has(event.data.callID)) return
-      child.tools.set(event.data.callID, { name: event.data.name, input: {}, started: event.created })
+      if (child.finishedTools.has(sourceKey(event.data.assistantMessageID, event.data.callID))) return
+      childTool(
+        child,
+        {
+          type: "tool",
+          id: event.data.callID,
+          name: event.data.name,
+          state: { status: "streaming", input: "" },
+          time: { created: event.created },
+        },
+        event.data.assistantMessageID,
+      )
+      return
+    }
+    if (event.type === "session.tool.input.delta" || event.type === "session.tool.input.ended") {
+      const current = child.tools.get(sourceKey(event.data.assistantMessageID, event.data.callID))
+      if (!current || current.part.state.status !== "streaming") return
+      childTool(
+        child,
+        {
+          ...current.part,
+          state: {
+            status: "streaming",
+            input:
+              event.type === "session.tool.input.ended" ? event.data.text : current.part.state.input + event.data.delta,
+          },
+        },
+        event.data.assistantMessageID,
+      )
       return
     }
     if (event.type === "session.tool.called") {
-      if (child.finishedTools.has(event.data.callID)) return
-      const current = child.tools.get(event.data.callID)
-      child.tools.set(event.data.callID, {
-        name: current?.name ?? "tool",
-        input: event.data.input,
-        started: current?.started ?? event.created,
-        providerState: event.data.state,
-      })
+      const key = sourceKey(event.data.assistantMessageID, event.data.callID)
+      if (child.finishedTools.has(key)) return
+      const current = child.tools.get(key)
       childTool(
         child,
-        structuredClone({
+        {
           type: "tool",
           id: event.data.callID,
-          name: current?.name ?? "tool",
+          name: current?.part.name ?? "tool",
           executed: event.data.executed,
           providerState: event.data.state,
           state: { status: "running", input: event.data.input, structured: {}, content: [] },
-          time: { created: current?.started ?? event.created, ran: event.created },
-        }) as SessionMessageAssistantTool,
+          time: { created: current?.part.time.created ?? event.created, ran: event.created },
+        },
+        event.data.assistantMessageID,
+      )
+      touch(child, event.created)
+      notifyDetail(child)
+      return
+    }
+    if (event.type === "session.tool.progress") {
+      const key = sourceKey(event.data.assistantMessageID, event.data.callID)
+      if (child.finishedTools.has(key)) return
+      const current = child.tools.get(key)
+      const part = current?.part
+      childTool(
+        child,
+        {
+          type: "tool",
+          id: event.data.callID,
+          name: part?.name ?? "tool",
+          executed: part?.executed,
+          providerState: part?.providerState,
+          state: {
+            status: "running",
+            input: part && part.state.status !== "streaming" ? part.state.input : {},
+            structured: event.data.structured,
+            content: event.data.content,
+          },
+          time: {
+            created: part?.time.created ?? event.created,
+            ran: part?.time.ran ?? event.created,
+          },
+        },
         event.data.assistantMessageID,
       )
       touch(child, event.created)
@@ -597,49 +853,72 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       return
     }
     if (event.type === "session.tool.success" || event.type === "session.tool.failed") {
-      if (child.finishedTools.has(event.data.callID)) return
-      const current = child.tools.get(event.data.callID)
+      const key = sourceKey(event.data.assistantMessageID, event.data.callID)
+      if (child.finishedTools.has(key)) return
+      const current = child.tools.get(key)
+      const part = current?.part
       const failed = event.type === "session.tool.failed"
       childTool(
         child,
-        structuredClone({
+        {
           type: "tool",
           id: event.data.callID,
-          name: current?.name ?? "tool",
+          name: part?.name ?? "tool",
           executed: event.data.executed,
-          providerState: current?.providerState,
+          providerState: part?.providerState,
           providerResultState: event.data.resultState,
           state: failed
             ? {
                 status: "error",
-                input: current?.input ?? {},
-                structured: {},
-                content: [],
+                input: part && part.state.status !== "streaming" ? part.state.input : {},
+                structured: part && part.state.status !== "streaming" ? part.state.structured : {},
+                content: part && part.state.status !== "streaming" ? part.state.content : [],
                 error: event.data.error,
                 result: event.data.result,
               }
             : {
                 status: "completed",
-                input: current?.input ?? {},
+                input: part && part.state.status !== "streaming" ? part.state.input : {},
                 structured: event.data.structured,
                 content: event.data.content,
                 result: event.data.result,
               },
           time: {
-            created: current?.started ?? event.created,
-            ran: current?.started,
+            created: part?.time.created ?? event.created,
+            ran: part?.time.ran,
             completed: event.created,
           },
-        }) as SessionMessageAssistantTool,
+        },
         event.data.assistantMessageID,
       )
       touch(child, event.created)
       notifyDetail(child)
       return
     }
+    if (event.type === "permission.v2.asked") {
+      if (!child.permissions.some((item) => item.id === event.data.id))
+        child.permissions.push(permissionTool(event.data, child.toolSources))
+      input.emit()
+      return
+    }
+    if (event.type === "permission.v2.replied") {
+      child.permissions = child.permissions.filter((item) => item.id !== event.data.requestID)
+      input.emit()
+      return
+    }
+    if (event.type === "form.created") {
+      if (!child.forms.some((item) => item.id === event.data.form.id)) child.forms.push(event.data.form)
+      input.emit()
+      return
+    }
+    if (event.type === "form.replied" || event.type === "form.cancelled") {
+      child.forms = child.forms.filter((item) => item.id !== event.data.id)
+      input.emit()
+      return
+    }
     if (event.type === "session.step.ended") return
     if (event.type === "session.step.failed") {
-      setFrame(child, `error:step:${event.data.assistantMessageID}`, {
+      setFrame(child, `error:${event.data.assistantMessageID}`, {
         kind: "error",
         source: "system",
         text: event.data.error.message,
@@ -673,52 +952,78 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
   }
 
   const mainTool = (item: SessionMessageAssistantTool, active?: Record<string, unknown>) => {
-    if (item.name !== "subagent" || item.state.status !== "completed") return
-    const found = childSessionID(record(item.state.structured))
+    const tool = normalizeTool(item)
+    if (tool.name !== "subagent" || tool.state.status === "streaming") return
+    const found = childSessionID(record(tool.state.structured))
     if (!found) return
-    const child = ensureChild(found.sessionID)
-    applyMeta(child, record(item.state.input))
-    if (found.running) child.background = true
+    const child = admitChild(found.sessionID)
+    if (!child) return
+    applyMeta(child, record(tool.state.input))
+    if (tool.state.status === "completed" && found.running) child.background = true
     if (child.status === "running") {
       const running = found.running && (!active || found.sessionID in active)
       child.status = running ? "running" : "completed"
     }
-    touch(child, item.time.completed ?? item.time.created)
+    touch(child, tool.time.completed ?? tool.time.created)
+  }
+
+  const settleHydrations = async () => {
+    while (true) {
+      await Promise.resolve()
+      const pending = [...discoveryJobs.values()]
+        .map((job) => job.task)
+        .concat([...hydrations.values(), ...blockerHydrations.values()])
+      if (pending.length === 0) return
+      await Promise.allSettled(pending)
+    }
   }
 
   return {
-    main(event) {
+    main(sdk, event, signal = input.signal) {
+      if (!active(signal)) return
       if (event.type === "session.tool.input.started") {
-        if (event.data.name === "subagent") pendingCalls.set(event.data.callID, {})
+        if (canonicalToolName(event.data.name) === "subagent")
+          pendingCalls.set(sourceKey(event.data.assistantMessageID, event.data.callID), {})
         return
       }
       if (event.type === "session.tool.called") {
-        if (pendingCalls.has(event.data.callID)) pendingCalls.set(event.data.callID, event.data.input)
+        const key = sourceKey(event.data.assistantMessageID, event.data.callID)
+        if (pendingCalls.has(key)) pendingCalls.set(key, event.data.input)
         return
       }
       if (event.type === "session.tool.failed") {
-        pendingCalls.delete(event.data.callID)
+        pendingCalls.delete(sourceKey(event.data.assistantMessageID, event.data.callID))
         return
       }
-      if (event.type !== "session.tool.success") return
-      const pending = pendingCalls.get(event.data.callID)
-      pendingCalls.delete(event.data.callID)
+      if (event.type !== "session.tool.progress" && event.type !== "session.tool.success") return
+      const key = sourceKey(event.data.assistantMessageID, event.data.callID)
+      const pending = pendingCalls.get(key)
+      if (event.type === "session.tool.success") pendingCalls.delete(key)
       const found = childSessionID(record(event.data.structured))
       if (!found) return
-      const child = ensureChild(found.sessionID)
+      const child = admitChild(found.sessionID)
+      if (!child) return
       applyMeta(child, pending)
-      if (found.running) {
+      if (event.type === "session.tool.success" && found.running) {
         child.background = true
         child.status = "running"
       }
-      if (!found.running && child.status === "running") child.status = "completed"
+      if (event.type === "session.tool.success" && !found.running && child.status === "running")
+        child.status = "completed"
       touch(child, event.created)
       input.emit()
-      if (!child.hydrated) void hydrateChild(child)
+      if (!child.blockersHydrated) void hydrateBlockers(sdk, child, blockerEpoch, signal)
+      if (!child.hydrated) void hydrateChild(sdk, child, signal)
     },
-    foreign(sessionID, event) {
+    foreign(sdk, sessionID, event, signal = input.signal) {
+      if (!active(signal)) return
       const child = children.get(sessionID)
       if (child) {
+        if (blockerHydrations.has(sessionID) && blockerCategory(event)) {
+          const buffered = blockerEvents.get(sessionID) ?? []
+          if (buffered.length < CHILD_EVENT_BUFFER_LIMIT) buffered.push(event)
+          blockerEvents.set(sessionID, buffered)
+        }
         if (hydrations.has(sessionID)) {
           const buffered = hydrationEvents.get(sessionID) ?? []
           if (buffered.length < CHILD_EVENT_BUFFER_LIMIT) buffered.push(event)
@@ -728,11 +1033,22 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
         reduce(child, event)
         return
       }
-      discover(sessionID)
+      void discover(sdk, sessionID, signal)
       const buffered = pendingEvents.get(sessionID)
       if (buffered && buffered.length < CHILD_EVENT_BUFFER_LIMIT) buffered.push(event)
     },
     async hydrate(next) {
+      const signal = next.signal ?? input.signal
+      if (!active(signal)) return
+      const blockerHydrationEpoch = resetBlockerHydration()
+      await settleHydrations()
+      if (!active(signal)) return
+      if (next.reconnect) {
+        for (const child of children.values()) {
+          child.hydrated = false
+          child.detailStale = true
+        }
+      }
       for (const message of next.messages) {
         if (message.type !== "assistant") continue
         for (const item of message.content) {
@@ -741,30 +1057,63 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       }
       // Family index: adopt children directly from the current session list so
       // historical subagents beyond the projected message window still get tabs.
-      const family = await input.sdk.session
-        .list({ parentID: input.sessionID, limit: FAMILY_LIST_LIMIT, order: "desc" })
-        .then((response) => response.data)
-        .catch(() => [])
-      for (const session of family) {
-        const child = ensureChild(session.id)
-        if (session.agent && child.label === FALLBACK_LABEL) child.label = Locale.titlecase(session.agent)
-        if (!child.title) child.title = session.title
-        touch(child, session.time.updated)
+      const queue = [input.sessionID]
+      const visited = new Set(queue)
+      while (queue.length > 0 && children.size < FAMILY_LIST_LIMIT) {
+        const owner = queue.shift()
+        if (!owner) continue
+        const family = await next.sdk.session
+          .list({ parentID: owner, limit: FAMILY_LIST_LIMIT - children.size, order: "desc" }, { signal })
+          .then((response) => response.data)
+          .catch(() => [])
+        if (!active(signal)) return
+        for (const session of family) {
+          if (visited.has(session.id) || children.size >= FAMILY_LIST_LIMIT) continue
+          visited.add(session.id)
+          const child = admitChild(session.id)
+          if (!child) break
+          if (session.agent && child.label === FALLBACK_LABEL) child.label = Locale.titlecase(session.agent)
+          if (!child.title) child.title = session.title
+          touch(child, session.time.updated)
+          queue.push(session.id)
+        }
       }
-      for (const sessionID of Object.keys(next.active)) discover(sessionID)
+      const activeSessions = Object.keys(next.active)
+      for (
+        let offset = 0;
+        offset < activeSessions.length && children.size < FAMILY_LIST_LIMIT;
+        offset += FAMILY_DISCOVERY_CONCURRENCY
+      )
+        await Promise.all(
+          activeSessions
+            .slice(offset, offset + FAMILY_DISCOVERY_CONCURRENCY)
+            .map((sessionID) => discover(next.sdk, sessionID, signal)),
+        )
+      if (!active(signal)) return
       for (const child of children.values()) {
         // Reconnect can miss a child's settled event; the active map is the
         // authoritative live signal for still-running children.
         if (child.status === "running" && !(child.sessionID in next.active)) child.status = "completed"
+        child.blockersHydrated = false
       }
+      const descendants = [...children.values()]
+      for (let offset = 0; offset < descendants.length; offset += FAMILY_DISCOVERY_CONCURRENCY)
+        await Promise.all(
+          descendants
+            .slice(offset, offset + FAMILY_DISCOVERY_CONCURRENCY)
+            .map((child) => hydrateBlockers(next.sdk, child, blockerHydrationEpoch, signal)),
+        )
+      if (!active(signal)) return
       const current = selected ? children.get(selected) : undefined
-      if (current) await hydrateChild(current)
+      if (current) await hydrateChild(next.sdk, current, signal)
+      if (!active(signal)) return
       if (children.size > 0) input.emit()
     },
-    select(sessionID) {
+    ready: settleHydrations,
+    select(sdk, sessionID) {
       selected = sessionID
       const child = sessionID ? children.get(sessionID) : undefined
-      if (child && !child.hydrated) void hydrateChild(child)
+      if (child && !child.hydrated) void hydrateChild(sdk, child)
       input.emit()
     },
     snapshot() {
@@ -774,10 +1123,33 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
         return b.lastUpdatedAt - a.lastUpdatedAt
       })
       const child = selected ? children.get(selected) : undefined
-      const details: Record<string, FooterSubagentDetail> = child
-        ? { [child.sessionID]: { sessionID: child.sessionID, commits: child.frames.map((item) => item.commit) } }
-        : {}
-      return { tabs, details, permissions: [], questions: [] }
+      const details: Record<string, FooterSubagentDetail> =
+        child && !child.detailStale
+          ? { [child.sessionID]: { sessionID: child.sessionID, commits: child.frames.map((item) => item.commit) } }
+          : {}
+      return {
+        tabs,
+        details,
+        permissions: [...children.values()].flatMap((item) => item.permissions),
+        forms: [...children.values()].flatMap((item) => item.forms),
+      }
+    },
+    settleForm(sessionID, formID) {
+      const child = children.get(sessionID)
+      if (!child) return
+      child.forms = child.forms.filter((item) => item.id !== formID)
+      input.emit()
+    },
+    close() {
+      closed = true
+      resetBlockerHydration()
+      for (const job of discoveryQueue.splice(0)) {
+        if (discoveryJobs.get(job.sessionID) === job) discoveryJobs.delete(job.sessionID)
+        job.resolve()
+      }
+      hydrationEvents.clear()
+      hydrationOverflow.clear()
+      pendingEvents.clear()
     },
   }
 }

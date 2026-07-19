@@ -7,7 +7,7 @@
 // palette if detection fails.
 import { RGBA, SyntaxStyle, type CliRenderer, type ColorInput, type TerminalColors } from "@opentui/core"
 import type { TuiThemeCurrent } from "@opencode-ai/plugin/tui"
-import type { EntryKind } from "./types"
+import type { EntryKind, RunTuiConfig } from "./types"
 
 type Tone = {
   body: ColorInput
@@ -616,7 +616,12 @@ export const RUN_THEME_FALLBACK: RunTheme = {
   },
 }
 
-export async function resolveRunTheme(renderer: CliRenderer): Promise<RunTheme> {
+export async function resolveRunTheme(
+  renderer: CliRenderer,
+  config?: RunTuiConfig["theme"],
+  themes: Record<string, unknown> = {},
+  warning?: (message: string) => void,
+): Promise<RunTheme> {
   try {
     const colors = await renderer.getPalette({
       size: 256,
@@ -628,19 +633,44 @@ export async function resolveRunTheme(renderer: CliRenderer): Promise<RunTheme> 
 
     // Palette-only terminal reloads can leave renderer.themeMode stale, but
     // ANSI slot zero is not the terminal background when OSC 11 is absent.
-    const pick = colors.defaultBackground
-      ? mode(RGBA.fromHex(colors.defaultBackground))
-      : (renderer.themeMode ?? mode(RGBA.fromHex(bg)))
-    const footerTheme = resolveTheme(generateSystem(colors, pick), pick)
+    const pick =
+      config?.mode === "dark" || config?.mode === "light"
+        ? config.mode
+        : colors.defaultBackground
+          ? mode(RGBA.fromHex(colors.defaultBackground))
+          : (renderer.themeMode ?? mode(RGBA.fromHex(bg)))
+    const { allThemes, generateSyntax, isTheme } = await import("../theme")
+    const custom = Object.entries(themes).reduce<Record<string, ThemeJson>>((result, [name, theme]) => {
+      if (isTheme(theme)) result[name] = theme
+      return result
+    }, {})
+    const name = config?.name && config.name !== "system" ? config.name : undefined
+    const configured = name ? custom[name] ?? allThemes()[name] : undefined
     const indexed = indexedPalette(colors, 256)
-    const scrollbackTheme = quantizeTheme(footerTheme, indexed)
-    const { generateSyntax } = await import("../theme")
-    const syntaxTheme: SharedSyntaxTheme = {
-      ...scrollbackTheme,
-      _hasSelectedListItemText: true,
+    const build = (selected: ThemeJson) => {
+      const footerTheme = resolveTheme(selected, pick)
+      const scrollbackTheme = quantizeTheme(footerTheme, indexed)
+      const syntaxTheme: SharedSyntaxTheme = {
+        ...scrollbackTheme,
+        _hasSelectedListItemText: true,
+      }
+      const syntax = generateSyntax(syntaxTheme)
+      return map(footerTheme, scrollbackTheme, splashTheme(scrollbackTheme, indexed), syntax)
     }
-    const syntax = generateSyntax(syntaxTheme)
-    return map(footerTheme, scrollbackTheme, splashTheme(scrollbackTheme, indexed), syntax)
+
+    if (!name) return build(generateSystem(colors, pick))
+    const fallback = () => warning?.(`Theme "${name}" was not found or is invalid. Falling back to "opencode".`)
+    if (!configured) {
+      fallback()
+      return build(allThemes().opencode)
+    }
+
+    try {
+      return build(configured)
+    } catch {
+      fallback()
+      return build(allThemes().opencode)
+    }
   } catch {
     return RUN_THEME_FALLBACK
   }

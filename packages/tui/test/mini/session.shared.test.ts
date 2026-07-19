@@ -193,7 +193,8 @@ describe("run session shared", () => {
       }),
     )
 
-    const out = await resolveCurrentSession(client, "ses_1")
+    const controller = new AbortController()
+    const out = await resolveCurrentSession(client, "ses_1", controller.signal)
 
     expect(out.model).toEqual({ providerID: "openai", modelID: "gpt-5" })
     expect(out.variant).toBe("high")
@@ -213,5 +214,10 @@ describe("run session shared", () => {
         },
       ],
     })
+    expect(client.message.list).toHaveBeenCalledWith(
+      { sessionID: "ses_1", limit: 200, order: "desc" },
+      { signal: controller.signal },
+    )
+    expect(client.session.get).toHaveBeenCalledWith({ sessionID: "ses_1" }, { signal: controller.signal })
   })
 })

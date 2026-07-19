@@ -17,6 +17,7 @@ import {
   type ThemeJson,
 } from "../theme"
 import { generateSystem, terminalMode } from "../theme/system"
+import { discoverThemes, themeDirectories } from "../theme/discovery"
 import { createComponentTheme, type ComponentTheme } from "../theme/v2/component"
 import { resolveThemeFile } from "../theme/v2/resolve"
 import { migrateV1 } from "../theme/v2/v1-migrate"
@@ -25,9 +26,6 @@ import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "./helper"
 import { useConfig } from "../config"
 import { Global } from "@opencode-ai/core/global"
-import { Glob } from "@opencode-ai/core/util/glob"
-import { readFile } from "node:fs/promises"
-import path from "node:path"
 import { DevTools } from "../devtools"
 
 const themePerformance = DevTools.register({ id: "theme-performance", title: "Theme performance" })
@@ -39,12 +37,7 @@ export type ThemeSource = Readonly<{
 
 const themeSource: ThemeSource = {
   async discover() {
-    const directories = [Global.Path.config]
-    for (let current = process.cwd(); ; current = path.dirname(current)) {
-      directories.push(path.join(current, ".opencode"))
-      if (path.dirname(current) === current) break
-    }
-    return discoverThemes(directories)
+    return discoverThemes(themeDirectories(Global.Path.config, process.cwd()))
   },
   subscribeRefresh(refresh) {
     process.on("SIGUSR2", refresh)
@@ -52,16 +45,7 @@ const themeSource: ThemeSource = {
   },
 }
 
-export async function discoverThemes(directories: string[]) {
-  const result: Record<string, unknown> = {}
-  for (const directory of directories) {
-    const files = await Glob.scan("themes/*.json", { cwd: directory, absolute: true, dot: true, symlink: true })
-    for (const file of files) {
-      result[path.basename(file, ".json")] = JSON.parse(await readFile(file, "utf8")) as unknown
-    }
-  }
-  return result
-}
+export { discoverThemes } from "../theme/discovery"
 
 export {
   DEFAULT_THEMES,

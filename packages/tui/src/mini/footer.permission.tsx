@@ -14,7 +14,6 @@
 import type { TextareaRenderable } from "@opentui/core"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import { For, Match, Show, Switch, createEffect, createMemo, createSignal } from "solid-js"
-import type { PermissionV2Request } from "@opencode-ai/client/promise"
 import {
   createPermissionBodyState,
   permissionAlwaysLines,
@@ -29,10 +28,11 @@ import {
   permissionShift,
   type PermissionOption,
 } from "./permission.shared"
+import { resolveDiffView } from "./diff"
 import { footerWidthPolicy } from "./footer.width"
 import { toolFiletype } from "./tool"
 import { transparent, type RunBlockTheme, type RunFooterTheme } from "./theme"
-import type { PermissionReply, RunDiffStyle } from "./types"
+import type { MiniPermissionRequest, PermissionReply, RunDiffStyle } from "./types"
 
 function buttons(
   list: PermissionOption[],
@@ -130,16 +130,19 @@ export function RejectField(props: {
 }
 
 export function RunPermissionBody(props: {
-  request: PermissionV2Request
+  request: MiniPermissionRequest
+  directory?: () => string
   theme: RunFooterTheme
   block: RunBlockTheme
   diffStyle?: RunDiffStyle
+  diffWrap?: "word" | "none"
   onReply: (input: PermissionReply) => void | Promise<void>
 }) {
   const dims = useTerminalDimensions()
-  const [state, setState] = createSignal(createPermissionBodyState(props.request.id))
-  const info = createMemo(() => permissionInfo(props.request))
+  const [state, setState] = createSignal(createPermissionBodyState(props.request))
+  const info = createMemo(() => permissionInfo(props.request, props.directory?.()))
   const ft = createMemo(() => toolFiletype(info().file))
+  const diffView = createMemo(() => resolveDiffView(props.diffStyle, dims().width))
   const narrow = createMemo(() => footerWidthPolicy(dims().width).dialog.narrow)
   const opts = createMemo(() =>
     permissionOptions(state().stage).filter((option) => option !== "always" || (props.request.save?.length ?? 0) > 0),
@@ -163,7 +166,7 @@ export function RunPermissionBody(props: {
       return
     }
 
-    setState(createPermissionBodyState(id))
+    setState(createPermissionBodyState(props.request))
   })
 
   const shift = (dir: -1 | 1) => {
@@ -361,25 +364,52 @@ export function RunPermissionBody(props: {
                   <Show
                     when={info().diff}
                     fallback={
-                      <box width="100%" flexDirection="column" gap={1} paddingLeft={1}>
-                        <For each={info().lines}>
-                          {(line) => (
-                            <text fg={props.theme.text} wrapMode="word">
-                              {line}
-                            </text>
-                          )}
-                        </For>
-                      </box>
+                      <Show
+                        when={info().patch}
+                        fallback={
+                          <box width="100%" flexDirection="column" gap={1} paddingLeft={1}>
+                            <For each={info().lines}>
+                              {(line) => (
+                                <text fg={props.theme.text} wrapMode="word">
+                                  {line}
+                                </text>
+                              )}
+                            </For>
+                          </box>
+                        }
+                      >
+                        {(patch) => (
+                          <Show
+                            when={props.block.syntax}
+                            fallback={
+                              <text fg={props.theme.muted} wrapMode="word">
+                                {patch()}
+                              </text>
+                            }
+                          >
+                            {(syntax) => (
+                              <code
+                                filetype="diff"
+                                drawUnstyledText={false}
+                                streaming={true}
+                                syntaxStyle={syntax()}
+                                content={patch()}
+                                fg={props.theme.muted}
+                              />
+                            )}
+                          </Show>
+                        )}
+                      </Show>
                     }
                   >
                     <diff
                       diff={info().diff!}
-                      view="unified"
+                      view={diffView()}
                       filetype={ft()}
                       syntaxStyle={props.block.syntax}
                       showLineNumbers={true}
                       width="100%"
-                      wrapMode="word"
+                      wrapMode={props.diffWrap ?? "word"}
                       fg={props.theme.text}
                       addedBg={props.block.diffAddedBg}
                       removedBg={props.block.diffRemovedBg}
@@ -392,7 +422,7 @@ export function RunPermissionBody(props: {
                       removedLineNumberBg={props.block.diffRemovedLineNumberBg}
                     />
                   </Show>
-                  <Show when={!info().diff && info().lines.length === 0}>
+                  <Show when={!info().diff && !info().patch && info().lines.length === 0}>
                     <box paddingLeft={1}>
                       <text fg={props.theme.muted}>No diff provided</text>
                     </box>

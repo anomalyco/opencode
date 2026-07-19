@@ -1,31 +1,34 @@
 import { describe, expect, test } from "bun:test"
+import type { SessionMessageAssistantTool } from "@opencode-ai/client/promise"
 import { entryBody, entryCanStream, entryDone } from "../../src/mini/entry.body"
-import type { MiniToolPart, StreamCommit, ToolSnapshot } from "../../src/mini/types"
+import type { StreamCommit, ToolSnapshot } from "../../src/mini/types"
 
 function commit(input: Partial<StreamCommit> & Pick<StreamCommit, "kind" | "text" | "phase" | "source">): StreamCommit {
   return input
 }
 
 function toolPart(
-  tool: string,
-  state: MiniToolPart["state"],
-  id = `${tool}-1`,
-  messageID = `msg-${tool}`,
-): MiniToolPart {
+  name: string,
+  state: SessionMessageAssistantTool["state"],
+  id = `${name}-1`,
+): SessionMessageAssistantTool {
   return {
-    id,
-    sessionID: "session-1",
-    messageID,
     type: "tool",
-    callID: `call-${id}`,
-    tool,
+    id,
+    name,
     state,
-  } as MiniToolPart
+    time:
+      state.status === "streaming"
+        ? { created: 1 }
+        : state.status === "completed" || state.status === "error"
+          ? { created: 1, ran: 1, completed: 2 }
+          : { created: 1, ran: 1 },
+  }
 }
 
 function toolCommit(input: {
   tool: string
-  state: MiniToolPart["state"]
+  state: SessionMessageAssistantTool["state"]
   phase?: StreamCommit["phase"]
   toolState?: StreamCommit["toolState"]
   text?: string
@@ -38,8 +41,11 @@ function toolCommit(input: {
     phase: input.phase ?? "final",
     source: "tool",
     tool: input.tool,
-    toolState: input.toolState ?? "completed",
-    part: toolPart(input.tool, input.state, input.id, input.messageID),
+    toolState:
+      input.toolState ??
+      (input.state.status === "error" ? "error" : input.state.status === "completed" ? "completed" : "running"),
+    messageID: input.messageID,
+    part: toolPart(input.tool, input.state, input.id),
   })
 }
 
@@ -62,13 +68,13 @@ describe("run entry body", () => {
           text: "Shell exited with code 7",
           phase: "final",
           source: "tool",
-          tool: "bash",
+          tool: "shell",
           toolState: "error",
           toolError: "Shell exited with code 7",
           shell: { callID: "sh_failed", command: "false" },
         }),
       ),
-    ).toEqual({ type: "text", content: "✖ bash failed: Shell exited with code 7" })
+    ).toEqual({ type: "text", content: "✖ shell failed: Shell exited with code 7" })
   })
 
   test("renders assistant, reasoning, and user entries in their display formats", () => {
@@ -136,13 +142,11 @@ describe("run entry body", () => {
         state: {
           status: "completed",
           input: {
-            filePath: "src/a.ts",
+            path: "src/a.ts",
             content: "const x = 1\n",
           },
-          output: "",
-          title: "",
-          metadata: {},
-          time: { start: 1, end: 2 },
+          structured: {},
+          content: [],
         },
       }),
       snapshot: {
@@ -159,14 +163,12 @@ describe("run entry body", () => {
         state: {
           status: "completed",
           input: {
-            filePath: "src/a.ts",
+            path: "src/a.ts",
           },
-          output: "",
-          title: "",
-          metadata: {
-            diff: "@@ -1 +1 @@\n-old\n+new\n",
+          structured: {
+            files: [{ file: "src/a.ts", status: "modified", patch: "@@ -1 +1 @@\n-old\n+new\n" }],
           },
-          time: { start: 1, end: 2 },
+          content: [],
         },
       }),
       snapshot: {
@@ -181,25 +183,22 @@ describe("run entry body", () => {
       },
     },
     {
-      name: "keeps completed apply_patch tool finals structured",
+      name: "keeps completed patch tool finals structured",
       commit: toolCommit({
-        tool: "apply_patch",
+        tool: "patch",
         state: {
           status: "completed",
           input: {},
-          output: "",
-          title: "",
-          metadata: {
+          content: [],
+          structured: {
             files: [
               {
-                type: "update",
-                filePath: "src/a.ts",
-                relativePath: "src/a.ts",
+                status: "modified",
+                file: "src/a.ts",
                 patch: "@@ -1 +1 @@\n-old\n+new\n",
               },
             ],
           },
-          time: { start: 1, end: 2 },
         },
       }),
       snapshot: {
@@ -215,22 +214,16 @@ describe("run entry body", () => {
       },
     },
   ] satisfies Array<{ name: string; commit: StreamCommit; snapshot: ToolSnapshot }>) {
-    if (item.name === "keeps completed apply_patch tool finals structured") {
-      test.skip(item.name, () => {
-        expect(structured(item.commit)).toEqual(item.snapshot)
-      })
-      continue
-    }
     test(item.name, () => {
       expect(structured(item.commit)).toEqual(item.snapshot)
     })
   }
 
-  test("keeps running task tool state out of scrollback", () => {
+  test("keeps running subagent tool state out of scrollback", () => {
     expect(
       entryBody(
         toolCommit({
-          tool: "task",
+          tool: "subagent",
           phase: "start",
           toolState: "running",
           text: "running inspect reducer",
@@ -238,9 +231,10 @@ describe("run entry body", () => {
             status: "running",
             input: {
               description: "Inspect reducer",
-              subagent_type: "explore",
+              agent: "explore",
             },
-            time: { start: 1 },
+            structured: { sessionID: "ses-child-1", status: "running" },
+            content: [],
           },
         }),
       ),
@@ -249,29 +243,23 @@ describe("run entry body", () => {
     })
   })
 
-  test("promotes task results to markdown and falls back to structured task summaries", () => {
+  test("promotes subagent results to markdown and falls back to structured summaries", () => {
     expect(
       entryBody(
         toolCommit({
-          tool: "task",
+          tool: "subagent",
           state: {
             status: "completed",
             input: {
               description: "Inspect reducer",
-              subagent_type: "explore",
+              agent: "explore",
             },
-            title: "",
-            output: [
-              '<task id="child-1" state="completed">',
-              "<task_result>",
-              "# Findings\n\n- Footer stays live",
-              "</task_result>",
-              "</task>",
-            ].join("\n"),
-            metadata: {
-              sessionId: "child-1",
+            content: [{ type: "text", text: "# Findings\n\n- Footer stays live" }],
+            structured: {
+              sessionID: "ses-child-1",
+              status: "completed",
+              output: "# Findings\n\n- Footer stays live",
             },
-            time: { start: 1, end: 2 },
           },
         }),
       ),
@@ -283,27 +271,25 @@ describe("run entry body", () => {
     expect(
       structured(
         toolCommit({
-          tool: "task",
+          tool: "subagent",
           state: {
             status: "completed",
             input: {
               description: "Inspect reducer",
-              subagent_type: "explore",
+              agent: "explore",
             },
-            title: "",
-            output: ['<task id="child-1" state="completed">', "<task_result>", "", "</task_result>", "</task>"].join(
-              "\n",
-            ),
-            metadata: {
-              sessionId: "child-1",
+            content: [],
+            structured: {
+              sessionID: "ses-child-1",
+              status: "completed",
+              output: "",
             },
-            time: { start: 1, end: 2 },
           },
         }),
       ),
     ).toEqual({
       kind: "task",
-      title: "# Explore Task",
+      title: "# Explore Subagent",
       rows: ["Inspect reducer"],
       tail: "",
     })
@@ -316,7 +302,7 @@ describe("run entry body", () => {
         text: "partial output",
         phase: "progress",
         source: "tool",
-        tool: "bash",
+        tool: "shell",
         partID: "tool-2",
       }),
     )
@@ -332,7 +318,7 @@ describe("run entry body", () => {
           text: "partial output",
           phase: "progress",
           source: "tool",
-          tool: "bash",
+          tool: "shell",
         }),
         body,
       ),
@@ -344,35 +330,30 @@ describe("run entry body", () => {
           text: "output",
           phase: "progress",
           source: "tool",
-          tool: "bash",
+          tool: "shell",
           toolState: "completed",
         }),
       ),
     ).toBe(true)
   })
 
-  test.skip("formats completed bash output with a blank line after the command and no trailing blank row", () => {
+  test("formats completed shell output with a blank line after the command and no trailing blank row", () => {
+    const output = ["/tmp/demo", "git status", "On branch demo", "nothing to commit, working tree clean", ""].join("\n")
     expect(
       entryBody(
         toolCommit({
-          tool: "bash",
+          tool: "shell",
           phase: "progress",
           toolState: "completed",
-          text: ["/tmp/demo", "git status", "On branch demo", "nothing to commit, working tree clean", ""].join("\n"),
+          text: output,
           state: {
             status: "completed",
             input: {
               command: "git status",
               workdir: "/tmp/demo",
             },
-            output: ["/tmp/demo", "git status", "On branch demo", "nothing to commit, working tree clean", ""].join(
-              "\n",
-            ),
-            title: "git status",
-            metadata: {
-              exitCode: 0,
-            },
-            time: { start: 1, end: 2 },
+            content: [{ type: "text", text: output }],
+            structured: { exit: 0, truncated: false },
           },
         }),
       ),
@@ -382,11 +363,11 @@ describe("run entry body", () => {
     })
   })
 
-  test.skip("renders command-only bash starts without the shell header", () => {
+  test("renders command-only shell starts without the shell header", () => {
     expect(
       entryBody(
         toolCommit({
-          tool: "bash",
+          tool: "shell",
           phase: "start",
           toolState: "running",
           text: "running shell",
@@ -395,7 +376,8 @@ describe("run entry body", () => {
             input: {
               command: "ls",
             },
-            time: { start: 1 },
+            structured: {},
+            content: [],
           },
         }),
       ),
@@ -413,7 +395,7 @@ describe("run entry body", () => {
           text: "running shell",
           phase: "start",
           source: "tool",
-          tool: "bash",
+          tool: "shell",
           partID: "shell:call-1",
           toolState: "running",
           shell: {
@@ -434,7 +416,7 @@ describe("run entry body", () => {
           text: "/tmp/demo\n",
           phase: "progress",
           source: "tool",
-          tool: "bash",
+          tool: "shell",
           partID: "shell:call-1",
           toolState: "completed",
           shell: {
@@ -449,29 +431,25 @@ describe("run entry body", () => {
     })
   })
 
-  test.skip("falls back to patch summary when apply_patch has no visible diff items", () => {
+  test("falls back to patch summary when patch has no visible diff items", () => {
     expect(
       entryBody(
         toolCommit({
-          tool: "apply_patch",
+          tool: "patch",
           state: {
             status: "completed",
             input: {
               patchText: "*** Begin Patch\n*** End Patch",
             },
-            output: "",
-            title: "",
-            metadata: {
+            content: [],
+            structured: {
               files: [
                 {
-                  type: "update",
-                  filePath: "src/a.ts",
-                  relativePath: "src/a.ts",
-                  diff: "@@ -1 +1 @@\n-old\n+new\n",
+                  status: "modified",
+                  file: "src/a.ts",
                 },
               ],
             },
-            time: { start: 1, end: 2 },
           },
         }),
       ),
@@ -481,34 +459,29 @@ describe("run entry body", () => {
     })
   })
 
-  test.skip("suppresses redundant patched rows when apply_patch also created a file", () => {
+  test("suppresses redundant patched rows when patch also created a file", () => {
     expect(
       entryBody(
         toolCommit({
-          tool: "apply_patch",
+          tool: "patch",
           state: {
             status: "completed",
             input: {
               patchText: "*** Begin Patch\n*** End Patch",
             },
-            output: "",
-            title: "",
-            metadata: {
+            content: [],
+            structured: {
               files: [
                 {
-                  type: "update",
-                  filePath: "src/a.ts",
-                  relativePath: "src/a.ts",
-                  diff: "@@ -1 +1 @@\n-old\n+new\n",
+                  status: "modified",
+                  file: "src/a.ts",
                 },
                 {
-                  type: "add",
-                  filePath: "README-demo.md",
-                  relativePath: "README-demo.md",
+                  status: "added",
+                  file: "README-demo.md",
                 },
               ],
             },
-            time: { start: 1, end: 2 },
           },
         }),
       ),
@@ -531,9 +504,9 @@ describe("run entry body", () => {
               pattern: "**/*tool*",
               path: "/tmp/demo/run",
             },
-            error: "No such file or directory: '/tmp/demo/run'",
-            metadata: {},
-            time: { start: 1, end: 2 },
+            error: { type: "unknown", message: "No such file or directory: '/tmp/demo/run'" },
+            structured: {},
+            content: [],
           },
         }),
       ),
@@ -541,6 +514,31 @@ describe("run entry body", () => {
       type: "text",
       content: "No such file or directory: '/tmp/demo/run'",
     })
+  })
+
+  test("renders bounded structured output for completed unknown tools without text", () => {
+    const body = entryBody(
+      toolCommit({
+        tool: "mcp_custom",
+        phase: "final",
+        toolState: "completed",
+        text: "",
+        state: {
+          status: "completed",
+          input: { target: "demo" },
+          structured: {
+            result: { ok: true, nested: { values: Array.from({ length: 40 }, (_, index) => ({ index })) } },
+            large: "x".repeat(8_000),
+          },
+          content: [],
+        },
+      }),
+    )
+
+    expect(body).toMatchObject({ type: "code", filetype: "json" })
+    expect(body.type === "code" ? body.content : "").toContain('"ok": true')
+    expect(body.type === "code" ? body.content : "").toContain("[truncated]")
+    expect(body.type === "code" ? body.content.length : Infinity).toBeLessThanOrEqual(4_096)
   })
 
   test("renders interrupted assistant finals as text", () => {

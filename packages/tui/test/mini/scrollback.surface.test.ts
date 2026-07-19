@@ -1,9 +1,11 @@
 import { afterEach, expect, test } from "bun:test"
+import type { SessionMessageAssistantTool } from "@opencode-ai/client/promise"
 import { RGBA, SyntaxStyle } from "@opentui/core"
 import { MockTreeSitterClient, createTestRenderer, type TestRenderer } from "@opentui/core/testing"
 import { RunScrollbackStream } from "../../src/mini/scrollback.surface"
+import { entryGroupKey } from "../../src/mini/scrollback.writer"
 import { RUN_THEME_FALLBACK, type RunTheme } from "../../src/mini/theme"
-import type { MiniToolPart, StreamCommit } from "../../src/mini/types"
+import type { StreamCommit } from "../../src/mini/types"
 
 type ClaimedCommit = {
   snapshot: {
@@ -218,16 +220,19 @@ function error(text: string): StreamCommit {
   }
 }
 
-function toolPart(tool: string, state: Record<string, unknown>, id: string, messageID: string): MiniToolPart {
+function toolPart(name: string, state: SessionMessageAssistantTool["state"], id: string): SessionMessageAssistantTool {
   return {
-    id,
-    sessionID: "session-1",
-    messageID,
     type: "tool",
-    callID: `call-${id}`,
-    tool,
+    id,
+    name,
     state,
-  } as MiniToolPart
+    time:
+      state.status === "streaming"
+        ? { created: 1 }
+        : state.status === "completed" || state.status === "error"
+          ? { created: 1, ran: 1, completed: 2 }
+          : { created: 1, ran: 1 },
+  }
 }
 
 function toolCommit(input: {
@@ -235,7 +240,7 @@ function toolCommit(input: {
   phase: StreamCommit["phase"]
   toolState?: StreamCommit["toolState"]
   text?: string
-  state?: Record<string, unknown>
+  state?: SessionMessageAssistantTool["state"]
   id?: string
   messageID?: string
 }): StreamCommit {
@@ -251,9 +256,22 @@ function toolCommit(input: {
     messageID,
     tool: input.tool,
     ...(input.toolState ? { toolState: input.toolState } : {}),
-    ...(input.state ? { part: toolPart(input.tool, input.state, id, messageID) } : {}),
+    ...(input.state ? { part: toolPart(input.tool, input.state, id) } : {}),
   }
 }
+
+test("scopes repeated tool part IDs to their assistant messages", () => {
+  const first = toolCommit({
+    tool: "read",
+    phase: "start",
+    id: "call-repeated",
+    messageID: "msg-one",
+    toolState: "running",
+  })
+  const second = { ...first, messageID: "msg-two" }
+
+  expect(entryGroupKey(first)).not.toBe(entryGroupKey(second))
+})
 
 test("finalizes markdown tables for streamed and coalesced input", async () => {
   const text =
@@ -342,7 +360,8 @@ test("renders question summaries without boilerplate footer copy", async () => {
               },
             ],
           },
-          time: { start: 1 },
+          structured: {},
+          content: [],
         },
       }),
       final: toolCommit({
@@ -361,10 +380,10 @@ test("renders question summaries without boilerplate footer copy", async () => {
               },
             ],
           },
-          metadata: {
+          structured: {
             answers: [["Bug fix"]],
           },
-          time: { start: 1, end: 2100 },
+          content: [],
         },
       }),
     },
@@ -436,7 +455,8 @@ test("inserts spacers for new visible groups", async () => {
           input: {
             pattern: "**/run.ts",
           },
-          time: { start: 1 },
+          structured: {},
+          content: [],
         },
       }),
     )
@@ -526,13 +546,13 @@ test.skipIf(process.platform === "win32")(
   },
 )
 
-test.skip("coalesces same-line tool progress into one snapshot", async () => {
+test("coalesces same-line tool progress into one snapshot", async () => {
   const out = await setup()
 
   try {
-    await out.scrollback.append(toolCommit({ tool: "bash", phase: "progress", text: "abc" }))
-    await out.scrollback.append(toolCommit({ tool: "bash", phase: "progress", text: "def" }))
-    await out.scrollback.append(toolCommit({ tool: "bash", phase: "final", text: "", toolState: "completed" }))
+    await out.scrollback.append(toolCommit({ tool: "shell", phase: "progress", text: "abc" }))
+    await out.scrollback.append(toolCommit({ tool: "shell", phase: "progress", text: "def" }))
+    await out.scrollback.append(toolCommit({ tool: "shell", phase: "final", text: "", toolState: "completed" }))
 
     const commits = claim(out.renderer)
     try {
@@ -546,102 +566,7 @@ test.skip("coalesces same-line tool progress into one snapshot", async () => {
   }
 })
 
-test.skip("omits the current directory from bash titles", async () => {
-  const out = await setup()
-
-  try {
-    await out.scrollback.append(
-      toolCommit({
-        tool: "bash",
-        phase: "start",
-        toolState: "running",
-        state: {
-          status: "running",
-          input: {
-            command: "pwd",
-            workdir: process.cwd(),
-          },
-          time: { start: 1 },
-        },
-      }),
-    )
-
-    const commits = claim(out.renderer)
-    try {
-      expect(render(commits)).toContain("$ pwd")
-      expect(render(commits)).not.toContain("Running in .")
-    } finally {
-      destroy(commits)
-    }
-  } finally {
-    out.scrollback.destroy()
-  }
-})
-
-test.skip("renders completed bash output with one blank line after the command and before the next group", async () => {
-  const out = await setup()
-
-  try {
-    const lines: string[] = []
-    const take = () => {
-      const commits = claim(out.renderer)
-      try {
-        lines.push(...commits.flatMap((commit) => renderRows(commit).flatMap((row) => row.split("\n"))))
-      } finally {
-        destroy(commits)
-      }
-    }
-
-    await out.scrollback.append(user("/fmt bash"))
-    take()
-    await out.scrollback.append(
-      toolCommit({
-        tool: "bash",
-        phase: "start",
-        toolState: "running",
-        state: {
-          status: "running",
-          input: {
-            command: "git status",
-            workdir: "/tmp/demo",
-          },
-          time: { start: 1 },
-        },
-      }),
-    )
-    take()
-    await out.scrollback.append(
-      toolCommit({
-        tool: "bash",
-        phase: "progress",
-        toolState: "completed",
-        text: ["/tmp/demo", "git status", "On branch demo", "nothing to commit, working tree clean", ""].join("\n"),
-        state: {
-          status: "completed",
-          input: {
-            command: "git status",
-            workdir: "/tmp/demo",
-          },
-          time: { start: 1, end: 2 },
-        },
-      }),
-    )
-    take()
-    await out.scrollback.append(assistant("oc-run-dev ahead 1"))
-    await out.scrollback.complete()
-    take()
-
-    const output = lines.join("\n")
-    expect(output).toContain("# Running in /tmp/demo\n$ git status")
-    expect(output).toContain("$ git status\n\nOn branch demo")
-    expect(output).toContain("nothing to commit, working tree clean\n\noc-run-dev ahead 1")
-    expect(output).not.toContain("nothing to commit, working tree clean\n\n\noc-run-dev ahead 1")
-  } finally {
-    out.scrollback.destroy()
-  }
-})
-
-test.skip("inserts a spacer before the next tool after completed multiline bash output", async () => {
+test("does not double-space before completed shell output when inline tool headers intervene", async () => {
   const out = await setup()
 
   try {
@@ -657,83 +582,7 @@ test.skip("inserts a spacer before the next tool after completed multiline bash 
 
     await out.scrollback.append(
       toolCommit({
-        tool: "bash",
-        phase: "start",
-        toolState: "running",
-        state: {
-          status: "running",
-          input: {
-            command: "pwd; ls -la",
-            workdir: "/tmp/demo",
-          },
-          time: { start: 1 },
-        },
-      }),
-    )
-    take()
-    await out.scrollback.append(
-      toolCommit({
-        tool: "bash",
-        phase: "progress",
-        toolState: "completed",
-        text: ["/tmp/demo", "pwd; ls -la", "/tmp/demo", "total 4", "", ""].join("\n"),
-        state: {
-          status: "completed",
-          input: {
-            command: "pwd; ls -la",
-            workdir: "/tmp/demo",
-          },
-          output: ["/tmp/demo", "pwd; ls -la", "/tmp/demo", "total 4", "", ""].join("\n"),
-          title: "pwd; ls -la",
-          metadata: {
-            exitCode: 0,
-          },
-          time: { start: 1, end: 2 },
-        },
-      }),
-    )
-    take()
-    await out.scrollback.append(
-      toolCommit({
-        tool: "glob",
-        phase: "start",
-        toolState: "running",
-        state: {
-          status: "running",
-          input: {
-            pattern: "**/*tool*",
-            path: "src/cli/cmd",
-          },
-          time: { start: 3 },
-        },
-      }),
-    )
-    take()
-
-    const output = lines.join("\n")
-    expect(output).toContain('total 4\n\n✱ Glob "**/*tool*" in src/cli/cmd')
-  } finally {
-    out.scrollback.destroy()
-  }
-})
-
-test.skip("does not double-space before completed bash output when inline tool headers intervene", async () => {
-  const out = await setup()
-
-  try {
-    const lines: string[] = []
-    const take = () => {
-      const commits = claim(out.renderer)
-      try {
-        lines.push(...commits.flatMap((commit) => renderRows(commit).flatMap((row) => row.split("\n"))))
-      } finally {
-        destroy(commits)
-      }
-    }
-
-    await out.scrollback.append(
-      toolCommit({
-        tool: "bash",
+        tool: "shell",
         phase: "start",
         toolState: "running",
         state: {
@@ -742,7 +591,8 @@ test.skip("does not double-space before completed bash output when inline tool h
             command: "ls",
             workdir: "src/cli/cmd/run",
           },
-          time: { start: 1 },
+          structured: {},
+          content: [],
         },
       }),
     )
@@ -758,7 +608,8 @@ test.skip("does not double-space before completed bash output when inline tool h
             pattern: "**/*tool*",
             path: "src/cli/cmd/run",
           },
-          time: { start: 2 },
+          structured: {},
+          content: [],
         },
       }),
     )
@@ -774,14 +625,15 @@ test.skip("does not double-space before completed bash output when inline tool h
             pattern: "tool",
             path: "src/cli/cmd/run",
           },
-          time: { start: 3 },
+          structured: {},
+          content: [],
         },
       }),
     )
     take()
     await out.scrollback.append(
       toolCommit({
-        tool: "bash",
+        tool: "shell",
         phase: "progress",
         toolState: "completed",
         text: ["src/cli/cmd/run", "ls", "demo.ts", "entry.body.ts", "", ""].join("\n"),
@@ -791,12 +643,8 @@ test.skip("does not double-space before completed bash output when inline tool h
             command: "ls",
             workdir: "src/cli/cmd/run",
           },
-          output: ["src/cli/cmd/run", "ls", "demo.ts", "entry.body.ts", "", ""].join("\n"),
-          title: "ls",
-          metadata: {
-            exitCode: 0,
-          },
-          time: { start: 1, end: 4 },
+          content: [{ type: "text", text: ["src/cli/cmd/run", "ls", "demo.ts", "entry.body.ts", "", ""].join("\n") }],
+          structured: { exit: 0, truncated: false },
         },
       }),
     )
@@ -810,7 +658,7 @@ test.skip("does not double-space before completed bash output when inline tool h
   }
 })
 
-test.skip("does not emit blank patch snapshots between edit and task", async () => {
+test("does not emit blank patch snapshots between edit and subagent", async () => {
   const out = await setup()
 
   try {
@@ -832,21 +680,25 @@ test.skip("does not emit blank patch snapshots between edit and task", async () 
         state: {
           status: "completed",
           input: {
-            filePath: "src/demo-format.ts",
+            path: "src/demo-format.ts",
           },
-          output: "",
-          title: "edit",
-          metadata: {
-            diff: "@@ -1 +1 @@\n-export const demo = 1\n+export const demo = 42\n",
+          content: [],
+          structured: {
+            files: [
+              {
+                file: "src/demo-format.ts",
+                status: "modified",
+                patch: "@@ -1 +1 @@\n-export const demo = 1\n+export const demo = 42\n",
+              },
+            ],
           },
-          time: { start: 1, end: 2 },
         },
       }),
     )
     take()
     await out.scrollback.append(
       toolCommit({
-        tool: "apply_patch",
+        tool: "patch",
         phase: "final",
         toolState: "completed",
         state: {
@@ -854,46 +706,42 @@ test.skip("does not emit blank patch snapshots between edit and task", async () 
           input: {
             patchText: "*** Begin Patch\n*** End Patch",
           },
-          output: "",
-          title: "apply_patch",
-          metadata: {
+          content: [],
+          structured: {
             files: [
               {
-                type: "update",
-                filePath: "src/demo-format.ts",
-                relativePath: "src/demo-format.ts",
-                diff: "@@ -1 +1 @@\n-export const demo = 1\n+export const demo = 42\n",
+                status: "modified",
+                file: "src/demo-format.ts",
+                patch: "@@ -1 +1 @@\n-export const demo = 1\n+export const demo = 42\n",
                 deletions: 1,
               },
               {
-                type: "add",
-                filePath: "README-demo.md",
-                relativePath: "README-demo.md",
+                status: "added",
+                file: "README-demo.md",
               },
             ],
           },
-          time: { start: 2, end: 3 },
         },
       }),
     )
     take()
     await out.scrollback.append(
       toolCommit({
-        tool: "task",
+        tool: "subagent",
         phase: "final",
         toolState: "completed",
         state: {
           status: "completed",
           input: {
             description: "Scan run/* for reducer touchpoints",
-            subagent_type: "explore",
+            agent: "explore",
           },
-          output: "",
-          title: "task",
-          metadata: {
-            sessionId: "sub_demo_1",
+          content: [],
+          structured: {
+            sessionID: "ses-sub-demo-1",
+            status: "completed",
+            output: "",
           },
-          time: { start: 3, end: 4 },
         },
       }),
     )
@@ -902,8 +750,8 @@ test.skip("does not emit blank patch snapshots between edit and task", async () 
     const output = lines.join("\n")
     expect(output).toContain("+ Created README-demo.md")
     expect(output).not.toContain("~ Patched src/demo-format.ts")
-    expect(output).toContain("+ Created README-demo.md\n\n# Explore Task")
-    expect(output).not.toContain("+ Created README-demo.md\n\n\n# Explore Task")
+    expect(output).toContain("+ Created README-demo.md\n\n# Explore Subagent")
+    expect(output).not.toContain("+ Created README-demo.md\n\n\n# Explore Subagent")
   } finally {
     out.scrollback.destroy()
   }
@@ -957,10 +805,11 @@ test("renders structured write finals once as code blocks", async () => {
         state: {
           status: "running",
           input: {
-            filePath: "src/a.ts",
+            path: "src/a.ts",
             content: "const x = 1\nconst y = 2\n",
           },
-          time: { start: 1 },
+          structured: {},
+          content: [],
         },
       }),
     )
@@ -976,11 +825,11 @@ test("renders structured write finals once as code blocks", async () => {
         state: {
           status: "completed",
           input: {
-            filePath: "src/a.ts",
+            path: "src/a.ts",
             content: "const x = 1\nconst y = 2\n",
           },
-          metadata: {},
-          time: { start: 1, end: 2 },
+          structured: {},
+          content: [],
         },
       }),
     )
@@ -1000,36 +849,32 @@ test("renders structured write finals once as code blocks", async () => {
   }
 })
 
-test("renders promoted task markdown without a leading blank row", async () => {
+test("renders promoted subagent markdown without a leading blank row", async () => {
   const out = await setup()
 
   try {
     await out.scrollback.append(
       toolCommit({
-        tool: "task",
+        tool: "subagent",
         phase: "final",
         toolState: "completed",
         state: {
           status: "completed",
           input: {
             description: "Explore run.ts",
-            subagent_type: "explore",
+            agent: "explore",
           },
-          output: [
-            '<task id="child-1" state="completed">',
-            "<task_result>",
-            "Location: `/tmp/run.ts`",
-            "",
-            "Summary:",
-            "- Local interactive mode",
-            "- Attach mode",
-            "</task_result>",
-            "</task>",
-          ].join("\n"),
-          metadata: {
-            sessionId: "child-1",
+          content: [
+            {
+              type: "text",
+              text: "Location: `/tmp/run.ts`\n\nSummary:\n- Local interactive mode\n- Attach mode",
+            },
+          ],
+          structured: {
+            sessionID: "ses-child-1",
+            status: "completed",
+            output: "Location: `/tmp/run.ts`\n\nSummary:\n- Local interactive mode\n- Attach mode",
           },
-          time: { start: 1, end: 2 },
         },
       }),
     )

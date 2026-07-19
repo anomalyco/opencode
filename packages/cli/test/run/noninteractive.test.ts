@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
-import { OpenCode, type EventSubscribeOutput } from "@opencode-ai/client/promise"
+import { OpenCode, type EventSubscribeOutput, type SessionMessageAssistantTool } from "@opencode-ai/client/promise"
 import { runNonInteractivePrompt } from "../../src/run/noninteractive"
 
 type V2Event = EventSubscribeOutput
 type FormInfo = Extract<V2Event, { type: "form.created" }>["data"]["form"]
+const location = { directory: "/work tree", workspaceID: "wrk_1" }
 
 function ok<T>(data: T) {
   return Promise.resolve(data)
@@ -18,8 +19,8 @@ function form(id: string, sessionID: string): FormInfo {
   }
 }
 
-function formCreated(info: FormInfo): V2Event {
-  return { id: `evt_${info.id}`, created: 0, type: "form.created", data: { form: info } }
+function formCreated(info: FormInfo, eventLocation = location): V2Event {
+  return { id: `evt_${info.id}`, created: 0, type: "form.created", location: eventLocation, data: { form: info } }
 }
 
 function prompted(inputID: string): V2Event {
@@ -92,6 +93,64 @@ function executionFailed(message: string): V2Event {
   }
 }
 
+function failedTool(inputID: string): V2Event[] {
+  return [
+    prompted(inputID),
+    {
+      id: "evt_failed_tool_input",
+      created: 1,
+      type: "session.tool.input.started",
+      durable: { aggregateID: "ses_1", seq: 1, version: 1 },
+      data: {
+        sessionID: "ses_1",
+        assistantMessageID: "msg_failed_tool",
+        callID: "call_failed_tool",
+        name: "shell",
+      },
+    },
+    {
+      id: "evt_failed_tool_called",
+      created: 2,
+      type: "session.tool.called",
+      durable: { aggregateID: "ses_1", seq: 2, version: 1 },
+      data: {
+        sessionID: "ses_1",
+        assistantMessageID: "msg_failed_tool",
+        callID: "call_failed_tool",
+        input: { command: "printf partial && false" },
+        executed: true,
+      },
+    },
+    {
+      id: "evt_failed_tool_progress",
+      created: 3,
+      type: "session.tool.progress",
+      durable: { aggregateID: "ses_1", seq: 3, version: 1 },
+      data: {
+        sessionID: "ses_1",
+        assistantMessageID: "msg_failed_tool",
+        callID: "call_failed_tool",
+        structured: { checkpoint: 1 },
+        content: [{ type: "text", text: "partial output" }],
+      },
+    },
+    {
+      id: "evt_failed_tool_terminal",
+      created: 4,
+      type: "session.tool.failed",
+      durable: { aggregateID: "ses_1", seq: 4, version: 1 },
+      data: {
+        sessionID: "ses_1",
+        assistantMessageID: "msg_failed_tool",
+        callID: "call_failed_tool",
+        error: { type: "unknown", message: "tool failed" },
+        executed: true,
+      },
+    },
+    settled(),
+  ]
+}
+
 // Runs one non-interactive prompt against a mocked SDK. `turn` produces the
 // live events the prompt admission triggers, keyed by the generated message ID.
 async function run(input: {
@@ -100,6 +159,9 @@ async function run(input: {
   attached?: boolean
   format?: "default" | "json"
   compatibility?: "v1"
+  cancel?: (input: { sessionID: string; formID: string }) => Promise<void>
+  renderTool?: (part: SessionMessageAssistantTool) => Promise<void>
+  renderToolError?: (part: SessionMessageAssistantTool) => Promise<void>
 }) {
   const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
   const values: V2Event[] = [{ id: "evt_connected", type: "server.connected", data: {} }]
@@ -119,10 +181,18 @@ async function run(input: {
   spyOn(sdk.event, "subscribe").mockImplementation(() => stream)
   spyOn(sdk.permission, "list").mockImplementation(() => ok([]) as never)
   spyOn(sdk.question, "list").mockImplementation(() => ok([]) as never)
+  spyOn(sdk.question, "reject").mockImplementation(() => ok(undefined) as never)
   spyOn(sdk.form, "list").mockImplementation(
     (request) => ok(input.pendingForms?.filter((item) => item.sessionID === request.sessionID) ?? []) as never,
   )
-  spyOn(sdk.form, "cancel").mockImplementation(() => ok(undefined) as never)
+  spyOn(sdk.form.request, "list").mockImplementation(
+    () =>
+      ok({
+        location: { ...location, project: { id: "proj_1", directory: location.directory } },
+        data: input.pendingForms?.filter((item) => item.sessionID === "global") ?? [],
+      }) as never,
+  )
+  spyOn(sdk.form, "cancel").mockImplementation((request) => (input.cancel?.(request) ?? ok(undefined)) as never)
   spyOn(sdk.session, "prompt").mockImplementation((request) => {
     const messageID = request.id ?? "msg_prompt"
     values.push(...input.turn(messageID))
@@ -133,6 +203,7 @@ async function run(input: {
   await runNonInteractivePrompt({
     client: sdk,
     sessionID: "ses_1",
+    location,
     message: "hello",
     files: [],
     thinking: false,
@@ -140,8 +211,8 @@ async function run(input: {
     auto: false,
     attached: input.attached ?? false,
     compatibility: input.compatibility,
-    renderTool: () => Promise.resolve(),
-    renderToolError: () => Promise.resolve(),
+    renderTool: input.renderTool ?? (() => Promise.resolve()),
+    renderToolError: input.renderToolError ?? (() => Promise.resolve()),
   })
   return sdk
 }
@@ -180,9 +251,20 @@ describe("runNonInteractivePrompt", () => {
       // which must not leave the consume loop waiting forever.
       turn: () => [formCreated(form("frm_live", "global")), settled("interrupted")],
     })
-    expect(sdk.form.cancel).toHaveBeenCalledWith({ sessionID: "global", formID: "frm_live" })
+    const globalOptions = {
+      headers: {
+        "x-opencode-directory": "%2Fwork%20tree",
+        "x-opencode-workspace": "wrk_1",
+      },
+    }
+    expect(sdk.form.cancel).toHaveBeenCalledWith({ sessionID: "global", formID: "frm_live" }, globalOptions)
     expect(sdk.form.cancel).toHaveBeenCalledWith({ sessionID: "ses_1", formID: "frm_pending" })
-    expect(sdk.form.cancel).toHaveBeenCalledWith({ sessionID: "global", formID: "frm_pending_global" })
+    expect(sdk.form.cancel).toHaveBeenCalledWith({ sessionID: "global", formID: "frm_pending_global" }, globalOptions)
+    expect(sdk.form.request.list).toHaveBeenCalledWith({
+      location: { directory: "/work tree", workspace: "wrk_1" },
+    })
+    expect(sdk.question.list).not.toHaveBeenCalled()
+    expect(sdk.question.reject).not.toHaveBeenCalled()
   })
 
   test("attach mode cancels only session-owned forms", async () => {
@@ -192,9 +274,12 @@ describe("runNonInteractivePrompt", () => {
       turn: (messageID) => [formCreated(form("frm_live", "global")), prompted(messageID), settled()],
     })
     expect(sdk.form.cancel).toHaveBeenCalledWith({ sessionID: "ses_1", formID: "frm_pending" })
-    expect(sdk.form.list).not.toHaveBeenCalledWith({ sessionID: "global" })
-    expect(sdk.form.cancel).not.toHaveBeenCalledWith({ sessionID: "global", formID: "frm_live" })
-    expect(sdk.form.cancel).not.toHaveBeenCalledWith({ sessionID: "global", formID: "frm_pending_global" })
+    expect(sdk.form.request.list).not.toHaveBeenCalled()
+    expect(sdk.form.cancel).not.toHaveBeenCalledWith({ sessionID: "global", formID: "frm_live" }, expect.anything())
+    expect(sdk.form.cancel).not.toHaveBeenCalledWith(
+      { sessionID: "global", formID: "frm_pending_global" },
+      expect.anything(),
+    )
   })
 
   test("V1 JSON output flushes step_start before an unrelated step failure", async () => {
@@ -249,5 +334,70 @@ describe("runNonInteractivePrompt", () => {
     })
 
     expect(output).toEqual({ stdout: "", stderr: "" })
+  })
+
+  test("renders native failed tool output before the terminal error", async () => {
+    const rendered: SessionMessageAssistantTool[] = []
+    const failed: SessionMessageAssistantTool[] = []
+    await capture({
+      turn: failedTool,
+      renderTool: (part) => {
+        rendered.push(part)
+        return Promise.resolve()
+      },
+      renderToolError: (part) => {
+        failed.push(part)
+        return Promise.resolve()
+      },
+    })
+
+    expect(rendered).toMatchObject([
+      {
+        id: "call_failed_tool",
+        state: {
+          status: "completed",
+          structured: { checkpoint: 1 },
+          content: [{ type: "text", text: "partial output" }],
+        },
+      },
+    ])
+    expect(failed).toMatchObject([
+      {
+        id: "call_failed_tool",
+        state: {
+          status: "error",
+          structured: { checkpoint: 1 },
+          content: [{ type: "text", text: "partial output" }],
+          error: { message: "tool failed" },
+        },
+      },
+    ])
+  })
+
+  test("keeps failed tool partial output out of the explicit V1 JSON bridge shape", async () => {
+    const output = await capture({ compatibility: "v1", format: "json", turn: failedTool })
+    const events = output.stdout
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line))
+
+    expect(events).toHaveLength(1)
+    expect(events[0]).toMatchObject({
+      type: "tool_use",
+      part: {
+        type: "tool",
+        callID: "call_failed_tool",
+        tool: "shell",
+        state: {
+          status: "error",
+          input: { command: "printf partial && false" },
+          error: "tool failed",
+        },
+      },
+    })
+    expect(events[0].part.state.output).toBeUndefined()
+    expect(events[0].part.state.metadata.structured).toBeUndefined()
+    expect(events[0].part.state.metadata.content).toBeUndefined()
+    expect(output.stderr).toBe("")
   })
 })

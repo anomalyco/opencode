@@ -94,6 +94,31 @@ export default defineScript({
       llm.queue(
         llm.toolCall({
           index: 0,
+          id: "mini-question",
+          name: "question",
+          input: {
+            questions: [
+              {
+                header: "Drive form",
+                question: "Choose the Mini Form answer",
+                options: [{ label: "Accepted", description: "Continue the run" }],
+                multiple: false,
+              },
+            ],
+          },
+        }),
+        llm.finish("tool-calls"),
+      )
+      llm.queue(llm.text("drive mini form complete"))
+      await tmux(["send-keys", "-t", session, "-l", "exercise the form"])
+      await tmux(["send-keys", "-H", "-t", session, "0d"])
+      await waitForPane(session, "Choose the Mini Form answer", 20_000)
+      await tmux(["send-keys", "-H", "-t", session, "0d"])
+      await waitForPane(session, "drive mini form complete", 20_000)
+
+      llm.queue(
+        llm.toolCall({
+          index: 0,
           id: "mini-slow-shell",
           name: "shell",
           input: { command: "sleep 10" },

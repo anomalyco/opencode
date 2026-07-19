@@ -59,7 +59,11 @@ function spread(color: RGBA) {
 }
 
 test("falls back when palette lookup fails", async () => {
-  expect(await resolveRunTheme(renderer({ fail: true }))).toBe(RUN_THEME_FALLBACK)
+  const warnings: string[] = []
+  expect(
+    await resolveRunTheme(renderer({ fail: true }), { name: "missing" }, {}, (message) => warnings.push(message)),
+  ).toBe(RUN_THEME_FALLBACK)
+  expect(warnings).toEqual([])
 })
 
 test("returns syntax styles and indexed splash colors", async () => {
@@ -133,6 +137,39 @@ test("keeps renderer mode when refreshed default background is unavailable", asy
   } finally {
     light.block.syntax?.destroy()
     dark.block.syntax?.destroy()
+  }
+})
+
+test("applies the configured theme name and mode", async () => {
+  const light = await resolveRunTheme(renderer({ themeMode: "dark" }), { name: "tokyonight", mode: "light" })
+  const dark = await resolveRunTheme(renderer({ themeMode: "light" }), { name: "tokyonight", mode: "dark" })
+
+  try {
+    expect(expectRgba(light.background).toInts()).not.toEqual(expectRgba(dark.background).toInts())
+    expect(expectRgba(light.footer.highlight).toInts()).not.toEqual(expectRgba(dark.footer.highlight).toInts())
+  } finally {
+    light.block.syntax?.destroy()
+    dark.block.syntax?.destroy()
+  }
+})
+
+test("warns and falls back to opencode for unresolved or structurally invalid explicit themes", async () => {
+  const warnings: string[] = []
+  const unresolved = await resolveRunTheme(
+    renderer(),
+    { name: "missing", mode: "dark" },
+    { missing: { source: "invalid" } },
+    (message) => warnings.push(message),
+  )
+  const fallback = await resolveRunTheme(renderer(), { name: "opencode", mode: "dark" })
+
+  try {
+    expect(warnings).toEqual(['Theme "missing" was not found or is invalid. Falling back to "opencode".'])
+    expect(expectRgba(unresolved.background).toInts()).toEqual(expectRgba(fallback.background).toInts())
+    expect(expectRgba(unresolved.footer.highlight).toInts()).toEqual(expectRgba(fallback.footer.highlight).toInts())
+  } finally {
+    unresolved.block.syntax?.destroy()
+    fallback.block.syntax?.destroy()
   }
 })
 

@@ -53,6 +53,7 @@ export function RunFooterSubagentBody(props: {
   detail: () => FooterSubagentDetail | undefined
   width: () => number
   diffStyle?: RunDiffStyle
+  diffWrap?: "word" | "none"
   onCycle: (dir: -1 | 1) => void
   onClose: () => void
   // Formatted interrupt shortcut from the registered keymap binding; the
@@ -63,7 +64,7 @@ export function RunFooterSubagentBody(props: {
   const footer = createMemo(() => theme().footer)
   const tab = createMemo(() => props.tab())
   const commits = createMemo(() => props.detail()?.commits ?? [])
-  const opts = createMemo(() => ({ diffStyle: props.diffStyle }))
+  const opts = createMemo(() => ({ diffStyle: props.diffStyle, diffWrap: props.diffWrap }))
   const scrollbar = createMemo(() => ({
     trackOptions: {
       backgroundColor: footer().surface,

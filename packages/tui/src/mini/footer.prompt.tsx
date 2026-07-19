@@ -57,7 +57,7 @@ type PromptOption = Auto | SlashOption
 type MenuMode = false | "mention" | "slash"
 
 type PromptInput = {
-  directory: string
+  directory: Accessor<string>
   findFiles: (query: string) => Promise<string[]>
   agents: Accessor<RunAgent[]>
   references: Accessor<RunReference[]>
@@ -379,7 +379,7 @@ export function createPromptState(input: PromptInput): PromptState {
       const next = extractLineRange(value)
       const list = await input.findFiles(next.base)
       return list.map((item): Auto => {
-        const url = pathToFileURL(path.resolve(input.directory, item))
+        const url = pathToFileURL(path.resolve(input.directory(), item))
         let filename = item
         if (next.line && !item.endsWith("/")) {
           filename = `${item}#${next.line.start}${next.line.end ? `-${next.line.end}` : ""}`

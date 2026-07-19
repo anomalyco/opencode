@@ -62,11 +62,12 @@ export function createSession(messages: SessionMessages): RunSession {
 export async function resolveCurrentSession(
   sdk: RunInput["sdk"],
   sessionID: string,
+  signal?: AbortSignal,
   limit = LIMIT,
 ): Promise<RunSession> {
   const [response, session] = await Promise.all([
-    sdk.message.list({ sessionID, limit, order: "desc" }),
-    sdk.session.get({ sessionID }),
+    sdk.message.list({ sessionID, limit, order: "desc" }, ...requestOptions(signal)),
+    sdk.session.get({ sessionID }, ...requestOptions(signal)),
   ])
   const current = createSession(response.data.toReversed())
   return {
@@ -82,6 +83,10 @@ export async function resolveCurrentSession(
       variant: session.model.variant,
     }),
   }
+}
+
+function requestOptions(signal?: AbortSignal): [] | [{ signal: AbortSignal }] {
+  return signal ? [{ signal }] : []
 }
 
 export function sessionHistory(session: RunSession, limit = LIMIT): RunPrompt[] {

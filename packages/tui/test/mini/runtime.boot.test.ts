@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
 import { OpenCode } from "@opencode-ai/client/promise"
-import type { Resolved } from "../../src/config/v1"
+import type { Resolved } from "../../src/config"
 import { resolveDiffStyle, resolveModelInfo, resolveRunTuiConfig } from "../../src/mini/runtime.boot"
 import { createTuiResolvedConfig } from "./fixture/tui-runtime"
 
@@ -119,7 +119,7 @@ describe("run runtime boot", () => {
     const result = await resolveRunTuiConfig(input)
 
     expect(result.keybinds.get("leader")?.[0]?.key).toBe("ctrl+g")
-    expect(result.leader_timeout).toBe(2000)
+    expect(result.leader.timeout).toBe(2000)
     expect(result.keybinds.get("command.palette.show")?.[0]?.key).toBe("ctrl+p")
     expect(result.keybinds.get("variant.cycle").map((item) => item.key)).toEqual(["ctrl+t", "alt+t"])
     expect(result.keybinds.get("session.interrupt")?.[0]?.key).toBe("ctrl+c")
@@ -134,8 +134,8 @@ describe("run runtime boot", () => {
     const result = await resolveRunTuiConfig(Promise.reject(new Error("boom")))
 
     expect(result.keybinds.get("leader")?.[0]?.key).toBe("ctrl+x")
-    expect(result.leader_timeout).toBe(2000)
-    expect(result.diff_style).toBe("auto")
+    expect(result.leader.timeout).toBe(2000)
+    expect(result.diffs?.view).toBeUndefined()
     expect(result.keybinds.get("command.palette.show")?.[0]?.key).toBe("ctrl+p")
     expect(result.keybinds.get("variant.cycle")?.[0]?.key).toBe("ctrl+t")
     expect(result.keybinds.get("session.interrupt")?.[0]?.key).toBe("escape")
@@ -152,10 +152,21 @@ describe("run runtime boot", () => {
     expect(result.keybinds.get("leader")).toEqual([])
   })
 
-  test("reads diff style and falls back to auto", async () => {
-    await expect(resolveDiffStyle(config({ diff_style: "stacked" }))).resolves.toBe("stacked")
+  test("preserves current theme, leader, diff, and thinking config", async () => {
+    const result = await resolveRunTuiConfig(
+      createTuiResolvedConfig({
+        theme: { name: "tokyonight", mode: "light" },
+        leader_timeout: 450,
+        diffs: { view: "unified", wrap: "none" },
+        session: { thinking: "hide" },
+      }),
+    )
 
-    await expect(resolveDiffStyle(Promise.reject(new Error("boom")))).resolves.toBe("auto")
+    expect(result.theme).toEqual({ name: "tokyonight", mode: "light" })
+    expect(result.leader.timeout).toBe(450)
+    expect(result.diffs).toEqual({ view: "unified", wrap: "none" })
+    expect(result.session?.thinking).toBe("hide")
+    await expect(resolveDiffStyle(result)).resolves.toBe("unified")
   })
 
   test("loads v2 providers and models for model selector data", async () => {
@@ -165,7 +176,9 @@ describe("run runtime boot", () => {
     const providerList = spyOn(sdk.provider, "list").mockImplementation(() => ok({ data: providers }) as never)
     spyOn(sdk.model, "list").mockImplementation(() => ok({ data: models }) as never)
 
-    await expect(resolveModelInfo(sdk, "/workspace", { providerID: "openai", modelID: "gpt-5" })).resolves.toEqual({
+    await expect(
+      resolveModelInfo(sdk, { directory: "/workspace" }, { providerID: "openai", modelID: "gpt-5" }),
+    ).resolves.toEqual({
       providers: [
         {
           id: "openai",
@@ -206,13 +219,11 @@ describe("run runtime boot", () => {
         "openai/gpt-5": 128000,
       },
     })
-    expect(providerList).toHaveBeenCalledWith(
-      {
-        location: {
-          directory: "/workspace",
-        },
+    expect(providerList).toHaveBeenCalledWith({
+      location: {
+        directory: "/workspace",
       },
-    )
+    })
   })
 
   test("loads context limits across v2 providers", async () => {
@@ -222,7 +233,9 @@ describe("run runtime boot", () => {
     spyOn(sdk.provider, "list").mockImplementation(() => ok({ data: providers }) as never)
     spyOn(sdk.model, "list").mockImplementation(() => ok({ data: models }) as never)
 
-    await expect(resolveModelInfo(sdk, "/workspace", { providerID: "openai", modelID: "gpt-5" })).resolves.toEqual({
+    await expect(
+      resolveModelInfo(sdk, { directory: "/workspace" }, { providerID: "openai", modelID: "gpt-5" }),
+    ).resolves.toEqual({
       providers: [
         expect.objectContaining({
           id: "openai",

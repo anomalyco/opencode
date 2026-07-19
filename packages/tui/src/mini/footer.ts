@@ -10,7 +10,7 @@
 //   rebuilding the session model.
 //
 //   Footer: event() updates the SolidJS signal-backed FooterState, which
-//   drives the reactive footer view (prompt, status, permission, question).
+//   drives the reactive footer view (prompt, status, permission, form).
 //   present() swaps the active footer view and resizes the footer region.
 //
 // Lifecycle:
@@ -29,6 +29,7 @@ import { render } from "@opentui/solid"
 import { createComponent, createSignal, type Accessor, type Setter } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { Keymap } from "../context/keymap"
+import { Locale } from "../util/locale"
 import { RUN_COMMAND_PANEL_ROWS, RUN_SUBAGENT_PANEL_ROWS } from "./footer.command"
 import { SUBAGENT_INSPECTOR_ROWS } from "./footer.subagent"
 import { PROMPT_MAX_ROWS, TEXTAREA_MIN_ROWS } from "./footer.prompt"
@@ -45,9 +46,9 @@ import type {
   FooterState,
   FooterSubagentState,
   FooterView,
+  FormCancel,
+  FormReply,
   PermissionReply,
-  QuestionReject,
-  QuestionReply,
   RunAgent,
   RunCommand,
   RunDiffStyle,
@@ -67,7 +68,7 @@ type CycleResult = {
 }
 
 type RunFooterOptions = {
-  directory: string
+  directory: () => string
   findFiles: (query: string) => Promise<string[]>
   agents: RunAgent[]
   references: RunReference[]
@@ -81,11 +82,14 @@ type RunFooterOptions = {
   first: boolean
   history?: RunPrompt[]
   theme: RunTheme
+  customThemes: Record<string, unknown>
+  onThemeWarning: (message: string) => void
   tuiConfig: RunTuiConfig
   diffStyle: RunDiffStyle
+  diffWrap: "word" | "none"
   onPermissionReply: (input: PermissionReply) => void | Promise<void>
-  onQuestionReply: (input: QuestionReply) => void | Promise<void>
-  onQuestionReject: (input: QuestionReject) => void | Promise<void>
+  onFormReply: (input: FormReply) => void | Promise<void>
+  onFormCancel: (input: FormCancel) => void | Promise<void>
   onCycleVariant?: () => CycleResult | void
   onModelSelect?: (model: NonNullable<RunInput["model"]>) => CycleResult | void | Promise<CycleResult | void>
   onVariantSelect?: (variant: string | undefined) => CycleResult | void | Promise<CycleResult | void>
@@ -100,7 +104,7 @@ type RunFooterOptions = {
 }
 
 const PERMISSION_ROWS = 12
-const QUESTION_ROWS = 14
+const FORM_ROWS = 14
 const COMMAND_ROWS = RUN_COMMAND_PANEL_ROWS
 const SKILL_ROWS = RUN_COMMAND_PANEL_ROWS
 const SUBAGENT_ROWS = RUN_SUBAGENT_PANEL_ROWS
@@ -114,7 +118,7 @@ function createEmptySubagentState(): FooterSubagentState {
     tabs: [],
     details: {},
     permissions: [],
-    questions: [],
+    forms: [],
   }
 }
 
@@ -222,6 +226,7 @@ export class RunFooter implements FooterApi {
   private createScrollback(wrote: boolean): RunScrollbackStream {
     return new RunScrollbackStream(this.renderer, this.theme(), {
       diffStyle: this.options.diffStyle,
+      diffWrap: this.options.diffWrap,
       wrote,
       sessionID: this.options.sessionID,
       treeSitterClient: this.options.treeSitterClient,
@@ -285,7 +290,7 @@ export class RunFooter implements FooterApi {
       setSubagent("tabs", reconcile(next.tabs, { key: "sessionID" }))
       setSubagent("details", reconcile(next.details))
       setSubagent("permissions", reconcile(next.permissions, { key: "id" }))
-      setSubagent("questions", reconcile(next.questions, { key: "id" }))
+      setSubagent("forms", reconcile(next.forms, { key: "id" }))
     }
     const [queuedPrompts, setQueuedPrompts] = createSignal<FooterQueuedPrompt[]>([])
     this.queuedPrompts = queuedPrompts
@@ -324,13 +329,14 @@ export class RunFooter implements FooterApi {
               currentVariant: footer.currentVariant,
               theme: footer.theme,
               diffStyle: options.diffStyle,
+              diffWrap: options.diffWrap,
               tuiConfig: options.tuiConfig,
               history: footer.history,
               agent: options.agentLabel,
               onSubmit: footer.handlePrompt,
               onPermissionReply: footer.handlePermissionReply,
-              onQuestionReply: footer.handleQuestionReply,
-              onQuestionReject: footer.handleQuestionReject,
+              onFormReply: footer.handleFormReply,
+              onFormCancel: footer.handleFormCancel,
               onCycle: footer.handleCycle,
               onInterrupt: footer.handleInterrupt,
               onBackground: options.onBackground,
@@ -395,6 +401,11 @@ export class RunFooter implements FooterApi {
   public event(next: FooterEvent): void {
     if (next.type === "history") {
       this.setHistory(next.history)
+      return
+    }
+
+    if (next.type === "agent") {
+      this.options.agentLabel = Locale.titlecase(next.agent ?? "build")
       return
     }
 
@@ -552,19 +563,9 @@ export class RunFooter implements FooterApi {
     }
 
     const last = this.queue.at(-1)
-    if (
-      last &&
-      last.phase === "progress" &&
-      commit.phase === "progress" &&
-      last.kind === commit.kind &&
-      last.source === commit.source &&
-      last.partID === commit.partID &&
-      last.tool === commit.tool
-    ) {
-      last.text += commit.text
-    } else {
-      this.queue.push(commit)
-    }
+    const merged = last ? coalesceProgressCommit(last, commit) : undefined
+    if (merged) this.queue[this.queue.length - 1] = merged
+    else this.queue.push(commit)
 
     if (this.pending) {
       return
@@ -704,15 +705,15 @@ export class RunFooter implements FooterApi {
     this.patch({ interrupt: 0, exit: 0 })
   }
 
-  // Resizes the footer to fit the current view. Permission and question views
+  // Resizes the footer to fit the current view. Permission and form views
   // get fixed extra rows; the prompt view scales with textarea line count.
   private applyHeight(): void {
     const type = this.view().type
     const height =
       type === "permission"
         ? this.base + PERMISSION_ROWS
-        : type === "question"
-          ? this.base + QUESTION_ROWS
+        : type === "form"
+          ? this.base + FORM_ROWS
           : this.promptRoute.type === "command"
             ? 1 + COMMAND_ROWS
             : this.promptRoute.type === "skill"
@@ -788,20 +789,14 @@ export class RunFooter implements FooterApi {
     await this.options.onPermissionReply(input)
   }
 
-  private handleQuestionReply = async (input: QuestionReply): Promise<void> => {
-    if (this.isClosed) {
-      return
-    }
-
-    await this.options.onQuestionReply(input)
+  private handleFormReply = async (input: FormReply): Promise<void> => {
+    if (this.isClosed) return
+    await this.options.onFormReply(input)
   }
 
-  private handleQuestionReject = async (input: QuestionReject): Promise<void> => {
-    if (this.isClosed) {
-      return
-    }
-
-    await this.options.onQuestionReject(input)
+  private handleFormCancel = async (input: FormCancel): Promise<void> => {
+    if (this.isClosed) return
+    await this.options.onFormCancel(input)
   }
 
   private handleCycle = (): void => {
@@ -1019,7 +1014,12 @@ export class RunFooter implements FooterApi {
   }
 
   private handlePalette = (): void => {
-    void resolveRunTheme(this.renderer).then((theme) => {
+    void resolveRunTheme(
+      this.renderer,
+      this.options.tuiConfig.theme,
+      this.options.customThemes,
+      this.options.onThemeWarning,
+    ).then((theme) => {
       if (this.isGone) {
         theme.block.syntax?.destroy()
         return
@@ -1138,4 +1138,20 @@ export class RunFooter implements FooterApi {
         this.flushError = error
       })
   }
+}
+
+/** @internal Exported for queue identity regression tests. */
+export function coalesceProgressCommit(previous: StreamCommit, current: StreamCommit): StreamCommit | undefined {
+  if (
+    previous.phase !== "progress" ||
+    current.phase !== "progress" ||
+    previous.kind !== current.kind ||
+    previous.source !== current.source ||
+    previous.messageID !== current.messageID ||
+    previous.partID !== current.partID ||
+    previous.tool !== current.tool ||
+    previous.toolState !== current.toolState
+  )
+    return
+  return { ...current, text: previous.text + current.text }
 }

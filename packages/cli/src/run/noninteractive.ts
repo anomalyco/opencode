@@ -1,4 +1,11 @@
-import type { EventSubscribeOutput, OpenCodeClient } from "@opencode-ai/client/promise"
+import type {
+  EventSubscribeOutput,
+  JsonValue,
+  LLMToolContent,
+  LocationRef,
+  OpenCodeClient,
+  SessionMessageAssistantTool,
+} from "@opencode-ai/client/promise"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { EOL } from "node:os"
 import { readFile } from "node:fs/promises"
@@ -19,6 +26,7 @@ type File = {
 type Input = {
   client: OpenCodeClient
   sessionID: string
+  location: LocationRef
   message: string
   files: File[]
   agent?: string
@@ -30,8 +38,8 @@ type Input = {
   /** True when the client is attached to a shared server rather than an exclusive in-process one. */
   attached: boolean
   compatibility?: "v1"
-  renderTool: (part: MiniToolPart) => Promise<void>
-  renderToolError: (part: MiniToolPart) => Promise<void>
+  renderTool: (part: SessionMessageAssistantTool) => Promise<void>
+  renderToolError: (part: SessionMessageAssistantTool) => Promise<void>
 }
 
 type StartedPart = {
@@ -42,9 +50,12 @@ type StartedPart = {
 type ToolState = StartedPart & {
   assistantMessageID: string
   tool: string
-  input: Record<string, unknown>
+  input: Record<string, JsonValue>
   raw?: string
   provider?: unknown
+  providerState?: SessionMessageAssistantTool["providerState"]
+  structured: Record<string, JsonValue>
+  content: LLMToolContent[]
 }
 
 type V2Event = EventSubscribeOutput
@@ -67,7 +78,6 @@ export async function runNonInteractivePrompt(input: Input) {
   let submitted = false
   let promoted = false
   let emittedError = false
-  let questionRejected = false
   let permissionRejected = false
   let formCancelled = false
   let interrupted = false
@@ -126,14 +136,16 @@ export async function runNonInteractivePrompt(input: Input) {
     }
   }
 
-  const rejectQuestion = async (request: { id: string }) => {
-    questionRejected = true
-    await input.client.question.reject({ sessionID: input.sessionID, requestID: request.id }).catch(() => {})
-  }
-
   const cancelForm = async (request: Pick<FormRequest, "id" | "sessionID">) => {
+    try {
+      await input.client.form.cancel(
+        { sessionID: request.sessionID, formID: request.id },
+        ...formRequestOptions(request.sessionID === GLOBAL_FORM_SESSION_ID ? input.location : undefined),
+      )
+    } catch (error) {
+      if (!formAlreadySettled(error)) throw error
+    }
     formCancelled = true
-    await input.client.form.cancel({ sessionID: request.sessionID, formID: request.id }).catch(() => {})
   }
 
   const consume = async () => {
@@ -152,15 +164,13 @@ export async function runNonInteractivePrompt(input: Input) {
         await replyPermission(event.data)
         continue
       }
-      if (event.type === "question.v2.asked" && submitted && event.data.sessionID === input.sessionID) {
-        await rejectQuestion(event.data)
-        continue
-      }
       if (
         event.type === "form.created" &&
         submitted &&
         (event.data.form.sessionID === input.sessionID ||
-          (!input.attached && event.data.form.sessionID === GLOBAL_FORM_SESSION_ID))
+          (!input.attached &&
+            event.data.form.sessionID === GLOBAL_FORM_SESSION_ID &&
+            sameLocation(event.location, input.location)))
       ) {
         await cancelForm(event.data.form)
         continue
@@ -177,7 +187,7 @@ export async function runNonInteractivePrompt(input: Input) {
       if (
         event.type === "session.execution.interrupted" &&
         event.data.reason === "user" &&
-        (interrupted || permissionRejected || questionRejected || formCancelled)
+        (interrupted || permissionRejected || formCancelled)
       ) {
         return
       }
@@ -260,24 +270,32 @@ export async function runNonInteractivePrompt(input: Input) {
 
       if (event.type === "session.tool.input.started") {
         flushStep()
-        tools.set(event.data.callID, {
+        tools.set(toolKey(event.data.assistantMessageID, event.data.callID), {
           id: partID(event.id),
           timestamp: time,
           assistantMessageID: event.data.assistantMessageID,
           tool: event.data.name,
           input: {},
+          structured: {},
+          content: [],
         })
         continue
       }
       if (event.type === "session.tool.input.ended") {
-        const current = tools.get(event.data.callID)
+        const current = tools.get(toolKey(event.data.assistantMessageID, event.data.callID))
         if (current) current.raw = event.data.text
+        continue
+      }
+      if (event.type === "session.tool.input.delta") {
+        const current = tools.get(toolKey(event.data.assistantMessageID, event.data.callID))
+        if (current) current.raw = (current.raw ?? "") + event.data.delta
         continue
       }
       if (event.type === "session.tool.called") {
         flushStep()
-        const current = tools.get(event.data.callID)
-        tools.set(event.data.callID, {
+        const key = toolKey(event.data.assistantMessageID, event.data.callID)
+        const current = tools.get(key)
+        tools.set(key, {
           id: current?.id ?? partID(event.id),
           timestamp: current?.timestamp ?? time,
           assistantMessageID: event.data.assistantMessageID,
@@ -285,11 +303,39 @@ export async function runNonInteractivePrompt(input: Input) {
           input: event.data.input,
           raw: current?.raw,
           provider: { executed: event.data.executed, state: event.data.state },
+          providerState: event.data.state,
+          structured: {},
+          content: [],
         })
         continue
       }
+      if (event.type === "session.tool.progress") {
+        const current = tools.get(toolKey(event.data.assistantMessageID, event.data.callID))
+        if (current) {
+          current.structured = event.data.structured
+          current.content = event.data.content
+        }
+        continue
+      }
       if (event.type === "session.tool.success") {
-        const current = tools.get(event.data.callID) ?? fallbackTool(event)
+        const key = toolKey(event.data.assistantMessageID, event.data.callID)
+        const current = tools.get(key) ?? fallbackTool(event)
+        const tool: SessionMessageAssistantTool = {
+          type: "tool",
+          id: event.data.callID,
+          name: current.tool,
+          executed: event.data.executed,
+          providerState: current.providerState,
+          providerResultState: event.data.resultState,
+          state: {
+            status: "completed",
+            input: current.input,
+            structured: event.data.structured,
+            content: event.data.content,
+            result: event.data.result,
+          },
+          time: { created: current.timestamp, ran: current.timestamp, completed: time },
+        }
         const part: MiniToolPart = {
           id: current.id,
           sessionID: input.sessionID,
@@ -313,13 +359,31 @@ export async function runNonInteractivePrompt(input: Input) {
             time: { start: current.timestamp, end: time },
           },
         }
-        tools.delete(event.data.callID)
-        if (!emit("tool_use", time, { part })) await input.renderTool(part)
+        tools.delete(key)
+        if (!emit("tool_use", time, { part })) await input.renderTool(tool)
         continue
       }
       if (event.type === "session.tool.failed") {
-        const current = tools.get(event.data.callID) ?? fallbackTool(event)
+        const key = toolKey(event.data.assistantMessageID, event.data.callID)
+        const current = tools.get(key) ?? fallbackTool(event)
         const error = event.data.error.message
+        const tool: SessionMessageAssistantTool = {
+          type: "tool",
+          id: event.data.callID,
+          name: current.tool,
+          executed: event.data.executed,
+          providerState: current.providerState,
+          providerResultState: event.data.resultState,
+          state: {
+            status: "error",
+            input: current.input,
+            structured: current.structured,
+            content: current.content,
+            error: event.data.error,
+            result: event.data.result,
+          },
+          time: { created: current.timestamp, ran: current.timestamp, completed: time },
+        }
         const part: MiniToolPart = {
           id: current.id,
           sessionID: input.sessionID,
@@ -340,10 +404,21 @@ export async function runNonInteractivePrompt(input: Input) {
             time: { start: current.timestamp, end: time },
           },
         }
-        tools.delete(event.data.callID)
-        if (input.compatibility === "v1" && (permissionRejected || questionRejected || formCancelled)) continue
+        tools.delete(key)
+        if (input.compatibility === "v1" && (permissionRejected || formCancelled)) continue
         if (!emit("tool_use", time, { part })) {
-          await input.renderToolError(part)
+          if (toolOutputText(current.tool, current.content).trim())
+            await input.renderTool({
+              ...tool,
+              state: {
+                status: "completed",
+                input: current.input,
+                structured: current.structured,
+                content: current.content,
+                result: event.data.result,
+              },
+            })
+          await input.renderToolError(tool)
           UI.error(error)
         }
         continue
@@ -373,7 +448,7 @@ export async function runNonInteractivePrompt(input: Input) {
           v1InvalidOutput = true
           continue
         }
-        if (interrupted || permissionRejected || questionRejected || formCancelled) continue
+        if (interrupted || permissionRejected || formCancelled) continue
         flushStep()
         emittedError = true
         process.exitCode = 1
@@ -381,13 +456,9 @@ export async function runNonInteractivePrompt(input: Input) {
         continue
       }
       if (event.type === "session.execution.failed") {
-        if (
-          input.compatibility === "v1" &&
-          (v1InvalidOutput || permissionRejected || questionRejected || formCancelled)
-        )
-          return
+        if (input.compatibility === "v1" && (v1InvalidOutput || permissionRejected || formCancelled)) return
         flushStep()
-        if (!emittedError && !questionRejected && !formCancelled) {
+        if (!emittedError && !formCancelled) {
           emittedError = true
           process.exitCode = 1
           if (!emit("error", time, { error: event.data.error })) UI.error(event.data.error.message)
@@ -395,7 +466,7 @@ export async function runNonInteractivePrompt(input: Input) {
         return
       }
       if (event.type === "session.execution.interrupted") {
-        if (input.compatibility === "v1" && (permissionRejected || questionRejected || formCancelled)) return
+        if (input.compatibility === "v1" && (permissionRejected || formCancelled)) return
         if (event.data.reason === "user" && interrupted) process.exitCode = 130
         if (event.data.reason !== "user" && !emittedError) {
           emittedError = true
@@ -470,19 +541,23 @@ export async function runNonInteractivePrompt(input: Input) {
     if (!response) return
     if (interrupted) await input.client.session.interrupt({ sessionID: input.sessionID }).catch(() => {})
 
-    const [permissions, questions, forms] = await Promise.all([
+    const [permissions, forms, globals] = await Promise.all([
       input.client.permission.list({ sessionID: input.sessionID }).catch(() => undefined),
-      input.client.question.list({ sessionID: input.sessionID }).catch(() => undefined),
-      Promise.all(
-        (input.attached ? [input.sessionID] : [input.sessionID, GLOBAL_FORM_SESSION_ID]).map((sessionID) =>
-          input.client.form.list({ sessionID }).catch(() => undefined),
-        ),
-      ),
+      input.client.form.list({ sessionID: input.sessionID }).catch(() => undefined),
+      input.attached
+        ? Promise.resolve(undefined)
+        : input.client.form.request
+            .list({
+              location: { directory: input.location.directory, workspace: input.location.workspaceID },
+            })
+            .catch(() => undefined),
     ])
     await Promise.all([
       ...(permissions ?? []).map(replyPermission),
-      ...(questions ?? []).map(rejectQuestion),
-      ...forms.flatMap((response) => response ?? []).map(cancelForm),
+      ...(forms ?? []).map(cancelForm),
+      ...(globals && sameLocation(globals.location, input.location)
+        ? globals.data.filter((form) => form.sessionID === GLOBAL_FORM_SESSION_ID).map(cancelForm)
+        : []),
     ])
     await completed
   } finally {
@@ -492,8 +567,32 @@ export async function runNonInteractivePrompt(input: Input) {
   }
 }
 
+function sameLocation(left: LocationRef | undefined, right: LocationRef) {
+  return !!left && left.directory === right.directory && left.workspaceID === right.workspaceID
+}
+
+function formRequestOptions(location: LocationRef | undefined): [] | [{ headers: Record<string, string> }] {
+  if (!location) return []
+  return [
+    {
+      headers: {
+        "x-opencode-directory": encodeURIComponent(location.directory),
+        ...(location.workspaceID ? { "x-opencode-workspace": location.workspaceID } : {}),
+      },
+    },
+  ]
+}
+
+function formAlreadySettled(error: unknown) {
+  return !!error && typeof error === "object" && Reflect.get(error, "_tag") === "FormAlreadySettledError"
+}
+
 function partID(eventID: string) {
   return `prt_${eventID.replace(/^evt_/, "")}`
+}
+
+function toolKey(messageID: string, callID: string) {
+  return `${messageID}\u0000${callID}`
 }
 
 function fallbackTool(event: {
@@ -507,6 +606,8 @@ function fallbackTool(event: {
     assistantMessageID: event.data.assistantMessageID,
     tool: "tool",
     input: {},
+    structured: {},
+    content: [],
   }
 }
 

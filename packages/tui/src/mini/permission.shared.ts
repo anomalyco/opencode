@@ -13,8 +13,7 @@
 //
 // permissionInfo() extracts display info (icon, title, lines, diff) from
 // the request, delegating to tool.ts for tool-specific formatting.
-import type { PermissionV2Request } from "@opencode-ai/client/promise"
-import type { PermissionReply } from "./types"
+import type { MiniPermissionRequest, PermissionReply } from "./types"
 import { toolPath, toolPermissionInfo } from "./tool"
 
 type Dict = Record<string, unknown>
@@ -24,6 +23,7 @@ export type PermissionOption = "once" | "always" | "reject" | "confirm" | "cance
 
 export type PermissionBodyState = {
   requestID: string
+  sessionID: string
   stage: PermissionStage
   selected: PermissionOption
   message: string
@@ -35,6 +35,7 @@ export type PermissionInfo = {
   title: string
   lines: string[]
   diff?: string
+  patch?: string
   file?: string
 }
 
@@ -55,21 +56,26 @@ function text(v: unknown): string {
   return typeof v === "string" ? v : ""
 }
 
-function data(request: PermissionV2Request): Dict {
-  const meta = dict(request.metadata)
-  return {
-    ...meta,
-    ...dict(meta.input),
+function data(request: MiniPermissionRequest): { input: Dict; metadata: Dict } {
+  const state = request.tool?.state
+  const metadata = {
+    ...(state && state.status !== "streaming" ? dict(state.structured) : {}),
+    ...dict(request.metadata),
   }
+  if (!state || state.status === "streaming") return { input: {}, metadata }
+  return { input: dict(state.input), metadata }
 }
 
-function patterns(request: PermissionV2Request): string[] {
+function patterns(request: MiniPermissionRequest): string[] {
   return request.resources.filter((item): item is string => typeof item === "string")
 }
 
-export function createPermissionBodyState(requestID: string): PermissionBodyState {
+export function createPermissionBodyState(
+  request: Pick<MiniPermissionRequest, "id" | "sessionID">,
+): PermissionBodyState {
   return {
-    requestID,
+    requestID: request.id,
+    sessionID: request.sessionID,
     stage: "permission",
     selected: "once",
     message: "",
@@ -89,10 +95,10 @@ export function permissionOptions(stage: PermissionStage): PermissionOption[] {
   return []
 }
 
-export function permissionInfo(request: PermissionV2Request): PermissionInfo {
+export function permissionInfo(request: MiniPermissionRequest, directory?: string): PermissionInfo {
   const pats = patterns(request)
-  const input = data(request)
-  const info = toolPermissionInfo(request.action, input, dict(request.metadata), pats)
+  const source = data(request)
+  const info = toolPermissionInfo(request.action, source.input, source.metadata, pats, directory)
   if (info) {
     return info
   }
@@ -103,7 +109,7 @@ export function permissionInfo(request: PermissionV2Request): PermissionInfo {
     const dir = raw.includes("*") ? raw.slice(0, raw.indexOf("*")).replace(/[\\/]+$/, "") : raw
     return {
       icon: "←",
-      title: `Access external directory ${toolPath(dir, { home: true })}`,
+      title: `Access external directory ${toolPath(dir, { home: true, directory })}`,
       lines: pats.map((item) => `- ${item}`),
     }
   }
@@ -123,16 +129,13 @@ export function permissionInfo(request: PermissionV2Request): PermissionInfo {
   }
 }
 
-export function permissionAlwaysLines(request: PermissionV2Request): string[] {
+export function permissionAlwaysLines(request: MiniPermissionRequest): string[] {
   const save = request.save ?? []
   if (save.length === 1 && save[0] === "*") {
     return [`This will allow ${request.action} until OpenCode is restarted.`]
   }
 
-  return [
-    "This will allow the following patterns until OpenCode is restarted.",
-    ...save.map((item) => `- ${item}`),
-  ]
+  return ["This will allow the following patterns until OpenCode is restarted.", ...save.map((item) => `- ${item}`)]
 }
 
 export function permissionLabel(option: PermissionOption): string {
@@ -143,8 +146,14 @@ export function permissionLabel(option: PermissionOption): string {
   return "Cancel"
 }
 
-export function permissionReply(requestID: string, reply: PermissionReply["reply"], message?: string): PermissionReply {
+export function permissionReply(
+  sessionID: string,
+  requestID: string,
+  reply: PermissionReply["reply"],
+  message?: string,
+): PermissionReply {
   return {
+    sessionID,
     requestID,
     reply,
     ...(message && message.trim() ? { message: message.trim() } : {}),
@@ -203,7 +212,7 @@ export function permissionRun(state: PermissionBodyState, requestID: string, opt
 
     return {
       state,
-      reply: permissionReply(requestID, "once"),
+      reply: permissionReply(state.sessionID, requestID, "once"),
     }
   }
 
@@ -223,7 +232,7 @@ export function permissionRun(state: PermissionBodyState, requestID: string, opt
 
   return {
     state,
-    reply: permissionReply(requestID, "always"),
+    reply: permissionReply(state.sessionID, requestID, "always"),
   }
 }
 
@@ -232,7 +241,7 @@ export function permissionReject(state: PermissionBodyState, requestID: string):
     return undefined
   }
 
-  return permissionReply(requestID, "reject", state.message)
+  return permissionReply(state.sessionID, requestID, "reject", state.message)
 }
 
 export function permissionCancel(state: PermissionBodyState): PermissionBodyState {

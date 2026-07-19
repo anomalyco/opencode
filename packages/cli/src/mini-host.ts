@@ -47,7 +47,8 @@ function preferences(statePath: string): MiniHost["preferences"] {
   return {
     async resolveVariant(model) {
       if (!model) return
-      return (await read()).variant?.[variantKey(model)]
+      const variant = (await read()).variant?.[variantKey(model)]
+      return variant === "default" ? undefined : variant
     },
     async saveVariant(model, variant) {
       if (!model) return
@@ -203,6 +204,12 @@ export function createMiniHost(input: {
     diagnostics: {
       ...diagnostics,
       trace: createTrace(paths.log, diagnostics),
+    },
+    themes: {
+      async discover() {
+        const { discoverThemes, themeDirectories } = await import("@opencode-ai/tui/theme/discovery")
+        return discoverThemes(themeDirectories(Global.Path.config, input.directory))
+      },
     },
     preferences: preferences(paths.state),
   }

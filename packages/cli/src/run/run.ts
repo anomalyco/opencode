@@ -1,13 +1,13 @@
 import { Service, type Endpoint } from "@opencode-ai/client/effect/service"
-import { OpenCode, type OpenCodeClient } from "@opencode-ai/client/promise"
+import { OpenCode, type OpenCodeClient, type SessionMessageAssistantTool } from "@opencode-ai/client/promise"
 import { FSUtil } from "@opencode-ai/core/fs-util"
-import { Model } from "@opencode-ai/schema/model"
 import { open } from "node:fs/promises"
 import path from "node:path"
 import { readStdin } from "../util/io"
 import { ServerConnection } from "../services/server-connection"
 import { waitForCatalogReady } from "../services/catalog"
-import { toolInlineInfo, type MiniToolPart } from "@opencode-ai/tui/mini/tool"
+import { parseSessionTargetModel, resolveSessionTarget } from "../session-target"
+import { toolInlineInfo } from "@opencode-ai/tui/mini/tool"
 import { runNonInteractivePrompt } from "./noninteractive"
 import { UI } from "./ui"
 
@@ -47,6 +47,15 @@ type ExecutionOptions = {
   compatibility?: "v1"
 }
 
+class RunTargetError extends Error {
+  constructor(
+    message: string,
+    readonly sessionID?: string,
+  ) {
+    super(message)
+  }
+}
+
 const ATTACH_FILE_MAX_BYTES = 10 * 1024 * 1024
 
 export function runNonInteractive(input: RunCommandInput) {
@@ -72,50 +81,74 @@ async function run(input: RunCommandInput, options: ExecutionOptions) {
 
 async function execute(input: RunCommandInput, prepared: Prepared, endpoint: Endpoint, options: ExecutionOptions) {
   const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) })
-  const requestedDirectory = prepared.directory ?? (await client.location.get()).directory
-  if (!requestedDirectory) fail("Failed to resolve server directory")
-  const session = await selectSession(client, requestedDirectory, input)
-  const cwd = session?.location.directory ?? requestedDirectory
-  const workspace = session?.location.workspaceID
   const explicit = parseRunModel(input.model)
-  const explicitModel = explicit?.model
-  const variant = options.variant ?? explicit?.variant
-  const sessionModel = session?.model ? { providerID: session.model.providerID, modelID: session.model.id } : undefined
-  const defaultModel =
-    !explicitModel && !sessionModel
-      ? await client.model
-          .default({ location: { directory: cwd, workspace } })
-          .then((result) => (result.data ? { providerID: result.data.providerID, modelID: result.data.id } : undefined))
-      : undefined
-  const model = pickRunModel(explicitModel, variant, sessionModel, defaultModel)
-  if (variant && !model) return reportRunError(input, "Cannot select a variant before selecting a model", session?.id)
-  if (model) {
-    await waitForCatalogReady({ sdk: client, directory: cwd, workspace, model })
-    const available = await client.model.list({ location: { directory: cwd, workspace } })
-    if (!available.data.some((item) => item.providerID === model.providerID && item.id === model.modelID))
-      return reportRunError(input, `Model unavailable: ${model.providerID}/${model.modelID}`, session?.id)
-  }
-  const agent = await validateAgent(client, cwd, input.agent)
-  const selected =
-    session ??
-    (await client.session.create({
-      agent,
-      model: model ? { providerID: model.providerID, id: model.modelID, variant } : undefined,
-      location: { directory: cwd },
-    }))
-  if (!session && input.title !== undefined) {
+  const target = await resolveSessionTarget({
+    client,
+    location: prepared.directory ? { directory: prepared.directory } : undefined,
+    continue: input.continue,
+    session: input.session,
+    fork: input.fork,
+    model: explicit
+      ? { providerID: explicit.model.providerID, id: explicit.model.modelID, variant: explicit.variant }
+      : undefined,
+    agent: input.agent,
+    prepare: async (next) => {
+      const selected =
+        next.model ??
+        (await client.model
+          .default({ location: { directory: next.location.directory, workspace: next.location.workspaceID } })
+          .then((result) => result.data))
+      const model = selected
+        ? {
+            providerID: selected.providerID,
+            id: selected.id,
+            variant: options.variant ?? ("variant" in selected ? selected.variant : undefined),
+          }
+        : undefined
+      if ((options.variant ?? explicit?.variant) && !model)
+        throw new RunTargetError("Cannot select a variant before selecting a model", next.session?.id)
+      if (model) {
+        await waitForCatalogReady({
+          sdk: client,
+          directory: next.location.directory,
+          workspace: next.location.workspaceID,
+          model: { providerID: model.providerID, modelID: model.id },
+        })
+        const available = await client.model.list({
+          location: { directory: next.location.directory, workspace: next.location.workspaceID },
+        })
+        if (!available.data.some((item) => item.providerID === model.providerID && item.id === model.id))
+          throw new RunTargetError(`Model unavailable: ${model.providerID}/${model.id}`, next.session?.id)
+      }
+      return {
+        model,
+        agent: input.agent
+          ? await validateAgent(client, next.location.directory, next.location.workspaceID, input.agent)
+          : next.agent,
+      }
+    },
+  }).catch((error) => {
+    if (!(error instanceof RunTargetError)) throw error
+    reportRunError(input, error.message, error.sessionID)
+    return undefined
+  })
+  if (!target) return
+  const model = target.model ? { providerID: target.model.providerID, modelID: target.model.id } : undefined
+  const variant = target.model?.variant
+  if (!target.resume && input.title !== undefined) {
     await client.session.rename({
-      sessionID: selected.id,
+      sessionID: target.session.id,
       title: input.title || prepared.message.slice(0, 50) + (prepared.message.length > 50 ? "..." : ""),
     })
   }
 
   await runNonInteractivePrompt({
     client,
-    sessionID: selected.id,
+    sessionID: target.session.id,
+    location: target.location,
     message: prepared.message,
     files: prepared.files,
-    agent,
+    agent: target.agent,
     model,
     variant,
     thinking: input.thinking ?? false,
@@ -123,9 +156,9 @@ async function execute(input: RunCommandInput, prepared: Prepared, endpoint: End
     auto: input.auto ?? false,
     attached: options.attached ?? true,
     compatibility: options.compatibility,
-    renderTool,
-    renderToolError,
-  }).catch((error) => reportRunError(input, errorMessage(error), selected.id))
+    renderTool: (part) => renderTool(part, target.location.directory),
+    renderToolError: (part) => renderToolError(part, target.location.directory),
+  }).catch((error) => reportRunError(input, errorMessage(error), target.session.id))
 }
 
 export function mergeInput(message: string | undefined, piped: string | undefined) {
@@ -160,18 +193,18 @@ function localDirectory(root: string) {
 }
 
 export function parseRunModel(value?: string) {
-  if (!value) return
-  const ref = Model.Ref.parse(value)
+  const ref = parseSessionTargetModel(value)
+  if (!ref) return
   return {
     model: { providerID: ref.providerID, modelID: ref.id },
     variant: ref.variant,
   }
 }
 
-async function validateAgent(client: OpenCodeClient, directory: string, name?: string) {
+async function validateAgent(client: OpenCodeClient, directory: string, workspace: string | undefined, name?: string) {
   if (!name) return
   const agents = await client.agent
-    .list({ location: { directory } })
+    .list({ location: { directory, workspace } })
     .then((result) => result.data)
     .catch(() => undefined)
   if (!agents) {
@@ -188,19 +221,6 @@ async function validateAgent(client: OpenCodeClient, directory: string, name?: s
     return
   }
   return name
-}
-
-async function selectSession(client: OpenCodeClient, directory: string, input: RunCommandInput) {
-  const selected = input.session
-    ? await client.session.get({ sessionID: input.session }).catch(() => undefined)
-    : input.continue
-      ? await client.session
-          .list({ directory, parentID: null, limit: 1, order: "desc" })
-          .then((result) => result.data[0])
-      : undefined
-  if (input.session && !selected) fail("Session not found")
-  if (!selected || !input.fork) return selected
-  return client.session.fork({ sessionID: selected.id })
 }
 
 async function prepareFile(input: string, directory: string, options: ExecutionOptions): Promise<FilePart> {
@@ -244,8 +264,8 @@ function isBinaryContent(bytes: Uint8Array) {
   return bytes.reduce((count, byte) => count + Number(byte < 9 || (byte > 13 && byte < 32)), 0) / bytes.length > 0.3
 }
 
-async function renderTool(part: MiniToolPart) {
-  const info = toolInlineInfo(part)
+async function renderTool(part: SessionMessageAssistantTool, directory: string) {
+  const info = toolInlineInfo(part, directory)
   if (info.mode === "block") {
     UI.empty()
     UI.println(UI.Style.TEXT_NORMAL + info.icon, UI.Style.TEXT_NORMAL + info.title)
@@ -260,8 +280,8 @@ async function renderTool(part: MiniToolPart) {
   )
 }
 
-async function renderToolError(part: MiniToolPart) {
-  const info = toolInlineInfo(part)
+async function renderToolError(part: SessionMessageAssistantTool, directory: string) {
+  const info = toolInlineInfo(part, directory)
   UI.println(UI.Style.TEXT_NORMAL + "✗", UI.Style.TEXT_NORMAL + `${info.title} failed`)
 }
 

@@ -16,10 +16,10 @@ import { entrySplash, exitSplash, splashMeta } from "./splash"
 import { resolveRunTheme } from "./theme"
 import type {
   FooterApi,
+  FormCancel,
+  FormReply,
   MiniHost,
   PermissionReply,
-  QuestionReject,
-  QuestionReply,
   RunAgent,
   RunInput,
   RunPrompt,
@@ -49,7 +49,7 @@ type FooterLabels = {
 
 export type LifecycleInput = {
   host: MiniHost
-  directory: string
+  getDirectory: () => string
   findFiles: (query: string) => Promise<string[]>
   agents: RunAgent[]
   references: RunReference[]
@@ -63,8 +63,8 @@ export type LifecycleInput = {
   variant: string | undefined
   tuiConfig: RunTuiConfig | Promise<RunTuiConfig>
   onPermissionReply: (input: PermissionReply) => void | Promise<void>
-  onQuestionReply: (input: QuestionReply) => void | Promise<void>
-  onQuestionReject: (input: QuestionReject) => void | Promise<void>
+  onFormReply: (input: FormReply) => void | Promise<void>
+  onFormCancel: (input: FormCancel) => void | Promise<void>
   onCycleVariant?: () => CycleResult | void
   onModelSelect?: (model: NonNullable<RunInput["model"]>) => CycleResult | void | Promise<CycleResult | void>
   onVariantSelect?: (variant: string | undefined) => CycleResult | void | Promise<CycleResult | void>
@@ -175,7 +175,15 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
     consoleMode: "disabled",
     clearOnShutdown: false,
   })
-  const [theme, tuiConfig] = await Promise.all([resolveRunTheme(renderer), input.tuiConfig])
+  const tuiConfig = await input.tuiConfig
+  const customThemes = await input.host.themes.discover().catch(() => ({}))
+  const warnings = new Set<string>()
+  const warning = (message: string) => {
+    if (warnings.has(message)) return
+    warnings.add(message)
+    input.host.stdout.write(`Warning: ${message}\n`)
+  }
+  const theme = await resolveRunTheme(renderer, tuiConfig.theme, customThemes, warning)
   renderer.setBackgroundColor(theme.background)
   const state: SplashState = {
     entry: false,
@@ -199,7 +207,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
       ...meta,
       theme: theme.splash,
       showSession: splash.showSession,
-      detail: directoryLabel(input.directory, input.host.paths.home),
+      detail: directoryLabel(input.getDirectory(), input.host.paths.home),
     }),
   )
   await renderer.idle().catch(() => {})
@@ -210,7 +218,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
   let detachSigintListener: (() => void) | undefined
 
   const footer = new RunFooter(renderer, {
-    directory: input.directory,
+    directory: input.getDirectory,
     findFiles: input.findFiles,
     agents: input.agents,
     references: input.references,
@@ -221,12 +229,15 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
     first: input.first,
     history: input.history,
     theme,
+    customThemes,
+    onThemeWarning: warning,
     wrote,
     tuiConfig,
-    diffStyle: tuiConfig.diff_style ?? "auto",
+    diffStyle: tuiConfig.diffs?.view ?? "auto",
+    diffWrap: tuiConfig.diffs?.wrap ?? "word",
     onPermissionReply: input.onPermissionReply,
-    onQuestionReply: input.onQuestionReply,
-    onQuestionReject: input.onQuestionReject,
+    onFormReply: input.onFormReply,
+    onFormCancel: input.onFormCancel,
     onCycleVariant: input.onCycleVariant,
     onModelSelect: input.onModelSelect,
     onVariantSelect: input.onVariantSelect,
@@ -243,7 +254,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
       try {
         return await input.host.editor.open({
           value,
-          cwd: input.directory,
+          cwd: input.getDirectory(),
           renderer,
           stdin: input.host.terminal.stdin,
         })
@@ -369,10 +380,11 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
           }),
           theme: footer.currentTheme().splash,
           showSession: splash.showSession,
-          detail: directoryLabel(input.directory, input.host.paths.home),
+          detail: directoryLabel(input.getDirectory(), input.host.paths.home),
         }),
       )
       renderer.requestRender()
+      await renderer.idle().catch(() => {})
     },
     close,
   }

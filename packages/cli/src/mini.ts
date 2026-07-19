@@ -1,14 +1,17 @@
-import { Service } from "@opencode-ai/client/effect/service"
-import { OpenCode, type OpenCodeClient } from "@opencode-ai/client/promise"
+import { Service, type Endpoint } from "@opencode-ai/client/effect/service"
+import { ClientError, OpenCode, type OpenCodeClient } from "@opencode-ai/client/promise"
 import type { MiniFrontendInput } from "@opencode-ai/tui/mini"
 import { setTimeout } from "node:timers/promises"
-import { ServerConnection } from "./services/server-connection"
 import { waitForCatalogReady } from "./services/catalog"
 import { readStdin } from "./util/io"
 import { createMiniHost, INTERACTIVE_INPUT_ERROR, usingInteractiveStdin } from "./mini-host"
+import { parseSessionTargetModel, resolveSessionTarget, type SessionTargetPreparation } from "./session-target"
 
 export type MiniCommandInput = {
-  server: ServerConnection.Resolved
+  server: {
+    endpoint: Endpoint
+    reconnect?: (signal: AbortSignal) => Promise<Endpoint>
+  }
   continue?: boolean
   session?: string
   fork?: boolean
@@ -21,7 +24,6 @@ export type MiniCommandInput = {
   tuiConfig?: MiniFrontendInput["tuiConfig"]
 }
 
-type Session = Awaited<ReturnType<OpenCodeClient["session"]["get"]>>
 type Model = MiniFrontendInput["model"]
 
 class MiniInputError extends Error {}
@@ -33,42 +35,87 @@ export async function runMini(input: MiniCommandInput) {
       const initialInput = mergeInput(process.stdin.isTTY ? undefined : await readStdin(), input.prompt)
       const frontendTask = import("@opencode-ai/tui/mini")
       const directory = localDirectory()
-      const sdk = OpenCode.make({
-        baseUrl: input.server.endpoint.url,
-        headers: Service.headers(input.server.endpoint),
-      })
-      const model = parseModel(input.model)
-      let agentTask: Promise<string | undefined> | undefined
-      const resolveAgent = () => {
-        agentTask ??= validateAgent(sdk, directory, input.agent)
-        return agentTask
-      }
-      const resolveSession = async () => {
-        const [agent, selected] = await Promise.all([resolveAgent(), selectSession(sdk, directory, input)])
-        const readyModel =
-          model ?? (selected?.model ? { providerID: selected.model.providerID, modelID: selected.model.id } : undefined)
-        if (readyModel) await waitForCatalogReady({ sdk, directory, model: readyModel })
-        const session = selected ?? (await createSession(sdk, directory, agent, model))
-        return { id: session.id, title: session.title, resume: selected !== undefined }
+      const connection = createMiniConnection(input.server)
+      const sdk = connection.sdk
+      const requested = parseModel(input.model)
+      const model = requested ? { providerID: requested.providerID, modelID: requested.id } : undefined
+      const prepare = prepareTarget(input.agent)
+      const resolveTarget = async (initial: OpenCodeClient, signal: AbortSignal) => {
+        const resolved = await resolveMiniTarget({
+          sdk: initial,
+          reconnect: connection.reconnect,
+          signal,
+          resolve: (client) =>
+            resolveSessionTarget({
+              client,
+              location: { directory },
+              continue: input.continue,
+              session: input.session,
+              fork: input.fork,
+              model: requested,
+              agent: input.agent,
+              prepare,
+              signal,
+            }).catch((error) => {
+              if (error instanceof Error && error.message === "Session not found") throw new MiniInputError(error.message)
+              throw error
+            }),
+        })
+        const target = resolved.value
+        return {
+          sdk: resolved.sdk,
+          sessionID: target.session.id,
+          sessionTitle: target.session.title,
+          location: target.location,
+          projectID: target.projectID,
+          model: target.model ? { providerID: target.model.providerID, modelID: target.model.id } : undefined,
+          variant: target.model?.variant,
+          agent: target.agent,
+          resume: target.resume,
+        }
       }
       const create = (
-        _sdk: OpenCodeClient,
-        next: { agent: string | undefined; model: Model; variant: string | undefined },
-      ) => createSession(sdk, directory, next.agent, next.model, next.variant)
+        client: OpenCodeClient,
+        next: {
+          location: { directory: string; workspaceID?: string }
+          agent: string | undefined
+          model: Model
+          variant: string | undefined
+        },
+        signal?: AbortSignal,
+      ) =>
+        resolveSessionTarget({
+          client,
+          location: { directory: next.location.directory, workspace: next.location.workspaceID },
+          agent: next.agent,
+          model: next.model
+            ? { providerID: next.model.providerID, id: next.model.modelID, variant: next.variant }
+            : undefined,
+          prepare,
+          signal,
+        }).then((target) => ({
+          sessionID: target.session.id,
+          sessionTitle: target.session.title,
+          location: target.location,
+          projectID: target.projectID,
+          model: target.model ? { providerID: target.model.providerID, modelID: target.model.id } : undefined,
+          variant: target.model?.variant,
+          agent: target.agent,
+          resume: false,
+        }))
       const frontend = await frontendTask
       return frontend.runMiniFrontend({
         host: createMiniHost({ terminal, directory }),
         sdk,
         directory,
-        resolveAgent,
-        session: resolveSession,
+        target: resolveTarget,
+        reconnect: connection.reconnect,
         createSession: create,
         agent: input.agent,
         model,
-        variant: undefined,
+        variant: requested?.variant,
         files: [],
         initialInput,
-        thinking: true,
         replay: input.replay ?? true,
         replayLimit: input.replayLimit,
         demo: input.demo,
@@ -80,6 +127,51 @@ export async function runMini(input: MiniCommandInput) {
     if (error instanceof MiniInputError || (error instanceof Error && error.message === INTERACTIVE_INPUT_ERROR))
       fail(error.message)
     throw error
+  }
+}
+
+/** @internal Exported for CLI boundary tests. */
+export function createMiniConnection(input: MiniCommandInput["server"]) {
+  const make = (endpoint: Endpoint) =>
+    OpenCode.make({
+      baseUrl: endpoint.url,
+      headers: Service.headers(endpoint),
+    })
+  const reconnect = input.reconnect
+  return {
+    sdk: make(input.endpoint),
+    reconnect: reconnect
+      ? async (signal: AbortSignal) => {
+          const endpoint = await reconnect(signal)
+          return make(endpoint)
+        }
+      : undefined,
+  }
+}
+
+/** @internal Exported for reconnect lifecycle tests. */
+export async function resolveMiniTarget<A>(input: {
+  sdk: OpenCodeClient
+  reconnect?: (signal: AbortSignal) => Promise<OpenCodeClient>
+  signal: AbortSignal
+  resolve: (sdk: OpenCodeClient) => Promise<A>
+}) {
+  let sdk = input.sdk
+  while (true) {
+    try {
+      return { sdk, value: await input.resolve(sdk) }
+    } catch (error) {
+      if (!input.reconnect || !(error instanceof ClientError) || error.reason !== "Transport") throw error
+      while (true) {
+        try {
+          sdk = await input.reconnect(input.signal)
+          break
+        } catch (resolveError) {
+          if (input.signal.aborted) throw resolveError
+          await setTimeout(250, undefined, { signal: input.signal })
+        }
+      }
+    }
   }
 }
 
@@ -112,64 +204,68 @@ function localDirectory(): string {
   }
 }
 
-function parseModel(value?: string): Model {
-  if (!value) return
-  const [providerID, ...rest] = value.split("/")
-  const modelID = rest.join("/")
-  if (!providerID || !modelID) throw new MiniInputError("--model must use the format provider/model")
-  return { providerID, modelID }
+function parseModel(value?: string) {
+  try {
+    return parseSessionTargetModel(value)
+  } catch {
+    throw new MiniInputError("--model must use the format provider/model[#variant]")
+  }
 }
 
-async function validateAgent(sdk: OpenCodeClient, directory: string, name?: string) {
+function prepareTarget(requestedAgent?: string): SessionTargetPreparation {
+  return async (input) => {
+    if (input.model)
+      await waitForCatalogReady({
+        sdk: input.client,
+        directory: input.location.directory,
+        workspace: input.location.workspaceID,
+        model: { providerID: input.model.providerID, modelID: input.model.id },
+        signal: input.signal,
+      })
+    return {
+      model: input.model,
+      agent: requestedAgent
+        ? await validateAgent(
+            input.client,
+            input.location.directory,
+            input.location.workspaceID,
+            requestedAgent,
+            input.signal,
+          )
+        : input.agent,
+    }
+  }
+}
+
+async function validateAgent(
+  sdk: OpenCodeClient,
+  directory: string,
+  workspace: string | undefined,
+  name?: string,
+  signal?: AbortSignal,
+) {
   if (!name) return
   const deadline = Date.now() + 5_000
   let agents: Awaited<ReturnType<OpenCodeClient["agent"]["list"]>> | undefined
-  while (Date.now() < deadline) {
-    agents = await sdk.agent.list({ location: { directory } }).catch(() => undefined)
+  while (Date.now() < deadline && !signal?.aborted) {
+    agents = await sdk.agent.list({ location: { directory, workspace } }, { signal }).catch((error) => {
+      if (signal && error instanceof ClientError && error.reason === "Transport") throw error
+      return undefined
+    })
     const agent = agents?.data.find((item) => item.id === name)
     if (agent?.mode === "subagent") {
       warning(`agent "${name}" is a subagent, not a primary agent. Falling back to default agent`)
       return
     }
     if (agent) return name
-    await setTimeout(25)
+    await setTimeout(25, undefined, { signal }).catch(() => {})
   }
+  if (signal?.aborted) return
   if (!agents) {
     warning("failed to list agents. Falling back to default agent")
     return
   }
   warning(`agent "${name}" not found. Falling back to default agent`)
-}
-
-async function selectSession(sdk: OpenCodeClient, directory: string, input: MiniCommandInput, preselected?: Session) {
-  const selected =
-    preselected ??
-    (input.session
-      ? await sdk.session.get({ sessionID: input.session }).catch(() => undefined)
-      : input.continue
-        ? await sdk.session
-            .list({ directory, parentID: null, limit: 1, order: "desc" })
-            .then((result) => result.data[0])
-        : undefined)
-  if (input.session && !selected) throw new MiniInputError("Session not found")
-  if (!selected) return
-  if (!input.fork) return selected
-  return sdk.session.fork({ sessionID: selected.id })
-}
-
-async function createSession(
-  sdk: OpenCodeClient,
-  directory: string,
-  agent: string | undefined,
-  model: Model,
-  variant?: string,
-): Promise<Session> {
-  if (model) await waitForCatalogReady({ sdk, directory, model })
-  return sdk.session.create({
-    agent,
-    model: model ? { providerID: model.providerID, id: model.modelID, variant } : undefined,
-    location: { directory },
-  })
 }
 
 function warning(message: string) {

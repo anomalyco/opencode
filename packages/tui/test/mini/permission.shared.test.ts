@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test"
-import type { PermissionV2Request } from "@opencode-ai/client/promise"
 import {
   createPermissionBodyState,
   permissionAlwaysLines,
@@ -9,8 +8,9 @@ import {
   permissionReject,
   permissionRun,
 } from "../../src/mini/permission.shared"
+import type { MiniPermissionRequest } from "../../src/mini/types"
 
-function req(input: Partial<PermissionV2Request> = {}): PermissionV2Request {
+function req(input: Partial<MiniPermissionRequest> = {}): MiniPermissionRequest {
   return {
     id: "perm-1",
     sessionID: "session-1",
@@ -22,23 +22,29 @@ function req(input: Partial<PermissionV2Request> = {}): PermissionV2Request {
   }
 }
 
+function body() {
+  return createPermissionBodyState(req())
+}
+
 describe("run permission shared", () => {
   test("replies immediately for allow once", () => {
-    const out = permissionRun(createPermissionBodyState("perm-1"), "perm-1", "once")
+    const out = permissionRun(body(), "perm-1", "once")
 
     expect(out.reply).toEqual({
+      sessionID: "session-1",
       requestID: "perm-1",
       reply: "once",
     })
   })
 
   test("requires confirmation for allow always", () => {
-    const next = permissionRun(createPermissionBodyState("perm-1"), "perm-1", "always")
+    const next = permissionRun(body(), "perm-1", "always")
     expect(next.state.stage).toBe("always")
     expect(next.state.selected).toBe("confirm")
     expect(next.reply).toBeUndefined()
 
     expect(permissionRun(next.state, "perm-1", "confirm").reply).toEqual({
+      sessionID: "session-1",
       requestID: "perm-1",
       reply: "always",
     })
@@ -50,11 +56,12 @@ describe("run permission shared", () => {
   })
 
   test("builds trimmed reject replies and stage transitions", () => {
-    const next = permissionRun(createPermissionBodyState("perm-1"), "perm-1", "reject")
+    const next = permissionRun(body(), "perm-1", "reject")
     expect(next.state.stage).toBe("reject")
 
     const out = permissionReject({ ...next.state, message: "  use rg  " }, "perm-1")
     expect(out).toEqual({
+      sessionID: "session-1",
       requestID: "perm-1",
       reply: "reject",
       message: "use rg",
@@ -65,7 +72,7 @@ describe("run permission shared", () => {
       selected: "reject",
     })
 
-    expect(permissionEscape(createPermissionBodyState("perm-1"))).toMatchObject({
+    expect(permissionEscape(body())).toMatchObject({
       stage: "reject",
       selected: "reject",
     })
@@ -76,36 +83,29 @@ describe("run permission shared", () => {
     })
   })
 
-  test.skip("maps supported permission types into display info", () => {
+  test("maps supported permission types into display info", () => {
     expect(
       permissionInfo(
         req({
-          action: "bash",
-          metadata: {
-            input: {
-              command: "git status --short",
+          action: "shell",
+          source: { type: "tool", messageID: "msg-shell", callID: "call-shell" },
+          tool: {
+            type: "tool",
+            id: "call-shell",
+            name: "shell",
+            state: {
+              status: "running",
+              input: { command: "git status --short" },
+              structured: {},
+              content: [],
             },
+            time: { created: 1, ran: 1 },
           },
         }),
       ),
     ).toMatchObject({
       title: "Shell command",
       lines: ["$ git status --short"],
-    })
-
-    expect(
-      permissionInfo(
-        req({
-          action: "task",
-          metadata: {
-            description: "investigate stream",
-            subagent_type: "general",
-          },
-        }),
-      ),
-    ).toMatchObject({
-      title: "General Task",
-      lines: ["◉ investigate stream"],
     })
 
     expect(
@@ -127,6 +127,61 @@ describe("run permission shared", () => {
     expect(permissionInfo(req({ action: "custom_tool" }))).toMatchObject({
       title: "Call tool custom_tool",
       lines: ["Tool: custom_tool"],
+    })
+  })
+
+  test("prefers canonical request metadata over source tool metadata", () => {
+    expect(
+      permissionInfo(
+        req({
+          action: "websearch",
+          metadata: { provider: "parallel" },
+          source: { type: "tool", messageID: "msg-search", callID: "call-search" },
+          tool: {
+            type: "tool",
+            id: "call-search",
+            name: "websearch",
+            state: {
+              status: "running",
+              input: { query: "current releases" },
+              structured: { provider: "exa", retained: true },
+              content: [],
+            },
+            time: { created: 1, ran: 1 },
+          },
+        }),
+      ),
+    ).toMatchObject({
+      title: 'Parallel Web Search "current releases"',
+      lines: ["Query: current releases"],
+    })
+  })
+
+  test("uses source patch text when an edit has no generated diff", () => {
+    expect(
+      permissionInfo(
+        req({
+          action: "edit",
+          resources: ["src/index.ts"],
+          source: { type: "tool", messageID: "msg-edit", callID: "call-edit" },
+          tool: {
+            type: "tool",
+            id: "call-edit",
+            name: "edit",
+            state: {
+              status: "running",
+              input: { patchText: "*** Begin Patch\n*** Update File: src/index.ts\n@@\n-old\n+new\n*** End Patch" },
+              structured: {},
+              content: [],
+            },
+            time: { created: 1, ran: 1 },
+          },
+        }),
+      ),
+    ).toMatchObject({
+      title: "Edit src/index.ts",
+      diff: undefined,
+      patch: "*** Begin Patch\n*** Update File: src/index.ts\n@@\n-old\n+new\n*** End Patch",
     })
   })
 

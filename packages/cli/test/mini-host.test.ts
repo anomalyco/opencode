@@ -152,6 +152,7 @@ describe("Mini CLI host", () => {
     expect(input.paths).toEqual({ home: directory, state: directory, log: directory })
     expect(input.platform).toBe(process.platform)
     expect(typeof input.files.readText).toBe("function")
+    expect(typeof input.themes.discover).toBe("function")
     const file = path.join(directory, "attachment.txt")
     await Bun.write(file, "attachment contents")
     expect(await input.files.readText(pathToFileURL(file).href)).toBe("attachment contents")
@@ -185,6 +186,9 @@ describe("Mini CLI host", () => {
       recent: [{ providerID: "anthropic", modelID: "sonnet" }],
       variant: { "openai/gpt-4.1": "low" },
     })
+
+    await Bun.write(file, JSON.stringify({ variant: { "openai/gpt-5": "default" } }))
+    expect(await input.preferences.resolveVariant(model)).toBeUndefined()
 
     await Bun.write(file, "{")
     await input.preferences.saveVariant(model, "high")

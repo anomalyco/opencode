@@ -5,7 +5,8 @@
 // model variant list with context limits, and session history for the prompt
 // history ring. All are async because they read config or hit the SDK, but
 // none block each other.
-import { resolve } from "../config/v1"
+import type { LocationRef } from "@opencode-ai/client/promise"
+import { resolve } from "../config"
 import { loadRunProviders } from "./catalog.shared"
 import { resolveCurrentSession, sessionHistory } from "./session.shared"
 import type { RunDiffStyle, RunInput, RunPrompt, RunProvider, RunTuiConfig } from "./types"
@@ -41,18 +42,16 @@ function emptySessionInfo(): SessionInfo {
 }
 
 function defaultRunTuiConfig(platform: NodeJS.Platform): RunTuiConfig {
-  return {
-    ...resolve({}, { terminalSuspend: platform !== "win32" }),
-    diff_style: "auto",
-  }
+  return resolve({}, { terminalSuspend: platform !== "win32" })
 }
 
 async function loadModelInfo(
   sdk: RunInput["sdk"],
-  directory: string,
+  location: LocationRef,
   model: RunInput["model"],
+  signal?: AbortSignal,
 ): Promise<ModelInfo> {
-  const providers = await loadRunProviders(sdk, directory)
+  const providers = await loadRunProviders(sdk, location, signal)
   const limits = Object.fromEntries(
     providers.flatMap((provider) =>
       Object.entries(provider.models ?? {}).flatMap(([modelID, info]) => {
@@ -74,14 +73,20 @@ async function loadModelInfo(
 // Fetches available variants and context limits for every provider/model pair.
 export async function resolveModelInfo(
   sdk: RunInput["sdk"],
-  directory: string,
+  location: LocationRef,
   model: RunInput["model"],
+  signal?: AbortSignal,
 ): Promise<ModelInfo> {
-  return loadModelInfo(sdk, directory, model).catch(() => emptyModelInfo())
+  return loadModelInfo(sdk, location, model, signal).catch(() => emptyModelInfo())
 }
 
-export function resolveModelInfoStrict(sdk: RunInput["sdk"], directory: string, model: RunInput["model"]) {
-  return loadModelInfo(sdk, directory, model)
+export function resolveModelInfoStrict(
+  sdk: RunInput["sdk"],
+  location: LocationRef,
+  model: RunInput["model"],
+  signal?: AbortSignal,
+) {
+  return loadModelInfo(sdk, location, model, signal)
 }
 
 // Fetches session messages to determine if this is the first turn and build prompt history.
@@ -89,8 +94,9 @@ export async function resolveSessionInfo(
   sdk: RunInput["sdk"],
   sessionID: string,
   model: RunInput["model"],
+  signal?: AbortSignal,
 ): Promise<SessionInfo> {
-  return resolveCurrentSession(sdk, sessionID)
+  return resolveCurrentSession(sdk, sessionID, signal)
     .then((session) => ({
       first: session.first,
       history: sessionHistory(session),
@@ -114,5 +120,5 @@ export async function resolveDiffStyle(
   config?: RunTuiConfig | Promise<RunTuiConfig>,
   platform: NodeJS.Platform = "linux",
 ): Promise<RunDiffStyle> {
-  return resolveRunTuiConfig(config, platform).then((value) => value.diff_style ?? "auto")
+  return resolveRunTuiConfig(config, platform).then((value) => value.diffs?.view ?? "auto")
 }

@@ -1,6 +1,7 @@
 import { createScrollbackWriter } from "@opentui/solid"
 import { TextRenderable, type ColorInput, type ScrollbackRenderContext, type ScrollbackWriter } from "@opentui/core"
 import { Match, Switch, createMemo } from "solid-js"
+import { resolveDiffView } from "./diff"
 import { entryBody, entryFlags } from "./entry.body"
 import { entryColor, entryLook, entrySyntax } from "./scrollback.shared"
 import { toolFiletype, toolStructuredFinal } from "./tool"
@@ -12,11 +13,12 @@ export function entryGroupKey(commit: StreamCommit): string | undefined {
     return undefined
   }
 
+  const part = `${commit.messageID ?? ""}\u0000${commit.partID}`
   if (toolStructuredFinal(commit)) {
-    return `tool:${commit.partID}:final`
+    return `tool:${part}:final`
   }
 
-  return `${commit.kind}:${commit.partID}`
+  return `${commit.kind}:${part}`
 }
 
 export function sameEntryGroup(left: StreamCommit | undefined, right: StreamCommit): boolean {
@@ -172,12 +174,12 @@ export function RunEntryContent(props: {
                 <box width="100%" paddingLeft={1}>
                   <diff
                     diff={item.diff}
-                    view="unified"
+                    view={resolveDiffView(props.opts?.diffStyle, props.width)}
                     filetype={toolFiletype(item.file)}
                     syntaxStyle={syntax()}
                     showLineNumbers={true}
                     width="100%"
-                    wrapMode="word"
+                    wrapMode={props.opts?.diffWrap ?? "word"}
                     fg={theme().block.text}
                     addedBg={diffBg(theme().block.diffAddedBg)}
                     removedBg={diffBg(theme().block.diffRemovedBg)}

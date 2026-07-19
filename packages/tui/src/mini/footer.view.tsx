@@ -25,7 +25,8 @@ import { FOOTER_MENU_ROWS, RunFooterMenu } from "./footer.menu"
 import { RunFooterSubagentBody } from "./footer.subagent"
 import { RunPromptBody, createPromptState } from "./footer.prompt"
 import { RunPermissionBody } from "./footer.permission"
-import { RunQuestionBody } from "./footer.question"
+import { RunFormBody } from "./footer.form"
+import { createFormBodyState, type FormBodyState } from "./form.shared"
 import { footerWidthPolicy } from "./footer.width"
 import { Keymap } from "../context/keymap"
 
@@ -35,9 +36,9 @@ import type {
   FooterState,
   FooterSubagentState,
   FooterView,
+  FormCancel,
+  FormReply,
   PermissionReply,
-  QuestionReject,
-  QuestionReply,
   RunAgent,
   RunCommand,
   RunDiffStyle,
@@ -67,7 +68,7 @@ const EMPTY_BORDER = {
 }
 
 type RunFooterViewProps = {
-  directory: string
+  directory: () => string
   findFiles: (query: string) => Promise<string[]>
   agents: () => RunAgent[]
   references: () => RunReference[]
@@ -82,13 +83,14 @@ type RunFooterViewProps = {
   queuedPrompts?: () => FooterQueuedPrompt[]
   theme: () => RunTheme
   diffStyle?: RunDiffStyle
+  diffWrap?: "word" | "none"
   tuiConfig: RunTuiConfig
   history?: () => RunPrompt[]
   agent: string
   onSubmit: (input: RunPrompt) => boolean
   onPermissionReply: (input: PermissionReply) => void | Promise<void>
-  onQuestionReply: (input: QuestionReply) => void | Promise<void>
-  onQuestionReject: (input: QuestionReject) => void | Promise<void>
+  onFormReply: (input: FormReply) => void | Promise<void>
+  onFormCancel: (input: FormCancel) => void | Promise<void>
   onCycle: () => void
   onInterrupt: () => boolean
   onBackground?: () => void
@@ -120,7 +122,7 @@ export function RunFooterView(props: RunFooterViewProps) {
         tabs: [],
         details: {},
         permissions: [],
-        questions: [],
+        forms: [],
       }
     )
   })
@@ -139,7 +141,7 @@ export function RunFooterView(props: RunFooterViewProps) {
   const panel = createMemo(
     () =>
       active().type === "permission" ||
-      active().type === "question" ||
+      active().type === "form" ||
       selectingQueued() ||
       selectingSubagent() ||
       commanding() ||
@@ -215,9 +217,24 @@ export function RunFooterView(props: RunFooterViewProps) {
     const view = active()
     return view.type === "permission" ? view : undefined
   })
-  const question = createMemo<Extract<FooterView, { type: "question" }> | undefined>(() => {
+  const form = createMemo<Extract<FooterView, { type: "form" }> | undefined>(() => {
     const view = active()
-    return view.type === "question" ? view : undefined
+    return view.type === "form" ? view : undefined
+  })
+  const formStates = new Map<string, FormBodyState>()
+  const settledForms = new Set<string>()
+  let formsAbsent = true
+
+  createEffect(() => {
+    const view = active()
+    if (view.type === "form") {
+      formsAbsent = false
+      return
+    }
+    if (view.type === "permission") return
+    formsAbsent = true
+    formStates.clear()
+    settledForms.clear()
   })
   const promptView = createMemo(() => {
     if (active().type !== "prompt") {
@@ -736,19 +753,38 @@ export function RunFooterView(props: RunFooterViewProps) {
                         <Match when={active().type === "permission"}>
                           <RunPermissionBody
                             request={permission()!.request}
+                            directory={props.directory}
                             theme={theme()}
                             block={block()}
                             diffStyle={props.diffStyle}
+                            diffWrap={props.diffWrap}
                             onReply={props.onPermissionReply}
                           />
                         </Match>
-                        <Match when={active().type === "question"}>
-                          <RunQuestionBody
-                            request={question()!.request}
-                            theme={theme()}
-                            onReply={props.onQuestionReply}
-                            onReject={props.onQuestionReject}
-                          />
+                        <Match when={active().type === "form"}>
+                          <For each={form() ? [form()!] : []}>
+                            {(value) => (
+                              <RunFormBody
+                                request={value.request}
+                                theme={theme()}
+                                state={formStates.get(value.request.id) ?? createFormBodyState(value.request)}
+                                onState={(state) => {
+                                  if (!formsAbsent && !settledForms.has(state.formID))
+                                    formStates.set(state.formID, state)
+                                }}
+                                onReply={async (input) => {
+                                  await props.onFormReply(input)
+                                  settledForms.add(input.formID)
+                                  formStates.delete(input.formID)
+                                }}
+                                onCancel={async (input) => {
+                                  await props.onFormCancel(input)
+                                  settledForms.add(input.formID)
+                                  formStates.delete(input.formID)
+                                }}
+                              />
+                            )}
+                          </For>
                         </Match>
                       </Switch>
                     </box>
@@ -891,6 +927,7 @@ export function RunFooterView(props: RunFooterViewProps) {
             detail={detail}
             width={width}
             diffStyle={props.diffStyle}
+            diffWrap={props.diffWrap}
             onCycle={cycleTab}
             onClose={closeTab}
             interrupt={() => subagentInterruptShortcut() || undefined}
