@@ -93,6 +93,7 @@ export const dict = {
   "command.session.unshare.description": "Припинити поширення цієї сесії",
 
   "palette.search.placeholder": "Пошук файлів, команд і сесій",
+  "palette.search.placeholder.home": "Пошук команд і сесій",
   "palette.empty": "Результатів не знайдено",
   "palette.group.commands": "Команди",
   "palette.group.files": "Файли",
@@ -702,6 +703,7 @@ export const dict = {
   "session.new.workspace.triggerLocal": "Локально",
   "session.new.workspace.local": "Локальний репозиторій",
   "session.new.workspace.existing": "Робоча область…",
+  "session.new.git.none": "Немає Git",
   "session.new.lastModified": "Востаннє змінено",
 
   "session.header.search.placeholder": "Пошук {{project}}",
