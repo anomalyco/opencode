@@ -251,21 +251,21 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
     const isFavorite =
       opts?.favorite ??
       local.model.favorite().some((f) => f.providerID === provider.id && f.modelID === modelID)
-    const note = local.model.note({ providerID: provider.id, modelID })
     const current = props.current
-    const row = modelRow(info, modelID, provider, listableModelsForProvider(provider), rowTheme, {
+    const row = modelRow(info, modelID, provider, rowTheme, {
       favorite: isFavorite,
-      note,
       current: !!current && current.providerID === provider.id && current.modelID === modelID,
       subscription: isSubscriptionFor(provider.id),
       onSelect: () => commitSelect(provider.id, modelID),
+      // Two-pane list does not use DialogSelect category headers, and string
+      // footers avoid allocating a JSX tree per model on every provider switch.
+      plainFooter: true,
     })
     const titleParts = [row.title]
     if (opts?.showProvider) titleParts.push(provider.name)
     return {
       ...row,
       title: titleParts.join(" · "),
-      note: note ? Locale.truncateMiddle(note, 24) : undefined,
       muted: opts?.muted === true,
     }
   }
@@ -274,16 +274,6 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
     provider: Provider
     modelID: string
     info: Provider["models"][string]
-  }
-
-  function listableModelsForProvider(provider: Provider) {
-    const out: (typeof provider.models)[string][] = []
-    for (const [modelID, info] of entries(provider.models)) {
-      if (info.status === "deprecated") continue
-      if (provider.id === "opencode" && modelID.includes("-nano")) continue
-      out.push(info)
-    }
-    return out
   }
 
   // Favorites → recent → others → hidden.
@@ -380,6 +370,20 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
     return rowsFromListed(items, false)
   }
 
+  // Cache provider rows across left-pane switches. Alternating between a small
+  // provider and OpenRouter (300+ models) previously rebuilt JSX/string rows
+  // on every arrow key — that allocate/free cycle gradually freezes the TUI.
+  const providerRowsCache = new Map<
+    string,
+    {
+      favorite: ReturnType<typeof local.model.favorite>
+      hidden: ReturnType<typeof local.model.hidden>
+      recent: ReturnType<typeof local.model.recent>
+      providers: typeof sync.data.provider
+      rows: ModelOption[]
+    }
+  >()
+
   const rightOptions = createMemo<ModelOption[]>(() => {
     const needle = query().trim()
     if (needle) return searchAllModels(needle)
@@ -387,9 +391,29 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
     const mode = rightMode()
     if (!mode) return []
     if (mode.kind === "provider") {
-      const provider = sync.data.provider.find((p) => p.id === mode.providerID)
+      const favorite = local.model.favorite()
+      const hidden = local.model.hidden()
+      const recent = local.model.recent()
+      const providers = sync.data.provider
+      const provider = providers.find((p) => p.id === mode.providerID)
       if (!provider) return []
-      return listProviderModels(provider)
+      const hit = providerRowsCache.get(mode.providerID)
+      const sameEpoch = (entry: {
+        favorite: typeof favorite
+        hidden: typeof hidden
+        recent: typeof recent
+        providers: typeof providers
+      }) =>
+        entry.favorite === favorite &&
+        entry.hidden === hidden &&
+        entry.recent === recent &&
+        entry.providers === providers
+      if (hit && sameEpoch(hit)) return hit.rows
+      const sample = providerRowsCache.values().next().value
+      if (sample && !sameEpoch(sample)) providerRowsCache.clear()
+      const rows = listProviderModels(provider)
+      providerRowsCache.set(mode.providerID, { favorite, hidden, recent, providers, rows })
+      return rows
     }
     if (mode.kind === "hidden") {
       return visibleHiddenRefs().flatMap((item) => {
@@ -1098,6 +1122,7 @@ function RowContent(props: {
   muted: boolean
 }) {
   const { theme } = useTheme()
+  const local = useLocal()
   const fg = selectedForeground(theme)
   const text = createMemo(() => {
     if (props.active) return fg
@@ -1109,6 +1134,13 @@ function RowContent(props: {
     if (props.active) return fg
     if (props.muted) return theme.textMuted
     return theme.info
+  })
+  // Read notes live so provider-row caching does not stale them.
+  const note = createMemo(() => {
+    const baked = props.option.note
+    if (baked) return baked
+    const raw = local.model.note(props.option.value)
+    return raw ? Locale.truncateMiddle(raw, 24) : undefined
   })
   return (
     <box flexDirection="column">
@@ -1126,10 +1158,10 @@ function RowContent(props: {
           >
             {props.option.title}
           </text>
-          <Show when={props.option.note}>
+          <Show when={note()}>
             <text fg={noteColor()} wrapMode="none">
               {" · "}
-              {props.option.note}
+              {note()}
             </text>
           </Show>
         </box>

@@ -106,16 +106,27 @@ function providerHeader(provider: Provider, visibleModels: ModelShape[], theme: 
   )
 }
 
+export type ModelRowBuildOptions = ModelRowOptions & {
+  onSelect: () => void
+  /** When set, attach a provider header (DialogSelect grouped view). Omit in the two-pane list. */
+  peers?: ModelShape[]
+  /** Prefer a plain string footer to avoid allocating JSX trees for every row. */
+  plainFooter?: boolean
+}
+
 // Build a DialogSelectOption for a model row with rich metadata.
 export function modelRow(
   model: ModelShape,
   modelID: string,
   provider: Provider,
-  visiblePeers: ModelShape[],
   theme: ModelRowTheme,
-  opts: ModelRowOptions & { onSelect: () => void },
+  opts: ModelRowBuildOptions,
 ): DialogSelectOption<{ providerID: string; modelID: string }> {
-  const { view: footerView, width: footerWidth } = footerTokens(model, provider, opts, theme)
+  const plainFooter = opts.plainFooter === true
+  const labeled = plainFooter ? footerLabel(model, provider, opts) : undefined
+  const tokens = plainFooter ? undefined : footerTokens(model, provider, opts, theme)
+  const footer = plainFooter ? labeled : tokens!.view
+  const footerWidth = plainFooter ? (labeled?.length ?? 0) : tokens!.width
   const capLine = capabilityLine(model)
   // Default title budget from DialogSelect.Option is 61; reserve room for the footer + 3 (padding).
   const titleWidth = Math.max(20, 61 - footerWidth - 1)
@@ -124,11 +135,30 @@ export function modelRow(
     title: model.name ?? modelID,
     titleWidth,
     truncateTitle: true,
-    footer: footerView,
+    footer,
     details: capLine ? [capLine] : undefined,
-    categoryView: providerHeader(provider, visiblePeers, theme),
+    categoryView: opts.peers ? providerHeader(provider, opts.peers, theme) : undefined,
     onSelect: opts.onSelect,
   }
+}
+
+function footerLabel(model: ModelShape, provider: Provider, opts: ModelRowOptions) {
+  const ctx = humanizeContext(model.limit?.context ?? 0)
+  const star = opts.favorite ? "★" : ""
+  const subscription = isSubscriptionProvider(provider.id) || opts.subscription === true
+  const pieces: string[] = []
+  if (!subscription) {
+    if (isFreeModel(model)) pieces.push("Free")
+    else {
+      const cost = humanizeCost(model.cost?.input ?? 0)
+      const out = humanizeCost(model.cost?.output ?? 0)
+      pieces.push(`${cost}/${out}`)
+    }
+  }
+  if (ctx) pieces.push(ctx)
+  if (star) pieces.push(star)
+  if (pieces.length === 0) return undefined
+  return pieces.join(" ")
 }
 
 export { providerHeader }
