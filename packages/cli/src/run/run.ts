@@ -6,9 +6,8 @@ import { open } from "node:fs/promises"
 import path from "node:path"
 import { readStdin } from "../util/io"
 import { ServerConnection } from "../services/server-connection"
-import { loadRunAgents, waitForCatalogReady } from "../mini/catalog.shared"
-import { toolInlineInfo } from "../mini/tool"
-import type { MiniToolPart } from "../mini/types"
+import { waitForCatalogReady } from "../services/catalog"
+import { toolInlineInfo, type MiniToolPart } from "@opencode-ai/tui/mini/tool"
 import { runNonInteractivePrompt } from "./noninteractive"
 import { UI } from "./ui"
 
@@ -171,7 +170,10 @@ export function parseRunModel(value?: string) {
 
 async function validateAgent(client: OpenCodeClient, directory: string, name?: string) {
   if (!name) return
-  const agents = await loadRunAgents(client, directory).catch(() => undefined)
+  const agents = await client.agent
+    .list({ location: { directory } })
+    .then((result) => result.data)
+    .catch(() => undefined)
   if (!agents) {
     warning("failed to list agents. Falling back to default agent")
     return

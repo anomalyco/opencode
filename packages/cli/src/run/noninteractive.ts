@@ -2,8 +2,7 @@ import type { EventSubscribeOutput, OpenCodeClient } from "@opencode-ai/client/p
 import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { EOL } from "node:os"
 import { readFile } from "node:fs/promises"
-import { toolOutputText } from "../mini/tool"
-import type { MiniToolPart } from "../mini/types"
+import { toolOutputText, type MiniToolPart } from "@opencode-ai/tui/mini/tool"
 import { UI } from "./ui"
 
 type Model = {
