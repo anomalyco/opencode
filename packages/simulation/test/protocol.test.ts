@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { Backend, Frontend, Handshake } from "../src/protocol"
 
 test("decodes ui.matches text params", () => {
@@ -19,6 +19,53 @@ test("decodes ui.matches text params", () => {
       params: { pattern: "OpenCode.*" },
     }),
   ).toThrow()
+})
+
+test("decodes semantic UI snapshots", () => {
+  expect(
+    Frontend.decodeRequest({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "ui.snapshot",
+    }),
+  ).toMatchObject({ method: "ui.snapshot" })
+  const decode = Schema.decodeUnknownSync(Frontend.SemanticSnapshot)
+  expect(
+    decode({
+      format: "opencode-ui-snapshot-v1",
+      nodes: [
+        {
+          id: "session.permission",
+          role: "dialog",
+          label: "Permission required",
+          element: 1,
+          expanded: false,
+        },
+      ],
+    }),
+  ).toMatchObject({ nodes: [{ role: "dialog", expanded: false }] })
+  expect(() =>
+    decode({
+      format: "opencode-ui-snapshot-v1",
+      nodes: [{ id: "", role: "dialog", element: 0 }],
+    }),
+  ).toThrow()
+  for (const nodes of [
+    [
+      { id: "duplicate", role: "dialog", element: 1 },
+      { id: "duplicate", role: "option", element: 2 },
+    ],
+    [
+      { id: "first", role: "dialog", element: 1 },
+      { id: "second", role: "option", element: 1 },
+    ],
+    [{ id: "orphan", parent: "missing", role: "option", element: 1 }],
+    [
+      { id: "first", parent: "second", role: "dialog", element: 1 },
+      { id: "second", parent: "first", role: "option", element: 2 },
+    ],
+  ])
+    expect(() => decode({ format: "opencode-ui-snapshot-v1", nodes })).toThrow()
 })
 
 const params: Handshake.Params = {

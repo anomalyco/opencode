@@ -67,9 +67,10 @@ export namespace Handshake {
   export const Params = Schema.Struct({
     client: Identity,
     expectedRole: EndpointRole,
-    offeredVersions: Schema.Array(
-      Schema.Int.check(Schema.isGreaterThan(0)),
-    ).check(Schema.isMinLength(1), Schema.isUnique()),
+    offeredVersions: Schema.Array(Schema.Int.check(Schema.isGreaterThan(0))).check(
+      Schema.isMinLength(1),
+      Schema.isUnique(),
+    ),
     requiredCapabilities: Schema.Array(Capability).check(Schema.isUnique()),
     optionalCapabilities: Schema.Array(Capability).check(Schema.isUnique()),
   })
@@ -174,6 +175,7 @@ export namespace Frontend {
     "ui.matches",
     "ui.screenshot",
     "ui.state",
+    "ui.snapshot",
     "ui.capture",
     "ui.recording.finish",
   ] as const satisfies ReadonlyArray<Handshake.Capability>
@@ -220,6 +222,46 @@ export namespace Frontend {
     elements: Schema.Array(Element),
   })
   export interface State extends Schema.Schema.Type<typeof State> {}
+
+  export const SemanticNode = Schema.Struct({
+    id: Schema.NonEmptyString,
+    instance: Schema.optionalKey(Schema.NonEmptyString),
+    parent: Schema.optionalKey(Schema.NonEmptyString),
+    role: Schema.NonEmptyString,
+    label: Schema.optionalKey(Schema.NonEmptyString),
+    element: Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0)),
+    focused: Schema.optionalKey(Schema.Boolean),
+    selected: Schema.optionalKey(Schema.Boolean),
+    expanded: Schema.optionalKey(Schema.Boolean),
+    disabled: Schema.optionalKey(Schema.Boolean),
+  })
+  export interface SemanticNode extends Schema.Schema.Type<typeof SemanticNode> {}
+
+  export const SemanticSnapshot = Schema.Struct({
+    format: Schema.Literal("opencode-ui-snapshot-v1"),
+    nodes: Schema.Array(SemanticNode).check(
+      Schema.makeFilter((nodes) => {
+        const ids = new Set(nodes.map((node) => node.id))
+        if (ids.size !== nodes.length) return "semantic node ids must be unique"
+        if (new Set(nodes.map((node) => node.element)).size !== nodes.length)
+          return "semantic node elements must be unique"
+        if (nodes.some((node) => node.parent !== undefined && !ids.has(node.parent)))
+          return "semantic node parents must reference another node"
+        const parents = new Map(nodes.map((node) => [node.id, node.parent]))
+        for (const node of nodes) {
+          const visited = new Set<string>()
+          let current: string | undefined = node.id
+          while (current !== undefined) {
+            if (visited.has(current)) return "semantic node hierarchy must be acyclic"
+            visited.add(current)
+            current = parents.get(current)
+          }
+        }
+        return undefined
+      }),
+    ),
+  })
+  export interface SemanticSnapshot extends Schema.Schema.Type<typeof SemanticSnapshot> {}
 
   export const Screenshot = Schema.String
   export type Screenshot = Schema.Schema.Type<typeof Screenshot>
@@ -293,7 +335,7 @@ export namespace Frontend {
     }),
     Schema.Struct({
       ...JsonRpc.RequestFields,
-      method: Schema.Literals(["ui.enter", "ui.state", "ui.recording.finish"]),
+      method: Schema.Literals(["ui.enter", "ui.state", "ui.snapshot", "ui.recording.finish"]),
     }),
     Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("ui.capture") }),
   ])

@@ -9,9 +9,10 @@ import {
   type MockInput,
   type MockMouse,
 } from "@opentui/core/testing"
-import { Config, Effect, FileSystem } from "effect"
-import type { SimulationProtocol } from "../protocol"
+import { Config, Effect, FileSystem, Schema } from "effect"
+import { SimulationProtocol } from "../protocol"
 import { SimulationRenderer } from "./renderer"
+import { SimulationSemantics } from "./semantics"
 
 export type Action = SimulationProtocol.Frontend.Action
 export type Element = SimulationProtocol.Frontend.Element
@@ -60,7 +61,8 @@ function hit(renderer: CliRenderer, renderable: Renderable) {
   if (renderable.width <= 0 || renderable.height <= 0) return false
   const x = Math.floor(renderable.screenX + renderable.width / 2)
   const y = Math.floor(renderable.screenY + renderable.height / 2)
-  return renderer.hitTest(x, y) === renderable.num
+  const target = renderer.hitTest(x, y)
+  return all(renderable).some((item) => item.num === target)
 }
 
 /**
@@ -120,6 +122,25 @@ export function state(harness: Harness) {
     },
     elements: elements(harness.renderer),
   }
+}
+
+export function snapshot(harness: Harness): SimulationProtocol.Frontend.SemanticSnapshot {
+  const ids = new Set<string>()
+  const visit = (renderable: Renderable, parent?: string): SimulationProtocol.Frontend.SemanticNode[] => {
+    if (!renderable.visible || renderable.isDestroyed) return []
+    const definition = SimulationSemantics.read(renderable)?.()
+    if (definition && ids.has(renderable.id)) throw new Error(`duplicate semantic UI id: ${renderable.id}`)
+    if (definition) ids.add(renderable.id)
+    const node = definition
+      ? [{ id: renderable.id, ...definition, ...(parent === undefined ? {} : { parent }), element: renderable.num }]
+      : []
+    const ancestor = definition ? renderable.id : parent
+    return [...node, ...children(renderable).flatMap((child) => visit(child, ancestor))]
+  }
+  return Schema.decodeUnknownSync(SimulationProtocol.Frontend.SemanticSnapshot)({
+    format: "opencode-ui-snapshot-v1",
+    nodes: visit(harness.renderer.root),
+  })
 }
 
 export function matches(harness: Pick<Harness, "screen">, text: string) {
@@ -183,9 +204,22 @@ export const execute = Effect.fn("SimulationActions.execute")(function* (harness
         .find((item) => item.num === action.target)
         ?.focus()
       break
-    case "ui.click":
-      yield* Effect.tryPromise(() => harness.mockMouse.click(action.x, action.y))
+    case "ui.click": {
+      const target = all(harness.renderer.root).find((item) => item.num === action.target)
+      if (!target || !target.visible || target.isDestroyed)
+        return yield* Effect.fail(new Error(`click target is stale or unavailable: ${action.target}`))
+      if (
+        !Number.isFinite(action.x) ||
+        action.x < 0 ||
+        action.x >= target.width ||
+        !Number.isFinite(action.y) ||
+        action.y < 0 ||
+        action.y >= target.height
+      )
+        return yield* Effect.fail(new Error("click position must be within the target element"))
+      yield* Effect.tryPromise(() => harness.mockMouse.click(target.screenX + action.x, target.screenY + action.y))
       break
+    }
     case "ui.resize":
       if (
         !Number.isSafeInteger(action.cols) ||

@@ -957,7 +957,14 @@ export function Session() {
               <Switch>
                 <Match when={composer.open || (!!session()?.parentID && forms().length === 0)}>{null}</Match>
                 <Match when={permissions().length > 0}>
-                  <PermissionPrompt request={permissions()[0]} directory={session()?.location.directory} />
+                  <Show when={permissions()[0]?.id} keyed>
+                    {(_) => {
+                      const request = permissions()[0]
+                      return request ? (
+                        <PermissionPrompt request={request} directory={session()?.location.directory} />
+                      ) : null
+                    }}
+                  </Show>
                 </Match>
                 <Match when={forms().length > 0}>
                   <Show when={forms()[0]?.id} keyed>
@@ -1460,7 +1467,8 @@ function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type:
   const { themeV2, syntax } = useTheme()
   const status = () => props.message.status
   const cancelled = () => props.message.status === "failed" && props.message.error.type === "aborted"
-  const text = () => (props.message.status === "failed" ? (cancelled() ? "" : props.message.error.message) : props.message.summary)
+  const text = () =>
+    props.message.status === "failed" ? (cancelled() ? "" : props.message.error.message) : props.message.summary
   const content = createMemo(() => text().trim())
   const color = () => (status() === "failed" && !cancelled() ? themeV2.text.feedback.error() : themeV2.text.subdued())
   return (
@@ -1807,7 +1815,9 @@ function AssistantMessage(props: { message: SessionMessageAssistant; last: boole
         <Match when={props.last || final() || props.message.error}>
           <box paddingLeft={3}>
             <text>
-              <span style={{ fg: props.message.error ? themeV2.text.subdued() : local.agent.color(props.message.agent) }}>
+              <span
+                style={{ fg: props.message.error ? themeV2.text.subdued() : local.agent.color(props.message.agent) }}
+              >
                 {Locale.titlecase(props.message.agent)}
               </span>
               <span style={{ fg: themeV2.text.subdued() }}> · {model()}</span>
@@ -2360,9 +2370,7 @@ function BlockTool(props: {
       paddingBottom={1}
       paddingLeft={2}
       gap={1}
-      backgroundColor={
-        hover() ? themeV2.raise(themeV2.background()) : themeV2.background()
-      }
+      backgroundColor={hover() ? themeV2.raise(themeV2.background()) : themeV2.background()}
       customBorderChars={SplitBorder.customBorderChars}
       borderColor={themeV2.background()}
       onMouseOver={() => props.onClick && setHover(true)}
@@ -2379,9 +2387,13 @@ function BlockTool(props: {
             {(title) => (
               <Show
                 when={props.spinner}
-                fallback={<text fg={permission() ? themeV2.text.feedback.warning() : themeV2.text.subdued()}>{title()}</text>}
+                fallback={
+                  <text fg={permission() ? themeV2.text.feedback.warning() : themeV2.text.subdued()}>{title()}</text>
+                }
               >
-                <Spinner color={permission() ? themeV2.text.feedback.warning() : themeV2.text.subdued()}>{title().replace(/^# /, "")}</Spinner>
+                <Spinner color={permission() ? themeV2.text.feedback.warning() : themeV2.text.subdued()}>
+                  {title().replace(/^# /, "")}
+                </Spinner>
               </Show>
             )}
           </Show>

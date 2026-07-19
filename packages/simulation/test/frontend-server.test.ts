@@ -39,7 +39,7 @@ test("scopes the frontend control server and reports malformed JSON", async () =
             protocolVersion: 1,
             role: "ui",
             server: { name: "opencode", version: expect.any(String) },
-            capabilities: expect.arrayContaining(["ui.state", "ui.capture"]),
+            capabilities: expect.arrayContaining(["ui.state", "ui.snapshot", "ui.capture"]),
           },
         })
 
@@ -58,6 +58,13 @@ test("scopes the frontend control server and reports malformed JSON", async () =
             cursor: [0, 0],
             lines: expect.any(Array),
           },
+        })
+
+        socket.send(JSON.stringify({ jsonrpc: "2.0", id: 3, method: "ui.snapshot" }))
+        expect(yield* Queue.take(messages)).toEqual({
+          jsonrpc: "2.0",
+          id: 3,
+          result: { format: "opencode-ui-snapshot-v1", nodes: [] },
         })
 
         socket.send("{")
