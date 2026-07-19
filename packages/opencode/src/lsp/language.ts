@@ -1,3 +1,5 @@
+import path from "path"
+
 export const LANGUAGE_EXTENSIONS: Record<string, string> = {
   ".abap": "abap",
   ".bat": "bat",
@@ -23,6 +25,7 @@ export const LANGUAGE_EXTENSIONS: Record<string, string> = {
   ".patch": "diff",
   ".dart": "dart",
   ".dockerfile": "dockerfile",
+  Dockerfile: "dockerfile",
   ".ex": "elixir",
   ".exs": "elixir",
   ".erl": "erlang",
@@ -119,3 +122,9 @@ export const LANGUAGE_EXTENSIONS: Record<string, string> = {
   ".typ": "typst",
   ".typc": "typst",
 } as const
+
+// Resolve a file to its LSP languageId. Files with no extension (Dockerfile, ...) fall back to the
+// basename so they still map to a language instead of "plaintext".
+export function languageId(file: string): string {
+  return LANGUAGE_EXTENSIONS[path.extname(file) || path.basename(file)] ?? "plaintext"
+}
