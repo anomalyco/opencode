@@ -1081,11 +1081,15 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     const result = await sdk.client.global.upgrade({ target: version })
 
     if (result.error || !result.data?.success) {
+      // fork: surface the server's actual error — a bare "Update failed"
+      // hides actionable causes (dev build, script exit code, network).
+      const data = result.data as { success?: boolean; error?: string } | undefined
+      const detail = data?.error ?? (result.error ? String(result.error) : "no error detail from server")
       toast.show({
         variant: "error",
         title: "Update Failed",
-        message: "Update failed",
-        duration: 10000,
+        message: detail,
+        duration: 15000,
       })
       return
     }

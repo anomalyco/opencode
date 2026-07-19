@@ -99,7 +99,13 @@ export const globalHandlers = HttpApiBuilder.group(RootHttpApi, "global", (handl
       if (method === "unknown") {
         return {
           status: 400,
-          body: { success: false as const, error: "Unknown installation method" },
+          body: {
+            success: false as const,
+            // fork: name the binary location — the common case is a dev build
+            // running from the repo's dist/, which cannot self-upgrade into a
+            // release install. Without this the TUI just said "Update failed".
+            error: `Unknown installation method (running from ${process.execPath}). A dev/working-tree build cannot self-upgrade; use the install script or a package manager install.`,
+          },
         }
       }
       const target = ctx.payload.target || (yield* installation.latest(method))
