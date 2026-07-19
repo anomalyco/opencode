@@ -131,6 +131,11 @@ export const start = <K extends StreamKey>(
  * identity on the first delta instead of a separate start event. OpenAI Chat has
  * this shape: `tool_calls[].index` is the stream key, and `id` / `name` may only
  * appear on the first delta for that index.
+ *
+ * Some OpenAI-compatible APIs (e.g. DashScope token-plan) send empty strings
+ * for `id` / `name` on subsequent deltas instead of omitting them. Treat
+ * empty strings as absent so the accumulated identity from the first delta
+ * is preserved.
  */
 export const appendOrStart = <K extends StreamKey>(
   route: string,
@@ -140,8 +145,8 @@ export const appendOrStart = <K extends StreamKey>(
   missingToolMessage: string,
 ): AppendOutcome<K> | LLMError => {
   const current = tools[key]
-  const id = delta.id ?? current?.id
-  const name = delta.name ?? current?.name
+  const id = (delta.id || undefined) ?? current?.id
+  const name = (delta.name || undefined) ?? current?.name
   if (!id || !name) return eventError(route, missingToolMessage)
 
   const tool = {

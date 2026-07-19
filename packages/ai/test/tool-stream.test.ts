@@ -36,6 +36,44 @@ describe("ToolStream", () => {
     }),
   )
 
+  it.effect("tolerates empty-string id and name on subsequent deltas", () =>
+    Effect.gen(function* () {
+      const first = ToolStream.appendOrStart(
+        ADAPTER,
+        ToolStream.empty<number>(),
+        0,
+        { id: "call_1", name: "calculator", text: "{" },
+        "missing tool",
+      )
+      if (ToolStream.isError(first)) return yield* first
+      // DashScope token-plan sends id:"" and name:"" on continuation deltas
+      const second = ToolStream.appendOrStart(
+        ADAPTER,
+        first.tools,
+        0,
+        { id: "", name: "", text: '"expression": "2+3"}' },
+        "missing tool",
+      )
+      if (ToolStream.isError(second)) return yield* second
+      const finished = yield* ToolStream.finish(ADAPTER, second.tools, 0)
+
+      expect(first.events).toEqual([
+        { type: "tool-input-start", id: "call_1", name: "calculator" },
+        { type: "tool-input-delta", id: "call_1", name: "calculator", text: "{" },
+      ])
+      expect(second.events).toEqual([
+        { type: "tool-input-delta", id: "call_1", name: "calculator", text: '"expression": "2+3"}' },
+      ])
+      expect(finished).toEqual({
+        tools: {},
+        events: [
+          { type: "tool-input-end", id: "call_1", name: "calculator" },
+          { type: "tool-call", id: "call_1", name: "calculator", input: { expression: "2+3" } },
+        ],
+      })
+    }),
+  )
+
   it.effect("fails appendExisting when the provider skipped the tool start", () =>
     Effect.gen(function* () {
       const error = ToolStream.appendExisting(ADAPTER, ToolStream.empty<number>(), 0, "{}", "missing tool")
