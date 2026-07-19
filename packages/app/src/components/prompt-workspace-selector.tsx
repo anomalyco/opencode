@@ -100,7 +100,10 @@ export function PromptWorkspaceSelector(props: {
 
 export function PromptGitStatus(props: { branch?: string; noGit?: boolean }) {
   const language = useLanguage()
-  const label = () => props.branch ?? (props.noGit ? language.t("session.new.git.none") : undefined)
+  const label = () => {
+    if (props.noGit) return language.t("session.new.git.none")
+    return props.branch
+  }
 
   return (
     <Show when={label()}>
