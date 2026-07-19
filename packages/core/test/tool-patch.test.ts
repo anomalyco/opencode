@@ -1,7 +1,7 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Deferred, Effect, Exit, Fiber, Layer } from "effect"
+import { Deferred, Effect, Exit, Fiber, Layer, Schema } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FileMutation } from "@opencode-ai/core/file-mutation"
@@ -167,7 +167,7 @@ describe("PatchTool", () => {
                 )
                 expect(settled.result).toEqual({
                   type: "text",
-                  value: "Applied patch sequentially:\nA nested/new.txt\nM update.txt\nD remove.txt",
+                  value: "Success. Updated the following files:\nA nested/new.txt\nM update.txt\nD remove.txt",
                 })
                 expect(settled.output?.structured).toMatchObject({
                   applied: [
@@ -217,7 +217,7 @@ describe("PatchTool", () => {
     ),
   )
 
-  it.live("rejects moves before applying any hunk", () =>
+  it.live("moves and updates a file", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
       (tmp) => {
@@ -234,12 +234,215 @@ describe("PatchTool", () => {
                       "*** Begin Patch\n*** Add File: created.txt\n+created\n*** Update File: old.txt\n*** Move to: moved.txt\n@@\n-before\n+after\n*** End Patch",
                     ),
                   ),
-                ).toEqual({ type: "error", value: "patch moves are not supported yet" })
-                expect(yield* exists(path.join(tmp.path, "created.txt"))).toBe(false)
-                expect(assertions).toEqual([])
+                ).toEqual({
+                  type: "text",
+                  value: "Success. Updated the following files:\nA created.txt\nM moved.txt",
+                })
+                expect(yield* exists(source)).toBe(false)
+                expect(yield* Effect.promise(() => fs.readFile(path.join(tmp.path, "moved.txt"), "utf8"))).toBe(
+                  "after\n",
+                )
+                expect(yield* Effect.promise(() => fs.readFile(path.join(tmp.path, "created.txt"), "utf8"))).toBe(
+                  "created\n",
+                )
               }),
             ),
           ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("moves a file over an existing destination", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const source = path.join(tmp.path, "old.txt")
+        const destination = path.join(tmp.path, "nested", "moved.txt")
+        return Effect.promise(() =>
+          Promise.all([
+            fs.writeFile(source, "before\n"),
+            fs.mkdir(path.dirname(destination), { recursive: true }).then(() => fs.writeFile(destination, "existing\n")),
+          ]),
+        ).pipe(
+          Effect.andThen(
+            withTool(tmp.path, (registry) =>
+              Effect.gen(function* () {
+                expect(
+                  yield* executeTool(
+                    registry,
+                    call(
+                      "*** Begin Patch\n*** Update File: old.txt\n*** Move to: nested/moved.txt\n@@\n-before\n+after\n*** End Patch",
+                    ),
+                  ),
+                ).toMatchObject({ type: "text" })
+                expect(yield* exists(source)).toBe(false)
+                expect(yield* Effect.promise(() => fs.readFile(destination, "utf8"))).toBe("after\n")
+              }),
+            ),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("rejects missing, invalid, and empty patches", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        return withTool(tmp.path, (registry) =>
+          Effect.gen(function* () {
+            expect(yield* executeTool(registry, call(""))).toEqual({ type: "error", value: "patchText is required" })
+            expect(yield* executeTool(registry, call("invalid patch", "invalid"))).toMatchObject({
+              type: "error",
+              value: expect.stringContaining("patch verification failed"),
+            })
+            expect(
+              yield* executeTool(registry, call("*** Begin Patch\n*** End Patch", "empty")),
+            ).toEqual({ type: "error", value: "patch rejected: empty patch" })
+            expect(
+              yield* executeTool(
+                registry,
+                call("*** Begin Patch\n*** Frobnicate File: foo\n*** End Patch", "unknown"),
+              ),
+            ).toEqual({ type: "error", value: "patch verification failed: no hunks found" })
+            expect(yield* executeTool(registry, call("   ", "whitespace"))).toMatchObject({
+              type: "error",
+              value: expect.stringContaining("patch verification failed"),
+            })
+          }),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("matches V1 update, BOM, heredoc, and fuzzy matching behavior", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        return withTool(tmp.path, (registry) =>
+          Effect.gen(function* () {
+            const run = (patchText: string, id: string) => executeTool(registry, call(patchText, id))
+
+            yield* Effect.promise(() => fs.writeFile(path.join(tmp.path, "multi.txt"), "a\nb\nc\nd\n"))
+            expect(
+              yield* run(
+                "*** Begin Patch\n*** Update File: multi.txt\n@@\n-b\n+B\n@@\n-d\n+D\n*** End Patch",
+                "multi",
+              ),
+            ).toMatchObject({ type: "text" })
+            expect(yield* Effect.promise(() => fs.readFile(path.join(tmp.path, "multi.txt"), "utf8"))).toBe(
+              "a\nB\nc\nD\n",
+            )
+
+            const bom = "\uFEFF"
+            yield* Effect.promise(() => fs.writeFile(path.join(tmp.path, "bom.txt"), `${bom}first\nsecond\n`))
+            const bomResult = yield* settleTool(
+              registry,
+              call(
+                "*** Begin Patch\n*** Update File: bom.txt\n@@\n-second\n+changed\n*** End Patch",
+                "bom",
+              ),
+            )
+            const bomOutput = Schema.decodeUnknownSync(PatchTool.Output)(bomResult.output?.structured)
+            expect(bomOutput.files[0]?.patch).not.toContain(bom)
+            expect(yield* Effect.promise(() => fs.readFile(path.join(tmp.path, "bom.txt"), "utf8"))).toBe(
+              `${bom}first\nchanged\n`,
+            )
+
+            const bomAddResult = yield* settleTool(
+              registry,
+              call(`*** Begin Patch\n*** Add File: bom-add.txt\n+${bom}first\n*** End Patch`, "bom-add"),
+            )
+            const bomAddOutput = Schema.decodeUnknownSync(PatchTool.Output)(bomAddResult.output?.structured)
+            expect(bomAddOutput.files[0]?.patch).not.toContain(bom)
+            expect(yield* Effect.promise(() => fs.readFile(path.join(tmp.path, "bom-add.txt"), "utf8"))).toBe(
+              `${bom}first\n`,
+            )
+
+            yield* Effect.promise(() => fs.writeFile(path.join(tmp.path, "no-newline.txt"), "old"))
+            yield* run(
+              "*** Begin Patch\n*** Update File: no-newline.txt\n@@\n-old\n+new\n*** End Patch",
+              "no-newline",
+            )
+            expect(yield* Effect.promise(() => fs.readFile(path.join(tmp.path, "no-newline.txt"), "utf8"))).toBe(
+              "new\n",
+            )
+
+            yield* Effect.promise(() => fs.writeFile(path.join(tmp.path, "context.txt"), "fn a\nx=10\nfn b\nx=10\n"))
+            yield* run(
+              "*** Begin Patch\n*** Update File: context.txt\n@@ fn b\n-x=10\n+x=11\n*** End Patch",
+              "context",
+            )
+            expect(yield* Effect.promise(() => fs.readFile(path.join(tmp.path, "context.txt"), "utf8"))).toBe(
+              "fn a\nx=10\nfn b\nx=11\n",
+            )
+
+            yield* run(
+              "cat <<'EOF'\n*** Begin Patch\n*** Add File: heredoc.txt\n+with cat\n*** End Patch\nEOF",
+              "heredoc-cat",
+            )
+            yield* run(
+              "<<EOF\n*** Begin Patch\n*** Add File: heredoc-plain.txt\n+without cat\n*** End Patch\nEOF",
+              "heredoc-plain",
+            )
+            expect(yield* Effect.promise(() => fs.readFile(path.join(tmp.path, "heredoc.txt"), "utf8"))).toBe(
+              "with cat\n",
+            )
+            expect(yield* Effect.promise(() => fs.readFile(path.join(tmp.path, "heredoc-plain.txt"), "utf8"))).toBe(
+              "without cat\n",
+            )
+
+            yield* Effect.promise(() =>
+              Promise.all([
+                fs.writeFile(path.join(tmp.path, "leading.txt"), "  line\n"),
+                fs.writeFile(path.join(tmp.path, "trailing.txt"), "line  \n"),
+                fs.writeFile(path.join(tmp.path, "unicode.txt"), 'He said “hello”\n'),
+              ]),
+            )
+            yield* run(
+              "*** Begin Patch\n*** Update File: leading.txt\n@@\n-line\n+leading\n*** Update File: trailing.txt\n@@\n-line\n+trailing\n*** Update File: unicode.txt\n@@\n-He said \"hello\"\n+He said \"hi\"\n*** End Patch",
+              "fuzzy",
+            )
+            expect(yield* Effect.promise(() => fs.readFile(path.join(tmp.path, "leading.txt"), "utf8"))).toBe(
+              "leading\n",
+            )
+            expect(yield* Effect.promise(() => fs.readFile(path.join(tmp.path, "trailing.txt"), "utf8"))).toBe(
+              "trailing\n",
+            )
+            expect(yield* Effect.promise(() => fs.readFile(path.join(tmp.path, "unicode.txt"), "utf8"))).toBe(
+              'He said "hi"\n',
+            )
+
+            yield* Effect.promise(() => fs.writeFile(path.join(tmp.path, "unchanged.txt"), "line1\nline2\n"))
+            expect(
+              yield* run(
+                "*** Begin Patch\n*** Update File: unchanged.txt\n@@\n-missing\n+changed\n*** End Patch",
+                "missing-context",
+              ),
+            ).toMatchObject({
+              type: "error",
+              value: expect.stringContaining("Failed to find expected lines"),
+            })
+            expect(yield* Effect.promise(() => fs.readFile(path.join(tmp.path, "unchanged.txt"), "utf8"))).toBe(
+              "line1\nline2\n",
+            )
+            expect(
+              yield* run(
+                "*** Begin Patch\n*** Update File: missing.txt\n@@\n-old\n+new\n*** End Patch",
+                "missing-update",
+              ),
+            ).toMatchObject({ type: "error" })
+            expect(
+              yield* run("*** Begin Patch\n*** Delete File: missing.txt\n*** End Patch", "missing-delete"),
+            ).toMatchObject({ type: "error" })
+          }),
         )
       },
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
@@ -369,7 +572,7 @@ describe("PatchTool", () => {
     ),
   )
 
-  it.live("rejects add hunks targeting an existing file without replacing it", () =>
+  it.live("adds files by overwriting existing targets", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
       (tmp) => {
@@ -384,8 +587,8 @@ describe("PatchTool", () => {
                     registry,
                     call("*** Begin Patch\n*** Add File: existing.txt\n+replacement\n*** End Patch"),
                   ),
-                ).toEqual({ type: "error", value: "Unable to apply patch at existing.txt" })
-                expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("sentinel\n")
+                ).toMatchObject({ type: "text" })
+                expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("replacement\n")
               }),
             ),
           ),
@@ -395,7 +598,7 @@ describe("PatchTool", () => {
     ),
   )
 
-  it.live("rejects an add target that appears during permission approval", () =>
+  it.live("overwrites an add target that appears during permission approval", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
       (tmp) => {
@@ -409,8 +612,8 @@ describe("PatchTool", () => {
                 registry,
                 call("*** Begin Patch\n*** Add File: appeared.txt\n+replacement\n*** End Patch"),
               ),
-            ).toEqual({ type: "error", value: "Unable to apply patch at appeared.txt" })
-            expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("winner\n")
+            ).toMatchObject({ type: "text" })
+            expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("replacement\n")
           }),
         )
       },

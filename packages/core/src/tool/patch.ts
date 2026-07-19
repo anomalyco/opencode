@@ -11,6 +11,7 @@ import { LocationMutation } from "../location-mutation"
 import { Patch } from "../patch"
 import { PermissionV2 } from "../permission"
 import { Tool } from "./tool"
+import DESCRIPTION from "./patch.txt"
 
 export const name = "patch"
 
@@ -34,7 +35,7 @@ export type Output = typeof Output.Type
 
 export const toModelOutput = (output: Output) =>
   [
-    "Applied patch sequentially:",
+    "Success. Updated the following files:",
     ...output.applied.map(
       (item) => `${item.type === "add" ? "A" : item.type === "delete" ? "D" : "M"} ${item.resource}`,
     ),
@@ -52,6 +53,7 @@ type Prepared =
       readonly content: string
       readonly before: string
       readonly after: string
+      readonly moveTarget?: LocationMutation.Target
     })
 
 export const Plugin = {
@@ -68,8 +70,7 @@ export const Plugin = {
           name,
           Tool.withPermission(
             Tool.make({
-              description:
-                "Apply one patch containing add, update, and delete file operations. All targets are resolved and approved before target contents are read. Operations apply sequentially; if a later operation fails, earlier operations remain applied and the failure reports them explicitly. Moves and atomic rollback are not supported yet.",
+              description: DESCRIPTION,
               input: Input,
               output: Output,
               toModelOutput: ({ output }) => [{ type: "text", text: toModelOutput(output) }],
@@ -88,22 +89,39 @@ export const Plugin = {
                     messageID: context.messageID,
                     callID: context.callID,
                   }
-                  if (!input.patchText.trim()) return yield* new ToolFailure({ message: "patchText is required" })
+                  if (!input.patchText) return yield* new ToolFailure({ message: "patchText is required" })
                   const hunks = yield* Effect.try({
                     try: () => Patch.parse(input.patchText),
                     catch: (cause) => new ToolFailure({ message: `patch verification failed: ${String(cause)}` }),
                   })
-                  if (hunks.length === 0) return yield* new ToolFailure({ message: "patch rejected: empty patch" })
-                  const move = hunks.find((hunk) => hunk.type === "update" && hunk.movePath !== undefined)
-                  if (move) return yield* new ToolFailure({ message: "patch moves are not supported yet" })
-
-                  const targets: Array<{ readonly hunk: Patch.Hunk; readonly target: LocationMutation.Target }> = []
-                  for (const hunk of hunks)
-                    targets.push({ hunk, target: yield* mutation.resolve({ path: hunk.path, kind: "file" }) })
+                  if (hunks.length === 0) {
+                    const normalized = input.patchText.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim()
+                    if (normalized === "*** Begin Patch\n*** End Patch") {
+                      return yield* new ToolFailure({ message: "patch rejected: empty patch" })
+                    }
+                    return yield* new ToolFailure({ message: "patch verification failed: no hunks found" })
+                  }
+                  const targets: Array<{
+                    readonly hunk: Patch.Hunk
+                    readonly target: LocationMutation.Target
+                    readonly moveTarget?: LocationMutation.Target
+                  }> = []
+                  for (const hunk of hunks) {
+                    targets.push({
+                      hunk,
+                      target: yield* mutation.resolve({ path: hunk.path, kind: "file" }),
+                      moveTarget:
+                        hunk.type === "update" && hunk.movePath
+                          ? yield* mutation.resolve({ path: hunk.movePath, kind: "file" })
+                          : undefined,
+                    })
+                  }
                   const externalDirectories = new Map<string, LocationMutation.ExternalDirectoryAuthorization>()
-                  for (const { target } of targets) {
-                    const external = target.externalDirectory
-                    if (external) externalDirectories.set(external.resource, external)
+                  for (const target of targets) {
+                    for (const item of [target.target, target.moveTarget]) {
+                      const external = item?.externalDirectory
+                      if (external) externalDirectories.set(external.resource, external)
+                    }
                   }
                   for (const external of externalDirectories.values()) {
                     yield* permission.assert({
@@ -123,15 +141,17 @@ export const Plugin = {
                   })
 
                   const prepared: Prepared[] = []
-                  for (const { hunk, target } of targets) {
+                  for (const { hunk, target, moveTarget } of targets) {
                     yield* Effect.gen(function* () {
                       if (hunk.type === "add") {
                         prepared.push({
                           ...hunk,
                           target,
                           before: "",
-                          after:
-                            hunk.contents.endsWith("\n") || hunk.contents === "" ? hunk.contents : `${hunk.contents}\n`,
+                          after: (hunk.contents.endsWith("\n") || hunk.contents === ""
+                            ? hunk.contents
+                            : `${hunk.contents}\n`
+                          ).replace(/^\uFEFF/, ""),
                         })
                         return
                       }
@@ -143,7 +163,11 @@ export const Plugin = {
                         prepared.push({ ...hunk, target, before, after: "" })
                         return
                       }
-                      const update = Patch.derive(hunk.path, hunk.chunks, original)
+                      const update = yield* Effect.try({
+                        try: () => Patch.derive(hunk.path, hunk.chunks, original),
+                        catch: (error) =>
+                          new ToolFailure({ message: `patch verification failed: ${String(error)}` }),
+                      })
                       prepared.push({
                         ...hunk,
                         target,
@@ -151,8 +175,9 @@ export const Plugin = {
                         content: Patch.joinBom(update.content, update.bom),
                         before,
                         after: update.content,
+                        moveTarget,
                       })
-                    }).pipe(Effect.mapError((error) => fail(hunk.path, error)))
+                    }).pipe(Effect.mapError((error) => (error instanceof ToolFailure ? error : fail(hunk.path, error))))
                   }
 
                   const patchFiles = prepared.map(patchFile)
@@ -161,7 +186,7 @@ export const Plugin = {
                     (change) =>
                       Effect.gen(function* () {
                         if (change.type === "add") {
-                          const result = yield* files.create({
+                          const result = yield* files.write({
                             target: change.target,
                             content:
                               change.contents.endsWith("\n") || change.contents === ""
@@ -173,6 +198,15 @@ export const Plugin = {
                         }
                         if (change.type === "delete") {
                           const result = yield* files.remove({ target: change.target })
+                          applied.push({ type: change.type, resource: result.resource, target: result.target })
+                          return
+                        }
+                        if (change.moveTarget) {
+                          const result = yield* files.write({
+                            target: change.moveTarget,
+                            content: change.content,
+                          })
+                          yield* files.remove({ target: change.target })
                           applied.push({ type: change.type, resource: result.resource, target: result.target })
                           return
                         }
@@ -199,7 +233,7 @@ export const Plugin = {
     yield* ctx.session.hook("context", (event) =>
       Effect.sync(() => {
         const usePatch =
-          event.model.providerID.toLowerCase() === "openai" || event.model.id.toLowerCase().includes("gpt")
+          event.model.id.includes("gpt-") && !event.model.id.includes("oss") && !event.model.id.includes("gpt-4")
         if (usePatch) {
           delete event.tools.edit
           delete event.tools.write
@@ -220,8 +254,13 @@ function patchFile(change: Prepared): typeof FileDiff.Info.Type {
     { additions: 0, deletions: 0 },
   )
   return {
-    file: change.target.resource,
-    patch: createTwoFilesPatch(change.target.resource, change.target.resource, change.before, change.after),
+    file: (change.type === "update" ? change.moveTarget : undefined)?.resource ?? change.target.resource,
+    patch: createTwoFilesPatch(
+      change.target.resource,
+      (change.type === "update" ? change.moveTarget : undefined)?.resource ?? change.target.resource,
+      change.before,
+      change.after,
+    ),
     status: change.type === "add" ? "added" : change.type === "delete" ? "deleted" : "modified",
     ...counts,
   }

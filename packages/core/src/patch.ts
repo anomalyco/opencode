@@ -34,7 +34,10 @@ export function parse(patchText: string): ReadonlyArray<Hunk> {
     const line = lines[index]!
     if (line.startsWith("*** Add File:")) {
       const path = line.slice("*** Add File:".length).trim()
-      if (!path) throw new Error("Invalid add file path")
+      if (!path) {
+        index++
+        continue
+      }
       const parsed = parseAdd(lines, index + 1)
       hunks.push({ type: "add", path, contents: parsed.content })
       index = parsed.next
@@ -42,28 +45,32 @@ export function parse(patchText: string): ReadonlyArray<Hunk> {
     }
     if (line.startsWith("*** Delete File:")) {
       const path = line.slice("*** Delete File:".length).trim()
-      if (!path) throw new Error("Invalid delete file path")
+      if (!path) {
+        index++
+        continue
+      }
       hunks.push({ type: "delete", path })
       index++
       continue
     }
     if (line.startsWith("*** Update File:")) {
       const path = line.slice("*** Update File:".length).trim()
-      if (!path) throw new Error("Invalid update file path")
+      if (!path) {
+        index++
+        continue
+      }
       let next = index + 1
       let movePath: string | undefined
       if (lines[next]?.startsWith("*** Move to:")) {
-        movePath = lines[next]!.slice("*** Move to:".length).trim()
-        if (!movePath) throw new Error("Invalid move file path")
+        movePath = lines[next]!.slice("*** Move to:".length).trim() || undefined
         next++
       }
       const parsed = parseUpdate(lines, next)
-      if (parsed.chunks.length === 0) throw new Error(`Invalid update hunk for ${path}: expected at least one @@ chunk`)
       hunks.push({ type: "update", path, movePath, chunks: parsed.chunks })
       index = parsed.next
       continue
     }
-    throw new Error(`Invalid patch line: ${line}`)
+    index++
   }
   return hunks
 }
@@ -89,8 +96,7 @@ function parseAdd(lines: ReadonlyArray<string>, start: number) {
   const content: string[] = []
   let index = start
   while (index < lines.length && !lines[index]!.startsWith("***")) {
-    if (!lines[index]!.startsWith("+")) throw new Error(`Invalid add file line: ${lines[index]}`)
-    content.push(lines[index]!.slice(1))
+    if (lines[index]!.startsWith("+")) content.push(lines[index]!.slice(1))
     index++
   }
   return { content: content.join("\n"), next: index }
@@ -101,7 +107,8 @@ function parseUpdate(lines: ReadonlyArray<string>, start: number) {
   let index = start
   while (index < lines.length && !lines[index]!.startsWith("***")) {
     if (!lines[index]!.startsWith("@@")) {
-      throw new Error(`Invalid update file line: ${lines[index]}`)
+      index++
+      continue
     }
     const changeContext = lines[index]!.slice(2).trim() || undefined
     const oldLines: string[] = []
@@ -121,7 +128,6 @@ function parseUpdate(lines: ReadonlyArray<string>, start: number) {
         newLines.push(line.slice(1))
       } else if (line.startsWith("-")) oldLines.push(line.slice(1))
       else if (line.startsWith("+")) newLines.push(line.slice(1))
-      else throw new Error(`Invalid update chunk line: ${line}`)
       index++
     }
     chunks.push({ oldLines, newLines, changeContext, endOfFile: endOfFile || undefined })
