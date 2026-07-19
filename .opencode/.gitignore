@@ -5,3 +5,5 @@ bun.lock
 .gitignore
 package-lock.json
 references/
+synapse-coder-queue.json
+synapse-coder-prompted

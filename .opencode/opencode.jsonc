@@ -12,7 +12,50 @@
       "description": "Contains opencode logs and data",
     },
   },
-  "mcp": {},
+  "mcp": {
+    "synapse-coder": {
+      "type": "remote",
+      "url": "https://synapse-coder-mcp-staging.greenbay-703e5a45.australiaeast.azurecontainerapps.io/mcp",
+      "headers": {
+        "Authorization": "Bearer {env:SYNAPSE_CODER_STAGING_BEARER_TOKEN}",
+      },
+    },
+    "alterspective-rag": {
+      "type": "remote",
+      "url": "https://rag.alterspective.com.au/mcp",
+      "headers": {
+        "Authorization": "Bearer {env:ALTERSPECTIVE_RAG_MCP_API_KEY}",
+      },
+    },
+    "keystone": {
+      "type": "remote",
+      "url": "https://identity.alterspective.com.au/api/mcp",
+      "headers": {
+        "Authorization": "Bearer {env:KEYSTONE_AI_ADMIN_API_KEY}",
+      },
+    },
+    "timely": {
+      "type": "remote",
+      "url": "https://timely-mcp.alterspective.com.au/mcp",
+    },
+    "sharedo": {
+      "type": "remote",
+      "url": "https://sharedo-api.alterspective.com.au/mcp",
+    },
+    "vault-local": {
+      "type": "local",
+      "command": ["node", "C:/GitHub/vault-mcp/dist/index.js"],
+      "enabled": true,
+    },
+    "azure-devops": {
+      "type": "local",
+      "command": ["npx", "-y", "azure-devops-mcp"],
+      "enabled": true,
+      "environment": {
+        "AZURE_DEVOPS_PAT": "{env:AZURE_DEVOPS_PAT}",
+      },
+    },
+  },
   "tools": {
     "github-triage": false,
     "github-pr-search": false,
