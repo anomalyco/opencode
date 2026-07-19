@@ -22,6 +22,7 @@
     "./mini/footer.view": "./src/mini/footer.view.tsx",
     "./mini/scrollback.writer": "./src/mini/scrollback.writer.tsx",
     "./mini/*": "./src/mini/*.ts",
+    "./run": "./src/run/index.ts",
     "./server-process": "./src/server-process.ts"
   },
   "scripts": {

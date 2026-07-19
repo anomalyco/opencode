@@ -99,9 +99,9 @@ export const RunCommand = effectCmd({
         default: false,
       }),
   handler: Effect.fn("Cli.run")(function* (args) {
-    const { runNonInteractive } = yield* Effect.promise(() => import("@opencode-ai/cli/mini"))
+    const { runV1Bridge } = yield* Effect.promise(() => import("@opencode-ai/cli/run"))
     yield* Effect.promise(() =>
-      runNonInteractive({
+      runV1Bridge({
         message: [...args.message, ...(args["--"] || [])],
         continue: args.continue,
         session: args.session,
@@ -112,7 +112,6 @@ export const RunCommand = effectCmd({
         file: args.file ?? [],
         title: args.title,
         server: args.server ?? args.attach,
-        // @ts-expect-error V1 does not consume the V2-only resolved server input.
         password: args.password ?? process.env.OPENCODE_PASSWORD ?? process.env.OPENCODE_SERVER_PASSWORD,
         username: args.username ?? process.env.OPENCODE_SERVER_USERNAME,
         directory: args.dir,

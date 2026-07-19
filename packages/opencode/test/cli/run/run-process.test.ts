@@ -5,9 +5,12 @@
 // an isolated test provider config under the fixture's temp home.
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
+import path from "node:path"
 import { reply } from "../../lib/llm-server"
 import { cliIt } from "../../lib/cli-process"
 import { testProviderConfig } from "../../lib/test-provider"
+
+const opencodeRoot = path.resolve(import.meta.dir, "../../..")
 
 describe("opencode run (non-interactive subprocess)", () => {
   // Happy path: prompt completes, output reaches stdout, process exits 0.
@@ -367,9 +370,12 @@ describe("opencode run (non-interactive subprocess)", () => {
     ({ llm, opencode }) =>
       Effect.gen(function* () {
         yield* llm.text("variant response")
-        const result = yield* opencode.spawn(["run", "--model", "test/test-model", "--variant", "default", "use the model"], {
-          config: { ...testProviderConfig(llm.url), model: "test/test-model" },
-        })
+        const result = yield* opencode.spawn(
+          ["run", "--model", "test/test-model", "--variant", "default", "use the model"],
+          {
+            config: { ...testProviderConfig(llm.url), model: "test/test-model" },
+          },
+        )
 
         opencode.expectExit(result, 0)
         expect(result.stdout).toBe("variant response\n")
@@ -382,7 +388,15 @@ describe("opencode run (non-interactive subprocess)", () => {
     ({ home, llm, opencode }) =>
       Effect.gen(function* () {
         const source = `${home}/image.png`
-        yield* Effect.promise(() => Bun.write(source, Buffer.from("iVBORw0KGgo=", "base64")))
+        yield* Effect.promise(() =>
+          Bun.write(
+            source,
+            Buffer.from(
+              "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+              "base64",
+            ),
+          ),
+        )
         yield* llm.text("attachment received")
         const config = testProviderConfig(llm.url)
         config.provider.test.models["test-model"].attachment = true
@@ -395,7 +409,7 @@ describe("opencode run (non-interactive subprocess)", () => {
         opencode.expectExit(result, 0)
         const input = JSON.stringify(yield* llm.inputs)
         expect(input).toContain("image/png")
-        expect(input).not.toContain("<file name=\\\"image.png\\\">")
+        expect(input).not.toContain('<file name=\\"image.png\\">')
       }),
     60_000,
   )
@@ -418,6 +432,26 @@ describe("opencode run (non-interactive subprocess)", () => {
         const input = JSON.stringify(yield* llm.inputs)
         expect(input).toContain(sentinel)
         expect(input).not.toContain(`file://${source}`)
+      }),
+    60_000,
+  )
+
+  cliIt.live(
+    "attach mode without --dir uses the remote server location",
+    ({ home, llm, opencode }) =>
+      Effect.gen(function* () {
+        expect(home).not.toBe(opencodeRoot)
+        yield* llm.text("remote location used")
+        const server = yield* opencode.serve()
+
+        const result = yield* opencode.run("use the server location", {
+          extraArgs: ["--attach", server.url],
+        })
+
+        opencode.expectExit(result, 0)
+        const input = JSON.stringify(yield* llm.inputs)
+        expect(input).toContain(`Working directory: ${opencodeRoot}`)
+        expect(input).not.toContain(`Working directory: ${home}`)
       }),
     60_000,
   )

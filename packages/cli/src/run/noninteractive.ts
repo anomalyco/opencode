@@ -2,9 +2,9 @@ import type { EventSubscribeOutput, OpenCodeClient } from "@opencode-ai/client/p
 import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { EOL } from "node:os"
 import { readFile } from "node:fs/promises"
-import { toolOutputText } from "./tool"
+import { toolOutputText } from "../mini/tool"
+import type { MiniToolPart } from "../mini/types"
 import { UI } from "./ui"
-import type { MiniToolPart } from "./types"
 
 type Model = {
   providerID: string
@@ -30,6 +30,7 @@ type Input = {
   auto: boolean
   /** True when the client is attached to a shared server rather than an exclusive in-process one. */
   attached: boolean
+  compatibility?: "v1"
   renderTool: (part: MiniToolPart) => Promise<void>
   renderToolError: (part: MiniToolPart) => Promise<void>
 }
@@ -71,7 +72,9 @@ export async function runNonInteractivePrompt(input: Input) {
   let permissionRejected = false
   let formCancelled = false
   let interrupted = false
+  let v1InvalidOutput = false
   let admission: AbortController | undefined
+  let pendingStep: { timestamp: number; part: Record<string, unknown>; label: string } | undefined
 
   const emit = (type: string, timestamp: number, data: Record<string, unknown>) => {
     if (input.format !== "json") return false
@@ -90,6 +93,17 @@ export async function runNonInteractivePrompt(input: Input) {
     UI.empty()
     UI.println(text)
     UI.empty()
+  }
+
+  const flushStep = () => {
+    if (!pendingStep) return
+    const value = pendingStep
+    pendingStep = undefined
+    if (!emit("step_start", value.timestamp, { part: value.part }) && input.format !== "json") {
+      UI.empty()
+      UI.println(value.label)
+      UI.empty()
+    }
   }
 
   const replyPermission = async (request: { id: string; action: string; resources: ReadonlyArray<string> }) => {
@@ -178,6 +192,14 @@ export async function runNonInteractivePrompt(input: Input) {
           type: "step-start",
           snapshot: event.data.snapshot,
         }
+        if (input.compatibility === "v1") {
+          pendingStep = {
+            timestamp: time,
+            part,
+            label: `> ${event.data.agent} · ${event.data.model.id}`,
+          }
+          continue
+        }
         if (!emit("step_start", time, { part }) && input.format !== "json") {
           UI.empty()
           UI.println(`> ${event.data.agent} · ${event.data.model.id}`)
@@ -187,6 +209,7 @@ export async function runNonInteractivePrompt(input: Input) {
       }
 
       if (event.type === "session.text.started") {
+        flushStep()
         starts.set("text", { id: partID(event.id), timestamp: time })
         continue
       }
@@ -206,6 +229,7 @@ export async function runNonInteractivePrompt(input: Input) {
       }
 
       if (event.type === "session.reasoning.started") {
+        flushStep()
         starts.set("reasoning", { id: partID(event.id), timestamp: time })
         continue
       }
@@ -236,6 +260,7 @@ export async function runNonInteractivePrompt(input: Input) {
       }
 
       if (event.type === "session.tool.input.started") {
+        flushStep()
         tools.set(event.data.callID, {
           id: partID(event.id),
           timestamp: time,
@@ -251,6 +276,7 @@ export async function runNonInteractivePrompt(input: Input) {
         continue
       }
       if (event.type === "session.tool.called") {
+        flushStep()
         const current = tools.get(event.data.callID)
         tools.set(event.data.callID, {
           id: current?.id ?? partID(event.id),
@@ -316,6 +342,7 @@ export async function runNonInteractivePrompt(input: Input) {
           },
         }
         tools.delete(event.data.callID)
+        if (input.compatibility === "v1" && (permissionRejected || questionRejected || formCancelled)) continue
         if (!emit("tool_use", time, { part })) {
           await input.renderToolError(part)
           UI.error(error)
@@ -324,6 +351,7 @@ export async function runNonInteractivePrompt(input: Input) {
       }
 
       if (event.type === "session.step.ended") {
+        flushStep()
         const part = {
           id: partID(event.id),
           sessionID: input.sessionID,
@@ -338,13 +366,28 @@ export async function runNonInteractivePrompt(input: Input) {
         continue
       }
       if (event.type === "session.step.failed") {
+        if (
+          input.compatibility === "v1" &&
+          event.data.error.message === "Provider stream ended without a terminal finish event"
+        ) {
+          pendingStep = undefined
+          v1InvalidOutput = true
+          continue
+        }
         if (interrupted || permissionRejected || questionRejected || formCancelled) continue
+        flushStep()
         emittedError = true
         process.exitCode = 1
         if (!emit("error", time, { error: event.data.error })) UI.error(event.data.error.message)
         continue
       }
       if (event.type === "session.execution.failed") {
+        if (
+          input.compatibility === "v1" &&
+          (v1InvalidOutput || permissionRejected || questionRejected || formCancelled)
+        )
+          return
+        flushStep()
         if (!emittedError && !questionRejected && !formCancelled) {
           emittedError = true
           process.exitCode = 1
@@ -353,6 +396,7 @@ export async function runNonInteractivePrompt(input: Input) {
         return
       }
       if (event.type === "session.execution.interrupted") {
+        if (input.compatibility === "v1" && (permissionRejected || questionRejected || formCancelled)) return
         if (event.data.reason === "user" && interrupted) process.exitCode = 130
         if (event.data.reason !== "user" && !emittedError) {
           emittedError = true
@@ -478,7 +522,7 @@ async function prepareFile(file: File) {
     const uri = file.url.startsWith("data:")
       ? file.url
       : `data:${file.mime};base64,${(await readFile(new URL(file.url))).toString("base64")}`
-    return { attachment: { uri, mime: file.mime, name: file.filename } }
+    return { attachment: { uri, name: file.filename } }
   }
   const content = file.url.startsWith("data:")
     ? Buffer.from(file.url.slice(file.url.indexOf(",") + 1), "base64").toString("utf8")

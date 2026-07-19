@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import path from "node:path"
-import { mergeInteractiveInput, mergeNonInteractiveInput, parseRunModel, pickRunModel } from "../src/mini"
+import { mergeInput as mergeInteractiveInput } from "../src/mini/mini"
 import { toolInlineInfo, toolOutputText, toolView } from "../src/mini/tool"
+import { mergeInput as mergeNonInteractiveInput, parseRunModel, pickRunModel } from "../src/run/run"
 
 async function cli(args: string[]) {
   const child = Bun.spawn([process.execPath, "run", "src/index.ts", ...args], {
@@ -59,7 +60,7 @@ describe("mini command", () => {
     expect(mergeInteractiveInput("from stdin", "from flag")).toBe("from stdin\nfrom flag")
   })
 
-  test("keeps run as mini's non-interactive input mode", () => {
+  test("merges non-interactive argument and stdin input", () => {
     expect(mergeNonInteractiveInput("from args", "from stdin")).toBe("from args\nfrom stdin")
     expect(mergeNonInteractiveInput(undefined, "from stdin")).toBe("from stdin")
   })
@@ -128,14 +129,7 @@ describe("mini command", () => {
     })
 
     try {
-      const result = await cli([
-        "run",
-        "--server",
-        server.url.toString(),
-        "--model",
-        "definitely/missing",
-        "hi",
-      ])
+      const result = await cli(["run", "--server", server.url.toString(), "--model", "definitely/missing", "hi"])
 
       expect(result.exitCode).toBe(1)
       expect(result.stderr).toContain("Model unavailable: definitely/missing")

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
 import { OpenCode, type EventSubscribeOutput } from "@opencode-ai/client/promise"
-import { runNonInteractivePrompt } from "@opencode-ai/cli/mini/noninteractive"
+import { runNonInteractivePrompt } from "../../src/run/noninteractive"
 
 type V2Event = EventSubscribeOutput
 type FormInfo = Extract<V2Event, { type: "form.created" }>["data"]["form"]
@@ -50,9 +50,57 @@ function settled(outcome: "success" | "interrupted" = "success"): V2Event {
   }
 }
 
+function stepStarted(): V2Event {
+  return {
+    id: "evt_step_started",
+    created: 1,
+    type: "session.step.started",
+    durable: { aggregateID: "ses_1", seq: 1, version: 1 },
+    data: {
+      sessionID: "ses_1",
+      assistantMessageID: "msg_assistant",
+      agent: "build",
+      model: { providerID: "test", id: "test-model" },
+    },
+  }
+}
+
+function stepFailed(message: string): V2Event {
+  return {
+    id: "evt_step_failed",
+    created: 2,
+    type: "session.step.failed",
+    durable: { aggregateID: "ses_1", seq: 2, version: 1 },
+    data: {
+      sessionID: "ses_1",
+      assistantMessageID: "msg_assistant",
+      error: { type: "provider.transport", message },
+    },
+  }
+}
+
+function executionFailed(message: string): V2Event {
+  return {
+    id: "evt_execution_failed",
+    created: 3,
+    type: "session.execution.failed",
+    durable: { aggregateID: "ses_1", seq: 3, version: 1 },
+    data: {
+      sessionID: "ses_1",
+      error: { type: "provider.transport", message },
+    },
+  }
+}
+
 // Runs one non-interactive prompt against a mocked SDK. `turn` produces the
 // live events the prompt admission triggers, keyed by the generated message ID.
-async function run(input: { turn: (inputID: string) => V2Event[]; pendingForms?: FormInfo[]; attached?: boolean }) {
+async function run(input: {
+  turn: (inputID: string) => V2Event[]
+  pendingForms?: FormInfo[]
+  attached?: boolean
+  format?: "default" | "json"
+  compatibility?: "v1"
+}) {
   const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
   const values: V2Event[] = [{ id: "evt_connected", type: "server.connected", data: {} }]
   let wake: (() => void) | undefined
@@ -88,13 +136,36 @@ async function run(input: { turn: (inputID: string) => V2Event[]; pendingForms?:
     message: "hello",
     files: [],
     thinking: false,
-    format: "default",
+    format: input.format ?? "default",
     auto: false,
     attached: input.attached ?? false,
+    compatibility: input.compatibility,
     renderTool: () => Promise.resolve(),
     renderToolError: () => Promise.resolve(),
   })
   return sdk
+}
+
+async function capture(input: Parameters<typeof run>[0]) {
+  const stdout: string[] = []
+  const stderr: string[] = []
+  const exitCode = process.exitCode
+  const stdoutWrite = spyOn(process.stdout, "write").mockImplementation((chunk) => {
+    stdout.push(String(chunk))
+    return true
+  })
+  const stderrWrite = spyOn(process.stderr, "write").mockImplementation((chunk) => {
+    stderr.push(String(chunk))
+    return true
+  })
+  try {
+    await run(input)
+    return { stdout: stdout.join(""), stderr: stderr.join("") }
+  } finally {
+    process.exitCode = exitCode ?? 0
+    stdoutWrite.mockRestore()
+    stderrWrite.mockRestore()
+  }
 }
 
 afterEach(() => {
@@ -124,5 +195,59 @@ describe("runNonInteractivePrompt", () => {
     expect(sdk.form.list).not.toHaveBeenCalledWith({ sessionID: "global" })
     expect(sdk.form.cancel).not.toHaveBeenCalledWith({ sessionID: "global", formID: "frm_live" })
     expect(sdk.form.cancel).not.toHaveBeenCalledWith({ sessionID: "global", formID: "frm_pending_global" })
+  })
+
+  test("V1 JSON output flushes step_start before an unrelated step failure", async () => {
+    const output = await capture({
+      compatibility: "v1",
+      format: "json",
+      turn: (messageID) => [
+        prompted(messageID),
+        stepStarted(),
+        stepFailed("Provider request failed"),
+        executionFailed("Provider request failed"),
+      ],
+    })
+
+    expect(
+      output.stdout
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line)),
+    ).toEqual([
+      expect.objectContaining({ type: "step_start", part: expect.objectContaining({ type: "step-start" }) }),
+      expect.objectContaining({
+        type: "error",
+        error: { type: "provider.transport", message: "Provider request failed" },
+      }),
+    ])
+    expect(output.stderr).toBe("")
+  })
+
+  test("V1 default output flushes step_start before an unrelated execution failure", async () => {
+    const output = await capture({
+      compatibility: "v1",
+      turn: (messageID) => [prompted(messageID), stepStarted(), executionFailed("Execution failed")],
+    })
+
+    expect(output.stdout).toBe("")
+    expect(output.stderr).toContain("> build · test-model")
+    expect(output.stderr).toContain("Error: \u001b[0mExecution failed")
+    expect(output.stderr.indexOf("> build · test-model")).toBeLessThan(output.stderr.indexOf("Execution failed"))
+  })
+
+  test("V1 preserves terminal-finish failure suppression before content", async () => {
+    const output = await capture({
+      compatibility: "v1",
+      format: "json",
+      turn: (messageID) => [
+        prompted(messageID),
+        stepStarted(),
+        stepFailed("Provider stream ended without a terminal finish event"),
+        executionFailed("Provider stream ended without a terminal finish event"),
+      ],
+    })
+
+    expect(output).toEqual({ stdout: "", stderr: "" })
   })
 })

@@ -6,10 +6,10 @@ import { open } from "node:fs/promises"
 import path from "node:path"
 import { readStdin } from "../util/io"
 import { ServerConnection } from "../services/server-connection"
-import { loadRunAgents, waitForCatalogReady } from "./catalog.shared"
+import { loadRunAgents, waitForCatalogReady } from "../mini/catalog.shared"
+import { toolInlineInfo } from "../mini/tool"
+import type { MiniToolPart } from "../mini/types"
 import { runNonInteractivePrompt } from "./noninteractive"
-import { toolInlineInfo } from "./tool"
-import type { MiniToolPart } from "./types"
 import { UI } from "./ui"
 
 export type RunCommandInput = {
@@ -39,24 +39,39 @@ type Prepared = {
   files: FilePart[]
 }
 
+type ExecutionOptions = {
+  root?: string
+  directory?: string
+  useServerDirectory?: boolean
+  variant?: string
+  attached?: boolean
+  compatibility?: "v1"
+}
+
 const ATTACH_FILE_MAX_BYTES = 10 * 1024 * 1024
 
 export function runNonInteractive(input: RunCommandInput) {
-  return run(input).catch((error) => reportError(input, error instanceof Error ? error.message : String(error)))
+  return runNonInteractiveWithOptions(input, {})
 }
 
-async function run(input: RunCommandInput) {
+/** @internal Used only by the V1 command boundary. */
+export function runNonInteractiveWithOptions(input: RunCommandInput, options: ExecutionOptions) {
+  return run(input, options).catch((error) => reportRunError(input, errorMessage(error)))
+}
+
+async function run(input: RunCommandInput, options: ExecutionOptions) {
   if (input.fork && !input.continue && !input.session) fail("--fork requires --continue or --session")
-  const root = process.env.PWD ?? process.cwd()
-  const directory = localDirectory(root)
+  const root = options.root ?? process.env.PWD ?? process.cwd()
+  const local = localDirectory(root)
+  const directory = options.useServerDirectory ? undefined : (options.directory ?? local)
   const message = mergeInput(formatMessage(input.message), process.stdin.isTTY ? undefined : await readStdin())
   if (!message?.trim()) fail("You must provide a message")
-  const files = await Promise.all(input.file.map((file) => prepareFile(file, root)))
+  const files = await Promise.all(input.file.map((file) => prepareFile(file, root, options)))
   const prepared = { directory, message, files }
-  return execute(input, prepared, input.server.endpoint)
+  return execute(input, prepared, input.server.endpoint, options)
 }
 
-async function execute(input: RunCommandInput, prepared: Prepared, endpoint: Endpoint) {
+async function execute(input: RunCommandInput, prepared: Prepared, endpoint: Endpoint, options: ExecutionOptions) {
   const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) })
   const requestedDirectory = prepared.directory ?? (await client.location.get()).directory
   if (!requestedDirectory) fail("Failed to resolve server directory")
@@ -65,7 +80,7 @@ async function execute(input: RunCommandInput, prepared: Prepared, endpoint: End
   const workspace = session?.location.workspaceID
   const explicit = parseRunModel(input.model)
   const explicitModel = explicit?.model
-  const variant = explicit?.variant
+  const variant = options.variant ?? explicit?.variant
   const sessionModel = session?.model ? { providerID: session.model.providerID, modelID: session.model.id } : undefined
   const defaultModel =
     !explicitModel && !sessionModel
@@ -74,12 +89,12 @@ async function execute(input: RunCommandInput, prepared: Prepared, endpoint: End
           .then((result) => (result.data ? { providerID: result.data.providerID, modelID: result.data.id } : undefined))
       : undefined
   const model = pickRunModel(explicitModel, variant, sessionModel, defaultModel)
-  if (variant && !model) return reportError(input, "Cannot select a variant before selecting a model", session?.id)
+  if (variant && !model) return reportRunError(input, "Cannot select a variant before selecting a model", session?.id)
   if (model) {
     await waitForCatalogReady({ sdk: client, directory: cwd, workspace, model })
     const available = await client.model.list({ location: { directory: cwd, workspace } })
     if (!available.data.some((item) => item.providerID === model.providerID && item.id === model.modelID))
-      return reportError(input, `Model unavailable: ${model.providerID}/${model.modelID}`, session?.id)
+      return reportRunError(input, `Model unavailable: ${model.providerID}/${model.modelID}`, session?.id)
   }
   const agent = await validateAgent(client, cwd, input.agent)
   const selected =
@@ -107,10 +122,11 @@ async function execute(input: RunCommandInput, prepared: Prepared, endpoint: End
     thinking: input.thinking ?? false,
     format: input.format,
     auto: input.auto ?? false,
-    attached: true,
+    attached: options.attached ?? true,
+    compatibility: options.compatibility,
     renderTool,
     renderToolError,
-  }).catch((error) => reportError(input, error instanceof Error ? error.message : String(error), selected.id))
+  }).catch((error) => reportRunError(input, errorMessage(error), selected.id))
 }
 
 export function mergeInput(message: string | undefined, piped: string | undefined) {
@@ -185,11 +201,13 @@ async function selectSession(client: OpenCodeClient, directory: string, input: R
   return client.session.fork({ sessionID: selected.id })
 }
 
-async function prepareFile(input: string, directory: string): Promise<FilePart> {
+async function prepareFile(input: string, directory: string, options: ExecutionOptions): Promise<FilePart> {
   const file = path.resolve(directory, input)
   const handle = await open(file, "r").catch(() => fail(`File not found: ${input}`))
   try {
     const stat = await handle.stat()
+    if (options.compatibility === "v1" && options.attached && stat.isDirectory())
+      fail(`Cannot attach local directory without a shared filesystem: ${input}`)
     if (!stat.isFile() || stat.size > ATTACH_FILE_MAX_BYTES)
       fail(`Cannot attach a directory, special file, or file larger than 10 MiB: ${input}`)
     const content = Buffer.alloc(Number(stat.size))
@@ -249,7 +267,15 @@ function warning(message: string) {
   UI.println(UI.Style.TEXT_WARNING_BOLD + "!", UI.Style.TEXT_NORMAL, message)
 }
 
-function reportError(input: RunCommandInput, message: string, sessionID?: string) {
+function errorMessage(error: unknown) {
+  if (error instanceof Error) return error.message
+  if (typeof error === "object" && error !== null && "message" in error && typeof error.message === "string")
+    return error.message
+  return String(error)
+}
+
+/** @internal Used by the V1 command boundary before a Session exists. */
+export function reportRunError(input: Pick<RunCommandInput, "format">, message: string, sessionID?: string) {
   process.exitCode = 1
   if (input.format === "json") {
     process.stdout.write(
