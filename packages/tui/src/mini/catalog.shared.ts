@@ -26,34 +26,27 @@ function location(ref: LocationRef) {
 
 function defaultCost(model: CurrentModel) {
   const picked = model.cost.find((cost) => cost.tier === undefined) ?? model.cost[0]
-  if (!picked) {
-    return undefined
-  }
-
-  return {
-    ...picked,
-    input: model.cost.every((cost) => cost.input === 0) ? 0 : picked.input,
-  }
+  if (!picked) return
+  return model.cost.every((cost) => cost.input === 0) ? 0 : picked.input
 }
 
-export function runAgent(input: CurrentAgent): RunAgent {
+function runAgent(input: CurrentAgent): RunAgent {
   return {
     id: input.id,
     name: input.name,
-    description: input.description,
     mode: input.mode,
     hidden: input.hidden,
   }
 }
 
-export function runCommand(input: CurrentCommand): RunCommand {
+function runCommand(input: CurrentCommand): RunCommand {
   return {
     name: input.name,
     description: input.description,
   }
 }
 
-export function runSkill(input: CurrentSkill): RunCommand {
+function runSkill(input: CurrentSkill): RunCommand {
   return {
     name: input.id,
     description: input.description,
@@ -78,13 +71,10 @@ export function runProviders(providers: CurrentProvider[], models: CurrentModel[
       name: model.providerID,
       models: {},
     }
+    const cost = defaultCost(model)
     provider.models[model.id] = {
-      id: model.id,
-      providerID: model.providerID,
       name: model.name,
-      capabilities: model.capabilities,
-      cost: defaultCost(model),
-      limit: model.limit,
+      cost: cost === undefined ? undefined : { input: cost },
       status: model.status,
       variants: Object.fromEntries((model.variants ?? []).map((variant) => [variant.id, {}])),
     }

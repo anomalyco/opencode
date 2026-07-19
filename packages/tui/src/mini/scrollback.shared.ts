@@ -10,7 +10,7 @@ export function entrySyntax(theme: RunTheme): SyntaxStyle {
   return syntax(theme.block.syntax)
 }
 
-export function entryFailed(commit: StreamCommit): boolean {
+function entryFailed(commit: StreamCommit): boolean {
   return commit.kind === "tool" && (commit.toolState === "error" || commit.part?.state.status === "error")
 }
 

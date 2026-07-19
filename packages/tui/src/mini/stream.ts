@@ -127,17 +127,6 @@ export function traceSubagentState(state: FooterSubagentState) {
   }
 }
 
-export function traceFooterOutput(footer?: FooterOutput) {
-  if (!footer?.subagent) {
-    return footer
-  }
-
-  return {
-    ...footer,
-    subagent: traceSubagentState(footer.subagent),
-  }
-}
-
 // Forwards transport output to the footer: commits go to scrollback, patches update the status bar.
 export function writeSessionOutput(input: OutputInput, out: StreamOutput): void {
   for (const commit of out.commits) {

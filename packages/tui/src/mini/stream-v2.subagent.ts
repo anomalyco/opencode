@@ -93,9 +93,7 @@ type Frame = {
 }
 
 type ToolTrack = {
-  messageID: string
   part: SessionMessageAssistantTool
-  output: string
 }
 
 type ChildState = {
@@ -105,7 +103,6 @@ type ChildState = {
   status: FooterSubagentTab["status"]
   background: boolean
   title?: string
-  callIDs: Set<string>
   lastUpdatedAt: number
   frames: Frame[]
   text: Map<string, string>
@@ -194,14 +191,11 @@ function childSessionID(structured: Record<string, unknown> | undefined) {
 function tab(child: ChildState): FooterSubagentTab {
   return {
     sessionID: child.sessionID,
-    partID: `subagent:${child.sessionID}`,
-    callID: `subagent:${child.sessionID}`,
     label: child.label,
     description: child.description || child.title || "",
     status: child.status,
     background: child.background ? true : undefined,
     title: child.title,
-    toolCalls: child.callIDs.size > 0 ? child.callIDs.size : undefined,
     lastUpdatedAt: child.lastUpdatedAt,
   }
 }
@@ -242,7 +236,6 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       description: "",
       status: "running",
       background: false,
-      callIDs: new Set(),
       lastUpdatedAt: 0,
       frames: [],
       text: new Map(),
@@ -320,17 +313,16 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
     const frame = `tool:${key}`
     child.toolSources.set(key, part)
     if (part.state.status === "streaming") {
-      child.tools.set(key, { messageID, part, output: "" })
+      child.tools.set(key, { part })
       return
     }
     const current = child.tools.get(key)
     const output = toolOutputText(part.name, part.state.content)
-    child.callIDs.add(key)
     if (part.state.status === "running") {
       if (!current || current.part.state.status === "streaming")
         setFrame(child, frame, toolCommit(part, messageID, "start", undefined, input.directory))
       if (output) setFrame(child, frame, toolCommit(part, messageID, "progress", output, input.directory))
-      child.tools.set(key, { messageID, part, output })
+      child.tools.set(key, { part })
       return
     }
     child.finishedTools.add(key)
@@ -352,7 +344,6 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
     child.finishedTools.clear()
     child.toolSources.clear()
     child.messageIDs.clear()
-    child.callIDs.clear()
     for (const message of messages) {
       if (message.type === "user") {
         child.prompts.delete(message.id)
@@ -1124,9 +1115,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       })
       const child = selected ? children.get(selected) : undefined
       const details: Record<string, FooterSubagentDetail> =
-        child && !child.detailStale
-          ? { [child.sessionID]: { sessionID: child.sessionID, commits: child.frames.map((item) => item.commit) } }
-          : {}
+        child && !child.detailStale ? { [child.sessionID]: { commits: child.frames.map((item) => item.commit) } } : {}
       return {
         tabs,
         details,

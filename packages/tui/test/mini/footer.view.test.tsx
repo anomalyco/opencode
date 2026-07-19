@@ -41,8 +41,6 @@ function command(input: { name: string; description: string; source?: "command" 
     name: input.name,
     description: input.description,
     source: input.source,
-    template: "",
-    hints: [],
   } satisfies RunCommand
 }
 
@@ -54,51 +52,11 @@ function model(input: {
   variants?: Record<string, Record<string, never>>
 }) {
   return {
-    id: input.id,
-    providerID: "opencode",
-    api: {
-      id: "opencode",
-      url: "https://opencode.ai",
-      npm: "@ai-sdk/openai-compatible",
-    },
     name: input.name,
-    capabilities: {
-      temperature: true,
-      reasoning: true,
-      attachment: true,
-      toolcall: true,
-      input: {
-        text: true,
-        audio: false,
-        image: true,
-        video: false,
-        pdf: true,
-      },
-      output: {
-        text: true,
-        audio: false,
-        image: false,
-        video: false,
-        pdf: false,
-      },
-      interleaved: false,
-    },
     cost: {
       input: input.cost ?? 1,
-      output: 1,
-      cache: {
-        read: 0,
-        write: 0,
-      },
-    },
-    limit: {
-      context: 128000,
-      output: 8192,
     },
     status: input.status ?? "active",
-    options: {},
-    headers: {},
-    release_date: "2026-01-01",
     variants: input.variants,
   } satisfies RunProvider["models"][string]
 }
@@ -107,9 +65,6 @@ function provider() {
   return {
     id: "opencode",
     name: "opencode",
-    source: "api",
-    env: [],
-    options: {},
     models: {
       "gpt-5": model({ id: "gpt-5", name: "GPT-5", variants: { high: {}, minimal: {} } }),
       "gpt-free": model({ id: "gpt-free", name: "GPT Free", cost: 0 }),
@@ -126,8 +81,6 @@ function subagent(input: {
 }) {
   return {
     sessionID: input.sessionID,
-    partID: `part-${input.sessionID}`,
-    callID: `call-${input.sessionID}`,
     label: input.label,
     description: input.description,
     status: input.status ?? "running",
@@ -141,7 +94,6 @@ function footerState(input: Partial<FooterState> = {}) {
     status: "",
     queue: 0,
     model: "gpt-5",
-    duration: "",
     usage: "",
     first: false,
     interrupt: 0,
@@ -192,7 +144,6 @@ async function renderFooter(
           subagent={subagents}
           theme={input.theme ?? (() => RUN_THEME_FALLBACK)}
           tuiConfig={config}
-          agent="opencode"
           onSubmit={input.onSubmit ?? (() => true)}
           onPermissionReply={() => {}}
           onFormReply={(value) => input.onFormReply?.(value)}
@@ -284,58 +235,6 @@ test("direct footer preserves a partial multi-field form draft across permission
   }
 })
 
-test("root Form preemption preserves keyed child and global textarea drafts on return", async () => {
-  const child: FormInfo = {
-    id: "frm_child_draft",
-    sessionID: "ses_child",
-    title: "Child input",
-    fields: [{ key: "value", type: "string", title: "Child value", required: true }],
-  }
-  const global: FormInfo = {
-    id: "frm_global_draft",
-    sessionID: "global",
-    title: "Global input",
-    fields: [{ key: "value", type: "string", title: "Global value", required: true }],
-  }
-  const root: FormInfo = {
-    id: "frm_root_preempting",
-    sessionID: "ses_root",
-    title: "Root input",
-    fields: [{ key: "value", type: "string", title: "Root value", required: true }],
-  }
-  const app = await renderFooter({ height: 16, view: { type: "form", request: child } })
-
-  try {
-    await app.renderOnce()
-    "child draft".split("").forEach((key) => app.mockInput.pressKey(key))
-    expect(app.renderer.currentFocusedEditor?.plainText).toBe("child draft")
-
-    app.setView({ type: "form", request: root })
-    await app.renderOnce()
-    "root draft".split("").forEach((key) => app.mockInput.pressKey(key))
-    app.setView({ type: "form", request: child })
-    await app.renderOnce()
-    expect(app.renderer.currentFocusedEditor?.plainText).toBe("child draft")
-
-    app.setView({ type: "form", request: global })
-    await app.renderOnce()
-    "global draft".split("").forEach((key) => app.mockInput.pressKey(key))
-    app.setView({ type: "form", request: root })
-    await app.renderOnce()
-    app.setView({ type: "form", request: global })
-    await app.renderOnce()
-    expect(app.renderer.currentFocusedEditor?.plainText).toBe("global draft")
-
-    app.setView({ type: "prompt" })
-    await app.renderOnce()
-    app.setView({ type: "form", request: child })
-    await app.renderOnce()
-    expect(app.renderer.currentFocusedEditor?.plainText).toBe("")
-  } finally {
-    app.cleanup()
-  }
-})
-
 function expectPaletteList(list: BoxRenderable, selectedIndex: number) {
   expect(list.backgroundColor.toInts()).toEqual((RUN_THEME_FALLBACK.footer.shade as RGBA).toInts())
   expect((list.getChildren()[selectedIndex] as BoxRenderable).backgroundColor.toInts()).toEqual(
@@ -421,7 +320,7 @@ test("run entry content updates when live commit text changes", async () => {
   const app = await testRender(
     () => (
       <box width={80} height={4}>
-        <RunEntryContent commit={commit()} theme={RUN_THEME_FALLBACK} width={80} />
+        <RunEntryContent commit={commit()} theme={RUN_THEME_FALLBACK} />
       </box>
     ),
     {
@@ -774,9 +673,7 @@ test("direct subagent panel closes when moving up from the first item", async ()
 })
 
 test("direct queued prompt panel renders pending prompt actions", async () => {
-  const [prompts] = createSignal([
-    { messageID: "m-1", partID: "p-1", prompt: { text: "fix the auth test", parts: [] } },
-  ])
+  const [prompts] = createSignal([{ messageID: "m-1", prompt: { text: "fix the auth test", parts: [] } }])
 
   const app = await testRender(
     () => (
@@ -1090,7 +987,6 @@ test("direct footer shows editable prompts and additional queued work while runn
     status: "",
     queue: 3,
     model: "gpt-5",
-    duration: "",
     usage: "",
     first: false,
     interrupt: 0,
@@ -1122,12 +1018,9 @@ test("direct footer shows editable prompts and additional queued work while runn
           state={state}
           view={view}
           subagent={subagents}
-          queuedPrompts={() => [
-            { messageID: "m-queued", partID: "p-queued", prompt: { text: "follow up", parts: [] } },
-          ]}
+          queuedPrompts={() => [{ messageID: "m-queued", prompt: { text: "follow up", parts: [] } }]}
           theme={() => RUN_THEME_FALLBACK}
           tuiConfig={tuiConfig}
-          agent="opencode"
           onSubmit={() => true}
           onPermissionReply={() => {}}
           onFormReply={() => {}}

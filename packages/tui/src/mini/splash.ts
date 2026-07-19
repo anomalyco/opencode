@@ -21,8 +21,8 @@ import { Locale } from "../util/locale"
 import { go } from "../logo"
 import type { RunSplashTheme } from "./theme"
 
-export const SPLASH_TITLE_LIMIT = 50
-export const SPLASH_TITLE_FALLBACK = "Untitled session"
+const SPLASH_TITLE_LIMIT = 50
+const SPLASH_TITLE_FALLBACK = "Untitled session"
 
 type SplashInput = {
   title: string | undefined

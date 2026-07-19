@@ -71,7 +71,7 @@ describe("run entry body", () => {
           tool: "shell",
           toolState: "error",
           toolError: "Shell exited with code 7",
-          shell: { callID: "sh_failed", command: "false" },
+          shell: { command: "false" },
         }),
       ),
     ).toEqual({ type: "text", content: "✖ shell failed: Shell exited with code 7" })
@@ -399,7 +399,6 @@ describe("run entry body", () => {
           partID: "shell:call-1",
           toolState: "running",
           shell: {
-            callID: "call-1",
             command: "pwd",
           },
         }),
@@ -420,7 +419,6 @@ describe("run entry body", () => {
           partID: "shell:call-1",
           toolState: "completed",
           shell: {
-            callID: "call-1",
             command: "pwd",
           },
         }),

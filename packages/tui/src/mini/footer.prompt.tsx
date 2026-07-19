@@ -23,6 +23,7 @@ import {
   isNewCommand,
   movePromptHistory,
   pushPromptHistory,
+  slashHead,
 } from "./prompt.shared"
 import { Keymap } from "../context/keymap"
 import { realignEditorPromptParts, resolveEditorSlashValue } from "./prompt.editor"
@@ -95,7 +96,6 @@ export type PromptState = {
   openEditor: (input?: { value?: string }) => Promise<void>
   onKeyDown: (event: KeyEvent) => void
   onContentChange: () => void
-  replaceDraft: (text: string) => void
   replacePrompt: (prompt: RunPrompt) => void
   bind: (area?: TextareaRenderable) => void
 }
@@ -138,23 +138,6 @@ function extractLineRange(input: string) {
   const start = Number(match[1])
   const end = match[2] && start < Number(match[2]) ? Number(match[2]) : undefined
   return { base, line: { start, end } }
-}
-
-function slashHead(text: string) {
-  if (!text.startsWith("/")) {
-    return
-  }
-
-  for (let i = 1; i < text.length; i++) {
-    switch (text[i]) {
-      case " ":
-      case "\t":
-      case "\n":
-        return { name: text.slice(1, i), arguments: text.slice(i + 1), end: i }
-    }
-  }
-
-  return { name: text.slice(1), arguments: "", end: text.length }
 }
 
 function slashQuery(text: string, cursor: number) {
@@ -630,21 +613,6 @@ export function createPromptState(input: PromptInput): PromptState {
       return
     }
 
-    scheduleRows()
-    area.focus()
-  }
-
-  const replaceDraft = (text: string) => {
-    draft = shell() ? { text, parts: [], mode: "shell" } : { text, parts: [] }
-    if (!area || area.isDestroyed) {
-      return
-    }
-
-    hide()
-    area.setText(text)
-    clearParts()
-    draft = shell() ? { text: area.plainText, parts: [], mode: "shell" } : { text: area.plainText, parts: [] }
-    area.cursorOffset = Math.min(stringWidth(text), stringWidth(area.plainText))
     scheduleRows()
     area.focus()
   }
@@ -1296,7 +1264,6 @@ export function createPromptState(input: PromptInput): PromptState {
       refresh()
       scheduleRows()
     },
-    replaceDraft,
     replacePrompt: restore,
     bind,
   }

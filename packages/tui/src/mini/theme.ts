@@ -20,7 +20,6 @@ export type RunSplashTheme = {
   left: ColorInput
   right: ColorInput
   leftShadow: ColorInput
-  rightShadow: ColorInput
 }
 
 export type RunFooterTheme = {
@@ -28,7 +27,6 @@ export type RunFooterTheme = {
   selected: ColorInput
   selectedText: ColorInput
   warning: ColorInput
-  success: ColorInput
   error: ColorInput
   muted: ColorInput
   text: ColorInput
@@ -42,12 +40,9 @@ export type RunFooterTheme = {
 }
 
 export type RunBlockTheme = {
-  highlight: ColorInput
-  warning: ColorInput
   text: ColorInput
   muted: ColorInput
   syntax?: SyntaxStyle
-  diffAdded: ColorInput
   diffRemoved: ColorInput
   diffAddedBg: ColorInput
   diffRemovedBg: ColorInput
@@ -460,7 +455,6 @@ function splashTheme(theme: TuiThemeCurrent, indexed: RGBA[]): RunSplashTheme {
     left,
     right,
     leftShadow: splashShadow(indexed, theme.background, left, 0.14),
-    rightShadow: splashShadow(indexed, theme.background, right, 0.14),
   }
 }
 
@@ -490,7 +484,6 @@ function map(
       selected: footerTheme.backgroundElement,
       selectedText: footerTheme.selectedListItemText,
       warning: footerTheme.warning,
-      success: footerTheme.success,
       error: footerTheme.error,
       muted: footerTheme.textMuted,
       text: footerTheme.text,
@@ -525,12 +518,9 @@ function map(
     },
     splash,
     block: {
-      highlight: scrollbackTheme.primary,
-      warning: scrollbackTheme.warning,
       text: scrollbackTheme.text,
       muted: scrollbackTheme.textMuted,
       syntax,
-      diffAdded: scrollbackTheme.diffAdded,
       diffRemoved: scrollbackTheme.diffRemoved,
       diffAddedBg: transparent,
       diffRemovedBg: transparent,
@@ -572,7 +562,6 @@ export const RUN_THEME_FALLBACK: RunTheme = {
     selected: seed.text,
     selectedText: seed.panel,
     warning: seed.warning,
-    success: seed.success,
     error: seed.error,
     muted: seed.muted,
     text: seed.text,
@@ -596,14 +585,10 @@ export const RUN_THEME_FALLBACK: RunTheme = {
     left: fallbackSplashLeft,
     right: fallbackSplashRight,
     leftShadow: splashShadow(fallbackSplashIndexed, RGBA.fromValues(0, 0, 0, 0), fallbackSplashLeft, 0.14),
-    rightShadow: splashShadow(fallbackSplashIndexed, RGBA.fromValues(0, 0, 0, 0), fallbackSplashRight, 0.14),
   },
   block: {
-    highlight: seed.highlight,
-    warning: seed.warning,
     text: seed.text,
     muted: seed.muted,
-    diffAdded: seed.success,
     diffRemoved: seed.error,
     diffAddedBg: alpha(seed.success, 0.18),
     diffRemovedBg: alpha(seed.error, 0.18),
@@ -616,12 +601,7 @@ export const RUN_THEME_FALLBACK: RunTheme = {
   },
 }
 
-export async function resolveRunTheme(
-  renderer: CliRenderer,
-  config?: RunTuiConfig["theme"],
-  themes: Record<string, unknown> = {},
-  warning?: (message: string) => void,
-): Promise<RunTheme> {
+export async function resolveRunTheme(renderer: CliRenderer, config?: RunTuiConfig["theme"]): Promise<RunTheme> {
   try {
     const colors = await renderer.getPalette({
       size: 256,
@@ -639,38 +619,15 @@ export async function resolveRunTheme(
         : colors.defaultBackground
           ? mode(RGBA.fromHex(colors.defaultBackground))
           : (renderer.themeMode ?? mode(RGBA.fromHex(bg)))
-    const { allThemes, generateSyntax, isTheme } = await import("../theme")
-    const custom = Object.entries(themes).reduce<Record<string, ThemeJson>>((result, [name, theme]) => {
-      if (isTheme(theme)) result[name] = theme
-      return result
-    }, {})
-    const name = config?.name && config.name !== "system" ? config.name : undefined
-    const configured = name ? custom[name] ?? allThemes()[name] : undefined
+    const { generateSyntax } = await import("../theme")
     const indexed = indexedPalette(colors, 256)
-    const build = (selected: ThemeJson) => {
-      const footerTheme = resolveTheme(selected, pick)
-      const scrollbackTheme = quantizeTheme(footerTheme, indexed)
-      const syntaxTheme: SharedSyntaxTheme = {
-        ...scrollbackTheme,
-        _hasSelectedListItemText: true,
-      }
-      const syntax = generateSyntax(syntaxTheme)
-      return map(footerTheme, scrollbackTheme, splashTheme(scrollbackTheme, indexed), syntax)
+    const footerTheme = resolveTheme(generateSystem(colors, pick), pick)
+    const scrollbackTheme = quantizeTheme(footerTheme, indexed)
+    const syntaxTheme: SharedSyntaxTheme = {
+      ...scrollbackTheme,
+      _hasSelectedListItemText: true,
     }
-
-    if (!name) return build(generateSystem(colors, pick))
-    const fallback = () => warning?.(`Theme "${name}" was not found or is invalid. Falling back to "opencode".`)
-    if (!configured) {
-      fallback()
-      return build(allThemes().opencode)
-    }
-
-    try {
-      return build(configured)
-    } catch {
-      fallback()
-      return build(allThemes().opencode)
-    }
+    return map(footerTheme, scrollbackTheme, splashTheme(scrollbackTheme, indexed), generateSyntax(syntaxTheme))
   } catch {
     return RUN_THEME_FALLBACK
   }

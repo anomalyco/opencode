@@ -6,7 +6,6 @@ const SESSION_PAGE_LIMIT = 50
 export type SessionTarget = {
   session: SessionInfo
   location: LocationGetOutput
-  projectID: string
   model: ModelRef | undefined
   agent: string | undefined
   resume: boolean
@@ -46,9 +45,7 @@ export async function resolveSessionTarget(input: {
     selection.location ??
     (await resolveLocation(
       input.client,
-      selected
-        ? { directory: selected.location.directory, workspace: selected.location.workspaceID }
-        : input.location,
+      selected ? { directory: selected.location.directory, workspace: selected.location.workspaceID } : input.location,
       input.signal,
     ))
   const prepared = await input.prepare({
@@ -76,7 +73,6 @@ export async function resolveSessionTarget(input: {
   return {
     session,
     location,
-    projectID: session.projectID,
     model: prepared.model,
     agent: prepared.agent,
     resume: selected !== undefined,
@@ -99,7 +95,8 @@ async function selectSession(input: {
 }) {
   const explicit = input.session
     ? await input.client.session.get({ sessionID: input.session }, ...requestOptions(input.signal)).catch((error) => {
-        if (error && typeof error === "object" && Reflect.get(error, "_tag") === "SessionNotFoundError") return undefined
+        if (error && typeof error === "object" && Reflect.get(error, "_tag") === "SessionNotFoundError")
+          return undefined
         throw error
       })
     : undefined
@@ -121,11 +118,9 @@ async function selectSession(input: {
   if (!selected) return { session: undefined, location }
   return {
     session: input.fork
-      ? await input.client.session
-          .fork({ sessionID: selected.id }, ...requestOptions(input.signal))
-          .catch((error) => {
-            throw new SessionTargetMutationError(error)
-          })
+      ? await input.client.session.fork({ sessionID: selected.id }, ...requestOptions(input.signal)).catch((error) => {
+          throw new SessionTargetMutationError(error)
+        })
       : selected,
   }
 }

@@ -41,7 +41,6 @@ import type {
   PermissionReply,
   RunAgent,
   RunCommand,
-  RunDiffStyle,
   RunInput,
   RunPrompt,
   RunProvider,
@@ -82,11 +81,8 @@ type RunFooterViewProps = {
   subagent?: () => FooterSubagentState
   queuedPrompts?: () => FooterQueuedPrompt[]
   theme: () => RunTheme
-  diffStyle?: RunDiffStyle
-  diffWrap?: "word" | "none"
   tuiConfig: RunTuiConfig
   history?: () => RunPrompt[]
-  agent: string
   onSubmit: (input: RunPrompt) => boolean
   onPermissionReply: (input: PermissionReply) => void | Promise<void>
   onFormReply: (input: FormReply) => void | Promise<void>
@@ -102,14 +98,12 @@ type RunFooterViewProps = {
   onModelSelect: (model: NonNullable<RunInput["model"]>) => void
   onVariantSelect: (variant: string | undefined) => void
   onRows: (rows: number) => void
-  onLayout: (input: { route: FooterPromptRoute; autocomplete: boolean; subagentRows: number }) => void
+  onLayout: (input: { route: FooterPromptRoute; subagentRows: number }) => void
   onStatus: (text: string) => void
   onSubagentSelect?: (sessionID: string | undefined) => void
   onSubagentInterrupt?: (sessionID: string) => void
   onQueuedRemove: (messageID: string) => Promise<boolean>
 }
-
-export { TEXTAREA_MIN_ROWS, TEXTAREA_MAX_ROWS } from "./footer.prompt"
 
 export function RunFooterView(props: RunFooterViewProps) {
   const term = useTerminalDimensions()
@@ -167,7 +161,7 @@ export function RunFooterView(props: RunFooterViewProps) {
   const foregroundSubagents = createMemo(() => activeTabs().some((item) => !item.background))
   const model = createMemo(() => {
     const current = props.currentModel()
-    return current ? modelInfo(props.providers(), current) : { model: props.state().model, provider: undefined }
+    return current ? modelInfo(props.providers(), current).model : props.state().model
   })
   const detail = createMemo(() => {
     const current = route()
@@ -388,10 +382,8 @@ export function RunFooterView(props: RunFooterViewProps) {
     }
 
     return {
-      model: model().model,
+      model: model(),
       variant: props.currentVariant(),
-      provider: undefined,
-      // Prefer without provider, but keep it on the shared width policy if we add it back.
     }
   })
   const statusColor = createMemo(() => {
@@ -588,7 +580,6 @@ export function RunFooterView(props: RunFooterViewProps) {
   createEffect(() => {
     props.onLayout({
       route: route(),
-      autocomplete: menu(),
       subagentRows: subagentMenuRows(),
     })
   })
@@ -756,8 +747,6 @@ export function RunFooterView(props: RunFooterViewProps) {
                             directory={props.directory}
                             theme={theme()}
                             block={block()}
-                            diffStyle={props.diffStyle}
-                            diffWrap={props.diffWrap}
                             onReply={props.onPermissionReply}
                           />
                         </Match>
@@ -860,9 +849,6 @@ export function RunFooterView(props: RunFooterViewProps) {
                     <box paddingRight={1} backgroundColor="transparent" flexShrink={0}>
                       <text fg={theme().text} wrapMode="none">
                         {info().model}
-                        <Show when={info().provider}>
-                          {(provider) => <span style={{ fg: theme().muted }}> {provider()}</span>}
-                        </Show>
                         <Show when={info().variant}>
                           {(variant) => (
                             <>
@@ -925,9 +911,6 @@ export function RunFooterView(props: RunFooterViewProps) {
             index={selectedIndex}
             total={() => tabs().length}
             detail={detail}
-            width={width}
-            diffStyle={props.diffStyle}
-            diffWrap={props.diffWrap}
             onCycle={cycleTab}
             onClose={closeTab}
             interrupt={() => subagentInterruptShortcut() || undefined}

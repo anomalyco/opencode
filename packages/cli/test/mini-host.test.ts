@@ -145,20 +145,18 @@ describe("Mini CLI host", () => {
     expect(process.listenerCount("SIGUSR2")).toBe(sigusr2)
   })
 
-  test("passes paths, platform, timing, and diagnostic context", async () => {
+  test("passes frontend host capabilities", async () => {
     const directory = await root()
     const input = host({ stdin: stream(true), cleanup() {} }, directory)
 
-    expect(input.paths).toEqual({ home: directory, state: directory, log: directory })
+    expect(input.paths).toEqual({ home: directory })
     expect(input.platform).toBe(process.platform)
     expect(typeof input.files.readText).toBe("function")
-    expect(typeof input.themes.discover).toBe("function")
     const file = path.join(directory, "attachment.txt")
     await Bun.write(file, "attachment contents")
     expect(await input.files.readText(pathToFileURL(file).href)).toBe("attachment contents")
     expect(typeof input.startup.showTiming).toBe("boolean")
     expect(typeof input.startup.now()).toBe("number")
-    expect(input.diagnostics).toMatchObject({ pid: process.pid, cwd: directory })
   })
 
   test("merges, clears, and repairs persisted model variants", async () => {

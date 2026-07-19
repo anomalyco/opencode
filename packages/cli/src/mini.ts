@@ -57,7 +57,8 @@ export async function runMini(input: MiniCommandInput) {
               prepare,
               signal,
             }).catch((error) => {
-              if (error instanceof Error && error.message === "Session not found") throw new MiniInputError(error.message)
+              if (error instanceof Error && error.message === "Session not found")
+                throw new MiniInputError(error.message)
               throw error
             }),
         })
@@ -67,7 +68,6 @@ export async function runMini(input: MiniCommandInput) {
           sessionID: target.session.id,
           sessionTitle: target.session.title,
           location: target.location,
-          projectID: target.projectID,
           model: target.model ? { providerID: target.model.providerID, modelID: target.model.id } : undefined,
           variant: target.model?.variant,
           agent: target.agent,
@@ -97,7 +97,6 @@ export async function runMini(input: MiniCommandInput) {
           sessionID: target.session.id,
           sessionTitle: target.session.title,
           location: target.location,
-          projectID: target.projectID,
           model: target.model ? { providerID: target.model.providerID, modelID: target.model.id } : undefined,
           variant: target.model?.variant,
           agent: target.agent,

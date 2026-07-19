@@ -1,7 +1,6 @@
 import { createScrollbackWriter } from "@opentui/solid"
 import { TextRenderable, type ColorInput, type ScrollbackRenderContext, type ScrollbackWriter } from "@opentui/core"
 import { Match, Switch, createMemo } from "solid-js"
-import { resolveDiffView } from "./diff"
 import { entryBody, entryFlags } from "./entry.body"
 import { entryColor, entryLook, entrySyntax } from "./scrollback.shared"
 import { toolFiletype, toolStructuredFinal } from "./tool"
@@ -49,14 +48,6 @@ export function entryLayout(commit: StreamCommit, body: RunEntryBody = entryBody
     return "inline"
   }
 
-  if (commit.kind === "reasoning") {
-    return "block"
-  }
-
-  if (commit.kind === "error") {
-    return "block"
-  }
-
   return "block"
 }
 
@@ -81,7 +72,6 @@ export function RunEntryContent(props: {
   body?: RunEntryBody
   theme?: RunTheme
   opts?: ScrollbackOptions
-  width?: number
 }) {
   const theme = createMemo(() => props.theme ?? RUN_THEME_FALLBACK)
   const body = createMemo(() => props.body ?? entryBody(props.commit))
@@ -174,12 +164,12 @@ export function RunEntryContent(props: {
                 <box width="100%" paddingLeft={1}>
                   <diff
                     diff={item.diff}
-                    view={resolveDiffView(props.opts?.diffStyle, props.width)}
+                    view="unified"
                     filetype={toolFiletype(item.file)}
                     syntaxStyle={syntax()}
                     showLineNumbers={true}
                     width="100%"
-                    wrapMode={props.opts?.diffWrap ?? "word"}
+                    wrapMode="word"
                     fg={theme().block.text}
                     addedBg={diffBg(theme().block.diffAddedBg)}
                     removedBg={diffBg(theme().block.diffRemovedBg)}
@@ -265,13 +255,12 @@ export function entryWriter(input: {
   opts?: ScrollbackOptions
 }): ScrollbackWriter {
   return createScrollbackWriter(
-    (ctx) => (
+    () => (
       <RunEntryContent
         commit={input.commit}
         body={input.body}
         theme={input.theme}
         opts={{ ...input.opts, suppressBackgrounds: true }}
-        width={ctx.width}
       />
     ),
     entryFlags(input.commit),

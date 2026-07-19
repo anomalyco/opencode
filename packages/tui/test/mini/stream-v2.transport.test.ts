@@ -237,7 +237,6 @@ describe("V2 mini transport", () => {
       sdk: client,
       sessionID: "ses_1",
       thinking: false,
-      limits: () => ({}),
       footer: ui.api,
     })
     const snapshots = ui.events.flatMap((event) => (event.type === "stream.subagent" ? [event.state] : []))
@@ -312,7 +311,6 @@ describe("V2 mini transport", () => {
       sdk: client,
       sessionID: "ses_1",
       thinking: false,
-      limits: () => ({}),
       footer: ui.api,
     })
 
@@ -373,7 +371,6 @@ describe("V2 mini transport", () => {
       location: { directory: "/work", workspaceID: "wrk_1" },
       sessionID: "ses_1",
       thinking: false,
-      limits: () => ({}),
       footer: ui.api,
     })
     const child = form("frm_child_live", "ses_child")
@@ -454,7 +451,6 @@ describe("V2 mini transport", () => {
       sessionID: "ses_1",
       thinking: true,
       replay: true,
-      limits: () => ({}),
       footer: ui.api,
     })
     expect(ui.commits.map((item) => item.text)).toEqual(["previous prompt"])
@@ -526,7 +522,6 @@ describe("V2 mini transport", () => {
       readTextFile: (url) => fs.readFile(new URL(url), "utf8"),
       sessionID: "ses_1",
       thinking: false,
-      limits: () => ({}),
       footer: ui.api,
     })
     let request: Parameters<OpenCodeClient["session"]["prompt"]>[0] | undefined
@@ -610,7 +605,6 @@ describe("V2 mini transport", () => {
       location: { directory: "/remote/project" },
       sessionID: "ses_1",
       thinking: false,
-      limits: () => ({}),
       footer: ui.api,
     })
     let request: Parameters<OpenCodeClient["session"]["prompt"]>[0] | undefined
@@ -699,7 +693,6 @@ describe("V2 mini transport", () => {
       sdk: client,
       sessionID: "ses_1",
       thinking: false,
-      limits: () => ({}),
       footer: ui.api,
     })
     let request: Parameters<OpenCodeClient["session"]["prompt"]>[0] | undefined
@@ -770,7 +763,6 @@ describe("V2 mini transport", () => {
       sdk: client,
       sessionID: "ses_1",
       thinking: false,
-      limits: () => ({}),
       footer: ui.api,
     })
     events.push({
@@ -833,7 +825,6 @@ describe("V2 mini transport", () => {
       sdk: client,
       sessionID: "ses_1",
       thinking: false,
-      limits: () => ({}),
       footer: ui.api,
     })
     let admitted = false
@@ -901,7 +892,6 @@ describe("V2 mini transport", () => {
       sdk: client,
       sessionID: "ses_1",
       thinking: false,
-      limits: () => ({}),
       footer: ui.api,
     })
     let admitted = false
@@ -995,7 +985,6 @@ describe("V2 mini transport", () => {
       sessionID: "ses_1",
       thinking: false,
       replay: true,
-      limits: () => ({}),
       footer: ui.api,
       onCatalogRefresh: () => {
         refreshes++
@@ -1113,7 +1102,6 @@ describe("V2 mini transport", () => {
       sessionID: "ses_1",
       thinking: false,
       replay: true,
-      limits: () => ({}),
       footer: ui.api,
     })
     spyOn(client.message, "list").mockImplementation(() =>
@@ -1193,7 +1181,6 @@ describe("V2 mini transport", () => {
       sessionID: "ses_1",
       thinking: false,
       replay: true,
-      limits: () => ({}),
       footer: ui.api,
       onCommit: (commit) => live.push(commit),
     })
@@ -1261,7 +1248,6 @@ describe("V2 mini transport", () => {
       sessionID: "ses_1",
       thinking: false,
       replay: true,
-      limits: () => ({}),
       footer: ui.api,
       onCommit: (commit) => live.push(commit),
     })
@@ -1309,7 +1295,6 @@ describe("V2 mini transport", () => {
       sessionID: "ses_1",
       thinking: true,
       replay: true,
-      limits: () => ({}),
       footer: ui.api,
       onCommit: (commit) => live.push(commit),
     })
@@ -1357,7 +1342,6 @@ describe("V2 mini transport", () => {
       sessionID: "ses_1",
       thinking: false,
       replay: true,
-      limits: () => ({}),
       footer: ui.api,
     })
     let release!: () => void
@@ -1399,7 +1383,6 @@ describe("V2 mini transport", () => {
       sessionID: "ses_1",
       thinking: false,
       replay: true,
-      limits: () => ({}),
       footer: ui.api,
       onCommit: (commit) => live.push(commit),
     })
@@ -1465,7 +1448,6 @@ describe("V2 mini transport", () => {
       sessionID: "ses_1",
       thinking: false,
       replay: true,
-      limits: () => ({}),
       footer: ui.api,
     })
     events.push({
@@ -1496,7 +1478,6 @@ describe("V2 mini transport", () => {
       sessionID: "ses_1",
       thinking: false,
       replay: true,
-      limits: () => ({}),
       footer: ui.api,
       onCommit: (commit) => live.push(commit),
     })
@@ -1549,7 +1530,6 @@ describe("V2 mini transport", () => {
       sessionID: "ses_1",
       thinking: false,
       replay: true,
-      limits: () => ({}),
       footer: ui.api,
     })
     spyOn(client.message, "list").mockImplementation(() =>
@@ -1627,7 +1607,6 @@ describe("V2 mini transport", () => {
       sessionID: "ses_1",
       thinking: true,
       replay: true,
-      limits: () => ({}),
       footer: ui.api,
     })
 
@@ -1649,7 +1628,6 @@ describe("V2 mini transport", () => {
       sdk: client,
       sessionID: "ses_1",
       thinking: true,
-      limits: () => ({}),
       footer: ui.api,
     })
     events.push({
@@ -1670,59 +1648,6 @@ describe("V2 mini transport", () => {
     await transport.close()
   })
 
-  test("renders a live tool start when the call begins", async () => {
-    const events = feed()
-    events.push(connected())
-    const client = sdk({ streams: [events] })
-    const ui = footer()
-    const transport = await createSessionTransport({
-      sdk: client,
-      location: { directory: "/session", workspaceID: "work-1" },
-      sessionID: "ses_1",
-      thinking: false,
-      limits: () => ({}),
-      footer: ui.api,
-    })
-
-    events.push({
-      id: "evt_tool_input",
-      created: 1,
-      type: "session.tool.input.started",
-      durable: durable("ses_1"),
-      data: {
-        sessionID: "ses_1",
-        assistantMessageID: "msg_assistant",
-        callID: "call_read",
-        name: "read",
-      },
-    })
-    events.push({
-      id: "evt_tool_called",
-      created: 2,
-      type: "session.tool.called",
-      durable: durable("ses_1", 1),
-      data: {
-        sessionID: "ses_1",
-        assistantMessageID: "msg_assistant",
-        callID: "call_read",
-        input: { path: "README.md" },
-        executed: false,
-      },
-    })
-    await Bun.sleep(0)
-
-    expect(ui.commits).toContainEqual(
-      expect.objectContaining({
-        kind: "tool",
-        phase: "start",
-        partID: "prt_call_read",
-        tool: "read",
-        directory: "/session",
-      }),
-    )
-    await transport.close()
-  })
-
   test("tracks repeated root call IDs independently across assistant messages", async () => {
     const events = feed()
     events.push(connected())
@@ -1732,7 +1657,6 @@ describe("V2 mini transport", () => {
       sdk: client,
       sessionID: "ses_1",
       thinking: false,
-      limits: () => ({}),
       footer: ui.api,
     })
 
@@ -1798,7 +1722,6 @@ describe("V2 mini transport", () => {
       sdk: client,
       sessionID: "ses_1",
       thinking: false,
-      limits: () => ({}),
       footer: ui.api,
     })
     events.push({
@@ -1880,7 +1803,6 @@ describe("V2 mini transport", () => {
       sdk: client,
       sessionID: "ses_1",
       thinking: false,
-      limits: () => ({}),
       footer: ui.api,
     })
     let admitted = false
@@ -1924,7 +1846,6 @@ describe("V2 mini transport", () => {
       sdk: client,
       sessionID: "ses_1",
       thinking: false,
-      limits: () => ({}),
       footer: ui.api,
     })
     spyOn(client.session, "get").mockImplementation(() => ok({ model: undefined }) as never)
@@ -1988,7 +1909,6 @@ describe("V2 mini transport", () => {
       sdk: client,
       sessionID: "ses_1",
       thinking: false,
-      limits: () => ({}),
       footer: ui.api,
     })
     let admitted = false
@@ -2044,7 +1964,6 @@ describe("V2 mini transport", () => {
       sdk: client,
       sessionID: "ses_1",
       thinking: false,
-      limits: () => ({}),
       footer: ui.api,
     })
     let request: Parameters<OpenCodeClient["session"]["shell"]>[0] | undefined
@@ -2106,8 +2025,14 @@ describe("V2 mini transport", () => {
 
     expect(request).toMatchObject({ sessionID: "ses_1", command: "ls", id: expect.stringMatching(/^evt_/) })
     expect(ui.commits.filter((item) => item.shell)).toMatchObject([
-      { phase: "start", tool: "shell", toolState: "running", shell: { callID: "sh_shell", command: "ls" } },
-      { phase: "progress", text: "file.txt", toolState: "completed", shell: { callID: "sh_shell", command: "ls" } },
+      { phase: "start", partID: "shell:sh_shell", tool: "shell", toolState: "running", shell: { command: "ls" } },
+      {
+        phase: "progress",
+        partID: "shell:sh_shell",
+        text: "file.txt",
+        toolState: "completed",
+        shell: { command: "ls" },
+      },
     ])
     expect(ui.events).toContainEqual({ type: "stream.patch", patch: { phase: "running", status: "running shell" } })
     await transport.close()
@@ -2122,7 +2047,6 @@ describe("V2 mini transport", () => {
       sdk: client,
       sessionID: "ses_1",
       thinking: false,
-      limits: () => ({}),
       footer: ui.api,
     })
     let started = false
@@ -2165,7 +2089,6 @@ describe("V2 mini transport", () => {
       sdk: client,
       sessionID: "ses_1",
       thinking: false,
-      limits: () => ({}),
       footer: ui.api,
     })
     let request: Parameters<OpenCodeClient["session"]["shell"]>[0] | undefined
@@ -2279,7 +2202,7 @@ describe("V2 mini transport", () => {
     await turn
 
     expect(request.id).toMatch(/^evt_/)
-    expect(ui.commits.some((item) => item.shell?.callID === "sh_owned" && item.text === "/tmp")).toBe(true)
+    expect(ui.commits.some((item) => item.partID === "shell:sh_owned" && item.text === "/tmp")).toBe(true)
     await transport.close()
   })
 
@@ -2309,7 +2232,6 @@ describe("V2 mini transport", () => {
       sessionID: "ses_1",
       thinking: false,
       replay: true,
-      limits: () => ({}),
       footer: ui.api,
     })
     events.push({
@@ -2337,8 +2259,8 @@ describe("V2 mini transport", () => {
     await Bun.sleep(0)
 
     expect(ui.commits.filter((item) => item.shell)).toMatchObject([
-      { phase: "start", shell: { callID: "sh_1", command: "ls" } },
-      { phase: "progress", text: "file.txt", toolState: "completed" },
+      { phase: "start", partID: "shell:sh_1", shell: { command: "ls" } },
+      { phase: "progress", partID: "shell:sh_1", text: "file.txt", toolState: "completed" },
     ])
     await transport.close()
   })
@@ -2369,7 +2291,6 @@ describe("V2 mini transport", () => {
       sessionID: "ses_1",
       thinking: false,
       replay: true,
-      limits: () => ({}),
       footer: ui.api,
     })
     events.push({
@@ -2430,7 +2351,6 @@ describe("V2 mini transport", () => {
       sdk: client,
       sessionID: "ses_1",
       thinking: false,
-      limits: () => ({}),
       footer: ui.api,
     })
     let request: Parameters<OpenCodeClient["session"]["command"]>[0] | undefined
@@ -2504,7 +2424,6 @@ describe("V2 mini transport", () => {
       sdk: client,
       sessionID: "ses_1",
       thinking: false,
-      limits: () => ({}),
       footer: ui.api,
     })
     let request: Parameters<OpenCodeClient["session"]["skill"]>[0] | undefined
@@ -2568,7 +2487,6 @@ describe("V2 mini transport", () => {
       sdk: client,
       sessionID: "ses_1",
       thinking: false,
-      limits: () => ({}),
       footer: ui.api,
     })
     let sent = false
@@ -2658,7 +2576,6 @@ describe("V2 mini transport", () => {
       },
       sessionID: "ses_1",
       thinking: false,
-      limits: () => ({}),
       footer: ui.api,
       onCatalogRefresh: () => refreshes++,
     })
@@ -2724,7 +2641,6 @@ describe("V2 mini transport", () => {
       sessionID: "ses_1",
       thinking: false,
       replay: true,
-      limits: () => ({}),
       footer: ui.api,
     })
     events.push({
@@ -2755,7 +2671,6 @@ describe("V2 mini transport", () => {
       sdk: client,
       sessionID: "ses_1",
       thinking: false,
-      limits: () => ({}),
       footer: ui.api,
     })
     const states = () => ui.events.flatMap((event) => (event.type === "stream.subagent" ? [event.state] : []))
@@ -2952,7 +2867,6 @@ describe("V2 mini transport", () => {
       sdk: client,
       sessionID: "ses_1",
       thinking: false,
-      limits: () => ({}),
       footer: ui.api,
     })
     const states = () => ui.events.flatMap((event) => (event.type === "stream.subagent" ? [event.state] : []))
@@ -3014,7 +2928,6 @@ describe("V2 mini transport", () => {
       sdk: client,
       sessionID: "ses_1",
       thinking: false,
-      limits: () => ({}),
       footer: ui.api,
     })
     const states = () => ui.events.flatMap((event) => (event.type === "stream.subagent" ? [event.state] : []))
@@ -3082,7 +2995,6 @@ describe("V2 mini transport", () => {
       sdk: client,
       sessionID: "ses_1",
       thinking: false,
-      limits: () => ({}),
       footer: ui.api,
     })
     const states = () => ui.events.flatMap((event) => (event.type === "stream.subagent" ? [event.state] : []))
@@ -3174,7 +3086,6 @@ describe("V2 mini transport", () => {
       sdk: client,
       sessionID: "ses_1",
       thinking: false,
-      limits: () => ({}),
       footer: ui.api,
     })
     const states = () => ui.events.flatMap((event) => (event.type === "stream.subagent" ? [event.state] : []))
@@ -3271,7 +3182,6 @@ describe("V2 mini transport", () => {
       sdk: client,
       sessionID: "ses_1",
       thinking: false,
-      limits: () => ({}),
       footer: ui.api,
     })
     const states = () => ui.events.flatMap((event) => (event.type === "stream.subagent" ? [event.state] : []))
@@ -3366,7 +3276,6 @@ describe("V2 mini transport", () => {
       sdk: client,
       sessionID: "ses_1",
       thinking: false,
-      limits: () => ({}),
       footer: ui.api,
     })
     const states = () => ui.events.flatMap((event) => (event.type === "stream.subagent" ? [event.state] : []))
@@ -3424,7 +3333,6 @@ describe("V2 mini transport", () => {
       sdk: client,
       sessionID: "ses_1",
       thinking: false,
-      limits: () => ({}),
       footer: ui.api,
     })
     const states = () => ui.events.flatMap((event) => (event.type === "stream.subagent" ? [event.state] : []))
@@ -3519,7 +3427,6 @@ describe("V2 mini transport", () => {
       sdk: client,
       sessionID: "ses_1",
       thinking: false,
-      limits: () => ({}),
       footer: ui.api,
     })
     const states = ui.events.flatMap((event) => (event.type === "stream.subagent" ? [event.state] : []))
@@ -3574,7 +3481,6 @@ describe("V2 mini transport", () => {
       sdk: client,
       sessionID: "ses_1",
       thinking: false,
-      limits: () => ({}),
       footer: ui.api,
     })
     const states = ui.events.flatMap((event) => (event.type === "stream.subagent" ? [event.state] : []))
@@ -3584,7 +3490,6 @@ describe("V2 mini transport", () => {
         label: "Explore",
         description: "Find things",
         status: "completed",
-        toolCalls: undefined,
       },
     ])
     await transport.close()

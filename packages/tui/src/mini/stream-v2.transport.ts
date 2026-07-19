@@ -16,7 +16,6 @@ import { normalizeTool, toolOutputText } from "./tool"
 import type {
   FooterApi,
   FooterView,
-  LocalReplayAnchor,
   LocalReplayRow,
   MiniPermissionRequest,
   MiniFormRequest,
@@ -24,7 +23,6 @@ import type {
   RunInput,
   RunPrompt,
   RunPromptPart,
-  RunProvider,
   StreamCommit,
 } from "./types"
 
@@ -42,8 +40,6 @@ type StreamInput = {
   thinking: boolean
   replay?: boolean
   replayLimit?: number
-  limits: () => Record<string, number>
-  providers?: () => RunProvider[]
   footer: FooterApi
   onCommit?: (commit: StreamCommit) => void
   trace?: Trace
@@ -58,7 +54,6 @@ export type SessionTurnInput = {
   prompt: RunPrompt
   files: RunFilePart[]
   includeFiles: boolean
-  onVisibleOutput?: (anchor: LocalReplayAnchor) => void
   signal?: AbortSignal
 }
 
@@ -83,7 +78,6 @@ type Wait = {
   failureRendered: boolean
   resolve: () => void
   reject: (error: unknown) => void
-  onVisibleOutput?: (anchor: LocalReplayAnchor) => void
 }
 
 // One active session.shell call. The HTTP response is the completion signal;
@@ -112,7 +106,6 @@ type ReplayBuffer = {
 }
 
 type ToolState = {
-  messageID: string
   part: SessionMessageAssistantTool
   output: string
   version: number
@@ -281,7 +274,7 @@ function shellCommit(
     source: "tool",
     partID: `shell:${callID}`,
     tool: "shell",
-    shell: { callID, command },
+    shell: { command },
     ...next,
   }
 }
@@ -428,17 +421,6 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
           text: commit.kind === "reasoning" && text ? `Thinking: ${text}` : (text ?? commit.text),
         })
       })
-    const visible = commits.at(-1)
-    if (visible) {
-      state.wait?.onVisibleOutput?.({
-        kind: visible.kind,
-        text: visible.text,
-        phase: visible.phase,
-        messageID: visible.messageID,
-        partID: visible.partID,
-        toolState: visible.toolState,
-      })
-    }
     writeSessionOutput({ footer: input.footer, trace: input.trace }, { commits, footer: patch ? { patch } : undefined })
   }
 
@@ -489,7 +471,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     }
     state.toolSources.set(key, part)
     if (part.state.status === "streaming") {
-      state.tools.set(key, { messageID, part, output: "", version: 0 })
+      state.tools.set(key, { part, output: "", version: 0 })
       return
     }
     const current = state.tools.get(key)
@@ -504,7 +486,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
           status: `running ${part.name}`,
         })
       if (render && delta) write([toolCommit(part, messageID, "progress", delta, input.location?.directory, version)])
-      state.tools.set(key, { messageID, part, output, version })
+      state.tools.set(key, { part, output, version })
       return
     }
     if (render && (!current || current.part.state.status === "streaming"))
@@ -1283,7 +1265,6 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       failureRendered: false,
       resolve,
       reject,
-      onVisibleOutput: next.onVisibleOutput,
     }
     state.wait = active
     const interrupt = () => {

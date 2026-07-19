@@ -176,14 +176,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
     clearOnShutdown: false,
   })
   const tuiConfig = await input.tuiConfig
-  const customThemes = await input.host.themes.discover().catch(() => ({}))
-  const warnings = new Set<string>()
-  const warning = (message: string) => {
-    if (warnings.has(message)) return
-    warnings.add(message)
-    input.host.stdout.write(`Warning: ${message}\n`)
-  }
-  const theme = await resolveRunTheme(renderer, tuiConfig.theme, customThemes, warning)
+  const theme = await resolveRunTheme(renderer, tuiConfig.theme)
   renderer.setBackgroundColor(theme.background)
   const state: SplashState = {
     entry: false,
@@ -229,12 +222,8 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
     first: input.first,
     history: input.history,
     theme,
-    customThemes,
-    onThemeWarning: warning,
     wrote,
     tuiConfig,
-    diffStyle: tuiConfig.diffs?.view ?? "auto",
-    diffWrap: tuiConfig.diffs?.wrap ?? "word",
     onPermissionReply: input.onPermissionReply,
     onFormReply: input.onFormReply,
     onFormCancel: input.onFormCancel,

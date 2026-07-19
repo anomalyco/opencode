@@ -24,7 +24,7 @@
 // Ctrl-c clears a live prompt draft first; otherwise interrupt and exit use a
 // two-press pattern where the first press shows a hint and the second press
 // within 5 seconds actually fires the action.
-import { CliRenderEvents, type CliRenderer, type TreeSitterClient } from "@opentui/core"
+import { CliRenderEvents, type CliRenderer } from "@opentui/core"
 import { render } from "@opentui/solid"
 import { createComponent, createSignal, type Accessor, type Setter } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
@@ -51,7 +51,6 @@ import type {
   PermissionReply,
   RunAgent,
   RunCommand,
-  RunDiffStyle,
   RunInput,
   RunPrompt,
   RunProvider,
@@ -72,7 +71,6 @@ type RunFooterOptions = {
   findFiles: (query: string) => Promise<string[]>
   agents: RunAgent[]
   references: RunReference[]
-  commands?: RunCommand[]
   wrote?: boolean
   sessionID: () => string | undefined
   agentLabel: string
@@ -82,11 +80,7 @@ type RunFooterOptions = {
   first: boolean
   history?: RunPrompt[]
   theme: RunTheme
-  customThemes: Record<string, unknown>
-  onThemeWarning: (message: string) => void
   tuiConfig: RunTuiConfig
-  diffStyle: RunDiffStyle
-  diffWrap: "word" | "none"
   onPermissionReply: (input: PermissionReply) => void | Promise<void>
   onFormReply: (input: FormReply) => void | Promise<void>
   onFormCancel: (input: FormCancel) => void | Promise<void>
@@ -96,11 +90,9 @@ type RunFooterOptions = {
   onInterrupt?: () => void
   onBackground?: () => void
   onEditorOpen: (input: { value: string }) => Promise<string | undefined>
-  onExit?: () => void
   onSubagentSelect?: (sessionID: string | undefined) => void
   onSubagentInterrupt?: (sessionID: string) => void
   subscribeThemeSignal: (listener: () => void) => () => void
-  treeSitterClient?: TreeSitterClient
 }
 
 const PERMISSION_ROWS = 12
@@ -142,13 +134,6 @@ function eventPatch(next: FooterEvent): FooterPatch | undefined {
       queue: next.queue,
       interrupt: 0,
       exit: 0,
-    }
-  }
-
-  if (next.type === "turn.wait") {
-    return {
-      phase: "running",
-      status: "waiting for assistant",
     }
   }
 
@@ -209,7 +194,6 @@ export class RunFooter implements FooterApi {
   private setHistory: Setter<RunPrompt[]>
   private promptRoute: FooterPromptRoute = { type: "composer" }
   private subagentMenuRows = SUBAGENT_ROWS
-  private autocomplete = false
   private interruptTimeout: NodeJS.Timeout | undefined
   private exitTimeout: NodeJS.Timeout | undefined
   private noticeTimeout: NodeJS.Timeout | undefined
@@ -225,11 +209,7 @@ export class RunFooter implements FooterApi {
 
   private createScrollback(wrote: boolean): RunScrollbackStream {
     return new RunScrollbackStream(this.renderer, this.theme(), {
-      diffStyle: this.options.diffStyle,
-      diffWrap: this.options.diffWrap,
       wrote,
-      sessionID: this.options.sessionID,
-      treeSitterClient: this.options.treeSitterClient,
       onThemeRelease: (theme) => {
         void this.renderer
           .idle()
@@ -248,7 +228,6 @@ export class RunFooter implements FooterApi {
       status: "",
       queue: 0,
       model: options.modelLabel,
-      duration: "",
       usage: "",
       first: options.first,
       interrupt: 0,
@@ -265,7 +244,7 @@ export class RunFooter implements FooterApi {
     const [references, setReferences] = createSignal(options.references)
     this.references = references
     this.setReferences = setReferences
-    const [commands, setCommands] = createSignal<RunCommand[] | undefined>(options.commands)
+    const [commands, setCommands] = createSignal<RunCommand[] | undefined>()
     this.commands = commands
     this.setCommands = setCommands
     const [providers, setProviders] = createSignal<RunProvider[] | undefined>()
@@ -328,11 +307,8 @@ export class RunFooter implements FooterApi {
               variants: footer.variants,
               currentVariant: footer.currentVariant,
               theme: footer.theme,
-              diffStyle: options.diffStyle,
-              diffWrap: options.diffWrap,
               tuiConfig: options.tuiConfig,
               history: footer.history,
-              agent: options.agentLabel,
               onSubmit: footer.handlePrompt,
               onPermissionReply: footer.handlePermissionReply,
               onFormReply: footer.handleFormReply,
@@ -513,7 +489,6 @@ export class RunFooter implements FooterApi {
       status: typeof next.status === "string" ? next.status : prev.status,
       queue: typeof next.queue === "number" ? Math.max(0, next.queue) : prev.queue,
       model: typeof next.model === "string" ? next.model : prev.model,
-      duration: typeof next.duration === "string" ? next.duration : prev.duration,
       usage: typeof next.usage === "string" ? next.usage : prev.usage,
       first: typeof next.first === "boolean" ? next.first : prev.first,
       interrupt:
@@ -751,9 +726,8 @@ export class RunFooter implements FooterApi {
     }
   }
 
-  private syncLayout = (next: { route: FooterPromptRoute; autocomplete: boolean; subagentRows: number }): void => {
+  private syncLayout = (next: { route: FooterPromptRoute; subagentRows: number }): void => {
     this.promptRoute = next.route
-    this.autocomplete = next.autocomplete
     this.subagentMenuRows = next.subagentRows
     if (this.view().type === "prompt") {
       this.applyHeight()
@@ -1009,17 +983,11 @@ export class RunFooter implements FooterApi {
     this.clearExitTimer()
     this.patch({ exit: 0, status: "exiting" })
     this.close()
-    this.options.onExit?.()
     return true
   }
 
   private handlePalette = (): void => {
-    void resolveRunTheme(
-      this.renderer,
-      this.options.tuiConfig.theme,
-      this.options.customThemes,
-      this.options.onThemeWarning,
-    ).then((theme) => {
+    void resolveRunTheme(this.renderer, this.options.tuiConfig.theme).then((theme) => {
       if (this.isGone) {
         theme.block.syntax?.destroy()
         return

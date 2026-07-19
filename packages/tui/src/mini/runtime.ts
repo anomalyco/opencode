@@ -1,12 +1,8 @@
 // Top-level orchestrator for `opencode mini`.
 //
 // Wires the boot sequence, lifecycle (renderer + footer), stream transport,
-// and prompt queue together into a single session loop. Two entry points:
-//
-//   runInteractiveMode     -- used when an SDK client already exists (attach mode)
-//   runInteractiveDeferredMode -- paints before resolving its session
-//
-// Both delegate to runInteractiveRuntime, which:
+// and prompt queue together into a single session loop. The frontend paints
+// before resolving its Session, then:
 //   1. resolves TUI config, model info, and session history,
 //   2. creates the split-footer lifecycle (renderer + RunFooter),
 //   3. starts the stream transport (SDK event subscription), lazily for fresh
@@ -18,26 +14,10 @@ import { loadRunAgents, loadRunCommands, loadRunReferences, waitForDefaultModel 
 import { resolveModelInfo, resolveModelInfoStrict, resolveRunTuiConfig, resolveSessionInfo } from "./runtime.boot"
 import { createRuntimeLifecycle } from "./runtime.lifecycle"
 import { cycleVariant, formatModelLabel, resolveVariant } from "./variant.shared"
-import type {
-  LocalReplayAnchor,
-  LocalReplayRow,
-  MiniHost,
-  RunInput,
-  RunPrompt,
-  RunProvider,
-  RunTuiConfig,
-  StreamCommit,
-} from "./types"
+import type { LocalReplayRow, MiniHost, RunInput, RunPrompt, RunProvider, RunTuiConfig, StreamCommit } from "./types"
 
-/** @internal Exported for testing */
-export { pickVariant, resolveVariant } from "./variant.shared"
-
-/** @internal Exported for testing */
-export { runPromptQueue } from "./runtime.queue"
-
-type BootContext = Pick<RunInput, "sdk" | "sessionID" | "sessionTitle" | "resume" | "agent" | "model" | "variant"> & {
+type BootContext = Pick<RunInput, "sdk" | "agent" | "model" | "variant"> & {
   location: LocationRef
-  projectID?: string
 }
 
 type CreateSessionInput = {
@@ -53,8 +33,7 @@ type Reconnect = (signal: AbortSignal) => Promise<RunInput["sdk"]>
 type RunRuntimeInput = {
   host: MiniHost
   boot: () => Promise<BootContext>
-  afterPaint?: (ctx: BootContext) => Promise<void> | void
-  resolveSession?: (sdk: RunInput["sdk"], signal: AbortSignal) => Promise<ResolvedSession>
+  resolveSession: (sdk: RunInput["sdk"], signal: AbortSignal) => Promise<ResolvedSession>
   createSession?: CreateSession
   reconnect?: Reconnect
   files: RunInput["files"]
@@ -107,7 +86,6 @@ type ResolvedSession = {
   sessionID: string
   sessionTitle?: string
   location: RunInput["location"]
-  projectID: string
   model: RunInput["model"]
   variant: string | undefined
   agent?: string | undefined
@@ -121,7 +99,6 @@ type RuntimeState = {
   model: RunInput["model"]
   providers: RunProvider[]
   variants: string[]
-  limits: Record<string, number>
   activeVariant: string | undefined
   sessionID: string
   history: RunPrompt[]
@@ -129,7 +106,6 @@ type RuntimeState = {
   sessionTitle?: string
   agent: string | undefined
   location: LocationRef
-  projectID?: string
   switching?: Promise<void>
   demo?: RunDemo
   selectSubagent?: (sessionID: string | undefined) => void
@@ -141,14 +117,6 @@ type ClientAttempt = {
   sdk: RunInput["sdk"]
   generation: number
   signal: AbortSignal
-}
-
-function hasSession(input: RunRuntimeInput, state: RuntimeState) {
-  return !input.resolveSession || !!state.sessionID
-}
-
-function eagerStream(input: RunRuntimeInput, ctx: BootContext) {
-  return ctx.resume === true || !input.resolveSession || !!input.demo
 }
 
 function variantsFor(providers: RunProvider[], model: RunInput["model"]) {
@@ -209,17 +177,13 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
   const tuiConfigTask = resolveRunTuiConfig(input.tuiConfig, input.host.platform)
   const ctx = await input.boot()
   const runtimeController = new AbortController()
-  const sessionTask =
-    ctx.resume === true
-      ? resolveSessionInfo(ctx.sdk, ctx.sessionID, ctx.model, runtimeController.signal)
-      : Promise.resolve({
-          first: true,
-          history: [],
-          model: undefined,
-          variant: undefined,
-        })
-  const savedTask = input.host.preferences.resolveVariant(ctx.model)
-  const [session, savedVariant] = await Promise.all([sessionTask, savedTask])
+  const session = {
+    first: true,
+    history: [] as RunPrompt[],
+    model: undefined as RunInput["model"],
+    variant: undefined as string | undefined,
+  }
+  const savedVariant = await input.host.preferences.resolveVariant(ctx.model)
   const state: RuntimeState = {
     sdk: ctx.sdk,
     shown: !session.first,
@@ -227,15 +191,12 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     model: ctx.model ?? session.model,
     providers: [],
     variants: [],
-    limits: {},
     activeVariant: resolveVariant(ctx.variant, session.variant, savedVariant, []),
-    sessionID: ctx.sessionID,
+    sessionID: "",
     history: [...session.history],
     localRows: [],
-    sessionTitle: ctx.sessionTitle,
     agent: ctx.agent,
     location: ctx.location,
-    projectID: ctx.projectID,
   }
   const settleForm = async (sessionID: string, formID: string) => {
     if (!state.stream) return
@@ -363,7 +324,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
       }
     },
     onInterrupt: () => {
-      if (!hasSession(input, state) || state.aborting) {
+      if (!state.sessionID || state.aborting) {
         return false
       }
 
@@ -380,7 +341,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
       return true
     },
     onBackground: () => {
-      if (!hasSession(input, state)) {
+      if (!state.sessionID) {
         return
       }
 
@@ -434,7 +395,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     !footer.isClosed && !attempt.signal.aborted && attempt.generation === clientGeneration && attempt.sdk === state.sdk
 
   const ensureSession = () => {
-    if (!input.resolveSession || state.sessionID) {
+    if (state.sessionID) {
       return Promise.resolve()
     }
 
@@ -451,7 +412,6 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
         state.sessionTitle = next.sessionTitle ?? state.sessionTitle
         state.agent = next.agent
         state.location = next.location
-        state.projectID = next.projectID
         state.model = next.model
         state.activeVariant = next.variant
         footer.event({ type: "agent", agent: state.agent })
@@ -500,7 +460,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     modelAttempt = controller
     try {
       if (selected) {
-        const info = await abortable(resolveModelInfo(sdk, state.location, selected, signal), signal)
+        const info = await abortable(resolveModelInfo(sdk, state.location, signal), signal)
         if (
           !info ||
           !currentModelLoad(generation, sdk) ||
@@ -521,7 +481,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
       if (!currentModelLoad(generation, sdk)) return
       const [fallbackSavedVariant, info] = await Promise.all([
         input.host.preferences.resolveVariant(model),
-        abortable(resolveModelInfo(sdk, state.location, model, signal), signal),
+        abortable(resolveModelInfo(sdk, state.location, signal), signal),
       ])
       if (!info || !currentModelLoad(generation, sdk)) return
       if (model && !state.model) state.model = model
@@ -563,12 +523,10 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     modelLoadStarted = true
     return requestModelLoad()
   })
-  const rememberLocal = (commit: StreamCommit, after?: LocalReplayAnchor) => {
+  const rememberLocal = (commit: StreamCommit) => {
     const last = state.localRows.at(-1)
     if (
       last &&
-      !after &&
-      !last.after &&
       (commit.kind === "assistant" || commit.kind === "reasoning") &&
       last.commit.kind === commit.kind &&
       last.commit.source === commit.source &&
@@ -579,7 +537,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
       state.localRows = [...state.localRows.slice(0, -1), { commit }]
       return
     }
-    state.localRows = [...state.localRows, { commit, after }].slice(-LOCAL_REPLAY_ROW_LIMIT)
+    state.localRows = [...state.localRows, { commit }].slice(-LOCAL_REPLAY_ROW_LIMIT)
   }
 
   const applyCatalog = (
@@ -630,7 +588,6 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     if (!currentClient(attempt)) return
     state.providers = info.providers
     state.variants = variantsFor(state.providers, state.model)
-    state.limits = info.limits
     state.activeVariant = boot
       ? resolveVariant(ctx.variant, current, saved, state.variants)
       : current && !state.variants.includes(current)
@@ -681,7 +638,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
         refresh.queued = false
         const [catalog, info] = await Promise.all([
           abortable(fetchCatalog(attempt), attempt.signal),
-          abortable(resolveModelInfoStrict(attempt.sdk, state.location, state.model, attempt.signal), attempt.signal),
+          abortable(resolveModelInfoStrict(attempt.sdk, state.location, attempt.signal), attempt.signal),
         ])
         if (!currentClient(attempt)) return
         if (catalog) applyCatalog(catalog, attempt)
@@ -734,10 +691,6 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     }
   }
 
-  if (input.afterPaint) {
-    void firstPaint.then(() => (footer.isClosed ? undefined : input.afterPaint?.(ctx))).catch(() => {})
-  }
-
   let streamTask = deps.streamTransport
   const loadStreamTransport = () => {
     if (streamTask) return streamTask
@@ -772,8 +725,6 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
         thinking,
         replay: input.replay,
         replayLimit: input.replayLimit,
-        limits: () => state.limits,
-        providers: () => state.providers,
         footer,
         onCommit: rememberLocal,
         trace: log,
@@ -885,7 +836,6 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
               state.sessionTitle = created.sessionTitle
               state.agent = created.agent ?? state.agent
               state.location = created.location
-              state.projectID = created.projectID
               state.model = created.model
               state.activeVariant = created.variant
               footer.event({ type: "agent", agent: state.agent })
@@ -910,7 +860,6 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
                 type: "stream.patch",
                 patch: {
                   phase: "idle",
-                  duration: "",
                   usage: "",
                   first: true,
                 },
@@ -949,7 +898,6 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
 
         await state.switching?.catch(() => {})
 
-        let outputAnchor: LocalReplayAnchor | undefined
         try {
           const next = await ensureStream()
           await next.handle.runPromptTurn({
@@ -959,9 +907,6 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
             prompt,
             files: input.files,
             includeFiles,
-            onVisibleOutput: (anchor) => {
-              outputAnchor = anchor
-            },
             signal,
           })
           if (prompt.messageID) {
@@ -987,7 +932,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
             source: "system",
             messageID: prompt.messageID,
           } as const
-          rememberLocal(commit, outputAnchor)
+          rememberLocal(commit)
           footer.append(commit)
         }
       },
@@ -995,20 +940,11 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
   }
 
   try {
-    const eager = eagerStream(input, ctx)
-    if (eager) {
+    if (input.demo) {
       await firstPaint
       if (footer.isClosed) return
-      if (input.replay && state.shown) {
-        // Replay commits immutable scrollback rows, so wait for provider names
-        // before bootstrapping existing session history.
-        await modelTask
-      }
-
       await ensureStream()
-    }
-
-    if (!eager && input.resolveSession) {
+    } else {
       void firstPaint
         .then(() => {
           if (footer.isClosed) {
@@ -1034,7 +970,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     offRuntimeClose()
 
     await shell.close({
-      showExit: state.shown && hasSession(input, state),
+      showExit: state.shown && !!state.sessionID,
       sessionTitle: state.sessionTitle,
       sessionID: state.sessionID,
       history: state.history,
@@ -1064,52 +1000,11 @@ export async function runInteractiveDeferredMode(input: RunDeferredInput, deps?:
         return {
           sdk,
           location: { directory: input.directory },
-          sessionID: "",
-          sessionTitle: undefined,
-          resume: false,
           agent: input.agent,
           model: input.model,
           variant: input.variant,
         }
       },
-    },
-    deps,
-  )
-}
-
-// Attach mode. Uses the caller-provided SDK client directly.
-export async function runInteractiveMode(
-  input: RunInput & {
-    host: MiniHost
-    reconnect?: Reconnect
-    createSession?: CreateSession
-    tuiConfig?: RunTuiConfig | Promise<RunTuiConfig>
-  },
-  deps?: RunRuntimeDeps,
-): Promise<void> {
-  return runInteractiveRuntime(
-    {
-      host: input.host,
-      files: input.files,
-      initialInput: input.initialInput,
-      thinking: input.thinking,
-      replay: input.replay,
-      replayLimit: input.replayLimit,
-      demo: input.demo,
-      tuiConfig: input.tuiConfig,
-      reconnect: input.reconnect,
-      boot: async () => ({
-        sdk: input.sdk,
-        location: input.location,
-        projectID: input.projectID,
-        sessionID: input.sessionID,
-        sessionTitle: input.sessionTitle,
-        resume: input.resume,
-        agent: input.agent,
-        model: input.model,
-        variant: input.variant,
-      }),
-      createSession: input.createSession,
     },
     deps,
   )

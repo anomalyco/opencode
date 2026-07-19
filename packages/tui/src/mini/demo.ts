@@ -45,7 +45,7 @@ const KINDS = [
   "mix",
 ]
 const PERMISSIONS = ["edit", "shell", "read", "subagent", "external", "doom"] as const
-const FORMS = ["question", "multiselect", "scalars", "external", "unsupported"] as const
+const FORMS = ["question", "external"] as const
 
 type PermissionKind = (typeof PERMISSIONS)[number]
 type FormKind = (typeof FORMS)[number]
@@ -186,13 +186,10 @@ function showSubagent(
   state: State,
   input: {
     sessionID: string
-    partID: string
-    callID: string
     label: string
     description: string
     status: "running" | "completed" | "cancelled" | "error"
     title?: string
-    toolCalls?: number
     commits: StreamCommit[]
   },
 ) {
@@ -202,19 +199,15 @@ function showSubagent(
       tabs: [
         {
           sessionID: input.sessionID,
-          partID: input.partID,
-          callID: input.callID,
           label: input.label,
           description: input.description,
           status: input.status,
           title: input.title,
-          toolCalls: input.toolCalls,
           lastUpdatedAt: Date.now(),
         },
       ],
       details: {
         [input.sessionID]: {
-          sessionID: input.sessionID,
           commits: input.commits,
         },
       },
@@ -541,13 +534,10 @@ function emitTask(state: State): void {
   } satisfies SessionMessageAssistantTool
   showSubagent(state, {
     sessionID: "sub_demo_1",
-    partID: ref.part,
-    callID: ref.call,
     label: "Explore",
     description: "Scan run/* for reducer touchpoints",
     status: "completed",
     title: "Reducer touchpoints found",
-    toolCalls: 4,
     commits: [
       {
         kind: "user",
@@ -807,58 +797,15 @@ function demoForm(kind: FormKind): { title: string; fields: MiniFormRequest["fie
       ],
     }
   }
-  if (kind === "multiselect")
-    return {
-      title: "MCP feature selection",
-      fields: [
-        {
-          key: "features",
-          title: "Features",
-          description: "Select the MCP capabilities to enable",
-          type: "multiselect",
-          options: [
-            { value: "search", label: "Search", description: "Enable indexed lookup" },
-            { value: "export", label: "Export", description: "Enable result export" },
-            { value: "alerts", label: "Alerts", description: "Enable notifications" },
-          ],
-          minItems: 1,
-          maxItems: 3,
-          custom: true,
-        },
-      ],
-    }
-  if (kind === "scalars")
-    return {
-      title: "MCP scalar settings",
-      fields: [
-        { key: "name", title: "Name", type: "string", placeholder: "Demo workspace", required: true },
-        { key: "retries", title: "Retries", type: "integer", minimum: 0, maximum: 9, default: 2 },
-        { key: "threshold", title: "Threshold", type: "number", minimum: 0, maximum: 1, default: 0.5 },
-        { key: "enabled", title: "Enabled", type: "boolean", default: true },
-      ],
-    }
-  if (kind === "external")
-    return {
-      title: "MCP authorization",
-      fields: [
-        {
-          key: "authorization",
-          type: "external",
-          url: "https://example.com/opencode-demo",
-          title: "Authorize demo MCP server",
-          description: "Complete authorization in your browser",
-        },
-      ],
-    }
   return {
-    title: "Unsupported Form preview",
+    title: "MCP authorization",
     fields: [
       {
-        key: "code",
-        title: "Access code",
-        description: "Pattern constraints are intentionally unsupported in Mini",
-        type: "string",
-        pattern: "^[A-Z]{4}$",
+        key: "authorization",
+        type: "external",
+        url: "https://example.com/opencode-demo",
+        title: "Authorize demo MCP server",
+        description: "Complete authorization in your browser",
       },
     ],
   }

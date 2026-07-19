@@ -51,63 +51,25 @@ export type RunCommand = {
   name: string
   description?: string
   source?: string
-  template?: string
-  hints?: unknown[]
-  agent?: string
-  model?: {
-    [key: string]: unknown
-  }
-  subtask?: boolean
 }
 
 export type RunProviderModel = {
-  id: string
-  providerID: string
-  api?: {
-    [key: string]: unknown
-  }
   name?: string
-  capabilities?: {
-    [key: string]: unknown
-  }
   cost?: {
     input: number
-    output?: number
-    cache?: {
-      read: number
-      write: number
-    }
-  }
-  limit?: {
-    context: number
-    input?: number
-    output?: number
   }
   status?: string
-  options?: {
-    [key: string]: unknown
-  }
-  headers?: {
-    [key: string]: string
-  }
-  release_date?: string
   variants?: Record<string, unknown>
 }
 
 export type RunProvider = {
   id: string
   name: string
-  source?: string
-  env?: string[]
-  options?: {
-    [key: string]: unknown
-  }
   models: Record<string, RunProviderModel>
 }
 
 export type RunPrompt = {
   messageID?: string
-  partID?: string
   text: string
   parts: RunPromptPart[]
   mode?: "shell"
@@ -121,14 +83,12 @@ export type RunPrompt = {
 
 export type FooterQueuedPrompt = {
   messageID: string
-  partID: string
   prompt: RunPrompt
 }
 
 export type RunAgent = {
   id: string
   name: string
-  description?: string
   mode: "subagent" | "primary" | "all"
   hidden: boolean
 }
@@ -138,25 +98,16 @@ export type RunReference = ReferenceListOutput["data"][number]
 export type RunInput = {
   sdk: OpenCodeClient
   location: LocationGetOutput
-  projectID: string
-  sessionID: string
-  sessionTitle?: string
-  resume?: boolean
-  replay?: boolean
-  replayLimit?: number
   agent: string | undefined
   model: PromptModel | undefined
   variant: string | undefined
   files: RunFilePart[]
-  initialInput?: string
-  thinking?: boolean
   demo?: boolean
 }
 
 export type MiniHost = {
   terminal: {
     stdin: NodeJS.ReadStream
-    cleanup(): void
   }
   platform: NodeJS.Platform
   stdout: {
@@ -175,8 +126,6 @@ export type MiniHost = {
   }
   paths: {
     home: string
-    state: string
-    log: string
   }
   signals: {
     sigint: {
@@ -191,15 +140,9 @@ export type MiniHost = {
     now(): number
   }
   diagnostics: {
-    pid: number
-    cwd: string
-    argv: readonly string[]
     trace?: {
       write(type: string, data?: unknown): void
     }
-  }
-  themes: {
-    discover(): Promise<Record<string, unknown>>
   }
   preferences: {
     resolveVariant(model: RunInput["model"]): Promise<string | undefined>
@@ -220,7 +163,6 @@ export type FooterState = {
   status: string
   queue: number
   model: string
-  duration: string
   usage: string
   first: boolean
   interrupt: number
@@ -230,8 +172,6 @@ export type FooterState = {
 // A partial update to FooterState. The footer merges this onto the current state.
 export type FooterPatch = Partial<FooterState>
 
-export type RunDiffStyle = "auto" | "split" | "unified"
-
 export type TurnSummary = {
   agent: string
   model: string
@@ -239,8 +179,6 @@ export type TurnSummary = {
 }
 
 export type ScrollbackOptions = {
-  diffStyle?: RunDiffStyle
-  diffWrap?: "word" | "none"
   suppressBackgrounds?: boolean
 }
 
@@ -354,19 +292,15 @@ export type FooterPromptRoute =
 
 export type FooterSubagentTab = {
   sessionID: string
-  partID: string
-  callID: string
   label: string
   description: string
   status: "running" | "completed" | "cancelled" | "error"
   background?: boolean
   title?: string
-  toolCalls?: number
   lastUpdatedAt: number
 }
 
 export type FooterSubagentDetail = {
-  sessionID: string
   commits: StreamCommit[]
 }
 
@@ -433,9 +367,6 @@ export type FooterEvent =
       queue: number
     }
   | {
-      type: "turn.wait"
-    }
-  | {
       type: "turn.idle"
       queue: number
     }
@@ -471,7 +402,7 @@ export type FormCancel = {
   location?: LocationRef
 }
 
-export type RunTuiConfig = Pick<Config.Resolved, "keybinds" | "leader" | "theme" | "diffs" | "session">
+export type RunTuiConfig = Pick<Config.Resolved, "keybinds" | "leader" | "theme" | "session">
 
 // Lifecycle phase of a scrollback entry. "start" opens the entry, "progress"
 // appends content (coalesced in the footer queue), "final" closes it.
@@ -500,24 +431,12 @@ export type StreamCommit = {
   toolState?: StreamToolState
   toolError?: string
   shell?: {
-    callID: string
     command: string
   }
 }
 
-export type LocalReplayAnchor = {
-  kind: EntryKind
-  text: string
-  phase: StreamPhase
-  messageID?: string
-  partID?: string
-  toolState?: StreamToolState
-  visible?: string
-}
-
 export type LocalReplayRow = {
   commit: StreamCommit
-  after?: LocalReplayAnchor
 }
 
 // The public contract between the stream transport / prompt queue and

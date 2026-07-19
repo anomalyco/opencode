@@ -167,17 +167,6 @@ export function mergeInput(message: string | undefined, piped: string | undefine
   return message + "\n" + piped
 }
 
-export function pickRunModel(
-  explicit: { providerID: string; modelID: string } | undefined,
-  variant: string | undefined,
-  session: { providerID: string; modelID: string } | undefined,
-  fallback: { providerID: string; modelID: string } | undefined,
-) {
-  if (explicit) return explicit
-  if (!variant) return
-  return session ?? fallback
-}
-
 function formatMessage(message: string[]) {
   const value = message.map((part) => (part.includes(" ") ? `"${part.replace(/"/g, '\\"')}"` : part)).join(" ")
   return value || undefined

@@ -3,7 +3,7 @@ import { ClientError, OpenCode } from "@opencode-ai/client/promise"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import path from "node:path"
 import { createMiniConnection, mergeInput as mergeInteractiveInput, resolveMiniTarget } from "../src/mini"
-import { mergeInput as mergeNonInteractiveInput, parseRunModel, pickRunModel } from "../src/run/run"
+import { mergeInput as mergeNonInteractiveInput, parseRunModel } from "../src/run/run"
 import { parseSessionTargetModel } from "../src/session-target"
 
 async function cli(args: string[]) {
@@ -100,17 +100,6 @@ describe("mini command", () => {
   test("merges non-interactive argument and stdin input", () => {
     expect(mergeNonInteractiveInput("from args", "from stdin")).toBe("from args\nfrom stdin")
     expect(mergeNonInteractiveInput(undefined, "from stdin")).toBe("from stdin")
-  })
-
-  test("applies a variant to a resumed session's model", () => {
-    expect(
-      pickRunModel(
-        undefined,
-        "high",
-        { providerID: "session-provider", modelID: "session-model" },
-        { providerID: "default-provider", modelID: "default-model" },
-      ),
-    ).toEqual({ providerID: "session-provider", modelID: "session-model" })
   })
 
   test("parses model variants from the model reference", () => {

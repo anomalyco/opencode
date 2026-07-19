@@ -28,11 +28,10 @@ import {
   permissionShift,
   type PermissionOption,
 } from "./permission.shared"
-import { resolveDiffView } from "./diff"
 import { footerWidthPolicy } from "./footer.width"
 import { toolFiletype } from "./tool"
 import { transparent, type RunBlockTheme, type RunFooterTheme } from "./theme"
-import type { MiniPermissionRequest, PermissionReply, RunDiffStyle } from "./types"
+import type { MiniPermissionRequest, PermissionReply } from "./types"
 
 function buttons(
   list: PermissionOption[],
@@ -134,15 +133,12 @@ export function RunPermissionBody(props: {
   directory?: () => string
   theme: RunFooterTheme
   block: RunBlockTheme
-  diffStyle?: RunDiffStyle
-  diffWrap?: "word" | "none"
   onReply: (input: PermissionReply) => void | Promise<void>
 }) {
   const dims = useTerminalDimensions()
   const [state, setState] = createSignal(createPermissionBodyState(props.request))
   const info = createMemo(() => permissionInfo(props.request, props.directory?.()))
   const ft = createMemo(() => toolFiletype(info().file))
-  const diffView = createMemo(() => resolveDiffView(props.diffStyle, dims().width))
   const narrow = createMemo(() => footerWidthPolicy(dims().width).dialog.narrow)
   const opts = createMemo(() =>
     permissionOptions(state().stage).filter((option) => option !== "always" || (props.request.save?.length ?? 0) > 0),
@@ -404,12 +400,12 @@ export function RunPermissionBody(props: {
                   >
                     <diff
                       diff={info().diff!}
-                      view={diffView()}
+                      view="unified"
                       filetype={ft()}
                       syntaxStyle={props.block.syntax}
                       showLineNumbers={true}
                       width="100%"
-                      wrapMode={props.diffWrap ?? "word"}
+                      wrapMode="word"
                       fg={props.theme.text}
                       addedBg={props.block.diffAddedBg}
                       removedBg={props.block.diffRemovedBg}

@@ -14,7 +14,6 @@ test("down opens subagents from an empty prompt", async () => {
     status: "",
     queue: 0,
     model: "gpt-5",
-    duration: "",
     usage: "",
     first: false,
     interrupt: 0,
@@ -25,8 +24,6 @@ test("down opens subagents from an empty prompt", async () => {
     tabs: [
       {
         sessionID: "subagent-1",
-        partID: "part-1",
-        callID: "call-1",
         label: "Explore",
         description: "Inspect the keymap",
         status: "running",
@@ -59,7 +56,6 @@ test("down opens subagents from an empty prompt", async () => {
           subagent={subagents}
           theme={() => RUN_THEME_FALLBACK}
           tuiConfig={config}
-          agent="opencode"
           onSubmit={() => true}
           onPermissionReply={() => {}}
           onFormReply={() => {}}

@@ -6,11 +6,11 @@ export type EntryFlags = {
   trailingNewline: boolean
 }
 
-export const RUN_ENTRY_NONE: RunEntryBody = {
+const RUN_ENTRY_NONE: RunEntryBody = {
   type: "none",
 }
 
-export function cleanRunText(text: string): string {
+function cleanRunText(text: string): string {
   return text.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
 }
 

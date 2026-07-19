@@ -1460,35 +1460,11 @@ function structuredBody(commit: StreamCommit, raw: string): RunEntryBody | undef
   }
 }
 
-const STRUCTURED_FALLBACK_DEPTH = 4
-const STRUCTURED_FALLBACK_ITEMS = 20
 const STRUCTURED_FALLBACK_LENGTH = 4_096
 
 function structuredFallback(value: ToolDict): RunEntryBody | undefined {
   if (Object.keys(value).length === 0) return
-  const seen = new WeakSet<object>()
-  const bounded = (item: unknown, depth: number): unknown => {
-    if (!item || typeof item !== "object") {
-      if (typeof item === "bigint") return String(item)
-      return item
-    }
-    if (seen.has(item)) return "[circular]"
-    if (depth >= STRUCTURED_FALLBACK_DEPTH) return Array.isArray(item) ? "[items omitted]" : "[properties omitted]"
-    seen.add(item)
-    if (Array.isArray(item)) {
-      const result = item.slice(0, STRUCTURED_FALLBACK_ITEMS).map((entry) => bounded(entry, depth + 1))
-      if (item.length > STRUCTURED_FALLBACK_ITEMS) result.push(`[${item.length - STRUCTURED_FALLBACK_ITEMS} more items]`)
-      return result
-    }
-    const entries = Object.entries(item)
-    const result = Object.fromEntries(
-      entries.slice(0, STRUCTURED_FALLBACK_ITEMS).map(([key, entry]) => [key, bounded(entry, depth + 1)]),
-    )
-    if (entries.length > STRUCTURED_FALLBACK_ITEMS)
-      result["..."] = `[${entries.length - STRUCTURED_FALLBACK_ITEMS} more properties]`
-    return result
-  }
-  const content = JSON.stringify(bounded(value, 0), null, 2)
+  const content = JSON.stringify(value, null, 2)
   if (!content) return
   const suffix = "\n... [truncated]"
   return {

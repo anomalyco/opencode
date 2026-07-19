@@ -53,6 +53,14 @@ export function isNewCommand(input: string): boolean {
   return input.trim().toLowerCase() === "/new"
 }
 
+export function slashHead(text: string) {
+  if (!text.startsWith("/")) return
+  const end = text.slice(1).search(/[ \t\n]/)
+  if (end === -1) return { name: text.slice(1), arguments: "", end: text.length }
+  const split = end + 1
+  return { name: text.slice(1, split), arguments: text.slice(split + 1), end: split }
+}
+
 export function createPromptHistory(items?: RunPrompt[]): PromptHistoryState {
   const list = (items ?? []).filter((item) => item.text.trim().length > 0).map(promptCopy)
   const next: RunPrompt[] = []

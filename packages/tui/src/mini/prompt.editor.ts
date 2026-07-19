@@ -1,4 +1,5 @@
 import type { RunPromptPart } from "./types"
+import { slashHead } from "./prompt.shared"
 
 type Mention = Extract<RunPromptPart, { type: "file" | "agent" }>
 
@@ -55,29 +56,6 @@ export function realignEditorPromptParts(content: string, parts: RunPromptPart[]
   }
 
   return next
-}
-
-function slashHead(text: string) {
-  if (!text.startsWith("/")) {
-    return
-  }
-
-  for (let i = 1; i < text.length; i++) {
-    switch (text[i]) {
-      case " ":
-      case "\t":
-      case "\n":
-        return {
-          name: text.slice(1, i),
-          arguments: text.slice(i + 1),
-        }
-    }
-  }
-
-  return {
-    name: text.slice(1),
-    arguments: "",
-  }
 }
 
 function promptPartText(part: Mention) {

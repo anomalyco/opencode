@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
 import { OpenCode } from "@opencode-ai/client/promise"
 import type { Resolved } from "../../src/config"
-import { resolveDiffStyle, resolveModelInfo, resolveRunTuiConfig } from "../../src/mini/runtime.boot"
+import { resolveModelInfo, resolveRunTuiConfig } from "../../src/mini/runtime.boot"
 import { createTuiResolvedConfig } from "./fixture/tui-runtime"
 
 function ok<T>(data: T) {
@@ -66,7 +66,6 @@ function model(id: string, providerID: string, context: number, variants: string
 function config(input?: {
   leader?: string
   leaderTimeout?: number
-  diff_style?: "auto" | "stacked"
   bindings?: Partial<{
     commandList: string[]
     variantCycle: string[]
@@ -80,7 +79,6 @@ function config(input?: {
 }): Resolved {
   const bind = input?.bindings
   return createTuiResolvedConfig({
-    diff_style: input?.diff_style,
     leader_timeout: input?.leaderTimeout,
     keybinds: {
       ...(input?.leader && { leader: input.leader }),
@@ -135,7 +133,6 @@ describe("run runtime boot", () => {
 
     expect(result.keybinds.get("leader")?.[0]?.key).toBe("ctrl+x")
     expect(result.leader.timeout).toBe(2000)
-    expect(result.diffs?.view).toBeUndefined()
     expect(result.keybinds.get("command.palette.show")?.[0]?.key).toBe("ctrl+p")
     expect(result.keybinds.get("variant.cycle")?.[0]?.key).toBe("ctrl+t")
     expect(result.keybinds.get("session.interrupt")?.[0]?.key).toBe("escape")
@@ -152,21 +149,18 @@ describe("run runtime boot", () => {
     expect(result.keybinds.get("leader")).toEqual([])
   })
 
-  test("preserves current theme, leader, diff, and thinking config", async () => {
+  test("preserves current theme mode, leader, and thinking config", async () => {
     const result = await resolveRunTuiConfig(
       createTuiResolvedConfig({
-        theme: { name: "tokyonight", mode: "light" },
+        theme: { mode: "light" },
         leader_timeout: 450,
-        diffs: { view: "unified", wrap: "none" },
         session: { thinking: "hide" },
       }),
     )
 
-    expect(result.theme).toEqual({ name: "tokyonight", mode: "light" })
+    expect(result.theme).toEqual({ mode: "light" })
     expect(result.leader.timeout).toBe(450)
-    expect(result.diffs).toEqual({ view: "unified", wrap: "none" })
     expect(result.session?.thinking).toBe("hide")
-    await expect(resolveDiffStyle(result)).resolves.toBe("unified")
   })
 
   test("loads v2 providers and models for model selector data", async () => {
@@ -176,34 +170,16 @@ describe("run runtime boot", () => {
     const providerList = spyOn(sdk.provider, "list").mockImplementation(() => ok({ data: providers }) as never)
     spyOn(sdk.model, "list").mockImplementation(() => ok({ data: models }) as never)
 
-    await expect(
-      resolveModelInfo(sdk, { directory: "/workspace" }, { providerID: "openai", modelID: "gpt-5" }),
-    ).resolves.toEqual({
+    await expect(resolveModelInfo(sdk, { directory: "/workspace" })).resolves.toEqual({
       providers: [
         {
           id: "openai",
           name: "OpenAI",
           models: {
             "gpt-5": {
-              id: "gpt-5",
-              providerID: "openai",
               name: "gpt-5",
-              capabilities: {
-                tools: true,
-                input: ["text"],
-                output: ["text"],
-              },
               cost: {
                 input: 0,
-                output: 0,
-                cache: {
-                  read: 0,
-                  write: 0,
-                },
-              },
-              limit: {
-                context: 128000,
-                output: 8192,
               },
               status: "active",
               variants: {
@@ -214,55 +190,10 @@ describe("run runtime boot", () => {
           },
         },
       ],
-      variants: ["high", "minimal"],
-      limits: {
-        "openai/gpt-5": 128000,
-      },
     })
     expect(providerList).toHaveBeenCalledWith({
       location: {
         directory: "/workspace",
-      },
-    })
-  })
-
-  test("loads context limits across v2 providers", async () => {
-    const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
-    const providers = [provider("openai", "OpenAI"), provider("anthropic", "Anthropic")]
-    const models = [model("gpt-5", "openai", 128000, ["high", "minimal"]), model("sonnet", "anthropic", 200000)]
-    spyOn(sdk.provider, "list").mockImplementation(() => ok({ data: providers }) as never)
-    spyOn(sdk.model, "list").mockImplementation(() => ok({ data: models }) as never)
-
-    await expect(
-      resolveModelInfo(sdk, { directory: "/workspace" }, { providerID: "openai", modelID: "gpt-5" }),
-    ).resolves.toEqual({
-      providers: [
-        expect.objectContaining({
-          id: "openai",
-          name: "OpenAI",
-          models: expect.objectContaining({
-            "gpt-5": expect.objectContaining({
-              variants: {
-                high: {},
-                minimal: {},
-              },
-            }),
-          }),
-        }),
-        expect.objectContaining({
-          id: "anthropic",
-          name: "Anthropic",
-          models: expect.objectContaining({
-            sonnet: expect.objectContaining({
-              variants: {},
-            }),
-          }),
-        }),
-      ],
-      variants: ["high", "minimal"],
-      limits: {
-        "openai/gpt-5": 128000,
-        "anthropic/sonnet": 200000,
       },
     })
   })
