@@ -5,6 +5,7 @@ import {
   createMemo,
   createResource,
   createRoot,
+  createSignal,
   For,
   Match,
   on,
@@ -35,12 +36,12 @@ import { usePlatform } from "@/context/platform"
 import { DateTime } from "luxon"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useDirectoryPicker } from "@/components/directory-picker"
-import { useSettingsDialog } from "@/components/settings-dialog"
+import { useSettingsCommand } from "@/components/settings-dialog"
 import { DialogSelectServer, useServerManagementController } from "@/components/dialog-select-server"
 import { DialogServerV2 } from "@/components/settings-v2/dialog-server-v2"
 import { ServerConnection, serverName, useServer } from "@/context/server"
 import { sessionHasOpenTab, useTabs } from "@/context/tabs"
-import { useServerSync, type ServerSync } from "@/context/server-sync"
+import { useServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
 import { useNotification } from "@/context/notification"
 import {
@@ -50,7 +51,6 @@ import {
   getProjectAvatarSource,
   homeProjectDirectories,
   projectForSession,
-  sortedRootSessions,
   toggleHomeProjectSelection,
 } from "@/pages/layout/helpers"
 import { SessionTabAvatar } from "@/pages/layout/session-tab-avatar"
@@ -69,11 +69,33 @@ import { archiveHomeSession } from "./home-session-archive"
 import { shouldOpenSessionInBackground } from "./home-session-open"
 import { showToast } from "@/utils/toast"
 import { fileManagerApp } from "@/utils/file-manager"
+import {
+  loadHomeSessionIndex,
+  retainHomeSessions,
+  type HomeSessionEvents,
+} from "@/context/global-sync/home-session-index"
 
 const HOME_SESSION_LIMIT = 64
 const HOME_SESSION_HEADER_STICKY_TOP = 12
 const HOME_SESSION_HEADER_TEXT_HEIGHT = 16
 const HOME_SESSION_HEADER_FADE_DISTANCE = 16
+
+function containHomeWheel(event: WheelEvent, viewport: HTMLElement) {
+  if (event.defaultPrevented || event.ctrlKey || !event.deltaY) return
+  if (!(event.target instanceof Element)) return
+
+  const scrollable = event.target.closest<HTMLElement>("[data-scrollable]")
+  if (
+    scrollable !== viewport &&
+    scrollable &&
+    (event.deltaY < 0
+      ? scrollable.scrollTop > 0
+      : scrollable.scrollTop < scrollable.scrollHeight - scrollable.clientHeight)
+  )
+    return
+
+  event.preventDefault()
+}
 const SHOW_HOME_SESSION_ARCHIVE = false
 const HOME_ROW_LAYOUT =
   "flex min-w-0 w-full shrink-0 cursor-default items-center rounded-[6px] bg-transparent text-left transition-[background-color,color,box-shadow] duration-[120ms] ease-in-out focus-visible:outline-none"
@@ -106,22 +128,24 @@ const HOME_SEARCH_RESULT_META =
 let pendingHomeNavigation: { server: ServerConnection.Key; href: string } | undefined
 
 function buildHomeSessionRecords(input: {
-  sync: Pick<ServerSync, "child">
+  sessions: () => Session[]
   projectDirectories: () => string[]
   projects: () => LocalProject[]
   projectByID: () => Map<string, LocalProject>
 }) {
-  return [
-    ...new Map(
-      input
-        .projectDirectories()
-        .flatMap((directory) => sortedRootSessions(input.sync.child(directory, { bootstrap: false })[0], Date.now()))
-        .map((session) => [`${pathKey(session.directory)}:${session.id}`, session] as const),
-    ).values(),
-  ]
+  const directories = new Set(input.projectDirectories().map(pathKey))
+  const sessions = input.sessions().filter((session) => directories.has(pathKey(session.directory)))
+  return [...new Map(sessions.map((session) => [session.id, session] as const)).values()]
     .sort((a, b) => (b.time.updated ?? b.time.created) - (a.time.updated ?? a.time.created))
     .flatMap((session) => {
-      const project = projectForSession(session, input.projects(), input.projectByID())
+      const directory = pathKey(session.directory)
+      const project =
+        input
+          .projects()
+          .find(
+            (item) =>
+              pathKey(item.worktree) === directory || item.sandboxes?.some((sandbox) => pathKey(sandbox) === directory),
+          ) ?? projectForSession(session, input.projects(), input.projectByID())
       if (!project) return []
       return {
         session,
@@ -144,6 +168,7 @@ function useHomeSessionHeaderOpacity(groups: () => HomeSessionGroup[]) {
   let content: HTMLDivElement | undefined
   let positionFrame: number | undefined
   let resizeObserver: ResizeObserver | undefined
+  let stickyTop = HOME_SESSION_HEADER_STICKY_TOP
   const headerRefs = new Map<HomeSessionGroup["id"], HTMLDivElement>()
   const headerOffsets = new Map<HomeSessionGroup["id"], number>()
   const [state, setState] = createStore({
@@ -202,6 +227,13 @@ function useHomeSessionHeaderOpacity(groups: () => HomeSessionGroup[]) {
 
   function updatePositionCache() {
     if (!viewport) return
+    const header = groups()
+      .map((group) => headerRefs.get(group.id))
+      .find((el) => el !== undefined)
+    if (header && typeof getComputedStyle === "function") {
+      const top = Number.parseFloat(getComputedStyle(header).top)
+      if (Number.isFinite(top)) stickyTop = top
+    }
     groups().forEach((group) => {
       const el = headerRefs.get(group.id)
       if (!el) return
@@ -217,7 +249,7 @@ function useHomeSessionHeaderOpacity(groups: () => HomeSessionGroup[]) {
         .slice(index + 1)
         .map((item) => headerOffsets.get(item.id))
         .find((offset) => offset !== undefined)
-      const fadeEnd = HOME_SESSION_HEADER_STICKY_TOP + HOME_SESSION_HEADER_TEXT_HEIGHT
+      const fadeEnd = stickyTop + HOME_SESSION_HEADER_TEXT_HEIGHT
       const nextTop = nextOffset === undefined ? undefined : nextOffset - scrollTop
       const opacity =
         nextTop === undefined ? 1 : Math.max(0, Math.min(1, (nextTop - fadeEnd) / HOME_SESSION_HEADER_FADE_DISTANCE))
@@ -269,8 +301,11 @@ export function NewHome() {
   const command = useCommand()
   const notification = useNotification()
   const marked = useMarked()
-  const openSettings = useSettingsDialog()
+  const openSettings = useSettingsCommand()
   let focusSessionSearch: (() => void) | undefined
+  let sessionViewport: HTMLDivElement | undefined
+  const [sessionThumbTrack, setSessionThumbTrack] = createSignal<HTMLDivElement>()
+  const [sessionHoverTarget, setSessionHoverTarget] = createSignal<HTMLElement>()
   const [state, setState] = createStore({
     search: "",
     searchFocused: false,
@@ -286,6 +321,7 @@ export function NewHome() {
     return global.ensureServerCtx(conn)
   })
   const focusedSync = () => focusedServerCtx()?.sync ?? sync()
+  const homeSessions = () => focusedSync().homeSessions
   const projects = createMemo(() => focusedServerCtx()?.projects.list() ?? layout.projects.list())
   const recentlyClosed = createMemo(
     () => focusedServerCtx()?.projects.recentlyClosed() ?? layout.projects.recentlyClosed(),
@@ -318,24 +354,47 @@ export function NewHome() {
     }
     return language.t("home.sessions.search.placeholder")
   })
+  const sessionEventLoad = useQuery(() => ({
+    queryKey: homeSessions().eventsKey,
+    queryFn: async (): Promise<HomeSessionEvents> => ({ sequence: 0, entries: [] }),
+    initialData: { sequence: 0, entries: [] } satisfies HomeSessionEvents,
+    enabled: false,
+  }))
   const sessionLoad = useQuery(() => ({
-    queryKey: ["home", "sessions", selection().server, ...projectDirectories()] as const,
-    queryFn: async () => {
-      await Promise.all(
-        projectDirectories().map((directory) =>
-          focusedSync().project.loadSessions(directory, { limit: HOME_SESSION_LIMIT }),
-        ),
+    queryKey: homeSessions().indexKey,
+    enabled: !!focusedServerCtx(),
+    queryFn: async ({ signal }) => {
+      const ctx = focusedServerCtx()
+      if (!ctx) return { sessions: [], eventSequence: 0 }
+      const cache = homeSessions()
+      const eventSequence = cache.eventSequence()
+      const index = await loadHomeSessionIndex(
+        (input, options) => ctx.sdk.client.v2.session.list(input, options),
+        eventSequence,
+        signal,
       )
-      return null
+      cache.complete(eventSequence)
+      return index
     },
+    retry: false,
+    staleTime: 30_000,
+    refetchOnMount: true,
+    refetchOnReconnect: true,
   }))
 
   const projectByID = createMemo(
     () => new Map(projects().flatMap((project) => (project.id ? [[project.id, project] as const] : []))),
   )
+  const indexedSessions = createMemo(() =>
+    retainHomeSessions(
+      homeSessions().sessions(sessionLoad.data, sessionEventLoad.data),
+      HOME_SESSION_LIMIT,
+      Date.now(),
+    ),
+  )
   const allRecords = createMemo(() =>
     buildHomeSessionRecords({
-      sync: focusedSync(),
+      sessions: indexedSessions,
       projectDirectories,
       projects,
       projectByID,
@@ -363,8 +422,7 @@ export function NewHome() {
         prefetched.add(key)
         createRoot((dispose) => {
           try {
-            const directory = ctx.sync.ensureDirSyncContext(record.session.directory)
-            void directory.session
+            void ctx.sync.session
               .sync(record.session.id)
               .then(() => {
                 return Promise.all(
@@ -402,6 +460,34 @@ export function NewHome() {
   }
 
   command.register("home", () => [
+    {
+      id: "command.palette",
+      title: language.t("command.palette"),
+      hidden: true,
+      onSelect: async () => {
+        const conn = focusedServer()
+        if (!conn) return
+        const ctx = global.ensureServerCtx(conn)
+        const { DialogHomeCommandPaletteV2 } = await import("@/components/dialog-command-palette-v2")
+        void dialog.show(() => (
+          <DialogHomeCommandPaletteV2
+            server={conn}
+            onSelectSession={(entry) => {
+              if (!entry.sessionID || !entry.directory || !entry.server) return
+              const sessionID = entry.sessionID
+              const server = entry.server
+              const directory = entry.project?.worktree ?? entry.directory
+              ctx.projects.open(directory)
+              ctx.projects.touch(directory)
+              void startTransition(() => {
+                const tab = tabs.addSessionTab({ server, sessionId: sessionID })
+                tabs.select(tab)
+              })
+            }}
+          />
+        ))
+      },
+    },
     {
       id: "home.sessions.search.focus",
       title: searchPlaceholder(),
@@ -484,7 +570,13 @@ export function NewHome() {
   }
 
   function openSession(session: Session, options?: OpenSessionOptions) {
-    const project = projectForSession(session, projects(), projectByID())
+    const directoryKey = pathKey(session.directory)
+    const project =
+      projects().find(
+        (item) =>
+          pathKey(item.worktree) === directoryKey ||
+          item.sandboxes?.some((sandbox) => pathKey(sandbox) === directoryKey),
+      ) ?? projectForSession(session, projects(), projectByID())
     const conn = focusedServer()
     if (!conn) return
     const directory = project?.worktree ?? session.directory
@@ -541,127 +633,158 @@ export function NewHome() {
   }
 
   return (
-    <div class="rounded-[10px] shadow-[var(--v2-elevation-raised)] m-2 min-h-0 lg:overflow-hidden bg-v2-background-bg-base self-stretch flex-1">
-      <div class="mx-auto grid h-full w-full max-w-[1080px] grid-rows-[auto_minmax(0,1fr)_auto] gap-4 px-3 lg:grid-cols-[280px_minmax(0,720px)] lg:grid-rows-1 lg:gap-8 lg:px-6">
-        <HomeProjectColumn
-          projects={projects()}
-          recentlyClosed={recentlyClosed()}
-          homedir={homedir()}
-          selected={selection()}
-          focusServer={focusServer}
-          selectProject={selectProject}
-          openNewSession={openProjectNewSession}
-          openRecentProject={(conn, directory) => addProjects(conn, [directory])}
-          chooseProject={(conn) => void chooseProject(conn)}
-          editProject={editProject}
-          closeProject={(conn, directory) => {
-            const next = closeHomeProject(
-              selection(),
-              ServerConnection.key(conn),
-              global.ensureServerCtx(conn).projects,
-              directory,
-            )
-            if (next) setSelection(next)
-          }}
-          clearNotifications={clearNotifications}
-          unseenCount={unseenCount}
-          openSettings={openSettings}
-          openHelp={() => platform.openLink("https://opencode.ai/desktop-feedback")}
-          language={language}
-        />
-
-        <section
-          class="min-h-0 min-w-0 flex-1 flex flex-col pt-6 lg:pt-12 relative"
-          aria-label={language.t("sidebar.project.recentSessions")}
-        >
-          <HomeSessionSearch
-            value={state.search}
-            placeholder={searchPlaceholder()}
-            open={searchOpen()}
-            loading={sessionLoad.isLoading}
-            results={searchResults()}
-            showProjectName={!selectedProject()}
-            server={selection().server}
-            noResultsLabel={language.t("home.sessions.search.noResults", { query: search() })}
-            bindFocus={(focus) => {
-              focusSessionSearch = focus
+    <div class="rounded-[10px] shadow-[var(--v2-elevation-raised)] m-2 min-h-0 overflow-hidden bg-v2-background-bg-base self-stretch flex-1">
+      <ScrollView
+        class="h-full [container-type:size]"
+        thumbContainer={sessionThumbTrack}
+        thumbHoverTarget={sessionHoverTarget}
+        viewportRef={(el) => {
+          sessionViewport = el
+          sessionHeaderOpacity.setViewport(el)
+        }}
+        onScroll={(event) => sessionHeaderOpacity.update(event.currentTarget.scrollTop)}
+        onWheel={(event) => {
+          if (!sessionViewport) return
+          if (event.target instanceof Node && sessionViewport.contains(event.target)) return
+          containHomeWheel(event, sessionViewport)
+        }}
+      >
+        <div class="mx-auto grid min-h-full w-full max-w-[1080px] grid-rows-[auto_minmax(0,1fr)_auto] gap-4 px-3 lg:grid-cols-[280px_minmax(0,720px)] lg:grid-rows-1 lg:gap-8 lg:px-6">
+          <HomeProjectColumn
+            projects={projects()}
+            recentlyClosed={recentlyClosed()}
+            homedir={homedir()}
+            selected={selection()}
+            focusServer={focusServer}
+            selectProject={selectProject}
+            openNewSession={openProjectNewSession}
+            openRecentProject={(conn, directory) => addProjects(conn, [directory])}
+            chooseProject={(conn) => void chooseProject(conn)}
+            editProject={editProject}
+            closeProject={(conn, directory) => {
+              const next = closeHomeProject(
+                selection(),
+                ServerConnection.key(conn),
+                global.ensureServerCtx(conn).projects,
+                directory,
+              )
+              if (next) setSelection(next)
             }}
-            onInput={(value) => setState("search", value)}
-            onFocus={() => setState("searchFocused", true)}
-            onClose={closeSearch}
-            onSelect={selectSearchSession}
+            clearNotifications={clearNotifications}
+            unseenCount={unseenCount}
+            openSettings={openSettings}
+            openHelp={() => platform.openLink("https://opencode.ai/desktop-feedback")}
+            language={language}
+            onWheel={(event) => {
+              if (sessionViewport) containHomeWheel(event, sessionViewport)
+            }}
           />
-          <ScrollView
-            class="mt-3 -mr-3 min-h-0 flex-1 relative"
-            viewportRef={sessionHeaderOpacity.setViewport}
-            onScroll={(event) => sessionHeaderOpacity.update(event.currentTarget.scrollTop)}
+
+          <section
+            ref={setSessionHoverTarget}
+            class="min-h-0 min-w-0 flex-1 flex flex-col"
+            aria-label={language.t("sidebar.project.recentSessions")}
           >
-            <Show when={groups().length > 0 && newSessionProject()}>
-              <div class="pointer-events-none absolute top-3 right-3 z-20 flex">
-                <ButtonV2
-                  data-action="home-new-session"
-                  variant="ghost-muted"
-                  size="normal"
-                  icon="edit"
-                  class="pointer-events-auto h-7 px-2 [font-weight:530]"
-                  onClick={openNewSession}
-                >
-                  {language.t("command.session.new")}
-                </ButtonV2>
-              </div>
-            </Show>
-            <Show
-              when={!sessionLoad.isLoading}
-              fallback={
-                <div class="pt-3">
-                  <HomeSessionSkeleton label={language.t("common.loading")} />
-                </div>
-              }
+            <div
+              class="sticky top-0 z-30 shrink-0 bg-v2-background-bg-base pb-3 pt-6 lg:pt-12"
+              onWheel={(event) => {
+                if (sessionViewport) containHomeWheel(event, sessionViewport)
+              }}
             >
-              <Show
-                when={groups().length > 0}
-                fallback={<HomeSessionsEmpty onNewSession={newSessionProject() ? openNewSession : undefined} />}
-              >
-                <div ref={sessionHeaderOpacity.setContentRef} class="flex flex-col pt-3 pr-3 pb-16">
-                  <For each={groups()}>
-                    {(group, index) => (
-                      <>
-                        <HomeSessionGroupHeader
-                          title={group.title}
-                          titleOpacity={sessionHeaderOpacity.titleOpacity(group.id)}
-                          ref={(el) => sessionHeaderOpacity.setHeaderRef(group.id, el)}
-                          elevated={index() === 0}
-                        />
-                        <div
-                          class={`flex min-w-0 flex-col gap-px pt-4 ${index() === groups().length - 1 ? "" : "mb-6"}`}
-                        >
-                          <For each={group.sessions}>
-                            {(record) => (
-                              <HomeSessionRow
-                                record={record}
-                                showProjectName={!selectedProject()}
-                                server={selection().server}
-                                openSession={openSession}
-                                archiveSession={archiveSession}
-                              />
-                            )}
-                          </For>
-                        </div>
-                      </>
-                    )}
-                  </For>
+              <HomeSessionSearch
+                value={state.search}
+                placeholder={searchPlaceholder()}
+                open={searchOpen()}
+                loading={sessionLoad.isLoading}
+                results={searchResults()}
+                showProjectName={!selectedProject()}
+                server={selection().server}
+                noResultsLabel={language.t("home.sessions.search.noResults", { query: search() })}
+                bindFocus={(focus) => {
+                  focusSessionSearch = focus
+                }}
+                onInput={(value) => setState("search", value)}
+                onFocus={() => setState("searchFocused", true)}
+                onClose={closeSearch}
+                onSelect={selectSearchSession}
+              />
+              <Show when={groups().length > 0 && newSessionProject()}>
+                <div class="pointer-events-none absolute right-0 top-[84px] z-20 flex lg:top-[108px]">
+                  <ButtonV2
+                    data-action="home-new-session"
+                    variant="ghost-muted"
+                    size="normal"
+                    icon="edit"
+                    class="pointer-events-auto h-7 px-2 [font-weight:530]"
+                    onClick={openNewSession}
+                  >
+                    {language.t("command.session.new")}
+                  </ButtonV2>
                 </div>
               </Show>
-            </Show>
-          </ScrollView>
-        </section>
-        <HomeUtilityNav
-          class="flex lg:hidden"
-          openSettings={openSettings}
-          openHelp={() => platform.openLink("https://opencode.ai/desktop-feedback")}
-          language={language}
-        />
-      </div>
+            </div>
+            {/* Sticky chrome for the portaled session scrollbar — matches old sessions ScrollView bounds */}
+            <div class="pointer-events-none sticky top-[84px] z-40 h-0 -mr-3 lg:top-[108px]">
+              <div
+                ref={setSessionThumbTrack}
+                data-component="home-session-scroll-track"
+                class="relative ml-auto h-[calc(100cqh-84px)] w-3 lg:h-[calc(100cqh-108px)]"
+              />
+            </div>
+            <div class="-mr-3 min-h-[calc(100cqh-72px)] lg:min-h-[calc(100cqh-96px)]">
+              <Show
+                when={!sessionLoad.isLoading}
+                fallback={
+                  <div class="pt-3">
+                    <HomeSessionSkeleton label={language.t("common.loading")} />
+                  </div>
+                }
+              >
+                <Show
+                  when={groups().length > 0}
+                  fallback={<HomeSessionsEmpty onNewSession={newSessionProject() ? openNewSession : undefined} />}
+                >
+                  <div ref={sessionHeaderOpacity.setContentRef} class="flex flex-col pt-3 pr-3 pb-16">
+                    <For each={groups()}>
+                      {(group, index) => (
+                        <>
+                          <HomeSessionGroupHeader
+                            title={group.title}
+                            titleOpacity={sessionHeaderOpacity.titleOpacity(group.id)}
+                            ref={(el) => sessionHeaderOpacity.setHeaderRef(group.id, el)}
+                            elevated={index() === 0}
+                          />
+                          <div
+                            class={`flex min-w-0 flex-col gap-px pt-4 ${index() === groups().length - 1 ? "" : "mb-6"}`}
+                          >
+                            <For each={group.sessions}>
+                              {(record) => (
+                                <HomeSessionRow
+                                  record={record}
+                                  showProjectName={!selectedProject()}
+                                  server={selection().server}
+                                  openSession={openSession}
+                                  archiveSession={archiveSession}
+                                />
+                              )}
+                            </For>
+                          </div>
+                        </>
+                      )}
+                    </For>
+                  </div>
+                </Show>
+              </Show>
+            </div>
+          </section>
+          <HomeUtilityNav
+            class="flex lg:hidden"
+            openSettings={openSettings}
+            openHelp={() => platform.openLink("https://opencode.ai/desktop-feedback")}
+            language={language}
+          />
+        </div>
+      </ScrollView>
     </div>
   )
 }
@@ -683,6 +806,7 @@ function HomeProjectColumn(props: {
   openSettings: () => void
   openHelp: () => void
   language: ReturnType<typeof useLanguage>
+  onWheel: (event: WheelEvent) => void
 }) {
   const global = useGlobal()
   const dialog = useDialog()
@@ -699,8 +823,12 @@ function HomeProjectColumn(props: {
 
   return (
     <aside
-      class="mt-6 flex min-h-0 min-w-0 flex-col gap-4 overflow-hidden lg:mt-14 lg:pt-[52px]"
+      class="mt-6 flex min-h-0 min-w-0 flex-col gap-4 overflow-hidden lg:sticky lg:top-14 lg:mt-14 lg:h-[calc(100cqh-56px)] lg:self-start lg:pt-[52px]"
       aria-label={props.language.t("home.projects")}
+      onWheel={(event) => {
+        if (event.target === event.currentTarget) return
+        props.onWheel(event)
+      }}
     >
       <div class="flex h-7 min-w-0 shrink-0 items-center justify-between pl-1.5 pr-3">
         <div class="text-v2-text-text-muted [font-weight:530]">{props.language.t("home.projects")}</div>
@@ -795,7 +923,7 @@ function HomeUtilityNav(props: {
   language: ReturnType<typeof useLanguage>
 }) {
   return (
-    <div class={`${props.class ?? ""} min-w-0 flex-col gap-1`}>
+    <div class={`${props.class ?? ""} min-w-0 flex-col gap-1 pr-3`}>
       <button
         type="button"
         class={`${HOME_PROJECT_NAV_ROW} text-v2-text-text-faint [&>[data-slot=icon-svg]]:text-v2-icon-icon-muted`}
@@ -1426,7 +1554,7 @@ function HomeSessionGroupHeader(props: {
   return (
     <div
       ref={props.ref}
-      class={`pointer-events-none sticky top-3 flex h-7 min-w-0 items-center justify-between pl-3 bg-v2-background-bg-base ${props.elevated ? "home-session-group-header z-[5]" : "z-10"}`}
+      class={`pointer-events-none sticky top-[84px] lg:top-[108px] flex h-7 min-w-0 items-center justify-between pl-3 bg-v2-background-bg-base ${props.elevated ? "home-session-group-header z-[5]" : "z-10"}`}
     >
       <div class={HOME_SECTION_LABEL} style={{ opacity: props.titleOpacity }}>
         {props.title}

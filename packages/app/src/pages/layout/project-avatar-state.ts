@@ -13,6 +13,7 @@ export function useSessionTabAvatarState(
   const global = useGlobal()
   const notification = useNotification()
   const permission = usePermission()
+  const permissionState = createMemo(() => permission.ensureServerState(server()))
   const connection = createMemo(() => global.servers.list().find((item) => ServerConnection.key(item) === server()))
   const sync = createMemo(() => {
     const conn = connection()
@@ -23,7 +24,7 @@ export function useSessionTabAvatarState(
     if (!serverSync) return false
     const [store] = serverSync.child(directory(), { bootstrap: false })
     return !!sessionPermissionRequest(store.session, serverSync.session.data.permission, sessionId(), (item) => {
-      return !permission.autoResponds(item, directory())
+      return !permissionState().autoResponds(item, directory())
     })
   })
   const hasQuestions = createMemo(() => {

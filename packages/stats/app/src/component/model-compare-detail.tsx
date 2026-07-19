@@ -1,4 +1,3 @@
-import "../routes/index.css"
 import { Link, Meta, Title } from "@solidjs/meta"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import {
@@ -161,16 +160,11 @@ export default function ModelCompareDetailPage(props: ModelCompareDetailPageProp
       buildComparisonModel(model.lab, model.slug, model.catalog ?? null, stats()?.models[index] ?? null),
     ),
   )
-  const title = createMemo(() => {
-    if (props.family)
-      return `${props.family.first.name} vs ${props.family.second.name}: ${models()[0].name} vs ${models()[1].name}`
-    return `${models()[0].name} vs ${models()[1].name} - Model Comparison`
-  })
-  const description = createMemo(() => {
-    if (props.family)
-      return `Compare the latest ${props.family.first.name} and ${props.family.second.name} models: ${models()[0].name} vs ${models()[1].name}. See benchmarks, usage, price, context length, and features.`
-    return `Compare ${models()[0].name} and ${models()[1].name} by usage, rank, context window, output limit, cache ratio, and cost across OpenCode data.`
-  })
+  const title = createMemo(() => `${models()[0].name} vs ${models()[1].name} - AI Model Comparison`)
+  const description = createMemo(
+    () =>
+      `Compare ${models()[0].name} from ${models()[0].labName} and ${models()[1].name} from ${models()[1].labName} on key metrics including benchmarks, price, context length, usage, and model features.`,
+  )
   const canonicalPath = createMemo(() => {
     if (props.family) return canonicalFamilyComparisonPath(props.family.first, props.family.second)
     const first = firstCatalog()
@@ -268,9 +262,8 @@ export default function ModelCompareDetailPage(props: ModelCompareDetailPageProp
               }}
             />
           </Show>
-          <ComparisonRadar models={models()} catalogModels={catalog()?.models ?? []} />
           <div
-            data-component="compare-detail-table"
+            data-component="compare-detail-comparison"
             data-model-count={models().length}
             style={`--compare-detail-grid: ${comparisonDetailGridTemplate(models().length)}`}
           >
@@ -281,6 +274,7 @@ export default function ModelCompareDetailPage(props: ModelCompareDetailPageProp
             >
               <ComparisonPairSelector catalogModels={selectorModels()} models={models()} />
             </div>
+            <ComparisonRadar models={models()} catalogModels={catalog()?.models ?? []} />
             <div
               data-component="compare-detail-body-scroll"
               ref={(element) => (comparisonBodyScroll = element)}

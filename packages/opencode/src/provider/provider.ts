@@ -277,7 +277,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         },
       }
     }),
-    "azure-cognitive-services": Effect.fnUntraced(function* () {
+    "azure-cognitive-services": Effect.fnUntraced(function* (provider: Info) {
       const resourceName = yield* dep.get("AZURE_COGNITIVE_SERVICES_RESOURCE_NAME")
       return {
         autoload: false,
@@ -285,7 +285,9 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           return selectAzureLanguageModel(sdk, modelID, Boolean(options?.["useCompletionUrls"]))
         },
         options: {
-          baseURL: resourceName ? `https://${resourceName}.cognitiveservices.azure.com/openai` : undefined,
+          baseURL: resourceName
+            ? `https://${resourceName}.cognitiveservices.azure.com/openai${provider.options?.useDeploymentBasedUrls ? "" : "/v1"}`
+            : undefined,
         },
       }
     }),
@@ -1267,14 +1269,7 @@ export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
         id: ModelV2.ID.make(id),
         name: `${model.name} ${mode[0].toUpperCase()}${mode.slice(1)}`,
         cost: opts.cost ? mergeDeep(base.cost, cost(opts.cost)) : base.cost,
-        options: opts.provider?.body
-          ? Object.fromEntries(
-              Object.entries(opts.provider.body).map(([k, v]) => [
-                k.replace(/_([a-z])/g, (_, c) => c.toUpperCase()),
-                v,
-              ]),
-            )
-          : base.options,
+        options: modeOptions(base, opts.provider?.body),
         headers: opts.provider?.headers ?? base.headers,
       }
     }
@@ -1287,6 +1282,17 @@ export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
     options: {},
     models,
   }
+}
+
+function modeOptions(model: Model, body: Record<string, unknown> | undefined) {
+  if (!body) return model.options
+  const options = Object.fromEntries(
+    Object.entries(body).map(([key, value]) => [key.replace(/_([a-z])/g, (_, char) => char.toUpperCase()), value]),
+  )
+  const reasoning = body.reasoning
+  if (model.api.npm !== "@ai-sdk/openai" || !isRecord(reasoning) || typeof reasoning.mode !== "string") return options
+  const { reasoning: _, ...rest } = options
+  return { ...rest, reasoningMode: reasoning.mode }
 }
 
 function modelSuggestions(provider: Info | undefined, modelID: ModelV2.ID, enableExperimentalModels: boolean) {

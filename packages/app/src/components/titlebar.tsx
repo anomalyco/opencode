@@ -392,7 +392,7 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
                   id: "tab.new",
                   category: "tab",
                   title: language.t("command.session.new"),
-                  keybind: "mod+t",
+                  keybind: "mod+t,mod+n",
                   hidden: true,
                   onSelect: openNewTab,
                 },
@@ -660,9 +660,9 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
                       </div>
                     </Show>
                     <div id="opencode-titlebar-left" class="flex items-center gap-3 min-w-0 px-2" />
-                    <ChannelIndicator debugTools={props.debugTools} />
                   </div>
                 </div>
+                <ChannelIndicator debugTools={props.debugTools} />
               </div>
             </div>
 

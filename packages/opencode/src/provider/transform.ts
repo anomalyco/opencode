@@ -1102,7 +1102,8 @@ export function options(input: {
     input.model.providerID === "openai" ||
     input.model.api.npm === "@ai-sdk/openai" ||
     input.model.api.npm === "@ai-sdk/github-copilot" ||
-    input.model.api.npm === "@ai-sdk/amazon-bedrock/mantle"
+    input.model.api.npm === "@ai-sdk/amazon-bedrock/mantle" ||
+    input.model.api.npm === "@ai-sdk/xai"
   ) {
     result["store"] = false
   }
@@ -1149,7 +1150,7 @@ export function options(input: {
   }
 
   if (input.model.providerID === "meta" && input.model.api.npm === "@ai-sdk/openai") {
-    result["reasoningEffort"] = "high"
+    result["reasoningEffort"] = "xhigh"
     result["reasoningSummary"] = "auto"
     result["include"] = INCLUDE_ENCRYPTED_REASONING
   }
@@ -1257,7 +1258,8 @@ export function smallOptions(model: Provider.Model) {
   if (
     model.providerID === "openai" ||
     model.api.npm === "@ai-sdk/openai" ||
-    model.api.npm === "@ai-sdk/github-copilot"
+    model.api.npm === "@ai-sdk/github-copilot" ||
+    model.api.npm === "@ai-sdk/xai"
   ) {
     const base = { store: false }
     return mergeDeep(base, small)
@@ -1584,7 +1586,7 @@ export function reasoningVariants(model: ModelsDev.Model, target: Provider.Model
   if (options.length === 0) return {}
 
   const effort = options.find((option) => option.type === "effort")
-  if (effort) return nonEmptyVariants(effortVariants(target, effort.values))
+  if (effort) return effortVariants(target, effort.values)
 
   const toggle = options.some((option) => option.type === "toggle")
   const budget = options.find((option) => option.type === "budget_tokens")
@@ -1649,7 +1651,7 @@ function reasoningEffort(model: Provider.Model, effort: string) {
       return { reasoning: { effort } }
     case "@ai-sdk/anthropic":
     case "@ai-sdk/google-vertex/anthropic":
-      return anthropicEffort(model, effort)
+      return anthropicEffort(model, effort) ?? { effort }
     case "@ai-sdk/google":
     case "@ai-sdk/google-vertex":
       return { thinkingConfig: { includeThoughts: true, thinkingLevel: effort } }

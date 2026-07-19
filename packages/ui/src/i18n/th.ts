@@ -150,6 +150,7 @@ export const dict = {
   "ui.common.close": "ปิด",
   "ui.common.next": "ถัดไป",
   "ui.common.submit": "ส่ง",
+  "ui.common.showMore": "แสดงเพิ่มเติม",
 
   "ui.permission.deny": "ปฏิเสธ",
   "ui.permission.allowAlways": "อนุญาตเสมอ",
