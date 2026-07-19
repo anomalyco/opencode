@@ -900,6 +900,9 @@
       "version": "1.17.13",
       "dependencies": {
         "@fontsource/commit-mono": "5.2.5",
+        "@fontsource/noto-sans-math": "5.2.5",
+        "@fontsource/noto-sans-symbols": "5.2.5",
+        "@fontsource/noto-sans-symbols-2": "5.2.5",
         "@napi-rs/canvas": "1.0.2",
         "@opencode-ai/ai": "workspace:*",
         "@opencode-ai/core": "workspace:*",
@@ -1794,6 +1797,12 @@
     "@fontsource/ibm-plex-mono": ["@fontsource/ibm-plex-mono@5.2.5", "", {}, "sha512-G09N3GfuT9qj3Ax2FDZvKqZttzM3v+cco2l8uXamhKyXLdmlaUDH5o88/C3vtTHj2oT7yRKsvxz9F+BXbWKMYA=="],
 
     "@fontsource/inter": ["@fontsource/inter@5.2.8", "", {}, "sha512-P6r5WnJoKiNVV+zvW2xM13gNdFhAEpQ9dQJHt3naLvfg+LkF2ldgSLiF4T41lf1SQCM9QmkqPTn4TH568IRagg=="],
+
+    "@fontsource/noto-sans-math": ["@fontsource/noto-sans-math@5.2.5", "", {}, "sha512-1bxEvVlF51Vfgpju32mRZzI/CHvsfqjXjI2+sAuEyHYvXABUAIyj+93sCO3QZIoMG5drWyrzgoCqRQRaL6wQ8Q=="],
+
+    "@fontsource/noto-sans-symbols": ["@fontsource/noto-sans-symbols@5.2.5", "", {}, "sha512-mxoIRstsmZpZFzd/SRWiD+l6T7TGhpgCrGs7TEnnuGSQIfjVMrQT9Zej2enh9pkfmPNAFyeaGJkHkszJ1hH++w=="],
+
+    "@fontsource/noto-sans-symbols-2": ["@fontsource/noto-sans-symbols-2@5.2.5", "", {}, "sha512-F4O9WLifwoZS1quNzY1ebjMNo2cQPe/UP68Dmud0ONi2lOxaR6xp6fFPO2gG17MI7DwAnfMyQFl64A2tAd28hg=="],
 
     "@fuma-translate/react": ["@fuma-translate/react@1.0.2", "", { "peerDependencies": { "@types/react": "*", "react": "^19.2.0", "react-dom": "^19.2.0" }, "optionalPeers": ["@types/react"] }, "sha512-uOiOtBx3nRXR8Nu1GzBf1tApgF1FErDBTHxRIAQeyQdyOoZbrNRN6H4kDCWObY4qyGeGbHydG0DHzgeUgFDMIw=="],
 

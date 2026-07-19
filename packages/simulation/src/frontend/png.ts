@@ -5,16 +5,29 @@ import regularFont from "@fontsource/commit-mono/files/commit-mono-latin-400-nor
 import boldFont from "@fontsource/commit-mono/files/commit-mono-latin-700-normal.woff2" with { type: "file" }
 import italicFont from "@fontsource/commit-mono/files/commit-mono-latin-400-italic.woff2" with { type: "file" }
 import boldItalicFont from "@fontsource/commit-mono/files/commit-mono-latin-700-italic.woff2" with { type: "file" }
+import symbolFont from "@fontsource/noto-sans-symbols/files/noto-sans-symbols-symbols-400-normal.woff2" with { type: "file" }
+import symbolFont2 from "@fontsource/noto-sans-symbols-2/files/noto-sans-symbols-2-symbols-400-normal.woff2" with { type: "file" }
+import brailleFont from "@fontsource/noto-sans-symbols-2/files/noto-sans-symbols-2-braille-400-normal.woff2" with { type: "file" }
+import mathFont from "@fontsource/noto-sans-math/files/noto-sans-math-math-400-normal.woff2" with { type: "file" }
 
 const CellWidth = 10
 const CellHeight = 20
 const FontSize = 16
 const FontFamily = "OpenCode Mono"
+const SymbolFontFamily = "OpenCode Symbols"
+const SymbolFontFamily2 = "OpenCode Symbols 2"
+const MathFontFamily = "OpenCode Math"
+const FontStack = `"${FontFamily}", "${SymbolFontFamily}", "${SymbolFontFamily2}", "${MathFontFamily}"`
 
-for (const file of [regularFont, boldFont, italicFont, boldItalicFont]) {
+for (const [file, family] of [
+  ...[regularFont, boldFont, italicFont, boldItalicFont].map((file) => [file, FontFamily] as const),
+  [symbolFont, SymbolFontFamily],
+  [symbolFont2, SymbolFontFamily2],
+  [brailleFont, SymbolFontFamily2],
+  [mathFont, MathFontFamily],
+] as const) {
   const font = Buffer.from(await Bun.file(file).arrayBuffer())
-  if (!GlobalFonts.register(font, FontFamily))
-    throw new Error(`Failed to register screenshot font: ${file}`)
+  if (!GlobalFonts.register(font, family)) throw new Error(`Failed to register screenshot font: ${file}`)
 }
 
 export function screenshot(renderer: CliRenderer) {
@@ -55,7 +68,7 @@ export function screenshotFrame(frame: CapturedFrame) {
           const x = column * CellWidth
           const y = row * CellHeight
           if (!drawBlockElement(context, char, x, y, cells)) {
-            context.font = `${attributes & TextAttributes.ITALIC ? "italic " : ""}${attributes & TextAttributes.BOLD ? "bold " : ""}${FontSize}px "${FontFamily}"`
+            context.font = `${attributes & TextAttributes.ITALIC ? "italic " : ""}${attributes & TextAttributes.BOLD ? "bold " : ""}${FontSize}px ${FontStack}`
             context.fillText(char, x, y + 1)
           }
           if (attributes & TextAttributes.UNDERLINE) {

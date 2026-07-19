@@ -18,6 +18,9 @@
   },
   "dependencies": {
     "@fontsource/commit-mono": "5.2.5",
+    "@fontsource/noto-sans-math": "5.2.5",
+    "@fontsource/noto-sans-symbols": "5.2.5",
+    "@fontsource/noto-sans-symbols-2": "5.2.5",
     "@napi-rs/canvas": "1.0.2",
     "@opencode-ai/core": "workspace:*",
     "@opencode-ai/ai": "workspace:*",
