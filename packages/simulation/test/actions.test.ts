@@ -72,6 +72,58 @@ test("clicks a target at relative coordinates through descendant text", async ()
   )
 })
 
+test("rejects a semantic click when the live identity does not match", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const renderer = yield* SimulationRenderer.create({})
+        let clicks = 0
+        const button = new BoxRenderable(renderer, {
+          id: "session.permission.action.once",
+          width: 12,
+          height: 1,
+          onMouseUp: () => clicks++,
+        })
+        SimulationSemantics.bind(() => ({
+          instance: "permission-2",
+          role: "option",
+          label: "Allow once",
+        }))(button)
+        renderer.root.add(button)
+        const harness = createHarness(renderer)
+        yield* Effect.promise(() => harness.renderOnce())
+
+        const error = yield* execute(harness, {
+          type: "ui.click",
+          target: button.num,
+          x: 1,
+          y: 0,
+          semantic: {
+            id: "session.permission.action.once",
+            instance: "permission-1",
+            element: button.num,
+          },
+        }).pipe(Effect.flip)
+        expect(error.message).toContain("semantic click target is stale or unavailable")
+        expect(clicks).toBe(0)
+
+        yield* execute(harness, {
+          type: "ui.click",
+          target: button.num,
+          x: 1,
+          y: 0,
+          semantic: {
+            id: "session.permission.action.once",
+            instance: "permission-2",
+            element: button.num,
+          },
+        })
+        expect(clicks).toBe(1)
+      }),
+    ),
+  )
+})
+
 test("snapshots lazy semantic hierarchy and interaction state", async () => {
   await Effect.runPromise(
     Effect.scoped(

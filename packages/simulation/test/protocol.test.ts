@@ -21,6 +21,35 @@ test("decodes ui.matches text params", () => {
   ).toThrow()
 })
 
+test("decodes semantic click identity", () => {
+  expect(
+    Frontend.decodeRequest({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "ui.click",
+      params: {
+        target: 12,
+        x: 4,
+        y: 0,
+        semantic: {
+          id: "session.permission.action.once",
+          instance: "permission-1",
+          element: 12,
+        },
+      },
+    }),
+  ).toMatchObject({
+    method: "ui.click",
+    params: {
+      semantic: {
+        id: "session.permission.action.once",
+        instance: "permission-1",
+        element: 12,
+      },
+    },
+  })
+})
+
 test("decodes semantic UI snapshots", () => {
   expect(
     Frontend.decodeRequest({

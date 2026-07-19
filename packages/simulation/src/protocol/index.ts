@@ -189,13 +189,26 @@ export namespace Frontend {
   })
   export interface KeyModifiers extends Schema.Schema.Type<typeof KeyModifiers> {}
 
+  export const SemanticClickTarget = Schema.Struct({
+    id: Schema.NonEmptyString,
+    instance: Schema.optionalKey(Schema.NonEmptyString),
+    element: Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0)),
+  })
+  export interface SemanticClickTarget extends Schema.Schema.Type<typeof SemanticClickTarget> {}
+
   export const Action = Schema.Union([
     Schema.Struct({ type: Schema.Literal("ui.type"), text: Schema.String }),
     Schema.Struct({ type: Schema.Literal("ui.press"), key: Schema.String, modifiers: Schema.optional(KeyModifiers) }),
     Schema.Struct({ type: Schema.Literal("ui.enter") }),
     Schema.Struct({ type: Schema.Literal("ui.arrow"), direction: Schema.Literals(["up", "down", "left", "right"]) }),
     Schema.Struct({ type: Schema.Literal("ui.focus"), target: Schema.Number }),
-    Schema.Struct({ type: Schema.Literal("ui.click"), target: Schema.Number, x: Schema.Number, y: Schema.Number }),
+    Schema.Struct({
+      type: Schema.Literal("ui.click"),
+      target: Schema.Number,
+      x: Schema.Number,
+      y: Schema.Number,
+      semantic: Schema.optionalKey(SemanticClickTarget),
+    }),
     Schema.Struct({ type: Schema.Literal("ui.resize"), cols: Schema.Number, rows: Schema.Number }),
   ])
   export type Action = Schema.Schema.Type<typeof Action>
@@ -313,7 +326,12 @@ export namespace Frontend {
   export const FocusParams = Schema.Struct({ target: Schema.Number })
   export interface FocusParams extends Schema.Schema.Type<typeof FocusParams> {}
 
-  export const ClickParams = Schema.Struct({ target: Schema.Number, x: Schema.Number, y: Schema.Number })
+  export const ClickParams = Schema.Struct({
+    target: Schema.Number,
+    x: Schema.Number,
+    y: Schema.Number,
+    semantic: Schema.optionalKey(SemanticClickTarget),
+  })
   export interface ClickParams extends Schema.Schema.Type<typeof ClickParams> {}
 
   export const ResizeParams = Schema.Struct({ cols: Schema.Number, rows: Schema.Number })

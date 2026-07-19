@@ -48,6 +48,7 @@ function handle(harness: Harness, request: SimulationProtocol.Frontend.Request) 
         target: request.params.target,
         x: request.params.x,
         y: request.params.y,
+        semantic: request.params.semantic,
       })
     case "ui.resize":
       return SimulationActions.execute(harness, {

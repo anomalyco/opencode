@@ -208,6 +208,15 @@ export const execute = Effect.fn("SimulationActions.execute")(function* (harness
       const target = all(harness.renderer.root).find((item) => item.num === action.target)
       if (!target || !target.visible || target.isDestroyed)
         return yield* Effect.fail(new Error(`click target is stale or unavailable: ${action.target}`))
+      if (action.semantic) {
+        const current = snapshot(harness).nodes.find((node) => node.element === action.target)
+        if (
+          current?.id !== action.semantic.id ||
+          current.instance !== action.semantic.instance ||
+          current.element !== action.semantic.element
+        )
+          return yield* Effect.fail(new Error(`semantic click target is stale or unavailable: ${action.semantic.id}`))
+      }
       if (
         !Number.isFinite(action.x) ||
         action.x < 0 ||
