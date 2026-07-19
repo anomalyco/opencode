@@ -58,6 +58,24 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("lowers the hosted OpenAI image generation tool", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.request({
+          model,
+          prompt: "Show me a rooftop garden.",
+          tools: [OpenAI.imageGeneration({ action: "generate", quality: "high", size: "1024x1024" })],
+          toolChoice: "image_generation",
+        }),
+      )
+
+      expect(prepared.body.tools).toEqual([
+        { type: "image_generation", action: "generate", quality: "high", size: "1024x1024" },
+      ])
+      expect(prepared.body.tool_choice).toEqual({ type: "image_generation" })
+    }),
+  )
+
   it.effect("lowers semantic service tier options", () =>
     Effect.gen(function* () {
       const input = LLM.updateRequest(request, { providerOptions: { openai: { serviceTier: "priority" } } })
@@ -1358,6 +1376,37 @@ describe("OpenAI Responses route", () => {
           providerMetadata: { openai: { itemId: "ws_1" } },
         },
       ])
+    }),
+  )
+
+  it.effect("decodes image generation output as image content", () =>
+    Effect.gen(function* () {
+      const item = {
+        type: "image_generation_call",
+        id: "ig_1",
+        status: "completed",
+        result: "AQID",
+      }
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "response.output_item.done", item },
+              { type: "response.completed", response: { usage: { input_tokens: 5, output_tokens: 1 } } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.events.find(LLMEvent.is.toolResult)).toMatchObject({
+        id: "ig_1",
+        name: "image_generation",
+        providerExecuted: true,
+        result: {
+          type: "content",
+          value: [{ type: "file", uri: "data:image/png;base64,AQID", mime: "image/png" }],
+        },
+      })
     }),
   )
 

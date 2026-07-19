@@ -113,11 +113,24 @@ const OpenAIResponsesTool = Schema.Struct({
   parameters: JsonObject,
   strict: Schema.optional(Schema.Boolean),
 })
-type OpenAIResponsesTool = Schema.Schema.Type<typeof OpenAIResponsesTool>
+const OpenAIResponsesImageGenerationTool = Schema.Struct({
+  type: Schema.tag("image_generation"),
+  action: Schema.optional(Schema.Literals(["auto", "generate", "edit"])),
+  background: Schema.optional(Schema.Literals(["auto", "opaque", "transparent"])),
+  input_fidelity: Schema.optional(Schema.Literals(["low", "high"])),
+  output_compression: Schema.optional(Schema.Number),
+  output_format: Schema.optional(Schema.Literals(["png", "jpeg", "webp"])),
+  partial_images: Schema.optional(Schema.Number),
+  quality: Schema.optional(Schema.Literals(["auto", "low", "medium", "high"])),
+  size: Schema.optional(Schema.String),
+})
+const OpenAIResponsesTools = Schema.Union([OpenAIResponsesTool, OpenAIResponsesImageGenerationTool])
+type OpenAIResponsesTool = Schema.Schema.Type<typeof OpenAIResponsesTools>
 
 const OpenAIResponsesToolChoice = Schema.Union([
   Schema.Literals(["auto", "none", "required"]),
   Schema.Struct({ type: Schema.tag("function"), name: Schema.String }),
+  Schema.Struct({ type: Schema.tag("image_generation") }),
 ])
 
 // Fields shared between the HTTP body and the WebSocket `response.create`
@@ -128,7 +141,7 @@ const OpenAIResponsesCoreFields = {
   model: Schema.String,
   input: Schema.Array(OpenAIResponsesInputItem),
   instructions: Schema.optional(Schema.String),
-  tools: optionalArray(OpenAIResponsesTool),
+  tools: optionalArray(OpenAIResponsesTools),
   tool_choice: Schema.optional(OpenAIResponsesToolChoice),
   store: Schema.optional(Schema.Boolean),
   service_tier: Schema.optional(OpenAIOptions.OpenAIServiceTier),
@@ -194,6 +207,7 @@ const OpenAIResponsesStreamItem = Schema.Struct({
   outputs: Schema.optional(Schema.Unknown),
   server_label: Schema.optional(Schema.String),
   output: Schema.optional(Schema.Unknown),
+  result: Schema.optional(Schema.String),
   error: Schema.optional(Schema.Unknown),
   encrypted_content: optionalNull(Schema.String),
 })
@@ -258,21 +272,30 @@ const invalid = ProviderShared.invalidRequest
 // =============================================================================
 // Request Lowering
 // =============================================================================
-const lowerTool = (tool: ToolDefinition, inputSchema: JsonSchema): OpenAIResponsesTool => ({
-  type: "function",
-  name: tool.name,
-  description: tool.description,
-  parameters: ToolSchemaProjection.openAI(inputSchema),
-  // TODO: Read this from OpenAI-specific tool options so direct LLM callers can opt into strict schemas.
-  strict: false,
-})
+const nativeImageTool = (tool: ToolDefinition) => {
+  const native = tool.native?.openai
+  return Schema.is(OpenAIResponsesImageGenerationTool)(native) ? native : undefined
+}
 
-const lowerToolChoice = (toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
+const lowerTool = (tool: ToolDefinition, inputSchema: JsonSchema): OpenAIResponsesTool =>
+  nativeImageTool(tool) ?? {
+    type: "function",
+    name: tool.name,
+    description: tool.description,
+    parameters: ToolSchemaProjection.openAI(inputSchema),
+    // TODO: Read this from OpenAI-specific tool options so direct LLM callers can opt into strict schemas.
+    strict: false,
+  }
+
+const lowerToolChoice = (toolChoice: NonNullable<LLMRequest["toolChoice"]>, tools: ReadonlyArray<ToolDefinition>) =>
   ProviderShared.matchToolChoice("OpenAI Responses", toolChoice, {
     auto: () => "auto" as const,
     none: () => "none" as const,
     required: () => "required" as const,
-    tool: (name) => ({ type: "function" as const, name }),
+    tool: (name) =>
+      tools.some((tool) => tool.name === name && nativeImageTool(tool) !== undefined)
+        ? ({ type: "image_generation" } as const)
+        : { type: "function" as const, name },
   })
 
 const lowerToolCall = (part: ToolCallPart): OpenAIResponsesInputItem => ({
@@ -488,7 +511,7 @@ const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request:
         : request.tools.map((tool) =>
             lowerTool(tool, ToolSchemaProjection.modelCompatibility(tool.inputSchema, toolSchemaCompatibility)),
           ),
-    tool_choice: request.toolChoice ? yield* lowerToolChoice(request.toolChoice) : undefined,
+    tool_choice: request.toolChoice ? yield* lowerToolChoice(request.toolChoice, request.tools) : undefined,
     stream: true as const,
     max_output_tokens: generation?.maxTokens,
     temperature: generation?.temperature,
@@ -576,6 +599,11 @@ const isReasoningItem = (
 // outputs / sources / status without re-decoding.
 const hostedToolResult = (item: OpenAIResponsesStreamItem) => {
   const isError = typeof item.error !== "undefined" && item.error !== null
+  if (item.type === "image_generation_call" && item.result)
+    return {
+      type: "content" as const,
+      value: [{ type: "file" as const, uri: `data:image/png;base64,${item.result}`, mime: "image/png" }],
+    }
   return isError ? { type: "error" as const, value: item.error } : { type: "json" as const, value: item }
 }
 
