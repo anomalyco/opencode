@@ -312,7 +312,7 @@ describe("code mode integration (real MCP server)", () => {
     expect(asked).toEqual(["fixtures_add", "fixtures_get_text"])
   })
 
-  test("streams running/completed metadata for child calls over a real transport", async () => {
+  test("publishes completed metadata for a quick child call over a real transport", async () => {
     const snapshots: Array<{ toolCalls: { tool: string; status: string; input?: Record<string, unknown> }[] }> = []
     const recordingCtx: Tool.Context = {
       ...ctx,
@@ -321,10 +321,7 @@ describe("code mode integration (real MCP server)", () => {
     await Effect.runPromise(
       tool.execute({ code: "await tools.fixtures.add({ a: 1, b: 2 }); return 'done'" }, recordingCtx),
     )
-    expect(snapshots).toContainEqual({
-      toolCalls: [{ tool: "fixtures.add", status: "running", input: { a: 1, b: 2 } }],
-    })
-    expect(snapshots).toContainEqual({
+    expect(snapshots.at(-1)).toEqual({
       toolCalls: [{ tool: "fixtures.add", status: "completed", input: { a: 1, b: 2 } }],
     })
   })

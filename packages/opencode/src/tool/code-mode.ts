@@ -1,6 +1,6 @@
 import * as Tool from "./tool"
 import { CallToolResultSchema, type CallToolResult } from "@modelcontextprotocol/sdk/types.js"
-import { Cause, Effect, Schema } from "effect"
+import { Cause, Effect, Fiber, Schema } from "effect"
 import { CodeMode, Tool as SandboxTool, toolError } from "@opencode-ai/codemode"
 import { MCP } from "@/mcp"
 import { McpCatalog } from "@/mcp/catalog"
@@ -213,8 +213,24 @@ export const CodeModeTool = Tool.define(
 
         const calls: CallEntry[] = []
         const attachments: Attachment[] = []
-        const publish = () =>
-          ctx.metadata({ title: CODE_MODE_TOOL, metadata: { toolCalls: calls.map((c) => ({ ...c })) } })
+        let version = 0
+        let published = 0
+        let warned = false
+        const publish = Effect.fnUntraced(function* () {
+          const current = version
+          if (current === published) return
+          yield* ctx.metadata({ title: CODE_MODE_TOOL, metadata: { toolCalls: calls.map((call) => ({ ...call })) } })
+          published = current
+        })
+        const publishProgress = () =>
+          publish().pipe(
+            Effect.timeout("1 second"),
+            Effect.catchCause((cause) => {
+              if (warned) return Effect.void
+              warned = true
+              return Effect.logWarning("Failed to publish Code Mode progress", { cause })
+            }),
+          )
 
         let childCalls = 0
         const callTool = (entry: CatalogEntry) => (input: unknown) =>
@@ -239,7 +255,7 @@ export const CodeModeTool = Tool.define(
         const runtime = CodeMode.make({
           tools: toolTree(catalog, callTool),
           onToolCallStart: ({ index, name, input }) =>
-            Effect.suspend(() => {
+            Effect.sync(() => {
               const shown = (() => {
                 if (input === null || input === undefined) return
                 if (typeof input === "object" && !Array.isArray(input)) {
@@ -249,13 +265,13 @@ export const CodeModeTool = Tool.define(
                 return { input }
               })()
               calls[index] = { tool: name, status: "running", ...(shown ? { input: shown } : {}) }
-              return publish()
+              version++
             }),
           onToolCallEnd: ({ index, outcome }) =>
-            Effect.suspend(() => {
+            Effect.sync(() => {
               const current = calls[index]
               if (current) calls[index] = { ...current, status: outcome === "success" ? "completed" : "error" }
-              return publish()
+              version++
             }),
         })
 
@@ -271,7 +287,18 @@ export const CodeModeTool = Tool.define(
           toolCalls: calls.map((call) => ({ name: call.tool })),
         })
 
-        const result = yield* Effect.raceFirst(runtime.execute(params.code), abort.pipe(Effect.map(cancelled)))
+        const result = yield* Effect.gen(function* () {
+          const updates = yield* Effect.gen(function* () {
+            while (true) {
+              yield* Effect.sleep("100 millis")
+              yield* publishProgress()
+            }
+          }).pipe(Effect.forkScoped)
+          const result = yield* Effect.raceFirst(runtime.execute(params.code), abort.pipe(Effect.map(cancelled)))
+          yield* Fiber.interrupt(updates)
+          yield* ctx.abort.aborted ? publishProgress() : Effect.raceFirst(publish(), abort)
+          return result
+        }).pipe(Effect.scoped)
         const logs = result.logs ?? []
         const withLogs = (text: string) => {
           if (logs.length === 0) return text
