@@ -90,12 +90,8 @@ import type {
   GlobalUpgradeResponses,
   InstanceDisposeErrors,
   InstanceDisposeResponses,
-  IssueAutoProgressStartErrors,
-  IssueAutoProgressStartResponses,
-  IssueAutoProgressStatusErrors,
-  IssueAutoProgressStatusResponses,
-  IssueAutoProgressStopErrors,
-  IssueAutoProgressStopResponses,
+  IssueArchiveErrors,
+  IssueArchiveResponses,
   IssueCreateErrors,
   IssueCreateResponses,
   IssueDeleteErrors,
@@ -1960,12 +1956,13 @@ export class Issue extends HeyApiClient {
   /**
    * List issues
    *
-   * List all issues (workspace-scoped todos) for the current project directory.
+   * List all issues (workspace-scoped todos) for the current project directory. Set include_archived=true to include Archived (Done/Canceled/Duplicate) issues; default returns only Active issues.
    */
   public list<ThrowOnError extends boolean = false>(
     parameters?: {
       directory?: string
       workspace?: string
+      include_archived?: "true" | "false"
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1976,6 +1973,7 @@ export class Issue extends HeyApiClient {
           args: [
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
+            { in: "query", key: "include_archived" },
           ],
         },
       ],
@@ -2087,6 +2085,7 @@ export class Issue extends HeyApiClient {
       id: string
       directory?: string
       workspace?: string
+      include_archived?: "true" | "false"
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -2098,6 +2097,7 @@ export class Issue extends HeyApiClient {
             { in: "path", key: "id" },
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
+            { in: "query", key: "include_archived" },
           ],
         },
       ],
@@ -2207,14 +2207,16 @@ export class Issue extends HeyApiClient {
   }
 
   /**
-   * Start auto-progress
+   * Archive issue
    *
-   * Start the L1/L2 auto-progress engine for a workspace directory.
+   * Archive a single issue by setting its status to a terminal state (Done/Canceled/Duplicate). Idempotent: archiving an already-archived issue returns it as-is without state change. Does NOT cascade — L1 archive leaves its L2 status unchanged.
    */
-  public autoProgressStart<ThrowOnError extends boolean = false>(
-    parameters?: {
+  public archive<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
       directory?: string
       workspace?: string
+      outcome?: "done" | "canceled" | "duplicate"
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -2223,88 +2225,23 @@ export class Issue extends HeyApiClient {
       [
         {
           args: [
+            { in: "path", key: "id" },
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
+            { in: "body", key: "outcome" },
           ],
         },
       ],
     )
-    return (options?.client ?? this.client).post<
-      IssueAutoProgressStartResponses,
-      IssueAutoProgressStartErrors,
-      ThrowOnError
-    >({
-      url: "/issue/auto-progress/start",
+    return (options?.client ?? this.client).post<IssueArchiveResponses, IssueArchiveErrors, ThrowOnError>({
+      url: "/issue/{id}/archive",
       ...options,
       ...params,
-    })
-  }
-
-  /**
-   * Stop auto-progress
-   *
-   * Stop the L1/L2 auto-progress engine for a workspace directory.
-   */
-  public autoProgressStop<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      workspace?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<
-      IssueAutoProgressStopResponses,
-      IssueAutoProgressStopErrors,
-      ThrowOnError
-    >({
-      url: "/issue/auto-progress/stop",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * Auto-progress status
-   *
-   * Whether the L1/L2 auto-progress engine is currently running for a workspace directory.
-   */
-  public autoProgressStatus<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      workspace?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).get<
-      IssueAutoProgressStatusResponses,
-      IssueAutoProgressStatusErrors,
-      ThrowOnError
-    >({
-      url: "/issue/auto-progress/status",
-      ...options,
-      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 

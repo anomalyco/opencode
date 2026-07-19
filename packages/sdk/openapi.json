@@ -2243,6 +2243,15 @@
               "type": "string"
             },
             "required": false
+          },
+          {
+            "name": "include_archived",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
+            },
+            "required": false
           }
         ],
         "responses": {
@@ -2271,7 +2280,7 @@
             }
           }
         },
-        "description": "List all issues (workspace-scoped todos) for the current project directory.",
+        "description": "List all issues (workspace-scoped todos) for the current project directory. Set include_archived=true to include Archived (Done/Canceled/Duplicate) issues; default returns only Active issues.",
         "summary": "List issues",
         "x-codeSamples": [
           {
@@ -2523,6 +2532,15 @@
             "in": "query",
             "schema": {
               "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "include_archived",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
             },
             "required": false
           }
@@ -2962,11 +2980,19 @@
         ]
       }
     },
-    "/issue/auto-progress/start": {
+    "/issue/{id}/archive": {
       "post": {
         "tags": ["issue"],
-        "operationId": "issue.autoProgressStart",
+        "operationId": "issue.archive",
         "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
           {
             "name": "directory",
             "in": "query",
@@ -2986,151 +3012,66 @@
         ],
         "responses": {
           "200": {
-            "description": "Started",
+            "description": "Archived issue",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "boolean",
-                  "description": "Started"
+                  "$ref": "#/components/schemas/Issue"
                 }
               }
             }
           },
           "400": {
-            "description": "Bad request",
+            "description": "BadRequest | InvalidRequestError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/BadRequestError"
-                }
-              }
-            }
-          }
-        },
-        "description": "Start the L1/L2 auto-progress engine for a workspace directory.",
-        "summary": "Start auto-progress",
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.issue.autoProgressStart({\n  ...\n})"
-          }
-        ]
-      }
-    },
-    "/issue/auto-progress/stop": {
-      "post": {
-        "tags": ["issue"],
-        "operationId": "issue.autoProgressStop",
-        "parameters": [
-          {
-            "name": "directory",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": false
-          },
-          {
-            "name": "workspace",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": false
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Stopped",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "boolean",
-                  "description": "Stopped"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BadRequestError"
-                }
-              }
-            }
-          }
-        },
-        "description": "Stop the L1/L2 auto-progress engine for a workspace directory.",
-        "summary": "Stop auto-progress",
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.issue.autoProgressStop({\n  ...\n})"
-          }
-        ]
-      }
-    },
-    "/issue/auto-progress/status": {
-      "get": {
-        "tags": ["issue"],
-        "operationId": "issue.autoProgressStatus",
-        "parameters": [
-          {
-            "name": "directory",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": false
-          },
-          {
-            "name": "workspace",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": false
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Status",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "status": {
-                      "type": "string",
-                      "enum": ["idle", "running"]
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
                     }
-                  },
-                  "required": ["status"],
-                  "additionalProperties": false,
-                  "description": "Status"
+                  ]
                 }
               }
             }
           },
-          "400": {
-            "description": "Bad request",
+          "404": {
+            "description": "Not found",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/BadRequestError"
+                  "$ref": "#/components/schemas/NotFoundError"
                 }
               }
             }
           }
         },
-        "description": "Whether the L1/L2 auto-progress engine is currently running for a workspace directory.",
-        "summary": "Auto-progress status",
+        "description": "Archive a single issue by setting its status to a terminal state (Done/Canceled/Duplicate). Idempotent: archiving an already-archived issue returns it as-is without state change. Does NOT cascade — L1 archive leaves its L2 status unchanged.",
+        "summary": "Archive issue",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "outcome": {
+                    "type": "string",
+                    "enum": ["done", "canceled", "duplicate"]
+                  }
+                },
+                "required": ["outcome"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.issue.autoProgressStatus({\n  ...\n})"
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.issue.archive({\n  ...\n})"
           }
         ]
       }

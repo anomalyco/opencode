@@ -8117,6 +8117,7 @@ export type IssueListData = {
   query?: {
     directory?: string
     workspace?: string
+    include_archived?: "true" | "false"
   }
   url: "/issue"
 }
@@ -8232,6 +8233,7 @@ export type IssueGetData = {
   query?: {
     directory?: string
     workspace?: string
+    include_archived?: "true" | "false"
   }
   url: "/issue/{id}"
 }
@@ -8345,91 +8347,41 @@ export type IssueReorderResponses = {
 
 export type IssueReorderResponse = IssueReorderResponses[keyof IssueReorderResponses]
 
-export type IssueAutoProgressStartData = {
-  body?: never
-  path?: never
+export type IssueArchiveData = {
+  body?: {
+    outcome: "done" | "canceled" | "duplicate"
+  }
+  path: {
+    id: string
+  }
   query?: {
     directory?: string
     workspace?: string
   }
-  url: "/issue/auto-progress/start"
+  url: "/issue/{id}/archive"
 }
 
-export type IssueAutoProgressStartErrors = {
+export type IssueArchiveErrors = {
   /**
-   * Bad request
+   * BadRequest | InvalidRequestError
    */
-  400: BadRequestError
-}
-
-export type IssueAutoProgressStartError = IssueAutoProgressStartErrors[keyof IssueAutoProgressStartErrors]
-
-export type IssueAutoProgressStartResponses = {
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
   /**
-   * Started
+   * Not found
    */
-  200: boolean
+  404: NotFoundError
 }
 
-export type IssueAutoProgressStartResponse = IssueAutoProgressStartResponses[keyof IssueAutoProgressStartResponses]
+export type IssueArchiveError = IssueArchiveErrors[keyof IssueArchiveErrors]
 
-export type IssueAutoProgressStopData = {
-  body?: never
-  path?: never
-  query?: {
-    directory?: string
-    workspace?: string
-  }
-  url: "/issue/auto-progress/stop"
-}
-
-export type IssueAutoProgressStopErrors = {
+export type IssueArchiveResponses = {
   /**
-   * Bad request
+   * Archived issue
    */
-  400: BadRequestError
+  200: Issue
 }
 
-export type IssueAutoProgressStopError = IssueAutoProgressStopErrors[keyof IssueAutoProgressStopErrors]
-
-export type IssueAutoProgressStopResponses = {
-  /**
-   * Stopped
-   */
-  200: boolean
-}
-
-export type IssueAutoProgressStopResponse = IssueAutoProgressStopResponses[keyof IssueAutoProgressStopResponses]
-
-export type IssueAutoProgressStatusData = {
-  body?: never
-  path?: never
-  query?: {
-    directory?: string
-    workspace?: string
-  }
-  url: "/issue/auto-progress/status"
-}
-
-export type IssueAutoProgressStatusErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-}
-
-export type IssueAutoProgressStatusError = IssueAutoProgressStatusErrors[keyof IssueAutoProgressStatusErrors]
-
-export type IssueAutoProgressStatusResponses = {
-  /**
-   * Status
-   */
-  200: {
-    status: "idle" | "running"
-  }
-}
-
-export type IssueAutoProgressStatusResponse = IssueAutoProgressStatusResponses[keyof IssueAutoProgressStatusResponses]
+export type IssueArchiveResponse = IssueArchiveResponses[keyof IssueArchiveResponses]
 
 export type IssueLinearBindingGetData = {
   body?: never
