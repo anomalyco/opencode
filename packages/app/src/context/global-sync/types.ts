@@ -58,6 +58,7 @@ export type State = {
     [sessionID: string]: Todo[]
   }
   workspace_todo: Issue[]
+  workspace_todo_archived: Issue[]
   permission: {
     [sessionID: string]: PermissionRequest[]
   }

@@ -32,6 +32,7 @@ function directoryState() {
     session_diff: {},
     todo: {},
     workspace_todo: [],
+    workspace_todo_archived: [],
     permission: {},
     question: {},
     mcp_ready: true,

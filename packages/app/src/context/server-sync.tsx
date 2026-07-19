@@ -214,15 +214,20 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
 
   const session = createServerSession(serverSDK.client)
 
-  const refreshTodo = (directory: string) => {
+  const refreshTodo = (directory: string, options?: { includeArchived?: boolean }) => {
     const key = directoryKey(directory)
     const sdk = sdkFor(directory)
+    const includeArchived = options?.includeArchived ?? false
+    const storeKey = includeArchived ? "workspace_todo_archived" : "workspace_todo"
+    const query = includeArchived
+      ? { directory, include_archived: "true" as const }
+      : { directory }
     void sdk.issue
-      .list({ directory })
+      .list(query)
       .then((x) => {
         const existing = children.children[key]
         if (!existing) return
-        existing[1]("workspace_todo", reconcile(x.data ?? [], { key: "id" }))
+        existing[1](storeKey, reconcile(x.data ?? [], { key: "id" }))
       })
       .catch(() => {})
   }
@@ -513,8 +518,8 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
     session,
     homeSessions,
     todo: {
-      refresh: (directory: string) => {
-        refreshTodo(directory)
+      refresh: (directory: string, options?: { includeArchived?: boolean }) => {
+        refreshTodo(directory, options)
         return Promise.resolve()
       },
     },
