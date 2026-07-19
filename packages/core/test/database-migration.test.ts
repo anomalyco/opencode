@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test"
 import { $ } from "bun"
+import fs from "fs/promises"
 import { fileURLToPath } from "url"
 import path from "path"
 import { SqliteClient } from "@effect/sql-sqlite-bun"
 import { EffectDrizzleSqlite } from "@opencode-ai/effect-drizzle-sqlite"
-import { Effect, Layer } from "effect"
+import { Context, Effect, Exit, Layer, Scope } from "effect"
 import { eq, inArray, sql } from "drizzle-orm"
 import { DatabaseMigration } from "@opencode-ai/core/database/migration"
 import { migrations } from "@opencode-ai/core/database/migration.gen"
@@ -38,6 +39,26 @@ const run = <A, E>(effect: Effect.Effect<A, E, SqlClientService>) =>
 const makeDb = EffectDrizzleSqlite.makeWithDefaults()
 
 describe("DatabaseMigration", () => {
+  test("backs up a corrupted database file and recreates it", async () => {
+    await using tmp = await tmpdir()
+    const filename = path.join(tmp.path, "recovery.sqlite")
+    await Bun.write(filename, new TextEncoder().encode(`SQLite format 3\0${"x".repeat(256)}`))
+
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const scope = yield* Scope.make()
+        const context = yield* Layer.buildWithScope(Database.layerFromPath(filename), scope)
+        const db = Context.get(context, Database.Service).db
+
+        expect((yield* Effect.promise(() => fs.readdir(tmp.path))).some((file) => file.startsWith("recovery.sqlite.corrupt-"))).toBe(true)
+        expect(yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'migration'`)).toEqual({
+          name: "migration",
+        })
+        yield* Scope.close(scope, Exit.void)
+      }),
+    )
+  })
+
   test("serializes concurrent embedded initialization for one database path", async () => {
     await using tmp = await tmpdir()
     const filename = path.join(tmp.path, "embedded.sqlite")
