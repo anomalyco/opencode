@@ -283,19 +283,18 @@ export const githubInstall = Effect.fn("Cli.github.install")(function* () {
         const installation = await getInstallation()
         if (installation) return s.stop("GitHub app already installed")
 
-        // Start a local HTTP server to receive the browser callback.
-        // This ensures the CLI waits for the user to complete the GitHub App
-        // installation in the browser before polling — preventing the hang where
-        // polling starts before the user even switches to the browser window.
+        // Start a local HTTP server on an OS-assigned port to receive the
+        // GitHub App installation redirect. The server's promise resolves only
+        // when the real browser hits the callback URL — no polling.
         const { startCallbackServer, waitForCallback } = await import("@/util/callback-server")
-        const server = startCallbackServer()
-        const callbackPromise = waitForCallback(server, {
-          path: "/github-install-callback",
-          timeoutMs: 300_000, // 5 minutes
-        })
+        const callbackPath = "/github-install-callback"
+        const server = startCallbackServer(callbackPath)
+        const callbackPromise = waitForCallback(server, { timeoutMs: 300_000 })
 
-        // Open browser
-        const url = "https://github.com/apps/opencode-agent"
+        // Build the install URL with a redirect_uri so GitHub sends the browser
+        // back to the local callback server after the user installs the app.
+        const redirectUri = `http://127.0.0.1:${server.port}${callbackPath}`
+        const url = `https://github.com/apps/opencode-agent/installations/new?redirect_uri=${encodeURIComponent(redirectUri)}`
         const command =
           process.platform === "darwin"
             ? `open "${url}"`
@@ -305,31 +304,31 @@ export const githubInstall = Effect.fn("Cli.github.install")(function* () {
 
         exec(command, (error) => {
           if (error) {
-            prompts.log.warn(`Could not open browser. Please visit: ${url}`)
+            prompts.log.warn(
+              `Could not open browser. Please visit: https://github.com/apps/opencode-agent`,
+            )
           }
         })
 
-        // Wait for user to complete GitHub App installation in the browser.
-        // The server receives the redirect after the user installs the app,
-        // which unblocks the CLI so it can verify with getInstallation().
-        s.message("Waiting for GitHub app to be installed - complete it in your browser")
+        // Block until the browser hits /github-install-callback (user finished
+        // installing) or the 5-minute timeout fires.
+        s.message("Waiting for GitHub app to be installed — complete it in your browser")
         try {
           await callbackPromise
         } catch {
-          server.close()
           s.stop("GitHub app authorization timed out. Please try again.")
           throw new UI.CancelledError()
         }
 
-        // Verify installation completed
+        // Confirm via API that the installation is actually visible server-side.
         const installed = await getInstallation()
         if (!installed) {
-          server.close()
-          s.stop(`Failed to detect GitHub app installation. Make sure to install the app for the \`${app.owner}/${app.repo}\` repository.`)
+          s.stop(
+            `Failed to detect GitHub app installation. Make sure to install the app for the \`${app.owner}/${app.repo}\` repository.`,
+          )
           throw new UI.CancelledError()
         }
 
-        server.close()
         s.stop("Installed GitHub app")
 
         async function getInstallation() {
