@@ -4,6 +4,7 @@ import type { JSONSchema7 } from "@ai-sdk/provider"
 import type * as Provider from "./provider"
 import type * as ModelsDev from "@opencode-ai/core/models-dev"
 import { iife } from "@/util/iife"
+import { Flag } from "@opencode-ai/core/flag/flag"
 
 type Modality = NonNullable<ModelsDev.Model["modalities"]>["input"][number]
 
@@ -320,9 +321,15 @@ function normalizeMessages(
   return msgs
 }
 
-function applyCaching(msgs: ModelMessage[], model: Provider.Model): ModelMessage[] {
+function applyCaching(msgs: ModelMessage[], model: Provider.Model, options?: Record<string, unknown>): ModelMessage[] {
   const system = msgs.filter((msg) => msg.role === "system").slice(0, 2)
   const final = msgs.filter((msg) => msg.role !== "system").slice(-2)
+
+  const ttl = options?.cache_point_ttl as string | undefined
+  const bedrockCachePoint: Record<string, unknown> = { type: "default" }
+  if (ttl) {
+    bedrockCachePoint.ttl = ttl
+  }
 
   const providerOptions = {
     anthropic: {
@@ -332,7 +339,7 @@ function applyCaching(msgs: ModelMessage[], model: Provider.Model): ModelMessage
       cacheControl: { type: "ephemeral" },
     },
     bedrock: {
-      cachePoint: { type: "default" },
+      cachePoint: bedrockCachePoint,
     },
     openaiCompatible: {
       cache_control: { type: "ephemeral" },
@@ -438,10 +445,12 @@ export function message(msgs: ModelMessage[], model: Provider.Model, options: Re
       model.id.includes("anthropic") ||
       model.id.includes("claude") ||
       model.api.npm === "@ai-sdk/anthropic" ||
-      model.api.npm === "@ai-sdk/alibaba") &&
+      model.api.npm === "@ai-sdk/alibaba" ||
+      model.providerID.includes("bedrock") ||
+      model.api.npm === "@ai-sdk/amazon-bedrock") &&
     model.api.npm !== "@ai-sdk/gateway"
   ) {
-    msgs = applyCaching(msgs, model)
+    msgs = applyCaching(msgs, model, options)
   }
 
   // Remap providerOptions keys from stored providerID to expected SDK key

@@ -387,7 +387,7 @@ export const getUsage = (input: { model: Provider.Model; usage: Usage; metadata?
       ? input.model.cost.experimentalOver200K
       : input.model.cost)
   const totalNanoAiu = input.metadata?.["copilot"]?.["totalNanoAiu"]
-  return {
+  const result = {
     cost:
       typeof totalNanoAiu === "number" && Number.isFinite(totalNanoAiu) && totalNanoAiu >= 0
         ? new Decimal(totalNanoAiu).div(100_000_000_000).toNumber()
@@ -404,6 +404,7 @@ export const getUsage = (input: { model: Provider.Model; usage: Usage; metadata?
           ),
     tokens,
   }
+  return result
 }
 
 export class BusyError extends Schema.TaggedErrorClass<BusyError>()("SessionBusyError", {

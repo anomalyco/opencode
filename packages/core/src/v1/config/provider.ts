@@ -112,6 +112,9 @@ export const Info = Schema.Struct({
           description:
             "Timeout in milliseconds between streamed SSE chunks for this provider. If no chunk arrives within this window, the request is aborted.",
         }),
+        cache_point_ttl: Schema.optional(Schema.Literals(["5m", "1h"])).annotate({
+          description: "TTL for Bedrock cache points. Only applies to amazon-bedrock provider.",
+        }),
       }),
       [Schema.Record(Schema.String, Schema.Any)],
     ),
