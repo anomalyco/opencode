@@ -12,6 +12,12 @@ import { Global } from "@opencode-ai/core/global"
 import { AppProcess } from "@opencode-ai/core/process"
 import { Config } from "./config"
 import { Npm } from "@opencode-ai/core/npm"
+import path from "node:path"
+
+const runtime = path.basename(process.execPath, path.extname(process.execPath)).toLowerCase()
+if (!process.env.OPENCODE_PARCEL_WATCHER_PATH && runtime !== "bun" && runtime !== "node" && runtime !== "nodejs") {
+  process.env.OPENCODE_PARCEL_WATCHER_PATH = path.join(path.dirname(process.execPath), "watcher.node")
+}
 
 const Handlers = Runtime.handlers(Commands, {
   $: () => import("./commands/handlers/default"),

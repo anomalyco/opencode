@@ -1,8 +1,9 @@
 #!/usr/bin/env bun
 
 import { $ } from "bun"
-import { rm } from "fs/promises"
+import { copyFile, rm } from "fs/promises"
 import path from "path"
+import { fileURLToPath } from "node:url"
 import { Script } from "@opencode-ai/script"
 import { createSolidTransformPlugin } from "@opentui/solid/bun-plugin"
 import pkg from "../package.json"
@@ -52,7 +53,9 @@ const targets = singleFlag
     })
   : allTargets
 
-if (!skipInstall) await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`
+if (!skipInstall) {
+  await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]} @parcel/watcher@${pkg.dependencies["@parcel/watcher"]}`
+}
 
 for (const item of targets) {
   const target = [
@@ -101,6 +104,9 @@ for (const item of targets) {
     for (const log of result.logs) console.error(log)
     process.exit(1)
   }
+
+  const watcher = `@parcel/watcher-${item.os}-${item.arch}${item.os === "linux" ? `-${item.abi ?? "glibc"}` : ""}`
+  await copyFile(fileURLToPath(import.meta.resolve(watcher)), path.join(outdir, name, "bin", "watcher.node"))
 
   await Bun.write(
     path.join(outdir, name, "package.json"),
