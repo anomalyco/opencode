@@ -14,6 +14,8 @@ import { writeHeapSnapshot } from "v8"
 import { ServerAuth } from "@/server/auth"
 import { validateSession } from "../tui/validate-session"
 import { win32InstallCtrlCGuard } from "@opencode-ai/tui/terminal-win32"
+import { Provider } from "@/provider/provider"
+import { bootstrap } from "@/cli/bootstrap"
 
 declare global {
   const OPENCODE_WORKER_PATH: string
@@ -206,6 +208,20 @@ export const TuiThreadCommand = cmd({
         return
       }
       const cwd = Filesystem.resolve(process.cwd())
+      // Resolving `--model free` requires Provider.Service.list, which needs the
+      // Instance ALS context the effectCmd wrapper would normally provide. The
+      // TUI handler runs outside it, so bootstrap it here only for `free`; any
+      // other model is passed through directly to avoid the load/dispose cost.
+      let model = args.model
+      if (args.model === "free") {
+        try {
+          model = (await bootstrap(cwd, (ctx) => Provider.resolveSelection(args.model, ctx))).model
+        } catch (error) {
+          UI.error(error instanceof Error ? error.message : String(error))
+          process.exitCode = 1
+          return
+        }
+      }
 
       const worker = new Worker(file, {
         env: Object.fromEntries(
@@ -288,7 +304,7 @@ export const TuiThreadCommand = cmd({
               continue: args.continue,
               sessionID: args.session,
               agent: args.agent,
-              model: args.model,
+              model,
               prompt,
               fork: args.fork,
               auto: args.auto || args.yolo || args["dangerously-skip-permissions"],

@@ -1,4 +1,5 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import os from "os"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import fuzzysort from "fuzzysort"
@@ -23,6 +24,7 @@ import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { EffectPromise } from "@/effect/promise"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { makeRuntime } from "@/effect/run-service"
 import { isRecord } from "@/util/record"
 import { optional } from "@opencode-ai/core/schema"
 import { ProviderTransform } from "./transform"
@@ -31,6 +33,8 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { ModelStatus } from "./model-status"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderError } from "./error"
+import { InstanceRef } from "@/effect/instance-ref"
+import type { InstanceContext } from "@/project/instance-context"
 
 const OPENAI_HEADER_TIMEOUT_DEFAULT = 300_000
 
@@ -1994,6 +1998,48 @@ export function sort<T extends { id: string }>(models: T[]) {
   )
 }
 
+const FREE = "free"
+
+export function isFree(model: Model) {
+  // Structural filter only: any opencode model whose every cost dimension is
+  // zero is a candidate. models.dev does not expose a "Zen tier" flag, and the
+  // OpenCode Zen endpoint (api.url = opencode.ai/zen/v1) is shared by both the
+  // -free suffix models and promotional zero-cost models (e.g. "big-pickle").
+  const extra = model.cost.experimentalOver200K
+  return (
+    model.providerID === ProviderV2.ID.opencode &&
+    model.cost.input === 0 &&
+    model.cost.output === 0 &&
+    model.cost.cache.read === 0 &&
+    model.cost.cache.write === 0 &&
+    (!extra || (extra.input === 0 && extra.output === 0 && extra.cache.read === 0 && extra.cache.write === 0))
+  )
+}
+
+export async function resolveSelection(model?: string, instance?: InstanceContext) {
+  if (!model) return { model }
+  if (model !== FREE) return { model }
+  // Service.list() requires InstanceRef in the Effect fiber. Callers from plain
+  // async code (run.ts handler post-await, thread.ts bootstrap callback) have no
+  // current fiber, so we provide it explicitly when given. Tests run inside an
+  // Effect fiber that already has InstanceRef set up, so the arg is optional.
+  const providers = await runPromise((svc) =>
+    instance ? svc.list().pipe(Effect.provideService(InstanceRef, instance)) : svc.list(),
+  )
+  const provider = providers[ProviderV2.ID.opencode]
+  const models = sort(Object.values(provider?.models ?? {}).filter(isFree))
+  // Unseeded by design: the same `--model free` in two terminals picks
+  // different models.
+  const pick = models[Math.floor(Math.random() * models.length)]
+  if (!pick)
+    throw new Error(
+      `No free opencode models found. The opencode provider must be configured (set OPENCODE_API_KEY) and at least one model in its catalog must have all costs set to 0.`,
+    )
+  return {
+    model: `${pick.providerID}/${pick.id}`,
+  }
+}
+
 export function parseModel(model: string) {
   const [providerID, ...rest] = model.split("/")
   return {
@@ -2007,5 +2053,7 @@ export const node = LayerNode.make({
   layer: layer,
   deps: [FSUtil.node, Config.node, Auth.node, Env.node, Plugin.node, ModelsDev.node, RuntimeFlags.node],
 })
+
+const { runPromise } = makeRuntime(Service, AppNodeBuilder.build(node))
 
 export * as Provider from "./provider"

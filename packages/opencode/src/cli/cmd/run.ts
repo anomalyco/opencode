@@ -24,6 +24,7 @@ import { EOL } from "os"
 import { Filesystem } from "@/util/filesystem"
 import { createOpencodeClient, type OpencodeClient, type ToolPart } from "@opencode-ai/sdk/v2"
 import { FormatError, FormatUnknownError } from "../error"
+import { Provider } from "@/provider/provider"
 import { INTERACTIVE_INPUT_ERROR, resolveInteractiveStdin } from "./run/runtime.stdin"
 
 type ModelInput = Parameters<OpencodeClient["session"]["prompt"]>[0]["model"]
@@ -209,10 +210,6 @@ export const RunCommand = effectCmd({
         type: "number",
         describe: "port for the local server (defaults to random port if no value provided)",
       })
-      .option("variant", {
-        type: "string",
-        describe: "model variant (provider-specific reasoning effort, e.g., high, max, minimal)",
-      })
       .option("thinking", {
         type: "boolean",
         describe: "show thinking blocks",
@@ -277,6 +274,19 @@ export const RunCommand = effectCmd({
         UI.error(message)
         process.exit(1)
       }
+      if (args.attach && args.model === "free") {
+        die(
+          "--model free is not supported with --attach; specify a concrete model id (e.g., --model opencode/mimo-v2.5-free)",
+        )
+      }
+      const resolved = await (async () => {
+        if (args.attach) return { model: args.model }
+        try {
+          return await Provider.resolveSelection(args.model, localInstance)
+        } catch (error) {
+          return die(error instanceof Error ? error.message : String(error))
+        }
+      })()
       const dieInteractive = (error: unknown): never => {
         if (error instanceof Error && error.message === INTERACTIVE_INPUT_ERROR) {
           die(error.message)
@@ -836,15 +846,13 @@ export const RunCommand = effectCmd({
             const error = await completed
             if (error) process.exitCode = 1
           }
-
           if (args.command) {
             const result = await client.session.command({
               sessionID,
               agent,
-              model: args.model,
+              model: resolved.model,
               command: args.command,
               arguments: message,
-              variant: args.variant,
             })
             if (result.error) {
               if (!emit("error", { error: result.error })) UI.error(formatRunError(result.error))
@@ -855,12 +863,11 @@ export const RunCommand = effectCmd({
             return
           }
 
-          const model = pick(args.model)
+          const model = resolved.model ? Provider.parseModel(resolved.model) : undefined
           const result = await client.session.prompt({
             sessionID,
             agent,
             model,
-            variant: args.variant,
             parts: [...files, { type: "text", text: message }],
           })
           if (result.error) {
@@ -872,7 +879,7 @@ export const RunCommand = effectCmd({
           return
         }
 
-        const model = pick(args.model)
+        const model = pick(resolved.model)
         const { runInteractiveMode } = await import("./run/runtime")
         try {
           await runInteractiveMode({
@@ -885,7 +892,7 @@ export const RunCommand = effectCmd({
             replayLimit: args["replay-limit"],
             agent,
             model,
-            variant: args.variant,
+            variant: undefined,
             files,
             initialInput,
             createSession: createFreshSession,
@@ -900,7 +907,7 @@ export const RunCommand = effectCmd({
       }
 
       if (interactive && !args.attach && !args.session && !args.continue) {
-        const model = pick(args.model)
+        const model = pick(resolved.model)
         const { runInteractiveLocalMode } = await import("./run/runtime")
         const fetchFn = (async (input: RequestInfo | URL, init?: RequestInit) => {
           const { Server } = await import("@/server/server")
@@ -921,7 +928,7 @@ export const RunCommand = effectCmd({
             createSession: createFreshSession,
             agent: args.agent,
             model,
-            variant: args.variant,
+            variant: undefined,
             replay,
             replayLimit: args["replay-limit"],
             files,
@@ -995,7 +1002,6 @@ export async function runMini(input: MiniCommandInput) {
     username: input.username,
     dir: input.directory,
     port: undefined,
-    variant: undefined,
     thinking: undefined,
     mini: true,
     interactive: false,
