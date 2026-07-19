@@ -288,10 +288,12 @@ const lowerAssistantMessage = Effect.fn("OpenAIChat.lowerAssistantMessage")(func
   const observedField = reasoning.map(reasoningField).find((value) => value !== undefined)
   const nativeReasoning = openAICompatibleReasoningContent(message.native?.openaiCompatible)
   const fullyStructured = reasoning.every((part) => Array.isArray(part.providerMetadata?.openai?.reasoningDetails))
-  const field =
-    reasoning.length > 0
-      ? (observedField ?? (nativeReasoning !== undefined || !fullyStructured ? "reasoning_content" : undefined))
-      : undefined
+  const field = (() => {
+    if (reasoning.length === 0) return
+    if (observedField !== undefined) return observedField
+    if (nativeReasoning !== undefined) return "reasoning_content"
+    if (!fullyStructured) return "reasoning_content"
+  })()
   return {
     role: "assistant" as const,
     content: content.length === 0 ? null : ProviderShared.joinText(content),
