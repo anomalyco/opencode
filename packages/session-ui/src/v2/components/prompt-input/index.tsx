@@ -39,6 +39,8 @@ export type PromptInputV2Props = {
   borderUnderlay?: boolean
   class?: string
   modelControl?: JSX.Element
+  attachKeybind?: string[]
+  attachShortcut?: string
 }
 
 export function PromptInputV2(props: PromptInputV2Props) {
@@ -197,9 +199,9 @@ export function PromptInputV2(props: PromptInputV2Props) {
             <PromptInputV2AddMenu
               disabled={state.mode === "shell"}
               title="Add images and files"
-              keybind={["Mod", "U"]}
+              keybind={props.attachKeybind ?? ["Mod", "U"]}
               attachLabel="Images and files"
-              attachShortcut="Mod+U"
+              attachShortcut={props.attachShortcut ?? "Mod+U"}
               commandsLabel="Commands"
               contextLabel="Context"
               shellLabel="Shell command"
@@ -233,7 +235,11 @@ export function PromptInputV2(props: PromptInputV2Props) {
             <Show when={view.variant}>
               {(control) => (
                 <Show when={control().options().length > 1}>
-                  <PromptInputV2ConfiguredSelect title="Choose model variant" control={control()} />
+                  <PromptInputV2ConfiguredSelect
+                    title="Choose model variant"
+                    keybind={["Shift", "Mod", "D"]}
+                    control={control()}
+                  />
                 </Show>
               )}
             </Show>
@@ -512,7 +518,7 @@ function PromptInputV2ConfiguredSelect(props: {
   return (
     <PromptInputV2Select
       title={props.title}
-      keybind={props.keybind}
+      keybind={props.control.keybind?.() ?? props.keybind}
       options={props.control.options()}
       current={current()}
       currentIcon={
@@ -536,36 +542,45 @@ export function PromptInputV2Select(props: {
   onSelect: (id: string) => void
 }) {
   return (
-    <MenuV2 gutter={6} modal={false} placement="top-start" onOpenChange={props.onOpenChange}>
-      <MenuV2.Trigger
-        as={ButtonV2}
-        variant="ghost-muted"
-        size="normal"
-        class={`max-w-[220px] justify-start ![font-weight:440] ${props.class ?? ""}`}
-        title={keybindTitle(props.title, props.keybind)}
-      >
-        {props.currentIcon}
-        <span class="truncate capitalize leading-5">
-          {props.options.find((option) => option.id === props.current)?.label ?? props.current}
-        </span>
-        <span class="-ml-0.5 -mr-1 flex shrink-0">
-          <IconV2 name="chevron-down" />
-        </span>
-      </MenuV2.Trigger>
-      <MenuV2.Portal>
-        <MenuV2.Content>
-          <MenuV2.RadioGroup value={props.current} onChange={props.onSelect}>
-            <For each={props.options}>
-              {(option) => (
-                <MenuV2.RadioItem value={option.id} class="capitalize" closeOnSelect>
-                  {option.label}
-                </MenuV2.RadioItem>
-              )}
-            </For>
-          </MenuV2.RadioGroup>
-        </MenuV2.Content>
-      </MenuV2.Portal>
-    </MenuV2>
+    <TooltipV2
+      placement="top"
+      value={
+        <>
+          {props.title}
+          <KeybindV2 keys={props.keybind ?? []} variant="neutral" />
+        </>
+      }
+    >
+      <MenuV2 gutter={6} modal={false} placement="top-start" onOpenChange={props.onOpenChange}>
+        <MenuV2.Trigger
+          as={ButtonV2}
+          variant="ghost-muted"
+          size="normal"
+          class={`max-w-[220px] justify-start ![font-weight:440] ${props.class ?? ""}`}
+        >
+          {props.currentIcon}
+          <span class="truncate capitalize leading-5">
+            {props.options.find((option) => option.id === props.current)?.label ?? props.current}
+          </span>
+          <span class="-ml-0.5 -mr-1 flex shrink-0">
+            <IconV2 name="chevron-down" />
+          </span>
+        </MenuV2.Trigger>
+        <MenuV2.Portal>
+          <MenuV2.Content>
+            <MenuV2.RadioGroup value={props.current} onChange={props.onSelect}>
+              <For each={props.options}>
+                {(option) => (
+                  <MenuV2.RadioItem value={option.id} class="capitalize" closeOnSelect>
+                    {option.label}
+                  </MenuV2.RadioItem>
+                )}
+              </For>
+            </MenuV2.RadioGroup>
+          </MenuV2.Content>
+        </MenuV2.Portal>
+      </MenuV2>
+    </TooltipV2>
   )
 }
 
@@ -687,9 +702,4 @@ function PromptInputV2SuggestionIcon(props: { item: PromptInputV2Suggestion }) {
       class="size-4 shrink-0"
     />
   )
-}
-
-function keybindTitle(label: string, keybind?: string[]) {
-  if (!keybind?.length) return label
-  return `${label} (${keybind.join("+")})`
 }

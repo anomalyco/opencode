@@ -23,6 +23,7 @@ export type PromptInputV2SelectControl = {
   options: Accessor<PromptInputV2Option[]>
   current: Accessor<string>
   onSelect: (id: string) => void
+  keybind?: Accessor<string[]>
 }
 
 export type PromptInputV2ViewConfig = {
