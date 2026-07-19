@@ -219,7 +219,7 @@ export function Prompt(props: PromptProps) {
       message: "Connect a provider to send prompts",
       duration: 3000,
     })
-    if (sync.data.provider.length === 0) {
+    if (sync.status !== "loading" && sync.data.provider.length === 0) {
       dialog.replace(() => <DialogProviderConnect />)
     }
   }

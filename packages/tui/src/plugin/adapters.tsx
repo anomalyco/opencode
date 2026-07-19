@@ -98,7 +98,7 @@ function mapOptionCb<Value>(cb?: (item: TuiDialogSelectOption<Value>) => void) {
 function stateApi(sync: ReturnType<typeof useSync>): TuiPluginApi["state"] {
   return {
     get ready() {
-      return sync.ready
+      return sync.status !== "loading"
     },
     get config() {
       return sync.data.config
