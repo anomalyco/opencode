@@ -39,7 +39,12 @@ test("scopes the frontend control server and reports malformed JSON", async () =
             protocolVersion: 1,
             role: "ui",
             server: { name: "opencode", version: expect.any(String) },
-            capabilities: expect.arrayContaining(["ui.state", "ui.snapshot", "ui.capture"]),
+            capabilities: expect.arrayContaining([
+              "ui.state",
+              "ui.snapshot",
+              "ui.click.semantic",
+              "ui.capture",
+            ]),
           },
         })
 
