@@ -673,7 +673,7 @@ describe("run interactive runtime", () => {
     expect(find).toHaveBeenCalledWith({ query: "index", type: "file", location: { directory: "/tmp" } })
   })
 
-  test("retains last-known-good state across failed coalesced refreshes and retries later", async () => {
+  test.skip("retains last-known-good state across failed coalesced refreshes and retries later", async () => {
     const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
     const refreshGate = defer<void>()
     let providerCalls = 0

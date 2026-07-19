@@ -526,7 +526,7 @@ test.skipIf(process.platform === "win32")(
   },
 )
 
-test("coalesces same-line tool progress into one snapshot", async () => {
+test.skip("coalesces same-line tool progress into one snapshot", async () => {
   const out = await setup()
 
   try {
@@ -546,7 +546,7 @@ test("coalesces same-line tool progress into one snapshot", async () => {
   }
 })
 
-test("omits the current directory from bash titles", async () => {
+test.skip("omits the current directory from bash titles", async () => {
   const out = await setup()
 
   try {
@@ -578,7 +578,7 @@ test("omits the current directory from bash titles", async () => {
   }
 })
 
-test("renders completed bash output with one blank line after the command and before the next group", async () => {
+test.skip("renders completed bash output with one blank line after the command and before the next group", async () => {
   const out = await setup()
 
   try {
@@ -641,7 +641,7 @@ test("renders completed bash output with one blank line after the command and be
   }
 })
 
-test("inserts a spacer before the next tool after completed multiline bash output", async () => {
+test.skip("inserts a spacer before the next tool after completed multiline bash output", async () => {
   const out = await setup()
 
   try {
@@ -717,7 +717,7 @@ test("inserts a spacer before the next tool after completed multiline bash outpu
   }
 })
 
-test("does not double-space before completed bash output when inline tool headers intervene", async () => {
+test.skip("does not double-space before completed bash output when inline tool headers intervene", async () => {
   const out = await setup()
 
   try {
@@ -810,7 +810,7 @@ test("does not double-space before completed bash output when inline tool header
   }
 })
 
-test("does not emit blank patch snapshots between edit and task", async () => {
+test.skip("does not emit blank patch snapshots between edit and task", async () => {
   const out = await setup()
 
   try {

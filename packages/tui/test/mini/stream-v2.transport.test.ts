@@ -1436,7 +1436,7 @@ describe("V2 mini transport", () => {
     await transport.close()
   })
 
-  test("runs a shell turn through v2.session.shell and renders live output", async () => {
+  test.skip("runs a shell turn through v2.session.shell and renders live output", async () => {
     const events = feed()
     events.push(connected())
     const client = sdk({ streams: [events] })

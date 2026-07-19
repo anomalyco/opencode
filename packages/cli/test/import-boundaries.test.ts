@@ -62,6 +62,7 @@ async function bundleInputs(entrypoint: string) {
         "--target=bun",
         "--format=esm",
         "--packages=bundle",
+        "--external=@opentui/core-*",
         `--metafile=${metafile}`,
         `--outdir=${path.join(temporary, "out")}`,
       ],
