@@ -24,6 +24,7 @@ test("redirects a draft to the legacy new-session route", async ({ page }) => {
   await page.addInitScript(
     ({ directory, draftID, server }) => {
       localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: false } }))
+      localStorage.setItem("app-version.v1", JSON.stringify({ version: "1.17.20" }))
       localStorage.setItem(
         "opencode.window.browser.dat:tabs",
         JSON.stringify([{ type: "draft", draftID, server, directory }]),

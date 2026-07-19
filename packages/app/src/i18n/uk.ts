@@ -93,6 +93,7 @@ export const dict = {
   "command.session.unshare.description": "Припинити поширення цієї сесії",
 
   "palette.search.placeholder": "Пошук файлів, команд і сесій",
+  "palette.search.placeholder.home": "Пошук команд і сесій",
   "palette.empty": "Результатів не знайдено",
   "palette.group.commands": "Команди",
   "palette.group.files": "Файли",
@@ -902,9 +903,13 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Розгортати частини інструменту редагування",
   "settings.general.row.editToolPartsExpanded.description":
     "Показувати частини інструментів редагування, запису та патчів розгорнутими за замовчуванням на часовій шкалі",
-  "settings.general.row.newLayoutDesigns.title": "Новий макет і дизайн",
-  "settings.general.row.newLayoutDesigns.description":
-    "Увімкнути оновлений макет та інтерфейси головної сторінки, редактора запитів і сесії",
+  "settings.general.row.newInterface.title": "Новий макет",
+  "settings.general.row.newInterface.badge": "Нове",
+  "settings.general.row.newInterface.description":
+    "Використовуйте нові вкладки та макет головної сторінки. Протягом обмеженого часу можна перемикатися між макетами.",
+  "settings.general.row.newInterfaceNotice.title": "Тепер ви використовуєте новий макет",
+  "settings.general.row.newInterfaceNotice.description": "Попередній макет більше недоступний",
+  "settings.general.row.newInterfaceNotice.dismiss": "Відхилити",
   "settings.general.row.pinchZoom.title": "Масштабування щипком",
   "settings.general.row.pinchZoom.description":
     "Дозволити масштабування жестом щипка на трекпаді та прокручуванням із Ctrl",

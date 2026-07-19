@@ -1,19 +1,17 @@
 import { createEffect, Suspense, type ParentProps } from "solid-js"
 import { useNavigate } from "@solidjs/router"
 import { DebugBar } from "@/components/debug-bar"
-import { HelpButton, TabsInfoPopup } from "@/components/help-button"
+import { TabsInfoPopup } from "@/components/help-button"
 import { Titlebar, type TitlebarUpdate } from "@/components/titlebar"
 import { usePlatform } from "@/context/platform"
 import { setNavigate } from "@/utils/notification-click"
 import { setV2Toast, ToastRegion } from "@/utils/toast"
-import { useSettingsCommand } from "@/components/settings-dialog"
 import { useDesktopDeepLinks } from "./layout/use-desktop-deep-links"
 
 export default function NewLayout(props: ParentProps) {
   const platform = usePlatform()
   const navigate = useNavigate()
   setNavigate(navigate)
-  useSettingsCommand()
   useDesktopDeepLinks()
 
   createEffect(() => setV2Toast(true))
@@ -42,7 +40,6 @@ export default function NewLayout(props: ParentProps) {
       </main>
       {import.meta.env.DEV && <DebugBar inline />}
       <TabsInfoPopup />
-      <HelpButton />
       <ToastRegion v2 />
     </div>
   )

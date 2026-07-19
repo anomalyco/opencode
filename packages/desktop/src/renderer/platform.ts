@@ -1,9 +1,4 @@
-import {
-  ACCEPTED_FILE_EXTENSIONS,
-  handleNotificationClick,
-  type Platform,
-  ServerConnection,
-} from "@opencode-ai/app"
+import { ACCEPTED_FILE_EXTENSIONS, handleNotificationClick, type Platform, ServerConnection } from "@opencode-ai/app"
 import type { UpdaterState } from "@opencode-ai/app/updater"
 import type { AsyncStorage } from "@solid-primitives/storage"
 import type { Accessor } from "solid-js"
@@ -120,6 +115,9 @@ export function createDesktopPlatform(windowState: DesktopWindowState, updaterSt
       }
       return window.api.openPath(path, app)
     },
+    async revealPath(path: string) {
+      return window.api.revealPath(path)
+    },
 
     back() {
       window.history.back()
@@ -138,6 +136,8 @@ export function createDesktopPlatform(windowState: DesktopWindowState, updaterSt
     },
 
     exportDebugLogs: () => window.api.exportDebugLogs(),
+
+    setForceFocus: (enabled) => window.api.setForceFocus(enabled),
 
     recordFatalRendererError: (error) => window.api.recordFatalRendererError(error),
 

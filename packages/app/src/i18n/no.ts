@@ -92,6 +92,7 @@ export const dict = {
   "command.session.unshare.description": "Slutt å dele denne sesjonen",
 
   "palette.search.placeholder": "Søk i filer, kommandoer og sesjoner",
+  "palette.search.placeholder.home": "Søk i kommandoer og sesjoner",
   "palette.empty": "Ingen resultater funnet",
   "palette.group.commands": "Kommandoer",
   "palette.group.files": "Filer",
@@ -1095,9 +1096,13 @@ export const dict = {
     "Plasser tittellinjen og sesjonsfanene nederst på mobilskjermen",
   "settings.general.row.showCustomAgents.title": "Egendefinerte agenter",
   "settings.general.row.showCustomAgents.description": "Vis agentvelgeren i skrivefeltet",
-  "settings.general.row.newLayoutDesigns.title": "Ny layout og utforming",
-  "settings.general.row.newLayoutDesigns.description":
-    "Aktiver ny layout og utforming for startsiden, skrivefeltet og sesjonsgrensesnittet",
+  "settings.general.row.newInterface.title": "Nytt oppsett",
+  "settings.general.row.newInterface.badge": "Ny",
+  "settings.general.row.newInterface.description":
+    "Bruk de nye fanene og startsidens oppsett. I en begrenset periode kan du bytte mellom oppsettene.",
+  "settings.general.row.newInterfaceNotice.title": "Du bruker nå det nye oppsettet",
+  "settings.general.row.newInterfaceNotice.description": "Det forrige oppsettet er ikke lenger tilgjengelig",
+  "settings.general.row.newInterfaceNotice.dismiss": "Avvis",
   "settings.general.row.pinchZoom.title": "Knip for å zoome",
   "settings.general.row.pinchZoom.description": "Tillat knipebevegelser på styreflaten og Ctrl-rulling for å zoome",
   "settings.updates.action.downloading": "Laster ned...",
