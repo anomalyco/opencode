@@ -629,6 +629,53 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("uses scalar reasoning when structured details are malformed", () =>
+    Effect.gen(function* () {
+      const details = [{ type: "reasoning.text", text: "invalid", id: 42 }]
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { choices: [{ delta: { reasoning: "thinking", reasoning_details: details } }] },
+              { choices: [{ delta: { content: "Hello" } }] },
+              { choices: [{ delta: {}, finish_reason: "stop" }] },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.reasoning).toBe("thinking")
+      expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
+        openai: { reasoningField: "reasoning", reasoningDetails: details },
+      })
+    }),
+  )
+
+  it.effect("does not render malformed text from otherwise valid structured details", () =>
+    Effect.gen(function* () {
+      const details = [
+        { type: "reasoning.encrypted", data: "opaque", format: "openai-responses-v1" },
+        { type: "reasoning.text", text: "invalid", id: 42 },
+      ]
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { choices: [{ delta: { reasoning: "thinking", reasoning_details: details } }] },
+              { choices: [{ delta: { content: "Hello" } }] },
+              { choices: [{ delta: {}, finish_reason: "stop" }] },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.reasoning).toBe("")
+      expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
+        openai: { reasoningField: "reasoning", reasoningDetails: details },
+      })
+    }),
+  )
+
   it.effect("uses reasoning details as display fallback without inventing a scalar replay field", () =>
     Effect.gen(function* () {
       const details = [

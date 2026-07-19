@@ -445,7 +445,7 @@ const reasoningDelta = (delta: Schema.Schema.Type<typeof OpenAIChatDelta> | null
 }
 
 const detailText = (details: ReadonlyArray<unknown>) => {
-  const text = details.flatMap((detail) => {
+  const text = details.filter(isReasoningDetail).flatMap((detail) => {
     if (!isRecord(detail)) return []
     if (detail.type === "reasoning.text") return [typeof detail.text === "string" ? detail.text : ""]
     if (detail.type === "reasoning.summary" && typeof detail.summary === "string" && detail.summary)
@@ -455,16 +455,33 @@ const detailText = (details: ReadonlyArray<unknown>) => {
   if (text.length > 0) return text.join("")
 }
 
-const hasReasoningDetail = (details: ReadonlyArray<unknown>) =>
-  details.some(
-    (detail) =>
-      isRecord(detail) &&
-      ((detail.type === "reasoning.text" &&
-        (detail.text === undefined || detail.text === null || typeof detail.text === "string") &&
-        (detail.signature === undefined || detail.signature === null || typeof detail.signature === "string")) ||
-        (detail.type === "reasoning.summary" && typeof detail.summary === "string") ||
-        (detail.type === "reasoning.encrypted" && typeof detail.data === "string")),
+const REASONING_FORMATS = new Set([
+  "unknown",
+  "openai-responses-v1",
+  "azure-openai-responses-v1",
+  "xai-responses-v1",
+  "anthropic-claude-v1",
+  "google-gemini-v1",
+])
+
+export const isReasoningDetail = (detail: unknown): detail is Record<string, unknown> => {
+  if (!isRecord(detail)) return false
+  if (detail.id !== undefined && detail.id !== null && typeof detail.id !== "string") return false
+  if (
+    detail.format !== undefined &&
+    detail.format !== null &&
+    (typeof detail.format !== "string" || !REASONING_FORMATS.has(detail.format))
   )
+    return false
+  if (detail.index !== undefined && (typeof detail.index !== "number" || !Number.isFinite(detail.index))) return false
+  if (detail.type === "reasoning.summary") return typeof detail.summary === "string"
+  if (detail.type === "reasoning.encrypted") return typeof detail.data === "string"
+  if (detail.type !== "reasoning.text") return false
+  if (detail.text !== undefined && detail.text !== null && typeof detail.text !== "string") return false
+  return detail.signature === undefined || detail.signature === null || typeof detail.signature === "string"
+}
+
+const hasReasoningDetail = (details: ReadonlyArray<unknown>) => details.some(isReasoningDetail)
 
 const reasoningMetadata = (field: ParserState["reasoningField"], details?: ReadonlyArray<unknown>) => ({
   openai: {

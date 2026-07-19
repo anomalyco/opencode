@@ -12,14 +12,6 @@ import { isRecord } from "../protocols/shared"
 export const profile = OpenAICompatibleProfiles.profiles.openrouter
 export const id = ProviderID.make(profile.provider)
 const ADAPTER = "openrouter"
-const REASONING_FORMATS = new Set([
-  "unknown",
-  "openai-responses-v1",
-  "azure-openai-responses-v1",
-  "xai-responses-v1",
-  "anthropic-claude-v1",
-  "google-gemini-v1",
-])
 
 export interface OpenRouterOptions {
   readonly [key: string]: unknown
@@ -97,23 +89,7 @@ const bodyOptions = (input: unknown) => {
 
 const normalizeReasoningDetails = (details: ReadonlyArray<unknown>, seen: Set<string>) =>
   details
-    .filter((detail) => {
-      if (!isRecord(detail)) return false
-      if (detail.id !== undefined && detail.id !== null && typeof detail.id !== "string") return false
-      if (
-        detail.format !== undefined &&
-        detail.format !== null &&
-        (typeof detail.format !== "string" || !REASONING_FORMATS.has(detail.format))
-      )
-        return false
-      if (detail.index !== undefined && (typeof detail.index !== "number" || !Number.isFinite(detail.index)))
-        return false
-      if (detail.type === "reasoning.summary") return typeof detail.summary === "string"
-      if (detail.type === "reasoning.encrypted") return typeof detail.data === "string"
-      if (detail.type !== "reasoning.text") return false
-      if (detail.text !== undefined && detail.text !== null && typeof detail.text !== "string") return false
-      return detail.signature === undefined || detail.signature === null || typeof detail.signature === "string"
-    })
+    .filter(OpenAIChat.isReasoningDetail)
     .reduce<unknown[]>((result, detail) => {
       const previous = result.at(-1)
       if (
