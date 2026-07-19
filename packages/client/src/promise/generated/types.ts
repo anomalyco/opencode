@@ -1276,6 +1276,8 @@ export type SessionStepFailed = {
     error: SessionStructuredError
     cost?: MoneyUSD
     tokens?: TokenUsageInfo
+    snapshot?: string
+    files?: Array<string>
   }
 }
 
