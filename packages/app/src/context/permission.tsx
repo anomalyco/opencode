@@ -71,12 +71,37 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
 
     const activeServer = createMemo(() => {
       if (params.serverKey && settings.general.newLayoutDesigns()) return requireServerKey(params.serverKey)
-      return activeDraft()?.server ?? server.key
+      const key = activeDraft()?.server ?? server.key
+      const servers = global.servers.list()
+      if (servers.length > 0 && !servers.some((s) => ServerConnection.key(s) === key)) {
+        return ServerConnection.key(servers[0])
+      }
+      return key
     })
+
+    const EMPTY_API = {
+      ready: () => true,
+      respond: () => {},
+      autoResponds: () => false,
+      isAutoAccepting: () => false,
+      isAutoAcceptingDirectory: () => false,
+      toggleAutoAccept: () => {},
+      toggleAutoAcceptDirectory: () => {},
+      enableAutoAccept: () => {},
+      disableAutoAccept: () => {},
+      isPermissionAllowAll: () => false,
+    }
+    const EMPTY: PermissionState = {
+      ...EMPTY_API,
+      api: EMPTY_API,
+      sync: null as never,
+      enableConfiguredDirectory: () => {},
+      permissionsEnabled: () => false,
+    }
 
     const ensure = (key: ServerConnection.Key) => {
       const conn = global.servers.list().find((item) => ServerConnection.key(item) === key)
-      if (!conn) throw new Error(`Permission server not found: ${key}`)
+      if (!conn) return EMPTY
       const ctx = global.ensureServerCtx(conn)
       const existing = states.get(ctx.sdk.scope)
       if (existing && global.servers.list().some((item) => ServerConnection.key(item) === existing.key)) {
