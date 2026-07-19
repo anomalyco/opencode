@@ -835,7 +835,9 @@ const onOutputItemDone = Effect.fn("OpenAIResponses.onOutputItemDone")(function*
       {
         ...state,
         lifecycle,
-        hasFunctionCall: resultEvents.some(LLMEvent.is.toolCall) ? true : state.hasFunctionCall,
+        hasFunctionCall:
+          resultEvents.some((event) => LLMEvent.is.toolCall(event) || LLMEvent.is.toolInputError(event)) ||
+          state.hasFunctionCall,
         tools: result.tools,
       },
       events,

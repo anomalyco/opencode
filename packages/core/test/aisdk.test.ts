@@ -1,11 +1,11 @@
-import type { LanguageModelV3CallOptions } from "@ai-sdk/provider"
+import type { LanguageModelV3, LanguageModelV3CallOptions, LanguageModelV3StreamPart } from "@ai-sdk/provider"
 import { AISDK } from "@opencode-ai/core/aisdk"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
-import { LLM, Message } from "@opencode-ai/ai"
-import { LLMClient } from "@opencode-ai/ai/route"
+import { LLM, LLMError, LLMEvent, Message } from "@opencode-ai/ai"
+import { LLMClient, RequestExecutor } from "@opencode-ai/ai/route"
 import { expect } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Layer } from "effect"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(AISDK.locationLayer)
@@ -18,6 +18,37 @@ const model = (packageName: string, settings: Record<string, unknown> = {}) =>
     settings,
     limit: { context: 100, output: 20 },
   })
+
+const streamModel = (events: ReadonlyArray<LanguageModelV3StreamPart>): LanguageModelV3 => ({
+  specificationVersion: "v3",
+  provider: "test",
+  modelId: "test",
+  supportedUrls: {},
+  doGenerate: () => Promise.reject(new Error("Unexpected non-streaming request")),
+  doStream: () =>
+    Promise.resolve({
+      stream: new ReadableStream({
+        start(controller) {
+          events.forEach((event) => controller.enqueue(event))
+          controller.close()
+        },
+      }),
+    }),
+})
+
+const usage = {
+  inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
+  outputTokens: { total: 1, text: 0, reasoning: 0 },
+} as const
+
+const client = LLMClient.layer.pipe(
+  Layer.provide(
+    Layer.succeed(
+      RequestExecutor.Service,
+      RequestExecutor.Service.of({ execute: () => Effect.die("Unexpected HTTP request") }),
+    ),
+  ),
+)
 
 it.effect("keys language models by package and flattened overlays", () =>
   Effect.gen(function* () {
@@ -236,5 +267,71 @@ it.effect("projects replay metadata onto AI SDK prompt parts", () =>
         ],
       },
     ])
+  }),
+)
+
+it.effect("emits malformed AI SDK tool input without executing it", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    const raw = '{"query":"partial'
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = {
+        languageModel: () =>
+          streamModel([
+            { type: "tool-input-start", id: "call_1", toolName: "lookup" },
+            { type: "tool-input-delta", id: "call_1", delta: raw },
+            { type: "tool-input-end", id: "call_1" },
+            { type: "tool-call", toolCallId: "call_1", toolName: "lookup", input: raw },
+            { type: "finish", finishReason: { unified: "tool-calls", raw: "tool_calls" }, usage },
+          ]),
+      }
+    })
+
+    const resolved = yield* aisdk.model(model("test-ai-sdk"))
+    const response = yield* LLMClient.generate(LLM.request({ model: resolved, prompt: "Lookup" })).pipe(
+      Effect.provide(client),
+    )
+
+    expect(response.events.find(LLMEvent.is.toolInputError)).toMatchObject({
+      id: "call_1",
+      name: "lookup",
+      raw,
+      message: "Invalid JSON input for aisdk tool call lookup",
+    })
+    expect(response.events.some(LLMEvent.is.toolInputEnd)).toBeTrue()
+    expect(response.events.some(LLMEvent.is.toolCall)).toBeFalse()
+  }),
+)
+
+it.effect("keeps malformed provider-executed AI SDK input terminal", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    const raw = '{"query":"partial'
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = {
+        languageModel: () =>
+          streamModel([
+            { type: "tool-input-start", id: "call_1", toolName: "web_search", providerExecuted: true },
+            { type: "tool-input-delta", id: "call_1", delta: raw },
+            { type: "tool-input-end", id: "call_1" },
+            {
+              type: "tool-call",
+              toolCallId: "call_1",
+              toolName: "web_search",
+              input: raw,
+              providerExecuted: true,
+            },
+          ]),
+      }
+    })
+
+    const resolved = yield* aisdk.model(model("hosted-test-ai-sdk"))
+    const error = yield* LLMClient.generate(LLM.request({ model: resolved, prompt: "Search" })).pipe(
+      Effect.provide(client),
+      Effect.flip,
+    )
+
+    expect(error).toBeInstanceOf(LLMError)
+    expect(error.message).toContain("Invalid JSON input for aisdk tool call web_search")
   }),
 )

@@ -64,6 +64,75 @@ describe("ToolStream", () => {
     }),
   )
 
+  it.effect("finalizes malformed local input as a non-executable tool error", () =>
+    Effect.gen(function* () {
+      const tools = ToolStream.start(ToolStream.empty<string>(), "item_1", {
+        id: "call_1",
+        name: "lookup",
+        input: '{"query":"partial',
+      })
+      const finished = yield* ToolStream.finish(ADAPTER, tools, "item_1")
+
+      expect(finished).toEqual({
+        tools: {},
+        events: [
+          {
+            type: "tool-input-error",
+            id: "call_1",
+            name: "lookup",
+            raw: '{"query":"partial',
+            message: "Invalid JSON input for test-route tool call lookup",
+          },
+        ],
+      })
+    }),
+  )
+
+  it.effect("preserves valid siblings when one parallel input is malformed", () =>
+    Effect.gen(function* () {
+      const valid = ToolStream.start(ToolStream.empty<number>(), 0, {
+        id: "call_valid",
+        name: "lookup",
+        input: '{"query":"weather"}',
+      })
+      const tools = ToolStream.start(valid, 1, {
+        id: "call_invalid",
+        name: "lookup",
+        input: '{"query":"partial',
+      })
+      const finished = yield* ToolStream.finishAll(ADAPTER, tools)
+
+      expect(finished).toEqual({
+        tools: {},
+        events: [
+          { type: "tool-input-end", id: "call_valid", name: "lookup" },
+          { type: "tool-call", id: "call_valid", name: "lookup", input: { query: "weather" } },
+          {
+            type: "tool-input-error",
+            id: "call_invalid",
+            name: "lookup",
+            raw: '{"query":"partial',
+            message: "Invalid JSON input for test-route tool call lookup",
+          },
+        ],
+      })
+    }),
+  )
+
+  it.effect("keeps malformed provider-executed input terminal", () =>
+    Effect.gen(function* () {
+      const tools = ToolStream.start(ToolStream.empty<string>(), "item_1", {
+        id: "call_1",
+        name: "web_search",
+        input: '{"query":"partial',
+        providerExecuted: true,
+      })
+      const result = yield* Effect.exit(ToolStream.finish(ADAPTER, tools, "item_1"))
+
+      expect(result._tag).toBe("Failure")
+    }),
+  )
+
   it.effect("preserves providerExecuted and clears all tools", () =>
     Effect.gen(function* () {
       const first: ToolStream.State<number> = ToolStream.start(ToolStream.empty<number>(), 0, {

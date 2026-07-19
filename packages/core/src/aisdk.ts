@@ -30,6 +30,7 @@ import {
   type UsageInput,
 } from "@opencode-ai/ai"
 import { Auth, Endpoint, type AnyRoute } from "@opencode-ai/ai/route"
+import { ProviderShared } from "@opencode-ai/ai/protocols/shared"
 import { Cause, Context, Effect, Layer, Option, Schema, Scope, Stream } from "effect"
 import { ModelV2 } from "./model"
 import { ProviderV2 } from "./provider"
@@ -605,6 +606,7 @@ function streamPartEvents(
         LLMEvent.toolInputStart({
           id: event.id,
           name: event.toolName,
+          providerExecuted: event.providerExecuted,
           providerMetadata: providerMetadata(event.providerMetadata),
         }),
       ])
@@ -622,15 +624,30 @@ function streamPartEvents(
       ])
     case "tool-call":
       state.toolNames[event.toolCallId] = event.toolName
-      return Effect.succeed([
-        LLMEvent.toolCall({
-          id: event.toolCallId,
-          name: event.toolName,
-          input: parseToolInput(event.input),
-          providerExecuted: event.providerExecuted,
-          providerMetadata: providerMetadata(event.providerMetadata),
-        }),
-      ])
+      return ProviderShared.parseToolInput("aisdk", event.toolName, event.input).pipe(
+        Effect.map((input) => [
+          LLMEvent.toolCall({
+            id: event.toolCallId,
+            name: event.toolName,
+            input,
+            providerExecuted: event.providerExecuted,
+            providerMetadata: providerMetadata(event.providerMetadata),
+          }),
+        ]),
+        Effect.catch((error) =>
+          event.providerExecuted
+            ? Effect.fail(error)
+            : Effect.succeed([
+                LLMEvent.toolInputError({
+                  id: event.toolCallId,
+                  name: event.toolName,
+                  raw: event.input,
+                  message: error.reason.message,
+                  providerMetadata: providerMetadata(event.providerMetadata),
+                }),
+              ]),
+        ),
+      )
     case "tool-result":
       delete state.toolNames[event.toolCallId]
       return Effect.succeed([
@@ -683,14 +700,6 @@ function finishReason(value: LanguageModelV3FinishReason): FinishReason {
 
 function providerMetadata(value: unknown) {
   return Schema.is(ProviderMetadata)(value) ? value : undefined
-}
-
-function parseToolInput(value: string) {
-  try {
-    return JSON.parse(value) as unknown
-  } catch {
-    return value
-  }
 }
 
 function jsonObject(input: Record<string, unknown>) {

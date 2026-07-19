@@ -484,6 +484,30 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
+  it.effect("keeps malformed server tool input terminal", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(
+        { type: "message_start", message: { usage: { input_tokens: 5 } } },
+        {
+          type: "content_block_start",
+          index: 0,
+          content_block: { type: "server_tool_use", id: "call_1", name: "web_search" },
+        },
+        {
+          type: "content_block_delta",
+          index: 0,
+          delta: { type: "input_json_delta", partial_json: '{"query":"partial' },
+        },
+        { type: "content_block_stop", index: 0 },
+      )
+
+      const error = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse(body)), Effect.flip)
+
+      expect(error).toBeInstanceOf(LLMError)
+      expect(error.message).toContain("Invalid JSON input for anthropic-messages tool call web_search")
+    }),
+  )
+
   it.effect("fails with a typed provider error for stream error frames", () =>
     Effect.gen(function* () {
       const error = yield* LLMClient.generate(request).pipe(

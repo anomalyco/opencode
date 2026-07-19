@@ -703,7 +703,14 @@ const onContentBlockStart = (state: ParserState, event: AnthropicEvent): StepRes
           providerExecuted: block.type === "server_tool_use",
         }),
       },
-      [...events, LLMEvent.toolInputStart({ id: block.id ?? String(event.index), name: block.name ?? "" })],
+      [
+        ...events,
+        LLMEvent.toolInputStart({
+          id: block.id ?? String(event.index),
+          name: block.name ?? "",
+          providerExecuted: block.type === "server_tool_use" ? true : undefined,
+        }),
+      ],
     ]
   }
 

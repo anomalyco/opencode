@@ -9,6 +9,7 @@ import { SessionError } from "@opencode-ai/schema/session-error"
 import { Money } from "@opencode-ai/schema/money"
 import { AgentV2 } from "../../agent"
 import { Snapshot } from "../../snapshot"
+import { RelativePath } from "../../schema"
 import { SessionUsage } from "../usage"
 
 type Input = {
@@ -60,6 +61,7 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
   let stepFailed = false
   let providerFailed = false
   let retryEvidence = false
+  let malformedToolInput = false
   let stepFailure: SessionError.Error | undefined
   let stepSettlement:
     | {
@@ -112,12 +114,12 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
         if (state !== undefined) current.state = { ...current.state, ...state }
         return Effect.succeed(current.ordinal)
       })
-    const end = Effect.fnUntraced(function* (id: string, state?: Record<string, unknown>) {
+    const end = Effect.fnUntraced(function* (id: string, state?: Record<string, unknown>, value?: string) {
       const current = chunks.get(id)
       if (!current) return yield* Effect.die(new Error(`${name} end before start: ${id}`))
       yield* ended(
         id,
-        current.values.join(""),
+        value ?? current.values.join(""),
         current.ordinal,
         state === undefined ? current.state : { ...current.state, ...state },
       )
@@ -175,7 +177,11 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
     yield* toolInput.flush()
   })
 
-  const startToolInput = Effect.fnUntraced(function* (event: { readonly id: string; readonly name: string }) {
+  const startToolInput = Effect.fnUntraced(function* (event: {
+    readonly id: string
+    readonly name: string
+    readonly providerExecuted?: boolean
+  }) {
     if (tools.has(event.id)) return yield* Effect.die(new Error(`Duplicate tool input start: ${event.id}`))
     const assistantMessageID = yield* startAssistant()
     tools.set(event.id, {
@@ -183,7 +189,7 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
       name: event.name,
       called: false,
       settled: false,
-      providerExecuted: false,
+      providerExecuted: event.providerExecuted === true,
     })
     yield* toolInput.start(event.id)
     yield* events.publish(SessionEvent.Tool.Input.Started, {
@@ -194,13 +200,44 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
     })
   })
 
-  const endToolInput = Effect.fnUntraced(function* (event: { readonly id: string; readonly name: string }) {
+  const endToolInput = Effect.fnUntraced(function* (
+    event: { readonly id: string; readonly name: string },
+    value?: string,
+  ) {
     const tool = tools.get(event.id)
     if (!tool) return yield* Effect.die(new Error(`Tool input end before start: ${event.id}`))
     if (tool.name !== event.name)
       return yield* Effect.die(new Error(`Tool input name changed for ${event.id}: ${tool.name} -> ${event.name}`))
     if (!toolInput.has(event.id)) return yield* Effect.die(new Error(`Duplicate tool input end: ${event.id}`))
-    yield* toolInput.end(event.id)
+    yield* toolInput.end(event.id, undefined, value)
+  })
+
+  const failMalformedToolInput = Effect.fnUntraced(function* (event: {
+    readonly id: string
+    readonly name: string
+    readonly raw: string
+    readonly message: string
+  }) {
+    if (!tools.has(event.id)) yield* startToolInput(event)
+    const tool = tools.get(event.id)
+    if (!tool || tool.called || tool.settled)
+      return yield* Effect.die(new Error(`Malformed tool input after call settlement: ${event.id}`))
+    if (tool.name !== event.name)
+      return yield* Effect.die(new Error(`Tool input name changed for ${event.id}: ${tool.name} -> ${event.name}`))
+    if (toolInput.has(event.id)) yield* endToolInput(event, event.raw)
+    tool.settled = true
+    malformedToolInput = true
+    yield* events.publish(SessionEvent.Tool.Failed, {
+      sessionID: input.sessionID,
+      assistantMessageID: tool.assistantMessageID,
+      callID: event.id,
+      error: {
+        type: "tool.input-json",
+        message: "Tool call arguments were malformed JSON and were not executed. Retry with valid JSON.",
+      },
+      executed: false,
+    })
+    if (stepFailure === undefined) stepFailure = { type: "provider.invalid-output", message: event.message }
   })
 
   const flush = Effect.fn("SessionRunner.flush")(function* () {
@@ -236,9 +273,11 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
     if (replace || stepFailure === undefined) stepFailure = error
   })
 
-  const publishStepFailure = Effect.fnUntraced(function* (usage?: {
-    readonly cost: Money.USD
-    readonly tokens: ReturnType<typeof SessionUsage.tokens>
+  const publishStepFailure = Effect.fnUntraced(function* (details?: {
+    readonly cost?: Money.USD
+    readonly tokens?: ReturnType<typeof SessionUsage.tokens>
+    readonly snapshot?: Snapshot.ID
+    readonly files?: readonly RelativePath[]
   }) {
     if (stepFailed || stepFailure === undefined) return
     const assistantMessageID = yield* startAssistant()
@@ -247,7 +286,7 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
       sessionID: input.sessionID,
       assistantMessageID,
       error: stepFailure,
-      ...usage,
+      ...details,
     })
   })
 
@@ -336,6 +375,10 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
       }
       case "tool-input-end":
         yield* endToolInput(event)
+        return
+      case "tool-input-error":
+        retryEvidence = true
+        yield* failMalformedToolInput(event)
         return
       case "tool-call": {
         retryEvidence = true
@@ -439,6 +482,7 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
     publishStepFailure,
     failUnsettledTools,
     hasProviderError: () => providerFailed,
+    hasMalformedToolInput: () => malformedToolInput,
     hasRetryEvidence: () => retryEvidence,
     stepFailure: () => stepFailure,
     stepSettlement: () => stepSettlement,

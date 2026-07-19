@@ -9,6 +9,8 @@ import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { RelativePath } from "@opencode-ai/core/schema"
+import { Snapshot } from "@opencode-ai/core/snapshot"
 import { createLLMEventPublisher } from "@opencode-ai/core/session/runner/publish-llm-event"
 
 const sessionID = SessionV2.ID.make("ses_tool_event_test")
@@ -229,6 +231,8 @@ test("content-filter finish retains failure evidence until step closeout", async
     publisher.publishStepFailure({
       cost: Money.USD.make(1.25),
       tokens: settlement.tokens,
+      snapshot: Snapshot.ID.make("tree-end"),
+      files: [RelativePath.make("src/changed.ts")],
     }),
   )
   expect(published.map((event) => event.type)).toEqual(["session.step.started.1", "session.step.failed.1"])
@@ -236,6 +240,8 @@ test("content-filter finish retains failure evidence until step closeout", async
     error: { type: "provider.content-filter", message: "Provider blocked the response" },
     cost: 1.25,
     tokens: { input: 8, output: 2, reasoning: 1 },
+    snapshot: "tree-end",
+    files: ["src/changed.ts"],
   })
 })
 

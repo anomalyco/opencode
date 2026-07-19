@@ -95,4 +95,20 @@ describe("LLMResponse reducer", () => {
       { type: "tool-call", id: "call_1", name: "lookup", input: { query: "weather" } },
     ])
   })
+
+  test("clears malformed tool input without appending an executable call", () => {
+    const state = reduce([
+      LLMEvent.toolInputStart({ id: "call_1", name: "lookup" }),
+      LLMEvent.toolInputDelta({ id: "call_1", name: "lookup", text: '{"query":"partial' }),
+      LLMEvent.toolInputError({
+        id: "call_1",
+        name: "lookup",
+        raw: '{"query":"partial',
+        message: "Invalid JSON input",
+      }),
+    ])
+
+    expect(state.toolInputs).toEqual({})
+    expect(state.message.content).toEqual([])
+  })
 })

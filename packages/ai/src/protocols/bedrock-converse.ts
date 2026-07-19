@@ -561,7 +561,9 @@ const step = (state: ParserState, event: BedrockEvent) =>
       return [
         {
           ...state,
-          hasToolCalls: resultEvents.some(LLMEvent.is.toolCall) ? true : state.hasToolCalls,
+          hasToolCalls:
+            resultEvents.some((event) => LLMEvent.is.toolCall(event) || LLMEvent.is.toolInputError(event)) ||
+            state.hasToolCalls,
           lifecycle,
           tools: result.tools,
           reasoningSignatures: Object.fromEntries(

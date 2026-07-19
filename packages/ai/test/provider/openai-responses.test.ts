@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { ConfigProvider, Effect, Layer, Stream } from "effect"
 import { Headers, HttpClientRequest } from "effect/unstable/http"
-import { LLM, LLMError, Message, Model, ToolCallPart, Usage } from "../../src"
+import { LLM, LLMError, LLMEvent, Message, Model, ToolCallPart, Usage } from "../../src"
 import { Auth, LLMClient, RequestExecutor, WebSocketExecutor } from "../../src/route"
 import * as Azure from "../../src/providers/azure"
 import * as OpenAI from "../../src/providers/openai"
@@ -1256,6 +1256,71 @@ describe("OpenAI Responses route", () => {
           usage,
         },
       ])
+    }),
+  )
+
+  it.effect("emits malformed final function arguments as an unexecuted tool error", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(
+        {
+          type: "response.output_item.added",
+          item: { type: "function_call", id: "item_1", call_id: "call_1", name: "lookup", arguments: "" },
+        },
+        { type: "response.function_call_arguments.delta", item_id: "item_1", delta: '{"query":"streamed"}' },
+        {
+          type: "response.output_item.done",
+          item: {
+            type: "function_call",
+            id: "item_1",
+            call_id: "call_1",
+            name: "lookup",
+            arguments: '{"query":"partial',
+          },
+        },
+        { type: "response.completed", response: { usage: { input_tokens: 5, output_tokens: 1 } } },
+      )
+      const response = yield* LLMClient.generate(
+        LLM.updateRequest(request, {
+          tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
+        }),
+      ).pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.events.find(LLMEvent.is.toolInputError)).toEqual({
+        type: "tool-input-error",
+        id: "call_1",
+        name: "lookup",
+        raw: '{"query":"partial',
+        message: "Invalid JSON input for openai-responses tool call lookup",
+        providerMetadata: { openai: { itemId: "item_1" } },
+      })
+      expect(response.finishReason).toBe("tool-calls")
+      expect(response.events.some(LLMEvent.is.toolCall)).toBeFalse()
+    }),
+  )
+
+  it.effect("settles malformed function arguments when output_item.added is absent", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(
+        {
+          type: "response.output_item.done",
+          item: {
+            type: "function_call",
+            id: "item_1",
+            call_id: "call_1",
+            name: "lookup",
+            arguments: '{"query":"partial',
+          },
+        },
+        { type: "response.completed", response: { usage: { input_tokens: 5, output_tokens: 1 } } },
+      )
+      const response = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.events.find(LLMEvent.is.toolInputError)).toMatchObject({
+        id: "call_1",
+        name: "lookup",
+        raw: '{"query":"partial',
+      })
+      expect(response.finishReason).toBe("tool-calls")
     }),
   )
 

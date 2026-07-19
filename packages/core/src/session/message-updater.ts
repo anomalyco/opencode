@@ -297,6 +297,12 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
             draft.cost = event.data.cost
             draft.tokens = castDraft(event.data.tokens)
           }
+          if (event.data.snapshot || event.data.files)
+            draft.snapshot = {
+              ...draft.snapshot,
+              end: event.data.snapshot,
+              files: event.data.files ? Array.from(event.data.files) : undefined,
+            }
         })
       },
       "session.text.started": (event) => {

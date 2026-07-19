@@ -464,7 +464,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
     }
 
     // Finalize accumulated tool inputs eagerly when finish_reason arrives so
-    // JSON parse failures fail the stream at the boundary rather than at halt.
+    // valid calls and malformed local calls settle independently.
     const finished =
       finishReason !== undefined && state.finishReason === undefined && Object.keys(tools).length > 0
         ? yield* ToolStream.finishAll(ADAPTER, tools)

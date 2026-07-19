@@ -567,6 +567,22 @@ Recent work
             }),
             SessionMessage.AssistantTool.make({
               type: "tool",
+              id: "hosted-completed",
+              name: "web_search",
+              executed: true,
+              providerState: { itemId: "call_completed" },
+              providerResultState: { itemId: "result_completed" },
+              state: SessionMessage.ToolStateCompleted.make({
+                status: "completed",
+                input: { query: "Effect" },
+                content: [],
+                structured: {},
+                result: { type: "json", value: { found: true } },
+              }),
+              time: { created, completed: created },
+            }),
+            SessionMessage.AssistantTool.make({
+              type: "tool",
               id: "hosted-failed",
               name: "web_search",
               executed: true,
@@ -592,6 +608,22 @@ Recent work
 
     expect(messages[0]?.content).toEqual([
       { type: "text", text: "Partial thought" },
+      {
+        type: "tool-call",
+        id: "hosted-completed",
+        name: "web_search",
+        input: { query: "Effect" },
+        providerExecuted: true,
+        providerMetadata: { provider: { itemId: "call_completed" } },
+      },
+      {
+        type: "tool-result",
+        id: "hosted-completed",
+        name: "web_search",
+        result: { type: "json", value: { found: true } },
+        providerExecuted: true,
+        providerMetadata: { provider: { itemId: "result_completed" } },
+      },
       {
         type: "tool-call",
         id: "hosted-failed",

@@ -80,6 +80,7 @@ const layer = Layer.effect(
       sessionID: SessionSchema.ID,
       promotion: SessionPending.Delivery | undefined,
       step: number,
+      recoverMalformedToolInput: boolean,
       recoverOverflow?: typeof compaction.compact,
       assistantMessageID?: SessionMessage.ID,
     ) {
@@ -195,25 +196,27 @@ const layer = Layer.effect(
         tokens: settlement.tokens,
       })
 
-      // Captures the end snapshot, diffs it against the step's start, and durably ends the
-      // assistant step.
+      const captureStepEnd = Effect.fnUntraced(function* () {
+        const snapshot = yield* snapshots.capture()
+        const files =
+          startSnapshot && snapshot
+            ? yield* snapshots
+                .files({ from: startSnapshot, to: snapshot })
+                .pipe(Effect.catch(() => Effect.succeed(undefined)))
+            : undefined
+        return { snapshot, files }
+      })
+
       const publishStepEnd = (settlement: NonNullable<ReturnType<typeof publisher.stepSettlement>>) =>
         Effect.gen(function* () {
-          const endSnapshot = yield* snapshots.capture()
-          const files =
-            startSnapshot && endSnapshot
-              ? yield* snapshots
-                  .files({ from: startSnapshot, to: endSnapshot })
-                  .pipe(Effect.catch(() => Effect.succeed(undefined)))
-              : undefined
+          const end = yield* captureStepEnd()
           yield* serialized(
             events.publish(SessionEvent.Step.Ended, {
               sessionID: session.id,
               assistantMessageID: yield* publisher.startAssistant(),
               finish: settlement.finish,
               ...stepUsage(settlement),
-              snapshot: endSnapshot,
-              files,
+              ...end,
             }),
           )
         })
@@ -253,7 +256,7 @@ const layer = Layer.effect(
                 step: currentStep,
               })
             }
-            yield* serialized(publisher.failAssistant(error))
+            yield* serialized(publisher.failAssistant(error, true))
           }
           // Provider error events only arrive from the stream, so the flag is final here.
           const providerFailed = publisher.hasProviderError()
@@ -274,7 +277,7 @@ const layer = Layer.effect(
           if (settled._tag === "Failure") yield* FiberSet.clear(toolFibers)
           if (userDeclined || streamInterrupted || toolsInterrupted) {
             yield* serialized(publisher.failUnsettledTools({ type: "aborted", message: "Tool execution interrupted" }))
-            yield* serialized(publisher.failAssistant({ type: "aborted", message: "Step interrupted" }))
+            yield* serialized(publisher.failAssistant({ type: "aborted", message: "Step interrupted" }, true))
           }
           // A settled tool fiber failure is one of two things. A defect from a tool
           // implementation becomes a failed tool call the model can read, and the step still
@@ -287,7 +290,7 @@ const layer = Layer.effect(
             const failure = infraError ?? Cause.squash(settledFailure)
             const error = toSessionError(failure)
             yield* serialized(publisher.failUnsettledTools(error))
-            if (infraError !== undefined) yield* serialized(publisher.failAssistant(error))
+            if (infraError !== undefined) yield* serialized(publisher.failAssistant(error, true))
           }
 
           // Fail unresolved calls before the terminal step event. Local calls have joined, so
@@ -315,27 +318,49 @@ const layer = Layer.effect(
               : false
           if (hostedResultMissing && !publisher.stepSettlement())
             yield* serialized(
-              publisher.failAssistant({
-                type: "tool.result-missing",
-                message: "Provider did not return a tool result",
-              }),
+              publisher.failAssistant(
+                {
+                  type: "tool.result-missing",
+                  message: "Provider did not return a tool result",
+                },
+                true,
+              ),
             )
 
           const stepFailure = publisher.stepFailure()
           const stepSettlement = publisher.stepSettlement()
           if (stepSettlement && !stepFailure) yield* publishStepEnd(stepSettlement)
-          if (stepFailure)
-            yield* serialized(publisher.publishStepFailure(stepSettlement ? stepUsage(stepSettlement) : undefined))
+          if (stepFailure) {
+            const end = yield* captureStepEnd()
+            yield* serialized(
+              publisher.publishStepFailure({
+                ...(stepSettlement ? stepUsage(stepSettlement) : {}),
+                ...end,
+              }),
+            )
+          }
+
+          const recoveredMalformedToolInput =
+            recoverMalformedToolInput &&
+            publisher.hasMalformedToolInput() &&
+            stream._tag === "Success" &&
+            stepSettlement !== undefined &&
+            !providerFailed &&
+            !streamInterrupted &&
+            !userDeclined &&
+            !toolsInterrupted &&
+            infraError === undefined
 
           if (stream._tag === "Failure") return yield* Effect.failCause(stream.cause)
           if (userDeclined) return yield* Effect.interrupt
           if ((toolsInterrupted || infraError !== undefined) && settledFailure)
             return yield* Effect.failCause(settledFailure)
           if (toolsInterrupted && settled._tag === "Failure") return yield* Effect.failCause(settled.cause)
-          if (stepFailure) return yield* new StepFailedError({ error: stepFailure })
+          if (stepFailure && !recoveredMalformedToolInput) return yield* new StepFailedError({ error: stepFailure })
           return {
             _tag: "Completed",
-            needsContinuation,
+            needsContinuation: needsContinuation || recoveredMalformedToolInput,
+            malformedToolInput: recoveredMalformedToolInput,
             step: currentStep,
           } as const
         }),
@@ -346,6 +371,7 @@ const layer = Layer.effect(
       sessionID: SessionSchema.ID,
       promotion: SessionPending.Delivery | undefined,
       step: number,
+      recoverMalformedToolInput: boolean,
     ) {
       // Compaction restarts rebuild the request from compacted history without re-promoting.
       // Overflow recovery is one-shot: a post-compaction attempt must not recover another
@@ -356,7 +382,14 @@ const layer = Layer.effect(
       let assistantMessageID: SessionMessage.ID | undefined
       while (true) {
         const attempt = yield* Effect.suspend(() =>
-          attemptStep(sessionID, currentPromotion, currentStep, recoverOverflow, assistantMessageID),
+          attemptStep(
+            sessionID,
+            currentPromotion,
+            currentStep,
+            recoverMalformedToolInput,
+            recoverOverflow,
+            assistantMessageID,
+          ),
         ).pipe(
           Effect.tapError((error) =>
             error instanceof SessionRunnerRetry.RetryableFailure
@@ -378,7 +411,12 @@ const layer = Layer.effect(
               .pipe(Effect.andThen(Effect.fail(error.cause)))
           }),
         )
-        if (attempt._tag === "Completed") return { needsContinuation: attempt.needsContinuation, step: attempt.step }
+        if (attempt._tag === "Completed")
+          return {
+            needsContinuation: attempt.needsContinuation,
+            malformedToolInput: attempt.malformedToolInput,
+            step: attempt.step,
+          }
         if (attempt._tag === "RestartAfterOverflowCompaction") recoverOverflow = undefined
         yield* Effect.yieldNow
         currentPromotion = undefined
@@ -436,12 +474,18 @@ const layer = Layer.effect(
       while (shouldRun) {
         let needsContinuation = true
         let step = 1
+        let canRecoverMalformedToolInput = true
         // Repeat steps while continuation is needed. A step needs continuation only
         // when it recorded local tool calls whose results the model has not yet seen;
         // a provider error suppresses it. Pending steers also continue the loop so
         // interjections are answered before the session goes idle.
         while (needsContinuation) {
-          const result = yield* runStep(input.sessionID, promotion, step)
+          const result = yield* runStep(
+            input.sessionID,
+            promotion,
+            step,
+            canRecoverMalformedToolInput,
+          )
           // Steer/queue promotion inside runStep has already made the pending input a visible
           // user message by this point, so the first-user-message check below is reliable.
           if (!titleAttempted.has(input.sessionID)) {
@@ -449,6 +493,7 @@ const layer = Layer.effect(
             forkTitle(title.generateForFirstPrompt(yield* getSession(input.sessionID)).pipe(Effect.ignore))
           }
           needsContinuation = result.needsContinuation
+          if (result.malformedToolInput) canRecoverMalformedToolInput = false
           step = result.step + 1
           if (needsContinuation) {
             yield* runPendingCompaction(input.sessionID)

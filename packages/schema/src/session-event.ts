@@ -276,6 +276,8 @@ export namespace Step {
       error: SessionError.Error,
       cost: Money.USD.pipe(optional),
       tokens: TokenUsage.Info.pipe(optional),
+      snapshot: Snapshot.ID.pipe(optional),
+      files: Schema.Array(RelativePath).pipe(optional),
     },
   })
   export type Failed = typeof Failed.Type
