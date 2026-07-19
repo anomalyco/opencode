@@ -97,36 +97,76 @@ describe("OpenRouter", () => {
     }),
   )
 
-  it.effect("filters unsigned signed-format details and duplicate continuation state", () =>
+  it.effect("preserves opaque and duplicate continuation details", () =>
     Effect.gen(function* () {
-      const encrypted = { type: "reasoning.encrypted", id: "state", data: "opaque", format: "openai-responses-v1" }
+      const details = [
+        { type: "reasoning.future", format: "provider-v2", state: { opaque: true } },
+        { type: "reasoning.encrypted", id: "state", data: "opaque" },
+        { type: "reasoning.encrypted", id: "state", data: "opaque" },
+      ]
       const prepared = yield* LLMClient.prepare<OpenRouter.OpenRouterBody>(
         LLM.request({
           model: OpenRouter.configure({ apiKey: "test-key" }).model("anthropic/claude-sonnet-4.6"),
           messages: [
-            Message.assistant([
-              {
-                type: "reasoning",
-                text: "Thinking",
-                providerMetadata: {
-                  openai: {
-                    reasoningField: "reasoning",
-                    reasoningDetails: [
-                      { type: "reasoning.text", text: "discard", id: 42 },
-                      {
-                        type: "reasoning.text",
-                        text: "Thinking",
-                        signature: "signed",
-                        format: "anthropic-claude-v1",
-                      },
-                      encrypted,
-                      encrypted,
-                      { type: "reasoning.text", text: "unsigned", format: "anthropic-claude-v1" },
-                    ],
-                  },
+            Message.assistant({
+              type: "reasoning",
+              text: "Thinking",
+              providerMetadata: { openai: { reasoningField: "reasoning", reasoningDetails: details } },
+            }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        { role: "assistant", content: null, reasoning: "Thinking", reasoning_details: details },
+      ])
+    }),
+  )
+
+  it.effect("does not merge distinct adjacent reasoning text blocks", () =>
+    Effect.gen(function* () {
+      const details = [
+        { type: "reasoning.text", id: "first", index: 0, text: "A", opaque: "first" },
+        { type: "reasoning.text", id: "second", index: 1, text: "B", opaque: "second" },
+      ]
+      const prepared = yield* LLMClient.prepare<OpenRouter.OpenRouterBody>(
+        LLM.request({
+          model: OpenRouter.configure({ apiKey: "test-key" }).model("anthropic/claude-sonnet-4.6"),
+          messages: [
+            Message.assistant({
+              type: "reasoning",
+              text: "AB",
+              providerMetadata: { openai: { reasoningField: "reasoning", reasoningDetails: details } },
+            }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        { role: "assistant", content: null, reasoning: "AB", reasoning_details: details },
+      ])
+    }),
+  )
+
+  it.effect("retains opaque fields while merging compatible fragments", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenRouter.OpenRouterBody>(
+        LLM.request({
+          model: OpenRouter.configure({ apiKey: "test-key" }).model("anthropic/claude-sonnet-4.6"),
+          messages: [
+            Message.assistant({
+              type: "reasoning",
+              text: "AB",
+              providerMetadata: {
+                openai: {
+                  reasoningField: "reasoning",
+                  reasoningDetails: [
+                    { type: "reasoning.text", text: "A", signature: "", format: "", first: true },
+                    { type: "reasoning.text", text: "B", second: true },
+                  ],
                 },
               },
-            ]),
+            }),
           ],
         }),
       )
@@ -135,15 +175,16 @@ describe("OpenRouter", () => {
         {
           role: "assistant",
           content: null,
-          reasoning: "Thinking",
+          reasoning: "AB",
           reasoning_details: [
             {
               type: "reasoning.text",
-              text: "Thinking",
-              signature: "signed",
-              format: "anthropic-claude-v1",
+              text: "AB",
+              signature: "",
+              format: "",
+              first: true,
+              second: true,
             },
-            encrypted,
           ],
         },
       ])

@@ -115,7 +115,7 @@ describe("Cloudflare", () => {
       )
 
       expect(response.reasoning).toBe("Thinking")
-      expect(response.events.filter(LLMEvent.is.reasoningDelta)).toHaveLength(3)
+      expect(response.events.filter(LLMEvent.is.reasoningDelta)).toHaveLength(2)
       expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
         openai: { reasoningField: "reasoning", reasoningDetails: details },
       })

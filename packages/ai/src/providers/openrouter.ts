@@ -43,7 +43,6 @@ export const protocol = Protocol.make({
       OpenAIChat.protocol.body.from(request).pipe(
         Effect.map((body) => {
           const sourceAssistants = request.messages.filter((message) => message.role === "assistant")
-          const seenReasoningDetails = new Set<string>()
           let assistantIndex = 0
           const messages = body.messages.map((message) => {
             if (message.role !== "assistant") return message
@@ -53,7 +52,7 @@ export const protocol = Protocol.make({
               .map((part) => part.text)
               .join("")
             const reasoningDetails = Array.isArray(message.reasoning_details)
-              ? normalizeReasoningDetails(message.reasoning_details, seenReasoningDetails)
+              ? mergeReasoningDetails(message.reasoning_details)
               : undefined
             return {
               ...message,
@@ -87,47 +86,40 @@ const bodyOptions = (input: unknown) => {
   }
 }
 
-const normalizeReasoningDetails = (details: ReadonlyArray<unknown>, seen: Set<string>) =>
-  details
-    .filter(OpenAIChat.isReasoningDetail)
-    .reduce<unknown[]>((result, detail) => {
-      const previous = result.at(-1)
-      if (
-        !isRecord(previous) ||
-        previous.type !== "reasoning.text" ||
-        !isRecord(detail) ||
-        detail.type !== "reasoning.text"
-      ) {
-        result.push(detail)
-        return result
-      }
-      result[result.length - 1] = {
-        ...previous,
-        text: `${typeof previous.text === "string" ? previous.text : ""}${typeof detail.text === "string" ? detail.text : ""}`,
-        signature: previous.signature || detail.signature,
-        format: previous.format || detail.format,
-      }
+const mergeReasoningDetails = (details: ReadonlyArray<unknown>) =>
+  details.reduce<unknown[]>((result, detail) => {
+    const previous = result.at(-1)
+    if (
+      !isRecord(previous) ||
+      previous.type !== "reasoning.text" ||
+      !isRecord(detail) ||
+      detail.type !== "reasoning.text" ||
+      conflictingReasoningTextDetails(previous, detail)
+    ) {
+      result.push(detail)
       return result
-    }, [])
-    .filter((detail) => {
-      if (!isRecord(detail)) return false
-      if (detail.type === "reasoning.text") {
-        const format = typeof detail.format === "string" ? detail.format : "anthropic-claude-v1"
-        if ((format === "anthropic-claude-v1" || format === "google-gemini-v1") && !detail.signature) return false
-      }
-      const key = (() => {
-        if (detail.type === "reasoning.summary" && typeof detail.summary === "string") return detail.summary
-        if (detail.type === "reasoning.encrypted" && typeof detail.data === "string")
-          return typeof detail.id === "string" && detail.id ? detail.id : detail.data
-        if (detail.type === "reasoning.text") {
-          if (typeof detail.text === "string" && detail.text) return detail.text
-          if (typeof detail.signature === "string" && detail.signature) return detail.signature
-        }
-      })()
-      if (key === undefined || seen.has(key)) return false
-      seen.add(key)
-      return true
-    })
+    }
+    result[result.length - 1] = {
+      ...previous,
+      ...Object.fromEntries(Object.entries(detail).filter((entry) => entry[1] !== undefined)),
+      text: `${typeof previous.text === "string" ? previous.text : ""}${typeof detail.text === "string" ? detail.text : ""}`,
+      signature: mergeDetailValue(previous.signature, detail.signature),
+      format: mergeDetailValue(previous.format, detail.format),
+    }
+    return result
+  }, [])
+
+const mergeDetailValue = (previous: unknown, current: unknown) =>
+  previous || current || (previous !== undefined ? previous : current)
+
+const conflictingReasoningTextDetails = (previous: Record<string, unknown>, current: Record<string, unknown>) =>
+  conflictingDetailValue(previous.id, current.id) ||
+  conflictingDetailValue(previous.index, current.index) ||
+  conflictingDetailValue(previous.format, current.format) ||
+  (Boolean(previous.signature) && Boolean(current.signature) && previous.signature !== current.signature)
+
+const conflictingDetailValue = (previous: unknown, current: unknown) =>
+  previous !== undefined && previous !== null && current !== undefined && current !== null && previous !== current
 
 export const route = Route.make({
   id: ADAPTER,
