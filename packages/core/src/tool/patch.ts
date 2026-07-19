@@ -3,7 +3,7 @@ export * as PatchTool from "./patch"
 import type { Context as PluginContext } from "@opencode-ai/plugin/v2/effect/plugin"
 import { ToolFailure } from "@opencode-ai/ai"
 import { FileDiff } from "@opencode-ai/schema/file-diff"
-import { createTwoFilesPatch, diffLines } from "diff"
+import { formatPatch, structuredPatch } from "diff"
 import { Effect, Schema } from "effect"
 import { FileMutation } from "../file-mutation"
 import { FSUtil } from "../fs-util"
@@ -246,21 +246,18 @@ export const Plugin = {
 }
 
 function patchFile(change: Prepared): typeof FileDiff.Info.Type {
-  const counts = diffLines(change.before, change.after).reduce(
-    (result, item) => ({
-      additions: result.additions + (item.added ? (item.count ?? 0) : 0),
-      deletions: result.deletions + (item.removed ? (item.count ?? 0) : 0),
+  const target = (change.type === "update" ? change.moveTarget : undefined)?.resource ?? change.target.resource
+  const diff = structuredPatch(change.target.resource, target, change.before, change.after)
+  const counts = diff.hunks.flatMap((hunk) => hunk.lines).reduce(
+    (result, line) => ({
+      additions: result.additions + (line.startsWith("+") ? 1 : 0),
+      deletions: result.deletions + (line.startsWith("-") ? 1 : 0),
     }),
     { additions: 0, deletions: 0 },
   )
   return {
-    file: (change.type === "update" ? change.moveTarget : undefined)?.resource ?? change.target.resource,
-    patch: createTwoFilesPatch(
-      change.target.resource,
-      (change.type === "update" ? change.moveTarget : undefined)?.resource ?? change.target.resource,
-      change.before,
-      change.after,
-    ),
+    file: target,
+    patch: formatPatch(diff),
     status: change.type === "add" ? "added" : change.type === "delete" ? "deleted" : "modified",
     ...counts,
   }
