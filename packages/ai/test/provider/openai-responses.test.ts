@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { ConfigProvider, Effect, Layer, Stream } from "effect"
 import { Headers, HttpClientRequest } from "effect/unstable/http"
-import { LLM, LLMError, LLMEvent, Message, Model, ToolCallPart, Usage } from "../../src"
+import { LLM, LLMError, LLMEvent, Message, Model, ToolCallPart, ToolResultPart, Usage } from "../../src"
 import { Auth, LLMClient, RequestExecutor, WebSocketExecutor } from "../../src/route"
 import * as Azure from "../../src/providers/azure"
 import * as OpenAI from "../../src/providers/openai"
@@ -73,6 +73,21 @@ describe("OpenAI Responses route", () => {
         { type: "image_generation", action: "generate", quality: "high", size: "1024x1024" },
       ])
       expect(prepared.body.tool_choice).toEqual({ type: "image_generation" })
+    }),
+  )
+
+  it.effect("rejects invalid hosted image generation options locally", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.prepare(
+        LLM.request({
+          model,
+          prompt: "Show me a rooftop garden.",
+          tools: [OpenAI.imageGeneration({ outputCompression: -1, partialImages: 4, size: "bogus" })],
+        }),
+      ).pipe(Effect.flip)
+
+      expect(error.reason._tag).toBe("InvalidRequest")
+      expect(error.message).toContain("image generation tool options are invalid")
     }),
   )
 
@@ -1121,6 +1136,48 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("continues stateless hosted image generation with the generated image", () =>
+    Effect.gen(function* () {
+      const imageTool = OpenAI.imageGeneration({ action: "edit" })
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.request({
+          model,
+          messages: [
+            Message.user("Generate a black triangle."),
+            Message.assistant([
+              ToolCallPart.make({
+                id: "ig_1",
+                name: "image_generation",
+                input: {},
+                providerExecuted: true,
+                providerMetadata: { openai: { itemId: "ig_1" } },
+              }),
+              ToolResultPart.make({
+                id: "ig_1",
+                name: "image_generation",
+                result: {
+                  type: "content",
+                  value: [{ type: "file", uri: "data:image/png;base64,AQID", mime: "image/png" }],
+                },
+                providerExecuted: true,
+                providerMetadata: { openai: { itemId: "ig_1" } },
+              }),
+            ]),
+            Message.user("Make it blue."),
+          ],
+          tools: [imageTool],
+        }),
+      )
+
+      expect(prepared.body.store).toBe(false)
+      expect(prepared.body.input).toEqual([
+        { role: "user", content: [{ type: "input_text", text: "Generate a black triangle." }] },
+        { role: "user", content: [{ type: "input_image", image_url: "data:image/png;base64,AQID" }] },
+        { role: "user", content: [{ type: "input_text", text: "Make it blue." }] },
+      ])
+    }),
+  )
+
   it.effect("joins streamed summary blocks into one continuation reasoning item", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
@@ -1407,6 +1464,28 @@ describe("OpenAI Responses route", () => {
           value: [{ type: "file", uri: "data:image/png;base64,AQID", mime: "image/png" }],
         },
       })
+    }),
+  )
+
+  it.effect("rejects malformed image generation base64", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              {
+                type: "response.output_item.done",
+                item: { type: "image_generation_call", id: "ig_bad", status: "completed", result: "%%%" },
+              },
+              { type: "response.completed", response: {} },
+            ),
+          ),
+        ),
+        Effect.flip,
+      )
+
+      expect(error.reason._tag).toBe("InvalidProviderOutput")
+      expect(error.message).toContain("invalid image base64")
     }),
   )
 

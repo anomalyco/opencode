@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect"
-import { HttpOptions, LLMError, ModelID, ProviderID, ProviderMetadata, Usage } from "./schema"
+import { HttpOptions, InvalidRequestReason, LLMError, ModelID, ProviderID, ProviderMetadata, Usage } from "./schema"
 import { ImageClient, type Execute as ImageExecute } from "./image-client"
 
 export interface ImageRoute {
@@ -54,15 +54,15 @@ export const ImageModelSchema = Schema.declare((value): value is ImageModel => v
 })
 
 export const ImageSize = Schema.Struct({
-  width: Schema.Number,
-  height: Schema.Number,
+  width: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+  height: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
 }).annotate({ identifier: "Image.Size" })
 export type ImageSize = Schema.Schema.Type<typeof ImageSize>
 
 export class ImageRequest extends Schema.Class<ImageRequest>("Image.Request")({
   model: ImageModelSchema,
   prompt: Schema.String,
-  count: Schema.optional(Schema.Number),
+  count: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
   size: Schema.optional(ImageSize),
   aspectRatio: Schema.optional(Schema.String),
   seed: Schema.optional(Schema.Number),
@@ -99,7 +99,16 @@ export const request = (input: ImageRequest | ImageRequestInput) => {
   })
 }
 
-export const generate = (input: ImageRequest | ImageRequestInput) => ImageClient.generate(request(input))
+export const generate = (input: ImageRequest | ImageRequestInput) =>
+  Effect.try({
+    try: () => request(input),
+    catch: (error) =>
+      new LLMError({
+        module: "Image",
+        method: "generate",
+        reason: new InvalidRequestReason({ message: error instanceof Error ? error.message : String(error) }),
+      }),
+  }).pipe(Effect.flatMap(ImageClient.generate))
 
 export const Image = {
   request,

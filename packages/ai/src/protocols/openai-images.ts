@@ -9,7 +9,7 @@ import {
   type ImageRoute,
 } from "../image"
 import { Auth, type Definition as AuthDefinition } from "../route/auth"
-import { InvalidProviderOutputReason, LLMError, Usage } from "../schema"
+import { InvalidProviderOutputReason, LLMError, Usage, mergeHttpOptions, mergeJsonRecords } from "../schema"
 import { ProviderShared } from "./shared"
 
 const ADAPTER = "openai-images"
@@ -27,13 +27,13 @@ export interface OpenAIImageOptions {
 const OpenAIImageBody = Schema.Struct({
   model: Schema.String,
   prompt: Schema.String,
-  n: Schema.optional(Schema.Number),
+  n: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
   size: Schema.optional(Schema.String),
   quality: Schema.optional(Schema.Literals(["auto", "low", "medium", "high"])),
   background: Schema.optional(Schema.Literals(["auto", "opaque", "transparent"])),
   moderation: Schema.optional(Schema.Literals(["auto", "low"])),
   output_format: Schema.optional(Schema.Literals(["png", "jpeg", "webp"])),
-  output_compression: Schema.optional(Schema.Number),
+  output_compression: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 100 }))),
 })
 export type OpenAIImageBody = Schema.Schema.Type<typeof OpenAIImageBody>
 
@@ -92,6 +92,38 @@ const invalidOutput = (message: string) =>
     reason: new InvalidProviderOutputReason({ message, route: ADAPTER }),
   })
 
+const applyQuery = (url: string, query: Record<string, string> | undefined) => {
+  if (!query) return url
+  const next = new URL(url)
+  Object.entries(query).forEach(([key, value]) => next.searchParams.set(key, value))
+  return next.toString()
+}
+
+const PROTOCOL_BODY_FIELDS = new Set([
+  "model",
+  "prompt",
+  "n",
+  "size",
+  "quality",
+  "background",
+  "moderation",
+  "output_format",
+  "output_compression",
+])
+
+const bodyWithOverlay = Effect.fn("OpenAIImages.bodyWithOverlay")(function* (
+  imageBody: OpenAIImageBody,
+  overlay: Record<string, unknown> | undefined,
+) {
+  if (!overlay) return imageBody
+  const reserved = Object.keys(overlay).filter((key) => PROTOCOL_BODY_FIELDS.has(key))
+  if (reserved.length > 0)
+    return yield* ProviderShared.invalidRequest(
+      `http.body cannot overlay protocol-owned field(s): ${reserved.join(", ")}`,
+    )
+  return mergeJsonRecords(imageBody, overlay) ?? imageBody
+})
+
 export const model = (input: ModelInput) => {
   const route: ImageRoute = {
     id: ADAPTER,
@@ -102,9 +134,10 @@ export const model = (input: ModelInput) => {
         return yield* ProviderShared.invalidRequest("OpenAI Images does not support the common seed option")
 
       const requestBody = yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(OpenAIImageBody))(body(request))
-      const text = Schema.encodeSync(Schema.fromJsonString(OpenAIImageBody))(requestBody)
-      const url = `${(input.baseURL ?? DEFAULT_BASE_URL).replace(/\/$/, "")}${PATH}`
-      const http = request.http ?? request.model.defaults?.http
+      const http = mergeHttpOptions(request.model.defaults?.http, request.http)
+      const overlaidBody = yield* bodyWithOverlay(requestBody, http?.body)
+      const text = ProviderShared.encodeJson(overlaidBody)
+      const url = applyQuery(`${(input.baseURL ?? DEFAULT_BASE_URL).replace(/\/$/, "")}${PATH}`, http?.query)
       const headers = yield* Auth.toEffect(input.auth)({
         request,
         method: "POST",

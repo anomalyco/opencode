@@ -1,7 +1,7 @@
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options"
 import type { Route, RouteDefaultsInput } from "../route/client"
 import type { ProviderPackage } from "../provider-package"
-import { HttpOptions, ProviderID, ToolDefinition, type ModelID } from "../schema"
+import { HttpOptions, ProviderID, ToolDefinition, mergeHttpOptions, type ModelID } from "../schema"
 import * as OpenAIChat from "../protocols/openai-chat"
 import * as OpenAIResponses from "../protocols/openai-responses"
 import { withOpenAIOptions, type OpenAIProviderOptionsInput } from "./openai-options"
@@ -22,6 +22,7 @@ export type Config = RouteDefaultsInput &
     readonly baseURL?: string
     readonly queryParams?: Record<string, string>
     readonly providerOptions?: OpenAIProviderOptionsInput
+    readonly image?: ImageConfig
   }
 
 export interface ImageConfig {
@@ -72,7 +73,7 @@ export interface Settings extends ProviderPackage.Settings {
 const auth = (options: ProviderAuthOption<"optional">) => AuthOptions.bearer(options, "OPENAI_API_KEY")
 
 const defaults = (input: Config) => {
-  const { apiKey: _, auth: _auth, baseURL: _baseURL, queryParams: _queryParams, ...rest } = input
+  const { apiKey: _, auth: _auth, baseURL: _baseURL, queryParams: _queryParams, image: _image, ...rest } = input
   return rest
 }
 
@@ -92,15 +93,19 @@ export const configure = (input: Config = {}) => {
   const responsesWebSocket = (id: string | ModelID) =>
     responsesWebSocketRoute.with(withOpenAIOptions(id, modelDefaults, { textVerbosity: true })).model({ id })
   const chat = (id: string | ModelID) => chatRoute.with(withOpenAIOptions(id, modelDefaults)).model({ id })
-  const image = (modelID: string | ModelID, options: ImageConfig = {}) =>
+  const image = (modelID: string | ModelID) =>
     OpenAIImages.model({
       id: modelID,
       auth: auth(input),
       baseURL: input.baseURL,
       headers: input.headers,
       defaults: {
-        providerOptions: options.providerOptions === undefined ? undefined : { openai: { ...options.providerOptions } },
-        http: input.http === undefined ? undefined : HttpOptions.make(input.http),
+        providerOptions:
+          input.image?.providerOptions === undefined ? undefined : { openai: { ...input.image.providerOptions } },
+        http: mergeHttpOptions(
+          input.http === undefined ? undefined : HttpOptions.make(input.http),
+          input.queryParams === undefined ? undefined : new HttpOptions({ query: input.queryParams }),
+        ),
       },
     })
 

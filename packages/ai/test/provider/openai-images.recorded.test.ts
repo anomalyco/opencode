@@ -6,13 +6,14 @@ import { recordedTests } from "../recorded-test"
 
 const model = OpenAI.configure({
   apiKey: process.env.OPENAI_API_KEY ?? "fixture",
-}).image("gpt-image-1-mini", {
-  providerOptions: {
-    quality: "low",
-    outputFormat: "jpeg",
-    outputCompression: 10,
+  image: {
+    providerOptions: {
+      quality: "low",
+      outputFormat: "jpeg",
+      outputCompression: 10,
+    },
   },
-})
+}).image("gpt-image-1-mini")
 
 const recorded = recordedTests({
   prefix: "openai-images",

@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMEvent } from "../../src"
+import { LLM, LLMEvent, Message } from "../../src"
 import { OpenAI } from "../../src/providers"
 import { recordedTests } from "../recorded-test"
 
@@ -16,22 +16,24 @@ const recorded = recordedTests({
 })
 
 describe("OpenAI Responses image generation recorded", () => {
-  recorded.effect("generates an image with the hosted tool", () =>
+  recorded.effect("generates and edits an image with the hosted tool", () =>
     Effect.gen(function* () {
+      const initial = Message.user("Generate a simple flat black triangle centered on a plain white background.")
+      const tools = [
+        OpenAI.imageGeneration({
+          action: "auto",
+          quality: "low",
+          size: "1024x1024",
+          outputFormat: "jpeg",
+          outputCompression: 10,
+          partialImages: 0,
+        }),
+      ]
       const response = yield* LLM.generate(
         LLM.request({
           model: openai.responses("gpt-5-mini"),
-          prompt: "Generate a simple flat black triangle centered on a plain white background.",
-          tools: [
-            OpenAI.imageGeneration({
-              action: "generate",
-              quality: "low",
-              size: "1024x1024",
-              outputFormat: "jpeg",
-              outputCompression: 10,
-              partialImages: 0,
-            }),
-          ],
+          messages: [initial],
+          tools,
           toolChoice: "image_generation",
         }),
       )
@@ -46,6 +48,19 @@ describe("OpenAI Responses image generation recorded", () => {
       if (result.result.value[0]?.type !== "file") return
       expect(result.result.value[0].mime).toBe("image/jpeg")
       expect(result.result.value[0].uri.startsWith("data:image/jpeg;base64,")).toBe(true)
+
+      const edited = yield* LLM.generate(
+        LLM.request({
+          model: openai.responses("gpt-5-mini"),
+          messages: [initial, response.message, Message.user("Now make the triangle blue.")],
+          tools,
+          toolChoice: "image_generation",
+        }),
+      )
+      const editedResult = edited.events.find(LLMEvent.is.toolResult)
+      expect(editedResult?.result.type).toBe("content")
+      if (editedResult?.result.type !== "content") return
+      expect(editedResult.result.value[0]?.type).toBe("file")
     }),
   )
 })
