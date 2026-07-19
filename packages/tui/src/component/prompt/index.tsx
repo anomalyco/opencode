@@ -108,6 +108,23 @@ function randomIndex(count: number) {
   return Math.floor(Math.random() * count)
 }
 
+export function resolvePromptMetadata(input: {
+  agentStatus: "loading" | "complete"
+  hasAgent: boolean
+  hasModel: boolean
+}): {
+  agent: "agent" | "empty"
+  visible: boolean
+  separator: boolean
+} {
+  const agent = input.agentStatus === "complete" && input.hasAgent ? "agent" : "empty"
+  return {
+    agent,
+    visible: agent === "agent" || input.hasModel,
+    separator: agent === "agent" && input.hasModel,
+  }
+}
+
 function fadeColor(color: RGBA, alpha: number) {
   return RGBA.fromValues(color.r, color.g, color.b, color.a * alpha)
 }
@@ -1299,6 +1316,13 @@ export function Prompt(props: PromptProps) {
     return !!current
   })
 
+  const promptMetadata = createMemo(() =>
+    resolvePromptMetadata({
+      agentStatus: sync.data.agent_status,
+      hasAgent: !!local.agent.current(),
+      hasModel: !!local.model.current(),
+    }),
+  )
   const agentMetaAlpha = createFadeIn(() => !!local.agent.current(), animationsEnabled)
   const modelMetaAlpha = createFadeIn(() => !!local.model.current() && store.mode === "normal", animationsEnabled)
   const variantMetaAlpha = createFadeIn(
@@ -1443,20 +1467,22 @@ export function Prompt(props: PromptProps) {
                 <Show
                   when={store.mode === "shell"}
                   fallback={
-                    <Show when={!!local.agent.current() || !!local.model.current()} fallback={<box height={1} />}>
-                      <Show when={local.agent.current()}>
-                        {(agent) => (
-                          <>
-                            <text fg={fadeColor(highlight(), agentMetaAlpha())}>{Locale.titlecase(agent().name)}</text>
-                            <Show when={local.permission.mode === "auto"}>
-                              <text fg={fadeColor(theme.textMuted, agentMetaAlpha())}>auto</text>
-                            </Show>
-                          </>
-                        )}
+                    <Show when={promptMetadata().visible} fallback={<box height={1} />}>
+                      <Show when={promptMetadata().agent === "agent"}>
+                        <Show when={local.agent.current()}>
+                          {(agent) => (
+                            <>
+                              <text fg={fadeColor(highlight(), agentMetaAlpha())}>{Locale.titlecase(agent().name)}</text>
+                              <Show when={local.permission.mode === "auto"}>
+                                <text fg={fadeColor(theme.textMuted, agentMetaAlpha())}>auto</text>
+                              </Show>
+                            </>
+                          )}
+                        </Show>
                       </Show>
                       <Show when={local.model.current()}>
                         <box flexDirection="row" gap={1}>
-                          <Show when={local.agent.current()}>
+                          <Show when={promptMetadata().separator}>
                             <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>·</text>
                           </Show>
                           <text

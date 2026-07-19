@@ -63,6 +63,7 @@ export const {
     const permission = usePermission()
     const [store, setStore] = createStore<{
       status: "loading" | "partial" | "complete"
+      agent_status: "loading" | "complete"
       provider: Provider[]
       provider_default: Record<string, string>
       provider_next: ProviderListResponse
@@ -118,6 +119,7 @@ export const {
       provider_auth: {},
       config: {},
       status: "loading",
+      agent_status: "loading",
       agent: [],
       permission: {},
       question: {},
@@ -144,6 +146,7 @@ export const {
     const fullSyncedSessions = new Set<string>()
     const syncingSessions = new Map<string, Promise<void>>()
     const hydratingSessions = new Map<string, { messages: Set<string>; parts: Set<string> }>()
+    let agentRequestGeneration = 0
     const touchMessage = (sessionID: string, messageID: string) => {
       hydratingSessions.get(sessionID)?.messages.add(messageID)
     }
@@ -445,6 +448,19 @@ export const {
     async function bootstrap(input: { fatal?: boolean } = {}) {
       const fatal = input.fatal ?? true
       const workspace = project.workspace.current()
+      const generation = ++agentRequestGeneration
+      setStore("agent_status", "loading")
+      void sdk.client.app
+        .agents({ workspace })
+        .then((response) => {
+          if (generation !== agentRequestGeneration) return
+          if (!response.data) return
+          setStore("agent", reconcile(response.data))
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          if (generation === agentRequestGeneration) setStore("agent_status", "complete")
+        })
       const projectPromise = project.sync()
       const sessionListPromise = projectPromise.then(() => listSessions())
 
@@ -459,13 +475,11 @@ export const {
         .get({ workspace }, { throwOnError: true })
         .then((x) => x.data)
         .catch(() => emptyConsoleState)
-      const agentsPromise = sdk.client.app.agents({ workspace }, { throwOnError: true })
       const configPromise = sdk.client.config.get({ workspace }, { throwOnError: true })
       await Promise.all([
         providersPromise,
         providerListPromise,
         capabilitiesPromise,
-        agentsPromise,
         configPromise,
         projectPromise,
         ...(args.continue ? [sessionListPromise] : []),
@@ -475,7 +489,6 @@ export const {
           const providerListResponse = providerListPromise.then((x) => x.data!)
           const capabilitiesResponse = capabilitiesPromise
           const consoleStateResponse = consoleStatePromise
-          const agentsResponse = agentsPromise.then((x) => x.data ?? [])
           const configResponse = configPromise.then((x) => x.data!)
           const sessionListResponse = args.continue ? sessionListPromise : undefined
 
@@ -484,7 +497,6 @@ export const {
             providerListResponse,
             capabilitiesResponse,
             consoleStateResponse,
-            agentsResponse,
             configResponse,
             ...(sessionListResponse ? [sessionListResponse] : []),
           ]).then((responses) => {
@@ -492,9 +504,8 @@ export const {
             const providerList = responses[1]
             const capabilities = responses[2]
             const consoleState = responses[3]
-            const agents = responses[4]
-            const config = responses[5]
-            const sessions = responses[6]
+            const config = responses[4]
+            const sessions = responses[5]
 
             batch(() => {
               setStore("provider", reconcile(providers.providers))
@@ -502,7 +513,6 @@ export const {
               setStore("provider_next", reconcile(providerList))
               setStore("capabilities", "experimentalBackgroundSubagents", capabilities?.backgroundSubagents === true)
               setStore("console_state", reconcile(consoleState))
-              setStore("agent", reconcile(agents))
               setStore("config", reconcile(config))
               if (sessions !== undefined) setStore("session", reconcile(sessions))
             })

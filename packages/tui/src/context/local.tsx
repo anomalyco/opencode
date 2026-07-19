@@ -58,6 +58,28 @@ export function recentModels(
     .map((item) => ({ providerID: item.providerID, modelID: item.modelID }))
 }
 
+export function resolveAgentSelection(
+  status: "loading" | "complete",
+  agents: readonly { name: string }[],
+  name: string,
+) {
+  if (status === "loading") return "pending" as const
+  return agents.some((agent) => agent.name === name) ? ("available" as const) : ("missing" as const)
+}
+
+export function settlePendingAgentSelection(
+  status: "loading" | "complete",
+  agents: readonly { name: string }[],
+  state: { current: string | undefined; pending: boolean },
+): { current: string | undefined; pending: false; missing: string | undefined } | undefined {
+  if (!state.pending || status === "loading") return
+  const name = state.current
+  if (!name || resolveAgentSelection(status, agents, name) === "available") {
+    return { current: name, pending: false, missing: undefined }
+  }
+  return { current: undefined, pending: false, missing: name }
+}
+
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
   init: () => {
@@ -89,6 +111,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       const visibleAgents = createMemo(() => sync.data.agent.filter((agent) => !agent.hidden))
       const [agentStore, setAgentStore] = createStore({
         current: undefined as string | undefined,
+        pending: false,
       })
       const colors = createMemo(() => [
         theme.secondary,
@@ -99,6 +122,28 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         theme.error,
         theme.info,
       ])
+
+      function warnMissing(name: string) {
+        toast.show({
+          variant: "warning",
+          message: `Agent not found: ${name}`,
+          duration: 3000,
+        })
+      }
+
+      createEffect(() => {
+        const settlement = settlePendingAgentSelection(sync.data.agent_status, agents(), {
+          current: agentStore.current,
+          pending: agentStore.pending,
+        })
+        if (!settlement) return
+        batch(() => {
+          setAgentStore("current", settlement.current)
+          setAgentStore("pending", settlement.pending)
+        })
+        if (settlement.missing) warnMissing(settlement.missing)
+      })
+
       return {
         list() {
           return agents()
@@ -107,13 +152,19 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           return agents().find((x) => x.name === agentStore.current) ?? agents().at(0)
         },
         set(name: string) {
-          if (!agents().some((x) => x.name === name))
-            return toast.show({
-              variant: "warning",
-              message: `Agent not found: ${name}`,
-              duration: 3000,
+          const state = resolveAgentSelection(sync.data.agent_status, agents(), name)
+          if (state === "pending") {
+            batch(() => {
+              setAgentStore("current", name)
+              setAgentStore("pending", true)
             })
-          setAgentStore("current", name)
+            return
+          }
+          if (state === "missing") return warnMissing(name)
+          batch(() => {
+            setAgentStore("current", name)
+            setAgentStore("pending", false)
+          })
         },
         move(direction: 1 | -1) {
           batch(() => {

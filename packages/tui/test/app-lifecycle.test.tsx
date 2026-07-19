@@ -5,6 +5,7 @@ import { createTestRenderer } from "@opentui/core/testing"
 import { Effect } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Global } from "@opencode-ai/core/global"
+import { resolveAgentSelection, settlePendingAgentSelection } from "../src/context/local"
 import { createTuiResolvedConfig } from "./fixture/tui-runtime"
 import { createEventSource, createFetch, directory, json } from "./fixture/tui-sdk"
 
@@ -43,6 +44,57 @@ async function waitFor(condition: () => boolean, timeout = 2000) {
     await Bun.sleep(10)
   }
 }
+
+function providerCatalog() {
+  return json({
+    providers: [
+      {
+        id: "test",
+        name: "Test",
+        env: [],
+        models: {
+          model: {
+            id: "model",
+            name: "Model",
+            attachment: false,
+            reasoning: false,
+            temperature: false,
+            tool_call: true,
+            release_date: "2025-01-01",
+            limit: { context: 100000, output: 10000 },
+            cost: { input: 0, output: 0 },
+            options: {},
+          },
+        },
+        options: {},
+      },
+    ],
+    default: { test: "model" },
+  })
+}
+
+test("requested agent selection waits for a settled agent list", () => {
+  const agents = [{ name: "build" }, { name: "plan" }]
+  expect(resolveAgentSelection("loading", [], "plan")).toBe("pending")
+  expect(resolveAgentSelection("complete", agents, "plan")).toBe("available")
+  expect(resolveAgentSelection("complete", agents, "missing")).toBe("missing")
+})
+
+test("missing pending agent emits one warning across repeated settlement", () => {
+  let current: string | undefined = "missing"
+  let pending = true
+  let warningEmissions = 0
+
+  for (let run = 0; run < 2; run++) {
+    const settlement = settlePendingAgentSelection("complete", [{ name: "build" }], { current, pending })
+    if (!settlement) continue
+    current = settlement.current
+    pending = settlement.pending
+    if (settlement.missing) warningEmissions++
+  }
+
+  expect(warningEmissions).toBe(1)
+})
 
 test("SIGHUP clears title and disposes scoped resources once", async () => {
   const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
@@ -157,6 +209,109 @@ test("app.exit prints the session epilogue after scoped cleanup", async () => {
     process.stdout.write = originalWrite
     if (!setup.renderer.isDestroyed) setup.renderer.destroy()
     activeRenderer = undefined
+  }
+})
+
+test("explicit agent is selected after deferred agents load", async () => {
+  const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
+  activeRenderer = setup.renderer
+  const events = createEventSource()
+  const agents = deferred<Response>()
+  const calls = createFetch((url) => {
+    if (url.pathname === "/agent") return agents.promise
+    if (url.pathname === "/config/providers") return providerCatalog()
+  })
+  let task: Promise<unknown> | undefined
+  let disposeSlots: (() => void) | undefined
+
+  try {
+    task = Effect.runPromise(
+      run({
+        url: "http://test",
+        directory,
+        config: createTuiResolvedConfig({ plugin_enabled: {} }),
+        fetch: calls.fetch,
+        events: events.source,
+        args: { agent: "plan" },
+        pluginHost: {
+          async start(input) {
+            disposeSlots = input.runtime.setupSlots(input.api).dispose
+          },
+          async dispose() {
+            disposeSlots?.()
+          },
+        },
+      }).pipe(Effect.provide(AppNodeBuilder.build(Global.node))),
+    )
+
+    agents.resolve(
+      json([
+        { name: "build", mode: "primary", permission: {}, options: {} },
+        { name: "plan", mode: "primary", permission: {}, options: {} },
+      ]),
+    )
+    await waitFor(() => findText(setup.renderer.root, "Plan"))
+    expect(findText(setup.renderer.root, "Build")).toBe(false)
+  } finally {
+    try {
+      agents.resolve(json([]))
+      if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+    } finally {
+      try {
+        await task
+      } finally {
+        activeRenderer = undefined
+      }
+    }
+  }
+})
+
+test("missing deferred agent warning is visible after loading settles", async () => {
+  const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
+  activeRenderer = setup.renderer
+  const events = createEventSource()
+  const agents = deferred<Response>()
+  const calls = createFetch((url) => {
+    if (url.pathname === "/agent") return agents.promise
+    if (url.pathname === "/config/providers") return providerCatalog()
+  })
+  const warning = "Agent not found: missing"
+  let task: Promise<unknown> | undefined
+  let disposeSlots: (() => void) | undefined
+
+  try {
+    task = Effect.runPromise(
+      run({
+        url: "http://test",
+        directory,
+        config: createTuiResolvedConfig({ plugin_enabled: {} }),
+        fetch: calls.fetch,
+        events: events.source,
+        args: { agent: "missing" },
+        pluginHost: {
+          async start(input) {
+            disposeSlots = input.runtime.setupSlots(input.api).dispose
+          },
+          async dispose() {
+            disposeSlots?.()
+          },
+        },
+      }).pipe(Effect.provide(AppNodeBuilder.build(Global.node))),
+    )
+
+    agents.resolve(json([{ name: "build", mode: "primary", permission: {}, options: {} }]))
+    await waitFor(() => findText(setup.renderer.root, warning))
+  } finally {
+    try {
+      agents.resolve(json([]))
+      if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+    } finally {
+      try {
+        await task
+      } finally {
+        activeRenderer = undefined
+      }
+    }
   }
 })
 
