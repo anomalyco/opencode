@@ -226,7 +226,12 @@ export const SidebarLinear = (props: { directory: Accessor<string> }): JSX.Eleme
       })
 
     if (res.error) {
-      syncHist.record({ type: "pull", count: 0, status: "error", error: String(res.error) })
+      syncHist.record({
+        type: "pull",
+        outcomes: { moved: 0, updated: 0, skipped: 0, deleted: 0, failed: 1 },
+        status: "error",
+        error: String(res.error),
+      })
       const err = res.error as { message?: string; error?: string }
       const msg =
         err?.message ?? (typeof err?.error === "string" ? err.error : null) ?? language.t("sidebar.linear.pullFailed")
@@ -245,25 +250,28 @@ export const SidebarLinear = (props: { directory: Accessor<string> }): JSX.Eleme
 
     serverSync().todo.refresh(props.directory())
 
+    // Per-outcome recording (ADR-0002 D9 / Amendment 2026-07-19): the entry
+    // tracks each outcome separately so the UI can render "↑N ✓M ·K ✗F"
+    // instead of a single opaque count. `moved` carries `pulled` for pull.
     syncHist.record({
       type: "pull",
-      count: pulled + updated + skipped + deleted,
+      outcomes: { moved: pulled, updated, skipped, deleted, failed },
       status: failed > 0 ? "error" : "success",
     })
 
     if (failed > 0) {
       showToast({
         variant: "error",
-        title: language.t("sidebar.linear.pullPartialFailed").replace("{{count}}", String(failed)),
+        title: language.t("sidebar.linear.pullPartialFailed", { count: failed }),
       })
       return
     }
-    const summary = language
-      .t("sidebar.linear.pullSuccess")
-      .replace("{{pulled}}", String(pulled))
-      .replace("{{updated}}", String(updated))
-      .replace("{{skipped}}", String(skipped))
-      .replace("{{deleted}}", String(deleted))
+    const summary = language.t("sidebar.linear.pullSuccess", {
+      pulled,
+      updated,
+      skipped,
+      deleted,
+    })
     showToast({ variant: "success", title: summary })
   }
 
@@ -281,7 +289,12 @@ export const SidebarLinear = (props: { directory: Accessor<string> }): JSX.Eleme
       })
 
     if (res.error) {
-      syncHist.record({ type: "push", count: 0, status: "error", error: String(res.error) })
+      syncHist.record({
+        type: "push",
+        outcomes: { moved: 0, updated: 0, skipped: 0, deleted: 0, failed: 1 },
+        status: "error",
+        error: String(res.error),
+      })
       const err = res.error as { message?: string; error?: string }
       const msg =
         err?.message ?? (typeof err?.error === "string" ? err.error : null) ?? language.t("sidebar.linear.pushFailed")
@@ -297,13 +310,19 @@ export const SidebarLinear = (props: { directory: Accessor<string> }): JSX.Eleme
 
     serverSync().todo.refresh(props.directory())
 
-    syncHist.record({ type: "push", count: pushed, status: failed > 0 ? "error" : "success" })
+    // Per-outcome recording (ADR-0002 D9 / Amendment 2026-07-19). For push,
+    // `moved` carries `pushed`; `updated`/`skipped`/`deleted` are always 0.
+    syncHist.record({
+      type: "push",
+      outcomes: { moved: pushed, updated: 0, skipped: 0, deleted: 0, failed },
+      status: failed > 0 ? "error" : "success",
+    })
 
     if (failed > 0) {
       const firstError = data?.errors?.[0]?.message ?? ""
       showToast({
         variant: "error",
-        title: language.t("sidebar.linear.pushPartialFailed").replace("{{count}}", String(failed)),
+        title: language.t("sidebar.linear.pushPartialFailed", { count: failed }),
         description: firstError || undefined,
       })
       return
@@ -311,7 +330,7 @@ export const SidebarLinear = (props: { directory: Accessor<string> }): JSX.Eleme
     if (pushed > 0) {
       showToast({
         variant: "success",
-        title: language.t("sidebar.linear.pushSuccess").replace("{{count}}", String(pushed)),
+        title: language.t("sidebar.linear.pushSuccess", { count: pushed }),
       })
       return
     }
