@@ -79,6 +79,13 @@ function normalizeMessages(
   model: Provider.Model,
   _options: Record<string, unknown>,
 ): ModelMessage[] {
+  // NVIDIA NIM rejects developer messages when chat_template_kwargs is present.
+  // Use system role instead for NVIDIA-hosted OpenAI-compatible models.
+  if (model.providerID === "nvidia") {
+    msgs = msgs.map((msg) =>
+      (msg as { role?: string }).role === "developer" ? ({ ...msg, role: "system" } as ModelMessage) : msg,
+    )
+  }
   const sanitizeToolResultOutput = (content: ToolResultPart) => {
     if (content.output.type === "text" || content.output.type === "error-text") {
       content.output.value = sanitizeSurrogates(content.output.value)
