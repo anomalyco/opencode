@@ -66,3 +66,4 @@ export const ContextOverflowError = NamedError.create("ContextOverflowError", {
   responseBody: Schema.optional(Schema.String),
 })
 export const ContentFilterError = NamedError.create("ContentFilterError", { message: Schema.String })
+export const EmptyResponseError = NamedError.create("EmptyResponseError", { message: Schema.String })
