@@ -20,6 +20,24 @@ export const DEFAULT_TIMEOUT_MS = 2 * 60 * 1_000
 export const MAX_TIMEOUT_MS = 10 * 60 * 1_000
 export const MAX_CAPTURE_BYTES = 1024 * 1024
 
+const DANGEROUS_PATTERNS = [
+  { pattern: /^rm\s/, reason: "File deletion via shell is irreversible" },
+  { pattern: /^rmdir\s/, reason: "Directory deletion via shell is irreversible" },
+  { pattern: /^mv\s/, reason: "mv can overwrite files and delete the source" },
+  { pattern: /^Remove-Item\b/i, reason: "File deletion via PowerShell is blocked" },
+  { pattern: /^Set-Content\b/i, reason: "Use the Write tool instead" },
+  { pattern: /^Add-Content\b/i, reason: "Use the Write tool instead" },
+  { pattern: /^Clear-Content\b/i, reason: "Content clearing is blocked" },
+  { pattern: /^Move-Item\b/i, reason: "Move is blocked; can overwrite files" },
+  { pattern: /^Rename-Item\b/i, reason: "Rename is blocked; can overwrite files" },
+  { pattern: /^del\b/i, reason: "File deletion via cmd is irreversible" },
+  { pattern: /^erase\b/i, reason: "File deletion via cmd is irreversible" },
+  { pattern: /^rd\b/i, reason: "Directory deletion via cmd is irreversible" },
+  { pattern: /^format\b/i, reason: "Format operations are blocked" },
+  { pattern: /^diskpart\b/i, reason: "Disk operations are blocked" },
+  { pattern: /sed\s+.*\b-i\b/, reason: "Use the Edit tool instead of sed -i" },
+]
+
 export const Input = Schema.Struct({
   command: Schema.String.annotate({ description: "Shell command string to execute" }),
   workdir: Schema.String.pipe(Schema.optional).annotate({
@@ -147,6 +165,17 @@ const layer = Layer.effectDiscard(
                 agent: context.agent,
                 source,
               })
+
+              const cmdCheck = input.command.trim()
+              for (const { pattern, reason } of DANGEROUS_PATTERNS) {
+                if (pattern.test(cmdCheck)) {
+                  return yield* Effect.fail(
+                    new ToolFailure({
+                      message: `Command blocked: "${input.command}"\nReason: ${reason}\nSuggestion: Use the dedicated opencode tools (Write, Edit, Read) instead.`,
+                    }),
+                  )
+                }
+              }
 
               if ((yield* fs.stat(target.canonical)).type !== "Directory")
                 return yield* Effect.fail(new Error(`Working directory is not a directory: ${target.canonical}`))
