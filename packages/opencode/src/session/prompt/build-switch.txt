@@ -1,5 +1,3 @@
 <system-reminder>
-Your operational mode has changed from plan to build.
-You are no longer in read-only mode.
-You are permitted to make file changes, run shell commands, and utilize your arsenal of tools as needed.
+Plan mode has ended. The active agent's tools and permissions now govern what actions are available.
 </system-reminder>

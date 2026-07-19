@@ -514,6 +514,62 @@ it.instance("loop calls LLM and returns assistant message", () =>
   }),
 )
 
+it.instance(
+  "legacy plan transition reminder applies once to a custom agent without persisting",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig((url) => ({
+        ...providerCfg(url),
+        agent: {
+          orchestrator: {
+            model: "test/test-model",
+          },
+        },
+      }))
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Pinned" })
+      const reminder = "Plan mode has ended. The active agent's tools and permissions now govern"
+
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "plan",
+        noReply: true,
+        parts: [{ type: "text", text: "make a plan" }],
+      })
+      yield* llm.text("the plan")
+      yield* prompt.loop({ sessionID: chat.id })
+
+      const transition = yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "orchestrator",
+        noReply: true,
+        parts: [{ type: "text", text: "execute it" }],
+      })
+      yield* llm.text("executed")
+      yield* prompt.loop({ sessionID: chat.id })
+
+      const transitionRequest = JSON.stringify((yield* llm.hits)[1]?.body)
+      expect(transitionRequest).toContain(reminder)
+      expect(transition.parts.some((part) => part.type === "text" && part.text.includes(reminder))).toBe(false)
+      const stored = yield* MessageV2.get({ sessionID: chat.id, messageID: transition.info.id })
+      expect(stored.parts.some((part) => part.type === "text" && part.text.includes(reminder))).toBe(false)
+
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "orchestrator",
+        noReply: true,
+        parts: [{ type: "text", text: "continue" }],
+      })
+      yield* llm.text("continued")
+      yield* prompt.loop({ sessionID: chat.id })
+
+      const laterRequest = JSON.stringify((yield* llm.hits)[2]?.body)
+      expect(laterRequest).not.toContain(reminder)
+    }),
+  30_000,
+)
+
 withMcpInstructions.instance(
   "loop includes MCP instructions in model system context",
   () =>

@@ -22,6 +22,7 @@ export const apply = Effect.fn("SessionReminders.apply")(function* (input: {
   const sessions = yield* Session.Service
   const userMessage = input.messages.findLast((msg) => msg.info.role === "user")
   if (!userMessage) return input.messages
+  const assistantMessage = input.messages.findLast((msg) => msg.info.role === "assistant")
 
   if (!flags.experimentalPlanMode) {
     if (input.agent.name === "plan") {
@@ -34,8 +35,7 @@ export const apply = Effect.fn("SessionReminders.apply")(function* (input: {
         synthetic: true,
       })
     }
-    const wasPlan = input.messages.some((msg) => msg.info.role === "assistant" && msg.info.agent === "plan")
-    if (wasPlan && input.agent.name === "build") {
+    if (input.agent.name !== "plan" && assistantMessage?.info.agent === "plan") {
       userMessage.parts.push({
         id: PartID.ascending(),
         messageID: userMessage.info.id,
@@ -48,7 +48,6 @@ export const apply = Effect.fn("SessionReminders.apply")(function* (input: {
     return input.messages
   }
 
-  const assistantMessage = input.messages.findLast((msg) => msg.info.role === "assistant")
   if (input.agent.name !== "plan" && assistantMessage?.info.agent === "plan") {
     const ctx = yield* InstanceState.context
     const plan = Session.plan(input.session, ctx)
