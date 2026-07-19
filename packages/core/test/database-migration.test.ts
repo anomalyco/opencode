@@ -583,6 +583,40 @@ describe("DatabaseMigration", () => {
     )
   })
 
+  test("imports legacy drizzle journals without a name column", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`CREATE TABLE session (id text PRIMARY KEY, metadata text)`)
+        yield* db.run(
+          sql`CREATE TABLE __drizzle_migrations (id SERIAL PRIMARY KEY, hash text NOT NULL, created_at numeric)`,
+        )
+        yield* db.run(
+          sql`INSERT INTO __drizzle_migrations (hash, created_at) VALUES ('', ${Date.UTC(2026, 4, 11, 17, 34, 37)})`,
+        )
+
+        yield* DatabaseMigration.applyOnly(db, [sessionMetadataMigration])
+
+        expect(yield* db.all(sql`SELECT id FROM migration`)).toEqual([{ id: "20260511173437_session-metadata" }])
+      }),
+    )
+  })
+
+  test("fails with a clear error for unmatched legacy drizzle journal entries", async () => {
+    await expect(
+      run(
+        Effect.gen(function* () {
+          const db = yield* makeDb
+          yield* db.run(
+            sql`CREATE TABLE __drizzle_migrations (id SERIAL PRIMARY KEY, hash text NOT NULL, created_at numeric)`,
+          )
+          yield* db.run(sql`INSERT INTO __drizzle_migrations (hash, created_at) VALUES ('', 1234567890000)`)
+          yield* DatabaseMigration.applyOnly(db, [sessionMetadataMigration])
+        }),
+      ),
+    ).rejects.toThrow("do not match any known migration")
+  })
+
   test("does not replay a migrated session metadata column", async () => {
     await run(
       Effect.gen(function* () {

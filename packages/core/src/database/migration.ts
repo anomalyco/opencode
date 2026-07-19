@@ -40,6 +40,22 @@ export function apply(db: Database) {
   )
 }
 
+// Drizzle-kit derives a migration's filename prefix from the same timestamp
+// it stores as `created_at` in the journal, so the prefix can be recovered
+// from journals that predate the `name` column.
+function timestampPrefix(millis: number) {
+  const date = new Date(millis)
+  const pad = (value: number) => value.toString().padStart(2, "0")
+  return [
+    date.getUTCFullYear(),
+    pad(date.getUTCMonth() + 1),
+    pad(date.getUTCDate()),
+    pad(date.getUTCHours()),
+    pad(date.getUTCMinutes()),
+    pad(date.getUTCSeconds()),
+  ].join("")
+}
+
 export function applyOnly(db: Database, input: Migration[]) {
   return Effect.gen(function* () {
     yield* db.run(
@@ -54,12 +70,51 @@ export function applyOnly(db: Database, input: Migration[]) {
       if (
         yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = ${"__drizzle_migrations"}`)
       ) {
-        yield* db.run(sql`
-          INSERT OR IGNORE INTO ${sql.identifier("migration")} (id, time_completed)
-          SELECT name, ${Date.now()}
-          FROM ${sql.identifier("__drizzle_migrations")}
-          WHERE name IS NOT NULL
-        `)
+        const columns = yield* db.all<{ name: string }>(
+          sql`SELECT name FROM pragma_table_info(${"__drizzle_migrations"})`,
+        )
+        if (columns.some((column) => column.name === "name")) {
+          yield* db.run(sql`
+            INSERT OR IGNORE INTO ${sql.identifier("migration")} (id, time_completed)
+            SELECT name, ${Date.now()}
+            FROM ${sql.identifier("__drizzle_migrations")}
+            WHERE name IS NOT NULL
+          `)
+        } else {
+          // Journals written by drizzle-orm's stock migrator (before the
+          // `name` column existed) only carry `created_at`. Map it back to
+          // the migration id's timestamp prefix, mirroring the v0 -> v1
+          // journal upgrade in effect-drizzle-sqlite, instead of crashing
+          // with "no such column: name".
+          const ids = new Map<string, string>()
+          for (const migration of input) {
+            const prefix = migration.id.split("_")[0]
+            if (prefix) ids.set(prefix, migration.id)
+          }
+          const rows = yield* db.all<{ created_at: number | string }>(
+            sql`SELECT created_at FROM ${sql.identifier("__drizzle_migrations")} WHERE created_at IS NOT NULL`,
+          )
+          const matched: string[] = []
+          const unmatched: (number | string)[] = []
+          for (const row of rows) {
+            const stringified = String(row.created_at)
+            const millis = Number(stringified.substring(0, stringified.length - 3) + "000")
+            const id = Number.isFinite(millis) ? ids.get(timestampPrefix(millis)) : undefined
+            if (id) matched.push(id)
+            else unmatched.push(row.created_at)
+          }
+          if (unmatched.length > 0) {
+            yield* Effect.die(
+              `Found ${unmatched.length} drizzle journal entries (created_at: ${unmatched.join(", ")}) that do not match any known migration. The database was likely created by a different version of opencode.`,
+            )
+          } else {
+            yield* Effect.forEach(matched, (id) =>
+              db.run(
+                sql`INSERT OR IGNORE INTO ${sql.identifier("migration")} (id, time_completed) VALUES (${id}, ${Date.now()})`,
+              ),
+            )
+          }
+        }
         completed = new Set(
           (yield* db.all<{ id: string }>(sql`SELECT id FROM ${sql.identifier("migration")}`)).map((row) => row.id),
         )
