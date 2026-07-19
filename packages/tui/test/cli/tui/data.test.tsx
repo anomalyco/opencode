@@ -64,6 +64,36 @@ function durable(sessionID: string, seq = 0, version = 1) {
   return { aggregateID: sessionID, seq, version }
 }
 
+test("preloads root sessions before applying the session limit", async () => {
+  const events = createEventStream()
+  let request: URL | undefined
+  const calls = createFetch((url) => {
+    if (url.pathname === "/api/session") request = url
+    return undefined
+  }, events)
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <ClientProvider api={createApi(calls.fetch)}>
+        <ProjectProvider>
+          <DataProvider>
+            <box />
+          </DataProvider>
+        </ProjectProvider>
+      </ClientProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await wait(() => request !== undefined)
+    expect(request?.searchParams.get("project")).toBe("proj_test")
+    expect(request?.searchParams.get("limit")).toBe("50")
+    expect(request?.searchParams.get("parentID")).toBe("null")
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("bootstraps MCP data for the TUI location", async () => {
   const events = createEventStream()
   const requests: URL[] = []
