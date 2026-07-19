@@ -52,13 +52,11 @@ export function PwaInstallBanner() {
     if (!prompt) return
 
     await prompt.prompt()
-    const { outcome } = await prompt.userChoice
+const { outcome } = await prompt.userChoice
 
-    if (outcome === "accepted") {
-      setShowBanner(false)
-    }
-    setDeferredPrompt(null)
-  }
+setShowBanner(false)
+setDeferredPrompt(null)
+if (outcome === "accepted") setIsInstalled(true)
 
   const handleDismiss = () => {
     setShowBanner(false)
