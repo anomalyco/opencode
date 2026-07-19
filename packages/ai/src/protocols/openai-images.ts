@@ -11,6 +11,7 @@ import {
 import { Auth, type Definition as AuthDefinition } from "../route/auth"
 import { InvalidProviderOutputReason, LLMError, Usage, mergeHttpOptions, mergeJsonRecords } from "../schema"
 import { ProviderShared } from "./shared"
+import { OpenAIImage } from "./utils/openai-image"
 
 const ADAPTER = "openai-images"
 export const DEFAULT_BASE_URL = "https://api.openai.com/v1"

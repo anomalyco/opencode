@@ -25,6 +25,7 @@ import { OpenAIOptions } from "./utils/openai-options"
 import { Lifecycle } from "./utils/lifecycle"
 import { ToolSchemaProjection } from "./utils/tool-schema"
 import { ToolStream } from "./utils/tool-stream"
+import { OpenAIImage } from "./utils/openai-image"
 
 const ADAPTER = "openai-responses"
 export const DEFAULT_BASE_URL = "https://api.openai.com/v1"
@@ -120,9 +121,9 @@ const OpenAIResponsesImageGenerationTool = Schema.Struct({
   input_fidelity: Schema.optional(Schema.Literals(["low", "high"])),
   output_compression: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 100 }))),
   output_format: Schema.optional(Schema.Literals(["png", "jpeg", "webp"])),
-  partial_images: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 3 }))),
+  partial_images: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
   quality: Schema.optional(Schema.Literals(["auto", "low", "medium", "high"])),
-  size: Schema.optional(Schema.String.check(Schema.isPattern(/^(?:auto|\d+x\d+)$/))),
+  size: Schema.optional(OpenAIImage.Size),
 })
 const OpenAIResponsesTools = Schema.Union([OpenAIResponsesTool, OpenAIResponsesImageGenerationTool])
 type OpenAIResponsesTool = Schema.Schema.Type<typeof OpenAIResponsesTools>
@@ -283,10 +284,7 @@ const nativeImageTool = (tool: ToolDefinition) => {
   return Schema.is(OpenAIResponsesImageGenerationTool)(native) ? native : undefined
 }
 
-const lowerTool = Effect.fn("OpenAIResponses.lowerTool")(function* (
-  tool: ToolDefinition,
-  inputSchema: JsonSchema,
-) {
+const lowerTool = Effect.fn("OpenAIResponses.lowerTool")(function* (tool: ToolDefinition, inputSchema: JsonSchema) {
   const native = nativeImageToolInput(tool)
   if (native !== undefined) {
     if (Schema.is(OpenAIResponsesImageGenerationTool)(native)) return native
