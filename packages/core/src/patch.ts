@@ -23,7 +23,7 @@ export interface FileUpdate {
 }
 
 export function parse(patchText: string): ReadonlyArray<Hunk> {
-  const lines = stripHeredoc(patchText.trim()).split("\n")
+  const lines = stripHeredoc(patchText.replaceAll("\r\n", "\n").trim()).split("\n")
   const begin = lines.findIndex((line) => line.trim() === "*** Begin Patch")
   const end = lines.findIndex((line) => line.trim() === "*** End Patch")
   if (begin === -1 || end === -1 || begin >= end) throw new Error("Invalid patch format: missing Begin/End markers")
@@ -106,15 +106,16 @@ function parseUpdate(lines: ReadonlyArray<string>, start: number) {
   const chunks: UpdateFileChunk[] = []
   let index = start
   while (index < lines.length && !lines[index]!.startsWith("***")) {
-    if (!lines[index]!.startsWith("@@")) {
+    const explicit = lines[index]!.startsWith("@@")
+    if (!explicit && (chunks.length > 0 || !/^[ +-]/.test(lines[index]!))) {
       index++
       continue
     }
-    const changeContext = lines[index]!.slice(2).trim() || undefined
+    const changeContext = explicit ? lines[index]!.slice(2).trim() || undefined : undefined
     const oldLines: string[] = []
     const newLines: string[] = []
     let endOfFile = false
-    index++
+    if (explicit) index++
     while (index < lines.length && !lines[index]!.startsWith("@@")) {
       const line = lines[index]!
       if (line === "*** End of File") {

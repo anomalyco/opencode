@@ -105,6 +105,47 @@ describe("Patch", () => {
     ])
   })
 
+  test("parses an initial update chunk without an explicit header", () => {
+    expect(
+      Patch.parse("*** Begin Patch\n*** Update File: file.py\n import foo\n+bar\n*** End Patch"),
+    ).toEqual([
+      {
+        type: "update",
+        path: "file.py",
+        movePath: undefined,
+        chunks: [
+          {
+            oldLines: ["import foo"],
+            newLines: ["import foo", "bar"],
+            changeContext: undefined,
+            endOfFile: undefined,
+          },
+        ],
+      },
+    ])
+  })
+
+  test("normalizes CRLF patch lines without removing content carriage returns", () => {
+    expect(
+      Patch.parse(
+        "*** Begin Patch\r\n*** Update File: file.txt\r\n@@\r\n-old\r\n+new\r\n*** End Patch\r\n",
+      ),
+    ).toEqual([
+      {
+        type: "update",
+        path: "file.txt",
+        movePath: undefined,
+        chunks: [{ oldLines: ["old"], newLines: ["new"], changeContext: undefined, endOfFile: undefined }],
+      },
+    ])
+
+    expect(
+      Patch.parse(
+        "*** Begin Patch\r\n*** Update File: file.txt\r\n@@\r\n-old\r\r\n+new\r\n*** End Patch\r\n",
+      )[0],
+    ).toMatchObject({ chunks: [{ oldLines: ["old\r"], newLines: ["new"] }] })
+  })
+
   test("matches V1 lenient parsing of malformed hunk bodies", () => {
     expect(Patch.parse("*** Begin Patch\n*** Add File: add.txt\nmissing plus\n*** End Patch")).toEqual([
       { type: "add", path: "add.txt", contents: "" },
