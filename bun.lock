@@ -902,6 +902,7 @@
         "@napi-rs/canvas": "1.0.2",
         "@opencode-ai/ai": "workspace:*",
         "@opencode-ai/core": "workspace:*",
+        "@opencode-ai/plugin": "workspace:*",
         "@opentui/core": "catalog:",
         "effect": "catalog:",
       },

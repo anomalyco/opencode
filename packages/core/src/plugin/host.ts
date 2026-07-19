@@ -365,11 +365,14 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
               },
             }),
           )
-          yield* Effect.forEach(
-            registrations,
-            (registration) => tools.register({ [registration.name]: registration.tool }, registration.options),
-            { discard: true },
-          ).pipe(Effect.orDie)
+          yield* tools
+            .registerBatch(
+              registrations.map((registration) => ({
+                tools: { [registration.name]: registration.tool },
+                ...(registration.options === undefined ? {} : { options: registration.options }),
+              })),
+            )
+            .pipe(Effect.orDie)
           return { dispose: Effect.void }
         }),
       hook: (name, callback) => {

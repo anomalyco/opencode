@@ -97,6 +97,96 @@ test("decodes semantic UI snapshots", () => {
     expect(() => decode({ format: "opencode-ui-snapshot-v1", nodes })).toThrow()
 })
 
+test("decodes the simulated tool lifecycle", () => {
+  const registration = {
+    name: "lookup",
+    description: "Look up a value",
+    inputSchema: {
+      type: "object",
+      properties: { query: { type: "string" } },
+      required: ["query"],
+      additionalProperties: false,
+    },
+    outputSchema: { type: "object" },
+    permission: "lookup",
+    options: { codemode: false },
+  }
+  expect(
+    Backend.decodeRequest({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tool.attach",
+      params: { tools: [registration] },
+    }),
+  ).toMatchObject({ method: "tool.attach", params: { tools: [registration] } })
+  expect(
+    Backend.decodeRequest({
+      jsonrpc: "2.0",
+      id: 2,
+      method: "tool.update",
+      params: {
+        id: "tool_1",
+        sequence: 0,
+        update: { structured: { phase: "searching" }, content: [{ type: "text", text: "Searching" }] },
+      },
+    }),
+  ).toMatchObject({ method: "tool.update" })
+  expect(
+    Backend.decodeRequest({
+      jsonrpc: "2.0",
+      id: 3,
+      method: "tool.finish",
+      params: {
+        id: "tool_1",
+        output: { structured: { answer: 42 }, content: [{ type: "text", text: "42" }] },
+      },
+    }),
+  ).toMatchObject({ method: "tool.finish" })
+  expect(
+    Backend.decodeRequest({
+      jsonrpc: "2.0",
+      id: 4,
+      method: "tool.fail",
+      params: { id: "tool_2", message: "lookup failed" },
+    }),
+  ).toMatchObject({ method: "tool.fail" })
+  expect(() =>
+    Backend.decodeRequest({
+      jsonrpc: "2.0",
+      id: 5,
+      method: "tool.attach",
+      params: { tools: [registration, registration] },
+    }),
+  ).toThrow()
+  for (const invalid of [
+    { ...registration, name: "1lookup" },
+    { ...registration, options: { namespace: "bad group", codemode: false } },
+    { ...registration, name: "execute", options: { codemode: false } },
+    { ...registration, options: { namespace: "a".repeat(64), codemode: false } },
+  ])
+    expect(() =>
+      Backend.decodeRequest({
+        jsonrpc: "2.0",
+        id: 6,
+        method: "tool.attach",
+        params: { tools: [invalid] },
+      }),
+    ).toThrow()
+  expect(() =>
+    Backend.decodeRequest({
+      jsonrpc: "2.0",
+      id: 7,
+      method: "tool.attach",
+      params: {
+        tools: [
+          { ...registration, name: "b_c", options: { namespace: "a", codemode: false } },
+          { ...registration, name: "c", options: { namespace: "a.b", codemode: false } },
+        ],
+      },
+    }),
+  ).toThrow()
+})
+
 const params: Handshake.Params = {
   client: { name: "opencode-drive", version: "test" },
   expectedRole: "ui",

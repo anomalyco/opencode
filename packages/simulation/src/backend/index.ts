@@ -1,5 +1,7 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { makeGlobalNode } from "@opencode-ai/core/effect/app-node"
 import { httpClient } from "@opencode-ai/core/effect/app-node-platform"
+import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
 import { Config, Effect, Layer } from "effect"
 import { HttpClient } from "effect/unstable/http"
 import { DriveManifest } from "../manifest"
@@ -41,7 +43,12 @@ export const simulationReplacements = Effect.fn("Simulation.replacements")(funct
       }),
     ),
   )
-  return [[httpClient, networkLayer]] satisfies LayerNode.Replacements
+  const networkNode = makeGlobalNode({
+    service: HttpClient.HttpClient,
+    layer: networkLayer,
+    deps: [SdkPlugins.node],
+  })
+  return [[httpClient, networkNode]] satisfies LayerNode.Replacements
 })
 
 export * as Simulation from "./index"

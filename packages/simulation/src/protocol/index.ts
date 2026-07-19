@@ -371,11 +371,29 @@ export namespace Backend {
     "llm.disconnect",
     "llm.pending",
     "llm.request",
+    "llm.tool-input-delta",
+    "tool.attach",
+    "tool.update",
+    "tool.finish",
+    "tool.fail",
+    "tool.invocation",
+    "tool.cancel",
   ] as const satisfies ReadonlyArray<Handshake.Capability>
 
   export const Item = Schema.Union([
     Schema.Struct({ type: Schema.Literal("textDelta"), text: Schema.String }),
     Schema.Struct({ type: Schema.Literal("reasoningDelta"), text: Schema.String }),
+    Schema.Struct({
+      type: Schema.Literal("toolInputStart"),
+      index: Schema.Number,
+      id: Schema.String,
+      name: Schema.String,
+    }),
+    Schema.Struct({
+      type: Schema.Literal("toolInputDelta"),
+      index: Schema.Number,
+      text: Schema.String,
+    }),
     Schema.Struct({
       type: Schema.Literal("toolCall"),
       index: Schema.Number,
@@ -389,6 +407,115 @@ export namespace Backend {
 
   export const FinishReason = Schema.Literals(["stop", "tool-calls", "length", "content-filter"])
   export type FinishReason = Schema.Schema.Type<typeof FinishReason>
+
+  export const ToolContent = Schema.Union([
+    Schema.Struct({ type: Schema.Literal("text"), text: Schema.String }),
+    Schema.Struct({
+      type: Schema.Literal("file"),
+      data: Schema.String,
+      mime: Schema.NonEmptyString,
+      name: Schema.optionalKey(Schema.String),
+    }),
+  ])
+  export type ToolContent = Schema.Schema.Type<typeof ToolContent>
+
+  const ToolName = Schema.NonEmptyString.check(
+    Schema.makeFilter((name) =>
+      /^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(name) ? undefined : "simulated tool names must be provider-safe",
+    ),
+  )
+  const ToolNamespace = Schema.NonEmptyString.check(
+    Schema.makeFilter((namespace) =>
+      namespace.split(".").every((segment) => /^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(segment))
+        ? undefined
+        : "simulated tool namespaces must contain provider-safe segments",
+    ),
+  )
+
+  export const ToolRegistration = Schema.Struct({
+    name: ToolName,
+    description: Schema.String,
+    inputSchema: Schema.Record(Schema.String, Schema.Json),
+    outputSchema: Schema.optionalKey(Schema.Record(Schema.String, Schema.Json)),
+    permission: Schema.optionalKey(Schema.NonEmptyString),
+    options: Schema.optionalKey(
+      Schema.Struct({
+        namespace: Schema.optionalKey(ToolNamespace),
+        codemode: Schema.optionalKey(Schema.Boolean),
+      }),
+    ),
+  })
+  export interface ToolRegistration extends Schema.Schema.Type<typeof ToolRegistration> {}
+
+  export const ToolAttachParams = Schema.Struct({
+    tools: Schema.Array(ToolRegistration).check(
+      Schema.makeFilter((tools) => {
+        const names = tools.map(exposedToolName)
+        if (names.some((name) => !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(name)))
+          return "simulated tool names including namespaces must be provider-safe"
+        if (new Set(names).size !== names.length) return "simulated tool registrations must have unique exposed names"
+        if (
+          tools.some(
+            (tool) =>
+              tool.name === "execute" && tool.options?.namespace === undefined && tool.options?.codemode === false,
+          )
+        )
+          return 'direct simulated tool name "execute" is reserved'
+        return undefined
+      }),
+    ),
+  })
+  export interface ToolAttachParams extends Schema.Schema.Type<typeof ToolAttachParams> {}
+
+  export function exposedToolName(registration: ToolRegistration) {
+    return registration.options?.namespace === undefined
+      ? registration.name
+      : `${registration.options.namespace.replaceAll(".", "_")}_${registration.name}`
+  }
+
+  export const ToolProgress = Schema.Struct({
+    structured: Schema.Record(Schema.String, Schema.Json),
+    content: Schema.optionalKey(Schema.Array(ToolContent)),
+  })
+  export interface ToolProgress extends Schema.Schema.Type<typeof ToolProgress> {}
+
+  export const ToolOutput = Schema.Struct({
+    structured: Schema.Json,
+    content: Schema.Array(ToolContent),
+  })
+  export interface ToolOutput extends Schema.Schema.Type<typeof ToolOutput> {}
+
+  export const ToolUpdateParams = Schema.Struct({
+    id: Schema.String,
+    sequence: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    update: ToolProgress,
+  })
+  export interface ToolUpdateParams extends Schema.Schema.Type<typeof ToolUpdateParams> {}
+
+  export const ToolFinishParams = Schema.Struct({ id: Schema.String, output: ToolOutput })
+  export interface ToolFinishParams extends Schema.Schema.Type<typeof ToolFinishParams> {}
+
+  export const ToolFailParams = Schema.Struct({ id: Schema.String, message: Schema.String })
+  export interface ToolFailParams extends Schema.Schema.Type<typeof ToolFailParams> {}
+
+  export const ToolInvocation = Schema.Struct({
+    id: Schema.String,
+    name: Schema.String,
+    input: Schema.Json,
+    context: Schema.Struct({
+      sessionID: Schema.String,
+      agent: Schema.String,
+      messageID: Schema.String,
+      callID: Schema.String,
+    }),
+  })
+  export interface ToolInvocation extends Schema.Schema.Type<typeof ToolInvocation> {}
+
+  export const ToolCancellation = Schema.Struct({
+    id: Schema.String,
+    reason: Schema.Literal("interrupted"),
+  })
+  export interface ToolCancellation extends Schema.Schema.Type<typeof ToolCancellation> {}
 
   export const ChunkParams = Schema.Struct({ id: Schema.String, items: Schema.Array(Item) })
   export interface ChunkParams extends Schema.Schema.Type<typeof ChunkParams> {}
@@ -407,6 +534,10 @@ export namespace Backend {
     Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("llm.chunk"), params: ChunkParams }),
     Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("llm.finish"), params: FinishParams }),
     Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("llm.disconnect"), params: DisconnectParams }),
+    Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("tool.attach"), params: ToolAttachParams }),
+    Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("tool.update"), params: ToolUpdateParams }),
+    Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("tool.finish"), params: ToolFinishParams }),
+    Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("tool.fail"), params: ToolFailParams }),
     Schema.Struct({
       ...JsonRpc.RequestFields,
       method: Schema.Literals(["llm.attach", "llm.pending"]),
