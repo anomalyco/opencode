@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#080808">
+  <title>OpenCode - Offline</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background-color: #080808;
+      color: #fafafa;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      text-align: center;
+    }
+    
+    .container {
+      max-width: 400px;
+      width: 100%;
+    }
+    
+    .logo {
+      width: 80px;
+      height: 80px;
+      margin: 0 auto 24px;
+      opacity: 0.6;
+    }
+    
+    h1 {
+      font-size: 24px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #fafafa;
+    }
+    
+    .subtitle {
+      font-size: 14px;
+      color: #a0a0a0;
+      margin-bottom: 32px;
+      line-height: 1.5;
+    }
+    
+    .icon {
+      font-size: 48px;
+      margin-bottom: 24px;
+      opacity: 0.8;
+    }
+    
+    .message {
+      font-size: 16px;
+      color: #d0d0d0;
+      margin-bottom: 32px;
+      line-height: 1.6;
+    }
+    
+    .retry-button {
+      background-color: #3b82f6;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background-color 0.2s;
+      width: 100%;
+      max-width: 200px;
+    }
+    
+    .retry-button:hover {
+      background-color: #2563eb;
+    }
+    
+    .retry-button:active {
+      background-color: #1d4ed8;
+    }
+    
+    .help-text {
+      font-size: 12px;
+      color: #808080;
+      margin-top: 24px;
+      line-height: 1.5;
+    }
+    
+    @media (prefers-color-scheme: light) {
+      body {
+        background-color: #fafafa;
+        color: #080808;
+      }
+      
+      h1 {
+        color: #080808;
+      }
+      
+      .subtitle {
+        color: #666666;
+      }
+      
+      .message {
+        color: #333333;
+      }
+      
+      .help-text {
+        color: #999999;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <svg class="logo" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="100" height="100" rx="20" fill="#1a1a1a"/>
+      <path d="M30 70V30L50 50L70 30V70" stroke="#3b82f6" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    
+    <h1>OpenCode</h1>
+    <p class="subtitle">AI-powered development tool</p>
+    
+    <div class="icon">📡</div>
+    
+    <p class="message">
+      You're currently offline. Please check your internet connection and try again.
+    </p>
+    
+    <button class="retry-button" onclick="window.location.reload()">
+      Try Again
+    </button>
+    
+    <p class="help-text">
+      OpenCode requires an internet connection to connect to your development server and AI services.
+    </p>
+  </div>
+</body>
+</html>

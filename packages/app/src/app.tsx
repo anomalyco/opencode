@@ -68,6 +68,7 @@ import { createSessionLineage } from "@/pages/session/session-lineage"
 
 import { SessionPage, SessionRouteErrorBoundary, TargetSessionRouteContent } from "@/pages/session"
 import { NewHome, LegacyHome } from "@/pages/home"
+import { PwaInstallBanner } from "@/components/pwa-install-banner"
 
 const NewSession = lazy(() => import("@/pages/new-session"))
 
@@ -572,6 +573,7 @@ export function AppInterface(props: {
                 <Routes serverScoped={props.serverScoped} />
               </Dynamic>
             </Show>
+            <PwaInstallBanner />
           </ConnectionGate>
         </SettingsProvider>
       </GlobalProvider>
