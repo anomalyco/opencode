@@ -9,7 +9,7 @@
 The PRD (`/Users/tk/repositories/OpenCode-Feature/REQUIREMENTS.md` and `OPENCODE_LINEAR_INTEGRATION.md`) calls for a Linear-style todo system in the OpenCode Desktop sidebar with the following requirements:
 
 - **Two-level hierarchy** (L1 sequential, L2 parallel) — feature does not validate ordering.
-- **Linear-aligned statuses** (`Backlog`, `Todo`, `In Progress`, `In Review`, `Done`, `Canceled`) and **priorities** (`Urgent`, `High`, `Medium`, `Low`, `No priority`).
+- **Linear-aligned statuses** (`Backlog`, `Todo`, `In Progress`, `In Review`, `Done`, `Canceled`, `Duplicate`) and **priorities** (`Urgent`, `High`, `Medium`, `Low`, `No priority`). See Amendment 2026-07-19 for the 7-status set rationale.
 - **Project/workspace scope** — each OpenCode directory maps to one project; items persist across sessions in that workspace.
 - **Linear MCP is an add-on**, not a prerequisite. The sidebar must work standalone.
 
@@ -169,3 +169,47 @@ This is a **narrow, justified exception** to the MCP-only integration rule. It d
 - The agent layer still needs no code changes — agents discover Linear tools through the existing MCP system.
 - The bypass is kernel-internal; the Desktop UI and SDK are unaware of it.
 - All other Linear interactions (list, get, save_issue for non-null fields, list_users, list_issue_statuses) go through MCP.
+
+## Amendment 2026-07-19 — Status set clarification and TodoPopover surface
+
+**Status:** Accepted (2026-07-19)
+**Supersedes:** §Context line listing 6 statuses (adds `Duplicate`); §D3 status-cycle bullet (clarifies the 7-status set).
+
+### Context
+
+ADR-0001 §Context and §D3 originally listed 6 Linear-aligned statuses: `Backlog`, `Todo`, `In Progress`, `In Review`, `Done`, `Canceled`. The implemented Linear MCP integration surfaced a 7th status, `Duplicate`, returned by `list_issue_statuses` for Linear teams that have it configured. A round-2 spec review flagged this as a drift between the ADR and the implementation. This amendment records the canonical 7-status set.
+
+Additionally, the round-2 review flagged `packages/app/src/components/todo-popover.tsx` as a "scope-creep" component because no ADR mentioned it. The component is in fact the **session-header Todo panel entry point** — a popover-style mirror of the sidebar's Todo section, rendered inside `session-header.tsx` (used in both v1 and v2 layouts). It exists because the sidebar is collapsed by default in some layouts, and the session header needs a quick-access affordance to view/create/edit todos without switching panels. This amendment documents it so it is no longer an undocumented surface.
+
+### Decision
+
+#### Status set — 7 Linear-aligned statuses
+
+The canonical status set is:
+
+1. `Backlog`
+2. `Todo`
+3. `In Progress`
+4. `In Review`
+5. `Done`
+6. `Canceled`
+7. `Duplicate`
+
+The kernel uses these literal strings directly (no state mapping), per the project memory constraint. `Duplicate` is treated as a terminal/archived status (same as `Done` / `Canceled`) — `isArchived(status)` returns `true` for it. ADR-0001 §Context and §D3 are updated in place to reflect this; the previous 6-status wording is superseded.
+
+#### TodoPopover — session-header surface
+
+`packages/app/src/components/todo-popover.tsx` is the documented session-header Todo surface. It:
+
+- Renders inside `packages/app/src/components/session/session-header.tsx` via `<TodoPopover v2={false} />` (v1 layout) and `<TodoPopover v2={true} />` (v2 layout).
+- Mirrors the sidebar's Todo panel content (same `useServerSync().todo` store, same Issue list, same add/edit/archive/delete affordances).
+- Exists because the sidebar panel is collapsible and sometimes off-screen; the session header needs a quick-access entry point.
+- Is NOT a separate feature — it is the same Todo surface rendered in a different location. All i18n keys, store bindings, and Issue API calls are shared with `sidebar-todo.tsx`.
+
+The `v2` prop switches between v1 and v2 session-header styling (button shape, icon size, popover anchor). The underlying Issue list and actions are identical.
+
+### What this does NOT change
+
+- The sidebar Todo section (`packages/app/src/pages/layout/sidebar-todo.tsx`) remains the primary surface. The TodoPopover is a convenience mirror, not a replacement.
+- The 7 statuses are passed through directly from Linear; the kernel does not validate or remap them.
+- No new routes, no new SDK methods, no new migrations.

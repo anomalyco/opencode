@@ -357,7 +357,7 @@ The column is renamed from `linear_updated_at` to `last_pulled_at`. This aligns 
 - `sync-pull.ts` (9 references in field names, comparisons, JSDoc) and `sync-push.ts` (2 references in post-push DB writes) updated
 - HTTP API schemas (`Issue`, `IssuePartial`) in `server/routes/instance/httpapi/groups/issue.ts` updated
 - SDK regenerated via `./script/generate.ts` (both `packages/sdk/openapi.json` and `packages/sdk/js/src/v2/gen/*.gen.ts`)
-- Migration `20260717043303_rename_linear_updated_at_to_last_pulled_at` (both the active TS migration in `packages/core/src/database/migration/` and the Drizzle Kit snapshot in `packages/opencode/migration/`) executes `ALTER TABLE \`issue\` RENAME COLUMN \`linear_updated_at\` TO \`last_pulled_at\`;` — SQLite preserves data and nullability. The TS migration is **idempotent**: it checks `PRAGMA table_info(\`issue\`)` for the existence of `linear_updated_at` before renaming, so fresh installs that never had the old column are not affected.
+- Migration `20260717043303_rename_linear_updated_at_to_last_pulled_at` (both the active TS migration in `packages/core/src/database/migration/` and the Drizzle Kit snapshot in `packages/opencode/migration/`) executes `ALTER TABLE \`issue\` RENAME COLUMN \`linear_updated_at\` TO \`last_pulled_at\`;`— SQLite preserves data and nullability. The TS migration is **idempotent**: it checks`PRAGMA table_info(\`issue\`)`for the existence of`linear_updated_at` before renaming, so fresh installs that never had the old column are not affected.
 - Base migration `20260621201623_add_issue_table` was amended to create `last_pulled_at` directly (instead of `linear_updated_at`), so fresh installs get the final column name without needing the rename.
 - Historical migration `20260708183506_add_issue_linear_updated_at` is left untouched (immutable history); the new migration carries the rename forward for existing installs
 
@@ -367,3 +367,185 @@ The column is renamed from `linear_updated_at` to `last_pulled_at`. This aligns 
 - The pull reconcile logic (cloud-wins for Linear-sourced fields, three-state decision: INSERT/SKIP/UPDATE)
 - The push contract (`last_pushed_at` watermark, field-level merge)
 - The historical migration file name `20260708183506_add_issue_linear_updated_at` (immutable history; only its effect is renamed by the new migration)
+
+## Amendment 2026-07-18 — Auto-progress redesign: archive semantics, list filtering, engine removal
+
+**Status:** Accepted
+**Spec:** [docs/superpowers/specs/2026-07-18-auto-progress-redesign.md](../superpowers/specs/2026-07-18-auto-progress-redesign.md)
+
+### Context
+
+The original `auto-progress.ts` engine coupled state-cascade with active-L1 promotion. Issue lifecycle was implicit: agents marked `status: "Done"` via `issue_update`, with no first-class "archive" action. `issue_list` returned every row regardless of state, forcing agents to filter manually. UI delete and agent delete were separate concepts.
+
+The redesign separates **archive** (a first-class terminal-state transition) from **delete** (a hard row removal that only applies to archived issues), and shifts the agent model from "engine pushes via events" to "agent pulls via `issue_list`".
+
+### Decision
+
+#### D8-revised — `issue_list` default excludes archived subtrees
+
+`Issue.Service.list({ directory, include_archived? })`:
+
+- Default (`include_archived` absent or `false`):
+  - L1 row returned iff `status ∉ {Done, Canceled, Duplicate}`
+  - L2 row returned iff its `parent_id` references a returned L1 **and** its own `status ∉ {Done, Canceled, Duplicate}`
+  - Archived L1 hides its entire subtree (including non-archived L2)
+  - Archived L2 under an active L1 is hidden
+- `include_archived: true` returns all rows; used by the UI archive area.
+
+The `ARCHIVED` set is `{"Done", "Canceled", "Duplicate"}` — the Linear terminal states. This is a server-side constant in `issue.ts`, mirrored client-side in `sidebar-todo.tsx` as `ARCHIVED_STATUSES`.
+
+#### D9-revised — `issue_archive` is the only path into terminal state
+
+New `Issue.Service.archive({ directory, id, outcome })` and tool `issue_archive`:
+
+- `outcome ∈ {"done", "canceled", "duplicate"}` → sets `status` accordingly (capitalised: `Done` / `Canceled` / `Duplicate`)
+- Idempotent: archiving an already-archived issue returns success without modifying state
+- Updates `time_updated`, publishes `Issue.Updated`
+- **Does NOT cascade**: L1 archive leaves its L2 status untouched; L2 archive leaves its L1 untouched
+- The hidden-subtree effect comes from `list` filtering, not from a cascade write
+
+Direct `issue_update({ status: "Done" })` is rejected with `IssueArchivedError` when the issue is already archived, and remains allowed for active issues — but the canonical path for terminal-state transition is `issue_archive`.
+
+#### D10-revised — `issue_delete` rejects active issues
+
+`Issue.Service.delete({ directory, id })`:
+
+- Active issue (`status ∉ ARCHIVED`) → `Effect.fail(new IssueNotArchivedError({ id }))`
+- Archived L2 → hard delete the L2 row only
+- Archived L1 → hard delete the L1 **and** cascade hard-delete its L2 rows (orphan L2 are meaningless)
+
+Cascade uses independent `db.delete()` statements (NOT `db.transaction` — see Lessons Learned: Drizzle transactions are unreliable under Effect + Bun sqlite).
+
+Local delete does NOT push to Linear (Linear MCP has no delete Issue API). Local-only rows (no `linear_issue_id`) delete cleanly.
+
+#### D11-revised — Archived issues are read-only
+
+`issue_update` and `issue_reorder` reject archived issues with `IssueArchivedError`. The agent-facing tools catch this and return a friendly message directing the agent to use `issue_archive` (for active) or `issue_delete` (for archived).
+
+#### D12-revised — Auto-progress engine removed
+
+The `auto-progress.ts` engine, the `issue_auto_progress` tool, the `Issue.AutoProgress.subscribeLayer`, and the `test/issue/auto-progress.test.ts` test file are **deleted**. The new model is pure pull:
+
+- Agent calls `issue_list` at the start of each turn
+- Agent picks the active L1 (status `In Progress` or `In Review`) — there is at most one
+- Agent works on its non-archived L2s
+- When an L2 is done, agent calls `issue_archive({ id, outcome: "done" })`
+- When all L2s of an L1 are archived, the agent calls `issue_archive` on the L1
+- No server-side state machine promotes L1s or cascades status
+
+The previous Rule 1 (L1 auto-Done when all L2 archived) and Rule 2 (auto-promote first `Todo` L1 to `In Progress`) are **no longer implemented**. The agent or user explicitly transitions states via `issue_archive` and `issue_update`.
+
+### Migration
+
+- **No schema changes**: `IssueTable` is unchanged; archive state is inferred from `status`
+- **New error types**: `Issue.ArchivedError`, `Issue.NotArchivedError` (added to `issue.ts`)
+- **New tool**: `issue_archive.ts` + `issue_archive.txt` registered in `tool/registry.ts`
+- **Modified tools**: `issue_delete.ts` (not-archived rejection), `issue_update.ts` + `issue_reorder.ts` (archived rejection), `issue_delete.txt` (description clarifies archive-first contract)
+- **Removed files**:
+  - `packages/opencode/src/issue/auto-progress.ts`
+  - `packages/opencode/src/tool/issue_auto_progress.ts`
+  - `packages/opencode/src/tool/issue_auto_progress.txt`
+  - `packages/opencode/test/issue/auto-progress.test.ts`
+- **SDK regenerated**: `packages/sdk/openapi.json` + `packages/sdk/js/src/v2/gen/*.gen.ts` now expose `issue.archive`
+- **UI**: `sidebar-todo.tsx` single × button (archive for active, delete for archived), archive area collapsed by default
+- **i18n**: 9 new keys (`sidebar.issue.toast.archiveFailed`, `sidebar.issue.tooltip.archive`, `sidebar.issue.tooltip.delete`, `sidebar.issue.confirmArchive`, `sidebar.issue.archivedBadge`, `sidebar.issue.archiveArea.{title,expand,collapse,empty}`) added to all 18 locales
+
+### What this does NOT change
+
+- Linear sync (`sync-push.ts`, `sync-pull.ts`) — archive state flows through `status` like any other status; shadow diff and three-state pull reconcile are untouched
+- `IssueTable` schema — no new columns, no new migration
+- The session-scoped `TodoTable` (in-session todos) — fully separate, untouched
+- The Linear MCP integration point — agents discover Linear tools through MCP as before
+- `issue_add` and `issue_update` for active issues — unchanged behaviour, only archived-state rejection is new
+
+## Amendment 2026-07-19 — Post-review clarifications and exception documentation
+
+**Status:** Accepted
+**Supersedes:** None (clarifies and documents exceptions surfaced by the post-implementation two-axis review)
+
+### Context
+
+A two-axis review (Standards + Spec) of the Todo Sidebar feature against `origin/dev` surfaced several items where the implementation either (a) intentionally deviated from a project-level rule because of an upstream limitation, (b) deferred a larger refactor to a follow-up iteration, or (c) needed a clearer semantic record so future maintainers don't re-litigate the decision. This amendment consolidates those items into a single authoritative record.
+
+### Decision
+
+#### D13 — Linear GraphQL HTTP client exception (kernel bypass)
+
+CLAUDE.md (Architecture › MCP integration) states: *"Linear MCP server is the integration point… do not add a Linear-specific HTTP client in the kernel."* `packages/opencode/src/issue/sync-push.ts:293-333` (`clearDueDateViaGraphQL`) deliberately violates this rule.
+
+**Reason for the exception:** Linear MCP's `save_issue` tool cannot clear nullable fields — passing `dueDate: null` (or omitting it) does not null the field on Linear's side, it leaves the existing value untouched. This is a known limitation of the Linear MCP server (verified during implementation). To support the "clear due date" UX in the Add/Edit Todo dialog, the kernel calls Linear's GraphQL endpoint directly (`POST https://api.linear.app/graphql`) with an `issueUpdate` mutation that sets `dueDate: null`.
+
+**Scope of the exception:**
+- The bypass is **read-write for field clearing only**. It does not replace MCP for any other operation (create, update non-null fields, list, archive, etc.).
+- Authentication uses `LINEAR_API_KEY` from the process environment (fallback path). When `LINEAR_API_KEY` is absent, the clear-due-date operation fails with a clear error message; it does not silently skip.
+- The bypass is invoked from `SyncPush.pushOne` only when the shadow diff detects that `due_date` transitioned from a non-null value to null.
+
+**Removal condition:** When Linear MCP adds support for nulling nullable fields (Linear roadmap item), `clearDueDateViaGraphQL` must be deleted and the push path must route the clear through MCP `save_issue`. Until then, this is the documented exception.
+
+#### D14 — `DatePicker` component (feature-scoped UI primitive)
+
+A new `packages/app/src/components/date-picker.tsx` was added to the Todo Sidebar feature scope. The project's existing date pickers (native `<input type="date">` and a full-calendar library) suffered broken styling inside the Add/Edit Todo dialog: the dialog renders the due-date field inside a Kobalte `Popover` that also hosts several Kobalte `Select` components (status, priority, labels, assignee). Under the nested Popover + Select portal stacking, the existing pickers overflowed the popover bounds, lost z-index fights against the dialog backdrop, and the native picker's browser-chrome dropdown clashed with the Linear-style surface tokens used elsewhere in the dialog.
+
+The feature-scoped `DatePicker` renders its calendar inside the same `Popover` primitive the dialog already uses, uses the project's semantic surface tokens, and stays visually consistent with the Linear-style edit form. Patching the upstream pickers would have touched main-branch UI components outside the Todo Sidebar feature scope — explicitly disallowed by the project rule "Never change anything out of the scope of Todo Sidebar Feature."
+
+**Removal condition:** If the upstream pickers are fixed to handle nested Popover + Select portal stacking, this component should be evaluated for replacement. Until then, it is the canonical date picker for the Todo Sidebar dialog.
+
+#### D15 — `SyncEntry` per-outcome counts with graphical arrow display
+
+`packages/app/src/components/linear-sync-history.tsx` previously stored `SyncEntry { count: number }` — a single opaque number. Per ADR-0002 D9, the sync result carries `{ pulled, updated, skipped, deleted, failed }` (for pull) or `{ pushed, failed }` (for push), and the UI was supposed to derive the toast text from these. The single-count field collapsed all outcomes into one number, making it impossible to render "Pulled N · Updated M · Skipped K" per the D6 UI text rule.
+
+The `SyncEntry` type now carries `outcomes: { moved, updated, skipped, deleted, failed }` where `moved` is `pulled` (for pull) or `pushed` (for push). The display uses **graphical arrows instead of localised text labels**:
+
+- `↗` / `↙` — operation direction (push / pull). Replaces the previous `"↗ Linear"` / `"↙ Linear"` i18n strings.
+- `↑N` — items moved across the sync boundary
+- `✓N` — items reconciled in place (pull only)
+- `·N` — items skipped (watermark-only refresh)
+- `🗑N` — items removed locally (pull only, cloud archived)
+- `✗N` — items that errored
+
+Zero-valued outcomes are omitted from the display to save horizontal space. The sidebar's sync history panel has limited width, so the graphical indicator format replaces the previous "Pulled" / "Pushed" text labels.
+
+The previous i18n keys `sidebar.linear.syncHistory.push` / `pull` / `itemCount.one` / `itemCount.other` are no longer read by the component but are retained in locale files to avoid breaking other consumers; they will be removed in a follow-up i18n cleanup pass.
+
+#### D16 — Composer reuse in New/Edit Todo dialog (deferred)
+
+ADR-0001 D3 stipulates: *"+ New button opens a dialog (reuses the existing composer for title + rich description with file/skill references, per PRD §4)."* The current `packages/app/src/components/dialog-edit-todo.tsx:305-333` does NOT mount `packages/app/src/pages/session/composer/` — it reimplements `@` and `/` trigger detection inline with its own popover and state.
+
+**Reason for deferral:** Reusing the chat composer inside a modal dialog is a large task: the composer is tightly coupled to the session context (it dispatches `session.prompt` events, reads session-scoped SDK clients, and assumes a session-scoped `useCommand()` provider). Decoupling it for use in a non-session dialog requires either (a) extracting a headless composer primitive, (b) faking a session context for the dialog, or (c) adding a `mode: "dialog"` prop that switches the composer's dispatch behaviour. Each option touches main-branch session code, which is out of scope for this feature iteration.
+
+**Current behaviour:** The dialog's inline `@` / `/` detection provides file and skill references with the same semantics as the composer, but reimplements the trigger UI. Functionality is preserved; only the code-sharing contract is unmet.
+
+**Follow-up:** Composer reuse is recorded as a follow-up task for the next Todo Sidebar iteration. The inline implementation must be deleted when the composer is extracted.
+
+#### D17 — `issue_delete` outcome uses discriminated union (not boolean flag)
+
+`packages/opencode/src/tool/issue_delete.ts` previously used an inverted `archived: boolean` flag for control flow: `archived: false` was set on successful deletion (the issue is gone, hence "not archived"), and `archived: true` was set when `IssueNotArchivedError` fired (the issue was NOT archived, i.e. active). The flag's name tracked the pre-call archived-state but read as the post-call state — a naming hazard flagged in the Standards review.
+
+Per TypeScript best practice for result-or-error types (discriminated unions / tagged unions / algebraic data types — the same pattern used by Rust `Result<T, E>`, Swift, and Effect's `Effect.catchTag`), the outcome is now a discriminated union:
+
+```ts
+type DeleteOutcome =
+  | { ok: true; remainingCount: number }
+  | { ok: false; reason: "not_archived" }
+```
+
+The user's semantic clarification (2026-07-19) is recorded: "archive" = move to recycle bin; "delete" = permanently remove from the recycle bin. Only archived issues can be deleted. The discriminated union makes the two outcomes explicit and self-documenting.
+
+#### D18 — Kobalte Popover / Select portal workaround (UI hack)
+
+`packages/ui/src/components/popover.tsx:70-75` adds a `[data-component="select-content"]` selector check to the Popover's outside-click detector. This is a **temporary workaround** for a Kobalte limitation: when a Kobalte `Select` is nested inside a `Popover`, the Select renders its dropdown options via a Portal at `document.body` level, outside the Popover's content DOM. The Popover's `inside()` check therefore treats clicks on Select options as "outside" clicks and closes the Popover mid-selection, breaking the Add/Edit Todo dialog's Status / Priority / Labels / Assignee selectors.
+
+The workaround treats any click inside an element marked `[data-component="select-content"]` as "inside" the Popover. This is a hack because:
+
+1. The generic `Popover` primitive has hardcoded knowledge of a sibling `Select` component's implementation detail.
+2. `[data-component="select-content"]` is a magic string; renaming it in the Select silently breaks the Popover.
+3. Proper architectural fixes exist (Kobalte's own portal containment semantics, a context-based portal registration pattern, or `aria-describedby` relation chains) but would touch the whole Popover / Select / Dialog system — out of scope for this feature.
+
+**Removal condition:** When the project's UI team lands an architectural fix for portal containment in the Popover/Select system, the `[data-component="select-content"]` check must be deleted. Until then, it is the documented workaround.
+
+### What this does NOT change
+
+- The Linear MCP integration point remains the canonical integration for all Linear operations except field clearing (D13).
+- The `IssueTable` schema, sync data path, and three-state pull reconcile are unchanged.
+- The session-scoped `TodoTable` remains fully separate.
+- No new migrations, no SDK regeneration required (this amendment is documentation-only).

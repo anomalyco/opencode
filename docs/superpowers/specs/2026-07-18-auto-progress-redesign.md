@@ -1,9 +1,33 @@
 # Auto-Progress 系统重新设计
 
 **Date:** 2026-07-18
-**Status:** Proposed
+**Status:** Partially superseded by ADR-0002 Amendment 2026-07-18
 **Supersedes:** `packages/opencode/src/issue/auto-progress.ts` (current implementation)
-**Related ADRs:** ADR-0001, ADR-0002 (含 Amendments 2026-07-11 / 2026-07-12), ADR-0003, ADR-0004
+**Related ADRs:** ADR-0001, ADR-0002 (含 Amendments 2026-07-11 / 2026-07-12 / 2026-07-18), ADR-0003, ADR-0004
+
+> **⚠ SUPERSEDED SECTIONS NOTICE (2026-07-19):**
+> ADR-0002 Amendment 2026-07-18 §D12-revised supersedes the following
+> sections of this spec. The ADR is authoritative; this spec is retained
+> for historical context only.
+>
+> - **§4 (AutoProgress 引擎规则)** — Rule 1 / Rule 2 are **no longer
+>   implemented**. The engine is deleted; the agent model is pure pull.
+> - **§5.5 (`issue_auto_progress` 保留)** — the tool is **deleted**.
+> - **§8.4 (保留当前实现)** — `auto-progress.ts` is **deleted**, not kept.
+> - **§10.1 (保留现有测试)** — `test/issue/auto-progress.test.ts` is
+>   **deleted**.
+> - **§10.3 Standards 修复 (移除 `isActive`)** — moot, the whole file is gone.
+> - **§11.1 第 5/6 项 (修改 `issue_auto_progress.ts/.txt`、移除
+>   `auto-progress.ts` 中 `isActive`)** — moot, both files are deleted.
+> - **§11.3 不做的事 (不重写 AutoProgress 引擎核心规则)** — the engine is
+>   now entirely removed, not just "not rewritten".
+> - **§13 验收标准 #6 / #9** — both moot: there is no engine whose rules
+>   are preserved, and no `issue_auto_progress.txt` to update.
+>
+> The remaining sections (§3 status classification, §5.1 `issue_list`
+> filtering, §5.2 `issue_archive`, §5.4 `issue_delete` constraints,
+> §6 UI behaviour, §9 Linear sync) remain accurate and reflect the
+> implemented design.
 
 ---
 
@@ -56,10 +80,10 @@ Todo Sidebar 系统已与 Linear Issue 完全对齐（Label / Status / Title / D
 
 ### 3.1 状态分类
 
-| 分类 | Status 集合 | 语义 |
-|---|---|---|
-| **Active** | `Backlog`, `Todo`, `In Progress`, `In Review` | 可编辑、可被 Agent 读取、可被 auto-progress 推进 |
-| **Archived** | `Done`, `Canceled`, `Duplicate` | 只读、不被 Agent 默认读取、仅可删除 |
+| 分类         | Status 集合                                   | 语义                                             |
+| ------------ | --------------------------------------------- | ------------------------------------------------ |
+| **Active**   | `Backlog`, `Todo`, `In Progress`, `In Review` | 可编辑、可被 Agent 读取、可被 auto-progress 推进 |
+| **Archived** | `Done`, `Canceled`, `Duplicate`               | 只读、不被 Agent 默认读取、仅可删除              |
 
 ### 3.2 层级语义
 
@@ -81,10 +105,12 @@ Todo Sidebar 系统已与 Linear Issue 完全对齐（Label / Status / Title / D
 ### 4.1 Rule 1：L2 全归档 → L1 自动 Done
 
 **触发条件**：
+
 - L1 处于 `In Progress` 或 `In Review`
 - 该 L1 下**至少有一个 L2** 且所有 L2 ∈ Archived
 
 **动作**：
+
 - L1.status = `Done`
 - time_updated 更新
 
@@ -95,14 +121,17 @@ Todo Sidebar 系统已与 Linear Issue 完全对齐（Label / Status / Title / D
 ### 4.2 Rule 2：提升首个 Todo L1
 
 **触发条件**：
+
 - 当前无 active L1（无 L1 处于 `In Progress` / `In Review`）
 - 存在 status = `Todo`（非 Backlog）的 L1
 
 **动作**：
+
 - 首个 `Todo` L1.status = `In Progress`
 - 该 L1 下所有 `Todo` L2.status = `In Progress`
 
 **守卫**：
+
 - `hasActive` 检查：若已有 L1 active，不再提升新 L1（顺序执行约束）
 
 **说明**：Backlog 状态的 L1 不参与提升，等待用户显式改为 Todo。
@@ -134,12 +163,14 @@ issue_list({
 ```
 
 **默认行为**（`include_archived` 未传或 false）：
+
 - 返回所有非归档 L1
 - 每个 L1 下返回其非归档 L2
 - 归档 L1 的整个子树（L1 + L2）不返回
 - 归档 L2 不返回（即使其 L1 活跃）
 
 **`include_archived: true`**：
+
 - 返回所有 L1 / L2（含归档）
 - 用于 UI 归档区折叠展示与管理视图
 
@@ -155,6 +186,7 @@ issue_archive({
 ```
 
 **行为**：
+
 1. 加载 issue by id
 2. 若 issue.status ∈ Archived → 幂等返回成功，不改状态
 3. 更新 issue.status = outcome, time_updated = now
@@ -165,12 +197,12 @@ issue_archive({
 
 ### 5.3 Agent 归档触发场景
 
-| # | 触发条件 | Agent 动作 | 后续 |
-|---|---|---|---|
-| 1 | L2 完成 | `issue_archive(L2, done)` | 读取下一个非归档 L2 继续执行 |
-| 2 | L1 完成（其 L2 全部归档） | `issue_archive(L1, done)` | 读取下一个非归档 L1 |
-| 3a | L2 取消/重复 | `issue_archive(L2, canceled \| duplicate)` | 跳过当前 L2，进行下一个 L2 |
-| 3b | L1 取消/重复 | `issue_archive(L1, canceled \| duplicate)` | 跳过当前 L1（其 L2 不动），进行下一个 L1 |
+| #   | 触发条件                  | Agent 动作                                 | 后续                                     |
+| --- | ------------------------- | ------------------------------------------ | ---------------------------------------- |
+| 1   | L2 完成                   | `issue_archive(L2, done)`                  | 读取下一个非归档 L2 继续执行             |
+| 2   | L1 完成（其 L2 全部归档） | `issue_archive(L1, done)`                  | 读取下一个非归档 L1                      |
+| 3a  | L2 取消/重复              | `issue_archive(L2, canceled \| duplicate)` | 跳过当前 L2，进行下一个 L2               |
+| 3b  | L1 取消/重复              | `issue_archive(L1, canceled \| duplicate)` | 跳过当前 L1（其 L2 不动），进行下一个 L1 |
 
 ### 5.4 `issue_delete`（约束修改）
 
@@ -179,6 +211,7 @@ issue_delete({ id: string })
 ```
 
 **新约束**：
+
 - Active issue → 拒绝，抛 `IssueNotArchivedError`
 - Archived L1 → 硬删除 L1 + 级联硬删除其所有 L2（孤儿 L2 无意义）
 - Archived L2 → 硬删除 L2，L1 不受影响
@@ -195,6 +228,7 @@ issue_delete({ id: string })
 ### 5.6 归档态保护
 
 以下工具对 Archived issue 抛 `IssueArchivedError`：
+
 - `issue_update`
 - `issue_reorder`
 - `issue_delete`（Active 时抛 `IssueNotArchivedError`；Archived 时允许）
@@ -207,13 +241,14 @@ Agent 工具捕获错误后返回友好提示。
 
 ### 6.1 单一"x"按钮
 
-| Issue 状态 | 点击"x" | 服务端动作 |
-|---|---|---|
-| Active L1 或 L2 | 归档（outcome=Done） | `issue_archive(id, done)` |
-| Archived L1 | 硬删除 L1 + 级联硬删除其 L2 | `issue_delete(id)` |
-| Archived L2 | 硬删除 L2 | `issue_delete(id)` |
+| Issue 状态      | 点击"x"                     | 服务端动作                |
+| --------------- | --------------------------- | ------------------------- |
+| Active L1 或 L2 | 归档（outcome=Done）        | `issue_archive(id, done)` |
+| Archived L1     | 硬删除 L1 + 级联硬删除其 L2 | `issue_delete(id)`        |
+| Archived L2     | 硬删除 L2                   | `issue_delete(id)`        |
 
 **视觉**：
+
 - Active issue 卡片右上角"x"图标，hover 提示"归档"
 - Archived issue 卡片右上角"x"图标，hover 提示"删除"
 
@@ -227,16 +262,16 @@ Agent 工具捕获错误后返回友好提示。
 
 所有用户编辑操作**不实时通知 Agent**，在 Agent 下一轮 `issue_list` 时自然生效：
 
-| 用户操作 | 对 Agent 的影响（下一轮） |
-|---|---|
-| 重排 L1（改 position） | 按新顺序推导活跃 L1 |
-| 把 Backlog L1 改为 Todo | 可被 Rule 2 提升 |
-| 添加 L2 到活跃 L1 | 看到新子任务 |
-| 删除活跃 L1 的最后一个 Todo L2 | Rule 1 可能将 L1 标 Done |
-| 手动把 L2 从 In Progress 改回 Todo | 重新执行该 L2 |
-| 手动"x"归档 Active L1 | 整个子树不再被读取 |
-| 手动"x"归档 Active L2 | Rule 1 可能级联 L1 Done |
-| 手动"x"删除 Archived L1 | L2 同步硬删除 |
+| 用户操作                           | 对 Agent 的影响（下一轮） |
+| ---------------------------------- | ------------------------- |
+| 重排 L1（改 position）             | 按新顺序推导活跃 L1       |
+| 把 Backlog L1 改为 Todo            | 可被 Rule 2 提升          |
+| 添加 L2 到活跃 L1                  | 看到新子任务              |
+| 删除活跃 L1 的最后一个 Todo L2     | Rule 1 可能将 L1 标 Done  |
+| 手动把 L2 从 In Progress 改回 Todo | 重新执行该 L2             |
+| 手动"x"归档 Active L1              | 整个子树不再被读取        |
+| 手动"x"归档 Active L2              | Rule 1 可能级联 L1 Done   |
+| 手动"x"删除 Archived L1            | L2 同步硬删除             |
 
 ---
 
@@ -254,15 +289,13 @@ Agent 工具捕获错误后返回友好提示。
 
 ```typescript
 // 在 issue.ts 中新增
-export class IssueArchivedError extends Schema.TaggedErrorClass<IssueArchivedError>()(
-  "Issue.ArchivedError",
-  { id: Schema.String },
-) {}
+export class IssueArchivedError extends Schema.TaggedErrorClass<IssueArchivedError>()("Issue.ArchivedError", {
+  id: Schema.String,
+}) {}
 
-export class IssueNotArchivedError extends Schema.TaggedErrorClass<IssueNotArchivedError>()(
-  "Issue.NotArchivedError",
-  { id: Schema.String },
-) {}
+export class IssueNotArchivedError extends Schema.TaggedErrorClass<IssueNotArchivedError>()("Issue.NotArchivedError", {
+  id: Schema.String,
+}) {}
 ```
 
 ---
@@ -273,15 +306,13 @@ export class IssueNotArchivedError extends Schema.TaggedErrorClass<IssueNotArchi
 
 ```typescript
 // 伪代码
-const all = yield* db.select().from(IssueTable).where(eq(IssueTable.directory, directory))
+const all = yield * db.select().from(IssueTable).where(eq(IssueTable.directory, directory))
 const archived = input.include_archived ?? false
 
 if (archived) return all
 
 // 默认过滤：L1 非归档 + L2 非归档 + L2 的 parent 非归档
-const activeL1Ids = new Set(
-  all.filter((i) => i.level === 0 && !ARCHIVED.has(i.status)).map((i) => i.id),
-)
+const activeL1Ids = new Set(all.filter((i) => i.level === 0 && !ARCHIVED.has(i.status)).map((i) => i.id))
 return all.filter((i) => {
   if (i.level === 0) return activeL1Ids.has(i.id)
   return activeL1Ids.has(i.parent_id!) && !ARCHIVED.has(i.status)
@@ -292,29 +323,27 @@ return all.filter((i) => {
 
 ```typescript
 // 伪代码
-const issue = yield* issue.get({ directory, id })
-if (ARCHIVED.has(issue.status)) return  // 幂等
+const issue = yield * issue.get({ directory, id })
+if (ARCHIVED.has(issue.status)) return // 幂等
 
-yield* db.update(IssueTable)
-  .set({ status: outcome, time_updated: Date.now() })
-  .where(eq(IssueTable.id, id))
+yield * db.update(IssueTable).set({ status: outcome, time_updated: Date.now() }).where(eq(IssueTable.id, id))
 
-yield* publish(directory)  // 触发 Issue.Updated → AutoProgress tick
+yield * publish(directory) // 触发 Issue.Updated → AutoProgress tick
 ```
 
 ### 8.3 `issue_delete` 约束
 
 ```typescript
-const issue = yield* issue.get({ directory, id })
+const issue = yield * issue.get({ directory, id })
 if (!ARCHIVED.has(issue.status)) {
-  yield* Effect.fail(new IssueNotArchivedError({ id }))
+  yield * Effect.fail(new IssueNotArchivedError({ id }))
 }
 
 // L1 级联硬删 L2
 if (issue.level === 0) {
-  yield* db.delete(IssueTable).where(eq(IssueTable.parent_id, id))
+  yield * db.delete(IssueTable).where(eq(IssueTable.parent_id, id))
 }
-yield* db.delete(IssueTable).where(eq(IssueTable.id, id))
+yield * db.delete(IssueTable).where(eq(IssueTable.id, id))
 ```
 
 ### 8.4 AutoProgress 引擎（保留当前实现）
@@ -357,6 +386,7 @@ yield* db.delete(IssueTable).where(eq(IssueTable.id, id))
 ### 10.2 新增测试用例
 
 **`issue_archive` 工具**：
+
 - Agent `issue_archive(L2, done)` → L2.status=Done，L1 不变
 - Agent `issue_archive(L1, done)` → L1.status=Done，L2 状态不变
 - Agent `issue_archive(L2, canceled)` → 跳过 L2
@@ -365,20 +395,24 @@ yield* db.delete(IssueTable).where(eq(IssueTable.id, id))
 - `issue_archive` 后 `issue_list` 默认不返回该 issue
 
 **`issue_list` 过滤**：
+
 - L1 归档 → 整个子树不返回
 - L1 活跃 + 部分 L2 归档 → 返回 L1 + 非归档 L2
 - `include_archived: true` → 返回所有
 
 **`issue_delete` 约束**：
+
 - Active issue → 抛 `IssueNotArchivedError`
 - Archived L1 → 硬删除 L1 + 其所有 L2
 - Archived L2 → 硬删除 L2
 
 **归档态保护**：
+
 - `issue_update` Archived issue → 抛 `IssueArchivedError`
 - `issue_reorder` Archived issue → 抛 `IssueArchivedError`
 
 **Rule 1 补强**：
+
 - `Canceled` L2 触发 Rule 1 级联（L1 自动 Done）
 - `Duplicate` L2 触发 Rule 1 级联
 - `In Review` 作为 active L1 状态
