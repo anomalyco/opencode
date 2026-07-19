@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
 import { Image, ImageClient } from "../src"
-import { OpenAI } from "../src/providers"
+import { Google, OpenAI } from "../src/providers"
 import { it } from "./lib/effect"
 import { dynamicResponse } from "./lib/http"
 
@@ -120,6 +120,137 @@ describe("Image", () => {
               )
             }),
           ),
+        ),
+      ),
+    ),
+  )
+
+  it.effect("generates images through the Google generateContent API", () =>
+    Effect.gen(function* () {
+      const response = yield* Image.generate({
+        model: Google.configure({
+          apiKey: "test",
+          baseURL: "https://generativelanguage.test/v1beta/",
+          headers: { "x-default": "yes" },
+          http: { body: { labels: { deployment: "test" } }, query: { api: "v1" } },
+          image: {
+            providerOptions: { imageSize: "2K", thinkingLevel: "High", includeThoughts: true },
+          },
+        }).image("gemini-3.1-flash-image"),
+        prompt: "A robot tending a rooftop garden",
+        aspectRatio: "16:9",
+        seed: 42,
+        http: {
+          body: { safetySettings: [] },
+          headers: { "x-request": "yes" },
+          query: { trace: "1" },
+        },
+      })
+
+      expect(response.images).toHaveLength(3)
+      expect(response.images.map((image) => image.data)).toEqual([
+        Uint8Array.from([1, 2, 3]),
+        Uint8Array.from([4, 5, 6]),
+        Uint8Array.from([7, 8, 9]),
+      ])
+      expect(response.images.map((image) => image.mediaType)).toEqual(["image/png", "image/jpeg", "image/webp"])
+      expect(response.images[0].providerMetadata).toMatchObject({ google: { thoughtSignature: "signature-1" } })
+      expect(response.images[1].providerMetadata).toMatchObject({
+        google: { candidateIndex: 0, partIndex: 2, finishReason: "STOP" },
+      })
+      expect(response.images[2].providerMetadata).toMatchObject({ google: { candidateIndex: 7, partIndex: 0 } })
+      expect(response.usage?.inputTokens).toBe(5)
+      expect(response.usage?.outputTokens).toBe(10)
+      expect(response.usage?.reasoningTokens).toBe(3)
+      expect(response.providerMetadata).toEqual({
+        google: {
+          modelVersion: "gemini-3.1-flash-image",
+          responseId: "response-1",
+          promptFeedback: undefined,
+          text: ["planning"],
+        },
+      })
+    }).pipe(
+      Effect.provide(
+        ImageClient.layer.pipe(
+          Layer.provide(
+            dynamicResponse((input) =>
+              Effect.gen(function* () {
+                const request = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
+                expect(request.url).toBe(
+                  "https://generativelanguage.test/v1beta/models/gemini-3.1-flash-image:generateContent?api=v1&trace=1",
+                )
+                expect(request.headers.get("x-goog-api-key")).toBe("test")
+                expect(request.headers.get("x-default")).toBe("yes")
+                expect(request.headers.get("x-request")).toBe("yes")
+                expect(JSON.parse(input.text)).toEqual({
+                  contents: [{ role: "user", parts: [{ text: "A robot tending a rooftop garden" }] }],
+                  generationConfig: {
+                    responseModalities: ["IMAGE"],
+                    imageConfig: { aspectRatio: "16:9", imageSize: "2K" },
+                    seed: 42,
+                    thinkingConfig: { thinkingLevel: "High", includeThoughts: true },
+                  },
+                  labels: { deployment: "test" },
+                  safetySettings: [],
+                })
+                return input.respond(
+                  JSON.stringify({
+                    candidates: [
+                      {
+                        content: {
+                          parts: [
+                            {
+                              inlineData: { mimeType: "image/png", data: "AQID" },
+                              thoughtSignature: "signature-1",
+                            },
+                            { text: "planning", thought: true },
+                            { inlineData: { mimeType: "image/jpeg", data: "BAUG" } },
+                          ],
+                        },
+                        finishReason: "STOP",
+                        safetyRatings: [{ category: "safe" }],
+                      },
+                      {
+                        index: 7,
+                        content: { parts: [{ inlineData: { mimeType: "image/webp", data: "BwgJ" } }] },
+                      },
+                    ],
+                    usageMetadata: {
+                      promptTokenCount: 5,
+                      candidatesTokenCount: 7,
+                      thoughtsTokenCount: 3,
+                      totalTokenCount: 15,
+                    },
+                    modelVersion: "gemini-3.1-flash-image",
+                    responseId: "response-1",
+                  }),
+                  { headers: { "content-type": "application/json" } },
+                )
+              }),
+            ),
+          ),
+        ),
+      ),
+    ),
+  )
+
+  it.effect("rejects unsupported Google image options locally", () =>
+    Image.generate({
+      model: Google.configure({ apiKey: "test" }).image("gemini-3.1-flash-image"),
+      prompt: "A robot tending a rooftop garden",
+      count: 2,
+      size: { width: 1024, height: 1024 },
+    }).pipe(
+      Effect.flip,
+      Effect.tap((error) =>
+        Effect.sync(() => {
+          expect(error.reason._tag).toBe("InvalidRequest")
+        }),
+      ),
+      Effect.provide(
+        ImageClient.layer.pipe(
+          Layer.provide(dynamicResponse(() => Effect.die("invalid request should not reach the provider"))),
         ),
       ),
     ),
