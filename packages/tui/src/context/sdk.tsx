@@ -8,6 +8,70 @@ export type EventSource = {
   subscribe: (handler: (event: GlobalEvent) => void) => Promise<() => void>
 }
 
+export type EventStreamLoop = {
+  readonly signals: readonly [AbortSignal, AbortSignal]
+  readonly connect: (signal: AbortSignal) => Promise<AsyncIterable<GlobalEvent>>
+  readonly event: (event: GlobalEvent) => void
+  readonly flush: () => void
+  readonly wait: (delay: number, signal: AbortSignal) => Promise<void>
+  readonly retry: (entry: { readonly attempt: number; readonly error: unknown }) => void
+}
+
+const retryDelay = 1000
+const maxRetryDelay = 30000
+
+export async function runEventStream(input: EventStreamLoop) {
+  const signal = AbortSignal.any([...input.signals])
+  let attempt = 0
+  while (!signal.aborted) {
+    let error: unknown = new Error("event stream completed")
+    try {
+      const stream = await input.connect(signal)
+      for await (const event of stream) {
+        if (signal.aborted) return
+        input.event(event)
+        if (event.payload.type === "server.connected") attempt = 0
+      }
+    } catch (cause) {
+      error = cause instanceof Error ? cause : new Error("event stream failed", { cause })
+    }
+    try {
+      input.flush()
+    } catch (cause) {
+      error = cause instanceof Error ? cause : new Error("event stream flush failed", { cause })
+    }
+    if (signal.aborted) return
+
+    attempt++
+    try {
+      await input.wait(Math.min(retryDelay * 2 ** (attempt - 1), maxRetryDelay), signal)
+    } catch (cause) {
+      error = cause instanceof Error ? cause : new Error("event stream retry wait failed", { cause })
+    }
+    if (signal.aborted) return
+    try {
+      input.retry({ attempt, error })
+    } catch {
+      continue
+    }
+  }
+}
+
+function waitForRetry(delay: number, signal: AbortSignal) {
+  if (signal.aborted) return Promise.resolve()
+  return new Promise<void>((resolve) => {
+    const abort = () => {
+      clearTimeout(timer)
+      resolve()
+    }
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", abort)
+      resolve()
+    }, delay)
+    signal.addEventListener("abort", abort, { once: true })
+  })
+}
+
 export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
   name: "SDK",
   init: (props: {
@@ -48,14 +112,13 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
     let queue: GlobalEvent[] = []
     let timer: Timer | undefined
     let last = 0
-    const retryDelay = 1000
-    const maxRetryDelay = 30000
 
     const flush = () => {
+      if (timer) clearTimeout(timer)
+      timer = undefined
       if (queue.length === 0) return
       const events = queue
       queue = []
-      timer = undefined
       last = Date.now()
       // Batch all event emissions so all store updates result in a single render
       batch(() => {
@@ -83,13 +146,11 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       sse?.abort()
       const ctrl = new AbortController()
       sse = ctrl
-      ;(async () => {
-        let attempt = 0
-        while (true) {
-          if (abort.signal.aborted || ctrl.signal.aborted) break
-
+      const task = runEventStream({
+        signals: [abort.signal, ctrl.signal],
+        connect: async (signal) => {
           const events = await sdk.global.event({
-            signal: ctrl.signal,
+            signal,
             sseMaxRetryAttempts: 0,
           })
 
@@ -98,37 +159,46 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
             // we've started listening to events
             await sdk.sync.start().catch(() => {})
           }
-
-          for await (const event of events.stream) {
-            if (ctrl.signal.aborted) break
-            handleEvent(event)
-          }
-
-          if (timer) clearTimeout(timer)
-          if (queue.length > 0) flush()
-          attempt += 1
-          if (abort.signal.aborted || ctrl.signal.aborted) break
-
-          // Exponential backoff
-          const backoff = Math.min(retryDelay * 2 ** (attempt - 1), maxRetryDelay)
-          await new Promise((resolve) => setTimeout(resolve, backoff))
-        }
-      })().catch(() => {})
+          return events.stream
+        },
+        event: handleEvent,
+        flush,
+        wait: waitForRetry,
+        retry: ({ attempt, error }) =>
+          console.warn("[tui.sdk] event stream disconnected, retrying", { attempt, error }),
+      })
+      void task.catch((error) => {
+        if (abort.signal.aborted || ctrl.signal.aborted) return
+        console.error("[tui.sdk] event stream stopped unexpectedly", { error })
+        startSSE()
+      })
     }
 
-    onMount(async () => {
+    onMount(() => {
       if (props.events) {
-        const unsub = await props.events.subscribe(handleEvent)
-        onCleanup(unsub)
-
-        if (Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
-          // Start syncing workspaces, it's important to do this after
-          // we've started listening to events
-          await sdk.sync.start().catch(() => {})
-        }
-      } else {
-        startSSE()
+        let disposed = false
+        let unsubscribe: (() => void) | undefined
+        onCleanup(() => {
+          disposed = true
+          unsubscribe?.()
+        })
+        void props.events
+          .subscribe(handleEvent)
+          .then((cleanup) => {
+            if (disposed) return cleanup()
+            unsubscribe = cleanup
+            if (Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
+              void sdk.sync.start().catch((error) => {
+                if (!disposed) console.error("[tui.sdk] workspace sync failed", { error })
+              })
+            }
+          })
+          .catch((error) => {
+            if (!disposed) console.error("[tui.sdk] injected event source failed", { error })
+          })
+        return
       }
+      startSSE()
     })
 
     onCleanup(() => {
