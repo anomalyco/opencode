@@ -23,13 +23,7 @@ describe("Snapshot", () => {
           yield* Effect.promise(async () => {
             await fs.mkdir(project)
             await fs.writeFile(path.join(project, "tracked.txt"), "one\n")
-            await $`git init`.cwd(project).quiet()
-            await $`git config core.fsmonitor false`.cwd(project).quiet()
-            await $`git config commit.gpgsign false`.cwd(project).quiet()
-            await $`git config user.email test@opencode.test`.cwd(project).quiet()
-            await $`git config user.name Test`.cwd(project).quiet()
-            await $`git add .`.cwd(project).quiet()
-            await $`git commit -m initial`.cwd(project).quiet()
+            await initGit(project)
           })
 
           const git = yield* Git.Service.pipe(Effect.provide(AppNodeBuilder.build(Git.node)))
@@ -99,13 +93,7 @@ describe("Snapshot", () => {
             await fs.mkdir(location, { recursive: true })
             await fs.writeFile(path.join(location, "tracked.txt"), "one\n")
             await fs.writeFile(path.join(project, "outside.txt"), "outside\n")
-            await $`git init`.cwd(project).quiet()
-            await $`git config core.fsmonitor false`.cwd(project).quiet()
-            await $`git config commit.gpgsign false`.cwd(project).quiet()
-            await $`git config user.email test@opencode.test`.cwd(project).quiet()
-            await $`git config user.name Test`.cwd(project).quiet()
-            await $`git add .`.cwd(project).quiet()
-            await $`git commit -m initial`.cwd(project).quiet()
+            await initGit(project)
           })
 
           const layer = snapshotLayer(tmp.path, location)
@@ -168,14 +156,8 @@ describe("Snapshot", () => {
           yield* Effect.promise(async () => {
             await fs.mkdir(project)
             await fs.writeFile(path.join(project, "tracked.txt"), "main\n")
-            await $`git init`.cwd(project).quiet()
-            await $`git config core.fsmonitor false`.cwd(project).quiet()
-            await $`git config commit.gpgsign false`.cwd(project).quiet()
-            await $`git config user.email test@opencode.test`.cwd(project).quiet()
-            await $`git config user.name Test`.cwd(project).quiet()
-            await $`git add .`.cwd(project).quiet()
-            await $`git commit -m initial`.cwd(project).quiet()
-            await $`git worktree add --detach ${linked} HEAD`.cwd(project).quiet()
+            await initGit(project, true)
+            await $`git -c core.fsmonitor=false worktree add --detach ${linked} HEAD`.cwd(project).quiet()
           })
 
           const capture = (directory: string) =>
@@ -213,13 +195,7 @@ describe("Snapshot", () => {
           yield* Effect.promise(async () => {
             await fs.mkdir(project)
             await fs.writeFile(path.join(project, "tracked.txt"), "one\n")
-            await $`git init`.cwd(project).quiet()
-            await $`git config core.fsmonitor false`.cwd(project).quiet()
-            await $`git config commit.gpgsign false`.cwd(project).quiet()
-            await $`git config user.email test@opencode.test`.cwd(project).quiet()
-            await $`git config user.name Test`.cwd(project).quiet()
-            await $`git add .`.cwd(project).quiet()
-            await $`git commit -m initial`.cwd(project).quiet()
+            await initGit(project)
           })
 
           yield* Effect.gen(function* () {
@@ -250,4 +226,13 @@ function snapshotLayer(data: string, directory: string) {
 
 function read(file: string) {
   return Effect.promise(() => fs.readFile(file, "utf8")).pipe(Effect.map((content) => content.replaceAll("\r\n", "\n")))
+}
+
+async function initGit(directory: string, commit = false) {
+  await $`git init`.cwd(directory).quiet()
+  await $`git -c core.fsmonitor=false add .`.cwd(directory).quiet()
+  if (!commit) return
+  await $`git -c user.email=test@opencode.test -c user.name=Test commit --no-gpg-sign -m initial`
+    .cwd(directory)
+    .quiet()
 }
