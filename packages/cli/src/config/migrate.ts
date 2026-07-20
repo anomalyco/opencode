@@ -6,7 +6,6 @@ import { Definitions } from "@opencode-ai/tui/config/keybind"
 import { Effect, FileSystem, Option, Schema } from "effect"
 import {
   createScanner,
-  findNodeAtLocation,
   parse,
   parseTree,
   type Node,
@@ -82,11 +81,8 @@ export const run = Effect.fn("cli.config.migrate")(function* (input: {
 function findKeybindProperties(text: string, name: string) {
   const tree = parseTree(text)
   if (tree === undefined) return []
-  return (
-    findNodeAtLocation(tree, ["keybinds"])?.children?.filter(
-      (property) => property.children?.[0]?.value === name,
-    ) ?? []
-  )
+  const keybinds = tree.children?.findLast((property) => property.children?.[0]?.value === "keybinds")?.children?.[1]
+  return keybinds?.children?.filter((property) => property.children?.[0]?.value === name) ?? []
 }
 
 function removeProperty(text: string, property: Node) {
