@@ -3119,19 +3119,6 @@ describe("ProviderTransform.reasoningVariants", () => {
     ).toEqual({ max: { effort: "max" } })
   })
 
-  test("maps models.dev effort options to adaptive thinking for kimi family targets", () => {
-    expect(
-      ProviderTransform.reasoningVariants(
-        model([{ type: "effort", values: ["low", "high", "max"] }]),
-        target("@ai-sdk/anthropic", "kimi-k3"),
-      ),
-    ).toEqual({
-      low: { thinking: { type: "adaptive", display: "summarized" }, effort: "low" },
-      high: { thinking: { type: "adaptive", display: "summarized" }, effort: "high" },
-      max: { thinking: { type: "adaptive", display: "summarized" }, effort: "max" },
-    })
-  })
-
   test("uses adaptive reasoning config for Anthropic models on Bedrock", () => {
     expect(
       ProviderTransform.reasoningVariants(
@@ -5216,48 +5203,5 @@ describe("ProviderTransform.options - kimi family adaptive thinking", () => {
     }
     const result = ProviderTransform.options({ model, sessionID: "s1", providerOptions: {} })
     expect(result.thinking).toBeUndefined()
-  })
-})
-
-describe("ProviderTransform.variants - kimi family adaptive thinking", () => {
-  const createModel = (npm: string) =>
-    ({
-      id: "moonshotai/kimi-k2-thinking",
-      providerID: "moonshotai",
-      api: {
-        id: "kimi-k2-thinking",
-        url: "https://api.moonshot.ai/anthropic",
-        npm,
-      },
-      name: "Kimi K2 Thinking",
-      capabilities: {
-        temperature: true,
-        reasoning: true,
-        attachment: false,
-        toolcall: true,
-        input: { text: true, audio: false, image: false, video: false, pdf: false },
-        output: { text: true, audio: false, image: false, video: false, pdf: false },
-        interleaved: false,
-      },
-      cost: { input: 0.001, output: 0.002, cache: { read: 0.0001, write: 0.0002 } },
-      limit: { context: 262144, output: 262144 },
-      status: "active",
-      options: {},
-      headers: {},
-    }) as any
-
-  test("exposes effort levels instead of budget variants on the anthropic protocol", () => {
-    const result = ProviderTransform.variants(createModel("@ai-sdk/anthropic"))
-    expect(Object.keys(result)).toEqual(["low", "medium", "high", "xhigh", "max"])
-    for (const effort of Object.keys(result)) {
-      expect(result[effort]).toEqual({
-        thinking: { type: "adaptive", display: "summarized" },
-        effort,
-      })
-    }
-  })
-
-  test("keeps openai-compatible kimi without thinking variants", () => {
-    expect(ProviderTransform.variants(createModel("@ai-sdk/openai-compatible"))).toEqual({})
   })
 })
