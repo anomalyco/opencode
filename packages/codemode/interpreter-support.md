@@ -238,9 +238,9 @@ ultimate source of truth.
       use their epoch time) and reject opaque runtime references as data errors.
 - [x] Unknown static members on global namespaces and on `Number`/`String`/the coercion functions read as `undefined`
       for feature detection. Calling any undefined value reports a native-style `TypeError` naming the callee, for
-      example `Math.sumPrecise is not a function.` Blocked members (`constructor`, `__proto__`, ...) still throw,
+      example `Math.sum is not a function.` Blocked members (`constructor`, `__proto__`, ...) still throw,
       and unknown `Promise` statics keep their descriptive error.
-- [ ] `Math.sumPrecise`.
+- [x] `Math.sumPrecise` over supported collection iterables, rejecting non-number elements without coercion.
 - [x] Global coercing `isFinite` and `isNaN`; opaque runtime references reject as data errors, like `Number(...)`.
 
 ## JSON and console
@@ -275,12 +275,13 @@ ultimate source of truth.
 
 - [x] Literal and `RegExp(pattern, flags)` construction, with or without `new`.
 - [x] `test`, `exec`, and `toString`.
-- [x] Readable `source`, `flags`, `lastIndex`, `global`, `ignoreCase`, `multiline`, `sticky`, `unicode`, and `dotAll`.
+- [x] Readable `source`, `flags`, `lastIndex`, `hasIndices`, `global`, `ignoreCase`, `multiline`, `sticky`, `unicode`,
+      `unicodeSets`, and `dotAll`.
 - [x] Captures, safe named groups (blocked member names are omitted), match `.index`, and stateful global matching.
 - [x] Integration with supported String methods, including function replacers.
 - [x] Writable `lastIndex`.
-- [ ] `hasIndices`, match `indices`, and `unicodeSets` metadata for the `d` and `v` flags.
-- [ ] `RegExp.escape`.
+- [x] Match `indices` metadata for the `d` flag, including named groups on `exec`, `match`, and `matchAll` results.
+- [x] `RegExp.escape`.
 
 ## Map and Set
 

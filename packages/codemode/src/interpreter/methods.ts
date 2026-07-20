@@ -28,7 +28,7 @@ import { invokeJsonMethod } from "../stdlib/json.js"
 import { invokeMathMethod } from "../stdlib/math.js"
 import { invokeNumberMethod, invokeNumberStatic } from "../stdlib/number.js"
 import { invokeObjectMethod } from "../stdlib/object.js"
-import { invokeRegExpMethod, matchToValue, toHostRegex } from "../stdlib/regexp.js"
+import { invokeRegExpMethod, invokeRegExpStatic, matchToValue, toHostRegex } from "../stdlib/regexp.js"
 import { invokeStringStatic } from "../stdlib/string.js"
 import { invokeURLMethod, invokeURLStatic, uriArgument } from "../stdlib/url.js"
 import { boundedData, coerceToNumber, coerceToString, errorBrandName } from "../stdlib/value.js"
@@ -126,12 +126,8 @@ export const invokeGlobalMethod = (ref: GlobalMethodReference, args: Array<unkno
   if (ref.namespace === "String") return invokeStringStatic(ref.name, args, node)
   if (ref.namespace === "URL") return invokeURLStatic(ref.name, args, node)
   if (ref.namespace === "Date") return invokeDateStatic(ref.name, args, node)
-  if (
-    ref.namespace === "RegExp" ||
-    ref.namespace === "Map" ||
-    ref.namespace === "Set" ||
-    ref.namespace === "URLSearchParams"
-  ) {
+  if (ref.namespace === "RegExp") return invokeRegExpStatic(ref.name, args, node)
+  if (ref.namespace === "Map" || ref.namespace === "Set" || ref.namespace === "URLSearchParams") {
     throw new InterpreterRuntimeError(`${ref.namespace}.${ref.name} is not available in CodeMode.`, node)
   }
   return invokeJsonMethod(ref.name, args, node)

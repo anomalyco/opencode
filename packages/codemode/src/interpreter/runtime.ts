@@ -53,7 +53,13 @@ import { mathConstants, mathMethods } from "../stdlib/math.js"
 import { numberConstants, numberMethods, numberStatics } from "../stdlib/number.js"
 import { objectMethodsPreservingIdentity, objectStatics } from "../stdlib/object.js"
 import { promiseStatics } from "../stdlib/promise.js"
-import { escapeRegexHint, regexpMethods, regexpProperties, regexFailureReason } from "../stdlib/regexp.js"
+import {
+  escapeRegexHint,
+  regexpMethods,
+  regexpProperties,
+  regexpStatics,
+  regexFailureReason,
+} from "../stdlib/regexp.js"
 import { stringMethods, stringStatics } from "../stdlib/string.js"
 import {
   urlMethods,
@@ -93,6 +99,7 @@ const globalStaticMembers: Partial<Record<GlobalNamespaceName, Set<string>>> = {
   Array: arrayStatics,
   console: consoleMethods,
   Date: dateStatics,
+  RegExp: regexpStatics,
   URL: urlStatics,
 }
 

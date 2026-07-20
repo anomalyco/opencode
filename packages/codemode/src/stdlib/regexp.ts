@@ -1,14 +1,18 @@
 export const regexpMethods = new Set(["test", "exec", "toString"])
 
+export const regexpStatics = new Set(["escape"])
+
 export const regexpProperties = new Set([
   "source",
   "flags",
   "lastIndex",
+  "hasIndices",
   "global",
   "ignoreCase",
   "multiline",
   "sticky",
   "unicode",
+  "unicodeSets",
   "dotAll",
 ])
 
@@ -48,7 +52,16 @@ export const matchToValue = (match: RegExpMatchArray): Array<unknown> => {
     }
     ;(result as Record<string, unknown> & Array<unknown>).groups = groups
   }
+  if (match.indices) (result as Record<string, unknown> & Array<unknown>).indices = indicesToValue(match.indices)
   return result
+}
+
+export const invokeRegExpStatic = (name: string, args: Array<unknown>, node: AstNode): string => {
+  if (name !== "escape") throw new InterpreterRuntimeError(`RegExp.${name} is not available in CodeMode.`, node)
+  if (typeof args[0] !== "string") {
+    throw new InterpreterRuntimeError("RegExp.escape expects a string.", node).as("TypeError")
+  }
+  return RegExp.escape(args[0])
 }
 
 export const invokeRegExpMethod = (
@@ -84,6 +97,20 @@ const toLength = (value: unknown): number => {
   const number = coerceToNumber(value)
   if (Number.isNaN(number) || number <= 0) return 0
   return Math.min(Math.floor(number), Number.MAX_SAFE_INTEGER)
+}
+
+const indicesToValue = (indices: RegExpIndicesArray): Array<unknown> => {
+  const result: Array<unknown> = Array.from(indices, (range) => (range === undefined ? undefined : [...range]))
+  if (indices.groups) {
+    const groups: SafeObject = Object.create(null) as SafeObject
+    for (const [key, range] of Object.entries(indices.groups)) {
+      if (!isBlockedMember(key)) groups[key] = range === undefined ? undefined : [...range]
+    }
+    ;(result as Record<string, unknown> & Array<unknown>).groups = groups
+    return result
+  }
+  ;(result as Record<string, unknown> & Array<unknown>).groups = undefined
+  return result
 }
 import { type AstNode, InterpreterRuntimeError } from "../interpreter/model.js"
 import { isBlockedMember, type SafeObject } from "../tool-runtime.js"
