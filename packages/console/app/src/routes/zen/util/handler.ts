@@ -15,6 +15,7 @@ import { UserTable } from "@opencode-ai/console-core/schema/user.sql.js"
 import { ModelTable } from "@opencode-ai/console-core/schema/model.sql.js"
 import { ProviderTable } from "@opencode-ai/console-core/schema/provider.sql.js"
 import { logger } from "./logger"
+import { corsHeaders } from "./cors"
 import {
   AuthError,
   CreditsError,
@@ -304,6 +305,9 @@ export async function handler(
         resHeaders.set(k, v)
       }
     }
+    for (const [k, v] of Object.entries(corsHeaders)) {
+      resHeaders.set(k, v)
+    }
     logger.debug("STATUS: " + res.status + " " + res.statusText)
 
     // Handle non-streaming response
@@ -450,7 +454,7 @@ export async function handler(
     // metric and 500 and return a quiet client-closed response.
     if (input.request.signal.aborted || error?.name === "AbortError") {
       logger.debug("REQUEST ABORTED BY CALLER")
-      return new Response(null, { status: 499 })
+      return new Response(null, { status: 499, headers: corsHeaders })
     }
 
     logger.metric({
@@ -472,7 +476,7 @@ export async function handler(
           type: "error",
           error: { type: error.constructor.name, message: error.message },
         }),
-        { status: 403 },
+        { status: 403, headers: corsHeaders },
       )
 
     // Note: both top level "type" and "error.type" fields are used by the @ai-sdk/anthropic client to render the error message.
@@ -488,7 +492,7 @@ export async function handler(
           type: "error",
           error: { type: error.constructor.name, message: error.message },
         }),
-        { status: 401 },
+        { status: 401, headers: corsHeaders },
       )
 
     if (
@@ -498,6 +502,9 @@ export async function handler(
       error instanceof BlackUsageLimitError
     ) {
       const headers = new Headers()
+      for (const [k, v] of Object.entries(corsHeaders)) {
+        headers.set(k, v)
+      }
       if (error.retryAfter) {
         headers.set("retry-after", String(error.retryAfter))
       }
@@ -528,7 +535,7 @@ export async function handler(
           message: "Internal server error",
         },
       }),
-      { status: 500 },
+      { status: 500, headers: corsHeaders },
     )
   }
 
