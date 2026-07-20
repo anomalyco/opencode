@@ -1,3 +1,18 @@
+import { type AstNode, InterpreterRuntimeError } from "../interpreter/model.js"
+import { isBlockedMember, type SafeObject } from "../tool-runtime.js"
+import { CodeModeRegExp } from "../values.js"
+import { coerceToNumber, coerceToString } from "./value.js"
+
+type MatchValue = Array<unknown> & {
+  index?: number
+  groups?: SafeObject
+  indices?: IndicesValue
+}
+
+type IndicesValue = Array<unknown> & {
+  groups?: SafeObject
+}
+
 export const regexpMethods = new Set(["test", "exec", "toString"])
 
 export const regexpStatics = new Set(["escape"])
@@ -43,16 +58,16 @@ export const toHostRegex = (arg: unknown, method: string, node: AstNode, extraFl
 }
 
 export const matchToValue = (match: RegExpMatchArray): Array<unknown> => {
-  const result: Array<unknown> = Array.from(match, (group) => group)
-  if (match.index !== undefined) (result as Record<string, unknown> & Array<unknown>).index = match.index
+  const result: MatchValue = Array.from(match, (group) => group)
+  if (match.index !== undefined) result.index = match.index
   if (match.groups) {
     const groups: SafeObject = Object.create(null) as SafeObject
     for (const [key, group] of Object.entries(match.groups)) {
       if (!isBlockedMember(key)) groups[key] = group
     }
-    ;(result as Record<string, unknown> & Array<unknown>).groups = groups
+    result.groups = groups
   }
-  if (match.indices) (result as Record<string, unknown> & Array<unknown>).indices = indicesToValue(match.indices)
+  if (match.indices) result.indices = indicesToValue(match.indices)
   return result
 }
 
@@ -99,20 +114,16 @@ const toLength = (value: unknown): number => {
   return Math.min(Math.floor(number), Number.MAX_SAFE_INTEGER)
 }
 
-const indicesToValue = (indices: RegExpIndicesArray): Array<unknown> => {
-  const result: Array<unknown> = Array.from(indices, (range) => (range === undefined ? undefined : [...range]))
+const indicesToValue = (indices: RegExpIndicesArray): IndicesValue => {
+  const result: IndicesValue = Array.from(indices, (range) => (range === undefined ? undefined : [...range]))
   if (indices.groups) {
     const groups: SafeObject = Object.create(null) as SafeObject
     for (const [key, range] of Object.entries(indices.groups)) {
       if (!isBlockedMember(key)) groups[key] = range === undefined ? undefined : [...range]
     }
-    ;(result as Record<string, unknown> & Array<unknown>).groups = groups
+    result.groups = groups
     return result
   }
-  ;(result as Record<string, unknown> & Array<unknown>).groups = undefined
+  result.groups = undefined
   return result
 }
-import { type AstNode, InterpreterRuntimeError } from "../interpreter/model.js"
-import { isBlockedMember, type SafeObject } from "../tool-runtime.js"
-import { CodeModeRegExp } from "../values.js"
-import { coerceToNumber, coerceToString } from "./value.js"

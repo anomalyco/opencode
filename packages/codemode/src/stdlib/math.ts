@@ -1,3 +1,13 @@
+import { type AstNode, InterpreterRuntimeError } from "../interpreter/model.js"
+import { spreadItems } from "./collections.js"
+
+// Bun exposes ES2026 Math.sumPrecise before TypeScript's standard library types.
+declare global {
+  interface Math {
+    sumPrecise(values: Iterable<number>): number
+  }
+}
+
 export const mathConstants = new Set(["PI", "E", "LN2", "LN10", "LOG2E", "LOG10E", "SQRT2", "SQRT1_2"])
 
 export const mathMethods = new Set([
@@ -52,7 +62,7 @@ export const invokeMathMethod = (name: string, args: Array<unknown>, node: AstNo
     if (!numbers.every((item): item is number => typeof item === "number")) {
       throw new InterpreterRuntimeError("Math.sumPrecise expects an iterable of numbers.", node).as("TypeError")
     }
-    return (Math as Math & { sumPrecise(values: Iterable<number>): number }).sumPrecise(numbers)
+    return Math.sumPrecise(numbers)
   }
   // Validate only the arguments the method consumes; like JS, extras are ignored
   // (so built-ins work as callbacks receiving (element, index, array)).
@@ -143,5 +153,3 @@ export const invokeMathMethod = (name: string, args: Array<unknown>, node: AstNo
   }
   throw new InterpreterRuntimeError(`Math.${name} is not available in CodeMode.`, node)
 }
-import { spreadItems } from "./collections.js"
-import { type AstNode, InterpreterRuntimeError } from "../interpreter/model.js"
