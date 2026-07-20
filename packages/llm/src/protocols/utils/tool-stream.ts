@@ -156,46 +156,88 @@ export const appendExisting = <K extends StreamKey>(
   return appendTool(tools, key, { ...current, input: `${current.input}${text}` }, text)
 }
 
+const malformedRecovery = (tool: PendingTool, error: LLMError) => {
+  const byteCount = tool.input.length
+  const call = LLMEvent.toolCall({
+    id: tool.id,
+    name: tool.name,
+    input: {},
+    providerExecuted: tool.providerExecuted ? true : undefined,
+    providerMetadata: {
+      ...tool.providerMetadata,
+      malformedInput: { byteCount, error: error.message },
+    },
+  })
+  const result = LLMEvent.toolResult({
+    id: tool.id,
+    name: tool.name,
+    result: { type: "error", value: error.message },
+    providerMetadata: {
+      ...tool.providerMetadata,
+      malformedInput: { byteCount },
+    },
+  })
+  return [call, result] as const
+}
+
+const catchMalformed = (tool: PendingTool) =>
+  Effect.catchIf(
+    (error): error is LLMError =>
+      error instanceof LLMError && error.reason._tag === "InvalidProviderOutput",
+    (error) => Effect.succeed(malformedRecovery(tool, error)),
+  )
+
 /**
  * Finalize one pending tool call: parse the accumulated raw JSON, remove it
  * from state, and return the optional public `tool-call` event. Missing keys are
  * a no-op because some providers emit stop events for non-tool content blocks.
+ * When the accumulated input cannot be parsed (provider truncation), a
+ * placeholder tool call and an error tool result are emitted instead of
+ * failing the stream so the model can retry.
  */
 export const finish = <K extends StreamKey>(route: string, tools: State<K>, key: K) =>
   Effect.gen(function* () {
     const tool = tools[key]
     if (!tool) return { tools }
+    const inputEnd = LLMEvent.toolInputEnd({ id: tool.id, name: tool.name, providerMetadata: tool.providerMetadata })
+    const callEvents = yield* toolCall(route, tool).pipe(
+      Effect.map((call) => [call]),
+      catchMalformed(tool),
+    )
     return {
       tools: withoutTool(tools, key),
-      events: [
-        LLMEvent.toolInputEnd({ id: tool.id, name: tool.name, providerMetadata: tool.providerMetadata }),
-        yield* toolCall(route, tool),
-      ],
+      events: [inputEnd, ...callEvents],
     }
   })
 
 /**
  * Finalize one pending tool call with an authoritative final input string.
  * OpenAI Responses can send accumulated deltas and then repeat the completed
- * arguments on `response.output_item.done`; the final value wins.
+ * arguments on `response.output_item.done`; the final value wins. When the
+ * final input cannot be parsed (provider truncation), a placeholder tool call
+ * and an error tool result are emitted instead of failing the stream.
  */
 export const finishWithInput = <K extends StreamKey>(route: string, tools: State<K>, key: K, input: string) =>
   Effect.gen(function* () {
     const tool = tools[key]
     if (!tool) return { tools }
+    const inputEnd = LLMEvent.toolInputEnd({ id: tool.id, name: tool.name, providerMetadata: tool.providerMetadata })
+    const callEvents = yield* toolCall(route, tool, input).pipe(
+      Effect.map((call) => [call]),
+      catchMalformed({ ...tool, input }),
+    )
     return {
       tools: withoutTool(tools, key),
-      events: [
-        LLMEvent.toolInputEnd({ id: tool.id, name: tool.name, providerMetadata: tool.providerMetadata }),
-        yield* toolCall(route, tool, input),
-      ],
+      events: [inputEnd, ...callEvents],
     }
   })
 
 /**
  * Finalize every pending tool call at once. OpenAI Chat has this shape: it does
  * not emit per-tool stop events, so all accumulated calls finish when the choice
- * receives a terminal `finish_reason`.
+ * receives a terminal `finish_reason`. When any tool's input cannot be parsed
+ * (provider truncation), that tool emits a placeholder call and an error result
+ * while other tools proceed normally.
  */
 export const finishAll = <K extends StreamKey>(route: string, tools: State<K>) =>
   Effect.gen(function* () {
@@ -210,6 +252,7 @@ export const finishAll = <K extends StreamKey>(route: string, tools: State<K>) =
             LLMEvent.toolInputEnd({ id: tool.id, name: tool.name, providerMetadata: tool.providerMetadata }),
             call,
           ]),
+          catchMalformed(tool),
         ),
       ).pipe(Effect.map((events) => events.flat())),
     }
