@@ -148,7 +148,12 @@ export function partsToContentChunks(parts: readonly ReplayPart[]): ContentChunk
 function resourceLinkToPart(link: ResourceLink): PromptPart {
   try {
     if (link.uri.startsWith("file://")) {
-      return { type: "file", url: link.uri, filename: link.name || filenameFromUri(link.uri) || "file", mime: link.mimeType ?? "text/plain" }
+      return {
+        type: "file",
+        url: link.uri,
+        filename: link.name || filenameFromUri(link.uri) || "file",
+        mime: link.mimeType ?? "text/plain",
+      }
     }
     if (link.uri.startsWith("zed://")) {
       const pathname = new URL(link.uri).searchParams.get("path")
@@ -164,9 +169,9 @@ function resourceLinkToPart(link: ResourceLink): PromptPart {
   return { type: "text", text: link.uri }
 }
 
-function decodeDataUrl(url: string) {
+function decodeDataUrl(url: string): { readonly mime: string; readonly base64: string } | undefined {
   const match = /^data:([^;]+);base64,(.*)$/.exec(url)
-  if (!match?.[1] || match[2] === undefined) return
+  if (!match?.[1] || match[2] === undefined) return undefined
   return { mime: match[1], base64: match[2] }
 }
 
@@ -176,8 +181,8 @@ function audienceFlags(audience: readonly Role[] | null | undefined) {
   return {}
 }
 
-function filenameFromUri(uri: string | undefined) {
-  if (!uri || uri.startsWith("data:")) return
+function filenameFromUri(uri: string | undefined): string | undefined {
+  if (!uri || uri.startsWith("data:")) return undefined
   try {
     return path.basename(new URL(uri).pathname) || undefined
   } catch {

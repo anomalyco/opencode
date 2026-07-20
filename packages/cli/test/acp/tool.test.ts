@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test"
-import { completedToolUpdate, errorToolUpdate, pendingToolCall, runningToolUpdate, toLocations, toToolKind } from "../../src/acp/tool"
+import {
+  completedToolUpdate,
+  errorToolUpdate,
+  pendingToolCall,
+  runningToolUpdate,
+  toLocations,
+  toToolKind,
+} from "../../src/acp/tool"
 
 describe("acp tools", () => {
   test("maps kinds and locations", () => {
@@ -11,7 +18,9 @@ describe("acp tools", () => {
   })
 
   test("builds tool lifecycle updates", () => {
-    expect(pendingToolCall({ toolCallId: "call", toolName: "read", state: { input: { filePath: "/tmp/a" } } })).toMatchObject({
+    expect(
+      pendingToolCall({ toolCallId: "call", toolName: "read", state: { input: { filePath: "/tmp/a" } } }),
+    ).toMatchObject({
       toolCallId: "call",
       status: "pending",
       kind: "read",
@@ -20,12 +29,29 @@ describe("acp tools", () => {
       toolCallId: "call",
       status: "in_progress",
     })
-    expect(completedToolUpdate({ toolCallId: "call", toolName: "read", input: {}, content: [{ type: "text", text: "done" }], structured: {} })).toMatchObject({
+    expect(
+      completedToolUpdate({
+        toolCallId: "call",
+        toolName: "read",
+        input: {},
+        content: [{ type: "text", text: "done" }],
+        structured: {},
+      }),
+    ).toMatchObject({
       toolCallId: "call",
       status: "completed",
       content: [{ type: "content", content: { type: "text", text: "done" } }],
     })
-    expect(errorToolUpdate({ toolCallId: "call", toolName: "read", input: {}, content: [], structured: {}, error: "failed" })).toMatchObject({
+    expect(
+      errorToolUpdate({
+        toolCallId: "call",
+        toolName: "read",
+        input: {},
+        content: [],
+        structured: {},
+        error: "failed",
+      }),
+    ).toMatchObject({
       toolCallId: "call",
       status: "failed",
     })

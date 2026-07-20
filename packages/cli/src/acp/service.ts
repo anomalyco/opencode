@@ -1,3 +1,13 @@
+import {
+  isSessionNotFoundError,
+  type CommandInfo,
+  type ModelInfo,
+  type ModelRef,
+  type OpenCodeClient,
+  type SessionInfo,
+  type SessionMessageInfo,
+  type SkillInfo,
+} from "@opencode-ai/client/promise"
 import type {
   AgentSideConnection,
   AuthenticateRequest,
@@ -21,7 +31,6 @@ import type {
   PromptResponse,
   ResumeSessionRequest,
   ResumeSessionResponse,
-  SessionInfo as ACPSessionInfo,
   SetSessionConfigOptionRequest,
   SetSessionConfigOptionResponse,
   SetSessionModelRequest,
@@ -29,17 +38,6 @@ import type {
   SetSessionModeRequest,
   SetSessionModeResponse,
 } from "@agentclientprotocol/sdk"
-import type {
-  AgentInfo,
-  CommandInfo,
-  LocationRef,
-  ModelInfo,
-  ModelRef,
-  OpenCodeClient,
-  SessionInfo,
-  SessionMessageInfo,
-  SkillInfo,
-} from "@opencode-ai/client/promise"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { buildConfigOptions, parseModelSelection, type ConfigOptionProvider } from "./config-option"
@@ -91,8 +89,7 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
   const registeredMcp = new Map<string, Set<string>>()
   const active = new Map<string, TurnControl>()
 
-  const catalog = (cwd: string, refresh = false) => {
-    if (refresh) catalogs.delete(cwd)
+  const catalog = (cwd: string) => {
     const cached = catalogs.get(cwd)
     if (cached) return cached
     const loaded = loadCatalog(input.client, cwd).catch((error) => {
@@ -174,7 +171,7 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
     },
     loadSession: async (params) => {
       const session = await getSession(input.client, params.sessionId)
-      const state = await attach(session, params.cwd, params.mcpServers, true)
+      const state = await attach(session, session.location.directory, params.mcpServers, true)
       return { configOptions: configOptions(state) }
     },
     listSessions: async (params) => {
@@ -185,20 +182,18 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
         ...(params.cursor ? { cursor: params.cursor } : {}),
       })
       return {
-        sessions: page.data.map(
-          (session): ACPSessionInfo => ({
-            sessionId: session.id,
-            cwd: session.location.directory,
-            title: session.title,
-            updatedAt: new Date(session.time.updated).toISOString(),
-          }),
-        ),
+        sessions: page.data.map((session) => ({
+          sessionId: session.id,
+          cwd: session.location.directory,
+          title: session.title,
+          updatedAt: new Date(session.time.updated).toISOString(),
+        })),
         ...(page.cursor.next ? { nextCursor: page.cursor.next } : {}),
       }
     },
     resumeSession: async (params) => {
       const session = await getSession(input.client, params.sessionId)
-      const state = await attach(session, params.cwd, params.mcpServers ?? [], false)
+      const state = await attach(session, session.location.directory, params.mcpServers ?? [], false)
       return { configOptions: configOptions(state) }
     },
     closeSession: async (params) => {
@@ -213,15 +208,13 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
       return {}
     },
     forkSession: async (params) => {
-      await requireSession(params.sessionId)
       const forked = await input.client.session.fork({ sessionID: params.sessionId })
-      const state = await attach(forked, params.cwd, params.mcpServers ?? [], true)
+      const state = await attach(forked, forked.location.directory, params.mcpServers ?? [], true)
       return { sessionId: state.id, configOptions: configOptions(state) }
     },
     setSessionConfigOption: async (params) => {
       const state = await requireSession(params.sessionId)
-      if (typeof params.value !== "string")
-        throw new ACPError.InvalidConfigOptionError({ configId: params.configId })
+      if (typeof params.value !== "string") throw new ACPError.InvalidConfigOptionError({ configId: params.configId })
       if (params.configId === "model") {
         const selected = requireModel(state.catalog, params.value)
         state.model = selected
@@ -257,15 +250,12 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
     },
     prompt: async (params) => {
       const state = await requireSession(params.sessionId)
-      state.catalog = await catalog(state.cwd, true)
-      const messageID = params.messageId ?? SessionMessage.ID.create()
+      const messageID = SessionMessage.ID.create()
       const parts = promptContentToParts(params.prompt)
       const visible = parts.filter((part) => part.type !== "text" || (!part.synthetic && !part.ignored))
       const synthetic = parts.flatMap((part) => (part.type === "text" && part.synthetic ? [part.text] : []))
       const text = visible.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
-      const files = visible.flatMap((part) =>
-        part.type === "file" ? [{ uri: part.url, name: part.filename, description: part.mime }] : [],
-      )
+      const files = visible.flatMap((part) => (part.type === "file" ? [{ uri: part.url, name: part.filename }] : []))
       const slash = detectSlashCommand(text)
       const command = slash ? state.catalog.commands.find((item) => item.name === slash.name) : undefined
       const skill = slash ? state.catalog.skills.find((item) => item.name === slash.name) : undefined
@@ -281,6 +271,7 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
         sessionID: state.id,
         cwd: state.cwd,
         start,
+        userMessageID: params.messageId,
         activate: (control) => active.set(state.id, control),
         deactivate: () => active.delete(state.id),
         submit: async (signal) => {
@@ -297,7 +288,14 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
           if (skill) return input.client.session.skill({ sessionID: state.id, id: messageID, skill: skill.id })
           if (command)
             return input.client.session.command(
-              { sessionID: state.id, id: messageID, command: command.name, arguments: slash?.args, delivery: "steer" },
+              {
+                sessionID: state.id,
+                id: messageID,
+                command: command.name,
+                arguments: slash?.args,
+                files,
+                delivery: "steer",
+              },
               { signal },
             )
           return input.client.session.prompt(
@@ -306,7 +304,7 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
           )
         },
       })
-      await sendUsageUpdate(input.client, input.connection, state)
+      await sendUsageUpdate(input.client, input.connection, state).catch(() => {})
       return response
     },
     cancel: async (params) => {
@@ -338,7 +336,11 @@ async function loadCatalog(client: OpenCodeClient, cwd: string): Promise<Catalog
   return {
     providers: providers(models),
     models,
-    defaultModel: { providerID: defaultModel.providerID, id: defaultModel.id, variant: defaultModel.variants[0]?.id },
+    defaultModel: {
+      providerID: defaultModel.providerID,
+      id: defaultModel.id,
+      variant: defaultModel.variants.find((variant) => variant.id === "default")?.id ?? defaultModel.variants[0]?.id,
+    },
     modes: agents.map((agent) => ({ id: agent.id, name: agent.name, description: agent.description })),
     defaultModeID: defaultAgent.id,
     commands: commandResult.data,
@@ -376,8 +378,9 @@ async function selectMode(client: OpenCodeClient, state: Attached, modeID: strin
 }
 
 async function getSession(client: OpenCodeClient, sessionID: string) {
-  return client.session.get({ sessionID }).catch(() => {
-    throw new ACPError.SessionNotFoundError({ sessionId: sessionID })
+  return client.session.get({ sessionID }).catch((error) => {
+    if (isSessionNotFoundError(error)) throw new ACPError.SessionNotFoundError({ sessionId: sessionID })
+    throw error
   })
 }
 
@@ -385,7 +388,9 @@ async function messages(client: OpenCodeClient, sessionID: string) {
   const result: SessionMessageInfo[] = []
   let cursor: string | undefined
   do {
-    const page = await client.message.list({ sessionID, limit: 200, order: "asc", cursor })
+    const page = cursor
+      ? await client.message.list({ sessionID, limit: 200, cursor })
+      : await client.message.list({ sessionID, limit: 200, order: "asc" })
     result.push(...page.data)
     cursor = page.cursor.next ?? undefined
   } while (cursor)
@@ -473,11 +478,11 @@ async function sendUsageUpdate(client: OpenCodeClient, connection: Connection, s
   })
 }
 
-function detectSlashCommand(text: string) {
+function detectSlashCommand(text: string): { readonly name: string; readonly args: string } | undefined {
   const value = text.trim()
-  if (!value.startsWith("/")) return
+  if (!value.startsWith("/")) return undefined
   const [name, ...rest] = value.slice(1).split(/\s+/)
-  if (!name) return
+  if (!name) return undefined
   return { name, args: rest.join(" ").trim() }
 }
 

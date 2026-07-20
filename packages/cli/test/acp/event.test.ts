@@ -23,14 +23,19 @@ test("acp prompt resolves after ordered turn updates", async () => {
         )
       }
       if (url.pathname === "/api/session/ses_test/prompt") {
-        const body = (await request.json()) as { id: string }
+        const body: unknown = await request.json()
+        if (!body || typeof body !== "object") {
+          return new Response(null, { status: 400 })
+        }
+        const id = Reflect.get(body, "id")
+        if (typeof id !== "string") return new Response(null, { status: 400 })
         queueMicrotask(() => {
           if (!events) return
           send(events, {
             id: "evt_promoted",
             created: 1,
             type: "session.input.promoted",
-            data: { sessionID: "ses_test", inputID: body.id },
+            data: { sessionID: "ses_test", inputID: id },
           })
           send(events, {
             id: "evt_text",
@@ -80,6 +85,7 @@ test("acp prompt resolves after ordered turn updates", async () => {
 
   try {
     const id = "msg_prompt"
+    const userMessageID = "client-message"
     const response = await streamTurn({
       client,
       connection: {
@@ -91,6 +97,7 @@ test("acp prompt resolves after ordered turn updates", async () => {
       sessionID: "ses_test",
       cwd: "/workspace",
       start: { type: "input", id },
+      userMessageID,
       submit: () => client.session.prompt({ sessionID: "ses_test", id, text: "hi" }),
       activate: () => {},
       deactivate: () => {},
@@ -106,7 +113,7 @@ test("acp prompt resolves after ordered turn updates", async () => {
         },
       },
     ])
-    expect(response).toMatchObject({ stopReason: "end_turn", userMessageId: id, usage: { totalTokens: 2 } })
+    expect(response).toMatchObject({ stopReason: "end_turn", userMessageId: userMessageID, usage: { totalTokens: 2 } })
   } finally {
     events?.close()
     await server.stop(true)

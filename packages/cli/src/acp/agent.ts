@@ -97,6 +97,7 @@ function isACPError(error: unknown): error is ACPError.Error {
     error instanceof ACPError.InvalidModelError ||
     error instanceof ACPError.InvalidEffortError ||
     error instanceof ACPError.InvalidModeError ||
+    error instanceof ACPError.AuthRequiredError ||
     error instanceof ACPError.UnknownAuthMethodError ||
     error instanceof ACPError.ServiceFailureError
   )

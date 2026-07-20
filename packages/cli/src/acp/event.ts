@@ -11,7 +11,15 @@ import type {
   SessionMessageInfo,
 } from "@opencode-ai/client/promise"
 import { partsToContentChunks, type ReplayPart } from "./content"
-import { completedToolUpdate, errorToolUpdate, pendingToolCall, runningToolUpdate, type ToolContent, type ToolInput } from "./tool"
+import { ACPError } from "./error"
+import {
+  completedToolUpdate,
+  errorToolUpdate,
+  pendingToolCall,
+  runningToolUpdate,
+  type ToolContent,
+  type ToolInput,
+} from "./tool"
 
 type Connection = Pick<AgentSideConnection, "sessionUpdate" | "requestPermission">
 
@@ -44,6 +52,7 @@ export async function streamTurn(input: {
   readonly sessionID: string
   readonly cwd: string
   readonly start: Start
+  readonly userMessageID?: string | null
   readonly submit: (signal: AbortSignal) => Promise<unknown>
   readonly activate: (control: TurnControl) => void
   readonly deactivate: () => void
@@ -58,6 +67,7 @@ export async function streamTurn(input: {
   let started = false
   let assistantMessageID: string | undefined
   let finish: SessionMessageAssistant["finish"]
+  let executionError: { readonly type: string; readonly message: string } | undefined
   const tools = new Map<string, ToolState>()
 
   const update = (value: Parameters<Connection["sessionUpdate"]>[0]["update"]) =>
@@ -220,7 +230,10 @@ export async function streamTurn(input: {
       }
       if (event.type === "session.execution.succeeded") return "succeeded" as const
       if (event.type === "session.execution.interrupted") return "interrupted" as const
-      if (event.type === "session.execution.failed") return "failed" as const
+      if (event.type === "session.execution.failed") {
+        executionError = event.data.error
+        return "failed" as const
+      }
     }
     return "interrupted" as const
   }
@@ -233,9 +246,22 @@ export async function streamTurn(input: {
     })
     const terminal = await completed
     const assistant = assistantMessageID
-      ? await input.client.session.message({ sessionID: input.sessionID, messageID: assistantMessageID }).catch(() => undefined)
+      ? await input.client.session
+          .message({ sessionID: input.sessionID, messageID: assistantMessageID })
+          .catch(() => undefined)
       : undefined
-    return response(assistant?.type === "assistant" ? assistant : undefined, terminal, control.cancelled, finish, input.start.id)
+    return response(
+      assistant?.type === "assistant" ? assistant : undefined,
+      executionError,
+      terminal,
+      control.cancelled,
+      finish,
+      input.userMessageID,
+    )
+  } catch (error) {
+    streamController.abort()
+    await completed.catch(() => {})
+    throw error
   } finally {
     input.deactivate()
     streamController.abort()
@@ -261,7 +287,7 @@ export async function replayMessages(
       })
       const files: ReplayPart[] = (message.files ?? []).map((file) => ({
         type: "file",
-        url: `data:${file.mime};base64,${file.data}`,
+        url: file.source.type === "uri" ? file.source.uri : `data:${file.mime};base64,${file.data}`,
         filename: file.name,
         mime: file.mime,
       }))
@@ -320,6 +346,21 @@ export async function replayMessages(
           },
         })
       }
+      if (part.state.status === "running") {
+        await connection.sessionUpdate({
+          sessionId: sessionID,
+          update: {
+            sessionUpdate: "tool_call_update",
+            ...runningToolUpdate({
+              toolCallId: part.id,
+              toolName: part.name,
+              state: { input: part.state.input },
+              content: part.state.content,
+              cwd,
+            }),
+          },
+        })
+      }
       if (part.state.status === "error") {
         await connection.sessionUpdate({
           sessionId: sessionID,
@@ -343,7 +384,8 @@ export async function replayMessages(
 
 function matchesStart(event: EventSubscribeOutput, start: Start) {
   if (start.type === "input") return event.type === "session.input.promoted" && event.data.inputID === start.id
-  if (start.type === "compaction") return event.type === "session.compaction.admitted" && event.data.inputID === start.id
+  if (start.type === "compaction")
+    return event.type === "session.compaction.admitted" && event.data.inputID === start.id
   return event.type === "session.skill.activated" && event.id === start.id.replace(/^msg_/, "evt_")
 }
 
@@ -359,11 +401,21 @@ function toolInput(tool: Extract<SessionMessageAssistant["content"][number], { t
 
 function response(
   assistant: SessionMessageAssistant | undefined,
+  executionError: { readonly type: string; readonly message: string } | undefined,
   terminal: "succeeded" | "failed" | "interrupted",
   cancelled: boolean,
   finish: SessionMessageAssistant["finish"],
-  messageID: string,
+  messageID: string | null | undefined,
 ): PromptResponse {
+  const error = assistant?.error ?? executionError
+  if (error?.type === "provider.auth") throw new ACPError.AuthRequiredError()
+  if (error && error.type !== "aborted" && error.type !== "provider.content-filter") {
+    throw new ACPError.ServiceFailureError({
+      safeMessage: error.message || "OpenCode prompt failed",
+      service: "session",
+      errorName: error.type,
+    })
+  }
   const tokens = assistant?.tokens
   const usage = tokens
     ? {
@@ -376,14 +428,14 @@ function response(
       }
     : undefined
   const stopReason =
-    cancelled || terminal === "interrupted"
+    cancelled || terminal === "interrupted" || error?.type === "aborted"
       ? ("cancelled" as const)
       : finish === "length"
         ? ("max_tokens" as const)
-        : finish === "content-filter"
+        : finish === "content-filter" || error?.type === "provider.content-filter"
           ? ("refusal" as const)
           : ("end_turn" as const)
-  return { stopReason, ...(usage ? { usage } : {}), userMessageId: messageID, _meta: {} }
+  return { stopReason, ...(usage ? { usage } : {}), ...(messageID ? { userMessageId: messageID } : {}), _meta: {} }
 }
 
 export * as ACPEvent from "./event"

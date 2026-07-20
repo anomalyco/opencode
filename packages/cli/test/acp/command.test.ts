@@ -23,7 +23,7 @@ describe("acp command", () => {
   test("initializes over ndjson and exits on stdin eof", async () => {
     const child = spawn()
     const stderr = new Response(child.stderr).text()
-    child.stdin.write(
+    await child.stdin.write(
       new TextEncoder().encode(
         JSON.stringify({
           jsonrpc: "2.0",
@@ -37,7 +37,7 @@ describe("acp command", () => {
         }) + "\n",
       ),
     )
-    child.stdin.flush()
+    await child.stdin.flush()
     const response = await readMessage(child.stdout)
     expect(response.id).toBe(1)
     expect(response.error).toBeUndefined()
@@ -47,7 +47,7 @@ describe("acp command", () => {
       agentInfo: { name: "OpenCode" },
     })
 
-    child.stdin.end()
+    await child.stdin.end()
     const exitCode = await child.exited
     const errorOutput = await stderr
     if (exitCode !== 0) throw new Error(`ACP exited with ${exitCode}: ${errorOutput}`)
@@ -82,8 +82,14 @@ async function readMessage(stream: ReadableStream<Uint8Array>) {
     const newline = output.indexOf("\n")
     if (newline === -1) continue
     reader.releaseLock()
-    return JSON.parse(output.slice(0, newline)) as Message
+    const message: unknown = JSON.parse(output.slice(0, newline))
+    if (!isMessage(message)) throw new Error(`invalid ACP response: ${output.slice(0, newline)}`)
+    return message
   }
+}
+
+function isMessage(value: unknown): value is Message {
+  return typeof value === "object" && value !== null
 }
 
 async function cli(args: string[]) {

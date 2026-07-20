@@ -13,12 +13,12 @@ describe("acp content", () => {
   })
 
   test("converts file and embedded resources", () => {
-    expect(
-      contentBlockToParts({ type: "resource_link", uri: "file:///tmp/notes.txt", name: "notes.txt" }),
-    ).toEqual([{ type: "file", url: "file:///tmp/notes.txt", filename: "notes.txt", mime: "text/plain" }])
-    expect(
-      contentBlockToParts({ type: "resource", resource: { uri: "mcp://context", text: "hello" } }),
-    ).toEqual([{ type: "text", text: "[mcp://context]\nhello" }])
+    expect(contentBlockToParts({ type: "resource_link", uri: "file:///tmp/notes.txt", name: "notes.txt" })).toEqual([
+      { type: "file", url: "file:///tmp/notes.txt", filename: "notes.txt", mime: "text/plain" },
+    ])
+    expect(contentBlockToParts({ type: "resource", resource: { uri: "mcp://context", text: "hello" } })).toEqual([
+      { type: "text", text: "[mcp://context]\nhello" },
+    ])
   })
 
   test("replays files and data urls", () => {
@@ -28,7 +28,9 @@ describe("acp content", () => {
         { type: "file", url: "data:text/plain;base64,aGVsbG8=", filename: "note.txt", mime: "text/plain" },
       ]),
     ).toEqual([
-      { content: { type: "resource_link", uri: "file:///tmp/readme.md", name: "readme.md", mimeType: "text/markdown" } },
+      {
+        content: { type: "resource_link", uri: "file:///tmp/readme.md", name: "readme.md", mimeType: "text/markdown" },
+      },
       {
         content: {
           type: "resource",

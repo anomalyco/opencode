@@ -23,6 +23,8 @@ export class InvalidModeError extends Schema.TaggedErrorClass<InvalidModeError>(
   mode: Schema.String,
 }) {}
 
+export class AuthRequiredError extends Schema.TaggedErrorClass<AuthRequiredError>()("ACPAuthRequiredError", {}) {}
+
 export class UnknownAuthMethodError extends Schema.TaggedErrorClass<UnknownAuthMethodError>()(
   "ACPUnknownAuthMethodError",
   { methodId: Schema.String },
@@ -40,10 +42,11 @@ export type Error =
   | InvalidModelError
   | InvalidEffortError
   | InvalidModeError
+  | AuthRequiredError
   | UnknownAuthMethodError
   | ServiceFailureError
 
-export function toRequestError(error: Error) {
+export function toRequestError(error: Error): RequestError {
   switch (error._tag) {
     case "ACPSessionNotFoundError":
       return RequestError.invalidParams({ sessionId: error.sessionId }, `session not found: ${error.sessionId}`)
@@ -58,6 +61,8 @@ export function toRequestError(error: Error) {
       return RequestError.invalidParams({ effort: error.effort }, `effort not found: ${error.effort}`)
     case "ACPInvalidModeError":
       return RequestError.invalidParams({ mode: error.mode }, `mode not found: ${error.mode}`)
+    case "ACPAuthRequiredError":
+      return RequestError.authRequired({}, "provider authentication required")
     case "ACPUnknownAuthMethodError":
       return RequestError.invalidParams({ methodId: error.methodId }, `unknown auth method: ${error.methodId}`)
     case "ACPServiceFailureError":
@@ -69,6 +74,8 @@ export function toRequestError(error: Error) {
         error.safeMessage,
       )
   }
+  const exhaustive: never = error
+  return exhaustive
 }
 
 export function fromUnknown(error: unknown, service?: string) {

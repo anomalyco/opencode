@@ -130,10 +130,7 @@ export function errorToolUpdate(input: {
     title: toolTitle(input.toolName, input.input, undefined),
     locations: toLocations(input.toolName, input.input, input.cwd),
     rawInput: rawInput(input.toolName, input.input, input.cwd),
-    content: [
-      ...toolContent(input.content),
-      { type: "content", content: { type: "text", text: input.error } },
-    ],
+    content: [...toolContent(input.content), { type: "content", content: { type: "text", text: input.error } }],
     rawOutput: { structured: input.structured, error: input.error },
   }
 }
@@ -173,7 +170,8 @@ function locationFrom(...values: unknown[]): ToolCallLocation[] {
   return Array.from(
     new Set(
       values.flatMap((value): string[] => {
-        if (Array.isArray(value)) return value.filter((item): item is string => typeof item === "string" && item.length > 0)
+        if (Array.isArray(value))
+          return value.filter((item): item is string => typeof item === "string" && item.length > 0)
         const path = stringValue(value)
         return path ? [path] : []
       }),

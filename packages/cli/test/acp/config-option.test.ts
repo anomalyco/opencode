@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test"
-import { buildConfigOptions, formatVariantName, parseModelSelection, type ConfigOptionProvider } from "../../src/acp/config-option"
+import {
+  buildConfigOptions,
+  formatVariantName,
+  parseModelSelection,
+  type ConfigOptionProvider,
+} from "../../src/acp/config-option"
 
 const providers: ConfigOptionProvider[] = [
   {
@@ -19,7 +24,10 @@ describe("acp config options", () => {
       providers,
       currentModel: { providerID: "anthropic", modelID: "claude/sonnet-4" },
       currentVariant: "high",
-      modes: [{ id: "build", name: "Build" }, { id: "plan", name: "Plan" }],
+      modes: [
+        { id: "build", name: "Build" },
+        { id: "plan", name: "Plan" },
+      ],
       currentModeId: "build",
     })
     expect(options.map((option) => option.id)).toEqual(["model", "effort", "mode"])

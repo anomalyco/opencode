@@ -33,7 +33,8 @@ export function buildConfigOptions(input: {
   currentModeId?: string
 }): SessionConfigOption[] {
   const variants = variantsForModel(input.providers, input.currentModel)
-  const effort = variants.length > 0 ? buildEffortSelectOption({ variants, currentVariant: input.currentVariant }) : undefined
+  const effort =
+    variants.length > 0 ? buildEffortSelectOption({ variants, currentVariant: input.currentVariant }) : undefined
   return [
     buildModelSelectOption({ providers: input.providers, currentModel: input.currentModel }),
     ...(effort ? [effort] : []),
@@ -122,8 +123,10 @@ export function formatVariantName(variant: string) {
 }
 
 function variantsForModel(providers: readonly ConfigOptionProvider[], model: ModelSelection["model"]) {
-  return providers.find((provider) => provider.id === model.providerID)?.models.find((item) => item.id === model.modelID)
-    ?.variants ?? []
+  return (
+    providers.find((provider) => provider.id === model.providerID)?.models.find((item) => item.id === model.modelID)
+      ?.variants ?? []
+  )
 }
 
 function selectVariant(variant: string | undefined, variants: readonly string[]) {
