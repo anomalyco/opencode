@@ -13,6 +13,8 @@ This document breaks the legacy configuration schema into small review groups. W
 
 Use one v2 config schema for now. Some fields, such as `autoupdate`, are intended for global/user configuration, but there is not yet enough benefit to enforce that with separate global and location schemas. Revisit this if more scope-sensitive fields survive the review.
 
+V2 core discovers config documents named `opencode.json` or `opencode.jsonc` in the global config directory, ancestor project directories, and `.opencode` config directories. The legacy `config.json` filename is not supported in V2.
+
 ## Group 1: File Metadata
 
 Small fields describing the config file itself rather than application behavior.

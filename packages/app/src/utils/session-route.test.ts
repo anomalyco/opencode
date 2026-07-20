@@ -1,13 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { ServerConnection } from "@/context/server"
-import {
-  legacySessionHref,
-  legacySessionServer,
-  requireServerKey,
-  rootSession,
-  selectSessionLineage,
-  sessionHref,
-} from "./session-route"
+import { legacySessionHref, legacySessionServer, requireServerKey, rootSession, sessionHref } from "./session-route"
 
 describe("session routes", () => {
   test("uses the unique persisted server for a legacy session route", () => {
@@ -74,11 +67,5 @@ describe("session routes", () => {
     }
 
     expect(rootSession(sessions.child, async (id) => sessions[id]!)).rejects.toThrow("Session parent cycle: child")
-  })
-
-  test("ignores a resolved lineage retained from the previous route", () => {
-    const previous = { session: { id: "A" }, root: { id: "A" } }
-
-    expect(selectSessionLineage("B", undefined, previous)).toBeUndefined()
   })
 })

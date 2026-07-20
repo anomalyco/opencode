@@ -71,12 +71,11 @@ export function make(input: Partial<Interface> = {}): Interface {
   }
 }
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.sync(() => Service.of(make())),
 )
 
-export const defaultLayer = layer
 export const node = makeGlobalNode({ service: Service, layer: layer, deps: [] })
 
 export const layerWith = (input: Partial<Interface>) =>

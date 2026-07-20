@@ -5,10 +5,11 @@ import { createSimpleContext } from "@opencode-ai/ui/context"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { useServerSync } from "./server-sync"
 import { useServerSDK } from "./server-sdk"
-import { ServerConnection, useServer } from "./server"
+import { RECENTLY_CLOSED_DISPLAY_LIMIT, ServerConnection, useServer } from "./server"
 import { usePlatform } from "./platform"
 import { Project } from "@opencode-ai/sdk/v2"
 import { Persist, persisted, removePersisted } from "@/utils/persist"
+import { pathKey } from "@/utils/path-key"
 import { decode64 } from "@/utils/base64"
 import { same } from "@/utils/same"
 import { createScrollPersistence, type SessionScroll } from "./layout-scroll"
@@ -18,6 +19,7 @@ import { migrateLegacySessionStateKeys, ServerScope, SessionStateKey } from "@/u
 import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys } from "./layout-helpers"
 import { requireServerKey } from "@/utils/session-route"
 import { type DraftTab, useTabs } from "./tabs"
+import { closeSessionTab, openSessionTab, previewSessionTab, type SessionTabs } from "./layout-tabs"
 
 export { createSessionKeyReader, ensureSessionKey, pruneSessionKeys }
 
@@ -45,23 +47,28 @@ export function getAvatarColors(key?: string) {
 }
 
 export function getProjectAvatarVariant(key?: string): ProjectAvatarVariant {
-  if (key === "orange") return "orange"
-  if (key === "pink") return "pink"
-  if (key === "cyan") return "cyan"
-  if (key === "purple") return "purple"
   if (key === "mint") return "cyan"
   if (key === "lime") return "green"
+  if (
+    key === "orange" ||
+    key === "yellow" ||
+    key === "cyan" ||
+    key === "green" ||
+    key === "red" ||
+    key === "pink" ||
+    key === "blue" ||
+    key === "purple" ||
+    key === "gray"
+  )
+    return key
   return "gray"
-}
-
-type SessionTabs = {
-  active?: string
-  all: string[]
 }
 
 type SessionView = {
   scroll: Record<string, SessionScroll>
   reviewOpen?: string[]
+  reviewMode?: ReviewChangeMode
+  reviewFile?: string
   pendingMessage?: string
   pendingMessageAt?: number
   todoCollapsed?: boolean
@@ -78,6 +85,7 @@ export type LocalProject = Partial<Project> & { worktree: string; expanded: bool
 export type HomeProjectSelection = { server: ServerConnection.Key; directory?: string }
 
 export type ReviewDiffStyle = "unified" | "split"
+export type ReviewChangeMode = "git" | "branch" | "turn"
 export type ReviewPanelSource = "context-button" | "other"
 
 export type LayoutRoute =
@@ -85,14 +93,6 @@ export type LayoutRoute =
   | { type: "draft"; draftID: string; server?: ServerConnection.Key }
   | { type: "dir-new-sesssion"; dir: string; dirBase64: string; server?: ServerConnection.Key }
   | { type: "session"; sessionId: string; server?: ServerConnection.Key }
-
-function nextSessionTabsForOpen(current: SessionTabs | undefined, tab: string): SessionTabs {
-  const all = current?.all ?? []
-  if (tab === "review") return { all: all.filter((x) => x !== "review"), active: tab }
-  if (tab === "context") return { all: [tab, ...all.filter((x) => x !== tab)], active: tab }
-  if (!all.includes(tab)) return { all: [...all, tab], active: tab }
-  return { all, active: tab }
-}
 
 const sessionPath = (key: string) => {
   const dir = SessionStateKey.route(key).split("/")[0]
@@ -307,6 +307,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     )
     const [ephemeral, setEphemeral] = createStore({
       reviewPanelSource: "other" as ReviewPanelSource,
+      sessionTabPreview: {} as Record<string, string | undefined>,
     })
 
     const MAX_SESSION_KEYS = 50
@@ -365,6 +366,12 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
       scroll.drop(drop)
       dropSessionState(drop)
+      setEphemeral(
+        "sessionTabPreview",
+        produce((draft) => {
+          for (const key of drop) delete draft[key]
+        }),
+      )
 
       for (const key of drop) {
         usage.used.delete(key)
@@ -493,7 +500,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           const root = rootFor(project.worktree)
           if (root === project.worktree) continue
 
-          server.projects.close(project.worktree)
+          server.projects.remove(project.worktree)
 
           if (!seen.has(root)) {
             server.projects.open(root)
@@ -613,6 +620,14 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       },
       projects: {
         list,
+        recentlyClosed: createMemo(() => {
+          const known = new Set(serverSync().data.project.map((project) => pathKey(project.worktree)))
+          return server.projects
+            .recentlyClosed()
+            .filter((worktree) => known.has(pathKey(worktree)))
+            .slice(0, RECENTLY_CLOSED_DISPLAY_LIMIT)
+            .map((worktree) => enrich({ worktree, expanded: false }))
+        }),
         open(directory: string) {
           const root = rootFor(directory)
           if (server.projects.list().find((x) => x.worktree === root)) return
@@ -782,6 +797,14 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       view(sessionKey: string | Accessor<string>) {
         const key = createSessionKeyReader(sessionKey, ensureKey)
         const s = createMemo(() => store.sessionView[key()] ?? { scroll: {} })
+        const reviewMode = createMemo(() => {
+          const mode = s().reviewMode
+          if (mode === "git" || mode === "branch" || mode === "turn") return mode
+        })
+        const reviewFile = createMemo(() => {
+          const file = s().reviewFile
+          if (typeof file === "string") return file
+        })
         const terminalOpened = createMemo(() => store.terminal?.opened ?? false)
         const reviewPanelOpened = createMemo(() => store.review?.panelOpened ?? DEFAULT_REVIEW_PANEL_OPENED)
         const reviewPanelSource = createMemo(() => (reviewPanelOpened() ? ephemeral.reviewPanelSource : "other"))
@@ -865,6 +888,32 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             },
           },
           review: {
+            mode: reviewMode,
+            setMode(mode: ReviewChangeMode) {
+              const session = key()
+              const current = store.sessionView[session]
+              if (!current) {
+                setStore("sessionView", session, { scroll: {}, reviewMode: mode })
+                prune(session)
+                return
+              }
+              if (current.reviewMode === mode) return
+              setStore("sessionView", session, "reviewMode", mode)
+              prune(session)
+            },
+            file: reviewFile,
+            setFile(file: string) {
+              const session = key()
+              const current = store.sessionView[session]
+              if (!current) {
+                setStore("sessionView", session, { scroll: {}, reviewFile: file })
+                prune(session)
+                return
+              }
+              if (current.reviewFile === file) return
+              setStore("sessionView", session, "reviewFile", file)
+              prune(session)
+            },
             open: createMemo(() => s().reviewOpen ?? []),
             setOpen(open: string[]) {
               const session = key()
@@ -936,10 +985,17 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         const tabs = createMemo(() => store.sessionTabs[key()] ?? { all: [] })
         const normalize = (tab: string) => normalizeSessionTab(path(), tab)
         const normalizeAll = (all: string[]) => normalizeSessionTabList(path(), all)
+        const apply = (session: string, next: ReturnType<typeof openSessionTab>) => {
+          batch(() => {
+            setStore("sessionTabs", session, next.tabs)
+            setEphemeral("sessionTabPreview", session, next.preview)
+          })
+        }
         return {
           tabs,
           active: createMemo(() => tabs().active),
           all: createMemo(() => tabs().all.filter((tab) => tab !== "review")),
+          preview: createMemo(() => ephemeral.sessionTabPreview[key()]),
           setActive(tab: string | undefined) {
             const session = key()
             const next = tab ? normalize(tab) : tab
@@ -952,40 +1008,44 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           setAll(all: string[]) {
             const session = key()
             const next = normalizeAll(all).filter((tab) => tab !== "review")
-            if (!store.sessionTabs[session]) {
-              setStore("sessionTabs", session, { all: next, active: undefined })
-            } else {
-              setStore("sessionTabs", session, "all", next)
-            }
+            batch(() => {
+              if (!store.sessionTabs[session]) {
+                setStore("sessionTabs", session, { all: next, active: undefined })
+              } else {
+                setStore("sessionTabs", session, "all", next)
+              }
+              const preview = ephemeral.sessionTabPreview[session]
+              if (preview && !next.includes(preview)) setEphemeral("sessionTabPreview", session, undefined)
+            })
           },
           async open(tab: string) {
             const session = key()
-            const next = nextSessionTabsForOpen(store.sessionTabs[session], normalize(tab))
-            setStore("sessionTabs", session, next)
+            apply(
+              session,
+              openSessionTab(
+                { tabs: store.sessionTabs[session] ?? { all: [] }, preview: ephemeral.sessionTabPreview[session] },
+                normalize(tab),
+              ),
+            )
+          },
+          previewTab(tab: string) {
+            const session = key()
+            apply(
+              session,
+              previewSessionTab(
+                { tabs: store.sessionTabs[session] ?? { all: [] }, preview: ephemeral.sessionTabPreview[session] },
+                normalize(tab),
+              ),
+            )
           },
           close(tab: string) {
             const session = key()
             const current = store.sessionTabs[session]
             if (!current) return
-
-            if (tab === "review") {
-              if (current.active !== tab) return
-              setStore("sessionTabs", session, "active", current.all[0])
-              return
-            }
-
-            const all = current.all.filter((x) => x !== tab)
-            if (current.active !== tab) {
-              setStore("sessionTabs", session, "all", all)
-              return
-            }
-
-            const index = current.all.findIndex((f) => f === tab)
-            const next = current.all[index - 1] ?? current.all[index + 1] ?? all[0]
-            batch(() => {
-              setStore("sessionTabs", session, "all", all)
-              setStore("sessionTabs", session, "active", next)
-            })
+            apply(
+              session,
+              closeSessionTab({ tabs: current, preview: ephemeral.sessionTabPreview[session] }, normalize(tab)),
+            )
           },
           move(tab: string, to: number) {
             const session = key()

@@ -125,7 +125,7 @@ export const refreshAfterBoot = Effect.gen(function* () {
   )
 })
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
@@ -139,7 +139,7 @@ export const layer = Layer.effect(
     })
 
     const canonical = Effect.fnUntraced(function* (input: AbsolutePath) {
-      const resolved = AbsolutePath.make(FSUtil.resolve(input))
+      const resolved = AbsolutePath.make(yield* fs.resolve(input))
       if (!(yield* fs.isDir(resolved))) return yield* new DirectoryUnavailableError({ directory: input })
       return resolved
     })

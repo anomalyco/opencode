@@ -69,7 +69,7 @@ interface ArboristTree {
   edgesOut: Map<string, { to?: ArboristNode }>
 }
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const afs = yield* FSUtil.Service
@@ -248,12 +248,6 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(
-  Layer.provide(EffectFlock.layer),
-  Layer.provide(FSUtil.layer),
-  Layer.provide(Global.layer),
-  Layer.provide(NodeFileSystem.layer),
-)
 export const node = makeGlobalNode({
   service: Service,
   layer: layer,

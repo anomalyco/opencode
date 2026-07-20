@@ -31,8 +31,8 @@ import { waitEvent } from "./util"
 import { WorkspaceRef } from "@/effect/instance-ref"
 import { Vcs } from "@/project/vcs"
 import { InstanceStore } from "@/project/instance-store"
-import { InstanceBootstrap } from "@/project/bootstrap"
 import { WorkspaceAdapterRuntime } from "./workspace-adapter-runtime"
+import { AppNodeBuilderV1 } from "@/effect/app-node-builder-v1"
 import { WorkspaceEvent } from "@opencode-ai/schema/workspace-event"
 
 export const Info = Schema.Struct({
@@ -601,11 +601,7 @@ const layer = Layer.effect(
                   }),
                 fallback: "",
                 response: "text",
-              }).pipe(
-                Effect.provide(
-                  LayerNode.compile(InstanceStore.node, [[InstanceStore.bootstrapNode, InstanceBootstrap.node]]),
-                ),
-              )
+              }).pipe(Effect.provide(AppNodeBuilderV1.build(InstanceStore.node)))
             : ""
 
         if (sourcePatch) {
@@ -621,11 +617,7 @@ const layer = Layer.effect(
                 body: HttpBody.jsonUnsafe({ patch: sourcePatch }),
               }),
             fallback: { applied: false },
-          }).pipe(
-            Effect.provide(
-              LayerNode.compile(InstanceStore.node, [[InstanceStore.bootstrapNode, InstanceBootstrap.node]]),
-            ),
-          )
+          }).pipe(Effect.provide(AppNodeBuilderV1.build(InstanceStore.node)))
         }
 
         if (input.workspaceID === null) {

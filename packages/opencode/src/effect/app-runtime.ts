@@ -38,7 +38,6 @@ import { Command } from "@/command"
 import { Truncate } from "@/tool/truncate"
 import { ToolRegistry } from "@/tool/registry"
 import { Format } from "@/format"
-import { InstanceBootstrap } from "@/project/bootstrap"
 import { InstanceStore } from "@/project/instance-store"
 import { Project } from "@/project/project"
 import { Vcs } from "@/project/vcs"
@@ -53,10 +52,10 @@ import { BackgroundJob } from "@/background/job"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { AppNodeBuilderV1 } from "./app-node-builder-v1"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 
-export const AppLayer = AppNodeBuilder.build(
+export const AppLayer = AppNodeBuilderV1.build(
   LayerNode.group([
     Npm.node,
     FSUtil.node,
@@ -107,8 +106,7 @@ export const AppLayer = AppNodeBuilder.build(
     ShareNext.node,
     SessionShare.node,
   ]),
-  [[InstanceStore.bootstrapNode, InstanceBootstrap.node]],
-).pipe(Layer.provideMerge(AppNodeBuilder.build(Ripgrep.node)), Layer.provideMerge(Observability.layer))
+).pipe(Layer.provideMerge(AppNodeBuilderV1.build(Ripgrep.node)), Layer.provideMerge(Observability.layer))
 
 const rt = ManagedRuntime.make(AppLayer, { memoMap })
 type Runtime = Pick<typeof rt, "runSync" | "runPromise" | "runPromiseExit" | "runFork" | "runCallback" | "dispose">

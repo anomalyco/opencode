@@ -1,7 +1,8 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { createEffect, createMemo, createRoot } from "solid-js"
 import { createStore } from "solid-js/store"
-import { createServerProjects, ServerConnection, useServer } from "./server"
+import { createServerProjects, RECENTLY_CLOSED_DISPLAY_LIMIT, ServerConnection, useServer } from "./server"
+import { pathKey } from "@/utils/path-key"
 import { useServerHealth } from "@/utils/server-health"
 import { createServerSdkContext } from "./server-sdk"
 import { createServerSyncContext } from "./server-sync"
@@ -127,6 +128,14 @@ function createServerCtx(
   }
 
   const projectsList = createMemo(() => projects.list().map(enrich))
+  const recentlyClosedList = createMemo(() => {
+    const known = new Set(sync.data.project.map((project) => pathKey(project.worktree)))
+    return projects
+      .recentlyClosed()
+      .filter((worktree) => known.has(pathKey(worktree)))
+      .slice(0, RECENTLY_CLOSED_DISPLAY_LIMIT)
+      .map((worktree) => enrich({ worktree, expanded: false }))
+  })
 
   const isLocal =
     (conn?.type === "sidecar" && conn.variant === "base") || (conn?.type === "http" && isLocalHost(conn.http.url))
@@ -139,6 +148,7 @@ function createServerCtx(
     projects: {
       ...projects,
       list: projectsList,
+      recentlyClosed: recentlyClosedList,
     },
   }
 }

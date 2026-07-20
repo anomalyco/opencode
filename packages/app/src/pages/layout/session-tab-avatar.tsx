@@ -1,5 +1,6 @@
 import type { LocalProject } from "@/context/layout"
 import { getProjectAvatarVariant } from "@/context/layout"
+import type { ServerConnection } from "@/context/server"
 import { displayName, getProjectAvatarSource } from "@/pages/layout/helpers"
 import { useSessionTabAvatarState } from "@/pages/layout/project-avatar-state"
 import { ProjectAvatar } from "@opencode-ai/ui/v2/project-avatar-v2"
@@ -10,12 +11,14 @@ export function SessionTabAvatar(props: {
   project?: LocalProject
   directory: string
   sessionId: string
-  activeServer: boolean
+  server: ServerConnection.Key
   revealProjectOnHover?: boolean
 }) {
-  const directory = () => props.directory
-  const sessionId = () => props.sessionId
-  const state = useSessionTabAvatarState(directory, sessionId, () => props.activeServer)
+  const state = useSessionTabAvatarState(
+    () => props.server,
+    () => props.directory,
+    () => props.sessionId,
+  )
   const projectAvatar = () => (
     <ProjectAvatar
       fallback={displayName(props.project ?? { worktree: props.directory })}

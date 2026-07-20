@@ -67,7 +67,12 @@
   gap: 4px;
   background: var(--v2-background-bg-layer-01);
   border-radius: 4px 0 0 4px;
+  cursor: default;
   transition: background 85ms ease-out;
+}
+
+[data-component="inline-input-v2"]:where([data-disabled]) [data-slot="inline-input-v2-prefix"] {
+  cursor: not-allowed;
 }
 
 [data-component="inline-input-v2"][data-label-width] [data-slot="inline-input-v2-prefix"] {
@@ -89,6 +94,7 @@
   letter-spacing: -0.04px;
   color: var(--v2-text-text-muted);
   font-variation-settings: "slnt" 0;
+  user-select: none;
 }
 
 [data-component="inline-input-v2"][data-numeric] [data-slot="inline-input-v2-prefix-text"] {
@@ -149,6 +155,7 @@
 
 [data-component="inline-input-v2"] [data-slot="inline-input-v2-input"]::placeholder {
   color: var(--v2-text-text-faint);
+  user-select: none;
 }
 
 [data-component="inline-input-v2"][data-numeric] [data-slot="inline-input-v2-input"] {
