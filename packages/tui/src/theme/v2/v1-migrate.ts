@@ -1,9 +1,9 @@
 import { RGBA } from "@opentui/core"
 import { oklchToHex, rgbToOklch } from "@opencode-ai/ui/theme/color"
 import type { Theme, ThemeJson } from "../index"
-import { DEFAULT_THEME } from "./defaults"
+import { DEFAULT_CATEGORICAL, DEFAULT_THEME } from "./defaults"
 import type { FileThemeDefinition, Mode, ThemeFile } from "./index"
-import { DEFAULT_CATEGORICAL, HueStep } from "./schema"
+import { HueStep } from "./schema"
 
 type ThemeColor = Exclude<keyof Theme, "thinkingOpacity" | "_hasSelectedListItemText">
 type ChromaticHue = "red" | "orange" | "yellow" | "green" | "cyan" | "blue" | "purple"

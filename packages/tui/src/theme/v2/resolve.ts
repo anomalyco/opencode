@@ -1,13 +1,12 @@
 import { RGBA } from "@opentui/core"
 import { Schema } from "effect"
-import { DEFAULT_THEME } from "./defaults"
+import { DEFAULT_CATEGORICAL, DEFAULT_THEME } from "./defaults"
 import { expandTheme, expandTokens, mergeTheme } from "./expand"
 import { fallback } from "./fallback"
 import {
   ActionState,
   ActionVariant,
   BaseHue,
-  DEFAULT_CATEGORICAL,
   FeedbackKind,
   HueAlias,
   HueStep,

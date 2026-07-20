@@ -4,7 +4,6 @@ export {
   ActionVariant,
   BaseHue,
   CategoricalDefinition,
-  DEFAULT_CATEGORICAL,
   FeedbackKind,
   FormfieldState,
   type FormfieldStateKey,
@@ -44,5 +43,6 @@ export type {
   ResolvedThemeView,
   StatefulColor,
 } from "./types"
+export { DEFAULT_CATEGORICAL } from "./defaults"
 export { migrateV1 } from "./v1-migrate"
 export { selectTheme, selectThemeMode, supportsThemeMode, themeModes } from "./select"

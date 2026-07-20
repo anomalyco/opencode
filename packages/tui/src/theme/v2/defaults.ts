@@ -1,5 +1,13 @@
-import type { ThemeFile } from "./index"
-import { DEFAULT_CATEGORICAL } from "./schema"
+import type { HueName, ThemeFile } from "./schema"
+
+export const DEFAULT_CATEGORICAL = [
+  "blue",
+  "purple",
+  "green",
+  "orange",
+  "red",
+  "cyan",
+] as const satisfies readonly HueName[]
 
 export const DEFAULT_THEME = {
   version: 2,
