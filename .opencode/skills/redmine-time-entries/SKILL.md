@@ -19,35 +19,37 @@ Use when: user says "cargar horas", "load hours", "register time entries", "carg
 
 ```
 ❌ NUNCA:   echo $REDMINE_PASS | ...     (bash expone la clave en ps aux)
-❌ NUNCA:   read .credentials y mostrarlo  (AI context → logs de sesión)
+❌ NUNCA:   mostrar .credentials en el chat  (AI context → logs de sesión)
 ❌ NUNCA:   pedir usuario/contraseña en el chat
 ✅ SIEMPRE: load-hours.js lee .credentials INTERNAMENTE
-✅ SIEMPRE: si el usuario no configuró creds, crear .credentials.example y parar
+✅ SIEMPRE: si no hay creds, crea template y pide editarlo
 ```
 
-### Cómo el usuario configura sus credenciales (sin exponerlas — 3 MÉTODOS SEGUROS)
+### Cómo el usuario configura sus credenciales (sin exponerlas — 4 MÉTODOS SEGUROS)
 
 **Opción A — opencode-cred (RECOMENDADO, multi-skill):**
-Usá el administrador de credenciales del ecosistema:
 ```bash
 opencode-cred set redmine
 ```
-Esto abre un formulario en el navegador (localhost). Completás usuario/contraseña y se guardan en `~/.config/opencode/credentials/redmine.cred`. No pasa por el chat.
+Abre formulario en el navegador (localhost). Las credenciales se guardan en `~/.config/opencode/credentials/redmine.cred`.
 
-**Opción B — Editor local (terminal):**
-Ejecutá `load-hours.js` directamente. Si no hay credenciales:
-1. El script detecta que `.credentials` no existe
-2. Te abre `nano` (o `$EDITOR`) con el template
-3. Completás usuario y contraseña — **en tu terminal, no en el chat**
-4. Guardás y cerrás
-5. El script verifica y continúa
+**Opción B — Editor gráfico (recomendado para AI context):**
+Cuando `load-hours.js` detecta que no hay TTY interactivo (caso típico cuando lo ejecuta el orquestrador):
+1. Escribe el template `.credentials` con placeholders
+2. Imprime la ruta del archivo
+3. El orquestrador abre un editor gráfico (gedit/kate) para que el usuario complete
+4. El usuario guarda y cierra
+5. El orquestrador vuelve a ejecutar el script (ya encuentra las creds)
 
 **Opción C — Variables de entorno (sin archivo en disco):**
 ```bash
 export REDMINE_USER=tu_usuario
 export REDMINE_PASS=tu_contraseña
 ```
-`load-hours.js` las lee automáticamente.
+`load-hours.js` las lee automáticamente. Ideal para CI o sesiones temporales.
+
+**Opción D — Editor local (terminal):**
+Ejecutá `load-hours.js` directamente en una terminal. Si detecta TTY, abre `gedit`, `kate`, `nano`, o `$EDITOR` con el template.
 
 **¿Por qué es seguro?**
 - Las credenciales **NUNCA** pasan por el contexto de la IA
@@ -55,16 +57,21 @@ export REDMINE_PASS=tu_contraseña
 - Los archivos quedan en tu máquina (permisos 600)
 - `opencode-cred` usa formulario en localhost, nada sale de tu PC
 
-### Onboarding guard (AUTOMÁTICO — no requiere acción del orquestrador)
+### Onboarding guard (AUTOMÁTICO — orquestrador)
 
-El script `load-hours.js` o el orquestrador verifican automáticamente:
-1. ¿Existe `opencode-cred`? → `opencode-cred get redmine`
-2. ¿No? → busca `REDMINE_USER`/`REDMINE_PASS` en entorno
-3. ¿No? → busca `.credentials` en el directorio del skill
-4. Si no encuentra nada → el orquestrador lanza `opencode-cred serve redmine` (formulario en navegador)
-5. El usuario completa en el formulario local → se guarda → el skill continúa
+Cuando el orquestrador necesita cargar horas y detecta que no hay credenciales:
 
-No es necesario ejecutar `setup.js` por separado ni hacer verificaciones manuales.
+1. Ejecuta `load-hours.js` → el script detecta que no hay `.credentials`
+2. Como no hay TTY, escribe el template `.credentials` y **sale con código 0** mostrando la ruta
+3. El orquestrador **lee la ruta** del mensaje y abre la herramienta disponible en orden:
+   - Si hay Playwright y DISPLAY → formulario HTML local en el navegador
+   - Si hay gedit/kate → editor gráfico con el template
+   - Si hay DISPLAY → `xdg-open` el archivo
+4. El usuario completa usuario/contraseña y guarda
+5. El orquestrador vuelve a ejecutar `load-hours.js` → ya encuentra las credenciales
+
+**Una sola vez**: una vez guardado `.credentials`, el script lo reusa automáticamente.
+El orquestrador NO debe preguntar credenciales en el chat, NO debe leer `.credentials` él mismo.
 
 ## Quick Usage (standalone script)
 
@@ -130,14 +137,15 @@ bun load-hours.js --date 2026-07-17,2026-07-17 \
 
 | Flag | Description | Default |
 |------|-------------|---------|
-| `--date` | Date(s) comma-separated | required |
-| `--comment` | Short summary | empty |
-| `--detail` | Extended technical info (auto-generated from Engram + git log if omitted) | empty |
+| `--date` | Date(s) comma-separated (simple mode) | — |
+| `--entries` | JSON array of entry objects (multi-project mode) | — |
+| `--comment` | Short summary | auto |
+| `--detail` | Extended technical info (auto-generated from Engram + git log if omitted) | auto |
 | `--no-detail` | Skip auto-detail generation | false |
 | `--hours` | Hours | from config |
 | `--activity` | Activity type | from config |
-| `--issue` | Issue ID override | from config |
-| `--project` | Project slug override | from config |
+| `--issue` | Issue ID override (comma-sep for multi-date) | from config |
+| `--project` | Project slug override (comma-sep for multi-date) | from config |
 | `--headless` | Show browser (false) | true |
 
 ## Activities

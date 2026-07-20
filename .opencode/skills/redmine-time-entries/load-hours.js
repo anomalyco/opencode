@@ -33,22 +33,22 @@ function loadJSON(filename) {
   return JSON.parse(readFileSync(path, 'utf8'));
 }
 
-function promptCredentials() {
-  const rl = createInterface({ input: process.stdin, output: process.stdout });
-  const exampleFile = join(__dirname, '.credentials.example');
-  const credFile = join(__dirname, '.credentials');
-
-  // Ensure example exists
-  if (!existsSync(exampleFile)) {
-    writeFileSync(exampleFile,
-      '# Redmine credentials — ONE-TIME SETUP (safe: stored locally, never sent anywhere)\n' +
-      '# Edit the values below, save, and close the editor.\n' +
-      'REDMINE_USER=your_username\n' +
-      'REDMINE_PASS=your_password\n' +
-      '\n',
-      'utf8'
-    );
+function pickEditor() {
+  // User preference first
+  if (process.env.EDITOR || process.env.VISUAL) return process.env.EDITOR || process.env.VISUAL;
+  // GUI desktop detected → prefer graphical editor
+  if (process.env.DISPLAY) {
+    for (const gui of ['gedit', 'kate', 'mousepad', 'pluma', 'leafpad']) {
+      try { execSync(`which ${gui} 2>/dev/null`, { encoding: 'utf8' }); return gui; } catch {}
+    }
   }
+  // Terminal fallback
+  return 'nano';
+}
+
+function promptCredentials() {
+  const credFile = join(__dirname, '.credentials');
+  const isTTY = process.stdin.isTTY;
 
   console.log('');
   console.log('╔══════════════════════════════════════════════════════════════╗');
@@ -59,37 +59,57 @@ function promptCredentials() {
   console.log('  or visible in any AI context. They stay in a local file');
   console.log('  that only this script can read.');
   console.log('');
-  console.log(`  Opening editor: ${exampleFile}`);
-  console.log('  — Set REDMINE_USER to your Redmine username');
-  console.log('  — Set REDMINE_PASS to your Redmine password');
-  console.log('  — Save the file and close the editor.');
-  console.log('  — The script will then save it as .credentials (local only).');
-  console.log('');
 
-  // Open editor
-  const editor = process.env.EDITOR || process.env.VISUAL || 'nano';
-  const result = spawnSync(editor, [exampleFile], { stdio: 'inherit', encoding: 'utf8' });
-
-  if (result.error || result.status !== 0) {
-    console.error(`❌ Editor "${editor}" exited with error. Try again or set EDITOR env var.`);
-    process.exit(1);
+  if (isTTY) {
+    // ── Interactive terminal ──
+    console.log('  Opening editor to set REDMINE_USER and REDMINE_PASS...');
+    const exampleFile = join(__dirname, '.credentials.example');
+    writeFileSync(exampleFile,
+      '# Redmine credentials — ONE-TIME SETUP\n' +
+      '# Edit the values below, save, and close the editor.\n' +
+      'REDMINE_USER=your_username\n' +
+      'REDMINE_PASS=your_password\n' +
+      '\n',
+      'utf8'
+    );
+    const editor = pickEditor();
+    const result = spawnSync(editor, [exampleFile], { stdio: 'inherit', encoding: 'utf8' });
+    if (result.error || result.status !== 0) {
+      console.error(`❌ Editor "${editor}" exited with error.`);
+      console.error('   Create .credentials manually from .credentials.example');
+      process.exit(1);
+    }
+    const raw = readFileSync(exampleFile, 'utf8');
+    const user = raw.match(/REDMINE_USER=(.+)/)?.[1]?.trim();
+    const pass = raw.match(/REDMINE_PASS=(.+)/)?.[1]?.trim();
+    if (!user || !pass || user === 'your_username' || pass === 'your_password') {
+      console.error('❌ You must set both REDMINE_USER and REDMINE_PASS in the file.');
+      process.exit(1);
+    }
+    writeFileSync(credFile, `REDMINE_USER=${user}\nREDMINE_PASS=${pass}\n`, 'utf8');
+    console.log('  ✅ Credentials saved locally in .credentials');
+    return { user, pass };
+  } else {
+    // ── Non-interactive (AI context, CI, etc.) ──
+    writeFileSync(credFile,
+      '# Redmine credentials — ONE-TIME SETUP\n' +
+      '# Edit the values below with your real credentials.\n' +
+      'REDMINE_USER=your_username\n' +
+      'REDMINE_PASS=your_password\n' +
+      '\n',
+      'utf8'
+    );
+    console.log('');
+    console.log('  ═══════════════════════════════════════════════════════════');
+    console.log('  🔒 Edit this file with your Redmine credentials:');
+    console.log(`     ${credFile}`);
+    console.log('');
+    console.log('  Replace "your_username" and "your_password" with your real');
+    console.log('  Redmine login. Then run this script again.');
+    console.log('  ═══════════════════════════════════════════════════════════');
+    console.log('');
+    process.exit(0);
   }
-
-  // Read what the user wrote
-  const raw = readFileSync(exampleFile, 'utf8');
-  const user = raw.match(/REDMINE_USER=(.+)/)?.[1]?.trim();
-  const pass = raw.match(/REDMINE_PASS=(.+)/)?.[1]?.trim();
-
-  if (!user || !pass || user === 'your_username' || pass === 'your_password') {
-    console.error('❌ You must set both REDMINE_USER and REDMINE_PASS in the file.');
-    console.error('   Run the script again to retry.');
-    process.exit(1);
-  }
-
-  // Save as .credentials (local, not in any repo)
-  writeFileSync(credFile, `REDMINE_USER=${user}\nREDMINE_PASS=${pass}\n`, 'utf8');
-  console.log('  ✅ Credentials saved locally in .credentials');
-  return { user, pass };
 }
 
 function loadCredentials() {
