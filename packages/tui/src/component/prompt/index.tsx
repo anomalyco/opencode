@@ -125,6 +125,16 @@ export function resolvePromptMetadata(input: {
   }
 }
 
+export function resolvePromptAgentGate(input: {
+  hasInput: boolean
+  agentStatus: "loading" | "complete"
+  hasAgent: boolean
+}): "empty" | "loading" | "unavailable" | "ready" {
+  if (!input.hasInput) return "empty"
+  if (input.hasAgent) return "ready"
+  return input.agentStatus === "loading" ? "loading" : "unavailable"
+}
+
 function fadeColor(color: RGBA, alpha: number) {
   return RGBA.fromValues(color.r, color.g, color.b, color.a * alpha)
 }
@@ -970,11 +980,17 @@ export function Prompt(props: PromptProps) {
       setStore("prompt", "input", input.plainText)
       syncExtmarksWithPromptParts()
     }
+    const agent = local.agent.current()
     if (props.disabled) return false
     if (workspace.creating() || move.creating()) return false
     if (auto()?.visible) return false
-    if (!store.prompt.input) return false
-    const agent = local.agent.current()
+    const agentGate = resolvePromptAgentGate({
+      hasInput: !!store.prompt.input,
+      agentStatus: sync.data.agent_status,
+      hasAgent: !!agent,
+    })
+    if (agentGate === "empty") return false
+    if (agentGate === "loading") return false
     if (!agent) return false
     const trimmed = store.prompt.input.trim()
     if (trimmed === "exit" || trimmed === "quit" || trimmed === ":q") {

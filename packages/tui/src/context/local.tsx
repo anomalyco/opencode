@@ -1,6 +1,6 @@
 import { createStore } from "solid-js/store"
 import { createSimpleContext } from "./helper"
-import { batch, createEffect, createMemo } from "solid-js"
+import { batch, createEffect, createMemo, createSignal } from "solid-js"
 import { useSync } from "./sync"
 import { useEvent } from "./event"
 import path from "path"
@@ -80,6 +80,20 @@ export function settlePendingAgentSelection(
   return { current: undefined, pending: false, missing: name }
 }
 
+export function moveAgent<T extends { name: string }>(
+  direction: 1 | -1,
+  agents: T[],
+  current: T | undefined,
+  select: (agent: T) => void,
+) {
+  if (!current) return false
+  let next = agents.findIndex((agent) => agent.name === current.name) + direction
+  if (next < 0) next = agents.length - 1
+  if (next >= agents.length) next = 0
+  select(agents[next])
+  return true
+}
+
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
   init: () => {
@@ -144,13 +158,12 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         if (settlement.missing) warnMissing(settlement.missing)
       })
 
+      const current = () => agents().find((x) => x.name === agentStore.current) ?? agents().at(0)
       return {
         list() {
           return agents()
         },
-        current() {
-          return agents().find((x) => x.name === agentStore.current) ?? agents().at(0)
-        },
+        current,
         set(name: string) {
           const state = resolveAgentSelection(sync.data.agent_status, agents(), name)
           if (state === "pending") {
@@ -168,13 +181,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         },
         move(direction: 1 | -1) {
           batch(() => {
-            const current = this.current()
-            if (!current) return
-            let next = agents().findIndex((x) => x.name === current.name) + direction
-            if (next < 0) next = agents().length - 1
-            if (next >= agents().length) next = 0
-            const value = agents()[next]
-            setAgentStore("current", value.name)
+            moveAgent(direction, agents(), current(), (agent) => setAgentStore("current", agent.name))
           })
         },
         color(name: string) {

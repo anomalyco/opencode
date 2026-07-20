@@ -14,11 +14,20 @@ export function isModelCatalogLoading(status: "loading" | "partial" | "complete"
   return status === "loading"
 }
 
+export function modelCatalogAttentionHandler(
+  status: "loading" | "partial" | "complete",
+  trigger: () => void,
+) {
+  return isModelCatalogLoading(status) ? trigger : undefined
+}
+
 export function DialogModel(props: { providerID?: string }) {
   const local = useLocal()
   const sync = useSync()
   const dialog = useDialog()
   const [query, setQuery] = createSignal("")
+  const [attention, setAttention] = createSignal(0)
+  const triggerAttention = () => setAttention((value) => value + 1)
 
   const connected = useConnected()
   const providers = createDialogProviderOptions()
@@ -162,10 +171,11 @@ export function DialogModel(props: { providerID?: string }) {
   return (
     <DialogSelect<ReturnType<typeof options>[number]["value"]>
       options={options()}
+      onEmptySubmit={modelCatalogAttentionHandler(sync.status, triggerAttention)}
       emptyView={
         isModelCatalogLoading(sync.status) ? (
           <box paddingLeft={4} paddingRight={4} paddingTop={1}>
-            <Spinner>Loading</Spinner>
+            <Spinner attention={attention()}>Loading</Spinner>
           </box>
         ) : undefined
       }
