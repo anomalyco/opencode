@@ -150,6 +150,39 @@ describe("constructors callable without new, like JS", () => {
     expect(await value(`const values = [2, undefined, 1]; values.sort(); return Object.hasOwn(values, 2)`)).toBe(true)
   })
 
+  // Adapted from test262's sort/precise-{getter,setter}-{appends,pops}-elements.js side-effect cases.
+  test("sort writes its snapshot without discarding comparator length mutations", async () => {
+    expect(
+      await value(`
+        const values = [3, 2, 1]
+        let first = true
+        values.sort((a, b) => {
+          if (first) {
+            first = false
+            values.push("kept")
+          }
+          return a - b
+        })
+        return values
+      `),
+    ).toEqual([1, 2, 3, "kept"])
+
+    expect(
+      await value(`
+        const values = [3, , 1, , 2]
+        let first = true
+        values.sort((a, b) => {
+          if (first) {
+            first = false
+            values.splice(0)
+          }
+          return a - b
+        })
+        return { values, owns: values.map((_, index) => Object.hasOwn(values, index)) }
+      `),
+    ).toEqual({ values: [1, 2, 3], owns: [true, true, true] })
+  })
+
   test("returned sparse arrays normalize holes to null at the host boundary", async () => {
     expect(await value(`return Array(3)`)).toEqual([null, null, null])
   })

@@ -65,6 +65,43 @@ describe("Date", () => {
     expect(await value(`return Number.isNaN(new Date({}).getTime())`)).toBe(true)
   })
 
+  // Adapted to CodeMode's supported syntax from test262 Date/value-to-primitive-result-{non-string-prim,string}.js.
+  test("one-argument construction uses valueOf then toString for objects", async () => {
+    expect(
+      await value(`
+        const calls = []
+        const number = { valueOf: () => 8 }
+        const text = {
+          valueOf: () => { calls.push("valueOf"); return {} },
+          toString: () => { calls.push("toString"); return "2016-06-05T18:40:00.000Z" },
+        }
+        return [new Date(number).getTime(), new Date(text).getTime(), calls]
+      `),
+    ).toEqual([8, 1465152000000, ["valueOf", "toString"]])
+
+    expect(
+      await value(`
+        const values = [
+          { valueOf: () => undefined },
+          { valueOf: () => true },
+          { valueOf: () => false },
+          { valueOf: () => null },
+        ]
+        return values.map((item) => new Date(item).getTime())
+      `),
+    ).toEqual([null, 1, 0, 0])
+
+    expect(
+      await value(`
+        try {
+          new Date({ valueOf: () => ({}), toString: () => ({}) })
+        } catch (error) {
+          return error.name
+        }
+      `),
+    ).toBe("TypeError")
+  })
+
   test("date arithmetic and comparison use the time value", async () => {
     expect(await value(`const a = new Date(1000); const b = new Date(3000); return b - a`)).toBe(2000)
     expect(await value(`const a = new Date(1000); const b = new Date(3000); return a < b`)).toBe(true)

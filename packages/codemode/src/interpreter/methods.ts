@@ -663,12 +663,14 @@ const invokeArrayMethod = <R>(
     case "reverse":
       return Effect.succeed(target.reverse())
     case "sort": {
-      const holeCount = Array.from({ length: target.length }, (_, index) => Object.hasOwn(target, index)).filter(
-        (own) => !own,
-      ).length
+      const length = target.length
+      const holeCount = Array.from({ length }, (_, index) => Object.hasOwn(target, index)).filter((own) => !own).length
+      const itemCount = length - holeCount
       return Effect.map(sortArray(runner, target, args[0], "Array.sort", node), (sorted) => {
-        target.splice(0, target.length, ...sorted)
-        Array.from({ length: holeCount }, (_, index) => target.length - index - 1).forEach((index) => {
+        sorted.slice(0, itemCount).forEach((item, index) => {
+          target[index] = item
+        })
+        Array.from({ length: holeCount }, (_, index) => itemCount + index).forEach((index) => {
           Reflect.deleteProperty(target, index)
         })
         return target
