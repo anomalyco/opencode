@@ -1336,7 +1336,7 @@ export function UserMessageDisplay(props: {
   )
 
   return (
-    <div data-component="user-message" data-timeline-part-id={textPart()?.id}>
+    <div data-component="user-message" data-timeline-part-id={textPart()?.id} data-time-created={props.message.time?.created}>
       <Show when={!props.useV2Actions}>{renderAttachments()}</Show>
       <Show
         when={text()}
@@ -1739,7 +1739,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
 
   return (
     <Show when={text()}>
-      <div data-component="text-part" data-timeline-part-id={part().id}>
+      <div data-component="text-part" data-timeline-part-id={part().id} data-time-created={props.message.time?.created} data-time-completed={props.message.time?.completed} data-tokens-input={(props.message as any).tokens?.input} data-tokens-output={(props.message as any).tokens?.output} data-tokens-reasoning={(props.message as any).tokens?.reasoning} data-model-id={(props.message as any).modelID} data-provider-id={(props.message as any).providerID}>
         <div data-slot="text-part-body">
           <Show when={streaming()} fallback={<Markdown text={text()} cacheKey={part().id} streaming={false} />}>
             <PacedMarkdown text={text()} cacheKey={part().id} streaming={streaming()} />
