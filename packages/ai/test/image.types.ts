@@ -6,7 +6,7 @@ import {
   type ImageRequestFor,
   type ImageRoute,
 } from "../src"
-import { Google, OpenAI, XAI } from "../src/providers"
+import { Google, OpenAI, XAI, ZAI } from "../src/providers"
 
 type GoogleLikeOptions = {
   readonly aspectRatio?: "1:1" | "16:9"
@@ -98,6 +98,20 @@ Image.generate({
 Image.generate({ model: xai, prompt: "A lighthouse", options: { n: "2" } })
 // @ts-expect-error Known xAI string options retain their value kind.
 Image.generate({ model: xai, prompt: "A lighthouse", options: { resolution: 2 } })
+
+const zai = ZAI.configure({ apiKey: "test" }).image("any-model-id")
+// @ts-expect-error Image generation options are request-scoped, not provider configuration.
+ZAI.configure({ image: { options: { quality: "hd" } } })
+Image.generate({
+  model: zai,
+  prompt: "A lighthouse",
+  options: { quality: "future-quality", userID: "user-123", future_option: true },
+})
+Image.generate({ model: zai, prompt: "A lighthouse", options: { user_id: "raw-user" } })
+// @ts-expect-error Known Z.ai string options retain their value kind.
+Image.generate({ model: zai, prompt: "A lighthouse", options: { quality: 1 } })
+// @ts-expect-error Known Z.ai user IDs retain their value kind.
+Image.generate({ model: zai, prompt: "A lighthouse", options: { userID: 1 } })
 
 declare const generic: ImageModel<ImageOptions>
 Image.generate({ model: generic, prompt: "A lighthouse", options: { arbitrary: true } })

@@ -4,10 +4,7 @@ import { Image } from "../../src"
 import { ZAI } from "../../src/providers"
 import { recordedTests } from "../recorded-test"
 
-const model = ZAI.configure({
-  apiKey: process.env.ZAI_API_KEY ?? "fixture",
-  image: { providerOptions: { quality: "standard", userID: "opencode-image-test" } },
-}).image("cogview-4-250304")
+const model = ZAI.configure({ apiKey: process.env.ZAI_API_KEY ?? "fixture" }).image("cogview-4-250304")
 
 const recorded = recordedTests({
   prefix: "zai-images",
@@ -22,11 +19,11 @@ describe("Z.ai Images recorded", () => {
       const response = yield* Image.generate({
         model,
         prompt: "A simple flat red circle centered on a plain white background.",
-        size: { width: 1024, height: 1024 },
+        options: { size: "1024x1024", quality: "standard", userID: "opencode-image-test" },
       })
 
       expect(response.images).toHaveLength(1)
-      expect(response.image?.mediaType).toBe("image/jpeg")
+      expect(response.image?.mediaType).toBe("application/octet-stream")
       expect(response.image?.data).toBeString()
       expect(response.image?.data).toStartWith("https://")
       expect(response.providerMetadata?.zai).toBeDefined()
