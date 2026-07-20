@@ -28,6 +28,8 @@ import { tabKey, useTabs } from "@/context/tabs"
 import type { PromptSession } from "@/context/prompt"
 import "./titlebar.css"
 import { newTabTooltipKeybind } from "./command-tooltip-keybind"
+import { useDirectoryPicker } from "@/components/directory-picker"
+import { homeProjectDirectories } from "@/pages/layout/helpers"
 
 type TauriDesktopWindow = {
   startDragging?: () => Promise<void>
@@ -253,6 +255,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
           {(_) => {
             const layout = useLayout()
             const global = useGlobal()
+            const pickDirectory = useDirectoryPicker()
 
             const tabs = useTabs()
             const tabsStore = tabs.store
@@ -372,6 +375,35 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
               tabs.newDraft({ server: fallback.server, directory: fallback.project.worktree }, "")
             }
             const toggleHome = () => tabs.toggleHome({ home: layout.route().type === "home", current: currentTab() })
+
+            const chooseProject = () => {
+              const conn = server.current
+              if (!conn) return
+              pickDirectory({
+                server: conn,
+                title: language.t("command.project.open"),
+                multiple: true,
+                onSelect: (result) => {
+                  const directories = homeProjectDirectories(result)
+                  const directory = directories[0]
+                  if (!directory) return
+                  const ctx = global.ensureServerCtx(conn)
+                  directories.forEach((entry) => ctx.projects.open(entry))
+                  ctx.projects.touch(directory)
+                  void tabs.newDraft({ server: ServerConnection.key(conn), directory })
+                },
+              })
+            }
+
+            command.register("titlebar-project", () => [
+              {
+                id: "project.open",
+                title: language.t("command.project.open"),
+                category: language.t("command.category.project"),
+                keybind: "mod+o",
+                onSelect: chooseProject,
+              },
+            ])
 
             command.register("titlebar-home", () => [
               {
