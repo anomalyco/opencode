@@ -21,63 +21,22 @@ import { ACPError } from "./error"
 import { ACPService } from "./service"
 
 export function create(client: OpenCodeClient, connection: AgentSideConnection) {
-  return new ACPAgent(ACPService.make({ client, connection }))
-}
-
-export class ACPAgent implements Agent {
-  constructor(private readonly service: ACPService.Interface) {}
-
-  initialize(params: InitializeRequest) {
-    return run(this.service.initialize(params))
-  }
-
-  authenticate(params: AuthenticateRequest) {
-    return run(this.service.authenticate(params))
-  }
-
-  newSession(params: NewSessionRequest) {
-    return run(this.service.newSession(params))
-  }
-
-  loadSession(params: LoadSessionRequest) {
-    return run(this.service.loadSession(params))
-  }
-
-  listSessions(params: ListSessionsRequest) {
-    return run(this.service.listSessions(params))
-  }
-
-  resumeSession(params: ResumeSessionRequest) {
-    return run(this.service.resumeSession(params))
-  }
-
-  closeSession(params: CloseSessionRequest) {
-    return run(this.service.closeSession(params))
-  }
-
-  unstable_forkSession(params: ForkSessionRequest) {
-    return run(this.service.forkSession(params))
-  }
-
-  setSessionConfigOption(params: SetSessionConfigOptionRequest) {
-    return run(this.service.setSessionConfigOption(params))
-  }
-
-  setSessionMode(params: SetSessionModeRequest) {
-    return run(this.service.setSessionMode(params))
-  }
-
-  unstable_setSessionModel(params: SetSessionModelRequest) {
-    return run(this.service.setSessionModel(params))
-  }
-
-  prompt(params: PromptRequest) {
-    return run(this.service.prompt(params))
-  }
-
-  cancel(params: CancelNotification) {
-    return run(this.service.cancel(params))
-  }
+  const service = ACPService.make({ client, connection })
+  return {
+    initialize: (params: InitializeRequest) => run(service.initialize(params)),
+    authenticate: (params: AuthenticateRequest) => run(service.authenticate(params)),
+    newSession: (params: NewSessionRequest) => run(service.newSession(params)),
+    loadSession: (params: LoadSessionRequest) => run(service.loadSession(params)),
+    listSessions: (params: ListSessionsRequest) => run(service.listSessions(params)),
+    resumeSession: (params: ResumeSessionRequest) => run(service.resumeSession(params)),
+    closeSession: (params: CloseSessionRequest) => run(service.closeSession(params)),
+    unstable_forkSession: (params: ForkSessionRequest) => run(service.forkSession(params)),
+    setSessionConfigOption: (params: SetSessionConfigOptionRequest) => run(service.setSessionConfigOption(params)),
+    setSessionMode: (params: SetSessionModeRequest) => run(service.setSessionMode(params)),
+    unstable_setSessionModel: (params: SetSessionModelRequest) => run(service.setSessionModel(params)),
+    prompt: (params: PromptRequest) => run(service.prompt(params)),
+    cancel: (params: CancelNotification) => run(service.cancel(params)),
+  } satisfies Agent
 }
 
 async function run<A>(promise: Promise<A>) {

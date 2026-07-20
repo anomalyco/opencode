@@ -84,11 +84,7 @@ export function partsToContentChunks(parts: readonly ReplayPart[]): ContentChunk
           content: {
             type: "text",
             text: part.text,
-            ...(part.synthetic
-              ? { annotations: { audience: ["assistant" as const] } }
-              : part.ignored
-                ? { annotations: { audience: ["user" as const] } }
-                : {}),
+            ...replayAudience(part),
           },
         },
       ]
@@ -146,26 +142,24 @@ export function partsToContentChunks(parts: readonly ReplayPart[]): ContentChunk
 }
 
 function resourceLinkToPart(link: ResourceLink): PromptPart {
-  try {
-    if (link.uri.startsWith("file://")) {
+  if (link.uri.startsWith("file://")) {
+    return {
+      type: "file",
+      url: link.uri,
+      filename: link.name || filenameFromUri(link.uri) || "file",
+      mime: link.mimeType ?? "text/plain",
+    }
+  }
+  if (link.uri.startsWith("zed://") && URL.canParse(link.uri)) {
+    const pathname = new URL(link.uri).searchParams.get("path")
+    if (pathname)
       return {
         type: "file",
-        url: link.uri,
-        filename: link.name || filenameFromUri(link.uri) || "file",
+        url: pathToFileURL(pathname).href,
+        filename: link.name || path.basename(pathname) || "file",
         mime: link.mimeType ?? "text/plain",
       }
-    }
-    if (link.uri.startsWith("zed://")) {
-      const pathname = new URL(link.uri).searchParams.get("path")
-      if (pathname)
-        return {
-          type: "file",
-          url: pathToFileURL(pathname).href,
-          filename: link.name || path.basename(pathname) || "file",
-          mime: link.mimeType ?? "text/plain",
-        }
-    }
-  } catch {}
+  }
   return { type: "text", text: link.uri }
 }
 
@@ -181,13 +175,16 @@ function audienceFlags(audience: readonly Role[] | null | undefined) {
   return {}
 }
 
+function replayAudience(part: Extract<PromptPart, { type: "text" }>) {
+  if (part.synthetic) return { annotations: { audience: ["assistant" as const] } }
+  if (part.ignored) return { annotations: { audience: ["user" as const] } }
+  return {}
+}
+
 function filenameFromUri(uri: string | undefined): string | undefined {
   if (!uri || uri.startsWith("data:")) return undefined
-  try {
-    return path.basename(new URL(uri).pathname) || undefined
-  } catch {
-    return path.basename(uri) || undefined
-  }
+  if (URL.canParse(uri)) return path.basename(new URL(uri).pathname) || undefined
+  return path.basename(uri) || undefined
 }
 
 export * as ACPContent from "./content"

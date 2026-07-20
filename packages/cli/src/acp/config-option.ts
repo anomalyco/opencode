@@ -99,9 +99,8 @@ export function parseModelSelection(modelId: string, providers: readonly ConfigO
   const provider = providers.find((item) => modelId.startsWith(`${item.id}/`))
   if (!provider) {
     const separator = modelId.indexOf("/")
-    return separator === -1
-      ? { model: { providerID: modelId, modelID: "" } }
-      : { model: { providerID: modelId.slice(0, separator), modelID: modelId.slice(separator + 1) } }
+    if (separator === -1) return { model: { providerID: modelId, modelID: "" } }
+    return { model: { providerID: modelId.slice(0, separator), modelID: modelId.slice(separator + 1) } }
   }
   const modelID = modelId.slice(provider.id.length + 1)
   if (provider.models.some((model) => model.id === modelID)) return { model: { providerID: provider.id, modelID } }

@@ -35,7 +35,7 @@ type ToolState = {
   content: ToolContent
 }
 
-type Start =
+export type TurnStart =
   | { readonly type: "input"; readonly id: string }
   | { readonly type: "skill"; readonly id: string }
   | { readonly type: "compaction"; readonly id: string }
@@ -46,12 +46,16 @@ const permissionOptions: PermissionOption[] = [
   { optionId: "reject", kind: "reject_once", name: "Reject" },
 ]
 
+function emptyToolState(): ToolState {
+  return { name: "tool", input: {}, structured: {}, content: [] }
+}
+
 export async function streamTurn(input: {
   readonly client: OpenCodeClient
   readonly connection: Connection
   readonly sessionID: string
   readonly cwd: string
-  readonly start: Start
+  readonly start: TurnStart
   readonly userMessageID?: string | null
   readonly submit: (signal: AbortSignal) => Promise<unknown>
   readonly control: TurnControl
@@ -142,12 +146,7 @@ export async function streamTurn(input: {
       }
       if (event.type === "session.tool.called") {
         assistantMessageID = event.data.assistantMessageID
-        const current = tools.get(event.data.callID) ?? {
-          name: "tool",
-          input: {},
-          structured: {},
-          content: [],
-        }
+        const current = tools.get(event.data.callID) ?? emptyToolState()
         current.input = event.data.input
         tools.set(event.data.callID, current)
         await update({
@@ -179,12 +178,7 @@ export async function streamTurn(input: {
         continue
       }
       if (event.type === "session.tool.success") {
-        const current = tools.get(event.data.callID) ?? {
-          name: "tool",
-          input: {},
-          structured: {},
-          content: [],
-        }
+        const current = tools.get(event.data.callID) ?? emptyToolState()
         tools.delete(event.data.callID)
         await update({
           sessionUpdate: "tool_call_update",
@@ -200,12 +194,7 @@ export async function streamTurn(input: {
         continue
       }
       if (event.type === "session.tool.failed") {
-        const current = tools.get(event.data.callID) ?? {
-          name: "tool",
-          input: {},
-          structured: {},
-          content: [],
-        }
+        const current = tools.get(event.data.callID) ?? emptyToolState()
         tools.delete(event.data.callID)
         await update({
           sessionUpdate: "tool_call_update",
@@ -327,59 +316,63 @@ export async function replayMessages(
           ...pendingToolCall({ toolCallId: part.id, toolName: part.name, state: { input: toolInput(part) }, cwd }),
         },
       })
-      if (part.state.status === "completed") {
-        await connection.sessionUpdate({
-          sessionId: sessionID,
-          update: {
-            sessionUpdate: "tool_call_update",
-            ...completedToolUpdate({
-              toolCallId: part.id,
-              toolName: part.name,
-              input: part.state.input,
-              structured: part.state.structured,
-              content: part.state.content,
-              result: part.state.result,
-            }),
-          },
-        })
-      }
-      if (part.state.status === "running") {
-        await connection.sessionUpdate({
-          sessionId: sessionID,
-          update: {
-            sessionUpdate: "tool_call_update",
-            ...runningToolUpdate({
-              toolCallId: part.id,
-              toolName: part.name,
-              state: { input: part.state.input },
-              content: part.state.content,
-              cwd,
-            }),
-          },
-        })
-      }
-      if (part.state.status === "error") {
-        await connection.sessionUpdate({
-          sessionId: sessionID,
-          update: {
-            sessionUpdate: "tool_call_update",
-            ...errorToolUpdate({
-              toolCallId: part.id,
-              toolName: part.name,
-              input: part.state.input,
-              structured: part.state.structured,
-              content: part.state.content,
-              error: part.state.error.message,
-              cwd,
-            }),
-          },
-        })
+      switch (part.state.status) {
+        case "completed":
+          await connection.sessionUpdate({
+            sessionId: sessionID,
+            update: {
+              sessionUpdate: "tool_call_update",
+              ...completedToolUpdate({
+                toolCallId: part.id,
+                toolName: part.name,
+                input: part.state.input,
+                structured: part.state.structured,
+                content: part.state.content,
+                result: part.state.result,
+              }),
+            },
+          })
+          break
+        case "running":
+          await connection.sessionUpdate({
+            sessionId: sessionID,
+            update: {
+              sessionUpdate: "tool_call_update",
+              ...runningToolUpdate({
+                toolCallId: part.id,
+                toolName: part.name,
+                state: { input: part.state.input },
+                content: part.state.content,
+                cwd,
+              }),
+            },
+          })
+          break
+        case "error":
+          await connection.sessionUpdate({
+            sessionId: sessionID,
+            update: {
+              sessionUpdate: "tool_call_update",
+              ...errorToolUpdate({
+                toolCallId: part.id,
+                toolName: part.name,
+                input: part.state.input,
+                structured: part.state.structured,
+                content: part.state.content,
+                error: part.state.error.message,
+                cwd,
+              }),
+            },
+          })
+          break
+        case "streaming":
+          break
       }
     }
   }
 }
 
-function matchesStart(event: EventSubscribeOutput, start: Start) {
+function matchesStart(event: EventSubscribeOutput, start: TurnStart) {
   if (start.type === "input") return event.type === "session.input.promoted" && event.data.inputID === start.id
   if (start.type === "compaction")
     return event.type === "session.compaction.admitted" && event.data.inputID === start.id
@@ -424,15 +417,20 @@ function response(
         ...(tokens.cache.write > 0 ? { cachedWriteTokens: tokens.cache.write } : {}),
       }
     : undefined
-  const stopReason =
-    cancelled || terminal === "interrupted" || error?.type === "aborted"
-      ? ("cancelled" as const)
-      : finish === "length"
-        ? ("max_tokens" as const)
-        : finish === "content-filter" || error?.type === "provider.content-filter"
-          ? ("refusal" as const)
-          : ("end_turn" as const)
+  const stopReason = resolveStopReason({ terminal, cancelled, finish, error: error?.type })
   return { stopReason, ...(usage ? { usage } : {}), ...(messageID ? { userMessageId: messageID } : {}), _meta: {} }
+}
+
+function resolveStopReason(input: {
+  readonly terminal: "succeeded" | "failed" | "interrupted"
+  readonly cancelled: boolean
+  readonly finish: SessionMessageAssistant["finish"]
+  readonly error?: string
+}): PromptResponse["stopReason"] {
+  if (input.cancelled || input.terminal === "interrupted" || input.error === "aborted") return "cancelled"
+  if (input.finish === "length") return "max_tokens"
+  if (input.finish === "content-filter" || input.error === "provider.content-filter") return "refusal"
+  return "end_turn"
 }
 
 export * as ACPEvent from "./event"
