@@ -96,14 +96,13 @@ const globalStaticMembers: Partial<Record<GlobalNamespaceName, Set<string>>> = {
   URL: urlStatics,
 }
 
-// Array lengths are unsigned 32-bit integers, so the largest index is one less than the maximum length.
-const MAX_ARRAY_INDEX = 4_294_967_294
+const MAX_ARRAY_LENGTH = 4_294_967_295
 
 const parseArrayIndex = (key: string | number): number | undefined => {
   const property = String(key)
   if (!/^(0|[1-9]\d*)$/.test(property)) return undefined
   const index = Number(property)
-  return index <= MAX_ARRAY_INDEX ? index : undefined
+  return index < MAX_ARRAY_LENGTH ? index : undefined
 }
 
 const calleeDescription = (callee: AstNode): string => {
