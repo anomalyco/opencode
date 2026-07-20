@@ -14,13 +14,14 @@ const R='[data-slot="question-text"],[data-slot="answer-text"],[data-component="
 const I='[data-component="prompt-input"],[contenteditable]'
 const ir=c=>{const p=c.codePointAt(0);return(p>=0x0590&&p<=0x05FF)||(p>=0x0600&&p<=0x06FF)||(p>=0x0750&&p<=0x077F)||(p>=0x08A0&&p<=0x08FF)||(p>=0xFB1D&&p<=0xFDFF)||(p>=0xFE70&&p<=0xFEFF)};
 const da=el=>{const t=el.textContent;let r=0,l=0,f=null;for(const c of t){if(ir(c)){r++;if(f===null)f='r'}else if(/[A-Za-z\u00C0-\u024F]/.test(c)){l++;if(f===null)f='l'}}if(f==='r'){el.setAttribute('dir','rtl');return}if(f==='l'&&r>0&&r>=l*0.4){el.setAttribute('dir','rtl');return}el.setAttribute('dir','ltr')};
+const inp=el=>{da(el);if(!el.hasAttribute("data-ih")){el.setAttribute("data-ih","1");el.addEventListener("input",()=>da(el))}}
 const co=el=>{if(el.getAttribute("data-cd")==="1")return;el.setAttribute("data-cd","1");new MutationObserver(recs=>{for(const r of recs){if(r.type!=="characterData")continue;const p=r.target.parentElement;if(!p)continue;if(p.matches(B)&&p.closest(C))da(p);else if(p.matches(R))da(p)}}).observe(el,{childList:true,subtree:true,characterData:true})}
 const mc=el=>{if(el.getAttribute("data-bc")!=="1"){el.setAttribute("data-bc","1");el.querySelectorAll(B).forEach(da);el.querySelectorAll(R).forEach(da);co(el)}}
-const mo=new MutationObserver(recs=>{for(const r of recs){for(const n of r.addedNodes){if(n.nodeType!==1)continue;if(n.matches(C))mc(n);else n.querySelectorAll(C).forEach(mc);if(n.matches(I))da(n);else n.querySelectorAll(I).forEach(da);if(n.matches(B)&&n.closest(C))da(n);else n.querySelectorAll(B).forEach(el=>{if(el.closest(C))da(el)});if(n.matches(R))da(n);else n.querySelectorAll(R).forEach(el=>{if(el.closest(C)||el.matches(R))da(el)})}}})
+const mo=new MutationObserver(recs=>{for(const r of recs){for(const n of r.addedNodes){if(n.nodeType!==1)continue;if(n.matches(C))mc(n);else n.querySelectorAll(C).forEach(mc);if(n.matches(I))inp(n);else n.querySelectorAll(I).forEach(inp);if(n.matches(B)&&n.closest(C))da(n);else n.querySelectorAll(B).forEach(el=>{if(el.closest(C))da(el)});if(n.matches(R))da(n);else n.querySelectorAll(R).forEach(el=>{if(el.closest(C)||el.matches(R))da(el)})}}})
 if(document.documentElement)mo.observe(document.documentElement,{childList:true,subtree:true})
 else document.addEventListener("DOMContentLoaded",()=>mo.observe(document.documentElement,{childList:true,subtree:true}),{once:true})
 document.querySelectorAll(C).forEach(mc)
-document.querySelectorAll(I).forEach(da)
+document.querySelectorAll(I).forEach(inp)
 
 const mc2=".oc-mf{font-size:11px;color:var(--text-weak);margin-top:4px;text-align:right;cursor:default;line-height:1.4}.oc-mf-ts,.oc-mf-tok{white-space:nowrap}"
 const s2=document.createElement("style");s2.textContent=mc2;s2.id="oc-meta-fix"
