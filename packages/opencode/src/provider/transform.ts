@@ -26,6 +26,14 @@ export function sanitizeSurrogates(content: string) {
   return content.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "\uFFFD")
 }
 
+function isKimiFamily(model: Provider.Model) {
+  const ids = [model.providerID, model.api.id, model.id].map((value) => value.toLowerCase())
+  if (ids.some((id) => id.includes("kimi") || id.includes("moonshot"))) return true
+  return ["api.kimi.com", "api.moonshot.ai", "api.moonshot.cn", "api.moonshotai.cn"].some((host) =>
+    model.api.url.toLowerCase().includes(host),
+  )
+}
+
 // Maps npm package to the key the AI SDK expects for providerOptions
 function sdkKey(npm: string): string | undefined {
   switch (npm) {
@@ -707,6 +715,11 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
       max: { effort: "max" },
     }
   }
+  if (isKimiFamily(model) && ["@ai-sdk/anthropic", "@ai-sdk/google-vertex/anthropic"].includes(model.api.npm)) {
+    return Object.fromEntries(
+      ["low", "medium", "high", "xhigh", "max"].map((effort) => [effort, anthropicEffort(model, effort)]),
+    )
+  }
   if (
     id.includes("deepseek-chat") ||
     id.includes("deepseek-reasoner") ||
@@ -1176,7 +1189,7 @@ export function options(input: {
   // Moonshot's Anthropic-compatible API uses adaptive effort rather than token budgets.
   if (
     ["@ai-sdk/anthropic", "@ai-sdk/google-vertex/anthropic"].includes(input.model.api.npm) &&
-    (input.model.providerID === "moonshotai" || modelId.includes("kimi")) &&
+    isKimiFamily(input.model) &&
     input.model.capabilities.reasoning
   ) {
     result["thinking"] = { type: "adaptive", display: "summarized" }
@@ -1704,6 +1717,7 @@ function reasoningEffort(model: Provider.Model, effort: string) {
 
 function anthropicEffort(model: Provider.Model, effort: string) {
   if (["opus-4-5", "opus-4.5"].some((value) => model.api.id.includes(value))) return { effort }
+  if (isKimiFamily(model)) return { thinking: { type: "adaptive", display: "summarized" }, effort }
   if (!anthropicAdaptiveEfforts(model.api.id)) return
   return {
     thinking: {

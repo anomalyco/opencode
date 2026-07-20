@@ -5180,6 +5180,17 @@ describe("ProviderTransform.options - kimi family adaptive thinking", () => {
     expect(result.effort).toBe("high")
   })
 
+  test("provides adaptive effort variants without models.dev metadata", () => {
+    expect(ProviderTransform.variants(createModel())).toEqual(
+      Object.fromEntries(
+        ["low", "medium", "high", "xhigh", "max"].map((effort) => [
+          effort,
+          { thinking: { type: "adaptive", display: "summarized" }, effort },
+        ]),
+      ),
+    )
+  })
+
   test("does not enable thinking for kimi models without reasoning capability", () => {
     const model = createModel()
     model.capabilities.reasoning = false
