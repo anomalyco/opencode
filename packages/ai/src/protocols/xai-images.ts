@@ -112,8 +112,6 @@ export const model = (input: ModelInput) => {
   const route: ImageRoute<XAIImageOptions> = {
     id: ADAPTER,
     generate: Effect.fn("XAIImages.generate")(function* (request: ImageRequestFor<XAIImageOptions>, execute) {
-      if (request.mask !== undefined)
-        return yield* ImageInputs.invalid(ADAPTER, "xAI Images does not support mask inputs")
       const http = mergeHttpOptions(request.model.http, request.http)
       const imageReferences = (request.images ?? []).map((image) => {
         if (image.type === "bytes") return { url: ImageInputs.dataUrl(image), type: "image_url" as const }

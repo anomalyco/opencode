@@ -62,7 +62,6 @@ const response =
       ImageInput.url("https://example.com/second.webp"),
       ImageInput.file("file_123"),
     ],
-    mask: ImageInput.bytes(maskBytes, "image/png"),
     options,
     http,
   })
@@ -71,11 +70,26 @@ const response =
 `ImageInput.fileUri(uri, mediaType)` represents provider file URIs such as Gemini Files. Raw strings are not
 accepted as image inputs, avoiding ambiguity between base64, URLs, and provider IDs. Empty or omitted `images`
 uses text-to-image generation; a non-empty array selects the provider's edit behavior without enforcing provider
-image-count limits locally. OpenAI uses multipart for byte/data-URL edits and its JSON reference body for URL or
-file-ID edits. On multipart requests, `http.body` can override option fields but not structural `model`, `prompt`,
-`image[]`, or `mask` fields, and the transport owns the multipart `Content-Type` boundary. xAI does not support
-masks, Gemini does not fetch public HTTP URLs or implement bitmap masks, and hosted Z.ai image generation does not
-accept image inputs. These cases fail with `InvalidRequest` before network I/O.
+image-count limits locally. `images` is the only common image-editing field. OpenAI uses multipart for byte/data-URL
+edits and its JSON reference body for URL or file-ID edits. Its provider-specific `options.mask` accepts an
+`ImageInput` for inpainting:
+
+```ts
+yield *
+  Image.generate({
+    model: OpenAI.configure({ apiKey }).image("gpt-image-2"),
+    prompt,
+    images: [ImageInput.bytes(sourceBytes, "image/png")],
+    options: { mask: ImageInput.bytes(maskBytes, "image/png") },
+  })
+```
+
+The OpenAI adapter extracts this helper value into the edit request's native `mask` field rather than passing the
+tagged `ImageInput` object through as an ordinary option. On multipart requests, `http.body` can override option
+fields but not structural `model`, `prompt`, `image[]`, or `mask` fields, and the transport owns the multipart
+`Content-Type` boundary. For JSON requests, `http.body` remains the final raw-native overlay. Gemini does not fetch
+public HTTP URLs, and hosted Z.ai image generation does not accept image inputs. These cases fail with
+`InvalidRequest` before network I/O.
 
 Provider-native image options belong to each request. Raw `http.body` fields have final precedence over them:
 

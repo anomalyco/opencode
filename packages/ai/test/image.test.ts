@@ -133,8 +133,11 @@ describe("Image", () => {
         ImageInput.bytes(Uint8Array.from([1, 2, 3]), "image/png"),
         ImageInput.url("data:image/jpeg;base64,BAUG"),
       ],
-      mask: ImageInput.bytes(Uint8Array.from([7, 8, 9]), "image/png"),
-      options: { quality: "high", future_option: true },
+      options: {
+        mask: ImageInput.bytes(Uint8Array.from([7, 8, 9]), "image/png"),
+        quality: "high",
+        future_option: true,
+      },
       http: {
         body: { quality: "low", model: "corrupt", prompt: "corrupt", image: "corrupt", "image[]": "corrupt" },
         headers: { "content-type": "application/json" },
@@ -170,7 +173,7 @@ describe("Image", () => {
       model: OpenAI.configure({ apiKey: "test", baseURL: "https://api.openai.test/v1" }).image("future-model"),
       prompt: "Combine these images",
       images: [ImageInput.url("https://example.test/source.png"), ImageInput.file("file_123")],
-      mask: ImageInput.file("file_mask"),
+      options: { mask: ImageInput.file("file_mask") },
       http: { body: { future_option: true } },
     }).pipe(
       Effect.provide(
@@ -301,12 +304,6 @@ describe("Image", () => {
   it.effect("rejects unsupported provider inputs before sending", () =>
     Effect.gen(function* () {
       const cases = [
-        Image.generate({
-          model: XAI.configure({ apiKey: "test" }).image("model"),
-          prompt: "edit",
-          images: [ImageInput.url("https://example.test/image.png")],
-          mask: ImageInput.url("https://example.test/mask.png"),
-        }),
         Image.generate({
           model: Google.configure({ apiKey: "test" }).image("model"),
           prompt: "edit",

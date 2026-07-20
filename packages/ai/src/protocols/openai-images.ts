@@ -1,6 +1,13 @@
 import { Effect, Encoding, Schema } from "effect"
 import { Headers, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
-import { ImageModel, GeneratedImage, ImageResponse, type ImageRequestFor, type ImageRoute } from "../image"
+import {
+  ImageModel,
+  GeneratedImage,
+  ImageResponse,
+  type ImageInput,
+  type ImageRequestFor,
+  type ImageRoute,
+} from "../image"
 import { Auth, type Definition as AuthDefinition } from "../route/auth"
 import {
   InvalidProviderOutputReason,
@@ -22,6 +29,7 @@ export const EDIT_PATH = "/images/edits"
 export type OpenAIImageString<Known extends string> = Known | (string & {})
 
 export type OpenAIImageOptions = {
+  readonly mask?: ImageInput
   readonly n?: number
   readonly size?: OpenAIImageString<
     "auto" | "256x256" | "512x512" | "1024x1024" | "1536x1024" | "1024x1536" | "1792x1024" | "1024x1792"
@@ -66,9 +74,9 @@ export interface ModelInput {
   readonly http?: HttpOptions
 }
 
-const nativeOptions = (options: Record<string, unknown> | undefined) => {
+const nativeOptions = (options: OpenAIImageOptions | undefined) => {
   if (!options) return undefined
-  const { outputFormat, outputCompression, ...native } = options
+  const { mask: _, outputFormat, outputCompression, ...native } = options
   return {
     output_format: outputFormat,
     output_compression: outputCompression,
@@ -94,7 +102,8 @@ export const model = (input: ModelInput) => {
   const route: ImageRoute<OpenAIImageOptions> = {
     id: ADAPTER,
     generate: Effect.fn("OpenAIImages.generate")(function* (request: ImageRequestFor<OpenAIImageOptions>, execute) {
-      if (request.mask !== undefined && (request.images?.length ?? 0) === 0)
+      const mask = request.options?.mask
+      if (mask !== undefined && (request.images?.length ?? 0) === 0)
         return yield* ImageInputs.invalid(ADAPTER, "An OpenAI image mask requires at least one input image")
       const http = mergeHttpOptions(request.model.http, request.http)
       const sourceImages = request.images ?? []
@@ -104,17 +113,17 @@ export const model = (input: ModelInput) => {
         return Effect.succeed(undefined)
       })
       const multipartMask =
-        request.mask === undefined
+        mask === undefined
           ? undefined
-          : request.mask.type === "bytes"
-            ? { data: request.mask.data, mediaType: request.mask.mediaType }
-            : request.mask.type === "url"
-              ? yield* ImageInputs.decodeDataUrl(request.mask.url, ADAPTER)
+          : mask.type === "bytes"
+            ? { data: mask.data, mediaType: mask.mediaType }
+            : mask.type === "url"
+              ? yield* ImageInputs.decodeDataUrl(mask.url, ADAPTER)
               : undefined
       const useMultipart =
         sourceImages.length > 0 &&
         multipartImages.every((image) => image !== undefined) &&
-        (request.mask === undefined || multipartMask !== undefined)
+        (mask === undefined || multipartMask !== undefined)
       const path = sourceImages.length === 0 ? PATH : EDIT_PATH
       const url = applyQuery(`${(input.baseURL ?? DEFAULT_BASE_URL).replace(/\/$/, "")}${path}`, http?.query)
 
@@ -153,7 +162,6 @@ export const model = (input: ModelInput) => {
       })
       if (references.some((image) => image === undefined))
         return yield* ImageInputs.invalid(ADAPTER, "OpenAI Images accepts image URLs, data URLs, bytes, and file IDs")
-      const mask = request.mask
       const maskReference =
         mask === undefined
           ? undefined
@@ -164,7 +172,7 @@ export const model = (input: ModelInput) => {
               : mask.type === "file-id"
                 ? { file_id: mask.id }
                 : undefined
-      if (request.mask !== undefined && maskReference === undefined)
+      if (mask !== undefined && maskReference === undefined)
         return yield* ImageInputs.invalid(ADAPTER, "OpenAI Images accepts masks as URLs, data URLs, bytes, or file IDs")
       const requestBody = mergeJsonRecords(
         {

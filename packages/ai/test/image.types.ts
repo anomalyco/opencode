@@ -67,8 +67,13 @@ Image.generate({
   model: openai,
   prompt: "A lighthouse",
   images: [ImageInput.url("https://example.com/source.png"), ImageInput.file("file_123")],
-  mask: ImageInput.bytes(Uint8Array.from([1]), "image/png"),
-  options: { quality: "hd", outputFormat: "webp", size: "2048x2048", future_option: true },
+  options: {
+    mask: ImageInput.bytes(Uint8Array.from([1]), "image/png"),
+    quality: "hd",
+    outputFormat: "webp",
+    size: "2048x2048",
+    future_option: true,
+  },
 })
 Image.generate({ model: openai, prompt: "A lighthouse", options: { quality: "future-quality", size: "256x256" } })
 Image.generate({ model: openai, prompt: "A lighthouse", options: { size: "1792x1024" } })
@@ -152,3 +157,5 @@ Image.generate({ model: openai, prompt: "A lighthouse", aspectRatio: "16:9" })
 Image.generate({ model: openai, prompt: "A lighthouse", seed: 1 })
 // @ts-expect-error Image requests do not expose metadata.
 Image.generate({ model: openai, prompt: "A lighthouse", metadata: { trace: true } })
+// @ts-expect-error Masks are provider options, not a common image request field.
+Image.generate({ model: openai, prompt: "A lighthouse", mask: ImageInput.url("https://example.com/mask.png") })

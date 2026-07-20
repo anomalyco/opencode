@@ -93,7 +93,6 @@ export class ImageRequest extends Schema.Class<ImageRequest>("Image.Request")({
   model: ImageModelSchema,
   prompt: Schema.String,
   images: Schema.optional(Schema.Array(ImageInputSchema)),
-  mask: Schema.optional(ImageInputSchema),
   options: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
   http: Schema.optional(HttpOptions),
 }) {

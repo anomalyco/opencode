@@ -75,8 +75,8 @@ export const model = (input: ModelInput) => {
   const route: ImageRoute<ZAIImageOptions> = {
     id: ADAPTER,
     generate: Effect.fn("ZAIImages.generate")(function* (request: ImageRequestFor<ZAIImageOptions>, execute) {
-      if ((request.images?.length ?? 0) > 0 || request.mask !== undefined)
-        return yield* ImageInputs.invalid(ADAPTER, "Z.ai hosted image generation does not support image or mask inputs")
+      if ((request.images?.length ?? 0) > 0)
+        return yield* ImageInputs.invalid(ADAPTER, "Z.ai hosted image generation does not support image inputs")
       const http = mergeHttpOptions(request.model.http, request.http)
       const requestBody = mergeJsonRecords(
         { model: request.model.id, prompt: request.prompt },

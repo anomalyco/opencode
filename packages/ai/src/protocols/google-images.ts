@@ -142,8 +142,6 @@ export const model = (input: ModelInput) => {
   const route: ImageRoute<GoogleImageOptions> = {
     id: ADAPTER,
     generate: Effect.fn("GoogleImages.generate")(function* (request: ImageRequestFor<GoogleImageOptions>, execute) {
-      if (request.mask !== undefined)
-        return yield* ImageInputs.invalid(ADAPTER, "Google image generation does not support bitmap mask inputs")
       const imageParts = yield* Effect.forEach(request.images ?? [], googleImagePart)
       const http = mergeHttpOptions(request.model.http, request.http)
       const requestBody = mergeJsonRecords(
