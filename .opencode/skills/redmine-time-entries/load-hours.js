@@ -1,16 +1,15 @@
 #!/usr/bin/env node
 /**
- * Redmine Time Entry Loader
+ * Cargador de Horas Redmine
  * 
- * Automates loading work hours into OneAdmin Redmine via Playwright.
+ * Automatiza la carga de horas en OneAdmin Redmine via Playwright.
  * 
- * First run: node setup.js    (configure credentials + settings)
- * Load hours: node load-hours.js --date 2026-07-13 --comment "Built installer"
+ * Uso: bun load-hours.js --date YYYY-MM-DD --comment "Resumen del trabajo"
  * 
- * Config hierarchy:
- *   1. CLI flags (--date, --comment, --detail, etc.)
- *   2. config.json (project, issue, activity defaults)
- *   3. .credentials (username, password)
+ * Jerarquía de configuración:
+ *   1. Flags CLI (--date, --comment, --detail, etc.)
+ *   2. config.json (proyecto, tarea, actividad por defecto)
+ *   3. .credentials (usuario, contraseña)
  */
 
 import { chromium } from 'playwright';
@@ -52,60 +51,60 @@ function promptCredentials() {
 
   console.log('');
   console.log('╔══════════════════════════════════════════════════════════════╗');
-  console.log('║        🔒 FIRST-TIME CREDENTIAL SETUP                     ║');
+  console.log('║        🔒 CONFIGURACIÓN DE CREDENCIALES                    ║');
   console.log('╚══════════════════════════════════════════════════════════════╝');
   console.log('');
-  console.log('  Your credentials will NEVER be sent to the cloud, logged,');
-  console.log('  or visible in any AI context. They stay in a local file');
-  console.log('  that only this script can read.');
+  console.log('  Tus credenciales NUNCA se envían a la nube, se loguean,');
+  console.log('  ni se ven en ningún contexto de IA. Quedan en un archivo');
+  console.log('  local que solo este script puede leer.');
   console.log('');
 
   if (isTTY) {
-    // ── Interactive terminal ──
-    console.log('  Opening editor to set REDMINE_USER and REDMINE_PASS...');
+    // ── Terminal interactivo ──
+    console.log('  Abriendo editor para configurar REDMINE_USER y REDMINE_PASS...');
     const exampleFile = join(__dirname, '.credentials.example');
     writeFileSync(exampleFile,
-      '# Redmine credentials — ONE-TIME SETUP\n' +
-      '# Edit the values below, save, and close the editor.\n' +
-      'REDMINE_USER=your_username\n' +
-      'REDMINE_PASS=your_password\n' +
+      '# Credenciales Redmine — CONFIGURACIÓN ÚNICA\n' +
+      '# Editá los valores abajo, guardá y cerrá el editor.\n' +
+      'REDMINE_USER=tu_usuario\n' +
+      'REDMINE_PASS=tu_contraseña\n' +
       '\n',
       'utf8'
     );
     const editor = pickEditor();
     const result = spawnSync(editor, [exampleFile], { stdio: 'inherit', encoding: 'utf8' });
     if (result.error || result.status !== 0) {
-      console.error(`❌ Editor "${editor}" exited with error.`);
-      console.error('   Create .credentials manually from .credentials.example');
+      console.error(`❌ El editor "${editor}" falló.`);
+      console.error('   Creá .credentials manualmente desde .credentials.example');
       process.exit(1);
     }
     const raw = readFileSync(exampleFile, 'utf8');
     const user = raw.match(/REDMINE_USER=(.+)/)?.[1]?.trim();
     const pass = raw.match(/REDMINE_PASS=(.+)/)?.[1]?.trim();
-    if (!user || !pass || user === 'your_username' || pass === 'your_password') {
-      console.error('❌ You must set both REDMINE_USER and REDMINE_PASS in the file.');
+    if (!user || !pass || user === 'tu_usuario' || pass === 'tu_contraseña') {
+      console.error('❌ Tenés que completar REDMINE_USER y REDMINE_PASS en el archivo.');
       process.exit(1);
     }
     writeFileSync(credFile, `REDMINE_USER=${user}\nREDMINE_PASS=${pass}\n`, 'utf8');
-    console.log('  ✅ Credentials saved locally in .credentials');
+    console.log('  ✅ Credenciales guardadas en .credentials');
     return { user, pass };
   } else {
-    // ── Non-interactive (AI context, CI, etc.) ──
+    // ── No interactivo (AI context, CI, etc.) ──
     writeFileSync(credFile,
-      '# Redmine credentials — ONE-TIME SETUP\n' +
-      '# Edit the values below with your real credentials.\n' +
-      'REDMINE_USER=your_username\n' +
-      'REDMINE_PASS=your_password\n' +
+      '# Credenciales Redmine — CONFIGURACIÓN ÚNICA\n' +
+      '# Editá los valores abajo con tus credenciales reales.\n' +
+      'REDMINE_USER=tu_usuario\n' +
+      'REDMINE_PASS=tu_contraseña\n' +
       '\n',
       'utf8'
     );
     console.log('');
     console.log('  ═══════════════════════════════════════════════════════════');
-    console.log('  🔒 Edit this file with your Redmine credentials:');
+    console.log('  🔒 Editá este archivo con tus credenciales de Redmine:');
     console.log(`     ${credFile}`);
     console.log('');
-    console.log('  Replace "your_username" and "your_password" with your real');
-    console.log('  Redmine login. Then run this script again.');
+    console.log('  Reemplazá "tu_usuario" y "tu_contraseña" con tus datos');
+    console.log('  reales de Redmine. Después ejecutá este script de nuevo.');
     console.log('  ═══════════════════════════════════════════════════════════');
     console.log('');
     process.exit(0);
@@ -126,14 +125,14 @@ function loadCredentials() {
     if (user && pass) return { user, pass };
   } catch {}
 
-  // 3. First-time setup: prompt via editor (safe — no credentials pass through chat)
+  // 3. Primera vez: pedir credenciales (seguro — no pasan por el chat)
   console.log('');
   console.log('  ─────────────────────────────────────────────────────');
-  console.log('  🔒 No credentials found. Let\'s set them up securely.');
+  console.log('  🔒 No hay credenciales. Vamos a configurarlas.');
   console.log('  ─────────────────────────────────────────────────────');
-  console.log('  Your credentials will NEVER pass through this chat');
-  console.log('  or any AI context. They stay in a local file on your');
-  console.log('  machine, readable only by this script.\n');
+  console.log('  Tus credenciales NUNCA pasan por este chat');
+  console.log('  ni por ningún contexto de IA. Quedan en un archivo');
+  console.log('  local en tu máquina, solo este script puede leerlo.\n');
   return promptCredentials();
 }
 
@@ -186,7 +185,7 @@ function buildEntries() {
         skipAutoDetail: !!e.skipAutoDetail,
       }));
     } catch (err) {
-      console.error(`❌ Invalid --entries JSON: ${err.message}`);
+      console.error(`❌ JSON de --entries inválido: ${err.message}`);
       process.exit(1);
     }
   }
@@ -221,7 +220,42 @@ const ACTIVITIES = [
 ];
 
 // ═══════════════════════════════════════════════════════════════
-// AUTO-DETAIL — Engram + git log when no --detail is provided
+// AUTO-COMMENT — genera resumen descriptivo cuando no hay --comment
+// ═══════════════════════════════════════════════════════════════
+
+function generateAutoComment(date) {
+  const gitLog = queryGitLog(date);
+  const commits = gitLog ? gitLog.split('\n').filter(l => l.trim()).map(l => l.replace(/^\s*-\s*/, '').replace(/\s+\([a-f0-9]+\)$/, '')) : [];
+  if (commits.length === 0) return '';
+
+  // Agrupar commits por área/scope
+  const scopes = {};
+  for (const c of commits) {
+    // Formato conventional commit: "tipo(scope): mensaje"
+    const match = c.match(/^(\w+)(?:\(([^)]+)\))?:\s*(.+)/);
+    if (match) {
+      const scope = match[2] || 'general';
+      const msg = match[3].charAt(0).toUpperCase() + match[3].slice(1);
+      if (!scopes[scope]) scopes[scope] = [];
+      scopes[scope].push(msg);
+    } else {
+      if (!scopes['general']) scopes['general'] = [];
+      scopes['general'].push(c);
+    }
+  }
+
+  // Armar resumen corto: "skills: multi-project, credential flow | installer: tests, docs"
+  const parts = Object.entries(scopes).map(([scope, msgs]) => {
+    const top = msgs.slice(0, 2).join(', ');
+    const extra = msgs.length > 2 ? ` +${msgs.length - 2} más` : '';
+    return `${scope}: ${top}${extra}`;
+  });
+
+  return parts.join(' | ');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// AUTO-DETAIL — Engram + git log cuando no se pasa --detail
 // ═══════════════════════════════════════════════════════════════
 
 const _require = createRequire(import.meta.url);
@@ -279,7 +313,7 @@ function formatAutoDetail(date) {
 
   // Git log section
   if (gitLog) {
-    parts.push('## Commits', gitLog);
+    parts.push('## Commits del día', gitLog);
   }
 
   // Engram section
@@ -352,87 +386,98 @@ async function main() {
   if (cliFlags.issue) CONFIG.issueId = cliFlags.issue;
   if (cliFlags.headless === 'false') CONFIG.headless = false;
 
-  // Show help if no entries
+  // Mostrar ayuda si no hay entradas
   if (ENTRIES.length === 0) {
     console.log('');
     console.log('╔══════════════════════════════════════════════════╗');
-    console.log('║         Redmine Time Entry Loader               ║');
+    console.log('║       Cargador de Horas Redmine                 ║');
     console.log('╚══════════════════════════════════════════════════╝');
     console.log('');
-    console.log(`  Config:  ${CONFIG.project} / Task #${CONFIG.issueId}`);
-    console.log(`  User:    ${CREDENTIALS.user}`);
+    console.log(`  Config:  ${CONFIG.project} / Tarea #${CONFIG.issueId}`);
+    console.log(`  Usuario: ${CREDENTIALS.user}`);
     console.log('');
-    console.log('  Usage:');
-    console.log('    node load-hours.js --date YYYY-MM-DD --comment "What I did"');
-    console.log('    node load-hours.js --entries \'[{...}]\'  (multi-project)');
+    console.log('  Uso:');
+    console.log('    bun load-hours.js --date YYYY-MM-DD --comment "Resumen"');
+    console.log('    bun load-hours.js --entries \'[{...}]\'  (multi-proyecto)');
     console.log('');
-    console.log('  Options:');
-    console.log('    --date       Date(s) comma-separated (required for simple mode)');
-    console.log('    --entries    JSON array of entry objects (multi-project mode)');
-    console.log('    --comment    Short summary');
-    console.log('    --detail     Extended technical info (auto-generated from Engram + git log if omitted)');
-    console.log('    --no-detail  Skip auto-detail generation');
-    console.log('    --hours      Hours (default: 8)');
-    console.log('    --activity   Activity type (default: Desarrollo)');
-    console.log('    --issue      Issue ID override (comma-sep for multi-entry)');
-    console.log('    --project    Project slug override (comma-sep for multi-entry)');
+    console.log('  Opciones:');
+    console.log('    --date       Fecha(s) separadas por coma (modo simple)');
+    console.log('    --entries    JSON array de entradas (modo multi-proyecto)');
+    console.log('    --comment    Resumen corto (se auto-genera si se omite)');
+    console.log('    --detail     Info técnica extendida (auto-generada)');
+    console.log('    --no-detail  Saltear auto-generación de detalle');
+    console.log('    --hours      Horas (default: 8)');
+    console.log('    --activity   Tipo de actividad (default: Desarrollo)');
+    console.log('    --issue      ID de tarea (coma-sep para multi-entry)');
+    console.log('    --project    Slug del proyecto (coma-sep para multi-entry)');
     console.log('');
-    console.log('  Activities:');
+    console.log('  Actividades:');
     console.log(`    ${ACTIVITIES.join(', ')}`);
     console.log('');
-    console.log('  Entry fields (--entries JSON):');
-    console.log('    date (required), hours, activity, comment, detail,');
+    console.log('  Campos de entrada (--entries JSON):');
+    console.log('    date (obligatorio), hours, activity, comment, detail,');
     console.log('    project, issue, skipAutoDetail');
     console.log('');
-    console.log('  Examples:');
-    console.log('    node load-hours.js --date 2026-07-13 --comment "Built installer"');
-    console.log('    node load-hours.js --date 2026-07-14,2026-07-15 --comment "Dev work"');
-    console.log('    node load-hours.js --date 2026-07-13 --no-detail --comment "Dev work"');
+    console.log('  Ejemplos:');
+    console.log('    bun load-hours.js --date 2026-07-13 --comment "Correcciones instalador"');
+    console.log('    bun load-hours.js --date 2026-07-14,2026-07-15');
+    console.log('    bun load-hours.js --date 2026-07-13 --no-detail');
     console.log('');
-    console.log('    # Multi-project in same day:');
-    console.log('    node load-hours.js --entries \'[');
-    console.log('      {"date":"2026-07-17","hours":4,"project":"proj-a","issue":"123","activity":"Desarrollo","comment":"Feature X"},');
-    console.log('      {"date":"2026-07-17","hours":2,"project":"proj-b","issue":"456","activity":"Testing","comment":"Bug fixes"}');
+    console.log('    # Multi-proyecto mismo día:');
+    console.log('    bun load-hours.js --entries \'[');
+    console.log('      {"date":"2026-07-17","hours":4,"project":"proj-a","issue":"123","activity":"Desarrollo","comment":"Nueva funcionalidad"},');
+    console.log('      {"date":"2026-07-17","hours":2,"project":"proj-b","issue":"456","activity":"Testing","comment":"Corrección de bugs"}');
     console.log('    ]\'');
     console.log('');
     process.exit(0);
   }
 
-  // Validate activities
+  // Validar actividades
   for (const entry of ENTRIES) {
     const act = entry.activity || CONFIG.defaultActivity;
     if (!ACTIVITIES.includes(act)) {
-      console.error(`❌ Invalid activity "${act}". Valid: ${ACTIVITIES.join(', ')}`);
+      console.error(`❌ Actividad inválida "${act}". Válidas: ${ACTIVITIES.join(', ')}`);
       process.exit(1);
+    }
+  }
+
+  // ── Auto-comment (resumen descriptivo) ──
+  for (const entry of ENTRIES) {
+    if (!entry.comment) {
+      const autoComment = generateAutoComment(entry.date);
+      if (autoComment) {
+        entry.comment = autoComment;
+        console.log(`  💬 Comment auto-generado: ${autoComment.substring(0, 80)}${autoComment.length > 80 ? '…' : ''}`);
+      }
     }
   }
 
   // ── Banner ──
   console.log('');
   console.log('╔══════════════════════════════════════════════════╗');
-  console.log('║         Loading time entries                    ║');
+  console.log('║         Cargando horas                          ║');
   console.log('╚══════════════════════════════════════════════════╝');
   const uniqueProjects = [...new Set(ENTRIES.map(e => e.project || CONFIG.project))];
   if (uniqueProjects.length === 1) {
-    console.log(`  📁 Project:  ${uniqueProjects[0]}`);
+    console.log(`  📁 Proyecto: ${uniqueProjects[0]}`);
   } else {
-    console.log(`  📁 Projects: ${uniqueProjects.join(', ')}`);
+    console.log(`  📁 Proyectos: ${uniqueProjects.join(', ')}`);
   }
-  console.log(`  📋 Issue:    Task #${CONFIG.issueId}: ${CONFIG.issueLabel}`);
-  console.log(`  🏷️  Activity: ${CONFIG.defaultActivity}`);
-  console.log(`  ⏰ Hours:    ${CONFIG.defaultHours}/day`);
-  console.log(`  📊 Entries:  ${ENTRIES.length}`);
+  console.log(`  📋 Tarea:    #${CONFIG.issueId}: ${CONFIG.issueLabel}`);
+  console.log(`  🏷️  Activ.:   ${CONFIG.defaultActivity}`);
+  console.log(`  ⏰ Horas:    ${CONFIG.defaultHours}/día`);
+  console.log(`  📊 Entradas: ${ENTRIES.length}`);
   console.log('');
 
-  // ── Auto-detail from Engram + git log ──
+  // ── Auto-detail desde Engram + git log ──
   for (const entry of ENTRIES) {
     if (!entry.skipAutoDetail && !entry.detail) {
       const autoDetail = formatAutoDetail(entry.date);
       if (autoDetail) {
         entry.detail = autoDetail;
-        console.log(`  📋 Auto-detail generated for ${entry.date}`);
+        console.log(`  📋 Detalle auto-generado para ${entry.date}`);
       } else {
-        console.log(`  ⚠️  No commits or Engram observations for ${entry.date}, detail empty`);
+        console.log(`  ⚠️  Sin commits ni observaciones Engram para ${entry.date}, detalle vacío`);
       }
     }
   }
@@ -451,7 +496,7 @@ async function main() {
     const page = await context.newPage();
 
     // ── Login ──
-    process.stdout.write('🔐 Logging in...');
+    process.stdout.write('🔐 Iniciando sesión...');
     await page.goto(`${CONFIG.baseUrl}/login`, { waitUntil: 'networkidle' });
     await page.locator('#username').fill(CREDENTIALS.user);
     await page.locator('#password').fill(CREDENTIALS.pass);
@@ -460,12 +505,12 @@ async function main() {
 
     if (page.url().includes('/login')) {
       console.log(' ❌');
-      console.error('  Login failed — run "node setup.js" to update credentials');
+      console.error('  Error de inicio de sesión — actualizá credenciales en .credentials');
       process.exit(1);
     }
     console.log(' ✅');
 
-    // ── Load entries ──
+    // ── Cargar entradas ──
     let success = 0;
     let failed = 0;
 
@@ -482,8 +527,8 @@ async function main() {
 
       const projectLabel = project !== CONFIG.project ? `[${project}] ` : '';
       console.log(`\n  📝 [${i + 1}/${ENTRIES.length}] ${projectLabel}${date} — ${hours}h ${activity}`);
-      if (comment) console.log(`     Comment: ${comment.length > 70 ? comment.substring(0, 70) + '...' : comment}`);
-      if (detail) console.log(`     Detail:  ${detail.length > 70 ? detail.substring(0, 70) + '...' : detail}`);
+      if (comment) console.log(`     Comentario: ${comment.length > 80 ? comment.substring(0, 80) + '...' : comment}`);
+      if (detail) console.log(`     Detalle:   ${detail.length > 80 ? detail.substring(0, 80) + '...' : detail}`);
 
       try {
         await page.goto(`${CONFIG.baseUrl}/projects/${project}/time_entries/new`, {
@@ -535,12 +580,12 @@ async function main() {
         await submitBtn.click();
         await page.waitForLoadState('networkidle', { timeout: 10000 });
 
-        if (!page.url().includes('/time_entries/new')) {
-          console.log('     ✅ Created');
+          if (!page.url().includes('/time_entries/new')) {
+          console.log('     ✅ Creada');
           success++;
         } else {
           const error = await page.locator('.flash error, #errorExplanation').textContent().catch(() => null);
-          console.log(`     ❌ Failed: ${error || 'unknown error'}`);
+          console.log(`     ❌ Falló: ${error || 'error desconocido'}`);
           failed++;
         }
       } catch (err) {
@@ -549,14 +594,14 @@ async function main() {
       }
     }
 
-    // ── Summary ──
+    // ── Resumen ──
     console.log('\n' + '═'.repeat(50));
-    console.log(`  ✅ Created: ${success}  ❌ Failed: ${failed}  📊 Total: ${ENTRIES.length}`);
+    console.log(`  ✅ Creadas: ${success}  ❌ Fallaron: ${failed}  📊 Total: ${ENTRIES.length}`);
     console.log('═'.repeat(50));
 
-    // ── Verify ──
+    // ── Verificar ──
     if (success > 0) {
-      console.log('\n  🔍 Verifying...');
+      console.log('\n  🔍 Verificando...');
       const verifiedProjects = new Set();
       for (const entry of ENTRIES) {
         const project = entry.project || CONFIG.project;
@@ -565,7 +610,7 @@ async function main() {
 
         const entryDates = ENTRIES.filter(e => (e.project || CONFIG.project) === project).map(e => e.date);
         const sortedDates = [...new Set(entryDates)].sort();
-        console.log(`     📁 ${project}: checking ${sortedDates[0]} → ${sortedDates[sortedDates.length - 1]}`);
+        console.log(`     📁 ${project}: verificando ${sortedDates[0]} → ${sortedDates[sortedDates.length - 1]}`);
 
         await page.goto(
           `${CONFIG.baseUrl}/projects/${project}/time_entries?set_filter=1&sort=spent_on:desc&f[]=spent_on&op[spent_on]=between&v[spent_on][]=${sortedDates[0]}&v[spent_on][]=${sortedDates[sortedDates.length - 1]}&f[]=user_id&op[user_id]==&v[user_id][]=me`,
@@ -574,18 +619,18 @@ async function main() {
 
         for (const e of ENTRIES.filter(en => (en.project || CONFIG.project) === project)) {
           const row = await page.locator(`tr:has(td:text-is("${e.date}"))`).count();
-          console.log(`       ${e.date}: ${row > 0 ? '✅' : '⚠️  created (check list)'}`);
+          console.log(`       ${e.date}: ${row > 0 ? '✅' : '⚠️  creada (revisar listado)'}`);
         }
       }
     }
 
   } finally {
     await browser.close();
-    console.log('\n  🏁 Done.\n');
+    console.log('\n  🏁 Terminado.\n');
   }
 }
 
 main().catch(err => {
-  console.error('\n❌ Fatal:', err.message);
+  console.error('\n❌ Error fatal:', err.message);
   process.exit(1);
 });

@@ -1,160 +1,157 @@
 ---
 name: redmine-time-entries
-description: "Trigger: cargar horas, time entries, registrar horas, cargar tiempo, redmine horas, oneinfo horas. Automate Redmine time entry creation via Playwright using Engram session data."
+description: "Trigger: cargar horas, registrar horas, cargar tiempo, redmine horas, oneinfo horas. Automatiza la carga de horas en Redmine via Playwright usando datos de Engram."
 license: Apache-2.0
 metadata:
   author: "servidor"
-  version: "2.2"
+  version: "2.3"
 ---
 
-## Activation Contract
+## Activación
 
-Load work hours into OneAdmin Redmine (https://oneadmin.oneinfoconsulting.com) by reading what was done from Engram memories and automating the time entry form via Playwright.
+Carga horas de trabajo en OneAdmin Redmine (https://oneadmin.oneinfoconsulting.com) leyendo lo trabajado desde memorias Engram y automatizando el formulario de carga via Playwright.
 
-Use when: user says "cargar horas", "load hours", "register time entries", "cargar tiempo", or asks to log work done into Redmine.
+Usar cuando el usuario diga: "cargar horas", "registrar horas", "cargar tiempo", "cargar horas redmine", o pida registrar trabajo en Redmine.
 
-## 🔒 Credential Security (READ THIS FIRST)
+## 🔒 Seguridad de Credenciales
 
-**Credentials NEVER pass through the chat, bash commands, or AI context.**
+**Las credenciales NUNCA pasan por el chat, comandos bash, o contexto de IA.**
 
 ```
 ❌ NUNCA:   echo $REDMINE_PASS | ...     (bash expone la clave en ps aux)
-❌ NUNCA:   mostrar .credentials en el chat  (AI context → logs de sesión)
+❌ NUNCA:   mostrar .credentials en el chat
 ❌ NUNCA:   pedir usuario/contraseña en el chat
 ✅ SIEMPRE: load-hours.js lee .credentials INTERNAMENTE
 ✅ SIEMPRE: si no hay creds, crea template y pide editarlo
 ```
 
-### Cómo el usuario configura sus credenciales (sin exponerlas — 4 MÉTODOS SEGUROS)
+### Cómo configurar las credenciales (4 métodos seguros)
 
-**Opción A — opencode-cred (RECOMENDADO, multi-skill):**
+**Opción A — opencode-cred (RECOMENDADO):**
 ```bash
 opencode-cred set redmine
 ```
 Abre formulario en el navegador (localhost). Las credenciales se guardan en `~/.config/opencode/credentials/redmine.cred`.
 
 **Opción B — Editor gráfico (recomendado para AI context):**
-Cuando `load-hours.js` detecta que no hay TTY interactivo (caso típico cuando lo ejecuta el orquestrador):
+Cuando `load-hours.js` detecta que no hay terminal interactivo:
 1. Escribe el template `.credentials` con placeholders
-2. Imprime la ruta del archivo
-3. El orquestrador abre un editor gráfico (gedit/kate) para que el usuario complete
-4. El usuario guarda y cierra
-5. El orquestrador vuelve a ejecutar el script (ya encuentra las creds)
+2. Muestra la ruta del archivo y termina
+3. El orquestrador abre editor gráfico (gedit/kate)
+4. El usuario completa y guarda
+5. Se vuelve a ejecutar el script (ya encuentra las credenciales)
 
 **Opción C — Variables de entorno (sin archivo en disco):**
 ```bash
 export REDMINE_USER=tu_usuario
 export REDMINE_PASS=tu_contraseña
 ```
-`load-hours.js` las lee automáticamente. Ideal para CI o sesiones temporales.
+`load-hours.js` las lee automáticamente.
 
-**Opción D — Editor local (terminal):**
-Ejecutá `load-hours.js` directamente en una terminal. Si detecta TTY, abre `gedit`, `kate`, `nano`, o `$EDITOR` con el template.
+**Opción D — Terminal local:**
+Ejecutá `load-hours.js` directo en una terminal. Si hay TTY, abre `gedit`, `kate`, `nano`, o `$EDITOR`.
 
 **¿Por qué es seguro?**
 - Las credenciales **NUNCA** pasan por el contexto de la IA
 - **NUNCA** se muestran en el chat, logs, o bash history
-- Los archivos quedan en tu máquina (permisos 600)
+- Archivos locales con permisos 600
 - `opencode-cred` usa formulario en localhost, nada sale de tu PC
 
-### Onboarding guard (AUTOMÁTICO — orquestrador)
+### Onboarding automático (orquestrador)
 
-Cuando el orquestrador necesita cargar horas y detecta que no hay credenciales:
+Cuando el orquestrador necesita cargar horas y no hay credenciales:
 
-1. Ejecuta `load-hours.js` → el script detecta que no hay `.credentials`
-2. Como no hay TTY, escribe el template `.credentials` y **sale con código 0** mostrando la ruta
-3. El orquestrador **lee la ruta** del mensaje y abre la herramienta disponible en orden:
-   - Si hay Playwright y DISPLAY → formulario HTML local en el navegador
-   - Si hay gedit/kate → editor gráfico con el template
-   - Si hay DISPLAY → `xdg-open` el archivo
+1. Ejecuta `load-hours.js` → detecta que no hay `.credentials`
+2. Como no hay TTY, escribe el template y **sale** mostrando la ruta
+3. El orquestrador abre la herramienta disponible:
+   - gedit/kate → editor gráfico con el template
+   - xdg-open → editor por defecto
 4. El usuario completa usuario/contraseña y guarda
-5. El orquestrador vuelve a ejecutar `load-hours.js` → ya encuentra las credenciales
+5. El orquestrador vuelve a ejecutar `load-hours.js` → ya funciona
 
-**Una sola vez**: una vez guardado `.credentials`, el script lo reusa automáticamente.
-El orquestrador NO debe preguntar credenciales en el chat, NO debe leer `.credentials` él mismo.
+**Una sola vez**: guardado `.credentials`, se reusa siempre.
+El orquestrador NO debe preguntar credenciales en el chat ni leer `.credentials`.
 
-## Quick Usage (standalone script)
+## Uso rápido
 
 ```bash
-# Single day — auto-detail from Engram + git log
-bun load-hours.js --date 2026-07-13 --comment "Built installer"
+# Un día — comment y detail auto-generados
+bun load-hours.js --date 2026-07-17
 
-# Multiple days — auto-detail for each date
-bun load-hours.js --date 2026-07-14,2026-07-15,2026-07-16 --comment "Dev work"
+# Varios días
+bun load-hours.js --date 2026-07-14,2026-07-15,2026-07-16
 
-# With custom detail (skip auto-generation)
-bun load-hours.js --date 2026-07-13 --hours 4 --activity Análisis \
-  --comment "Review plan" --detail "Refs: abc123, def456"
+# Con datos explícitos (sin auto-generación)
+bun load-hours.js --date 2026-07-17 --hours 4 --activity "Análisis" \
+  --comment "Revisión de plan" --detail "Refs: abc123, def456"
 
-# Skip auto-detail entirely
-bun load-hours.js --date 2026-07-13 --no-detail --comment "Quick fix"
+# Sin auto-detail
+bun load-hours.js --date 2026-07-17 --no-detail
 
-# Multi-project in the same day (--entries JSON)
+# Multi-proyecto mismo día (--entries JSON)
 bun load-hours.js --entries '[
-  {"date":"2026-07-17","hours":4,"project":"proj-a","issue":"123","activity":"Desarrollo","comment":"Feature X"},
-  {"date":"2026-07-17","hours":2,"project":"proj-b","issue":"456","activity":"Testing","comment":"Bug fixes"},
-  {"date":"2026-07-16","hours":6,"project":"proj-a","activity":"Desarrollo","comment":"More work"}
+  {"date":"2026-07-17","hours":4,"project":"proy-a","issue":"123","activity":"Desarrollo","comment":"Nueva funcionalidad"},
+  {"date":"2026-07-17","hours":2,"project":"proy-b","issue":"456","activity":"Testing","comment":"Corrección de bugs"}
 ]'
 
-# Multi-project via comma-separated --project and --issue (same dates, different projects)
+# Multi-proyecto con flags separados por coma
 bun load-hours.js --date 2026-07-17,2026-07-17 \
-  --project proj-a,proj-b --issue 123,456 \
-  --activity Desarrollo,Testing --hours 4,2 \
-  --comment "Feature X,Bug fixes"
+  --project proy-a,proy-b --issue 123,456 \
+  --activity Desarrollo,Testing --hours 4,2
 ```
 
-> **Note**: Auto-detail requires `bun` (queries Engram SQLite DB + git log).
-> Falls back to `node` gracefully but without auto-detail.
-> Use `--no-detail` to skip the auto-query even when running with `bun`.
+> **Nota**: El auto-detail requiere `bun` (consulta SQLite de Engram + git log).
+> Sin `bun` funciona pero sin auto-generación de detalle.
 
-## Hard Rules
+## Reglas estrictas
 
-- 🔒 **NEVER touch `.credentials` from AI context.** `load-hours.js` lo lee internamente. El AI no debe leerlo, mostrarlo, ni pasarlo como argumento.
-- 🔒 **NEVER pass credentials via bash.** No `echo $PASS |`, no `--password=...` en línea de comandos. El script usa el archivo o env vars.
-- 🔒 **Onboarding guard es AUTOMÁTICO.** `load-hours.js` abre el editor y te guía. El orquestrador NO debe preguntar credenciales en el chat, NO debe leer `.credentials`, NO debe ejecutar `setup.js` manualmente.
-- ALWAYS ask ALL of these before starting (mandatory preflight):
-  1. **¿Cuántos proyectos?** Single project or multiple? If multiple, collect entries per project.
-  2. **Entradas por proyecto** (for each, repeat as needed):
-     - **Proyecto**: Which Redmine project slug?
-     - **Tarea/Issue**: Which task to log against (optional, project-specific)?
-     - **Rango de fechas**: Which dates to load for this project?
-     - **Actividad**: Activity type?
-     - **Horas por día**: Hours per day?
-  3. **Modo de confirmación**: `auto` / `confirm-all` / `confirm-each`
-- Use "Crear y continuar" for batch entries, "Crear" for last entry.
-- Load ONLY work done in the specified project(s).
-- Soportar múltiples proyectos en el mismo día. Ejemplo: 4 horas en Proyecto A (Desarrollo) y 4 horas en Proyecto B (Testing), misma fecha.
-- Cuando hay múltiples proyectos, pasar `--entries` JSON al script en lugar de `--date`.
+- 🔒 **NUNCA tocar `.credentials` desde el contexto de IA.** `load-hours.js` lo lee internamente. El AI no debe leerlo, mostrarlo, ni pasarlo como argumento.
+- 🔒 **NUNCA pasar credenciales por bash.** No `echo $PASS |`, no `--password=...`. El script usa archivo o env vars.
+- 🔒 **Onboarding guard AUTOMÁTICO.** `load-hours.js` maneja la config sola. El orquestrador NO pregunta credenciales, NO lee `.credentials`, NO ejecuta `setup.js`.
+- **Siempre preguntar antes de empezar** (preflight obligatorio):
+  1. **¿Cuántos proyectos?** ¿Uno solo o varios? Si son varios, recolectar entradas por proyecto.
+  2. **Entradas por proyecto** (repetir por cada uno):
+     - **Proyecto**: slug del proyecto en Redmine
+     - **Tarea/Issue**: número de tarea (opcional, específica del proyecto)
+     - **Fechas**: qué días cargar para este proyecto
+     - **Actividad**: tipo (Desarrollo, Testing, etc.)
+     - **Horas por día**
+  3. **Modo de confirmación**: `auto` / `confirmar-todo` / `confirmar-cada-una`
+- Usar "Crear y continuar" para entradas en lote, "Crear" para la última.
+- **Cargar SOLO** trabajo hecho en el/los proyecto(s) especificados.
+- **Soportar múltiples proyectos en el mismo día.** Ej: 4h en Proyecto A (Desarrollo) y 4h en Proyecto B (Testing), misma fecha.
+- Con múltiples proyectos, pasar `--entries` JSON en vez de `--date`.
+- El **comment se auto-genera** a partir de los commits del día si no se especifica. Arma un resumen descriptivo como `"skills: multi-project, credential flow | installer: tests, docs"`.
 
-## Config Files
+## Archivos de configuración
 
-| File | Purpose | Shareable? |
-|------|---------|------------|
-| `config.json` | Project, issue, activity defaults | Yes (no secrets) |
-| `.credentials` | Username + password | NO (per-user) |
+| Archivo | Propósito | Compartible? |
+|---------|-----------|-------------|
+| `config.json` | Proyecto, tarea, actividad por defecto | Sí (sin secretos) |
+| `.credentials` | Usuario + contraseña | NO (por usuario) |
 
-## CLI Flags
+## Flags CLI
 
-| Flag | Description | Default |
+| Flag | Descripción | Default |
 |------|-------------|---------|
-| `--date` | Date(s) comma-separated (simple mode) | — |
-| `--entries` | JSON array of entry objects (multi-project mode) | — |
-| `--comment` | Short summary | auto |
-| `--detail` | Extended technical info (auto-generated from Engram + git log if omitted) | auto |
-| `--no-detail` | Skip auto-detail generation | false |
-| `--hours` | Hours | from config |
-| `--activity` | Activity type | from config |
-| `--issue` | Issue ID override (comma-sep for multi-date) | from config |
-| `--project` | Project slug override (comma-sep for multi-date) | from config |
-| `--headless` | Show browser (false) | true |
+| `--date` | Fecha(s) separadas por coma (modo simple) | — |
+| `--entries` | JSON array de entradas (modo multi-proyecto) | — |
+| `--comment` | Resumen corto | auto-generado |
+| `--detail` | Info técnica extendida (auto-generada) | auto |
+| `--no-detail` | Saltar auto-generación de detalle | false |
+| `--hours` | Horas | del config |
+| `--activity` | Tipo de actividad | del config |
+| `--issue` | ID de tarea (coma-sep para multi-entry) | del config |
+| `--project` | Slug del proyecto (coma-sep para multi-entry) | del config |
+| `--headless` | Mostrar navegador (false) | true |
 
-## Activities
+## Actividades
 
 Análisis, Diseño, Desarrollo, Seguimiento, Testing, Prueba de Concepto, Reunion, Despliegue+Soporte QA, Despliegue+Soporte PROD, Gestión
 
-## Error Handling
+## Manejo de errores
 
-- Login fails → re-run `node setup.js`
-- Form error → log, skip entry, continue
-- Browser crash → close and retry
-- Always closes browser in finally block
+- Login falla → actualizar credenciales en `.credentials`
+- Error en formulario → loguear, saltar entrada, continuar
+- Navegador crashea → cerrar y reintentar
+- Siempre cierra el navegador en finally
