@@ -205,11 +205,15 @@ export const SidebarLinear = (props: { directory: Accessor<string> }): JSX.Eleme
   const syncType = syncHist.syncType
 
   // When the management panel opens, sync the selectors from the current
-  // binding and lazy-load the team list (if not already loaded).
+  // binding and eager-load both the team list and the project list for
+  // the bound team. Kobalte's Select refuses to open when `options` is
+  // empty (see select-base.tsx `open()`), so lists must be populated
+  // before the user can interact with the dropdown.
   createEffect(() => {
     if (!state.mgmtShown) return
     syncFromBinding()
     if (state.teams.length === 0) void loadTeams()
+    if (state.selectedTeam && state.projects.length === 0) void loadProjects(state.selectedTeam.id)
   })
 
   const handlePull = async () => {
