@@ -36,12 +36,33 @@ const program = Effect.gen(function* () {
   const response = yield* Image.generate({
     model: OpenAI.configure({ apiKey: process.env.OPENAI_API_KEY }).image("gpt-image-2"),
     prompt: "A robot tending a rooftop garden",
-    count: 2,
-    size: { width: 1024, height: 1024 },
-    providerOptions: { openai: { quality: "high", outputFormat: "webp" } },
+    options: {
+      n: 2,
+      size: "1024x1024",
+      quality: "high", // inferred from the OpenAI image model
+      outputFormat: "webp",
+      future_option: true, // unknown native options pass through unchanged
+    },
   })
 
   return response.images // GeneratedImage[] with owned bytes or a provider URL
+})
+```
+
+Provider option defaults can be configured once and overridden per request. Raw `http.body` fields have final
+precedence over both:
+
+```ts
+const model = OpenAI.configure({
+  apiKey: process.env.OPENAI_API_KEY,
+  image: { options: { quality: "medium", outputFormat: "png" } },
+}).image("gpt-image-2")
+
+Image.generate({
+  model,
+  prompt: "A glass observatory above the clouds",
+  options: { quality: "high" },
+  http: { body: { quality: "low" } },
 })
 ```
 

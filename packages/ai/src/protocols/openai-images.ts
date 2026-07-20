@@ -4,7 +4,7 @@ import {
   ImageModel,
   GeneratedImage,
   ImageResponse,
-  type ImageRequest,
+  type ImageRequestFor,
   type ImageModelDefaults,
   type ImageRoute,
 } from "../image"
@@ -17,26 +17,20 @@ const ADAPTER = "openai-images"
 export const DEFAULT_BASE_URL = "https://api.openai.com/v1"
 export const PATH = "/images/generations"
 
-export interface OpenAIImageOptions {
+export type OpenAIImageOptions = {
+  readonly n?: number
+  readonly size?: "auto" | "1024x1024" | "1536x1024" | "1024x1536"
   readonly quality?: "auto" | "low" | "medium" | "high"
   readonly background?: "auto" | "opaque" | "transparent"
   readonly moderation?: "auto" | "low"
   readonly outputFormat?: "png" | "jpeg" | "webp"
   readonly outputCompression?: number
-}
+} & Record<string, unknown>
 
-const OpenAIImageBody = Schema.Struct({
-  model: Schema.String,
-  prompt: Schema.String,
-  n: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
-  size: Schema.optional(Schema.String),
-  quality: Schema.optional(Schema.Literals(["auto", "low", "medium", "high"])),
-  background: Schema.optional(Schema.Literals(["auto", "opaque", "transparent"])),
-  moderation: Schema.optional(Schema.Literals(["auto", "low"])),
-  output_format: Schema.optional(Schema.Literals(["png", "jpeg", "webp"])),
-  output_compression: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 100 }))),
-})
-export type OpenAIImageBody = Schema.Schema.Type<typeof OpenAIImageBody>
+export type OpenAIImageBody = Record<string, unknown> & {
+  readonly model: string
+  readonly prompt: string
+}
 
 const OpenAIImageResponse = Schema.Struct({
   data: Schema.Array(
@@ -63,26 +57,16 @@ export interface ModelInput {
   readonly auth: AuthDefinition
   readonly baseURL?: string
   readonly headers?: Record<string, string>
-  readonly defaults?: ImageModelDefaults
+  readonly defaults?: ImageModelDefaults<OpenAIImageOptions>
 }
 
-const providerOptions = (request: ImageRequest): OpenAIImageOptions => ({
-  ...request.model.defaults?.providerOptions?.openai,
-  ...request.providerOptions?.openai,
-})
-
-const body = (request: ImageRequest): OpenAIImageBody => {
-  const options = providerOptions(request)
+const nativeOptions = (options: Record<string, unknown> | undefined) => {
+  if (!options) return undefined
+  const { outputFormat, outputCompression, ...native } = options
   return {
-    model: request.model.id,
-    prompt: request.prompt,
-    n: request.count,
-    size: request.size === undefined ? undefined : `${request.size.width}x${request.size.height}`,
-    quality: options.quality,
-    background: options.background,
-    moderation: options.moderation,
-    output_format: options.outputFormat,
-    output_compression: options.outputCompression,
+    ...native,
+    output_format: outputFormat,
+    output_compression: outputCompression,
   }
 }
 
@@ -100,44 +84,18 @@ const applyQuery = (url: string, query: Record<string, string> | undefined) => {
   return next.toString()
 }
 
-const PROTOCOL_BODY_FIELDS = new Set([
-  "model",
-  "prompt",
-  "n",
-  "size",
-  "quality",
-  "background",
-  "moderation",
-  "output_format",
-  "output_compression",
-])
-
-const bodyWithOverlay = Effect.fn("OpenAIImages.bodyWithOverlay")(function* (
-  imageBody: OpenAIImageBody,
-  overlay: Record<string, unknown> | undefined,
-) {
-  if (!overlay) return imageBody
-  const reserved = Object.keys(overlay).filter((key) => PROTOCOL_BODY_FIELDS.has(key))
-  if (reserved.length > 0)
-    return yield* ProviderShared.invalidRequest(
-      `http.body cannot overlay protocol-owned field(s): ${reserved.join(", ")}`,
-    )
-  return mergeJsonRecords(imageBody, overlay) ?? imageBody
-})
-
 export const model = (input: ModelInput) => {
-  const route: ImageRoute = {
+  const route: ImageRoute<OpenAIImageOptions> = {
     id: ADAPTER,
-    generate: Effect.fn("OpenAIImages.generate")(function* (request: ImageRequest, execute) {
-      if (request.aspectRatio !== undefined)
-        return yield* ProviderShared.invalidRequest("OpenAI Images does not support the common aspectRatio option")
-      if (request.seed !== undefined)
-        return yield* ProviderShared.invalidRequest("OpenAI Images does not support the common seed option")
-
-      const requestBody = yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(OpenAIImageBody))(body(request))
+    generate: Effect.fn("OpenAIImages.generate")(function* (request: ImageRequestFor<OpenAIImageOptions>, execute) {
       const http = mergeHttpOptions(request.model.defaults?.http, request.http)
-      const overlaidBody = yield* bodyWithOverlay(requestBody, http?.body)
-      const text = ProviderShared.encodeJson(overlaidBody)
+      const requestBody = mergeJsonRecords(
+        { model: request.model.id, prompt: request.prompt },
+        nativeOptions(request.model.defaults?.options),
+        nativeOptions(request.options),
+        http?.body,
+      ) as OpenAIImageBody
+      const text = ProviderShared.encodeJson(requestBody)
       const url = applyQuery(`${(input.baseURL ?? DEFAULT_BASE_URL).replace(/\/$/, "")}${PATH}`, http?.query)
       const headers = yield* Auth.toEffect(input.auth)({
         request,
@@ -158,7 +116,8 @@ export const model = (input: ModelInput) => {
       const decoded = yield* Schema.decodeUnknownEffect(OpenAIImageResponse)(payload).pipe(
         Effect.mapError(() => invalidOutput("OpenAI Images returned an invalid response")),
       )
-      const format = decoded.output_format ?? providerOptions(request).outputFormat ?? "png"
+      const format =
+        decoded.output_format ?? (typeof requestBody.output_format === "string" ? requestBody.output_format : "png")
       const images = yield* Effect.forEach(decoded.data, (item, index) => {
         if (item.b64_json)
           return Effect.fromResult(Encoding.decodeBase64(item.b64_json)).pipe(
@@ -200,7 +159,7 @@ export const model = (input: ModelInput) => {
       })
     }),
   }
-  return ImageModel.make({ id: input.id, provider: "openai", route, defaults: input.defaults })
+  return ImageModel.make<OpenAIImageOptions>({ id: input.id, provider: "openai", route, defaults: input.defaults })
 }
 
 export const OpenAIImages = {

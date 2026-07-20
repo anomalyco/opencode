@@ -14,16 +14,13 @@ describe("Image", () => {
           apiKey: "test",
           baseURL: "https://api.openai.test/v1",
           queryParams: { "api-version": "v1" },
+          image: { options: { quality: "medium", outputFormat: "png", background: "opaque" } },
           http: { body: { deployment: "test" }, headers: { "x-default": "yes" } },
         }).image("gpt-image-2"),
         prompt: "A robot tending a rooftop garden",
-        count: 2,
-        size: { width: 1024, height: 1024 },
-        providerOptions: {
-          openai: { quality: "high", outputFormat: "webp" },
-        },
+        options: { n: 2, size: "1024x1024", quality: "high", outputFormat: "jpeg", future_option: true },
         http: {
-          body: { request_metadata: "value" },
+          body: { output_format: "webp", request_metadata: "value" },
           headers: { "x-request": "yes" },
           query: { trace: "1" },
         },
@@ -51,7 +48,9 @@ describe("Image", () => {
                   n: 2,
                   size: "1024x1024",
                   quality: "high",
+                  background: "opaque",
                   output_format: "webp",
+                  future_option: true,
                   deployment: "test",
                   request_metadata: "value",
                 })
@@ -66,28 +65,6 @@ describe("Image", () => {
               }),
             ),
           ),
-        ),
-      ),
-    ),
-  )
-
-  it.effect("rejects invalid common and OpenAI image options locally", () =>
-    Image.generate({
-      model: OpenAI.configure({ apiKey: "test", baseURL: "https://api.openai.test/v1" }).image("gpt-image-2"),
-      prompt: "A robot tending a rooftop garden",
-      count: -1,
-      size: { width: -1, height: 0.5 },
-      providerOptions: { openai: { outputCompression: 101 } },
-    }).pipe(
-      Effect.flip,
-      Effect.tap((error) =>
-        Effect.sync(() => {
-          expect(error.reason._tag).toBe("InvalidRequest")
-        }),
-      ),
-      Effect.provide(
-        ImageClient.layer.pipe(
-          Layer.provide(dynamicResponse(() => Effect.die("invalid request should not reach the provider"))),
         ),
       ),
     ),

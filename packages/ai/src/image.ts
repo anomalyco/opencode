@@ -1,27 +1,33 @@
 import { Effect, Schema } from "effect"
 import { HttpOptions, InvalidRequestReason, LLMError, ModelID, ProviderID, ProviderMetadata, Usage } from "./schema"
-import { ImageClient, type Execute as ImageExecute } from "./image-client"
+import { ImageClient, Service, type Execute as ImageExecute } from "./image-client"
 
-export interface ImageRoute {
+export interface ImageRoute<Options extends ImageOptions = ImageOptions> {
   readonly id: string
-  readonly generate: (request: ImageRequest, execute: ImageExecute) => Effect.Effect<ImageResponse, LLMError>
+  readonly generate: (
+    request: ImageRequestFor<Options>,
+    execute: ImageExecute,
+  ) => Effect.Effect<ImageResponse, LLMError>
 }
 
-export class ImageModel {
+export type ImageOptions = Record<string, unknown>
+
+export class ImageModel<Options extends ImageOptions = ImageOptions> {
+  declare protected readonly _Options: Options
   readonly id: ModelID
   readonly provider: ProviderID
-  readonly route: ImageRoute
-  readonly defaults?: ImageModelDefaults
+  readonly route: ImageRoute<Options>
+  readonly defaults?: ImageModelDefaults<Options>
 
-  constructor(input: ImageModel.Input) {
+  constructor(input: ImageModel.Input<Options>) {
     this.id = input.id
     this.provider = input.provider
     this.route = input.route
     this.defaults = input.defaults
   }
 
-  static make(input: ImageModel.MakeInput) {
-    return new ImageModel({
+  static make<Options extends ImageOptions = ImageOptions>(input: ImageModel.MakeInput<Options>) {
+    return new ImageModel<Options>({
       id: ModelID.make(input.id),
       provider: ProviderID.make(input.provider),
       route: input.route,
@@ -31,21 +37,22 @@ export class ImageModel {
 }
 
 export namespace ImageModel {
-  export interface Input {
+  export interface Input<Options extends ImageOptions = ImageOptions> {
     readonly id: ModelID
     readonly provider: ProviderID
-    readonly route: ImageRoute
-    readonly defaults?: ImageModelDefaults
+    readonly route: ImageRoute<Options>
+    readonly defaults?: ImageModelDefaults<Options>
   }
 
-  export interface MakeInput extends Omit<Input, "id" | "provider"> {
+  export interface MakeInput<Options extends ImageOptions = ImageOptions>
+    extends Omit<Input<Options>, "id" | "provider"> {
     readonly id: string | ModelID
     readonly provider: string | ProviderID
   }
 }
 
-export interface ImageModelDefaults {
-  readonly providerOptions?: Record<string, Record<string, unknown>>
+export interface ImageModelDefaults<Options extends ImageOptions = ImageOptions> {
+  readonly options?: Options
   readonly http?: HttpOptions
 }
 
@@ -53,25 +60,27 @@ export const ImageModelSchema = Schema.declare((value): value is ImageModel => v
   expected: "Image.Model",
 })
 
-export const ImageSize = Schema.Struct({
-  width: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
-  height: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
-}).annotate({ identifier: "Image.Size" })
-export type ImageSize = Schema.Schema.Type<typeof ImageSize>
-
 export class ImageRequest extends Schema.Class<ImageRequest>("Image.Request")({
   model: ImageModelSchema,
   prompt: Schema.String,
-  count: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
-  size: Schema.optional(ImageSize),
-  aspectRatio: Schema.optional(Schema.String),
-  seed: Schema.optional(Schema.Number),
-  providerOptions: Schema.optional(Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Unknown))),
+  options: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
   http: Schema.optional(HttpOptions),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 }) {}
 
-export type ImageRequestInput = Omit<ConstructorParameters<typeof ImageRequest>[0], "http"> & {
+export type ImageRequestFor<Options extends ImageOptions = ImageOptions> = Omit<ImageRequest, "model" | "options"> & {
+  readonly model: ImageModel<Options>
+  readonly options?: Options
+}
+
+export type ImageModelOptions<Model extends ImageModel> = Model extends ImageModel<infer Options> ? Options : never
+
+export type ImageRequestInput<Model extends ImageModel = ImageModel> = Omit<
+  ConstructorParameters<typeof ImageRequest>[0],
+  "model" | "options" | "http"
+> & {
+  readonly model: Model
+  readonly options?: ImageModelOptions<NoInfer<Model>>
   readonly http?: HttpOptions.Input
 }
 
@@ -91,7 +100,9 @@ export class ImageResponse extends Schema.Class<ImageResponse>("Image.Response")
   }
 }
 
-export const request = (input: ImageRequest | ImageRequestInput) => {
+export function request<Model extends ImageModel>(input: ImageRequestInput<Model>): ImageRequest
+export function request(input: ImageRequest): ImageRequest
+export function request(input: ImageRequest | ImageRequestInput) {
   if (input instanceof ImageRequest) return input
   return new ImageRequest({
     ...input,
@@ -99,9 +110,13 @@ export const request = (input: ImageRequest | ImageRequestInput) => {
   })
 }
 
-export const generate = (input: ImageRequest | ImageRequestInput) =>
-  Effect.try({
-    try: () => request(input),
+export function generate<Model extends ImageModel>(
+  input: ImageRequestInput<Model>,
+): Effect.Effect<ImageResponse, LLMError, Service>
+export function generate(input: ImageRequest): Effect.Effect<ImageResponse, LLMError, Service>
+export function generate(input: ImageRequest | ImageRequestInput) {
+  return Effect.try({
+    try: () => (input instanceof ImageRequest ? input : request(input)),
     catch: (error) =>
       new LLMError({
         module: "Image",
@@ -109,6 +124,7 @@ export const generate = (input: ImageRequest | ImageRequestInput) =>
         reason: new InvalidRequestReason({ message: error instanceof Error ? error.message : String(error) }),
       }),
   }).pipe(Effect.flatMap(ImageClient.generate))
+}
 
 export const Image = {
   request,

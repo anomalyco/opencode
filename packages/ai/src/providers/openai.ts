@@ -26,7 +26,7 @@ export type Config = RouteDefaultsInput &
   }
 
 export interface ImageConfig {
-  readonly providerOptions?: OpenAIImageOptions
+  readonly options?: OpenAIImageOptions
 }
 
 export interface ImageGenerationOptions {
@@ -100,8 +100,7 @@ export const configure = (input: Config = {}) => {
       baseURL: input.baseURL,
       headers: input.headers,
       defaults: {
-        providerOptions:
-          input.image?.providerOptions === undefined ? undefined : { openai: { ...input.image.providerOptions } },
+        options: input.image?.options,
         http: mergeHttpOptions(
           input.http === undefined ? undefined : HttpOptions.make(input.http),
           input.queryParams === undefined ? undefined : new HttpOptions({ query: input.queryParams }),
