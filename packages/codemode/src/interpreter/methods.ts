@@ -25,7 +25,6 @@ import {
   isCodeModeValue,
 } from "../values.js"
 import { dateSetterArgumentCount, invokeDateMethod, invokeDateStatic } from "../stdlib/date.js"
-import { invokeJsonMethod } from "../stdlib/json.js"
 import { invokeMathMethod } from "../stdlib/math.js"
 import { invokeNumberMethod, invokeNumberStatic } from "../stdlib/number.js"
 import { invokeObjectMethod } from "../stdlib/object.js"
@@ -168,7 +167,7 @@ export const invokeGlobalMethod = (ref: GlobalMethodReference, args: Array<unkno
   if (ref.namespace === "Map" || ref.namespace === "Set" || ref.namespace === "URLSearchParams") {
     throw new InterpreterRuntimeError(`${ref.namespace}.${ref.name} is not available in CodeMode.`, node)
   }
-  return invokeJsonMethod(ref.name, args, node)
+  throw new InterpreterRuntimeError(`JSON.${ref.name} requires the effectful JSON dispatcher.`, node)
 }
 
 const requireDataArgument = (name: string, index: number, arg: unknown, node: AstNode): unknown => {

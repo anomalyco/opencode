@@ -285,21 +285,21 @@ describe("still-rejected callables get the wrap hint", () => {
     expect(diagnostic.message).toContain("wrap it in an arrow function")
   })
 
-  test("callable JSON.stringify replacers are rejected, never silently ignored", async () => {
-    expect((await error(`return JSON.stringify({ a: 1 }, Math.abs)`)).message).toContain(
-      "JSON.stringify replacers are not supported",
-    )
+  test("JSON callbacks use the unified callback gate", async () => {
+    expect(
+      await value(`return JSON.stringify({ a: -1 }, (key, item) => typeof item === "number" ? Math.abs(item) : item)`),
+    ).toBe('{"a":1}')
     expect((await toolError(`return JSON.stringify({ a: 1 }, tools.host.echo)`)).message).toContain(
-      "JSON.stringify replacers are not supported",
+      "wrap it in an arrow function",
+    )
+    expect((await toolError(`return JSON.parse('{"a":1}', tools.host.echo)`)).message).toContain(
+      "wrap it in an arrow function",
     )
   })
 
-  test("callable JSON.parse revivers are rejected, never silently ignored", async () => {
-    expect((await error(`return JSON.parse('{"a":1}', (key, v) => 99)`)).message).toContain(
-      "JSON.parse revivers are not supported",
-    )
+  test("non-callable JSON callback arguments are ignored", async () => {
     expect(await value(`return JSON.parse('{"a":1}', undefined)`)).toEqual({ a: 1 })
-    // A non-callable reviver is silently ignored, matching JS's IsCallable check.
     expect(await value(`return JSON.parse('{"a":1}', 42)`)).toEqual({ a: 1 })
+    expect(await value(`return JSON.stringify({ a: 1 }, 42)`)).toBe('{"a":1}')
   })
 })

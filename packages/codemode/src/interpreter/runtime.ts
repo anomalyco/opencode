@@ -43,6 +43,7 @@ import {
   invokeGroupBy,
   invokeIntrinsic,
 } from "./methods.js"
+import { invokeJsonMethod } from "../stdlib/json.js"
 import {
   constructPromise,
   invokePromiseInstanceMethod,
@@ -1607,6 +1608,7 @@ export class Interpreter<R> {
       }
       if (callable instanceof GlobalMethodReference) {
         if (callable.namespace === "console") return self.invokeConsole(callable.name, args, node)
+        if (callable.namespace === "JSON") return yield* invokeJsonMethod(self.runner, callable.name, args, node)
         if (callable.namespace === "Object" && args[0] instanceof ToolReference) {
           return self.invokeObjectMethodOnTools(callable.name, args[0], node)
         }

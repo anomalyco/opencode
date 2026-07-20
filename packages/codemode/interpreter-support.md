@@ -247,10 +247,15 @@ ultimate source of truth.
 
 - [x] `JSON.parse` and `JSON.stringify` for supported data objects; the blocked data-key gap listed above still applies.
 - [x] Numeric/string indentation for `JSON.stringify`.
+- [x] `JSON.parse` reviver callbacks, including postorder traversal, deletion through `undefined`, and root replacement.
+      Revivers receive `(key, value)` but no `this` holder because CodeMode functions intentionally have no `this`.
+- [x] `JSON.stringify` function and array replacers. Function replacers receive `(key, value)` in preorder, including
+      the root, but no `this` holder. Array replacers preserve requested property order, deduplicate names, coerce
+      number primitives, and ignore non-string/non-number entries. Primitive wrapper entries remain unsupported.
+- [x] JSON callbacks retain the blocked-key boundary: parsed or stringified data containing `__proto__`, `constructor`,
+      or `prototype` is rejected before callback traversal.
 - [x] Captured `console.log`, `console.info`, `console.debug`, `console.warn`, and `console.error`.
 - [x] Captured `console.dir` and `console.table`.
-- [ ] `JSON.parse` reviver callbacks.
-- [ ] `JSON.stringify` function/array replacers.
 
 ## Date
 
