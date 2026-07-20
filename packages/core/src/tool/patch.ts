@@ -99,7 +99,10 @@ export const Plugin = {
                   if (!input.patchText) return yield* new ToolFailure({ message: "patchText is required" })
                   const hunks = yield* Effect.try({
                     try: () => Patch.parse(input.patchText),
-                    catch: (cause) => new ToolFailure({ message: `patch verification failed: ${String(cause)}` }),
+                    catch: (cause) =>
+                      new ToolFailure({
+                        message: `patch verification failed: ${cause instanceof Error ? cause.message : String(cause)}`,
+                      }),
                   })
                   if (hunks.length === 0) {
                     const normalized = input.patchText.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim()
@@ -153,15 +156,27 @@ export const Plugin = {
                         prepared.push({ ...hunk, target, before: original.replace(/^\uFEFF/, ""), after: "" })
                         return
                       }
-                      const stats = yield* fs
-                        .stat(target.canonical)
-                        .pipe(Effect.catch(() => Effect.succeed(undefined)))
-                      if (!stats || stats.type === "Directory") {
+                      const stats = yield* fs.stat(target.canonical).pipe(
+                        Effect.mapError(
+                          (error) =>
+                            new ToolFailure({
+                              message: `patch verification failed: Failed to read file to update ${target.canonical}: ${error instanceof Error ? error.message : String(error)}`,
+                            }),
+                        ),
+                      )
+                      if (stats.type === "Directory") {
                         return yield* new ToolFailure({
-                          message: `patch verification failed: Failed to read file to update: ${target.canonical}`,
+                          message: `patch verification failed: Failed to read file to update ${target.canonical}: path is a directory`,
                         })
                       }
-                      const content = yield* fs.readFile(target.canonical)
+                      const content = yield* fs.readFile(target.canonical).pipe(
+                        Effect.mapError(
+                          (error) =>
+                            new ToolFailure({
+                              message: `patch verification failed: Failed to read file to update ${target.canonical}: ${error instanceof Error ? error.message : String(error)}`,
+                            }),
+                        ),
+                      )
                       const original = new TextDecoder("utf-8", { ignoreBOM: true }).decode(content)
                       const before = original.replace(/^\uFEFF/, "")
                       const update = yield* Effect.try({

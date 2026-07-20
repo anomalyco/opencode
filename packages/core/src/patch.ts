@@ -26,7 +26,8 @@ export function parse(patchText: string): ReadonlyArray<Hunk> {
   const lines = stripHeredoc(patchText.trim()).split("\n")
   const begin = lines.findIndex((line) => line.trim() === "*** Begin Patch")
   const end = lines.findIndex((line) => line.trim() === "*** End Patch")
-  if (begin === -1 || end === -1 || begin >= end) throw new Error("Invalid patch format: missing Begin/End markers")
+  if (begin === -1) throw new Error("The first line of the patch must be '*** Begin Patch'")
+  if (end === -1 || begin >= end) throw new Error("The last line of the patch must be '*** End Patch'")
 
   const hunks: Hunk[] = []
   let index = begin + 1
@@ -71,6 +72,14 @@ export function parse(patchText: string): ReadonlyArray<Hunk> {
       continue
     }
     index++
+  }
+  if (hunks.length === 0) {
+    const invalid = lines.findIndex((line, index) => index > begin && index < end && line.trim() !== "")
+    if (invalid !== -1) {
+      throw new Error(
+        `Invalid hunk at line ${invalid + 1}: '${lines[invalid]!.trim()}' is not a valid hunk header. Valid hunk headers: '*** Add File: {path}', '*** Delete File: {path}', '*** Update File: {path}'`,
+      )
+    }
   }
   return hunks
 }

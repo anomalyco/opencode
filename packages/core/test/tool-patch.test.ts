@@ -433,9 +433,13 @@ describe("PatchTool", () => {
   it.live("rejects invalid patch format", () =>
     withTempTool((_directory, registry) =>
       Effect.gen(function* () {
-        expect(yield* executeTool(registry, call("invalid patch"))).toMatchObject({
+        expect(yield* executeTool(registry, call("invalid patch"))).toEqual({
           type: "error",
-          value: expect.stringContaining("patch verification failed"),
+          value: "patch verification failed: The first line of the patch must be '*** Begin Patch'",
+        })
+        expect(yield* executeTool(registry, call("*** Begin Patch\n*** Add File: foo\n+hello"))).toEqual({
+          type: "error",
+          value: "patch verification failed: The last line of the patch must be '*** End Patch'",
         })
       }),
     ),
@@ -460,7 +464,11 @@ describe("PatchTool", () => {
             registry,
             call("*** Begin Patch\n*** Frobnicate File: foo\n*** End Patch"),
           ),
-        ).toEqual({ type: "error", value: "patch verification failed: no hunks found" })
+        ).toEqual({
+          type: "error",
+          value:
+            "patch verification failed: Invalid hunk at line 2: '*** Frobnicate File: foo' is not a valid hunk header. Valid hunk headers: '*** Add File: {path}', '*** Delete File: {path}', '*** Update File: {path}'",
+        })
       }),
     ),
   )
@@ -623,7 +631,7 @@ describe("PatchTool", () => {
   )
 
   it.live("rejects an update when the target file is missing", () =>
-    withTempTool((_directory, registry) =>
+    withTempTool((directory, registry) =>
       Effect.gen(function* () {
         expect(
           yield* executeTool(
@@ -632,7 +640,23 @@ describe("PatchTool", () => {
           ),
         ).toMatchObject({
           type: "error",
-          value: expect.stringContaining("patch verification failed: Failed to read file to update"),
+          value: expect.stringContaining(
+            `patch verification failed: Failed to read file to update ${path.join(directory, "missing.txt")}: `,
+          ),
+        })
+      }),
+    ),
+  )
+
+  it.live("identifies a directory used as an update target", () =>
+    withTempTool((directory, registry) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(() => fs.mkdir(path.join(directory, "nested")))
+        expect(
+          yield* executeTool(registry, call("*** Begin Patch\n*** Update File: nested\n@@\n-old\n+new\n*** End Patch")),
+        ).toEqual({
+          type: "error",
+          value: `patch verification failed: Failed to read file to update ${path.join(directory, "nested")}: path is a directory`,
         })
       }),
     ),

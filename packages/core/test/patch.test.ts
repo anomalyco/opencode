@@ -34,8 +34,13 @@ describe("Patch", () => {
     ])
   })
 
-  test("rejects invalid patch format", () => {
-    expect(() => Patch.parse("This is not a valid patch")).toThrow("Invalid patch format")
+  test("identifies the missing patch boundary", () => {
+    expect(() => Patch.parse("This is not a valid patch")).toThrow(
+      "The first line of the patch must be '*** Begin Patch'",
+    )
+    expect(() => Patch.parse("*** Begin Patch\n*** Add File: add.txt\n+added")).toThrow(
+      "The last line of the patch must be '*** End Patch'",
+    )
   })
 
   test("strips a heredoc wrapper", () => {
