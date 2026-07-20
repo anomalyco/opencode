@@ -61,7 +61,7 @@ export function transitionPromptInputV2(
   event: PromptInputV2InteractionEvent,
   persisted: PromptInputV2PersistedState,
 ): PromptInputV2Transition {
-  if (event.type === "input.changed") return inputChanged(state, event.value, event.persist !== false)
+  if (event.type === "input.changed") return inputChanged(state, event.value, event.persist !== false, persisted.cursor)
   if (event.type === "commands.open") return openCommands(state, persisted)
   if (event.type === "context.open") return openContext(state, persisted)
   if (event.type === "popover.query") return queryChanged(state, event.value)
@@ -81,14 +81,19 @@ export function transitionPromptInputV2(
   return changed({ ...state, focus: "external" })
 }
 
-function inputChanged(state: PromptInputV2InteractionState, value: string, persist: boolean): PromptInputV2Transition {
+function inputChanged(
+  state: PromptInputV2InteractionState,
+  value: string,
+  persist: boolean,
+  cursor: number | undefined,
+): PromptInputV2Transition {
   const setText: PromptInputV2InteractionCommand[] = persist ? [{ type: "draft.setText", value }] : []
   if (state.mode === "normal" && value === "!") {
     return changed({ ...state, mode: "shell", popover: { type: "closed" }, focus: "editor" }, [
       { type: "draft.setText", value: "" },
     ])
   }
-  const context = value.match(/(?:^|\s)@([^\s@]*)$/)
+  const context = value.slice(0, cursor ?? value.length).match(/(?:^|\s)@([^\s@]*)$/)
   if (context) {
     const query = context[1] ?? ""
     return changed({ ...state, popover: { type: "context", query }, focus: "editor" }, [
