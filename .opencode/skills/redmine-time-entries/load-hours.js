@@ -228,27 +228,56 @@ function generateAutoComment(date) {
   const commits = gitLog ? gitLog.split('\n').filter(l => l.trim()).map(l => l.replace(/^\s*-\s*/, '').replace(/\s+\([a-f0-9]+\)$/, '')) : [];
   if (commits.length === 0) return '';
 
-  // Agrupar commits por área/scope
+  // Etiquetas de tipos en español
+  const typeLabels = {
+    feat: 'implementación', fix: 'corrección', docs: 'documentación',
+    test: 'tests', refactor: 'refactor', chore: 'mantenimiento',
+  };
+
+  // Traducción de scopes
+  const scopeLabels = {
+    installer: 'Instalador', install: 'Instalador', skills: 'Skills',
+    core: 'Núcleo', tui: 'Interfaz', cli: 'CLI', sdk: 'SDK',
+    config: 'Configuración', app: 'App', desktop: 'Escritorio',
+    plugin: 'Plugin', opencode: 'OpenCode', general: 'General',
+  };
+
+  // Agrupar por scope y contar tipos
   const scopes = {};
   for (const c of commits) {
-    // Formato conventional commit: "tipo(scope): mensaje"
     const match = c.match(/^(\w+)(?:\(([^)]+)\))?:\s*(.+)/);
     if (match) {
-      const scope = match[2] || 'general';
-      const msg = match[3].charAt(0).toUpperCase() + match[3].slice(1);
+      const scope = scopeLabels[match[2]] || match[2] || 'General';
+      const type = typeLabels[match[1]] || match[1];
       if (!scopes[scope]) scopes[scope] = [];
-      scopes[scope].push(msg);
+      scopes[scope].push(type);
     } else {
-      if (!scopes['general']) scopes['general'] = [];
-      scopes['general'].push(c);
+      if (!scopes['General']) scopes['General'] = [];
+      scopes['General'].push('cambio');
     }
   }
 
-  // Armar resumen corto: "skills: multi-project, credential flow | installer: tests, docs"
-  const parts = Object.entries(scopes).map(([scope, msgs]) => {
-    const top = msgs.slice(0, 2).join(', ');
-    const extra = msgs.length > 2 ? ` +${msgs.length - 2} más` : '';
-    return `${scope}: ${top}${extra}`;
+  // Armar resumen en español
+  const parts = Object.entries(scopes).map(([scope, types]) => {
+    const total = types.length;
+    // Contar ocurrencias por tipo
+    const counts = {};
+    for (const t of types) counts[t] = (counts[t] || 0) + 1;
+    const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+
+    // Si hay un solo tipo dominante, decir "X cambios de tipo Y"
+    if (sorted.length === 1) {
+      const [t, c] = sorted[0];
+      if (c === 1) return `${scope}: 1 cambio (${t})`;
+      return `${scope}: ${c} cambios (${t})`;
+    }
+
+    // Múltiples tipos: "documentación, tests y correcciones"
+    const labels = sorted.map(([t, c]) => c > 1 ? `${t} (${c})` : t);
+    const desc = labels.length <= 2
+      ? labels.join(' y ')
+      : labels.slice(0, -1).join(', ') + ' y ' + labels[labels.length - 1];
+    return `${scope}: ${desc}`;
   });
 
   return parts.join(' | ');
