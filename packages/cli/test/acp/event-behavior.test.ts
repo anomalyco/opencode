@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import type { AgentSideConnection } from "@agentclientprotocol/sdk"
 import type { SessionMessageInfo } from "@opencode-ai/client/promise"
+import { resolve } from "node:path"
 import { replayMessages, streamTurn, type TurnControl } from "../../src/acp/event"
 import { createSseFixture, durableEvent, ephemeralEvent, withTimeout } from "./sse-fixture"
 
@@ -307,7 +308,7 @@ describe("acp event behavior", () => {
       expect(updates[1]?.update).toMatchObject({
         title: "printf done",
         kind: "execute",
-        locations: [{ path: "/workspace/sub" }],
+        locations: [{ path: resolve("/workspace", "sub") }],
         rawInput: { command: "printf done", workdir: "sub" },
       })
       expect(updates[2]?.update).toMatchObject({
