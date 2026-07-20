@@ -61,9 +61,16 @@ export const invokeRegExpMethod = (
     case "test":
     case "exec": {
       const input = coerceToString(args[0])
-      if (value.regex.global || value.regex.sticky) value.regex.lastIndex = toLength(value.lastIndex)
-      if (name === "test") return value.regex.test(input)
+      const lastIndex = value.lastIndex
+      const stateful = value.regex.global || value.regex.sticky
+      value.regex.lastIndex = toLength(lastIndex)
+      if (name === "test") {
+        const matched = value.regex.test(input)
+        if (!stateful) value.lastIndex = lastIndex
+        return matched
+      }
       const matched = value.regex.exec(input)
+      if (!stateful) value.lastIndex = lastIndex
       return matched === null ? null : matchToValue(matched)
     }
     case "toString":

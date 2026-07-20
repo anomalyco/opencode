@@ -262,6 +262,24 @@ describe("RegExp", () => {
     ).toEqual([{}, 1, 0, null])
   })
 
+  test("non-global exec and test coerce and preserve lastIndex", async () => {
+    expect(
+      await value(`
+        const execPattern = /a/
+        const execIndex = {}
+        execPattern.lastIndex = execIndex
+        const match = execPattern.exec("ba")
+
+        const testPattern = /a/
+        const testIndex = {}
+        testPattern.lastIndex = testIndex
+        const matched = testPattern.test("ba")
+
+        return [match.index, execPattern.lastIndex === execIndex, matched, testPattern.lastIndex === testIndex]
+      `),
+    ).toEqual([1, true, true, true])
+  })
+
   test("an unmatched string pattern returns null", async () => {
     expect(await value(`return "abc".match(/\\d/)`)).toBeNull()
   })
