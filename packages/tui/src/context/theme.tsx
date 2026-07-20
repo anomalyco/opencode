@@ -144,6 +144,9 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     }
 
     onMount(() => {
+      // Desktop PTYs may start before their terminal frontend attaches. These bytes are
+      // replayed on attach, avoiding the terminal capability probe's startup timeout.
+      process.stdout.write("\x1b[?2031h\x1b[?996n")
       void Promise.allSettled([resolveSystemTheme(store.mode), syncCustomThemes()]).finally(() => {
         setStore("ready", true)
       })
@@ -246,6 +249,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     unsubscribeRefresh = themes.subscribeRefresh?.(refresh)
 
     onCleanup(() => {
+      process.stdout.write("\x1b[?2031l")
       renderer.off(CliRenderEvents.THEME_MODE, handle)
       renderer.removeInputHandler(handleThemeNotification)
       unsubscribeRefresh?.()
