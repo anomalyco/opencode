@@ -26,11 +26,20 @@ export function sanitizeSurrogates(content: string) {
   return content.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "\uFFFD")
 }
 
+// Kimi family endpoints are Moonshot's Anthropic-compatible API
+// (api.moonshot.ai/cn, api.kimi.com) and model families (kimi-*, moonshot-*).
+// Detection drives endpoint-specific request shaping, so match provider,
+// model, and endpoint URL alike.
 function isKimiFamily(model: Provider.Model) {
-  const ids = [model.providerID, model.api.id, model.id].map((value) => value?.toLowerCase() ?? "")
-  if (ids.some((id) => id.includes("kimi") || id.includes("moonshot"))) return true
+  const providerID = model.providerID?.toLowerCase() ?? ""
+  if (providerID.includes("kimi") || providerID.includes("moonshot")) return true
+  const apiID = model.api.id?.toLowerCase() ?? ""
+  if (apiID.includes("kimi") || apiID.includes("moonshot")) return true
+  const modelID = model.id?.toLowerCase() ?? ""
+  if (modelID.includes("kimi") || modelID.includes("moonshot")) return true
+  const url = model.api.url?.toLowerCase() ?? ""
   return ["api.kimi.com", "api.moonshot.ai", "api.moonshot.cn", "api.moonshotai.cn"].some((host) =>
-    (model.api.url?.toLowerCase() ?? "").includes(host),
+    url.includes(host),
   )
 }
 
@@ -715,6 +724,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
       max: { effort: "max" },
     }
   }
+  // Kimi's Anthropic-compatible transports implement adaptive thinking effort.
   if (isKimiFamily(model) && ["@ai-sdk/anthropic", "@ai-sdk/google-vertex/anthropic"].includes(model.api.npm)) {
     return Object.fromEntries(
       ["low", "medium", "high", "xhigh", "max"].flatMap((effort) => {
@@ -1190,6 +1200,7 @@ export function options(input: {
   }
 
   // Moonshot's Anthropic-compatible API uses adaptive effort rather than token budgets.
+  // Request summaries so thinking content survives replay on subsequent turns.
   if (
     ["@ai-sdk/anthropic", "@ai-sdk/google-vertex/anthropic"].includes(input.model.api.npm) &&
     isKimiFamily(input.model) &&
@@ -1720,6 +1731,7 @@ function reasoningEffort(model: Provider.Model, effort: string) {
 
 function anthropicEffort(model: Provider.Model, effort: string) {
   if (["opus-4-5", "opus-4.5"].some((value) => model.api.id.includes(value))) return { effort }
+  // Kimi defaults to omitting adaptive thinking text unless summarized display is requested.
   if (isKimiFamily(model)) return { thinking: { type: "adaptive", display: "summarized" }, effort }
   if (!anthropicAdaptiveEfforts(model.api.id)) return
   return {

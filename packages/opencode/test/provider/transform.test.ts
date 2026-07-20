@@ -3119,6 +3119,19 @@ describe("ProviderTransform.reasoningVariants", () => {
     ).toEqual({ max: { effort: "max" } })
   })
 
+  test("maps Kimi effort metadata to adaptive thinking", () => {
+    expect(
+      ProviderTransform.reasoningVariants(
+        model([{ type: "effort", values: ["low", "high", "max"] }]),
+        target("@ai-sdk/anthropic", "kimi-k3"),
+      ),
+    ).toEqual({
+      low: { thinking: { type: "adaptive", display: "summarized" }, effort: "low" },
+      high: { thinking: { type: "adaptive", display: "summarized" }, effort: "high" },
+      max: { thinking: { type: "adaptive", display: "summarized" }, effort: "max" },
+    })
+  })
+
   test("uses adaptive reasoning config for Anthropic models on Bedrock", () => {
     expect(
       ProviderTransform.reasoningVariants(
@@ -5189,6 +5202,10 @@ describe("ProviderTransform.options - kimi family adaptive thinking", () => {
         ]),
       ),
     )
+
+    const model = createModel()
+    model.api.npm = "@ai-sdk/openai-compatible"
+    expect(ProviderTransform.variants(model)).toEqual({})
   })
 
   test("does not enable thinking for kimi models without reasoning capability", () => {
