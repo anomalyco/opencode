@@ -3,6 +3,7 @@ import { DEFAULT_THEMES, resolveTheme as resolveV1 } from "../../../src/theme"
 import { resolveThemeFile } from "../../../src/theme/v2/resolve"
 import { selectThemeMode, themeModes } from "../../../src/theme/v2/select"
 import { migrateV1 } from "../../../src/theme/v2/v1-migrate"
+import { DEFAULT_CATEGORICAL } from "../../../src/theme/v2/schema"
 
 test("migrates resolved V1 modes into literal V2 tokens", () => {
   const migrated = migrateV1(DEFAULT_THEMES.opencode)
@@ -11,6 +12,8 @@ test("migrates resolved V1 modes into literal V2 tokens", () => {
   const resolved = resolveThemeFile(migrated, "light")
 
   expect(migrated.standalone).toBeTrue()
+  expect(migrated.light.categorical).toEqual(DEFAULT_CATEGORICAL)
+  expect(migrated.dark.categorical).toEqual(DEFAULT_CATEGORICAL)
   expect(migrated.light.hue?.accent).toBeObject()
   expect(migrated.light.hue?.interactive).toBeObject()
   if (typeof migrated.light.hue?.accent !== "object" || typeof migrated.light.hue.interactive !== "object") {

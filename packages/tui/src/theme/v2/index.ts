@@ -3,10 +3,13 @@ export {
   type ActionStateKey,
   ActionVariant,
   BaseHue,
+  CategoricalDefinition,
+  DEFAULT_CATEGORICAL,
   FeedbackKind,
   FormfieldState,
   type FormfieldStateKey,
   HueAlias,
+  HueName,
   HueStep,
   MarkdownDefinition,
   MarkdownToken,
@@ -30,6 +33,7 @@ export {
 } from "./schema"
 
 export type {
+  Categorical,
   FormfieldColor,
   Hue,
   HueSource,

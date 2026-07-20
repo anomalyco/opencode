@@ -3,7 +3,7 @@ import { oklchToHex, rgbToOklch } from "@opencode-ai/ui/theme/color"
 import type { Theme, ThemeJson } from "../index"
 import { DEFAULT_THEME } from "./defaults"
 import type { FileThemeDefinition, Mode, ThemeFile } from "./index"
-import { HueStep } from "./schema"
+import { DEFAULT_CATEGORICAL, HueStep } from "./schema"
 
 type ThemeColor = Exclude<keyof Theme, "thinkingOpacity" | "_hasSelectedListItemText">
 type ChromaticHue = "red" | "orange" | "yellow" | "green" | "cyan" | "blue" | "purple"
@@ -64,6 +64,7 @@ function migrateMode(theme: Theme, mode: Mode): FileThemeDefinition {
       interactive: ambiguous(theme.primary) ? "$hue.gray" : hueScale(theme.primary, mode),
       neutral: "$hue.gray",
     },
+    categorical: DEFAULT_CATEGORICAL,
     text: {
       default: text,
       subdued: textMuted,

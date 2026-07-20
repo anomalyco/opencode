@@ -1,11 +1,6 @@
 import type { RGBA } from "@opentui/core"
 import type { Accessor } from "solid-js"
-import type {
-  ActionVariant,
-  Mode,
-  ResolvedActionState,
-  ResolvedThemeView,
-} from "./index"
+import type { ActionVariant, Mode, ResolvedActionState, ResolvedThemeView } from "./index"
 import { ActionState, HueStep } from "./schema"
 
 type StateFlags = Partial<Record<ActionState, boolean>>
@@ -77,6 +72,7 @@ export function createComponentTheme(current: Accessor<ResolvedThemeView>, mode:
 
   return {
     hue,
+    categorical: (step: HueStep) => current().categorical.map((scale) => scale[step]),
     source: (color: RGBA) => current().source(color),
     increase: (color: RGBA, amount = 1) => current().increase(color, amount),
     decrease: (color: RGBA, amount = 1) => current().decrease(color, amount),
@@ -86,29 +82,29 @@ export function createComponentTheme(current: Accessor<ResolvedThemeView>, mode:
     border: () => current().border.default,
     scrollbar: () => current().scrollbar.default,
     diff: {
-        text: {
-          added: () => current().diff.text.added,
-          removed: () => current().diff.text.removed,
-          context: () => current().diff.text.context,
-          hunkHeader: () => current().diff.text.hunkHeader,
-        },
+      text: {
+        added: () => current().diff.text.added,
+        removed: () => current().diff.text.removed,
+        context: () => current().diff.text.context,
+        hunkHeader: () => current().diff.text.hunkHeader,
+      },
+      background: {
+        added: () => current().diff.background.added,
+        removed: () => current().diff.background.removed,
+        context: () => current().diff.background.context,
+      },
+      highlight: {
+        added: () => current().diff.highlight.added,
+        removed: () => current().diff.highlight.removed,
+      },
+      lineNumber: {
+        text: () => current().diff.lineNumber.text,
         background: {
-          added: () => current().diff.background.added,
-          removed: () => current().diff.background.removed,
-          context: () => current().diff.background.context,
-        },
-        highlight: {
-          added: () => current().diff.highlight.added,
-          removed: () => current().diff.highlight.removed,
-        },
-        lineNumber: {
-          text: () => current().diff.lineNumber.text,
-          background: {
-            added: () => current().diff.lineNumber.background.added,
-            removed: () => current().diff.lineNumber.background.removed,
-          },
+          added: () => current().diff.lineNumber.background.added,
+          removed: () => current().diff.lineNumber.background.removed,
         },
       },
+    },
     syntax: {
       comment: () => current().syntax.comment,
       keyword: () => current().syntax.keyword,

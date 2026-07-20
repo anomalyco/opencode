@@ -40,6 +40,7 @@ const background = {
 
 const definition = {
   hue: {} as ThemeDefinition["hue"],
+  categorical: ["blue", "accent"],
   text,
   background,
   border: { default: "$hue.neutral.300" },
@@ -66,6 +67,7 @@ test("supports property-first definitions, variants, states, and contexts", () =
   expect(background.surface.offset).toBe("$hue.neutral.200")
   expect(definition["@context:elevated"].text?.default).toBe("$hue.neutral.800")
   expect(definition["@context:overlay"].background?.default).toBe("$hue.neutral.300")
+  expect(definition.categorical).toEqual(["blue", "accent"])
   expect(file.light).toBe(definition)
   expect(lightOnly.light).toBe(definition)
   expect(darkOnly.dark).toBe(definition)

@@ -13,13 +13,14 @@ test("provides reactive property, variant, state, and context accessors", () => 
   const [context, setContext] = createSignal<ContextKey>()
   const theme = createComponentTheme(() => {
     const key = context()
-    return key ? resolved().contexts[key] ?? resolved() : resolved()
+    return key ? (resolved().contexts[key] ?? resolved()) : resolved()
   }, mode)
 
   expect(theme.text()).toBe(resolved().text.default)
   expect(theme.hue.accent(500)).toBe(resolved().hue.accent[500])
   expect(theme.hue.interactive(500)).toBe(resolved().hue.interactive[500])
   expect(theme.hue.gray(200)).toBe(resolved().hue.gray[200])
+  expect(theme.categorical(500)).toEqual(resolved().categorical.map((scale) => scale[500]))
   expect(theme.increase(theme.background.surface.offset(), 1)).toBe(resolved().hue.neutral[400])
   expect(theme.raise(theme.background.surface.offset())).toBe(resolved().hue.neutral[400])
   expect(theme.decrease(theme.hue.red(300), 2)).toBe(resolved().hue.red[100])
@@ -39,30 +40,20 @@ test("provides reactive property, variant, state, and context accessors", () => 
   expect(theme.background.action("selected")).toBe(resolved().background.action.primary.selected)
   expect(theme.background.action("hovered")).toBe(resolved().background.action.primary.hovered)
   expect(theme.background.action({ selected: true })).toBe(resolved().background.action.primary.selected)
-  expect(theme.background.action({ selected: true, hovered: true })).toBe(
-    resolved().background.action.primary.selected,
-  )
-  expect(theme.background.action({ focused: true, selected: true })).toBe(
-    resolved().background.action.primary.focused,
-  )
+  expect(theme.background.action({ selected: true, hovered: true })).toBe(resolved().background.action.primary.selected)
+  expect(theme.background.action({ focused: true, selected: true })).toBe(resolved().background.action.primary.focused)
   expect(theme.background.action({ pressed: true, focused: true, selected: true })).toBe(
     resolved().background.action.primary.pressed,
   )
-  expect(
-    theme.background.action({ disabled: true, pressed: true, focused: true, selected: true, hovered: true }),
-  ).toBe(
+  expect(theme.background.action({ disabled: true, pressed: true, focused: true, selected: true, hovered: true })).toBe(
     resolved().background.action.primary.disabled,
   )
   expect(theme.background.action({ disabled: false, selected: false })).toBe(
     resolved().background.action.primary.default,
   )
-  expect(theme.background.action.destructive("disabled")).toBe(
-    resolved().background.action.destructive.disabled,
-  )
+  expect(theme.background.action.destructive("disabled")).toBe(resolved().background.action.destructive.disabled)
   expect(theme.background.formfield("hovered")).toBe(resolved().background.formfield.hovered)
-  expect(theme.background.formfield({ selected: true, hovered: true })).toBe(
-    resolved().background.formfield.selected,
-  )
+  expect(theme.background.formfield({ selected: true, hovered: true })).toBe(resolved().background.formfield.selected)
   expect(theme.background.formfield({ focused: true, selected: true, hovered: true })).toBe(
     resolved().background.formfield.focused,
   )
@@ -75,6 +66,7 @@ test("provides reactive property, variant, state, and context accessors", () => 
   expect(theme.diff.text.added()).toBe(resolved().diff.text.added)
 
   setContext("@context:elevated")
+  expect(theme.categorical(500)).toEqual(resolved().categorical.map((scale) => scale[500]))
   expect(theme.text()).toBe(resolved().contexts["@context:elevated"]!.text.default)
   expect(theme.background.action("focused")).toBe(
     resolved().contexts["@context:elevated"]!.background.action.primary.focused,

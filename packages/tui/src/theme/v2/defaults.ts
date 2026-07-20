@@ -1,4 +1,5 @@
 import type { ThemeFile } from "./index"
+import { DEFAULT_CATEGORICAL } from "./schema"
 
 export const DEFAULT_THEME = {
   version: 2,
@@ -96,6 +97,7 @@ export const DEFAULT_THEME = {
       interactive: "$hue.blue",
       neutral: "$hue.gray",
     },
+    categorical: DEFAULT_CATEGORICAL,
     text: {
       default: "$hue.neutral.800",
       subdued: "$hue.neutral.600",
@@ -308,6 +310,7 @@ export const DEFAULT_THEME = {
       interactive: "$hue.blue",
       neutral: "$hue.gray",
     },
+    categorical: DEFAULT_CATEGORICAL,
     text: {
       default: "$hue.neutral.200",
       subdued: "$hue.neutral.400",

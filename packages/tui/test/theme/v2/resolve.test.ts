@@ -14,11 +14,37 @@ test("resolves one-mode files with defaults for the available mode", () => {
 
   expect(resolvedLight.background.default.equals(resolveTheme(light).background.default)).toBeTrue()
   expect(resolvedDark.background.default.equals(resolveTheme(dark).background.default)).toBeTrue()
+  expect(resolvedLight.categorical.length).toBeGreaterThan(0)
+  expect(resolvedDark.categorical.length).toBeGreaterThan(0)
 })
 
 test("rejects theme files without a mode", () => {
   // @ts-expect-error Runtime decoding also enforces the at-least-one-mode invariant.
   expect(() => resolveThemeFile({ version: 2 })).toThrow("Invalid theme")
+})
+
+test("validates and resolves categorical hues in configured order", () => {
+  const theme = resolveThemeFile({ version: 2, light: { categorical: ["accent", "red", "interactive"] } }, "light")
+
+  expect(theme.categorical[0]).toBe(theme.hue.accent)
+  expect(theme.categorical[1]).toBe(theme.hue.red)
+  expect(theme.categorical[2]).toBe(theme.hue.interactive)
+  expect(theme.contexts["@context:elevated"]?.categorical).toBe(theme.categorical)
+  expect(() => resolveThemeFile({ version: 2, light: { categorical: [] } }, "light")).toThrow("Invalid theme")
+  expect(() =>
+    resolveThemeFile(
+      // @ts-expect-error Runtime decoding rejects unknown categorical hue names.
+      { version: 2, light: { categorical: ["magenta"] } },
+      "light",
+    ),
+  ).toThrow("Invalid theme")
+})
+
+test("uses the default categorical order for direct definitions", () => {
+  const theme = resolveTheme({ ...light, categorical: undefined })
+
+  expect(theme.categorical[0]).toBe(theme.hue.blue)
+  expect(theme.categorical[1]).toBe(theme.hue.purple)
 })
 
 test("resolves independent definitions and hue aliases", () => {
@@ -31,6 +57,7 @@ test("resolves independent definitions and hue aliases", () => {
   expect(lightTheme.hue.interactive[500].equals(lightTheme.hue.blue[500])).toBeTrue()
   expect(lightTheme.hue.neutral).not.toBe(lightTheme.hue.gray)
   expect(lightTheme.hue.neutral[500].equals(lightTheme.hue.gray[500])).toBeTrue()
+  expect(lightTheme.categorical[0]).toBe(lightTheme.hue.blue)
   expect(lightTheme.source(lightTheme.hue.blue[500])).toEqual({ hue: "blue", step: 500 })
   expect(lightTheme.source(lightTheme.hue.neutral[200])).toEqual({ hue: "neutral", step: 200 })
   expect(lightTheme.source(lightTheme.background.surface.offset)).toEqual({ hue: "neutral", step: 300 })

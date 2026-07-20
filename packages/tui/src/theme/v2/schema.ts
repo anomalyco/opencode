@@ -34,7 +34,18 @@ const ColorValue = Schema.Union([
   Schema.TemplateLiteral(["$", Schema.NonEmptyString]),
 ])
 
-const HueName = Schema.Union([BaseHue, HueAlias])
+export const HueName = Schema.Union([BaseHue, HueAlias])
+export type HueName = Schema.Schema.Type<typeof HueName>
+export const DEFAULT_CATEGORICAL = [
+  "blue",
+  "purple",
+  "green",
+  "orange",
+  "red",
+  "cyan",
+] as const satisfies readonly HueName[]
+export const CategoricalDefinition = Schema.Array(HueName).check(Schema.isMinLength(1))
+export type CategoricalDefinition = Schema.Schema.Type<typeof CategoricalDefinition>
 const HueColorValue = Schema.Union([HexColor, Schema.TemplateLiteral(["$hue.", HueName, ".", HueStep])])
 
 const ContextKey = Schema.Literals(["@context:elevated", "@context:overlay"])
@@ -214,6 +225,7 @@ export type ThemeTokensDefinition = Schema.Schema.Type<typeof ThemeTokensDefinit
 
 const ThemeDefinitionFields = Schema.Struct({
   hue: HueDefinition,
+  categorical: Schema.optional(CategoricalDefinition),
   ...ThemeTokensDefinition.fields,
   "@context:elevated": Schema.optional(ThemeTokensDefinition),
   "@context:overlay": Schema.optional(ThemeTokensDefinition),
@@ -223,6 +235,7 @@ export type ThemeDefinition = Schema.Schema.Type<typeof ThemeDefinition>
 
 const FileThemeDefinition = Schema.Struct({
   hue: Schema.optional(HueOverrideDefinition),
+  categorical: Schema.optional(CategoricalDefinition),
   ...ThemeTokensDefinition.fields,
   "@context:elevated": Schema.optional(ThemeTokensDefinition),
   "@context:overlay": Schema.optional(ThemeTokensDefinition),
@@ -232,6 +245,7 @@ export type FileThemeDefinition = Schema.Schema.Type<typeof FileThemeDefinition>
 const MergeModeDefinition = Schema.Struct({
   mergeMode: Schema.Literal(true),
   hue: Schema.optional(HueOverrideDefinition),
+  categorical: Schema.optional(CategoricalDefinition),
   ...ThemeTokensDefinition.fields,
   "@context:elevated": Schema.optional(ThemeTokensDefinition),
   "@context:overlay": Schema.optional(ThemeTokensDefinition),
