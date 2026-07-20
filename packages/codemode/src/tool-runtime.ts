@@ -101,6 +101,13 @@ export class ToolReference {
 }
 
 const MAX_VALUE_DEPTH = 32
+export const MAX_BIGINT_BITS = 4_096
+
+export const bigintBitLength = (value: bigint): number => {
+  if (value === 0n) return 0
+  const binary = value.toString(2)
+  return binary[0] === "-" ? binary.length - 1 : binary.length
+}
 
 export class ToolRuntimeError extends Error {
   constructor(
@@ -147,13 +154,19 @@ const copyBounded = (
   if (depth > MAX_VALUE_DEPTH) {
     throw new ToolRuntimeError("InvalidDataValue", `${label} exceeds the maximum value depth of ${MAX_VALUE_DEPTH}.`)
   }
+  if (preserveCodeModeValues && typeof value === "bigint") {
+    if (bigintBitLength(value) > MAX_BIGINT_BITS) {
+      throw new ToolRuntimeError("InvalidDataValue", `${label} exceeds CodeMode's ${MAX_BIGINT_BITS}-bit BigInt limit.`)
+    }
+    return value
+  }
+
   if (
     value === null ||
     value === undefined ||
     typeof value === "string" ||
     typeof value === "boolean" ||
-    typeof value === "number" ||
-    (preserveCodeModeValues && typeof value === "bigint")
+    typeof value === "number"
   ) {
     return value
   }

@@ -206,3 +206,69 @@ describe("BigInt JSON-like boundaries", () => {
     if (!result.ok) expect(result.error.kind).toBe("InvalidToolOutput")
   })
 })
+
+describe("BigInt resource bound", () => {
+  test("limits in-interpreter BigInts to 4,096 bits", async () => {
+    const maximum = await execute(`return ${`0b1${"0".repeat(4_095)}n`} === ${`0b1${"0".repeat(4_095)}n`}`)
+    expect(maximum.ok).toBe(true)
+    if (maximum.ok) expect(maximum.value).toBe(true)
+
+    const oversized = await execute(`return ${`0b1${"0".repeat(4_096)}n`} === 0n`)
+    expect(oversized.ok).toBe(false)
+    if (!oversized.ok) {
+      expect(oversized.error.kind).toBe("InvalidDataValue")
+      expect(oversized.error.message).toContain("4096-bit BigInt limit")
+    }
+  })
+
+  test("rejects expensive operations before native evaluation", async () => {
+    for (const code of [
+      `const value = 1n << 2_048n; return value * value`,
+      `return 16n ** 1_024n`,
+      `return 1n << 4_096n`,
+      `return 1n >> -4_096n`,
+    ]) {
+      const result = await execute(code)
+      expect(result.ok).toBe(false)
+      if (!result.ok) {
+        expect(result.error.kind).toBe("InvalidDataValue")
+        expect(result.error.message).toContain("may exceed CodeMode's 4096-bit limit")
+      }
+    }
+  })
+
+  test("rejects oversized results from non-preflighted operations", async () => {
+    for (const code of [
+      `const value = 1n << 4_095n; return value + value`,
+      `let value = ${`0b${"1".repeat(4_096)}n`}; value++; return true`,
+    ]) {
+      const result = await execute(code)
+      expect(result.ok).toBe(false)
+      if (!result.ok) {
+        expect(result.error.kind).toBe("InvalidDataValue")
+        expect(result.error.message).toContain("exceeds CodeMode's 4096-bit BigInt limit")
+      }
+    }
+  })
+
+  test("does not let synchronous BigInt work bypass a one-millisecond timeout", async () => {
+    const result = await Effect.runPromise(
+      CodeMode.execute({
+        code: `
+          for (let index = 0; index < 20; index++) {
+            const huge = 1n << 499_999n
+            huge * huge
+          }
+          return true
+        `,
+        tools: {},
+        limits: { timeoutMs: 1 },
+      }),
+    )
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error.kind).toBe("InvalidDataValue")
+      expect(result.error.message).toContain("may exceed CodeMode's 4096-bit limit")
+    }
+  })
+})

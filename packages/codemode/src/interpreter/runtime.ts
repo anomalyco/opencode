@@ -1,5 +1,12 @@
 import { Cause, Effect } from "effect"
-import { isBlockedMember, ToolReference, ToolRuntimeError, type SafeObject } from "../tool-runtime.js"
+import {
+  bigintBitLength,
+  isBlockedMember,
+  MAX_BIGINT_BITS,
+  ToolReference,
+  ToolRuntimeError,
+  type SafeObject,
+} from "../tool-runtime.js"
 import {
   type AstNode,
   asNode,
@@ -168,6 +175,29 @@ const instanceofValue = (lhs: unknown, rhs: unknown, node: AstNode): boolean => 
   throw new InterpreterRuntimeError(
     "The right-hand side of 'instanceof' must be a constructor CodeMode knows: Error (or a specific error type like TypeError), Date, RegExp, Map, Set, URL, URLSearchParams, Array, Object, or Promise.",
     node,
+  )
+}
+
+const assertSafeBigIntOperation = (operator: string, lhs: unknown, rhs: unknown, node: AstNode): void => {
+  if (typeof lhs !== "bigint" || typeof rhs !== "bigint") return
+  const leftBits = bigintBitLength(lhs)
+  const rightBits = bigintBitLength(rhs)
+  const exceedsLimit = (() => {
+    if (operator === "*") return lhs !== 0n && rhs !== 0n && leftBits + rightBits > MAX_BIGINT_BITS
+    if (operator === "**") {
+      if (rhs <= 0n || lhs === 0n || lhs === 1n || lhs === -1n) return false
+      return rhs > BigInt(Math.floor(MAX_BIGINT_BITS / leftBits))
+    }
+    if (operator !== "<<" && operator !== ">>") return false
+    if (lhs === 0n) return false
+    const growth = operator === "<<" ? rhs : -rhs
+    return growth > BigInt(MAX_BIGINT_BITS - leftBits)
+  })()
+  if (!exceedsLimit) return
+  throw new InterpreterRuntimeError(
+    `BigInt operation '${operator}' may exceed CodeMode's ${MAX_BIGINT_BITS}-bit limit.`,
+    node,
+    "InvalidDataValue",
   )
 }
 
@@ -1342,6 +1372,7 @@ export class Interpreter<R> {
     const bothObjects = lhs !== null && typeof lhs === "object" && rhs !== null && typeof rhs === "object"
     const l = coerceOperand(lhs)
     const r = coerceOperand(rhs)
+    assertSafeBigIntOperation(operator, l, r, node)
     switch (operator) {
       case "+":
         return (l as string) + (r as string)
@@ -1544,8 +1575,11 @@ export class Interpreter<R> {
       return typeof current === "bigint" ? current : coerceToNumber(current)
     }
 
-    const update = (current: number | bigint): number | bigint =>
-      typeof current === "bigint" ? current + (increment === 1 ? 1n : -1n) : current + increment
+    const update = (current: number | bigint): unknown =>
+      boundedData(
+        typeof current === "bigint" ? current + (increment === 1 ? 1n : -1n) : current + increment,
+        "Update expression result",
+      )
 
     if (argument.type === "Identifier") {
       return Effect.sync(() => {

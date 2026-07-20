@@ -38,7 +38,9 @@ ultimate source of truth.
 - [x] BigInt literals (decimal, binary, octal, hexadecimal, and numeric separators) and BigInt behavior for the
       supported arithmetic, bitwise, unary, update, assignment, equality, and ordering operators. Mixed Number/BigInt
       arithmetic throws. BigInt remains invalid in program results, `JSON.stringify`, and tool arguments/results; the
-      `BigInt` constructor and other BigInt-specific standard-library APIs are not exposed.
+      `BigInt` constructor and other BigInt-specific standard-library APIs are not exposed. In-interpreter BigInts are
+      limited to 4,096 bits; multiplication, exponentiation, and size-increasing shifts conservatively reject before
+      native evaluation when their result may exceed that limit.
 - [ ] Symbol primitive values and symbol-keyed properties.
 - [ ] Tagged-template calls.
 - [ ] Getter and setter definitions in object literals.
