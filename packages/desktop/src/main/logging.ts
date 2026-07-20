@@ -198,6 +198,13 @@ function initConsoleTransport() {
       log.transports.console.level = false
     }
   }
+
+  const onStderrError = (err: Error) => {
+    if (!isBrokenPipe(err)) return
+    log.transports.console.level = false
+    process.stderr.removeListener("error", onStderrError)
+  }
+  process.stderr.on("error", onStderrError)
 }
 
 function isBrokenPipe(err: unknown) {
