@@ -1,6 +1,6 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { Global } from "@opencode-ai/util/global"
-import { Effect } from "effect"
+import { Effect, FileSystem } from "effect"
 import { expect, test } from "bun:test"
 import { parse } from "jsonc-parser"
 import path from "path"
@@ -228,6 +228,86 @@ test("preserves the effective value when migrating duplicate legacy keybinds", a
     expect(config.keybinds).toEqual({ "session.delete": "ctrl+b" })
     expect(parse(await Bun.file(file).text()).keybinds).toEqual({ "session.delete": "ctrl+b" })
   } finally {
+    await Bun.$`rm -rf ${directory}`
+  }
+})
+
+test("migrates the effective duplicate top-level keybinds", async () => {
+  const directory = await Bun.$`mktemp -d`.text().then((value) => value.trim())
+  const file = path.join(directory, "cli.json")
+  await Bun.write(file, `{"keybinds":{"session_delete":"first"},"keybinds":{"session_delete":"last"}}`)
+
+  try {
+    const config = await run(
+      directory,
+      Effect.gen(function* () {
+        const service = yield* Config.Service
+        return yield* service.get()
+      }),
+    )
+
+    expect(config.keybinds).toEqual({ "session.delete": "last" })
+    expect(parse(await Bun.file(file).text()).keybinds).toEqual({ "session.delete": "last" })
+  } finally {
+    await Bun.$`rm -rf ${directory}`
+  }
+})
+
+test("does not overwrite a concurrent config update during migration", async () => {
+  const directory = await Bun.$`mktemp -d`.text().then((value) => value.trim())
+  const file = path.join(directory, "cli.json")
+  await Bun.write(file, `{"keybinds":{"session_delete":"ctrl+d"}}`)
+  const node = await Effect.runPromise(
+    Effect.gen(function* () {
+      return yield* FileSystem.FileSystem
+    }).pipe(Effect.provide(NodeFileSystem.layer)),
+  )
+  const started = Promise.withResolvers<void>()
+  const resume = Promise.withResolvers<void>()
+  const state = { writes: 0 }
+  const writeFileString: FileSystem.FileSystem["writeFileString"] = (path, data, options) => {
+    state.writes++
+    if (state.writes !== 1) return node.writeFileString(path, data, options)
+    started.resolve()
+    return Effect.gen(function* () {
+      yield* Effect.promise(() => resume.promise)
+      yield* node.writeFileString(path, data, options)
+    })
+  }
+  const fs = new Proxy(node, {
+    get(target, property, receiver) {
+      if (property === "writeFileString") return writeFileString
+      return Reflect.get(target, property, receiver)
+    },
+  })
+
+  try {
+    const config = await Effect.runPromise(
+      Effect.gen(function* () {
+        const service = yield* Config.Service
+        return yield* Effect.promise(async () => {
+          const reading = Effect.runPromise(service.get())
+          await started.promise
+          const updating = Effect.runPromise(
+            service.update((draft) => {
+              draft.mouse = false
+            }),
+          )
+          await Promise.race([updating, Bun.sleep(100)]).finally(() => resume.resolve())
+          await Promise.all([reading, updating])
+          return Effect.runPromise(service.get())
+        })
+      }).pipe(
+        Effect.provide(Config.layer),
+        Effect.provide(Global.layerWith({ config: directory, state: directory })),
+        Effect.provideService(FileSystem.FileSystem, fs),
+      ),
+    )
+
+    expect(config).toMatchObject({ keybinds: { "session.delete": "ctrl+d" }, mouse: false })
+    expect(await Bun.file(file).json()).toMatchObject({ keybinds: { "session.delete": "ctrl+d" }, mouse: false })
+  } finally {
+    resume.resolve()
     await Bun.$`rm -rf ${directory}`
   }
 })

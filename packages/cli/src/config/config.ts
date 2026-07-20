@@ -50,10 +50,14 @@ export const layer = Layer.effect(
       Effect.provideService(FileSystem.FileSystem, fs),
     )
 
-    const get = Effect.fn("cli.config.get")(function* () {
-      yield* migrate.pipe(Effect.catchCause((cause) => Effect.logWarning("failed to migrate cli config", { cause })))
-      return Option.getOrElse(decode(yield* readJson()), () => empty)
-    })
+    const get = Effect.fn("cli.config.get")(() =>
+      lock.withPermits(1)(
+        Effect.gen(function* () {
+          yield* migrate.pipe(Effect.catchCause((cause) => Effect.logWarning("failed to migrate cli config", { cause })))
+          return Option.getOrElse(decode(yield* readJson()), () => empty)
+        }),
+      ),
+    )
 
     const update = Effect.fn("cli.config.update")((update: (draft: Draft<Info>) => void) =>
       lock
