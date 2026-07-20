@@ -153,9 +153,10 @@ export function SessionPage() {
 }
 
 // Rendered under app.tsx's TargetSessionRoute, which owns the per-server keyed
-// remount around the server-scoped providers. Nothing here may key on the
-// session ID: session tabs on the same server share this route instance, and
-// workspace-scoped state (terminal, directory providers) lives below.
+// remount around the server-scoped providers. Session changes are handled
+// reactively inside Page: nothing here keys on the session ID, so session
+// tabs on the same server share this route instance and workspace-scoped
+// state (terminal, directory providers) stays alive across switches.
 export function TargetSessionRouteContent() {
   const params = useParams<{ serverKey: string; id: string }>()
   const serverSync = useServerSync()
@@ -406,7 +407,6 @@ export default function Page() {
   })
 
   const workspaceTabs = createMemo(() => layout.tabs(workspaceKey))
-  const sessionPanelKey = createMemo(() => (params.id ? `${serverSDK().scope}\0${params.id}` : undefined))
 
   createEffect(
     on(
@@ -2077,9 +2077,6 @@ export default function Page() {
             </div>
           </Match>
           <Match when={params.id}>
-            {/* SessionPanelFrame already remounts on sessionPanelKey. Keying this
-                descendant on the same navigation double-disposes its owner tree
-                when Solid commits the route transition. */}
             <Show when={messagesReady() ? params.id : undefined}>
               {(_id) => (
                 <MessageTimeline
@@ -2271,21 +2268,13 @@ export default function Page() {
           }}
         >
           {settings.general.newLayoutDesigns() ? (
-            <Show when={sessionPanelKey()} keyed>
-              {(_) => (
-                <SessionPanelFrame newLayout raised={!!params.id}>
-                  <ErrorBoundary fallback={sessionErrorFallback}>{sessionPanelContent()}</ErrorBoundary>
-                </SessionPanelFrame>
-              )}
-            </Show>
+            <SessionPanelFrame newLayout raised={!!params.id}>
+              <ErrorBoundary fallback={sessionErrorFallback}>{sessionPanelContent()}</ErrorBoundary>
+            </SessionPanelFrame>
           ) : (
-            <Show when={sessionPanelKey() ?? "new"} keyed>
-              {(_) => (
-                <SessionPanelFrame newLayout={false} raised={!!params.id}>
-                  <ErrorBoundary fallback={sessionErrorFallback}>{sessionPanelContent()}</ErrorBoundary>
-                </SessionPanelFrame>
-              )}
-            </Show>
+            <SessionPanelFrame newLayout={false} raised={!!params.id}>
+              <ErrorBoundary fallback={sessionErrorFallback}>{sessionPanelContent()}</ErrorBoundary>
+            </SessionPanelFrame>
           )}
 
           <Show when={desktopSessionResizeOpen()}>
