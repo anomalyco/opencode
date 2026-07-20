@@ -41,6 +41,7 @@ it.instance("subagent permissions take precedence over parent agent restrictions
     const parentSessionPermission: PermissionV1.Ruleset = []
 
     const subagentSessionPermission = deriveSubagentSessionPermission({
+      parentAgent: undefined,
       parentSessionPermission,
       subagent: generalAgent!,
     })
@@ -61,6 +62,7 @@ it.instance("subagent's own read-only restriction remains effective", () =>
 
     const parentSessionPermission: PermissionV1.Ruleset = []
     const subagentSessionPermission = deriveSubagentSessionPermission({
+      parentAgent: undefined,
       parentSessionPermission,
       subagent: explore!,
     })
@@ -81,6 +83,7 @@ it.instance(
 
       const parentSessionPermission: PermissionV1.Ruleset = []
       const subagentSessionPermission = deriveSubagentSessionPermission({
+        parentAgent: undefined,
         parentSessionPermission,
         subagent: my!,
       })
@@ -125,6 +128,7 @@ it.effect("subagent self permissions are preserved", () =>
     const effective = Permission.merge(
       executor.permission,
       deriveSubagentSessionPermission({
+        parentAgent: undefined,
         parentSessionPermission: [],
         subagent: executor,
       }),
@@ -150,11 +154,117 @@ it.effect("subagent inherits parent session deny rules as hard runtime ceilings"
     const effective = Permission.merge(
       executor.permission,
       deriveSubagentSessionPermission({
+        parentAgent: undefined,
         parentSessionPermission: Permission.fromConfig({ bash: "deny" }),
         subagent: executor,
       }),
     )
 
     expect(Permission.evaluate("bash", "git status", effective).action).toBe("deny")
+  }),
+)
+
+it.effect("[#16491] subagent inherits parent session MCP tool allow rules", () =>
+  Effect.sync(() => {
+    const executor = testAgent({
+      name: "executor",
+      mode: "subagent",
+      permission: {
+        read: "allow",
+      },
+    })
+
+    // Simulate a parent session that has allowed MCP tools.
+    // MCP tool permission keys use an underscore pattern:
+    // sanitize(clientName) + '_' + sanitize(toolName)
+    const parentWithMcpAllows: PermissionV1.Ruleset = Permission.fromConfig({
+      "myserver_tool-one": "allow",
+      "myserver_tool-two": "allow",
+      "otherclient_resource-list": "allow",
+      bash: "allow",
+      read: "allow",
+    })
+
+    const subagentSessionPermission = deriveSubagentSessionPermission({
+      parentSessionPermission: parentWithMcpAllows,
+      parentAgent: undefined,
+      subagent: executor,
+    })
+
+    const effective = Permission.merge(executor.permission, subagentSessionPermission)
+
+    // MCP tools (with underscores) should be allowed in the subagent
+    expect(Permission.evaluate("myserver_tool-one", "*", effective).action).toBe("allow")
+    expect(Permission.evaluate("myserver_tool-two", "*", effective).action).toBe("allow")
+    expect(Permission.evaluate("otherclient_resource-list", "*", effective).action).toBe("allow")
+
+    // Native tools (no underscore) should NOT be inherited through the
+    // MCP allow filter. The subagent itself only allowed "read", so
+    // bash resolves to "ask" (the default) — not "deny" and not "allow".
+    // The parent session's bash:allow doesn't leak through because
+    // "bash" has no underscore in its permission key.
+    expect(Permission.evaluate("bash", "ls", effective).action).toBe("ask")
+  }),
+)
+
+it.effect("[#16491] wildcard allow in parent session is inherited by subagent", () =>
+  Effect.sync(() => {
+    const executor = testAgent({
+      name: "executor",
+      mode: "subagent",
+      permission: {
+        read: "allow",
+      },
+    })
+
+    // Parent session with wildcard allow (user accepted all tools)
+    const parentWithWildcard: PermissionV1.Ruleset = Permission.fromConfig({
+      "*": "allow",
+    })
+
+    const subagentSessionPermission = deriveSubagentSessionPermission({
+      parentSessionPermission: parentWithWildcard,
+      parentAgent: undefined,
+      subagent: executor,
+    })
+
+    const effective = Permission.merge(executor.permission, subagentSessionPermission)
+
+    // Wildcard allow should be inherited
+    expect(Permission.evaluate("context7_resolve-library-id", "*", effective).action).toBe("allow")
+    expect(Permission.evaluate("matrix_matrix_read", "*", effective).action).toBe("allow")
+  }),
+)
+
+it.effect("[#16491] native tool deny rules still propagate and are not overridden by MCP allow rules", () =>
+  Effect.sync(() => {
+    const executor = testAgent({
+      name: "executor",
+      mode: "subagent",
+      permission: {
+        read: "allow",
+      },
+    })
+
+    // Parent session: MCP tools allowed, but edit denied (e.g. read-only session)
+    const parentSession: PermissionV1.Ruleset = Permission.fromConfig({
+      "context7_resolve-library-id": "allow",
+      "matrix_matrix_read": "allow",
+      edit: { "*": "deny" },
+      read: "allow",
+    })
+
+    const subagentSessionPermission = deriveSubagentSessionPermission({
+      parentSessionPermission: parentSession,
+      parentAgent: undefined,
+      subagent: executor,
+    })
+
+    const effective = Permission.merge(executor.permission, subagentSessionPermission)
+
+    // MCP tools allowed
+    expect(Permission.evaluate("context7_resolve-library-id", "*", effective).action).toBe("allow")
+    // Edit still denied from parent session
+    expect(Permission.evaluate("edit", "/some/file.ts", effective).action).toBe("deny")
   }),
 )
