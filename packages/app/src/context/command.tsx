@@ -11,7 +11,7 @@ import { Persist, persisted } from "@/utils/persist"
 const IS_MAC = typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
 
 const PALETTE_ID = "command.palette"
-const DEFAULT_PALETTE_KEYBIND = "mod+shift+p"
+export const DEFAULT_PALETTE_KEYBIND = "mod+k,mod+shift+p"
 const SUGGESTED_PREFIX = "suggested."
 const EDITABLE_KEYBIND_IDS = new Set(["terminal.toggle", "terminal.new", "file.attach"])
 
@@ -85,6 +85,13 @@ export interface CommandOption {
   when?: (event: KeyboardEvent) => boolean
   onSelect?: (source?: "palette" | "keybind" | "slash") => void
   onHighlight?: () => (() => void) | void
+}
+
+export function commandPaletteOptions(options: CommandOption[]) {
+  return options.filter(
+    (option) =>
+      !option.disabled && !option.hidden && !option.id.startsWith(SUGGESTED_PREFIX) && option.id !== "file.open",
+  )
 }
 
 export function resolveKeybindOption(candidates: CommandOption[] | undefined, event: KeyboardEvent) {
@@ -375,7 +382,7 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
     }
 
     const showPalette = () => {
-      run("file.open", "palette")
+      run(PALETTE_ID, "palette")
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
