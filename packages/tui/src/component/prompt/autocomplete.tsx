@@ -22,38 +22,7 @@ import { Keymap } from "../../context/keymap"
 import { displayCharAt, mentionTriggerIndex } from "../../prompt/display"
 import type { FileSystemEntry } from "@opencode-ai/client"
 import { stringWidth } from "../../util/string-width"
-
-function removeLineRange(input: string) {
-  const hashIndex = input.lastIndexOf("#")
-  return hashIndex !== -1 ? input.substring(0, hashIndex) : input
-}
-
-function extractLineRange(input: string) {
-  const hashIndex = input.lastIndexOf("#")
-  if (hashIndex === -1) {
-    return { baseQuery: input }
-  }
-
-  const baseName = input.substring(0, hashIndex)
-  const linePart = input.substring(hashIndex + 1)
-  const lineMatch = linePart.match(/^(\d+)(?:-(\d*))?$/)
-
-  if (!lineMatch) {
-    return { baseQuery: baseName }
-  }
-
-  const startLine = Number(lineMatch[1])
-  const endLine = lineMatch[2] && startLine < Number(lineMatch[2]) ? Number(lineMatch[2]) : undefined
-
-  return {
-    lineRange: {
-      baseName,
-      startLine,
-      endLine,
-    },
-    baseQuery: baseName,
-  }
-}
+import { parseFileLineRange, stripFileLineRange } from "../../prompt/parse"
 
 export type AutocompleteRef = {
   onInput: (value: string) => void
@@ -275,9 +244,9 @@ export function Autocomplete(props: {
 
   const referenceMatch = createMemo(() => {
     if (!store.visible || store.visible === "/") return
-    const { baseQuery } = extractLineRange(search())
-    const slash = baseQuery.indexOf("/")
-    const alias = slash === -1 ? baseQuery : baseQuery.slice(0, slash)
+    const base = parseFileLineRange(search()).base
+    const slash = base.indexOf("/")
+    const alias = slash === -1 ? base : base.slice(0, slash)
     return references().find((item) => !item.hidden && item.name === alias)
   })
 
@@ -312,11 +281,11 @@ export function Autocomplete(props: {
     async (input) => {
       if (!input.visible || input.visible === "/") return { options: [], failed: false }
       if (referenceMatch()) return { options: [], failed: false }
-      const { lineRange, baseQuery } = extractLineRange(input.query ?? "")
+      const { lineRange, base } = parseFileLineRange(input.query ?? "")
 
       const result = await client.api.file
         .find({
-          query: baseQuery,
+          query: base,
           limit: 20,
           location: {
             directory: input.location?.directory,
@@ -500,9 +469,9 @@ export function Autocomplete(props: {
     }
 
     const fuzziedNonFiles = fuzzysort
-      .go(removeLineRange(searchValue), nonFileOptions, {
+      .go(stripFileLineRange(searchValue), nonFileOptions, {
         keys: [
-          (obj) => removeLineRange((obj.value ?? obj.display).trimEnd()),
+          (obj) => stripFileLineRange((obj.value ?? obj.display).trimEnd()),
           // Match description for slash commands only; for "@" it surfaced unrelated items.
           ...(store.visible === "/" ? ["description" as const] : []),
           (obj) => obj.aliases?.join(" ") ?? "",

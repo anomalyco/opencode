@@ -23,12 +23,14 @@ const providers: RunProvider[] = [
 describe("run variant shared", () => {
   test("prefers cli then session then saved variants", () => {
     expect(resolveVariant("max", "high", "low", ["low", "high"])).toBe("max")
+    expect(resolveVariant("default", "high", "low", ["low", "high"])).toBeUndefined()
     expect(resolveVariant(undefined, "high", "low", ["low", "high"])).toBe("high")
     expect(resolveVariant(undefined, "missing", "low", ["low", "high"])).toBe("low")
   })
 
   test("cycles through variants and back to default", () => {
     expect(cycleVariant(undefined, ["low", "high"])).toBe("low")
+    expect(cycleVariant("default", ["low", "high"])).toBe("low")
     expect(cycleVariant("low", ["low", "high"])).toBe("high")
     expect(cycleVariant("high", ["low", "high"])).toBeUndefined()
     expect(cycleVariant(undefined, [])).toBeUndefined()

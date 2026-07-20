@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { normalizeTool, toolOutputText } from "../../src/mini/tool"
+import { normalizeTool, toolOutputText, toolPath } from "../../src/mini/tool"
 
 describe("Mini tool presentation", () => {
   test("uses V2 shell output without the model-facing status", () => {
@@ -71,5 +71,10 @@ describe("Mini tool presentation", () => {
         time: { created: 1, ran: 1 },
       }),
     ).toMatchObject({ name: "subagent", state: { input: { agent: "explore" } } })
+  })
+
+  test("keeps segment-safe contained tool paths relative", () => {
+    expect(toolPath("..cache/result.txt", { directory: "/work/project" })).toBe("..cache/result.txt")
+    expect(toolPath("../shared/result.txt", { directory: "/work/project" })).toBe("/work/shared/result.txt")
   })
 })

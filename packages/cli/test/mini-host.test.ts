@@ -159,37 +159,19 @@ describe("Mini CLI host", () => {
     expect(typeof input.startup.now()).toBe("number")
   })
 
-  test("merges, clears, and repairs persisted model variants", async () => {
+  test("delegates model variant preferences", async () => {
     const directory = await root()
     const input = host({ stdin: stream(true), cleanup() {} }, directory)
     const file = path.join(directory, "model.json")
-    await Bun.write(
-      file,
-      JSON.stringify({
-        recent: [{ providerID: "anthropic", modelID: "sonnet" }],
-        variant: { "openai/gpt-4.1": "low", invalid: 42 },
-      }),
-    )
 
     await input.preferences.saveVariant(model, "high")
     expect(await input.preferences.resolveVariant(model)).toBe("high")
-    expect(await Bun.file(file).json()).toEqual({
-      recent: [{ providerID: "anthropic", modelID: "sonnet" }],
-      variant: { "openai/gpt-4.1": "low", "openai/gpt-5": "high" },
-    })
 
-    await input.preferences.saveVariant(model, undefined)
-    expect(await input.preferences.resolveVariant(model)).toBeUndefined()
-    expect(await Bun.file(file).json()).toEqual({
-      recent: [{ providerID: "anthropic", modelID: "sonnet" }],
-      variant: { "openai/gpt-4.1": "low" },
-    })
-
-    await Bun.write(file, JSON.stringify({ variant: { "openai/gpt-5": "default" } }))
+    await input.preferences.saveVariant(model, "default")
     expect(await input.preferences.resolveVariant(model)).toBeUndefined()
 
     await Bun.write(file, "{")
     await input.preferences.saveVariant(model, "high")
-    expect(await Bun.file(file).json()).toEqual({ variant: { "openai/gpt-5": "high" } })
+    expect(await input.preferences.resolveVariant(model)).toBe("high")
   })
 })

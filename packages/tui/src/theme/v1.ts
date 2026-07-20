@@ -97,7 +97,7 @@ export type Variant = {
   dark: HexColor | RefName
   light: HexColor | RefName
 }
-export type ColorValue = HexColor | RefName | Variant | RGBA
+export type ColorValue = HexColor | RefName | Variant | RGBA | number
 export type ThemeJson = {
   $schema?: string
   defs?: Record<string, HexColor | RefName>

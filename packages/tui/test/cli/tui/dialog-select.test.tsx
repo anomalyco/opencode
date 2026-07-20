@@ -272,3 +272,27 @@ test("selects a repopulated option after removing the only option", async () => 
     select.app.renderer.destroy()
   }
 })
+
+test("keeps the cursor index while options are temporarily empty", async () => {
+  await using tmp = await tmpdir()
+  const options = ["first", "second", "third"].map((value) => ({ title: value, value }))
+  const select = await mountSelect(tmp.path, options)
+
+  try {
+    select.app.mockInput.pressArrow("down")
+    await select.app.waitFor(() => select.moved.at(-1) === "second")
+    select.app.mockInput.pressArrow("down")
+    await select.app.waitFor(() => select.moved.at(-1) === "third")
+    select.replaceOptions([])
+    await select.app.waitForFrame((frame) => frame.includes("No items available"))
+
+    select.replaceOptions(options)
+    await select.app.waitForFrame((frame) => frame.includes("third"))
+    select.app.mockInput.pressEnter()
+    await select.app.waitFor(() => select.selected.length === 1)
+
+    expect(select.selected).toEqual(["third"])
+  } finally {
+    select.app.renderer.destroy()
+  }
+})

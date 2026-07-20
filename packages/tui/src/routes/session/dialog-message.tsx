@@ -7,6 +7,7 @@ import { useClient } from "../../context/client"
 import { errorMessage } from "../../util/error"
 import { DialogFork } from "./dialog-fork"
 import type { PromptInfo } from "../../prompt/history"
+import { projectedPromptInput } from "../../prompt/codec"
 
 export function DialogMessage(props: {
   messageID: string
@@ -31,17 +32,7 @@ export function DialogMessage(props: {
             const value = message()
             if (value?.type === "user") {
               props.setPrompt?.({
-                text: value.text,
-                files: value.files?.map((file) => ({
-                  uri: file.source.type === "uri" ? file.source.uri : `data:${file.mime};base64,${file.data}`,
-                  name: file.name,
-                  description: file.description,
-                  mention: file.mention ? { ...file.mention } : undefined,
-                })),
-                agents: value.agents?.map((agent) => ({
-                  name: agent.name,
-                  mention: agent.mention ? { ...agent.mention } : undefined,
-                })),
+                ...projectedPromptInput(value),
                 pasted: [],
               })
             }

@@ -98,4 +98,19 @@ describe("run prompt editor helpers", () => {
       },
     ])
   })
+
+  test("uses display offsets when realigning Mini parts", () => {
+    const part = {
+      type: "agent",
+      name: "helper",
+      source: { start: 0, end: 7, value: "@helper" },
+    } satisfies RunPromptPart
+
+    expect(realignEditorPromptParts("中文🙂\n@helper", [part])).toEqual([
+      {
+        ...part,
+        source: { start: 7, end: 14, value: "@helper" },
+      },
+    ])
+  })
 })

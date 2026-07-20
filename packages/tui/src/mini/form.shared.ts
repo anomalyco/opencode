@@ -1,7 +1,20 @@
 import type { FormAnswer, FormField, FormInfo, FormValue } from "@opencode-ai/client/promise"
+import {
+  formCustom,
+  formDisplayValue,
+  formInitialValues,
+  formLabel,
+  formRows,
+  formSelected,
+  formSetMultiselectCustom,
+  formTextual,
+  formToggleMultiselect,
+  formValidateValue,
+} from "../util/form"
+import type { FormAnswerField } from "../util/form"
 import type { FormReply, MiniFormRequest } from "./types"
 
-type AnswerField = Exclude<FormField, { type: "external" }>
+export { formCustom, formLabel, formRows, formSelected, formTextual, formValidateValue }
 
 export type FormBodyState = {
   formID: string
@@ -15,31 +28,14 @@ export type FormBodyState = {
   error: string
 }
 
-export type FormRow = {
-  value: string | boolean
-  label: string
-  description?: string
-}
-
 export function createFormBodyState(form: FormInfo): FormBodyState {
-  const answers = Object.fromEntries(
-    form.fields.flatMap((field) =>
-      field.type !== "external" && field.default !== undefined ? [[field.key, field.default]] : [],
-    ),
-  )
-  const custom = Object.fromEntries(
-    form.fields.flatMap((field) => {
-      if (field.type !== "string" || !field.options || !field.custom || typeof field.default !== "string") return []
-      if (field.options.some((option) => option.value === field.default)) return []
-      return [[field.key, field.default]]
-    }),
-  )
+  const initial = formInitialValues(form.fields)
   return {
     formID: form.id,
     field: 0,
-    answers,
-    custom,
-    selected: formSelected(form.fields[0], answers[form.fields[0]?.key ?? ""]),
+    answers: initial.answers,
+    custom: initial.custom,
+    selected: formSelected(form.fields[0], initial.answers[form.fields[0]?.key ?? ""]),
     editing: formTextual(form.fields[0]),
     externalReady: {},
     submitting: false,
@@ -65,10 +61,6 @@ export function formUnsupported(form: FormInfo): string | undefined {
   }
 }
 
-export function formLabel(field: FormField) {
-  return field.title ?? (field.type === "external" ? field.url : field.key)
-}
-
 export function formCurrent(form: FormInfo, state: FormBodyState) {
   return form.fields[state.field]
 }
@@ -89,44 +81,9 @@ export function formSingle(form: FormInfo) {
   )
 }
 
-export function formTextual(field: FormField | undefined) {
-  if (!field) return false
-  return field.type === "number" || field.type === "integer" || (field.type === "string" && !field.options)
-}
-
 export function formPlaceholder(field: FormField | undefined) {
   if (field?.type === "string") return field.placeholder ?? "Type your answer"
   return "Enter a number"
-}
-
-export function formCustom(field: FormField | undefined) {
-  if (!field) return false
-  if (field.type === "string" && field.options) return field.custom === true
-  return field.type === "multiselect" && field.custom === true
-}
-
-export function formRows(field: FormField | undefined): FormRow[] {
-  if (!field) return []
-  if (field.type === "boolean")
-    return [
-      { value: true, label: "Yes" },
-      { value: false, label: "No" },
-    ]
-  const options = field.type === "multiselect" ? field.options : field.type === "string" ? field.options : undefined
-  if (!options) return []
-  return options.map((option) => ({
-    value: option.value,
-    label: option.label,
-    description: option.description,
-  }))
-}
-
-export function formSelected(field: FormField | undefined, value: FormValue | undefined) {
-  if (!field || value === undefined || Array.isArray(value)) return 0
-  const index = formRows(field).findIndex((row) => row.value === value)
-  if (index !== -1) return index
-  if (typeof value === "string" && formCustom(field)) return formRows(field).length
-  return 0
 }
 
 export function formMove(state: FormBodyState, form: FormInfo, direction: -1 | 1): FormBodyState {
@@ -164,40 +121,6 @@ export function formInput(state: FormBodyState, field: FormField | undefined) {
 export function formSetDraft(state: FormBodyState, field: FormField | undefined, value: string): FormBodyState {
   if (!field || field.type === "external") return state
   return { ...state, custom: { ...state.custom, [field.key]: value } }
-}
-
-export function formValidateValue(field: AnswerField, value: FormValue | undefined): string | undefined {
-  if (value === undefined) return field.required ? "Answer required" : undefined
-  if (field.required && (value === "" || (Array.isArray(value) && value.length === 0)))
-    return field.type === "multiselect" ? "Select at least one option" : "Answer required"
-  if (field.type === "string") {
-    if (typeof value !== "string") return "Expected text"
-    if (field.minLength !== undefined && value.length < field.minLength)
-      return `Must be at least ${field.minLength} characters`
-    if (field.maxLength !== undefined && value.length > field.maxLength)
-      return `Must be at most ${field.maxLength} characters`
-    if (field.format === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return "Expected an email address"
-    if (field.format === "uri" && !validURL(value)) return "Expected a URL"
-    if (field.format === "date" && !validDate(value)) return "Expected a date (YYYY-MM-DD)"
-    if (field.format === "date-time" && Number.isNaN(new Date(value).getTime())) return "Expected a date and time"
-    if (field.options && !field.custom && !field.options.some((option) => option.value === value))
-      return "Select an available option"
-    return
-  }
-  if (field.type === "number" || field.type === "integer") {
-    if (typeof value !== "number" || !Number.isFinite(value)) return "Expected a number"
-    if (field.type === "integer" && !Number.isInteger(value)) return "Expected an integer"
-    if (typeof field.minimum === "number" && value < field.minimum) return `Must be at least ${field.minimum}`
-    if (typeof field.maximum === "number" && value > field.maximum) return `Must be at most ${field.maximum}`
-    return
-  }
-  if (field.type === "boolean") return typeof value === "boolean" ? undefined : "Expected yes or no"
-  if (!Array.isArray(value)) return "Expected selections"
-  if (field.required && value.length === 0) return "Select at least one option"
-  if (field.minItems !== undefined && value.length < field.minItems) return `Select at least ${field.minItems}`
-  if (field.maxItems !== undefined && value.length > field.maxItems) return `Select at most ${field.maxItems}`
-  if (!field.custom && value.some((item) => !field.options.some((option) => option.value === item)))
-    return "Select only available options"
 }
 
 export function formValidate(form: FormInfo, state: FormBodyState): string | undefined {
@@ -249,13 +172,11 @@ export function formPick(state: FormBodyState, form: FormInfo): FormBodyState {
   const row = rows[state.selected]
   if (!row) return state
   if (field.type === "multiselect") {
-    const answer = state.answers[field.key]
-    const values = Array.isArray(answer) ? [...answer] : []
-    const value = String(row.value)
-    const index = values.indexOf(value)
-    if (index === -1) values.push(value)
-    if (index !== -1) values.splice(index, 1)
-    return { ...state, answers: { ...state.answers, [field.key]: values }, error: "" }
+    return {
+      ...state,
+      answers: { ...state.answers, [field.key]: formToggleMultiselect(state.answers[field.key], String(row.value)) },
+      error: "",
+    }
   }
   const next = {
     ...state,
@@ -271,14 +192,7 @@ export function formCommitInput(state: FormBodyState, form: FormInfo, text: stri
   const input = text.trim()
   const value = !input ? undefined : field.type === "number" || field.type === "integer" ? Number(input) : input
   if (field.type === "multiselect") {
-    const answer = state.answers[field.key]
-    const values = Array.isArray(answer) ? [...answer] : []
-    const previous = state.custom[field.key]
-    if (previous) {
-      const index = values.indexOf(previous)
-      if (index !== -1) values.splice(index, 1)
-    }
-    if (input && !values.includes(input)) values.push(input)
+    const values = formSetMultiselectCustom(state.answers[field.key], state.custom[field.key], input)
     const invalid = formValidateValue(field, values)
     if (invalid) return formSetError(state, invalid)
     return {
@@ -311,11 +225,8 @@ export function formAcknowledge(state: FormBodyState, form: FormInfo): FormBodyS
   return formSetField(next, form, formSingle(form) ? state.field : state.field + 1)
 }
 
-export function formDisplay(field: AnswerField, value: FormValue | undefined) {
-  if (value === undefined) return ""
-  const label = (item: string | number | boolean) =>
-    formRows(field).find((row) => row.value === item)?.label ?? String(item)
-  return Array.isArray(value) ? value.map(label).join(", ") : label(value)
+export function formDisplay(field: FormAnswerField, value: FormValue | undefined) {
+  return formDisplayValue(field, value, "")
 }
 
 export function formErrorMessage(error: unknown) {
@@ -327,19 +238,4 @@ export function formErrorMessage(error: unknown) {
     if (typeof tag === "string" && tag.trim()) return tag
   }
   return "Form request failed"
-}
-
-function validURL(value: string) {
-  try {
-    new URL(value)
-    return true
-  } catch {
-    return false
-  }
-}
-
-function validDate(value: string) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
-  const date = new Date(`${value}T00:00:00.000Z`)
-  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value
 }

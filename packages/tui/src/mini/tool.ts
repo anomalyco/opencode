@@ -1,13 +1,12 @@
 // Per-tool display rules shared across `opencode run` output paths.
 //
 // Each known tool (shell, edit, write, subagent, etc.) has a ToolRule that controls
-// five display hooks:
+// four display hooks:
 //
 //   view       → visibility policy for progress/final scrollback entries and
 //                whether completed finals can render as structured snapshots
 //   run        → inline summary for the non-interactive `run` command output
 //   scroll     → text formatting for start/progress/final scrollback entries
-//   permission → display info for the permission UI (icon, title, diff)
 //   snap       → structured snapshot (code block, diff, task card) for rich
 //                scrollback entries
 //
@@ -18,9 +17,18 @@ import stripAnsi from "strip-ansi"
 import type { SessionMessageAssistantTool } from "@opencode-ai/client/promise"
 import { LANGUAGE_EXTENSIONS } from "../util/filetype"
 import { Locale } from "../util/locale"
+import {
+  canonicalToolName,
+  finiteNumber,
+  primitiveInputSummary,
+  toolDisplayMetadata,
+  webSearchProviderLabel,
+} from "../util/tool-display"
+import { formatPath } from "../util/path-format"
 import type { RunEntryBody, StreamCommit, ToolSnapshot } from "./types"
 
 export type { MiniToolPart } from "./types"
+export { canonicalToolName } from "../util/tool-display"
 
 export type ToolView = {
   output: boolean
@@ -92,33 +100,10 @@ export type ToolInline = {
   body?: string
 }
 
-export type ToolPermissionInfo = {
-  icon: string
-  title: string
-  lines: string[]
-  diff?: string
-  patch?: string
-  file?: string
-}
-
 export type ToolProps = {
   input: ToolInput
   metadata: ToolMetadata
   frame: ToolFrame
-}
-
-type ToolPermissionProps = {
-  directory?: string
-  input: ToolInput
-  metadata: ToolMetadata
-  patterns: string[]
-}
-
-type ToolPermissionCtx = {
-  directory?: string
-  input: ToolDict
-  meta: ToolDict
-  patterns: string[]
 }
 
 type ToolName =
@@ -144,7 +129,6 @@ type ToolRule = {
   view: ToolView
   run: (props: ToolProps) => ToolInline
   scroll?: Partial<Record<ToolPhase, (props: ToolProps) => string>>
-  permission?: (props: ToolPermissionProps) => ToolPermissionInfo
   snap?: (props: ToolProps) => ToolSnapshot | undefined
 }
 
@@ -168,21 +152,6 @@ function props(frame: ToolFrame): ToolProps {
   }
 }
 
-function permission(ctx: ToolPermissionCtx): ToolPermissionProps {
-  return {
-    directory: ctx.directory,
-    input: ctx.input,
-    metadata: ctx.meta,
-    patterns: ctx.patterns,
-  }
-}
-
-function webSearchProviderLabel(provider: unknown) {
-  if (provider === "parallel") return "Parallel Web Search"
-  if (provider === "exa") return "Exa Web Search"
-  return "Web Search"
-}
-
 function text(v: unknown): string {
   return typeof v === "string" ? v : ""
 }
@@ -191,13 +160,6 @@ export function toolOutputText(name: string, content: ReadonlyArray<{ type: stri
   // V2 shell content appends model-only status after the user-visible command output.
   if (canonicalToolName(name) === "shell") return content.find((item) => item.type === "text")?.text ?? ""
   return content.flatMap((item) => (item.type === "text" && item.text ? [item.text] : [])).join("\n")
-}
-
-export function canonicalToolName(name: string) {
-  if (name === "bash") return "shell"
-  if (name === "task") return "subagent"
-  if (name === "apply_patch") return "patch"
-  return name
 }
 
 function normalizeInput(name: string, value: unknown) {
@@ -228,7 +190,7 @@ function normalizeFile(value: unknown): PatchFile | undefined {
             ? "moved"
             : legacy)
   const patch = typeof file.patch === "string" ? file.patch : text(file.diff) || undefined
-  const deletions = num(file.deletions)
+  const deletions = finiteNumber(file.deletions)
   return {
     ...file,
     file: name,
@@ -250,8 +212,10 @@ function normalizeStructured(name: string, value: unknown) {
     ...structured,
     ...(["edit", "patch"].includes(name) && Array.isArray(structured.files) ? { files } : {}),
     ...(name === "subagent" && sessionID ? { sessionID } : {}),
-    ...(name === "shell" && num(structured.exit) === undefined && num(structured.exitCode) !== undefined
-      ? { exit: num(structured.exitCode) }
+    ...(name === "shell" &&
+    finiteNumber(structured.exit) === undefined &&
+    finiteNumber(structured.exitCode) !== undefined
+      ? { exit: finiteNumber(structured.exitCode) }
       : {}),
   }
 }
@@ -265,17 +229,9 @@ export function normalizeTool(tool: SessionMessageAssistantTool): SessionMessage
     state: {
       ...tool.state,
       input: normalizeInput(name, tool.state.input),
-      structured: normalizeStructured(name, tool.state.structured),
+      structured: normalizeStructured(name, toolDisplayMetadata(tool.state)),
     },
   } as SessionMessageAssistantTool
-}
-
-function num(v: unknown): number | undefined {
-  if (typeof v !== "number" || !Number.isFinite(v)) {
-    return undefined
-  }
-
-  return v
 }
 
 function list<T>(v: unknown): T[] {
@@ -284,22 +240,6 @@ function list<T>(v: unknown): T[] {
   }
 
   return v
-}
-
-function info(data: ToolDict, skip: string[] = []): string {
-  const list = Object.entries(data).filter(([key, val]) => {
-    if (skip.includes(key)) {
-      return false
-    }
-
-    return typeof val === "string" || typeof val === "number" || typeof val === "boolean"
-  })
-
-  if (list.length === 0) {
-    return ""
-  }
-
-  return `[${list.map(([key, val]) => `${key}=${String(val)}`).join(", ")}]`
 }
 
 function span(frame: ToolFrame): string {
@@ -335,7 +275,7 @@ function toolError(ctx: ToolFrame): string {
 }
 
 function fallbackStart(ctx: ToolFrame): string {
-  const extra = info(ctx.input)
+  const extra = primitiveInputSummary(ctx.input)
   if (!extra) {
     return `⚙ ${ctx.name}`
   }
@@ -361,28 +301,11 @@ function fallbackFinal(ctx: ToolFrame): string {
 }
 
 export function toolPath(input?: string, opts: { home?: boolean; directory?: string } = {}): string {
-  if (!input) {
-    return ""
-  }
-
-  const cwd = opts.directory ?? process.cwd()
-  const home = os.homedir()
-  const abs = path.isAbsolute(input) ? input : path.resolve(cwd, input)
-  const rel = path.relative(cwd, abs)
-
-  if (!rel) {
-    return "."
-  }
-
-  if (!rel.startsWith("..")) {
-    return rel.replaceAll("\\", "/")
-  }
-
-  if (opts.home && home && (abs === home || abs.startsWith(home + path.sep))) {
-    return abs.replace(home, "~").replaceAll("\\", "/")
-  }
-
-  return abs.replaceAll("\\", "/")
+  return formatPath(input, {
+    base: opts.directory ?? process.cwd(),
+    home: opts.home ? os.homedir() : undefined,
+    forwardSlashes: true,
+  })
 }
 
 function displayPath(p: ToolProps, input?: string, opts: { home?: boolean } = {}) {
@@ -438,7 +361,7 @@ function runList(p: ToolProps): ToolInline {
 
 function runRead(p: ToolProps): ToolInline {
   const file = displayPath(p, p.input.path)
-  const description = info(p.frame.input, ["path"]) || undefined
+  const description = primitiveInputSummary(p.frame.input, ["path"]) || undefined
   return {
     icon: "→",
     title: `Read ${file}`,
@@ -748,7 +671,7 @@ function scrollShellFinal(p: ToolProps): string {
     return fail(p.frame)
   }
 
-  const code = p.metadata.exit ?? num(p.frame.meta.exitCode) ?? num(p.frame.meta.exit_code)
+  const code = p.metadata.exit ?? finiteNumber(p.frame.meta.exitCode) ?? finiteNumber(p.frame.meta.exit_code)
   const time = span(p.frame)
   if (code === undefined) {
     if (!time) {
@@ -763,7 +686,7 @@ function scrollShellFinal(p: ToolProps): string {
 
 function scrollReadStart(p: ToolProps): string {
   const file = displayPath(p, p.input.path)
-  const extra = info(p.frame.input, ["path"])
+  const extra = primitiveInputSummary(p.frame.input, ["path"])
   const tail = extra ? ` ${extra}` : ""
   return `→ Read ${file}${tail}`.trim()
 }
@@ -953,109 +876,6 @@ function scrollWebSearchStart(p: ToolProps): string {
   return `◈ ${title} "${query}"`
 }
 
-function permEdit(p: ToolPermissionProps): ToolPermissionInfo {
-  const file = p.input.path || p.patterns[0] || ""
-  const diff = (list<PatchFile>(p.metadata.files)[0]?.patch ?? text(p.metadata.diff)) || undefined
-  return {
-    icon: "→",
-    title: `Edit ${toolPath(file, { home: true, directory: p.directory })}`,
-    lines: [],
-    diff,
-    patch: diff ? undefined : text(p.input.patchText) || undefined,
-    file,
-  }
-}
-
-function permRead(p: ToolPermissionProps): ToolPermissionInfo {
-  const file = p.input.path || p.patterns[0] || ""
-  return {
-    icon: "→",
-    title: `Read ${toolPath(file, { home: true, directory: p.directory })}`,
-    lines: file ? [`Path: ${toolPath(file, { home: true, directory: p.directory })}`] : [],
-  }
-}
-
-function permGlob(p: ToolPermissionProps): ToolPermissionInfo {
-  const pattern = p.input.pattern || p.patterns[0] || ""
-  return {
-    icon: "✱",
-    title: `Glob "${pattern}"`,
-    lines: pattern ? [`Pattern: ${pattern}`] : [],
-  }
-}
-
-function permGrep(p: ToolPermissionProps): ToolPermissionInfo {
-  const pattern = p.input.pattern || p.patterns[0] || ""
-  return {
-    icon: "✱",
-    title: `Grep "${pattern}"`,
-    lines: pattern ? [`Pattern: ${pattern}`] : [],
-  }
-}
-
-function permList(p: ToolPermissionProps): ToolPermissionInfo {
-  const dir = text(dict(p.input).path) || p.patterns[0] || ""
-  return {
-    icon: "→",
-    title: `List ${toolPath(dir, { home: true, directory: p.directory })}`,
-    lines: dir ? [`Path: ${toolPath(dir, { home: true, directory: p.directory })}`] : [],
-  }
-}
-
-function permBash(p: ToolPermissionProps): ToolPermissionInfo {
-  const cmd = p.input.command || ""
-  return {
-    icon: "#",
-    title: "Shell command",
-    lines: cmd ? [`$ ${cmd}`] : p.patterns.map((item) => `- ${item}`),
-  }
-}
-
-function permTask(p: ToolPermissionProps): ToolPermissionInfo {
-  const type = p.input.agent || "general"
-  const desc = p.input.description
-  return {
-    icon: "#",
-    title: `${Locale.titlecase(type)} Subagent`,
-    lines: desc ? [`◉ ${desc}`] : [],
-  }
-}
-
-function permWebfetch(p: ToolPermissionProps): ToolPermissionInfo {
-  const url = p.input.url || ""
-  return {
-    icon: "%",
-    title: `WebFetch ${url}`,
-    lines: url ? [`URL: ${url}`] : [],
-  }
-}
-
-function permWebSearch(p: ToolPermissionProps): ToolPermissionInfo {
-  const query = p.input.query || ""
-  const title = webSearchProviderLabel(p.metadata.provider)
-  return {
-    icon: "◈",
-    title: query ? `${title} "${query}"` : title,
-    lines: query ? [`Query: ${query}`] : [],
-  }
-}
-
-function permLsp(p: ToolPermissionProps): ToolPermissionInfo {
-  const file = p.input.path || ""
-  const line = typeof p.input.line === "number" ? p.input.line : undefined
-  const char = typeof p.input.character === "number" ? p.input.character : undefined
-  const pos = line !== undefined && char !== undefined ? `${line}:${char}` : undefined
-  return {
-    icon: "→",
-    title: lspTitle(p.input, { home: true, directory: p.directory }),
-    lines: [
-      ...(p.input.operation ? [`Operation: ${p.input.operation}`] : []),
-      ...(file ? [`Path: ${toolPath(file, { home: true, directory: p.directory })}`] : []),
-      ...(pos ? [`Position: ${pos}`] : []),
-    ],
-  }
-}
-
 const TOOL_RULES = {
   invalid: {
     view: {
@@ -1078,7 +898,6 @@ const TOOL_RULES = {
       progress: scrollBashProgress,
       final: scrollShellFinal,
     },
-    permission: permBash,
   },
   write: {
     view: {
@@ -1103,7 +922,6 @@ const TOOL_RULES = {
     scroll: {
       start: scrollEditStart,
     },
-    permission: permEdit,
   },
   patch: {
     view: {
@@ -1140,7 +958,6 @@ const TOOL_RULES = {
       start: scrollTaskStart,
       final: scrollTaskFinal,
     },
-    permission: permTask,
   },
   question: {
     view: {
@@ -1164,7 +981,6 @@ const TOOL_RULES = {
     scroll: {
       start: scrollReadStart,
     },
-    permission: permRead,
   },
   glob: {
     view: {
@@ -1176,7 +992,6 @@ const TOOL_RULES = {
       start: scrollGlobStart,
       final: scrollGlobFinal,
     },
-    permission: permGlob,
   },
   grep: {
     view: {
@@ -1187,7 +1002,6 @@ const TOOL_RULES = {
     scroll: {
       start: scrollGrepStart,
     },
-    permission: permGrep,
   },
   list: {
     view: {
@@ -1198,7 +1012,6 @@ const TOOL_RULES = {
     scroll: {
       start: scrollListStart,
     },
-    permission: permList,
   },
   lsp: {
     view: {
@@ -1209,7 +1022,6 @@ const TOOL_RULES = {
     scroll: {
       start: scrollLspStart,
     },
-    permission: permLsp,
   },
   webfetch: {
     view: {
@@ -1220,7 +1032,6 @@ const TOOL_RULES = {
     scroll: {
       start: scrollWebfetchStart,
     },
-    permission: permWebfetch,
   },
   websearch: {
     view: {
@@ -1231,7 +1042,6 @@ const TOOL_RULES = {
     scroll: {
       start: scrollWebSearchStart,
     },
-    permission: permWebSearch,
   },
   skill: {
     view: {
@@ -1383,33 +1193,6 @@ export function toolScroll(phase: ToolPhase, ctx: ToolFrame): string {
   }
 
   return fallbackFinal(ctx)
-}
-
-export function toolPermissionInfo(
-  name: string,
-  input: ToolDict,
-  meta: ToolDict,
-  patterns: string[],
-  directory?: string,
-): ToolPermissionInfo | undefined {
-  const normalized = canonicalToolName(name)
-  const draw = rule(normalized)?.permission
-  if (!draw) {
-    return undefined
-  }
-
-  try {
-    return draw(
-      permission({
-        directory,
-        input: normalizeInput(normalized, input),
-        meta: normalizeStructured(normalized, meta),
-        patterns,
-      }),
-    )
-  } catch {
-    return undefined
-  }
 }
 
 export function toolSnapshot(commit: StreamCommit, raw: string): ToolSnapshot | undefined {

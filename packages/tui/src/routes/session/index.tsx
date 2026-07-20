@@ -38,7 +38,13 @@ import type {
 import { useLocal } from "../../context/local"
 import { Locale } from "../../util/locale"
 import { FilePath } from "../../ui/file-path"
-import { webSearchProviderLabel } from "../../util/tool-display"
+import {
+  canonicalToolName,
+  finiteNumber,
+  primitiveInputSummary,
+  toolDisplayMetadata,
+  webSearchProviderLabel,
+} from "../../util/tool-display"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import { useClient } from "../../context/client"
 import { useEditorContext } from "../../context/editor"
@@ -55,6 +61,7 @@ import { errorMessage } from "../../util/error"
 import { useToast } from "../../ui/toast"
 import stripAnsi from "strip-ansi"
 import { usePromptRef } from "../../context/prompt"
+import { projectedPromptInput } from "../../prompt/codec"
 import { useEpilogue } from "../../context/epilogue"
 import { normalizePath } from "../../util/path"
 import { PermissionPrompt } from "./permission"
@@ -511,17 +518,7 @@ export function Session() {
           .stage({ sessionID: route.sessionID, messageID: message.id })
           .catch((error) => toast.show({ message: errorMessage(error), variant: "error", duration: 5000 }))
         prompt?.set({
-          text: message.text,
-          files: message.files?.map((file) => ({
-            uri: file.source.type === "uri" ? file.source.uri : `data:${file.mime};base64,${file.data}`,
-            name: file.name,
-            description: file.description,
-            mention: file.mention ? { ...file.mention } : undefined,
-          })),
-          agents: message.agents?.map((agent) => ({
-            name: agent.name,
-            mention: agent.mention ? { ...agent.mention } : undefined,
-          })),
+          ...projectedPromptInput(message),
           pasted: [],
         })
         dialog.clear()
@@ -2036,7 +2033,7 @@ function ToolPart(props: { part: SessionMessageAssistantTool }) {
 
   const toolprops = {
     get metadata() {
-      return props.part.state.status === "streaming" ? {} : props.part.state.structured
+      return toolDisplayMetadata(props.part.state)
     },
     get input() {
       return typeof props.part.state.input === "string" ? {} : props.part.state.input
@@ -2568,8 +2565,8 @@ function Glob(props: ToolProps) {
     <InlineTool icon="✱" pending="Finding files..." complete={stringValue(props.input.pattern)} part={props.part}>
       Glob "{stringValue(props.input.pattern)}"{" "}
       <Show when={stringValue(props.input.path)}>in {pathFormatter.format(stringValue(props.input.path))} </Show>
-      <Show when={numberValue(props.metadata.count)}>
-        ({numberValue(props.metadata.count)} {numberValue(props.metadata.count) === 1 ? "match" : "matches"})
+      <Show when={finiteNumber(props.metadata.count)}>
+        ({finiteNumber(props.metadata.count)} {finiteNumber(props.metadata.count) === 1 ? "match" : "matches"})
       </Show>
     </InlineTool>
   )
@@ -2615,8 +2612,8 @@ function Grep(props: ToolProps) {
     <InlineTool icon="✱" pending="Searching content..." complete={stringValue(props.input.pattern)} part={props.part}>
       Grep "{stringValue(props.input.pattern)}"{" "}
       <Show when={stringValue(props.input.path)}>in {pathFormatter.format(stringValue(props.input.path))} </Show>
-      <Show when={numberValue(props.metadata.matches)}>
-        ({numberValue(props.metadata.matches)} {numberValue(props.metadata.matches) === 1 ? "match" : "matches"})
+      <Show when={finiteNumber(props.metadata.matches)}>
+        ({finiteNumber(props.metadata.matches)} {finiteNumber(props.metadata.matches) === 1 ? "match" : "matches"})
       </Show>
     </InlineTool>
   )
@@ -2634,7 +2631,7 @@ function WebSearch(props: ToolProps) {
   return (
     <InlineTool icon="◈" pending="Searching web..." complete={stringValue(props.input.query)} part={props.part}>
       {webSearchProviderLabel(props.metadata.provider)} "{stringValue(props.input.query)}"{" "}
-      <Show when={numberValue(props.metadata.numResults)}>({numberValue(props.metadata.numResults)} results)</Show>
+      <Show when={finiteNumber(props.metadata.numResults)}>({finiteNumber(props.metadata.numResults)} results)</Show>
     </InlineTool>
   )
 }
@@ -2708,7 +2705,7 @@ function Execute(props: ToolProps) {
   const content = createMemo(() => {
     const lines = ["execute"]
     for (const call of calls()) {
-      const args = input(call.input ?? {})
+      const args = primitiveInputSummary(call.input ?? {})
       lines.push(`↳ ${call.tool}${args ? ` ${args}` : ""}${call.status === "error" ? " (failed)" : ""}`)
     }
     return lines.join("\n")
@@ -2991,21 +2988,8 @@ function Diagnostics(props: { diagnostics: unknown; filePath: string }) {
   )
 }
 
-function input(input: Record<string, unknown>, omit?: string[]): string {
-  const primitives = Object.entries(input).filter(([key, value]) => {
-    if (omit?.includes(key)) return false
-    return typeof value === "string" || typeof value === "number" || typeof value === "boolean"
-  })
-  if (primitives.length === 0) return ""
-  return `[${primitives.map(([key, value]) => `${key}=${value}`).join(", ")}]`
-}
-
 function stringValue(value: unknown) {
   return typeof value === "string" ? value : undefined
-}
-
-function numberValue(value: unknown) {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined
 }
 
 const toolDisplays = new Set([
@@ -3025,9 +3009,7 @@ const toolDisplays = new Set([
 ])
 
 export function toolDisplay(tool: string) {
-  // Legacy transcripts recorded the shell tool as "bash" and the subagent tool as "task"; render
-  // them with the renamed views.
-  const normalized = tool === "bash" ? "shell" : tool === "task" ? "subagent" : tool === "apply_patch" ? "patch" : tool
+  const normalized = canonicalToolName(tool)
   return toolDisplays.has(normalized) ? normalized : "generic"
 }
 
@@ -3073,8 +3055,8 @@ export function parseApplyPatchFiles(value: unknown) {
     const relativePath = stringValue(file.file) ?? stringValue(file.relativePath)
     const filePath = stringValue(file.filePath) ?? relativePath
     const patch = stringValue(file.patch)
-    const additions = numberValue(file.additions)
-    const deletions = numberValue(file.deletions)
+    const additions = finiteNumber(file.additions)
+    const deletions = finiteNumber(file.deletions)
     if (
       !type ||
       !relativePath ||
@@ -3110,8 +3092,8 @@ export function parseDiagnostics(value: unknown, filePath: string) {
     .flatMap((item) => {
       const diagnostic = recordValue(item)
       const start = recordValue(recordValue(diagnostic?.range)?.start)
-      const line = numberValue(start?.line)
-      const character = numberValue(start?.character)
+      const line = finiteNumber(start?.line)
+      const character = finiteNumber(start?.character)
       const message = stringValue(diagnostic?.message)
       if (diagnostic?.severity !== 1 || line === undefined || character === undefined || !message) return []
       return [{ range: { start: { line, character } }, message }]

@@ -31,6 +31,7 @@
     "./editor-zed": "./src/editor-zed.ts",
     "./mini": "./src/mini/index.ts",
     "./mini/tool": "./src/mini/tool.ts",
+    "./model-preference": "./src/model-preference.ts",
     "./runtime": "./src/runtime.tsx",
     "./terminal-win32": "./src/terminal-win32.ts",
     "./context/keymap": "./src/context/keymap.tsx",

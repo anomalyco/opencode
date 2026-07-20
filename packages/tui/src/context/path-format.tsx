@@ -1,5 +1,4 @@
-import path from "path"
-import { abbreviateHome } from "../runtime"
+import { formatPath } from "../util/path-format"
 import { useLocation } from "./location"
 import { useTuiPaths } from "./runtime"
 
@@ -8,17 +7,6 @@ export function usePathFormatter() {
   const location = useLocation()
   return {
     path: () => location.current?.directory || paths.cwd,
-    format: (input?: string) => formatPath(input, location.current?.directory || paths.cwd, paths.home),
+    format: (input?: string) => formatPath(input, { base: location.current?.directory || paths.cwd, home: paths.home }),
   }
-}
-
-function formatPath(input: string | undefined, base: string, home: string) {
-  if (typeof input !== "string" || !input) return ""
-
-  const absolute = path.isAbsolute(input) ? input : path.resolve(base, input)
-  const relative = path.relative(base, absolute)
-
-  if (!relative) return "."
-  if (relative !== ".." && !relative.startsWith(".." + path.sep)) return relative
-  return abbreviateHome(absolute, home)
 }

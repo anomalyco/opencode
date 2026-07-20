@@ -5,6 +5,7 @@ import { createEffect, createMemo, createSignal, type Accessor } from "solid-js"
 import { transparent, type RunFooterTheme } from "./theme"
 import { Locale } from "../util/locale"
 import { stringWidth } from "../util/string-width"
+import { moveSelection, moveSelectionOffset, reconcileSelection, revealSelectionOffset } from "../ui/select-controller"
 
 export const FOOTER_MENU_ROWS = 8
 
@@ -20,41 +21,6 @@ type RunFooterMenuRow =
   | { type: "item"; item: RunFooterMenuItem; index: number }
   | { type: "spacer" }
 
-function maxOffset(count: number, limit: number) {
-  return Math.max(0, count - limit)
-}
-
-function previewMargin(limit: number) {
-  return Math.max(0, Math.min(2, Math.floor((limit - 1) / 2)))
-}
-
-function revealOffset(value: number, input: { count: number; limit: number; selected: number }) {
-  const max = maxOffset(input.count, input.limit)
-  if (input.selected < value) {
-    return Math.min(max, input.selected)
-  }
-
-  if (input.selected >= value + input.limit) {
-    return Math.min(max, input.selected - input.limit + 1)
-  }
-
-  return Math.min(max, value)
-}
-
-function moveOffset(value: number, input: { count: number; limit: number; selected: number; dir: -1 | 1 }) {
-  const max = maxOffset(input.count, input.limit)
-  const margin = previewMargin(input.limit)
-  if (input.dir < 0 && input.selected < value + margin) {
-    return Math.max(0, Math.min(max, input.selected - margin))
-  }
-
-  if (input.dir > 0 && input.selected > value + input.limit - margin - 1) {
-    return Math.min(max, input.selected - input.limit + margin + 1)
-  }
-
-  return Math.min(max, value)
-}
-
 export function createFooterMenuState(input: { count: Accessor<number>; limit?: number }) {
   const [selected, setSelected] = createSignal(0)
   const [offset, setOffset] = createSignal(0)
@@ -63,15 +29,9 @@ export function createFooterMenuState(input: { count: Accessor<number>; limit?: 
 
   const reveal = (index: number) => {
     const count = input.count()
-    if (count === 0) {
-      setSelected(0)
-      setOffset(0)
-      return
-    }
-
-    const next = Math.max(0, Math.min(count - 1, index))
+    const next = reconcileSelection(index, count)
     setSelected(next)
-    setOffset((value) => revealOffset(value, { count, limit: limit(), selected: next }))
+    setOffset((value) => revealSelectionOffset(value, { count, limit: limit(), selected: next }))
   }
 
   const reset = () => {
@@ -81,28 +41,16 @@ export function createFooterMenuState(input: { count: Accessor<number>; limit?: 
 
   createEffect(() => {
     const count = input.count()
-    if (count === 0) {
-      reset()
-      return
-    }
-
-    if (selected() >= count) {
-      setSelected(count - 1)
-    }
-
-    setOffset((value) => revealOffset(value, { count, limit: limit(), selected: selected() }))
+    const next = reconcileSelection(selected(), count)
+    setSelected(next)
+    setOffset((value) => revealSelectionOffset(value, { count, limit: limit(), selected: next }))
   })
 
   const move = (dir: -1 | 1) => {
     const count = input.count()
-    if (count === 0) {
-      reset()
-      return
-    }
-
-    const next = Math.max(0, Math.min(count - 1, selected() + dir))
+    const next = moveSelection(selected(), { count, delta: dir, policy: "clamp" })
     setSelected(next)
-    setOffset((value) => moveOffset(value, { count, limit: limit(), selected: next, dir }))
+    setOffset((value) => moveSelectionOffset(value, { count, limit: limit(), selected: next, direction: dir }))
   }
 
   return {
@@ -169,8 +117,8 @@ export function RunFooterMenu(props: {
     const dir = props.selected() === previous + 1 ? 1 : props.selected() === previous - 1 ? -1 : undefined
     setGroupOffset((value) =>
       dir
-        ? moveOffset(value, { count: all.length, limit: limit(), selected, dir })
-        : revealOffset(value, { count: all.length, limit: limit(), selected }),
+        ? moveSelectionOffset(value, { count: all.length, limit: limit(), selected, direction: dir })
+        : revealSelectionOffset(value, { count: all.length, limit: limit(), selected }),
     )
     previous = props.selected()
   })

@@ -1,5 +1,4 @@
 import { createMemo, createSignal, onMount, Show } from "solid-js"
-import { unwrap } from "solid-js/store"
 import { useData } from "../../context/data"
 import { useRoute } from "../../context/route"
 import { useClient } from "../../context/client"
@@ -9,6 +8,7 @@ import { useDialog } from "../../ui/dialog"
 import { useToast } from "../../ui/toast"
 import { errorMessage } from "../../util/error"
 import { Locale } from "../../util/locale"
+import { projectedPromptInput } from "../../prompt/codec"
 
 export function DialogFork(props: { sessionID: string; messageID?: string; onMove?: (messageID?: string) => void }) {
   const data = useData()
@@ -26,20 +26,15 @@ export function DialogFork(props: { sessionID: string; messageID?: string; onMov
     })
     if (!result) return dialog.clear()
     const message = messageID ? data.session.message.get(props.sessionID, messageID) : undefined
+    const prompt = message?.type === "user" ? projectedPromptInput(message) : undefined
     route.navigate({
       sessionID: result.id,
       type: "session",
       prompt:
-        message?.type === "user"
+        prompt
           ? {
-              text: message.text,
-              files: message.files?.map((file) => ({
-                uri: file.source.type === "uri" ? file.source.uri : `data:${file.mime};base64,${file.data}`,
-                name: file.name,
-                description: file.description,
-                mention: file.mention,
-              })),
-              agents: structuredClone(unwrap(message.agents ?? [])),
+              ...prompt,
+              agents: prompt.agents ?? [],
               pasted: [],
             }
           : undefined,

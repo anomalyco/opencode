@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
 import { RGBA, type CliRenderer, type TerminalColors } from "@opentui/core"
 import { RUN_THEME_FALLBACK, generateSystem, resolveRunTheme, resolveTheme } from "../../src/mini/theme"
+import { DEFAULT_THEMES } from "../../src/theme"
 
 const palette = ["#15161e", "#f7768e", "#9ece6a", "#e0af68", "#7aa2f7", "#bb9af7", "#7dcfff", "#c0caf5"] as const
 
@@ -60,6 +61,18 @@ function spread(color: RGBA) {
 
 test("falls back when palette lookup fails", async () => {
   expect(await resolveRunTheme(renderer({ fail: true }))).toBe(RUN_THEME_FALLBACK)
+})
+
+test("resolveTheme preserves Mini indexed color and result shape semantics", () => {
+  const item = structuredClone(DEFAULT_THEMES.opencode)
+  item.theme.primary = 6
+  delete item.theme.selectedListItemText
+
+  const theme = resolveTheme(item, "dark")
+  expect(theme.primary.intent).toBe("indexed")
+  expect(theme.primary.slot).toBe(6)
+  expect(theme.selectedListItemText).toBe(theme.background)
+  expect("_hasSelectedListItemText" in theme).toBe(false)
 })
 
 test("returns syntax styles and indexed splash colors", async () => {

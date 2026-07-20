@@ -11,126 +11,25 @@ import { useClipboard } from "../../context/clipboard"
 import { SplitBorder } from "../../ui/border"
 import { useToast } from "../../ui/toast"
 import { Keymap } from "../../context/keymap"
+import {
+  formCustom,
+  formDisplayValue,
+  formInitialValues,
+  formLabel,
+  formRows,
+  formSelected,
+  formSetMultiselectCustom,
+  formTextual,
+  formToggleMultiselect,
+  formValidateValue,
+  isFormAnswerField,
+} from "../../util/form"
+import type { FormAnswerField } from "../../util/form"
 
 const FORM_MODE = "form"
 
-type Field = Exclude<FormField, { type: "external" }>
-
-function isField(field: FormField): field is Field {
-  return field.type !== "external"
-}
-
-function fieldLabel(field: FormField) {
-  return field.title ?? (field.type === "external" ? field.url : field.key)
-}
-
 function truncate(label: string, max: number) {
   return label.length > max ? label.slice(0, max - 1).trimEnd() + "…" : label
-}
-
-function validateText(field: Field, text: string): string | undefined {
-  if (field.type !== "string") return undefined
-  if (field.minLength !== undefined && text.length < field.minLength)
-    return `Must be at least ${field.minLength} characters`
-  if (field.maxLength !== undefined && text.length > field.maxLength)
-    return `Must be at most ${field.maxLength} characters`
-  if (field.pattern !== undefined) {
-    try {
-      if (!new RegExp(field.pattern).test(text)) return `Must match pattern: ${field.pattern}`
-    } catch {
-      return `Invalid pattern: ${field.pattern}`
-    }
-  }
-  if (field.format === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text)) return "Expected an email address"
-  if (field.format === "uri") {
-    try {
-      new URL(text)
-    } catch {
-      return "Expected a URL"
-    }
-  }
-  if (field.format === "date") {
-    const date = new Date(`${text}T00:00:00.000Z`)
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(text) || Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== text)
-      return "Expected a date (YYYY-MM-DD)"
-  }
-  if (field.format === "date-time" && Number.isNaN(new Date(text).getTime())) return "Expected a date and time"
-  return undefined
-}
-
-function validateSelection(field: Field, value: FormValue | undefined): string | undefined {
-  if (field.type !== "multiselect" || value === undefined) return undefined
-  if (!Array.isArray(value)) return "Expected selections"
-  if (field.required && value.length === 0) return "Select at least one option"
-  if (field.minItems !== undefined && value.length < field.minItems) return `Select at least ${field.minItems}`
-  if (field.maxItems !== undefined && value.length > field.maxItems) return `Select at most ${field.maxItems}`
-  return undefined
-}
-
-function validateValue(field: Field, value: FormValue | undefined): string | undefined {
-  if (value === undefined) return field.required ? "Answer required" : undefined
-  if (field.required && (value === "" || (Array.isArray(value) && value.length === 0))) {
-    return field.type === "multiselect" ? "Select at least one option" : "Answer required"
-  }
-  if (field.type === "string") {
-    if (typeof value !== "string") return "Expected text"
-    const invalid = validateText(field, value)
-    if (invalid) return invalid
-    if (field.options && !field.custom && !field.options.some((option) => option.value === value)) {
-      return "Select an available option"
-    }
-    return undefined
-  }
-  if (field.type === "number" || field.type === "integer") {
-    if (typeof value !== "number" || !Number.isFinite(value)) return "Expected a number"
-    if (field.type === "integer" && !Number.isInteger(value)) return "Expected an integer"
-    if (typeof field.minimum === "number" && value < field.minimum) return `Must be at least ${field.minimum}`
-    if (typeof field.maximum === "number" && value > field.maximum) return `Must be at most ${field.maximum}`
-    return undefined
-  }
-  if (field.type === "boolean") return typeof value === "boolean" ? undefined : "Expected yes or no"
-  const invalid = validateSelection(field, value)
-  if (invalid) return invalid
-  if (
-    Array.isArray(value) &&
-    !field.custom &&
-    value.some((item) => !field.options.some((option) => option.value === item))
-  ) {
-    return "Select only available options"
-  }
-  return undefined
-}
-
-function fieldRows(field: Field): { value: FormValue; label: string; description?: string }[] {
-  if (field.type === "boolean")
-    return [
-      { value: true, label: "Yes" },
-      { value: false, label: "No" },
-    ]
-  if (field.type === "multiselect" || (field.type === "string" && field.options))
-    return (field.options ?? []).map((option) => ({
-      value: option.value,
-      label: option.label,
-      description: option.description,
-    }))
-  return []
-}
-
-function selectedRow(field: Field | undefined, value: FormValue | undefined) {
-  if (!field || value === undefined || Array.isArray(value)) return 0
-  const rows = fieldRows(field)
-  const index = rows.findIndex((row) => row.value === value)
-  if (index !== -1) return index
-  if (typeof value === "string" && field.type === "string" && field.options && field.custom) return rows.length
-  return 0
-}
-
-function display(field: Field, value: FormValue | undefined) {
-  if (value === undefined) return ""
-  const label = (item: string | number | boolean) =>
-    fieldRows(field).find((row) => row.value === item)?.label ?? String(item)
-  if (Array.isArray(value)) return value.length === 0 ? "(none)" : value.map(label).join(", ")
-  return label(value)
 }
 
 function requestOptions(form: FormWithLocation) {
@@ -151,23 +50,16 @@ export function FormPrompt(props: { form: FormWithLocation }) {
   const keymap = Keymap.use()
   const clipboard = useClipboard()
   const toast = useToast()
-  const configuredFields = props.form.fields.filter(isField)
+  const configuredFields = props.form.fields.filter(isFormAnswerField)
+  const initial = formInitialValues(props.form.fields)
 
   const [tabHover, setTabHover] = createSignal<number | "confirm" | null>(null)
   const [store, setStore] = createStore({
     tab: 0,
-    answers: Object.fromEntries(
-      configuredFields.flatMap((field) => (field.default === undefined ? [] : [[field.key, field.default]])),
-    ) as Record<string, FormValue | undefined>,
-    custom: Object.fromEntries(
-      configuredFields.flatMap((field) => {
-        if (field.type !== "string" || !field.options || !field.custom || typeof field.default !== "string") return []
-        if (field.options.some((option) => option.value === field.default)) return []
-        return [[field.key, field.default]]
-      }),
-    ) as Record<string, string>,
+    answers: initial.answers,
+    custom: initial.custom,
     externalReady: {} as Record<string, boolean>,
-    selected: selectedRow(configuredFields[0], configuredFields[0]?.default),
+    selected: formSelected(configuredFields[0], configuredFields[0]?.default),
     editing: false,
     error: "",
   })
@@ -202,7 +94,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
   })
   const tabs = createMemo(() => (single() ? 1 : fields().length + 1))
   const tabbed = createMemo(() => {
-    const width = fields().reduce((sum, item) => sum + truncate(fieldLabel(item), 24).length + 3, "Confirm".length + 3)
+    const width = fields().reduce((sum, item) => sum + truncate(formLabel(item), 24).length + 3, "Confirm".length + 3)
     return width <= dimensions().width - 8
   })
   const answered = createMemo(
@@ -215,7 +107,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
   const field = createMemo(() => fields()[store.tab])
   const answerField = createMemo(() => {
     const current = field()
-    return current && isField(current) ? current : undefined
+    return current && isFormAnswerField(current) ? current : undefined
   })
   const externalField = createMemo(() => {
     const current = field()
@@ -225,7 +117,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
   const rows = createMemo(() => {
     const current = answerField()
     if (!current) return []
-    const configured = fieldRows(current)
+    const configured = formRows(current)
     const value = store.answers[current.key]
     if (current.type !== "multiselect" || !Array.isArray(value)) return configured
     const known = new Set(configured.map((row) => row.value))
@@ -236,17 +128,10 @@ export function FormPrompt(props: { form: FormWithLocation }) {
   })
   const textual = createMemo(() => {
     if (confirm()) return false
-    const current = answerField()
-    if (!current) return false
-    if (current.type === "number" || current.type === "integer") return true
-    return current.type === "string" && current.options === undefined
+    return formTextual(answerField())
   })
   const custom = createMemo(() => {
-    const current = answerField()
-    if (!current) return false
-    if (current.type === "string" && current.options !== undefined) return current.custom === true
-    if (current.type === "multiselect") return current.custom === true
-    return false
+    return formCustom(answerField())
   })
   const multi = createMemo(() => answerField()?.type === "multiselect")
   const actionLabel = createMemo(() => {
@@ -293,7 +178,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
     setStore("error", "")
   }
 
-  function replySingle(field: Field, value: FormValue) {
+  function replySingle(field: FormAnswerField, value: FormValue) {
     client.api.form
       .reply(
         {
@@ -316,7 +201,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
   function pick(value: FormValue, customValue?: string) {
     const current = answerField()
     if (!current) return
-    const invalid = validateValue(current, value)
+    const invalid = formValidateValue(current, value)
     if (invalid) {
       setStore("error", invalid)
       return
@@ -333,19 +218,14 @@ export function FormPrompt(props: { form: FormWithLocation }) {
   function toggle(value: string) {
     const current = answerField()
     if (!current) return
-    const existing = store.answers[current.key]
-    const list = Array.isArray(existing) ? [...existing] : []
-    const index = list.indexOf(value)
-    if (index === -1) list.push(value)
-    if (index !== -1) list.splice(index, 1)
-    answer(current.key, list)
+    answer(current.key, formToggleMultiselect(store.answers[current.key], value))
   }
 
   function validateCurrent() {
     if (confirm()) return true
     const current = answerField()
     if (!current) return true
-    const invalid = validateValue(current, store.answers[current.key])
+    const invalid = formValidateValue(current, store.answers[current.key])
     if (!invalid) return true
     setStore("error", invalid)
     return false
@@ -355,7 +235,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
     if (!confirm() && index > store.tab && !validateCurrent()) return
     const next = fields()[index]
     setStore("tab", index)
-    setStore("selected", next && isField(next) ? selectedRow(next, store.answers[next.key]) : 0)
+    setStore("selected", next && isFormAnswerField(next) ? formSelected(next, store.answers[next.key]) : 0)
     setStore("editing", false)
     setStore("error", "")
   }
@@ -393,7 +273,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
       const existing = store.answers[current.key]
       const values = Array.isArray(existing) ? existing.filter((value) => value !== previous) : []
       const value = !isTextual && isMulti && Array.isArray(existing) ? values : undefined
-      const invalid = validateValue(current, value)
+      const invalid = formValidateValue(current, value)
       if (invalid) {
         setStore("error", invalid)
         return false
@@ -406,7 +286,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
 
     if (isTextual && (current.type === "number" || current.type === "integer")) {
       const value = Number(text)
-      const invalid = validateValue(current, value)
+      const invalid = formValidateValue(current, value)
       if (invalid) {
         setStore("error", invalid)
         return false
@@ -415,7 +295,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
     }
 
     if (isTextual && current.type === "string") {
-      const invalid = validateValue(current, text)
+      const invalid = formValidateValue(current, text)
       if (invalid) {
         setStore("error", invalid)
         return false
@@ -424,19 +304,11 @@ export function FormPrompt(props: { form: FormWithLocation }) {
     }
 
     if (!isTextual && isMulti) {
-      const previous = store.custom[current.key]
-      const existing = store.answers[current.key]
-      const values = Array.isArray(existing) ? [...existing] : []
-      if (previous) {
-        const index = values.indexOf(previous)
-        if (index !== -1) values.splice(index, 1)
-      }
-      if (!values.includes(text)) values.push(text)
-      answer(current.key, values)
+      answer(current.key, formSetMultiselectCustom(store.answers[current.key], store.custom[current.key], text))
     }
 
     if (!isTextual && !isMulti) {
-      const invalid = validateValue(current, text)
+      const invalid = formValidateValue(current, text)
       if (invalid) {
         setStore("error", invalid)
         return false
@@ -518,14 +390,14 @@ export function FormPrompt(props: { form: FormWithLocation }) {
   function submit() {
     const unacknowledged = fields().find((field) => field.type === "external" && store.answers[field.key] !== true)
     if (unacknowledged) {
-      setStore("error", `External action must be acknowledged: ${fieldLabel(unacknowledged)}`)
+      setStore("error", `External action must be acknowledged: ${formLabel(unacknowledged)}`)
       return
     }
     const invalid = fields()
-      .filter(isField)
-      .find((field) => validateValue(field, store.answers[field.key]))
+      .filter(isFormAnswerField)
+      .find((field) => formValidateValue(field, store.answers[field.key]))
     if (invalid) {
-      setStore("error", validateValue(invalid, store.answers[invalid.key]) ?? "Invalid answer")
+      setStore("error", formValidateValue(invalid, store.answers[invalid.key]) ?? "Invalid answer")
       return
     }
     client.api.form
@@ -812,7 +684,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                               : themeV2.text.subdued()
                       }
                     >
-                      {truncate(fieldLabel(item), 24)}
+                      {truncate(formLabel(item), 24)}
                     </text>
                   </box>
                 )
@@ -877,7 +749,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
           <box paddingLeft={1} gap={1}>
             <box>
               <text fg={themeV2.text()}>
-                {answerField()!.description ?? fieldLabel(answerField()!)}
+                {answerField()!.description ?? formLabel(answerField()!)}
                 {answerField()!.required ? " (required)" : ""}
                 {multi() ? " (select all that apply)" : ""}
               </text>
@@ -893,7 +765,9 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                       val.gotoLineEnd()
                     })
                   }}
-                  initialValue={input() || display(answerField()!, store.answers[answerField()!.key])}
+                  initialValue={
+                    input() || formDisplayValue(answerField()!, store.answers[answerField()!.key], "(none)")
+                  }
                   placeholder={placeholder()}
                   placeholderColor={themeV2.text.subdued()}
                   minHeight={1}
@@ -1049,7 +923,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                   return (
                     <box paddingLeft={1}>
                       <text>
-                        <span style={{ fg: themeV2.text.subdued() }}>{truncate(fieldLabel(item), 40)}:</span>{" "}
+                        <span style={{ fg: themeV2.text.subdued() }}>{truncate(formLabel(item), 40)}:</span>{" "}
                         <span
                           style={{
                             fg: acknowledged()
@@ -1063,14 +937,14 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                     </box>
                   )
                 }
-                const value = () => display(item, store.answers[item.key])
+                const value = () => formDisplayValue(item, store.answers[item.key], "(none)")
                 const answered = () => store.answers[item.key] !== undefined
                 const missing = () => !answered() && item.required === true
-                const invalid = () => validateValue(item, store.answers[item.key])
+                const invalid = () => formValidateValue(item, store.answers[item.key])
                 return (
                   <box paddingLeft={1}>
                     <text>
-                      <span style={{ fg: themeV2.text.subdued() }}>{truncate(fieldLabel(item), 40)}:</span>{" "}
+                      <span style={{ fg: themeV2.text.subdued() }}>{truncate(formLabel(item), 40)}:</span>{" "}
                       <span
                         style={{
                           fg:

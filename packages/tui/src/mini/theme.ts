@@ -7,6 +7,10 @@
 // palette if detection fails.
 import { RGBA, SyntaxStyle, type CliRenderer, type ColorInput, type TerminalColors } from "@opentui/core"
 import type { TuiThemeCurrent } from "@opencode-ai/plugin/tui"
+import { ansiToRgba } from "../theme/color"
+import { resolveThemeColors } from "../theme/resolve"
+import { terminalMode } from "../theme/system"
+import type { ThemeJson } from "../theme/v1"
 import type { EntryKind, RunTuiConfig } from "./types"
 
 type Tone = {
@@ -63,21 +67,6 @@ export type RunTheme = {
 }
 
 type ThemeColor = Exclude<keyof TuiThemeCurrent, "thinkingOpacity">
-type HexColor = `#${string}`
-type RefName = string
-type Variant = {
-  dark: HexColor | RefName
-  light: HexColor | RefName
-}
-type ColorValue = HexColor | RefName | Variant | RGBA | number
-type ThemeJson = {
-  defs?: Record<string, HexColor | RefName>
-  theme: Omit<Record<ThemeColor, ColorValue>, "selectedListItemText" | "backgroundMenu"> & {
-    selectedListItemText?: ColorValue
-    backgroundMenu?: ColorValue
-    thinkingOpacity?: number
-  }
-}
 
 type SharedSyntaxTheme = TuiThemeCurrent & {
   _hasSelectedListItemText: boolean
@@ -94,7 +83,7 @@ function rgba(hex: string, value?: number): RGBA {
   return value === undefined ? color : alpha(color, value)
 }
 
-function mode(bg: RGBA): "dark" | "light" {
+function colorMode(bg: RGBA): "dark" | "light" {
   return luminance(bg) > 0.5 ? "light" : "dark"
 }
 
@@ -116,46 +105,6 @@ function fade(color: RGBA, base: RGBA, fallback: number, scale: number, limit: n
     base.b + (color.b - base.b) * mix,
     color.a,
   )
-}
-
-function ansiToRgba(code: number): RGBA {
-  if (code < 16) {
-    const ansi = [
-      "#000000",
-      "#800000",
-      "#008000",
-      "#808000",
-      "#000080",
-      "#800080",
-      "#008080",
-      "#c0c0c0",
-      "#808080",
-      "#ff0000",
-      "#00ff00",
-      "#ffff00",
-      "#0000ff",
-      "#ff00ff",
-      "#00ffff",
-      "#ffffff",
-    ]
-    return RGBA.fromHex(ansi[code] ?? "#000000")
-  }
-
-  if (code < 232) {
-    const index = code - 16
-    const b = index % 6
-    const g = Math.floor(index / 6) % 6
-    const r = Math.floor(index / 36)
-    const value = (x: number) => (x === 0 ? 0 : x * 40 + 55)
-    return RGBA.fromInts(value(r), value(g), value(b))
-  }
-
-  if (code < 256) {
-    const gray = (code - 232) * 10 + 8
-    return RGBA.fromInts(gray, gray, gray)
-  }
-
-  return RGBA.fromInts(0, 0, 0)
 }
 
 function tint(base: RGBA, overlay: RGBA, value: number): RGBA {
@@ -236,54 +185,10 @@ function splashShadow(indexed: RGBA[], base: RGBA, overlay: RGBA, value: number)
 }
 
 export function resolveTheme(theme: ThemeJson, pick: "dark" | "light"): TuiThemeCurrent {
-  const defs = theme.defs ?? {}
-
-  const resolveColor = (value: ColorValue, chain: string[] = []): RGBA => {
-    if (value instanceof RGBA) return value
-
-    if (typeof value === "number") {
-      return RGBA.fromIndex(value, ansiToRgba(value))
-    }
-
-    if (typeof value !== "string") {
-      return resolveColor(value[pick], chain)
-    }
-
-    if (value === "transparent" || value === "none") {
-      return RGBA.fromInts(0, 0, 0, 0)
-    }
-
-    if (value.startsWith("#")) {
-      return RGBA.fromHex(value)
-    }
-
-    if (chain.includes(value)) {
-      throw new Error(`Circular color reference: ${[...chain, value].join(" -> ")}`)
-    }
-
-    const next = defs[value] ?? theme.theme[value as ThemeColor]
-    if (next === undefined) {
-      throw new Error(`Color reference "${value}" not found in defs or theme`)
-    }
-
-    return resolveColor(next, [...chain, value])
-  }
-
-  const resolved = Object.fromEntries(
-    Object.entries(theme.theme)
-      .filter(([key]) => key !== "selectedListItemText" && key !== "backgroundMenu" && key !== "thinkingOpacity")
-      .map(([key, value]) => [key, resolveColor(value as ColorValue)]),
-  ) as Partial<Record<ThemeColor, RGBA>>
-
+  const resolved = resolveThemeColors(theme, pick, (code) => RGBA.fromIndex(code, ansiToRgba(code)))
   return {
-    ...(resolved as Record<ThemeColor, RGBA>),
-    selectedListItemText:
-      theme.theme.selectedListItemText === undefined
-        ? resolved.background!
-        : resolveColor(theme.theme.selectedListItemText),
-    backgroundMenu:
-      theme.theme.backgroundMenu === undefined ? resolved.backgroundElement! : resolveColor(theme.theme.backgroundMenu),
-    thinkingOpacity: theme.theme.thinkingOpacity ?? 0.6,
+    ...resolved.theme,
+    thinkingOpacity: resolved.thinkingOpacity,
   }
 }
 
@@ -465,7 +370,7 @@ function map(
   syntax?: SyntaxStyle,
 ): RunTheme {
   const footerBackground = alpha(footerTheme.background, 1)
-  const footerMode = mode(footerBackground)
+  const footerMode = colorMode(footerBackground)
   const shade = fade(footerTheme.backgroundMenu, footerTheme.background, 0.12, 0.56, 0.72)
   const surface = fade(footerTheme.backgroundMenu, footerTheme.background, 0.18, 0.76, 0.9)
   const line = fade(footerTheme.backgroundMenu, footerTheme.background, 0.24, 0.9, 0.98)
@@ -616,9 +521,7 @@ export async function resolveRunTheme(renderer: CliRenderer, config?: RunTuiConf
     const pick =
       config?.mode === "dark" || config?.mode === "light"
         ? config.mode
-        : colors.defaultBackground
-          ? mode(RGBA.fromHex(colors.defaultBackground))
-          : (renderer.themeMode ?? mode(RGBA.fromHex(bg)))
+        : (terminalMode(colors) ?? renderer.themeMode ?? colorMode(RGBA.fromHex(bg)))
     const { generateSyntax } = await import("../theme")
     const indexed = indexedPalette(colors, 256)
     const footerTheme = resolveTheme(generateSystem(colors, pick), pick)

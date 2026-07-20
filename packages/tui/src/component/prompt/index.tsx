@@ -26,6 +26,8 @@ import { editorSelectionKey, useEditorContext, type EditorSelection } from "../.
 import { normalizePromptContent, openEditor } from "../../editor"
 import { useExit } from "../../context/exit"
 import { promptOffsetWidth } from "../../prompt/display"
+import { expandPromptInputPastedText, realignPromptInputMentions } from "../../prompt/mention"
+import { parseSlashHead } from "../../prompt/parse"
 import { stringWidth } from "../../util/string-width"
 import { createStore, produce, unwrap } from "solid-js/store"
 import { emptyPrompt, usePromptHistory, type PromptInfo, type PromptPartRef } from "../../prompt/history"
@@ -137,15 +139,15 @@ function formatEditorContext(selection: EditorSelection) {
 let stashed: { prompt: PromptInfo; cursor: number } | undefined
 
 function argumentSlash(input: string, commands: readonly KeymapCommand[]) {
-  if (!input.startsWith("/")) return
-  const separator = input.search(/\s/)
-  const name = input.slice(1, separator === -1 ? undefined : separator)
+  const head = parseSlashHead(input, /\s/)
+  if (!head) return
   const command = commands.find(
     (command) =>
-      command.slash?.arguments && (command.slash.name === name || command.slash.aliases?.includes(name) === true),
+      command.slash?.arguments &&
+      (command.slash.name === head.name || command.slash.aliases?.includes(head.name) === true),
   )
   if (!command) return
-  return { command, input: separator === -1 ? "" : input.slice(separator + 1) }
+  return { command, input: head.arguments }
 }
 
 export function Prompt(props: PromptProps) {
@@ -493,13 +495,8 @@ export function Prompt(props: PromptProps) {
         run: async () => {
           dialog.clear()
 
-          // replace summarized text parts with the actual text
-          const text = store.prompt.pasted.reduce(
-            (result, part) => result.replace(part.source.text, part.text),
-            store.prompt.text,
-          )
-
-          const value = text
+          const editorPrompt = expandPromptInputPastedText(store.prompt, store.prompt.pasted)
+          const value = editorPrompt.text
           const content = await openEditor({
             renderer,
             value,
@@ -513,20 +510,8 @@ export function Prompt(props: PromptProps) {
 
           input.setText(normalized)
 
-          // Update attachment positions and drop virtual text deleted in the editor.
-          // this handles a case where the user edits the text in the editor
-          // such that the virtual text moves around or is deleted
-          const moveMention = <Part extends { mention?: { start: number; end: number; text: string } }>(part: Part) => {
-            if (!part.mention?.text) return part
-            const start = normalized.indexOf(part.mention.text)
-            if (start === -1) return
-            return { ...part, mention: { ...part.mention, start, end: start + part.mention.text.length } }
-          }
-
           setStore("prompt", {
-            text: normalized,
-            files: store.prompt.files?.map(moveMention).filter((part) => part !== undefined),
-            agents: store.prompt.agents?.map(moveMention).filter((part) => part !== undefined),
+            ...realignPromptInputMentions(normalized, editorPrompt),
             pasted: [],
           })
           restoreExtmarksFromPrompt(store.prompt)
@@ -1122,7 +1107,7 @@ export function Prompt(props: PromptProps) {
       if (
         session?.model?.providerID !== selectedModel.providerID ||
         session.model.id !== selectedModel.modelID ||
-        session.model.variant !== variant
+        (session.model.variant ?? "default") !== (variant ?? "default")
       ) {
         await client.api.session.switchModel({
           sessionID,

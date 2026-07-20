@@ -13,6 +13,7 @@ export default defineScript({
 
     const registration = await serviceRegistration(artifacts)
     const root = path.resolve(import.meta.dir, "../../../..")
+    const preload = Bun.resolveSync("@opentui/solid/preload", path.join(root, "packages/cli"))
     const session = `mini-stage2-${process.pid}`
     const snapshots = path.join(artifacts, "mini-stage2")
     await mkdir(snapshots, { recursive: true })
@@ -56,7 +57,7 @@ export default defineScript({
         "OPENCODE_DIRECT_TRACE=1",
         process.execPath,
         "--conditions=browser",
-        "--preload=@opentui/solid/preload",
+        `--preload=${preload}`,
         path.join(root, "packages/cli/src/index.ts"),
         "mini",
         "--server",

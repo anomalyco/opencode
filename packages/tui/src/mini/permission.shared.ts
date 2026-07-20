@@ -1,22 +1,6 @@
-// Pure state machine for the permission UI.
-//
-// Lives outside the JSX component so it can be tested independently. The
-// machine has three stages:
-//
-//   permission → initial view with Allow once / Always / Reject options
-//   always     → confirmation step (Confirm / Cancel)
-//   reject     → text input for rejection message
-//
-// permissionRun() is the main transition: given the current state and the
-// selected option, it returns a new state and optionally a PermissionReply
-// to send to the SDK. The component calls this on enter/click.
-//
-// permissionInfo() extracts display info (icon, title, lines, diff) from
-// the request, delegating to tool.ts for tool-specific formatting.
 import type { MiniPermissionRequest, PermissionReply } from "./types"
-import { toolPath, toolPermissionInfo } from "./tool"
-
-type Dict = Record<string, unknown>
+import { permissionAlwaysLines, permissionOptionLabel, permissionPresentation } from "../util/permission"
+import { toolPath } from "./tool"
 
 export type PermissionStage = "permission" | "always" | "reject"
 export type PermissionOption = "once" | "always" | "reject" | "confirm" | "cancel"
@@ -30,44 +14,9 @@ export type PermissionBodyState = {
   submitting: boolean
 }
 
-export type PermissionInfo = {
-  icon: string
-  title: string
-  lines: string[]
-  diff?: string
-  patch?: string
-  file?: string
-}
-
 export type PermissionStep = {
   state: PermissionBodyState
   reply?: PermissionReply
-}
-
-function dict(v: unknown): Dict {
-  if (!v || typeof v !== "object" || Array.isArray(v)) {
-    return {}
-  }
-
-  return { ...v }
-}
-
-function text(v: unknown): string {
-  return typeof v === "string" ? v : ""
-}
-
-function data(request: MiniPermissionRequest): { input: Dict; metadata: Dict } {
-  const state = request.tool?.state
-  const metadata = {
-    ...(state && state.status !== "streaming" ? dict(state.structured) : {}),
-    ...dict(request.metadata),
-  }
-  if (!state || state.status === "streaming") return { input: {}, metadata }
-  return { input: dict(state.input), metadata }
-}
-
-function patterns(request: MiniPermissionRequest): string[] {
-  return request.resources.filter((item): item is string => typeof item === "string")
 }
 
 export function createPermissionBodyState(
@@ -95,56 +44,25 @@ export function permissionOptions(stage: PermissionStage): PermissionOption[] {
   return []
 }
 
-export function permissionInfo(request: MiniPermissionRequest, directory?: string): PermissionInfo {
-  const pats = patterns(request)
-  const source = data(request)
-  const info = toolPermissionInfo(request.action, source.input, source.metadata, pats, directory)
-  if (info) {
-    return info
-  }
-
-  if (request.action === "external_directory") {
-    const meta = dict(request.metadata)
-    const raw = text(meta.parentDir) || text(meta.filepath) || pats[0] || ""
-    const dir = raw.includes("*") ? raw.slice(0, raw.indexOf("*")).replace(/[\\/]+$/, "") : raw
-    return {
-      icon: "←",
-      title: `Access external directory ${toolPath(dir, { home: true, directory })}`,
-      lines: pats.map((item) => `- ${item}`),
-    }
-  }
-
-  if (request.action === "doom_loop") {
-    return {
-      icon: "⟳",
-      title: "Continue after repeated failures",
-      lines: ["This keeps the session running despite repeated failures."],
-    }
-  }
-
-  return {
-    icon: "⚙",
-    title: `Call tool ${request.action}`,
-    lines: [`Tool: ${request.action}`],
-  }
-}
-
-export function permissionAlwaysLines(request: MiniPermissionRequest): string[] {
-  const save = request.save ?? []
-  if (save.length === 1 && save[0] === "*") {
-    return [`This will allow ${request.action} until OpenCode is restarted.`]
-  }
-
-  return ["This will allow the following patterns until OpenCode is restarted.", ...save.map((item) => `- ${item}`)]
+export function permissionInfo(request: MiniPermissionRequest, directory?: string) {
+  const state = request.tool?.state
+  return permissionPresentation(
+    {
+      action: request.action,
+      resources: request.resources,
+      metadata: request.metadata,
+      input: state?.status === "streaming" ? undefined : state?.input,
+      structured: state?.status === "streaming" ? undefined : state?.structured,
+    },
+    (value) => toolPath(value, { home: true, directory }),
+  )
 }
 
 export function permissionLabel(option: PermissionOption): string {
-  if (option === "once") return "Allow once"
-  if (option === "always") return "Allow always"
-  if (option === "reject") return "Reject"
-  if (option === "confirm") return "Confirm"
-  return "Cancel"
+  return permissionOptionLabel(option)
 }
+
+export { permissionAlwaysLines }
 
 export function permissionReply(
   sessionID: string,

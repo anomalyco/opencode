@@ -45,6 +45,17 @@ test("resolveTheme rejects circular color refs", () => {
   expect(() => resolveTheme(item, "dark")).toThrow("Circular color reference")
 })
 
+test("resolveTheme preserves full theme numeric color and marker semantics", () => {
+  const item = structuredClone(DEFAULT_THEMES.opencode)
+  item.theme.primary = 6
+  delete item.theme.selectedListItemText
+
+  const theme = resolveTheme(item, "dark")
+  expect(theme.primary.intent).toBe("rgb")
+  expect(theme.selectedListItemText).toBe(theme.background)
+  expect(theme._hasSelectedListItemText).toBe(false)
+})
+
 function terminalColors(defaultBackground: string | null, palette: Array<string | null> = []): TerminalColors {
   return {
     palette,

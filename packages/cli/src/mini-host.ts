@@ -1,8 +1,9 @@
 import type { MiniFrontendInput } from "@opencode-ai/tui/mini"
+import { createModelPreferenceRepository } from "@opencode-ai/tui/model-preference"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Global } from "@opencode-ai/core/global"
 import fs from "node:fs"
-import { mkdir, readFile, writeFile } from "node:fs/promises"
+import { readFile } from "node:fs/promises"
 import path from "node:path"
 import { ReadStream } from "node:tty"
 
@@ -14,51 +15,17 @@ export type InteractiveStdin = {
 }
 
 type MiniHost = MiniFrontendInput["host"]
-type ModelState = Record<string, unknown> & {
-  variant?: Record<string, string | undefined>
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === "object" && !Array.isArray(value)
-}
-
-function state(value: unknown): ModelState {
-  if (!isRecord(value)) return {}
-  const variant = isRecord(value.variant)
-    ? Object.fromEntries(
-        Object.entries(value.variant).flatMap(([key, item]) =>
-          typeof item === "string" ? ([[key, item]] as const) : [],
-        ),
-      )
-    : undefined
-  return { ...value, variant }
-}
-
-function variantKey(model: NonNullable<MiniFrontendInput["model"]>) {
-  return `${model.providerID}/${model.modelID}`
-}
 
 function preferences(statePath: string): MiniHost["preferences"] {
-  const file = path.join(statePath, "model.json")
-  const read = () =>
-    readFile(file, "utf8")
-      .then((value) => state(JSON.parse(value)))
-      .catch(() => state(undefined))
+  const repository = createModelPreferenceRepository(path.join(statePath, "model.json"))
   return {
     async resolveVariant(model) {
       if (!model) return
-      const variant = (await read()).variant?.[variantKey(model)]
-      return variant === "default" ? undefined : variant
+      return repository.resolveVariant(model)
     },
     async saveVariant(model, variant) {
       if (!model) return
-      const current = await read()
-      const next = { ...current.variant }
-      if (variant) next[variantKey(model)] = variant
-      if (!variant) delete next[variantKey(model)]
-      await mkdir(path.dirname(file), { recursive: true })
-        .then(() => writeFile(file, JSON.stringify({ ...current, variant: next }, null, 2)))
-        .catch(() => {})
+      await repository.saveVariant(model, variant).catch(() => undefined)
     },
   }
 }

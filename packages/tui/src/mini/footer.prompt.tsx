@@ -22,9 +22,10 @@ import {
   mentionTriggerIndex,
   isNewCommand,
   movePromptHistory,
+  promptCopy,
   pushPromptHistory,
-  slashHead,
 } from "./prompt.shared"
+import { parseFileLineRange, parseSlashHead, stripFileLineRange } from "../prompt/parse"
 import { Keymap } from "../context/keymap"
 import { realignEditorPromptParts, resolveEditorSlashValue } from "./prompt.editor"
 import { FOOTER_MENU_ROWS, createFooterMenuState, type RunFooterMenuItem } from "./footer.menu"
@@ -104,44 +105,12 @@ function clamp(rows: number): number {
   return Math.max(TEXTAREA_MIN_ROWS, Math.min(TEXTAREA_MAX_ROWS, rows))
 }
 
-function clonePrompt(prompt: RunPrompt): RunPrompt {
-  return {
-    text: prompt.text,
-    parts: structuredClone(prompt.parts),
-    ...(prompt.mode ? { mode: prompt.mode } : {}),
-    ...(prompt.command ? { command: prompt.command } : {}),
-  }
-}
-
 function emptyPrompt(shell: boolean): RunPrompt {
   return shell ? { text: "", parts: [], mode: "shell" } : { text: "", parts: [] }
 }
 
-function removeLineRange(input: string) {
-  const hash = input.lastIndexOf("#")
-  return hash === -1 ? input : input.slice(0, hash)
-}
-
-function extractLineRange(input: string) {
-  const hash = input.lastIndexOf("#")
-  if (hash === -1) {
-    return { base: input }
-  }
-
-  const base = input.slice(0, hash)
-  const line = input.slice(hash + 1)
-  const match = line.match(/^(\d+)(?:-(\d*))?$/)
-  if (!match) {
-    return { base }
-  }
-
-  const start = Number(match[1])
-  const end = match[2] && start < Number(match[2]) ? Number(match[2]) : undefined
-  return { base, line: { start, end } }
-}
-
 function slashQuery(text: string, cursor: number) {
-  const head = slashHead(text.slice(0, cursor))
+  const head = parseSlashHead(text.slice(0, cursor))
   if (!head || head.end !== cursor) {
     return
   }
@@ -150,7 +119,7 @@ function slashQuery(text: string, cursor: number) {
 }
 
 function parseSlashCommand(text: string, commands: RunCommand[] | undefined) {
-  const head = slashHead(text)
+  const head = parseSlashHead(text)
   if (!head || head.name.length === 0) {
     return { type: "none" as const }
   }
@@ -175,7 +144,7 @@ export function selectedCommand(text: string, command: RunPrompt["command"], com
     return
   }
 
-  const head = slashHead(text)
+  const head = parseSlashHead(text)
   if (!head || head.name !== command.name) {
     return
   }
@@ -359,16 +328,16 @@ export function createPromptState(input: PromptInput): PromptState {
         return []
       }
 
-      const next = extractLineRange(value)
+      const next = parseFileLineRange(value)
       const list = await input.findFiles(next.base)
       return list.map((item): Auto => {
         const url = pathToFileURL(path.resolve(input.directory(), item))
         let filename = item
-        if (next.line && !item.endsWith("/")) {
-          filename = `${item}#${next.line.start}${next.line.end ? `-${next.line.end}` : ""}`
-          url.searchParams.set("start", String(next.line.start))
-          if (next.line.end !== undefined) {
-            url.searchParams.set("end", String(next.line.end))
+        if (next.lineRange && !item.endsWith("/")) {
+          filename = `${item}#${next.lineRange.startLine}${next.lineRange.endLine ? `-${next.lineRange.endLine}` : ""}`
+          url.searchParams.set("start", String(next.lineRange.startLine))
+          if (next.lineRange.endLine !== undefined) {
+            url.searchParams.set("end", String(next.lineRange.endLine))
           }
         }
 
@@ -452,7 +421,7 @@ export function createPromptState(input: PromptInput): PromptState {
       return mixed
     }
 
-    const next = removeLineRange(query())
+    const next = stripFileLineRange(query())
     if (mode() === "mention") {
       return [
         ...fuzzysort.go(next, agents(), { keys: ["value", "display", "description"] }).map((item) => item.obj),
@@ -587,7 +556,7 @@ export function createPromptState(input: PromptInput): PromptState {
   }
 
   const restore = (value: RunPrompt, cursor = stringWidth(value.text)) => {
-    draft = clonePrompt(value)
+    draft = promptCopy(value)
     setShell(value.mode === "shell")
     if (!area || area.isDestroyed) {
       return
@@ -726,7 +695,7 @@ export function createPromptState(input: PromptInput): PromptState {
     }
 
     if (history.index === null && dir === -1) {
-      stash = clonePrompt(draft)
+      stash = promptCopy(draft)
     }
 
     const next = movePromptHistory(history, dir, area.plainText, area.cursorOffset)
@@ -804,7 +773,7 @@ export function createPromptState(input: PromptInput): PromptState {
     syncDraft()
     hide()
 
-    const current = clonePrompt(draft)
+    const current = promptCopy(draft)
     try {
       const content = await input.onEditorOpen({
         value: inputValue?.value ?? current.text,
@@ -847,7 +816,7 @@ export function createPromptState(input: PromptInput): PromptState {
       }
 
       const cursor = area.cursorOffset
-      const head = slashHead(area.plainText)
+      const head = parseSlashHead(area.plainText)
       const local = !shell() && (next.name === "new" || next.name === "exit")
       const separator = !shell() && !local && head && /\s/.test(area.plainText[head.end] ?? "") ? "" : " "
       const text = `/${next.name}${separator}`
@@ -864,7 +833,7 @@ export function createPromptState(input: PromptInput): PromptState {
       hide()
       syncDraft()
       if (!shell()) {
-        submitPrompt(clonePrompt(draft))
+        submitPrompt(promptCopy(draft))
         return
       }
 
@@ -1127,7 +1096,7 @@ export function createPromptState(input: PromptInput): PromptState {
 
   const submitPrompt = (next: RunPrompt) => {
     if (!area || area.isDestroyed) {
-      draft = clonePrompt(next)
+      draft = promptCopy(next)
     }
 
     if (visible()) {
@@ -1183,7 +1152,7 @@ export function createPromptState(input: PromptInput): PromptState {
 
   const onSubmit = () => {
     syncDraft()
-    submitPrompt(clonePrompt(draft))
+    submitPrompt(promptCopy(draft))
   }
 
   const submitText = (text: string) => {
