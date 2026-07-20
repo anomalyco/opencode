@@ -211,6 +211,27 @@ test("migrates legacy keybind names in an existing cli.json", async () => {
   }
 })
 
+test("preserves the effective value when migrating duplicate legacy keybinds", async () => {
+  const directory = await Bun.$`mktemp -d`.text().then((value) => value.trim())
+  const file = path.join(directory, "cli.json")
+  await Bun.write(file, `{"keybinds":{"session_delete":"ctrl+a","session_delete":"ctrl+b"}}`)
+
+  try {
+    const config = await run(
+      directory,
+      Effect.gen(function* () {
+        const service = yield* Config.Service
+        return yield* service.get()
+      }),
+    )
+
+    expect(config.keybinds).toEqual({ "session.delete": "ctrl+b" })
+    expect(parse(await Bun.file(file).text()).keybinds).toEqual({ "session.delete": "ctrl+b" })
+  } finally {
+    await Bun.$`rm -rf ${directory}`
+  }
+})
+
 test("removes a sole orphaned keybind with a trailing comma", async () => {
   const directory = await Bun.$`mktemp -d`.text().then((value) => value.trim())
   const file = path.join(directory, "cli.json")
