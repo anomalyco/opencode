@@ -717,7 +717,10 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
   }
   if (isKimiFamily(model) && ["@ai-sdk/anthropic", "@ai-sdk/google-vertex/anthropic"].includes(model.api.npm)) {
     return Object.fromEntries(
-      ["low", "medium", "high", "xhigh", "max"].map((effort) => [effort, anthropicEffort(model, effort)]),
+      ["low", "medium", "high", "xhigh", "max"].flatMap((effort) => {
+        const settings = anthropicEffort(model, effort)
+        return settings ? [[effort, settings]] : []
+      }),
     )
   }
   if (
