@@ -87,11 +87,11 @@ export function TabsInfoPopup() {
           <DrawerClose
             as={IconButtonV2}
             type="button"
-            size="large"
+            size="small"
             variant="neutral"
             aria-label="Close"
             icon={<IconV2 name="xmark-small" />}
-            class="absolute top-[6px] left-[-44px]"
+            class="absolute top-[10px] left-[-36px]"
           />
         </Show>
         <div
