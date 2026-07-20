@@ -96,26 +96,35 @@ const stringify = <R>(
   const apply = applyCollectionCallback(runner, replacer, "JSON.stringify", node)
   const root: SafeObject = Object.create(null) as SafeObject
   root[""] = input
+  const stack = new Set<object>()
   const visit = (holder: SafeObject | Array<unknown>, key: string): Effect.Effect<unknown, unknown, R> =>
     Effect.gen(function* () {
       const value = yield* apply([key, toJSONValue(holder[key as keyof typeof holder])])
+      if (value === undefined || typeofValue(value) === "function") return undefined
       copyIn(value, "JSON.stringify replacer result", true)
-      if (value === undefined) return undefined
       if (typeof value === "number") return Number.isFinite(value) ? value : null
       if (value === null || typeof value === "string" || typeof value === "boolean") return value
       if (Array.isArray(value)) {
+        if (stack.has(value))
+          throw new InterpreterRuntimeError("Converting circular structure to JSON.", node).as("TypeError")
+        stack.add(value)
         const result: Array<unknown> = []
         for (let index = 0; index < value.length; index += 1) {
           result.push((yield* visit(value, String(index))) ?? null)
         }
+        stack.delete(value)
         return result
       }
       if (!isPlainObject(value)) return {}
+      if (stack.has(value))
+        throw new InterpreterRuntimeError("Converting circular structure to JSON.", node).as("TypeError")
+      stack.add(value)
       const result: SafeObject = Object.create(null) as SafeObject
       for (const name of Object.keys(value)) {
         const item = yield* visit(value, name)
         if (item !== undefined) result[name] = item
       }
+      stack.delete(value)
       return result
     })
 
