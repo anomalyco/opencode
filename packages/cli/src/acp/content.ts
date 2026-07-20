@@ -1,4 +1,4 @@
-import type { ContentBlock, ContentChunk, ResourceLink, Role } from "@agentclientprotocol/sdk"
+import type { ContentBlock, ContentChunk, ResourceLink } from "@agentclientprotocol/sdk"
 import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
@@ -14,8 +14,16 @@ export function promptContentToParts(content: readonly ContentBlock[]): PromptPa
 
 export function contentBlockToParts(block: ContentBlock): PromptPart[] {
   switch (block.type) {
-    case "text":
-      return [{ type: "text", text: block.text, ...audienceFlags(block.annotations?.audience ?? undefined) }]
+    case "text": {
+      const audience = block.annotations?.audience
+      if (audience?.length === 1 && audience[0] === "assistant") {
+        return [{ type: "text", text: block.text, synthetic: true }]
+      }
+      if (audience?.length === 1 && audience[0] === "user") {
+        return [{ type: "text", text: block.text, ignored: true }]
+      }
+      return [{ type: "text", text: block.text }]
+    }
     case "image":
       if (block.data) {
         return [
@@ -84,7 +92,8 @@ export function partsToContentChunks(parts: readonly ReplayPart[]): ContentChunk
           content: {
             type: "text",
             text: part.text,
-            ...replayAudience(part),
+            ...(part.synthetic ? { annotations: { audience: ["assistant" as const] } } : {}),
+            ...(!part.synthetic && part.ignored ? { annotations: { audience: ["user" as const] } } : {}),
           },
         },
       ]
@@ -105,15 +114,17 @@ export function partsToContentChunks(parts: readonly ReplayPart[]): ContentChunk
       ]
     }
     if (!part.url.startsWith("data:")) return []
-    const data = decodeDataUrl(part.url)
-    if (!data) return []
-    if (data.mime.startsWith("image/")) {
+    const match = /^data:([^;]+);base64,(.*)$/.exec(part.url)
+    if (!match?.[1] || match[2] === undefined) return []
+    const mime = match[1]
+    const data = match[2]
+    if (mime.startsWith("image/")) {
       return [
         {
           content: {
             type: "image",
-            mimeType: data.mime,
-            data: data.base64,
+            mimeType: mime,
+            data,
             uri: pathToFileURL(part.filename ?? "image").href,
           },
         },
@@ -124,16 +135,16 @@ export function partsToContentChunks(parts: readonly ReplayPart[]): ContentChunk
         content: {
           type: "resource",
           resource:
-            data.mime.startsWith("text/") || data.mime === "application/json"
+            mime.startsWith("text/") || mime === "application/json"
               ? {
                   uri: pathToFileURL(part.filename ?? "file").href,
-                  mimeType: data.mime,
-                  text: Buffer.from(data.base64, "base64").toString("utf8"),
+                  mimeType: mime,
+                  text: Buffer.from(data, "base64").toString("utf8"),
                 }
               : {
                   uri: pathToFileURL(part.filename ?? "file").href,
-                  mimeType: data.mime,
-                  blob: data.base64,
+                  mimeType: mime,
+                  blob: data,
                 },
         },
       },
@@ -161,24 +172,6 @@ function resourceLinkToPart(link: ResourceLink): PromptPart {
       }
   }
   return { type: "text", text: link.uri }
-}
-
-function decodeDataUrl(url: string): { readonly mime: string; readonly base64: string } | undefined {
-  const match = /^data:([^;]+);base64,(.*)$/.exec(url)
-  if (!match?.[1] || match[2] === undefined) return undefined
-  return { mime: match[1], base64: match[2] }
-}
-
-function audienceFlags(audience: readonly Role[] | null | undefined) {
-  if (audience?.length === 1 && audience[0] === "assistant") return { synthetic: true as const }
-  if (audience?.length === 1 && audience[0] === "user") return { ignored: true as const }
-  return {}
-}
-
-function replayAudience(part: Extract<PromptPart, { type: "text" }>) {
-  if (part.synthetic) return { annotations: { audience: ["assistant" as const] } }
-  if (part.ignored) return { annotations: { audience: ["user" as const] } }
-  return {}
 }
 
 function filenameFromUri(uri: string | undefined): string | undefined {

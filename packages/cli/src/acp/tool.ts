@@ -103,31 +103,35 @@ export function completedToolUpdate(input: {
   readonly structured: Readonly<Record<string, unknown>>
   readonly result?: unknown
 }): ToolCallUpdate {
-  return {
-    toolCallId: input.toolCallId,
-    status: "completed",
-    content: completedToolContent(input.toolName, input.input, input.content, input.structured),
-    rawOutput: {
-      structured: input.structured,
-      ...(input.result === undefined ? {} : { result: input.result }),
-    },
-  }
-}
-
-function completedToolContent(
-  toolName: string,
-  input: ToolInput,
-  content: ToolContent,
-  structured: Readonly<Record<string, unknown>>,
-): ToolCallContent[] {
-  const normalized = toolContent(content)
-  const read = toolName.toLocaleLowerCase() === "read" ? readDisplayText(structured) : undefined
+  const normalized = toolContent(input.content)
+  const read = input.toolName.toLocaleLowerCase() === "read" ? readDisplayText(input.structured) : undefined
   const images = normalized.filter((part) => part.type === "content" && part.content.type === "image")
   const primary =
     read === undefined
       ? normalized.filter((part) => !images.includes(part))
       : [{ type: "content" as const, content: { type: "text" as const, text: read } }]
-  return [...primary, ...diffContent(input), ...images]
+  const oldText = stringValue(input.input.oldString)
+  const newText = stringValue(input.input.newString)
+  const diff: ToolCallContent[] =
+    oldText === undefined || newText === undefined
+      ? []
+      : [
+          {
+            type: "diff",
+            path: stringValue(input.input.path) ?? stringValue(input.input.filePath) ?? "",
+            oldText,
+            newText,
+          },
+        ]
+  return {
+    toolCallId: input.toolCallId,
+    status: "completed",
+    content: [...primary, ...diff, ...images],
+    rawOutput: {
+      structured: input.structured,
+      ...(input.result === undefined ? {} : { result: input.result }),
+    },
+  }
 }
 
 export function errorToolUpdate(input: {
@@ -158,20 +162,6 @@ function toolContent(content: ToolContent): ToolCallContent[] {
     if (!match?.[1]?.startsWith("image/") || match[2] === undefined) return []
     return [{ type: "content", content: { type: "image", mimeType: match[1], data: match[2] } }]
   })
-}
-
-function diffContent(input: ToolInput): ToolCallContent[] {
-  const oldText = stringValue(input.oldString)
-  const newText = stringValue(input.newString)
-  if (oldText === undefined || newText === undefined) return []
-  return [
-    {
-      type: "diff",
-      path: stringValue(input.path) ?? stringValue(input.filePath) ?? "",
-      oldText,
-      newText,
-    },
-  ]
 }
 
 function readDisplayText(structured: Readonly<Record<string, unknown>>) {

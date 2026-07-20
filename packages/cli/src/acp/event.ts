@@ -311,7 +311,12 @@ async function replayMessage(
       sessionId: sessionID,
       update: {
         sessionUpdate: "tool_call",
-        ...pendingToolCall({ toolCallId: part.id, toolName: part.name, state: { input: toolInput(part) }, cwd }),
+        ...pendingToolCall({
+          toolCallId: part.id,
+          toolName: part.name,
+          state: { input: part.state.status === "streaming" ? {} : part.state.input },
+          cwd,
+        }),
       },
     })
     switch (part.state.status) {
@@ -374,10 +379,6 @@ function matchesStart(event: EventSubscribeOutput, start: TurnStart) {
   if (start.type === "compaction")
     return event.type === "session.compaction.admitted" && event.data.inputID === start.id
   return event.type === "session.skill.activated" && event.id === start.id.replace(/^msg_/, "evt_")
-}
-
-function toolInput(tool: Extract<SessionMessageAssistant["content"][number], { type: "tool" }>) {
-  return tool.state.status === "streaming" ? {} : tool.state.input
 }
 
 function response(

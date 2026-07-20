@@ -1,10 +1,4 @@
-import type {
-  AgentSideConnection,
-  PermissionOption,
-  RequestPermissionResponse,
-  ToolCallContent,
-  ToolCallLocation,
-} from "@agentclientprotocol/sdk"
+import type { AgentSideConnection, PermissionOption, ToolCallContent, ToolCallLocation } from "@agentclientprotocol/sdk"
 import type { EventSubscribeOutput, OpenCodeClient } from "@opencode-ai/client/promise"
 import { Patch } from "@opencode-ai/core/patch"
 import { isAbsolute, resolve } from "node:path"
@@ -47,10 +41,12 @@ export async function replyPermission(input: {
       options,
     })
     .catch(() => undefined)
+  const selected = result?.outcome.outcome === "selected" ? result.outcome.optionId : undefined
+  const reply = selected === "once" || selected === "always" ? selected : "reject"
   await input.client.permission.reply({
     sessionID: input.sessionID,
     requestID: input.event.data.id,
-    reply: selectedReply(result),
+    reply,
   })
 }
 
@@ -63,7 +59,15 @@ export async function syncEditedFiles(input: {
   readonly structured: Readonly<Record<string, unknown>>
 }) {
   if (!input.connection.writeTextFile || toToolKind(input.toolName) !== "edit") return
-  const paths = editedPaths(input.toolInput, input.structured)
+  const files = Array.isArray(input.structured.files)
+    ? input.structured.files.flatMap((file): string[] => {
+        if (!file || typeof file !== "object") return []
+        const path = Reflect.get(file, "file")
+        return typeof path === "string" ? [path] : []
+      })
+    : []
+  const path = filePath(input.toolInput)
+  const paths = [...new Set([...files, ...(path ? [path] : [])])]
   await Promise.all(
     paths.map(async (path) => {
       const target = resolvePath(path, input.cwd)
@@ -161,30 +165,12 @@ function readText(path: string, cwd: string) {
     .catch(() => "")
 }
 
-function editedPaths(input: ToolInput, structured: Readonly<Record<string, unknown>>) {
-  const files = Array.isArray(structured.files)
-    ? structured.files.flatMap((file): string[] => {
-        if (!file || typeof file !== "object") return []
-        const path = Reflect.get(file, "file")
-        return typeof path === "string" ? [path] : []
-      })
-    : []
-  const path = filePath(input)
-  return [...new Set([...files, ...(path ? [path] : [])])]
-}
-
 function filePath(input: ToolInput) {
   return stringValue(input.path) ?? stringValue(input.filePath) ?? stringValue(input.filepath)
 }
 
 function resolvePath(path: string, cwd: string) {
   return isAbsolute(path) ? path : resolve(cwd, path)
-}
-
-function selectedReply(result: RequestPermissionResponse | undefined): "once" | "always" | "reject" {
-  if (result?.outcome.outcome !== "selected") return "reject"
-  if (result.outcome.optionId === "once" || result.outcome.optionId === "always") return result.outcome.optionId
-  return "reject"
 }
 
 function stringValue(value: unknown) {

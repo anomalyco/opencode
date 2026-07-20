@@ -127,7 +127,18 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
     }
     sessions.set(session.id, state)
     await registerMcpServers(input.client, registeredMcp, state, mcpServers)
-    await sendAvailableCommands(input.connection, state)
+    await input.connection.sessionUpdate({
+      sessionId: state.id,
+      update: {
+        sessionUpdate: "available_commands_update",
+        availableCommands: [
+          ...state.catalog.commands,
+          ...state.catalog.skills.filter(
+            (skill) => !state.catalog.commands.some((command) => command.name === skill.name),
+          ),
+        ].map((command) => ({ name: command.name, description: command.description ?? "" })),
+      },
+    })
     return state
   }
 
@@ -489,21 +500,6 @@ function stableStringify(value: unknown): string {
     .toSorted(([a], [b]) => a.localeCompare(b))
     .map(([key, item]) => `${JSON.stringify(key)}:${stableStringify(item)}`)
     .join(",")}}`
-}
-
-async function sendAvailableCommands(connection: Connection, session: Attached) {
-  await connection.sessionUpdate({
-    sessionId: session.id,
-    update: {
-      sessionUpdate: "available_commands_update",
-      availableCommands: [
-        ...session.catalog.commands,
-        ...session.catalog.skills.filter(
-          (skill) => !session.catalog.commands.some((command) => command.name === skill.name),
-        ),
-      ].map((command) => ({ name: command.name, description: command.description ?? "" })),
-    },
-  })
 }
 
 async function sendUsageUpdate(client: OpenCodeClient, connection: Connection, session: Attached) {
