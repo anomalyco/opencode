@@ -165,8 +165,16 @@ export const OpenAIChatEvent = Schema.Struct({
 })
 export type OpenAIChatEvent = Schema.Schema.Type<typeof OpenAIChatEvent>
 type OpenAIChatRequestMessage = LLMRequest["messages"][number]
+
+interface PendingToolDelta {
+  readonly id?: string
+  readonly name?: string
+  readonly input: string
+}
+
 export interface ParserState {
   readonly tools: ToolStream.State<number>
+  readonly pendingTools: Partial<Record<number, PendingToolDelta>>
   readonly toolCallEvents: ReadonlyArray<LLMEvent>
   readonly usage?: Usage
   readonly finishReason?: FinishReason
@@ -506,6 +514,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
     const delta = choice?.delta
     const toolDeltas = delta?.tool_calls ?? []
     let tools = state.tools
+    let pendingTools = state.pendingTools
 
     let lifecycle = state.lifecycle
 
@@ -537,11 +546,24 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
     }
 
     for (const tool of toolDeltas) {
+      const current = tools[tool.index]
+      const pending = pendingTools[tool.index]
+      const id = current?.id ?? pending?.id ?? (tool.id || undefined)
+      const name = current?.name ?? pending?.name ?? (tool.function?.name || undefined)
+      const text = `${pending?.input ?? ""}${tool.function?.arguments ?? ""}`
+      if (!current && (!id || !name)) {
+        pendingTools = { ...pendingTools, [tool.index]: { id: id || undefined, name: name || undefined, input: text } }
+        continue
+      }
+      if (pending) {
+        pendingTools = { ...pendingTools }
+        delete pendingTools[tool.index]
+      }
       const result = ToolStream.appendOrStart(
         ADAPTER,
         tools,
         tool.index,
-        { id: tool.id ?? undefined, name: tool.function?.name ?? undefined, text: tool.function?.arguments ?? "" },
+        { id: id || undefined, name: name || undefined, text },
         "OpenAI Chat tool call delta is missing id or name",
       )
       if (ToolStream.isError(result)) return yield* result
@@ -549,6 +571,9 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
       if (result.events.length) lifecycle = Lifecycle.stepStart(lifecycle, events)
       events.push(...result.events)
     }
+
+    if (finishReason !== undefined && state.finishReason === undefined && Object.keys(pendingTools).length > 0)
+      return yield* ProviderShared.eventError(ADAPTER, "OpenAI Chat tool call delta is missing id or name")
 
     // Finalize accumulated tool inputs eagerly when finish_reason arrives so
     // valid calls and malformed local calls settle independently.
@@ -560,6 +585,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
     return [
       {
         tools: finished?.tools ?? tools,
+        pendingTools,
         toolCallEvents: finished?.events ?? state.toolCallEvents,
         usage,
         finishReason,
@@ -611,6 +637,7 @@ export const protocol = Protocol.make({
     event: Protocol.jsonEvent(OpenAIChatEvent),
     initial: () => ({
       tools: ToolStream.empty<number>(),
+      pendingTools: {},
       toolCallEvents: [],
       lifecycle: Lifecycle.initial(),
       reasoningField: undefined,

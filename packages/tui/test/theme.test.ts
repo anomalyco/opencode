@@ -3,7 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
 import type { TerminalColors } from "@opentui/core"
 import { DEFAULT_THEMES, addTheme, allThemes, hasTheme, resolveTheme } from "../src/theme"
-import { discoverThemes } from "../src/context/theme"
+import { discoverThemes, themeDirectories } from "../src/theme/discovery"
 import { terminalMode } from "../src/theme/system"
 import { tmpdir } from "./fixture/fixture"
 
@@ -79,4 +79,19 @@ test("custom theme precedence follows directory order", async () => {
   await writeFile(path.join(project, "themes", "custom.json"), JSON.stringify({ source: "project" }))
 
   await expect(discoverThemes([global, project])).resolves.toEqual({ custom: { source: "project" } })
+})
+
+test("theme directories include global config before project directories", async () => {
+  await using tmp = await tmpdir()
+  const global = path.join(tmp.path, "global")
+  const project = path.join(tmp.path, "repo", "package")
+  await mkdir(path.join(global, "themes"), { recursive: true })
+  await mkdir(path.join(project, ".opencode", "themes"), { recursive: true })
+  await writeFile(path.join(global, "themes", "global.json"), JSON.stringify({ source: "global" }))
+  await writeFile(path.join(project, ".opencode", "themes", "project.json"), JSON.stringify({ source: "project" }))
+
+  await expect(discoverThemes(themeDirectories(global, project))).resolves.toEqual({
+    global: { source: "global" },
+    project: { source: "project" },
+  })
 })

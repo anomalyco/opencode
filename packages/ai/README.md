@@ -1,6 +1,6 @@
 # @opencode-ai/ai
 
-Schema-first LLM core for opencode. One typed request, response, event, and tool language; provider quirks live in adapters, not in calling code.
+Schema-first AI primitives for opencode. Provider quirks live in adapters, not in calling code.
 
 ```ts
 import { Effect } from "effect"
@@ -24,6 +24,45 @@ const program = Effect.gen(function* () {
 
 Run `LLMClient.stream(request)` instead of `generate` when you want incremental `LLMEvent`s. The event stream is provider-neutral — same shape across OpenAI Chat, OpenAI Responses, Anthropic Messages, Gemini, Bedrock Converse, and any OpenAI-compatible deployment.
 
+## Image generation
+
+Use `Image.generate` with an image model for direct asset generation:
+
+```ts
+import { Image } from "@opencode-ai/ai"
+import { OpenAI } from "@opencode-ai/ai/providers"
+
+const program = Effect.gen(function* () {
+  const response = yield* Image.generate({
+    model: OpenAI.configure({ apiKey: process.env.OPENAI_API_KEY }).image("gpt-image-2"),
+    prompt: "A robot tending a rooftop garden",
+    count: 2,
+    size: { width: 1024, height: 1024 },
+    providerOptions: { openai: { quality: "high", outputFormat: "webp" } },
+  })
+
+  return response.images // GeneratedImage[] with owned bytes or a provider URL
+})
+```
+
+Conversational image generation remains part of the LLM interaction. OpenAI Responses exposes it through its hosted image tool:
+
+```ts
+const program = Effect.gen(function* () {
+  const response = yield* LLM.generate(
+    LLM.request({
+      model: OpenAI.configure({ apiKey }).responses("gpt-5"),
+      prompt: "Design a solarpunk rooftop garden, then show me.",
+      tools: [OpenAI.imageGeneration({ quality: "high" })],
+    }),
+  )
+
+  return response.message
+})
+```
+
+The hosted result is represented as a provider-executed tool call and tool result. Its image is a `file` content item with a data URI, so retaining `response.message` preserves the generated image for continuation.
+
 ## Public API
 
 - **`LLM.request({...})`** — build a provider-neutral `LLMRequest`. Accepts ergonomic inputs (`system: string`, `prompt: string`) that normalize into the canonical Schema classes.
@@ -32,6 +71,8 @@ Run `LLMClient.stream(request)` instead of `generate` when you want incremental 
 - **`Model.make(...)` / `ToolCallPart.make(...)` / `ToolResultPart.make(...)` / `ToolDefinition.make(...)`** — model and tool-related constructors from the canonical schema model.
 - **`LLMClient.prepare(request)`** — compile a request through protocol body construction, validation, and HTTP preparation without sending. Useful for inspection and testing.
 - **`LLMEvent.is.*`** — typed guards (`is.textDelta`, `is.toolCall`, `is.finish`, …) for filtering streams.
+- **`Image.generate({...})`** — generate images through a provider-neutral image request and response model.
+- **`ImageClient`** — Effect service and layer for image execution, parallel to `LLMClient`.
 
 ## Caching
 
@@ -182,7 +223,7 @@ Adding a new model or deployment is usually 5-15 lines using `Route.make({ proto
 
 ## Effect
 
-This package is built on Effect. Public methods return `Effect` or `Stream`; provide `LLMClient.layer` for runtime dispatch and import the provider/protocol modules for the routes you use. The example at `example/tutorial.ts` is a runnable walkthrough.
+This package is built on Effect. Public methods return `Effect` or `Stream`; provide `LLMClient.layer` for LLM dispatch and `ImageClient.layer` for image dispatch, then import the provider/protocol modules for the routes you use. The example at `example/tutorial.ts` is a runnable walkthrough.
 
 ## See also
 

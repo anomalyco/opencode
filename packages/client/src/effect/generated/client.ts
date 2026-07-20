@@ -650,14 +650,61 @@ type Endpoint11_0Input = { readonly location?: Endpoint11_0Request["query"]["loc
 const Endpoint11_0 = (raw: RawClient["server.mcp"]) => (input?: Endpoint11_0Input) =>
   raw["mcp.list"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint11_1Request = Parameters<RawClient["server.mcp"]["mcp.resource.catalog"]>[0]
-type Endpoint11_1Input = { readonly location?: Endpoint11_1Request["query"]["location"] }
-const Endpoint11_1 = (raw: RawClient["server.mcp"]) => (input?: Endpoint11_1Input) =>
+type Endpoint11_1Request = Parameters<RawClient["server.mcp"]["mcp.add"]>[0]
+type Endpoint11_1Input = {
+  readonly server: Endpoint11_1Request["params"]["server"]
+  readonly location?: Endpoint11_1Request["query"]["location"]
+  readonly config: Endpoint11_1Request["payload"]["config"]
+}
+const Endpoint11_1 = (raw: RawClient["server.mcp"]) => (input: Endpoint11_1Input) =>
+  raw["mcp.add"]({
+    params: { server: input["server"] },
+    query: { location: input["location"] },
+    payload: { config: input["config"] },
+  }).pipe(Effect.mapError(mapClientError))
+
+type Endpoint11_2Request = Parameters<RawClient["server.mcp"]["mcp.remove"]>[0]
+type Endpoint11_2Input = {
+  readonly server: Endpoint11_2Request["params"]["server"]
+  readonly location?: Endpoint11_2Request["query"]["location"]
+}
+const Endpoint11_2 = (raw: RawClient["server.mcp"]) => (input: Endpoint11_2Input) =>
+  raw["mcp.remove"]({ params: { server: input["server"] }, query: { location: input["location"] } }).pipe(
+    Effect.mapError(mapClientError),
+  )
+
+type Endpoint11_3Request = Parameters<RawClient["server.mcp"]["mcp.connect"]>[0]
+type Endpoint11_3Input = {
+  readonly server: Endpoint11_3Request["params"]["server"]
+  readonly location?: Endpoint11_3Request["query"]["location"]
+}
+const Endpoint11_3 = (raw: RawClient["server.mcp"]) => (input: Endpoint11_3Input) =>
+  raw["mcp.connect"]({ params: { server: input["server"] }, query: { location: input["location"] } }).pipe(
+    Effect.mapError(mapClientError),
+  )
+
+type Endpoint11_4Request = Parameters<RawClient["server.mcp"]["mcp.disconnect"]>[0]
+type Endpoint11_4Input = {
+  readonly server: Endpoint11_4Request["params"]["server"]
+  readonly location?: Endpoint11_4Request["query"]["location"]
+}
+const Endpoint11_4 = (raw: RawClient["server.mcp"]) => (input: Endpoint11_4Input) =>
+  raw["mcp.disconnect"]({ params: { server: input["server"] }, query: { location: input["location"] } }).pipe(
+    Effect.mapError(mapClientError),
+  )
+
+type Endpoint11_5Request = Parameters<RawClient["server.mcp"]["mcp.resource.catalog"]>[0]
+type Endpoint11_5Input = { readonly location?: Endpoint11_5Request["query"]["location"] }
+const Endpoint11_5 = (raw: RawClient["server.mcp"]) => (input?: Endpoint11_5Input) =>
   raw["mcp.resource.catalog"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError))
 
 const adaptGroup11 = (raw: RawClient["server.mcp"]) => ({
   list: Endpoint11_0(raw),
-  resource: { catalog: Endpoint11_1(raw) },
+  add: Endpoint11_1(raw),
+  remove: Endpoint11_2(raw),
+  connect: Endpoint11_3(raw),
+  disconnect: Endpoint11_4(raw),
+  resource: { catalog: Endpoint11_5(raw) },
 })
 
 type Endpoint12_0Request = Parameters<RawClient["server.credential"]["credential.update"]>[0]

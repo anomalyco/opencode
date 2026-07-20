@@ -15,6 +15,7 @@ import { getScrollAcceleration } from "../../util/scroll"
 import { useConfig } from "../../config"
 import { Keymap } from "../../context/keymap"
 import { usePathFormatter } from "../../context/path-format"
+import { SimulationSemantics } from "../../simulation/semantics"
 
 type PermissionStage = "permission" | "always" | "reject"
 
@@ -160,6 +161,8 @@ export function PermissionPrompt(props: { request: PermissionV2Request; director
       <Match when={store.stage === "always"}>
         <Prompt
           title="Always allow"
+          semanticLabel={`Always allow ${props.request.action}`}
+          instance={props.request.id}
           body={
             <Switch>
               <Match when={props.request.save?.length === 1 && props.request.save[0] === "*"}>
@@ -167,7 +170,9 @@ export function PermissionPrompt(props: { request: PermissionV2Request; director
               </Match>
               <Match when={true}>
                 <box paddingLeft={1} gap={1}>
-                  <text fg={themeV2.text.subdued()}>This will allow the following patterns until OpenCode is restarted</text>
+                  <text fg={themeV2.text.subdued()}>
+                    This will allow the following patterns until OpenCode is restarted
+                  </text>
                   <box>
                     <For each={props.request.save ?? []}>
                       {(pattern) => (
@@ -197,6 +202,8 @@ export function PermissionPrompt(props: { request: PermissionV2Request; director
       </Match>
       <Match when={store.stage === "reject"}>
         <RejectPrompt
+          action={props.request.action}
+          instance={props.request.id}
           onConfirm={(message) => {
             void client.api.permission.reply({
               sessionID: props.request.sessionID,
@@ -425,6 +432,8 @@ export function PermissionPrompt(props: { request: PermissionV2Request; director
           const body = (
             <Prompt
               title="Permission required"
+              semanticLabel={permissionSemanticLabel(props.request.action, current.title)}
+              instance={props.request.id}
               header={header()}
               body={current.body}
               options={
@@ -467,7 +476,16 @@ export function PermissionPrompt(props: { request: PermissionV2Request; director
   )
 }
 
-function RejectPrompt(props: { onConfirm: (message: string) => void; onCancel: () => void }) {
+export function permissionSemanticLabel(action: string, title?: string) {
+  return `Permission required: ${title ?? action}`
+}
+
+function RejectPrompt(props: {
+  action: string
+  instance: string
+  onConfirm: (message: string) => void
+  onCancel: () => void
+}) {
   let input: TextareaRenderable
   const { themeV2 } = useTheme().contextual("elevated")
   const dimensions = useTerminalDimensions()
@@ -495,6 +513,12 @@ function RejectPrompt(props: { onConfirm: (message: string) => void; onCancel: (
 
   return (
     <box
+      id="session.permission.reject"
+      ref={SimulationSemantics.bind(() => ({
+        instance: props.instance,
+        role: "dialog",
+        label: `Reject permission: ${props.action}`,
+      }))}
       backgroundColor={themeV2.background()}
       border={["left"]}
       borderColor={themeV2.text.feedback.error()}
@@ -522,8 +546,16 @@ function RejectPrompt(props: { onConfirm: (message: string) => void; onCancel: (
         gap={1}
       >
         <textarea
+          id="session.permission.reject.message"
           ref={(val: TextareaRenderable) => {
             input = val
+            SimulationSemantics.bind(() => ({
+              instance: props.instance,
+              role: "textbox",
+              label: "Rejection reason",
+              focused: val.focused,
+              disabled: false,
+            }))(val)
             val.traits = { status: "REJECT" }
           }}
           focused
@@ -531,13 +563,45 @@ function RejectPrompt(props: { onConfirm: (message: string) => void; onCancel: (
           focusedTextColor={themeV2.text()}
           cursorColor={themeV2.text()}
         />
-        <box flexDirection="row" gap={2} flexShrink={0}>
-          <text fg={themeV2.text()}>
-            enter <span style={{ fg: themeV2.text.subdued() }}>confirm</span>
-          </text>
-          <text fg={themeV2.text()}>
-            esc <span style={{ fg: themeV2.text.subdued() }}>cancel</span>
-          </text>
+        <box
+          id="session.permission.reject.actions"
+          ref={SimulationSemantics.bind(() => ({
+            instance: props.instance,
+            role: "group",
+            label: "Rejection actions",
+          }))}
+          flexDirection="row"
+          gap={2}
+          flexShrink={0}
+        >
+          <box
+            id="session.permission.reject.confirm"
+            ref={SimulationSemantics.bind(() => ({
+              instance: props.instance,
+              role: "button",
+              label: "Confirm rejection",
+              disabled: false,
+            }))}
+            onMouseUp={() => props.onConfirm(input.plainText)}
+          >
+            <text fg={themeV2.text()}>
+              enter <span style={{ fg: themeV2.text.subdued() }}>confirm</span>
+            </text>
+          </box>
+          <box
+            id="session.permission.reject.cancel"
+            ref={SimulationSemantics.bind(() => ({
+              instance: props.instance,
+              role: "button",
+              label: "Cancel rejection",
+              disabled: false,
+            }))}
+            onMouseUp={props.onCancel}
+          >
+            <text fg={themeV2.text()}>
+              esc <span style={{ fg: themeV2.text.subdued() }}>cancel</span>
+            </text>
+          </box>
         </box>
       </box>
     </box>
@@ -546,6 +610,8 @@ function RejectPrompt(props: { onConfirm: (message: string) => void; onCancel: (
 
 function Prompt<const T extends Record<string, string>>(props: {
   title: string
+  semanticLabel?: string
+  instance: string
   header?: JSX.Element
   body: JSX.Element
   options: T
@@ -643,10 +709,7 @@ function Prompt<const T extends Record<string, string>>(props: {
           ]
         : []),
     ],
-    bindings: [
-      ...(props.escapeKey ? ["app.exit"] : []),
-      ...(props.fullscreen ? ["permission.prompt.fullscreen"] : []),
-    ],
+    bindings: [...(props.escapeKey ? ["app.exit"] : []), ...(props.fullscreen ? ["permission.prompt.fullscreen"] : [])],
   }))
 
   const hint = createMemo(() => (store.expanded ? "minimize" : "fullscreen"))
@@ -654,6 +717,13 @@ function Prompt<const T extends Record<string, string>>(props: {
 
   const content = () => (
     <box
+      id="session.permission"
+      ref={SimulationSemantics.bind(() => ({
+        instance: props.instance,
+        role: "dialog",
+        label: props.semanticLabel ?? props.title,
+        expanded: store.expanded,
+      }))}
       backgroundColor={themeV2.background()}
       border={["left"]}
       borderColor={themeV2.background.action("focused")}
@@ -697,26 +767,39 @@ function Prompt<const T extends Record<string, string>>(props: {
         justifyContent={narrow() ? "flex-start" : "space-between"}
         alignItems={narrow() ? "flex-start" : "center"}
       >
-        <box flexDirection="row" gap={1} flexShrink={0}>
+        <box
+          id="session.permission.actions"
+          ref={SimulationSemantics.bind(() => ({
+            instance: props.instance,
+            role: "listbox",
+            label: "Permission choices",
+          }))}
+          flexDirection="row"
+          gap={1}
+          flexShrink={0}
+        >
           <For each={keys}>
             {(option) => (
               <box
+                id={`session.permission.action.${String(option)}`}
+                ref={SimulationSemantics.bind(() => ({
+                  instance: props.instance,
+                  role: "option",
+                  label: props.options[option],
+                  focused: option === store.selected,
+                  selected: option === store.selected,
+                  disabled: false,
+                }))}
                 paddingLeft={1}
                 paddingRight={1}
-                backgroundColor={themeV2.background.action(
-                  option === store.selected ? "focused" : "default",
-                )}
+                backgroundColor={themeV2.background.action(option === store.selected ? "focused" : "default")}
                 onMouseOver={() => setStore("selected", option)}
                 onMouseUp={() => {
                   setStore("selected", option)
                   props.onSelect(option)
                 }}
               >
-                <text
-                  fg={themeV2.text.action(
-                    option === store.selected ? "focused" : "default",
-                  )}
-                >
+                <text fg={themeV2.text.action(option === store.selected ? "focused" : "default")}>
                   {props.options[option]}
                 </text>
               </box>
@@ -726,7 +809,8 @@ function Prompt<const T extends Record<string, string>>(props: {
         <box flexDirection="row" gap={2} flexShrink={0}>
           <Show when={props.fullscreen}>
             <text fg={themeV2.text()}>
-              {shortcuts.get("permission.prompt.fullscreen")} <span style={{ fg: themeV2.text.subdued() }}>{hint()}</span>
+              {shortcuts.get("permission.prompt.fullscreen")}{" "}
+              <span style={{ fg: themeV2.text.subdued() }}>{hint()}</span>
             </text>
           </Show>
           <text fg={themeV2.text()}>

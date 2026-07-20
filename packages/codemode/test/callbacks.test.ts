@@ -131,10 +131,6 @@ describe("constructors callable without new, like JS", () => {
     expect((await error(`try { Array(-1) } catch (e) { throw Error(e.name) }`)).message).toContain("RangeError")
   })
 
-  test("sort densifies trailing holes into undefined (documented divergence)", async () => {
-    expect(await value(`return Array(2).sort().map(() => 1)`)).toEqual([1, 1])
-  })
-
   test("returned sparse arrays normalize holes to null at the host boundary", async () => {
     expect(await value(`return Array(3)`)).toEqual([null, null, null])
   })
@@ -153,6 +149,57 @@ describe("constructors callable without new, like JS", () => {
 })
 
 describe("sort accepts the unified callback set", () => {
+  test("sort preserves trailing holes while toSorted densifies them", async () => {
+    expect(
+      await value(`
+        const defaultSorted = [2, , 1]
+        const compared = [2, , 1]
+        const copied = defaultSorted.toSorted()
+        defaultSorted.sort()
+        compared.sort((a, b) => a - b)
+        return [
+          Object.hasOwn(defaultSorted, 2),
+          Object.hasOwn(compared, 2),
+          Object.hasOwn(copied, 2),
+        ]
+      `),
+    ).toEqual([false, false, true])
+
+    expect(await value(`const values = [2, undefined, 1]; values.sort(); return Object.hasOwn(values, 2)`)).toBe(true)
+  })
+
+  test("sort writes its snapshot without discarding comparator length mutations", async () => {
+    expect(
+      await value(`
+        const values = [3, 2, 1]
+        let first = true
+        values.sort((a, b) => {
+          if (first) {
+            first = false
+            values.push("kept")
+          }
+          return a - b
+        })
+        return values
+      `),
+    ).toEqual([1, 2, 3, "kept"])
+
+    expect(
+      await value(`
+        const values = [3, , 1, , 2]
+        let first = true
+        values.sort((a, b) => {
+          if (first) {
+            first = false
+            values.splice(0)
+          }
+          return a - b
+        })
+        return { values, owns: values.map((_, index) => Object.hasOwn(values, index)) }
+      `),
+    ).toEqual({ values: [1, 2, 3], owns: [true, true, true] })
+  })
+
   test("sort and toSorted take built-in comparators", async () => {
     expect(await value(`return [0, 1, 0].sort(Boolean)`)).toEqual([0, 0, 1])
     expect(await value(`return [0, 1, 0].toSorted(Boolean)`)).toEqual([0, 0, 1])

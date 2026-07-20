@@ -1,3 +1,14 @@
+/*
+ * Portions adapted from Test262 at revision 250f204f23a9249ff204be2baec29600faae7b75:
+ * - test/built-ins/Date/value-to-primitive-result-non-string-prim.js
+ * - test/built-ins/Date/value-to-primitive-result-string.js
+ *
+ * CodeMode does not support Symbol.toPrimitive, so these cases exercise the same Date-constructor primitive-result
+ * handling through supported own valueOf and toString functions.
+ *
+ * Copyright (C) 2016 the V8 project authors. All rights reserved.
+ * Test262 portions are governed by the BSD license in LICENSE.test262.
+ */
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
 import { CodeMode, Tool } from "../src/index.js"
@@ -55,6 +66,52 @@ describe("Date", () => {
     expect(await value(`return Date.parse("2024-01-02T03:04:05.000Z")`)).toBe(1704164645000)
   })
 
+  test("one-argument construction coerces supported values like JavaScript", async () => {
+    expect(
+      await value(`return [new Date(true).getTime(), new Date(false).getTime(), new Date(null).getTime()]`),
+    ).toEqual([1, 0, 0])
+    expect(await value(`return Number.isNaN(new Date(undefined).getTime())`)).toBe(true)
+    expect(await value(`return Number.isNaN(new Date([]).getTime())`)).toBe(true)
+    expect(await value(`return new Date(["1970-01-01T00:00:00.000Z"]).getTime()`)).toBe(0)
+    expect(await value(`return Number.isNaN(new Date({}).getTime())`)).toBe(true)
+  })
+
+  test("one-argument construction uses valueOf then toString for objects", async () => {
+    expect(
+      await value(`
+        const calls = []
+        const number = { valueOf: () => 8 }
+        const text = {
+          valueOf: () => { calls.push("valueOf"); return {} },
+          toString: () => { calls.push("toString"); return "2016-06-05T18:40:00.000Z" },
+        }
+        return [new Date(number).getTime(), new Date(text).getTime(), calls]
+      `),
+    ).toEqual([8, 1465152000000, ["valueOf", "toString"]])
+
+    expect(
+      await value(`
+        const values = [
+          { valueOf: () => undefined },
+          { valueOf: () => true },
+          { valueOf: () => false },
+          { valueOf: () => null },
+        ]
+        return values.map((item) => new Date(item).getTime())
+      `),
+    ).toEqual([null, 1, 0, 0])
+
+    expect(
+      await value(`
+        try {
+          new Date({ valueOf: () => ({}), toString: () => ({}) })
+        } catch (error) {
+          return error.name
+        }
+      `),
+    ).toBe("TypeError")
+  })
+
   test("date arithmetic and comparison use the time value", async () => {
     expect(await value(`const a = new Date(1000); const b = new Date(3000); return b - a`)).toBe(2000)
     expect(await value(`const a = new Date(1000); const b = new Date(3000); return a < b`)).toBe(true)
@@ -74,9 +131,9 @@ describe("Date", () => {
     expect(await value(`return new Date("garbage").toJSON()`)).toBeNull()
   })
 
-  test("toISOString on an invalid date is a catchable error", async () => {
-    expect(await value(`try { new Date("garbage").toISOString(); return "no" } catch { return "caught" }`)).toBe(
-      "caught",
+  test("toISOString on an invalid date throws RangeError", async () => {
+    expect(await value(`try { new Date("garbage").toISOString() } catch (error) { return error.name }`)).toBe(
+      "RangeError",
     )
   })
 
@@ -198,7 +255,7 @@ describe("RegExp", () => {
     ).toBe("7null[object Object]")
   })
 
-  test("function replacers can await effectful tool calls", async () => {
+  test("promise-returning string replacers are coerced synchronously", async () => {
     const decorate = Tool.make({
       description: "Decorate a string",
       input: Schema.String,
@@ -211,7 +268,7 @@ describe("RegExp", () => {
         code: `return "a1b22".replace(/\\d+/g, async (match) => await tools.host.decorate(match))`,
       }),
     )
-    expect(result.ok && result.value).toBe("a[1]b[22]")
+    expect(result.ok && result.value).toBe("a[object Promise]b[object Promise]")
 
     const missingAwait = await Effect.runPromise(
       CodeMode.execute({
@@ -219,8 +276,7 @@ describe("RegExp", () => {
         code: `return "a1".replace(/\\d/, (match) => tools.host.decorate(match))`,
       }),
     )
-    expect(!missingAwait.ok && missingAwait.error.kind).toBe("InvalidDataValue")
-    expect(!missingAwait.ok && missingAwait.error.message).toContain("un-awaited Promise")
+    expect(missingAwait.ok && missingAwait.value).toBe("a[object Promise]")
   })
 
   test("replaceAll without the g flag is a catchable error", async () => {

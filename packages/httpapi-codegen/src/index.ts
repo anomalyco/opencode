@@ -126,10 +126,18 @@ export function compile<Id extends string, Groups extends HttpApiGroup.Constrain
         ...inputFields(headers?.schema, "headers", name),
         ...payloads.flatMap((item) => inputFields(item.schema, "payload", name)),
       ]
-      const names = new Set<string>()
+      const names = new Map<string, InputField["source"]>()
       for (const field of inputs) {
-        if (names.has(field.name)) throw new GenerationError({ reason: `Input field collision: ${field.name}` })
-        names.add(field.name)
+        const existing = names.get(field.name)
+        if (existing !== undefined) {
+          if (field.source === "payload" && payloads[0] !== undefined && !isFlattenableStruct(payloads[0].schema)) {
+            throw new GenerationError({
+              reason: `Opaque payload field collision: ${name}.payload conflicts with ${existing}.${field.name}`,
+            })
+          }
+          throw new GenerationError({ reason: `Input field collision: ${field.name}` })
+        }
+        names.set(field.name, field.source)
       }
 
       const schemaPaths: Array<readonly [string, Schema.Top]> = [
@@ -336,7 +344,7 @@ function renderEffectShape(groups: ReadonlyArray<Group>, options: { readonly mod
       const input = endpoint.input
         .map(
           (field) =>
-            `readonly ${JSON.stringify(field.name)}${field.optional ? "?" : ""}: ${prefix}Request[${JSON.stringify(field.source)}][${JSON.stringify(field.name)}]`,
+            `readonly ${JSON.stringify(field.name)}${field.optional ? "?" : ""}: ${prefix}Request[${JSON.stringify(field.source)}]${isOpaquePayload(endpoint) && field.source === "payload" ? "" : `[${JSON.stringify(field.name)}]`}`,
         )
         .join("; ")
       const inputType = endpoint.operation.inputMode === "none" ? "" : `export type ${prefix}Input = { ${input} }`
@@ -474,26 +482,37 @@ function renderImportedEffectFiles(
     const rawGroup = group.endpoints[0]?.topLevel ? "RawClient" : `RawClient[${JSON.stringify(group.sourceIdentifier)}]`
     const methods = group.endpoints.map((item, endpointIndex) => {
       const prefix = `Endpoint${groupIndex}_${endpointIndex}`
+      const schemaBySource = {
+        params: item.params,
+        query: item.query,
+        headers: item.headers,
+        payload: item.payloads[0],
+      }
       const request = (["params", "query", "headers", "payload"] as const)
-        .flatMap((source) => {
-          const fields = item.input.filter((field) => field.source === source)
-          if (fields.length === 0) return []
-          return [
-            `${source}: { ${fields.map((field) => `${JSON.stringify(field.name)}: input${item.operation.inputMode === "optional" ? "?." : ""}[${JSON.stringify(field.name)}]`).join(", ")} }`,
-          ]
-        })
+        .map((source) =>
+          renderEffectRequestPart(
+            item.input,
+            item.operation.inputMode,
+            source,
+            isOpaquePayload(item),
+            schemaBySource[source] !== undefined,
+          ),
+        )
+        .filter((part): part is string => part !== undefined)
         .join(", ")
       const input = item.input
         .map(
           (field) =>
-            `readonly ${JSON.stringify(field.name)}${field.optional ? "?" : ""}: ${prefix}Request[${JSON.stringify(field.source)}][${JSON.stringify(field.name)}]`,
+            `readonly ${JSON.stringify(field.name)}${field.optional ? "?" : ""}: ${prefix}Request[${JSON.stringify(field.source)}]${isOpaquePayload(item) && field.source === "payload" ? "" : `[${JSON.stringify(field.name)}]`}`,
         )
         .join("; ")
       const argument =
         item.operation.inputMode === "none"
           ? ""
           : `input${item.operation.inputMode === "optional" ? "?" : ""}: ${prefix}Input`
-      const rawCall = `raw[${JSON.stringify(item.endpoint.identifier)}]({ ${request} })`
+      // HttpApiClient distributes union payloads into union request objects, while rebuilding a flattened input
+      // produces one object containing a union value. The shapes are equivalent but TypeScript cannot correlate them.
+      const rawCall = `raw[${JSON.stringify(item.endpoint.identifier)}]({ ${request} }${isOpaquePayload(item) ? ` as ${prefix}Request` : ""})`
       const mapped = `${rawCall}.pipe(Effect.mapError(mapClientError)${item.unwrapData ? ", Effect.map((value) => value.data)" : ""})`
       return `${item.operation.inputMode === "none" ? "" : `type ${prefix}Request = Parameters<${rawGroup}[${JSON.stringify(item.endpoint.identifier)}]>[0]\ntype ${prefix}Input = { ${input} }\n`}const ${prefix} = (raw: ${rawGroup}) => (${argument}) => ${item.operation.success === "stream" ? `Stream.unwrap(${rawCall}.pipe(Effect.mapError(mapClientError), Effect.map((stream) => stream.pipe(Stream.mapError(mapClientError)))))` : mapped}`
     })
@@ -623,7 +642,7 @@ function renderPromiseTypes(
             const schema = schemas[field.source]
             if (schema === undefined)
               throw new GenerationError({ reason: `Missing input schema: ${prefix}.${field.name}` })
-            return `readonly ${JSON.stringify(field.name)}${field.optional ? "?" : ""}: (${typeOf(schema, field.source === "query")})[${JSON.stringify(field.name)}]`
+            return `readonly ${JSON.stringify(field.name)}${field.optional ? "?" : ""}: ${isOpaquePayload(endpoint) && field.source === "payload" ? typeOf(schema) : `(${typeOf(schema, field.source === "query")})[${JSON.stringify(field.name)}]`}`
           })
           .join("; ")
         const successSchema = endpoint.successes[0]
@@ -693,8 +712,12 @@ function renderPromiseClient(groups: ReadonlyArray<Group>) {
       const part = (source: InputField["source"]) => {
         const inputs = endpoint.input.filter((field) => field.source === source)
         return inputs.length === 0
-          ? undefined
-          : `{ ${inputs.map((field) => `${JSON.stringify(field.name)}: ${access(field.name)}`).join(", ")} }`
+          ? source === "payload" && endpoint.payloads.length > 0
+            ? "{ }"
+            : undefined
+          : isOpaquePayload(endpoint) && source === "payload"
+            ? access(inputs[0].name)
+            : `{ ${inputs.map((field) => `${JSON.stringify(field.name)}: ${access(field.name)}`).join(", ")} }`
       }
       const parts = [
         endpoint.query === undefined ? undefined : `query: ${part("query")}`,
@@ -1146,10 +1169,21 @@ export function generate<Id extends string, Groups extends HttpApiGroup.Constrai
   }).pipe(Effect.flatMap((output) => write(output, options.directory)))
 }
 
+function isFlattenableStruct(schema: Schema.Top) {
+  const ast = Schema.toType(schema).ast
+  return SchemaAST.isObjects(ast) && ast.indexSignatures.length === 0
+}
+
+function isOpaquePayload(endpoint: Endpoint) {
+  const payload = endpoint.payloads[0]
+  return payload !== undefined && !isFlattenableStruct(payload)
+}
+
 function inputFields(schema: Schema.Top | undefined, source: InputField["source"], operation: string) {
   if (schema === undefined) return []
   const ast = Schema.toType(schema).ast
   if (!SchemaAST.isObjects(ast) || ast.indexSignatures.length > 0) {
+    if (source === "payload") return [{ name: "payload", source, optional: false }] as const
     throw new GenerationError({ reason: `Input schema must be a struct: ${operation}.${source}` })
   }
   return ast.propertySignatures.map((field) => {
@@ -1416,7 +1450,7 @@ function renderGroup(group: Group, groupIndex: number) {
         if (slot === undefined) {
           throw new GenerationError({ reason: `Missing input schema: ${group.identifier}.${endpoint.identifier}` })
         }
-        return `readonly ${JSON.stringify(field.name)}${field.optional ? "?" : ""}: (typeof ${slot.name}.Type)[${JSON.stringify(field.name)}]`
+        return `readonly ${JSON.stringify(field.name)}${field.optional ? "?" : ""}: ${isOpaquePayload(operation) && field.source === "payload" ? `typeof ${slot.name}.Type` : `(typeof ${slot.name}.Type)[${JSON.stringify(field.name)}]`}`
       })
       .join("; ")
     const argument =
@@ -1424,24 +1458,29 @@ function renderGroup(group: Group, groupIndex: number) {
         ? ""
         : `input${operation.operation.inputMode === "optional" ? "?" : ""}: ${prefix}Input`
     const request = (["params", "query", "headers", "payload"] as const)
-      .flatMap((source) => {
-        const slot = schemaBySource[source]
-        if (slot === undefined) return []
-        const fields = operation.input
-          .filter((field) => field.source === source)
-          .map(
-            (field) =>
-              `${JSON.stringify(field.name)}: input${operation.operation.inputMode === "optional" ? "?." : ""}[${JSON.stringify(field.name)}]`,
-          )
-        return [`${source}: { ${fields.join(", ")} }`]
-      })
+      .map((source) =>
+        renderEffectRequestPart(
+          operation.input,
+          operation.operation.inputMode,
+          source,
+          isOpaquePayload(operation),
+          schemaBySource[source] !== undefined,
+        ),
+      )
+      .filter((part): part is string => part !== undefined)
       .join(", ")
     const declared = [...errorSlots, ...(success.streamError === undefined ? [] : [success.streamError])]
     const declaredSchema =
       declared.length === 0 ? "Schema.Never" : `Schema.Union([${declared.map((slot) => slot.name).join(", ")}])`
-    const rawCall = `raw[${JSON.stringify(endpoint.identifier)}]({ ${request} })`
+    const opaquePayload = isOpaquePayload(operation)
+    // HttpApiClient distributes union payloads into union request objects, while rebuilding a flattened input
+    // produces one object containing a union value. The shapes are equivalent but TypeScript cannot correlate them.
+    const rawCall = `raw[${JSON.stringify(endpoint.identifier)}]({ ${request} }${opaquePayload ? ` as ${prefix}Request` : ""})`
     const mapped = `${rawCall}.pipe(Effect.mapError(map${prefix}Error)${operation.unwrapData ? ", Effect.map((value) => value.data)" : ""})`
-    const inputDeclaration = operation.operation.inputMode === "none" ? "" : `type ${prefix}Input = { ${inputType} }\n`
+    const inputDeclaration =
+      operation.operation.inputMode === "none"
+        ? ""
+        : `${opaquePayload ? `type ${prefix}Request = Parameters<RawGroup[${JSON.stringify(endpoint.identifier)}]>[0]\n` : ""}type ${prefix}Input = { ${inputType} }\n`
     adapters.push(
       `${inputDeclaration}const ${prefix}DeclaredError = ${declaredSchema}\nconst map${prefix}Error = (error: unknown) => HttpClientError.isHttpClientError(error) || Schema.isSchemaError(error) || Sse.Retry.is(error) ? new ClientError({ cause: error }) : Schema.is(${prefix}DeclaredError)(error) ? error : new ClientError({ cause: error })\nconst ${prefix} = (raw: RawGroup) => (${argument}) => ${operation.operation.success === "stream" ? `Stream.unwrap(${rawCall}.pipe(Effect.mapError(map${prefix}Error), Effect.map((stream) => stream.pipe(Stream.mapError(map${prefix}Error)))))` : mapped}`,
     )
@@ -1489,6 +1528,20 @@ function renderGroup(group: Group, groupIndex: number) {
     : `HttpApiClient.Client.Group<typeof Group${groupIndex}, never, never>`
   const usesStream = group.endpoints.some((item) => item.operation.success === "stream")
   return `// Generated by @opencode-ai/httpapi-codegen. Do not edit.\nimport { Effect, Schema${usesStream ? ", Stream" : ""} } from "effect"\nimport { Sse } from "effect/unstable/encoding"\nimport { HttpClientError } from "effect/unstable/http"\nimport { HttpApiClient, HttpApiEndpoint, HttpApiGroup${usesHttpApiSchema ? ", HttpApiSchema" : ""} } from "effect/unstable/httpapi"\nimport { ClientError } from "./client-error"\n\n${declarations}\n\nexport const Group${groupIndex} = ${groupSource}\n\ntype RawGroup = ${rawGroup}\n\n${adapters.join("\n\n")}\n\nexport const adaptGroup${groupIndex} = (raw: RawGroup) => ({ ${methods} })\n`
+}
+
+function renderEffectRequestPart(
+  input: Endpoint["input"],
+  mode: Operation["inputMode"],
+  source: InputField["source"],
+  opaquePayload: boolean,
+  present = false,
+) {
+  const fields = input.filter((field) => field.source === source)
+  if (fields.length === 0) return present ? `${source}: { }` : undefined
+  const access = (name: string) => `input${mode === "optional" ? "?." : ""}[${JSON.stringify(name)}]`
+  if (opaquePayload && source === "payload") return `${source}: ${access(fields[0].name)}`
+  return `${source}: { ${fields.map((field) => `${JSON.stringify(field.name)}: ${access(field.name)}`).join(", ")} }`
 }
 
 function renderSchemas(slots: ReadonlyArray<Slot>) {

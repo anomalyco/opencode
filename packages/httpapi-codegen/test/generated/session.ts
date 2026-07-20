@@ -24,6 +24,19 @@ const Endpoint3Params = Schema.Struct({ sessionID: Schema.String })
 
 const Endpoint3Success = Schema.Void.annotate({ httpApiStatus: 204 })
 
+const Endpoint4Params = Schema.Struct({ sessionID: Schema.String })
+
+const Endpoint4Query = Schema.Struct({ dryRun: Schema.optionalKey(Schema.Union([Schema.Boolean, Schema.Undefined])) })
+
+const Endpoint4Headers = Schema.Struct({ traceID: Schema.String })
+
+const Endpoint4Payload0 = Schema.Union([
+  Schema.Struct({ type: Schema.Literal("local"), command: Schema.Array(Schema.String) }),
+  Schema.Struct({ type: Schema.Literal("remote"), url: Schema.String }),
+])
+
+const Endpoint4Success = Schema.String
+
 export const Group0 = HttpApiGroup.make("session", { topLevel: false })
   .add(HttpApiEndpoint.make("GET")("health", "/session/health", { success: Endpoint0Success }))
   .add(HttpApiEndpoint.make("GET")("list", "/session", { query: Endpoint1Query, success: Endpoint1Success }))
@@ -38,6 +51,15 @@ export const Group0 = HttpApiGroup.make("session", { topLevel: false })
     HttpApiEndpoint.make("POST")("interrupt", "/session/:sessionID/interrupt", {
       params: Endpoint3Params,
       success: Endpoint3Success,
+    }),
+  )
+  .add(
+    HttpApiEndpoint.make("POST")("configure", "/session/:sessionID/configure", {
+      params: Endpoint4Params,
+      query: Endpoint4Query,
+      headers: Endpoint4Headers,
+      payload: Endpoint4Payload0,
+      success: Endpoint4Success,
     }),
   )
 
@@ -88,9 +110,32 @@ const mapEndpoint3Error = (error: unknown) =>
 const Endpoint3 = (raw: RawGroup) => (input: Endpoint3Input) =>
   raw["interrupt"]({ params: { sessionID: input["sessionID"] } }).pipe(Effect.mapError(mapEndpoint3Error))
 
+type Endpoint4Request = Parameters<RawGroup["configure"]>[0]
+type Endpoint4Input = {
+  readonly sessionID: (typeof Endpoint4Params.Type)["sessionID"]
+  readonly dryRun?: (typeof Endpoint4Query.Type)["dryRun"]
+  readonly traceID: (typeof Endpoint4Headers.Type)["traceID"]
+  readonly payload: typeof Endpoint4Payload0.Type
+}
+const Endpoint4DeclaredError = Schema.Never
+const mapEndpoint4Error = (error: unknown) =>
+  HttpClientError.isHttpClientError(error) || Schema.isSchemaError(error) || Sse.Retry.is(error)
+    ? new ClientError({ cause: error })
+    : Schema.is(Endpoint4DeclaredError)(error)
+      ? error
+      : new ClientError({ cause: error })
+const Endpoint4 = (raw: RawGroup) => (input: Endpoint4Input) =>
+  raw["configure"]({
+    params: { sessionID: input["sessionID"] },
+    query: { dryRun: input["dryRun"] },
+    headers: { traceID: input["traceID"] },
+    payload: input["payload"],
+  } as Endpoint4Request).pipe(Effect.mapError(mapEndpoint4Error))
+
 export const adaptGroup0 = (raw: RawGroup) => ({
   health: Endpoint0(raw),
   list: Endpoint1(raw),
   get: Endpoint2(raw),
   interrupt: Endpoint3(raw),
+  configure: Endpoint4(raw),
 })

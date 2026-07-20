@@ -140,8 +140,8 @@ export const appendOrStart = <K extends StreamKey>(
   missingToolMessage: string,
 ): AppendOutcome<K> | LLMError => {
   const current = tools[key]
-  const id = delta.id ?? current?.id
-  const name = delta.name ?? current?.name
+  const id = current?.id ?? delta.id
+  const name = current?.name ?? delta.name
   if (!id || !name) return eventError(route, missingToolMessage)
 
   const tool = {

@@ -1,6 +1,6 @@
 import { Config, Effect, Redacted } from "effect"
 import { Headers } from "effect/unstable/http"
-import { AuthenticationReason, InvalidRequestReason, LLMError, type LLMRequest } from "../schema"
+import { AuthenticationReason, InvalidRequestReason, LLMError, type HttpOptions } from "../schema"
 
 export class MissingCredentialError extends Error {
   readonly _tag = "MissingCredentialError"
@@ -15,7 +15,7 @@ export type AuthError = CredentialError | LLMError
 type Secret = string | Redacted.Redacted | Config.Config<string | Redacted.Redacted>
 
 export interface AuthInput {
-  readonly request: LLMRequest
+  readonly request: { readonly http?: HttpOptions }
   readonly method: "POST" | "GET"
   readonly url: string
   readonly body: string

@@ -1,8 +1,57 @@
 export * as Mcp from "./mcp.js"
 
 import { Schema } from "effect"
-import { optional } from "./schema.js"
+import { optional, PositiveInt } from "./schema.js"
 import { IntegrationID } from "./integration-id.js"
+
+export class TimeoutConfig extends Schema.Class<TimeoutConfig>("Mcp.TimeoutConfig")({
+  startup: PositiveInt.pipe(Schema.optional).annotate({
+    description: "Maximum time in milliseconds to establish and initialize the MCP server.",
+  }),
+  catalog: PositiveInt.pipe(Schema.optional).annotate({
+    description: "Maximum time in milliseconds to wait for MCP discovery requests such as tools/list and prompts/list.",
+  }),
+  execution: PositiveInt.pipe(Schema.optional).annotate({
+    description: "Maximum time in milliseconds to wait for MCP tool and prompt execution.",
+  }),
+}) {}
+
+export class LocalConfig extends Schema.Class<LocalConfig>("Mcp.LocalConfig")({
+  type: Schema.Literal("local"),
+  command: Schema.String.pipe(Schema.Array),
+  cwd: Schema.String.pipe(Schema.optional).annotate({
+    description: "Working directory for the MCP server process. Relative paths resolve from the workspace directory.",
+  }),
+  environment: Schema.Record(Schema.String, Schema.String).pipe(Schema.optional),
+  disabled: Schema.Boolean.pipe(Schema.optional),
+  codemode: Schema.Boolean.pipe(Schema.optional).annotate({
+    description: "Expose this server's tools through Code Mode. Defaults to true.",
+  }),
+  timeout: TimeoutConfig.pipe(Schema.optional),
+}) {}
+
+export class OAuthConfig extends Schema.Class<OAuthConfig>("Mcp.OAuthConfig")({
+  client_id: Schema.String.pipe(Schema.optional),
+  client_secret: Schema.String.pipe(Schema.optional),
+  scope: Schema.String.pipe(Schema.optional),
+  callback_port: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 })).pipe(Schema.optional),
+  redirect_uri: Schema.String.pipe(Schema.optional),
+}) {}
+
+export class RemoteConfig extends Schema.Class<RemoteConfig>("Mcp.RemoteConfig")({
+  type: Schema.Literal("remote"),
+  url: Schema.String,
+  headers: Schema.Record(Schema.String, Schema.String).pipe(Schema.optional),
+  oauth: Schema.Union([OAuthConfig, Schema.Literal(false)]).pipe(Schema.optional),
+  disabled: Schema.Boolean.pipe(Schema.optional),
+  codemode: Schema.Boolean.pipe(Schema.optional).annotate({
+    description: "Expose this server's tools through Code Mode. Defaults to true.",
+  }),
+  timeout: TimeoutConfig.pipe(Schema.optional),
+}) {}
+
+export const ServerConfig = Schema.Union([LocalConfig, RemoteConfig]).pipe(Schema.toTaggedUnion("type"))
+export type ServerConfig = typeof ServerConfig.Type
 
 const Connected = Schema.Struct({ status: Schema.Literal("connected") }).annotate({
   identifier: "Mcp.Status.Connected",

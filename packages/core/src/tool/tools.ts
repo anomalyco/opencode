@@ -10,6 +10,13 @@ export interface Interface {
     tools: Readonly<Record<string, Tool.AnyTool>>,
     options?: Tool.RegisterOptions,
   ) => Effect.Effect<void, Tool.RegistrationError, Scope.Scope>
+  /** Internal atomic registration capability used by plugin transforms. */
+  readonly registerBatch: (
+    registrations: ReadonlyArray<{
+      readonly tools: Readonly<Record<string, Tool.AnyTool>>
+      readonly options?: Tool.RegisterOptions
+    }>,
+  ) => Effect.Effect<void, Tool.RegistrationError, Scope.Scope>
 }
 
 /** Narrow registration-only Location capability. */

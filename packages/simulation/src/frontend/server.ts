@@ -22,6 +22,8 @@ function handle(harness: Harness, request: SimulationProtocol.Frontend.Request) 
       return SimulationActions.screenshot(harness, request.params?.name)
     case "ui.state":
       return Effect.sync(() => SimulationActions.state(harness))
+    case "ui.snapshot":
+      return Effect.sync(() => SimulationActions.snapshot(harness))
     case "ui.matches":
       return Effect.sync(() => SimulationActions.matches(harness, request.params.text))
     case "ui.recording.finish":
@@ -46,6 +48,7 @@ function handle(harness: Harness, request: SimulationProtocol.Frontend.Request) 
         target: request.params.target,
         x: request.params.x,
         y: request.params.y,
+        semantic: request.params.semantic,
       })
     case "ui.resize":
       return SimulationActions.execute(harness, {

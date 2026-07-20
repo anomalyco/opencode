@@ -1294,6 +1294,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
                 project: location.project.id,
                 limit: 50,
                 order: "desc",
+                parentID: null,
               })
             })
             .then((response) => {

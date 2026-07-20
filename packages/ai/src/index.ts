@@ -1,4 +1,5 @@
 export { LLMClient } from "./route/client"
+export { ImageClient } from "./image-client"
 export { Auth } from "./route/auth"
 export { Provider } from "./provider"
 export { ProviderPackage } from "./provider-package"
@@ -10,6 +11,9 @@ export type {
   Service as LLMClientService,
 } from "./route/client"
 export * from "./schema"
+export { GeneratedImage, ImageModel, ImageRequest, ImageResponse, ImageSize } from "./image"
+export type { ImageModelDefaults, ImageRequestInput, ImageRoute } from "./image"
+export { Image } from "./image"
 export { Tool, ToolFailure, toDefinitions } from "./tool"
 export { ToolRuntime } from "./tool-runtime"
 export type { DispatchResult as ToolDispatchResult, ToolSettlement } from "./tool-runtime"

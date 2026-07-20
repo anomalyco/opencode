@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect"
+import { Effect, Encoding, Schema } from "effect"
 import { Route } from "../route/client"
 import { Auth } from "../route/auth"
 import { Endpoint } from "../route/endpoint"
@@ -25,6 +25,7 @@ import { OpenAIOptions } from "./utils/openai-options"
 import { Lifecycle } from "./utils/lifecycle"
 import { ToolSchemaProjection } from "./utils/tool-schema"
 import { ToolStream } from "./utils/tool-stream"
+import { OpenAIImage } from "./utils/openai-image"
 
 const ADAPTER = "openai-responses"
 export const DEFAULT_BASE_URL = "https://api.openai.com/v1"
@@ -113,11 +114,24 @@ const OpenAIResponsesTool = Schema.Struct({
   parameters: JsonObject,
   strict: Schema.optional(Schema.Boolean),
 })
-type OpenAIResponsesTool = Schema.Schema.Type<typeof OpenAIResponsesTool>
+const OpenAIResponsesImageGenerationTool = Schema.Struct({
+  type: Schema.tag("image_generation"),
+  action: Schema.optional(Schema.Literals(["auto", "generate", "edit"])),
+  background: Schema.optional(Schema.Literals(["auto", "opaque", "transparent"])),
+  input_fidelity: Schema.optional(Schema.Literals(["low", "high"])),
+  output_compression: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 100 }))),
+  output_format: Schema.optional(Schema.Literals(["png", "jpeg", "webp"])),
+  partial_images: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
+  quality: Schema.optional(Schema.Literals(["auto", "low", "medium", "high"])),
+  size: Schema.optional(OpenAIImage.Size),
+})
+const OpenAIResponsesTools = Schema.Union([OpenAIResponsesTool, OpenAIResponsesImageGenerationTool])
+type OpenAIResponsesTool = Schema.Schema.Type<typeof OpenAIResponsesTools>
 
 const OpenAIResponsesToolChoice = Schema.Union([
   Schema.Literals(["auto", "none", "required"]),
   Schema.Struct({ type: Schema.tag("function"), name: Schema.String }),
+  Schema.Struct({ type: Schema.tag("image_generation") }),
 ])
 
 // Fields shared between the HTTP body and the WebSocket `response.create`
@@ -128,7 +142,7 @@ const OpenAIResponsesCoreFields = {
   model: Schema.String,
   input: Schema.Array(OpenAIResponsesInputItem),
   instructions: Schema.optional(Schema.String),
-  tools: optionalArray(OpenAIResponsesTool),
+  tools: optionalArray(OpenAIResponsesTools),
   tool_choice: Schema.optional(OpenAIResponsesToolChoice),
   store: Schema.optional(Schema.Boolean),
   service_tier: Schema.optional(OpenAIOptions.OpenAIServiceTier),
@@ -194,6 +208,8 @@ const OpenAIResponsesStreamItem = Schema.Struct({
   outputs: Schema.optional(Schema.Unknown),
   server_label: Schema.optional(Schema.String),
   output: Schema.optional(Schema.Unknown),
+  result: Schema.optional(Schema.String),
+  output_format: Schema.optional(Schema.Literals(["png", "jpeg", "webp"])),
   error: Schema.optional(Schema.Unknown),
   encrypted_content: optionalNull(Schema.String),
 })
@@ -258,21 +274,41 @@ const invalid = ProviderShared.invalidRequest
 // =============================================================================
 // Request Lowering
 // =============================================================================
-const lowerTool = (tool: ToolDefinition, inputSchema: JsonSchema): OpenAIResponsesTool => ({
-  type: "function",
-  name: tool.name,
-  description: tool.description,
-  parameters: ToolSchemaProjection.openAI(inputSchema),
-  // TODO: Read this from OpenAI-specific tool options so direct LLM callers can opt into strict schemas.
-  strict: false,
+const nativeImageToolInput = (tool: ToolDefinition) => {
+  const native = tool.native?.openai
+  return ProviderShared.isRecord(native) && native.type === "image_generation" ? native : undefined
+}
+
+const nativeImageTool = (tool: ToolDefinition) => {
+  const native = nativeImageToolInput(tool)
+  return Schema.is(OpenAIResponsesImageGenerationTool)(native) ? native : undefined
+}
+
+const lowerTool = Effect.fn("OpenAIResponses.lowerTool")(function* (tool: ToolDefinition, inputSchema: JsonSchema) {
+  const native = nativeImageToolInput(tool)
+  if (native !== undefined) {
+    if (Schema.is(OpenAIResponsesImageGenerationTool)(native)) return native
+    return yield* invalid("OpenAI Responses image generation tool options are invalid")
+  }
+  return {
+    type: "function" as const,
+    name: tool.name,
+    description: tool.description,
+    parameters: ToolSchemaProjection.openAI(inputSchema),
+    // TODO: Read this from OpenAI-specific tool options so direct LLM callers can opt into strict schemas.
+    strict: false,
+  }
 })
 
-const lowerToolChoice = (toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
+const lowerToolChoice = (toolChoice: NonNullable<LLMRequest["toolChoice"]>, tools: ReadonlyArray<ToolDefinition>) =>
   ProviderShared.matchToolChoice("OpenAI Responses", toolChoice, {
     auto: () => "auto" as const,
     none: () => "none" as const,
     required: () => "required" as const,
-    tool: (name) => ({ type: "function" as const, name }),
+    tool: (name) =>
+      tools.some((tool) => tool.name === name && nativeImageTool(tool) !== undefined)
+        ? ({ type: "image_generation" } as const)
+        : { type: "function" as const, name },
   })
 
 const lowerToolCall = (part: ToolCallPart): OpenAIResponsesInputItem => ({
@@ -420,6 +456,13 @@ const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (requ
           const itemID = hostedToolItemID(part)
           if (store !== false && itemID && !hostedToolReferences.has(itemID))
             input.push({ type: "item_reference", id: itemID })
+          if (store === false && part.name === "image_generation" && part.result.type === "content") {
+            const content: ReadonlyArray<ToolContent> = part.result.value
+            input.push({
+              role: "user",
+              content: yield* Effect.forEach(content, lowerToolResultContentItem),
+            })
+          }
           if (itemID) hostedToolReferences.add(itemID)
           continue
         }
@@ -485,10 +528,10 @@ const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request:
     tools:
       request.tools.length === 0
         ? undefined
-        : request.tools.map((tool) =>
+        : yield* Effect.forEach(request.tools, (tool) =>
             lowerTool(tool, ToolSchemaProjection.modelCompatibility(tool.inputSchema, toolSchemaCompatibility)),
           ),
-    tool_choice: request.toolChoice ? yield* lowerToolChoice(request.toolChoice) : undefined,
+    tool_choice: request.toolChoice ? yield* lowerToolChoice(request.toolChoice, request.tools) : undefined,
     stream: true as const,
     max_output_tokens: generation?.maxTokens,
     temperature: generation?.temperature,
@@ -574,14 +617,29 @@ const isReasoningItem = (
 
 // Round-trip the full item as the structured result so consumers can extract
 // outputs / sources / status without re-decoding.
-const hostedToolResult = (item: OpenAIResponsesStreamItem) => {
+const hostedToolResult = Effect.fn("OpenAIResponses.hostedToolResult")(function* (item: OpenAIResponsesStreamItem) {
   const isError = typeof item.error !== "undefined" && item.error !== null
+  if (item.type === "image_generation_call" && item.result) {
+    yield* Effect.fromResult(Encoding.decodeBase64(item.result)).pipe(
+      Effect.mapError(() => ProviderShared.eventError(ADAPTER, "OpenAI Responses returned invalid image base64")),
+    )
+    return {
+      type: "content" as const,
+      value: [
+        {
+          type: "file" as const,
+          uri: `data:image/${item.output_format ?? "png"};base64,${item.result}`,
+          mime: `image/${item.output_format ?? "png"}`,
+        },
+      ],
+    }
+  }
   return isError ? { type: "error" as const, value: item.error } : { type: "json" as const, value: item }
-}
+})
 
-const hostedToolEvents = (
+const hostedToolEvents = Effect.fn("OpenAIResponses.hostedToolEvents")(function* (
   item: OpenAIResponsesStreamItem & { type: HostedToolType; id: string },
-): ReadonlyArray<LLMEvent> => {
+) {
   const tool = HOSTED_TOOLS[item.type]
   const providerMetadata = openaiMetadata({ itemId: item.id })
   return [
@@ -595,12 +653,12 @@ const hostedToolEvents = (
     LLMEvent.toolResult({
       id: item.id,
       name: tool.name,
-      result: hostedToolResult(item),
+      result: yield* hostedToolResult(item),
       providerExecuted: true,
       providerMetadata,
     }),
   ]
-}
+})
 
 type StepResult = readonly [ParserState, ReadonlyArray<LLMEvent>]
 
@@ -847,7 +905,7 @@ const onOutputItemDone = Effect.fn("OpenAIResponses.onOutputItemDone")(function*
   if (isHostedToolItem(item)) {
     const events: LLMEvent[] = []
     const lifecycle = Lifecycle.stepStart(state.lifecycle, events)
-    events.push(...hostedToolEvents(item))
+    events.push(...(yield* hostedToolEvents(item)))
     return [{ ...state, lifecycle }, events] satisfies StepResult
   }
 

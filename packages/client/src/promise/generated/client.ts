@@ -104,6 +104,14 @@ import type {
   IntegrationCommandCancelOutput,
   McpListInput,
   McpListOutput,
+  McpAddInput,
+  McpAddOutput,
+  McpRemoveInput,
+  McpRemoveOutput,
+  McpConnectInput,
+  McpConnectOutput,
+  McpDisconnectInput,
+  McpDisconnectOutput,
   McpResourceCatalogInput,
   McpResourceCatalogOutput,
   CredentialUpdateInput,
@@ -1041,6 +1049,55 @@ export function make(options: ClientOptions) {
             successStatus: 200,
             declaredStatuses: [401, 400],
             empty: false,
+          },
+          requestOptions,
+        ),
+      add: (input: McpAddInput, requestOptions?: RequestOptions) =>
+        request<McpAddOutput>(
+          {
+            method: "PUT",
+            path: `/api/mcp/${encodeURIComponent(input.server)}`,
+            query: { location: input["location"] },
+            body: { config: input["config"] },
+            successStatus: 204,
+            declaredStatuses: [401, 400],
+            empty: true,
+          },
+          requestOptions,
+        ),
+      remove: (input: McpRemoveInput, requestOptions?: RequestOptions) =>
+        request<McpRemoveOutput>(
+          {
+            method: "DELETE",
+            path: `/api/mcp/${encodeURIComponent(input.server)}`,
+            query: { location: input["location"] },
+            successStatus: 204,
+            declaredStatuses: [404, 401, 400],
+            empty: true,
+          },
+          requestOptions,
+        ),
+      connect: (input: McpConnectInput, requestOptions?: RequestOptions) =>
+        request<McpConnectOutput>(
+          {
+            method: "POST",
+            path: `/api/mcp/${encodeURIComponent(input.server)}/connect`,
+            query: { location: input["location"] },
+            successStatus: 204,
+            declaredStatuses: [404, 401, 400],
+            empty: true,
+          },
+          requestOptions,
+        ),
+      disconnect: (input: McpDisconnectInput, requestOptions?: RequestOptions) =>
+        request<McpDisconnectOutput>(
+          {
+            method: "POST",
+            path: `/api/mcp/${encodeURIComponent(input.server)}/disconnect`,
+            query: { location: input["location"] },
+            successStatus: 204,
+            declaredStatuses: [404, 401, 400],
+            empty: true,
           },
           requestOptions,
         ),

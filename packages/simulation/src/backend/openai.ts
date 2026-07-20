@@ -29,6 +29,32 @@ type FinishReason = Extract<SimulatedProvider.ProviderResponseEvent, { readonly 
 function chunkOf(item: ProviderItem): OpenAIChatEvent | unknown {
   if (item.type === "textDelta") return { choices: [{ delta: { content: item.text } }] }
   if (item.type === "reasoningDelta") return { choices: [{ delta: { reasoning_content: item.text } }] }
+  if (item.type === "toolInputStart")
+    return {
+      choices: [
+        {
+          delta: {
+            tool_calls: [
+              {
+                index: item.index,
+                id: item.id,
+                function: { name: item.name, arguments: "" },
+              },
+            ],
+          },
+        },
+      ],
+    }
+  if (item.type === "toolInputDelta")
+    return {
+      choices: [
+        {
+          delta: {
+            tool_calls: [{ index: item.index, function: { arguments: item.text } }],
+          },
+        },
+      ],
+    }
   if (item.type === "toolCall")
     return {
       choices: [

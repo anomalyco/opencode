@@ -428,16 +428,14 @@ const invokeStringReplacer = <R>(
     let end = 0
     for (const match of matches) {
       const replacement = yield* apply(match.args)
-      const resolved =
-        args[1] instanceof CodeModeFunction && args[1].async && replacement instanceof CodeModePromise
-          ? yield* runner.settlePromise(replacement)
-          : replacement
       // Error values are branded plain objects; boundedData would strip the brand before coercion.
       output.push(
         value.slice(end, match.offset),
-        errorBrandName(resolved)
-          ? coerceToString(resolved)
-          : coerceToString(boundedData(resolved, `String.${name} replacer result`)),
+        replacement instanceof CodeModePromise
+          ? "[object Promise]"
+          : errorBrandName(replacement)
+            ? coerceToString(replacement)
+            : coerceToString(boundedData(replacement, `String.${name} replacer result`)),
       )
       end = match.offset + match.match.length
     }
@@ -664,11 +662,20 @@ const invokeArrayMethod = <R>(
       return Effect.succeed(target.flat(optNumber(args[0], "depth") ?? 1))
     case "reverse":
       return Effect.succeed(target.reverse())
-    case "sort":
+    case "sort": {
+      const length = target.length
+      const holeCount = Array.from({ length }, (_, index) => Object.hasOwn(target, index)).filter((own) => !own).length
+      const itemCount = length - holeCount
       return Effect.map(sortArray(runner, target, args[0], "Array.sort", node), (sorted) => {
-        target.splice(0, target.length, ...sorted)
+        sorted.slice(0, itemCount).forEach((item, index) => {
+          target[index] = item
+        })
+        Array.from({ length: holeCount }, (_, index) => itemCount + index).forEach((index) => {
+          Reflect.deleteProperty(target, index)
+        })
         return target
       })
+    }
     case "toSorted":
       return sortArray(runner, target, args[0], "Array.toSorted", node)
     case "toReversed":

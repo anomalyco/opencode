@@ -773,6 +773,42 @@ describe("HttpApiCodegen.generate", () => {
     }
   })
 
+  test("serializes an opaque union payload as the direct JSON body", async () => {
+    const output = emitPromise(
+      compileContract(
+        api(
+          HttpApiEndpoint.post("configure", "/session", {
+            payload: Schema.Union([
+              Schema.Struct({ type: Schema.Literal("local"), command: Schema.Array(Schema.String) }),
+              Schema.Struct({ type: Schema.Literal("remote"), url: Schema.String }),
+            ]),
+            success: HttpApiSchema.NoContent,
+          }),
+        ),
+      ),
+    )
+    const directory = await mkdtemp(join(tmpdir(), "opencode-httpapi-codegen-"))
+
+    try {
+      await Promise.all(output.files.map((file) => Bun.write(join(directory, file.path), file.content)))
+      const generated = await import(`${join(directory, "index.ts")}?t=${crypto.randomUUID()}`)
+      let request: Request | undefined
+      const client = generated.OpenCode.make({
+        baseUrl: "https://example.com",
+        fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+          request = input instanceof Request ? input : new Request(input, init)
+          return new Response(null, { status: 204 })
+        },
+      })
+
+      await client.session.configure({ payload: { type: "local", command: ["opencode"] } })
+
+      expect(await request?.json()).toEqual({ type: "local", command: ["opencode"] })
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
   test("serializes explicit null query values", async () => {
     const output = emitPromise(
       compileContract(
@@ -969,6 +1005,74 @@ describe("HttpApiCodegen.generate", () => {
     expect(output.files.find((file) => file.path === "session.ts")?.content).toContain(
       'params: { "sessionID": input["sessionID"] }',
     )
+  })
+
+  test("uses one opaque field for non-struct payloads across emitters", () => {
+    const source = api(
+      HttpApiEndpoint.post("configure", "/session/configure", {
+        payload: Schema.Union([
+          Schema.Struct({ type: Schema.Literal("local"), command: Schema.Array(Schema.String) }),
+          Schema.Struct({ type: Schema.Literal("remote"), url: Schema.String }),
+        ]),
+        success: Schema.String,
+      }),
+    )
+    const contract = compileContract(source)
+    const effect = emitEffect(contract)
+    const imported = emitEffectImported(contract, { module: "@example/api", api: "Api" })
+    const shape = emitEffectShape(contract, { module: "@example/api", api: "Api" })
+    const promise = emitPromise(contract)
+
+    expect(effect.operations[0]).toMatchObject({
+      input: [{ name: "payload", source: "payload" }],
+      inputMode: "required",
+    })
+    expect(effect.files.find((file) => file.path === "session.ts")?.content).toContain('payload: input["payload"]')
+    expect(imported.files.find((file) => file.path === "client.ts")?.content).toContain('payload: input["payload"]')
+    expect(shape.files[0]?.content).toContain('Endpoint0_0Request["payload"]')
+    expect(promise.files.find((file) => file.path === "types.ts")?.content).toContain(
+      'readonly "payload": { readonly "type": "local", readonly "command": ReadonlyArray<string> } | { readonly "type": "remote", readonly "url": string }',
+    )
+    expect(promise.files.find((file) => file.path === "client.ts")?.content).toContain('body: input["payload"]')
+  })
+
+  test("routes arrays, primitives, and index-signature records through the opaque payload path", () => {
+    for (const payload of [Schema.Array(Schema.String), Schema.String, Schema.Record(Schema.String, Schema.Number)]) {
+      expect(
+        compileContract(api(HttpApiEndpoint.post("set", "/session", { payload, success: HttpApiSchema.NoContent })))
+          .groups[0]?.endpoints[0]?.operation.input,
+      ).toEqual([{ name: "payload", source: "payload" }])
+    }
+  })
+
+  test("rejects an opaque payload field that collides with another input channel", () => {
+    expect(() =>
+      compileContract(
+        api(
+          HttpApiEndpoint.post("configure", "/session", {
+            query: { payload: Schema.String },
+            payload: Schema.Union([Schema.String, Schema.Number]),
+            success: Schema.String,
+          }),
+        ),
+      ),
+    ).toThrow("Opaque payload field collision: session.configure.payload conflicts with query.payload")
+  })
+
+  test("preserves required empty struct payloads in imported Effect adapters", () => {
+    const contract = compileContract(
+      api(
+        HttpApiEndpoint.post("empty", "/session", {
+          payload: Schema.Struct({}),
+          success: Schema.String,
+        }),
+      ),
+    )
+    const effect = emitEffectImported(contract, { module: "@example/api", api: "Api" })
+    const promise = emitPromise(contract)
+
+    expect(effect.files.find((file) => file.path === "client.ts")?.content).toContain("payload: { }")
+    expect(promise.files.find((file) => file.path === "client.ts")?.content).toContain("body: { }")
   })
 
   test("uses no argument when an operation has no input fields", () => {

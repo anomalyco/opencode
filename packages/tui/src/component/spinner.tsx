@@ -4,10 +4,11 @@ import { useConfig } from "../config"
 import type { JSX } from "@opentui/solid"
 import type { RGBA } from "@opentui/core"
 import { registerOpencodeSpinner } from "./register-spinner"
+import { SPINNER_FRAMES } from "./spinner-frames"
+
+export { SPINNER_FRAMES } from "./spinner-frames"
 
 registerOpencodeSpinner()
-
-export const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
 export function Spinner(props: { children?: JSX.Element; color?: RGBA }) {
   const { themeV2 } = useTheme()

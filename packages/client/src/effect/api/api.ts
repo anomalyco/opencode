@@ -542,13 +542,50 @@ export type Endpoint11_0Input = { readonly location?: Endpoint11_0Request["query
 export type Endpoint11_0Output = EffectValue<ReturnType<RawClient["server.mcp"]["mcp.list"]>>
 export type McpListOperation<E = never> = (input?: Endpoint11_0Input) => Effect.Effect<Endpoint11_0Output, E>
 
-type Endpoint11_1Request = Parameters<RawClient["server.mcp"]["mcp.resource.catalog"]>[0]
-export type Endpoint11_1Input = { readonly location?: Endpoint11_1Request["query"]["location"] }
-export type Endpoint11_1Output = EffectValue<ReturnType<RawClient["server.mcp"]["mcp.resource.catalog"]>>
-export type McpResourceCatalogOperation<E = never> = (input?: Endpoint11_1Input) => Effect.Effect<Endpoint11_1Output, E>
+type Endpoint11_1Request = Parameters<RawClient["server.mcp"]["mcp.add"]>[0]
+export type Endpoint11_1Input = {
+  readonly server: Endpoint11_1Request["params"]["server"]
+  readonly location?: Endpoint11_1Request["query"]["location"]
+  readonly config: Endpoint11_1Request["payload"]["config"]
+}
+export type Endpoint11_1Output = EffectValue<ReturnType<RawClient["server.mcp"]["mcp.add"]>>
+export type McpAddOperation<E = never> = (input: Endpoint11_1Input) => Effect.Effect<Endpoint11_1Output, E>
+
+type Endpoint11_2Request = Parameters<RawClient["server.mcp"]["mcp.remove"]>[0]
+export type Endpoint11_2Input = {
+  readonly server: Endpoint11_2Request["params"]["server"]
+  readonly location?: Endpoint11_2Request["query"]["location"]
+}
+export type Endpoint11_2Output = EffectValue<ReturnType<RawClient["server.mcp"]["mcp.remove"]>>
+export type McpRemoveOperation<E = never> = (input: Endpoint11_2Input) => Effect.Effect<Endpoint11_2Output, E>
+
+type Endpoint11_3Request = Parameters<RawClient["server.mcp"]["mcp.connect"]>[0]
+export type Endpoint11_3Input = {
+  readonly server: Endpoint11_3Request["params"]["server"]
+  readonly location?: Endpoint11_3Request["query"]["location"]
+}
+export type Endpoint11_3Output = EffectValue<ReturnType<RawClient["server.mcp"]["mcp.connect"]>>
+export type McpConnectOperation<E = never> = (input: Endpoint11_3Input) => Effect.Effect<Endpoint11_3Output, E>
+
+type Endpoint11_4Request = Parameters<RawClient["server.mcp"]["mcp.disconnect"]>[0]
+export type Endpoint11_4Input = {
+  readonly server: Endpoint11_4Request["params"]["server"]
+  readonly location?: Endpoint11_4Request["query"]["location"]
+}
+export type Endpoint11_4Output = EffectValue<ReturnType<RawClient["server.mcp"]["mcp.disconnect"]>>
+export type McpDisconnectOperation<E = never> = (input: Endpoint11_4Input) => Effect.Effect<Endpoint11_4Output, E>
+
+type Endpoint11_5Request = Parameters<RawClient["server.mcp"]["mcp.resource.catalog"]>[0]
+export type Endpoint11_5Input = { readonly location?: Endpoint11_5Request["query"]["location"] }
+export type Endpoint11_5Output = EffectValue<ReturnType<RawClient["server.mcp"]["mcp.resource.catalog"]>>
+export type McpResourceCatalogOperation<E = never> = (input?: Endpoint11_5Input) => Effect.Effect<Endpoint11_5Output, E>
 
 export interface McpApi<E = never> {
   readonly list: McpListOperation<E>
+  readonly add: McpAddOperation<E>
+  readonly remove: McpRemoveOperation<E>
+  readonly connect: McpConnectOperation<E>
+  readonly disconnect: McpDisconnectOperation<E>
   readonly resource: { readonly catalog: McpResourceCatalogOperation<E> }
 }
 

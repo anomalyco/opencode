@@ -1095,7 +1095,7 @@ export class Interpreter<R> {
         const args = yield* self.evaluateCallArguments(argNodes)
         switch (name) {
           case "Date":
-            return self.constructDate(args)
+            return yield* self.constructDate(args, node)
           case "RegExp":
             return self.constructRegExp(args, node)
           case "Map":
@@ -1133,17 +1133,37 @@ export class Interpreter<R> {
     )
   }
 
-  private constructDate(args: Array<unknown>): CodeModeDate {
-    if (args.length === 0) return new CodeModeDate(Date.now())
+  private constructDate(args: Array<unknown>, node: AstNode): Effect.Effect<CodeModeDate, unknown, R> {
+    if (args.length === 0) return Effect.succeed(new CodeModeDate(Date.now()))
     if (args.length === 1) {
       const arg = args[0]
-      if (arg instanceof CodeModeDate) return new CodeModeDate(arg.time)
-      if (typeof arg === "number") return new CodeModeDate(new Date(arg).getTime())
-      if (typeof arg === "string") return new CodeModeDate(Date.parse(arg))
-      return new CodeModeDate(Number.NaN)
+      if (arg instanceof CodeModeDate) return Effect.succeed(new CodeModeDate(arg.time))
+      return Effect.map(this.toDatePrimitive(arg, node), (value) =>
+        typeof value === "string"
+          ? new CodeModeDate(Date.parse(value))
+          : new CodeModeDate(new Date(coerceToNumber(value)).getTime()),
+      )
     }
     const parts = args.map((arg) => coerceToNumber(arg))
-    return new CodeModeDate(new Date(...(parts as [number, number])).getTime())
+    return Effect.succeed(new CodeModeDate(new Date(...(parts as [number, number])).getTime()))
+  }
+
+  private toDatePrimitive(value: unknown, node: AstNode): Effect.Effect<unknown, unknown, R> {
+    if (value === null || (typeof value !== "object" && typeof value !== "function")) return Effect.succeed(value)
+    const object = value as Record<string, unknown>
+    const self = this
+    return Effect.gen(function* () {
+      if (Object.hasOwn(object, "valueOf") && typeofValue(object.valueOf) === "function") {
+        const result = yield* self.runner.invokeCallable(object.valueOf, [], node)
+        if (result === null || (typeof result !== "object" && typeof result !== "function")) return result
+      }
+      if (!Object.hasOwn(object, "toString")) return coerceToString(value)
+      if (typeofValue(object.toString) === "function") {
+        const result = yield* self.runner.invokeCallable(object.toString, [], node)
+        if (result === null || (typeof result !== "object" && typeof result !== "function")) return result
+      }
+      throw new InterpreterRuntimeError("Cannot convert object to primitive value.", node).as("TypeError")
+    })
   }
 
   private constructRegExp(args: Array<unknown>, node: AstNode): CodeModeRegExp {

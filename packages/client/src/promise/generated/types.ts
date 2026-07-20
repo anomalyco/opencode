@@ -2482,6 +2482,14 @@ export type ProviderNotFoundError = {
 export const isProviderNotFoundError = (value: unknown): value is ProviderNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ProviderNotFoundError"
 
+export type McpServerNotFoundError = {
+  readonly _tag: "McpServerNotFoundError"
+  readonly server: string
+  readonly message: string
+}
+export const isMcpServerNotFoundError = (value: unknown): value is McpServerNotFoundError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "McpServerNotFoundError"
+
 export type FormNotFoundError = { readonly _tag: "FormNotFoundError"; readonly id: string; readonly message: string }
 export const isFormNotFoundError = (value: unknown): value is FormNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "FormNotFoundError"
@@ -3460,6 +3468,84 @@ export type McpListOutput = {
   location: { directory: string; workspaceID?: string; project: { id: string; directory: string } }
   data: Array<McpServer>
 }
+
+export type McpAddInput = {
+  readonly server: { readonly server: string }["server"]
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+  readonly config: {
+    readonly config:
+      | {
+          readonly type: "local"
+          readonly command: ReadonlyArray<string>
+          readonly cwd?: string | undefined
+          readonly environment?: { readonly [x: string]: string } | undefined
+          readonly disabled?: boolean | undefined
+          readonly codemode?: boolean | undefined
+          readonly timeout?:
+            | {
+                readonly startup?: number | undefined
+                readonly catalog?: number | undefined
+                readonly execution?: number | undefined
+              }
+            | undefined
+        }
+      | {
+          readonly type: "remote"
+          readonly url: string
+          readonly headers?: { readonly [x: string]: string } | undefined
+          readonly oauth?:
+            | {
+                readonly client_id?: string | undefined
+                readonly client_secret?: string | undefined
+                readonly scope?: string | undefined
+                readonly callback_port?: number | undefined
+                readonly redirect_uri?: string | undefined
+              }
+            | false
+            | undefined
+          readonly disabled?: boolean | undefined
+          readonly codemode?: boolean | undefined
+          readonly timeout?:
+            | {
+                readonly startup?: number | undefined
+                readonly catalog?: number | undefined
+                readonly execution?: number | undefined
+              }
+            | undefined
+        }
+  }["config"]
+}
+
+export type McpAddOutput = void
+
+export type McpRemoveInput = {
+  readonly server: { readonly server: string }["server"]
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type McpRemoveOutput = void
+
+export type McpConnectInput = {
+  readonly server: { readonly server: string }["server"]
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type McpConnectOutput = void
+
+export type McpDisconnectInput = {
+  readonly server: { readonly server: string }["server"]
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type McpDisconnectOutput = void
 
 export type McpResourceCatalogInput = {
   readonly location?: {

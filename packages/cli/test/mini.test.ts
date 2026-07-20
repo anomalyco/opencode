@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test"
+import { ClientError, OpenCode } from "@opencode-ai/client/promise"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import path from "node:path"
-import { mergeInteractiveInput, mergeNonInteractiveInput, parseRunModel, pickRunModel } from "../src/mini"
-import { toolInlineInfo, toolView } from "../src/mini/tool"
+import { createMiniConnection, mergeInput as mergeInteractiveInput, resolveMiniTarget } from "../src/mini"
+import { mergeInput as mergeNonInteractiveInput, parseRunModel } from "../src/run/run"
+import { parseSessionTargetModel } from "../src/session-target"
 
 async function cli(args: string[]) {
   const child = Bun.spawn([process.execPath, "run", "src/index.ts", ...args], {
@@ -19,48 +21,96 @@ async function cli(args: string[]) {
 }
 
 describe("mini command", () => {
-  test("renders the renamed shell tool with the shell rule", () => {
-    const part = {
-      id: "part-shell",
-      sessionID: "session-shell",
-      messageID: "message-shell",
-      callID: "call-shell",
-      tool: "shell",
-      state: {
-        status: "pending" as const,
-        input: { command: "pwd" },
-      },
-    } as const
-
-    expect(toolView(part.tool)).toEqual({ output: true, final: false })
-    expect(toolInlineInfo(part)).toMatchObject({ icon: "$", title: "pwd", mode: "block" })
-  })
-
   test("uses piped stdin as the initial prompt", () => {
     expect(mergeInteractiveInput("from stdin", undefined)).toBe("from stdin")
     expect(mergeInteractiveInput("from stdin", "from flag")).toBe("from stdin\nfrom flag")
   })
 
-  test("keeps run as mini's non-interactive input mode", () => {
-    expect(mergeNonInteractiveInput("from args", "from stdin")).toBe("from args\nfrom stdin")
-    expect(mergeNonInteractiveInput(undefined, "from stdin")).toBe("from stdin")
+  test("constructs a fresh authenticated client for a replacement endpoint", async () => {
+    const authorization: Array<string | null> = []
+    const initial = Bun.serve({
+      port: 0,
+      fetch() {
+        return Response.json({ healthy: true, version: InstallationVersion, pid: process.pid })
+      },
+    })
+    const replacement = Bun.serve({
+      port: 0,
+      fetch(request) {
+        authorization.push(request.headers.get("authorization"))
+        return Response.json({ healthy: true, version: InstallationVersion, pid: process.pid })
+      },
+    })
+    const controller = new AbortController()
+    let signal: AbortSignal | undefined
+
+    try {
+      const connection = createMiniConnection({
+        endpoint: { url: initial.url.toString() },
+        reconnect: async (next) => {
+          signal = next
+          return {
+            url: replacement.url.toString(),
+            auth: { type: "basic", username: "replacement", password: "secret" },
+          }
+        },
+      })
+      const client = await connection.reconnect?.(controller.signal)
+      if (!client) throw new Error("Expected a replacement client")
+      await client.health.get()
+
+      expect(client).not.toBe(connection.sdk)
+      expect(signal).toBe(controller.signal)
+      expect(authorization).toEqual([`Basic ${btoa("replacement:secret")}`])
+      expect(createMiniConnection({ endpoint: { url: initial.url.toString() } }).reconnect).toBeUndefined()
+    } finally {
+      initial.stop(true)
+      replacement.stop(true)
+    }
   })
 
-  test("applies a variant to a resumed session's model", () => {
-    expect(
-      pickRunModel(
-        undefined,
-        "high",
-        { providerID: "session-provider", modelID: "session-model" },
-        { providerID: "default-provider", modelID: "default-model" },
-      ),
-    ).toEqual({ providerID: "session-provider", modelID: "session-model" })
+  test("re-resolves a managed target when the endpoint moves before transport construction", async () => {
+    const initial = OpenCode.make({ baseUrl: "https://initial.opencode.test" })
+    const replacement = OpenCode.make({ baseUrl: "https://replacement.opencode.test" })
+    const controller = new AbortController()
+    const seen: (typeof initial)[] = []
+    let reconnects = 0
+
+    const result = await resolveMiniTarget({
+      sdk: initial,
+      reconnect: async (signal) => {
+        expect(signal).toBe(controller.signal)
+        reconnects++
+        if (reconnects === 1) throw new Error("service still moving")
+        return replacement
+      },
+      signal: controller.signal,
+      resolve: async (sdk) => {
+        seen.push(sdk)
+        if (sdk === initial) throw new ClientError("Transport")
+        return "ses-replacement"
+      },
+    })
+
+    expect(seen).toEqual([initial, replacement])
+    expect(reconnects).toBe(2)
+    expect(result).toEqual({ sdk: replacement, value: "ses-replacement" })
+  })
+
+  test("merges non-interactive argument and stdin input", () => {
+    expect(mergeNonInteractiveInput("from args", "from stdin")).toBe("from args\nfrom stdin")
+    expect(mergeNonInteractiveInput(undefined, "from stdin")).toBe("from stdin")
   })
 
   test("parses model variants from the model reference", () => {
     expect(JSON.stringify(parseRunModel("openrouter/openai/gpt-5#high"))).toBe(
       JSON.stringify({ model: { providerID: "openrouter", modelID: "openai/gpt-5" }, variant: "high" }),
     )
+    expect(parseSessionTargetModel("openrouter/openai/gpt-5#high")).toEqual({
+      providerID: "openrouter",
+      id: "openai/gpt-5",
+      variant: "high",
+    })
   })
 
   test("is registered in the preview CLI", async () => {
@@ -110,14 +160,7 @@ describe("mini command", () => {
     })
 
     try {
-      const result = await cli([
-        "run",
-        "--server",
-        server.url.toString(),
-        "--model",
-        "definitely/missing",
-        "hi",
-      ])
+      const result = await cli(["run", "--server", server.url.toString(), "--model", "definitely/missing", "hi"])
 
       expect(result.exitCode).toBe(1)
       expect(result.stderr).toContain("Model unavailable: definitely/missing")
