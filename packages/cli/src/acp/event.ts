@@ -1,9 +1,4 @@
-import type {
-  AgentSideConnection,
-  PermissionOption,
-  PromptResponse,
-  RequestPermissionResponse,
-} from "@agentclientprotocol/sdk"
+import type { AgentSideConnection, PromptResponse } from "@agentclientprotocol/sdk"
 import type {
   EventSubscribeOutput,
   OpenCodeClient,
@@ -12,6 +7,7 @@ import type {
 } from "@opencode-ai/client/promise"
 import { partsToContentChunks, type ReplayPart } from "./content"
 import { ACPError } from "./error"
+import { replyPermission, syncEditedFiles } from "./permission"
 import {
   completedToolUpdate,
   errorToolUpdate,
@@ -21,7 +17,8 @@ import {
   type ToolInput,
 } from "./tool"
 
-type Connection = Pick<AgentSideConnection, "sessionUpdate" | "requestPermission">
+type Connection = Pick<AgentSideConnection, "sessionUpdate" | "requestPermission"> &
+  Partial<Pick<AgentSideConnection, "writeTextFile">>
 
 export type TurnControl = {
   cancelled: boolean
@@ -39,12 +36,6 @@ export type TurnStart =
   | { readonly type: "input"; readonly id: string }
   | { readonly type: "skill"; readonly id: string }
   | { readonly type: "compaction"; readonly id: string }
-
-const permissionOptions: PermissionOption[] = [
-  { optionId: "once", kind: "allow_once", name: "Allow once" },
-  { optionId: "always", kind: "allow_always", name: "Always allow" },
-  { optionId: "reject", kind: "reject_once", name: "Reject" },
-]
 
 function emptyToolState(): ToolState {
   return { name: "tool", input: {}, structured: {}, content: [] }
@@ -75,30 +66,21 @@ export async function streamTurn(input: {
   const update = (value: Parameters<Connection["sessionUpdate"]>[0]["update"]) =>
     input.connection.sessionUpdate({ sessionId: input.sessionID, update: value })
 
-  const replyPermission = async (event: Extract<EventSubscribeOutput, { type: "permission.v2.asked" }>) => {
-    const result = await input.connection
-      .requestPermission({
-        sessionId: input.sessionID,
-        toolCall: pendingToolCall({
-          toolCallId: event.data.source?.callID ?? event.data.id,
-          toolName: event.data.action,
-          state: { input: event.data.metadata ?? {} },
-          cwd: input.cwd,
-        }),
-        options: permissionOptions,
-      })
-      .catch(() => undefined)
-    const reply = selectedReply(result)
-    await input.client.permission.reply({ sessionID: input.sessionID, requestID: event.data.id, reply })
-  }
-
   const consume = async () => {
     while (!streamController.signal.aborted) {
       const next = await stream.next()
       if (next.done) throw new Error("event stream disconnected during prompt execution")
       const event = next.value
       if (event.type === "permission.v2.asked" && event.data.sessionID === input.sessionID) {
-        await replyPermission(event)
+        const tool = event.data.source?.callID ? tools.get(event.data.source.callID) : undefined
+        await replyPermission({
+          client: input.client,
+          connection: input.connection,
+          event,
+          sessionID: input.sessionID,
+          cwd: input.cwd,
+          tool,
+        })
         continue
       }
       if (!("sessionID" in event.data) || event.data.sessionID !== input.sessionID) continue
@@ -180,6 +162,14 @@ export async function streamTurn(input: {
       if (event.type === "session.tool.success") {
         const current = tools.get(event.data.callID) ?? emptyToolState()
         tools.delete(event.data.callID)
+        await syncEditedFiles({
+          connection: input.connection,
+          sessionID: input.sessionID,
+          cwd: input.cwd,
+          toolName: current.name,
+          toolInput: current.input,
+          structured: event.data.structured,
+        }).catch(() => {})
         await update({
           sessionUpdate: "tool_call_update",
           ...completedToolUpdate({
@@ -384,12 +374,6 @@ function matchesStart(event: EventSubscribeOutput, start: TurnStart) {
   if (start.type === "compaction")
     return event.type === "session.compaction.admitted" && event.data.inputID === start.id
   return event.type === "session.skill.activated" && event.id === start.id.replace(/^msg_/, "evt_")
-}
-
-function selectedReply(result: RequestPermissionResponse | undefined): "once" | "always" | "reject" {
-  if (result?.outcome.outcome !== "selected") return "reject"
-  if (result.outcome.optionId === "once" || result.outcome.optionId === "always") return result.outcome.optionId
-  return "reject"
 }
 
 function toolInput(tool: Extract<SessionMessageAssistant["content"][number], { type: "tool" }>) {

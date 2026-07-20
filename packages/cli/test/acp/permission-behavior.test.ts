@@ -1,10 +1,14 @@
 import { describe, expect, test } from "bun:test"
 import type { AgentSideConnection, RequestPermissionRequest, RequestPermissionResponse } from "@agentclientprotocol/sdk"
+import fs from "node:fs/promises"
+import os from "node:os"
+import path from "node:path"
 import { streamTurn } from "../../src/acp/event"
 import { createSseFixture, durableEvent, ephemeralEvent, withTimeout } from "./sse-fixture"
 
 type SessionUpdateParams = Parameters<AgentSideConnection["sessionUpdate"]>[0]
-type Connection = Pick<AgentSideConnection, "sessionUpdate" | "requestPermission">
+type Connection = Pick<AgentSideConnection, "sessionUpdate" | "requestPermission"> &
+  Partial<Pick<AgentSideConnection, "writeTextFile">>
 type Fixture = ReturnType<typeof createSseFixture>
 
 describe("acp permission behavior", () => {
@@ -67,7 +71,7 @@ describe("acp permission behavior", () => {
         toolCall: {
           toolCallId: "call_always",
           status: "pending",
-          title: "read",
+          title: "/workspace/file.ts",
           kind: "read",
           locations: [{ path: "/workspace/file.ts" }],
           rawInput: { filePath: "/workspace/file.ts" },
@@ -79,6 +83,226 @@ describe("acp permission behavior", () => {
       ])
     } finally {
       await fixture.stop()
+    }
+  })
+
+  test("preserves external directory permission context", async () => {
+    const permissionRequests: RequestPermissionRequest[] = []
+    const fixture = createSseFixture({
+      onPrompt({ id, send }) {
+        send(durableEvent("session.input.promoted", { sessionID: "ses_external", inputID: id }))
+        send(
+          permissionAsked("ses_external", "perm_external", {
+            action: "external_directory",
+            metadata: {
+              command: "mkdir -p /tmp/outside",
+              description: "Create external directory",
+              directories: ["/tmp/outside"],
+              patterns: ["/tmp/outside/*"],
+            },
+          }),
+        )
+        send(durableEvent("session.execution.succeeded", { sessionID: "ses_external" }))
+      },
+    })
+    const connection = {
+      sessionUpdate: async () => {},
+      requestPermission: async (request) => {
+        permissionRequests.push(request)
+        return { outcome: { outcome: "selected", optionId: "once" } } as const
+      },
+    } satisfies Connection
+
+    try {
+      await startTurn(fixture, connection, "ses_external", "input_external")
+
+      expect(permissionRequests[0]?.toolCall).toMatchObject({
+        title: "Create external directory",
+        locations: [{ path: "/tmp/outside" }],
+        rawInput: {
+          command: "mkdir -p /tmp/outside",
+          description: "Create external directory",
+          directories: ["/tmp/outside"],
+          patterns: ["/tmp/outside/*"],
+        },
+      })
+    } finally {
+      await fixture.stop()
+    }
+  })
+
+  test("previews edits during approval and syncs the completed file", async () => {
+    const cwd = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-acp-permission-"))
+    const file = path.join(cwd, "file.ts")
+    await fs.writeFile(file, "before")
+    const permissionRequests: RequestPermissionRequest[] = []
+    const writes: Parameters<AgentSideConnection["writeTextFile"]>[0][] = []
+    const fixture = createSseFixture({
+      onPrompt({ id, send }) {
+        send(durableEvent("session.input.promoted", { sessionID: "ses_edit", inputID: id }))
+        send(
+          durableEvent("session.tool.input.started", {
+            sessionID: "ses_edit",
+            assistantMessageID: "msg_edit",
+            callID: "call_edit",
+            name: "edit",
+          }),
+        )
+        send(
+          durableEvent("session.tool.called", {
+            sessionID: "ses_edit",
+            assistantMessageID: "msg_edit",
+            callID: "call_edit",
+            input: { path: "file.ts", oldString: "before", newString: "after" },
+            executed: false,
+          }),
+        )
+        send(
+          permissionAsked("ses_edit", "perm_edit", {
+            action: "edit",
+            source: { type: "tool", messageID: "msg_edit", callID: "call_edit" },
+          }),
+        )
+      },
+      async onPermissionReply({ send }) {
+        await fs.writeFile(file, "after")
+        send(
+          durableEvent("session.tool.success", {
+            sessionID: "ses_edit",
+            assistantMessageID: "msg_edit",
+            callID: "call_edit",
+            structured: { files: [{ file: "file.ts" }], replacements: 1 },
+            content: [{ type: "text", text: "edited" }],
+            executed: true,
+          }),
+        )
+        send(durableEvent("session.execution.succeeded", { sessionID: "ses_edit" }))
+      },
+    })
+    const connection = {
+      sessionUpdate: async () => {},
+      requestPermission: async (request) => {
+        permissionRequests.push(request)
+        return { outcome: { outcome: "selected", optionId: "once" } } as const
+      },
+      writeTextFile: async (request) => {
+        writes.push(request)
+        return {}
+      },
+    } satisfies Connection
+
+    try {
+      await startTurn(fixture, connection, "ses_edit", "input_edit", cwd)
+
+      expect(permissionRequests[0]?.toolCall).toMatchObject({
+        title: "file.ts",
+        kind: "edit",
+        locations: [{ path: "file.ts" }],
+        content: [{ type: "diff", path: "file.ts", oldText: "before", newText: "after" }],
+      })
+      expect(writes).toEqual([{ sessionId: "ses_edit", path: file, content: "after" }])
+    } finally {
+      await fixture.stop()
+      await fs.rm(cwd, { recursive: true, force: true })
+    }
+  })
+
+  test("previews and syncs each file in a patch", async () => {
+    const cwd = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-acp-patch-permission-"))
+    await Promise.all([
+      fs.writeFile(path.join(cwd, "first.ts"), "one\n"),
+      fs.writeFile(path.join(cwd, "second.ts"), "alpha\n"),
+    ])
+    const patchText = [
+      "*** Begin Patch",
+      "*** Update File: first.ts",
+      "@@",
+      "-one",
+      "+two",
+      "*** Update File: second.ts",
+      "@@",
+      "-alpha",
+      "+beta",
+      "*** End Patch",
+    ].join("\n")
+    const permissionRequests: RequestPermissionRequest[] = []
+    const writes: Parameters<AgentSideConnection["writeTextFile"]>[0][] = []
+    const fixture = createSseFixture({
+      onPrompt({ id, send }) {
+        send(durableEvent("session.input.promoted", { sessionID: "ses_patch", inputID: id }))
+        send(
+          durableEvent("session.tool.input.started", {
+            sessionID: "ses_patch",
+            assistantMessageID: "msg_patch",
+            callID: "call_patch",
+            name: "patch",
+          }),
+        )
+        send(
+          durableEvent("session.tool.called", {
+            sessionID: "ses_patch",
+            assistantMessageID: "msg_patch",
+            callID: "call_patch",
+            input: { patchText },
+            executed: false,
+          }),
+        )
+        send(
+          permissionAsked("ses_patch", "perm_patch", {
+            action: "edit",
+            source: { type: "tool", messageID: "msg_patch", callID: "call_patch" },
+          }),
+        )
+      },
+      async onPermissionReply({ send }) {
+        await Promise.all([
+          fs.writeFile(path.join(cwd, "first.ts"), "two\n"),
+          fs.writeFile(path.join(cwd, "second.ts"), "beta\n"),
+        ])
+        send(
+          durableEvent("session.tool.success", {
+            sessionID: "ses_patch",
+            assistantMessageID: "msg_patch",
+            callID: "call_patch",
+            structured: { files: [{ file: "first.ts" }, { file: "second.ts" }] },
+            content: [{ type: "text", text: "patched" }],
+            executed: true,
+          }),
+        )
+        send(durableEvent("session.execution.succeeded", { sessionID: "ses_patch" }))
+      },
+    })
+    const connection = {
+      sessionUpdate: async () => {},
+      requestPermission: async (request) => {
+        permissionRequests.push(request)
+        return { outcome: { outcome: "selected", optionId: "once" } } as const
+      },
+      writeTextFile: async (request) => {
+        writes.push(request)
+        return {}
+      },
+    } satisfies Connection
+
+    try {
+      await startTurn(fixture, connection, "ses_patch", "input_patch", cwd)
+
+      expect(permissionRequests[0]?.toolCall).toMatchObject({
+        title: "2 files",
+        kind: "edit",
+        locations: [{ path: "first.ts" }, { path: "second.ts" }],
+        content: [
+          { type: "diff", path: "first.ts", oldText: "one\n", newText: "two\n" },
+          { type: "diff", path: "second.ts", oldText: "alpha\n", newText: "beta\n" },
+        ],
+      })
+      expect(writes.toSorted((a, b) => a.path.localeCompare(b.path))).toEqual([
+        { sessionId: "ses_patch", path: path.join(cwd, "first.ts"), content: "two\n" },
+        { sessionId: "ses_patch", path: path.join(cwd, "second.ts"), content: "beta\n" },
+      ])
+    } finally {
+      await fixture.stop()
+      await fs.rm(cwd, { recursive: true, force: true })
     }
   })
 
@@ -234,12 +458,12 @@ describe("acp permission behavior", () => {
   })
 })
 
-function startTurn(fixture: Fixture, connection: Connection, sessionID: string, inputID: string) {
+function startTurn(fixture: Fixture, connection: Connection, sessionID: string, inputID: string, cwd = "/workspace") {
   return streamTurn({
     client: fixture.client,
     connection,
     sessionID,
-    cwd: "/workspace",
+    cwd,
     start: { type: "input", id: inputID },
     control: { cancelled: false, admission: new AbortController() },
     submit: (signal) => fixture.client.session.prompt({ sessionID, id: inputID, text: "hello" }, { signal }),
@@ -251,7 +475,7 @@ function permissionAsked(
   id: string,
   input: {
     readonly action?: string
-    readonly metadata?: Record<string, string>
+    readonly metadata?: Record<string, unknown>
     readonly source?: { readonly type: "tool"; readonly messageID: string; readonly callID: string }
   } = {},
 ) {

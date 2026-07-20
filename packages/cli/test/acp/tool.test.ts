@@ -71,6 +71,12 @@ describe("acp tools", () => {
         content: { type: "text", text: "edited /tmp/file.ts" },
       },
       {
+        type: "diff",
+        path: "/tmp/file.ts",
+        oldText: "before",
+        newText: "after",
+      },
+      {
         type: "content",
         content: { type: "image", mimeType: "image/png", data: image },
       },
@@ -95,6 +101,39 @@ describe("acp tools", () => {
         content: { type: "text", text: "wrote /tmp/file.ts" },
       },
     ])
+  })
+
+  test("uses clean structured read content instead of model-facing formatting", () => {
+    expect(
+      completedToolUpdate({
+        toolCallId: "tool-read",
+        toolName: "read",
+        input: { path: "/tmp/file.ts" },
+        content: [{ type: "text", text: "<content>1: first\n2: second</content>" }],
+        structured: {
+          type: "text-page",
+          content: "first\nsecond",
+          mime: "text/plain",
+          offset: 1,
+          truncated: false,
+        },
+      }).content,
+    ).toEqual([{ type: "content", content: { type: "text", text: "first\nsecond" } }])
+
+    expect(
+      completedToolUpdate({
+        toolCallId: "tool-list",
+        toolName: "read",
+        input: { path: "/tmp" },
+        content: [],
+        structured: {
+          entries: [
+            { path: "a.ts", type: "file" },
+            { path: "src", type: "directory" },
+          ],
+        },
+      }).content,
+    ).toEqual([{ type: "content", content: { type: "text", text: "a.ts\nsrc" } }])
   })
 
   test("sends completed tool calls as partial updates", () => {
@@ -141,6 +180,12 @@ describe("acp tools", () => {
         {
           type: "content",
           content: { type: "text", text: "Edit applied successfully." },
+        },
+        {
+          type: "diff",
+          path: "/tmp/file.ts",
+          oldText: "before",
+          newText: "after",
         },
       ],
       rawOutput: {

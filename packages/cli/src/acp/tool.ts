@@ -106,12 +106,28 @@ export function completedToolUpdate(input: {
   return {
     toolCallId: input.toolCallId,
     status: "completed",
-    content: toolContent(input.content),
+    content: completedToolContent(input.toolName, input.input, input.content, input.structured),
     rawOutput: {
       structured: input.structured,
       ...(input.result === undefined ? {} : { result: input.result }),
     },
   }
+}
+
+function completedToolContent(
+  toolName: string,
+  input: ToolInput,
+  content: ToolContent,
+  structured: Readonly<Record<string, unknown>>,
+): ToolCallContent[] {
+  const normalized = toolContent(content)
+  const read = toolName.toLocaleLowerCase() === "read" ? readDisplayText(structured) : undefined
+  const images = normalized.filter((part) => part.type === "content" && part.content.type === "image")
+  const primary =
+    read === undefined
+      ? normalized.filter((part) => !images.includes(part))
+      : [{ type: "content" as const, content: { type: "text" as const, text: read } }]
+  return [...primary, ...diffContent(input), ...images]
 }
 
 export function errorToolUpdate(input: {
@@ -142,6 +158,35 @@ function toolContent(content: ToolContent): ToolCallContent[] {
     if (!match?.[1]?.startsWith("image/") || match[2] === undefined) return []
     return [{ type: "content", content: { type: "image", mimeType: match[1], data: match[2] } }]
   })
+}
+
+function diffContent(input: ToolInput): ToolCallContent[] {
+  const oldText = stringValue(input.oldString)
+  const newText = stringValue(input.newString)
+  if (oldText === undefined || newText === undefined) return []
+  return [
+    {
+      type: "diff",
+      path: stringValue(input.path) ?? stringValue(input.filePath) ?? "",
+      oldText,
+      newText,
+    },
+  ]
+}
+
+function readDisplayText(structured: Readonly<Record<string, unknown>>) {
+  if (typeof structured.content === "string") {
+    if (structured.type === "text-page" || structured.encoding === "utf8") return structured.content
+  }
+  if (!Array.isArray(structured.entries)) return undefined
+  return structured.entries
+    .flatMap((entry): string[] => {
+      if (typeof entry === "string") return [entry]
+      if (!entry || typeof entry !== "object") return []
+      const path = Reflect.get(entry, "path")
+      return typeof path === "string" ? [path] : []
+    })
+    .join("\n")
 }
 
 function toolTitle(toolName: string, input: ToolInput, fallback: string | undefined) {
