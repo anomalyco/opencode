@@ -85,10 +85,10 @@ Die folgende Tabelle zeigt eine geschätzte Anzahl von Anfragen basierend auf ty
 
 | Model             | Anfragen pro 5 Stunden | Anfragen pro Woche | Anfragen pro Monat |
 | ----------------- | ---------------------- | ------------------ | ------------------ |
-| Grok 4.5          | 80                     | 190                | 380                |
+| Grok 4.5          | 120                    | 300                | 600                |
 | GLM-5.2           | 880                    | 2,150              | 4,300              |
 | GLM-5.1           | 880                    | 2,150              | 4,300              |
-| Kimi K3           | 140                    | 340                | 680                |
+| Kimi K3           | 110                    | 250                | 490                |
 | Kimi K2.7 Code    | 1,350                  | 4,630              | 9,250              |
 | Kimi K2.6         | 1,150                  | 2,880              | 5,750              |
 | MiMo-V2.5         | 30,100                 | 75,200             | 150,400            |
@@ -101,11 +101,12 @@ Die folgende Tabelle zeigt eine geschätzte Anzahl von Anfragen basierend auf ty
 | DeepSeek V4 Pro   | 3,450                  | 8,550              | 17,150             |
 | DeepSeek V4 Flash | 31,650                 | 79,050             | 158,150            |
 
-Die Schätzungen basieren auf beobachteten durchschnittlichen Anfragemustern:
+Die Schätzungen basieren auf beobachteten Anfragemustern:
 
 - Grok 4.5 — 1.100 Input-, 71.500 Cached-, 220 Output-Tokens pro Anfrage
 - GLM-5.2/5.1 — 700 Input-, 52.000 Cached-, 150 Output-Tokens pro Anfrage
-- Kimi K3/K2.7/K2.6 — 870 Input-, 55.000 Cached-, 200 Output-Tokens pro Anfrage
+- Kimi K3 — 1.050 Input-, 76.500 Cached-, 300 Output-Tokens pro Anfrage
+- Kimi K2.7/K2.6 — 870 Input-, 55.000 Cached-, 200 Output-Tokens pro Anfrage
 - DeepSeek V4 Pro — 750 Input-, 82.000 Cached-, 290 Output-Tokens pro Anfrage
 - DeepSeek V4 Flash — 790 Input-, 68.000 Cached-, 280 Output-Tokens pro Anfrage
 - MiniMax M3 — 510 Input-, 56.000 Cached-, 190 Output-Tokens pro Anfrage
@@ -120,7 +121,7 @@ Die Schätzungen basieren außerdem auf den folgenden Preisen pro 1M Tokens und 
 
 | Model                        | Input  | Output | Cached Read | Cached Write | Nutzung |
 | ---------------------------- | ------ | ------ | ----------- | ------------ | ------- |
-| Grok 4.5                     | $2.00  | $6.00  | $0.50       | -            | $15     |
+| Grok 4.5                     | $2.00  | $6.00  | $0.30       | -            | $15     |
 | GLM-5.2                      | $1.40  | $4.40  | $0.26       | -            | $60     |
 | GLM-5.1                      | $1.40  | $4.40  | $0.26       | -            | $60     |
 | Kimi K3                      | $3.00  | $15.00 | $0.30       | -            | $15     |

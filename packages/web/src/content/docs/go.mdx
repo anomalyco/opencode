@@ -93,10 +93,10 @@ The table below provides an estimated request count based on typical Go usage pa
 
 | Model             | requests per 5 hour | requests per week | requests per month |
 | ----------------- | ------------------- | ----------------- | ------------------ |
-| Grok 4.5          | 80                  | 190               | 380                |
+| Grok 4.5          | 120                 | 300               | 600                |
 | GLM-5.2           | 880                 | 2,150             | 4,300              |
 | GLM-5.1           | 880                 | 2,150             | 4,300              |
-| Kimi K3           | 140                 | 340               | 680                |
+| Kimi K3           | 110                 | 250               | 490                |
 | Kimi K2.7 Code    | 1,350               | 4,630             | 9,250              |
 | Kimi K2.6         | 1,150               | 2,880             | 5,750              |
 | MiMo-V2.5         | 30,100              | 75,200            | 150,400            |
@@ -109,11 +109,12 @@ The table below provides an estimated request count based on typical Go usage pa
 | DeepSeek V4 Pro   | 3,450               | 8,550             | 17,150             |
 | DeepSeek V4 Flash | 31,650              | 79,050            | 158,150            |
 
-The estimates are based on observed average request patterns:
+The estimates are based on observed request patterns:
 
 - Grok 4.5 — 1,100 input, 71,500 cached, 220 output tokens per request
 - GLM-5.2/5.1 — 700 input, 52,000 cached, 150 output tokens per request
-- Kimi K3/K2.7/K2.6 — 870 input, 55,000 cached, 200 output tokens per request
+- Kimi K3 — 1,050 input, 76,500 cached, 300 output tokens per request
+- Kimi K2.7/K2.6 — 870 input, 55,000 cached, 200 output tokens per request
 - DeepSeek V4 Pro — 750 input, 82,000 cached, 290 output tokens per request
 - DeepSeek V4 Flash — 790 input, 68,000 cached, 280 output tokens per request
 - MiniMax M3 — 510 input, 56,000 cached, 190 output tokens per request
@@ -128,7 +129,7 @@ The estimates are also based on the following prices per 1M tokens and the month
 
 | Model                        | Input  | Output | Cached Read | Cached Write | Usage |
 | ---------------------------- | ------ | ------ | ----------- | ------------ | ----- |
-| Grok 4.5                     | $2.00  | $6.00  | $0.50       | -            | $15   |
+| Grok 4.5                     | $2.00  | $6.00  | $0.30       | -            | $15   |
 | GLM-5.2                      | $1.40  | $4.40  | $0.26       | -            | $60   |
 | GLM-5.1                      | $1.40  | $4.40  | $0.26       | -            | $60   |
 | Kimi K3                      | $3.00  | $15.00 | $0.30       | -            | $15   |
