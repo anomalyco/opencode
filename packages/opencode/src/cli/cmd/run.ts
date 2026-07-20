@@ -226,7 +226,13 @@ export const RunCommand = effectCmd({
         type: "boolean",
         default: true,
         hidden: true,
-        describe: "replay interactive session history on resume and after resize (use --no-replay to disable)",
+        describe: "replay interactive session history on resume (use --no-replay to disable)",
+      })
+      .option("resize-replay", {
+        type: "boolean",
+        default: false,
+        hidden: true,
+        describe: "also replay session history after terminal resize (for terminals that do not reflow scrollback)",
       })
       .option("replay-limit", {
         type: "number",
@@ -307,6 +313,10 @@ export const RunCommand = effectCmd({
 
       if (args["replay-limit"] !== undefined && !interactive) {
         die("--replay-limit requires --mini")
+      }
+
+      if (args["resize-replay"] && !interactive) {
+        die("--resize-replay requires --mini")
       }
 
       if (
@@ -882,6 +892,7 @@ export const RunCommand = effectCmd({
             sessionTitle: sess.title,
             resume: Boolean(args.session || args.continue) && !args.fork,
             replay,
+            resizeReplay: args["resize-replay"],
             replayLimit: args["replay-limit"],
             agent,
             model,
@@ -923,6 +934,7 @@ export const RunCommand = effectCmd({
             model,
             variant: args.variant,
             replay,
+            resizeReplay: args["resize-replay"],
             replayLimit: args["replay-limit"],
             files,
             initialInput,
@@ -970,6 +982,7 @@ type MiniCommandInput = {
   agent?: string
   prompt?: string
   replay?: boolean
+  resizeReplay?: boolean
   replayLimit?: number
   demo?: boolean
 }
@@ -1000,6 +1013,8 @@ export async function runMini(input: MiniCommandInput) {
     mini: true,
     interactive: false,
     replay: input.replay ?? true,
+    "resize-replay": input.resizeReplay ?? false,
+    resizeReplay: input.resizeReplay ?? false,
     "replay-limit": input.replayLimit,
     replayLimit: input.replayLimit,
     auto: false,

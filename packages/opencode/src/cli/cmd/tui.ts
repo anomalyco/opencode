@@ -131,7 +131,12 @@ export const TuiThreadCommand = cmd({
       })
       .option("no-replay", {
         type: "boolean",
-        describe: "disable mini session history replay on resume and after resize",
+        describe: "disable mini session history replay on resume",
+      })
+      .option("resize-replay", {
+        type: "boolean",
+        describe:
+          "also replay mini session history after terminal resize (for terminals that do not reflow scrollback)",
       })
       .option("replay-limit", {
         type: "number",
@@ -169,6 +174,7 @@ export const TuiThreadCommand = cmd({
         agent: args.agent,
         prompt: args.prompt,
         replay: noReplay ? false : undefined,
+        resizeReplay: args.resizeReplay,
         replayLimit: args.replayLimit,
         demo: args.demo,
       })
@@ -177,6 +183,7 @@ export const TuiThreadCommand = cmd({
 
     const unsupported = [
       ["--no-replay", noReplay],
+      ["--resize-replay", args.resizeReplay === true],
       ["--replay-limit", args.replayLimit !== undefined],
       ["--demo", args.demo !== undefined],
     ].find((entry) => entry[1])?.[0]

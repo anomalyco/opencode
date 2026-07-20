@@ -235,4 +235,78 @@ describe("run interactive runtime", () => {
 
     expect(transportProviders).toEqual([[provider]])
   })
+
+  test("replays on resize only when resize replay is opted in", async () => {
+    for (const resizeReplay of [undefined, true]) {
+      const sdk = new OpencodeClient()
+      spyOn(sdk.config, "providers").mockImplementation(() => ok({ providers: [provider], default: {} }))
+      spyOn(sdk.session, "messages").mockImplementation(() => ok([]))
+      spyOn(sdk.session, "get").mockRejectedValue(new Error("not needed"))
+      spyOn(sdk.app, "agents").mockImplementation(() => ok([]))
+      spyOn(sdk.experimental.resource, "list").mockImplementation(() => ok({}))
+      spyOn(sdk.command, "list").mockImplementation(() => ok([]))
+
+      let resize: (() => void) | undefined
+      let replays = 0
+      const transportReady = defer<void>()
+      const ui = footer()
+
+      const task = runInteractiveMode(
+        {
+          sdk,
+          directory: "/tmp",
+          sessionID: "ses-1",
+          sessionTitle: "Session",
+          resume: true,
+          replay: true,
+          resizeReplay,
+          agent: "build",
+          model: {
+            providerID: "openai",
+            modelID: "gpt-5",
+          },
+          variant: undefined,
+          files: [],
+          thinking: true,
+          backgroundSubagents: false,
+        },
+        {
+          createRuntimeLifecycle: async () => ({
+            footer: ui,
+            onResize: (fn) => {
+              resize = fn
+              return () => {}
+            },
+            refreshTheme: () => {},
+            resetForReplay: () => Promise.resolve(),
+            close: () => Promise.resolve(),
+          }),
+          streamTransport: Promise.resolve({
+            createSessionTransport: async () => {
+              transportReady.resolve()
+              return {
+                runPromptTurn: async () => {},
+                selectSubagent: () => {},
+                replayOnResize: async () => {
+                  replays += 1
+                  return true
+                },
+                close: async () => {},
+              }
+            },
+            formatUnknownError: (error: unknown) => (error instanceof Error ? error.message : String(error)),
+          }),
+        },
+      )
+
+      await transportReady.promise
+      while (!resize) await Bun.sleep(0)
+      resize()
+      await Bun.sleep(400)
+
+      expect(replays).toBe(resizeReplay ? 1 : 0)
+      ui.close()
+      await task
+    }
+  })
 })
