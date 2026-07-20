@@ -17,13 +17,17 @@ const ADAPTER = "openai-images"
 export const DEFAULT_BASE_URL = "https://api.openai.com/v1"
 export const PATH = "/images/generations"
 
+export type OpenAIImageString<Known extends string> = Known | (string & {})
+
 export type OpenAIImageOptions = {
   readonly n?: number
-  readonly size?: "auto" | "1024x1024" | "1536x1024" | "1024x1536"
-  readonly quality?: "auto" | "low" | "medium" | "high"
-  readonly background?: "auto" | "opaque" | "transparent"
-  readonly moderation?: "auto" | "low"
-  readonly outputFormat?: "png" | "jpeg" | "webp"
+  readonly size?: OpenAIImageString<
+    "auto" | "256x256" | "512x512" | "1024x1024" | "1536x1024" | "1024x1536" | "1792x1024" | "1024x1792"
+  >
+  readonly quality?: OpenAIImageString<"auto" | "low" | "medium" | "high" | "standard" | "hd">
+  readonly background?: OpenAIImageString<"auto" | "opaque" | "transparent">
+  readonly moderation?: OpenAIImageString<"auto" | "low">
+  readonly outputFormat?: OpenAIImageString<"png" | "jpeg" | "webp">
   readonly outputCompression?: number
 } & Record<string, unknown>
 
@@ -64,9 +68,9 @@ const nativeOptions = (options: Record<string, unknown> | undefined) => {
   if (!options) return undefined
   const { outputFormat, outputCompression, ...native } = options
   return {
-    ...native,
     output_format: outputFormat,
     output_compression: outputCompression,
+    ...native,
   }
 }
 

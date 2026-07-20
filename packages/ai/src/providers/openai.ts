@@ -5,7 +5,7 @@ import { HttpOptions, ProviderID, ToolDefinition, mergeHttpOptions, type ModelID
 import * as OpenAIChat from "../protocols/openai-chat"
 import * as OpenAIResponses from "../protocols/openai-responses"
 import { withOpenAIOptions, type OpenAIProviderOptionsInput } from "./openai-options"
-import { OpenAIImages, type OpenAIImageOptions } from "../protocols/openai-images"
+import { OpenAIImages, type OpenAIImageOptions, type OpenAIImageString } from "../protocols/openai-images"
 
 export type { OpenAIOptionsInput, OpenAIResponseIncludable } from "./openai-options"
 export type { OpenAIImageOptions } from "../protocols/openai-images"
@@ -30,14 +30,16 @@ export interface ImageConfig {
 }
 
 export interface ImageGenerationOptions {
-  readonly action?: "auto" | "generate" | "edit"
-  readonly background?: "auto" | "opaque" | "transparent"
-  readonly inputFidelity?: "low" | "high"
+  readonly action?: OpenAIImageString<"auto" | "generate" | "edit">
+  readonly background?: OpenAIImageString<"auto" | "opaque" | "transparent">
+  readonly inputFidelity?: OpenAIImageString<"low" | "high">
   readonly outputCompression?: number
-  readonly outputFormat?: "png" | "jpeg" | "webp"
+  readonly outputFormat?: OpenAIImageString<"png" | "jpeg" | "webp">
   readonly partialImages?: number
-  readonly quality?: "auto" | "low" | "medium" | "high"
-  readonly size?: string
+  readonly quality?: OpenAIImageString<"auto" | "low" | "medium" | "high" | "standard" | "hd">
+  readonly size?: OpenAIImageString<
+    "auto" | "256x256" | "512x512" | "1024x1024" | "1536x1024" | "1024x1536" | "1792x1024" | "1024x1792"
+  >
 }
 
 export const imageGeneration = (options: ImageGenerationOptions = {}) =>

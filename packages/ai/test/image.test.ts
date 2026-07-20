@@ -14,13 +14,32 @@ describe("Image", () => {
           apiKey: "test",
           baseURL: "https://api.openai.test/v1",
           queryParams: { "api-version": "v1" },
-          image: { options: { quality: "medium", outputFormat: "png", background: "opaque" } },
+          image: {
+            options: {
+              quality: "medium",
+              outputFormat: "png",
+              output_format: "gif",
+              outputCompression: 10,
+              output_compression: 20,
+              background: "opaque",
+              native_default: true,
+            },
+          },
           http: { body: { deployment: "test" }, headers: { "x-default": "yes" } },
         }).image("gpt-image-2"),
         prompt: "A robot tending a rooftop garden",
-        options: { n: 2, size: "1024x1024", quality: "high", outputFormat: "jpeg", future_option: true },
+        options: {
+          n: 2,
+          size: "2048x2048",
+          quality: "future-quality",
+          outputFormat: "jpeg",
+          output_format: "avif",
+          outputCompression: 30,
+          output_compression: 40,
+          future_option: true,
+        },
         http: {
-          body: { output_format: "webp", request_metadata: "value" },
+          body: { output_format: "webp", output_compression: 50, future_option: "http", request_metadata: "value" },
           headers: { "x-request": "yes" },
           query: { trace: "1" },
         },
@@ -46,11 +65,13 @@ describe("Image", () => {
                   model: "gpt-image-2",
                   prompt: "A robot tending a rooftop garden",
                   n: 2,
-                  size: "1024x1024",
-                  quality: "high",
+                  size: "2048x2048",
+                  quality: "future-quality",
                   background: "opaque",
                   output_format: "webp",
-                  future_option: true,
+                  output_compression: 50,
+                  native_default: true,
+                  future_option: "http",
                   deployment: "test",
                   request_metadata: "value",
                 })
@@ -64,6 +85,50 @@ describe("Image", () => {
                 )
               }),
             ),
+          ),
+        ),
+      ),
+    ),
+  )
+
+  it.effect("preserves native snake_case and unknown request options", () =>
+    Image.generate({
+      model: OpenAI.configure({
+        apiKey: "test",
+        baseURL: "https://api.openai.test/v1",
+        image: { options: { outputFormat: "png", outputCompression: 10 } },
+      }).image("future-image-model"),
+      prompt: "A lighthouse in fog",
+      options: {
+        outputFormat: "jpeg",
+        output_format: "avif",
+        outputCompression: 30,
+        output_compression: 40,
+        provider_future_option: { enabled: true },
+      },
+    }).pipe(
+      Effect.tap((response) =>
+        Effect.sync(() => {
+          expect(response.image?.mediaType).toBe("image/avif")
+        }),
+      ),
+      Effect.provide(
+        ImageClient.layer.pipe(
+          Layer.provide(
+            dynamicResponse((input) => {
+              expect(JSON.parse(input.text)).toEqual({
+                model: "future-image-model",
+                prompt: "A lighthouse in fog",
+                output_format: "avif",
+                output_compression: 40,
+                provider_future_option: { enabled: true },
+              })
+              return Effect.succeed(
+                input.respond(JSON.stringify({ data: [{ b64_json: "AQID" }] }), {
+                  headers: { "content-type": "application/json" },
+                }),
+              )
+            }),
           ),
         ),
       ),

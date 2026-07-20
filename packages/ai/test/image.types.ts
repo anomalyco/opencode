@@ -26,16 +26,23 @@ Image.generate({
 })
 
 const openai = OpenAI.image("gpt-image-2")
-// @ts-expect-error Extracted model options retain known provider fields.
-const invalidOpenAIOptions: ImageModelOptions<typeof openai> = { quality: "ultra" }
-void invalidOpenAIOptions
+const futureOpenAIOptions: ImageModelOptions<typeof openai> = { quality: "future-quality" }
+void futureOpenAIOptions
 Image.generate({
   model: openai,
   prompt: "A lighthouse",
-  options: { quality: "high", outputFormat: "webp", future_option: true },
+  options: { quality: "hd", outputFormat: "webp", size: "2048x2048", future_option: true },
 })
-// @ts-expect-error Known OpenAI options retain their provider-specific value types.
-Image.generate({ model: openai, prompt: "A lighthouse", options: { quality: "ultra" } })
+Image.generate({ model: openai, prompt: "A lighthouse", options: { quality: "future-quality", size: "256x256" } })
+Image.generate({ model: openai, prompt: "A lighthouse", options: { size: "1792x1024" } })
+Image.generate({ model: openai, prompt: "A lighthouse", options: { native_future_option: true } })
+// @ts-expect-error Known OpenAI string options retain their value kind.
+Image.generate({ model: openai, prompt: "A lighthouse", options: { quality: 1 } })
+// @ts-expect-error Known OpenAI numeric options retain their value kind.
+Image.generate({ model: openai, prompt: "A lighthouse", options: { outputCompression: "80" } })
+OpenAI.imageGeneration({ action: "future-action", quality: "future-quality", size: "2048x2048" })
+// @ts-expect-error Hosted image generation numeric options retain their value kind.
+OpenAI.imageGeneration({ partialImages: "2" })
 // @ts-expect-error Known Google-like options are inferred from the selected model.
 Image.generate({ model: google, prompt: "A lighthouse", options: { aspectRatio: "wide" } })
 
