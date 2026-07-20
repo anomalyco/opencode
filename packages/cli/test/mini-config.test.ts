@@ -4,15 +4,15 @@ import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { Effect, Option } from "effect"
 import { expect, mock, test } from "bun:test"
 import { Config } from "../src/config"
-import type { RunTuiConfig } from "../src/mini/types"
+import type { MiniCommandInput } from "../src/mini"
 
 test("mini handler passes resolved CLI keybinds to the runtime", async () => {
-  let received: RunTuiConfig | Promise<RunTuiConfig> | undefined
+  let received: MiniCommandInput["tuiConfig"]
   const mini = await import("../src/mini")
   mock.module("../src/mini", () => ({
     ...mini,
     validateMiniTerminal() {},
-    runMini(input: { tuiConfig?: RunTuiConfig | Promise<RunTuiConfig> }) {
+    runMini(input: Pick<MiniCommandInput, "tuiConfig">) {
       received = input.tuiConfig
       return Promise.resolve()
     },
@@ -56,7 +56,7 @@ test("mini handler passes resolved CLI keybinds to the runtime", async () => {
     )
 
     const config = await received
-    expect(config?.leader_timeout).toBe(321)
+    expect(config?.leader.timeout).toBe(321)
     expect(config?.keybinds.get("composer.subagent.interrupt")).toMatchObject([{ key: "ctrl+i" }])
   } finally {
     server.stop(true)

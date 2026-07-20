@@ -134,8 +134,8 @@ export const Definitions = {
   "mcp.list": keybind("none", "List MCP servers"),
   "provider.connect": keybind("none", "Connect integration"),
   "agent.list": keybind("<leader>a", "List agents"),
-  "agent.cycle": keybind("tab", "Next agent"),
-  "agent.cycle.reverse": keybind("shift+tab", "Previous agent"),
+  "agent.cycle": keybind("shift+tab", "Next agent"),
+  "agent.cycle.reverse": keybind("none", "Previous agent"),
   "variant.cycle": keybind("ctrl+t", "Cycle model variants"),
   "variant.list": keybind("none", "List model variants"),
 
@@ -232,6 +232,7 @@ export const Definitions = {
   "prompt.autocomplete.complete": keybind("tab", "Complete autocomplete item"),
   "permission.prompt.fullscreen": keybind("ctrl+f", "Toggle permission prompt fullscreen"),
   "plugins.toggle": keybind("space", "Toggle plugin"),
+  "dialog.mcp.toggle": keybind("space", "Toggle MCP server"),
   "dialog.plugins.install": keybind("shift+i", "Install plugin from plugin dialog"),
 
   "terminal.suspend": keybind("ctrl+z", "Suspend terminal"),
