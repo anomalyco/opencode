@@ -1,13 +1,6 @@
 import { Effect, Encoding, Schema } from "effect"
 import { Headers, HttpClientRequest } from "effect/unstable/http"
-import {
-  GeneratedImage,
-  ImageModel,
-  ImageResponse,
-  type ImageModelDefaults,
-  type ImageRequest,
-  type ImageRoute,
-} from "../image"
+import { GeneratedImage, ImageModel, ImageResponse, type ImageRequestFor, type ImageRoute } from "../image"
 import { Auth, type Definition as AuthDefinition } from "../route/auth"
 import {
   InvalidProviderOutputReason,
@@ -15,6 +8,7 @@ import {
   Usage,
   mergeHttpOptions,
   mergeJsonRecords,
+  type HttpOptions,
   type ProviderMetadata,
 } from "../schema"
 import { ProviderShared } from "./shared"
@@ -22,40 +16,25 @@ import { ProviderShared } from "./shared"
 const ADAPTER = "google-images"
 export const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 
-export const GoogleThinkingLevel = Schema.Literals(["MINIMAL", "LOW", "MEDIUM", "HIGH"])
-export type GoogleThinkingLevel = Schema.Schema.Type<typeof GoogleThinkingLevel>
+export type GoogleImageString<Known extends string> = Known | (string & {})
 
-export interface GoogleImageOptions {
-  readonly imageSize?: string
-  readonly thinkingLevel?: GoogleThinkingLevel
+export type GoogleImageOptions = {
+  readonly aspectRatio?: GoogleImageString<
+    "1:1" | "2:3" | "3:2" | "3:4" | "4:3" | "4:5" | "5:4" | "9:16" | "16:9" | "21:9"
+  >
+  readonly imageSize?: GoogleImageString<"1K" | "2K" | "4K">
+  readonly seed?: number
+  readonly thinkingLevel?: GoogleImageString<"MINIMAL" | "LOW" | "MEDIUM" | "HIGH">
   readonly includeThoughts?: boolean
-}
+} & Record<string, unknown>
 
-const GoogleImageBody = Schema.Struct({
-  contents: Schema.Array(
-    Schema.Struct({
-      role: Schema.Literal("user"),
-      parts: Schema.Array(Schema.Struct({ text: Schema.String })),
-    }),
-  ),
-  generationConfig: Schema.Struct({
-    responseModalities: Schema.Array(Schema.Literal("IMAGE")),
-    imageConfig: Schema.optional(
-      Schema.Struct({
-        aspectRatio: Schema.optional(Schema.String),
-        imageSize: Schema.optional(Schema.String),
-      }),
-    ),
-    seed: Schema.optional(Schema.Number),
-    thinkingConfig: Schema.optional(
-      Schema.Struct({
-        thinkingLevel: Schema.optional(GoogleThinkingLevel),
-        includeThoughts: Schema.optional(Schema.Boolean),
-      }),
-    ),
-  }),
-})
-export type GoogleImageBody = Schema.Schema.Type<typeof GoogleImageBody>
+export type GoogleImageBody = Record<string, unknown> & {
+  readonly contents: ReadonlyArray<{
+    readonly role: "user"
+    readonly parts: ReadonlyArray<{ readonly text: string }>
+  }>
+  readonly generationConfig: Record<string, unknown>
+}
 
 const GoogleUsage = Schema.StructWithRest(
   Schema.Struct({
@@ -111,34 +90,40 @@ export interface ModelInput {
   readonly auth: AuthDefinition
   readonly baseURL?: string
   readonly headers?: Record<string, string>
-  readonly defaults?: ImageModelDefaults
+  readonly http?: HttpOptions
 }
 
-const providerOptions = (request: ImageRequest): GoogleImageOptions => ({
-  ...request.model.defaults?.providerOptions?.google,
-  ...request.providerOptions?.google,
-})
-
-const body = (request: ImageRequest): GoogleImageBody => {
-  const options = providerOptions(request)
+const nativeOptions = (options: GoogleImageOptions | undefined) => {
+  const { aspectRatio, imageSize, seed, thinkingLevel, includeThoughts, ...native } = options ?? {}
   const image = {
-    aspectRatio: request.aspectRatio,
-    imageSize: options.imageSize,
+    aspectRatio,
+    imageSize,
   }
   const thinkingConfig = {
-    thinkingLevel: options.thinkingLevel,
-    includeThoughts: options.includeThoughts,
+    thinkingLevel,
+    includeThoughts,
   }
-  return {
-    contents: [{ role: "user", parts: [{ text: request.prompt }] }],
-    generationConfig: {
-      responseModalities: ["IMAGE"],
-      imageConfig: Object.values(image).some((value) => value !== undefined) ? image : undefined,
-      seed: request.seed,
-      thinkingConfig: Object.values(thinkingConfig).some((value) => value !== undefined) ? thinkingConfig : undefined,
-    },
-  }
+  return (
+    mergeJsonRecords(
+      {
+        responseModalities: ["IMAGE"],
+        imageConfig: Object.values(image).some((value) => value !== undefined) ? image : undefined,
+        seed,
+        thinkingConfig: Object.values(thinkingConfig).some((value) => value !== undefined) ? thinkingConfig : undefined,
+      },
+      native,
+    ) ?? { responseModalities: ["IMAGE"] }
+  )
 }
+
+const body = (request: ImageRequestFor<GoogleImageOptions>, overlay: Record<string, unknown> | undefined) =>
+  mergeJsonRecords(
+    {
+      contents: [{ role: "user", parts: [{ text: request.prompt }] }],
+      generationConfig: nativeOptions(request.options),
+    },
+    overlay,
+  ) as GoogleImageBody
 
 const invalidOutput = (message: string, providerMetadata?: ProviderMetadata) =>
   new LLMError({
@@ -154,38 +139,12 @@ const applyQuery = (url: string, query: Record<string, string> | undefined) => {
   return next.toString()
 }
 
-const PROTOCOL_BODY_FIELDS = new Set(["contents", "generationConfig"])
-
-const bodyWithOverlay = Effect.fn("GoogleImages.bodyWithOverlay")(function* (
-  imageBody: GoogleImageBody,
-  overlay: Record<string, unknown> | undefined,
-) {
-  if (!overlay) return imageBody
-  const reserved = Object.keys(overlay).filter((key) => PROTOCOL_BODY_FIELDS.has(key))
-  if (reserved.length > 0)
-    return yield* ProviderShared.invalidRequest(
-      `http.body cannot overlay protocol-owned field(s): ${reserved.join(", ")}`,
-    )
-  return mergeJsonRecords(imageBody, overlay) ?? imageBody
-})
-
 export const model = (input: ModelInput) => {
-  const route: ImageRoute = {
+  const route: ImageRoute<GoogleImageOptions> = {
     id: ADAPTER,
-    generate: Effect.fn("GoogleImages.generate")(function* (request: ImageRequest, execute) {
-      if (/^imagen(?:-|$)/i.test(request.model.id))
-        return yield* ProviderShared.invalidRequest(
-          `Google Images uses Gemini generateContent and does not support Imagen model ID ${request.model.id}`,
-        )
-      if (request.count !== undefined)
-        return yield* ProviderShared.invalidRequest("Google Images does not support the common count option")
-      if (request.size !== undefined)
-        return yield* ProviderShared.invalidRequest("Google Images does not support the common size option")
-
-      const requestBody = yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(GoogleImageBody))(body(request))
-      const http = mergeHttpOptions(request.model.defaults?.http, request.http)
-      const overlaidBody = yield* bodyWithOverlay(requestBody, http?.body)
-      const text = ProviderShared.encodeJson(overlaidBody)
+    generate: Effect.fn("GoogleImages.generate")(function* (request: ImageRequestFor<GoogleImageOptions>, execute) {
+      const http = mergeHttpOptions(request.model.http, request.http)
+      const text = ProviderShared.encodeJson(body(request, http?.body))
       const url = applyQuery(
         `${(input.baseURL ?? DEFAULT_BASE_URL).replace(/\/$/, "")}/models/${request.model.id}:generateContent`,
         http?.query,
@@ -316,7 +275,7 @@ export const model = (input: ModelInput) => {
       })
     }),
   }
-  return ImageModel.make({ id: input.id, provider: "google", route, defaults: input.defaults })
+  return ImageModel.make<GoogleImageOptions>({ id: input.id, provider: "google", route, http: input.http })
 }
 
 export const GoogleImages = {

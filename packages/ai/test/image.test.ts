@@ -133,15 +133,28 @@ describe("Image", () => {
           baseURL: "https://generativelanguage.test/v1beta/",
           headers: { "x-default": "yes" },
           http: { body: { labels: { deployment: "test" } }, query: { api: "v1" } },
-          image: {
-            providerOptions: { imageSize: "2K", thinkingLevel: "HIGH", includeThoughts: true },
-          },
-        }).image("gemini-3.1-flash-image"),
+        }).image("any-model-id"),
         prompt: "A robot tending a rooftop garden",
-        aspectRatio: "16:9",
-        seed: 42,
+        options: {
+          aspectRatio: "16:9",
+          imageSize: "2K",
+          seed: 42,
+          thinkingLevel: "HIGH",
+          includeThoughts: true,
+          futureOption: true,
+          imageConfig: { aspectRatio: "4:3", nativeImageOption: true },
+          thinkingConfig: { thinkingLevel: "LOW", nativeThinkingOption: true },
+        },
         http: {
-          body: { safetySettings: [] },
+          body: {
+            safetySettings: [],
+            generationConfig: {
+              imageConfig: { aspectRatio: "3:2", httpImageOption: true },
+              thinkingConfig: { includeThoughts: false, httpThinkingOption: true },
+              futureOption: "http",
+              httpOption: true,
+            },
+          },
           headers: { "x-request": "yes" },
           query: { trace: "1" },
         },
@@ -225,7 +238,7 @@ describe("Image", () => {
               Effect.gen(function* () {
                 const request = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
                 expect(request.url).toBe(
-                  "https://generativelanguage.test/v1beta/models/gemini-3.1-flash-image:generateContent?api=v1&trace=1",
+                  "https://generativelanguage.test/v1beta/models/any-model-id:generateContent?api=v1&trace=1",
                 )
                 expect(request.headers.get("x-goog-api-key")).toBe("test")
                 expect(request.headers.get("x-default")).toBe("yes")
@@ -234,9 +247,21 @@ describe("Image", () => {
                   contents: [{ role: "user", parts: [{ text: "A robot tending a rooftop garden" }] }],
                   generationConfig: {
                     responseModalities: ["IMAGE"],
-                    imageConfig: { aspectRatio: "16:9", imageSize: "2K" },
+                    imageConfig: {
+                      aspectRatio: "3:2",
+                      imageSize: "2K",
+                      nativeImageOption: true,
+                      httpImageOption: true,
+                    },
                     seed: 42,
-                    thinkingConfig: { thinkingLevel: "HIGH", includeThoughts: true },
+                    thinkingConfig: {
+                      thinkingLevel: "LOW",
+                      includeThoughts: false,
+                      nativeThinkingOption: true,
+                      httpThinkingOption: true,
+                    },
+                    futureOption: "http",
+                    httpOption: true,
                   },
                   labels: { deployment: "test" },
                   safetySettings: [],
@@ -283,47 +308,6 @@ describe("Image", () => {
               }),
             ),
           ),
-        ),
-      ),
-    ),
-  )
-
-  it.effect("rejects unsupported Google image options locally", () =>
-    Image.generate({
-      model: Google.configure({ apiKey: "test" }).image("gemini-3.1-flash-image"),
-      prompt: "A robot tending a rooftop garden",
-      count: 2,
-      size: { width: 1024, height: 1024 },
-    }).pipe(
-      Effect.flip,
-      Effect.tap((error) =>
-        Effect.sync(() => {
-          expect(error.reason._tag).toBe("InvalidRequest")
-        }),
-      ),
-      Effect.provide(
-        ImageClient.layer.pipe(
-          Layer.provide(dynamicResponse(() => Effect.die("invalid request should not reach the provider"))),
-        ),
-      ),
-    ),
-  )
-
-  it.effect("rejects Imagen model IDs locally", () =>
-    Image.generate({
-      model: Google.configure({ apiKey: "test" }).image("imagen-4.0-generate-001"),
-      prompt: "A robot tending a rooftop garden",
-    }).pipe(
-      Effect.flip,
-      Effect.tap((error) =>
-        Effect.sync(() => {
-          expect(error.reason._tag).toBe("InvalidRequest")
-          expect(error.message).toContain("does not support Imagen model ID")
-        }),
-      ),
-      Effect.provide(
-        ImageClient.layer.pipe(
-          Layer.provide(dynamicResponse(() => Effect.die("invalid model should not reach the provider"))),
         ),
       ),
     ),

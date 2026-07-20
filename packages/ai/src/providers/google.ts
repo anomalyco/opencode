@@ -4,7 +4,7 @@ import type { ProviderAuthOption } from "../route/auth-options"
 import type { ProviderPackage } from "../provider-package"
 import { HttpOptions, ProviderID, mergeHttpOptions, type ModelID, type ProviderOptions } from "../schema"
 import { Gemini } from "../protocols/gemini"
-import { GoogleImages, type GoogleImageOptions } from "../protocols/google-images"
+import { GoogleImages } from "../protocols/google-images"
 
 export type { GoogleImageOptions } from "../protocols/google-images"
 
@@ -15,12 +15,7 @@ export const routes = [Gemini.route]
 export type Config = RouteDefaultsInput &
   ProviderAuthOption<"optional"> & {
     readonly baseURL?: string
-    readonly image?: ImageConfig
   }
-
-export interface ImageConfig {
-  readonly providerOptions?: GoogleImageOptions
-}
 
 export interface Settings extends ProviderPackage.Settings {
   readonly apiKey?: string
@@ -36,7 +31,7 @@ const auth = (options: ProviderAuthOption<"optional">) => {
 }
 
 const configuredRoute = (input: Config) => {
-  const { apiKey: _, auth: _auth, baseURL, image: _image, ...rest } = input
+  const { apiKey: _, auth: _auth, baseURL, ...rest } = input
   return Gemini.route.with({ ...rest, endpoint: { baseURL }, auth: auth(input) })
 }
 
@@ -48,11 +43,7 @@ export const configure = (input: Config = {}) => {
       auth: auth(input),
       baseURL: input.baseURL,
       headers: input.headers,
-      defaults: {
-        providerOptions:
-          input.image?.providerOptions === undefined ? undefined : { google: { ...input.image.providerOptions } },
-        http: mergeHttpOptions(input.http === undefined ? undefined : HttpOptions.make(input.http)),
-      },
+      http: mergeHttpOptions(input.http === undefined ? undefined : HttpOptions.make(input.http)),
     })
   return {
     id,

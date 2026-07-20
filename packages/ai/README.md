@@ -88,29 +88,27 @@ import { Google } from "@opencode-ai/ai/providers"
 
 const googleProgram = Effect.gen(function* () {
   const response = yield* Image.generate({
-    model: Google.configure({
-      apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
-      image: {
-        providerOptions: { imageSize: "2K", thinkingLevel: "HIGH", includeThoughts: true },
-      },
-    }).image("gemini-3.1-flash-image"),
+    model: Google.configure({ apiKey }).image("any-model-id"),
     prompt: "A robot tending a rooftop garden",
-    aspectRatio: "16:9",
-    seed: 42,
-    providerOptions: { google: { imageSize: "2K" } },
+    options: {
+      aspectRatio: "16:9",
+      imageSize: "2K",
+      seed: 42,
+      thinkingLevel: "HIGH",
+      includeThoughts: true,
+      futureOption: true,
+    },
+    http,
   })
 
   return response.images
 })
 ```
 
-`Google.configure(...).image(...)` is limited to Gemini `generateContent` image models (the Nano Banana family,
-including `gemini-2.5-flash-image`, `gemini-3-pro-image`, and `gemini-3.1-flash-image` plus their preview
-variants). Imagen model IDs use a different API and are rejected locally. Google provider options are `imageSize`,
-`thinkingLevel` (`MINIMAL`, `LOW`, `MEDIUM`, or `HIGH`), and `includeThoughts`; request-level options override the
-configured defaults. The API does not support a requested image count or exact pixel dimensions, so `count` and
-`size` are rejected; use `aspectRatio` and the provider-specific `imageSize` tier instead. This route performs one
-direct `Image.generate` request and does not provide conversational image continuation.
+Google image options are request-scoped and inferred from the selected model. Known fields autocomplete while
+future string values and arbitrary native Gemini `generationConfig` fields remain available. Native fields override
+their mapped aliases, and `http.body` is the final deep overlay. The selected model ID is sent to Gemini
+`generateContent` without a local allowlist.
 
 Conversational image generation remains part of the LLM interaction. OpenAI Responses exposes it through its hosted image tool:
 

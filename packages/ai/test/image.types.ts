@@ -6,7 +6,7 @@ import {
   type ImageRequestFor,
   type ImageRoute,
 } from "../src"
-import { OpenAI, XAI } from "../src/providers"
+import { Google, OpenAI, XAI } from "../src/providers"
 
 type GoogleLikeOptions = {
   readonly aspectRatio?: "1:1" | "16:9"
@@ -24,6 +24,33 @@ Image.generate({
   prompt: "A lighthouse",
   options: { aspectRatio: "16:9", imageSize: "2K", futureOption: true },
 })
+
+const googleProvider = Google.configure({ apiKey: "test" }).image("any-model-id")
+Image.generate({
+  model: googleProvider,
+  prompt: "A lighthouse",
+  options: {
+    aspectRatio: "16:9",
+    imageSize: "2K",
+    seed: 42,
+    thinkingLevel: "HIGH",
+    includeThoughts: true,
+    futureOption: true,
+  },
+})
+Image.generate({
+  model: googleProvider,
+  prompt: "A lighthouse",
+  options: { aspectRatio: "future-ratio", imageSize: "8K", thinkingLevel: "FUTURE" },
+})
+// @ts-expect-error Image generation options are request-scoped, not provider configuration.
+Google.configure({ image: { providerOptions: { imageSize: "2K" } } })
+// @ts-expect-error Known Google string options retain their value kind.
+Image.generate({ model: googleProvider, prompt: "A lighthouse", options: { imageSize: 2 } })
+// @ts-expect-error Known Google numeric options retain their value kind.
+Image.generate({ model: googleProvider, prompt: "A lighthouse", options: { seed: "42" } })
+// @ts-expect-error Known Google boolean options retain their value kind.
+Image.generate({ model: googleProvider, prompt: "A lighthouse", options: { includeThoughts: "yes" } })
 
 const openai = OpenAI.image("gpt-image-2")
 // @ts-expect-error Image generation options are request-scoped, not provider configuration.
