@@ -57,7 +57,7 @@ describe("Permission.evaluate for permission.task", () => {
     expect(Permission.evaluate("task", "code-reviewer", globalRuleset).action).toBe("ask")
   })
 
-  test("later rules take precedence (last match wins)", () => {
+  test("more specific pattern beats broader deny", () => {
     const ruleset = createRuleset({
       "orchestrator-*": "deny",
       "orchestrator-fast": "allow",
