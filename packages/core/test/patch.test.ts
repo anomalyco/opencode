@@ -19,6 +19,25 @@ describe("Patch", () => {
     ])
   })
 
+  test("parses a file move", () => {
+    expect(
+      Patch.parse(
+        "*** Begin Patch\n*** Update File: old.txt\n*** Move to: new.txt\n@@\n-old\n+new\n*** End Patch",
+      ),
+    ).toEqual([
+      {
+        type: "update",
+        path: "old.txt",
+        movePath: "new.txt",
+        chunks: [{ oldLines: ["old"], newLines: ["new"], changeContext: undefined, endOfFile: undefined }],
+      },
+    ])
+  })
+
+  test("rejects invalid patch format", () => {
+    expect(() => Patch.parse("This is not a valid patch")).toThrow("Invalid patch format")
+  })
+
   test("strips a heredoc wrapper", () => {
     expect(Patch.parse("cat <<'EOF'\n*** Begin Patch\n*** Add File: add.txt\n+added\n*** End Patch\nEOF")).toEqual([
       { type: "add", path: "add.txt", contents: "added" },
@@ -90,60 +109,6 @@ describe("Patch", () => {
         "marker\nmiddle\nmarker\nend\n",
       ).content,
     ).toBe("marker\nmiddle\nmarker changed\nend\n")
-  })
-
-  test("parses the EOF marker inside update chunks", () => {
-    expect(
-      Patch.parse("*** Begin Patch\n*** Update File: update.txt\n@@\n-last\n+end\n*** End of File\n*** End Patch"),
-    ).toEqual([
-      {
-        type: "update",
-        path: "update.txt",
-        movePath: undefined,
-        chunks: [{ oldLines: ["last"], newLines: ["end"], changeContext: undefined, endOfFile: true }],
-      },
-    ])
-  })
-
-  test("parses an initial update chunk without an explicit header", () => {
-    expect(
-      Patch.parse("*** Begin Patch\n*** Update File: file.py\n import foo\n+bar\n*** End Patch"),
-    ).toEqual([
-      {
-        type: "update",
-        path: "file.py",
-        movePath: undefined,
-        chunks: [
-          {
-            oldLines: ["import foo"],
-            newLines: ["import foo", "bar"],
-            changeContext: undefined,
-            endOfFile: undefined,
-          },
-        ],
-      },
-    ])
-  })
-
-  test("normalizes CRLF patch lines without removing content carriage returns", () => {
-    expect(
-      Patch.parse(
-        "*** Begin Patch\r\n*** Update File: file.txt\r\n@@\r\n-old\r\n+new\r\n*** End Patch\r\n",
-      ),
-    ).toEqual([
-      {
-        type: "update",
-        path: "file.txt",
-        movePath: undefined,
-        chunks: [{ oldLines: ["old"], newLines: ["new"], changeContext: undefined, endOfFile: undefined }],
-      },
-    ])
-
-    expect(
-      Patch.parse(
-        "*** Begin Patch\r\n*** Update File: file.txt\r\n@@\r\n-old\r\r\n+new\r\n*** End Patch\r\n",
-      )[0],
-    ).toMatchObject({ chunks: [{ oldLines: ["old\r"], newLines: ["new"] }] })
   })
 
   test("matches V1 lenient parsing of malformed hunk bodies", () => {

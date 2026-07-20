@@ -3,10 +3,11 @@ export * as PatchTool from "./patch"
 import type { Context as PluginContext } from "@opencode-ai/plugin/v2/effect/plugin"
 import { ToolFailure } from "@opencode-ai/ai"
 import { FileDiff } from "@opencode-ai/schema/file-diff"
-import { formatPatch, structuredPatch } from "diff"
+import { createTwoFilesPatch, diffLines } from "diff"
 import { Effect, Schema } from "effect"
-import { FileMutation } from "../file-mutation"
+import path from "path"
 import { FSUtil } from "../fs-util"
+import { Location } from "../location"
 import { LocationMutation } from "../location-mutation"
 import { Patch } from "../patch"
 import { PermissionV2 } from "../permission"
@@ -49,7 +50,6 @@ type Prepared =
     })
   | (Extract<Patch.Hunk, { readonly type: "update" }> & {
       readonly target: LocationMutation.Target
-      readonly source: Uint8Array
       readonly content: string
       readonly before: string
       readonly after: string
@@ -60,8 +60,8 @@ export const Plugin = {
   id: "opencode.tool.patch",
   effect: Effect.fn("PatchTool.Plugin")(function* (ctx: PluginContext) {
     const mutation = yield* LocationMutation.Service
-    const files = yield* FileMutation.Service
     const fs = yield* FSUtil.Service
+    const location = yield* Location.Service
     const permission = yield* PermissionV2.Service
 
     yield* ctx.tool
@@ -107,44 +107,44 @@ export const Plugin = {
                     readonly moveTarget?: LocationMutation.Target
                   }> = []
                   for (const hunk of hunks) {
-                    const target = yield* mutation.resolve({ path: hunk.path, kind: "file" })
+                    const resolvedTarget = yield* mutation.resolve({ path: hunk.path, kind: "file" })
+                    const targetPath = path.resolve(location.directory, hunk.path)
+                    const target = {
+                      ...resolvedTarget,
+                      canonical: targetPath,
+                      resource: path.relative(location.project.directory, targetPath).replaceAll("\\", "/") || ".",
+                    }
+                    const movePath = hunk.type === "update" ? hunk.movePath : undefined
                     const moveTarget =
-                      hunk.type === "update" && hunk.movePath
-                        ? yield* mutation.resolve({ path: hunk.movePath, kind: "file" })
+                      movePath
+                        ? yield* Effect.gen(function* () {
+                            const resolved = yield* mutation.resolve({ path: movePath, kind: "file" })
+                            const target = path.resolve(location.directory, movePath)
+                            return {
+                              ...resolved,
+                              canonical: target,
+                              resource:
+                                path.relative(location.project.directory, target).replaceAll("\\", "/") || ".",
+                            }
+                          })
                         : undefined
                     targets.push({
                       hunk,
                       target,
-                      moveTarget: moveTarget?.canonical === target.canonical ? undefined : moveTarget,
+                      moveTarget,
                     })
                   }
-                  const externalDirectories = new Map<string, LocationMutation.ExternalDirectoryAuthorization>()
-                  for (const target of targets) {
-                    for (const item of [target.target, target.moveTarget]) {
-                      const external = item?.externalDirectory
-                      if (external) externalDirectories.set(external.resource, external)
-                    }
-                  }
-                  for (const external of externalDirectories.values()) {
-                    yield* permission.assert({
-                      ...LocationMutation.externalDirectoryPermission(external),
-                      sessionID: context.sessionID,
-                      agent: context.agent,
-                      source,
-                    })
-                  }
-                  yield* permission.assert({
-                    action: "edit",
-                    resources: [...new Set(targets.map(({ target }) => target.resource))],
-                    save: ["*"],
-                    sessionID: context.sessionID,
-                    agent: context.agent,
-                    source,
-                  })
-
                   const prepared: Prepared[] = []
                   for (const { hunk, target, moveTarget } of targets) {
                     yield* Effect.gen(function* () {
+                      if (target.externalDirectory) {
+                        yield* permission.assert({
+                          ...LocationMutation.externalDirectoryPermission(target.externalDirectory),
+                          sessionID: context.sessionID,
+                          agent: context.agent,
+                          source,
+                        })
+                      }
                       if (hunk.type === "add") {
                         prepared.push({
                           ...hunk,
@@ -157,23 +157,46 @@ export const Plugin = {
                         })
                         return
                       }
-                      if ((yield* fs.stat(target.canonical)).type !== "File") yield* fail(hunk.path)
-                      const source = yield* fs.readFile(target.canonical)
-                      const original = new TextDecoder("utf-8", { ignoreBOM: true }).decode(source)
-                      const before = original.replace(/^\uFEFF/, "")
                       if (hunk.type === "delete") {
-                        prepared.push({ ...hunk, target, before, after: "" })
+                        const content = yield* fs.readFile(target.canonical).pipe(
+                          Effect.mapError(
+                            (error) =>
+                              new ToolFailure({
+                                message: `patch verification failed: ${error instanceof Error ? error.message : String(error)}`,
+                              }),
+                          ),
+                        )
+                        const original = new TextDecoder("utf-8", { ignoreBOM: true }).decode(content)
+                        prepared.push({ ...hunk, target, before: original.replace(/^\uFEFF/, ""), after: "" })
                         return
                       }
+                      const stats = yield* fs
+                        .stat(target.canonical)
+                        .pipe(Effect.catch(() => Effect.succeed(undefined)))
+                      if (!stats || stats.type === "Directory") {
+                        return yield* new ToolFailure({
+                          message: `patch verification failed: Failed to read file to update: ${target.canonical}`,
+                        })
+                      }
+                      const content = yield* fs.readFile(target.canonical)
+                      const original = new TextDecoder("utf-8", { ignoreBOM: true }).decode(content)
+                      const before = original.replace(/^\uFEFF/, "")
                       const update = yield* Effect.try({
                         try: () => Patch.derive(hunk.path, hunk.chunks, original),
                         catch: (error) =>
                           new ToolFailure({ message: `patch verification failed: ${String(error)}` }),
                       })
+                      if (moveTarget?.externalDirectory) {
+                        yield* permission.assert({
+                          ...LocationMutation.externalDirectoryPermission(moveTarget.externalDirectory),
+                          sessionID: context.sessionID,
+                          agent: context.agent,
+                          source,
+                        })
+                      }
                       prepared.push({
                         ...hunk,
                         target,
-                        source,
                         content: Patch.joinBom(update.content, update.bom),
                         before,
                         after: update.content,
@@ -183,41 +206,63 @@ export const Plugin = {
                   }
 
                   const patchFiles = prepared.map(patchFile)
+                  yield* permission.assert({
+                    action: "edit",
+                    resources: [...new Set(targets.map(({ target }) => target.resource))],
+                    save: ["*"],
+                    metadata: {
+                      filepath: targets.map(({ target }) => target.resource).join(", "),
+                      diff: patchFiles.map((file) => `${file.patch}\n`).join(""),
+                      files: patchFiles,
+                    },
+                    sessionID: context.sessionID,
+                    agent: context.agent,
+                    source,
+                  })
+
                   yield* Effect.forEach(
                     prepared,
                     (change) =>
                       Effect.gen(function* () {
                         if (change.type === "add") {
-                          const result = yield* files.write({
-                            target: change.target,
-                            content:
-                              change.contents.endsWith("\n") || change.contents === ""
-                                ? change.contents
-                                : `${change.contents}\n`,
+                          yield* fs.writeWithDirs(
+                            change.target.canonical,
+                            change.contents.endsWith("\n") || change.contents === ""
+                              ? change.contents
+                              : `${change.contents}\n`,
+                          )
+                          applied.push({
+                            type: change.type,
+                            resource: change.target.resource,
+                            target: change.target.canonical,
                           })
-                          applied.push({ type: change.type, resource: result.resource, target: result.target })
                           return
                         }
                         if (change.type === "delete") {
-                          const result = yield* files.remove({ target: change.target })
-                          applied.push({ type: change.type, resource: result.resource, target: result.target })
+                          yield* fs.remove(change.target.canonical)
+                          applied.push({
+                            type: change.type,
+                            resource: change.target.resource,
+                            target: change.target.canonical,
+                          })
                           return
                         }
                         if (change.moveTarget) {
-                          const result = yield* files.write({
-                            target: change.moveTarget,
-                            content: change.content,
+                          yield* fs.writeWithDirs(change.moveTarget.canonical, change.content)
+                          yield* fs.remove(change.target.canonical)
+                          applied.push({
+                            type: change.type,
+                            resource: change.moveTarget.resource,
+                            target: change.moveTarget.canonical,
                           })
-                          yield* files.remove({ target: change.target })
-                          applied.push({ type: change.type, resource: result.resource, target: result.target })
                           return
                         }
-                        const result = yield* files.writeIfUnchanged({
-                          target: change.target,
-                          expected: change.source,
-                          content: change.content,
+                        yield* fs.writeWithDirs(change.target.canonical, change.content)
+                        applied.push({
+                          type: change.type,
+                          resource: change.target.resource,
+                          target: change.target.canonical,
                         })
-                        applied.push({ type: change.type, resource: result.resource, target: result.target })
                       }).pipe(Effect.mapError((error) => fail(change.path, error))),
                     { discard: true },
                   )
@@ -249,18 +294,52 @@ export const Plugin = {
 
 function patchFile(change: Prepared): typeof FileDiff.Info.Type {
   const target = (change.type === "update" ? change.moveTarget : undefined)?.resource ?? change.target.resource
-  const diff = structuredPatch(change.target.resource, target, change.before, change.after)
-  const counts = diff.hunks.flatMap((hunk) => hunk.lines).reduce(
-    (result, line) => ({
-      additions: result.additions + (line.startsWith("+") ? 1 : 0),
-      deletions: result.deletions + (line.startsWith("-") ? 1 : 0),
-    }),
-    { additions: 0, deletions: 0 },
+  const patch = trimDiff(
+    createTwoFilesPatch(change.target.canonical, change.target.canonical, change.before, change.after),
   )
+  const counts =
+    change.type === "delete"
+      ? { additions: 0, deletions: change.before.split("\n").length }
+      : diffLines(change.before, change.after).reduce(
+          (result, item) => ({
+            additions: result.additions + (item.added ? (item.count ?? 0) : 0),
+            deletions: result.deletions + (item.removed ? (item.count ?? 0) : 0),
+          }),
+          { additions: 0, deletions: 0 },
+        )
   return {
     file: target,
-    patch: formatPatch(diff),
+    patch,
     status: change.type === "add" ? "added" : change.type === "delete" ? "deleted" : "modified",
     ...counts,
   }
+}
+
+function trimDiff(diff: string) {
+  const lines = diff.split("\n")
+  const content = lines.filter(
+    (line) =>
+      (line.startsWith("+") || line.startsWith("-") || line.startsWith(" ")) &&
+      !line.startsWith("---") &&
+      !line.startsWith("+++"),
+  )
+  if (content.length === 0) return diff
+  const indent = content.reduce((result, line) => {
+    const value = line.slice(1)
+    if (value.trim().length === 0) return result
+    return Math.min(result, value.match(/^(\s*)/)?.[1].length ?? result)
+  }, Infinity)
+  if (indent === Infinity || indent === 0) return diff
+  return lines
+    .map((line) => {
+      if (
+        (line.startsWith("+") || line.startsWith("-") || line.startsWith(" ")) &&
+        !line.startsWith("---") &&
+        !line.startsWith("+++")
+      ) {
+        return line[0] + line.slice(1 + indent)
+      }
+      return line
+    })
+    .join("\n")
 }

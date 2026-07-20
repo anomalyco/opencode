@@ -23,7 +23,7 @@ export interface FileUpdate {
 }
 
 export function parse(patchText: string): ReadonlyArray<Hunk> {
-  const lines = stripHeredoc(patchText.replaceAll("\r\n", "\n").trim()).split("\n")
+  const lines = stripHeredoc(patchText.trim()).split("\n")
   const begin = lines.findIndex((line) => line.trim() === "*** Begin Patch")
   const end = lines.findIndex((line) => line.trim() === "*** End Patch")
   if (begin === -1 || end === -1 || begin >= end) throw new Error("Invalid patch format: missing Begin/End markers")
@@ -62,7 +62,7 @@ export function parse(patchText: string): ReadonlyArray<Hunk> {
       let next = index + 1
       let movePath: string | undefined
       if (lines[next]?.startsWith("*** Move to:")) {
-        movePath = lines[next]!.slice("*** Move to:".length).trim() || undefined
+        movePath = lines[next]!.slice("*** Move to:".length).trim()
         next++
       }
       const parsed = parseUpdate(lines, next)
@@ -106,24 +106,17 @@ function parseUpdate(lines: ReadonlyArray<string>, start: number) {
   const chunks: UpdateFileChunk[] = []
   let index = start
   while (index < lines.length && !lines[index]!.startsWith("***")) {
-    const explicit = lines[index]!.startsWith("@@")
-    if (!explicit && (chunks.length > 0 || !/^[ +-]/.test(lines[index]!))) {
+    if (!lines[index]!.startsWith("@@")) {
       index++
       continue
     }
-    const changeContext = explicit ? lines[index]!.slice(2).trim() || undefined : undefined
+    const changeContext = lines[index]!.slice(2).trim() || undefined
     const oldLines: string[] = []
     const newLines: string[] = []
     let endOfFile = false
-    if (explicit) index++
-    while (index < lines.length && !lines[index]!.startsWith("@@")) {
+    index++
+    while (index < lines.length && !lines[index]!.startsWith("@@") && !lines[index]!.startsWith("***")) {
       const line = lines[index]!
-      if (line === "*** End of File") {
-        endOfFile = true
-        index++
-        break
-      }
-      if (line.startsWith("***")) break
       if (line.startsWith(" ")) {
         oldLines.push(line.slice(1))
         newLines.push(line.slice(1))
