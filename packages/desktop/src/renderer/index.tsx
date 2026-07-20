@@ -112,6 +112,21 @@ function DesktopMemoryRouter(props: BaseRouterProps & { windowID: string }) {
 
 const createPlatform = (windowState: DesktopWindowState): Platform => {
   const attachmentPaths = new WeakMap<File, string>()
+  const [backgroundImage, setBackgroundImage] = createSignal(false)
+  const applyBackgroundImage = (image: Awaited<ReturnType<typeof window.api.loadBackgroundImage>>) => {
+    setBackgroundImage(!!image)
+    document.documentElement.toggleAttribute("data-background-image", !!image)
+    if (image) {
+      document.documentElement.style.setProperty(
+        "--app-background-image",
+        `url("oc://renderer/background-image?revision=${encodeURIComponent(image.revision)}")`,
+      )
+      return true
+    }
+    document.documentElement.style.removeProperty("--app-background-image")
+    return false
+  }
+  window.api.onBackgroundImageChanged(applyBackgroundImage)
   const os = (() => {
     const ua = navigator.userAgent
     if (ua.includes("Mac")) return "macos"
@@ -310,6 +325,23 @@ const createPlatform = (windowState: DesktopWindowState): Platform => {
         type: "image/png",
       })
     },
+
+    async loadBackgroundImage() {
+      return applyBackgroundImage(await window.api.loadBackgroundImage())
+    },
+
+    async selectBackgroundImage() {
+      const image = await window.api.selectBackgroundImage()
+      if (!image) return backgroundImage()
+      return applyBackgroundImage(image)
+    },
+
+    async clearBackgroundImage() {
+      await window.api.clearBackgroundImage()
+      applyBackgroundImage(null)
+    },
+
+    backgroundImage,
   }
 }
 
@@ -329,6 +361,7 @@ function LoadingSplash() {
 
 function DesktopRoot(props: { windowState: DesktopWindowState }) {
   const platform = createPlatform(props.windowState)
+  void platform.loadBackgroundImage?.()
   const loadLocale = async () => {
     const current = await platform.storage?.("opencode.global.dat").getItem("language")
     const legacy = current ? undefined : await platform.storage?.().getItem("language.v1")

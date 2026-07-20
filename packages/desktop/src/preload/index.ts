@@ -120,6 +120,14 @@ const api: ElectronAPI = {
   setTitlebar: (theme) => ipcRenderer.invoke("set-titlebar", theme),
   runDesktopMenuAction: (action) => ipcRenderer.invoke("run-desktop-menu-action", action),
   setBackgroundColor: (color: string) => ipcRenderer.invoke("set-background-color", color),
+  loadBackgroundImage: () => ipcRenderer.invoke("load-background-image"),
+  selectBackgroundImage: () => ipcRenderer.invoke("select-background-image"),
+  clearBackgroundImage: () => ipcRenderer.invoke("clear-background-image"),
+  onBackgroundImageChanged: (cb) => {
+    const handler = (_: unknown, image: Parameters<typeof cb>[0]) => cb(image)
+    ipcRenderer.on("background-image-changed", handler)
+    return () => ipcRenderer.removeListener("background-image-changed", handler)
+  },
   exportDebugLogs: () => ipcRenderer.invoke("export-debug-logs"),
   recordFatalRendererError: (error) => ipcRenderer.invoke("record-fatal-renderer-error", error),
 }

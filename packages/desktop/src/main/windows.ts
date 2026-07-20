@@ -9,6 +9,7 @@ import { dirname, isAbsolute, join, relative, resolve } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import type { TitlebarTheme } from "../preload/types"
 import { exportDebugLogs, write as writeLog } from "./logging"
+import { findBackgroundImage } from "./background-image"
 import { getStore, removeStoreFile } from "./store"
 import { PINCH_ZOOM_ENABLED_KEY, WINDOW_IDS_KEY } from "./store-keys"
 import { createUnresponsiveSampler } from "./unresponsive"
@@ -257,6 +258,12 @@ export function registerRendererProtocol() {
     if (url.host !== rendererHost) {
       writeLog("protocol", "rejected host", { url: request.url }, "warn")
       return new Response("Not found", { status: 404 })
+    }
+
+    if (url.pathname === "/background-image") {
+      const image = await findBackgroundImage(app.getPath("userData"))
+      if (!image) return new Response("Not found", { status: 404 })
+      return net.fetch(pathToFileURL(image.path).toString())
     }
 
     const file = resolve(rendererRoot, `.${decodeURIComponent(url.pathname)}`)

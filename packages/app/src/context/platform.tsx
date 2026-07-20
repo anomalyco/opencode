@@ -112,6 +112,18 @@ type PlatformBase = {
   /** Read image from clipboard (desktop only) */
   readClipboardImage?(): Promise<File | null>
 
+  /** Load and apply the saved app background image. */
+  loadBackgroundImage?(): Promise<boolean>
+
+  /** Whether the app currently has a background image. */
+  backgroundImage?: Accessor<boolean>
+
+  /** Select and apply an app background image. */
+  selectBackgroundImage?(): Promise<boolean>
+
+  /** Clear the saved app background image. */
+  clearBackgroundImage?(): Promise<void>
+
   /** Export collected diagnostic logs (desktop only) */
   exportDebugLogs?(): Promise<string>
 

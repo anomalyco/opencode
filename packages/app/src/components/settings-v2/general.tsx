@@ -29,6 +29,7 @@ import { Link } from "../link"
 import { SettingsListV2 } from "./parts/list"
 import { SettingsRowV2 } from "./parts/row"
 import { LayoutRetirementNotice, LayoutTransitionToggle } from "./interface-transition"
+import { useSettingsBackgroundImage } from "../settings-background-image"
 import "./settings-v2.css"
 
 let demoSoundState = {
@@ -88,6 +89,7 @@ export const SettingsGeneralV2: Component<{
   const language = useLanguage()
   const permission = usePermission()
   const platform = usePlatform()
+  const backgroundImage = useSettingsBackgroundImage()
   const dialog = useDialog()
   const settings = useSettings()
   const serverSync = useServerSync()
@@ -459,6 +461,29 @@ export const SettingsGeneralV2: Component<{
             }}
           />
         </SettingsRowV2>
+
+        <Show when={backgroundImage.available}>
+          <SettingsRowV2
+            title={language.t("settings.general.row.backgroundImage.title")}
+            description={language.t("settings.general.row.backgroundImage.description")}
+          >
+            <div class="flex items-center gap-2">
+              <ButtonV2
+                size="normal"
+                variant="neutral"
+                disabled={backgroundImage.busy}
+                onClick={backgroundImage.select}
+              >
+                {language.t("settings.general.row.backgroundImage.choose")}
+              </ButtonV2>
+              <Show when={backgroundImage.active()}>
+                <ButtonV2 size="normal" variant="ghost" disabled={backgroundImage.busy} onClick={backgroundImage.clear}>
+                  {language.t("settings.general.row.backgroundImage.remove")}
+                </ButtonV2>
+              </Show>
+            </div>
+          </SettingsRowV2>
+        </Show>
 
         <SettingsRowV2
           title={language.t("settings.general.row.uiFont.title")}

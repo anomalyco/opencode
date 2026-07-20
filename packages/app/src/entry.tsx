@@ -1,6 +1,7 @@
 // @refresh reload
 
 import * as Sentry from "@sentry/solid"
+import { createSignal } from "solid-js"
 import { render } from "solid-js/web"
 import { AppBaseProviders, AppInterface } from "@/app"
 import { type Platform, PlatformProvider } from "@/context/platform"
@@ -8,6 +9,12 @@ import { dict as en } from "@/i18n/en"
 import { dict as zh } from "@/i18n/zh"
 import { handleNotificationClick } from "@/utils/notification-click"
 import { authFromToken } from "@/utils/server"
+import {
+  clearWebBackgroundImage,
+  loadWebBackgroundImage,
+  saveWebBackgroundImage,
+  selectWebBackgroundImage,
+} from "@/utils/web-background-image"
 import pkg from "../package.json"
 import { ServerConnection } from "./context/server"
 
@@ -119,6 +126,21 @@ const clearAuthToken = () => {
   history.replaceState(null, "", location.pathname + (params.size ? `?${params}` : "") + location.hash)
 }
 
+const [backgroundImage, setBackgroundImage] = createSignal(false)
+let backgroundImageUrl: string | undefined
+const applyBackgroundImage = (image: Blob | null) => {
+  if (backgroundImageUrl) URL.revokeObjectURL(backgroundImageUrl)
+  backgroundImageUrl = image ? URL.createObjectURL(image) : undefined
+  setBackgroundImage(!!backgroundImageUrl)
+  document.documentElement.toggleAttribute("data-background-image", !!backgroundImageUrl)
+  if (backgroundImageUrl) {
+    document.documentElement.style.setProperty("--app-background-image", `url("${backgroundImageUrl}")`)
+    return true
+  }
+  document.documentElement.style.removeProperty("--app-background-image")
+  return false
+}
+
 const platform: Platform = {
   platform: "web",
   version: pkg.version,
@@ -132,7 +154,22 @@ const platform: Platform = {
     return stored ? ServerConnection.Key.make(stored) : null
   },
   setDefaultServer: writeDefaultServerUrl,
+  backgroundImage,
+  async loadBackgroundImage() {
+    return applyBackgroundImage(await loadWebBackgroundImage())
+  },
+  async selectBackgroundImage() {
+    const file = await selectWebBackgroundImage()
+    if (!file) return backgroundImage()
+    return applyBackgroundImage(await saveWebBackgroundImage(file))
+  },
+  async clearBackgroundImage() {
+    await clearWebBackgroundImage()
+    applyBackgroundImage(null)
+  },
 }
+
+void platform.loadBackgroundImage?.()
 
 if (import.meta.env.VITE_SENTRY_DSN) {
   Sentry.init({

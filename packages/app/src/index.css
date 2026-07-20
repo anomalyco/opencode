@@ -3,6 +3,35 @@
 @import "@opencode-ai/ui/v2/styles/tailwind.css";
 @import "tw-animate-css";
 
+html[data-background-image] body {
+  background-image: linear-gradient(rgb(0 0 0 / 12%), rgb(0 0 0 / 12%)), var(--app-background-image);
+  background-color: transparent !important;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+
+html[data-background-image] #root {
+  background-color: transparent !important;
+}
+
+html[data-background-image] [data-background-surface="shell"] {
+  background-color: transparent !important;
+}
+
+html[data-background-image] [data-background-surface="content"] {
+  background-color: color-mix(in srgb, var(--background-base) 68%, transparent) !important;
+}
+
+html[data-background-image] [data-background-surface="panel"] {
+  background-color: color-mix(in srgb, var(--v2-background-bg-base) 56%, transparent) !important;
+}
+
+html[data-background-image] [data-background-surface="prompt"] {
+  background-color: color-mix(in srgb, var(--v2-background-bg-base) 68%, transparent) !important;
+  backdrop-filter: blur(16px);
+}
+
 @font-face {
   font-family: "JetBrainsMono Nerd Font Mono";
   src: url("/assets/JetBrainsMonoNerdFontMono-Regular.woff2") format("woff2");

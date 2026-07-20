@@ -31,6 +31,7 @@ import { decode64 } from "@/utils/base64"
 import { playSoundById, SOUND_OPTIONS } from "@/utils/sound"
 import { Link } from "./link"
 import { SettingsList } from "./settings-list"
+import { useSettingsBackgroundImage } from "./settings-background-image"
 
 let demoSoundState = {
   cleanup: undefined as (() => void) | undefined,
@@ -87,6 +88,7 @@ export const SettingsGeneral: Component = () => {
   const language = useLanguage()
   const permission = usePermission()
   const platform = usePlatform()
+  const backgroundImage = useSettingsBackgroundImage()
   const dialog = useDialog()
   const params = useParams()
   const settings = useSettings()
@@ -498,6 +500,24 @@ export const SettingsGeneral: Component = () => {
             triggerVariant="settings"
           />
         </SettingsRow>
+
+        <Show when={backgroundImage.available}>
+          <SettingsRow
+            title={language.t("settings.general.row.backgroundImage.title")}
+            description={language.t("settings.general.row.backgroundImage.description")}
+          >
+            <div class="flex items-center gap-2">
+              <Button size="small" variant="secondary" disabled={backgroundImage.busy} onClick={backgroundImage.select}>
+                {language.t("settings.general.row.backgroundImage.choose")}
+              </Button>
+              <Show when={backgroundImage.active()}>
+                <Button size="small" variant="ghost" disabled={backgroundImage.busy} onClick={backgroundImage.clear}>
+                  {language.t("settings.general.row.backgroundImage.remove")}
+                </Button>
+              </Show>
+            </div>
+          </SettingsRow>
+        </Show>
 
         <SettingsRow
           title={language.t("settings.general.row.uiFont.title")}

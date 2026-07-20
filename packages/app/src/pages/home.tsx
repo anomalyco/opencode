@@ -598,7 +598,10 @@ export function NewHome() {
   }
 
   return (
-    <div class="rounded-[10px] shadow-[var(--v2-elevation-raised)] m-2 min-h-0 overflow-hidden bg-v2-background-bg-base self-stretch flex-1">
+    <div
+      data-background-surface="panel"
+      class="rounded-[10px] shadow-[var(--v2-elevation-raised)] m-2 min-h-0 overflow-hidden bg-v2-background-bg-base self-stretch flex-1"
+    >
       <ScrollView
         class="h-full [container-type:size]"
         thumbContainer={sessionThumbTrack}

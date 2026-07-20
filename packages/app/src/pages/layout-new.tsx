@@ -26,6 +26,7 @@ export default function NewLayout(props: ParentProps) {
 
   return (
     <div
+      data-background-surface="shell"
       class="relative bg-v2-background-bg-deep flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text"
       style={{
         "padding-top": "env(safe-area-inset-top, 0px)",
