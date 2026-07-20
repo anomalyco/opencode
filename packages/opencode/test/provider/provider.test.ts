@@ -23,8 +23,7 @@ import { InstanceStore } from "@/project/instance-store"
 import { testEffect } from "../lib/effect"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
-
-type ModelsDevProvider = Parameters<typeof Provider.fromModelsDevProvider>[0]
+import { Money } from "@opencode-ai/schema/money"
 
 const originalEnv = new Map<string, string | undefined>()
 
@@ -1339,121 +1338,82 @@ it.instance(
   },
 )
 
-test("mode options and cost are derived from the base model", () => {
-  const provider = {
-    id: "openai",
-    name: "OpenAI",
-    env: [],
-    npm: "@ai-sdk/openai",
-    api: "https://api.openai.com/v1",
-    models: {
-      "gpt-5.6-sol": {
-        id: "gpt-5.6-sol",
-        name: "GPT-5.6 Sol",
-        family: "gpt",
-        release_date: "2026-03-05",
-        attachment: true,
-        reasoning: true,
-        temperature: false,
-        tool_call: true,
-        cost: {
-          input: 2.5,
-          output: 15,
-          cache_read: 0.25,
-          context_over_200k: {
-            input: 5,
-            output: 22.5,
-            cache_read: 0.5,
-          },
-        },
-        limit: {
-          context: 1_050_000,
-          input: 922_000,
-          output: 128_000,
-        },
-        experimental: {
-          modes: {
-            fast: {
-              cost: {
-                input: 5,
-                output: 30,
-                cache_read: 0.5,
-              },
-              provider: {
-                body: {
-                  service_tier: "priority",
-                },
-              },
-            },
-            pro: {
-              provider: {
-                body: {
-                  reasoning: { mode: "pro" },
-                  service_tier: "priority",
-                },
-              },
-            },
-          },
-        },
-      },
+test("converts normalized models.dev snapshots", () => {
+  const snapshot = {
+    info: {
+      id: ProviderV2.ID.openai,
+      name: "OpenAI",
+      package: ProviderV2.aisdk("@ai-sdk/openai"),
+      settings: { baseURL: "https://api.openai.com/v1" },
     },
-  } as unknown as ModelsDevProvider
+    environment: ["OPENAI_API_KEY"],
+    models: [
+      {
+        ...ModelV2.Info.empty(ProviderV2.ID.openai, ModelV2.ID.make("gpt-test")),
+        modelID: ModelV2.ID.make("gpt-test-api"),
+        package: ProviderV2.aisdk("@ai-sdk/openai"),
+        capabilities: {
+          tools: true,
+          temperature: true,
+          reasoning: true,
+          attachment: true,
+          interleaved: { field: "reasoning_content" },
+          input: ["text"],
+          output: ["text"],
+        },
+        body: { reasoning: { mode: "pro" }, service_tier: "priority" },
+        cost: [
+          {
+            input: Money.USDPerMillionTokens.make(1),
+            output: Money.USDPerMillionTokens.make(2),
+            cache: { read: Money.USDPerMillionTokens.zero, write: Money.USDPerMillionTokens.zero },
+          },
+          {
+            tier: { type: "context", size: 200_000 },
+            input: Money.USDPerMillionTokens.make(3),
+            output: Money.USDPerMillionTokens.make(4),
+            cache: { read: Money.USDPerMillionTokens.make(0.3), write: Money.USDPerMillionTokens.make(0.4) },
+          },
+        ],
+      },
+    ],
+  } satisfies ModelsDev.Snapshot
 
-  const model = Provider.fromModelsDevProvider(provider).models["gpt-5.6-sol-fast"]
-  expect(model.cost.input).toEqual(5)
-  expect(model.cost.output).toEqual(30)
-  expect(model.cost.cache.read).toEqual(0.5)
-  expect(model.cost.cache.write).toEqual(0)
-  expect(model.options["serviceTier"]).toEqual("priority")
-  const pro = Provider.fromModelsDevProvider(provider).models["gpt-5.6-sol-pro"]
-  expect(pro.api.id).toEqual("gpt-5.6-sol")
-  expect(pro.options).toEqual({ reasoningMode: "pro", serviceTier: "priority" })
+  const provider = Provider.fromModelsDevSnapshot(snapshot)
+  const model = provider.models["gpt-test"]
+
+  expect(provider.env).toEqual(["OPENAI_API_KEY"])
+  expect(model.api).toEqual({
+    id: "gpt-test-api",
+    npm: "@ai-sdk/openai",
+    url: "https://api.openai.com/v1",
+  })
+  expect(model.capabilities).toMatchObject({
+    attachment: true,
+    reasoning: true,
+    temperature: true,
+    toolcall: true,
+    interleaved: { field: "reasoning_content" },
+  })
+  expect(model.options).toEqual({ reasoningMode: "pro", serviceTier: "priority" })
   expect(model.cost.experimentalOver200K).toEqual({
-    input: 5,
-    output: 22.5,
-    cache: { read: 0.5, write: 0 },
+    input: 3,
+    output: 4,
+    cache: { read: 0.3, write: 0.4 },
   })
 })
 
-test("models.dev normalization fills required response fields", () => {
-  const provider = {
-    id: "gateway",
-    name: "Gateway",
-    env: [],
-    models: {
-      "gpt-5.4": {
-        id: "gpt-5.4",
-        name: "GPT-5.4",
-        family: "gpt",
-        cost: { input: 2.5, output: 15 },
-        limit: { context: 1_050_000, input: 922_000, output: 128_000 },
-      },
-    },
-  } as unknown as ModelsDevProvider
-
-  const model = Provider.fromModelsDevProvider(provider).models["gpt-5.4"]
-  expect(model.api.url).toBe("")
-  expect(model.capabilities.temperature).toBe(false)
-  expect(model.capabilities.reasoning).toBe(false)
-  expect(model.capabilities.attachment).toBe(false)
-  expect(model.capabilities.toolcall).toBe(true)
-  expect(model.release_date).toBe("")
-})
-
 test("public provider info omits invalid models", () => {
-  const provider = Provider.fromModelsDevProvider({
-    id: "test",
-    name: "Test",
-    env: [],
-    models: {
-      valid: {
-        id: "valid",
-        name: "Valid",
-        cost: { input: 1, output: 1 },
-        limit: { context: 128_000, output: 16_000 },
+  const provider = Provider.fromModelsDevSnapshot({
+    info: { id: ProviderV2.ID.make("test"), name: "Test", package: ProviderV2.aisdk("@ai-sdk/openai-compatible") },
+    environment: [],
+    models: [
+      {
+        ...ModelV2.Info.empty(ProviderV2.ID.make("test"), ModelV2.ID.make("valid")),
+        capabilities: { tools: true, input: [], output: [] },
       },
-    },
-  } as unknown as ModelsDevProvider)
+    ],
+  })
   provider.models.invalid = {
     ...provider.models.valid,
     id: ModelV2.ID.make("invalid"),
