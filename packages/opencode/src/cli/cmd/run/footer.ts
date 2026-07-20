@@ -397,6 +397,7 @@ export class RunFooter implements FooterApi {
             agent: this.options.agentLabel,
             model: current ? modelInfo(this.providers(), current).model : this.state().model,
             duration: next.duration,
+            time: next.time,
           }),
         )
         .catch((error) => {

@@ -101,6 +101,7 @@ export type TurnSummary = {
   agent: string
   model: string
   duration: string
+  time?: string
 }
 
 export type ScrollbackOptions = {
@@ -266,6 +267,7 @@ export type FooterEvent =
   | {
       type: "turn.duration"
       duration: string
+      time: string
     }
   | {
       type: "stream.patch"
