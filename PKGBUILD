@@ -13,7 +13,7 @@
 
 pkgname=opencode-desktop-bin
 pkgver=1.18.3
-pkgrel=6
+pkgrel=7
 pkgdesc="OpenCode desktop client (local build with workspace refresh and Linux titlebar fixes)"
 arch=('x86_64')
 url="https://opencode.ai"

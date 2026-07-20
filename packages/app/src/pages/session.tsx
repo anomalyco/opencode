@@ -2077,7 +2077,10 @@ export default function Page() {
             </div>
           </Match>
           <Match when={params.id}>
-            <Show when={messagesReady() ? params.id : undefined} keyed>
+            {/* SessionPanelFrame already remounts on sessionPanelKey. Keying this
+                descendant on the same navigation double-disposes its owner tree
+                when Solid commits the route transition. */}
+            <Show when={messagesReady() ? params.id : undefined}>
               {(_id) => (
                 <MessageTimeline
                   actions={actions}

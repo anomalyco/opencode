@@ -1,7 +1,7 @@
 pkgbase = opencode-desktop-bin
 	pkgdesc = OpenCode desktop client (local build with workspace refresh and Linux titlebar fixes)
 	pkgver = 1.18.3
-	pkgrel = 6
+	pkgrel = 7
 	url = https://opencode.ai
 	arch = x86_64
 	license = MIT

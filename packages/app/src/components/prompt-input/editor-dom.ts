@@ -54,6 +54,9 @@ export function getCursorPosition(parent: HTMLElement): number {
 }
 
 export function setCursorPosition(parent: HTMLElement, position: number) {
+  // Focus restoration can outlive a session panel remount. Do not install a
+  // selection range backed by the detached editor from the previous session.
+  if (!parent.isConnected) return
   let remaining = position
   let node = parent.firstChild
   while (node) {

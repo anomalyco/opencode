@@ -96,4 +96,14 @@ describe("prompt-input editor dom", () => {
 
     container.remove()
   })
+
+  test("setCursorPosition ignores editors detached during session remount", () => {
+    const container = document.createElement("div")
+    container.textContent = "old session"
+    window.getSelection()?.removeAllRanges()
+
+    setCursorPosition(container, 3)
+
+    expect(window.getSelection()?.rangeCount).toBe(0)
+  })
 })
