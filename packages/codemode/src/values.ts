@@ -13,6 +13,14 @@ export class CodeModeRegExp {
   constructor(pattern: string, flags: string) {
     this.regex = new RegExp(pattern, flags)
   }
+
+  get lastIndex(): unknown {
+    return Reflect.get(this.regex, "lastIndex")
+  }
+
+  set lastIndex(value: unknown) {
+    Reflect.set(this.regex, "lastIndex", value)
+  }
 }
 
 export class CodeModeMap {

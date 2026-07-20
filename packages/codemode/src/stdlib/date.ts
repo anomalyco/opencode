@@ -4,6 +4,8 @@ export const dateMethods = new Set([
   "toISOString",
   "toJSON",
   "toString",
+  "toUTCString",
+  "toGMTString",
   "getFullYear",
   "getMonth",
   "getDate",
@@ -51,6 +53,9 @@ export const invokeDateMethod = (value: CodeModeDate, name: string, node: AstNod
       return Number.isFinite(value.time) ? hosted.toISOString() : null
     case "toString":
       return coerceToString(value)
+    case "toUTCString":
+    case "toGMTString":
+      return hosted.toUTCString()
     case "getFullYear":
       return hosted.getFullYear()
     case "getMonth":

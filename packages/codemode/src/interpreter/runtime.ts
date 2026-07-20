@@ -1958,6 +1958,7 @@ export class Interpreter<R> {
         return new ComputedValue(undefined)
       }
       if (objectValue instanceof CodeModeRegExp) {
+        if (key === "lastIndex") return { target: objectValue, key }
         if (typeof key === "string" && regexpProperties.has(key)) {
           return new ComputedValue((objectValue.regex as unknown as Record<string, unknown>)[key])
         }
@@ -2052,6 +2053,7 @@ export class Interpreter<R> {
         if (typeof reference.key === "string") return new IntrinsicReference(reference.target, reference.key)
         return reference.target[reference.key]
       }
+      if (reference.target instanceof CodeModeRegExp) return reference.target.lastIndex
       if (reference.target instanceof CodeModeURL) {
         return (reference.target.url as unknown as Record<string, unknown>)[String(reference.key)]
       }
@@ -2081,6 +2083,9 @@ export class Interpreter<R> {
         reference.target instanceof CodeModeURL
       ) {
         throw new InterpreterRuntimeError("Only data fields may be deleted in CodeMode.", target, "InvalidDataValue")
+      }
+      if (reference.target instanceof CodeModeRegExp) {
+        return Reflect.deleteProperty(reference.target.regex, reference.key)
       }
       return Reflect.deleteProperty(reference.target, reference.key)
     })
@@ -2114,14 +2119,18 @@ export class Interpreter<R> {
         }
       }
       const key = Array.isArray(reference.target) ? reference.key : String(reference.key)
-      const current =
-        reference.target instanceof CodeModeURL
-          ? (reference.target.url as unknown as Record<string, unknown>)[key]
-          : (reference.target as Record<PropertyKey, unknown>)[key]
-      const { write, next, result } = yield* compute(current)
+      const { write, next, result } = yield* compute(self.readReferenceValue(reference, key))
       if (write) self.assignToReference(reference, key, next, node)
       return result
     })
+  }
+
+  private readReferenceValue(reference: MemberReference, key: number | string): unknown {
+    if (reference.target instanceof CodeModeURL) {
+      return (reference.target.url as unknown as Record<string, unknown>)[key]
+    }
+    if (reference.target instanceof CodeModeRegExp) return reference.target.lastIndex
+    return (reference.target as Record<PropertyKey, unknown>)[key]
   }
 
   private assignToReference(reference: MemberReference, key: number | string, next: unknown, node: AstNode): void {
@@ -2151,6 +2160,10 @@ export class Interpreter<R> {
         if (error instanceof InterpreterRuntimeError || error instanceof ToolRuntimeError) throw error
         throw new InterpreterRuntimeError(`URL.${property} received an invalid value.`, node).as("TypeError")
       }
+    }
+    if (reference.target instanceof CodeModeRegExp) {
+      reference.target.lastIndex = next
+      return
     }
     const target = reference.target as SafeObject
     const objectKey = key as string

@@ -2,11 +2,16 @@
  * Portions adapted from Test262 at revision 250f204f23a9249ff204be2baec29600faae7b75:
  * - test/built-ins/Date/value-to-primitive-result-non-string-prim.js
  * - test/built-ins/Date/value-to-primitive-result-string.js
+ * - test/built-ins/Date/prototype/toUTCString/format.js
+ * - test/built-ins/Date/prototype/toUTCString/invalid-date.js
+ * - test/built-ins/RegExp/prototype/exec/S15.10.6.2_A4_T8.js
  *
- * CodeMode does not support Symbol.toPrimitive, so these cases exercise the same Date-constructor primitive-result
+ * CodeMode does not support Symbol.toPrimitive, so the Date-constructor cases exercise the same primitive-result
  * handling through supported own valueOf and toString functions.
  *
  * Copyright (C) 2016 the V8 project authors. All rights reserved.
+ * Copyright (C) 2017 the V8 project authors. All rights reserved.
+ * Copyright 2009 the Sputnik authors. All rights reserved.
  * Test262 portions are governed by the BSD license in LICENSE.test262.
  */
 import { describe, expect, test } from "bun:test"
@@ -175,6 +180,15 @@ describe("Date", () => {
     expect(await value(`return typeof new Date(0)`)).toBe("object")
     expect(await value(`return new Date(0).nope === undefined`)).toBe(true)
   })
+
+  test("toUTCString and toGMTString use the native UTC format", async () => {
+    expect(
+      await value(`
+        const date = new Date(0)
+        return [date.toUTCString(), date.toGMTString(), new Date(NaN).toUTCString()]
+      `),
+    ).toEqual(["Thu, 01 Jan 1970 00:00:00 GMT", "Thu, 01 Jan 1970 00:00:00 GMT", "Invalid Date"])
+  })
 })
 
 describe("RegExp", () => {
@@ -209,6 +223,19 @@ describe("RegExp", () => {
       return [first[0], second[0]]
     `),
     ).toEqual(["1", "22"])
+  })
+
+  test("lastIndex is writable and exec coerces its stored value", async () => {
+    expect(
+      await value(`
+        const pattern = /(?:ab|cd)\\d?/g
+        pattern.lastIndex = "12"
+        const stored = [pattern.lastIndex, typeof pattern.lastIndex]
+        const match = pattern.exec("aacd2233ab12nm444ab42")
+        pattern.lastIndex = 0
+        return [stored, match[0], match.index, pattern.lastIndex, delete pattern.lastIndex]
+      `),
+    ).toEqual([["12", "string"], "ab4", 17, 0, false])
   })
 
   test("an unmatched string pattern returns null", async () => {

@@ -714,6 +714,19 @@ const invokeArrayMethod = <R>(
       for (const item of inserted) rejectCircularInsertion(target, item, "Array.splice result", node)
       return Effect.succeed(target.splice(start, deleteCount, ...inserted))
     }
+    case "toSpliced": {
+      if (args.length === 0) return Effect.succeed([...target])
+      const start = optNumber(args[0], "start") ?? 0
+      if (args.length === 1) {
+        const copied = [...target]
+        copied.splice(start)
+        return Effect.succeed(copied)
+      }
+      const deleteCount = optNumber(args[1], "delete count") ?? 0
+      const copied = [...target]
+      copied.splice(start, deleteCount, ...args.slice(2))
+      return Effect.succeed(copied)
+    }
     case "fill": {
       rejectCircularInsertion(target, args[0], "Array.fill result", node)
       return Effect.succeed(target.fill(args[0], optNumber(args[1], "start"), optNumber(args[2], "end")))
