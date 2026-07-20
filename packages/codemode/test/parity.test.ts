@@ -42,6 +42,15 @@ describe("H2: string property access reads as undefined (not a throw)", () => {
   test("unknown property on a number is undefined", async () => {
     expect(await value(`return (5).foo ?? "n"`)).toBe("n")
   })
+
+  test("only canonical string index keys access characters", async () => {
+    expect(
+      await value(`
+        const text = "abc"
+        return [text[1], text["1"], text["01"], text["1.0"], text[-0], text["-0"]]
+      `),
+    ).toEqual(["b", "b", null, null, "a", null])
+  })
 })
 
 describe("H3: array property access reads as undefined (not a throw)", () => {
@@ -61,6 +70,38 @@ describe("H3: array property access reads as undefined (not a throw)", () => {
   test("array indexing still works", async () => {
     expect(await value(`return [1,2,3][9] === undefined`)).toBe(true)
     expect(await value(`return [1,2,3][9]`)).toBeNull()
+  })
+
+  test("only canonical array index keys access elements", async () => {
+    expect(
+      await value(`
+        const values = ["a", "b"]
+        return [values[1], values["1"], values["01"], values["1.0"], values[-0], values["-0"]]
+      `),
+    ).toEqual(["b", "b", null, null, "a", null])
+  })
+
+  test("noncanonical keys cannot mutate or delete an aliased element", async () => {
+    expect(
+      await value(`
+        const values = ["a", "b"]
+        let writes = 0
+        try { values["01"] = ++writes } catch {}
+        const removed = delete values["01"]
+        return [writes, removed, values]
+      `),
+    ).toEqual([0, true, ["a", "b"]])
+  })
+
+  test("the maximum array length is not accepted as an array index", async () => {
+    expect(
+      await value(`
+        const values = []
+        let writes = 0
+        try { values["4294967295"] = ++writes } catch {}
+        return [writes, values.length]
+      `),
+    ).toEqual([0, 0])
   })
 })
 

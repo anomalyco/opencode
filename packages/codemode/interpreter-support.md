@@ -197,8 +197,8 @@ ultimate source of truth.
 - [x] `length`, numeric indexing, index assignment, spread, and `for...of`.
 - [x] The `thisArg` argument of `Array.from` is accepted and ignored, like JS arrows.
 - [ ] `Array.prototype.toSpliced`.
-- [ ] Canonical array/string index parsing: a key such as `"01"` must remain an ordinary property key rather than
-      aliasing index `1`.
+- [x] Canonical array/string index parsing: keys such as `"01"` remain non-index properties rather than aliasing index
+      `1`; arbitrary array-property assignment remains unsupported.
 - [x] `Array.prototype.sort` preserves trailing holes, while `toSorted` densifies holes into `undefined` elements,
       like JavaScript.
 

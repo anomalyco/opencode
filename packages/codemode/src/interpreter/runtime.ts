@@ -96,6 +96,13 @@ const globalStaticMembers: Partial<Record<GlobalNamespaceName, Set<string>>> = {
   URL: urlStatics,
 }
 
+const canonicalArrayIndex = (key: string | number): number | undefined => {
+  const property = String(key)
+  const index = Number(property)
+  if (!Number.isInteger(index) || index < 0 || index >= 2 ** 32 - 1 || String(index) !== property) return undefined
+  return index
+}
+
 const calleeDescription = (callee: AstNode): string => {
   if (callee.type === "Identifier") return getString(callee, "name")
   if (callee.type === "MemberExpression") {
@@ -1916,8 +1923,8 @@ export class Interpreter<R> {
 
       if (typeof objectValue === "string") {
         if (key === "length") return new ComputedValue(objectValue.length)
-        if (typeof key === "number") return new ComputedValue(objectValue[key])
-        if (typeof key === "string" && /^\d+$/.test(key)) return new ComputedValue(objectValue[Number(key)])
+        const index = canonicalArrayIndex(key)
+        if (index !== undefined) return new ComputedValue(objectValue[index])
         if (typeof key === "string" && stringMethods.has(key)) return new IntrinsicReference(objectValue, key)
         return new ComputedValue(undefined)
       }
@@ -2011,18 +2018,14 @@ export class Interpreter<R> {
 
       if (Array.isArray(objectValue)) {
         if (operation === "delete") return { target: objectValue, key }
-        if (
-          key !== "length" &&
-          !(typeof key === "string" && arrayMethods.has(key)) &&
-          typeof key !== "number" &&
-          !/^\d+$/.test(key)
-        ) {
+        const index = canonicalArrayIndex(key)
+        if (key !== "length" && !(typeof key === "string" && arrayMethods.has(key)) && index === undefined) {
           if (typeof key === "string" && Object.hasOwn(objectValue, key)) {
             return new ComputedValue((objectValue as Record<string, unknown> & Array<unknown>)[key])
           }
           return new ComputedValue(undefined)
         }
-        return { target: objectValue, key }
+        return { target: objectValue, key: index ?? key }
       }
 
       return { target: objectValue as SafeObject, key }
@@ -2046,7 +2049,7 @@ export class Interpreter<R> {
         if (typeof reference.key === "string" && arrayMethods.has(reference.key)) {
           return new IntrinsicReference(reference.target, reference.key)
         }
-        return reference.key === "length" ? reference.target.length : reference.target[Number(reference.key)]
+        return reference.key === "length" ? reference.target.length : reference.target[reference.key as number]
       }
       if (reference.target instanceof CodeModeURL) {
         return (reference.target.url as unknown as Record<string, unknown>)[String(reference.key)]
@@ -2109,7 +2112,7 @@ export class Interpreter<R> {
           throw new InterpreterRuntimeError("Array methods cannot be assigned in CodeMode.", node)
         }
       }
-      const key = Array.isArray(reference.target) ? Number(reference.key) : String(reference.key)
+      const key = Array.isArray(reference.target) ? reference.key : String(reference.key)
       const current =
         reference.target instanceof CodeModeURL
           ? (reference.target.url as unknown as Record<string, unknown>)[key]
@@ -2124,9 +2127,9 @@ export class Interpreter<R> {
     if (Array.isArray(reference.target)) {
       const target = reference.target
       const index = key as number
-      if (!Number.isInteger(index) || index < 0) {
+      if (!Number.isInteger(index) || index < 0 || index >= 2 ** 32 - 1) {
         throw new InterpreterRuntimeError(
-          "Array assignment index must be a non-negative integer.",
+          "Array assignment index must be a valid array index.",
           node,
           "InvalidDataValue",
         )
