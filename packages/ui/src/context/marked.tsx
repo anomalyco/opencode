@@ -3,6 +3,7 @@ import markedShiki from "marked-shiki"
 import katex from "katex"
 import { bundledLanguages, type BundledLanguage } from "shiki"
 import { createSimpleContext } from "./helper"
+import { markedCodeSpanBoundary } from "./marked-code-span"
 import { getSharedHighlighter, registerCustomTheme, ThemeRegistrationResolved } from "@pierre/diffs"
 
 export const OpenCodeTheme = {
@@ -521,6 +522,7 @@ export const { use: useMarked, provider: MarkedProvider } = createSimpleContext(
   name: "Marked",
   init: (props: { nativeParser?: NativeMarkdownParser }) => {
     const jsParser = marked.use(
+      markedCodeSpanBoundary,
       {
         renderer: {
           link({ href, title, text }) {

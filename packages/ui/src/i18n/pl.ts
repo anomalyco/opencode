@@ -148,6 +148,7 @@ export const dict = {
   "ui.common.close": "Zamknij",
   "ui.common.next": "Dalej",
   "ui.common.submit": "Prześlij",
+  "ui.common.showMore": "Pokaż więcej",
 
   "ui.permission.deny": "Odmów",
   "ui.permission.allowAlways": "Zezwalaj zawsze",

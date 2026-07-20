@@ -723,7 +723,11 @@ body[data-new-layout] #review-panel [data-component="tabs"][data-variant="normal
     }
 
     &:has([data-slot="tabs-trigger-close-button"]) {
-      padding-right: 10px;
+      padding-right: 8px;
+
+      [data-slot="tabs-trigger-close-button"] {
+        margin-left: 2px;
+      }
     }
 
     &:has([data-selected]) {
@@ -789,6 +793,62 @@ body[data-new-layout]
   [data-slot="tabs-list"]
   > .sticky {
   padding-right: 0;
+
+  [data-component="icon-button-v2"] {
+    position: relative;
+
+    &::after {
+      content: "";
+      position: absolute;
+      left: 100%;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 20px;
+      height: 28px;
+      background-color: var(--v2-background-bg-base);
+      pointer-events: none;
+    }
+  }
+}
+
+body[data-new-layout]
+  #review-panel
+  [data-component="tabs"]
+  .session-review-v2-tabs-bar
+  [data-slot="tabs-list"]
+  > .session-review-v2-sidebar-toggle-slot.sticky {
+  padding-right: 0;
+
+  &::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    bottom: auto;
+    left: auto;
+    right: 100%;
+    transform: translateY(-50%);
+    width: 12px;
+    height: 28px;
+    background-color: var(--v2-background-bg-base);
+    background-image: none;
+    pointer-events: none;
+  }
+
+  &::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 100%;
+    transform: translateY(-50%);
+    width: 8px;
+    height: 28px;
+    pointer-events: none;
+    background: linear-gradient(90deg, var(--v2-background-bg-base), transparent);
+  }
+
+  [data-component="icon-button-v2"]::after {
+    display: none;
+  }
 }
 
 body[data-new-layout] #review-panel [data-component="tabs"] .session-review-v2-open-in-app-slot {
