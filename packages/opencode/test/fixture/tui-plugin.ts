@@ -218,6 +218,13 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
       },
     },
     renderer,
+    selection: {
+      on: () => () => {},
+      onCancel: () => () => {},
+      arm: () => {},
+      cancel: () => {},
+      armed: () => false,
+    },
     slots: {
       register: () => "fixture-slot",
     },
@@ -325,6 +332,10 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
       part: opts.state?.part ?? (() => []),
       lsp: opts.state?.lsp ?? (() => []),
       mcp: opts.state?.mcp ?? (() => []),
+      skill: {
+        list: () => [],
+        refresh: async () => {},
+      },
     },
     theme: {
       get current() {
