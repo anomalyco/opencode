@@ -295,8 +295,8 @@ ultimate source of truth.
 - [x] Materialized `keys`, `values`, and `entries` arrays for Map and Set.
 - [x] Spread, `for...of`, `Array.from`, and `Object.fromEntries` integration.
 - [x] Map and Set values serialize to `{}` at host/JSON boundaries.
-- [ ] Set composition and relation methods: `union`, `intersection`, `difference`, `symmetricDifference`, `isSubsetOf`,
-      `isSupersetOf`, and `isDisjointFrom`.
+- [x] Set composition and relation methods: `union`, `intersection`, `difference`, `symmetricDifference`, `isSubsetOf`,
+      `isSupersetOf`, and `isDisjointFrom`, including supported Set-like operands.
 
 ## URL and URI helpers
 
