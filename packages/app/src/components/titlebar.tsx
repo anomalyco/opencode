@@ -69,7 +69,7 @@ export function useTitlebarRightMount() {
   return mount
 }
 
-export function Titlebar(props: { update?: TitlebarUpdate }) {
+export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visible: boolean; toggle: () => void } }) {
   const layout = useLayout()
   const platform = usePlatform()
   const command = useCommand()
@@ -494,7 +494,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                   "md:pl-4": !mac(),
                 }}
               >
-                <ChannelIndicator />
+                <ChannelIndicator debugTools={props.debugTools} />
                 <Show when={windows() || linux()}>
                   <WindowsAppMenu command={command} platform={platform} variant="v2" />
                 </Show>
@@ -692,9 +692,9 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                       </div>
                     </Show>
                     <div id="opencode-titlebar-left" class="flex items-center gap-3 min-w-0 px-2" />
-                    <ChannelIndicator />
                   </div>
                 </div>
+                <ChannelIndicator debugTools={props.debugTools} />
               </div>
             </div>
 
@@ -779,12 +779,27 @@ function TitlebarUpdateIconButton(props: { state: TitlebarUpdatePillState }) {
   )
 }
 
-function ChannelIndicator() {
+function ChannelIndicator(props: { debugTools?: { visible: boolean; toggle: () => void } }) {
+  const channel = import.meta.env.VITE_OPENCODE_CHANNEL
+  if (channel === "dev" && props.debugTools) {
+    return (
+      <button
+        type="button"
+        class="bg-icon-interactive-base text-[#FFF] font-medium px-2 rounded-sm uppercase font-mono cursor-pointer"
+        onClick={props.debugTools.toggle}
+        aria-label="Toggle debug tools"
+        aria-pressed={props.debugTools.visible}
+      >
+        DEV
+      </button>
+    )
+  }
+
   return (
     <>
-      {["beta", "dev"].includes(import.meta.env.VITE_OPENCODE_CHANNEL) && (
+      {["beta", "dev"].includes(channel) && (
         <div class="bg-icon-interactive-base text-[#FFF] font-medium px-2 rounded-sm uppercase font-mono">
-          {import.meta.env.VITE_OPENCODE_CHANNEL.toUpperCase()}
+          {channel.toUpperCase()}
         </div>
       )}
     </>
