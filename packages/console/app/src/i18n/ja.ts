@@ -253,6 +253,7 @@ export const dict = {
   "zen.privacy.exceptionsLink": "以下の例外",
 
   "go.title": "OpenCode Go | すべての人のための低価格なコーディングモデル",
+  "go.banner.text": "Kimi K3の利用上限が期間限定で2倍に",
   "go.meta.description":
     "Goは最初の月$5、その後$10/月で、Grok 4.5、GLM-5.2、GLM-5.1、Kimi K3、Kimi K2.7 Code、Kimi K2.6、MiMo-V2.5-Pro、MiMo-V2.5、Qwen3.7 Max、Qwen3.7 Plus、Qwen3.6 Plus、MiniMax M2.7、MiniMax M3、DeepSeek V4 Pro、DeepSeek V4 Flashに対して5時間のゆとりあるリクエスト上限があります。",
   "go.hero.title": "すべての人のための低価格なコーディングモデル",
@@ -271,7 +272,6 @@ export const dict = {
   "go.graph.go": "Go",
   "go.graph.label": "5時間あたりのリクエスト数",
   "go.graph.usageLimits": "利用制限",
-  "go.graph.tick": "{{n}}倍",
   "go.graph.aria": "5時間あたりのリクエスト数: {{free}} 対 {{go}}",
 
   "go.testimonials.brand.zen": "Zen",
