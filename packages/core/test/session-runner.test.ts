@@ -1174,6 +1174,33 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("recovers from terminal usage overflow", () =>
+    Effect.gen(function* () {
+      const session = yield* setupOverflowRecovery
+      responses = [
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.stepFinish({
+            index: 0,
+            reason: "length",
+            usage: { inputTokens: 19_800, outputTokens: 0 },
+          }),
+          LLMEvent.finish({ reason: "length", usage: { inputTokens: 19_800, outputTokens: 0 } }),
+        ],
+        fragmentFixture("text", "text-summary", ["## Objective\n- Recover terminal overflow"]).completeEvents,
+        fragmentFixture("text", "text-final", ["Recovered"]).completeEvents,
+      ]
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Continue" }), resume: false })
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(3)
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "compaction", summary: "## Objective\n- Recover terminal overflow" },
+        { type: "assistant", finish: "stop" },
+      ])
+    }),
+  )
+
   it.effect("persists a second context overflow after one recovery", () =>
     Effect.gen(function* () {
       const session = yield* setupOverflowRecovery

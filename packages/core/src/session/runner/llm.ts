@@ -6,6 +6,7 @@ import {
   Message,
   SystemPart,
   isContextOverflowFailure,
+  isContextOverflowFinish,
   type ProviderErrorEvent,
 } from "@opencode-ai/llm"
 import { Cause, DateTime, Effect, FiberSet, Layer, Option, Semaphore, Stream } from "effect"
@@ -233,6 +234,18 @@ const layer = Layer.effect(
         Stream.runForEach((event) =>
           Effect.gen(function* () {
             if (overflowFailure || publisher.hasProviderError()) return
+            if (
+              LLMEvent.is.finish(event) &&
+              isContextOverflowFinish(event, model.route.defaults.limits?.context) &&
+              !publisher.hasAssistantStarted()
+            ) {
+              overflowFailure = LLMEvent.providerError({
+                message: "Input exceeds context window of this model",
+                classification: "context-overflow",
+                providerMetadata: event.providerMetadata,
+              })
+              return
+            }
             if (LLMEvent.is.providerError(event)) {
               if (isContextOverflowFailure(event) && !publisher.hasAssistantStarted()) {
                 overflowFailure = event

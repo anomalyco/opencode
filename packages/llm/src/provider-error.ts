@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { LLMError, ProviderErrorEvent } from "./schema"
+import { LLMError, ProviderErrorEvent, type Finish } from "./schema"
 
 const patterns = [
   /prompt is too long/i,
@@ -36,6 +36,13 @@ const exclusions = [/^(throttling error|service unavailable):/i, /rate limit/i, 
 export const isContextOverflow = (message: string) =>
   !exclusions.some((pattern) => pattern.test(message)) &&
   (patterns.some((pattern) => pattern.test(message)) || /^4(00|13)\s*(status code)?\s*\(no body\)/i.test(message))
+
+export const isContextOverflowFinish = (event: Finish, contextWindow: number | undefined) => {
+  const input = event.usage?.inputTokens
+  if (contextWindow === undefined || contextWindow <= 0 || input === undefined) return false
+  if (event.reason === "stop") return input > contextWindow
+  return event.reason === "length" && event.usage?.outputTokens === 0 && input >= contextWindow * 0.99
+}
 
 export const isContextOverflowFailure = (failure: unknown) =>
   failure instanceof LLMError
