@@ -7,8 +7,10 @@ import { HueStep } from "./schema"
 
 type ThemeColor = Exclude<keyof Theme, "thinkingOpacity" | "_hasSelectedListItemText">
 type ChromaticHue = "red" | "orange" | "yellow" | "green" | "cyan" | "blue" | "purple"
+type V1HueToken = "secondary" | "accent" | "success" | "warning" | "primary" | "error" | "info"
 
 const chromaticHues: readonly ChromaticHue[] = ["red", "orange", "yellow", "green", "cyan", "blue", "purple"]
+const categoricalTokens: readonly V1HueToken[] = ["secondary", "accent", "success", "warning", "primary", "error"]
 const minimumChroma = 0.03
 const lightThreshold = 0.6
 
@@ -44,6 +46,11 @@ function migrateMode(theme: Theme, mode: Mode): FileThemeDefinition {
   const selected = hex(selectedForeground(theme, theme.primary))
   const destructive = hex(selectedForeground(theme, theme.error))
   const hues = inferHues(theme, mode)
+  const categorical = categoricalTokens.flatMap((token) => {
+    const hue = hues.byToken[token]
+    return hue ? [hue] : []
+  })
+  const uniqueCategorical = categorical.filter((hue, index) => categorical.indexOf(hue) === index)
   const text = mode === "light" ? "$hue.neutral.800" : "$hue.neutral.200"
   const textMuted = mode === "light" ? "$hue.neutral.600" : "$hue.neutral.400"
   const primary = mode === "light" ? "$hue.interactive.800" : "$hue.interactive.200"
@@ -56,7 +63,7 @@ function migrateMode(theme: Theme, mode: Mode): FileThemeDefinition {
       gray: neutralScale(theme, mode),
       ...Object.fromEntries(
         chromaticHues.map((name) => {
-          const match = hues[name]
+          const match = hues.byHue[name]
           return [name, match ? hueScale(match.color, mode) : "$hue.gray"]
         }),
       ),
@@ -64,7 +71,7 @@ function migrateMode(theme: Theme, mode: Mode): FileThemeDefinition {
       interactive: ambiguous(theme.primary) ? "$hue.gray" : hueScale(theme.primary, mode),
       neutral: "$hue.gray",
     },
-    categorical: DEFAULT_CATEGORICAL,
+    categorical: uniqueCategorical.length ? uniqueCategorical : DEFAULT_CATEGORICAL,
     text: {
       default: text,
       subdued: textMuted,
@@ -173,22 +180,45 @@ function migrateMode(theme: Theme, mode: Mode): FileThemeDefinition {
 }
 
 function inferHues(theme: Theme, mode: "light" | "dark") {
-  return [theme.accent, theme.success, theme.warning, theme.primary, theme.error, theme.info, theme.secondary].reduce<
-    Partial<Record<ChromaticHue, { color: RGBA; distance: number }>>
-  >((result, color) => {
-    const value = toOklch(color)
-    if (ambiguous(color, value.c)) return result
-    const anchor = inferenceAnchor(value.l)
-    const nearest = chromaticHues
-      .map((name) => ({
-        name,
-        distance: hueDistance(value.h, toOklch(RGBA.fromHex(DEFAULT_THEME[mode].hue[name][anchor])).h),
-      }))
-      .sort((first, second) => first.distance - second.distance)[0]
-    const current = result[nearest.name]
-    if (current && current.distance <= nearest.distance) return result
-    return { ...result, [nearest.name]: { color, distance: nearest.distance } }
-  }, {})
+  const colors: readonly [V1HueToken, RGBA][] = [
+    ["accent", theme.accent],
+    ["success", theme.success],
+    ["warning", theme.warning],
+    ["primary", theme.primary],
+    ["error", theme.error],
+    ["info", theme.info],
+    ["secondary", theme.secondary],
+  ]
+  return colors.reduce<{
+    byHue: Partial<Record<ChromaticHue, { color: RGBA; distance: number }>>
+    byToken: Partial<Record<V1HueToken, ChromaticHue>>
+  }>(
+    (result, [token, color]) => {
+      const nearest = inferHue(color, mode)
+      if (!nearest) return result
+      const current = result.byHue[nearest.name]
+      return {
+        byHue:
+          current && current.distance <= nearest.distance
+            ? result.byHue
+            : { ...result.byHue, [nearest.name]: { color, distance: nearest.distance } },
+        byToken: { ...result.byToken, [token]: nearest.name },
+      }
+    },
+    { byHue: {}, byToken: {} },
+  )
+}
+
+function inferHue(color: RGBA, mode: Mode) {
+  const value = toOklch(color)
+  if (ambiguous(color, value.c)) return
+  const anchor = inferenceAnchor(value.l)
+  return chromaticHues
+    .map((name) => ({
+      name,
+      distance: hueDistance(value.h, toOklch(RGBA.fromHex(DEFAULT_THEME[mode].hue[name][anchor])).h),
+    }))
+    .sort((first, second) => first.distance - second.distance)[0]
 }
 
 function inferenceAnchor(lightness: number): HueStep {

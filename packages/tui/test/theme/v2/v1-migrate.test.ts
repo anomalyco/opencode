@@ -3,7 +3,7 @@ import { DEFAULT_THEMES, resolveTheme as resolveV1 } from "../../../src/theme"
 import { resolveThemeFile } from "../../../src/theme/v2/resolve"
 import { selectThemeMode, themeModes } from "../../../src/theme/v2/select"
 import { migrateV1 } from "../../../src/theme/v2/v1-migrate"
-import { DEFAULT_CATEGORICAL } from "../../../src/theme/v2/defaults"
+import { DEFAULT_CATEGORICAL, DEFAULT_THEME } from "../../../src/theme/v2/defaults"
 
 test("migrates resolved V1 modes into literal V2 tokens", () => {
   const migrated = migrateV1(DEFAULT_THEMES.opencode)
@@ -12,8 +12,8 @@ test("migrates resolved V1 modes into literal V2 tokens", () => {
   const resolved = resolveThemeFile(migrated, "light")
 
   expect(migrated.standalone).toBeTrue()
-  expect(migrated.light.categorical).toEqual(DEFAULT_CATEGORICAL)
-  expect(migrated.dark.categorical).toEqual(DEFAULT_CATEGORICAL)
+  expect(migrated.light.categorical?.length).toBeGreaterThan(0)
+  expect(migrated.dark.categorical?.length).toBeGreaterThan(0)
   expect(migrated.light.hue?.accent).toBeObject()
   expect(migrated.light.hue?.interactive).toBeObject()
   if (typeof migrated.light.hue?.accent !== "object" || typeof migrated.light.hue.interactive !== "object") {
@@ -85,6 +85,41 @@ test("infers chromatic hues, anchors light and dark colors, and aliases ambiguou
   expect(migrated.light.hue?.interactive).toBe("$hue.gray")
   expect(() => resolveThemeFile(migrated, "light")).not.toThrow()
   expect(() => resolveThemeFile(migrated, "dark")).not.toThrow()
+})
+
+test("orders categorical hues by V1 semantic color mapping", () => {
+  const source = structuredClone(DEFAULT_THEMES.opencode)
+  const mapped = (name: "red" | "orange" | "yellow" | "green" | "blue" | "purple") => ({
+    light: DEFAULT_THEME.light.hue[name][700],
+    dark: DEFAULT_THEME.dark.hue[name][300],
+  })
+  source.theme.secondary = mapped("purple")
+  source.theme.accent = mapped("orange")
+  source.theme.success = mapped("green")
+  source.theme.warning = mapped("yellow")
+  source.theme.primary = mapped("blue")
+  source.theme.error = mapped("red")
+
+  const migrated = migrateV1(source)
+  expect(migrated.light?.categorical).toEqual(["purple", "orange", "green", "yellow", "blue", "red"])
+  expect(migrated.dark?.categorical).toEqual(["purple", "orange", "green", "yellow", "blue", "red"])
+
+  source.theme.accent = source.theme.secondary
+  expect(migrateV1(source).light?.categorical).toEqual(["purple", "green", "yellow", "blue", "red"])
+})
+
+test("uses default categorical hues when V1 semantic colors are ambiguous", () => {
+  const source = structuredClone(DEFAULT_THEMES.opencode)
+  source.theme.secondary = "transparent"
+  source.theme.accent = "transparent"
+  source.theme.success = "transparent"
+  source.theme.warning = "transparent"
+  source.theme.primary = "transparent"
+  source.theme.error = "transparent"
+
+  const migrated = migrateV1(source)
+  expect(migrated.light?.categorical).toEqual(DEFAULT_CATEGORICAL)
+  expect(migrated.dark?.categorical).toEqual(DEFAULT_CATEGORICAL)
 })
 
 test("builds and extrapolates gray from V1 surfaces and text without using menus or borders", () => {
