@@ -86,6 +86,7 @@ import * as TuiAudio from "./audio"
 import { win32DisableProcessedInput, win32FlushInputBuffer } from "./terminal-win32"
 import { destroyRenderer } from "./util/renderer"
 import { cliErrorMessage, errorFormat } from "./util/error"
+import type { TuiSelectionEvent } from "@opencode-ai/plugin/tui"
 
 registerOpencodeSpinner()
 
@@ -385,6 +386,36 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   const pluginRuntime = usePluginRuntime()
   const attention = createTuiAttention({ renderer, config: tuiConfig, kv })
   const clipboard = useClipboard()
+  const selectionListeners = new Set<(selection: TuiSelectionEvent) => void>()
+  const selectionCancelListeners = new Set<() => void>()
+  let pluginSelectionArmed = false
+  let pluginSelectionStarted = false
+  const selection = {
+    on(handler: (selection: TuiSelectionEvent) => void) {
+      selectionListeners.add(handler)
+      return () => selectionListeners.delete(handler)
+    },
+    onCancel(handler: () => void) {
+      selectionCancelListeners.add(handler)
+      return () => selectionCancelListeners.delete(handler)
+    },
+    publish(value: TuiSelectionEvent) {
+      for (const handler of selectionListeners) handler(value)
+    },
+    arm() {
+      pluginSelectionArmed = true
+      renderer.clearSelection()
+    },
+    cancel() {
+      pluginSelectionArmed = false
+      pluginSelectionStarted = false
+      renderer.clearSelection()
+      for (const handler of selectionCancelListeners) handler()
+    },
+    armed() {
+      return pluginSelectionArmed
+    },
+  }
 
   const api = createTuiApi(
     createTuiApiAdapters({
@@ -402,6 +433,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       theme: themeState,
       toast,
       renderer,
+      selection,
       attention,
       Slot: pluginRuntime.Slot,
     }),
@@ -425,6 +457,12 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   const offSelectionKeys = keymap.intercept(
     "key",
     ({ event }) => {
+      if (pluginSelectionArmed && event.name === "escape") {
+        selection.cancel()
+        event.preventDefault()
+        event.stopPropagation()
+        return
+      }
       if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
       Selection.handleSelectionKey(renderer, toast, event, clipboard)
     },
@@ -1093,6 +1131,8 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       flexDirection="column"
       backgroundColor={theme.background}
       onMouseDown={(evt) => {
+        pluginSelectionStarted = Selection.startPluginSelection(renderer, evt, pluginSelectionArmed)
+        if (pluginSelectionStarted) return
         if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
         if (evt.button !== MouseButton.RIGHT) return
 
@@ -1100,11 +1140,19 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         evt.preventDefault()
         evt.stopPropagation()
       }}
-      onMouseUp={
-        !Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT
-          ? () => Selection.copy(renderer, toast, clipboard)
-          : undefined
-      }
+      onMouseUp={(evt) => {
+        const handledPluginSelection = Selection.capturePluginSelection(
+          renderer,
+          evt,
+          selection.publish,
+          pluginSelectionStarted,
+        )
+        pluginSelectionStarted = false
+        if (handledPluginSelection) {
+          return
+        }
+        if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) Selection.copy(renderer, toast, clipboard)
+      }}
     >
       <Show when={Flag.OPENCODE_SHOW_TTFD}>
         <TimeToFirstDraw />

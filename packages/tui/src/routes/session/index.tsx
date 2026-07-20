@@ -1681,7 +1681,13 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
   const { theme, syntax } = useTheme()
   return (
     <Show when={props.part.text.trim()}>
-      <box ref={(el: BoxRenderable) => alwaysSeparate.add(el)} paddingLeft={3} marginTop={1} flexShrink={0}>
+      <box
+        id={`2lang-assistant:${props.message.id}:${props.part.id}`}
+        ref={(el: BoxRenderable) => alwaysSeparate.add(el)}
+        paddingLeft={3}
+        marginTop={1}
+        flexShrink={0}
+      >
         <markdown
           syntaxStyle={syntax()}
           streaming={true}

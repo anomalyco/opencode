@@ -36,6 +36,7 @@ type Input = {
   theme: ReturnType<typeof useTheme>
   toast: ReturnType<typeof useToast>
   renderer: TuiPluginApi["renderer"]
+  selection: TuiPluginApi["selection"]
   attention: TuiPluginApi["attention"]
   Slot: TuiPluginApi["ui"]["Slot"]
 }
@@ -317,6 +318,7 @@ export function createTuiApiAdapters(input: Input): Omit<TuiPluginApi, "lifecycl
     },
     event: input.event,
     renderer: input.renderer,
+    selection: input.selection,
     slots: {
       register() {
         throw new Error("slots.register is only available in plugin context")

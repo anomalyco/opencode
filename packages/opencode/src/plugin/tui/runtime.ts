@@ -596,6 +596,24 @@ function pluginApi(runtime: RuntimeState, plugin: PluginEntry, scope: PluginScop
     },
   }
 
+  const selection: TuiPluginApi["selection"] = {
+    on(handler) {
+      return scope.track(api.selection.on(handler))
+    },
+    onCancel(handler) {
+      return scope.track(api.selection.onCancel(handler))
+    },
+    arm() {
+      api.selection.arm()
+    },
+    cancel() {
+      api.selection.cancel()
+    },
+    armed() {
+      return api.selection.armed()
+    },
+  }
+
   const keymap = createScopedKeymap(api.keymap, scope)
 
   let count = 0
@@ -628,6 +646,7 @@ function pluginApi(runtime: RuntimeState, plugin: PluginEntry, scope: PluginScop
     },
     event,
     renderer: api.renderer,
+    selection,
     slots,
     plugins: {
       list() {

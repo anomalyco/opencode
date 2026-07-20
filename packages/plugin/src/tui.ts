@@ -523,6 +523,21 @@ export type TuiSlots = {
   }
 }
 
+export type TuiSelectionEvent = {
+  text: string
+  x: number
+  y: number
+  renderables: readonly Renderable[]
+}
+
+export type TuiSelection = {
+  on: (handler: (selection: TuiSelectionEvent) => void) => () => void
+  onCancel: (handler: () => void) => () => void
+  arm: () => void
+  cancel: () => void
+  armed: () => boolean
+}
+
 export type TuiEventBus = {
   on: <Type extends Event["type"]>(type: Type, handler: (event: Extract<Event, { type: Type }>) => void) => () => void
 }
@@ -621,6 +636,7 @@ export type TuiPluginApi = {
   client: OpencodeClient
   event: TuiEventBus
   renderer: CliRenderer
+  selection: TuiSelection
   slots: TuiSlots
   plugins: {
     list: () => ReadonlyArray<TuiPluginStatus>
