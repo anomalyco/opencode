@@ -657,6 +657,36 @@ function Main {
                     }
                     Copy-Item -Path $_.FullName -Destination $dest -Recurse -Force -Exclude "node_modules"
                     Write-Success "  Skill '$($_.Name)' installed"
+                    # Install skill dependencies if package.json exists
+                    $pkgJson = Join-Path $dest "package.json"
+                    if (Test-Path $pkgJson) {
+                        try {
+                            Write-Info "     Installing dependencies for '$($_.Name)'..."
+                            Push-Location $dest
+                            # Prefer bun, fall back to npm
+                            if (Get-Command "bun" -ErrorAction SilentlyContinue) {
+                                $depResult = bun install --production 2>&1
+                                if ($LASTEXITCODE -eq 0) {
+                                    Write-Success "     Dependencies installed (bun)"
+                                } else {
+                                    Write-Warn "     bun install failed, trying npm..."
+                                    npm install --production --no-audit --no-fund 2>&1 | Out-Null
+                                    if ($LASTEXITCODE -eq 0) { Write-Success "     Dependencies installed (npm)" }
+                                    else { Write-Warn "     Could not install dependencies ($($_.Name))" }
+                                }
+                            } elseif (Get-Command "npm" -ErrorAction SilentlyContinue) {
+                                npm install --production --no-audit --no-fund 2>&1 | Out-Null
+                                if ($LASTEXITCODE -eq 0) { Write-Success "     Dependencies installed (npm)" }
+                                else { Write-Warn "     Could not install dependencies ($($_.Name))" }
+                            } else {
+                                Write-Warn "     No package manager found (need bun or npm)"
+                            }
+                            Pop-Location
+                        } catch {
+                            Write-Warn "     Failed to install dependencies for '$($_.Name)': $_"
+                            Pop-Location
+                        }
+                    }
                 }
                 # Write version stamp
                 if ($Version) {
