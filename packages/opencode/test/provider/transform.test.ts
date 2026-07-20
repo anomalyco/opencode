@@ -5172,6 +5172,14 @@ describe("ProviderTransform.options - kimi family adaptive thinking", () => {
     expect(JSON.stringify(result)).not.toContain("budgetTokens")
   })
 
+  test("uses adaptive thinking through Google Vertex Anthropic", () => {
+    const model = createModel()
+    model.api.npm = "@ai-sdk/google-vertex/anthropic"
+    const result = ProviderTransform.options({ model, sessionID: "s1", providerOptions: {} })
+    expect(result.thinking).toEqual({ type: "adaptive", display: "summarized" })
+    expect(result.effort).toBe("high")
+  })
+
   test("does not enable thinking for kimi models without reasoning capability", () => {
     const model = createModel()
     model.capabilities.reasoning = false

@@ -1175,7 +1175,7 @@ export function options(input: {
 
   // Moonshot's Anthropic-compatible API uses adaptive effort rather than token budgets.
   if (
-    input.model.api.npm === "@ai-sdk/anthropic" &&
+    ["@ai-sdk/anthropic", "@ai-sdk/google-vertex/anthropic"].includes(input.model.api.npm) &&
     (input.model.providerID === "moonshotai" || modelId.includes("kimi")) &&
     input.model.capabilities.reasoning
   ) {
