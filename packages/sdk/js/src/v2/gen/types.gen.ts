@@ -701,6 +701,7 @@ export type QuestionOption = {
    * Explanation of choice
    */
   description: string
+  recommended?: boolean
 }
 
 export type QuestionInfo = {
@@ -3132,6 +3133,7 @@ export type QuestionV2Option = {
    * Explanation of choice
    */
   description: string
+  recommended?: boolean
 }
 
 export type QuestionV2Info = {

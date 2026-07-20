@@ -33,6 +33,7 @@ function Option(props: {
   picked: boolean
   label: string
   description?: string
+  recommended?: boolean
   disabled: boolean
   ref?: (el: HTMLButtonElement) => void
   onFocus?: VoidFunction
@@ -53,6 +54,9 @@ function Option(props: {
       <Mark multi={props.multi} picked={props.picked} />
       <span data-slot="question-option-main">
         <span data-slot="option-label">{props.label}</span>
+        <Show when={props.recommended}>
+          <span data-slot="option-recommended">(Recommended)</span>
+        </Show>
         <Show when={props.description}>
           <span data-slot="option-description">{props.description}</span>
         </Show>
@@ -551,6 +555,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
                 picked={picked(opt.label)}
                 label={opt.label}
                 description={opt.description}
+                recommended={opt.recommended}
                 disabled={sending()}
                 ref={(el) => (optsRef[i()] = el)}
                 onFocus={() => setStore("focus", i())}

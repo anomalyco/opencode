@@ -384,6 +384,9 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
                           <text fg={active() ? theme.secondary : picked() ? theme.success : theme.text}>
                             {multi() ? `[${picked() ? "✓" : " "}] ${opt.label}` : opt.label}
                           </text>
+                          <Show when={opt.recommended}>
+                            <text fg={theme.success}> (Recommended)</text>
+                          </Show>
                         </box>
                         <Show when={!multi()}>
                           <text fg={theme.success}>{picked() ? " ✓" : ""}</text>

@@ -407,6 +407,9 @@ export function RunQuestionBody(props: {
                               >
                                 {info()?.multiple ? `[${hit() ? "✓" : " "}] ${item.label}` : item.label}
                               </text>
+                              <Show when={item.recommended}>
+                                <text fg={props.theme.success}> (Recommended)</text>
+                              </Show>
                             </box>
                             <Show when={!info()?.multiple}>
                               <text fg={props.theme.success}>{hit() ? " ✓" : ""}</text>
