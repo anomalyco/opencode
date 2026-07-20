@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, Match, on, onCleanup, Show, Switch } from "solid-js"
+import { createEffect, createMemo, createResource, createSignal, Match, on, onCleanup, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -8,6 +8,7 @@ import { cloneSelectedLineRange, previewSelectedLines } from "@opencode-ai/sessi
 import { createLineCommentController } from "@opencode-ai/session-ui/line-comment-annotations"
 import { createLineCommentControllerV2 } from "@opencode-ai/session-ui/v2/line-comment-annotations-v2"
 import { sampledChecksum } from "@opencode-ai/core/util/encode"
+import { normalize, text } from "@opencode-ai/session-ui/session-diff"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { LineCommentV2OverflowIcon } from "@opencode-ai/ui/v2/line-comment-v2"
@@ -18,11 +19,23 @@ import { showToast } from "@/utils/toast"
 import { selectionFromLines, useFile, type FileSelection, type SelectedLineRange } from "@/context/file"
 import { useComments } from "@/context/comments"
 import { useLanguage } from "@/context/language"
+import { useLayout } from "@/context/layout"
 import { usePrompt } from "@/context/prompt"
 import { useSettings } from "@/context/settings"
 import { getSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
+import { reviewDiffNeedsLoad, type RenderDiff } from "@/pages/session/v2/review-diff-kinds"
+
+type SessionFileViewProps = {
+  tab: string
+  diff?: RenderDiff
+  diffVersion?: number
+  loadDiff?: (path: string, version?: number) => Promise<RenderDiff | undefined>
+  expandUnchanged?: boolean
+}
+
+const selectionSide = (range: SelectedLineRange) => range.endSide ?? range.side ?? "additions"
 
 function FileCommentMenu(props: {
   moreLabel: string
@@ -207,11 +220,27 @@ export function FileTabContent(props: { tab: string }) {
   )
 }
 
-export function SessionFileView(props: { tab: string }) {
+export function SessionFileView(props: SessionFileViewProps) {
   const settings = useSettings()
+  const detailSource = createMemo(() => {
+    if (!props.diff || !props.loadDiff || !reviewDiffNeedsLoad(props.diff)) return
+    return { diff: props.diff, load: props.loadDiff, version: props.diffVersion }
+  })
+  const [loadedDiff] = createResource(detailSource, async ({ diff, load, version }) => {
+    const value = await load(diff.file, version)
+    if (value?.file !== diff.file) return
+    return { source: diff, version, value }
+  })
+  const diff = createMemo(() => {
+    const source = props.diff
+    if (!source) return
+    const loaded = loadedDiff()
+    return normalize(loaded?.source === source && loaded.version === props.diffVersion ? loaded.value : source)
+  })
+
   return (
     <Show when={settings.general.newLayoutDesigns()} fallback={<SessionFileViewV1 tab={props.tab} />}>
-      <SessionFileViewV2 tab={props.tab} />
+      <SessionFileViewV2 tab={props.tab} diff={diff()} expandUnchanged={props.expandUnchanged} />
     </Show>
   )
 }
@@ -501,11 +530,12 @@ function SessionFileViewV1(props: { tab: string }) {
   return content()
 }
 
-function SessionFileViewV2(props: { tab: string }) {
+function SessionFileViewV2(props: { tab: string; diff?: ReturnType<typeof normalize>; expandUnchanged?: boolean }) {
   const file = useFile()
   const comments = useComments()
   const language = useLanguage()
   const prompt = usePrompt()
+  const layout = useLayout()
   const fileComponent = useFileComponent()
   const { sessionKey, tabs, view } = useSessionLayout()
   const activeFileTab = createSessionTabs({
@@ -548,10 +578,15 @@ function SessionFileViewV2(props: { tab: string }) {
     })
   }
 
-  const buildPreview = (filePath: string, selection: FileSelection) => {
-    const source = filePath === path() ? contents() : file.get(filePath)?.content?.content
+  const buildPreview = (filePath: string, lines: SelectedLineRange) => {
+    const source =
+      filePath === path()
+        ? props.diff
+          ? text(props.diff, selectionSide(lines))
+          : contents()
+        : file.get(filePath)?.content?.content
     if (!source) return undefined
-    return selectionPreview(source, selection)
+    return selectionPreview(source, selectionFromLines(lines))
   }
 
   const addCommentToContext = (input: {
@@ -562,7 +597,7 @@ function SessionFileViewV2(props: { tab: string }) {
     origin?: "review" | "file"
   }) => {
     const selection = selectionFromLines(input.selection)
-    const preview = input.preview ?? buildPreview(input.file, selection)
+    const preview = input.preview ?? buildPreview(input.file, input.selection)
 
     const saved = comments.add({
       file: input.file,
@@ -587,7 +622,7 @@ function SessionFileViewV2(props: { tab: string }) {
     comment: string
   }) => {
     comments.update(input.file, input.id, input.comment)
-    const preview = input.file === path() ? buildPreview(input.file, selectionFromLines(input.selection)) : undefined
+    const preview = input.file === path() ? buildPreview(input.file, input.selection) : undefined
     prompt.context.updateComment(input.file, input.id, {
       comment: input.comment,
       ...(preview ? { preview } : {}),
@@ -628,7 +663,7 @@ function SessionFileViewV2(props: { tab: string }) {
     mention: {
       items: file.searchFilesAndDirectories,
     },
-    getSide: (range) => range.endSide ?? range.side ?? "additions",
+    getSide: selectionSide,
     state: {
       opened: () => note.openedComment,
       setOpened: (id) => setNote("openedComment", id),
@@ -726,12 +761,21 @@ function SessionFileViewV2(props: { tab: string }) {
     <div class="relative overflow-hidden pb-40">
       <Dynamic
         component={fileComponent}
-        mode="text"
-        file={{
-          name: path() ?? "",
-          contents: source,
-          cacheKey: cacheKey(),
-        }}
+        {...(props.diff
+          ? {
+              mode: "diff" as const,
+              fileDiff: props.diff.fileDiff,
+              diffStyle: layout.review.diffStyle(),
+              expandUnchanged: props.expandUnchanged,
+            }
+          : {
+              mode: "text" as const,
+              file: {
+                name: path() ?? "",
+                contents: source,
+                cacheKey: cacheKey(),
+              },
+            })}
         enableLineSelection
         enableGutterUtility
         selectedLines={activeSelection()}
@@ -761,6 +805,7 @@ function SessionFileViewV2(props: { tab: string }) {
         media={{
           mode: "auto",
           path: path(),
+          deleted: props.diff?.status === "deleted",
           current: state()?.content,
           onLoad: scrollSync.queueRestore,
           onError: (args: { kind: "image" | "audio" | "svg" }) => {
@@ -779,6 +824,7 @@ function SessionFileViewV2(props: { tab: string }) {
     <div class="mt-3 relative h-full min-h-0">
       <ScrollView class="h-full" viewportRef={scrollSync.setViewport} onScroll={scrollSync.handleScroll as any}>
         <Switch>
+          <Match when={props.diff}>{renderFile(contents())}</Match>
           <Match when={state()?.loaded}>{renderFile(contents())}</Match>
           <Match when={state()?.loading}>
             <div class="px-6 py-4 text-text-weak">{language.t("common.loading")}...</div>

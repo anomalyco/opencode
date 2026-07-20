@@ -110,6 +110,7 @@ function reconcileFetched<T extends { id: string }>(
   options: {
     touched?: ReadonlySet<string>
     retained?: ReadonlySet<string>
+    removed?: ReadonlySet<string>
     preserveUnfetched?: boolean | ((item: T) => boolean)
   } = {},
 ) {
@@ -132,6 +133,7 @@ function reconcileFetched<T extends { id: string }>(
     if (item) result.set(id, item)
     if (!item) result.delete(id)
   }
+  for (const id of options.removed ?? emptyIDs) result.delete(id)
   return [...result.values()].sort((a, b) => cmp(a.id, b.id))
 }
 
@@ -577,6 +579,7 @@ export function createServerSession(client: OpencodeClient, options?: { retry?: 
     const messages = reconcileFetched(merged.session, data.message[sessionID] ?? [], {
       touched: touchedMessages,
       retained: load?.retainedMessages,
+      removed: load?.removedMessages,
       preserveUnfetched,
     })
     batch(() => {
@@ -645,7 +648,15 @@ export function createServerSession(client: OpencodeClient, options?: { retry?: 
           if (generations.get(sessionID) !== active) break
           const parent = await fetchMessage(sessionID, parentID, () =>
             resetMessageLoad(sessionID, load, messageLoadBaseline(load, parentID)),
-          )
+          ).catch((error) => {
+            const cause = error instanceof Error && typeof error.cause === "object" ? error.cause : undefined
+            if (cause && "status" in cause && cause.status === 404) {
+              load.removedMessages.add(parentID)
+              return
+            }
+            throw error
+          })
+          if (!parent) continue
           if (parent.message.role !== "user") throw new Error(`Assistant parent is not a user message: ${parentID}`)
           parents.push(parent)
         }
