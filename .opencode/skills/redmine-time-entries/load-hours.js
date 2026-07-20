@@ -146,17 +146,46 @@ function parseArgs() {
 function buildEntries() {
   const flags = parseArgs();
 
+  // NEW: --entries JSON array (supports multi-project)
+  if (flags.entries) {
+    try {
+      const raw = flags.entries;
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed) || parsed.length === 0) {
+        console.error('❌ --entries must be a non-empty JSON array');
+        process.exit(1);
+      }
+      return parsed.map((e, i) => ({
+        date: e.date,
+        hours: e.hours ? parseFloat(e.hours) : undefined,
+        activity: e.activity || undefined,
+        comment: e.comment || undefined,
+        detail: e.detail || undefined,
+        project: e.project || undefined,
+        issueId: e.issue || e.issueId || undefined,
+        skipAutoDetail: !!e.skipAutoDetail,
+      }));
+    } catch (err) {
+      console.error(`❌ Invalid --entries JSON: ${err.message}`);
+      process.exit(1);
+    }
+  }
+
+  // OLD: --date (backward compat)
   if (!flags.date) return [];
 
   const dates = flags.date.split(',').map(d => d.trim());
+  const projects = flags.project ? flags.project.split(',').map(p => p.trim()) : [];
+  const issues = flags.issue ? flags.issue.split(',').map(i => i.trim()) : [];
   const skipAutoDetail = flags['no-detail'] === true;
-  return dates.map(date => ({
+  return dates.map((date, i) => ({
     date,
     hours: flags.hours ? parseFloat(flags.hours) : undefined,
     activity: flags.activity || undefined,
     comment: flags.comment || undefined,
     detail: skipAutoDetail ? undefined : (flags.detail || undefined),
-    issueId: flags.issue || undefined,
+    project: projects[i] || projects[0] || undefined,
+    issueId: issues[i] || issues[0] || flags.issue || undefined,
     skipAutoDetail,
   }));
 }
@@ -315,24 +344,36 @@ async function main() {
     console.log('');
     console.log('  Usage:');
     console.log('    node load-hours.js --date YYYY-MM-DD --comment "What I did"');
+    console.log('    node load-hours.js --entries \'[{...}]\'  (multi-project)');
     console.log('');
     console.log('  Options:');
-    console.log('    --date       Date(s) comma-separated (required)');
+    console.log('    --date       Date(s) comma-separated (required for simple mode)');
+    console.log('    --entries    JSON array of entry objects (multi-project mode)');
     console.log('    --comment    Short summary');
     console.log('    --detail     Extended technical info (auto-generated from Engram + git log if omitted)');
     console.log('    --no-detail  Skip auto-detail generation');
     console.log('    --hours      Hours (default: 8)');
     console.log('    --activity   Activity type (default: Desarrollo)');
-    console.log('    --issue      Issue ID override');
-    console.log('    --project    Project slug override');
+    console.log('    --issue      Issue ID override (comma-sep for multi-entry)');
+    console.log('    --project    Project slug override (comma-sep for multi-entry)');
     console.log('');
     console.log('  Activities:');
     console.log(`    ${ACTIVITIES.join(', ')}`);
+    console.log('');
+    console.log('  Entry fields (--entries JSON):');
+    console.log('    date (required), hours, activity, comment, detail,');
+    console.log('    project, issue, skipAutoDetail');
     console.log('');
     console.log('  Examples:');
     console.log('    node load-hours.js --date 2026-07-13 --comment "Built installer"');
     console.log('    node load-hours.js --date 2026-07-14,2026-07-15 --comment "Dev work"');
     console.log('    node load-hours.js --date 2026-07-13 --no-detail --comment "Dev work"');
+    console.log('');
+    console.log('    # Multi-project in same day:');
+    console.log('    node load-hours.js --entries \'[');
+    console.log('      {"date":"2026-07-17","hours":4,"project":"proj-a","issue":"123","activity":"Desarrollo","comment":"Feature X"},');
+    console.log('      {"date":"2026-07-17","hours":2,"project":"proj-b","issue":"456","activity":"Testing","comment":"Bug fixes"}');
+    console.log('    ]\'');
     console.log('');
     process.exit(0);
   }
@@ -351,7 +392,12 @@ async function main() {
   console.log('╔══════════════════════════════════════════════════╗');
   console.log('║         Loading time entries                    ║');
   console.log('╚══════════════════════════════════════════════════╝');
-  console.log(`  📁 Project:  ${CONFIG.project}`);
+  const uniqueProjects = [...new Set(ENTRIES.map(e => e.project || CONFIG.project))];
+  if (uniqueProjects.length === 1) {
+    console.log(`  📁 Project:  ${uniqueProjects[0]}`);
+  } else {
+    console.log(`  📁 Projects: ${uniqueProjects.join(', ')}`);
+  }
   console.log(`  📋 Issue:    Task #${CONFIG.issueId}: ${CONFIG.issueLabel}`);
   console.log(`  🏷️  Activity: ${CONFIG.defaultActivity}`);
   console.log(`  ⏰ Hours:    ${CONFIG.defaultHours}/day`);
@@ -410,15 +456,17 @@ async function main() {
       const activity = entry.activity || CONFIG.defaultActivity;
       const comment = entry.comment || '';
       const detail = entry.detail || '';
+      const project = entry.project || CONFIG.project;
       const issueId = entry.issueId || CONFIG.issueId;
       const isLast = i === ENTRIES.length - 1;
 
-      console.log(`\n  📝 [${i + 1}/${ENTRIES.length}] ${date} — ${hours}h ${activity}`);
+      const projectLabel = project !== CONFIG.project ? `[${project}] ` : '';
+      console.log(`\n  📝 [${i + 1}/${ENTRIES.length}] ${projectLabel}${date} — ${hours}h ${activity}`);
       if (comment) console.log(`     Comment: ${comment.length > 70 ? comment.substring(0, 70) + '...' : comment}`);
       if (detail) console.log(`     Detail:  ${detail.length > 70 ? detail.substring(0, 70) + '...' : detail}`);
 
       try {
-        await page.goto(`${CONFIG.baseUrl}/projects/${CONFIG.project}/time_entries/new`, {
+        await page.goto(`${CONFIG.baseUrl}/projects/${project}/time_entries/new`, {
           waitUntil: 'networkidle',
         });
 
@@ -489,15 +537,25 @@ async function main() {
     // ── Verify ──
     if (success > 0) {
       console.log('\n  🔍 Verifying...');
-      const dates = ENTRIES.map(e => e.date).sort();
-      await page.goto(
-        `${CONFIG.baseUrl}/projects/${CONFIG.project}/time_entries?set_filter=1&sort=spent_on:desc&f[]=spent_on&op[spent_on]=between&v[spent_on][]=${dates[0]}&v[spent_on][]=${dates[dates.length - 1]}&f[]=user_id&op[user_id]==&v[user_id][]=me`,
-        { waitUntil: 'networkidle' }
-      );
-
+      const verifiedProjects = new Set();
       for (const entry of ENTRIES) {
-        const row = await page.locator(`tr:has(td:text-is("${entry.date}"))`).count();
-        console.log(`     ${entry.date}: ${row > 0 ? '✅' : '⚠️  created (check list)'}`);
+        const project = entry.project || CONFIG.project;
+        if (verifiedProjects.has(project)) continue;
+        verifiedProjects.add(project);
+
+        const entryDates = ENTRIES.filter(e => (e.project || CONFIG.project) === project).map(e => e.date);
+        const sortedDates = [...new Set(entryDates)].sort();
+        console.log(`     📁 ${project}: checking ${sortedDates[0]} → ${sortedDates[sortedDates.length - 1]}`);
+
+        await page.goto(
+          `${CONFIG.baseUrl}/projects/${project}/time_entries?set_filter=1&sort=spent_on:desc&f[]=spent_on&op[spent_on]=between&v[spent_on][]=${sortedDates[0]}&v[spent_on][]=${sortedDates[sortedDates.length - 1]}&f[]=user_id&op[user_id]==&v[user_id][]=me`,
+          { waitUntil: 'networkidle' }
+        );
+
+        for (const e of ENTRIES.filter(en => (en.project || CONFIG.project) === project)) {
+          const row = await page.locator(`tr:has(td:text-is("${e.date}"))`).count();
+          console.log(`       ${e.date}: ${row > 0 ? '✅' : '⚠️  created (check list)'}`);
+        }
       }
     }
 

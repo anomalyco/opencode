@@ -81,6 +81,19 @@ bun load-hours.js --date 2026-07-13 --hours 4 --activity Análisis \
 
 # Skip auto-detail entirely
 bun load-hours.js --date 2026-07-13 --no-detail --comment "Quick fix"
+
+# Multi-project in the same day (--entries JSON)
+bun load-hours.js --entries '[
+  {"date":"2026-07-17","hours":4,"project":"proj-a","issue":"123","activity":"Desarrollo","comment":"Feature X"},
+  {"date":"2026-07-17","hours":2,"project":"proj-b","issue":"456","activity":"Testing","comment":"Bug fixes"},
+  {"date":"2026-07-16","hours":6,"project":"proj-a","activity":"Desarrollo","comment":"More work"}
+]'
+
+# Multi-project via comma-separated --project and --issue (same dates, different projects)
+bun load-hours.js --date 2026-07-17,2026-07-17 \
+  --project proj-a,proj-b --issue 123,456 \
+  --activity Desarrollo,Testing --hours 4,2 \
+  --comment "Feature X,Bug fixes"
 ```
 
 > **Note**: Auto-detail requires `bun` (queries Engram SQLite DB + git log).
@@ -93,14 +106,18 @@ bun load-hours.js --date 2026-07-13 --no-detail --comment "Quick fix"
 - 🔒 **NEVER pass credentials via bash.** No `echo $PASS |`, no `--password=...` en línea de comandos. El script usa el archivo o env vars.
 - 🔒 **Onboarding guard es AUTOMÁTICO.** `load-hours.js` abre el editor y te guía. El orquestrador NO debe preguntar credenciales en el chat, NO debe leer `.credentials`, NO debe ejecutar `setup.js` manualmente.
 - ALWAYS ask ALL of these before starting (mandatory preflight):
-  1. **Proyecto**: Which Redmine project? (from config.json or ask)
-  2. **Tarea/Issue**: Which task to log against?
-  3. **Rango de fechas**: Which dates to load?
-  4. **Actividad**: Activity type? (default from config)
-  5. **Horas por día**: Hours per day? (default from config)
-  6. **Modo de confirmación**: `auto` / `confirm-all` / `confirm-each`
-- Use "Crear y continuar" for batch, "Crear" for last entry.
-- Load ONLY work done in the specified project.
+  1. **¿Cuántos proyectos?** Single project or multiple? If multiple, collect entries per project.
+  2. **Entradas por proyecto** (for each, repeat as needed):
+     - **Proyecto**: Which Redmine project slug?
+     - **Tarea/Issue**: Which task to log against (optional, project-specific)?
+     - **Rango de fechas**: Which dates to load for this project?
+     - **Actividad**: Activity type?
+     - **Horas por día**: Hours per day?
+  3. **Modo de confirmación**: `auto` / `confirm-all` / `confirm-each`
+- Use "Crear y continuar" for batch entries, "Crear" for last entry.
+- Load ONLY work done in the specified project(s).
+- Soportar múltiples proyectos en el mismo día. Ejemplo: 4 horas en Proyecto A (Desarrollo) y 4 horas en Proyecto B (Testing), misma fecha.
+- Cuando hay múltiples proyectos, pasar `--entries` JSON al script en lugar de `--date`.
 
 ## Config Files
 
