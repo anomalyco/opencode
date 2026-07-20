@@ -26,6 +26,20 @@ describe("prompt input v2 interaction machine", () => {
     expect(closed.state.popover).toEqual({ type: "closed" })
   })
 
+  test("opens context completion at the cursor", () => {
+    const value = "alpha @sr omega"
+    const input = persisted(value)
+    input.cursor = 9
+
+    const result = transitionPromptInputV2(
+      createPromptInputV2InteractionState(),
+      { type: "input.changed", value, persist: false },
+      input,
+    )
+
+    expect(result.state.popover).toEqual({ type: "context", query: "sr" })
+  })
+
   test("enters shell mode from an initial exclamation mark", () => {
     const result = transitionPromptInputV2(
       createPromptInputV2InteractionState(),
