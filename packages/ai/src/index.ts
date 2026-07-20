@@ -11,7 +11,7 @@ export type {
   Service as LLMClientService,
 } from "./route/client"
 export * from "./schema"
-export { GeneratedImage, ImageModel, ImageRequest, ImageResponse } from "./image"
+export { GeneratedImage, ImageInput, ImageInputSchema, ImageModel, ImageRequest, ImageResponse } from "./image"
 export type { ImageModelOptions, ImageOptions, ImageRequestFor, ImageRequestInput, ImageRoute } from "./image"
 export { Image } from "./image"
 export { Tool, ToolFailure, toDefinitions } from "./tool"

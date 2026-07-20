@@ -11,10 +11,12 @@ import {
   type HttpOptions,
 } from "../schema"
 import { ProviderShared, optionalNull } from "./shared"
+import { ImageInputs } from "./utils/image-input"
 
 const ADAPTER = "xai-images"
 export const DEFAULT_BASE_URL = "https://api.x.ai/v1"
 export const PATH = "/images/generations"
+export const EDIT_PATH = "/images/edits"
 
 export type XAIImageString<Known extends string> = Known | (string & {})
 
@@ -110,14 +112,32 @@ export const model = (input: ModelInput) => {
   const route: ImageRoute<XAIImageOptions> = {
     id: ADAPTER,
     generate: Effect.fn("XAIImages.generate")(function* (request: ImageRequestFor<XAIImageOptions>, execute) {
+      if (request.mask !== undefined)
+        return yield* ImageInputs.invalid(ADAPTER, "xAI Images does not support mask inputs")
       const http = mergeHttpOptions(request.model.http, request.http)
+      const imageReferences = (request.images ?? []).map((image) => {
+        if (image.type === "bytes") return { url: ImageInputs.dataUrl(image), type: "image_url" as const }
+        if (image.type === "url") return { url: image.url, type: "image_url" as const }
+        if (image.type === "file-id") return { file_id: image.id }
+        return undefined
+      })
+      if (imageReferences.some((image) => image === undefined))
+        return yield* ImageInputs.invalid(ADAPTER, "xAI Images accepts image URLs, data URLs, bytes, and file IDs")
       const requestBody = mergeJsonRecords(
-        { model: request.model.id, prompt: request.prompt },
+        {
+          model: request.model.id,
+          prompt: request.prompt,
+          image: imageReferences.length === 1 ? imageReferences[0] : undefined,
+          images: imageReferences.length > 1 ? imageReferences : undefined,
+        },
         nativeOptions(request.options),
         http?.body,
       ) as XAIImageBody
       const text = ProviderShared.encodeJson(requestBody)
-      const url = applyQuery(`${(input.baseURL ?? DEFAULT_BASE_URL).replace(/\/$/, "")}${PATH}`, http?.query)
+      const url = applyQuery(
+        `${(input.baseURL ?? DEFAULT_BASE_URL).replace(/\/$/, "")}${imageReferences.length === 0 ? PATH : EDIT_PATH}`,
+        http?.query,
+      )
       const headers = yield* Auth.toEffect(input.auth)({
         request,
         method: "POST",

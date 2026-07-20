@@ -55,9 +55,45 @@ export const ImageModelSchema = Schema.declare((value): value is ImageModel => v
   expected: "Image.Model",
 })
 
+const ImageBytesInput = Schema.Struct({
+  type: Schema.Literal("bytes"),
+  data: Schema.Uint8Array,
+  mediaType: Schema.String,
+})
+const ImageUrlInput = Schema.Struct({
+  type: Schema.Literal("url"),
+  url: Schema.String,
+})
+const ImageFileIDInput = Schema.Struct({
+  type: Schema.Literal("file-id"),
+  id: Schema.String,
+})
+const ImageFileURIInput = Schema.Struct({
+  type: Schema.Literal("file-uri"),
+  uri: Schema.String,
+  mediaType: Schema.String,
+})
+
+export const ImageInputSchema = Schema.Union([
+  ImageBytesInput,
+  ImageUrlInput,
+  ImageFileIDInput,
+  ImageFileURIInput,
+]).pipe(Schema.toTaggedUnion("type"))
+export type ImageInput = Schema.Schema.Type<typeof ImageInputSchema>
+
+export const ImageInput = {
+  bytes: (data: Uint8Array, mediaType: string): ImageInput => ({ type: "bytes", data, mediaType }),
+  url: (url: string): ImageInput => ({ type: "url", url }),
+  file: (id: string): ImageInput => ({ type: "file-id", id }),
+  fileUri: (uri: string, mediaType: string): ImageInput => ({ type: "file-uri", uri, mediaType }),
+} as const
+
 export class ImageRequest extends Schema.Class<ImageRequest>("Image.Request")({
   model: ImageModelSchema,
   prompt: Schema.String,
+  images: Schema.optional(Schema.Array(ImageInputSchema)),
+  mask: Schema.optional(ImageInputSchema),
   options: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
   http: Schema.optional(HttpOptions),
 }) {

@@ -29,7 +29,7 @@ Run `LLMClient.stream(request)` instead of `generate` when you want incremental 
 Use `Image.generate` with an image model for direct asset generation:
 
 ```ts
-import { Image } from "@opencode-ai/ai"
+import { Image, ImageInput } from "@opencode-ai/ai"
 import { OpenAI } from "@opencode-ai/ai/providers"
 
 const program = Effect.gen(function* () {
@@ -48,6 +48,34 @@ const program = Effect.gen(function* () {
   return response.images // GeneratedImage[] with owned bytes or a provider URL
 })
 ```
+
+Pass ordered image inputs to the same method for editing, composition, or image-conditioned generation:
+
+```ts
+const response =
+  yield *
+  Image.generate({
+    model,
+    prompt: "Combine these product photos into one studio scene",
+    images: [
+      ImageInput.bytes(firstBytes, "image/png"),
+      ImageInput.url("https://example.com/second.webp"),
+      ImageInput.file("file_123"),
+    ],
+    mask: ImageInput.bytes(maskBytes, "image/png"),
+    options,
+    http,
+  })
+```
+
+`ImageInput.fileUri(uri, mediaType)` represents provider file URIs such as Gemini Files. Raw strings are not
+accepted as image inputs, avoiding ambiguity between base64, URLs, and provider IDs. Empty or omitted `images`
+uses text-to-image generation; a non-empty array selects the provider's edit behavior without enforcing provider
+image-count limits locally. OpenAI uses multipart for byte/data-URL edits and its JSON reference body for URL or
+file-ID edits. On multipart requests, `http.body` can override option fields but not structural `model`, `prompt`,
+`image[]`, or `mask` fields, and the transport owns the multipart `Content-Type` boundary. xAI does not support
+masks, Gemini does not fetch public HTTP URLs or implement bitmap masks, and hosted Z.ai image generation does not
+accept image inputs. These cases fail with `InvalidRequest` before network I/O.
 
 Provider-native image options belong to each request. Raw `http.body` fields have final precedence over them:
 

@@ -1,8 +1,8 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
-import { Image, ImageClient } from "../src"
-import { Google, OpenAI } from "../src/providers"
+import { Image, ImageClient, ImageInput } from "../src"
+import { Google, OpenAI, XAI, ZAI } from "../src/providers"
 import { it } from "./lib/effect"
 import { dynamicResponse } from "./lib/http"
 
@@ -120,6 +120,214 @@ describe("Image", () => {
               )
             }),
           ),
+        ),
+      ),
+    ),
+  )
+
+  it.effect("routes OpenAI byte inputs and masks through multipart edits", () =>
+    Image.generate({
+      model: OpenAI.configure({ apiKey: "test", baseURL: "https://api.openai.test/v1" }).image("future-model"),
+      prompt: "Combine these images",
+      images: [
+        ImageInput.bytes(Uint8Array.from([1, 2, 3]), "image/png"),
+        ImageInput.url("data:image/jpeg;base64,BAUG"),
+      ],
+      mask: ImageInput.bytes(Uint8Array.from([7, 8, 9]), "image/png"),
+      options: { quality: "high", future_option: true },
+      http: {
+        body: { quality: "low", model: "corrupt", prompt: "corrupt", image: "corrupt", "image[]": "corrupt" },
+        headers: { "content-type": "application/json" },
+      },
+    }).pipe(
+      Effect.provide(
+        ImageClient.layer.pipe(
+          Layer.provide(
+            dynamicResponse((input) =>
+              Effect.gen(function* () {
+                const request = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
+                expect(request.url).toBe("https://api.openai.test/v1/images/edits")
+                expect(request.headers.get("content-type")).toStartWith("multipart/form-data; boundary=")
+                expect(input.text).toContain('name="model"\r\n\r\nfuture-model')
+                expect(input.text).toContain('name="prompt"\r\n\r\nCombine these images')
+                expect(input.text.match(/name="image\[\]"/g)).toHaveLength(2)
+                expect(input.text).toContain('name="mask"')
+                expect(input.text).toContain('name="quality"\r\n\r\nlow')
+                expect(input.text).not.toContain("corrupt")
+                return input.respond(JSON.stringify({ data: [{ b64_json: "AQID" }] }), {
+                  headers: { "content-type": "application/json" },
+                })
+              }),
+            ),
+          ),
+        ),
+      ),
+    ),
+  )
+
+  it.effect("routes OpenAI URL and file inputs through JSON edits", () =>
+    Image.generate({
+      model: OpenAI.configure({ apiKey: "test", baseURL: "https://api.openai.test/v1" }).image("future-model"),
+      prompt: "Combine these images",
+      images: [ImageInput.url("https://example.test/source.png"), ImageInput.file("file_123")],
+      mask: ImageInput.file("file_mask"),
+      http: { body: { future_option: true } },
+    }).pipe(
+      Effect.provide(
+        ImageClient.layer.pipe(
+          Layer.provide(
+            dynamicResponse((input) => {
+              expect(JSON.parse(input.text)).toEqual({
+                model: "future-model",
+                prompt: "Combine these images",
+                images: [{ image_url: "https://example.test/source.png" }, { file_id: "file_123" }],
+                mask: { file_id: "file_mask" },
+                future_option: true,
+              })
+              return Effect.succeed(
+                input.respond(JSON.stringify({ data: [{ b64_json: "AQID" }] }), {
+                  headers: { "content-type": "application/json" },
+                }),
+              )
+            }),
+          ),
+        ),
+      ),
+    ),
+  )
+
+  it.effect("routes ordered xAI image inputs through JSON edits", () =>
+    Image.generate({
+      model: XAI.configure({ apiKey: "test", baseURL: "https://api.xai.test/v1" }).image("future-model"),
+      prompt: "Combine these images",
+      images: [
+        ImageInput.bytes(Uint8Array.from([1, 2, 3]), "image/png"),
+        ImageInput.url("https://example.test/source.jpg"),
+        ImageInput.file("file_123"),
+      ],
+    }).pipe(
+      Effect.provide(
+        ImageClient.layer.pipe(
+          Layer.provide(
+            dynamicResponse((input) => {
+              expect(JSON.parse(input.text)).toEqual({
+                model: "future-model",
+                prompt: "Combine these images",
+                images: [
+                  { url: "data:image/png;base64,AQID", type: "image_url" },
+                  { url: "https://example.test/source.jpg", type: "image_url" },
+                  { file_id: "file_123" },
+                ],
+              })
+              return Effect.succeed(
+                input.respond(JSON.stringify({ data: [{ b64_json: "AQID", mime_type: "image/png" }] }), {
+                  headers: { "content-type": "application/json" },
+                }),
+              )
+            }),
+          ),
+        ),
+      ),
+    ),
+  )
+
+  it.effect("uses xAI's singular image field for one input", () =>
+    Image.generate({
+      model: XAI.configure({ apiKey: "test", baseURL: "https://api.xai.test/v1" }).image("future-model"),
+      prompt: "Edit this image",
+      images: [ImageInput.file("file_123")],
+    }).pipe(
+      Effect.provide(
+        ImageClient.layer.pipe(
+          Layer.provide(
+            dynamicResponse((input) => {
+              expect(JSON.parse(input.text)).toEqual({
+                model: "future-model",
+                prompt: "Edit this image",
+                image: { file_id: "file_123" },
+              })
+              return Effect.succeed(
+                input.respond(JSON.stringify({ data: [{ b64_json: "AQID", mime_type: "image/png" }] }), {
+                  headers: { "content-type": "application/json" },
+                }),
+              )
+            }),
+          ),
+        ),
+      ),
+    ),
+  )
+
+  it.effect("lowers ordered Google image inputs into generateContent parts", () =>
+    Image.generate({
+      model: Google.configure({ apiKey: "test", baseURL: "https://google.test/v1beta" }).image("future-model"),
+      prompt: "Combine these images",
+      images: [
+        ImageInput.bytes(Uint8Array.from([1, 2, 3]), "image/png"),
+        ImageInput.url("data:image/jpeg;base64,BAUG"),
+        ImageInput.fileUri("https://generativelanguage.googleapis.com/v1beta/files/123", "image/webp"),
+      ],
+    }).pipe(
+      Effect.provide(
+        ImageClient.layer.pipe(
+          Layer.provide(
+            dynamicResponse((input) => {
+              expect(JSON.parse(input.text).contents[0].parts).toEqual([
+                { text: "Combine these images" },
+                { inlineData: { mimeType: "image/png", data: "AQID" } },
+                { inlineData: { mimeType: "image/jpeg", data: "BAUG" } },
+                {
+                  fileData: {
+                    mimeType: "image/webp",
+                    fileUri: "https://generativelanguage.googleapis.com/v1beta/files/123",
+                  },
+                },
+              ])
+              return Effect.succeed(
+                input.respond(
+                  JSON.stringify({
+                    candidates: [{ content: { parts: [{ inlineData: { mimeType: "image/png", data: "AQID" } }] } }],
+                  }),
+                  { headers: { "content-type": "application/json" } },
+                ),
+              )
+            }),
+          ),
+        ),
+      ),
+    ),
+  )
+
+  it.effect("rejects unsupported provider inputs before sending", () =>
+    Effect.gen(function* () {
+      const cases = [
+        Image.generate({
+          model: XAI.configure({ apiKey: "test" }).image("model"),
+          prompt: "edit",
+          images: [ImageInput.url("https://example.test/image.png")],
+          mask: ImageInput.url("https://example.test/mask.png"),
+        }),
+        Image.generate({
+          model: Google.configure({ apiKey: "test" }).image("model"),
+          prompt: "edit",
+          images: [ImageInput.url("https://example.test/image.png")],
+        }),
+        Image.generate({
+          model: ZAI.configure({ apiKey: "test" }).image("model"),
+          prompt: "edit",
+          images: [ImageInput.bytes(Uint8Array.from([1]), "image/png")],
+        }),
+      ]
+      yield* Effect.forEach(cases, (program) =>
+        program.pipe(
+          Effect.flip,
+          Effect.tap((error) => Effect.sync(() => expect(error.reason._tag).toBe("InvalidRequest"))),
+        ),
+      )
+    }).pipe(
+      Effect.provide(
+        ImageClient.layer.pipe(
+          Layer.provide(dynamicResponse(() => Effect.die("unsupported input reached the network"))),
         ),
       ),
     ),

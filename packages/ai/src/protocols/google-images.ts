@@ -1,6 +1,13 @@
 import { Effect, Encoding, Schema } from "effect"
 import { Headers, HttpClientRequest } from "effect/unstable/http"
-import { GeneratedImage, ImageModel, ImageResponse, type ImageRequestFor, type ImageRoute } from "../image"
+import {
+  GeneratedImage,
+  ImageModel,
+  ImageResponse,
+  type ImageInput,
+  type ImageRequestFor,
+  type ImageRoute,
+} from "../image"
 import { Auth, type Definition as AuthDefinition } from "../route/auth"
 import {
   InvalidProviderOutputReason,
@@ -12,6 +19,7 @@ import {
   type ProviderMetadata,
 } from "../schema"
 import { ProviderShared } from "./shared"
+import { ImageInputs } from "./utils/image-input"
 
 const ADAPTER = "google-images"
 export const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
@@ -31,7 +39,7 @@ export type GoogleImageOptions = {
 export type GoogleImageBody = Record<string, unknown> & {
   readonly contents: ReadonlyArray<{
     readonly role: "user"
-    readonly parts: ReadonlyArray<{ readonly text: string }>
+    readonly parts: ReadonlyArray<Record<string, unknown>>
   }>
   readonly generationConfig: Record<string, unknown>
 }
@@ -116,15 +124,6 @@ const nativeOptions = (options: GoogleImageOptions | undefined) => {
   )
 }
 
-const body = (request: ImageRequestFor<GoogleImageOptions>, overlay: Record<string, unknown> | undefined) =>
-  mergeJsonRecords(
-    {
-      contents: [{ role: "user", parts: [{ text: request.prompt }] }],
-      generationConfig: nativeOptions(request.options),
-    },
-    overlay,
-  ) as GoogleImageBody
-
 const invalidOutput = (message: string, providerMetadata?: ProviderMetadata) =>
   new LLMError({
     module: ADAPTER,
@@ -143,8 +142,18 @@ export const model = (input: ModelInput) => {
   const route: ImageRoute<GoogleImageOptions> = {
     id: ADAPTER,
     generate: Effect.fn("GoogleImages.generate")(function* (request: ImageRequestFor<GoogleImageOptions>, execute) {
+      if (request.mask !== undefined)
+        return yield* ImageInputs.invalid(ADAPTER, "Google image generation does not support bitmap mask inputs")
+      const imageParts = yield* Effect.forEach(request.images ?? [], googleImagePart)
       const http = mergeHttpOptions(request.model.http, request.http)
-      const text = ProviderShared.encodeJson(body(request, http?.body))
+      const requestBody = mergeJsonRecords(
+        {
+          contents: [{ role: "user", parts: [{ text: request.prompt }, ...imageParts] }],
+          generationConfig: nativeOptions(request.options),
+        },
+        http?.body,
+      ) as GoogleImageBody
+      const text = ProviderShared.encodeJson(requestBody)
       const url = applyQuery(
         `${(input.baseURL ?? DEFAULT_BASE_URL).replace(/\/$/, "")}/models/${request.model.id}:generateContent`,
         http?.query,
@@ -276,6 +285,30 @@ export const model = (input: ModelInput) => {
     }),
   }
   return ImageModel.make<GoogleImageOptions>({ id: input.id, provider: "google", route, http: input.http })
+}
+
+const googleImagePart = (image: ImageInput): Effect.Effect<Record<string, unknown>, LLMError> => {
+  if (image.type === "bytes")
+    return Effect.succeed({ inlineData: { mimeType: image.mediaType, data: Encoding.encodeBase64(image.data) } })
+  if (image.type === "file-uri") return Effect.succeed({ fileData: { mimeType: image.mediaType, fileUri: image.uri } })
+  if (image.type === "url")
+    return ImageInputs.decodeDataUrl(image.url, ADAPTER).pipe(
+      Effect.flatMap((decoded) => {
+        if (decoded === undefined)
+          return Effect.fail(
+            ImageInputs.invalid(
+              ADAPTER,
+              "Google generateContent does not fetch public image URLs; use bytes, a data URL, or a Gemini file URI",
+            ),
+          )
+        return Effect.succeed({
+          inlineData: { mimeType: decoded.mediaType, data: Encoding.encodeBase64(decoded.data) },
+        })
+      }),
+    )
+  return Effect.fail(
+    ImageInputs.invalid(ADAPTER, "Google generateContent requires Gemini file URIs rather than provider file IDs"),
+  )
 }
 
 export const GoogleImages = {

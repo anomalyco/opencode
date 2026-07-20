@@ -4,6 +4,7 @@ import { GeneratedImage, ImageModel, ImageResponse, type ImageRequestFor, type I
 import { Auth, type Definition as AuthDefinition } from "../route/auth"
 import { InvalidProviderOutputReason, LLMError, mergeHttpOptions, mergeJsonRecords, type HttpOptions } from "../schema"
 import { ProviderShared } from "./shared"
+import { ImageInputs } from "./utils/image-input"
 
 const ADAPTER = "zai-images"
 export const DEFAULT_BASE_URL = "https://api.z.ai/api/paas/v4"
@@ -74,6 +75,8 @@ export const model = (input: ModelInput) => {
   const route: ImageRoute<ZAIImageOptions> = {
     id: ADAPTER,
     generate: Effect.fn("ZAIImages.generate")(function* (request: ImageRequestFor<ZAIImageOptions>, execute) {
+      if ((request.images?.length ?? 0) > 0 || request.mask !== undefined)
+        return yield* ImageInputs.invalid(ADAPTER, "Z.ai hosted image generation does not support image or mask inputs")
       const http = mergeHttpOptions(request.model.http, request.http)
       const requestBody = mergeJsonRecords(
         { model: request.model.id, prompt: request.prompt },

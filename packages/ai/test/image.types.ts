@@ -1,5 +1,6 @@
 import {
   Image,
+  ImageInput,
   ImageModel,
   type ImageModelOptions,
   type ImageOptions,
@@ -22,6 +23,11 @@ void invalidGoogleOptions
 Image.generate({
   model: google,
   prompt: "A lighthouse",
+  images: [
+    ImageInput.bytes(Uint8Array.from([1, 2, 3]), "image/png"),
+    ImageInput.url("data:image/jpeg;base64,AQID"),
+    ImageInput.fileUri("https://generativelanguage.googleapis.com/v1beta/files/example", "image/webp"),
+  ],
   options: { aspectRatio: "16:9", imageSize: "2K", futureOption: true },
 })
 
@@ -60,6 +66,8 @@ void futureOpenAIOptions
 Image.generate({
   model: openai,
   prompt: "A lighthouse",
+  images: [ImageInput.url("https://example.com/source.png"), ImageInput.file("file_123")],
+  mask: ImageInput.bytes(Uint8Array.from([1]), "image/png"),
   options: { quality: "hd", outputFormat: "webp", size: "2048x2048", future_option: true },
 })
 Image.generate({ model: openai, prompt: "A lighthouse", options: { quality: "future-quality", size: "256x256" } })
@@ -81,6 +89,7 @@ XAI.configure({ image: { options: { resolution: "1k" } } })
 Image.generate({
   model: xai,
   prompt: "A lighthouse",
+  images: [ImageInput.url("data:image/png;base64,AQID"), ImageInput.file("file_123")],
   options: {
     n: 2,
     aspectRatio: "future-ratio",
@@ -115,6 +124,15 @@ Image.generate({ model: zai, prompt: "A lighthouse", options: { userID: 1 } })
 
 declare const generic: ImageModel<ImageOptions>
 Image.generate({ model: generic, prompt: "A lighthouse", options: { arbitrary: true } })
+const explicitImageInput: ImageInput = ImageInput.url("https://example.com/image.png")
+void explicitImageInput
+
+// @ts-expect-error Raw strings are ambiguous and are not image inputs.
+Image.generate({ model: openai, prompt: "A lighthouse", images: ["AQID"] })
+// @ts-expect-error Byte image inputs require an explicit MIME type.
+Image.generate({ model: openai, prompt: "A lighthouse", images: [{ type: "bytes", data: new Uint8Array() }] })
+// @ts-expect-error File URIs require an explicit MIME type for Gemini fileData.
+Image.generate({ model: google, prompt: "A lighthouse", images: [{ type: "file-uri", uri: "files/123" }] })
 
 const request = Image.request({
   model: google,
