@@ -178,6 +178,83 @@ describe("Runner", () => {
   )
 
   it.live(
+    // Regression guard for the lost-wakeup bug fixed in #36375 (refs #35066): a
+    // completing background subagent calls ensureRunning to notify the parent while
+    // it is still Running. Each such wakeup must survive, so the runner has to cycle
+    // Running -> RunningThenRun -> Running for every new arrival instead of dropping
+    // the queued work. Pre-fix the very first queued run never reached RunningThenRun.
+    "re-queues each run that arrives after the previous queued run is promoted",
+    Effect.gen(function* () {
+      const s = yield* Scope.Scope
+      const runner = Runner.make<string>(s)
+      const ran = yield* Ref.make<string[]>([])
+      const parentTurn = yield* Deferred.make<void>()
+      const firstQueued = yield* Deferred.make<void>()
+      // Set when the first notification finishes and captured when the second one
+      // starts, so the test proves the second is promoted only after the first has
+      // fully completed rather than merely after it began running.
+      const firstNotificationDone = yield* Ref.make(false)
+      const secondSawFirstDone = yield* Ref.make(false)
+
+      // Parent turn is in progress and stays Running until released.
+      const parent = yield* runner
+        .ensureRunning(
+          Effect.gen(function* () {
+            yield* Ref.update(ran, (a) => [...a, "parent"])
+            yield* Deferred.await(parentTurn)
+            return "parent"
+          }),
+        )
+        .pipe(Effect.forkChild)
+      yield* waitForState(runner, "Running")
+
+      // First notification arrives while the parent is still busy.
+      const wakeA = yield* runner
+        .ensureRunning(
+          Effect.gen(function* () {
+            yield* Ref.update(ran, (a) => [...a, "notify-a"])
+            yield* Deferred.await(firstQueued)
+            yield* Ref.set(firstNotificationDone, true)
+            return "notify-a"
+          }),
+        )
+        .pipe(Effect.forkChild)
+      yield* waitForState(runner, "RunningThenRun")
+
+      // Parent finishes; the queued notification is promoted to the running turn.
+      yield* Deferred.succeed(parentTurn, undefined)
+      yield* waitForState(runner, "Running")
+
+      // Second notification arrives while the promoted one is now running, forcing
+      // the runner back into RunningThenRun a second time.
+      const wakeB = yield* runner
+        .ensureRunning(
+          Effect.gen(function* () {
+            const firstDone = yield* Ref.get(firstNotificationDone)
+            yield* Ref.set(secondSawFirstDone, firstDone)
+            yield* Ref.update(ran, (a) => [...a, "notify-b"])
+            return "notify-b"
+          }),
+        )
+        .pipe(Effect.forkChild)
+      yield* waitForState(runner, "RunningThenRun")
+
+      // Release the first notification; the second must run after it completes, not be lost.
+      yield* Deferred.succeed(firstQueued, undefined)
+
+      const [valParent, valA, valB] = yield* Effect.all([Fiber.join(parent), Fiber.join(wakeA), Fiber.join(wakeB)])
+      expect(valParent).toBe("parent")
+      expect(valA).toBe("notify-a")
+      expect(valB).toBe("notify-b")
+      expect(yield* Ref.get(ran)).toEqual(["parent", "notify-a", "notify-b"])
+      // The second notification observed the first as completed, proving the runner
+      // promoted it only after the first queued run finished.
+      expect(yield* Ref.get(secondSawFirstDone)).toBe(true)
+      yield* waitForState(runner, "Idle")
+    }),
+  )
+
+  it.live(
     "cancel in RunningThenRun cancels both current and pending",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
