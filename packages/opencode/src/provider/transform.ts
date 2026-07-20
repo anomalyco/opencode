@@ -27,10 +27,17 @@ export function sanitizeSurrogates(content: string) {
 }
 
 function isKimiFamily(model: Provider.Model) {
-  return [model.providerID, model.api.id].some((id) => {
-    const value = id.toLowerCase()
-    return value.includes("kimi") || value.includes("moonshot")
-  })
+  if (
+    [model.providerID, model.api.id].some((id) => {
+      const value = id.toLowerCase()
+      return value.includes("kimi") || value.includes("moonshot")
+    })
+  )
+    return true
+  const url = model.api.url.toLowerCase()
+  return ["api.kimi.com", "api.moonshot.ai", "api.moonshot.cn", "api.moonshotai.cn"].some((host) =>
+    url.includes(host),
+  )
 }
 
 // Maps npm package to the key the AI SDK expects for providerOptions
