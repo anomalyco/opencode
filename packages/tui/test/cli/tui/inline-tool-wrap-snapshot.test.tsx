@@ -144,7 +144,7 @@ function AssistantSummaryBeforeInlineFixture() {
   return (
     <box flexDirection="column" width={72}>
       <box ref={(el: BoxRenderable) => alwaysSeparate.add(el)} paddingLeft={3}>
-        <text>▣ Build · Little Frank · 53.1s</text>
+        <text>▣ Build · Little Frank · 53.1s · 3:41 PM</text>
       </box>
       <InlineToolRow icon="✓" complete={true} pending="">
         {"Build Task — Review changes\n↳ 48 toolcalls · 1m 40s"}
