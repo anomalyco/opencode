@@ -285,6 +285,7 @@ ultimate source of truth.
 
 ## Map and Set
 
+- [ ] Static `Map.groupBy`.
 - [x] `new Map()` from entry arrays or another Map.
 - [x] Map `get`, `set`, `has`, `delete`, `clear`, `size`, and `forEach`.
 - [x] `new Set()` from arrays, strings, or another Set.
