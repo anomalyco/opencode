@@ -95,6 +95,15 @@ describe("Cloudflare", () => {
         { type: "reasoning.text", text: "ing", format: "anthropic-claude-v1", index: 0 },
         { type: "reasoning.text", signature: "signed", format: "anthropic-claude-v1", index: 0 },
       ]
+      const merged = [
+        {
+          type: "reasoning.text",
+          text: "Thinking",
+          signature: "signed",
+          format: "anthropic-claude-v1",
+          index: 0,
+        },
+      ]
       const response = yield* LLM.generate(LLM.request({ model, prompt: "Say hello." })).pipe(
         Effect.provide(
           dynamicResponse((input) =>
@@ -117,12 +126,12 @@ describe("Cloudflare", () => {
       expect(response.reasoning).toBe("Thinking")
       expect(response.events.filter(LLMEvent.is.reasoningDelta)).toHaveLength(2)
       expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
-        openai: { reasoningField: "reasoning", reasoningDetails: details },
+        openai: { reasoningField: "reasoning", reasoningDetails: merged },
       })
 
       const replay = yield* LLMClient.prepare(LLM.request({ model, messages: [response.message] }))
       expect(replay.body.messages).toEqual([
-        { role: "assistant", content: "Hello", reasoning: "Thinking", reasoning_details: details },
+        { role: "assistant", content: "Hello", reasoning: "Thinking", reasoning_details: merged },
       ])
     }),
   )

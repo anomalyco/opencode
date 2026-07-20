@@ -88,16 +88,13 @@ for (const item of cases) {
             replay.body.messages[0]?.role === "assistant" ? replay.body.messages[0].reasoning_details : undefined
           expect(Array.isArray(replayDetails)).toBe(true)
           if (!Array.isArray(replayDetails)) return
-          if (item.name === "Vercel AI Gateway") expect(replayDetails).toEqual(details)
-          if (item.name === "OpenRouter") {
-            expect(replayDetails).toHaveLength(1)
-            expect(replayDetails).not.toEqual(details)
-            expect(replayDetails[0]).toMatchObject({
-              type: "reasoning.text",
-              text: response.reasoning,
-              signature: expect.any(String),
-            })
-          }
+          expect(replayDetails).toEqual(details)
+          expect(replayDetails).toHaveLength(1)
+          expect(replayDetails[0]).toMatchObject({
+            type: "reasoning.text",
+            text: response.reasoning,
+            signature: expect.any(String),
+          })
         }),
       30_000,
     )

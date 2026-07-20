@@ -51,9 +51,7 @@ export const protocol = Protocol.make({
               .filter((part) => part.type === "reasoning")
               .map((part) => part.text)
               .join("")
-            const reasoningDetails = Array.isArray(message.reasoning_details)
-              ? mergeReasoningDetails(message.reasoning_details)
-              : undefined
+            const reasoningDetails = Array.isArray(message.reasoning_details) ? message.reasoning_details : undefined
             return {
               ...message,
               reasoning_content: undefined,
@@ -85,41 +83,6 @@ const bodyOptions = (input: unknown) => {
     ...(typeof openrouter.promptCacheKey === "string" ? { prompt_cache_key: openrouter.promptCacheKey } : {}),
   }
 }
-
-const mergeReasoningDetails = (details: ReadonlyArray<unknown>) =>
-  details.reduce<unknown[]>((result, detail) => {
-    const previous = result.at(-1)
-    if (
-      !isRecord(previous) ||
-      previous.type !== "reasoning.text" ||
-      !isRecord(detail) ||
-      detail.type !== "reasoning.text" ||
-      conflictingReasoningTextDetails(previous, detail)
-    ) {
-      result.push(detail)
-      return result
-    }
-    result[result.length - 1] = {
-      ...previous,
-      ...Object.fromEntries(Object.entries(detail).filter((entry) => entry[1] !== undefined)),
-      text: `${typeof previous.text === "string" ? previous.text : ""}${typeof detail.text === "string" ? detail.text : ""}`,
-      signature: mergeDetailValue(previous.signature, detail.signature),
-      format: mergeDetailValue(previous.format, detail.format),
-    }
-    return result
-  }, [])
-
-const mergeDetailValue = (previous: unknown, current: unknown) =>
-  previous || current || (previous !== undefined ? previous : current)
-
-const conflictingReasoningTextDetails = (previous: Record<string, unknown>, current: Record<string, unknown>) =>
-  conflictingDetailValue(previous.id, current.id) ||
-  conflictingDetailValue(previous.index, current.index) ||
-  conflictingDetailValue(previous.format, current.format) ||
-  (Boolean(previous.signature) && Boolean(current.signature) && previous.signature !== current.signature)
-
-const conflictingDetailValue = (previous: unknown, current: unknown) =>
-  previous !== undefined && previous !== null && current !== undefined && current !== null && previous !== current
 
 export const route = Route.make({
   id: ADAPTER,

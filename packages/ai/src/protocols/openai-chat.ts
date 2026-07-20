@@ -455,6 +455,41 @@ const detailText = (details: ReadonlyArray<unknown>) => {
   if (text.length > 0) return text.join("")
 }
 
+const appendReasoningDetails = (result: Array<unknown>, details: ReadonlyArray<unknown>) => {
+  for (const detail of details) {
+    const previous = result.at(-1)
+    if (
+      !isRecord(previous) ||
+      previous.type !== "reasoning.text" ||
+      !isRecord(detail) ||
+      detail.type !== "reasoning.text" ||
+      conflictingReasoningTextDetails(previous, detail)
+    ) {
+      result.push(detail)
+      continue
+    }
+    result[result.length - 1] = {
+      ...previous,
+      ...Object.fromEntries(Object.entries(detail).filter((entry) => entry[1] !== undefined)),
+      text: `${typeof previous.text === "string" ? previous.text : ""}${typeof detail.text === "string" ? detail.text : ""}`,
+      signature: mergeDetailValue(previous.signature, detail.signature),
+      format: mergeDetailValue(previous.format, detail.format),
+    }
+  }
+}
+
+const mergeDetailValue = (previous: unknown, current: unknown) =>
+  previous || current || (previous !== undefined ? previous : current)
+
+const conflictingReasoningTextDetails = (previous: Record<string, unknown>, current: Record<string, unknown>) =>
+  conflictingDetailValue(previous.id, current.id) ||
+  conflictingDetailValue(previous.index, current.index) ||
+  conflictingDetailValue(previous.format, current.format) ||
+  (Boolean(previous.signature) && Boolean(current.signature) && previous.signature !== current.signature)
+
+const conflictingDetailValue = (previous: unknown, current: unknown) =>
+  previous !== undefined && previous !== null && current !== undefined && current !== null && previous !== current
+
 const reasoningMetadata = (field: ParserState["reasoningField"], details?: ReadonlyArray<unknown>) => ({
   openai: {
     ...(field ? { reasoningField: field } : {}),
@@ -477,7 +512,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
     const reasoning = reasoningDelta(delta)
     const reasoningField = state.reasoningField ?? (!state.lifecycle.text.has("text-0") ? reasoning?.field : undefined)
     const detailDelta = Array.isArray(delta?.reasoning_details) ? delta.reasoning_details : undefined
-    if (detailDelta !== undefined) state.reasoningDetails.push(...detailDelta)
+    if (detailDelta !== undefined) appendReasoningDetails(state.reasoningDetails, detailDelta)
     const reasoningDetailsObserved = state.reasoningDetailsObserved || detailDelta !== undefined
     const deltaMetadata = reasoningMetadata(reasoningField)
     const text = detailDelta?.length ? (detailText(detailDelta) ?? reasoning?.text) : reasoning?.text

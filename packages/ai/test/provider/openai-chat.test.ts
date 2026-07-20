@@ -768,6 +768,15 @@ describe("OpenAI Chat route", () => {
         { type: "reasoning.text", text: "thinking", format: "anthropic-claude-v1", index: 0 },
         { type: "reasoning.text", signature: "signed", format: "anthropic-claude-v1", index: 0 },
       ]
+      const merged = [
+        {
+          type: "reasoning.text",
+          text: "thinking",
+          signature: "signed",
+          format: "anthropic-claude-v1",
+          index: 0,
+        },
+      ]
       const response = yield* LLMClient.generate(request).pipe(
         Effect.provide(
           fixedResponse(
@@ -784,13 +793,13 @@ describe("OpenAI Chat route", () => {
       expect(response.reasoning).toBe("thinking")
       expect(response.message.content.filter((part) => part.type === "reasoning")).toHaveLength(1)
       expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
-        openai: { reasoningField: "reasoning", reasoningDetails: details },
+        openai: { reasoningField: "reasoning", reasoningDetails: merged },
       })
       expect(response.events.filter(LLMEvent.is.reasoningStart)).toHaveLength(1)
       expect(response.events.filter(LLMEvent.is.reasoningDelta)).toHaveLength(1)
       expect(response.events.filter(LLMEvent.is.reasoningEnd)).toHaveLength(1)
       expect(response.events.filter(LLMEvent.is.reasoningEnd).at(-1)?.providerMetadata).toEqual({
-        openai: { reasoningField: "reasoning", reasoningDetails: details },
+        openai: { reasoningField: "reasoning", reasoningDetails: merged },
       })
       expect(response.events.findIndex(LLMEvent.is.reasoningEnd)).toBeLessThan(
         response.events.findIndex(LLMEvent.is.textStart),
@@ -800,7 +809,7 @@ describe("OpenAI Chat route", () => {
         LLM.request({ model, messages: [response.message] }),
       )
       expect(replay.body.messages).toEqual([
-        { role: "assistant", content: "Hello", reasoning: "thinking", reasoning_details: details },
+        { role: "assistant", content: "Hello", reasoning: "thinking", reasoning_details: merged },
       ])
     }),
   )

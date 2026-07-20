@@ -54,7 +54,7 @@ describe("OpenRouter", () => {
     }),
   )
 
-  it.effect("merges streamed reasoning text fragments before replay", () =>
+  it.effect("preserves manually supplied reasoning details", () =>
     Effect.gen(function* () {
       const details = [
         { type: "reasoning.text", text: "Think", format: "anthropic-claude-v1", index: 0 },
@@ -82,16 +82,7 @@ describe("OpenRouter", () => {
           role: "assistant",
           content: null,
           reasoning: "Thinking",
-          reasoning_details: [
-            {
-              type: "reasoning.text",
-              text: "Thinking",
-              signature: "signed",
-              format: "anthropic-claude-v1",
-              index: 0,
-            },
-            { type: "reasoning.encrypted", data: "opaque", format: "openai-responses-v1", index: 1 },
-          ],
+          reasoning_details: details,
         },
       ])
     }),
@@ -144,49 +135,6 @@ describe("OpenRouter", () => {
 
       expect(prepared.body.messages).toEqual([
         { role: "assistant", content: null, reasoning: "AB", reasoning_details: details },
-      ])
-    }),
-  )
-
-  it.effect("retains opaque fields while merging compatible fragments", () =>
-    Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<OpenRouter.OpenRouterBody>(
-        LLM.request({
-          model: OpenRouter.configure({ apiKey: "test-key" }).model("anthropic/claude-sonnet-4.6"),
-          messages: [
-            Message.assistant({
-              type: "reasoning",
-              text: "AB",
-              providerMetadata: {
-                openai: {
-                  reasoningField: "reasoning",
-                  reasoningDetails: [
-                    { type: "reasoning.text", text: "A", signature: "", format: "", first: true },
-                    { type: "reasoning.text", text: "B", second: true },
-                  ],
-                },
-              },
-            }),
-          ],
-        }),
-      )
-
-      expect(prepared.body.messages).toEqual([
-        {
-          role: "assistant",
-          content: null,
-          reasoning: "AB",
-          reasoning_details: [
-            {
-              type: "reasoning.text",
-              text: "AB",
-              signature: "",
-              format: "",
-              first: true,
-              second: true,
-            },
-          ],
-        },
       ])
     }),
   )
