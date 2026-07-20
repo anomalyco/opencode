@@ -12,7 +12,7 @@ const C='[data-component="markdown"],[data-slot="text-part-body"],[data-slot="us
 const B='p,li,h1,h2,h3,h4,h5,h6,td,th,blockquote'
 const R='[data-slot="question-text"],[data-slot="answer-text"],[data-component="tool-output"],[data-slot="user-message-text"]'
 const I='[data-component="prompt-input"],[contenteditable]'
-const da=el=>{if(!el.hasAttribute("dir"))el.setAttribute("dir","auto")}
+const da=el=>{el.setAttribute("dir","auto")}
 const co=el=>{if(el.getAttribute("data-cd")==="1")return;el.setAttribute("data-cd","1");new MutationObserver(recs=>{for(const r of recs){if(r.type!=="characterData")continue;const p=r.target.parentElement;if(!p)continue;if(p.matches(B)&&p.closest(C))da(p);else if(p.matches(R))da(p)}}).observe(el,{childList:true,subtree:true,characterData:true})}
 const mc=el=>{if(el.getAttribute("data-bc")!=="1"){el.setAttribute("data-bc","1");el.querySelectorAll(B).forEach(da);el.querySelectorAll(R).forEach(da);co(el)}}
 const mo=new MutationObserver(recs=>{for(const r of recs){for(const n of r.addedNodes){if(n.nodeType!==1)continue;if(n.matches(C))mc(n);else n.querySelectorAll(C).forEach(mc);if(n.matches(I))da(n);else n.querySelectorAll(I).forEach(da);if(n.matches(B)&&n.closest(C))da(n);else n.querySelectorAll(B).forEach(el=>{if(el.closest(C))da(el)});if(n.matches(R))da(n);else n.querySelectorAll(R).forEach(el=>{if(el.closest(C)||el.matches(R))da(el)})}}})
