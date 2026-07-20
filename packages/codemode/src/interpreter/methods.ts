@@ -12,7 +12,7 @@ import {
   PromiseNamespace,
   UriFunction,
 } from "./model.js"
-import { containsOpaqueReference, rejectCircularInsertion, typeofValue } from "./references.js"
+import { containsOpaqueReference, isRuntimeReference, rejectCircularInsertion, typeofValue } from "./references.js"
 import { isBlockedMember, type SafeObject } from "../tool-runtime.js"
 import {
   CodeModeDate,
@@ -413,6 +413,89 @@ export const invokeArrayFrom = <R>(
   })
 }
 
+export const invokeGroupBy = <R>(
+  runner: CallbackRunner<R>,
+  namespace: "Map" | "Object",
+  args: Array<unknown>,
+  node: AstNode,
+): Effect.Effect<unknown, unknown, R> => {
+  const source = args[0]
+  if (source === null || source === undefined) {
+    throw new InterpreterRuntimeError(`${namespace}.groupBy expects an iterable collection.`, node).as("TypeError")
+  }
+  const apply = applyCollectionCallback(runner, args[1], `${namespace}.groupBy`, node)
+  const items = groupByItems(source)
+  if (items === undefined) {
+    throw new InterpreterRuntimeError(`${namespace}.groupBy expects an iterable collection.`, node).as("TypeError")
+  }
+  return Effect.gen(function* () {
+    if (namespace === "Map") {
+      const result = new CodeModeMap()
+      let index = 0
+      for (const item of items) {
+        const key = yield* apply([item, index])
+        const group = result.map.get(key)
+        if (group === undefined) result.map.set(key, [item])
+        else (group as Array<unknown>).push(item)
+        index += 1
+      }
+      return result
+    }
+
+    const result: SafeObject = Object.create(null) as SafeObject
+    let index = 0
+    for (const item of items) {
+      const key = yield* coerceGroupByPropertyKey(runner, yield* apply([item, index]), node)
+      if (isBlockedMember(key)) {
+        throw new InterpreterRuntimeError(`Property '${key}' is not available in CodeMode.`, node)
+      }
+      const group = result[key]
+      if (group === undefined) result[key] = [item]
+      else (group as Array<unknown>).push(item)
+      index += 1
+    }
+    return result
+  })
+}
+
+const groupByItems = (source: unknown): Iterable<unknown> | undefined => {
+  if (Array.isArray(source) || typeof source === "string") return source
+  if (source instanceof CodeModeMap) return source.map.entries()
+  if (source instanceof CodeModeSet) return source.set.values()
+  if (source instanceof CodeModeURLSearchParams) return source.params.entries()
+}
+
+const coerceGroupByPropertyKey = <R>(
+  runner: CallbackRunner<R>,
+  value: unknown,
+  node: AstNode,
+): Effect.Effect<string, unknown, R> => {
+  if (value === null || typeof value !== "object" || Array.isArray(value) || isCodeModeValue(value)) {
+    return Effect.succeed(coerceToString(value))
+  }
+  if (value instanceof CodeModePromise) return Effect.succeed("[object Promise]")
+  if (isRuntimeReference(value)) {
+    throw new InterpreterRuntimeError("Object.groupBy callback must return a data value.", node, "InvalidDataValue")
+  }
+  const object = value as Record<string, unknown>
+  if (!Object.hasOwn(object, "toString")) return Effect.succeed(coerceToString(value))
+  return Effect.gen(function* () {
+    if (typeofValue(object.toString) === "function") {
+      const result = yield* runner.invokeCallable(object.toString, [], node)
+      if (result === null || (typeof result !== "object" && typeof result !== "function")) {
+        return coerceToString(result)
+      }
+    }
+    if (Object.hasOwn(object, "valueOf") && typeofValue(object.valueOf) === "function") {
+      const result = yield* runner.invokeCallable(object.valueOf, [], node)
+      if (result === null || (typeof result !== "object" && typeof result !== "function")) {
+        return coerceToString(result)
+      }
+    }
+    throw new InterpreterRuntimeError("Cannot convert object to primitive value.", node).as("TypeError")
+  })
+}
+
 const invokeStringReplacer = <R>(
   runner: CallbackRunner<R>,
   value: string,
@@ -491,7 +574,7 @@ export const applyCollectionCallback = <R>(
         node,
       )
     }
-    throw new InterpreterRuntimeError(`${name} expects a function callback.`, node)
+    throw new InterpreterRuntimeError(`${name} expects a function callback.`, node).as("TypeError")
   }
   return (callbackArgs) => runner.invokeCallable(callback, callbackArgs, node)
 }

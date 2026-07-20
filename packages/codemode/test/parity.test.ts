@@ -857,7 +857,6 @@ describe("coercion parity: ++ and -- use CodeMode numeric coercion", () => {
 describe("coercion parity: unknown static members read as undefined", () => {
   test("feature detection on missing statics works like native JS", async () => {
     expect(await value(`return typeof Math.sum`)).toBe("undefined")
-    expect(await value(`return Object.groupBy === undefined`)).toBe(true)
     expect(await value(`return RegExp.quote === undefined`)).toBe(true)
     expect(await value(`return Number.range === undefined`)).toBe(true)
     expect(await value(`return String.raw === undefined`)).toBe(true)
@@ -866,7 +865,6 @@ describe("coercion parity: unknown static members read as undefined", () => {
     expect(await value(`return Date.moment === undefined`)).toBe(true)
     expect(await value(`return JSON.rawJSON === undefined`)).toBe(true)
     expect(await value(`return URL.createObjectURL === undefined`)).toBe(true)
-    expect(await value(`return Map.groupBy === undefined`)).toBe(true)
     expect(await value(`return Math.sum?.([1]) ?? "fallback"`)).toBe("fallback")
   })
 
@@ -876,6 +874,8 @@ describe("coercion parity: unknown static members read as undefined", () => {
     expect(await value(`return typeof Date.now`)).toBe("function")
     expect(await value(`return typeof Math.sumPrecise`)).toBe("function")
     expect(await value(`return typeof RegExp.escape`)).toBe("function")
+    expect(await value(`return typeof Object.groupBy`)).toBe("function")
+    expect(await value(`return typeof Map.groupBy`)).toBe("function")
     expect(await value(`return Math.max(1, 2)`)).toBe(2)
     expect(await value(`return Math.sumPrecise([1, 2])`)).toBe(3)
     expect(await value(`return RegExp.escape("a.b")`)).toBe("\\x61\\.b")

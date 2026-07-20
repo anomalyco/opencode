@@ -35,7 +35,14 @@ import {
   UriFunction,
 } from "./model.js"
 import { caughtErrorValue, constructErrorValue } from "./errors.js"
-import { arrayStatics, type CallbackRunner, invokeArrayFrom, invokeGlobalMethod, invokeIntrinsic } from "./methods.js"
+import {
+  arrayStatics,
+  type CallbackRunner,
+  invokeArrayFrom,
+  invokeGlobalMethod,
+  invokeGroupBy,
+  invokeIntrinsic,
+} from "./methods.js"
 import {
   constructPromise,
   invokePromiseInstanceMethod,
@@ -45,7 +52,7 @@ import {
 } from "./promises.js"
 import { containsOpaqueReference, isRuntimeReference, rejectCircularInsertion, typeofValue } from "./references.js"
 import { ScopeStack } from "./scope.js"
-import { arrayMethods, mapMethods, setMethods, spreadItems } from "../stdlib/collections.js"
+import { arrayMethods, mapMethods, mapStatics, setMethods, spreadItems } from "../stdlib/collections.js"
 import { consoleMethods, formatConsoleMessage } from "../stdlib/console.js"
 import { dateMethods, dateStatics } from "../stdlib/date.js"
 import { jsonStatics } from "../stdlib/json.js"
@@ -100,6 +107,7 @@ const globalStaticMembers: Partial<Record<GlobalNamespaceName, Set<string>>> = {
   console: consoleMethods,
   Date: dateStatics,
   RegExp: regexpStatics,
+  Map: mapStatics,
   URL: urlStatics,
 }
 
@@ -1607,6 +1615,9 @@ export class Interpreter<R> {
         }
         if (callable.namespace === "Array" && callable.name === "from") {
           return yield* invokeArrayFrom(self.runner, args, node)
+        }
+        if ((callable.namespace === "Object" || callable.namespace === "Map") && callable.name === "groupBy") {
+          return yield* invokeGroupBy(self.runner, callable.namespace, args, node)
         }
         if (callable.namespace === "Array" && callable.name === "of") {
           return invokeGlobalMethod(callable, args, node)

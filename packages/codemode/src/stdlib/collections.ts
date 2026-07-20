@@ -39,6 +39,8 @@ export const arrayMethods = new Set([
 
 export const mapMethods = new Set(["get", "set", "has", "delete", "clear", "forEach", "keys", "values", "entries"])
 
+export const mapStatics = new Set(["groupBy"])
+
 export const setMethods = new Set(["add", "has", "delete", "clear", "forEach", "keys", "values", "entries"])
 
 export const spreadItems = (value: unknown): Array<unknown> | undefined => {

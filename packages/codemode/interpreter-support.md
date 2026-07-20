@@ -177,7 +177,7 @@ ultimate source of truth.
 - [ ] Legal own data fields named `__proto__`, `constructor`, or `prototype` are rejected at JSON/tool boundaries and
       cannot be created, read, or written in CodeMode; tool path segments with those names remain supported.
 - [x] `Object.is` for supported data values.
-- [ ] `Object.groupBy`.
+- [x] `Object.groupBy` over supported collection iterables, with string-key coercion and null-prototype results.
 
 ## Arrays
 
@@ -287,7 +287,7 @@ ultimate source of truth.
 
 ## Map and Set
 
-- [ ] Static `Map.groupBy`.
+- [x] Static `Map.groupBy` over supported collection iterables, preserving key identity.
 - [x] `new Map()` from entry arrays or another Map.
 - [x] Map `get`, `set`, `has`, `delete`, `clear`, `size`, and `forEach`.
 - [x] `new Set()` from arrays, strings, or another Set.
