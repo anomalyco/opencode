@@ -42,7 +42,7 @@ describe("readPartText", () => {
 })
 
 describe("toolMeta", () => {
-  test("formats completed tool start time and duration", () => {
+  test("returns empty meta when display options are omitted", () => {
     expect(
       toolMeta(i18n, {
         status: "completed",
@@ -50,57 +50,121 @@ describe("toolMeta", () => {
         end: Date.UTC(2026, 5, 28, 14, 3, 5),
         now: Date.UTC(2026, 5, 28, 14, 3, 8),
       }),
+    ).toBe("")
+  })
+
+  test("formats completed tool start time and duration", () => {
+    expect(
+      toolMeta(
+        i18n,
+        {
+          status: "completed",
+          start: Date.UTC(2026, 5, 28, 14, 3, 0),
+          end: Date.UTC(2026, 5, 28, 14, 3, 5),
+          now: Date.UTC(2026, 5, 28, 14, 3, 8),
+        },
+        { toolTimestamp: true, toolDuration: true },
+      ),
     ).toBe("2:03 PM · 5s")
+  })
+
+  test("formats completed tool duration without start time when only duration is enabled", () => {
+    expect(
+      toolMeta(
+        i18n,
+        {
+          status: "completed",
+          start: Date.UTC(2026, 5, 28, 14, 3, 0),
+          end: Date.UTC(2026, 5, 28, 14, 3, 5),
+          now: Date.UTC(2026, 5, 28, 14, 3, 8),
+        },
+        { toolDuration: true },
+      ),
+    ).toBe("5s")
   })
 
   test("formats running tool start time and live duration", () => {
     expect(
-      toolMeta(i18n, {
-        status: "running",
-        start: Date.UTC(2026, 5, 28, 14, 3, 0),
-        now: Date.UTC(2026, 5, 28, 14, 3, 7),
-      }),
+      toolMeta(
+        i18n,
+        {
+          status: "running",
+          start: Date.UTC(2026, 5, 28, 14, 3, 0),
+          now: Date.UTC(2026, 5, 28, 14, 3, 7),
+        },
+        { toolTimestamp: true, toolDuration: true },
+      ),
     ).toBe("2:03 PM · 7s")
   })
 
   test("shows interrupted state without duration", () => {
     expect(
-      toolMeta(i18n, {
-        status: "interrupted",
-        start: Date.UTC(2026, 5, 28, 14, 3, 0),
-        now: Date.UTC(2026, 5, 28, 14, 3, 7),
-      }),
+      toolMeta(
+        i18n,
+        {
+          status: "interrupted",
+          start: Date.UTC(2026, 5, 28, 14, 3, 0),
+          now: Date.UTC(2026, 5, 28, 14, 3, 7),
+        },
+        { toolTimestamp: true, toolStatus: true },
+      ),
     ).toBe("2:03 PM · Interrupted")
+  })
+
+  test("hides interrupted state when status display is disabled", () => {
+    expect(
+      toolMeta(
+        i18n,
+        {
+          status: "interrupted",
+          start: Date.UTC(2026, 5, 28, 14, 3, 0),
+          now: Date.UTC(2026, 5, 28, 14, 3, 7),
+        },
+        { toolTimestamp: true },
+      ),
+    ).toBe("2:03 PM")
   })
 
   test("returns empty meta for pending tool without start time", () => {
     expect(
-      toolMeta(i18n, {
-        status: "pending",
-        now: Date.UTC(2026, 5, 28, 14, 3, 7),
-      }),
+      toolMeta(
+        i18n,
+        {
+          status: "pending",
+          now: Date.UTC(2026, 5, 28, 14, 3, 7),
+        },
+        { toolTimestamp: true, toolDuration: true, toolStatus: true },
+      ),
     ).toBe("")
   })
 
   test("formats error tool start time and failed state", () => {
     expect(
-      toolMeta(i18n, {
-        status: "error",
-        start: Date.UTC(2026, 5, 28, 14, 3, 0),
-        end: Date.UTC(2026, 5, 28, 14, 3, 5),
-        now: Date.UTC(2026, 5, 28, 14, 3, 8),
-      }),
+      toolMeta(
+        i18n,
+        {
+          status: "error",
+          start: Date.UTC(2026, 5, 28, 14, 3, 0),
+          end: Date.UTC(2026, 5, 28, 14, 3, 5),
+          now: Date.UTC(2026, 5, 28, 14, 3, 8),
+        },
+        { toolTimestamp: true, toolStatus: true },
+      ),
     ).toBe("2:03 PM · Failed")
   })
 
   test("formats minute durations", () => {
     expect(
-      toolMeta(i18n, {
-        status: "completed",
-        start: Date.UTC(2026, 5, 28, 14, 3, 0),
-        end: Date.UTC(2026, 5, 28, 14, 4, 5),
-        now: Date.UTC(2026, 5, 28, 14, 4, 8),
-      }),
+      toolMeta(
+        i18n,
+        {
+          status: "completed",
+          start: Date.UTC(2026, 5, 28, 14, 3, 0),
+          end: Date.UTC(2026, 5, 28, 14, 4, 5),
+          now: Date.UTC(2026, 5, 28, 14, 4, 8),
+        },
+        { toolTimestamp: true, toolDuration: true },
+      ),
     ).toBe("2:03 PM · 1m 5s")
   })
 })

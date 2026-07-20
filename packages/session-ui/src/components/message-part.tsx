@@ -60,6 +60,7 @@ import { attached, inline, kind } from "./message-file"
 import { readPartText } from "./message-part-text"
 import { toolMeta, type ToolMetaInput } from "./tool-meta"
 import { formatMessageStamp, handleCopyResponseClick } from "./message-actions"
+import type { MessageDisplayOptions } from "./message-options"
 
 function toolMetaInput(part: ToolPart, now: number): ToolMetaInput {
   const state = part.state
@@ -88,7 +89,7 @@ function toolPartOutput(part: ToolPart) {
   return state.output
 }
 
-function createToolMeta(part: () => ToolPart, i18n: UiI18n) {
+function createToolMeta(part: () => ToolPart, i18n: UiI18n, displayOptions?: () => MessageDisplayOptions | undefined) {
   const [now, setNow] = createSignal(Date.now())
 
   createEffect(() => {
@@ -99,7 +100,7 @@ function createToolMeta(part: () => ToolPart, i18n: UiI18n) {
     onCleanup(() => clearInterval(interval))
   })
 
-  return createMemo(() => toolMeta(i18n, toolMetaInput(part(), now())))
+  return createMemo(() => toolMeta(i18n, toolMetaInput(part(), now()), displayOptions?.()?.metadata))
 }
 
 async function writeClipboard(text: string): Promise<boolean> {
@@ -204,6 +205,7 @@ export interface MessageProps {
   actions?: UserActions
   showAssistantCopyPartID?: string | null
   showReasoningSummaries?: boolean
+  displayOptions?: MessageDisplayOptions
 }
 
 export type SessionAction = (input: { sessionID: string; messageID: string }) => Promise<void> | void
@@ -225,6 +227,7 @@ export interface MessagePartProps {
   onContentRendered?: () => void
   showAssistantCopyPartID?: string | null
   turnDurationMs?: number
+  displayOptions?: MessageDisplayOptions
 }
 
 export type PartComponent = Component<MessagePartProps>
@@ -687,6 +690,7 @@ export function AssistantParts(props: {
   showReasoningSummaries?: boolean
   shellToolDefaultOpen?: boolean
   editToolDefaultOpen?: boolean
+  displayOptions?: MessageDisplayOptions
 }) {
   const data = useData()
   const emptyParts: PartType[] = []
@@ -741,7 +745,7 @@ export function AssistantParts(props: {
 
                 return (
                   <Show when={parts().length > 0}>
-                    <ContextToolGroup parts={parts()} busy={busy()} />
+                    <ContextToolGroup parts={parts()} busy={busy()} displayOptions={props.displayOptions} />
                   </Show>
                 )
               })()}
@@ -767,6 +771,7 @@ export function AssistantParts(props: {
                         message={message()!}
                         showAssistantCopyPartID={props.showAssistantCopyPartID}
                         turnDurationMs={props.turnDurationMs}
+                        displayOptions={props.displayOptions}
                         defaultOpen={partDefaultOpen(item()!, props.shellToolDefaultOpen, props.editToolDefaultOpen)}
                       />
                     </Show>
@@ -894,7 +899,12 @@ export function Message(props: MessageProps) {
     <Switch>
       <Match when={props.message.role === "user" && props.message}>
         {(userMessage) => (
-          <UserMessageDisplay message={userMessage() as UserMessage} parts={props.parts} actions={props.actions} />
+          <UserMessageDisplay
+            message={userMessage() as UserMessage}
+            parts={props.parts}
+            actions={props.actions}
+            displayOptions={props.displayOptions}
+          />
         )}
       </Match>
       <Match when={props.message.role === "assistant" && props.message}>
@@ -904,6 +914,7 @@ export function Message(props: MessageProps) {
             parts={props.parts}
             showAssistantCopyPartID={props.showAssistantCopyPartID}
             showReasoningSummaries={props.showReasoningSummaries}
+            displayOptions={props.displayOptions}
           />
         )}
       </Match>
@@ -916,6 +927,7 @@ export function AssistantMessageDisplay(props: {
   parts: PartType[]
   showAssistantCopyPartID?: string | null
   showReasoningSummaries?: boolean
+  displayOptions?: MessageDisplayOptions
 }) {
   const emptyTools: ToolPart[] = []
   const part = createMemo(() => index(props.parts))
@@ -956,7 +968,7 @@ export function AssistantMessageDisplay(props: {
 
                 return (
                   <Show when={parts().length > 0}>
-                    <ContextToolGroup parts={parts()} />
+                    <ContextToolGroup parts={parts()} displayOptions={props.displayOptions} />
                   </Show>
                 )
               })()}
@@ -975,6 +987,7 @@ export function AssistantMessageDisplay(props: {
                       part={item()!}
                       message={props.message}
                       showAssistantCopyPartID={props.showAssistantCopyPartID}
+                      displayOptions={props.displayOptions}
                     />
                   </Show>
                 )
@@ -987,7 +1000,12 @@ export function AssistantMessageDisplay(props: {
   )
 }
 
-export function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean; onSizeChange?: () => void }) {
+export function ContextToolGroup(props: {
+  parts: ToolPart[]
+  busy?: boolean
+  onSizeChange?: () => void
+  displayOptions?: MessageDisplayOptions
+}) {
   const i18n = useI18n()
   const [open, setOpen] = createSignal(false)
   const pending = createMemo(
@@ -1059,7 +1077,7 @@ export function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean; onS
           <Index each={props.parts}>
             {(partAccessor) => {
               const trigger = createMemo(() => contextToolTrigger(partAccessor(), i18n))
-              const meta = createToolMeta(partAccessor, i18n)
+              const meta = createToolMeta(partAccessor, i18n, () => props.displayOptions)
               const running = createMemo(
                 () => partAccessor().state.status === "pending" || partAccessor().state.status === "running",
               )
@@ -1104,7 +1122,12 @@ export function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean; onS
   )
 }
 
-export function UserMessageDisplay(props: { message: UserMessage; parts: PartType[]; actions?: UserActions }) {
+export function UserMessageDisplay(props: {
+  message: UserMessage
+  parts: PartType[]
+  actions?: UserActions
+  displayOptions?: MessageDisplayOptions
+}) {
   const data = useData()
   const dialog = useDialog()
   const i18n = useI18n()
@@ -1137,6 +1160,7 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
     return match?.models?.[modelID]?.name ?? modelID
   })
   const stamp = createMemo(() => {
+    if (!props.displayOptions?.metadata?.messageTimestamp) return ""
     const created = props.message.time?.created
     if (typeof created !== "number") return ""
     return formatMessageStamp(i18n.locale(), created)
@@ -1336,6 +1360,7 @@ export function Part(props: MessagePartProps) {
         onContentRendered={props.onContentRendered}
         showAssistantCopyPartID={props.showAssistantCopyPartID}
         turnDurationMs={props.turnDurationMs}
+        displayOptions={props.displayOptions}
       />
     </Show>
   )
@@ -1454,7 +1479,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   const render = createMemo(() => ToolRegistry.render(part().tool) ?? GenericTool)
   const controlledOpen = () => (props.onToolOpenChange ? (props.toolOpen ?? props.defaultOpen) : undefined)
   const handleToolOpenChange = (open: boolean) => props.onToolOpenChange?.(open)
-  const meta = createToolMeta(part, i18n)
+  const meta = createToolMeta(part, i18n, () => props.displayOptions)
 
   return (
     <Show when={!hideQuestion()}>
@@ -1573,7 +1598,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
     if (props.message.role !== "assistant") return ""
     const message = props.message as AssistantMessage
     const items = [
-      formatMessageStamp(i18n.locale(), message.time.created),
+      props.displayOptions?.metadata?.messageTimestamp ? formatMessageStamp(i18n.locale(), message.time.created) : "",
       message.agent ? message.agent[0]?.toUpperCase() + message.agent.slice(1) : "",
       model(),
       duration(),
