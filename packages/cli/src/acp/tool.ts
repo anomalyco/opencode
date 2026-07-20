@@ -215,7 +215,7 @@ function locationFrom(...values: unknown[]): ToolCallLocation[] {
   )
 }
 
-function stringValue(value: unknown) {
+export function stringValue(value: unknown) {
   return typeof value === "string" ? value : undefined
 }
 

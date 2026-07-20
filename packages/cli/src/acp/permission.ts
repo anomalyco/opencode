@@ -2,7 +2,7 @@ import type { AgentSideConnection, PermissionOption, ToolCallContent, ToolCallLo
 import type { EventSubscribeOutput, OpenCodeClient } from "@opencode-ai/client/promise"
 import { Patch } from "@opencode-ai/core/patch"
 import { isAbsolute, resolve } from "node:path"
-import { pendingToolCall, toLocations, toToolKind, type ToolInput } from "./tool"
+import { pendingToolCall, stringValue, toLocations, toToolKind, type ToolInput } from "./tool"
 
 type PermissionEvent = Extract<EventSubscribeOutput, { type: "permission.v2.asked" }>
 type Connection = Pick<AgentSideConnection, "requestPermission"> & Partial<Pick<AgentSideConnection, "writeTextFile">>
@@ -171,10 +171,6 @@ function filePath(input: ToolInput) {
 
 function resolvePath(path: string, cwd: string) {
   return isAbsolute(path) ? path : resolve(cwd, path)
-}
-
-function stringValue(value: unknown) {
-  return typeof value === "string" ? value : undefined
 }
 
 export * as ACPPermission from "./permission"
