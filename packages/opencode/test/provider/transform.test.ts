@@ -1672,6 +1672,55 @@ describe("ProviderTransform.schema - moonshot $ref siblings", () => {
   })
 })
 
+describe("ProviderTransform.message - Mistral tool call IDs", () => {
+  test.each(["codestral-latest", "pixtral-large-latest", "open-mixtral-8x22b"])(
+    "normalizes IDs for custom OpenAI-compatible %s models",
+    (id) => {
+      const result = ProviderTransform.message(
+        [
+          {
+            role: "assistant",
+            content: [
+              {
+                type: "tool-call",
+                toolCallId: "toolu_01CBhTTz95qkd9LJMdC9sf8t",
+                toolName: "read",
+                input: { filePath: "/tmp/test" },
+              },
+            ],
+          },
+          {
+            role: "tool",
+            content: [
+              {
+                type: "tool-result",
+                toolCallId: "toolu_01CBhTTz95qkd9LJMdC9sf8t",
+                toolName: "read",
+                output: { type: "text", value: "test" },
+              },
+            ],
+          },
+        ] as any,
+        {
+          id: `custom/${id}`,
+          providerID: "custom",
+          api: {
+            id,
+            url: "https://example.com/v1",
+            npm: "@ai-sdk/openai-compatible",
+          },
+        } as any,
+        {},
+      )
+
+      expect(result).toMatchObject([
+        { role: "assistant", content: [{ type: "tool-call", toolCallId: "toolu01CB" }] },
+        { role: "tool", content: [{ type: "tool-result", toolCallId: "toolu01CB" }] },
+      ])
+    },
+  )
+})
+
 describe("ProviderTransform.message - DeepSeek reasoning content", () => {
   test("DeepSeek with tool calls includes reasoning_content in providerOptions", () => {
     const msgs = [
