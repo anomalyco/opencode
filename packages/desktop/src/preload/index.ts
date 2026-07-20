@@ -2,6 +2,42 @@ import { contextBridge, ipcRenderer, webUtils } from "electron"
 import type { ElectronAPI, WslServersEvent } from "./types"
 import type { UpdaterState } from "@opencode-ai/app/updater"
 
+// BiDi text direction support + message metadata footer
+{
+const css = `[data-component="markdown"]>*{unicode-bidi:plaintext !important}[data-slot="text-part-body"]>*{unicode-bidi:plaintext !important}[data-slot="user-message-text"]{unicode-bidi:plaintext !important}[data-component="reasoning-part"]>*{unicode-bidi:plaintext !important}[data-component="tool-output"]{unicode-bidi:plaintext !important}[data-slot="question-text"]{unicode-bidi:plaintext !important}[data-slot="answer-text"]{unicode-bidi:plaintext !important}[data-component="markdown"] code,[data-component="markdown"] pre{direction:ltr;unicode-bidi:isolate !important}[data-component="markdown"] pre code{unicode-bidi:isolate !important}[data-component="prompt-input"]{unicode-bidi:plaintext !important}`
+const s = document.createElement("style");s.textContent=css;s.id="oc-bidi-fix"
+const inj=()=>{if(document.head){document.head.appendChild(s);return true}return false}
+if(!inj())document.addEventListener("DOMContentLoaded",inj,{once:true})
+const ir=c=>{const p=c.codePointAt(0);return(p>=0x0590&&p<=0x05FF)||(p>=0x0600&&p<=0x06FF)||(p>=0x0750&&p<=0x077F)||(p>=0x08A0&&p<=0x08FF)||(p>=0xFB1D&&p<=0xFDFF)||(p>=0xFE70&&p<=0xFEFF)}
+const dd=el=>{let r=0,l=0;for(const c of el.textContent){if(ir(c))r++;else if(/[A-Za-z\u00C0-\u024F]/.test(c))l++}return(r>0&&r>=l)?'rtl':(l>0&&l>r)?'ltr':null}
+const C='[data-component="markdown"],[data-slot="text-part-body"],[data-slot="user-message-text"],[data-component="reasoning-part"],[data-component="tool-output"],[data-slot="question-text"],[data-slot="answer-text"]'
+const B='p,li,h1,h2,h3,h4,h5,h6,td,th,blockquote'
+const R='[data-slot="question-text"],[data-slot="answer-text"],[data-component="tool-output"],[data-slot="user-message-text"]'
+const I='[data-component="prompt-input"],[contenteditable]'
+const da=el=>{const d=dd(el);if(d)el.setAttribute("dir",d)}
+const dai=el=>{if(!el.hasAttribute("dir"))el.setAttribute("dir","auto")}
+const co=el=>{if(el.getAttribute("data-cd")==="1")return;el.setAttribute("data-cd","1");new MutationObserver(recs=>{for(const r of recs){if(r.type!=="characterData")continue;const p=r.target.parentElement;if(!p)continue;if(p.matches(B)&&p.closest(C))da(p);else if(p.matches(R))da(p)}}).observe(el,{childList:true,subtree:true,characterData:true})}
+const mc=el=>{if(el.getAttribute("data-bc")!=="1"){el.setAttribute("data-bc","1");el.querySelectorAll(B).forEach(da);el.querySelectorAll(R).forEach(da);co(el)}}
+const mo=new MutationObserver(recs=>{for(const r of recs){for(const n of r.addedNodes){if(n.nodeType!==1)continue;if(n.matches(C))mc(n);else n.querySelectorAll(C).forEach(mc);if(n.matches(I))dai(n);else n.querySelectorAll(I).forEach(dai);if(n.matches(B)&&n.closest(C))da(n);else n.querySelectorAll(B).forEach(el=>{if(el.closest(C))da(el)});if(n.matches(R))da(n);else n.querySelectorAll(R).forEach(el=>{if(el.closest(C)||el.matches(R))da(el)})}}})
+if(document.documentElement)mo.observe(document.documentElement,{childList:true,subtree:true})
+else document.addEventListener("DOMContentLoaded",()=>mo.observe(document.documentElement,{childList:true,subtree:true}),{once:true})
+document.querySelectorAll(C).forEach(mc)
+document.querySelectorAll(I).forEach(dai)
+
+const mc2=".oc-mf{font-size:11px;color:var(--text-weak);margin-top:4px;text-align:right;cursor:default;line-height:1.4}.oc-mf-ts,.oc-mf-tok{white-space:nowrap}"
+const s2=document.createElement("style");s2.textContent=mc2;s2.id="oc-meta-fix"
+const inj2=()=>{if(document.head){document.head.appendChild(s2);return true}return false}
+if(!inj2())document.addEventListener("DOMContentLoaded",inj2,{once:true})
+const fm=d=>{const n=new Date();const sd=d.toDateString()===n.toDateString();const yd=new Date(n);yd.setDate(yd.getDate()-1);const iy=d.toDateString()===yd.toDateString();const ts=d.toLocaleTimeString(undefined,{hour:"numeric",minute:"2-digit"});if(sd)return"Today, "+ts;if(iy)return"Yesterday, "+ts;if(d.getFullYear()===n.getFullYear())return d.toLocaleDateString(undefined,{month:"short",day:"numeric"})+", "+ts;return d.toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"})+", "+ts}
+const mf=el=>{if(el.getAttribute("data-mf")==="1")return;const ia=el.matches('[data-component="text-part"]');if(!el.matches('[data-component="user-message"]')&&!ia)return;const tc=el.getAttribute("data-time-created");const tcom=el.getAttribute("data-time-completed");if(ia&&tcom===null)return;el.setAttribute("data-mf","1");const f=document.createElement("div");f.className="oc-mf";const p=[];if(tc){const d=new Date(parseInt(tc,10));const sp=document.createElement("span");sp.className="oc-mf-ts";sp.textContent=fm(d);sp.title=d.toLocaleString();p.push(sp)}if(ia){const ti=el.getAttribute("data-tokens-input");const to=el.getAttribute("data-tokens-output");const tr=el.getAttribute("data-tokens-reasoning");if(to){p.push(document.createTextNode(" \u00B7 "));const sp=document.createElement("span");sp.className="oc-mf-tok";sp.textContent="\u2191"+(ti||"0")+" \u2193"+to;const tip=[];if(ti)tip.push("Input: "+(+ti).toLocaleString()+" tok");if(to)tip.push("Output: "+(+to).toLocaleString()+" tok");if(tr)tip.push("Thinking: "+(+tr).toLocaleString()+" tok");if(tc&&tcom){const ms=parseInt(tcom,10)-parseInt(tc,10);if(ms>0){const tps=((+to)/(ms/1e3)).toFixed(1);tip.push("Speed: ~"+tps+" tok/s");tip.push("Total: "+(ms/1e3).toFixed(1)+"s")}}sp.title=tip.join(" \u00B7 ");p.push(sp)}}if(p.length===0)return;p.forEach(x=>f.appendChild(x));const cw=el.querySelector('[data-slot="user-message-copy-wrapper"],[data-slot="text-part-copy-wrapper"]');if(cw&&cw.parentNode)cw.parentNode.insertBefore(f,cw.nextSibling);else el.appendChild(f)}
+const m1=new MutationObserver(recs=>{for(const r of recs){for(const n of r.addedNodes){if(n.nodeType!==1)continue;if(n.matches('[data-component="user-message"],[data-component="text-part"]'))mf(n);else n.querySelectorAll('[data-component="user-message"],[data-component="text-part"]').forEach(mf)}}})
+const m2=new MutationObserver(recs=>{for(const r of recs){if(r.type!=="attributes")continue;mf(r.target)}})
+if(document.documentElement){m1.observe(document.documentElement,{childList:true,subtree:true});m2.observe(document.documentElement,{subtree:true,attributes:true,attributeFilter:["data-time-completed"]})}else document.addEventListener("DOMContentLoaded",()=>{m1.observe(document.documentElement,{childList:true,subtree:true});m2.observe(document.documentElement,{subtree:true,attributes:true,attributeFilter:["data-time-completed"]})},{once:true})
+document.querySelectorAll('[data-component="user-message"],[data-component="text-part"]').forEach(mf)
+}
+
+
+
 const updaterCallbacks = new Set<(state: UpdaterState) => void>()
 let updaterState: UpdaterState | undefined
 let updaterSubscription: Promise<void> | undefined
