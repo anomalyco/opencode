@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { sortModelOptions } from "../../../../src/component/dialog-model"
+import { isModelCatalogLoading, sortModelOptions } from "../../../../src/component/dialog-model"
 
 describe("sortModelOptions", () => {
   test("orders provider-scoped model choices by newest release first", () => {
@@ -28,5 +28,19 @@ describe("sortModelOptions", () => {
     )
 
     expect(sorted.map((model) => model.title)).toEqual(["Free new", "Free old", "GLM 5.2", "GLM 5.1", "GLM 5"])
+  })
+})
+
+describe("isModelCatalogLoading", () => {
+  test("loading is an unsettled model catalog", () => {
+    expect(isModelCatalogLoading("loading")).toBe(true)
+  })
+
+  test("partial has a settled model catalog", () => {
+    expect(isModelCatalogLoading("partial")).toBe(false)
+  })
+
+  test("complete has a settled model catalog", () => {
+    expect(isModelCatalogLoading("complete")).toBe(false)
   })
 })
