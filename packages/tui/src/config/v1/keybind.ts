@@ -96,7 +96,7 @@ export const Definitions = {
   session_interrupt: keybind("escape", "Interrupt current session"),
   session_background: keybind("ctrl+b", "Background blocking session tools"),
   session_compact: keybind("<leader>c", "Compact the session"),
-  session_queued_prompts: keybind("<leader>q", "Manage queued prompts"),
+  session_queued_prompts: keybind("<leader>q", "View pending work"),
   session_child_first: keybind("down,<leader>down", "Toggle subagent picker"),
   session_child_cycle: keybind("right", "Go to next child session"),
   session_child_cycle_reverse: keybind("left", "Go to previous child session"),

@@ -6,6 +6,7 @@ import type {
   PermissionV2Request,
   SessionMessageAssistantTool,
   SessionMessageInfo,
+  SessionPendingInfo,
 } from "@opencode-ai/client/promise"
 import { Event } from "@opencode-ai/schema/event"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
@@ -20,6 +21,7 @@ import type {
   LocalReplayRow,
   MiniPermissionRequest,
   MiniFormRequest,
+  FooterQueuedPrompt,
   RunFilePart,
   RunInput,
   RunPrompt,
@@ -64,7 +66,9 @@ export type SessionResizeReplayInput = {
 }
 
 export type SessionTransport = {
-  runPromptTurn(input: SessionTurnInput): Promise<void>
+  runPromptTurn(input: SessionTurnInput, admitted?: () => void): Promise<void>
+  queuePromptTurn(input: SessionTurnInput): Promise<void>
+  waitForIdle(): Promise<void>
   interruptActiveTurn(): Promise<void>
   selectSubagent(sessionID: string | undefined): void
   replayOnResize(input: SessionResizeReplayInput): Promise<boolean>
@@ -74,11 +78,12 @@ export type SessionTransport = {
 
 type Wait = {
   messageID: string
+  failureMessageID: string
   promoted: boolean
+  promotionObserved: boolean
   interrupted: boolean
   failureRendered: boolean
-  resolve: () => void
-  reject: (error: unknown) => void
+  terminalError?: Error
 }
 
 // One active session.shell call. The HTTP response is the completion signal;
@@ -134,6 +139,8 @@ type State = {
   rootActive: boolean
   buffered?: ReplayBuffer
   errors: Set<string>
+  pending: Map<string, FooterQueuedPrompt>
+  admitted: Set<string>
 }
 
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" })
@@ -165,6 +172,16 @@ function globalForm(form: FormInfo, location: LocationRef): MiniFormRequest {
 
 function errorMessage(error: { message?: string; _tag?: string }) {
   return error.message || error._tag || "Session execution failed"
+}
+
+function pendingPrompt(item: SessionPendingInfo): FooterQueuedPrompt | undefined {
+  if (item.type !== "user") return undefined
+  return {
+    messageID: item.id,
+    prompt: { messageID: item.id, text: item.data.text, parts: [] },
+    delivery: item.delivery,
+    admittedSeq: item.admittedSeq,
+  }
 }
 
 function wait(delay: number, signal: AbortSignal) {
@@ -369,6 +386,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
   let sdk = input.sdk
   let generation = 0
   let activeAttempt: Attempt | undefined
+  let settlementClient: OpenCodeClient | undefined
   input.signal?.addEventListener("abort", () => controller.abort(), { once: true })
   const state: State = {
     permissions: [],
@@ -389,6 +407,8 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     initial: true,
     rootActive: false,
     errors: new Set(),
+    pending: new Map(),
+    admitted: new Set(),
   }
   let readyResolve!: () => void
   let readyReject!: (error: unknown) => void
@@ -441,6 +461,30 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       { footer: input.footer, trace: input.trace },
       { commits, updates: patch ? [{ type: "stream.patch", patch }] : undefined },
     )
+  }
+
+  const syncPending = () => {
+    const prompts = [...state.pending.values()].toSorted((left, right) => left.admittedSeq - right.admittedSeq)
+    input.trace?.write("ui.patch", { pending: prompts.length })
+    input.footer.event({ type: "queued.prompts", prompts })
+  }
+
+  const mergePending = (item: SessionPendingInfo) => {
+    const prompt = pendingPrompt(item)
+    if (!prompt || state.messageIDs.has(prompt.messageID)) return
+    state.admitted.add(prompt.messageID)
+    state.pending.set(prompt.messageID, prompt)
+    syncPending()
+  }
+
+  const promoteWait = (wait: Wait, observed: boolean, messageID = wait.messageID) => {
+    const transition = messageID !== wait.failureMessageID || (observed ? !wait.promotionObserved : !wait.promoted)
+    wait.promoted = true
+    if (observed) wait.promotionObserved = true
+    if (!transition) return
+    wait.failureMessageID = messageID
+    wait.failureRendered = false
+    wait.terminalError = undefined
   }
 
   const syncBlockers = () => {
@@ -528,15 +572,19 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
   const renderMessage = (message: SessionMessageInfo, render: boolean, reuseVisibleWait: boolean) => {
     if (message.type === "user") {
       const waiting = state.wait?.messageID === message.id
-      if (waiting && state.wait) state.wait.promoted = true
-      if (!render || state.messageIDs.has(message.id)) return
+      const admitted = state.admitted.delete(message.id)
+      if (state.wait && (admitted || (waiting && state.wait.failureMessageID === message.id)))
+        promoteWait(state.wait, false, message.id)
+      if (state.pending.delete(message.id)) syncPending()
+      if (state.messageIDs.has(message.id)) return
       state.messageIDs.add(message.id)
+      if (!render) return
       if (reuseVisibleWait && waiting) return
       write([{ kind: "user", source: "system", text: message.text, phase: "start", messageID: message.id }])
       return
     }
     if (message.type === "skill") {
-      if (state.wait?.messageID === message.id) state.wait.promoted = true
+      if (state.wait?.messageID === message.id) promoteWait(state.wait, false)
       if (!render || state.skillMessages.has(message.id)) {
         state.skillMessages.add(message.id)
         return
@@ -616,8 +664,10 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       }
       renderTool(message.id, item, render)
     }
-    if (render && message.error && !state.errors.has(message.id)) {
+    if (message.error && !state.errors.has(message.id)) {
       state.errors.add(message.id)
+      if (!render) return
+      if (state.wait) state.wait.failureRendered = true
       write([
         {
           kind: "error",
@@ -628,6 +678,22 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         },
       ])
     }
+  }
+
+  const projectedMessages = async (client: OpenCodeClient, signal: AbortSignal) =>
+    (
+      await client.message.list(
+        { sessionID: input.sessionID, limit: input.replayLimit ?? 200, order: "desc" },
+        { signal },
+      )
+    ).data.toReversed()
+
+  const settleSession = async (client: OpenCodeClient) => {
+    await client.session.wait({ sessionID: input.sessionID }, { signal: controller.signal })
+    for (const message of await projectedMessages(client, controller.signal)) renderMessage(message, true, true)
+    state.rootActive = false
+    write([], { phase: "idle", status: blockerStatus(state.view) })
+    await input.footer.idle()
   }
 
   const resolvePermissionSources = async (
@@ -672,8 +738,9 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
   ) => {
     const client = attempt.client
     const options = { signal: attempt.signal }
-    const [messages, permissions, forms, globals, active] = await Promise.all([
-      client.message.list({ sessionID: input.sessionID, limit: input.replayLimit ?? 200, order: "desc" }, options),
+    const [projected, pending, permissions, forms, globals, active] = await Promise.all([
+      projectedMessages(client, attempt.signal),
+      client.session.pending.list({ sessionID: input.sessionID }, options),
       client.permission.list({ sessionID: input.sessionID }, options),
       client.form.list({ sessionID: input.sessionID }, options),
       input.location
@@ -687,7 +754,11 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       client.session.active(options),
     ])
     if (!current(attempt)) return
-    const projected = structuredClone(messages.data).toReversed() as SessionMessageInfo[]
+    state.pending = new Map(pending.flatMap((item) => {
+      const prompt = pendingPrompt(item)
+      return prompt ? [[prompt.messageID, prompt] as const] : []
+    }))
+    syncPending()
     state.permissions = permissions
     pruneToolSources()
     for (const message of projected) renderMessage(message, next.render, next.reuseVisibleWait)
@@ -714,11 +785,6 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     })
     if (!state.rootActive) await input.footer.idle()
     if (!current(attempt)) return
-    if (!state.rootActive && state.wait && (state.wait.promoted || state.wait.interrupted)) {
-      const current = state.wait
-      state.wait = undefined
-      current.resolve()
-    }
   }
 
   const apply = (attempt: Attempt, event: RunV2Event) => {
@@ -756,9 +822,37 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     }
     input.trace?.write("recv.event", event)
     subagents.main(client, event, attempt.signal)
+    if (event.type === "session.input.admitted") {
+      if (event.data.input.type !== "user") return
+      mergePending({
+        admittedSeq: event.durable.seq,
+        id: event.data.inputID,
+        sessionID: event.data.sessionID,
+        timeCreated: event.created,
+        ...event.data.input,
+      })
+      return
+    }
     if (event.type === "session.input.promoted") {
-      if (state.wait?.messageID === event.data.inputID) state.wait.promoted = true
-      state.messageIDs.add(event.data.inputID)
+      const waiting = state.wait?.messageID === event.data.inputID
+      if (state.wait) promoteWait(state.wait, true, event.data.inputID)
+      state.admitted.delete(event.data.inputID)
+      const pending = state.pending.get(event.data.inputID)
+      state.pending.delete(event.data.inputID)
+      syncPending()
+      const visible = state.messageIDs.has(event.data.inputID)
+      if (waiting || pending) state.messageIDs.add(event.data.inputID)
+      if (!waiting && pending && !visible) {
+        write([
+          {
+            kind: "user",
+            source: "system",
+            text: pending.prompt.text,
+            phase: "start",
+            messageID: event.data.inputID,
+          },
+        ])
+      }
       write([], { phase: "running", status: "waiting for assistant" })
       return
     }
@@ -768,7 +862,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     }
     if (event.type === "session.skill.activated") {
       const messageID = messageIDFromEvent(event.id)
-      if (state.wait?.messageID === messageID) state.wait.promoted = true
+      if (state.wait?.messageID === messageID) promoteWait(state.wait, true)
       if (state.skillMessages.has(messageID)) return
       state.skillMessages.add(messageID)
       write([skillCommit(messageID, event.data.name)])
@@ -1047,25 +1141,17 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       state.rootActive = false
       write([], { phase: "idle", status: "" })
       const current = state.wait
-      if (!current || (!current.promoted && !current.interrupted)) return
-      state.wait = undefined
+      if (!current) return
       if (current.interrupted && event.type === "session.execution.interrupted" && event.data.reason === "user") {
-        current.resolve()
         return
       }
       if (event.type === "session.execution.failed") {
-        if (current.failureRendered) {
-          current.resolve()
-          return
-        }
-        current.reject(new Error(errorMessage(event.data.error)))
+        if (!current.failureRendered) current.terminalError = new Error(errorMessage(event.data.error))
         return
       }
       if (event.type === "session.execution.interrupted") {
-        current.reject(new Error(`Session interrupted: ${event.data.reason}`))
-        return
+        current.terminalError = new Error(`Session interrupted: ${event.data.reason}`)
       }
-      current.resolve()
     }
   }
 
@@ -1248,27 +1334,22 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     }
   }
 
-  // Shared settlement scaffolding for prompt-shaped turns: registers the wait,
-  // wires interruption, sends, then blocks until the live settled event (or a
-  // hydration pass over an idle session) resolves it.
+  // Prompt-shaped turns complete through the process-local idle fence. Live
+  // lifecycle events remain presentation and best-effort outcome metadata.
   const runTurnWait = async (
     next: SessionTurnInput,
     messageID: string,
-    turn: { promoted?: boolean; send: () => Promise<unknown> },
+    client: OpenCodeClient,
+    send: () => Promise<SessionPendingInfo | void>,
+    onAdmitted?: () => void,
   ) => {
-    let resolve!: () => void
-    let reject!: (error: unknown) => void
-    const done = new Promise<void>((ok, fail) => {
-      resolve = ok
-      reject = fail
-    })
     const active: Wait = {
       messageID,
-      promoted: turn.promoted === true,
+      failureMessageID: messageID,
+      promoted: false,
+      promotionObserved: false,
       interrupted: false,
       failureRendered: false,
-      resolve,
-      reject,
     }
     state.wait = active
     const interrupt = () => {
@@ -1277,14 +1358,26 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     }
     next.signal?.addEventListener("abort", interrupt, { once: true })
     try {
-      await turn.send()
-      await done
+      const admitted = await send()
+      if (admitted) mergePending(admitted)
+      onAdmitted?.()
+      await settleSession(client)
+      if (active.terminalError && !active.failureRendered)
+        write([
+          {
+            kind: "error",
+            source: "system",
+            text: active.terminalError.message,
+            phase: "start",
+            messageID: active.failureMessageID,
+          },
+        ])
     } catch (error) {
-      if (state.wait === active) state.wait = undefined
       if (next.signal?.aborted) return
       throw error
     } finally {
       next.signal?.removeEventListener("abort", interrupt)
+      if (state.wait === active) state.wait = undefined
     }
   }
 
@@ -1362,6 +1455,46 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
   let queuedResizeReplay: SessionResizeReplayInput | undefined
   let closing: Promise<void> | undefined
 
+  const admitPrompt = async (next: SessionTurnInput, client: OpenCodeClient, delivery: "steer" | "queue") => {
+    const messageID = next.prompt.messageID
+    if (!messageID) throw new Error("Prompt message ID is required")
+    const command = next.prompt.command
+    const attachments = await prepareAttachments(next, command ? "command" : "prompt", input.readTextFile)
+    const agents = promptAgents(next)
+    if (!command) {
+      input.trace?.write("send.prompt", { sessionID: input.sessionID, messageID, delivery })
+      return client.session.prompt(
+        {
+          sessionID: input.sessionID,
+          id: messageID,
+          text: [next.prompt.text, ...attachments.text].join("\n\n"),
+          files: attachments.files.length ? attachments.files : undefined,
+          agents: agents.length ? agents : undefined,
+          delivery,
+        },
+        { signal: next.signal },
+      )
+    }
+
+    const selected = await resolveSelectedModel(input, client, next)
+    if (next.variant && !selected) throw new Error("Cannot select a variant before selecting a model")
+    input.trace?.write("send.command", { sessionID: input.sessionID, messageID, command: command.name, delivery })
+    return client.session.command(
+      {
+        sessionID: input.sessionID,
+        id: messageID,
+        command: command.name,
+        arguments: command.arguments,
+        agent: next.agent,
+        model: selected,
+        files: attachments.files.length ? attachments.files : undefined,
+        agents: agents.length ? agents : undefined,
+        delivery,
+      },
+      { signal: next.signal },
+    )
+  }
+
   const replayOnResize = (next: SessionResizeReplayInput) => {
     queuedResizeReplay = next
     if (resizeReplay) return resizeReplay
@@ -1388,7 +1521,20 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
   }
 
   return {
-    async runPromptTurn(next) {
+    async queuePromptTurn(next) {
+      if (next.prompt.mode === "shell" || next.prompt.command?.source === "skill")
+        throw new Error("This prompt cannot be queued")
+      if (!state.connected) throw new Error("Event stream is reconnecting")
+      const client = sdk
+      mergePending(await admitPrompt(next, client, "queue"))
+      settlementClient = client
+    },
+    async waitForIdle() {
+      const client = settlementClient ?? sdk
+      await settleSession(client)
+      if (settlementClient === client) settlementClient = undefined
+    },
+    async runPromptTurn(next, admitted) {
       if (next.prompt.mode === "shell") {
         await runShellTurn(next)
         return
@@ -1402,40 +1548,21 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       const command = next.prompt.command
       if (command?.source === "skill") {
         input.trace?.write("send.skill", { sessionID: input.sessionID, messageID, skill: command.name })
-        await runTurnWait(next, messageID, {
-          send: () =>
+        await runTurnWait(
+          next,
+          messageID,
+          client,
+          () =>
             client.session.skill(
               { sessionID: input.sessionID, id: messageID, skill: command.name },
               { signal: next.signal },
             ),
-        })
+          admitted,
+        )
         return
       }
       if (command) {
-        const selected = await resolveSelectedModel(input, client, next)
-        if (next.variant && !selected) throw new Error("Cannot select a variant before selecting a model")
-        // Agent and model ride the command payload; the server switches only
-        // when the command itself does not pin them.
-        const attachments = await prepareAttachments(next, "command")
-        const agents = promptAgents(next)
-        input.trace?.write("send.command", { sessionID: input.sessionID, messageID, command: command.name })
-        await runTurnWait(next, messageID, {
-          send: () =>
-            client.session.command(
-              {
-                sessionID: input.sessionID,
-                id: messageID,
-                command: command.name,
-                arguments: command.arguments,
-                agent: next.agent,
-                model: selected,
-                files: attachments.files.length ? attachments.files : undefined,
-                agents: agents.length ? agents : undefined,
-                delivery: "steer",
-              },
-              { signal: next.signal },
-            ),
-        })
+        await runTurnWait(next, messageID, client, () => admitPrompt(next, client, "steer"), admitted)
         return
       }
 
@@ -1447,23 +1574,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       if (selected)
         await client.session.switchModel({ sessionID: input.sessionID, model: selected }, { signal: next.signal })
 
-      const attachments = await prepareAttachments(next, "prompt", input.readTextFile)
-      const agents = promptAgents(next)
-      input.trace?.write("send.prompt", { sessionID: input.sessionID, messageID })
-      await runTurnWait(next, messageID, {
-        send: () =>
-          client.session.prompt(
-            {
-              sessionID: input.sessionID,
-              id: messageID,
-              text: [next.prompt.text, ...attachments.text].join("\n\n"),
-              files: attachments.files.length ? attachments.files : undefined,
-              agents: agents.length ? agents : undefined,
-              delivery: "steer",
-            },
-            { signal: next.signal },
-          ),
-      })
+      await runTurnWait(next, messageID, client, () => admitPrompt(next, client, "steer"), admitted)
     },
     async interruptActiveTurn() {
       // A running shell holds no drain, so session.interrupt cannot reach it;

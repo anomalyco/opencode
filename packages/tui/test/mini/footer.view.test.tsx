@@ -92,7 +92,6 @@ function footerState(input: Partial<FooterState> = {}) {
   return createSignal<FooterState>({
     phase: "idle",
     status: "",
-    queue: 0,
     model: "gpt-5",
     usage: "",
     first: false,
@@ -158,7 +157,6 @@ async function renderFooter(
           onRows={() => {}}
           onLayout={() => {}}
           onStatus={() => {}}
-          onQueuedRemove={async () => true}
         />
       </Keymap.Provider>
     )
@@ -680,10 +678,15 @@ test("direct subagent panel closes when moving up from the first item", async ()
   }
 })
 
-test("direct queued prompt panel renders pending prompt actions", async () => {
-  const [prompts] = createSignal([{ messageID: "m-1", prompt: { text: "fix the auth test", parts: [] } }])
-  const edited: string[] = []
-  const deleted: string[] = []
+test("direct pending panel shows durable delivery without edit actions", async () => {
+  const [prompts] = createSignal([
+    {
+      messageID: "m-1",
+      prompt: { text: "fix the auth test", parts: [] },
+      delivery: "queue" as const,
+      admittedSeq: 1,
+    },
+  ])
 
   const app = await testRender(
     () => (
@@ -692,12 +695,6 @@ test("direct queued prompt panel renders pending prompt actions", async () => {
           theme={() => RUN_THEME_FALLBACK.footer}
           prompts={prompts}
           onClose={() => {}}
-          onEdit={(prompt) => {
-            edited.push(prompt.messageID)
-          }}
-          onDelete={(prompt) => {
-            deleted.push(prompt.messageID)
-          }}
         />
       </box>
     ),
@@ -709,16 +706,14 @@ test("direct queued prompt panel renders pending prompt actions", async () => {
     const frame = app.captureCharFrame()
     const list = panelMenu(app.renderer.root)
 
-    expect(frame).toContain("Queued prompts")
+    expect(frame).toContain("Pending work")
     expect(frame).toContain("fix the auth test")
-    expect(frame).toContain("queued")
+    expect(frame).toContain("queue")
     expect(frame).not.toContain("┌")
     expect(frame).not.toContain("┃")
     expectPaletteList(list, 0)
-    app.mockInput.pressKey("e", { ctrl: true })
-    app.mockInput.pressKey("DELETE")
-    expect(edited).toEqual(["m-1"])
-    expect(deleted).toEqual(["m-1"])
+    expect(frame).not.toContain("edit")
+    expect(frame).not.toContain("remove")
   } finally {
     app.renderer.destroy()
   }
@@ -999,11 +994,10 @@ test.skip("direct footer clears the synthetic skills draft when the panel closes
   }
 })
 
-test("direct footer shows editable prompts and additional queued work while running", async () => {
+test("direct footer shows authoritative pending work while running", async () => {
   const [state] = createSignal<FooterState>({
     phase: "running",
     status: "",
-    queue: 3,
     model: "gpt-5",
     usage: "",
     first: false,
@@ -1036,7 +1030,14 @@ test("direct footer shows editable prompts and additional queued work while runn
           state={state}
           view={view}
           subagent={subagents}
-          queuedPrompts={() => [{ messageID: "m-queued", prompt: { text: "follow up", parts: [] } }]}
+          queuedPrompts={() => [
+            {
+              messageID: "m-queued",
+              prompt: { text: "follow up", parts: [] },
+              delivery: "queue",
+              admittedSeq: 1,
+            },
+          ]}
           theme={() => RUN_THEME_FALLBACK}
           tuiConfig={tuiConfig}
           onSubmit={() => true}
@@ -1053,7 +1054,6 @@ test("direct footer shows editable prompts and additional queued work while runn
           onRows={() => {}}
           onLayout={() => {}}
           onStatus={() => {}}
-          onQueuedRemove={async () => true}
         />
       </Keymap.Provider>
     )
@@ -1088,9 +1088,9 @@ test("direct footer shows editable prompts and additional queued work while runn
 
     expect(spinner).toBeDefined()
     expect(frame).toContain("a-model-name-long-enough-to-force-responsive-truncation")
-    expect(frame).toContain("3 queued")
+    expect(frame).toContain("1 pending")
     expect(frame).toContain("ctrl+b background")
-    expect(frame).toContain("ctrl+x q 3 queued")
+    expect(frame).toContain("ctrl+x q 1 pending")
     expect(frame).toContain("↓ subagents")
     expect(frame).toContain("ctrl+p cmd")
     expect(frame).toContain("a-model-name-long-enough-to-force-responsive-truncation")

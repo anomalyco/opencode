@@ -465,8 +465,8 @@ export function RunCommandMenuBody(props: {
             {
               action: "queued" as const,
               category: "Agent",
-              display: "Manage queued prompts",
-              footer: `${props.queued().length} queued`,
+              display: "View pending work",
+              footer: `${props.queued().length} pending`,
               keywords: props
                 .queued()
                 .map((item) => item.prompt.text)
@@ -673,15 +673,13 @@ export function RunQueuedPromptSelectBody(props: {
   theme: Accessor<RunFooterTheme>
   prompts: Accessor<FooterQueuedPrompt[]>
   onClose: () => void
-  onEdit: (prompt: FooterQueuedPrompt) => void | Promise<void>
-  onDelete: (prompt: FooterQueuedPrompt) => void | Promise<void>
   onRows?: (rows: number) => void
 }) {
   const entries = createMemo<QueuedEntry[]>(() =>
     props.prompts().map((prompt) => ({
       category: "",
       display: prompt.prompt.text.replaceAll("\n", " "),
-      footer: "queued · ctrl+e edit · ctrl+d remove",
+      footer: prompt.delivery,
       keywords: prompt.prompt.text,
       prompt,
     })),
@@ -690,29 +688,13 @@ export function RunQueuedPromptSelectBody(props: {
     entries,
     limit: SUBAGENT_LIST_ROWS,
     onClose: props.onClose,
-    onSelect: (item) => props.onEdit(item.prompt),
+    onSelect: props.onClose,
     onRows: props.onRows,
-    onKey: (event, item) => {
-      const ctrl = event.ctrl && !event.meta && !event.shift && !event.super
-      if (item && (event.name === "delete" || (ctrl && event.name === "d"))) {
-        event.preventDefault()
-        props.onDelete(item.prompt)
-        return true
-      }
-
-      if (item && ctrl && event.name === "e") {
-        event.preventDefault()
-        props.onEdit(item.prompt)
-        return true
-      }
-
-      return false
-    },
   })
 
   return (
     <PanelShell
-      title="Queued prompts"
+      title="Pending work"
       query={controller.query()}
       count={controller.items().length}
       total={entries().length}
@@ -730,7 +712,7 @@ export function RunQueuedPromptSelectBody(props: {
         offset={controller.menu.offset}
         rows={controller.menu.rows}
         limit={SUBAGENT_LIST_ROWS}
-        empty="No queued prompts"
+        empty="No pending work"
         border={false}
         paddingLeft={PANEL_PAD}
         paddingRight={PANEL_PAD}

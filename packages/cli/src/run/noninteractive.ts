@@ -5,6 +5,7 @@ import type {
   LocationRef,
   OpenCodeClient,
   SessionMessageAssistantTool,
+  SessionMessageInfo,
 } from "@opencode-ai/client/promise"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { EOL } from "node:os"
@@ -75,6 +76,9 @@ export async function runNonInteractivePrompt(input: Input) {
   const messageID = SessionMessage.ID.create()
   const starts = new Map<string, StartedPart>()
   const tools = new Map<string, ToolState>()
+  const renderedText = new Map<string, string>()
+  const renderedReasoning = new Map<string, string>()
+  const renderedTools = new Set<string>()
   let submitted = false
   let promoted = false
   let emittedError = false
@@ -82,6 +86,8 @@ export async function runNonInteractivePrompt(input: Input) {
   let formCancelled = false
   let interrupted = false
   let v1InvalidOutput = false
+  let prePromotionError: { message: string; [key: string]: unknown } | undefined
+  let finalizing = false
   let admission: AbortController | undefined
   let pendingStep: { timestamp: number; part: Record<string, unknown>; label: string } | undefined
 
@@ -101,6 +107,17 @@ export async function runNonInteractivePrompt(input: Input) {
     }
     UI.empty()
     UI.println(text)
+    UI.empty()
+  }
+
+  const writeReasoning = (part: { text: string; [key: string]: unknown }, timestamp: number) => {
+    if (emit("reasoning", timestamp, { part })) return
+    const text = part.text.trim()
+    if (!text) return
+    const line = `Thinking: ${text}`
+    if (!process.stdout.isTTY) return void process.stdout.write(line + EOL)
+    UI.empty()
+    UI.println(`${UI.Style.TEXT_DIM}\u001b[3m${line}\u001b[0m${UI.Style.TEXT_NORMAL}`)
     UI.empty()
   }
 
@@ -181,6 +198,7 @@ export async function runNonInteractivePrompt(input: Input) {
       if (event.type === "session.input.promoted") {
         if (event.data.inputID === messageID) {
           promoted = true
+          prePromotionError = undefined
           continue
         }
       }
@@ -191,7 +209,12 @@ export async function runNonInteractivePrompt(input: Input) {
       ) {
         return
       }
+      if (!promoted && event.type === "session.execution.failed") {
+        prePromotionError = event.data.error
+        continue
+      }
       if (!promoted) continue
+      if (finalizing) continue
 
       if (event.type === "session.step.started") {
         const part = {
@@ -219,12 +242,16 @@ export async function runNonInteractivePrompt(input: Input) {
 
       if (event.type === "session.text.started") {
         flushStep()
-        starts.set("text", { id: partID(event.id), timestamp: time })
+        starts.set(`text\u0000${contentKey(event.data.assistantMessageID, event.data.ordinal)}`, {
+          id: partID(event.id),
+          timestamp: time,
+        })
         continue
       }
       if (event.type === "session.text.ended") {
-        const started = starts.get("text")
-        starts.delete("text")
+        const key = contentKey(event.data.assistantMessageID, event.data.ordinal)
+        const started = starts.get(`text\u0000${key}`)
+        starts.delete(`text\u0000${key}`)
         const part = {
           id: started?.id ?? partID(event.id),
           sessionID: input.sessionID,
@@ -233,18 +260,23 @@ export async function runNonInteractivePrompt(input: Input) {
           text: event.data.text,
           time: { start: started?.timestamp ?? time, end: time },
         }
+        renderedText.set(key, event.data.text)
         writeText(part, time)
         continue
       }
 
       if (event.type === "session.reasoning.started") {
         flushStep()
-        starts.set("reasoning", { id: partID(event.id), timestamp: time })
+        starts.set(`reasoning\u0000${contentKey(event.data.assistantMessageID, event.data.ordinal)}`, {
+          id: partID(event.id),
+          timestamp: time,
+        })
         continue
       }
       if (event.type === "session.reasoning.ended" && input.thinking) {
-        const started = starts.get("reasoning")
-        starts.delete("reasoning")
+        const key = contentKey(event.data.assistantMessageID, event.data.ordinal)
+        const started = starts.get(`reasoning\u0000${key}`)
+        starts.delete(`reasoning\u0000${key}`)
         const part = {
           id: started?.id ?? partID(event.id),
           sessionID: input.sessionID,
@@ -254,17 +286,8 @@ export async function runNonInteractivePrompt(input: Input) {
           metadata: event.data.state,
           time: { start: started?.timestamp ?? time, end: time },
         }
-        if (emit("reasoning", time, { part })) continue
-        const text = part.text.trim()
-        if (!text) continue
-        const line = `Thinking: ${text}`
-        if (!process.stdout.isTTY) {
-          process.stdout.write(line + EOL)
-          continue
-        }
-        UI.empty()
-        UI.println(`${UI.Style.TEXT_DIM}\u001b[3m${line}\u001b[0m${UI.Style.TEXT_NORMAL}`)
-        UI.empty()
+        renderedReasoning.set(key, event.data.text)
+        writeReasoning(part, time)
         continue
       }
 
@@ -360,6 +383,7 @@ export async function runNonInteractivePrompt(input: Input) {
           },
         }
         tools.delete(key)
+        renderedTools.add(key)
         if (!emit("tool_use", time, { part })) await input.renderTool(tool)
         continue
       }
@@ -405,6 +429,7 @@ export async function runNonInteractivePrompt(input: Input) {
           },
         }
         tools.delete(key)
+        renderedTools.add(key)
         if (input.compatibility === "v1" && (permissionRejected || formCancelled)) continue
         if (!emit("tool_use", time, { part })) {
           if (toolOutputText(current.tool, current.content).trim())
@@ -478,6 +503,122 @@ export async function runNonInteractivePrompt(input: Input) {
       }
       if (event.type === "session.execution.succeeded") return
     }
+  }
+
+  const projectedMessages = async () => {
+    const messages: SessionMessageInfo[] = []
+    let cursor: string | undefined
+    while (true) {
+      const page = await input.client.message.list(
+        cursor
+          ? { sessionID: input.sessionID, limit: 200, cursor }
+          : { sessionID: input.sessionID, limit: 200, order: "desc" },
+      )
+      for (const message of page.data) {
+        if (message.id === messageID) return { found: true, messages: messages.toReversed() }
+        messages.push(message)
+      }
+      cursor = page.cursor.next ?? undefined
+      if (!cursor) return { found: false, messages: [] }
+    }
+  }
+
+  const reconcile = async () => {
+    const projected = await projectedMessages()
+    for (const message of projected.messages) {
+      if (message.type !== "assistant") continue
+      const timestamp = message.time.completed ?? message.time.created
+      let textOrdinal = 0
+      let reasoningOrdinal = 0
+      for (const item of message.content) {
+        if (item.type === "text") {
+          const ordinal = textOrdinal++
+          const key = contentKey(message.id, ordinal)
+          const rendered = renderedText.get(key) ?? ""
+          if (rendered === item.text || !item.text.startsWith(rendered)) continue
+          const text = item.text.slice(rendered.length)
+          writeText(
+            {
+              id: projectedPartID(message.id, `text-${ordinal}`),
+              sessionID: input.sessionID,
+              messageID: message.id,
+              type: "text",
+              text,
+              time: { start: message.time.created, end: timestamp },
+            },
+            timestamp,
+          )
+          renderedText.set(key, item.text)
+          continue
+        }
+        if (item.type === "reasoning") {
+          const ordinal = reasoningOrdinal++
+          if (!input.thinking) continue
+          const key = contentKey(message.id, ordinal)
+          const rendered = renderedReasoning.get(key) ?? ""
+          if (rendered === item.text || !item.text.startsWith(rendered)) continue
+          const text = item.text.slice(rendered.length)
+          const part = {
+            id: projectedPartID(message.id, `reasoning-${ordinal}`),
+            sessionID: input.sessionID,
+            messageID: message.id,
+            type: "reasoning",
+            text,
+            metadata: item.state,
+            time: { start: message.time.created, end: timestamp },
+          }
+          renderedReasoning.set(key, item.text)
+          writeReasoning(part, timestamp)
+          continue
+        }
+
+        const key = toolKey(message.id, item.id)
+        if (renderedTools.has(key) || item.state.status === "streaming" || item.state.status === "running") continue
+        const part: MiniToolPart = {
+          id: projectedPartID(message.id, `tool-${item.id}`),
+          sessionID: input.sessionID,
+          messageID: message.id,
+          type: "tool",
+          callID: item.id,
+          tool: item.name,
+          state:
+            item.state.status === "completed"
+              ? {
+                  status: "completed",
+                  input: item.state.input,
+                  output: toolOutputText(item.name, item.state.content),
+                  title: item.name,
+                  metadata: { structured: item.state.structured, content: item.state.content, result: item.state.result },
+                  time: { start: item.time.ran ?? item.time.created, end: item.time.completed ?? timestamp },
+                }
+              : {
+                  status: "error",
+                  input: item.state.input,
+                  error: item.state.error.message,
+                  metadata: { structured: item.state.structured, content: item.state.content, result: item.state.result },
+                  time: { start: item.time.ran ?? item.time.created, end: item.time.completed ?? timestamp },
+                },
+        }
+        renderedTools.add(key)
+        if (emit("tool_use", timestamp, { part })) continue
+        if (item.state.status === "completed") {
+          await input.renderTool(item)
+          continue
+        }
+        if (toolOutputText(item.name, item.state.content).trim()) {
+          await input.renderTool({ ...item, state: { ...item.state, status: "completed" } })
+        }
+        await input.renderToolError(item)
+        UI.error(item.state.error.message)
+      }
+
+      if (message.error && !emittedError) {
+        emittedError = true
+        process.exitCode = 1
+        if (!emit("error", timestamp, { error: message.error })) UI.error(message.error.message)
+      }
+    }
+    return projected.found
   }
 
   const interrupt = () => {
@@ -559,11 +700,27 @@ export async function runNonInteractivePrompt(input: Input) {
         ? globals.data.filter((form) => form.sessionID === GLOBAL_FORM_SESSION_ID).map(cancelForm)
         : []),
     ])
-    await completed
+    if (input.compatibility === "v1") {
+      await completed
+      return
+    }
+
+    const waiting = input.client.session.wait({ sessionID: input.sessionID })
+    await Promise.race([waiting, completed.then(() => waiting)])
+    finalizing = true
+    controller.abort()
+    const found = await reconcile()
+    if (!found && !interrupted && !permissionRejected && !formCancelled && !emittedError) {
+      const error = prePromotionError ?? { type: "unknown", message: "Prompt was not promoted" }
+      emittedError = true
+      process.exitCode = 1
+      if (!emit("error", Date.now(), { error })) UI.error(error.message)
+    }
   } finally {
     process.off("SIGINT", interrupt)
     controller.abort()
-    await stream.return?.(undefined).catch(() => {})
+    if (input.compatibility === "v1") await stream.return?.(undefined).catch(() => {})
+    else void stream.return?.(undefined).catch(() => {})
   }
 }
 
@@ -593,6 +750,14 @@ function partID(eventID: string) {
 
 function toolKey(messageID: string, callID: string) {
   return `${messageID}\u0000${callID}`
+}
+
+function contentKey(messageID: string, ordinal: number) {
+  return `${messageID}\u0000${ordinal}`
+}
+
+function projectedPartID(messageID: string, part: string) {
+  return `prt_${messageID.replace(/^msg_/, "")}_${part}`
 }
 
 function fallbackTool(event: {

@@ -93,6 +93,8 @@ describe("run interactive runtime", () => {
             streamStarted.resolve()
             return {
               runPromptTurn: async () => {},
+              queuePromptTurn: async () => {},
+              waitForIdle: async () => {},
               interruptActiveTurn: async () => {},
               selectSubagent: () => {},
               settleForm: (sessionID: string, formID: string) => settled.push({ sessionID, formID }),
@@ -432,6 +434,8 @@ describe("run interactive runtime", () => {
             setTimeout(() => input.footer.close(), 0)
             return {
               runPromptTurn: async () => {},
+              queuePromptTurn: async () => {},
+              waitForIdle: async () => {},
               interruptActiveTurn: async () => {},
               selectSubagent: () => {},
               replayOnResize: async () => false,

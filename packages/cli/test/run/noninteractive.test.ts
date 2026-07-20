@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
-import { OpenCode, type EventSubscribeOutput, type SessionMessageAssistantTool } from "@opencode-ai/client/promise"
+import {
+  OpenCode,
+  type EventSubscribeOutput,
+  type SessionMessageAssistantTool,
+  type SessionMessageInfo,
+} from "@opencode-ai/client/promise"
 import { runNonInteractivePrompt } from "../../src/run/noninteractive"
 
 type V2Event = EventSubscribeOutput
@@ -162,10 +167,13 @@ async function run(input: {
   cancel?: (input: { sessionID: string; formID: string }) => Promise<void>
   renderTool?: (part: SessionMessageAssistantTool) => Promise<void>
   renderToolError?: (part: SessionMessageAssistantTool) => Promise<void>
+  messages?: (inputID: string) => SessionMessageInfo[]
+  wait?: () => Promise<void>
 }) {
   const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
   const values: V2Event[] = [{ id: "evt_connected", type: "server.connected", data: {} }]
   let wake: (() => void) | undefined
+  const wait = Promise.withResolvers<void>()
   const stream = (async function* (): AsyncGenerator<V2Event, void, unknown> {
     while (true) {
       const value = values.shift()
@@ -175,6 +183,7 @@ async function run(input: {
         })
         continue
       }
+      if (value.type.startsWith("session.execution.")) setTimeout(wait.resolve, 0)
       yield value
     }
   })()
@@ -193,8 +202,19 @@ async function run(input: {
       }) as never,
   )
   spyOn(sdk.form, "cancel").mockImplementation((request) => (input.cancel?.(request) ?? ok(undefined)) as never)
+  let promptID = "msg_prompt"
+  spyOn(sdk.session, "wait").mockImplementation(() => input.wait?.() ?? wait.promise)
+  spyOn(sdk.message, "list").mockImplementation(() =>
+    ok({
+      data: input.messages?.(promptID) ?? [
+        { id: promptID, type: "user", text: "hello", time: { created: 1 } },
+      ],
+      cursor: {},
+    }),
+  )
   spyOn(sdk.session, "prompt").mockImplementation((request) => {
     const messageID = request.id ?? "msg_prompt"
+    promptID = messageID
     values.push(...input.turn(messageID))
     wake?.()
     wake = undefined
@@ -244,6 +264,63 @@ afterEach(() => {
 })
 
 describe("runNonInteractivePrompt", () => {
+  test("uses session.wait then reconciles projected output without a terminal event", async () => {
+    const idle = Promise.withResolvers<void>()
+    let done = false
+    const task = capture({
+      format: "json",
+      turn: (messageID) => [prompted(messageID)],
+      wait: () => idle.promise,
+      messages: (messageID) => [
+        {
+          id: "msg_assistant",
+          type: "assistant",
+          agent: "build",
+          model: { providerID: "test", id: "test-model" },
+          content: [{ type: "text", text: "projected answer" }],
+          finish: "stop",
+          time: { created: 2, completed: 3 },
+        },
+        { id: messageID, type: "user", text: "hello", time: { created: 1 } },
+      ],
+    }).then((output) => {
+      done = true
+      return output
+    })
+
+    await Bun.sleep(0)
+    await Bun.sleep(0)
+    expect(done).toBe(false)
+    idle.resolve()
+    const output = await task
+    expect(
+      output.stdout
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line)),
+    ).toEqual([expect.objectContaining({ type: "text", part: expect.objectContaining({ text: "projected answer" }) })])
+  })
+
+  test("reports an observed execution failure before prompt promotion", async () => {
+    const output = await capture({
+      format: "json",
+      turn: () => [executionFailed("instructions unavailable")],
+      messages: () => [],
+    })
+
+    expect(
+      output.stdout
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line)),
+    ).toEqual([
+      expect.objectContaining({
+        type: "error",
+        error: { type: "provider.transport", message: "instructions unavailable" },
+      }),
+    ])
+  })
+
   test("cancels session and global form blockers and exits on pre-promotion interrupt", async () => {
     const sdk = await run({
       pendingForms: [form("frm_pending", "ses_1"), form("frm_pending_global", "global")],
@@ -307,6 +384,9 @@ describe("runNonInteractivePrompt", () => {
       }),
     ])
     expect(output.stderr).toBe("")
+    const sdk = await run({ compatibility: "v1", turn: (messageID) => [prompted(messageID), settled()] })
+    expect(sdk.session.wait).not.toHaveBeenCalled()
+    expect(sdk.message.list).not.toHaveBeenCalled()
   })
 
   test("V1 default output flushes step_start before an unrelated execution failure", async () => {

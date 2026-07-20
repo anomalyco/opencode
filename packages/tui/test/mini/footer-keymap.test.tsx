@@ -12,7 +12,6 @@ test("down opens subagents from an empty prompt", async () => {
   const [state] = createSignal<FooterState>({
     phase: "idle",
     status: "",
-    queue: 0,
     model: "gpt-5",
     usage: "",
     first: false,
@@ -70,7 +69,6 @@ test("down opens subagents from an empty prompt", async () => {
           onRows={() => {}}
           onLayout={() => {}}
           onStatus={() => {}}
-          onQueuedRemove={async () => true}
         />
       </Keymap.Provider>
     )

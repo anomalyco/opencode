@@ -102,7 +102,6 @@ type RunFooterViewProps = {
   onStatus: (text: string) => void
   onSubagentSelect?: (sessionID: string | undefined) => void
   onSubagentInterrupt?: (sessionID: string) => void
-  onQueuedRemove: (messageID: string) => Promise<boolean>
 }
 
 export function RunFooterView(props: RunFooterViewProps) {
@@ -179,7 +178,6 @@ export function RunFooterView(props: RunFooterViewProps) {
   const busy = createMemo(() => props.state().phase === "running")
   const armed = createMemo(() => props.state().interrupt > 0)
   const exiting = createMemo(() => props.state().exit > 0)
-  const queue = createMemo(() => props.state().queue)
   const usage = createMemo(() => props.state().usage)
   const interruptLabel = createMemo(() => {
     if (!interrupt()) {
@@ -414,7 +412,7 @@ export function RunFooterView(props: RunFooterViewProps) {
       items.push({ kind: "background", key: backgroundShortcut(), label: "background" })
     }
     if (queuedPrompts().length > 0 && queuedShortcut()) {
-      items.push({ kind: "queued", key: queuedShortcut(), label: `${queue()} queued` })
+      items.push({ kind: "queued", key: queuedShortcut(), label: `${queuedPrompts().length} pending` })
     }
     if (activeTabs().length > 0 && subagentShortcut()) {
       items.push({ kind: "subagents", key: subagentShortcut(), label: "subagents" })
@@ -495,7 +493,7 @@ export function RunFooterView(props: RunFooterViewProps) {
     commands: [
       {
         id: "session.queued_prompts",
-        title: "Manage queued prompts",
+        title: "View pending work",
         group: "Session",
         run: openQueuedMenu,
       },
@@ -656,12 +654,6 @@ export function RunFooterView(props: RunFooterViewProps) {
                             theme={theme}
                             prompts={queuedPrompts}
                             onClose={closePanel}
-                            onDelete={(item) => void props.onQueuedRemove(item.messageID)}
-                            onEdit={async (item) => {
-                              if (!(await props.onQueuedRemove(item.messageID))) return
-                              closePanel()
-                              queueMicrotask(() => composer.replacePrompt(item.prompt))
-                            }}
                             onRows={setSubagentMenuRows}
                           />
                         </Match>

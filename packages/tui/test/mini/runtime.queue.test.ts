@@ -1,7 +1,15 @@
 import { describe, expect, test } from "bun:test"
-import { runPromptQueue } from "../../src/mini/runtime.queue"
+import { runPromptQueue as runPromptQueueBase, type QueueInput } from "../../src/mini/runtime.queue"
 import type { RunPrompt } from "../../src/mini/types"
 import { createFooterApiFixture } from "./fixture/footer-api"
+
+function runPromptQueue(input: Omit<QueueInput, "admit" | "settle"> & Partial<Pick<QueueInput, "admit" | "settle">>) {
+  return runPromptQueueBase({
+    admit: async () => {},
+    settle: async () => {},
+    ...input,
+  })
+}
 
 describe("run runtime queue", () => {
   test("ignores empty prompts", async () => {
@@ -171,206 +179,90 @@ describe("run runtime queue", () => {
     ])
   })
 
-  test("passes prompts to onSend", async () => {
+  test("durably admits in-flight follow-ups in submission order", async () => {
     const ui = createFooterApiFixture()
-    const seen: string[] = []
-
-    await runPromptQueue({
-      footer: ui.api,
-      initialInput: "  hello  ",
-      onSend: (input) => {
-        seen.push(input.text)
-      },
-      run: async () => {
-        ui.api.close()
-      },
-    })
-
-    expect(seen).toEqual(["  hello  "])
-  })
-
-  test("appends the user row before the turn starts", async () => {
-    const ui = createFooterApiFixture()
-
-    await runPromptQueue({
-      footer: ui.api,
-      initialInput: "/fmt bash",
-      run: async () => {
-        expect(ui.commits).toEqual([
-          {
-            kind: "user",
-            text: "/fmt bash",
-            phase: "start",
-            source: "system",
-            messageID: expect.any(String),
-          },
-        ])
-        ui.api.close()
-      },
-    })
-  })
-
-  test("runs queued prompts in order", async () => {
-    const ui = createFooterApiFixture()
-    const seen: string[] = []
-    let wake: (() => void) | undefined
-    const gate = new Promise<void>((resolve) => {
-      wake = resolve
-    })
+    const admitted: string[] = []
+    const gate = Promise.withResolvers<void>()
 
     const task = runPromptQueue({
       footer: ui.api,
-      run: async (input) => {
-        seen.push(input.text)
-        if (seen.length === 1) {
-          await gate
-          return
-        }
-
-        ui.api.close()
+      run: async (input, _signal, onAdmitted) => {
+        admitted.push(`${input.text}:steer`)
+        onAdmitted()
+        await gate.promise
       },
+      admit: async (input) => {
+        admitted.push(`${input.text}:queue`)
+      },
+      settle: async () => ui.api.close(),
     })
 
     ui.submit("one")
     ui.submit("two")
-    await Promise.resolve()
-    expect(seen).toEqual(["one"])
-
-    wake?.()
-    await task
-
-    expect(seen).toEqual(["one", "two"])
-  })
-
-  test("exposes ordinary in-flight prompts for removal before sending", async () => {
-    const ui = createFooterApiFixture()
-    const turns: RunPrompt[] = []
-    let wake: (() => void) | undefined
-    const gate = new Promise<void>((resolve) => {
-      wake = resolve
-    })
-
-    const task = runPromptQueue({
-      footer: ui.api,
-      run: async (input) => {
-        turns.push(input)
-        await gate
-      },
-    })
-
-    ui.submit("one")
-    ui.submit("two")
-    await Promise.resolve()
-    await Promise.resolve()
-
-    expect(turns.map((item) => item.text)).toEqual(["one"])
-    expect(turns[0]?.messageID).toEqual(expect.any(String))
+    ui.submit("three")
+    while (admitted.length < 3) await Bun.sleep(0)
+    expect(admitted).toEqual(["one:steer", "two:queue", "three:queue"])
     expect(ui.commits.map((item) => item.text)).toEqual(["one"])
-    const first = ui.events.find((item) => item.type === "queued.prompts")
-    const event = ui.events.findLast((item) => item.type === "queued.prompts")
-    expect(first?.type === "queued.prompts" ? first.prompts : []).toEqual([])
-    expect(
-      first?.type === "queued.prompts" && event?.type === "queued.prompts" ? first.prompts === event.prompts : true,
-    ).toBe(false)
-    expect(ui.events.findLast((item) => item.type === "queue")).toEqual({ type: "queue", queue: 1 })
-    expect(event?.type === "queued.prompts" ? event.prompts.map((item) => item.prompt.text) : []).toEqual(["two"])
-    if (event?.type === "queued.prompts") ui.removeQueued(event.prompts[0]!.messageID)
-    await Promise.resolve()
 
-    wake?.()
-    ui.api.close()
+    gate.resolve()
     await task
-    expect(turns.map((item) => item.text)).toEqual(["one"])
   })
 
-  test("removing one managed queued prompt preserves the others", async () => {
+  test("continues durable admission after one fails", async () => {
     const ui = createFooterApiFixture()
-    const turns: string[] = []
-    let wake: (() => void) | undefined
-    const gate = new Promise<void>((resolve) => {
-      wake = resolve
-    })
-
+    const admitted: string[] = []
+    const errors: string[] = []
+    const gate = Promise.withResolvers<void>()
     const task = runPromptQueue({
       footer: ui.api,
-      run: async (input) => {
-        turns.push(input.text)
-        if (input.text === "active") await gate
-        if (input.text === "queued three") ui.api.close()
+      run: async (_input, _signal, admitted) => {
+        admitted()
+        await gate.promise
       },
-    })
-
-    ui.submit("active")
-    ui.submit("queued one")
-    ui.submit("queued two")
-    ui.submit("queued three")
-    await Promise.resolve()
-    await Promise.resolve()
-
-    const event = ui.events.findLast((item) => item.type === "queued.prompts")
-    if (event?.type === "queued.prompts") {
-      const second = event.prompts.find((item) => item.prompt.text === "queued two")
-      if (second) ui.removeQueued(second.messageID)
-    }
-
-    wake?.()
-    await task
-    expect(turns).toEqual(["active", "queued one", "queued three"])
-  })
-
-  test("drains a prompt queued during an in-flight turn", async () => {
-    const ui = createFooterApiFixture()
-    const seen: string[] = []
-    let wake: (() => void) | undefined
-    const gate = new Promise<void>((resolve) => {
-      wake = resolve
-    })
-
-    const task = runPromptQueue({
-      footer: ui.api,
-      run: async (input) => {
-        seen.push(input.text)
-        if (seen.length === 1) {
-          await gate
-          return
-        }
-
-        ui.api.close()
+      admit: async (input) => {
+        if (input.text === "two") throw new Error("admission failed")
+        admitted.push(input.text)
       },
+      onAdmissionError: (_prompt, error) => {
+        errors.push(error instanceof Error ? error.message : String(error))
+      },
+      settle: async () => ui.api.close(),
     })
 
     ui.submit("one")
-    await Promise.resolve()
-    expect(seen).toEqual(["one"])
-
-    wake?.()
-    await Promise.resolve()
     ui.submit("two")
+    ui.submit("three")
+    while (admitted.length === 0) await Bun.sleep(0)
+    gate.resolve()
     await task
 
-    expect(seen).toEqual(["one", "two"])
+    expect(errors).toEqual(["admission failed"])
+    expect(admitted).toEqual(["three"])
   })
 
-  test("close aborts the active run and drops pending queued work", async () => {
+  test("close aborts an in-flight durable admission", async () => {
     const ui = createFooterApiFixture()
-    const seen: string[] = []
-    let hit = false
+    let admissionHit = false
+    const admissionStarted = Promise.withResolvers<void>()
 
     const task = runPromptQueue({
       footer: ui.api,
-      run: async (input, signal) => {
-        seen.push(input.text)
+      run: async (_input, signal, admitted) => {
+        admitted()
+        await new Promise<void>((resolve) => signal.addEventListener("abort", () => resolve(), { once: true }))
+      },
+      admit: async (_prompt, signal) => {
+        admissionStarted.resolve()
         await new Promise<void>((resolve) => {
           if (signal.aborted) {
-            hit = true
+            admissionHit = true
             resolve()
             return
           }
-
           signal.addEventListener(
             "abort",
             () => {
-              hit = true
+              admissionHit = true
               resolve()
             },
             { once: true },
@@ -382,11 +274,11 @@ describe("run runtime queue", () => {
     ui.submit("one")
     await Promise.resolve()
     ui.submit("two")
+    await admissionStarted.promise
     ui.api.close()
     await task
 
-    expect(hit).toBe(true)
-    expect(seen).toEqual(["one"])
+    expect(admissionHit).toBe(true)
   })
 
   test("propagates run errors", async () => {
