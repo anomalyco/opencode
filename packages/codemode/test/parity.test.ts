@@ -64,7 +64,7 @@ describe("H3: array property access reads as undefined (not a throw)", () => {
   })
 
   test("unknown property reads stay undefined for methods CodeMode does not implement", async () => {
-    expect(await value(`return [1,2,3].toSpliced === undefined`)).toBe(true)
+    expect(await value(`return [1,2,3].unknownMethod === undefined`)).toBe(true)
   })
 
   test("array indexing still works", async () => {

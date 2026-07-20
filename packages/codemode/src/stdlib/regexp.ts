@@ -59,9 +59,18 @@ export const invokeRegExpMethod = (
 ): unknown => {
   switch (name) {
     case "test":
-      return value.regex.test(coerceToString(args[0]))
     case "exec": {
-      const matched = value.regex.exec(coerceToString(args[0]))
+      const input = coerceToString(args[0])
+      const lastIndex = value.lastIndex
+      const stateful = value.regex.global || value.regex.sticky
+      value.regex.lastIndex = toLength(lastIndex)
+      if (name === "test") {
+        const matched = value.regex.test(input)
+        if (!stateful) value.lastIndex = lastIndex
+        return matched
+      }
+      const matched = value.regex.exec(input)
+      if (!stateful) value.lastIndex = lastIndex
       return matched === null ? null : matchToValue(matched)
     }
     case "toString":
@@ -70,7 +79,13 @@ export const invokeRegExpMethod = (
       throw new InterpreterRuntimeError(`RegExp method '${name}' is not available in CodeMode.`, node)
   }
 }
+
+const toLength = (value: unknown): number => {
+  const number = coerceToNumber(value)
+  if (Number.isNaN(number) || number <= 0) return 0
+  return Math.min(Math.floor(number), Number.MAX_SAFE_INTEGER)
+}
 import { type AstNode, InterpreterRuntimeError } from "../interpreter/model.js"
 import { isBlockedMember, type SafeObject } from "../tool-runtime.js"
 import { CodeModeRegExp } from "../values.js"
-import { coerceToString } from "./value.js"
+import { coerceToNumber, coerceToString } from "./value.js"

@@ -1,5 +1,5 @@
 import type { SafeObject } from "../tool-runtime.js"
-import type { CodeModePromise, CodeModeURL } from "../values.js"
+import type { CodeModePromise, CodeModeRegExp, CodeModeURL } from "../values.js"
 
 export type SourcePosition = {
   line: number
@@ -35,7 +35,7 @@ export type StatementResult =
   | { kind: "continue" }
 
 export type MemberReference = {
-  target: SafeObject | Array<unknown> | CodeModeURL
+  target: SafeObject | Array<unknown> | CodeModeRegExp | CodeModeURL
   key: string | number
 }
 

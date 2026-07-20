@@ -25,6 +25,12 @@ export function DialogMessage(props: {
       title="Message Actions"
       options={[
         {
+          title: "Jump to",
+          value: "message.jump",
+          description: "view message in session",
+          onSelect: (dialog) => dialog.clear(),
+        },
+        {
           title: "Revert",
           value: "session.revert",
           description: "undo messages and file changes",

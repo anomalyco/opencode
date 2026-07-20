@@ -196,7 +196,7 @@ ultimate source of truth.
 - [x] Materialized iteration helpers: `keys`, `values`, and `entries` return arrays rather than iterators.
 - [x] `length`, numeric indexing, index assignment, spread, and `for...of`.
 - [x] The `thisArg` argument of `Array.from` is accepted and ignored, like JS arrows.
-- [ ] `Array.prototype.toSpliced`.
+- [x] `Array.prototype.toSpliced`.
 - [x] Canonical array/string index parsing: keys such as `"01"` remain non-index properties rather than aliasing index
       `1`; arbitrary array-property assignment remains unsupported.
 - [x] `Array.prototype.sort` preserves trailing holes, while `toSorted` densifies holes into `undefined` elements,
@@ -266,7 +266,7 @@ ultimate source of truth.
 - [x] `getTimezoneOffset`, arithmetic, relational comparison, and `instanceof Date`.
 - [x] Date values serialize to ISO strings; invalid dates serialize to `null`.
 - [ ] Date setters.
-- [ ] `Date.prototype.toUTCString` and its `toGMTString` alias.
+- [x] `Date.prototype.toUTCString` and its `toGMTString` alias.
 - [x] Native one-argument Date coercion for supported values, including booleans, null, arrays, and plain objects.
 - [ ] Native Date loose-equality and default primitive-coercion semantics.
 - [x] Native `RangeError` branding for invalid `toISOString()` calls.
@@ -278,7 +278,7 @@ ultimate source of truth.
 - [x] Readable `source`, `flags`, `lastIndex`, `global`, `ignoreCase`, `multiline`, `sticky`, `unicode`, and `dotAll`.
 - [x] Captures, safe named groups (blocked member names are omitted), match `.index`, and stateful global matching.
 - [x] Integration with supported String methods, including function replacers.
-- [ ] Writable `lastIndex`.
+- [x] Writable `lastIndex`.
 - [ ] `hasIndices`, match `indices`, and `unicodeSets` metadata for the `d` and `v` flags.
 - [ ] `RegExp.escape`.
 

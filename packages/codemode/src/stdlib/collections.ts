@@ -29,6 +29,7 @@ export const arrayMethods = new Set([
   "shift",
   "unshift",
   "splice",
+  "toSpliced",
   "fill",
   "copyWithin",
   "keys",

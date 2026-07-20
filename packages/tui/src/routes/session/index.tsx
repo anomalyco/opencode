@@ -53,6 +53,7 @@ import { useDialog } from "../../ui/dialog"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { DialogMessage } from "./dialog-message"
 import { DialogFork } from "./dialog-fork"
+import { DialogTimeline } from "./dialog-timeline"
 import { Sidebar } from "./sidebar"
 import { Composer } from "./composer"
 import { filetype } from "../../util/filetype"
@@ -458,7 +459,15 @@ export function Session() {
       id: "session.timeline",
       group: "Session",
       slash: { name: "timeline" },
-      run: () => unavailable("The message timeline"),
+      run: () => {
+        dialog.replace(() => (
+          <DialogTimeline
+            sessionID={route.sessionID}
+            onMove={jumpToMessage}
+            setPrompt={(value) => promptRef.current?.set(value)}
+          />
+        ))
+      },
     },
     {
       title: "Fork session",

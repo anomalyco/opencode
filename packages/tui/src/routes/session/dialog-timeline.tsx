@@ -4,10 +4,12 @@ import { DialogSelect, type DialogSelectOption } from "../../ui/dialog-select"
 import { Locale } from "../../util/locale"
 import { DialogMessage } from "./dialog-message"
 import { useDialog } from "../../ui/dialog"
+import type { PromptInfo } from "../../prompt/history"
 
 export function DialogTimeline(props: {
   sessionID: string
   onMove: (messageID: string) => void
+  setPrompt?: (prompt: PromptInfo) => void
 }) {
   const data = useData()
   const dialog = useDialog()
@@ -26,7 +28,9 @@ export function DialogTimeline(props: {
         value: message.id,
         footer: Locale.time(message.time.created),
         onSelect: (dialog) => {
-          dialog.replace(() => <DialogMessage messageID={message.id} sessionID={props.sessionID} />)
+          dialog.replace(() => (
+            <DialogMessage messageID={message.id} sessionID={props.sessionID} setPrompt={props.setPrompt} />
+          ))
         },
       })
     }
