@@ -261,113 +261,120 @@ export async function replayMessages(
   cwd: string,
   messages: readonly SessionMessageInfo[],
 ) {
-  for (const message of messages) {
-    if (message.type === "user") {
+  for (const message of messages) await replayMessage(connection, sessionID, cwd, message).catch(() => {})
+}
+
+async function replayMessage(
+  connection: Pick<AgentSideConnection, "sessionUpdate">,
+  sessionID: string,
+  cwd: string,
+  message: SessionMessageInfo,
+) {
+  if (message.type === "user") {
+    await connection.sessionUpdate({
+      sessionId: sessionID,
+      update: {
+        sessionUpdate: "user_message_chunk",
+        messageId: message.id,
+        content: { type: "text", text: message.text },
+      },
+    })
+    const files: ReplayPart[] = (message.files ?? []).map((file) => ({
+      type: "file",
+      url: file.source.type === "uri" ? file.source.uri : `data:${file.mime};base64,${file.data}`,
+      filename: file.name,
+      mime: file.mime,
+    }))
+    for (const chunk of partsToContentChunks(files)) {
+      await connection.sessionUpdate({
+        sessionId: sessionID,
+        update: { sessionUpdate: "user_message_chunk", messageId: message.id, ...chunk },
+      })
+    }
+    return
+  }
+  if (message.type !== "assistant") return
+  for (const part of message.content) {
+    if (part.type === "text") {
       await connection.sessionUpdate({
         sessionId: sessionID,
         update: {
-          sessionUpdate: "user_message_chunk",
+          sessionUpdate: "agent_message_chunk",
           messageId: message.id,
-          content: { type: "text", text: message.text },
+          content: { type: "text", text: part.text },
         },
       })
-      const files: ReplayPart[] = (message.files ?? []).map((file) => ({
-        type: "file",
-        url: file.source.type === "uri" ? file.source.uri : `data:${file.mime};base64,${file.data}`,
-        filename: file.name,
-        mime: file.mime,
-      }))
-      for (const chunk of partsToContentChunks(files)) {
-        await connection.sessionUpdate({
-          sessionId: sessionID,
-          update: { sessionUpdate: "user_message_chunk", messageId: message.id, ...chunk },
-        })
-      }
       continue
     }
-    if (message.type !== "assistant") continue
-    for (const part of message.content) {
-      if (part.type === "text") {
-        await connection.sessionUpdate({
-          sessionId: sessionID,
-          update: {
-            sessionUpdate: "agent_message_chunk",
-            messageId: message.id,
-            content: { type: "text", text: part.text },
-          },
-        })
-        continue
-      }
-      if (part.type === "reasoning") {
-        await connection.sessionUpdate({
-          sessionId: sessionID,
-          update: {
-            sessionUpdate: "agent_thought_chunk",
-            messageId: message.id,
-            content: { type: "text", text: part.text },
-          },
-        })
-        continue
-      }
+    if (part.type === "reasoning") {
       await connection.sessionUpdate({
         sessionId: sessionID,
         update: {
-          sessionUpdate: "tool_call",
-          ...pendingToolCall({ toolCallId: part.id, toolName: part.name, state: { input: toolInput(part) }, cwd }),
+          sessionUpdate: "agent_thought_chunk",
+          messageId: message.id,
+          content: { type: "text", text: part.text },
         },
       })
-      switch (part.state.status) {
-        case "completed":
-          await connection.sessionUpdate({
-            sessionId: sessionID,
-            update: {
-              sessionUpdate: "tool_call_update",
-              ...completedToolUpdate({
-                toolCallId: part.id,
-                toolName: part.name,
-                input: part.state.input,
-                structured: part.state.structured,
-                content: part.state.content,
-                result: part.state.result,
-              }),
-            },
-          })
-          break
-        case "running":
-          await connection.sessionUpdate({
-            sessionId: sessionID,
-            update: {
-              sessionUpdate: "tool_call_update",
-              ...runningToolUpdate({
-                toolCallId: part.id,
-                toolName: part.name,
-                state: { input: part.state.input },
-                content: part.state.content,
-                cwd,
-              }),
-            },
-          })
-          break
-        case "error":
-          await connection.sessionUpdate({
-            sessionId: sessionID,
-            update: {
-              sessionUpdate: "tool_call_update",
-              ...errorToolUpdate({
-                toolCallId: part.id,
-                toolName: part.name,
-                input: part.state.input,
-                structured: part.state.structured,
-                content: part.state.content,
-                error: part.state.error.message,
-                cwd,
-              }),
-            },
-          })
-          break
-        case "streaming":
-          break
-      }
+      continue
+    }
+    await connection.sessionUpdate({
+      sessionId: sessionID,
+      update: {
+        sessionUpdate: "tool_call",
+        ...pendingToolCall({ toolCallId: part.id, toolName: part.name, state: { input: toolInput(part) }, cwd }),
+      },
+    })
+    switch (part.state.status) {
+      case "completed":
+        await connection.sessionUpdate({
+          sessionId: sessionID,
+          update: {
+            sessionUpdate: "tool_call_update",
+            ...completedToolUpdate({
+              toolCallId: part.id,
+              toolName: part.name,
+              input: part.state.input,
+              structured: part.state.structured,
+              content: part.state.content,
+              result: part.state.result,
+            }),
+          },
+        })
+        break
+      case "running":
+        await connection.sessionUpdate({
+          sessionId: sessionID,
+          update: {
+            sessionUpdate: "tool_call_update",
+            ...runningToolUpdate({
+              toolCallId: part.id,
+              toolName: part.name,
+              state: { input: part.state.input },
+              content: part.state.content,
+              cwd,
+            }),
+          },
+        })
+        break
+      case "error":
+        await connection.sessionUpdate({
+          sessionId: sessionID,
+          update: {
+            sessionUpdate: "tool_call_update",
+            ...errorToolUpdate({
+              toolCallId: part.id,
+              toolName: part.name,
+              input: part.state.input,
+              structured: part.state.structured,
+              content: part.state.content,
+              error: part.state.error.message,
+              cwd,
+            }),
+          },
+        })
+        break
+      case "streaming":
+        break
     }
   }
 }

@@ -356,32 +356,41 @@ function turnStart(messageID: string, slash: PreparedPrompt["slash"], skill: Ski
 
 async function loadCatalog(client: OpenCodeClient, cwd: string): Promise<Catalog> {
   const location = { directory: cwd }
-  const [modelResult, defaultResult, agentResult, commandResult, skillResult] = await Promise.all([
-    client.model.list({ location }),
-    client.model.default({ location }),
-    client.agent.list({ location }),
-    client.command.list({ location }),
-    client.skill.list({ location }),
-  ])
-  const models = modelResult.data.filter((model) => model.enabled)
-  const defaultModel = defaultResult.data ?? models[0]
-  if (!defaultModel) throw new Error("No models are available")
-  const agents = agentResult.data.filter((agent) => agent.mode !== "subagent" && !agent.hidden)
-  const defaultAgent = agents.find((agent) => agent.mode === "primary") ?? agents[0]
-  if (!defaultAgent) throw new Error("No primary agents are available")
-  return {
-    providers: providers(models),
-    models,
-    defaultModel: {
-      providerID: defaultModel.providerID,
-      id: defaultModel.id,
-      variant: defaultModel.variants.find((variant) => variant.id === "default")?.id ?? defaultModel.variants[0]?.id,
-    },
-    modes: agents.map((agent) => ({ id: agent.id, name: agent.name, description: agent.description })),
-    defaultModeID: defaultAgent.id,
-    commands: commandResult.data,
-    skills: skillResult.data.filter((skill) => skill.slash !== false),
+  // Location plugins initialize asynchronously, so the first ACP request may observe an empty catalog.
+  const deadline = Date.now() + 5_000
+  let missing = "No models are available"
+  while (Date.now() < deadline) {
+    const [modelResult, defaultResult, agentResult, commandResult, skillResult] = await Promise.all([
+      client.model.list({ location }),
+      client.model.default({ location }),
+      client.agent.list({ location }),
+      client.command.list({ location }),
+      client.skill.list({ location }),
+    ])
+    const models = modelResult.data.filter((model) => model.enabled)
+    const defaultModel = defaultResult.data ?? models[0]
+    const agents = agentResult.data.filter((agent) => agent.mode !== "subagent" && !agent.hidden)
+    const defaultAgent = agents.find((agent) => agent.mode === "primary") ?? agents[0]
+    if (defaultModel && defaultAgent) {
+      return {
+        providers: providers(models),
+        models,
+        defaultModel: {
+          providerID: defaultModel.providerID,
+          id: defaultModel.id,
+          variant:
+            defaultModel.variants.find((variant) => variant.id === "default")?.id ?? defaultModel.variants[0]?.id,
+        },
+        modes: agents.map((agent) => ({ id: agent.id, name: agent.name, description: agent.description })),
+        defaultModeID: defaultAgent.id,
+        commands: commandResult.data,
+        skills: skillResult.data.filter((skill) => skill.slash !== false),
+      }
+    }
+    missing = defaultModel ? "No primary agents are available" : "No models are available"
+    await Bun.sleep(25)
   }
+  throw new Error(missing)
 }
 
 function providers(models: readonly ModelInfo[]): ConfigOptionProvider[] {
