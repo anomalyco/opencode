@@ -809,6 +809,7 @@ function SessionFileViewV2(props: {
         media={{
           mode: "auto",
           path: path(),
+          deleted: props.diff?.status === "deleted",
           current: state()?.content,
           onLoad: scrollSync.queueRestore,
           onError: (args: { kind: "image" | "audio" | "svg" }) => {
