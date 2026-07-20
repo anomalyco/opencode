@@ -638,8 +638,16 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
         msg = e.message
       }
       if (isUserEvent) {
-        await createComment(`${msg}${footer()}`)
-        await removeReaction(commentType)
+        try {
+          await createComment(`${msg}${footer()}`)
+          await removeReaction(commentType)
+        } catch (commentError) {
+          // Token exchange may fail before octoRest is initialized
+          console.error(
+            "Failed to update GitHub comment/reaction:",
+            commentError instanceof Error ? commentError.message : commentError,
+          )
+        }
       }
       core.setFailed(msg)
       // Also output the clean error message for the action to capture
@@ -1001,12 +1009,19 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
             },
           })
 
+      const body = await response.text()
       if (!response.ok) {
-        const responseJson = (await response.json()) as { error?: string }
-        throw new Error(`App token exchange failed: ${response.status} ${response.statusText} - ${responseJson.error}`)
+        let detail = body
+        try {
+          const parsed = JSON.parse(body) as { error?: string }
+          if (parsed.error) detail = parsed.error
+        } catch {
+          // non-JSON error body from upstream
+        }
+        throw new Error(`App token exchange failed: ${response.status} ${response.statusText} - ${detail}`)
       }
 
-      const responseJson = (await response.json()) as { token: string }
+      const responseJson = JSON.parse(body) as { token: string }
       return responseJson.token
     }
 

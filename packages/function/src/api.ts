@@ -5,6 +5,7 @@ import { jwtVerify, createRemoteJWKSet } from "jose"
 import { createAppAuth } from "@octokit/auth-app"
 import { Octokit } from "@octokit/rest"
 import { Resource } from "sst"
+import { parseGithubOidcSub } from "./github-oidc"
 
 type Env = {
   SYNC_SERVER: DurableObjectNamespace<SyncServer>
@@ -275,36 +276,43 @@ export default new Hono<{ Bindings: Env }>()
         issuer: GITHUB_ISSUER,
         audience: EXPECTED_AUDIENCE,
       })
-      const sub = payload.sub // e.g. 'repo:my-org/my-repo:ref:refs/heads/main'
-      const parts = sub.split(":")[1].split("/")
-      owner = parts[0]
-      repo = parts[1]
+      // classic: repo:owner/name:ref:...
+      // immutable: repo:owner@id/name@id:ref:...
+      const parsed = parseGithubOidcSub(payload.sub ?? "")
+      owner = parsed.owner
+      repo = parsed.repo
     } catch (err) {
       console.error("Token verification failed:", err)
       return c.json({ error: "Invalid or expired token" }, { status: 403 })
     }
 
-    // Create app JWT token
-    const auth = createAppAuth({
-      appId: Resource.GITHUB_APP_ID.value,
-      privateKey: Resource.GITHUB_APP_PRIVATE_KEY.value,
-    })
-    const appAuth = await auth({ type: "app" })
+    try {
+      // Create app JWT token
+      const auth = createAppAuth({
+        appId: Resource.GITHUB_APP_ID.value,
+        privateKey: Resource.GITHUB_APP_PRIVATE_KEY.value,
+      })
+      const appAuth = await auth({ type: "app" })
 
-    // Lookup installation
-    const octokit = new Octokit({ auth: appAuth.token })
-    const { data: installation } = await octokit.apps.getRepoInstallation({
-      owner,
-      repo,
-    })
+      // Lookup installation
+      const octokit = new Octokit({ auth: appAuth.token })
+      const { data: installation } = await octokit.apps.getRepoInstallation({
+        owner,
+        repo,
+      })
 
-    // Get installation token
-    const installationAuth = await auth({
-      type: "installation",
-      installationId: installation.id,
-    })
+      // Get installation token
+      const installationAuth = await auth({
+        type: "installation",
+        installationId: installation.id,
+      })
 
-    return c.json({ token: installationAuth.token })
+      return c.json({ token: installationAuth.token })
+    } catch (err) {
+      console.error("Failed to get installation token:", err)
+      const message = err instanceof Error ? err.message : "Failed to get installation token"
+      return c.json({ error: message }, { status: 500 })
+    }
   })
   /**
    * Used by the GitHub action to get GitHub installation access token given user PAT token (used when testing `opencode github run` locally)
