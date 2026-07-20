@@ -1,3 +1,14 @@
+/*
+ * Portions adapted from Test262 at revision 250f204f23a9249ff204be2baec29600faae7b75:
+ * - test/built-ins/Date/value-to-primitive-result-non-string-prim.js
+ * - test/built-ins/Date/value-to-primitive-result-string.js
+ *
+ * CodeMode does not support Symbol.toPrimitive, so these cases exercise the same Date-constructor primitive-result
+ * handling through supported own valueOf and toString functions.
+ *
+ * Copyright (C) 2016 the V8 project authors. All rights reserved.
+ * Test262 portions are governed by the BSD license in LICENSE.test262.
+ */
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
 import { CodeMode, Tool } from "../src/index.js"
@@ -65,7 +76,6 @@ describe("Date", () => {
     expect(await value(`return Number.isNaN(new Date({}).getTime())`)).toBe(true)
   })
 
-  // Adapted to CodeMode's supported syntax from test262 Date/value-to-primitive-result-{non-string-prim,string}.js.
   test("one-argument construction uses valueOf then toString for objects", async () => {
     expect(
       await value(`

@@ -131,6 +131,24 @@ describe("constructors callable without new, like JS", () => {
     expect((await error(`try { Array(-1) } catch (e) { throw Error(e.name) }`)).message).toContain("RangeError")
   })
 
+  test("returned sparse arrays normalize holes to null at the host boundary", async () => {
+    expect(await value(`return Array(3)`)).toEqual([null, null, null])
+  })
+
+  test("RegExp with non-string flags throws a SyntaxError, like JS", async () => {
+    expect((await error(`try { RegExp("a", 0) } catch (e) { throw Error(e.name) }`)).message).toContain("SyntaxError")
+  })
+
+  test("new-requiring constructors throw a TypeError when called", async () => {
+    expect((await error(`return Map()`)).message).toContain("Constructor Map requires 'new'")
+    expect((await error(`return [1].map(Set)`)).message).toContain("Constructor Set requires 'new'")
+    expect((await error(`return Promise(() => 1)`)).message).toContain("Constructor Promise requires 'new'")
+    // As a reaction handler the TypeError rejects the derived promise catchably, like JS.
+    expect(await value(`return await Promise.resolve(1).then(Map).catch((e) => e.name)`)).toBe("TypeError")
+  })
+})
+
+describe("sort accepts the unified callback set", () => {
   test("sort preserves trailing holes while toSorted densifies them", async () => {
     expect(
       await value(`
@@ -150,7 +168,6 @@ describe("constructors callable without new, like JS", () => {
     expect(await value(`const values = [2, undefined, 1]; values.sort(); return Object.hasOwn(values, 2)`)).toBe(true)
   })
 
-  // Adapted from test262's sort/precise-{getter,setter}-{appends,pops}-elements.js side-effect cases.
   test("sort writes its snapshot without discarding comparator length mutations", async () => {
     expect(
       await value(`
@@ -183,24 +200,6 @@ describe("constructors callable without new, like JS", () => {
     ).toEqual({ values: [1, 2, 3], owns: [true, true, true] })
   })
 
-  test("returned sparse arrays normalize holes to null at the host boundary", async () => {
-    expect(await value(`return Array(3)`)).toEqual([null, null, null])
-  })
-
-  test("RegExp with non-string flags throws a SyntaxError, like JS", async () => {
-    expect((await error(`try { RegExp("a", 0) } catch (e) { throw Error(e.name) }`)).message).toContain("SyntaxError")
-  })
-
-  test("new-requiring constructors throw a TypeError when called", async () => {
-    expect((await error(`return Map()`)).message).toContain("Constructor Map requires 'new'")
-    expect((await error(`return [1].map(Set)`)).message).toContain("Constructor Set requires 'new'")
-    expect((await error(`return Promise(() => 1)`)).message).toContain("Constructor Promise requires 'new'")
-    // As a reaction handler the TypeError rejects the derived promise catchably, like JS.
-    expect(await value(`return await Promise.resolve(1).then(Map).catch((e) => e.name)`)).toBe("TypeError")
-  })
-})
-
-describe("sort accepts the unified callback set", () => {
   test("sort and toSorted take built-in comparators", async () => {
     expect(await value(`return [0, 1, 0].sort(Boolean)`)).toEqual([0, 0, 1])
     expect(await value(`return [0, 1, 0].toSorted(Boolean)`)).toEqual([0, 0, 1])
