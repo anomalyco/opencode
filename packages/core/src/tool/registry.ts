@@ -1,7 +1,7 @@
 export * as ToolRegistry from "./registry"
 
 import { ToolOutput, type ToolCall, type ToolDefinition, type ToolResultValue } from "@opencode-ai/ai"
-import { Context, Effect, Layer, Scope } from "effect"
+import { Context, Effect, Layer, Scope, Semaphore } from "effect"
 import type { AgentV2 } from "../agent"
 import { Image } from "../image"
 import { PermissionV2 } from "../permission"
@@ -44,6 +44,13 @@ export interface Interface {
   readonly register: (
     tools: Readonly<Record<string, AnyTool>>,
     options?: Tools.RegisterOptions,
+  ) => Effect.Effect<void, RegistrationError, Scope.Scope>
+  /** Internal atomic registration capability used by plugin transforms. */
+  readonly registerBatch: (
+    registrations: ReadonlyArray<{
+      readonly tools: Readonly<Record<string, AnyTool>>
+      readonly options?: Tools.RegisterOptions
+    }>,
   ) => Effect.Effect<void, RegistrationError, Scope.Scope>
 }
 
@@ -107,6 +114,7 @@ const registryLayer = Layer.effect(
       readonly codemode: boolean
     }
     const local = new Map<string, Array<{ readonly token: object; readonly registration: Registration }>>()
+    const registrationLock = Semaphore.makeUnsafe(1)
 
     const settleTool = Effect.fn("ToolRegistry.settleTool")(function* (input: ExecuteInput, tool: AnyTool) {
       // Hooks fire only for hosted/local tools; provider-executed calls never reach settleTool.
@@ -192,101 +200,128 @@ const registryLayer = Layer.effect(
       }
     })
 
-    return Service.of({
-      register: Effect.fn("ToolRegistry.register")(function* (tools, options) {
-        if (options?.namespace !== undefined) yield* validateNamespace(options.namespace)
-        const entries = registrationEntries(tools, options?.namespace)
-        if (entries.length === 0) return
-        const codemode = options?.codemode ?? true
-        const reserved = codemode ? undefined : entries.find((entry) => entry.key === "execute")
-        if (reserved)
-          return yield* Effect.fail(
-            new RegistrationError({ name: reserved.key, message: 'Tool name "execute" is reserved for CodeMode' }),
-          )
-        yield* Effect.uninterruptible(
+    const registerBatch: Interface["registerBatch"] = Effect.fn("ToolRegistry.registerBatch")(
+      function* (registrations) {
+        const planned = yield* Effect.forEach(registrations, ({ tools, options }) =>
           Effect.gen(function* () {
-            const token = {}
-            for (const entry of entries)
-              local.set(entry.key, [
-                ...(local.get(entry.key) ?? []),
-                {
-                  token,
-                  registration: {
-                    tool: entry.tool,
-                    name: entry.name,
-                    namespace: entry.namespace,
-                    codemode,
-                  },
-                },
-              ])
-            yield* Effect.addFinalizer(() =>
-              Effect.sync(() => {
-                for (const entry of entries) {
-                  const registrations =
-                    local.get(entry.key)?.filter((registration) => registration.token !== token) ?? []
-                  if (registrations.length > 0) local.set(entry.key, registrations)
-                  else local.delete(entry.key)
-                }
-              }),
-            )
+            if (options?.namespace !== undefined) yield* validateNamespace(options.namespace)
+            const entries = registrationEntries(tools, options?.namespace)
+            const codemode = options?.codemode ?? true
+            const reserved = codemode ? undefined : entries.find((entry) => entry.key === "execute")
+            if (reserved)
+              return yield* Effect.fail(
+                new RegistrationError({ name: reserved.key, message: 'Tool name "execute" is reserved for CodeMode' }),
+              )
+            return { entries, codemode }
           }),
         )
-      }),
-      materialize: Effect.fn("ToolRegistry.materialize")(function* (permissions) {
-        const direct = new Map<string, Registration>()
-        const codemode = new Map<string, Registration>()
-        const rules = permissions ?? []
-        for (const [name, entries] of local) {
-          const registration = entries.at(-1)?.registration
-          if (!registration) continue
-          if (whollyDisabled(permission(registration.tool, name), rules)) continue
-          if (registration.codemode) codemode.set(name, registration)
-          else direct.set(name, registration)
-        }
-        const execute =
-          codemode.size > 0 && !whollyDisabled("execute", rules) ? ExecuteTool.create(codemode) : undefined
-        // Build each tool definition defensively. A plugin can register a structurally
-        // invalid tool (missing description, undecodable input schema, opaque object from
-        // a different module copy, etc.) that only fails when its definition is read.
-        // Throwing here used to break every model step in the Location because no
-        // definition list could be produced. Isolate the bad tool: log once and omit it
-        // so the rest of the catalog stays usable. See
-        // https://github.com/anomalyco/opencode/issues/35963
-        const definitions: ToolDefinition[] = []
-        for (const [name, registration] of direct) {
-          try {
-            definitions.push(definition(name, registration.tool))
-          } catch (error) {
-            yield* Effect.logWarning("failed to materialize tool definition; skipping", {
-              tool: name,
-              error: error instanceof Error ? error.message : String(error),
-            })
-            // Drop the bad registration so later materializations and settle() do not
-            // surface it as a usable tool.
-            direct.delete(name)
-          }
-        }
-        if (execute) definitions.push(definition("execute", execute))
-        return {
-          definitions,
-          settle: (input) => {
-            if (input.call.name === "execute" && execute) return settleTool(input, execute)
-            const registration = direct.get(input.call.name)
-            if (registration) return settleTool(input, registration.tool)
-            return Effect.succeed({
-              result: { type: "error", value: `Unknown tool: ${input.call.name}` },
-              error: { type: "tool.unknown", message: `Unknown tool: ${input.call.name}` },
-            })
+        if (planned.every((plan) => plan.entries.length === 0)) return
+        yield* Effect.uninterruptible(
+          registrationLock.withPermit(
+            Effect.gen(function* () {
+              const token = {}
+              for (const { entries, codemode } of planned)
+                for (const entry of entries)
+                  local.set(entry.key, [
+                    ...(local.get(entry.key) ?? []),
+                    {
+                      token,
+                      registration: {
+                        tool: entry.tool,
+                        name: entry.name,
+                        namespace: entry.namespace,
+                        codemode,
+                      },
+                    },
+                  ])
+              yield* Effect.addFinalizer(() =>
+                registrationLock.withPermit(
+                  Effect.sync(() => {
+                    for (const { entries } of planned)
+                      for (const entry of entries) {
+                        const registrations =
+                          local.get(entry.key)?.filter((registration) => registration.token !== token) ?? []
+                        if (registrations.length > 0) local.set(entry.key, registrations)
+                        else local.delete(entry.key)
+                      }
+                  }),
+                ),
+              )
+            }),
+          ),
+        )
+      },
+    )
+
+    return Service.of({
+      register: Effect.fn("ToolRegistry.register")((tools, options) =>
+        registerBatch([
+          {
+            tools,
+            ...(options === undefined ? {} : { options }),
           },
-        }
-      }),
+        ]),
+      ),
+      registerBatch,
+      materialize: Effect.fn("ToolRegistry.materialize")((permissions) =>
+        registrationLock.withPermit(
+          Effect.gen(function* () {
+            const direct = new Map<string, Registration>()
+            const codemode = new Map<string, Registration>()
+            const rules = permissions ?? []
+            for (const [name, entries] of local) {
+              const registration = entries.at(-1)?.registration
+              if (!registration) continue
+              if (whollyDisabled(permission(registration.tool, name), rules)) continue
+              if (registration.codemode) codemode.set(name, registration)
+              else direct.set(name, registration)
+            }
+            const execute =
+              codemode.size > 0 && !whollyDisabled("execute", rules) ? ExecuteTool.create(codemode) : undefined
+            // Build each tool definition defensively. A plugin can register a structurally
+            // invalid tool (missing description, undecodable input schema, opaque object from
+            // a different module copy, etc.) that only fails when its definition is read.
+            // Throwing here used to break every model step in the Location because no
+            // definition list could be produced. Isolate the bad tool: log and omit it
+            // so the rest of the catalog stays usable. See
+            // https://github.com/anomalyco/opencode/issues/35963
+            const definitions: ToolDefinition[] = []
+            for (const [name, registration] of direct) {
+              try {
+                definitions.push(definition(name, registration.tool))
+              } catch (error) {
+                yield* Effect.logWarning("failed to materialize tool definition; skipping", {
+                  tool: name,
+                  error: error instanceof Error ? error.message : String(error),
+                })
+                direct.delete(name)
+              }
+            }
+            if (execute) definitions.push(definition("execute", execute))
+            return {
+              definitions,
+              settle: (input: ExecuteInput) => {
+                if (input.call.name === "execute" && execute) return settleTool(input, execute)
+                const registration = direct.get(input.call.name)
+                if (registration) return settleTool(input, registration.tool)
+                return Effect.succeed({
+                  result: { type: "error", value: `Unknown tool: ${input.call.name}` },
+                  error: { type: "tool.unknown", message: `Unknown tool: ${input.call.name}` },
+                })
+              },
+            }
+          }),
+        ),
+      ),
     })
   }),
 )
 
 const layer = Layer.effect(
   Tools.Service,
-  Service.use((registry) => Effect.succeed(Tools.Service.of({ register: registry.register }))),
+  Service.use((registry) =>
+    Effect.succeed(Tools.Service.of({ register: registry.register, registerBatch: registry.registerBatch })),
+  ),
 ).pipe(Layer.provideMerge(registryLayer))
 
 function whollyDisabled(action: string, rules: PermissionV2.Ruleset) {
