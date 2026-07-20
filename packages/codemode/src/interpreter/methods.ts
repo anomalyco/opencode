@@ -22,13 +22,14 @@ import {
   CodeModeSet,
   CodeModeURL,
   CodeModeURLSearchParams,
+  isCodeModeValue,
 } from "../values.js"
-import { invokeDateMethod, invokeDateStatic } from "../stdlib/date.js"
+import { dateSetterArgumentCount, invokeDateMethod, invokeDateStatic } from "../stdlib/date.js"
 import { invokeJsonMethod } from "../stdlib/json.js"
 import { invokeMathMethod } from "../stdlib/math.js"
 import { invokeNumberMethod, invokeNumberStatic } from "../stdlib/number.js"
 import { invokeObjectMethod } from "../stdlib/object.js"
-import { invokeRegExpMethod, matchToValue, toHostRegex } from "../stdlib/regexp.js"
+import { invokeRegExpMethod, invokeRegExpStatic, matchToValue, toHostRegex } from "../stdlib/regexp.js"
 import { invokeStringStatic } from "../stdlib/string.js"
 import { invokeURLMethod, invokeURLStatic, uriArgument } from "../stdlib/url.js"
 import { boundedData, coerceToNumber, coerceToString, errorBrandName } from "../stdlib/value.js"
@@ -96,7 +97,17 @@ export const invokeIntrinsic = <R>(
     return invokeArrayMethod(runner, ref.receiver, ref.name, args, node)
   }
   if (ref.receiver instanceof CodeModeDate) {
-    return Effect.succeed(invokeDateMethod(ref.receiver, ref.name, node))
+    const target = ref.receiver
+    const argumentCount = dateSetterArgumentCount(ref.name)
+    if (argumentCount === undefined) return Effect.succeed(invokeDateMethod(target, ref.name, [], node))
+    // Native setters read the current time before argument coercion, whose callbacks may mutate the Date.
+    const initialTime = target.time
+    return Effect.map(
+      Effect.forEach(args.slice(0, argumentCount), (arg) => coerceDateSetterArgument(runner, arg, node), {
+        concurrency: 1,
+      }),
+      (values) => invokeDateMethod(target, ref.name, values, node, initialTime),
+    )
   }
   if (ref.receiver instanceof CodeModeRegExp) {
     return Effect.succeed(invokeRegExpMethod(ref.receiver, ref.name, args, node))
@@ -116,6 +127,33 @@ export const invokeIntrinsic = <R>(
   throw new InterpreterRuntimeError(`Method '${ref.name}' is not available in CodeMode.`, node)
 }
 
+const coerceDateSetterArgument = <R>(
+  runner: CallbackRunner<R>,
+  value: unknown,
+  node: AstNode,
+): Effect.Effect<number, unknown, R> => {
+  if (value === null || typeof value !== "object" || Array.isArray(value) || isCodeModeValue(value)) {
+    return Effect.succeed(coerceToNumber(value))
+  }
+  const object = value as Record<string, unknown>
+  return Effect.gen(function* () {
+    if (Object.hasOwn(object, "valueOf") && typeofValue(object.valueOf) === "function") {
+      const result = yield* runner.invokeCallable(object.valueOf, [], node)
+      if (result === null || (typeof result !== "object" && typeof result !== "function")) {
+        return coerceToNumber(result)
+      }
+    }
+    if (!Object.hasOwn(object, "toString")) return coerceToNumber(value)
+    if (typeofValue(object.toString) === "function") {
+      const result = yield* runner.invokeCallable(object.toString, [], node)
+      if (result === null || (typeof result !== "object" && typeof result !== "function")) {
+        return coerceToNumber(result)
+      }
+    }
+    throw new InterpreterRuntimeError("Cannot convert object to primitive value.", node).as("TypeError")
+  })
+}
+
 export const invokeGlobalMethod = (ref: GlobalMethodReference, args: Array<unknown>, node: AstNode): unknown => {
   if (ref.namespace === "console")
     throw new InterpreterRuntimeError(`console.${ref.name} is not available in CodeMode.`, node)
@@ -126,12 +164,8 @@ export const invokeGlobalMethod = (ref: GlobalMethodReference, args: Array<unkno
   if (ref.namespace === "String") return invokeStringStatic(ref.name, args, node)
   if (ref.namespace === "URL") return invokeURLStatic(ref.name, args, node)
   if (ref.namespace === "Date") return invokeDateStatic(ref.name, args, node)
-  if (
-    ref.namespace === "RegExp" ||
-    ref.namespace === "Map" ||
-    ref.namespace === "Set" ||
-    ref.namespace === "URLSearchParams"
-  ) {
+  if (ref.namespace === "RegExp") return invokeRegExpStatic(ref.name, args, node)
+  if (ref.namespace === "Map" || ref.namespace === "Set" || ref.namespace === "URLSearchParams") {
     throw new InterpreterRuntimeError(`${ref.namespace}.${ref.name} is not available in CodeMode.`, node)
   }
   return invokeJsonMethod(ref.name, args, node)

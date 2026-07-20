@@ -98,7 +98,7 @@ function migrateMode(theme: Theme, mode: Mode): FileThemeDefinition {
         overlay: backgroundMenu,
       },
       action: {
-        primary: { default: "transparent", $hovered: backgroundPanel, $focused: primary, $selected: primary },
+        primary: { default: "transparent", $hovered: backgroundPanel, $focused: primary, $selected: "transparent" },
         destructive: { default: color("error") },
       },
       formfield: {

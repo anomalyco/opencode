@@ -238,9 +238,9 @@ ultimate source of truth.
       use their epoch time) and reject opaque runtime references as data errors.
 - [x] Unknown static members on global namespaces and on `Number`/`String`/the coercion functions read as `undefined`
       for feature detection. Calling any undefined value reports a native-style `TypeError` naming the callee, for
-      example `Math.sumPrecise is not a function.` Blocked members (`constructor`, `__proto__`, ...) still throw,
+      example `Math.sum is not a function.` Blocked members (`constructor`, `__proto__`, ...) still throw,
       and unknown `Promise` statics keep their descriptive error.
-- [ ] `Math.sumPrecise`.
+- [x] `Math.sumPrecise` over supported collection iterables, rejecting non-number elements without coercion.
 - [x] Global coercing `isFinite` and `isNaN`; opaque runtime references reject as data errors, like `Number(...)`.
 
 ## JSON and console
@@ -265,25 +265,29 @@ ultimate source of truth.
       `getUTCSeconds`, and `getUTCMilliseconds`.
 - [x] `getTimezoneOffset`, arithmetic, relational comparison, and `instanceof Date`.
 - [x] Date values serialize to ISO strings; invalid dates serialize to `null`.
-- [ ] Date setters.
+- [x] Local and UTC Date setters, including native argument coercion, mutation, rollover, invalid-Date recovery, and
+      `TimeClip` behavior.
 - [x] `Date.prototype.toUTCString` and its `toGMTString` alias.
 - [x] Native one-argument Date coercion for supported values, including booleans, null, arrays, and plain objects.
-- [ ] Native Date loose-equality and default primitive-coercion semantics.
+- [x] Native Date loose-equality and default primitive-coercion semantics, using CodeMode's deterministic ISO string
+      representation for the string primitive.
 - [x] Native `RangeError` branding for invalid `toISOString()` calls.
 
 ## Regular expressions
 
 - [x] Literal and `RegExp(pattern, flags)` construction, with or without `new`.
 - [x] `test`, `exec`, and `toString`.
-- [x] Readable `source`, `flags`, `lastIndex`, `global`, `ignoreCase`, `multiline`, `sticky`, `unicode`, and `dotAll`.
+- [x] Readable `source`, `flags`, `lastIndex`, `hasIndices`, `global`, `ignoreCase`, `multiline`, `sticky`, `unicode`,
+      `unicodeSets`, and `dotAll`.
 - [x] Captures, safe named groups (blocked member names are omitted), match `.index`, and stateful global matching.
 - [x] Integration with supported String methods, including function replacers.
 - [x] Writable `lastIndex`.
-- [ ] `hasIndices`, match `indices`, and `unicodeSets` metadata for the `d` and `v` flags.
-- [ ] `RegExp.escape`.
+- [x] Match `indices` metadata for the `d` flag, including named groups on `exec`, `match`, and `matchAll` results.
+- [x] `RegExp.escape`.
 
 ## Map and Set
 
+- [ ] Static `Map.groupBy`.
 - [x] `new Map()` from entry arrays or another Map.
 - [x] Map `get`, `set`, `has`, `delete`, `clear`, `size`, and `forEach`.
 - [x] `new Set()` from arrays, strings, or another Set.

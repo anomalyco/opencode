@@ -5,7 +5,7 @@ export class CodeModePromise {
 }
 
 export class CodeModeDate {
-  constructor(readonly time: number) {}
+  constructor(public time: number) {}
 }
 
 export class CodeModeRegExp {
