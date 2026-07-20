@@ -14,7 +14,7 @@
  *   bun .opencode/scripts/health-check.ts
  *
  * Configuration (env):
- *   HEALTH_CHECK_PORT          listen port (default 4040)
+ *   HEALTH_CHECK_PORT          listen port (default 4043 — 4040-4042 are owned by Docker Desktop's backend on Windows)
  *   HEALTH_CHECK_HOST          listen host (default 0.0.0.0)
  *   BUILD_SHA                  git short SHA injected at build time (default "unknown")
  *   BUILD_DATE                 build date injected at build time (default "unknown")
@@ -27,7 +27,7 @@ import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import { dirname, resolve as pathResolve, join as pathJoin } from "node:path"
 
-const PORT = Number.parseInt(process.env.HEALTH_CHECK_PORT ?? "4040", 10) || 4040
+const PORT = Number.parseInt(process.env.HEALTH_CHECK_PORT ?? "4043", 10) || 4043
 const HOST = process.env.HEALTH_CHECK_HOST ?? "0.0.0.0"
 const BUILD_SHA = process.env.BUILD_SHA ?? "unknown"
 const BUILD_DATE = process.env.BUILD_DATE ?? "unknown"
