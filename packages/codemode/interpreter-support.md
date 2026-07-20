@@ -40,7 +40,8 @@ ultimate source of truth.
       arithmetic throws. BigInt remains invalid in program results, `JSON.stringify`, and tool arguments/results; the
       `BigInt` constructor and other BigInt-specific standard-library APIs are not exposed. In-interpreter BigInts are
       limited to 4,096 bits; multiplication, exponentiation, and size-increasing shifts conservatively reject before
-      native evaluation when their result may exceed that limit.
+      native evaluation when their result may exceed that limit, and necessarily oversized literal tokens are rejected
+      by a bounded source scan before TypeScript or Acorn parses them.
 - [ ] Symbol primitive values and symbol-keyed properties.
 - [ ] Tagged-template calls.
 - [ ] Getter and setter definitions in object literals.

@@ -183,9 +183,16 @@ const assertSafeBigIntOperation = (operator: string, lhs: unknown, rhs: unknown,
   const leftBits = bigintBitLength(lhs)
   const rightBits = bigintBitLength(rhs)
   const exceedsLimit = (() => {
-    if (operator === "*") return lhs !== 0n && rhs !== 0n && leftBits + rightBits > MAX_BIGINT_BITS
+    if (operator === "*") {
+      if (lhs === 0n || lhs === 1n || lhs === -1n || rhs === 0n || rhs === 1n || rhs === -1n) return false
+      return leftBits + rightBits > MAX_BIGINT_BITS
+    }
     if (operator === "**") {
       if (rhs <= 0n || lhs === 0n || lhs === 1n || lhs === -1n) return false
+      const magnitude = lhs < 0n ? -lhs : lhs
+      if ((magnitude & (magnitude - 1n)) === 0n) {
+        return BigInt(leftBits - 1) * rhs + 1n > BigInt(MAX_BIGINT_BITS)
+      }
       return rhs > BigInt(Math.floor(MAX_BIGINT_BITS / leftBits))
     }
     if (operator !== "<<" && operator !== ">>") return false

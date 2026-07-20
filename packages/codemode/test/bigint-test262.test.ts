@@ -208,23 +208,92 @@ describe("BigInt JSON-like boundaries", () => {
 })
 
 describe("BigInt resource bound", () => {
-  test("limits in-interpreter BigInts to 4,096 bits", async () => {
-    const maximum = await execute(`return ${`0b1${"0".repeat(4_095)}n`} === ${`0b1${"0".repeat(4_095)}n`}`)
-    expect(maximum.ok).toBe(true)
-    if (maximum.ok) expect(maximum.value).toBe(true)
+  const separate = (digits: string) => digits.match(/.{1,32}/g)!.join("_")
+  const decimalMaximum = ((1n << 4_096n) - 1n).toString()
 
-    const oversized = await execute(`return ${`0b1${"0".repeat(4_096)}n`} === 0n`)
-    expect(oversized.ok).toBe(false)
-    if (!oversized.ok) {
-      expect(oversized.error.kind).toBe("InvalidDataValue")
-      expect(oversized.error.message).toContain("4096-bit BigInt limit")
+  test("accepts 4,096-bit literal boundaries for every radix and separators", async () => {
+    for (const literal of [
+      `${separate(decimalMaximum)}n`,
+      `0x${separate(`8${"0".repeat(1_023)}`)}n`,
+      `0o${separate(`1${"0".repeat(1_365)}`)}n`,
+      `0b${separate(`1${"0".repeat(4_095)}`)}n`,
+    ]) {
+      const result = await Effect.runPromise(
+        CodeMode.execute({ code: `return typeof ${literal} === "bigint"`, tools: {}, limits: { timeoutMs: 1 } }),
+      )
+      expect(result.ok).toBe(true)
+      if (result.ok) expect(result.value).toBe(true)
     }
+  })
+
+  test("rejects necessarily oversized literal boundaries before parsing", async () => {
+    for (const literal of [
+      `${1n << 4_096n}n`,
+      `0x1${"0".repeat(1_024)}n`,
+      `0o2${"0".repeat(1_365)}n`,
+      `0b${separate(`1${"0".repeat(4_096)}`)}n`,
+    ]) {
+      const result = await Effect.runPromise(
+        CodeMode.execute({ code: `return ${literal}`, tools: {}, limits: { timeoutMs: 1 } }),
+      )
+      expect(result.ok).toBe(false)
+      if (!result.ok) {
+        expect(result.error.kind).toBe("InvalidDataValue")
+        expect(result.error.message).toContain("literal source")
+        expect(result.error.message).toContain("before parsing")
+      }
+    }
+  })
+
+  test("ignores BigInt-shaped text outside numeric literals", async () => {
+    const oversized = `0b1${"0".repeat(4_096)}n`
+    expect(await value(`const text = "${oversized}"; return text.length`)).toBe(4_100)
+    expect(await value(`/* ${oversized} */ return true`)).toBe(true)
+    expect(await value(`return \`${oversized}\`.length`)).toBe(4_100)
+    expect(await value(`return /${oversized}/.test("no")`)).toBe(false)
+    expect(await value(`if (true) /${oversized}/.test("no"); return true`)).toBe(true)
+  })
+
+  test("rejects very large literal source promptly despite a one-millisecond timeout", async () => {
+    const started = performance.now()
+    for (const digits of [500_000, 2_000_000]) {
+      const result = await Effect.runPromise(
+        CodeMode.execute({
+          code: `return 0b1${"0".repeat(digits)}n`,
+          tools: {},
+          limits: { timeoutMs: 1 },
+        }),
+      )
+      expect(result.ok).toBe(false)
+      if (!result.ok) {
+        expect(result.error.kind).toBe("InvalidDataValue")
+        expect(result.error.message).toContain("before parsing")
+      }
+    }
+    expect(performance.now() - started).toBeLessThan(2_000)
+  })
+
+  test("accepts precise safe multiplication and power-of-two exponentiation boundaries", async () => {
+    const maximumBit = `0b1${"0".repeat(4_095)}n`
+    expect(
+      await value(`
+        const value = ${maximumBit}
+        return [
+          value * 1n === value,
+          value * -1n === -value,
+          1n * value === value,
+          -1n * value === -value,
+          2n ** 4095n === value,
+        ]
+      `),
+    ).toEqual(new Array(5).fill(true))
   })
 
   test("rejects expensive operations before native evaluation", async () => {
     for (const code of [
       `const value = 1n << 2_048n; return value * value`,
       `return 16n ** 1_024n`,
+      `return 2n ** 4_096n`,
       `return 1n << 4_096n`,
       `return 1n >> -4_096n`,
     ]) {

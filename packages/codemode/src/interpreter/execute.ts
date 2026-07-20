@@ -1,8 +1,19 @@
 import { parse } from "acorn"
 import { Cause, Effect, Scope } from "effect"
-import { DiagnosticCategory, ModuleKind, ScriptTarget, flattenDiagnosticMessageText, transpileModule } from "typescript"
+import {
+  DiagnosticCategory,
+  ModuleKind,
+  ScriptKind,
+  ScriptTarget,
+  SyntaxKind,
+  createSourceFile,
+  flattenDiagnosticMessageText,
+  forEachChild,
+  transpileModule,
+  type Node,
+} from "typescript"
 import type { DataValue, Diagnostic, ExecuteOptions, ResolvedExecutionLimits, Result } from "../codemode.js"
-import { copyIn, copyOut, ToolRuntime, type Services } from "../tool-runtime.js"
+import { copyIn, copyOut, MAX_BIGINT_BITS, ToolRuntime, type Services } from "../tool-runtime.js"
 import type { Tools } from "../tools.js"
 import { normalizeError } from "./errors.js"
 import { InterpreterRuntimeError, isRecord, type ProgramNode } from "./model.js"
@@ -119,6 +130,7 @@ export const executeWithLimits = <const Provided extends Record<string, unknown>
 }
 
 const parseProgram = (code: string): ProgramNode => {
+  assertBigIntLiteralSourcesBounded(code)
   const transpiled = transpileModule(`async function __codemode__() {\n${code}\n}`, {
     reportDiagnostics: true,
     compilerOptions: {
@@ -152,6 +164,129 @@ const parseProgram = (code: string): ProgramNode => {
   }
 
   return parsed as ProgramNode
+}
+
+const decimalBigIntLimit = ((1n << BigInt(MAX_BIGINT_BITS)) - 1n).toString()
+
+// TypeScript and Acorn materialize BigInt tokens before the interpreter can apply its value limit.
+// Find necessarily oversized digit runs without constructing a BigInt, replace them with small
+// sentinels, and parse only that shortened source to distinguish literals from identical text in
+// strings, comments, templates, and regexps. Neither real parser sees an oversized BigInt token.
+const assertBigIntLiteralSourcesBounded = (code: string): void => {
+  const candidates = oversizedBigIntSources(code)
+  if (candidates.length === 0) return
+
+  let sourceEnd = 0
+  let maskedEnd = 0
+  const starts = new Set<number>()
+  const chunks = candidates.map((candidate) => {
+    const chunk = `${code.slice(sourceEnd, candidate.start)}0n`
+    starts.add(maskedEnd + chunk.length - 2)
+    sourceEnd = candidate.end
+    maskedEnd += chunk.length
+    return chunk
+  })
+  const masked = `${chunks.join("")}${code.slice(sourceEnd)}`
+  const prefix = "async function __codemode__() {\n"
+  const source = createSourceFile("codemode.ts", `${prefix}${masked}\n}`, ScriptTarget.ESNext, false, ScriptKind.TS)
+  let oversized = false
+  const visit = (node: Node): void => {
+    if (node.kind === SyntaxKind.BigIntLiteral && starts.has(node.getStart(source) - prefix.length)) {
+      oversized = true
+      return
+    }
+    if (!oversized) forEachChild(node, visit)
+  }
+  visit(source)
+  if (!oversized) return
+  throw new InterpreterRuntimeError(
+    `BigInt literal source exceeds CodeMode's ${MAX_BIGINT_BITS}-bit limit before parsing.`,
+    undefined,
+    "InvalidDataValue",
+  )
+}
+
+const oversizedBigIntSources = (code: string) => {
+  const candidates: Array<{ start: number; end: number }> = []
+  for (let start = 0; start < code.length; start++) {
+    if (code[start] < "0" || code[start] > "9" || isIdentifierPart(code[start - 1])) continue
+    const prefix = code[start] === "0" ? code[start + 1]?.toLowerCase() : undefined
+    const radix = prefix === "b" ? 2 : prefix === "o" ? 8 : prefix === "x" ? 16 : 10
+    const radixBits = radix === 2 ? 1 : radix === 8 ? 3 : radix === 16 ? 4 : 0
+    const digitsStart = radix === 10 ? start : start + 2
+    let end = digitsStart
+    let valid = true
+    let separator = false
+    let significantStart = -1
+    let significantDigits = 0
+    let firstSignificant = 0
+    while (end < code.length) {
+      const digit = digitValue(code[end])
+      if (digit >= 0 && digit < radix) {
+        if (digit !== 0 || significantStart !== -1) {
+          if (significantStart === -1) {
+            significantStart = end
+            firstSignificant = digit
+          }
+          significantDigits++
+        }
+        separator = false
+        end++
+        continue
+      }
+      if (code[end] !== "_") break
+      if (end === digitsStart || separator) valid = false
+      separator = true
+      end++
+    }
+    if (separator || code[end] !== "n") valid = false
+    if (radix === 10 && end > start + 1 && code[start] === "0") valid = false
+    if (code[end] === "n") end++
+    if (
+      valid &&
+      !isIdentifierPart(code[end]) &&
+      sourceBigIntExceedsLimit(code, significantStart, end - 1, significantDigits, firstSignificant, radixBits)
+    ) {
+      candidates.push({ start, end })
+    }
+    start = Math.max(start, end - 1)
+  }
+  return candidates
+}
+
+const isIdentifierPart = (character: string | undefined): boolean =>
+  character !== undefined && (/[A-Za-z0-9_$]/.test(character) || character.charCodeAt(0) > 127)
+
+const digitValue = (character: string | undefined): number => {
+  if (character === undefined) return -1
+  const value = character.charCodeAt(0)
+  if (value >= 48 && value <= 57) return value - 48
+  if (value >= 65 && value <= 70) return value - 55
+  if (value >= 97 && value <= 102) return value - 87
+  return -1
+}
+
+const sourceBigIntExceedsLimit = (
+  code: string,
+  significantStart: number,
+  suffix: number,
+  significantDigits: number,
+  firstSignificant: number,
+  radixBits: number,
+): boolean => {
+  if (radixBits !== 0) {
+    if (significantDigits === 0) return false
+    return (significantDigits - 1) * radixBits + firstSignificant.toString(2).length > MAX_BIGINT_BITS
+  }
+  if (significantDigits !== decimalBigIntLimit.length) return significantDigits > decimalBigIntLimit.length
+  let compared = 0
+  for (let position = significantStart; position < suffix; position++) {
+    if (code[position] === "_") continue
+    const difference = code.charCodeAt(position) - decimalBigIntLimit.charCodeAt(compared)
+    if (difference !== 0) return difference > 0
+    compared++
+  }
+  return false
 }
 
 const utf8ByteLength = (value: string): number => new TextEncoder().encode(value).byteLength
