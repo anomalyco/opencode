@@ -93,10 +93,10 @@ A tabela abaixo fornece uma contagem estimada de requisições com base nos padr
 
 | Model             | requisições por 5 horas | requisições por semana | requisições por mês |
 | ----------------- | ----------------------- | ---------------------- | ------------------- |
-| Grok 4.5          | 80                      | 190                    | 380                 |
+| Grok 4.5          | 120                     | 300                    | 600                 |
 | GLM-5.2           | 880                     | 2,150                  | 4,300               |
 | GLM-5.1           | 880                     | 2,150                  | 4,300               |
-| Kimi K3           | 140                     | 340                    | 680                 |
+| Kimi K3           | 110                     | 250                    | 490                 |
 | Kimi K2.7 Code    | 1,350                   | 4,630                  | 9,250               |
 | Kimi K2.6         | 1,150                   | 2,880                  | 5,750               |
 | MiMo-V2.5         | 30,100                  | 75,200                 | 150,400             |
@@ -109,11 +109,12 @@ A tabela abaixo fornece uma contagem estimada de requisições com base nos padr
 | DeepSeek V4 Pro   | 3,450                   | 8,550                  | 17,150              |
 | DeepSeek V4 Flash | 31,650                  | 79,050                 | 158,150             |
 
-As estimativas se baseiam nos padrões médios de requisições observados:
+As estimativas se baseiam nos padrões de requisições observados:
 
 - Grok 4.5 — 1.100 tokens de entrada, 71.500 em cache, 220 tokens de saída por requisição
 - GLM-5.2/5.1 — 700 tokens de entrada, 52.000 em cache, 150 tokens de saída por requisição
-- Kimi K3/K2.7/K2.6 — 870 tokens de entrada, 55.000 em cache, 200 tokens de saída por requisição
+- Kimi K3 — 1.050 tokens de entrada, 76.500 em cache, 300 tokens de saída por requisição
+- Kimi K2.7/K2.6 — 870 tokens de entrada, 55.000 em cache, 200 tokens de saída por requisição
 - DeepSeek V4 Pro — 750 tokens de entrada, 82.000 em cache, 290 tokens de saída por requisição
 - DeepSeek V4 Flash — 790 tokens de entrada, 68.000 em cache, 280 tokens de saída por requisição
 - MiniMax M3 — 510 tokens de entrada, 56.000 em cache, 190 tokens de saída por requisição
@@ -128,7 +129,7 @@ As estimativas também se baseiam nos seguintes preços por 1M tokens e no uso m
 
 | Modelo                       | Entrada | Saída  | Leitura em cache | Escrita em cache | Uso |
 | ---------------------------- | ------- | ------ | ---------------- | ---------------- | --- |
-| Grok 4.5                     | $2.00   | $6.00  | $0.50            | -                | $15 |
+| Grok 4.5                     | $2.00   | $6.00  | $0.30            | -                | $15 |
 | GLM-5.2                      | $1.40   | $4.40  | $0.26            | -                | $60 |
 | GLM-5.1                      | $1.40   | $4.40  | $0.26            | -                | $60 |
 | Kimi K3                      | $3.00   | $15.00 | $0.30            | -                | $15 |

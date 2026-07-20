@@ -703,6 +703,7 @@ export const dict = {
   "session.new.workspace.triggerLocal": "Локально",
   "session.new.workspace.local": "Локальний репозиторій",
   "session.new.workspace.existing": "Робоча область…",
+  "session.new.git.none": "Немає Git",
   "session.new.lastModified": "Востаннє змінено",
 
   "session.header.search.placeholder": "Пошук {{project}}",
