@@ -49,21 +49,18 @@ const program = Effect.gen(function* () {
 })
 ```
 
-Provider option defaults can be configured once and overridden per request. Raw `http.body` fields have final
-precedence over both:
+Provider-native image options belong to each request. Raw `http.body` fields have final precedence over them:
 
 ```ts
-const model = OpenAI.configure({
-  apiKey: process.env.OPENAI_API_KEY,
-  image: { options: { quality: "medium", outputFormat: "png" } },
-}).image("gpt-image-2")
+const model = OpenAI.configure({ apiKey }).image("gpt-image-2")
 
-Image.generate({
-  model,
-  prompt: "A glass observatory above the clouds",
-  options: { quality: "high" },
-  http: { body: { quality: "low" } },
-})
+yield *
+  Image.generate({
+    model,
+    prompt,
+    options: { quality: "medium" },
+    http,
+  })
 ```
 
 Conversational image generation remains part of the LLM interaction. OpenAI Responses exposes it through its hosted image tool:

@@ -5,7 +5,7 @@ import { HttpOptions, ProviderID, ToolDefinition, mergeHttpOptions, type ModelID
 import * as OpenAIChat from "../protocols/openai-chat"
 import * as OpenAIResponses from "../protocols/openai-responses"
 import { withOpenAIOptions, type OpenAIProviderOptionsInput } from "./openai-options"
-import { OpenAIImages, type OpenAIImageOptions, type OpenAIImageString } from "../protocols/openai-images"
+import { OpenAIImages, type OpenAIImageString } from "../protocols/openai-images"
 
 export type { OpenAIOptionsInput, OpenAIResponseIncludable } from "./openai-options"
 export type { OpenAIImageOptions } from "../protocols/openai-images"
@@ -22,12 +22,7 @@ export type Config = RouteDefaultsInput &
     readonly baseURL?: string
     readonly queryParams?: Record<string, string>
     readonly providerOptions?: OpenAIProviderOptionsInput
-    readonly image?: ImageConfig
   }
-
-export interface ImageConfig {
-  readonly options?: OpenAIImageOptions
-}
 
 export interface ImageGenerationOptions {
   readonly action?: OpenAIImageString<"auto" | "generate" | "edit">
@@ -75,7 +70,7 @@ export interface Settings extends ProviderPackage.Settings {
 const auth = (options: ProviderAuthOption<"optional">) => AuthOptions.bearer(options, "OPENAI_API_KEY")
 
 const defaults = (input: Config) => {
-  const { apiKey: _, auth: _auth, baseURL: _baseURL, queryParams: _queryParams, image: _image, ...rest } = input
+  const { apiKey: _, auth: _auth, baseURL: _baseURL, queryParams: _queryParams, ...rest } = input
   return rest
 }
 
@@ -101,13 +96,10 @@ export const configure = (input: Config = {}) => {
       auth: auth(input),
       baseURL: input.baseURL,
       headers: input.headers,
-      defaults: {
-        options: input.image?.options,
-        http: mergeHttpOptions(
-          input.http === undefined ? undefined : HttpOptions.make(input.http),
-          input.queryParams === undefined ? undefined : new HttpOptions({ query: input.queryParams }),
-        ),
-      },
+      http: mergeHttpOptions(
+        input.http === undefined ? undefined : HttpOptions.make(input.http),
+        input.queryParams === undefined ? undefined : new HttpOptions({ query: input.queryParams }),
+      ),
     })
 
   return {

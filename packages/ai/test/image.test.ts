@@ -14,17 +14,6 @@ describe("Image", () => {
           apiKey: "test",
           baseURL: "https://api.openai.test/v1",
           queryParams: { "api-version": "v1" },
-          image: {
-            options: {
-              quality: "medium",
-              outputFormat: "png",
-              output_format: "gif",
-              outputCompression: 10,
-              output_compression: 20,
-              background: "opaque",
-              native_default: true,
-            },
-          },
           http: { body: { deployment: "test" }, headers: { "x-default": "yes" } },
         }).image("gpt-image-2"),
         prompt: "A robot tending a rooftop garden",
@@ -36,6 +25,8 @@ describe("Image", () => {
           output_format: "avif",
           outputCompression: 30,
           output_compression: 40,
+          background: "opaque",
+          native_default: true,
           future_option: true,
         },
         http: {
@@ -96,7 +87,6 @@ describe("Image", () => {
       model: OpenAI.configure({
         apiKey: "test",
         baseURL: "https://api.openai.test/v1",
-        image: { options: { outputFormat: "png", outputCompression: 10 } },
       }).image("future-image-model"),
       prompt: "A lighthouse in fog",
       options: {

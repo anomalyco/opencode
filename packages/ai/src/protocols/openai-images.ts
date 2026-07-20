@@ -1,15 +1,15 @@
 import { Effect, Encoding, Schema } from "effect"
 import { Headers, HttpClientRequest } from "effect/unstable/http"
-import {
-  ImageModel,
-  GeneratedImage,
-  ImageResponse,
-  type ImageRequestFor,
-  type ImageModelDefaults,
-  type ImageRoute,
-} from "../image"
+import { ImageModel, GeneratedImage, ImageResponse, type ImageRequestFor, type ImageRoute } from "../image"
 import { Auth, type Definition as AuthDefinition } from "../route/auth"
-import { InvalidProviderOutputReason, LLMError, Usage, mergeHttpOptions, mergeJsonRecords } from "../schema"
+import {
+  InvalidProviderOutputReason,
+  LLMError,
+  Usage,
+  mergeHttpOptions,
+  mergeJsonRecords,
+  type HttpOptions,
+} from "../schema"
 import { ProviderShared } from "./shared"
 import { OpenAIImage } from "./utils/openai-image"
 
@@ -61,7 +61,7 @@ export interface ModelInput {
   readonly auth: AuthDefinition
   readonly baseURL?: string
   readonly headers?: Record<string, string>
-  readonly defaults?: ImageModelDefaults<OpenAIImageOptions>
+  readonly http?: HttpOptions
 }
 
 const nativeOptions = (options: Record<string, unknown> | undefined) => {
@@ -92,10 +92,9 @@ export const model = (input: ModelInput) => {
   const route: ImageRoute<OpenAIImageOptions> = {
     id: ADAPTER,
     generate: Effect.fn("OpenAIImages.generate")(function* (request: ImageRequestFor<OpenAIImageOptions>, execute) {
-      const http = mergeHttpOptions(request.model.defaults?.http, request.http)
+      const http = mergeHttpOptions(request.model.http, request.http)
       const requestBody = mergeJsonRecords(
         { model: request.model.id, prompt: request.prompt },
-        nativeOptions(request.model.defaults?.options),
         nativeOptions(request.options),
         http?.body,
       ) as OpenAIImageBody
@@ -163,7 +162,7 @@ export const model = (input: ModelInput) => {
       })
     }),
   }
-  return ImageModel.make<OpenAIImageOptions>({ id: input.id, provider: "openai", route, defaults: input.defaults })
+  return ImageModel.make<OpenAIImageOptions>({ id: input.id, provider: "openai", route, http: input.http })
 }
 
 export const OpenAIImages = {

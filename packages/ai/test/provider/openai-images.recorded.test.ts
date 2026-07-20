@@ -6,13 +6,6 @@ import { recordedTests } from "../recorded-test"
 
 const model = OpenAI.configure({
   apiKey: process.env.OPENAI_API_KEY ?? "fixture",
-  image: {
-    options: {
-      quality: "low",
-      outputFormat: "jpeg",
-      outputCompression: 10,
-    },
-  },
 }).image("gpt-image-1-mini")
 
 const recorded = recordedTests({
@@ -28,7 +21,7 @@ describe("OpenAI Images recorded", () => {
       const response = yield* Image.generate({
         model,
         prompt: "A simple flat black circle centered on a plain white background.",
-        options: { size: "1024x1024" },
+        options: { quality: "low", outputFormat: "jpeg", outputCompression: 10, size: "1024x1024" },
       })
 
       expect(response.images).toHaveLength(1)

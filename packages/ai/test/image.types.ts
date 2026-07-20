@@ -26,6 +26,8 @@ Image.generate({
 })
 
 const openai = OpenAI.image("gpt-image-2")
+// @ts-expect-error Image generation options are request-scoped, not provider configuration.
+OpenAI.configure({ image: { options: { quality: "medium" } } })
 const futureOpenAIOptions: ImageModelOptions<typeof openai> = { quality: "future-quality" }
 void futureOpenAIOptions
 Image.generate({

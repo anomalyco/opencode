@@ -17,13 +17,13 @@ export class ImageModel<Options extends ImageOptions = ImageOptions> {
   readonly id: ModelID
   readonly provider: ProviderID
   readonly route: ImageRoute<Options>
-  readonly defaults?: ImageModelDefaults<Options>
+  readonly http?: HttpOptions
 
   constructor(input: ImageModel.Input<Options>) {
     this.id = input.id
     this.provider = input.provider
     this.route = input.route
-    this.defaults = input.defaults
+    this.http = input.http
   }
 
   static make<Options extends ImageOptions = ImageOptions>(input: ImageModel.MakeInput<Options>) {
@@ -31,7 +31,7 @@ export class ImageModel<Options extends ImageOptions = ImageOptions> {
       id: ModelID.make(input.id),
       provider: ProviderID.make(input.provider),
       route: input.route,
-      defaults: input.defaults,
+      http: input.http,
     })
   }
 }
@@ -41,7 +41,7 @@ export namespace ImageModel {
     readonly id: ModelID
     readonly provider: ProviderID
     readonly route: ImageRoute<Options>
-    readonly defaults?: ImageModelDefaults<Options>
+    readonly http?: HttpOptions
   }
 
   export interface MakeInput<Options extends ImageOptions = ImageOptions>
@@ -49,11 +49,6 @@ export namespace ImageModel {
     readonly id: string | ModelID
     readonly provider: string | ProviderID
   }
-}
-
-export interface ImageModelDefaults<Options extends ImageOptions = ImageOptions> {
-  readonly options?: Options
-  readonly http?: HttpOptions
 }
 
 export const ImageModelSchema = Schema.declare((value): value is ImageModel => value instanceof ImageModel, {
