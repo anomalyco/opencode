@@ -107,13 +107,15 @@ export const Plugin = {
                     readonly moveTarget?: LocationMutation.Target
                   }> = []
                   for (const hunk of hunks) {
+                    const target = yield* mutation.resolve({ path: hunk.path, kind: "file" })
+                    const moveTarget =
+                      hunk.type === "update" && hunk.movePath
+                        ? yield* mutation.resolve({ path: hunk.movePath, kind: "file" })
+                        : undefined
                     targets.push({
                       hunk,
-                      target: yield* mutation.resolve({ path: hunk.path, kind: "file" }),
-                      moveTarget:
-                        hunk.type === "update" && hunk.movePath
-                          ? yield* mutation.resolve({ path: hunk.movePath, kind: "file" })
-                          : undefined,
+                      target,
+                      moveTarget: moveTarget?.canonical === target.canonical ? undefined : moveTarget,
                     })
                   }
                   const externalDirectories = new Map<string, LocationMutation.ExternalDirectoryAuthorization>()

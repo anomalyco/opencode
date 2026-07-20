@@ -254,6 +254,37 @@ describe("PatchTool", () => {
     ),
   )
 
+  it.live("treats a move to the same canonical path as an update", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const target = path.join(tmp.path, "same.txt")
+        return Effect.promise(() => fs.writeFile(target, "before\n")).pipe(
+          Effect.andThen(
+            withTool(tmp.path, (registry) =>
+              Effect.gen(function* () {
+                expect(
+                  yield* executeTool(
+                    registry,
+                    call(
+                      "*** Begin Patch\n*** Update File: same.txt\n*** Move to: ./same.txt\n@@\n-before\n+after\n*** End Patch",
+                    ),
+                  ),
+                ).toEqual({
+                  type: "text",
+                  value: "Success. Updated the following files:\nM same.txt",
+                })
+                expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("after\n")
+              }),
+            ),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
   it.live("moves a file over an existing destination", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
