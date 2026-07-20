@@ -265,10 +265,12 @@ ultimate source of truth.
       `getUTCSeconds`, and `getUTCMilliseconds`.
 - [x] `getTimezoneOffset`, arithmetic, relational comparison, and `instanceof Date`.
 - [x] Date values serialize to ISO strings; invalid dates serialize to `null`.
-- [ ] Date setters.
+- [x] Local and UTC Date setters, including native argument coercion, mutation, rollover, invalid-Date recovery, and
+      `TimeClip` behavior.
 - [x] `Date.prototype.toUTCString` and its `toGMTString` alias.
 - [x] Native one-argument Date coercion for supported values, including booleans, null, arrays, and plain objects.
-- [ ] Native Date loose-equality and default primitive-coercion semantics.
+- [x] Native Date loose-equality and default primitive-coercion semantics, using CodeMode's deterministic ISO string
+      representation for the string primitive.
 - [x] Native `RangeError` branding for invalid `toISOString()` calls.
 
 ## Regular expressions

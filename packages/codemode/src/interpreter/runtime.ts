@@ -1324,9 +1324,11 @@ export class Interpreter<R> {
       throw new InterpreterRuntimeError("Binary operators require data values in CodeMode.", node, "InvalidDataValue")
     }
     // Null-prototype data needs explicit primitive coercion; identity and `in` retain raw objects.
-    // Dates use string coercion for `+` and epoch time elsewhere.
+    // Dates use their default string hint for addition and loose equality, and epoch time elsewhere.
     const coerceOperand = (operand: unknown): unknown => {
-      if (operand instanceof CodeModeDate) return operator === "+" ? coerceToString(operand) : operand.time
+      if (operand instanceof CodeModeDate) {
+        return operator === "+" || operator === "==" || operator === "!=" ? coerceToString(operand) : operand.time
+      }
       return operand !== null && typeof operand === "object" ? coerceToString(operand) : operand
     }
     const bothObjects = lhs !== null && typeof lhs === "object" && rhs !== null && typeof rhs === "object"

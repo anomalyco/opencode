@@ -22,8 +22,9 @@ import {
   CodeModeSet,
   CodeModeURL,
   CodeModeURLSearchParams,
+  isCodeModeValue,
 } from "../values.js"
-import { invokeDateMethod, invokeDateStatic } from "../stdlib/date.js"
+import { dateSetterArgumentCount, invokeDateMethod, invokeDateStatic } from "../stdlib/date.js"
 import { invokeJsonMethod } from "../stdlib/json.js"
 import { invokeMathMethod } from "../stdlib/math.js"
 import { invokeNumberMethod, invokeNumberStatic } from "../stdlib/number.js"
@@ -96,7 +97,17 @@ export const invokeIntrinsic = <R>(
     return invokeArrayMethod(runner, ref.receiver, ref.name, args, node)
   }
   if (ref.receiver instanceof CodeModeDate) {
-    return Effect.succeed(invokeDateMethod(ref.receiver, ref.name, node))
+    const target = ref.receiver
+    const argumentCount = dateSetterArgumentCount(ref.name)
+    if (argumentCount === undefined) return Effect.succeed(invokeDateMethod(target, ref.name, [], node))
+    // Native setters read the current time before argument coercion, whose callbacks may mutate the Date.
+    const initialTime = target.time
+    return Effect.map(
+      Effect.forEach(args.slice(0, argumentCount), (arg) => coerceDateSetterArgument(runner, arg, node), {
+        concurrency: 1,
+      }),
+      (values) => invokeDateMethod(target, ref.name, values, node, initialTime),
+    )
   }
   if (ref.receiver instanceof CodeModeRegExp) {
     return Effect.succeed(invokeRegExpMethod(ref.receiver, ref.name, args, node))
@@ -114,6 +125,33 @@ export const invokeIntrinsic = <R>(
     return invokeURLSearchParamsMethod(runner, ref.receiver, ref.name, args, node)
   }
   throw new InterpreterRuntimeError(`Method '${ref.name}' is not available in CodeMode.`, node)
+}
+
+const coerceDateSetterArgument = <R>(
+  runner: CallbackRunner<R>,
+  value: unknown,
+  node: AstNode,
+): Effect.Effect<number, unknown, R> => {
+  if (value === null || typeof value !== "object" || Array.isArray(value) || isCodeModeValue(value)) {
+    return Effect.succeed(coerceToNumber(value))
+  }
+  const object = value as Record<string, unknown>
+  return Effect.gen(function* () {
+    if (Object.hasOwn(object, "valueOf") && typeofValue(object.valueOf) === "function") {
+      const result = yield* runner.invokeCallable(object.valueOf, [], node)
+      if (result === null || (typeof result !== "object" && typeof result !== "function")) {
+        return coerceToNumber(result)
+      }
+    }
+    if (!Object.hasOwn(object, "toString")) return coerceToNumber(value)
+    if (typeofValue(object.toString) === "function") {
+      const result = yield* runner.invokeCallable(object.toString, [], node)
+      if (result === null || (typeof result !== "object" && typeof result !== "function")) {
+        return coerceToNumber(result)
+      }
+    }
+    throw new InterpreterRuntimeError("Cannot convert object to primitive value.", node).as("TypeError")
+  })
 }
 
 export const invokeGlobalMethod = (ref: GlobalMethodReference, args: Array<unknown>, node: AstNode): unknown => {
