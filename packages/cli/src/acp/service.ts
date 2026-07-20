@@ -250,6 +250,12 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
     },
     prompt: async (params) => {
       const state = await requireSession(params.sessionId)
+      if (active.has(state.id)) {
+        throw new ACPError.ServiceFailureError({
+          safeMessage: `Session already has an active ACP prompt: ${state.id}`,
+          service: "session",
+        })
+      }
       const messageID = SessionMessage.ID.create()
       const parts = promptContentToParts(params.prompt)
       const visible = parts.filter((part) => part.type !== "text" || (!part.synthetic && !part.ignored))
@@ -265,6 +271,8 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
           : skill
             ? ({ type: "skill", id: messageID } as const)
             : ({ type: "input", id: messageID } as const)
+      const control: TurnControl = { cancelled: false, admission: new AbortController() }
+      active.set(state.id, control)
       const response = await streamTurn({
         client: input.client,
         connection: input.connection,
@@ -272,8 +280,7 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
         cwd: state.cwd,
         start,
         userMessageID: params.messageId,
-        activate: (control) => active.set(state.id, control),
-        deactivate: () => active.delete(state.id),
+        control,
         submit: async (signal) => {
           if (synthetic.length > 0) {
             await input.client.session.synthetic({
@@ -303,6 +310,8 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
             { signal },
           )
         },
+      }).finally(() => {
+        if (active.get(state.id) === control) active.delete(state.id)
       })
       await sendUsageUpdate(input.client, input.connection, state).catch(() => {})
       return response

@@ -54,16 +54,14 @@ export async function streamTurn(input: {
   readonly start: Start
   readonly userMessageID?: string | null
   readonly submit: (signal: AbortSignal) => Promise<unknown>
-  readonly activate: (control: TurnControl) => void
-  readonly deactivate: () => void
+  readonly control: TurnControl
 }): Promise<PromptResponse> {
   const streamController = new AbortController()
   const stream = input.client.event.subscribe({ signal: streamController.signal })[Symbol.asyncIterator]()
   const connected = await stream.next()
   if (connected.done) throw new Error("event stream disconnected before prompt admission")
 
-  const control: TurnControl = { cancelled: false, admission: new AbortController() }
-  input.activate(control)
+  const control = input.control
   let started = false
   let assistantMessageID: string | undefined
   let finish: SessionMessageAssistant["finish"]
@@ -263,7 +261,6 @@ export async function streamTurn(input: {
     await completed.catch(() => {})
     throw error
   } finally {
-    input.deactivate()
     streamController.abort()
     await stream.return?.(undefined).catch(() => {})
   }
