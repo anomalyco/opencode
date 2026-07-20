@@ -27,10 +27,10 @@ export function sanitizeSurrogates(content: string) {
 }
 
 function isKimiFamily(model: Provider.Model) {
-  const ids = [model.providerID, model.api.id, model.id].map((value) => value.toLowerCase())
+  const ids = [model.providerID, model.api.id, model.id].map((value) => value?.toLowerCase() ?? "")
   if (ids.some((id) => id.includes("kimi") || id.includes("moonshot"))) return true
   return ["api.kimi.com", "api.moonshot.ai", "api.moonshot.cn", "api.moonshotai.cn"].some((host) =>
-    model.api.url.toLowerCase().includes(host),
+    (model.api.url?.toLowerCase() ?? "").includes(host),
   )
 }
 
