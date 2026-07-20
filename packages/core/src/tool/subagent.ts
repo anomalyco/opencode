@@ -32,6 +32,13 @@ export const Output = Schema.Struct({
   output: Schema.String,
 })
 
+const StructuredOutput = Schema.Struct({
+  sessionID: Output.fields.sessionID,
+  status: Output.fields.status,
+  bytes: Schema.Number,
+  truncated: Schema.Boolean,
+})
+
 export const description = [
   "Spawn a subagent: a child session running a configured agent with fresh context.",
   "Foreground (default) runs the subagent to completion and returns its final response.",
@@ -115,6 +122,14 @@ export const Plugin = {
             description,
             input: Input,
             output: Output,
+            structured: StructuredOutput,
+            contentTruncation: true,
+            toStructuredOutput: ({ output }) => ({
+              sessionID: output.sessionID,
+              status: output.status,
+              bytes: Buffer.byteLength(output.output, "utf-8"),
+              truncated: false,
+            }),
             toModelOutput: ({ output }) => [{ type: "text", text: output.output }],
             execute: (input, context) =>
               Effect.gen(function* () {

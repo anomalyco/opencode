@@ -2,7 +2,8 @@ import fs from "fs/promises"
 import path from "path"
 import { fileURLToPath } from "url"
 import { describe, expect, test } from "bun:test"
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Schema } from "effect"
+import { parsePatch } from "diff"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FileMutation } from "@opencode-ai/core/file-mutation"
@@ -165,6 +166,48 @@ describe("EditTool", () => {
                 expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("after\nrest\n")
                 expect(assertions).toMatchObject([{ sessionID, action: "edit", resources: ["hello.txt"], save: ["*"] }])
                 expect(writes).toEqual([yield* Effect.promise(() => fs.realpath(target))])
+              }),
+            ),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("retains a bounded patch for large edits", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const target = path.join(tmp.path, "large.txt")
+        const before = "x".repeat(20_000)
+        const after = "y".repeat(20_000)
+        return Effect.promise(() => fs.writeFile(target, before)).pipe(
+          Effect.andThen(
+            withTool(tmp.path, (registry) =>
+              Effect.gen(function* () {
+                const settled = yield* settleTool(
+                  registry,
+                  call({ path: "large.txt", oldString: before, newString: after }),
+                )
+                const structured = Schema.decodeUnknownSync(EditTool.Output)(settled.output?.structured)
+                expect(Buffer.byteLength(JSON.stringify(structured))).toBeLessThanOrEqual(
+                  ToolOutputStore.MAX_STRUCTURED_BYTES,
+                )
+                const hunk = parsePatch(structured.files[0]?.patch ?? "")[0]?.hunks[0]
+                expect(hunk?.lines.some((line) => line.startsWith("-"))).toBe(true)
+                expect(hunk?.lines.some((line) => line.startsWith("+"))).toBe(true)
+                expect(hunk).toMatchObject({ oldLines: 1, newLines: 1 })
+                expect(structured).toMatchObject({
+                  replacements: 1,
+                  files: [
+                    {
+                      file: "large.txt",
+                      patch: expect.stringContaining("... truncated ..."),
+                    },
+                  ],
+                })
               }),
             ),
           ),

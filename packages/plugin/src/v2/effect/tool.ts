@@ -97,6 +97,10 @@ export type Definition<
   readonly input: Input
   readonly output: Output
   readonly structured?: Structured
+  /** Expose encoded output to CodeMode instead of the persisted structured projection. */
+  readonly codeModeOutput?: "output"
+  /** Mark a receipt's `truncated` field when its model-facing text is bounded. */
+  readonly contentTruncation?: true
   readonly permission?: string
   readonly toStructuredOutput?: (input: {
     readonly input: InputValue<Input>

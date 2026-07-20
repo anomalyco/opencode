@@ -22,6 +22,13 @@ export const Output = Schema.Struct({
   output: Schema.String,
 })
 
+const StructuredOutput = Schema.Struct({
+  name: Schema.String,
+  directory: Schema.String,
+  bytes: Schema.Number,
+  truncated: Schema.Boolean,
+})
+
 export const description = [
   "Load a specialized skill when the task at hand matches one of the available skills in the instructions.",
   "",
@@ -66,6 +73,15 @@ export const Plugin = {
             description,
             input: Input,
             output: Output,
+            structured: StructuredOutput,
+            codeModeOutput: "output",
+            contentTruncation: true,
+            toStructuredOutput: ({ output }) => ({
+              name: output.name,
+              directory: output.directory,
+              bytes: Buffer.byteLength(output.output, "utf-8"),
+              truncated: false,
+            }),
             toModelOutput: ({ output }) => [{ type: "text", text: output.output }],
             execute: (input, context) =>
               Effect.gen(function* () {

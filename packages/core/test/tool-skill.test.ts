@@ -121,7 +121,14 @@ describe("SkillTool", () => {
               }),
             ).toMatchObject({
               result: { type: "text", value: SkillTool.toModelOutput(info, [reference]) },
-              output: { structured: { name: "Effect" } },
+              output: {
+                structured: {
+                  name: "Effect",
+                  directory,
+                  bytes: Buffer.byteLength(SkillTool.toModelOutput(info, [reference])),
+                  truncated: false,
+                },
+              },
             })
             expect(assertions).toMatchObject([
               { sessionID, action: "skill", resources: ["effect"], save: ["effect"] },

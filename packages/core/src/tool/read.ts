@@ -28,6 +28,31 @@ const LocationInput = Schema.Struct({
 })
 const Input = LocationInput
 const Output = Schema.Union([FileSystem.Content, ReadToolFileSystem.TextPage, ReadToolFileSystem.ListPage])
+const StructuredOutput = Schema.Union([
+  Schema.Struct({
+    type: Schema.Literal("file"),
+    uri: Schema.String,
+    name: Schema.String.pipe(Schema.optional),
+    encoding: FileSystem.Content.fields.encoding,
+    mime: Schema.String,
+    bytes: Schema.Number,
+    truncated: Schema.Boolean,
+  }),
+  Schema.Struct({
+    type: Schema.Literal("text-page"),
+    mime: Schema.String,
+    offset: Schema.Number,
+    bytes: Schema.Number,
+    truncated: Schema.Boolean,
+    next: Schema.Number.pipe(Schema.optional),
+  }),
+  Schema.Struct({
+    type: Schema.Literal("list-page"),
+    count: Schema.Number,
+    truncated: Schema.Boolean,
+    next: Schema.Number.pipe(Schema.optional),
+  }),
+])
 
 export const Plugin = {
   id: "opencode.tool.read",
@@ -48,15 +73,39 @@ export const Plugin = {
               "Read a text file or supported image, page through a large UTF-8 text file by line offset, or list a directory page. Relative paths resolve from the current location; absolute paths inside it are accepted, while external absolute paths require external_directory approval.",
             input: Input,
             output: Output,
-            structured: Schema.toEncoded(Output),
-            // Image base64 reaches the model through content items (normalized generically
-            // at tool settlement); persisting a second copy in structured would store the
-            // original unresized bytes in the message row.
-            toStructuredOutput: ({ output }) =>
-              "encoding" in output && output.encoding === "base64" ? { ...output, content: "" } : output,
+            structured: StructuredOutput,
+            codeModeOutput: "output",
+            contentTruncation: true,
+            toStructuredOutput: ({ output }) => {
+              if ("encoding" in output)
+                return {
+                  type: "file" as const,
+                  uri: output.uri,
+                  name: output.name,
+                  encoding: output.encoding,
+                  mime: output.mime,
+                  bytes: Buffer.byteLength(output.content, output.encoding === "base64" ? "base64" : "utf-8"),
+                  truncated: false,
+                }
+              if ("content" in output)
+                return {
+                  type: output.type,
+                  mime: output.mime,
+                  offset: output.offset,
+                  bytes: Buffer.byteLength(output.content, "utf-8"),
+                  truncated: output.truncated,
+                  next: output.next,
+                }
+              return {
+                type: "list-page" as const,
+                count: output.entries.length,
+                truncated: output.truncated,
+                next: output.next,
+              }
+            },
             toModelOutput: ({ input, output }) => {
               if (!("encoding" in output) || output.encoding !== "base64" || !SUPPORTED_IMAGE_MIMES.has(output.mime))
-                return []
+                return [{ type: "text", text: JSON.stringify(output) }]
               return [
                 { type: "text", text: "Image read successfully" },
                 { type: "file", data: output.content, mime: output.mime, name: input.path },

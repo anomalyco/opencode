@@ -239,6 +239,7 @@ export const read = Effect.fn("ReadTool.read")(function* (
       let line = 1
       let bytes = 0
       let next: number | undefined
+      let lineTruncated = false
       const append = (input: string) => {
         if (line < offset) {
           line++
@@ -249,6 +250,7 @@ export const read = Effect.fn("ReadTool.read")(function* (
           return false
         }
         const text = input.length > MAX_LINE_LENGTH ? input.slice(0, MAX_LINE_LENGTH) + MAX_LINE_SUFFIX : input
+        if (text !== input) lineTruncated = true
         const size = Buffer.byteLength(text, "utf-8") + (lines.length > 0 ? 1 : 0)
         if (bytes + size > MAX_READ_BYTES) {
           next = line
@@ -314,7 +316,7 @@ export const read = Effect.fn("ReadTool.read")(function* (
         content: lines.join("\n"),
         mime: FSUtil.mimeType(real),
         offset,
-        truncated: next !== undefined,
+        truncated: next !== undefined || lineTruncated,
         ...(next === undefined ? {} : { next }),
       })
     }),

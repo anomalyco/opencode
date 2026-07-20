@@ -16,6 +16,7 @@ import { FSUtil } from "../fs-util"
 import { LocationMutation } from "../location-mutation"
 import { PermissionV2 } from "../permission"
 import { Tool } from "./tool"
+import { ToolStructured } from "./structured"
 
 export const name = "edit"
 
@@ -103,6 +104,15 @@ export const Plugin = {
                 "Replace exact text in one file. Relative paths resolve within the active Location. Absolute paths inside the Location are accepted. Explicit external absolute paths require external_directory approval before edit approval.",
               input: Input,
               output: Output,
+              structured: Output,
+              toStructuredOutput: ({ output }) =>
+                ToolStructured.fit((maximumBytes) => ({
+                  ...output,
+                  files: output.files.map((file) => ({
+                    ...file,
+                    patch: ToolStructured.patch(file.patch, maximumBytes),
+                  })),
+                })),
               toModelOutput: ({ input, output }) => [
                 { type: "text", text: toModelOutput(output, input.oldString, input.newString) },
               ],

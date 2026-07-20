@@ -244,7 +244,7 @@ describe("WebSearchTool registration", () => {
       expect(settled).toEqual({
         result: { type: "text", value: "parallel results" },
         output: {
-          structured: { provider: "parallel", text: "parallel results" },
+          structured: { provider: "parallel", bytes: 16, truncated: false },
           content: [{ type: "text", text: "parallel results" }],
         },
       })

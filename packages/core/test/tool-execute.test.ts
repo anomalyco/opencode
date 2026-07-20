@@ -93,3 +93,70 @@ test("execute supports callable namespace tools", async () => {
   })
   expect(result.content).toEqual([{ type: "text", text: '[\n  "admin",\n  "created"\n]' }])
 })
+
+test("execute exposes typed internal output instead of the persisted receipt", async () => {
+  const child = Tool.make({
+    description: "Fetch content",
+    input: Schema.Struct({}),
+    output: Schema.Struct({ content: Schema.String, bytes: Schema.Number }),
+    structured: Schema.Struct({ bytes: Schema.Number }),
+    codeModeOutput: "output",
+    toStructuredOutput: ({ output }) => ({ bytes: output.bytes }),
+    toModelOutput: ({ output }) => [{ type: "text", text: output.content }],
+    execute: () => Effect.succeed({ content: "full payload", bytes: 12 }),
+  })
+  const execute = ExecuteTool.create(new Map([["fetch", { tool: child, name: "fetch" }]]))
+  const result = await Effect.runPromise(
+    Tool.settle(
+      execute,
+      {
+        type: "tool-call",
+        id: "call_execute",
+        name: "execute",
+        input: { code: "return (await tools.fetch({})).content" },
+      },
+      {
+        sessionID: Session.ID.make("ses_execute"),
+        agent: Agent.ID.make("build"),
+        messageID: SessionMessage.ID.make("msg_execute"),
+        callID: "call_execute",
+        progress: () => Effect.void,
+      },
+    ),
+  )
+
+  expect(result.structured).toEqual({ toolCalls: [{ tool: "fetch", status: "completed" }] })
+  expect(result.content).toEqual([{ type: "text", text: "full payload" }])
+})
+
+test("execute keeps the structured projection unless a tool opts into internal output", async () => {
+  const child = Tool.make({
+    description: "Fetch content",
+    input: Schema.Struct({}),
+    output: Schema.Struct({ content: Schema.String, bytes: Schema.Number }),
+    structured: Schema.Struct({ bytes: Schema.Number }),
+    toStructuredOutput: ({ output }) => ({ bytes: output.bytes }),
+    execute: () => Effect.succeed({ content: "internal", bytes: 8 }),
+  })
+  const execute = ExecuteTool.create(new Map([["fetch", { tool: child, name: "fetch" }]]))
+  const result = await Effect.runPromise(
+    Tool.settle(
+      execute,
+      {
+        type: "tool-call",
+        id: "call_execute",
+        name: "execute",
+        input: { code: "return await tools.fetch({})" },
+      },
+      {
+        sessionID: Session.ID.make("ses_execute"),
+        agent: Agent.ID.make("build"),
+        messageID: SessionMessage.ID.make("msg_execute"),
+        callID: "call_execute",
+        progress: () => Effect.void,
+      },
+    ),
+  )
+
+  expect(result.content).toEqual([{ type: "text", text: '{\n  "bytes": 8\n}' }])
+})

@@ -223,6 +223,30 @@ describe("ShellTool", () => {
     ),
   )
 
+  it.live("marks output truncated when generic settlement limits are lower than shell capture limits", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        return withSession(tmp.path, (registry) =>
+          Effect.gen(function* () {
+            const settled = yield* settleTool(
+              registry,
+              call({ command: overflowCommand(ToolOutputStore.MAX_BYTES + 1_000) }),
+            )
+
+            expect(settled.output?.structured).toMatchObject({ exit: 0, truncated: true })
+            expect(settled.output?.content[0]).toMatchObject({
+              type: "text",
+              text: expect.stringContaining("output truncated; full content saved to"),
+            })
+          }),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+    ),
+  )
+
   it.live("resolves a relative workdir from the active Location", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
@@ -439,7 +463,10 @@ describe("ShellTool", () => {
                     if (update.structured.truncated !== true) return
                     const content = update.content[0]
                     if (content?.type !== "text") return
-                    if (content.text.indexOf("\n\n[output truncated; full output saved to:") !== ShellTool.MAX_CAPTURE_BYTES)
+                    if (
+                      content.text.indexOf("\n\n[output truncated; full output saved to:") !==
+                      ShellTool.MAX_CAPTURE_BYTES
+                    )
                       return
                     yield* Deferred.succeed(observed, update)
                     yield* Effect.promise(() => fs.writeFile(releasePath, ""))

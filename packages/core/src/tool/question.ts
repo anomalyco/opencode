@@ -7,6 +7,7 @@ import { Form } from "../form"
 import { PermissionV2 } from "../permission"
 import { QuestionV2 } from "../question"
 import { Tool } from "./tool"
+import { ToolStructured } from "./structured"
 
 export const name = "question"
 
@@ -63,6 +64,13 @@ export const Plugin = {
             description,
             input: Input,
             output: Output,
+            structured: Output,
+            toStructuredOutput: ({ output }) =>
+              ToolStructured.fit((maximumBytes) => ({
+                answers: output.answers.map((answers) =>
+                  answers.map((answer) => ToolStructured.truncate(answer, maximumBytes)),
+                ),
+              })),
             toModelOutput: ({ input, output }) => [
               { type: "text", text: toModelOutput(input.questions, output.answers) },
             ],

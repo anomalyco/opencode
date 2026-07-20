@@ -86,8 +86,8 @@ describe("search tools", () => {
               const glob = yield* settleTool(registry, call("glob", { pattern: "*" }))
               const grep = yield* settleTool(registry, call("grep", { pattern: "needle" }))
 
-              expect(glob.output?.structured).toHaveLength(FileSystem.DEFAULT_SEARCH_LIMIT)
-              expect(grep.output?.structured).toHaveLength(FileSystem.DEFAULT_SEARCH_LIMIT)
+              expect(glob.output?.structured).toEqual({ count: FileSystem.DEFAULT_SEARCH_LIMIT })
+              expect(grep.output?.structured).toEqual({ matches: FileSystem.DEFAULT_SEARCH_LIMIT })
             }),
           )
         }),

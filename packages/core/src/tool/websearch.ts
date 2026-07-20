@@ -187,6 +187,12 @@ const Output = Schema.Struct({
   text: Schema.String,
 })
 
+const StructuredOutput = Schema.Struct({
+  provider: Provider,
+  bytes: Schema.Number,
+  truncated: Schema.Boolean,
+})
+
 export const Plugin = {
   id: "opencode.tool.websearch",
   effect: Effect.fn("WebSearchTool.Plugin")(function* (ctx: PluginContext) {
@@ -202,6 +208,14 @@ export const Plugin = {
             description,
             input: Input,
             output: Output,
+            structured: StructuredOutput,
+            codeModeOutput: "output",
+            contentTruncation: true,
+            toStructuredOutput: ({ output }) => ({
+              provider: output.provider,
+              bytes: Buffer.byteLength(output.text, "utf-8"),
+              truncated: false,
+            }),
             toModelOutput: ({ output }) => [{ type: "text", text: output.text }],
             execute: (input, context) => {
               const provider = selectProvider(context.sessionID, config, config.provider)

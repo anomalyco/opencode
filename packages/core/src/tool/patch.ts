@@ -11,6 +11,7 @@ import { LocationMutation } from "../location-mutation"
 import { Patch } from "../patch"
 import { PermissionV2 } from "../permission"
 import { Tool } from "./tool"
+import { ToolStructured } from "./structured"
 
 export const name = "patch"
 
@@ -72,6 +73,15 @@ export const Plugin = {
                 "Apply one patch containing add, update, and delete file operations. All targets are resolved and approved before target contents are read. Operations apply sequentially; if a later operation fails, earlier operations remain applied and the failure reports them explicitly. Moves and atomic rollback are not supported yet.",
               input: Input,
               output: Output,
+              structured: Output,
+              toStructuredOutput: ({ output }) =>
+                ToolStructured.fit((maximumBytes) => ({
+                  ...output,
+                  files: output.files.map((file) => ({
+                    ...file,
+                    patch: ToolStructured.patch(file.patch, maximumBytes),
+                  })),
+                })),
               toModelOutput: ({ output }) => [{ type: "text", text: toModelOutput(output) }],
               execute: (input, context) => {
                 const applied: Array<typeof Applied.Type> = []

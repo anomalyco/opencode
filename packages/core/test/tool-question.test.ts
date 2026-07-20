@@ -19,6 +19,7 @@ const assertions: PermissionV2.AssertInput[] = []
 let captured: Form.CreateInput | undefined
 let reject = false
 let deny = false
+let firstAnswer = "Build"
 const capturedInput = () => captured
 const questionInput = {
   questions: [
@@ -63,7 +64,7 @@ const form = Layer.succeed(
         Effect.andThen(
           Effect.sync(
             (): Form.TerminalState =>
-              reject ? { status: "cancelled" } : { status: "answered", answer: { q0: "Build", q1: ["Dev"] } },
+              reject ? { status: "cancelled" } : { status: "answered", answer: { q0: firstAnswer, q1: ["Dev"] } },
           ),
         ),
       ),
@@ -122,6 +123,7 @@ describe("QuestionTool", () => {
       captured = undefined
       reject = false
       deny = false
+      firstAnswer = "Build"
       const registry = yield* ToolRegistry.Service
       const questions = [
         {
@@ -198,6 +200,27 @@ describe("QuestionTool", () => {
         ],
       })
     }),
+  )
+
+  it.effect("retains bounded answers for long custom responses", () =>
+    Effect.gen(function* () {
+      reject = false
+      deny = false
+      firstAnswer = "x".repeat(ToolOutputStore.MAX_STRUCTURED_BYTES)
+      const registry = yield* ToolRegistry.Service
+      const settled = yield* settleTool(registry, {
+        sessionID,
+        ...toolIdentity,
+        call: { type: "tool-call", id: "call-question-large", name: "question", input: questionInput },
+      })
+
+      expect(Buffer.byteLength(JSON.stringify(settled.output?.structured))).toBeLessThanOrEqual(
+        ToolOutputStore.MAX_STRUCTURED_BYTES,
+      )
+      expect(settled.output?.structured).toMatchObject({
+        answers: [[expect.stringContaining("... truncated ...")]],
+      })
+    }).pipe(Effect.ensuring(Effect.sync(() => (firstAnswer = "Build")))),
   )
 
   it.effect("does not invent tool ownership metadata without a durable registry source", () =>

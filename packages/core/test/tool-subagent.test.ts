@@ -35,7 +35,8 @@ const childModel = ModelV2.Ref.make({ id: ModelV2.ID.make("child"), providerID: 
 const parentModel = ModelV2.Ref.make({ id: ModelV2.ID.make("parent"), providerID: ProviderV2.ID.make("test") })
 const tokens = { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
 
-const outputSessionID = (value: unknown) => Schema.decodeUnknownSync(SubagentTool.Output)(value).sessionID
+const outputSessionID = (value: unknown) =>
+  Schema.decodeUnknownSync(Schema.Struct({ sessionID: SessionV2.ID }))(value).sessionID
 
 const executionNode = makeGlobalNode({
   service: SessionExecution.Service,
@@ -229,7 +230,12 @@ describe("SubagentTool", () => {
             },
           })
 
-          expect(settled.output?.structured).toMatchObject({ status: "completed", output: childText })
+          expect(settled.output?.structured).toMatchObject({
+            status: "completed",
+            bytes: Buffer.byteLength(childText),
+            truncated: false,
+          })
+          expect(settled.output?.structured).not.toHaveProperty("output")
           expect((yield* sessions.get(outputSessionID(settled.output?.structured))).parentID).toBe(parent.id)
         }),
       ),
@@ -264,7 +270,13 @@ describe("SubagentTool", () => {
             },
           })
 
-          expect(settled.output?.structured).toMatchObject({ status: "completed", output: childText })
+          expect(settled.result).toEqual({ type: "text", value: childText })
+          expect(settled.output?.structured).toMatchObject({
+            status: "completed",
+            bytes: Buffer.byteLength(childText),
+            truncated: false,
+          })
+          expect(settled.output?.structured).not.toHaveProperty("output")
           const child = yield* sessions.get(outputSessionID(settled.output?.structured))
           expect(progress[0]?.structured).toEqual({ sessionID: child.id, status: "running" })
           expect(child).toMatchObject({
@@ -358,8 +370,10 @@ describe("SubagentTool", () => {
           const childID = outputSessionID(settled.output?.structured)
           expect(settled.output?.structured).toMatchObject({
             status: "running",
-            output: expect.stringContaining(`id: ${childID}`),
+            bytes: expect.any(Number),
+            truncated: false,
           })
+          expect(settled.output?.structured).not.toHaveProperty("output")
 
           const admission = Array.from(yield* Fiber.join(admitted))[0]
           expect(admission?.data.input.data.text).toContain(`<subagent id="${childID}" state="completed"`)

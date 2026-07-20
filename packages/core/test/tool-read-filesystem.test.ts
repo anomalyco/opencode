@@ -100,6 +100,21 @@ describe("ReadToolFileSystem", () => {
     }),
   )
 
+  it.effect("reports a shortened long line as truncated", () =>
+    Effect.gen(function* () {
+      const { fs, files, directory } = yield* fixture
+      const file = path.join(directory, "long-line.txt")
+      yield* files.writeFileString(file, "x".repeat(3_000))
+
+      const result = yield* ReadToolFileSystem.read(fs, file, "long-line.txt", { limit: 1 })
+
+      expect(result).toMatchObject({ type: "text-page", truncated: true })
+      if (!(result instanceof ReadToolFileSystem.TextPage)) throw new Error("expected text page")
+      expect(result.next).toBeUndefined()
+      expect(result.content).toEndWith("... (line truncated to 2000 chars)")
+    }),
+  )
+
   it.effect("preserves the media ingestion limit message", () =>
     Effect.gen(function* () {
       const { fs, files, directory } = yield* fixture

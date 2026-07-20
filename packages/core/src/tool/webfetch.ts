@@ -38,6 +38,14 @@ const Output = Schema.Struct({
   output: Schema.String,
 })
 
+const StructuredOutput = Schema.Struct({
+  url: Schema.String,
+  contentType: Schema.String,
+  format: Input.fields.format,
+  bytes: Schema.Number,
+  truncated: Schema.Boolean,
+})
+
 type Format = (typeof Input.Type)["format"]
 
 const acceptHeader = (format: Format) => {
@@ -126,6 +134,16 @@ export const Plugin = {
             description,
             input: Input,
             output: Output,
+            structured: StructuredOutput,
+            codeModeOutput: "output",
+            contentTruncation: true,
+            toStructuredOutput: ({ input, output }) => ({
+              url: output.url,
+              contentType: output.contentType,
+              format: input.format,
+              bytes: Buffer.byteLength(output.output, "utf-8"),
+              truncated: false,
+            }),
             toModelOutput: ({ output }) => [{ type: "text", text: output.output }],
             execute: (input, context) =>
               Effect.gen(function* () {

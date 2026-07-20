@@ -83,18 +83,16 @@ const registryLayer = Layer.effect(
         const base64 = /^data:[^,]*;base64,(.*)$/s.exec(item.uri)?.[1]
         if (base64 === undefined) return Effect.succeed(item)
         const resource = item.name ?? `${item.mime} tool output`
-        return image
-          .normalize(resource, { uri: resource, content: base64, encoding: "base64", mime: item.mime })
-          .pipe(
-            Effect.map((result) => ({
-              ...item,
-              uri: `data:${result.mime};base64,${result.content}`,
-              mime: result.mime,
-            })),
-            Effect.catchTag("Image.ResizerUnavailableError", () => Effect.succeed(item)),
-            Effect.catchTag("Image.DecodeError", () => Effect.succeed("decode" as const)),
-            Effect.catchTag("Image.SizeError", () => Effect.succeed("size" as const)),
-          )
+        return image.normalize(resource, { uri: resource, content: base64, encoding: "base64", mime: item.mime }).pipe(
+          Effect.map((result) => ({
+            ...item,
+            uri: `data:${result.mime};base64,${result.content}`,
+            mime: result.mime,
+          })),
+          Effect.catchTag("Image.ResizerUnavailableError", () => Effect.succeed(item)),
+          Effect.catchTag("Image.DecodeError", () => Effect.succeed("decode" as const)),
+          Effect.catchTag("Image.SizeError", () => Effect.succeed("size" as const)),
+        )
       })
       const note = (reason: "decode" | "size", text: string) => {
         const count = normalized.filter((item) => item === reason).length
@@ -118,6 +116,7 @@ const registryLayer = Layer.effect(
 
     const settleTool = Effect.fn("ToolRegistry.settleTool")(function* (input: ExecuteInput, tool: AnyTool) {
       // Hooks fire only for hosted/local tools; provider-executed calls never reach settleTool.
+      const propagateTruncation = !("jsonSchema" in tool) && tool.contentTruncation === true
       const beforeEvent: ToolHooks.BeforeEvent = {
         tool: input.call.name,
         sessionID: input.sessionID,
@@ -149,7 +148,28 @@ const registryLayer = Layer.effect(
                       name: part.name,
                     },
               ),
-            ).pipe(Effect.flatMap((content) => progress({ structured: update.structured, content })))
+            ).pipe(
+              Effect.flatMap((content) =>
+                propagateTruncation
+                  ? resources
+                      .limits()
+                      .pipe(
+                        Effect.map((limits) =>
+                          ToolOutputStore.propagateTruncation({ structured: update.structured, content }, limits),
+                        ),
+                      )
+                  : Effect.succeed({ structured: update.structured, content }),
+              ),
+              Effect.flatMap((output) => {
+                const structured = output.structured
+                const entries =
+                  typeof structured === "object" && structured !== null && !Array.isArray(structured)
+                    ? Object.entries(structured)
+                    : undefined
+                if (!entries) return Effect.die(new Error("Tool progress structured output must be an object"))
+                return progress({ structured: Object.fromEntries(entries), content: output.content })
+              }),
+            )
           },
         },
       ).pipe(
@@ -165,21 +185,13 @@ const registryLayer = Layer.effect(
       if ("result" in pending) {
         settlement = pending
       } else {
-        const bounded = yield* resources.bound({
-          sessionID: input.sessionID,
-          callID: input.call.id,
-          output: { structured: pending.output.structured, content: yield* normalizeImages(pending.output.content) },
-        })
-        const result = ToolOutput.toResultValue(bounded.output)
-        settlement =
-          result.type === "error"
-            ? bounded.outputPaths.length > 0
-              ? { result, outputPaths: bounded.outputPaths }
-              : { result }
-            : bounded.outputPaths.length > 0
-              ? { result, output: bounded.output, outputPaths: bounded.outputPaths }
-              : { result, output: bounded.output }
+        const output = {
+          structured: pending.output.structured,
+          content: yield* normalizeImages(pending.output.content),
+        }
+        settlement = { result: ToolOutput.toResultValue(output), output }
       }
+      const initialResult = settlement.result
       const afterEvent: ToolHooks.AfterEvent = {
         tool: input.call.name,
         sessionID: input.sessionID,
@@ -192,10 +204,22 @@ const registryLayer = Layer.effect(
         outputPaths: settlement.outputPaths,
       }
       yield* toolHooks.runAfter(afterEvent)
+      const finalOutput = afterEvent.output
+        ? yield* resources.bound({
+            sessionID: input.sessionID,
+            callID: input.call.id,
+            output: afterEvent.output,
+            propagateTruncation,
+          })
+        : undefined
+      const outputPaths = [...new Set([...(afterEvent.outputPaths ?? []), ...(finalOutput?.outputPaths ?? [])])]
       return {
-        result: afterEvent.result,
-        ...(afterEvent.output !== undefined ? { output: afterEvent.output } : {}),
-        ...(afterEvent.outputPaths !== undefined ? { outputPaths: afterEvent.outputPaths } : {}),
+        result:
+          finalOutput !== undefined && afterEvent.result === initialResult && !("result" in pending)
+            ? ToolOutput.toResultValue(finalOutput.output)
+            : afterEvent.result,
+        ...(finalOutput !== undefined ? { output: finalOutput.output } : {}),
+        ...(outputPaths.length > 0 ? { outputPaths } : {}),
         ...(settlement.error !== undefined ? { error: settlement.error } : {}),
       }
     })

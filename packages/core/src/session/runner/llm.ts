@@ -40,6 +40,7 @@ const layer = Layer.effect(
     const db = (yield* Database.Service).db
     const compaction = yield* SessionCompaction.Service
     const title = yield* SessionTitle.Service
+    const outputs = yield* ToolOutputStore.Service
     // Title generation is a side effect of the first step; it must not delay step continuation.
     // Tracked per process so repeated wakes before the second user message arrives don't
     // re-fire a redundant LLM call; `SessionTitle` itself is idempotent based on durable history.
@@ -116,7 +117,7 @@ const layer = Layer.effect(
       const ownedToolFibers: Array<Fiber.Fiber<void, ToolOutputStore.Error>> = []
       let needsContinuation = false
       const startSnapshot = yield* snapshots.capture()
-      const publisher = createLLMEventPublisher(events, {
+      const publisher = createLLMEventPublisher(events, outputs, {
         sessionID: session.id,
         agent: agent.id,
         // The selected catalog identity, not model.id: route-level ids are provider API
@@ -165,13 +166,25 @@ const layer = Layer.effect(
                     call: event,
                     progress: (update) =>
                       serialized(
-                        events.publish(SessionEvent.Tool.Progress, {
-                          sessionID: session.id,
-                          assistantMessageID,
-                          callID: event.id,
-                          structured: { ...update.structured },
-                          content: [...update.content],
-                        }),
+                        Effect.gen(function* () {
+                          const bounded = yield* outputs.bound({
+                            sessionID: session.id,
+                            callID: event.id,
+                            output: update,
+                          })
+                          const structured = bounded.output.structured
+                          const entries =
+                            typeof structured === "object" && structured !== null && !Array.isArray(structured)
+                              ? Object.entries(structured)
+                              : yield* Effect.die(new Error("Tool progress structured output must be an object"))
+                          yield* events.publish(SessionEvent.Tool.Progress, {
+                            sessionID: session.id,
+                            assistantMessageID,
+                            callID: event.id,
+                            structured: Object.fromEntries(entries),
+                            content: [...bounded.output.content],
+                          })
+                        }).pipe(Effect.orDie),
                       ),
                   }),
                 ).pipe(
@@ -261,6 +274,11 @@ const layer = Layer.effect(
             }
             yield* serialized(publisher.failAssistant(error))
           }
+          if (streamFailure instanceof ToolOutputStore.StorageError) {
+            const error = toSessionError(streamFailure)
+            yield* serialized(publisher.failUnsettledTools(error))
+            yield* serialized(publisher.failAssistant(error))
+          }
           // Provider error events only arrive from the stream, so the flag is final here.
           const providerFailed = publisher.hasProviderError()
 
@@ -287,8 +305,21 @@ const layer = Layer.effect(
           // settles so the model may recover. A typed infrastructure failure (tool output
           // could not be persisted) also fails the assistant and then fails the drain.
           const settledFailure = settledCauses.find((cause) => !Cause.hasInterrupts(cause) && !isUserDeclined(cause))
+          const infrastructureFailure = settledCauses.find(
+            (cause) =>
+              Option.getOrUndefined(Cause.findErrorOption(cause)) instanceof ToolOutputStore.StorageError ||
+              cause.reasons.some(
+                (reason) => Cause.isDieReason(reason) && reason.defect instanceof ToolOutputStore.StorageError,
+              ),
+          )
+          const typedError = infrastructureFailure
+            ? Option.getOrUndefined(Cause.findErrorOption(infrastructureFailure))
+            : undefined
+          const storageDefect = infrastructureFailure?.reasons.find(
+            (reason) => Cause.isDieReason(reason) && reason.defect instanceof ToolOutputStore.StorageError,
+          )
           const infraError =
-            settledFailure === undefined ? undefined : Option.getOrUndefined(Cause.findErrorOption(settledFailure))
+            typedError ?? (storageDefect && Cause.isDieReason(storageDefect) ? storageDefect.defect : undefined)
           if (settledFailure !== undefined) {
             const failure = infraError ?? Cause.squash(settledFailure)
             const error = toSessionError(failure)
@@ -342,8 +373,8 @@ const layer = Layer.effect(
 
           if (stream._tag === "Failure") return yield* Effect.failCause(stream.cause)
           if (userDeclined) return yield* Effect.interrupt
-          if ((toolsInterrupted || infraError !== undefined) && settledFailure)
-            return yield* Effect.failCause(settledFailure)
+          if (infraError !== undefined && infrastructureFailure) return yield* Effect.failCause(infrastructureFailure)
+          if (toolsInterrupted && settledFailure) return yield* Effect.failCause(settledFailure)
           if (toolsInterrupted && settled._tag === "Failure") return yield* Effect.failCause(settled.cause)
           if (stepFailure) return yield* new StepFailedError({ error: stepFailure })
           return {
@@ -500,6 +531,7 @@ export const node = makeLocationNode({
     SessionCompaction.node,
     SessionTitle.node,
     Snapshot.node,
+    ToolOutputStore.node,
     Database.node,
   ],
 })

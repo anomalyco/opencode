@@ -49,7 +49,7 @@ export const create = (registrations: ReadonlyMap<string, Registration>) => {
   ) => {
     const tools: Record<string, Tool.Definition<never>> = {}
     for (const [name, registration] of registrations) {
-      const child = definition(name, registration.tool)
+      const child = definition(name, codeModeTool(registration.tool))
       const value = Tool.make({
         description: child.description,
         input: child.inputSchema,
@@ -96,7 +96,7 @@ export const create = (registrations: ReadonlyMap<string, Registration>) => {
             Effect.gen(function* () {
               const index = yield* Ref.getAndUpdate(callIndex, (index) => index + 1)
               const output = yield* settle(
-                registration.tool,
+                codeModeTool(registration.tool),
                 { type: "tool-call", id: context.callID, name, input },
                 {
                   sessionID: context.sessionID,
@@ -139,6 +139,11 @@ export const create = (registrations: ReadonlyMap<string, Registration>) => {
         return { output, toolCalls, files: collected, ...(result.ok ? {} : { error: true as const }) }
       }),
   })
+}
+
+function codeModeTool(tool: AnyTool): AnyTool {
+  if ("jsonSchema" in tool || tool.codeModeOutput !== "output") return tool
+  return { ...tool, structured: undefined }
 }
 
 function displayInput(input: unknown): Record<string, unknown> | undefined {

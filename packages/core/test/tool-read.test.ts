@@ -206,14 +206,14 @@ describe("ReadTool", () => {
           call: { type: "tool-call", id: "call-read", name: "read", input: { path: "README.md" } },
         }),
       ).toEqual({
-        type: "json",
-        value: {
+        type: "text",
+        value: JSON.stringify({
           uri: "file:///README.md",
           name: "README.md",
           content: "hello",
           encoding: "utf8",
           mime: "text/plain",
-        },
+        }),
       })
       expect(assertions).toMatchObject([{ sessionID, action: "read", resources: ["README.md"], save: ["*"] }])
       expect(readCalls).toEqual([
@@ -236,7 +236,7 @@ describe("ReadTool", () => {
           ...toolIdentity,
           call: { type: "tool-call", id: "call-external-read", name: "read", input: { path: external } },
         }),
-      ).toMatchObject({ type: "json" })
+      ).toMatchObject({ type: "text" })
       expect(assertions).toMatchObject([
         {
           sessionID,
@@ -287,14 +287,15 @@ describe("ReadTool", () => {
         call: { type: "tool-call", id: "call-image-settle", name: "read", input: { path: "pixel.png" } },
       })
       expect(settled.output?.structured).toMatchObject({
+        type: "file",
         uri: "file:///pixel.png",
         name: "pixel.png",
         mime: "image/png",
         encoding: "base64",
-        // Image base64 is carried by the content file item only; structured is slimmed
-        // so the original bytes are never persisted twice.
-        content: "",
+        bytes: Buffer.byteLength(png, "base64"),
+        truncated: false,
       })
+      expect(settled.output?.structured).not.toHaveProperty("content")
       expect(settled.output?.content).toMatchObject([
         { type: "text", text: "Image read successfully" },
         { type: "file", mime: "image/png", uri: `data:image/png;base64,${png}` },
@@ -626,7 +627,7 @@ describe("ReadTool", () => {
             input: { path: "src", offset: 2, limit: 10 },
           },
         }),
-      ).toEqual({ type: "json", value: { entries: [], truncated: false } })
+      ).toEqual({ type: "text", value: JSON.stringify({ entries: [], truncated: false }) })
       expect(assertions).toMatchObject([{ sessionID, action: "read", resources: ["src"], save: ["*"] }])
       expect(listCalls).toEqual([{ offset: 2, limit: 10 }])
     }),
@@ -692,8 +693,15 @@ describe("ReadTool", () => {
           },
         }),
       ).toEqual({
-        type: "json",
-        value: { type: "text-page", content: "hello", mime: "text/plain", offset: 2, truncated: true, next: 3 },
+        type: "text",
+        value: JSON.stringify({
+          type: "text-page",
+          content: "hello",
+          mime: "text/plain",
+          offset: 2,
+          truncated: true,
+          next: 3,
+        }),
       })
       expect(readCalls).toEqual([
         { input: AbsolutePath.make(path.join(process.cwd(), "large.txt")), page: { offset: 2, limit: 1 } },

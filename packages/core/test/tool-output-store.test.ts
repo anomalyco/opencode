@@ -75,10 +75,142 @@ describe("ToolOutputStore", () => {
       Effect.gen(function* () {
         const structured = { text: "x".repeat(ToolOutputStore.MAX_BYTES) }
         const result = yield* store.bound({ sessionID, callID: "call-json", output: { structured, content: [] } })
-        expect(result.output.structured).toEqual(structured)
+        expect(result.output.structured).toEqual({
+          _truncated: true,
+          _bytes: Buffer.byteLength(JSON.stringify(structured)),
+          _outputPath: result.outputPaths[0],
+        })
+        expect(Buffer.byteLength(JSON.stringify(result.output.structured))).toBeLessThanOrEqual(
+          ToolOutputStore.MAX_STRUCTURED_BYTES,
+        )
         expect(result.outputPaths).toHaveLength(1)
         expect(JSON.parse(yield* fs.readFileString(result.outputPaths[0]))).toEqual(structured)
         expect(result.output.content).toHaveLength(1)
+      }),
+    ),
+  )
+
+  it.live("projects guarded structured-only output into the bounded content channel", () =>
+    withStore(({ store, fs }) =>
+      Effect.gen(function* () {
+        const structured = { text: "x".repeat(ToolOutputStore.MAX_STRUCTURED_BYTES) }
+        const result = yield* store.bound({
+          sessionID,
+          callID: "call-structured-content",
+          output: { structured, content: [] },
+        })
+        expect(result.output.structured).toEqual({
+          _truncated: true,
+          _bytes: Buffer.byteLength(JSON.stringify(structured)),
+          _outputPath: result.outputPaths[0],
+        })
+        expect(result.output.content).toEqual([{ type: "text", text: JSON.stringify(structured) }])
+        expect(JSON.parse(yield* fs.readFileString(result.outputPaths[0]))).toEqual(structured)
+      }),
+    ),
+  )
+
+  it.live("measures the structured boundary in UTF-8 bytes", () =>
+    withStore(({ store }) =>
+      Effect.gen(function* () {
+        const structured = { text: "é".repeat(ToolOutputStore.MAX_STRUCTURED_BYTES / 2) }
+        const encoded = JSON.stringify(structured)
+        expect(structured.text.length).toBeLessThan(ToolOutputStore.MAX_STRUCTURED_BYTES)
+        expect(Buffer.byteLength(encoded)).toBeGreaterThan(ToolOutputStore.MAX_STRUCTURED_BYTES)
+
+        const result = yield* store.bound({
+          sessionID,
+          callID: "call-structured-utf8",
+          output: { structured, content: [] },
+        })
+
+        expect(result.output.structured).toMatchObject({
+          _truncated: true,
+          _bytes: Buffer.byteLength(encoded),
+        })
+      }),
+    ),
+  )
+
+  it.live("retains independent structured and contextual overflow", () =>
+    withStore(({ store, fs }) =>
+      Effect.gen(function* () {
+        const structured = { detail: "s".repeat(ToolOutputStore.MAX_STRUCTURED_BYTES) }
+        const content = "c".repeat(ToolOutputStore.MAX_BYTES + 1)
+        const result = yield* store.bound({
+          sessionID,
+          callID: "call-two-channel-overflow",
+          output: { structured, content: [{ type: "text", text: content }] },
+        })
+
+        expect(result.outputPaths).toHaveLength(2)
+        expect(JSON.parse(yield* fs.readFileString(result.outputPaths[0]))).toEqual(structured)
+        expect(yield* fs.readFileString(result.outputPaths[1])).toBe(content)
+      }),
+    ),
+  )
+
+  it.live("keeps structured output at the receipt boundary inline", () =>
+    withStore(({ store }) =>
+      Effect.gen(function* () {
+        const empty = JSON.stringify({ text: "" })
+        const structured = { text: "x".repeat(ToolOutputStore.MAX_STRUCTURED_BYTES - Buffer.byteLength(empty)) }
+        expect(Buffer.byteLength(JSON.stringify(structured))).toBe(ToolOutputStore.MAX_STRUCTURED_BYTES)
+
+        const result = yield* store.bound({
+          sessionID,
+          callID: "call-structured-boundary",
+          output: { structured, content: [] },
+        })
+
+        expect(result).toEqual({ output: { structured, content: [] }, outputPaths: [] })
+      }),
+    ),
+  )
+
+  it.live("normalizes structured values to their durable JSON record", () =>
+    withStore(({ store }) =>
+      Effect.gen(function* () {
+        const primitive = yield* store.bound({
+          sessionID,
+          callID: "call-primitive",
+          output: { structured: "value", content: [] },
+        })
+        const nonFinite = yield* store.bound({
+          sessionID,
+          callID: "call-non-finite",
+          output: { structured: { value: Number.NaN }, content: [] },
+        })
+        const omitted = yield* store.bound({
+          sessionID,
+          callID: "call-omitted",
+          output: { structured: undefined, content: [] },
+        })
+
+        expect(primitive.output.structured).toEqual({ value: "value" })
+        expect(nonFinite.output.structured).toEqual({ value: null })
+        expect(omitted.output.structured).toEqual({})
+      }),
+    ),
+  )
+
+  it.live("measures primitive overflow after durable record normalization", () =>
+    withStore(({ store, fs }) =>
+      Effect.gen(function* () {
+        const value = "x".repeat(ToolOutputStore.MAX_STRUCTURED_BYTES)
+        const encoded = JSON.stringify({ value })
+        const result = yield* store.bound({
+          sessionID,
+          callID: "call-primitive-overflow",
+          output: { structured: value, content: [] },
+        })
+
+        expect(result.output.structured).toEqual({
+          _truncated: true,
+          _bytes: Buffer.byteLength(encoded),
+          _outputPath: result.outputPaths[0],
+        })
+        expect(yield* fs.readFileString(result.outputPaths[0])).toBe(encoded)
       }),
     ),
   )
@@ -131,15 +263,52 @@ describe("ToolOutputStore", () => {
     ),
   )
 
-  it.live("does not double-count structured data duplicated in projected text", () =>
+  it.live("marks projected receipt metadata truncated when bounding its contextual output", () =>
     withStore(({ store }) =>
+      Effect.gen(function* () {
+        const result = yield* store.bound({
+          sessionID,
+          callID: "call-receipt",
+          propagateTruncation: true,
+          output: {
+            structured: { bytes: ToolOutputStore.MAX_BYTES + 1, truncated: false },
+            content: [{ type: "text", text: "x".repeat(ToolOutputStore.MAX_BYTES + 1) }],
+          },
+        })
+        expect(result.output.structured).toEqual({ bytes: ToolOutputStore.MAX_BYTES + 1, truncated: true })
+      }),
+    ),
+  )
+
+  it.live("preserves ordinary truncated metadata when bounding contextual output", () =>
+    withStore(({ store }) =>
+      Effect.gen(function* () {
+        const result = yield* store.bound({
+          sessionID,
+          callID: "call-ordinary-truncated",
+          output: {
+            structured: { truncated: false },
+            content: [{ type: "text", text: "x".repeat(ToolOutputStore.MAX_BYTES + 1) }],
+          },
+        })
+        expect(result.output.structured).toEqual({ truncated: false })
+      }),
+    ),
+  )
+
+  it.live("bounds structured data duplicated in projected text independently", () =>
+    withStore(({ store, fs }) =>
       Effect.gen(function* () {
         const text = "x".repeat(30_000)
         const output = { structured: { output: text }, content: [{ type: "text" as const, text }] }
-        expect(yield* store.bound({ sessionID, callID: "call-duplicated", output })).toEqual({
-          output,
-          outputPaths: [],
+        const result = yield* store.bound({ sessionID, callID: "call-duplicated", output })
+        expect(result.output.content).toEqual(output.content)
+        expect(result.output.structured).toEqual({
+          _truncated: true,
+          _bytes: Buffer.byteLength(JSON.stringify(output.structured)),
+          _outputPath: result.outputPaths[0],
         })
+        expect(JSON.parse(yield* fs.readFileString(result.outputPaths[0]))).toEqual(output.structured)
       }),
     ),
   )
@@ -162,14 +331,17 @@ describe("ToolOutputStore", () => {
     ),
   )
 
-  it.live("does not encode ignored structured metadata when projected content exists", () =>
+  it.live("rejects unencodable structured metadata even when projected content exists", () =>
     withStore(({ store }) =>
       Effect.gen(function* () {
         const output = { structured: { value: 1n }, content: [{ type: "text" as const, text: "readable text" }] }
-        expect(yield* store.bound({ sessionID, callID: "call-unencodable", output })).toEqual({
-          output,
-          outputPaths: [],
-        })
+        const exit = yield* store.bound({ sessionID, callID: "call-unencodable", output }).pipe(Effect.exit)
+        expect(Exit.isFailure(exit)).toBe(true)
+        if (Exit.isFailure(exit))
+          expect(Option.getOrUndefined(Cause.findErrorOption(exit.cause))).toMatchObject({
+            _tag: "ToolOutputStore.StorageError",
+            operation: "encode",
+          })
       }),
     ),
   )

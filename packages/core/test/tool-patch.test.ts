@@ -1,7 +1,8 @@
 import fs from "fs/promises"
 import path from "path"
-import { describe, expect } from "bun:test"
-import { Deferred, Effect, Exit, Fiber, Layer } from "effect"
+import { describe, expect, test } from "bun:test"
+import { Deferred, Effect, Exit, Fiber, Layer, Schema } from "effect"
+import { createTwoFilesPatch, parsePatch } from "diff"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FileMutation } from "@opencode-ai/core/file-mutation"
@@ -14,6 +15,7 @@ import { SessionV2 } from "@opencode-ai/core/session"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { PatchTool } from "@opencode-ai/core/tool/patch"
+import { ToolStructured } from "@opencode-ai/core/tool/structured"
 import { location } from "./fixture/location"
 import { tmpdir } from "./fixture/tmpdir"
 import { makeLocationNode } from "@opencode-ai/core/effect/app-node"
@@ -145,6 +147,22 @@ const exists = (target: string) =>
 const it = testEffect(Layer.empty)
 
 describe("PatchTool", () => {
+  test("summarizes multi-line truncation without fabricating unchanged context", () => {
+    const before = Array.from({ length: 100 }, (_, index) => `old-${index}`).join("\n")
+    const after = Array.from({ length: 100 }, (_, index) => `new-${index}`).join("\n")
+    const summary = ToolStructured.patch(createTwoFilesPatch("large.txt", "large.txt", before, after), 500)
+    const hunk = parsePatch(summary)[0]?.hunks[0]
+
+    expect(hunk?.lines.some((line) => line.startsWith(" "))).toBe(false)
+    expect(hunk?.lines).toEqual([
+      "-old-0",
+      "+new-0",
+      "-... 99 removed lines omitted ...",
+      "+... 99 added lines omitted ...",
+    ])
+    expect(hunk).toMatchObject({ oldLines: 2, newLines: 2 })
+  })
+
   it.live("registers and sequentially applies add, update, and delete hunks", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
@@ -208,6 +226,43 @@ describe("PatchTool", () => {
                 )
                 expect(yield* Effect.promise(() => fs.readFile(update, "utf8"))).toBe("after\n")
                 expect(yield* exists(remove)).toBe(false)
+              }),
+            ),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("retains a bounded patch for large changes", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const target = path.join(tmp.path, "large.txt")
+        const before = "x".repeat(20_000)
+        const after = "y".repeat(20_000)
+        return Effect.promise(() => fs.writeFile(target, `${before}\n`)).pipe(
+          Effect.andThen(
+            withTool(tmp.path, (registry) =>
+              Effect.gen(function* () {
+                const settled = yield* settleTool(
+                  registry,
+                  call(`*** Begin Patch\n*** Update File: large.txt\n@@\n-${before}\n+${after}\n*** End Patch`),
+                )
+                const structured = Schema.decodeUnknownSync(PatchTool.Output)(settled.output?.structured)
+                expect(Buffer.byteLength(JSON.stringify(structured))).toBeLessThanOrEqual(
+                  ToolOutputStore.MAX_STRUCTURED_BYTES,
+                )
+                const hunk = parsePatch(structured.files[0]?.patch ?? "")[0]?.hunks[0]
+                expect(hunk?.lines.some((line) => line.startsWith("-"))).toBe(true)
+                expect(hunk?.lines.some((line) => line.startsWith("+"))).toBe(true)
+                expect(hunk).toMatchObject({ oldLines: 1, newLines: 1 })
+                expect(structured).toMatchObject({
+                  applied: [{ type: "update", resource: "large.txt" }],
+                  files: [{ file: "large.txt", patch: expect.stringContaining("... truncated ...") }],
+                })
               }),
             ),
           ),
