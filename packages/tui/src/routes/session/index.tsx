@@ -1647,7 +1647,7 @@ function UserMessage(props: { message: SessionMessageUser }) {
   const data = useData()
   const local = useLocal()
   const files = createMemo(() => props.message.files ?? [])
-  const { themeV2 } = useTheme().contextual("elevated")
+  const { themeV2, mode } = useTheme().contextual("elevated")
   const [hover, setHover] = createSignal(false)
   const color = createMemo(() => local.agent.color(data.session.get(ctx.sessionID)?.agent ?? "build"))
   const queued = createMemo(
@@ -1697,7 +1697,7 @@ function UserMessage(props: { message: SessionMessageUser }) {
                     <text fg={themeV2.text()}>
                       <span
                         style={{
-                          bg: themeV2.hue.accent(500),
+                          bg: themeV2.hue.accent(mode() === "light" ? 700 : 200),
                           fg: themeV2.background(),
                           bold: true,
                         }}
