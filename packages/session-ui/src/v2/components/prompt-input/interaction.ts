@@ -82,9 +82,7 @@ export function createPromptInputV2Controller(input: {
       draft.addMention(part)
       return true
     }
-    const text = draft.state.prompt.map((item) => ("content" in item ? item.content : "")).join("")
-    const cursor = draft.state.cursor ?? text.length
-    draft.setText(text.slice(0, cursor) + part.content + text.slice(cursor))
+    draft.addText(part.content)
     return true
   }
   const attachments = input.attachments
