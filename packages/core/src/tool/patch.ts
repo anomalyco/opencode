@@ -8,7 +8,6 @@ import { Effect, Schema } from "effect"
 import path from "path"
 import { FSUtil } from "../fs-util"
 import { Location } from "../location"
-import { LocationMutation } from "../location-mutation"
 import { Patch } from "../patch"
 import { PermissionV2 } from "../permission"
 import { Tool } from "./tool"
@@ -44,22 +43,30 @@ export const toModelOutput = (output: Output) =>
 
 type Prepared =
   | (Extract<Patch.Hunk, { readonly type: "add" | "delete" }> & {
-      readonly target: LocationMutation.Target
+      readonly target: Target
       readonly before: string
       readonly after: string
     })
   | (Extract<Patch.Hunk, { readonly type: "update" }> & {
-      readonly target: LocationMutation.Target
+      readonly target: Target
       readonly content: string
       readonly before: string
       readonly after: string
-      readonly moveTarget?: LocationMutation.Target
+      readonly moveTarget?: Target
     })
+
+interface Target {
+  readonly canonical: string
+  readonly resource: string
+  readonly externalDirectory?: {
+    readonly directory: string
+    readonly resource: string
+  }
+}
 
 export const Plugin = {
   id: "opencode.tool.patch",
   effect: Effect.fn("PatchTool.Plugin")(function* (ctx: PluginContext) {
-    const mutation = yield* LocationMutation.Service
     const fs = yield* FSUtil.Service
     const location = yield* Location.Service
     const permission = yield* PermissionV2.Service
@@ -101,45 +108,21 @@ export const Plugin = {
                     }
                     return yield* new ToolFailure({ message: "patch verification failed: no hunks found" })
                   }
-                  const targets: Array<{
-                    readonly hunk: Patch.Hunk
-                    readonly target: LocationMutation.Target
-                    readonly moveTarget?: LocationMutation.Target
-                  }> = []
-                  for (const hunk of hunks) {
-                    const resolvedTarget = yield* mutation.resolve({ path: hunk.path, kind: "file" })
-                    const targetPath = path.resolve(location.directory, hunk.path)
-                    const target = {
-                      ...resolvedTarget,
-                      canonical: targetPath,
-                      resource: path.relative(location.project.directory, targetPath).replaceAll("\\", "/") || ".",
-                    }
-                    const movePath = hunk.type === "update" ? hunk.movePath : undefined
-                    const moveTarget =
-                      movePath
-                        ? yield* Effect.gen(function* () {
-                            const resolved = yield* mutation.resolve({ path: movePath, kind: "file" })
-                            const target = path.resolve(location.directory, movePath)
-                            return {
-                              ...resolved,
-                              canonical: target,
-                              resource:
-                                path.relative(location.project.directory, target).replaceAll("\\", "/") || ".",
-                            }
-                          })
-                        : undefined
-                    targets.push({
-                      hunk,
-                      target,
-                      moveTarget,
-                    })
-                  }
                   const prepared: Prepared[] = []
-                  for (const { hunk, target, moveTarget } of targets) {
+                  const targets: Target[] = []
+                  for (const hunk of hunks) {
                     yield* Effect.gen(function* () {
+                      const target = resolveTarget(location, hunk.path)
+                      targets.push(target)
                       if (target.externalDirectory) {
                         yield* permission.assert({
-                          ...LocationMutation.externalDirectoryPermission(target.externalDirectory),
+                          action: "external_directory",
+                          resources: [target.externalDirectory.resource],
+                          save: [target.externalDirectory.resource],
+                          metadata: {
+                            filepath: target.canonical,
+                            parentDir: target.externalDirectory.directory,
+                          },
                           sessionID: context.sessionID,
                           agent: context.agent,
                           source,
@@ -186,9 +169,16 @@ export const Plugin = {
                         catch: (error) =>
                           new ToolFailure({ message: `patch verification failed: ${String(error)}` }),
                       })
+                      const moveTarget = hunk.movePath ? resolveTarget(location, hunk.movePath) : undefined
                       if (moveTarget?.externalDirectory) {
                         yield* permission.assert({
-                          ...LocationMutation.externalDirectoryPermission(moveTarget.externalDirectory),
+                          action: "external_directory",
+                          resources: [moveTarget.externalDirectory.resource],
+                          save: [moveTarget.externalDirectory.resource],
+                          metadata: {
+                            filepath: moveTarget.canonical,
+                            parentDir: moveTarget.externalDirectory.directory,
+                          },
                           sessionID: context.sessionID,
                           agent: context.agent,
                           source,
@@ -208,10 +198,10 @@ export const Plugin = {
                   const patchFiles = prepared.map(patchFile)
                   yield* permission.assert({
                     action: "edit",
-                    resources: [...new Set(targets.map(({ target }) => target.resource))],
+                    resources: [...new Set(targets.map((target) => target.resource))],
                     save: ["*"],
                     metadata: {
-                      filepath: targets.map(({ target }) => target.resource).join(", "),
+                      filepath: targets.map((target) => target.resource).join(", "),
                       diff: patchFiles.map((file) => `${file.patch}\n`).join(""),
                       files: patchFiles,
                     },
@@ -342,4 +332,25 @@ function trimDiff(diff: string) {
       return line
     })
     .join("\n")
+}
+
+function resolveTarget(location: Location.Interface, value: string): Target {
+  const canonical =
+    process.platform === "win32"
+      ? FSUtil.normalizePath(path.resolve(location.directory, value))
+      : path.resolve(location.directory, value)
+  const projectRoot = path.parse(location.project.directory).root
+  const external =
+    !FSUtil.contains(location.directory, canonical) &&
+    (location.project.directory === projectRoot || !FSUtil.contains(location.project.directory, canonical))
+  const directory = path.dirname(canonical)
+  const resource =
+    process.platform === "win32"
+      ? FSUtil.normalizePathPattern(path.join(directory, "*"))
+      : path.join(directory, "*").replaceAll("\\", "/")
+  return {
+    canonical,
+    resource: path.relative(location.project.directory, canonical).replaceAll("\\", "/") || ".",
+    externalDirectory: external ? { directory, resource } : undefined,
+  }
 }

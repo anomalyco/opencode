@@ -6,7 +6,6 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Location } from "@opencode-ai/core/location"
-import { LocationMutation } from "@opencode-ai/core/location-mutation"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
@@ -22,7 +21,7 @@ import { toolIdentity, executeTool, registerToolPlugin, settleTool, toolDefiniti
 const patchToolNode = makeLocationNode({
   name: "test/patch-tool-plugin",
   layer: Layer.effectDiscard(registerToolPlugin(PatchTool.Plugin)),
-  deps: [ToolRegistry.toolsNode, LocationMutation.node, FSUtil.node, Location.node, PermissionV2.node],
+  deps: [ToolRegistry.toolsNode, FSUtil.node, Location.node, PermissionV2.node],
 })
 
 const sessionID = SessionV2.ID.make("ses_patch_tool_test")
@@ -89,10 +88,19 @@ const filesystem = Layer.effect(
   }),
 ).pipe(Layer.provide(LayerNode.compile(FSUtil.node)))
 
-const withTool = <A, E, R>(directory: string, body: (registry: ToolRegistry.Interface) => Effect.Effect<A, E, R>) => {
+const withTool = <A, E, R>(
+  directory: string,
+  body: (registry: ToolRegistry.Interface) => Effect.Effect<A, E, R>,
+  projectDirectory = directory,
+) => {
   const activeLocation = Layer.succeed(
     Location.Service,
-    Location.Service.of(location({ directory: AbsolutePath.make(directory) })),
+    Location.Service.of(
+      location(
+        { directory: AbsolutePath.make(directory) },
+        { projectDirectory: AbsolutePath.make(projectDirectory) },
+      ),
+    ),
   )
   return Effect.gen(function* () {
     return yield* body(yield* ToolRegistry.Service)
@@ -102,7 +110,6 @@ const withTool = <A, E, R>(directory: string, body: (registry: ToolRegistry.Inte
         LayerNode.group([
           ToolRegistry.node,
           ToolRegistry.toolsNode,
-          LocationMutation.node,
           patchToolNode,
         ]),
         [
@@ -659,6 +666,105 @@ describe("PatchTool", () => {
                 ).toMatchObject({ type: "text" })
                 expect(assertions.map((input) => input.action)).toEqual(["external_directory", "edit"])
                 expect(readsBeforeEditApproval).toBe(1)
+                expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("after\n")
+              }),
+            ),
+          ),
+        )
+      },
+      ([active, outside]) =>
+        Effect.promise(() =>
+          Promise.all([active[Symbol.asyncDispose](), outside[Symbol.asyncDispose]()]).then(() => undefined),
+        ),
+    ),
+  )
+
+  it.live("does not inspect an external file when external permission is denied", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => Promise.all([tmpdir(), tmpdir()])),
+      ([active, outside]) => {
+        reset()
+        denyAction = "external_directory"
+        const target = path.join(outside.path, "external.txt")
+        return Effect.promise(() => fs.writeFile(target, "before\n")).pipe(
+          Effect.andThen(
+            withTool(
+              active.path,
+              (registry) =>
+                Effect.gen(function* () {
+                  expect(
+                    yield* executeTool(
+                      registry,
+                      call(`*** Begin Patch\n*** Update File: ${target}\n@@\n-before\n+after\n*** End Patch`),
+                    ),
+                  ).toMatchObject({ type: "error" })
+                  expect(assertions.map((input) => input.action)).toEqual(["external_directory"])
+                  expect(readsBeforeEditApproval).toBe(0)
+                  expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("before\n")
+                }),
+              path.parse(active.path).root,
+            ),
+          ),
+        )
+      },
+      ([active, outside]) =>
+        Effect.promise(() =>
+          Promise.all([active[Symbol.asyncDispose](), outside[Symbol.asyncDispose]()]).then(() => undefined),
+        ),
+    ),
+  )
+
+  it.live("treats a sibling path inside the project worktree as internal", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const active = path.join(tmp.path, "active")
+        const target = path.join(tmp.path, "sibling.txt")
+        return Effect.promise(() => Promise.all([fs.mkdir(active), fs.writeFile(target, "before\n")])).pipe(
+          Effect.andThen(
+            withTool(
+              active,
+              (registry) =>
+                Effect.gen(function* () {
+                  expect(
+                    yield* executeTool(
+                      registry,
+                      call("*** Begin Patch\n*** Update File: ../sibling.txt\n@@\n-before\n+after\n*** End Patch"),
+                    ),
+                  ).toMatchObject({ type: "text" })
+                  expect(assertions.map((input) => input.action)).toEqual(["edit"])
+                  expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("after\n")
+                }),
+              tmp.path,
+            ),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("follows an internal symlink to an external file without external permission", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => Promise.all([tmpdir(), tmpdir()])),
+      ([active, outside]) => {
+        reset()
+        if (process.platform === "win32") return Effect.void
+        const target = path.join(outside.path, "external.txt")
+        const link = path.join(active.path, "link.txt")
+        return Effect.promise(() => fs.writeFile(target, "before\n")).pipe(
+          Effect.andThen(Effect.promise(() => fs.symlink(target, link))),
+          Effect.andThen(
+            withTool(active.path, (registry) =>
+              Effect.gen(function* () {
+                expect(
+                  yield* executeTool(
+                    registry,
+                    call("*** Begin Patch\n*** Update File: link.txt\n@@\n-before\n+after\n*** End Patch"),
+                  ),
+                ).toMatchObject({ type: "text" })
+                expect(assertions.map((input) => input.action)).toEqual(["edit"])
                 expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("after\n")
               }),
             ),
