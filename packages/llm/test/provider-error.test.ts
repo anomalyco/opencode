@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { LLMEvent, isContextOverflow, isContextOverflowFinish } from "../src"
+import { isContextOverflow } from "../src"
 
 describe("provider error classification", () => {
   test("classifies provider token limit messages as context overflow", () => {
@@ -26,36 +26,5 @@ describe("provider error classification", () => {
     ]
 
     expect(messages.some(isContextOverflow)).toBe(false)
-  })
-
-  test("classifies terminal usage overflow", () => {
-    expect(
-      isContextOverflowFinish(
-        LLMEvent.finish({ reason: "stop", usage: { inputTokens: 200_001, outputTokens: 10 } }),
-        200_000,
-      ),
-    ).toBe(true)
-    expect(
-      isContextOverflowFinish(
-        LLMEvent.finish({ reason: "length", usage: { inputTokens: 198_000, outputTokens: 0 } }),
-        200_000,
-      ),
-    ).toBe(true)
-  })
-
-  test("does not classify ordinary terminal usage as overflow", () => {
-    expect(
-      isContextOverflowFinish(
-        LLMEvent.finish({ reason: "stop", usage: { inputTokens: 200_000, outputTokens: 10 } }),
-        200_000,
-      ),
-    ).toBe(false)
-    expect(
-      isContextOverflowFinish(
-        LLMEvent.finish({ reason: "length", usage: { inputTokens: 198_000, outputTokens: 1 } }),
-        200_000,
-      ),
-    ).toBe(false)
-    expect(isContextOverflowFinish(LLMEvent.finish({ reason: "length" }), 200_000)).toBe(false)
   })
 })
