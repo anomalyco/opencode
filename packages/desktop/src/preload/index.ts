@@ -4,7 +4,7 @@ import type { UpdaterState } from "@opencode-ai/app/updater"
 
 // BiDi text direction support + message metadata footer
 {
-const css = `[data-component="markdown"]>*{unicode-bidi:plaintext !important}[data-slot="text-part-body"]>*{unicode-bidi:plaintext !important}[data-slot="user-message-text"]{unicode-bidi:plaintext !important}[data-component="reasoning-part"]>*{unicode-bidi:plaintext !important}[data-component="tool-output"]{unicode-bidi:plaintext !important}[data-slot="question-text"]{unicode-bidi:plaintext !important}[data-slot="answer-text"]{unicode-bidi:plaintext !important}[data-component="markdown"] code,[data-component="markdown"] pre{direction:ltr;unicode-bidi:isolate !important}[data-component="markdown"] pre code{unicode-bidi:isolate !important}[data-component="prompt-input"]{unicode-bidi:plaintext !important}`
+const css = `[data-component="markdown"]>*{unicode-bidi:plaintext !important}[data-slot="text-part-body"]>*{unicode-bidi:plaintext !important}[data-slot="user-message-text"]{unicode-bidi:plaintext !important}[data-component="reasoning-part"]>*{unicode-bidi:plaintext !important}[data-component="tool-output"]{unicode-bidi:plaintext !important}[data-slot="question-text"]{unicode-bidi:plaintext !important}[data-slot="answer-text"]{unicode-bidi:plaintext !important}[data-component="markdown"] code,[data-component="markdown"] pre{direction:ltr;unicode-bidi:isolate !important}[data-component="markdown"] pre code{unicode-bidi:isolate !important}`
 const s = document.createElement("style");s.textContent=css;s.id="oc-bidi-fix"
 const inj=()=>{if(document.head){document.head.appendChild(s);return true}return false}
 if(!inj())document.addEventListener("DOMContentLoaded",inj,{once:true})
