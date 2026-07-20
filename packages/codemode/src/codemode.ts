@@ -120,6 +120,13 @@ export type Runtime<R = never> = {
   readonly execute: (code: string) => Effect.Effect<Result, never, R>
 }
 
+export const description = [
+  "Run JavaScript in a confined Code Mode runtime through { code }.",
+  "Call Code Mode tools through `tools` using the exact paths and signatures from the instructions.",
+  "Use `search({ query })` to discover exact signatures when needed.",
+  "Await important calls and use `Promise.all` for independent calls.",
+].join("\n")
+
 const validateLimit = (name: keyof ExecutionLimits, value: number | undefined, minimum: number): number | undefined => {
   if (value !== undefined && (!Number.isSafeInteger(value) || value < minimum)) {
     throw new RangeError(`${name} must be a safe integer greater than or equal to ${minimum}.`)

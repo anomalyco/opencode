@@ -550,6 +550,23 @@ describe("CodeMode schema flexibility", () => {
 })
 
 describe("CodeMode public contract", () => {
+  test("keeps the tool description independent from the catalog", () => {
+    const runtime = CodeMode.make({
+      tools: {
+        lookup: Tool.make({
+          description: "Look up a record",
+          input: Schema.Struct({}),
+          output: Schema.String,
+          run: () => Effect.succeed("found"),
+        }),
+      },
+    })
+
+    expect(CodeMode.description).toContain("confined Code Mode runtime")
+    expect(CodeMode.description).not.toContain("lookup")
+    expect(runtime.instructions()).toContain("tools.lookup(input:")
+  })
+
   const lookup = Tool.make({
     description: "Look up an order by ID",
     input: Schema.Struct({ id: Schema.String }),

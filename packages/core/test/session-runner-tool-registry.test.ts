@@ -481,6 +481,9 @@ describe("ToolRegistry", () => {
         })
         .pipe(Scope.provide(scope))
       const materialized = yield* service.materialize()
+      const execute = materialized.definitions.find((tool) => tool.name === "execute")
+      expect(execute?.description).toContain("confined Code Mode runtime")
+      expect(execute?.description).not.toContain("Echo text")
       yield* Scope.close(scope, Exit.void)
       yield* service.register({
         echo: Tool.make({

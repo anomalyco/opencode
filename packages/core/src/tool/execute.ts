@@ -36,34 +36,15 @@ type CollectedFiles = {
   readonly files: Array<typeof ExecuteFile.Type>
 }
 
-interface Registration {
+export interface Registration {
   readonly tool: AnyTool
   readonly name: string
   readonly namespace?: string
 }
 
 export const create = (registrations: ReadonlyMap<string, Registration>) => {
-  const runtime = (
-    invoke: (name: string, registration: Registration, input: unknown) => Effect.Effect<unknown, unknown>,
-    hooks?: CodeMode.ToolCallHooks,
-  ) => {
-    const tools: Record<string, Tool.Definition<never>> = {}
-    for (const [name, registration] of registrations) {
-      const child = definition(name, registration.tool)
-      const value = Tool.make({
-        description: child.description,
-        input: child.inputSchema,
-        output: child.outputSchema,
-        run: (input) => invoke(name, registration, input),
-      })
-      const path = registration.namespace === undefined ? registration.name : `${registration.namespace}.${registration.name}`
-      tools[path] = value
-    }
-    return CodeMode.make<typeof tools>({ tools, ...hooks })
-  }
-  const discovery = runtime(() => Effect.fail(toolError("Execute context is unavailable")))
   return make({
-    description: discovery.instructions(),
+    description: CodeMode.description,
     input: CodeMode.Input,
     output: ExecuteOutput,
     structured: ExecuteMetadata,
@@ -92,6 +73,7 @@ export const create = (registrations: ReadonlyMap<string, Registration>) => {
           ),
         )
         const result = yield* runtime(
+          registrations,
           (name, registration, input) =>
             Effect.gen(function* () {
               const index = yield* Ref.getAndUpdate(callIndex, (index) => index + 1)
@@ -139,6 +121,29 @@ export const create = (registrations: ReadonlyMap<string, Registration>) => {
         return { output, toolCalls, files: collected, ...(result.ok ? {} : { error: true as const }) }
       }),
   })
+}
+
+export const instructions = (registrations: ReadonlyMap<string, Registration>) => {
+  return runtime(registrations, () => Effect.fail(toolError("Execute context is unavailable"))).instructions()
+}
+
+function runtime(
+  registrations: ReadonlyMap<string, Registration>,
+  invoke: (name: string, registration: Registration, input: unknown) => Effect.Effect<unknown, unknown>,
+  hooks?: CodeMode.ToolCallHooks,
+) {
+  const tools: Record<string, Tool.Definition<never>> = {}
+  for (const [name, registration] of registrations) {
+    const child = definition(name, registration.tool)
+    const path = registration.namespace === undefined ? registration.name : `${registration.namespace}.${registration.name}`
+    tools[path] = Tool.make({
+      description: child.description,
+      input: child.inputSchema,
+      output: child.outputSchema,
+      run: (input) => invoke(name, registration, input),
+    })
+  }
+  return CodeMode.make<typeof tools>({ tools, ...hooks })
 }
 
 function displayInput(input: unknown): Record<string, unknown> | undefined {

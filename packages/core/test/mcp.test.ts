@@ -767,9 +767,10 @@ it.effect("advertises MCP output schemas to Code Mode", () =>
   Effect.gen(function* () {
     const registry = yield* ToolRegistry.Service
     yield* waitForTool(registry, "execute")
-    const execute = (yield* toolDefinitions(registry)).find((tool) => tool.name === "execute")
+    const materialized = yield* registry.materialize()
+    const execute = materialized.definitions.find((tool) => tool.name === "execute")
 
-    expect(execute?.description).toContain("tools.demo.search(input: {}): Promise<{\n  ok: boolean,\n}>")
+    expect(execute?.description).not.toContain("tools.demo.search")
   }),
 )
 

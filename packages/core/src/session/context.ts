@@ -12,6 +12,7 @@ import { McpInstructions } from "../mcp/instructions"
 import { PluginSupervisor } from "../plugin/supervisor"
 import { ReferenceInstructions } from "../reference/instructions"
 import { SkillInstructions } from "../skill/instructions"
+import { CodeModeInstructions } from "../codemode/instructions"
 import { AgentNotFoundError } from "./error"
 import { SessionHistory } from "./history"
 import { InstructionEntry } from "./instruction-entry"
@@ -54,6 +55,7 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const agents = yield* AgentV2.Service
     const builtins = yield* InstructionBuiltIns.Service
+    const codeModeInstructions = yield* CodeModeInstructions.Service
     const db = (yield* Database.Service).db
     const discovery = yield* InstructionDiscovery.Service
     const entries = yield* InstructionEntry.Service
@@ -77,6 +79,7 @@ const layer = Layer.effect(
       const instructions = yield* Effect.all(
         [
           builtins.load(sessionID),
+          codeModeInstructions.load(agent),
           discovery.load(),
           skillInstructions.load(agent),
           referenceInstructions.load(),
@@ -109,6 +112,7 @@ export const node = makeLocationNode({
   layer,
   deps: [
     AgentV2.node,
+    CodeModeInstructions.node,
     Database.node,
     InstructionBuiltIns.node,
     InstructionDiscovery.node,
