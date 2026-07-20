@@ -20,7 +20,7 @@ export function DialogSessionList() {
   const dialog = useDialog()
   const route = useRoute()
   const data = useData()
-  const { theme } = useTheme()
+  const { themeV2, mode } = useTheme().contextual("elevated")
   const client = useClient()
   const local = useLocal()
   const toast = useToast()
@@ -109,12 +109,13 @@ export function DialogSessionList() {
         value: session.id,
         category,
         footer,
-        bg: deleting ? theme.error : undefined,
+        bg: deleting ? themeV2.background.action.destructive.focused : undefined,
+        fg: deleting ? themeV2.text.action.destructive.focused : undefined,
         gutter: data.session.family(session.id).some((id) => data.session.status(id) === "running")
           ? () => <Spinner />
           : slot === undefined
             ? undefined
-            : () => <text fg={theme.accent}>{slot}</text>,
+            : () => <text fg={themeV2.hue.accent[mode() === "light" ? 800 : 200]}>{slot}</text>,
       }
     }
 
@@ -142,12 +143,14 @@ export function DialogSessionList() {
       }}
       emptyView={
         <box paddingLeft={4} paddingRight={4} paddingTop={1}>
-          <text fg={theme.textMuted}>No sessions available</text>
+          <text fg={themeV2.text.subdued}>No sessions available</text>
         </box>
       }
       noMatchView={
         <box paddingLeft={4} paddingRight={4} paddingTop={1}>
-          <text fg={searchState().error ? theme.error : theme.textMuted}>{searchState().message}</text>
+          <text fg={searchState().error ? themeV2.text.feedback.error.default : themeV2.text.subdued}>
+            {searchState().message}
+          </text>
         </box>
       }
       onMove={() => setToDelete(undefined)}
