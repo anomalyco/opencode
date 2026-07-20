@@ -386,6 +386,100 @@ describe("CodeMode output budget", () => {
     expect(result.logs).toStrictEqual(["first line", "[logs truncated: showing 1 of 2 lines]"])
   })
 
+  test("keeps an exact-fit line on success using UTF-8 bytes plus one", async () => {
+    const result = await Effect.runPromise(
+      CodeMode.execute({
+        code: `console.log("abc"); console.log("later"); return "ok"`,
+        limits: { maxOutputBytes: 8 },
+      }),
+    )
+
+    expect(result).toStrictEqual({
+      ok: true,
+      value: "ok",
+      logs: ["abc", "[logs truncated: showing 1 of 2 lines]"],
+      truncated: true,
+      toolCalls: [],
+    })
+  })
+
+  test("accounts for multibyte log lines on failure", async () => {
+    const result = await Effect.runPromise(
+      CodeMode.execute({
+        code: `console.log("é"); console.log("x"); throw new Error("boom")`,
+        limits: { maxOutputBytes: 3 },
+      }),
+    )
+
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.logs).toStrictEqual(["é", "[logs truncated: showing 1 of 2 lines]"])
+    expect(result.truncated).toBe(true)
+  })
+
+  test("bounds logs captured before timeout", async () => {
+    const result = await Effect.runPromise(
+      CodeMode.execute({
+        code: `console.log("abc"); console.log("later"); while (true) {}`,
+        limits: { maxOutputBytes: 4, timeoutMs: 50 },
+      }),
+    )
+
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.error.kind).toBe("TimeoutExceeded")
+    expect(result.logs).toStrictEqual(["abc", "[logs truncated: showing 1 of 2 lines]"])
+    expect(result.truncated).toBe(true)
+  })
+
+  test("retains no lines at a zero-byte limit", async () => {
+    const result = await Effect.runPromise(
+      CodeMode.execute({
+        code: `console.log("a"); console.log("b"); return null`,
+        limits: { maxOutputBytes: 0 },
+      }),
+    )
+
+    expect(result.logs).toStrictEqual(["[logs truncated: showing 0 of 2 lines]"])
+    expect(result.truncated).toBe(true)
+  })
+
+  test("stops retaining after an oversized first line", async () => {
+    const result = await Effect.runPromise(
+      CodeMode.execute({
+        code: `console.log("first line is too large"); console.log("x"); return "ok"`,
+        limits: { maxOutputBytes: 8 },
+      }),
+    )
+
+    expect(result.logs).toStrictEqual(["[logs truncated: showing 0 of 2 lines]"])
+    expect(result.truncated).toBe(true)
+  })
+
+  test("applies the return-value budget before retained logs", async () => {
+    const result = await Effect.runPromise(
+      CodeMode.execute({
+        code: `console.log("abc"); return "ok"`,
+        limits: { maxOutputBytes: 6 },
+      }),
+    )
+
+    expect(result.logs).toStrictEqual(["[logs truncated: showing 0 of 1 lines]"])
+    expect(result.truncated).toBe(true)
+  })
+
+  test("counts embedded newlines as bytes in one captured entry", async () => {
+    const result = await Effect.runPromise(
+      CodeMode.execute({
+        code: `console.log("a\\nb"); console.log("c"); return null`,
+        limits: { maxOutputBytes: 8 },
+      }),
+    )
+
+    expect(result.logs).toStrictEqual(["a\nb", "[logs truncated: showing 1 of 2 lines]"])
+    expect(result.truncated).toBe(true)
+  })
+
   test("does not mark results within the budget", async () => {
     const result = await Effect.runPromise(
       CodeMode.execute({
@@ -393,6 +487,7 @@ describe("CodeMode output budget", () => {
         console.log("fits")
         return { fits: true }
       `,
+        limits: { maxOutputBytes: 100 },
       }),
     )
     expect(result).toStrictEqual({
