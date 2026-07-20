@@ -63,6 +63,24 @@ yield *
   })
 ```
 
+xAI image models use the same request API with xAI-native controls:
+
+```ts
+yield *
+  Image.generate({
+    model: XAI.configure({ apiKey }).image("any-model-id"),
+    prompt,
+    options: {
+      n: 2,
+      aspectRatio: "16:9",
+      resolution: "1k",
+      responseFormat: "b64_json",
+      future_option: true,
+    },
+    http,
+  })
+```
+
 Conversational image generation remains part of the LLM interaction. OpenAI Responses exposes it through its hosted image tool:
 
 ```ts

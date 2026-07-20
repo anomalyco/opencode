@@ -6,7 +6,7 @@ import {
   type ImageRequestFor,
   type ImageRoute,
 } from "../src"
-import { OpenAI } from "../src/providers"
+import { OpenAI, XAI } from "../src/providers"
 
 type GoogleLikeOptions = {
   readonly aspectRatio?: "1:1" | "16:9"
@@ -47,6 +47,30 @@ OpenAI.imageGeneration({ action: "future-action", quality: "future-quality", siz
 OpenAI.imageGeneration({ partialImages: "2" })
 // @ts-expect-error Known Google-like options are inferred from the selected model.
 Image.generate({ model: google, prompt: "A lighthouse", options: { aspectRatio: "wide" } })
+
+const xai = XAI.configure({ apiKey: "test" }).image("any-model-id")
+// @ts-expect-error Image generation options are request-scoped, not provider configuration.
+XAI.configure({ image: { options: { resolution: "1k" } } })
+Image.generate({
+  model: xai,
+  prompt: "A lighthouse",
+  options: {
+    n: 2,
+    aspectRatio: "future-ratio",
+    resolution: "future-resolution",
+    responseFormat: "future-format",
+    future_option: true,
+  },
+})
+Image.generate({
+  model: xai,
+  prompt: "A lighthouse",
+  options: { aspect_ratio: "16:9", response_format: "b64_json", native_future_option: true },
+})
+// @ts-expect-error Known xAI numeric options retain their value kind.
+Image.generate({ model: xai, prompt: "A lighthouse", options: { n: "2" } })
+// @ts-expect-error Known xAI string options retain their value kind.
+Image.generate({ model: xai, prompt: "A lighthouse", options: { resolution: 2 } })
 
 declare const generic: ImageModel<ImageOptions>
 Image.generate({ model: generic, prompt: "A lighthouse", options: { arbitrary: true } })
