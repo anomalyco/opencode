@@ -3029,7 +3029,13 @@ describe("ProviderTransform.temperature - Cohere North", () => {
 describe("ProviderTransform.reasoningVariants", () => {
   const model = (reasoning_options: ModelsDev.Model["reasoning_options"]) => ({ reasoning_options }) as ModelsDev.Model
   const target = (npm: string, id = "test-model") =>
-    ({ id, api: { id, npm, url: "" }, capabilities: { reasoning: true }, limit: { output: 64_000 } }) as any
+    ({
+      id,
+      providerID: "test",
+      api: { id, npm, url: "" },
+      capabilities: { reasoning: true },
+      limit: { output: 64_000 },
+    }) as any
 
   test("respects explicitly empty reasoning options", () => {
     expect(ProviderTransform.reasoningVariants(model([]), target("@ai-sdk/openai"))).toEqual({})

@@ -26,21 +26,11 @@ export function sanitizeSurrogates(content: string) {
   return content.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "\uFFFD")
 }
 
-// Kimi family endpoints are Moonshot's Anthropic-compatible API
-// (api.moonshot.ai/cn, api.kimi.com) and model families (kimi-*, moonshot-*).
-// Detection drives endpoint-specific request shaping, so match provider,
-// model, and endpoint URL alike.
 function isKimiFamily(model: Provider.Model) {
-  const providerID = model.providerID?.toLowerCase() ?? ""
-  if (providerID.includes("kimi") || providerID.includes("moonshot")) return true
-  const apiID = model.api.id?.toLowerCase() ?? ""
-  if (apiID.includes("kimi") || apiID.includes("moonshot")) return true
-  const modelID = model.id?.toLowerCase() ?? ""
-  if (modelID.includes("kimi") || modelID.includes("moonshot")) return true
-  const url = model.api.url?.toLowerCase() ?? ""
-  return ["api.kimi.com", "api.moonshot.ai", "api.moonshot.cn", "api.moonshotai.cn"].some((host) =>
-    url.includes(host),
-  )
+  return [model.providerID, model.api.id].some((id) => {
+    const value = id.toLowerCase()
+    return value.includes("kimi") || value.includes("moonshot")
+  })
 }
 
 // Maps npm package to the key the AI SDK expects for providerOptions
@@ -727,10 +717,10 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
   // Kimi's Anthropic-compatible transports implement adaptive thinking effort.
   if (isKimiFamily(model) && ["@ai-sdk/anthropic", "@ai-sdk/google-vertex/anthropic"].includes(model.api.npm)) {
     return Object.fromEntries(
-      ["low", "medium", "high", "xhigh", "max"].flatMap((effort) => {
-        const settings = anthropicEffort(model, effort)
-        return settings ? [[effort, settings]] : []
-      }),
+      ["low", "medium", "high", "xhigh", "max"].map((effort) => [
+        effort,
+        { thinking: { type: "adaptive", display: "summarized" }, effort },
+      ]),
     )
   }
   if (
