@@ -112,4 +112,33 @@ describe("State", () => {
       expect(finalized).toBe(2)
     }),
   )
+
+  it.effect("exposes the committed state to notify while finalize still sees the previous state", () =>
+    Effect.gen(function* () {
+      const observed: { finalize?: string[]; notify?: string[] } = {}
+      const state = State.create({
+        initial: () => ({ values: [] as string[] }),
+        draft: (draft) => ({ add: (item: string) => draft.values.push(item) }),
+        finalize: () =>
+          Effect.sync(() => {
+            observed.finalize = [...state.get().values]
+          }),
+        notify: () =>
+          Effect.sync(() => {
+            observed.notify = [...state.get().values]
+          }),
+      })
+
+      yield* state.transform((editor) => {
+        editor.add("registered")
+      })
+
+      // finalize completes the rebuild before it becomes readable.
+      expect(observed.finalize).toEqual([])
+      // notify runs after get() exposes the rebuilt state, so an update event
+      // emitted here is a safe invalidation boundary: a client refetch sees it.
+      expect(observed.notify).toEqual(["registered"])
+      expect(state.get().values).toEqual(["registered"])
+    }),
+  )
 })
