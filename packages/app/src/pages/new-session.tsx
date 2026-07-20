@@ -126,6 +126,17 @@ export default function NewSessionPage() {
       keybind: "ctrl+l",
       onSelect: () => promptInputV2Controller.restoreFocus(),
     },
+    {
+      id: "workspace.new",
+      title: language.t("workspace.new"),
+      category: language.t("command.category.workspace"),
+      keybind: "mod+shift+w",
+      disabled: !showWorkspaceBar(),
+      onSelect: () => {
+        setStore("worktree", "create")
+        promptInputV2Controller.restoreFocus()
+      },
+    },
   ])
 
   createEffect(() => {
