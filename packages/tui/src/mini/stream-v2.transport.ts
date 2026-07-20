@@ -11,6 +11,7 @@ import { Event } from "@opencode-ai/schema/event"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { blockerStatus, pickBlockerView } from "./session-data"
 import { writeSessionOutput } from "./stream"
+import { createFragmentReconciler, fragmentRef, type FragmentReconciler } from "./stream-v2.fragment"
 import { createSubagentTracker, toolCommit, toolFinalPhase } from "./stream-v2.subagent"
 import { normalizeTool, toolOutputText } from "./tool"
 import type {
@@ -117,10 +118,7 @@ type State = {
   globalForms: MiniFormRequest[]
   view: FooterView
   messageIDs: Set<string>
-  text: Map<string, string>
-  projectedText: Map<string, string>
-  reasoning: Map<string, string>
-  projectedReasoning: Map<string, string>
+  fragments: FragmentReconciler
   tools: Map<string, ToolState>
   toolSources: Map<string, SessionMessageAssistantTool>
   finishedTools: Set<string>
@@ -202,12 +200,12 @@ function nextEvent(stream: AsyncIterator<RunV2Event>, signal: AbortSignal) {
   })
 }
 
-async function prepareFile(file: RunFilePart, readTextFile?: StreamInput["readTextFile"]) {
-  if (file.mime !== "text/plain") return { attachment: { uri: file.url, name: file.filename } }
+async function prepareInitialFile(file: RunFilePart, readTextFile?: StreamInput["readTextFile"]) {
+  if (file.mime !== "text/plain") return { type: "file" as const, file: { uri: file.url, name: file.filename } }
   const content = file.url.startsWith("data:")
     ? Buffer.from(file.url.slice(file.url.indexOf(",") + 1), "base64").toString("utf8")
     : await (readTextFile?.(file.url) ?? Promise.reject(new Error("Local text file acquisition is unavailable")))
-  return { text: `<file name="${file.filename}">\n${content}\n</file>` }
+  return { type: "text" as const, text: `<file name="${file.filename}">\n${content}\n</file>` }
 }
 
 function promptFileMention(part: PromptFilePart) {
@@ -231,6 +229,25 @@ function promptFiles(next: SessionTurnInput) {
         ]
       : [],
   )
+}
+
+async function prepareAttachments(
+  next: SessionTurnInput,
+  mode: "command" | "prompt",
+  readTextFile?: StreamInput["readTextFile"],
+) {
+  const initial = next.includeFiles ? next.files : []
+  if (mode === "command") {
+    return {
+      text: [],
+      files: [...initial.map((file) => ({ uri: file.url, name: file.filename })), ...promptFiles(next)],
+    }
+  }
+  const prepared = await Promise.all(initial.map((file) => prepareInitialFile(file, readTextFile)))
+  return {
+    text: prepared.flatMap((file) => (file.type === "text" ? [file.text] : [])),
+    files: [...prepared.flatMap((file) => (file.type === "file" ? [file.file] : [])), ...promptFiles(next)],
+  }
 }
 
 function promptAgents(next: SessionTurnInput) {
@@ -359,10 +376,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     globalForms: [],
     view: { type: "prompt" },
     messageIDs: new Set(),
-    text: new Map(),
-    projectedText: new Map(),
-    reasoning: new Map(),
-    projectedReasoning: new Map(),
+    fragments: createFragmentReconciler(),
     tools: new Map(),
     toolSources: new Map(),
     finishedTools: new Set(),
@@ -400,7 +414,10 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     emit: () => {
       if (state.closed || input.footer.isClosed) return
       const snapshot = subagents.snapshot()
-      writeSessionOutput({ footer: input.footer, trace: input.trace }, { commits: [], footer: { subagent: snapshot } })
+      writeSessionOutput(
+        { footer: input.footer, trace: input.trace },
+        { commits: [], updates: [{ type: "stream.subagent", state: snapshot }] },
+      )
       syncBlockers()
     },
   })
@@ -414,14 +431,16 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
           input.onCommit?.(commit)
           return
         }
-        const key = streamPartKey(commit.messageID, commit.partID)
-        const text = commit.kind === "assistant" ? state.text.get(key) : state.reasoning.get(key)
+        const text = state.fragments.value({ messageID: commit.messageID, partID: commit.partID })
         input.onCommit?.({
           ...commit,
           text: commit.kind === "reasoning" && text ? `Thinking: ${text}` : (text ?? commit.text),
         })
       })
-    writeSessionOutput({ footer: input.footer, trace: input.trace }, { commits, footer: patch ? { patch } : undefined })
+    writeSessionOutput(
+      { footer: input.footer, trace: input.trace },
+      { commits, updates: patch ? [{ type: "stream.patch", patch }] : undefined },
+    )
   }
 
   const syncBlockers = () => {
@@ -438,13 +457,16 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       { footer: input.footer, trace: input.trace },
       {
         commits: [],
-        footer: {
-          view: next,
-          patch:
-            next.type === "prompt"
-              ? { phase: state.rootActive ? "running" : "idle", status: blockerStatus(next) }
-              : { status: blockerStatus(next) },
-        },
+        updates: [
+          {
+            type: "stream.patch",
+            patch:
+              next.type === "prompt"
+                ? { phase: state.rootActive ? "running" : "idle", status: blockerStatus(next) }
+                : { status: blockerStatus(next) },
+          },
+          { type: "stream.view", view: next },
+        ],
       },
     )
   }
@@ -560,39 +582,34 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     let reasoningOrdinal = 0
     for (const item of message.content) {
       if (item.type === "text") {
-        const id = `text:${textOrdinal++}`
-        const key = streamPartKey(message.id, id)
-        const sent = state.text.get(key)?.length ?? 0
-        state.text.set(key, item.text)
-        if (render) state.projectedText.set(key, item.text)
-        if (render && item.text.length > sent)
+        const fragment = fragmentRef(message.id, "text", textOrdinal++)
+        const update = state.fragments.project(fragment, item.text, render)
+        if (render && item.text.length > update.previous.length)
           write([
             {
               kind: "assistant",
               source: "assistant",
-              text: item.text.slice(sent),
+              text: item.text.slice(update.previous.length),
               phase: "progress",
               messageID: message.id,
-              partID: id,
+              partID: fragment.partID,
             },
           ])
         continue
       }
       if (item.type === "reasoning") {
-        const id = `reasoning:${reasoningOrdinal++}`
-        const key = streamPartKey(message.id, id)
-        const sent = state.reasoning.get(key)?.length ?? 0
-        state.reasoning.set(key, item.text)
-        if (render) state.projectedReasoning.set(key, item.text)
-        if (render && input.thinking && item.text.length > sent)
+        const fragment = fragmentRef(message.id, "reasoning", reasoningOrdinal++)
+        const update = state.fragments.project(fragment, item.text, render)
+        if (render && input.thinking && item.text.length > update.previous.length)
           write([
             {
               kind: "reasoning",
               source: "reasoning",
-              text: sent === 0 ? `Thinking: ${item.text}` : item.text.slice(sent),
+              text:
+                update.previous.length === 0 ? `Thinking: ${item.text}` : item.text.slice(update.previous.length),
               phase: "progress",
               messageID: message.id,
-              partID: id,
+              partID: fragment.partID,
             },
           ])
         continue
@@ -800,16 +817,8 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       return
     }
     if (event.type === "session.text.delta") {
-      const id = `text:${event.data.ordinal}`
-      const key = streamPartKey(event.data.assistantMessageID, id)
-      const projected = state.projectedText.get(key)
-      const covered = projected?.indexOf(event.data.delta) ?? -1
-      if (projected && covered >= 0) {
-        state.projectedText.set(key, projected.slice(covered + event.data.delta.length))
-        return
-      }
-      const previous = state.text.get(key) ?? ""
-      state.text.set(key, previous + event.data.delta)
+      const fragment = fragmentRef(event.data.assistantMessageID, "text", event.data.ordinal)
+      if (!state.fragments.delta(fragment, event.data.delta)) return
       write([
         {
           kind: "assistant",
@@ -817,74 +826,67 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
           text: event.data.delta,
           phase: "progress",
           messageID: event.data.assistantMessageID,
-          partID: id,
+          partID: fragment.partID,
         },
       ])
       return
     }
     if (event.type === "session.text.ended") {
-      const id = `text:${event.data.ordinal}`
-      const key = streamPartKey(event.data.assistantMessageID, id)
-      const previous = state.text.get(key) ?? ""
-      state.text.set(key, event.data.text)
-      if (event.data.text.length > previous.length)
+      const update = state.fragments.end(
+        fragmentRef(event.data.assistantMessageID, "text", event.data.ordinal),
+        event.data.text,
+      )
+      if (event.data.text.length > update.previous.length)
         write([
           {
             kind: "assistant",
             source: "assistant",
-            text: event.data.text.slice(previous.length),
+            text: event.data.text.slice(update.previous.length),
             phase: "progress",
             messageID: event.data.assistantMessageID,
-            partID: id,
+            partID: update.partID,
           },
         ])
-      state.projectedText.delete(key)
       return
     }
     if (event.type === "session.reasoning.started") {
       return
     }
     if (event.type === "session.reasoning.delta") {
-      const id = `reasoning:${event.data.ordinal}`
-      const key = streamPartKey(event.data.assistantMessageID, id)
-      const projected = state.projectedReasoning.get(key)
-      const covered = projected?.indexOf(event.data.delta) ?? -1
-      if (projected && covered >= 0) {
-        state.projectedReasoning.set(key, projected.slice(covered + event.data.delta.length))
-        return
-      }
-      const previous = state.reasoning.get(key) ?? ""
-      state.reasoning.set(key, previous + event.data.delta)
+      const update = state.fragments.delta(
+        fragmentRef(event.data.assistantMessageID, "reasoning", event.data.ordinal),
+        event.data.delta,
+      )
+      if (!update) return
       if (input.thinking)
         write([
           {
             kind: "reasoning",
             source: "reasoning",
-            text: previous ? event.data.delta : `Thinking: ${event.data.delta}`,
+            text: update.previous ? event.data.delta : `Thinking: ${event.data.delta}`,
             phase: "progress",
             messageID: event.data.assistantMessageID,
-            partID: id,
+            partID: update.partID,
           },
         ])
       return
     }
     if (event.type === "session.reasoning.ended") {
-      const id = `reasoning:${event.data.ordinal}`
-      const key = streamPartKey(event.data.assistantMessageID, id)
-      const previous = state.reasoning.get(key) ?? ""
-      state.reasoning.set(key, event.data.text)
-      if (input.thinking && event.data.text.length > previous.length)
+      const update = state.fragments.end(
+        fragmentRef(event.data.assistantMessageID, "reasoning", event.data.ordinal),
+        event.data.text,
+      )
+      if (input.thinking && event.data.text.length > update.previous.length)
         write([
           {
             kind: "reasoning",
             source: "reasoning",
-            text: previous ? event.data.text.slice(previous.length) : `Thinking: ${event.data.text}`,
+            text: update.previous ? event.data.text.slice(update.previous.length) : `Thinking: ${event.data.text}`,
             phase: "progress",
             messageID: event.data.assistantMessageID,
-            partID: id,
+            partID: update.partID,
           },
         ])
-      state.projectedReasoning.delete(key)
       return
     }
     if (event.type === "session.tool.input.started") {
@@ -1299,10 +1301,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       if (!current(attempt)) return false
       reset = true
       state.messageIDs.clear()
-      state.text.clear()
-      state.projectedText.clear()
-      state.reasoning.clear()
-      state.projectedReasoning.clear()
+      state.fragments.clear()
       state.tools.clear()
       state.toolSources.clear()
       state.finishedTools.clear()
@@ -1326,34 +1325,18 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
             row.commit.partID &&
             (row.commit.kind === "assistant" || row.commit.kind === "reasoning")
           ) {
-            const key = streamPartKey(row.commit.messageID, row.commit.partID)
             const prefix = row.commit.kind === "reasoning" ? "Thinking: " : ""
             const text = row.commit.text.startsWith(prefix) ? row.commit.text.slice(prefix.length) : row.commit.text
-            const current = row.commit.kind === "assistant" ? state.text.get(key) : state.reasoning.get(key)
-            if (current === undefined) {
-              input.footer.append(row.commit)
-              if (row.commit.kind === "assistant") {
-                state.text.set(key, text)
-                state.projectedText.set(key, text)
-              } else {
-                state.reasoning.set(key, text)
-                state.projectedReasoning.set(key, text)
-              }
+            const restored = state.fragments.restore(
+              { messageID: row.commit.messageID, partID: row.commit.partID },
+              text,
+            )
+            if (restored.type === "covered") continue
+            if (restored.type === "append") {
+              if (restored.suffix)
+                input.footer.append(restored.suffix === text ? row.commit : { ...row.commit, text: restored.suffix })
               continue
             }
-            if (text.startsWith(current)) {
-              const suffix = text.slice(current.length)
-              if (suffix) input.footer.append({ ...row.commit, text: suffix })
-              if (row.commit.kind === "assistant") {
-                state.text.set(key, text)
-                state.projectedText.set(key, text)
-              } else {
-                state.reasoning.set(key, text)
-                state.projectedReasoning.set(key, text)
-              }
-              continue
-            }
-            if (current.startsWith(text)) continue
           }
           if (row.commit.kind === "error" && row.commit.messageID) {
             if (state.errors.has(row.commit.messageID)) continue
@@ -1431,10 +1414,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         if (next.variant && !selected) throw new Error("Cannot select a variant before selecting a model")
         // Agent and model ride the command payload; the server switches only
         // when the command itself does not pin them.
-        const files = [
-          ...(next.includeFiles ? next.files : []).map((file) => ({ uri: file.url, name: file.filename })),
-          ...promptFiles(next),
-        ]
+        const attachments = await prepareAttachments(next, "command")
         const agents = promptAgents(next)
         input.trace?.write("send.command", { sessionID: input.sessionID, messageID, command: command.name })
         await runTurnWait(next, messageID, {
@@ -1447,7 +1427,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
                 arguments: command.arguments,
                 agent: next.agent,
                 model: selected,
-                files: files.length ? files : undefined,
+                files: attachments.files.length ? attachments.files : undefined,
                 agents: agents.length ? agents : undefined,
                 delivery: "steer",
               },
@@ -1465,13 +1445,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       if (selected)
         await client.session.switchModel({ sessionID: input.sessionID, model: selected }, { signal: next.signal })
 
-      const prepared = await Promise.all(
-        (next.includeFiles ? next.files : []).map((file) => prepareFile(file, input.readTextFile)),
-      )
-      const attachments = [
-        ...prepared.flatMap((file) => (file.attachment ? [file.attachment] : [])),
-        ...promptFiles(next),
-      ]
+      const attachments = await prepareAttachments(next, "prompt", input.readTextFile)
       const agents = promptAgents(next)
       input.trace?.write("send.prompt", { sessionID: input.sessionID, messageID })
       await runTurnWait(next, messageID, {
@@ -1480,8 +1454,8 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
             {
               sessionID: input.sessionID,
               id: messageID,
-              text: [next.prompt.text, ...prepared.flatMap((file) => (file.text ? [file.text] : []))].join("\n\n"),
-              files: attachments.length ? attachments : undefined,
+              text: [next.prompt.text, ...attachments.text].join("\n\n"),
+              files: attachments.files.length ? attachments.files : undefined,
               agents: agents.length ? agents : undefined,
               delivery: "steer",
             },

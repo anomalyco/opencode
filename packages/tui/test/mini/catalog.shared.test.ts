@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
 import { OpenCode } from "@opencode-ai/client/promise"
 import { loadRunReferences, runProviders, waitForDefaultModel } from "../../src/mini/catalog.shared"
+import { catalogModel, catalogProvider } from "./fixture/catalog"
 
 afterEach(() => {
   mock.restore()
@@ -58,45 +59,15 @@ describe("run catalog shared", () => {
 
   test("merges current providers and models into the footer catalog shape", () => {
     const providers = runProviders(
+      [catalogProvider("openai", "OpenAI")],
       [
-        {
-          id: "openai",
-          name: "OpenAI",
-          package: "",
-        },
-      ],
-      [
-        {
+        catalogModel({
           id: "gpt-5",
           modelID: "openai",
           providerID: "openai",
           name: "Little Frank",
-          capabilities: {
-            tools: true,
-            input: ["text"],
-            output: ["text"],
-          },
-          variants: [{ id: "high" }],
-          time: {
-            released: 1,
-          },
-          cost: [
-            {
-              input: 0,
-              output: 0,
-              cache: {
-                read: 0,
-                write: 0,
-              },
-            },
-          ],
-          status: "active",
-          enabled: true,
-          limit: {
-            context: 128000,
-            output: 8192,
-          },
-        },
+          variants: ["high"],
+        }),
       ],
     )
 

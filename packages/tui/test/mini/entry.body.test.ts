@@ -2,28 +2,10 @@ import { describe, expect, test } from "bun:test"
 import type { SessionMessageAssistantTool } from "@opencode-ai/client/promise"
 import { entryBody, entryCanStream, entryDone } from "../../src/mini/entry.body"
 import type { StreamCommit, ToolSnapshot } from "../../src/mini/types"
+import { canonicalToolPart } from "./fixture/tool-part"
 
 function commit(input: Partial<StreamCommit> & Pick<StreamCommit, "kind" | "text" | "phase" | "source">): StreamCommit {
   return input
-}
-
-function toolPart(
-  name: string,
-  state: SessionMessageAssistantTool["state"],
-  id = `${name}-1`,
-): SessionMessageAssistantTool {
-  return {
-    type: "tool",
-    id,
-    name,
-    state,
-    time:
-      state.status === "streaming"
-        ? { created: 1 }
-        : state.status === "completed" || state.status === "error"
-          ? { created: 1, ran: 1, completed: 2 }
-          : { created: 1, ran: 1 },
-  }
 }
 
 function toolCommit(input: {
@@ -45,7 +27,7 @@ function toolCommit(input: {
       input.toolState ??
       (input.state.status === "error" ? "error" : input.state.status === "completed" ? "completed" : "running"),
     messageID: input.messageID,
-    part: toolPart(input.tool, input.state, input.id),
+    part: canonicalToolPart(input.tool, input.state, input.id),
   })
 }
 

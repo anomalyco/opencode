@@ -48,8 +48,6 @@ type QueuedEntry = PanelEntry & {
   prompt: FooterQueuedPrompt
 }
 
-type MenuState = ReturnType<typeof createFooterMenuState>
-
 const PANEL_PAD = 2
 const PANEL_LIST_ROWS = 10
 const PANEL_FRAME_ROWS = 6
@@ -124,72 +122,6 @@ function subagentStatusLabel(status: FooterSubagentTab["status"]) {
   return "running"
 }
 
-function handleKey(input: {
-  event: KeyEvent
-  menu: MenuState
-  field: () => InputRenderable | undefined
-  setQuery: (value: string) => void
-  select: () => void
-  close: () => void
-}) {
-  const name = input.event.name.toLowerCase()
-  const ctrl = input.event.ctrl && !input.event.meta && !input.event.shift && !input.event.super
-
-  if (name === "escape" || (ctrl && name === "c")) {
-    input.event.preventDefault()
-    input.close()
-    return
-  }
-
-  if (name === "up" || (ctrl && name === "p")) {
-    input.event.preventDefault()
-    input.menu.move(-1)
-    return
-  }
-
-  if (name === "down" || (ctrl && name === "n")) {
-    input.event.preventDefault()
-    input.menu.move(1)
-    return
-  }
-
-  if (name === "pageup") {
-    input.event.preventDefault()
-    input.menu.reveal(input.menu.selected() - PANEL_PAGE)
-    return
-  }
-
-  if (name === "pagedown") {
-    input.event.preventDefault()
-    input.menu.reveal(input.menu.selected() + PANEL_PAGE)
-    return
-  }
-
-  if (name === "home") {
-    input.event.preventDefault()
-    input.menu.reveal(0)
-    return
-  }
-
-  if (name === "end") {
-    input.event.preventDefault()
-    input.menu.reveal(Number.POSITIVE_INFINITY)
-    return
-  }
-
-  if (name === "return") {
-    input.event.preventDefault()
-    input.select()
-    return
-  }
-
-  if (ctrl && name === "u") {
-    input.event.preventDefault()
-    input.setQuery("")
-    input.field()?.setText("")
-  }
-}
-
 function match<T extends PanelEntry>(query: string, entries: T[]) {
   const text = query.trim()
   if (!text) {
@@ -199,6 +131,128 @@ function match<T extends PanelEntry>(query: string, entries: T[]) {
   return fuzzysort
     .go(text, entries, { keys: ["display", "category", "description", "keywords"] })
     .map((item) => item.obj)
+}
+
+function createSearchablePanelController<T extends PanelEntry>(input: {
+  entries: Accessor<T[]>
+  limit: number
+  onClose: () => void
+  onSelect: (item: T) => void
+  isCurrent?: (item: T) => boolean
+  closeOnFirstUp?: boolean
+  onKey?: (event: KeyEvent, item: T | undefined) => boolean
+  onRows?: (rows: number) => void
+}) {
+  let field: InputRenderable | undefined
+  const [query, setQuery] = createSignal("")
+  const items = createMemo<T[]>(() => match(query(), input.entries()))
+  const menu = createFooterMenuState({ count: () => items().length, limit: input.limit })
+  const selected = () => items()[menu.selected()]
+
+  createEffect(() => {
+    query()
+    menu.reset()
+  })
+
+  createEffect(() => {
+    if (!input.isCurrent || query().trim()) {
+      return
+    }
+
+    const index = items().findIndex(input.isCurrent)
+    if (index !== -1) {
+      menu.reveal(index)
+    }
+  })
+
+  createEffect(() => {
+    input.onRows?.(menu.rows() + PANEL_FRAME_ROWS)
+  })
+
+  useKeyboard((event) => {
+    if (event.defaultPrevented) {
+      return
+    }
+
+    if (input.onKey?.(event, selected())) {
+      return
+    }
+
+    const name = event.name.toLowerCase()
+    if (input.closeOnFirstUp && name === "up" && menu.selected() === 0) {
+      event.preventDefault()
+      input.onClose()
+      return
+    }
+
+    const ctrl = event.ctrl && !event.meta && !event.shift && !event.super
+    if (name === "escape" || (ctrl && name === "c")) {
+      event.preventDefault()
+      input.onClose()
+      return
+    }
+
+    if (name === "up" || (ctrl && name === "p")) {
+      event.preventDefault()
+      menu.move(-1)
+      return
+    }
+
+    if (name === "down" || (ctrl && name === "n")) {
+      event.preventDefault()
+      menu.move(1)
+      return
+    }
+
+    if (name === "pageup") {
+      event.preventDefault()
+      menu.reveal(menu.selected() - PANEL_PAGE)
+      return
+    }
+
+    if (name === "pagedown") {
+      event.preventDefault()
+      menu.reveal(menu.selected() + PANEL_PAGE)
+      return
+    }
+
+    if (name === "home") {
+      event.preventDefault()
+      menu.reveal(0)
+      return
+    }
+
+    if (name === "end") {
+      event.preventDefault()
+      menu.reveal(Number.POSITIVE_INFINITY)
+      return
+    }
+
+    if (name === "return") {
+      event.preventDefault()
+      const item = selected()
+      if (item) {
+        input.onSelect(item)
+      }
+      return
+    }
+
+    if (ctrl && name === "u") {
+      event.preventDefault()
+      setQuery("")
+      field?.setText("")
+    }
+  })
+
+  return {
+    query,
+    setQuery,
+    items,
+    menu,
+    inputRef(input: InputRenderable) {
+      field = input
+    },
+  }
 }
 
 function PanelShell(props: {
@@ -350,8 +404,6 @@ export function RunCommandMenuBody(props: {
   onNew: () => void
   onExit: () => void
 }) {
-  let field: InputRenderable | undefined
-  const [query, setQuery] = createSignal("")
   const skills = createMemo(() => (props.commands() ?? []).filter((item) => item.source === "skill"))
   const activeSubagentCount = createMemo(() => props.subagents().filter((item) => item.status === "running").length)
   const entries = createMemo<CommandEntry[]>(() => {
@@ -466,8 +518,6 @@ export function RunCommandMenuBody(props: {
       { action: "exit", category: "System", display: "Exit", footer: "/exit", keywords: "/exit exit" },
     ]
   })
-  const items = createMemo<CommandEntry[]>(() => match(query(), entries()))
-  const menu = createFooterMenuState({ count: () => items().length, limit: PANEL_LIST_ROWS })
   const pick = (item: CommandEntry) => {
     if (item.action === "model") {
       props.onModel()
@@ -516,56 +566,39 @@ export function RunCommandMenuBody(props: {
 
     props.onCommand(item.name)
   }
-  const select = () => {
-    const item = items()[menu.selected()]
-    if (!item) {
-      return
-    }
-
-    pick(item)
-  }
-
-  createEffect(() => {
-    query()
-    menu.reset()
-  })
-
-  useKeyboard((event) => {
-    if (event.defaultPrevented) {
-      return
-    }
-
-    handleKey({ event, menu, field: () => field, setQuery, select, close: props.onClose })
+  const controller = createSearchablePanelController({
+    entries,
+    limit: PANEL_LIST_ROWS,
+    onClose: props.onClose,
+    onSelect: pick,
   })
 
   return (
     <PanelShell
       title="Commands"
       countVisible={false}
-      query={query()}
-      count={items().length}
+      query={controller.query()}
+      count={controller.items().length}
       total={entries().length}
       placeholder="Search"
       theme={props.theme}
-      inputRef={(input) => {
-        field = input
-      }}
-      onQuery={setQuery}
+      inputRef={controller.inputRef}
+      onQuery={controller.setQuery}
       dark
       chrome="minimal"
     >
       <RunFooterMenu
         theme={props.theme}
-        items={items}
-        selected={menu.selected}
-        offset={menu.offset}
+        items={controller.items}
+        selected={controller.menu.selected}
+        offset={controller.menu.offset}
         rows={() => PANEL_LIST_ROWS}
         limit={PANEL_LIST_ROWS}
         empty="No results found"
         border={false}
         paddingLeft={PANEL_PAD}
         paddingRight={PANEL_PAD}
-        grouped={!query().trim()}
+        grouped={!controller.query().trim()}
         background
         headerColor={props.theme().muted}
       />
@@ -581,8 +614,6 @@ export function RunSubagentSelectBody(props: {
   onSelect: (sessionID: string) => void
   onRows?: (rows: number) => void
 }) {
-  let field: InputRenderable | undefined
-  const [query, setQuery] = createSignal("")
   const entries = createMemo<SubagentEntry[]>(() =>
     props.tabs().map((item) => {
       const title = item.description || item.title || item.label
@@ -597,72 +628,35 @@ export function RunSubagentSelectBody(props: {
       }
     }),
   )
-  const items = createMemo<SubagentEntry[]>(() => match(query(), entries()))
-  const menu = createFooterMenuState({ count: () => items().length, limit: SUBAGENT_LIST_ROWS })
-  const select = () => {
-    const item = items()[menu.selected()]
-    if (!item) {
-      return
-    }
-
-    props.onSelect(item.sessionID)
-  }
-
-  createEffect(() => {
-    query()
-    menu.reset()
-  })
-
-  createEffect(() => {
-    if (query().trim()) {
-      return
-    }
-
-    const index = items().findIndex((item) => item.current)
-    if (index !== -1) {
-      menu.reveal(index)
-    }
-  })
-
-  createEffect(() => {
-    props.onRows?.(menu.rows() + PANEL_FRAME_ROWS)
-  })
-
-  useKeyboard((event) => {
-    if (event.defaultPrevented) {
-      return
-    }
-
-    if (event.name.toLowerCase() === "up" && menu.selected() === 0) {
-      event.preventDefault()
-      props.onClose()
-      return
-    }
-
-    handleKey({ event, menu, field: () => field, setQuery, select, close: props.onClose })
+  const controller = createSearchablePanelController({
+    entries,
+    limit: SUBAGENT_LIST_ROWS,
+    onClose: props.onClose,
+    onSelect: (item) => props.onSelect(item.sessionID),
+    isCurrent: (item) => item.current,
+    closeOnFirstUp: true,
+    onRows: props.onRows,
   })
 
   return (
     <PanelShell
       title="Select subagent"
-      query={query()}
-      count={items().length}
+      query={controller.query()}
+      count={controller.items().length}
       total={entries().length}
       placeholder="Search"
       theme={props.theme}
-      inputRef={(input) => {
-        field = input
-      }}
-      onQuery={setQuery}
+      inputRef={controller.inputRef}
+      onQuery={controller.setQuery}
       dark
       chrome="minimal"
     >
       <RunFooterMenu
         theme={props.theme}
-        items={items}
-        selected={menu.selected}
-        offset={menu.offset}
-        rows={menu.rows}
+        items={controller.items}
+        selected={controller.menu.selected}
+        offset={controller.menu.offset}
+        rows={controller.menu.rows}
         limit={SUBAGENT_LIST_ROWS}
         empty="No subagents found"
         border={false}
@@ -683,8 +677,6 @@ export function RunQueuedPromptSelectBody(props: {
   onDelete: (prompt: FooterQueuedPrompt) => void | Promise<void>
   onRows?: (rows: number) => void
 }) {
-  let field: InputRenderable | undefined
-  const [query, setQuery] = createSignal("")
   const entries = createMemo<QueuedEntry[]>(() =>
     props.prompts().map((prompt) => ({
       category: "",
@@ -694,72 +686,49 @@ export function RunQueuedPromptSelectBody(props: {
       prompt,
     })),
   )
-  const items = createMemo<QueuedEntry[]>(() => match(query(), entries()))
-  const menu = createFooterMenuState({ count: () => items().length, limit: SUBAGENT_LIST_ROWS })
-  const selected = () => items()[menu.selected()]
+  const controller = createSearchablePanelController({
+    entries,
+    limit: SUBAGENT_LIST_ROWS,
+    onClose: props.onClose,
+    onSelect: (item) => props.onEdit(item.prompt),
+    onRows: props.onRows,
+    onKey: (event, item) => {
+      const ctrl = event.ctrl && !event.meta && !event.shift && !event.super
+      if (item && (event.name === "delete" || (ctrl && event.name === "d"))) {
+        event.preventDefault()
+        props.onDelete(item.prompt)
+        return true
+      }
 
-  createEffect(() => {
-    query()
-    menu.reset()
-  })
+      if (item && ctrl && event.name === "e") {
+        event.preventDefault()
+        props.onEdit(item.prompt)
+        return true
+      }
 
-  createEffect(() => {
-    props.onRows?.(menu.rows() + PANEL_FRAME_ROWS)
-  })
-
-  useKeyboard((event) => {
-    if (event.defaultPrevented) {
-      return
-    }
-
-    const item = selected()
-    const ctrl = event.ctrl && !event.meta && !event.shift && !event.super
-    if (item && (event.name === "delete" || (ctrl && event.name === "d"))) {
-      event.preventDefault()
-      props.onDelete(item.prompt)
-      return
-    }
-
-    if (item && ctrl && event.name === "e") {
-      event.preventDefault()
-      props.onEdit(item.prompt)
-      return
-    }
-
-    handleKey({
-      event,
-      menu,
-      field: () => field,
-      setQuery,
-      select: () => {
-        const item = selected()
-        if (item) props.onEdit(item.prompt)
-      },
-      close: props.onClose,
-    })
+      return false
+    },
   })
 
   return (
     <PanelShell
       title="Queued prompts"
-      query={query()}
-      count={items().length}
+      query={controller.query()}
+      count={controller.items().length}
       total={entries().length}
       placeholder="Search"
       theme={props.theme}
-      inputRef={(input) => {
-        field = input
-      }}
-      onQuery={setQuery}
+      inputRef={controller.inputRef}
+      onQuery={controller.setQuery}
       dark
       chrome="minimal"
     >
       <RunFooterMenu
         theme={props.theme}
-        items={items}
-        selected={menu.selected}
-        offset={menu.offset}
-        rows={menu.rows}
+        items={controller.items}
+        selected={controller.menu.selected}
+        offset={controller.menu.offset}
+        rows={controller.menu.rows}
         limit={SUBAGENT_LIST_ROWS}
         empty="No queued prompts"
         border={false}
@@ -778,8 +747,6 @@ export function RunSkillSelectBody(props: {
   onClose: () => void
   onSelect: (name: string) => void
 }) {
-  let field: InputRenderable | undefined
-  const [query, setQuery] = createSignal("")
   const entries = createMemo<SkillEntry[]>(() =>
     (props.commands() ?? [])
       .filter((item) => item.source === "skill")
@@ -792,50 +759,31 @@ export function RunSkillSelectBody(props: {
       }))
       .sort((a, b) => a.display.localeCompare(b.display)),
   )
-  const items = createMemo<SkillEntry[]>(() => match(query(), entries()))
-  const menu = createFooterMenuState({ count: () => items().length, limit: PANEL_LIST_ROWS })
-  const select = () => {
-    const item = items()[menu.selected()]
-    if (!item) {
-      return
-    }
-
-    props.onSelect(item.name)
-  }
-
-  createEffect(() => {
-    query()
-    menu.reset()
-  })
-
-  useKeyboard((event) => {
-    if (event.defaultPrevented) {
-      return
-    }
-
-    handleKey({ event, menu, field: () => field, setQuery, select, close: props.onClose })
+  const controller = createSearchablePanelController({
+    entries,
+    limit: PANEL_LIST_ROWS,
+    onClose: props.onClose,
+    onSelect: (item) => props.onSelect(item.name),
   })
 
   return (
     <PanelShell
       title="Skills"
-      query={query()}
-      count={items().length}
+      query={controller.query()}
+      count={controller.items().length}
       total={entries().length}
       placeholder="Search"
       theme={props.theme}
-      inputRef={(input) => {
-        field = input
-      }}
-      onQuery={setQuery}
+      inputRef={controller.inputRef}
+      onQuery={controller.setQuery}
       dark
       chrome="minimal"
     >
       <RunFooterMenu
         theme={props.theme}
-        items={items}
-        selected={menu.selected}
-        offset={menu.offset}
+        items={controller.items}
+        selected={controller.menu.selected}
+        offset={controller.menu.offset}
         rows={() => PANEL_LIST_ROWS}
         limit={PANEL_LIST_ROWS}
         empty={props.commands() ? "No skills found" : "Skills loading"}
@@ -856,8 +804,6 @@ export function RunVariantSelectBody(props: {
   onClose: () => void
   onSelect: (variant: string | undefined) => void
 }) {
-  let field: InputRenderable | undefined
-  const [query, setQuery] = createSignal("")
   const entries = createMemo<VariantEntry[]>(() => [
     {
       category: "",
@@ -876,64 +822,32 @@ export function RunVariantSelectBody(props: {
       current: props.current() === variant,
     })),
   ])
-  const items = createMemo<VariantEntry[]>(() => match(query(), entries()))
-  const menu = createFooterMenuState({ count: () => items().length, limit: PANEL_LIST_ROWS })
-  const pick = (item: VariantEntry) => {
-    props.onSelect(item.variant)
-  }
-  const select = () => {
-    const item = items()[menu.selected()]
-    if (!item) {
-      return
-    }
-
-    pick(item)
-  }
-
-  createEffect(() => {
-    query()
-    menu.reset()
-  })
-
-  createEffect(() => {
-    if (query().trim()) {
-      return
-    }
-
-    const index = items().findIndex((item) => item.current)
-    if (index !== -1) {
-      menu.reveal(index)
-    }
-  })
-
-  useKeyboard((event) => {
-    if (event.defaultPrevented) {
-      return
-    }
-
-    handleKey({ event, menu, field: () => field, setQuery, select, close: props.onClose })
+  const controller = createSearchablePanelController({
+    entries,
+    limit: PANEL_LIST_ROWS,
+    onClose: props.onClose,
+    onSelect: (item) => props.onSelect(item.variant),
+    isCurrent: (item) => item.current,
   })
 
   return (
     <PanelShell
       title="Select variant"
-      query={query()}
-      count={items().length}
+      query={controller.query()}
+      count={controller.items().length}
       total={entries().length}
       placeholder="Search"
       theme={props.theme}
-      inputRef={(input) => {
-        field = input
-      }}
-      onQuery={setQuery}
+      inputRef={controller.inputRef}
+      onQuery={controller.setQuery}
       dark
       chrome="minimal"
     >
       <RunFooterMenu
         theme={props.theme}
-        items={items}
-        selected={menu.selected}
-        offset={menu.offset}
+        items={controller.items}
+        selected={controller.menu.selected}
+        offset={controller.menu.offset}
         rows={() => PANEL_LIST_ROWS}
         limit={PANEL_LIST_ROWS}
         empty="No results found"
@@ -954,8 +868,6 @@ export function RunModelSelectBody(props: {
   onClose: () => void
   onSelect: (model: NonNullable<RunInput["model"]>) => void
 }) {
-  let field: InputRenderable | undefined
-  const [query, setQuery] = createSignal("")
   const entries = createMemo<ModelEntry[]>(() =>
     (props.providers() ?? [])
       .flatMap((provider) =>
@@ -997,71 +909,39 @@ export function RunModelSelectBody(props: {
         return a.display.localeCompare(b.display)
       }),
   )
-  const items = createMemo<ModelEntry[]>(() => match(query(), entries()))
-  const menu = createFooterMenuState({ count: () => items().length, limit: PANEL_LIST_ROWS })
-  const pick = (item: ModelEntry) => {
-    props.onSelect({ providerID: item.providerID, modelID: item.modelID })
-  }
-  const select = () => {
-    const item = items()[menu.selected()]
-    if (!item) {
-      return
-    }
-
-    pick(item)
-  }
-
-  createEffect(() => {
-    query()
-    menu.reset()
-  })
-
-  createEffect(() => {
-    if (query().trim()) {
-      return
-    }
-
-    const index = items().findIndex((item) => item.current)
-    if (index !== -1) {
-      menu.reveal(index)
-    }
-  })
-
-  useKeyboard((event) => {
-    if (event.defaultPrevented) {
-      return
-    }
-
-    handleKey({ event, menu, field: () => field, setQuery, select, close: props.onClose })
+  const controller = createSearchablePanelController({
+    entries,
+    limit: PANEL_LIST_ROWS,
+    onClose: props.onClose,
+    onSelect: (item) => props.onSelect({ providerID: item.providerID, modelID: item.modelID }),
+    isCurrent: (item) => item.current,
   })
 
   return (
     <PanelShell
       title="Select model"
-      query={query()}
-      count={items().length}
+      query={controller.query()}
+      count={controller.items().length}
       total={entries().length}
       placeholder="Search"
       theme={props.theme}
-      inputRef={(input) => {
-        field = input
-      }}
-      onQuery={setQuery}
+      inputRef={controller.inputRef}
+      onQuery={controller.setQuery}
       dark
       chrome="minimal"
     >
       <RunFooterMenu
         theme={props.theme}
-        items={items}
-        selected={menu.selected}
-        offset={menu.offset}
+        items={controller.items}
+        selected={controller.menu.selected}
+        offset={controller.menu.offset}
         rows={() => PANEL_LIST_ROWS}
         limit={PANEL_LIST_ROWS}
         empty={props.providers() ? "No results found" : "Models loading"}
         border={false}
         paddingLeft={PANEL_PAD}
         paddingRight={PANEL_PAD}
-        grouped={!query().trim()}
+        grouped={!controller.query().trim()}
         background
         headerColor={props.theme().muted}
       />

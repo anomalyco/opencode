@@ -1,11 +1,11 @@
 // Thin bridge between transport output and the footer API.
 //
-// Transports produce StreamCommit[] and an optional FooterOutput (patch +
-// view + subagent state). This module forwards them to footer.append() and
-// footer.event() respectively, adding trace writes along the way. It also
+// Transports produce immutable StreamCommit[] rows and typed mutable-footer
+// updates. This module forwards both to the footer API, adding trace writes
+// along the way. It also
 // defaults status updates to phase "running" if the caller didn't set a
 // phase -- a convenience so transport code doesn't have to repeat that.
-import type { FooterApi, FooterOutput, FooterPatch, FooterSubagentState, StreamCommit } from "./types"
+import type { FooterApi, FooterEvent, FooterPatch, FooterSubagentState, StreamCommit } from "./types"
 
 type Trace = {
   write(type: string, data?: unknown): void
@@ -18,7 +18,7 @@ type OutputInput = {
 
 type StreamOutput = {
   commits: StreamCommit[]
-  footer?: FooterOutput
+  updates?: Extract<FooterEvent, { type: "stream.patch" | "stream.view" | "stream.subagent" }>[]
 }
 
 // Default to "running" phase when a status string arrives without an explicit phase.
@@ -134,32 +134,19 @@ export function writeSessionOutput(input: OutputInput, out: StreamOutput): void 
     input.footer.append(commit)
   }
 
-  if (out.footer?.patch) {
-    const next = patch(out.footer.patch)
-    input.trace?.write("ui.patch", next)
-    input.footer.event({
-      type: "stream.patch",
-      patch: next,
-    })
+  for (const update of out.updates ?? []) {
+    if (update.type === "stream.patch") {
+      const next = { ...update, patch: patch(update.patch) }
+      input.trace?.write("ui.patch", next.patch)
+      input.footer.event(next)
+      continue
+    }
+    if (update.type === "stream.subagent") {
+      input.trace?.write("ui.subagent", traceSubagentState(update.state))
+      input.footer.event(update)
+      continue
+    }
+    input.trace?.write("ui.patch", { view: update.view })
+    input.footer.event(update)
   }
-
-  if (out.footer?.subagent) {
-    input.trace?.write("ui.subagent", traceSubagentState(out.footer.subagent))
-    input.footer.event({
-      type: "stream.subagent",
-      state: out.footer.subagent,
-    })
-  }
-
-  if (!out.footer?.view) {
-    return
-  }
-
-  input.trace?.write("ui.patch", {
-    view: out.footer.view,
-  })
-  input.footer.event({
-    type: "stream.view",
-    view: out.footer.view,
-  })
 }

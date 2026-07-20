@@ -2,7 +2,9 @@ import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
 import { OpenCode } from "@opencode-ai/client/promise"
 import { runInteractiveDeferredMode } from "../../src/mini/runtime"
 import type { LifecycleInput } from "../../src/mini/runtime.lifecycle"
-import type { FooterApi, FooterEvent, MiniHost } from "../../src/mini/types"
+import type { FooterEvent, MiniHost } from "../../src/mini/types"
+import { catalogModel, catalogProvider, stubCatalogLists } from "./fixture/catalog"
+import { createFooterApiFixture } from "./fixture/footer-api"
 import { createTuiResolvedConfig } from "./fixture/tui-runtime"
 
 function defer<T>() {
@@ -38,55 +40,8 @@ function host(): MiniHost {
   }
 }
 
-function footer(events: FooterEvent[] = []): FooterApi {
-  let closed = false
-  const closes = new Set<() => void>()
-
-  const notify = () => {
-    for (const fn of closes) fn()
-  }
-
-  return {
-    get isClosed() {
-      return closed
-    },
-    onPrompt: () => () => {},
-    onQueuedRemove: () => () => {},
-    onClose(fn) {
-      if (closed) {
-        fn()
-        return () => {}
-      }
-
-      closes.add(fn)
-      return () => {
-        closes.delete(fn)
-      }
-    },
-    event(value) {
-      events.push(value)
-    },
-    append() {},
-    idle() {
-      return Promise.resolve()
-    },
-    close() {
-      if (closed) {
-        return
-      }
-
-      closed = true
-      notify()
-    },
-    destroy() {
-      if (closed) {
-        return
-      }
-
-      closed = true
-      notify()
-    },
-  }
+function footer(events: FooterEvent[] = []) {
+  return createFooterApiFixture({ events }).api
 }
 
 afterEach(() => {
@@ -100,12 +55,7 @@ describe("run interactive runtime", () => {
     const streamStarted = defer<void>()
     let lifecycle!: LifecycleInput
     const settled: Array<{ sessionID: string; formID: string }> = []
-    spyOn(sdk.provider, "list").mockImplementation(() => ok({ location: { directory: "/tmp" }, data: [] }) as never)
-    spyOn(sdk.model, "list").mockImplementation(() => ok({ location: { directory: "/tmp" }, data: [] }) as never)
-    spyOn(sdk.agent, "list").mockImplementation(() => ok({ location: { directory: "/tmp" }, data: [] }) as never)
-    spyOn(sdk.reference, "list").mockImplementation(() => ok({ location: { directory: "/tmp" }, data: [] }) as never)
-    spyOn(sdk.command, "list").mockImplementation(() => ok({ location: { directory: "/tmp" }, data: [] }) as never)
-    spyOn(sdk.skill, "list").mockImplementation(() => ok({ location: { directory: "/tmp" }, data: [] }) as never)
+    stubCatalogLists(sdk)
     const reply = spyOn(sdk.form, "reply").mockImplementation(() => ok(undefined))
 
     const task = runInteractiveDeferredMode(
@@ -195,12 +145,7 @@ describe("run interactive runtime", () => {
     const api = footer()
     let resolved = 0
     api.idle = () => painted.promise
-    spyOn(sdk.provider, "list").mockImplementation(() => ok({ location: { directory: "/tmp" }, data: [] }) as never)
-    spyOn(sdk.model, "list").mockImplementation(() => ok({ location: { directory: "/tmp" }, data: [] }) as never)
-    spyOn(sdk.agent, "list").mockImplementation(() => ok({ location: { directory: "/tmp" }, data: [] }) as never)
-    spyOn(sdk.reference, "list").mockImplementation(() => ok({ location: { directory: "/tmp" }, data: [] }) as never)
-    spyOn(sdk.command, "list").mockImplementation(() => ok({ location: { directory: "/tmp" }, data: [] }) as never)
-    spyOn(sdk.skill, "list").mockImplementation(() => ok({ location: { directory: "/tmp" }, data: [] }) as never)
+    stubCatalogLists(sdk)
 
     const task = runInteractiveDeferredMode(
       {
@@ -279,38 +224,17 @@ describe("run interactive runtime", () => {
           cursor: {},
         }) as never,
     )
-    spyOn(sdk.provider, "list").mockImplementation(
-      () =>
-        ok({
-          location: { directory: "/tmp" },
-          data: [{ id: "openai", name: "OpenAI", request: { headers: {}, body: {} } }],
-        }) as never,
-    )
-    spyOn(sdk.model, "list").mockImplementation(
-      () =>
-        ok({
-          location: { directory: "/tmp" },
-          data: [
-            {
-              id: "gpt-5",
-              providerID: "openai",
-              name: "Little Frank",
-              capabilities: { tools: true, input: ["text"], output: ["text"] },
-              request: { headers: {}, body: {} },
-              variants: [{ id: "high", settings: {}, headers: {}, body: {} }],
-              time: { released: 1 },
-              cost: [{ input: 0, output: 0, cache: { read: 0, write: 0 } }],
-              status: "active",
-              enabled: true,
-              limit: { context: 128000, output: 8192 },
-            },
-          ],
-        }) as never,
-    )
-    spyOn(sdk.agent, "list").mockImplementation(() => ok({ location: { directory: "/tmp" }, data: [] }) as never)
-    spyOn(sdk.reference, "list").mockImplementation(() => ok({ location: { directory: "/tmp" }, data: [] }) as never)
-    spyOn(sdk.command, "list").mockImplementation(() => ok({ location: { directory: "/tmp" }, data: [] }) as never)
-    spyOn(sdk.skill, "list").mockImplementation(() => ok({ location: { directory: "/tmp" }, data: [] }) as never)
+    stubCatalogLists(sdk, {
+      providers: [catalogProvider("openai", "OpenAI")],
+      models: [
+        catalogModel({
+          id: "gpt-5",
+          providerID: "openai",
+          name: "Little Frank",
+          variants: ["high"],
+        }),
+      ],
+    })
 
     const task = runInteractiveDeferredMode(
       {
@@ -391,13 +315,7 @@ describe("run interactive runtime", () => {
     const session = spyOn(sdk.session, "get").mockImplementation(
       (_request, options) => pending(options?.signal) as never,
     )
-    const response = { location: { directory: "/tmp" }, data: [] }
-    spyOn(sdk.provider, "list").mockResolvedValue(response as never)
-    spyOn(sdk.model, "list").mockResolvedValue(response as never)
-    spyOn(sdk.agent, "list").mockResolvedValue(response as never)
-    spyOn(sdk.reference, "list").mockResolvedValue(response as never)
-    spyOn(sdk.command, "list").mockResolvedValue(response as never)
-    spyOn(sdk.skill, "list").mockResolvedValue(response as never)
+    stubCatalogLists(sdk)
 
     const task = runInteractiveDeferredMode(
       {
@@ -457,13 +375,9 @@ describe("run interactive runtime", () => {
     let getDirectory: (() => string) | undefined
     let findFiles: ((query: string) => Promise<string[]>) | undefined
     let transportLocation: unknown
-    const response = { location: { directory: "/session", workspaceID: "work-1" }, data: [] }
-    const providerList = spyOn(sdk.provider, "list").mockResolvedValue(response as never)
-    const modelList = spyOn(sdk.model, "list").mockResolvedValue(response as never)
-    const agentList = spyOn(sdk.agent, "list").mockResolvedValue(response as never)
-    const referenceList = spyOn(sdk.reference, "list").mockResolvedValue(response as never)
-    const commandList = spyOn(sdk.command, "list").mockResolvedValue(response as never)
-    const skillList = spyOn(sdk.skill, "list").mockResolvedValue(response as never)
+    const catalogs = stubCatalogLists(sdk, {
+      location: { directory: "/session", workspaceID: "work-1" },
+    })
     const fileFind = spyOn(sdk.file, "find").mockResolvedValue({
       location: {
         directory: "/session",
@@ -538,12 +452,12 @@ describe("run interactive runtime", () => {
     const query = { location: { directory: "/session", workspace: "work-1" } }
     expect(getDirectory?.()).toBe("/session")
     expect(transportLocation).toMatchObject({ directory: "/session", workspaceID: "work-1" })
-    expect(providerList).toHaveBeenCalledWith(query, { signal: expect.any(AbortSignal) })
-    expect(modelList).toHaveBeenCalledWith(query, { signal: expect.any(AbortSignal) })
-    expect(agentList).toHaveBeenCalledWith(query, { signal: expect.any(AbortSignal) })
-    expect(referenceList).toHaveBeenCalledWith(query, { signal: expect.any(AbortSignal) })
-    expect(commandList).toHaveBeenCalledWith(query, { signal: expect.any(AbortSignal) })
-    expect(skillList).toHaveBeenCalledWith(query, { signal: expect.any(AbortSignal) })
+    expect(catalogs.provider).toHaveBeenCalledWith(query, { signal: expect.any(AbortSignal) })
+    expect(catalogs.model).toHaveBeenCalledWith(query, { signal: expect.any(AbortSignal) })
+    expect(catalogs.agent).toHaveBeenCalledWith(query, { signal: expect.any(AbortSignal) })
+    expect(catalogs.reference).toHaveBeenCalledWith(query, { signal: expect.any(AbortSignal) })
+    expect(catalogs.command).toHaveBeenCalledWith(query, { signal: expect.any(AbortSignal) })
+    expect(catalogs.skill).toHaveBeenCalledWith(query, { signal: expect.any(AbortSignal) })
     expect(fileFind).toHaveBeenCalledWith({ query: "index", type: "file", ...query })
   })
 })

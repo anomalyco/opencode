@@ -6,6 +6,7 @@ import { RunScrollbackStream } from "../../src/mini/scrollback.surface"
 import { entryGroupKey } from "../../src/mini/scrollback.writer"
 import { RUN_THEME_FALLBACK, type RunTheme } from "../../src/mini/theme"
 import type { StreamCommit } from "../../src/mini/types"
+import { canonicalToolPart } from "./fixture/tool-part"
 
 type ClaimedCommit = {
   snapshot: {
@@ -220,21 +221,6 @@ function error(text: string): StreamCommit {
   }
 }
 
-function toolPart(name: string, state: SessionMessageAssistantTool["state"], id: string): SessionMessageAssistantTool {
-  return {
-    type: "tool",
-    id,
-    name,
-    state,
-    time:
-      state.status === "streaming"
-        ? { created: 1 }
-        : state.status === "completed" || state.status === "error"
-          ? { created: 1, ran: 1, completed: 2 }
-          : { created: 1, ran: 1 },
-  }
-}
-
 function toolCommit(input: {
   tool: string
   phase: StreamCommit["phase"]
@@ -256,7 +242,7 @@ function toolCommit(input: {
     messageID,
     tool: input.tool,
     ...(input.toolState ? { toolState: input.toolState } : {}),
-    ...(input.state ? { part: toolPart(input.tool, input.state, id) } : {}),
+    ...(input.state ? { part: canonicalToolPart(input.tool, input.state, id) } : {}),
   }
 }
 

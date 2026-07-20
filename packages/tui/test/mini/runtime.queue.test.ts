@@ -1,87 +1,11 @@
 import { describe, expect, test } from "bun:test"
 import { runPromptQueue } from "../../src/mini/runtime.queue"
-import type { FooterApi, FooterEvent, RunPrompt, StreamCommit } from "../../src/mini/types"
-
-function footer() {
-  const prompts = new Set<(input: RunPrompt) => void>()
-  const queuedRemoves = new Set<(messageID: string) => void>()
-  const closes = new Set<() => void>()
-  const events: FooterEvent[] = []
-  const commits: StreamCommit[] = []
-  let closed = false
-
-  const api: FooterApi = {
-    get isClosed() {
-      return closed
-    },
-    onPrompt(fn) {
-      prompts.add(fn)
-      return () => {
-        prompts.delete(fn)
-      }
-    },
-    onQueuedRemove(fn) {
-      queuedRemoves.add(fn)
-      return () => {
-        queuedRemoves.delete(fn)
-      }
-    },
-    onClose(fn) {
-      if (closed) {
-        fn()
-        return () => {}
-      }
-
-      closes.add(fn)
-      return () => {
-        closes.delete(fn)
-      }
-    },
-    event(next) {
-      events.push(next)
-    },
-    append(next) {
-      commits.push(next)
-    },
-    idle() {
-      return Promise.resolve()
-    },
-    close() {
-      if (closed) {
-        return
-      }
-
-      closed = true
-      for (const fn of [...closes]) {
-        fn()
-      }
-    },
-    destroy() {
-      api.close()
-      prompts.clear()
-      closes.clear()
-    },
-  }
-
-  return {
-    api,
-    events,
-    commits,
-    submit(text: string, mode?: RunPrompt["mode"]) {
-      const next = mode ? { text, parts: [] as RunPrompt["parts"], mode } : { text, parts: [] as RunPrompt["parts"] }
-      for (const fn of [...prompts]) {
-        fn(next)
-      }
-    },
-    removeQueued(messageID: string) {
-      for (const fn of [...queuedRemoves]) fn(messageID)
-    },
-  }
-}
+import type { RunPrompt } from "../../src/mini/types"
+import { createFooterApiFixture } from "./fixture/footer-api"
 
 describe("run runtime queue", () => {
   test("ignores empty prompts", async () => {
-    const ui = footer()
+    const ui = createFooterApiFixture()
     let calls = 0
 
     const task = runPromptQueue({
@@ -99,7 +23,7 @@ describe("run runtime queue", () => {
   })
 
   test("treats /exit as a close command", async () => {
-    const ui = footer()
+    const ui = createFooterApiFixture()
     let calls = 0
 
     const task = runPromptQueue({
@@ -116,7 +40,7 @@ describe("run runtime queue", () => {
   })
 
   test("treats /new as a local session command", async () => {
-    const ui = footer()
+    const ui = createFooterApiFixture()
     const seen: string[] = []
     let created = 0
 
@@ -149,7 +73,7 @@ describe("run runtime queue", () => {
   })
 
   test("shell mode submits /exit as a shell command", async () => {
-    const ui = footer()
+    const ui = createFooterApiFixture()
     const seen: RunPrompt[] = []
 
     const task = runPromptQueue({
@@ -168,7 +92,7 @@ describe("run runtime queue", () => {
   })
 
   test("shell mode submits /new instead of creating a session", async () => {
-    const ui = footer()
+    const ui = createFooterApiFixture()
     const seen: RunPrompt[] = []
     let created = 0
 
@@ -192,7 +116,7 @@ describe("run runtime queue", () => {
   })
 
   test("shell mode does not append a synthetic user row", async () => {
-    const ui = footer()
+    const ui = createFooterApiFixture()
 
     const task = runPromptQueue({
       footer: ui.api,
@@ -207,7 +131,7 @@ describe("run runtime queue", () => {
   })
 
   test("shell mode does not emit a turn duration summary", async () => {
-    const ui = footer()
+    const ui = createFooterApiFixture()
 
     const task = runPromptQueue({
       footer: ui.api,
@@ -223,7 +147,7 @@ describe("run runtime queue", () => {
   })
 
   test("preserves whitespace for initial input", async () => {
-    const ui = footer()
+    const ui = createFooterApiFixture()
     const seen: string[] = []
 
     await runPromptQueue({
@@ -248,7 +172,7 @@ describe("run runtime queue", () => {
   })
 
   test("passes prompts to onSend", async () => {
-    const ui = footer()
+    const ui = createFooterApiFixture()
     const seen: string[] = []
 
     await runPromptQueue({
@@ -266,7 +190,7 @@ describe("run runtime queue", () => {
   })
 
   test("appends the user row before the turn starts", async () => {
-    const ui = footer()
+    const ui = createFooterApiFixture()
 
     await runPromptQueue({
       footer: ui.api,
@@ -287,7 +211,7 @@ describe("run runtime queue", () => {
   })
 
   test("runs queued prompts in order", async () => {
-    const ui = footer()
+    const ui = createFooterApiFixture()
     const seen: string[] = []
     let wake: (() => void) | undefined
     const gate = new Promise<void>((resolve) => {
@@ -319,7 +243,7 @@ describe("run runtime queue", () => {
   })
 
   test("exposes ordinary in-flight prompts for removal before sending", async () => {
-    const ui = footer()
+    const ui = createFooterApiFixture()
     const turns: RunPrompt[] = []
     let wake: (() => void) | undefined
     const gate = new Promise<void>((resolve) => {
@@ -360,7 +284,7 @@ describe("run runtime queue", () => {
   })
 
   test("removing one managed queued prompt preserves the others", async () => {
-    const ui = footer()
+    const ui = createFooterApiFixture()
     const turns: string[] = []
     let wake: (() => void) | undefined
     const gate = new Promise<void>((resolve) => {
@@ -395,7 +319,7 @@ describe("run runtime queue", () => {
   })
 
   test("drains a prompt queued during an in-flight turn", async () => {
-    const ui = footer()
+    const ui = createFooterApiFixture()
     const seen: string[] = []
     let wake: (() => void) | undefined
     const gate = new Promise<void>((resolve) => {
@@ -428,7 +352,7 @@ describe("run runtime queue", () => {
   })
 
   test("close aborts the active run and drops pending queued work", async () => {
-    const ui = footer()
+    const ui = createFooterApiFixture()
     const seen: string[] = []
     let hit = false
 
@@ -466,7 +390,7 @@ describe("run runtime queue", () => {
   })
 
   test("propagates run errors", async () => {
-    const ui = footer()
+    const ui = createFooterApiFixture()
 
     const task = runPromptQueue({
       footer: ui.api,

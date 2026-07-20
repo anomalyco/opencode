@@ -7,7 +7,7 @@
 //
 // Data flow through the system:
 //
-//   V2 events / demo actions → StreamCommit[] + FooterOutput
+//   V2 events / demo actions → StreamCommit[] + FooterEvent[]
 //     → stream.ts bridges to footer API
 //       → footer.ts queues commits and patches the footer view
 //         → OpenTUI split-footer renderer writes to terminal
@@ -309,13 +309,6 @@ export type FooterSubagentState = {
   details: Record<string, FooterSubagentDetail>
   permissions: MiniPermissionRequest[]
   forms: MiniFormRequest[]
-}
-
-// The transport emits this alongside scrollback commits so the footer can update in the same frame.
-export type FooterOutput = {
-  patch?: FooterPatch
-  view?: FooterView
-  subagent?: FooterSubagentState
 }
 
 // Typed messages sent to RunFooter.event(). The prompt queue and stream

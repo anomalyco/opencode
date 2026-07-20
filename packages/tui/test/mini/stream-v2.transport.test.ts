@@ -11,7 +11,9 @@ import {
   type PermissionV2Request,
 } from "@opencode-ai/client/promise"
 import { createSessionTransport } from "../../src/mini/stream-v2.transport"
-import type { FooterApi, FooterEvent, StreamCommit } from "../../src/mini/types"
+import type { StreamCommit } from "../../src/mini/types"
+import { createFooterApiFixture } from "./fixture/footer-api"
+import { canonicalToolPart } from "./fixture/tool-part"
 import { tmpdir } from "../fixture/fixture"
 
 type RunV2Event = EventSubscribeOutput
@@ -91,31 +93,7 @@ function promptAdmission(input: Parameters<OpenCodeClient["session"]["prompt"]>[
 }
 
 function footer() {
-  const commits: StreamCommit[] = []
-  const events: FooterEvent[] = []
-  let closed = false
-  const api: FooterApi = {
-    get isClosed() {
-      return closed
-    },
-    onPrompt: () => () => {},
-    onQueuedRemove: () => () => {},
-    onClose: () => () => {},
-    event(value) {
-      events.push(value)
-    },
-    append(value) {
-      commits.push(value)
-    },
-    idle: () => Promise.resolve(),
-    close() {
-      closed = true
-    },
-    destroy() {
-      closed = true
-    },
-  }
-  return { api, commits, events }
+  return createFooterApiFixture()
 }
 
 type SessionMessages = MessageListOutput["data"]
@@ -268,18 +246,16 @@ describe("V2 mini transport", () => {
       agent: "build",
       model: { providerID: "test", id: "model" },
       content: [
-        {
-          type: "tool" as const,
-          id: "call_child_source",
-          name: "shell",
-          state: {
+        canonicalToolPart(
+          "shell",
+          {
             status: "running" as const,
             input: { command: "git status --short" },
             structured: {},
             content: [],
           },
-          time: { created: 1, ran: 1 },
-        },
+          "call_child_source",
+        ),
       ],
       time: { created: 1 },
     }
@@ -508,8 +484,10 @@ describe("V2 mini transport", () => {
   test("sends local file and directory mentions as structured prompt files", async () => {
     await using tmp = await tmpdir()
     const filePath = path.join(tmp.path, "note.ts")
+    const contextPath = path.join(tmp.path, "context.txt")
     const directoryPath = path.join(tmp.path, "docs")
     await Bun.write(filePath, "export const answer = 42\n")
+    await Bun.write(contextPath, "context body")
     await fs.mkdir(directoryPath)
     await Bun.write(path.join(directoryPath, "README.md"), "# hello\n")
 
@@ -573,12 +551,16 @@ describe("V2 mini transport", () => {
           },
         ],
       },
-      files: [],
+      files: [
+        { type: "file", url: pathToFileURL(contextPath).href, filename: "context.txt", mime: "text/plain" },
+        { type: "file", url: "file:///tmp/image.png", filename: "image.png", mime: "image/png" },
+      ],
       includeFiles: true,
     })
 
-    expect(request?.text).toBe("Review @note.ts and @docs")
+    expect(request?.text).toBe('Review @note.ts and @docs\n\n<file name="context.txt">\ncontext body\n</file>')
     expect(request?.files).toEqual([
+      { uri: "file:///tmp/image.png", name: "image.png" },
       {
         uri: pathToFileURL(filePath).href,
         name: "note.ts",
@@ -2393,10 +2375,19 @@ describe("V2 mini transport", () => {
       prompt: {
         messageID: "msg_cmd",
         text: "/deploy prod",
-        parts: [],
+        parts: [
+          {
+            type: "file",
+            url: "file:///tmp/mentioned.txt",
+            filename: "mentioned.txt",
+            source: { type: "file", text: { start: 8, end: 12, value: "prod" } },
+          },
+        ],
         command: { name: "deploy", arguments: "prod" },
       },
-      files: [],
+      files: [
+        { type: "file", url: "file:///tmp/context.txt", filename: "context.txt", mime: "text/plain" },
+      ],
       includeFiles: true,
     })
 
@@ -2407,6 +2398,14 @@ describe("V2 mini transport", () => {
       arguments: "prod",
       agent: "build",
       model: { providerID: "test", id: "model" },
+      files: [
+        { uri: "file:///tmp/context.txt", name: "context.txt" },
+        {
+          uri: "file:///tmp/mentioned.txt",
+          name: "mentioned.txt",
+          mention: { start: 8, end: 12, text: "prod" },
+        },
+      ],
       delivery: "steer",
     })
     // Selection rides the command payload; no separate client-side switch.
@@ -2845,6 +2844,14 @@ describe("V2 mini transport", () => {
             agents: [],
             time: { created: 1 },
           },
+          {
+            id: "msg_child_a",
+            type: "assistant" as const,
+            agent: "explore",
+            model: { providerID: "test", id: "model" },
+            content: [{ type: "text" as const, text: "child answer" }],
+            time: { created: 2 },
+          },
         ],
       },
     })
@@ -2890,18 +2897,34 @@ describe("V2 mini transport", () => {
       { sessionID: "ses_child", label: "Explore", title: "Find files", status: "running" },
     ])
 
+    expect(states().at(-1)?.details.ses_child?.commits.filter((item) => item.text === "child answer")).toHaveLength(1)
+
     events.push({
-      id: "evt_child_text",
+      id: "evt_child_text_replayed",
       created: 0,
       type: "session.text.delta",
       data: {
         sessionID: "ses_child",
         assistantMessageID: "msg_child_a",
         ordinal: 0,
-        delta: "child answer",
+        delta: "answer",
       },
     })
-    while (!states().some((state) => state.details.ses_child?.commits.some((item) => item.text === "child answer")))
+    await Bun.sleep(0)
+    expect(states().at(-1)?.details.ses_child?.commits.filter((item) => item.text === "child answer")).toHaveLength(1)
+
+    events.push({
+      id: "evt_child_text_suffix",
+      created: 0,
+      type: "session.text.delta",
+      data: {
+        sessionID: "ses_child",
+        assistantMessageID: "msg_child_a",
+        ordinal: 0,
+        delta: " suffix",
+      },
+    })
+    while (!states().some((state) => state.details.ses_child?.commits.some((item) => item.text === "child answer suffix")))
       await Bun.sleep(0)
 
     events.push({

@@ -2,66 +2,8 @@ import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
 import { OpenCode } from "@opencode-ai/client/promise"
 import type { Resolved } from "../../src/config"
 import { resolveModelInfo, resolveRunTuiConfig } from "../../src/mini/runtime.boot"
+import { catalogModel, catalogProvider } from "./fixture/catalog"
 import { createTuiResolvedConfig } from "./fixture/tui-runtime"
-
-function ok<T>(data: T) {
-  return Promise.resolve(data)
-}
-
-function provider(id: string, name: string) {
-  return {
-    id,
-    name,
-    api: { type: "native" as const, settings: {} },
-    request: { headers: {}, body: {} },
-  }
-}
-
-function model(id: string, providerID: string, context: number, variants: string[] = []) {
-  return {
-    id,
-    providerID,
-    api: {
-      id: providerID,
-      type: "native" as const,
-      settings: {},
-    },
-    name: id,
-    capabilities: {
-      tools: true,
-      input: ["text"],
-      output: ["text"],
-    },
-    request: {
-      headers: {},
-      body: {},
-    },
-    variants: variants.map((variant) => ({
-      id: variant,
-      headers: {},
-      body: {},
-    })),
-    time: {
-      released: 1,
-    },
-    cost: [
-      {
-        input: 0,
-        output: 0,
-        cache: {
-          read: 0,
-          write: 0,
-        },
-      },
-    ],
-    limit: {
-      context,
-      output: 8192,
-    },
-    status: "active" as const,
-    enabled: true,
-  }
-}
 
 function config(input?: {
   leader?: string
@@ -165,10 +107,15 @@ describe("run runtime boot", () => {
 
   test("loads v2 providers and models for model selector data", async () => {
     const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
-    const providers = [provider("openai", "OpenAI")]
-    const models = [model("gpt-5", "openai", 128000, ["high", "minimal"])]
-    const providerList = spyOn(sdk.provider, "list").mockImplementation(() => ok({ data: providers }) as never)
-    spyOn(sdk.model, "list").mockImplementation(() => ok({ data: models }) as never)
+    const location = { directory: "/workspace", project: { id: "proj_1", directory: "/workspace" } }
+    const providerList = spyOn(sdk.provider, "list").mockResolvedValue({
+      location,
+      data: [catalogProvider("openai", "OpenAI")],
+    } as never)
+    spyOn(sdk.model, "list").mockResolvedValue({
+      location,
+      data: [catalogModel({ id: "gpt-5", providerID: "openai", variants: ["high", "minimal"] })],
+    } as never)
 
     await expect(resolveModelInfo(sdk, { directory: "/workspace" })).resolves.toEqual({
       providers: [

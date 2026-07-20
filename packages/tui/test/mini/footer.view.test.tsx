@@ -422,6 +422,7 @@ test("direct skill panel renders searchable skill list", async () => {
     command({ name: "internal", description: "Skill command", source: "skill" }),
     command({ name: "formatter", description: "Apply formatter fixes", source: "skill" }),
   ])
+  const selected: string[] = []
 
   const app = await testRender(
     () => (
@@ -430,7 +431,9 @@ test("direct skill panel renders searchable skill list", async () => {
           theme={() => RUN_THEME_FALLBACK.footer}
           commands={commands}
           onClose={() => {}}
-          onSelect={() => {}}
+          onSelect={(name) => {
+            selected.push(name)
+          }}
         />
       </box>
     ),
@@ -451,6 +454,11 @@ test("direct skill panel renders searchable skill list", async () => {
     expect(frame).toContain("formatter")
     expect(frame).toContain("Apply formatter fixes")
     expect(frame).not.toContain("review")
+    await app.mockInput.typeText("format")
+    await app.renderOnce()
+    expect(app.captureCharFrame()).not.toContain("internal")
+    app.mockInput.pressEnter()
+    expect(selected).toEqual(["formatter"])
   } finally {
     app.renderer.destroy()
   }
@@ -674,6 +682,8 @@ test("direct subagent panel closes when moving up from the first item", async ()
 
 test("direct queued prompt panel renders pending prompt actions", async () => {
   const [prompts] = createSignal([{ messageID: "m-1", prompt: { text: "fix the auth test", parts: [] } }])
+  const edited: string[] = []
+  const deleted: string[] = []
 
   const app = await testRender(
     () => (
@@ -682,8 +692,12 @@ test("direct queued prompt panel renders pending prompt actions", async () => {
           theme={() => RUN_THEME_FALLBACK.footer}
           prompts={prompts}
           onClose={() => {}}
-          onEdit={() => {}}
-          onDelete={() => {}}
+          onEdit={(prompt) => {
+            edited.push(prompt.messageID)
+          }}
+          onDelete={(prompt) => {
+            deleted.push(prompt.messageID)
+          }}
         />
       </box>
     ),
@@ -701,6 +715,10 @@ test("direct queued prompt panel renders pending prompt actions", async () => {
     expect(frame).not.toContain("┌")
     expect(frame).not.toContain("┃")
     expectPaletteList(list, 0)
+    app.mockInput.pressKey("e", { ctrl: true })
+    app.mockInput.pressKey("DELETE")
+    expect(edited).toEqual(["m-1"])
+    expect(deleted).toEqual(["m-1"])
   } finally {
     app.renderer.destroy()
   }
