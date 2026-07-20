@@ -19,15 +19,15 @@ export function DialogHelp() {
   return (
     <box paddingLeft={2} paddingRight={2} gap={1}>
       <box flexDirection="row" justifyContent="space-between">
-        <text attributes={TextAttributes.BOLD} fg={themeV2.text()}>
+        <text attributes={TextAttributes.BOLD} fg={themeV2.text.default}>
           Help
         </text>
-        <text fg={themeV2.text.subdued()} onMouseUp={() => dialog.clear()}>
+        <text fg={themeV2.text.subdued} onMouseUp={() => dialog.clear()}>
           esc/enter
         </text>
       </box>
       <box paddingBottom={1}>
-        <text fg={themeV2.text.subdued()}>
+        <text fg={themeV2.text.subdued}>
           Press {shortcuts.get("command.palette.show")} to see all available actions and commands in any context.
         </text>
       </box>
@@ -35,10 +35,10 @@ export function DialogHelp() {
         <box
           paddingLeft={3}
           paddingRight={3}
-          backgroundColor={themeV2.background.action("focused")}
+          backgroundColor={themeV2.background.action.primary.focused}
           onMouseUp={() => dialog.clear()}
         >
-          <text fg={themeV2.text.action("focused")}>ok</text>
+          <text fg={themeV2.text.action.primary.focused}>ok</text>
         </box>
       </box>
     </box>

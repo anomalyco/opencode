@@ -72,21 +72,21 @@ export function DialogWorkspaceFileChanges(props: {
   return (
     <box gap={1}>
       <box flexDirection="row" justifyContent="space-between" paddingLeft={2} paddingRight={2}>
-        <text attributes={TextAttributes.BOLD} fg={themeV2.text()}>
+        <text attributes={TextAttributes.BOLD} fg={themeV2.text.default}>
           {props.title ?? "File Changes Found"}
         </text>
-        <text fg={themeV2.text.subdued()} onMouseUp={() => dialog.clear()}>
+        <text fg={themeV2.text.subdued} onMouseUp={() => dialog.clear()}>
           esc
         </text>
       </box>
       <box paddingLeft={2} paddingRight={2}>
-        <text fg={themeV2.text.subdued()} wrapMode="word">
+        <text fg={themeV2.text.subdued} wrapMode="word">
           {props.message ?? "Do you want to move these changes with the session?"}
         </text>
       </box>
       <scrollbox
         height={height()}
-        backgroundColor={overlayTheme.background()}
+        backgroundColor={overlayTheme.background.default}
         scrollbarOptions={{ visible: false }}
         scrollAcceleration={scrollAcceleration()}
       >
@@ -95,18 +95,16 @@ export function DialogWorkspaceFileChanges(props: {
             <box flexDirection="row" justifyContent="space-between" paddingLeft={2} paddingRight={2}>
               <box flexDirection="row" minWidth={0} flexShrink={1}>
                 <box width={2} flexShrink={0}>
-                  <text fg={overlayTheme.text.subdued()}>{statusLabel(item.status)}</text>
+                  <text fg={overlayTheme.text.subdued}>{statusLabel(item.status)}</text>
                 </box>
-                <FilePath value={item.file} maxWidth={fileNameWidth()} fg={overlayTheme.text.subdued()} />
+                <FilePath value={item.file} maxWidth={fileNameWidth()} fg={overlayTheme.text.subdued} />
               </box>
               <box flexDirection="row" gap={1} minWidth={7} flexShrink={0} justifyContent="flex-end">
                 <text>
                   {" "}
-                  {item.additions ? (
-                    <span style={{ fg: overlayTheme.diff.text.added() }}>+{item.additions}</span>
-                  ) : null}
+                  {item.additions ? <span style={{ fg: overlayTheme.diff.text.added }}>+{item.additions}</span> : null}
                   {item.deletions ? (
-                    <span style={{ fg: overlayTheme.diff.text.removed() }}> -{item.deletions}</span>
+                    <span style={{ fg: overlayTheme.diff.text.removed }}> -{item.deletions}</span>
                   ) : null}
                 </text>
               </box>
@@ -120,14 +118,16 @@ export function DialogWorkspaceFileChanges(props: {
             <box
               paddingLeft={2}
               paddingRight={2}
-              backgroundColor={item === store.active ? themeV2.background.action("focused") : undefined}
+              backgroundColor={item === store.active ? themeV2.background.action.primary.focused : undefined}
               onMouseUp={() => {
                 setStore("active", item)
                 props.onSelect(item)
                 dialog.clear()
               }}
             >
-              <text fg={item === store.active ? themeV2.text.action("focused") : themeV2.text.subdued()}>{item}</text>
+              <text fg={item === store.active ? themeV2.text.action.primary.focused : themeV2.text.subdued}>
+                {item}
+              </text>
             </box>
           )}
         </For>

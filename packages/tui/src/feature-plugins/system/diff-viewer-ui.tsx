@@ -38,7 +38,7 @@ export function Panel(props: Omit<JSX.IntrinsicElements["box"], "border"> & { bo
       ? {}
       : {
           border: panelBorderSides(group?.axis ?? "y", border),
-          borderColor: themeV2.border(),
+          borderColor: themeV2.border.default,
         }
 
   return (
@@ -60,7 +60,7 @@ function panelBorderSides(axis: Axis, border: Exclude<PanelBorder, "none">): Bor
 export function Separator(props: { axis?: Axis; color?: ColorInput; start?: SeparatorEdge; end?: SeparatorEdge }) {
   const group = usePanelGroup()
   const { themeV2 } = useTheme()
-  const color = () => props.color ?? themeV2.border()
+  const color = () => props.color ?? themeV2.border.default
   const axis = () => props.axis ?? crossAxis(group?.axis ?? "y")
   if (axis() === "y") {
     return (

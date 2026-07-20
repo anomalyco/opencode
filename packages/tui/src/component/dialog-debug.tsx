@@ -54,10 +54,10 @@ export function DialogDebug() {
   return (
     <box paddingLeft={2} paddingRight={2} gap={1} paddingBottom={1}>
       <box flexDirection="row" justifyContent="space-between">
-        <text fg={themeV2.text()} attributes={TextAttributes.BOLD}>
+        <text fg={themeV2.text.default} attributes={TextAttributes.BOLD}>
           Debug
         </text>
-        <text fg={themeV2.text.subdued()} onMouseUp={() => dialog.clear()}>
+        <text fg={themeV2.text.subdued} onMouseUp={() => dialog.clear()}>
           esc
         </text>
       </box>
@@ -67,10 +67,10 @@ export function DialogDebug() {
         <For each={entries()}>
           {(entry) => (
             <box flexDirection="row" gap={1}>
-              <text flexShrink={0} fg={themeV2.text.subdued()}>
+              <text flexShrink={0} fg={themeV2.text.subdued}>
                 {entry.label.padEnd(10)}
               </text>
-              <text fg={themeV2.text()} wrapMode="word">
+              <text fg={themeV2.text.default} wrapMode="word">
                 {entry.value}
               </text>
             </box>
@@ -78,12 +78,12 @@ export function DialogDebug() {
         </For>
       </box>
       <box flexDirection="row" justifyContent="space-between">
-        <text fg={themeV2.text.subdued()}>Share this when reporting an issue.</text>
+        <text fg={themeV2.text.subdued}>Share this when reporting an issue.</text>
         <text onMouseUp={copy}>
-          <span style={{ fg: copied() ? themeV2.text.feedback.success() : themeV2.text() }}>
+          <span style={{ fg: copied() ? themeV2.text.feedback.success.default : themeV2.text.default }}>
             <b>{copied() ? "✓ copied" : "copy"}</b>{" "}
           </span>
-          <span style={{ fg: themeV2.text.subdued() }}>enter</span>
+          <span style={{ fg: themeV2.text.subdued }}>enter</span>
         </text>
       </box>
     </box>

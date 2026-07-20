@@ -19,12 +19,12 @@ function View(props: { context: Plugin.Context; sessionID: string }) {
   )
 
   const dot = (status: string) => {
-    if (status === "connected") return themeV2.text.feedback.success()
-    if (status === "failed") return themeV2.text.feedback.error()
-    if (status === "disabled") return themeV2.text.subdued()
-    if (status === "needs_auth") return themeV2.text.feedback.warning()
-    if (status === "needs_client_registration") return themeV2.text.feedback.error()
-    return themeV2.text.subdued()
+    if (status === "connected") return themeV2.text.feedback.success.default
+    if (status === "failed") return themeV2.text.feedback.error.default
+    if (status === "disabled") return themeV2.text.subdued
+    if (status === "needs_auth") return themeV2.text.feedback.warning.default
+    if (status === "needs_client_registration") return themeV2.text.feedback.error.default
+    return themeV2.text.subdued
   }
 
   return (
@@ -32,12 +32,12 @@ function View(props: { context: Plugin.Context; sessionID: string }) {
       <box>
         <box flexDirection="row" gap={1} onMouseDown={() => list().length > 2 && setOpen((x) => !x)}>
           <Show when={list().length > 2}>
-            <text fg={themeV2.text()}>{open() ? "▼" : "▶"}</text>
+            <text fg={themeV2.text.default}>{open() ? "▼" : "▶"}</text>
           </Show>
-          <text fg={themeV2.text()}>
+          <text fg={themeV2.text.default}>
             <b>MCP</b>
             <Show when={!open()}>
-              <span style={{ fg: themeV2.text.subdued() }}>
+              <span style={{ fg: themeV2.text.subdued }}>
                 {" "}
                 ({on()} active{bad() > 0 ? `, ${bad()} error${bad() > 1 ? "s" : ""}` : ""})
               </span>
@@ -56,9 +56,9 @@ function View(props: { context: Plugin.Context; sessionID: string }) {
                 >
                   •
                 </text>
-                <text fg={themeV2.text()} wrapMode="word">
+                <text fg={themeV2.text.default} wrapMode="word">
                   {item.name}{" "}
-                  <span style={{ fg: themeV2.text.subdued() }}>
+                  <span style={{ fg: themeV2.text.subdued }}>
                     <Switch fallback={item.status.status}>
                       <Match when={item.status.status === "connected"}>Connected</Match>
                       <Match when={item.status.status === "failed"}>

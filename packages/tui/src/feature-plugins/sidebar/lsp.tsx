@@ -5,10 +5,10 @@ function View() {
   const { themeV2 } = useTheme()
   return (
     <box>
-      <text fg={themeV2.text()}>
+      <text fg={themeV2.text.default}>
         <b>LSP</b>
       </text>
-      <text fg={themeV2.text.subdued()}>LSP status unavailable</text>
+      <text fg={themeV2.text.subdued}>LSP status unavailable</text>
     </box>
   )
 }

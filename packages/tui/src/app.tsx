@@ -1088,7 +1088,7 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
       width={dimensions().width}
       height={dimensions().height}
       flexDirection="column"
-      backgroundColor={themeV2.background()}
+      backgroundColor={themeV2.background.default}
       onMouseDown={(evt) => {
         if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
         if (evt.button !== MouseButton.RIGHT) return

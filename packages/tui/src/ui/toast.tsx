@@ -31,17 +31,17 @@ export function Toast() {
           paddingRight={2}
           paddingTop={1}
           paddingBottom={1}
-          backgroundColor={themeV2.background()}
-          borderColor={themeV2.text.feedback[current().variant]()}
+          backgroundColor={themeV2.background.default}
+          borderColor={themeV2.text.feedback[current().variant].default}
           border={["left", "right"]}
           customBorderChars={SplitBorder.customBorderChars}
         >
           <Show when={current().title}>
-            <text attributes={TextAttributes.BOLD} marginBottom={1} fg={themeV2.text()}>
+            <text attributes={TextAttributes.BOLD} marginBottom={1} fg={themeV2.text.default}>
               {current().title}
             </text>
           </Show>
-          <text fg={themeV2.text()} wrapMode="word" width="100%">
+          <text fg={themeV2.text.default} wrapMode="word" width="100%">
             {current().message}
           </text>
         </box>

@@ -63,29 +63,29 @@ export function DialogSkill(props: DialogSkillProps) {
         <Switch
           fallback={
             <box paddingLeft={4} paddingRight={4} paddingTop={1}>
-              <text fg={themeV2.text.subdued()}>No skills available</text>
+              <text fg={themeV2.text.subdued}>No skills available</text>
             </box>
           }
         >
           <Match when={showError()}>
             <box paddingLeft={4} paddingRight={4} paddingTop={1}>
-              <text fg={themeV2.text.feedback.error()} attributes={TextAttributes.BOLD}>
+              <text fg={themeV2.text.feedback.error.default} attributes={TextAttributes.BOLD}>
                 Could not load skills
               </text>
-              <text fg={themeV2.text.subdued()}>{errorMessage(loadError())}</text>
-              <text fg={themeV2.text.subdued()}>Close and reopen Skills to try again.</text>
+              <text fg={themeV2.text.subdued}>{errorMessage(loadError())}</text>
+              <text fg={themeV2.text.subdued}>Close and reopen Skills to try again.</text>
             </box>
           </Match>
           <Match when={skills.loading}>
             <box paddingLeft={4} paddingRight={4} paddingTop={1}>
-              <text fg={themeV2.text.subdued()}>Loading skills…</text>
+              <text fg={themeV2.text.subdued}>Loading skills…</text>
             </box>
           </Match>
         </Switch>
       }
       noMatchView={
         <box paddingLeft={4} paddingRight={4} paddingTop={1}>
-          <text fg={themeV2.text.subdued()}>No skills found</text>
+          <text fg={themeV2.text.subdued}>No skills found</text>
         </box>
       }
     />

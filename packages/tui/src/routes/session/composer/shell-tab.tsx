@@ -98,7 +98,7 @@ export function ShellTab(props: { sessionID: string }) {
   return (
     <Show when={composer.active("shell")}>
       <scrollbox scrollbarOptions={{ visible: false }} maxHeight={5} ref={(r: ScrollBoxRenderable) => (scroll = r)}>
-        <Show when={entries().length > 0} fallback={<text fg={themeV2.text.subdued()}> No shell commands</text>}>
+        <Show when={entries().length > 0} fallback={<text fg={themeV2.text.subdued}> No shell commands</text>}>
           <For each={entries()}>
             {(shell, index) => {
               const active = createMemo(() => index() === store.selected)
@@ -107,11 +107,13 @@ export function ShellTab(props: { sessionID: string }) {
                   flexDirection="row"
                   paddingLeft={1}
                   paddingRight={1}
-                  backgroundColor={themeV2.background.action({ focused: active() })}
+                  backgroundColor={
+                    active() ? themeV2.background.action.primary.focused : themeV2.background.action.primary.default
+                  }
                   onMouseOver={() => setStore("selected", index())}
                 >
                   <text
-                    fg={themeV2.text.action({ focused: active() })}
+                    fg={active() ? themeV2.text.action.primary.focused : themeV2.text.action.primary.default}
                     attributes={active() ? TextAttributes.BOLD : undefined}
                     wrapMode="none"
                   >

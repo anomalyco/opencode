@@ -74,7 +74,7 @@ export function DialogIntegration(props: { onConnected?: OnIntegrationConnected 
         footer: connectionSummary(integration) || undefined,
         category: integration.id in INTEGRATION_PRIORITY ? "Popular" : "Services",
         disabled: methods.length === 0,
-        gutter: connected ? () => <text fg={themeV2.text.feedback.success()}>✓</text> : undefined,
+        gutter: connected ? () => <text fg={themeV2.text.feedback.success.default}>✓</text> : undefined,
         onSelect: () =>
           credentialConnections(integration).length
             ? manageConnections(integration, methods, dialog, props.onConnected)
@@ -89,12 +89,12 @@ export function DialogIntegration(props: { onConnected?: OnIntegrationConnected 
       options={options()}
       emptyView={
         <box paddingLeft={4} paddingRight={4} paddingTop={1}>
-          <text fg={themeV2.text.subdued()}>No integrations available</text>
+          <text fg={themeV2.text.subdued}>No integrations available</text>
         </box>
       }
       noMatchView={
         <box paddingLeft={4} paddingRight={4} paddingTop={1}>
-          <text fg={themeV2.text.subdued()}>No integrations found</text>
+          <text fg={themeV2.text.subdued}>No integrations found</text>
         </box>
       }
     />
@@ -295,24 +295,24 @@ function CommandView(props: { title: string; output: string; message: string }) 
   return (
     <box gap={1} paddingBottom={1}>
       <box flexDirection="row" justifyContent="space-between" paddingLeft={2} paddingRight={2}>
-        <text attributes={TextAttributes.BOLD} fg={themeV2.text()}>
+        <text attributes={TextAttributes.BOLD} fg={themeV2.text.default}>
           {props.title}
         </text>
-        <text fg={themeV2.text.subdued()} onMouseUp={() => dialog.clear()}>
+        <text fg={themeV2.text.subdued} onMouseUp={() => dialog.clear()}>
           esc close
         </text>
       </box>
       <box
-        backgroundColor={overlayTheme.background()}
+        backgroundColor={overlayTheme.background.default}
         paddingLeft={2}
         paddingRight={2}
         paddingTop={1}
         paddingBottom={1}
       >
-        <text fg={overlayTheme.text()}>{props.output.trim()}</text>
+        <text fg={overlayTheme.text.default}>{props.output.trim()}</text>
       </box>
       <box paddingLeft={2} paddingRight={2}>
-        <text fg={themeV2.text.subdued()}>{props.message}</text>
+        <text fg={themeV2.text.subdued}>{props.message}</text>
       </box>
     </box>
   )
@@ -346,7 +346,7 @@ function KeyMethod(props: {
           .catch((cause) => setError(message(cause)))
       }}
       description={() => (
-        <Show when={error()}>{(value) => <text fg={themeV2.text.feedback.error()}>{value()}</text>}</Show>
+        <Show when={error()}>{(value) => <text fg={themeV2.text.feedback.error.default}>{value()}</text>}</Show>
       )}
     />
   )
@@ -536,9 +536,9 @@ function OAuthCode(props: {
       }}
       description={() => (
         <box gap={1}>
-          <text fg={themeV2.text.subdued()}>{props.attempt.instructions}</text>
-          <Link href={props.attempt.url} fg={themeV2.markdown.link()} />
-          <Show when={error()}>{(value) => <text fg={themeV2.text.feedback.error()}>{value()}</text>}</Show>
+          <text fg={themeV2.text.subdued}>{props.attempt.instructions}</text>
+          <Link href={props.attempt.url} fg={themeV2.markdown.link} />
+          <Show when={error()}>{(value) => <text fg={themeV2.text.feedback.error.default}>{value()}</text>}</Show>
         </box>
       )}
     />
@@ -551,27 +551,27 @@ function OAuthView(props: { title: string; url?: string; instructions?: string; 
   return (
     <box paddingLeft={2} paddingRight={2} gap={1} paddingBottom={1}>
       <box flexDirection="row" justifyContent="space-between">
-        <text attributes={TextAttributes.BOLD} fg={themeV2.text()}>
+        <text attributes={TextAttributes.BOLD} fg={themeV2.text.default}>
           {props.title}
         </text>
-        <text fg={themeV2.text.subdued()} onMouseUp={() => dialog.clear()}>
+        <text fg={themeV2.text.subdued} onMouseUp={() => dialog.clear()}>
           esc
         </text>
       </box>
       <Show when={props.url}>
         {(url) => (
           <box gap={1}>
-            <Link href={url()} fg={themeV2.markdown.link()} />
+            <Link href={url()} fg={themeV2.markdown.link} />
             <Show when={props.instructions}>
-              {(instructions) => <text fg={themeV2.text.subdued()}>{instructions()}</text>}
+              {(instructions) => <text fg={themeV2.text.subdued}>{instructions()}</text>}
             </Show>
           </box>
         )}
       </Show>
-      <text fg={themeV2.text.subdued()}>{props.message}</text>
+      <text fg={themeV2.text.subdued}>{props.message}</text>
       <Show when={props.copy}>
-        <text fg={themeV2.text()}>
-          c <span style={{ fg: themeV2.text.subdued() }}>copy</span>
+        <text fg={themeV2.text.default}>
+          c <span style={{ fg: themeV2.text.subdued }}>copy</span>
         </text>
       </Show>
     </box>

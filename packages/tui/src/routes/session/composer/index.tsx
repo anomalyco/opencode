@@ -113,8 +113,8 @@ export function Composer(props: ComposerProps) {
         <box
           {...SplitBorder}
           border={["left"]}
-          borderColor={themeV2.border()}
-          backgroundColor={themeV2.background()}
+          borderColor={themeV2.border.default}
+          backgroundColor={themeV2.background.default}
           paddingLeft={1}
           paddingRight={2}
           paddingTop={1}
@@ -125,7 +125,7 @@ export function Composer(props: ComposerProps) {
               <Show
                 when={tabList().length > 1}
                 fallback={
-                  <text fg={themeV2.text()} attributes={TextAttributes.BOLD}>
+                  <text fg={themeV2.text.default} attributes={TextAttributes.BOLD}>
                     {tabList()[0]?.label ?? ""}
                   </text>
                 }
@@ -136,7 +136,7 @@ export function Composer(props: ComposerProps) {
                       const isActive = createMemo(() => store.active === t.id)
                       return (
                         <text
-                          fg={isActive() ? themeV2.text() : themeV2.text.subdued()}
+                          fg={isActive() ? themeV2.text.default : themeV2.text.subdued}
                           attributes={isActive() ? TextAttributes.BOLD : undefined}
                         >
                           {t.label}
@@ -146,7 +146,7 @@ export function Composer(props: ComposerProps) {
                   </For>
                 </box>
               </Show>
-              <text fg={themeV2.text.subdued()} onMouseUp={close}>
+              <text fg={themeV2.text.subdued} onMouseUp={close}>
                 esc
               </text>
             </box>
@@ -156,19 +156,19 @@ export function Composer(props: ComposerProps) {
               <For each={footerHints()}>
                 {(hint) => (
                   <text>
-                    <span style={{ fg: themeV2.text() }}>
+                    <span style={{ fg: themeV2.text.default }}>
                       <b>{hint.label}</b>{" "}
                     </span>
-                    <span style={{ fg: themeV2.text.subdued() }}>{hint.shortcut}</span>
+                    <span style={{ fg: themeV2.text.subdued }}>{hint.shortcut}</span>
                   </text>
                 )}
               </For>
               <Show when={tabList().length > 1}>
                 <text>
-                  <span style={{ fg: themeV2.text() }}>
+                  <span style={{ fg: themeV2.text.default }}>
                     <b>tabs</b>{" "}
                   </span>
-                  <span style={{ fg: themeV2.text.subdued() }}>←/→</span>
+                  <span style={{ fg: themeV2.text.subdued }}>←/→</span>
                 </text>
               </Show>
             </box>

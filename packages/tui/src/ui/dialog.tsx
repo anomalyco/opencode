@@ -59,7 +59,7 @@ export function Dialog(
         }}
         width={width()}
         maxWidth={dimensions().width - 2}
-        backgroundColor={themeV2.background()}
+        backgroundColor={themeV2.background.default}
         paddingTop={1}
       >
         {props.children}

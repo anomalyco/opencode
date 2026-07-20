@@ -91,7 +91,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       })
       const colors = createMemo(() => {
         const step = mode() === "light" ? 800 : 200
-        return dedupeWith(themeV2.categorical(step), (first, second) => first.equals(second))
+        return dedupeWith(
+          themeV2.categorical.map((scale) => scale[step]),
+          (first, second) => first.equals(second),
+        )
       })
       return {
         list() {

@@ -43,19 +43,19 @@ function Scrap(props: { context: Plugin.Context }) {
   }))
 
   return (
-    <box width={dimensions().width} height={dimensions().height} backgroundColor={themeV2.background()}>
+    <box width={dimensions().width} height={dimensions().height} backgroundColor={themeV2.background.default}>
       <box flexGrow={1} />
       <box
         height={1}
         flexShrink={0}
-        backgroundColor={elevatedTheme.background()}
+        backgroundColor={elevatedTheme.background.default}
         paddingLeft={1}
         paddingRight={1}
         flexDirection="row"
       >
-        <text fg={elevatedTheme.text.subdued()}>~/code/anomalyco/opencode</text>
+        <text fg={elevatedTheme.text.subdued}>~/code/anomalyco/opencode</text>
         <box flexGrow={1} />
-        <text fg={elevatedTheme.text.subdued()}>esc home</text>
+        <text fg={elevatedTheme.text.subdued}>esc home</text>
       </box>
     </box>
   )

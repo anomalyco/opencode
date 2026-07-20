@@ -74,10 +74,10 @@ export function DialogPrompt(props: DialogPromptProps) {
   return (
     <box paddingLeft={2} paddingRight={2} gap={1}>
       <box flexDirection="row" justifyContent="space-between">
-        <text attributes={TextAttributes.BOLD} fg={themeV2.text()}>
+        <text attributes={TextAttributes.BOLD} fg={themeV2.text.default}>
           {props.title}
         </text>
-        <text fg={themeV2.text.subdued()} onMouseUp={() => dialog.clear()}>
+        <text fg={themeV2.text.subdued} onMouseUp={() => dialog.clear()}>
           esc
         </text>
       </box>
@@ -91,20 +91,20 @@ export function DialogPrompt(props: DialogPromptProps) {
           }}
           initialValue={props.value}
           placeholder={props.placeholder ?? "Enter text"}
-          placeholderColor={themeV2.text.subdued()}
-          textColor={themeV2.text.formfield({ disabled: props.busy })}
-          focusedTextColor={themeV2.text.formfield({ disabled: props.busy })}
-          cursorColor={props.busy ? themeV2.background.formfield("disabled") : themeV2.text()}
+          placeholderColor={themeV2.text.subdued}
+          textColor={props.busy ? themeV2.text.formfield.disabled : themeV2.text.formfield.default}
+          focusedTextColor={props.busy ? themeV2.text.formfield.disabled : themeV2.text.formfield.default}
+          cursorColor={props.busy ? themeV2.background.formfield.disabled : themeV2.text.default}
         />
         <Show when={props.busy}>
-          <Spinner color={themeV2.text.subdued()}>{props.busyText ?? "Working..."}</Spinner>
+          <Spinner color={themeV2.text.subdued}>{props.busyText ?? "Working..."}</Spinner>
         </Show>
       </box>
       <box paddingBottom={1} gap={1} flexDirection="row">
-        <Show when={!props.busy} fallback={<text fg={themeV2.text.subdued()}>processing...</text>}>
+        <Show when={!props.busy} fallback={<text fg={themeV2.text.subdued}>processing...</text>}>
           <Show when={shortcuts.get("dialog.prompt.submit")}>
-            <text fg={themeV2.text()}>
-              {shortcuts.get("dialog.prompt.submit")} <span style={{ fg: themeV2.text.subdued() }}>submit</span>
+            <text fg={themeV2.text.default}>
+              {shortcuts.get("dialog.prompt.submit")} <span style={{ fg: themeV2.text.subdued }}>submit</span>
             </text>
           </Show>
         </Show>

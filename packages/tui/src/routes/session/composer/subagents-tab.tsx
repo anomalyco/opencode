@@ -205,7 +205,7 @@ export function SubagentsTab(props: { sessionID: string }) {
   return (
     <Show when={composer.active("subagents")}>
       <scrollbox scrollbarOptions={{ visible: false }} maxHeight={5} ref={(r: ScrollBoxRenderable) => (scroll = r)}>
-        <Show when={entries().length > 0} fallback={<text fg={themeV2.text.subdued()}> No subagents</text>}>
+        <Show when={entries().length > 0} fallback={<text fg={themeV2.text.subdued}> No subagents</text>}>
           <For each={entries()}>
             {(entry, index) => {
               const active = createMemo(() => index() === selected())
@@ -218,7 +218,13 @@ export function SubagentsTab(props: { sessionID: string }) {
                   flexDirection="row"
                   paddingLeft={1}
                   paddingRight={1}
-                  backgroundColor={themeV2.background.action({ focused: active(), selected: entry.current })}
+                  backgroundColor={
+                    active()
+                      ? themeV2.background.action.primary.focused
+                      : entry.current
+                        ? themeV2.background.action.primary.selected
+                        : themeV2.background.action.primary.default
+                  }
                   onMouseOver={() => setStore("selected", index())}
                   onMouseUp={() => {
                     setStore("selected", index())
@@ -227,7 +233,13 @@ export function SubagentsTab(props: { sessionID: string }) {
                 >
                   <box flexGrow={1} minWidth={0} flexDirection="row">
                     <text
-                      fg={themeV2.text.action({ focused: active(), selected: entry.current })}
+                      fg={
+                        active()
+                          ? themeV2.text.action.primary.focused
+                          : entry.current
+                            ? themeV2.text.action.primary.selected
+                            : themeV2.text.action.primary.default
+                      }
                       attributes={active() ? TextAttributes.BOLD : undefined}
                       wrapMode="none"
                     >
@@ -235,14 +247,7 @@ export function SubagentsTab(props: { sessionID: string }) {
                     </text>
                   </box>
                   <Show when={status()}>
-                    <text
-                      fg={
-                        active()
-                          ? themeV2.text.action({ focused: active(), selected: entry.current })
-                          : themeV2.text.subdued()
-                      }
-                      wrapMode="none"
-                    >
+                    <text fg={active() ? themeV2.text.action.primary.focused : themeV2.text.subdued} wrapMode="none">
                       {status()}
                     </text>
                   </Show>

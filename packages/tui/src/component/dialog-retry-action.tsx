@@ -40,7 +40,7 @@ export function DialogRetryAction(props: DialogRetryActionProps) {
   const dialog = useDialog()
   const { themeV2 } = useTheme().contextual("elevated")
   const showGoTreatment = () => props.link === GO_URL
-  const textBg = () => (showGoTreatment() ? panelOverlay(themeV2.background()) : undefined)
+  const textBg = () => (showGoTreatment() ? panelOverlay(themeV2.background.default) : undefined)
   const [selected, setSelected] = createSignal<"dismiss" | "action">("action")
 
   Keymap.createLayer(() => ({
@@ -85,26 +85,26 @@ export function DialogRetryAction(props: DialogRetryActionProps) {
       ) : null}
       <box zIndex={1} paddingLeft={PAD_X} paddingRight={PAD_X} paddingBottom={1} gap={1}>
         <box flexDirection="row" justifyContent="space-between">
-          <text attributes={TextAttributes.BOLD} fg={themeV2.text()} bg={textBg()}>
+          <text attributes={TextAttributes.BOLD} fg={themeV2.text.default} bg={textBg()}>
             {props.title}
           </text>
-          <text fg={themeV2.text.subdued()} bg={textBg()} onMouseUp={() => dialog.clear()}>
+          <text fg={themeV2.text.subdued} bg={textBg()} onMouseUp={() => dialog.clear()}>
             esc
           </text>
         </box>
         <box gap={0}>
-          <text fg={themeV2.text.subdued()} bg={textBg()}>
+          <text fg={themeV2.text.subdued} bg={textBg()}>
             {props.message}
           </text>
         </box>
         {props.link ? (
           showGoTreatment() ? (
             <box alignItems="center" justifyContent="flex-end" height={7} paddingBottom={1}>
-              <Link href={props.link} fg={themeV2.markdown.link()} bg={textBg()} wrapMode="none" />
+              <Link href={props.link} fg={themeV2.markdown.link} bg={textBg()} wrapMode="none" />
             </box>
           ) : (
             <box width="100%" flexDirection="row" justifyContent="center" paddingBottom={1}>
-              <Link href={props.link} fg={themeV2.markdown.link()} wrapMode="none" />
+              <Link href={props.link} fg={themeV2.markdown.link} wrapMode="none" />
             </box>
           )
         ) : (
@@ -115,13 +115,13 @@ export function DialogRetryAction(props: DialogRetryActionProps) {
             paddingLeft={2}
             paddingRight={2}
             backgroundColor={
-              selected() === "dismiss" ? themeV2.background.action("focused") : RGBA.fromInts(0, 0, 0, 0)
+              selected() === "dismiss" ? themeV2.background.action.primary.focused : RGBA.fromInts(0, 0, 0, 0)
             }
             onMouseOver={() => setSelected("dismiss")}
             onMouseUp={() => dismiss(props, dialog)}
           >
             <text
-              fg={selected() === "dismiss" ? themeV2.text.action("focused") : themeV2.text.subdued()}
+              fg={selected() === "dismiss" ? themeV2.text.action.primary.focused : themeV2.text.subdued}
               bg={selected() === "dismiss" ? undefined : textBg()}
               attributes={selected() === "dismiss" ? TextAttributes.BOLD : undefined}
             >
@@ -131,12 +131,14 @@ export function DialogRetryAction(props: DialogRetryActionProps) {
           <box
             paddingLeft={2}
             paddingRight={2}
-            backgroundColor={selected() === "action" ? themeV2.background.action("focused") : RGBA.fromInts(0, 0, 0, 0)}
+            backgroundColor={
+              selected() === "action" ? themeV2.background.action.primary.focused : RGBA.fromInts(0, 0, 0, 0)
+            }
             onMouseOver={() => setSelected("action")}
             onMouseUp={() => runAction(props, dialog)}
           >
             <text
-              fg={selected() === "action" ? themeV2.text.action("focused") : themeV2.text()}
+              fg={selected() === "action" ? themeV2.text.action.primary.focused : themeV2.text.default}
               bg={selected() === "action" ? undefined : textBg()}
               attributes={selected() === "action" ? TextAttributes.BOLD : undefined}
             >

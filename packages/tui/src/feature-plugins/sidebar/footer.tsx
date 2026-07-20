@@ -12,7 +12,7 @@ function View(props: { context: Plugin.Context }) {
     props.context.location ? abbreviateHome(props.context.location.directory, paths.home) : undefined,
   )
   return (
-    <Show when={directory()}>{(value) => <FilePath value={value()} maxWidth={38} fg={themeV2.text.subdued()} />}</Show>
+    <Show when={directory()}>{(value) => <FilePath value={value()} maxWidth={38} fg={themeV2.text.subdued} />}</Show>
   )
 }
 
