@@ -124,6 +124,7 @@
         "opencode2": "./bin/opencode2.cjs",
       },
       "dependencies": {
+        "@agentclientprotocol/sdk": "0.21.0",
         "@effect/platform-node": "catalog:",
         "@opencode-ai/client": "workspace:*",
         "@opencode-ai/core": "workspace:*",
