@@ -246,6 +246,7 @@ function ResolvedTargetSessionRoute() {
   const params = useParams<{ serverKey: string; id: string }>()
   const tabs = useTabs()
   const sync = useServerSync()
+  const layout = useLayout()
   const serverKey = createMemo(() => requireServerKey(params.serverKey))
   const current = createSessionLineage(
     () => params.id,
@@ -261,6 +262,7 @@ function ResolvedTargetSessionRoute() {
       server: serverKey(),
       sessionId: session.root.id,
     })
+    layout.projects.open(session.session.directory)
   })
 
   return (
