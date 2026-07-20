@@ -276,9 +276,10 @@ export default new Hono<{ Bindings: Env }>()
         audience: EXPECTED_AUDIENCE,
       })
       const sub = payload.sub // e.g. 'repo:my-org/my-repo:ref:refs/heads/main'
+      // immutable sub claims append numeric ids, e.g. 'repo:my-org@123456/my-repo@456789:ref:refs/heads/main'
       const parts = sub.split(":")[1].split("/")
-      owner = parts[0]
-      repo = parts[1]
+      owner = parts[0].split("@")[0]
+      repo = parts[1].split("@")[0]
     } catch (err) {
       console.error("Token verification failed:", err)
       return c.json({ error: "Invalid or expired token" }, { status: 403 })
