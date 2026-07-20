@@ -9,6 +9,7 @@ import {
   createSourceFile,
   flattenDiagnosticMessageText,
   forEachChild,
+  isIdentifierPart,
   transpileModule,
   type Node,
 } from "typescript"
@@ -209,7 +210,7 @@ const assertBigIntLiteralSourcesBounded = (code: string): void => {
 const oversizedBigIntSources = (code: string) => {
   const candidates: Array<{ start: number; end: number }> = []
   for (let start = 0; start < code.length; start++) {
-    if (code[start] < "0" || code[start] > "9" || isIdentifierPart(code[start - 1])) continue
+    if (code[start] < "0" || code[start] > "9" || isSourceIdentifierPartBefore(code, start)) continue
     const prefix = code[start] === "0" ? code[start + 1]?.toLowerCase() : undefined
     const radix = prefix === "b" ? 2 : prefix === "o" ? 8 : prefix === "x" ? 16 : 10
     const radixBits = radix === 2 ? 1 : radix === 8 ? 3 : radix === 16 ? 4 : 0
@@ -244,7 +245,7 @@ const oversizedBigIntSources = (code: string) => {
     if (code[end] === "n") end++
     if (
       valid &&
-      !isIdentifierPart(code[end]) &&
+      !isSourceIdentifierPartAt(code, end) &&
       sourceBigIntExceedsLimit(code, significantStart, end - 1, significantDigits, firstSignificant, radixBits)
     ) {
       candidates.push({ start, end })
@@ -254,8 +255,18 @@ const oversizedBigIntSources = (code: string) => {
   return candidates
 }
 
-const isIdentifierPart = (character: string | undefined): boolean =>
-  character !== undefined && (/[A-Za-z0-9_$]/.test(character) || character.charCodeAt(0) > 127)
+const isSourceIdentifierPartBefore = (code: string, index: number): boolean => {
+  if (index === 0) return false
+  const previous = code.charCodeAt(index - 1)
+  const high = index > 1 ? code.charCodeAt(index - 2) : 0
+  const start = previous >= 0xdc00 && previous <= 0xdfff && high >= 0xd800 && high <= 0xdbff ? index - 2 : index - 1
+  return isSourceIdentifierPartAt(code, start)
+}
+
+const isSourceIdentifierPartAt = (code: string, index: number): boolean => {
+  const point = code.codePointAt(index)
+  return point !== undefined && isIdentifierPart(point, ScriptTarget.ESNext)
+}
 
 const digitValue = (character: string | undefined): number => {
   if (character === undefined) return -1

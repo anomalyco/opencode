@@ -273,6 +273,26 @@ describe("BigInt resource bound", () => {
     expect(performance.now() - started).toBeLessThan(2_000)
   })
 
+  test("rejects huge literals after Unicode whitespace", async () => {
+    const literal = `0b1${"0".repeat(500_000)}n`
+    for (const whitespace of ["\u00a0", "\u2003"]) {
+      const result = await Effect.runPromise(
+        CodeMode.execute({ code: `return${whitespace}${literal}`, tools: {}, limits: { timeoutMs: 1 } }),
+      )
+      expect(result.ok).toBe(false)
+      if (!result.ok) {
+        expect(result.error.kind).toBe("InvalidDataValue")
+        expect(result.error.message).toContain("before parsing")
+      }
+    }
+  })
+
+  test("keeps Unicode identifier adjacency distinct from literals", async () => {
+    const suffix = `0b1${"0".repeat(4_096)}n`
+    expect(await value(`const π${suffix} = 1; return true`)).toBe(true)
+    expect(await value(`const 𐐀${suffix} = 1; return true`)).toBe(true)
+  })
+
   test("accepts precise safe multiplication and power-of-two exponentiation boundaries", async () => {
     const maximumBit = `0b1${"0".repeat(4_095)}n`
     expect(
