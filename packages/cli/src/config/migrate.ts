@@ -40,14 +40,18 @@ export const run = Effect.fn("cli.config.migrate")(function* (input: {
         (LegacyKeybindTargets.has(name) ? name : undefined)
       if (target === undefined) return text
       if (target === name && target in Definitions) return text
-      const tree = parseTree(text)
-      if (tree === undefined) return text
-      const property = findNodeAtLocation(tree, ["keybinds", name])?.parent
-      if (property === undefined) return text
-      if (!(target in Definitions) || (target !== name && target in keybinds)) return removeProperty(text, property)
-      const key = property.children?.[0]
+      const properties = findKeybindProperties(text, name)
+      if (!properties.length) return text
+      const remove = !(target in Definitions) || (target !== name && target in keybinds)
+      // The parser gives the final duplicate precedence, so remove earlier properties before renaming it.
+      const updated = properties.slice(0, remove ? properties.length : -1).reduce((text) => {
+        const property = findKeybindProperties(text, name)[0]
+        return property === undefined ? text : removeProperty(text, property)
+      }, text)
+      if (remove) return updated
+      const key = findKeybindProperties(updated, name)[0]?.children?.[0]
       if (key === undefined) return text
-      return text.slice(0, key.offset) + JSON.stringify(target) + text.slice(key.offset + key.length)
+      return updated.slice(0, key.offset) + JSON.stringify(target) + updated.slice(key.offset + key.length)
     }, text)
     if (updated === text) return
     const temp = input.file + ".tmp"
@@ -74,6 +78,16 @@ export const run = Effect.fn("cli.config.migrate")(function* (input: {
     to: input.file,
   })
 })
+
+function findKeybindProperties(text: string, name: string) {
+  const tree = parseTree(text)
+  if (tree === undefined) return []
+  return (
+    findNodeAtLocation(tree, ["keybinds"])?.children?.filter(
+      (property) => property.children?.[0]?.value === name,
+    ) ?? []
+  )
+}
 
 function removeProperty(text: string, property: Node) {
   const properties = property.parent?.children ?? []
