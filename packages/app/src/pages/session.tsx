@@ -99,6 +99,7 @@ import { Persist, persisted } from "@/utils/persist"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { formatServerError, isLocalSessionNotFoundError, isSessionNotFoundError } from "@/utils/server-errors"
 import { legacySessionHref, requireServerKey, sessionHref } from "@/utils/session-route"
+import { ScopedKey } from "@/utils/server-scope"
 import { useUsageExceededDialogs } from "./session/usage-exceeded-dialogs"
 import { createSessionOwnership } from "./session/session-ownership"
 import { createSessionLineage } from "./session/session-lineage"
@@ -271,7 +272,7 @@ function ResolvedTargetSessionRoute() {
     <Show when={directory()}>
       <SDKProvider directory={targetDirectory}>
         <DirectoryDataProvider directory={targetDirectory} server={serverKey}>
-          <TargetSessionPage />
+          <WorkspaceSessionPage />
         </DirectoryDataProvider>
       </SDKProvider>
     </Show>
@@ -281,11 +282,11 @@ function ResolvedTargetSessionRoute() {
 // Owns the workspace-identity remount. Must not include the session ID in the
 // key: SessionPage handles session changes reactively, and remounting here
 // destroys workspace-scoped state (terminal PTYs, file/prompt providers).
-function TargetSessionPage() {
+export function WorkspaceSessionPage() {
   const sdk = useSDK()
   const serverSDK = useServerSDK()
   return (
-    <Show when={`${serverSDK().scope}\0${sdk().directory}`} keyed>
+    <Show when={ScopedKey.from(serverSDK().scope, sdk().directory)} keyed>
       <SessionPage />
     </Show>
   )
