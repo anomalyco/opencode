@@ -152,7 +152,8 @@ const copyBounded = (
     value === undefined ||
     typeof value === "string" ||
     typeof value === "boolean" ||
-    typeof value === "number"
+    typeof value === "number" ||
+    (preserveCodeModeValues && typeof value === "bigint")
   ) {
     return value
   }

@@ -35,7 +35,10 @@ ultimate source of truth.
 - [x] Template literals with interpolation.
 - [x] Regular-expression literals.
 - [x] `NaN` and `Infinity` globals.
-- [ ] BigInt literals and in-interpreter BigInt arithmetic; BigInt remains invalid at JSON-like host boundaries.
+- [x] BigInt literals (decimal, binary, octal, hexadecimal, and numeric separators) and BigInt behavior for the
+      supported arithmetic, bitwise, unary, update, assignment, equality, and ordering operators. Mixed Number/BigInt
+      arithmetic throws. BigInt remains invalid in program results, `JSON.stringify`, and tool arguments/results; the
+      `BigInt` constructor and other BigInt-specific standard-library APIs are not exposed.
 - [ ] Symbol primitive values and symbol-keyed properties.
 - [ ] Tagged-template calls.
 - [ ] Getter and setter definitions in object literals.

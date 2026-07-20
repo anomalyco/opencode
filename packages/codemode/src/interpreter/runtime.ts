@@ -1533,7 +1533,7 @@ export class Interpreter<R> {
 
     // CodeMode numeric coercion, not host Number(): null-prototype data objects would make
     // the host throw during ToPrimitive, and opaque runtime references must reject clearly.
-    const operand = (current: unknown): number => {
+    const operand = (current: unknown): number | bigint => {
       if (containsOpaqueReference(current)) {
         throw new InterpreterRuntimeError(
           `'${operator}' requires a data value in CodeMode.`,
@@ -1541,14 +1541,17 @@ export class Interpreter<R> {
           "InvalidDataValue",
         )
       }
-      return coerceToNumber(current)
+      return typeof current === "bigint" ? current : coerceToNumber(current)
     }
+
+    const update = (current: number | bigint): number | bigint =>
+      typeof current === "bigint" ? current + (increment === 1 ? 1n : -1n) : current + increment
 
     if (argument.type === "Identifier") {
       return Effect.sync(() => {
         const name = getString(argument, "name")
         const current = operand(this.scopes.get(name, argument))
-        const next = current + increment
+        const next = update(current)
         this.scopes.set(name, next, argument)
         return prefix ? next : current
       })
@@ -1557,7 +1560,7 @@ export class Interpreter<R> {
     if (argument.type === "MemberExpression") {
       return this.modifyMember(argument, (current) => {
         const value = operand(current)
-        const next = value + increment
+        const next = update(value)
         return Effect.succeed({ write: true, next, result: prefix ? next : value })
       })
     }
