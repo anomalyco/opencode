@@ -640,8 +640,13 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
         msg = e.message
       }
       if (isUserEvent) {
-        await createComment(`${msg}${footer()}`)
-        await removeReaction(commentType)
+        // posting the error comment is best-effort
+        try {
+          await createComment(`${msg}${footer()}`)
+          await removeReaction(commentType)
+        } catch (commentError) {
+          console.error("Failed to post error comment:", commentError)
+        }
       }
       core.setFailed(msg)
       // Also output the clean error message for the action to capture
@@ -1004,8 +1009,14 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
           })
 
       if (!response.ok) {
-        const responseJson = (await response.json()) as { error?: string }
-        throw new Error(`App token exchange failed: ${response.status} ${response.statusText} - ${responseJson.error}`)
+        const body = await response.text()
+        let message = body
+        try {
+          message = (JSON.parse(body) as { error?: string }).error ?? body
+        } catch {
+          // response body is not JSON (e.g. an HTML error page)
+        }
+        throw new Error(`App token exchange failed: ${response.status} ${response.statusText} - ${message}`)
       }
 
       const responseJson = (await response.json()) as { token: string }
