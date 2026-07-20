@@ -5,5 +5,5 @@
     "noEmit": true,
     "rootDir": "."
   },
-  "include": ["test/auth-options.types.ts", "test/image.types.ts"]
+  "include": ["test/**/*.types.ts"]
 }
