@@ -294,10 +294,13 @@ export default new Hono<{ Bindings: Env }>()
 
     // Lookup installation
     const octokit = new Octokit({ auth: appAuth.token })
-    const { data: installation } = await octokit.apps.getRepoInstallation({
-      owner,
-      repo,
-    })
+    let installation
+    try {
+      installation = (await octokit.apps.getRepoInstallation({ owner, repo })).data
+    } catch (err) {
+      console.error("Installation lookup failed:", err)
+      return c.json({ error: `Failed to find GitHub app installation for ${owner}/${repo}` }, { status: 404 })
+    }
 
     // Get installation token
     const installationAuth = await auth({
