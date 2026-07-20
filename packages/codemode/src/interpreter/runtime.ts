@@ -96,11 +96,14 @@ const globalStaticMembers: Partial<Record<GlobalNamespaceName, Set<string>>> = {
   URL: urlStatics,
 }
 
-const canonicalArrayIndex = (key: string | number): number | undefined => {
+// Array lengths are unsigned 32-bit integers, so the largest index is one less than the maximum length.
+const MAX_ARRAY_INDEX = 4_294_967_294
+
+const parseArrayIndex = (key: string | number): number | undefined => {
   const property = String(key)
+  if (!/^(0|[1-9]\d*)$/.test(property)) return undefined
   const index = Number(property)
-  if (!Number.isInteger(index) || index < 0 || index >= 2 ** 32 - 1 || String(index) !== property) return undefined
-  return index
+  return index <= MAX_ARRAY_INDEX ? index : undefined
 }
 
 const calleeDescription = (callee: AstNode): string => {
@@ -1923,7 +1926,7 @@ export class Interpreter<R> {
 
       if (typeof objectValue === "string") {
         if (key === "length") return new ComputedValue(objectValue.length)
-        const index = canonicalArrayIndex(key)
+        const index = parseArrayIndex(key)
         if (index !== undefined) return new ComputedValue(objectValue[index])
         if (typeof key === "string" && stringMethods.has(key)) return new IntrinsicReference(objectValue, key)
         return new ComputedValue(undefined)
@@ -2018,7 +2021,7 @@ export class Interpreter<R> {
 
       if (Array.isArray(objectValue)) {
         if (operation === "delete") return { target: objectValue, key }
-        const index = canonicalArrayIndex(key)
+        const index = parseArrayIndex(key)
         if (key !== "length" && !(typeof key === "string" && arrayMethods.has(key)) && index === undefined) {
           if (typeof key === "string" && Object.hasOwn(objectValue, key)) {
             return new ComputedValue((objectValue as Record<string, unknown> & Array<unknown>)[key])
@@ -2046,10 +2049,9 @@ export class Interpreter<R> {
       )
         return reference
       if (Array.isArray(reference.target)) {
-        if (typeof reference.key === "string" && arrayMethods.has(reference.key)) {
-          return new IntrinsicReference(reference.target, reference.key)
-        }
-        return reference.key === "length" ? reference.target.length : reference.target[reference.key as number]
+        if (reference.key === "length") return reference.target.length
+        if (typeof reference.key === "string") return new IntrinsicReference(reference.target, reference.key)
+        return reference.target[reference.key]
       }
       if (reference.target instanceof CodeModeURL) {
         return (reference.target.url as unknown as Record<string, unknown>)[String(reference.key)]
@@ -2126,8 +2128,7 @@ export class Interpreter<R> {
   private assignToReference(reference: MemberReference, key: number | string, next: unknown, node: AstNode): void {
     if (Array.isArray(reference.target)) {
       const target = reference.target
-      const index = key as number
-      if (!Number.isInteger(index) || index < 0 || index >= 2 ** 32 - 1) {
+      if (typeof key !== "number" || parseArrayIndex(key) === undefined) {
         throw new InterpreterRuntimeError(
           "Array assignment index must be a valid array index.",
           node,
@@ -2135,7 +2136,7 @@ export class Interpreter<R> {
         )
       }
       rejectCircularInsertion(target, next, "Array assignment result", node)
-      target[index] = next
+      target[key] = next
       return
     }
     if (reference.target instanceof CodeModeURL) {
