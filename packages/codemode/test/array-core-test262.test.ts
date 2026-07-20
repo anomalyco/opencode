@@ -31,7 +31,9 @@
  * - test/built-ins/Array/prototype/splice/called_with_one_argument.js
  * - test/built-ins/Array/prototype/toSpliced/holes-not-preserved.js
  * - test/built-ins/Array/prototype/toSpliced/immutable.js
+ * - test/built-ins/Array/prototype/toSpliced/start-and-deleteCount-undefineds.js
  * - test/built-ins/Array/prototype/toSpliced/start-and-deleteCount-missing.js
+ * - test/built-ins/Array/prototype/toSpliced/start-undefined-and-deleteCount-missing.js
  * - test/built-ins/Array/prototype/fill/fill-values.js
  * - test/built-ins/Array/prototype/fill/fill-values-custom-start-and-end.js
  * - test/built-ins/Array/prototype/fill/return-this.js
@@ -240,6 +242,16 @@ const cases = [
   {
     path: "test/built-ins/Array/prototype/toSpliced/start-and-deleteCount-missing.js",
     code: `const input = ["first", "second", "third"]; const result = input.toSpliced(); return [result, result !== input]`,
+    expected: [["first", "second", "third"], true],
+  },
+  {
+    path: "test/built-ins/Array/prototype/toSpliced/start-undefined-and-deleteCount-missing.js",
+    code: `return ["first", "second", "third"].toSpliced(undefined)`,
+    expected: [],
+  },
+  {
+    path: "test/built-ins/Array/prototype/toSpliced/start-and-deleteCount-undefineds.js",
+    code: `const input = ["first", "second", "third"]; const result = input.toSpliced(undefined, undefined); return [result, result !== input]`,
     expected: [["first", "second", "third"], true],
   },
   {

@@ -185,9 +185,19 @@ describe("Date", () => {
     expect(
       await value(`
         const date = new Date(0)
-        return [date.toUTCString(), date.toGMTString(), new Date(NaN).toUTCString()]
+        return [
+          date.toUTCString(),
+          date.toGMTString(),
+          new Date(NaN).toUTCString(),
+          new Date("0020-01-01T00:00:00Z").toUTCString(),
+        ]
       `),
-    ).toEqual(["Thu, 01 Jan 1970 00:00:00 GMT", "Thu, 01 Jan 1970 00:00:00 GMT", "Invalid Date"])
+    ).toEqual([
+      "Thu, 01 Jan 1970 00:00:00 GMT",
+      "Thu, 01 Jan 1970 00:00:00 GMT",
+      "Invalid Date",
+      "Wed, 01 Jan 0020 00:00:00 GMT",
+    ])
   })
 })
 
@@ -236,6 +246,20 @@ describe("RegExp", () => {
         return [stored, match[0], match.index, pattern.lastIndex, delete pattern.lastIndex]
       `),
     ).toEqual([["12", "string"], "ab4", 17, 0, false])
+  })
+
+  test("exec coerces CodeMode data objects assigned to lastIndex", async () => {
+    expect(
+      await value(`
+        const pattern = /a/g
+        pattern.lastIndex = {}
+        const stored = pattern.lastIndex
+        const match = pattern.exec("ba")
+        pattern.lastIndex = 10
+        const missed = pattern.exec("a")
+        return [stored, match.index, pattern.lastIndex, missed]
+      `),
+    ).toEqual([{}, 1, 0, null])
   })
 
   test("an unmatched string pattern returns null", async () => {
