@@ -1,0 +1,389 @@
+import type {
+  AgentSideConnection,
+  PermissionOption,
+  PromptResponse,
+  RequestPermissionResponse,
+} from "@agentclientprotocol/sdk"
+import type {
+  EventSubscribeOutput,
+  OpenCodeClient,
+  SessionMessageAssistant,
+  SessionMessageInfo,
+} from "@opencode-ai/client/promise"
+import { partsToContentChunks, type ReplayPart } from "./content"
+import { completedToolUpdate, errorToolUpdate, pendingToolCall, runningToolUpdate, type ToolContent, type ToolInput } from "./tool"
+
+type Connection = Pick<AgentSideConnection, "sessionUpdate" | "requestPermission">
+
+export type TurnControl = {
+  cancelled: boolean
+  readonly admission: AbortController
+}
+
+type ToolState = {
+  readonly name: string
+  input: ToolInput
+  structured: Record<string, unknown>
+  content: ToolContent
+}
+
+type Start =
+  | { readonly type: "input"; readonly id: string }
+  | { readonly type: "skill"; readonly id: string }
+  | { readonly type: "compaction"; readonly id: string }
+
+const permissionOptions: PermissionOption[] = [
+  { optionId: "once", kind: "allow_once", name: "Allow once" },
+  { optionId: "always", kind: "allow_always", name: "Always allow" },
+  { optionId: "reject", kind: "reject_once", name: "Reject" },
+]
+
+export async function streamTurn(input: {
+  readonly client: OpenCodeClient
+  readonly connection: Connection
+  readonly sessionID: string
+  readonly cwd: string
+  readonly start: Start
+  readonly submit: (signal: AbortSignal) => Promise<unknown>
+  readonly activate: (control: TurnControl) => void
+  readonly deactivate: () => void
+}): Promise<PromptResponse> {
+  const streamController = new AbortController()
+  const stream = input.client.event.subscribe({ signal: streamController.signal })[Symbol.asyncIterator]()
+  const connected = await stream.next()
+  if (connected.done) throw new Error("event stream disconnected before prompt admission")
+
+  const control: TurnControl = { cancelled: false, admission: new AbortController() }
+  input.activate(control)
+  let started = false
+  let assistantMessageID: string | undefined
+  let finish: SessionMessageAssistant["finish"]
+  const tools = new Map<string, ToolState>()
+
+  const update = (value: Parameters<Connection["sessionUpdate"]>[0]["update"]) =>
+    input.connection.sessionUpdate({ sessionId: input.sessionID, update: value })
+
+  const replyPermission = async (event: Extract<EventSubscribeOutput, { type: "permission.v2.asked" }>) => {
+    const result = await input.connection
+      .requestPermission({
+        sessionId: input.sessionID,
+        toolCall: pendingToolCall({
+          toolCallId: event.data.source?.callID ?? event.data.id,
+          toolName: event.data.action,
+          state: { input: event.data.metadata ?? {} },
+          cwd: input.cwd,
+        }),
+        options: permissionOptions,
+      })
+      .catch(() => undefined)
+    const reply = selectedReply(result)
+    await input.client.permission.reply({ sessionID: input.sessionID, requestID: event.data.id, reply })
+  }
+
+  const consume = async () => {
+    while (!streamController.signal.aborted) {
+      const next = await stream.next()
+      if (next.done) throw new Error("event stream disconnected during prompt execution")
+      const event = next.value
+      if (event.type === "permission.v2.asked" && event.data.sessionID === input.sessionID) {
+        await replyPermission(event)
+        continue
+      }
+      if (!("sessionID" in event.data) || event.data.sessionID !== input.sessionID) continue
+      if (matchesStart(event, input.start)) {
+        started = true
+        continue
+      }
+      if (!started) continue
+
+      if (event.type === "session.step.started") {
+        assistantMessageID = event.data.assistantMessageID
+        continue
+      }
+      if (event.type === "session.text.delta") {
+        assistantMessageID = event.data.assistantMessageID
+        await update({
+          sessionUpdate: "agent_message_chunk",
+          messageId: event.data.assistantMessageID,
+          content: { type: "text", text: event.data.delta },
+        })
+        continue
+      }
+      if (event.type === "session.reasoning.delta") {
+        assistantMessageID = event.data.assistantMessageID
+        await update({
+          sessionUpdate: "agent_thought_chunk",
+          messageId: event.data.assistantMessageID,
+          content: { type: "text", text: event.data.delta },
+        })
+        continue
+      }
+      if (event.type === "session.tool.input.started") {
+        assistantMessageID = event.data.assistantMessageID
+        tools.set(event.data.callID, { name: event.data.name, input: {}, structured: {}, content: [] })
+        await update({
+          sessionUpdate: "tool_call",
+          ...pendingToolCall({
+            toolCallId: event.data.callID,
+            toolName: event.data.name,
+            state: { input: {} },
+            cwd: input.cwd,
+          }),
+        })
+        continue
+      }
+      if (event.type === "session.tool.called") {
+        assistantMessageID = event.data.assistantMessageID
+        const current = tools.get(event.data.callID) ?? {
+          name: "tool",
+          input: {},
+          structured: {},
+          content: [],
+        }
+        current.input = event.data.input
+        tools.set(event.data.callID, current)
+        await update({
+          sessionUpdate: "tool_call_update",
+          ...runningToolUpdate({
+            toolCallId: event.data.callID,
+            toolName: current.name,
+            state: { input: current.input },
+            cwd: input.cwd,
+          }),
+        })
+        continue
+      }
+      if (event.type === "session.tool.progress") {
+        const current = tools.get(event.data.callID)
+        if (!current) continue
+        current.structured = event.data.structured
+        current.content = event.data.content
+        await update({
+          sessionUpdate: "tool_call_update",
+          ...runningToolUpdate({
+            toolCallId: event.data.callID,
+            toolName: current.name,
+            state: { input: current.input },
+            content: current.content,
+            cwd: input.cwd,
+          }),
+        })
+        continue
+      }
+      if (event.type === "session.tool.success") {
+        const current = tools.get(event.data.callID) ?? {
+          name: "tool",
+          input: {},
+          structured: {},
+          content: [],
+        }
+        tools.delete(event.data.callID)
+        await update({
+          sessionUpdate: "tool_call_update",
+          ...completedToolUpdate({
+            toolCallId: event.data.callID,
+            toolName: current.name,
+            input: current.input,
+            structured: event.data.structured,
+            content: event.data.content,
+            result: event.data.result,
+          }),
+        })
+        continue
+      }
+      if (event.type === "session.tool.failed") {
+        const current = tools.get(event.data.callID) ?? {
+          name: "tool",
+          input: {},
+          structured: {},
+          content: [],
+        }
+        tools.delete(event.data.callID)
+        await update({
+          sessionUpdate: "tool_call_update",
+          ...errorToolUpdate({
+            toolCallId: event.data.callID,
+            toolName: current.name,
+            input: current.input,
+            structured: current.structured,
+            content: current.content,
+            error: event.data.error.message,
+            cwd: input.cwd,
+          }),
+        })
+        continue
+      }
+      if (event.type === "session.step.ended") {
+        assistantMessageID = event.data.assistantMessageID
+        finish = event.data.finish
+        continue
+      }
+      if (event.type === "session.execution.succeeded") return "succeeded" as const
+      if (event.type === "session.execution.interrupted") return "interrupted" as const
+      if (event.type === "session.execution.failed") return "failed" as const
+    }
+    return "interrupted" as const
+  }
+
+  const completed = consume()
+  try {
+    await input.submit(control.admission.signal).catch(async (error) => {
+      if (!control.cancelled) throw error
+      await input.client.session.interrupt({ sessionID: input.sessionID }).catch(() => {})
+    })
+    const terminal = await completed
+    const assistant = assistantMessageID
+      ? await input.client.session.message({ sessionID: input.sessionID, messageID: assistantMessageID }).catch(() => undefined)
+      : undefined
+    return response(assistant?.type === "assistant" ? assistant : undefined, terminal, control.cancelled, finish, input.start.id)
+  } finally {
+    input.deactivate()
+    streamController.abort()
+    await stream.return?.(undefined).catch(() => {})
+  }
+}
+
+export async function replayMessages(
+  connection: Pick<AgentSideConnection, "sessionUpdate">,
+  sessionID: string,
+  cwd: string,
+  messages: readonly SessionMessageInfo[],
+) {
+  for (const message of messages) {
+    if (message.type === "user") {
+      await connection.sessionUpdate({
+        sessionId: sessionID,
+        update: {
+          sessionUpdate: "user_message_chunk",
+          messageId: message.id,
+          content: { type: "text", text: message.text },
+        },
+      })
+      const files: ReplayPart[] = (message.files ?? []).map((file) => ({
+        type: "file",
+        url: `data:${file.mime};base64,${file.data}`,
+        filename: file.name,
+        mime: file.mime,
+      }))
+      for (const chunk of partsToContentChunks(files)) {
+        await connection.sessionUpdate({
+          sessionId: sessionID,
+          update: { sessionUpdate: "user_message_chunk", messageId: message.id, ...chunk },
+        })
+      }
+      continue
+    }
+    if (message.type !== "assistant") continue
+    for (const part of message.content) {
+      if (part.type === "text") {
+        await connection.sessionUpdate({
+          sessionId: sessionID,
+          update: {
+            sessionUpdate: "agent_message_chunk",
+            messageId: message.id,
+            content: { type: "text", text: part.text },
+          },
+        })
+        continue
+      }
+      if (part.type === "reasoning") {
+        await connection.sessionUpdate({
+          sessionId: sessionID,
+          update: {
+            sessionUpdate: "agent_thought_chunk",
+            messageId: message.id,
+            content: { type: "text", text: part.text },
+          },
+        })
+        continue
+      }
+      await connection.sessionUpdate({
+        sessionId: sessionID,
+        update: {
+          sessionUpdate: "tool_call",
+          ...pendingToolCall({ toolCallId: part.id, toolName: part.name, state: { input: toolInput(part) }, cwd }),
+        },
+      })
+      if (part.state.status === "completed") {
+        await connection.sessionUpdate({
+          sessionId: sessionID,
+          update: {
+            sessionUpdate: "tool_call_update",
+            ...completedToolUpdate({
+              toolCallId: part.id,
+              toolName: part.name,
+              input: part.state.input,
+              structured: part.state.structured,
+              content: part.state.content,
+              result: part.state.result,
+            }),
+          },
+        })
+      }
+      if (part.state.status === "error") {
+        await connection.sessionUpdate({
+          sessionId: sessionID,
+          update: {
+            sessionUpdate: "tool_call_update",
+            ...errorToolUpdate({
+              toolCallId: part.id,
+              toolName: part.name,
+              input: part.state.input,
+              structured: part.state.structured,
+              content: part.state.content,
+              error: part.state.error.message,
+              cwd,
+            }),
+          },
+        })
+      }
+    }
+  }
+}
+
+function matchesStart(event: EventSubscribeOutput, start: Start) {
+  if (start.type === "input") return event.type === "session.input.promoted" && event.data.inputID === start.id
+  if (start.type === "compaction") return event.type === "session.compaction.admitted" && event.data.inputID === start.id
+  return event.type === "session.skill.activated" && event.id === start.id.replace(/^msg_/, "evt_")
+}
+
+function selectedReply(result: RequestPermissionResponse | undefined): "once" | "always" | "reject" {
+  if (result?.outcome.outcome !== "selected") return "reject"
+  if (result.outcome.optionId === "once" || result.outcome.optionId === "always") return result.outcome.optionId
+  return "reject"
+}
+
+function toolInput(tool: Extract<SessionMessageAssistant["content"][number], { type: "tool" }>) {
+  return tool.state.status === "streaming" ? {} : tool.state.input
+}
+
+function response(
+  assistant: SessionMessageAssistant | undefined,
+  terminal: "succeeded" | "failed" | "interrupted",
+  cancelled: boolean,
+  finish: SessionMessageAssistant["finish"],
+  messageID: string,
+): PromptResponse {
+  const tokens = assistant?.tokens
+  const usage = tokens
+    ? {
+        inputTokens: tokens.input,
+        outputTokens: tokens.output,
+        totalTokens: tokens.input + tokens.output + tokens.reasoning + tokens.cache.read + tokens.cache.write,
+        ...(tokens.reasoning > 0 ? { thoughtTokens: tokens.reasoning } : {}),
+        ...(tokens.cache.read > 0 ? { cachedReadTokens: tokens.cache.read } : {}),
+        ...(tokens.cache.write > 0 ? { cachedWriteTokens: tokens.cache.write } : {}),
+      }
+    : undefined
+  const stopReason =
+    cancelled || terminal === "interrupted"
+      ? ("cancelled" as const)
+      : finish === "length"
+        ? ("max_tokens" as const)
+        : finish === "content-filter"
+          ? ("refusal" as const)
+          : ("end_turn" as const)
+  return { stopReason, ...(usage ? { usage } : {}), userMessageId: messageID, _meta: {} }
+}
+
+export * as ACPEvent from "./event"
