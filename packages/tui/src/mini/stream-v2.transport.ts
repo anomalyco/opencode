@@ -712,6 +712,8 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       phase: state.rootActive ? "running" : "idle",
       status: state.rootActive ? "assistant responding" : blockerStatus(state.view),
     })
+    if (!state.rootActive) await input.footer.idle()
+    if (!current(attempt)) return
     if (!state.rootActive && state.wait && (state.wait.promoted || state.wait.interrupted)) {
       const current = state.wait
       state.wait = undefined

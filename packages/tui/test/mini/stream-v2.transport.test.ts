@@ -417,11 +417,26 @@ describe("V2 mini transport", () => {
     await transport.close()
   })
 
-  test("hydrates projection, reduces live output, and completes on settlement", async () => {
+  test("finalizes an idle projection before reducing live output", async () => {
     const events = feed()
     events.push(connected())
-    const client = sdk({ streams: [events] })
+    const client = sdk({
+      streams: [events],
+      messages: {
+        ses_1: [
+          {
+            id: "msg_old",
+            type: "assistant",
+            agent: "build",
+            model: { providerID: "test", id: "model" },
+            content: [{ type: "text", text: "[Link](https://example.com)" }],
+            time: { created: 1 },
+          },
+        ],
+      },
+    })
     const ui = footer()
+    const idle = spyOn(ui.api, "idle")
     const transport = await createSessionTransport({
       sdk: client,
       sessionID: "ses_1",
@@ -429,7 +444,8 @@ describe("V2 mini transport", () => {
       replay: true,
       footer: ui.api,
     })
-    expect(ui.commits.map((item) => item.text)).toEqual(["previous prompt"])
+    expect(ui.commits.map((item) => item.text)).toEqual(["[Link](https://example.com)"])
+    expect(idle).toHaveBeenCalledTimes(1)
 
     let admitted = false
     spyOn(client.session, "prompt").mockImplementation((request) => {
@@ -476,7 +492,7 @@ describe("V2 mini transport", () => {
     })
     await turn
 
-    expect(ui.commits.map((item) => item.text)).toEqual(["previous prompt", "answer"])
+    expect(ui.commits.map((item) => item.text)).toEqual(["[Link](https://example.com)", "answer"])
     expect(ui.events).toContainEqual({ type: "stream.patch", patch: { phase: "idle", status: "" } })
     await transport.close()
   })
