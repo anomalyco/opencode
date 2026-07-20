@@ -33,7 +33,7 @@ OpenCode는 널리 사용되는 언어를 위해 여러 built-in LSP 서버를 �
 | nixd               | .nix                                                                | `nixd` 명령 사용 가능                                      |
 | ocaml-lsp          | .ml, .mli                                                           | `ocamllsp` 명령 사용 가능                                  |
 | oxlint             | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue, .astro, .svelte | 프로젝트에 `oxlint` dependency 존재                        |
-| php intelephense   | .php                                                                | PHP 프로젝트에서 자동 설치                                 |
+| phpantom            | .php                                                                | GitHub 릴리스에서 자동 설치                                |
 | prisma             | .prisma                                                             | `prisma` 명령 사용 가능                                    |
 | pyright            | .py, .pyi                                                           | `pyright` dependency 설치됨                                |
 | ruby-lsp (rubocop) | .rb, .rake, .gemspec, .ru                                           | `ruby` 및 `gem` 명령 사용 가능                             |
@@ -194,15 +194,3 @@ OpenCode config의 `lsp` 섹션에서 LSP 서버를 활성화하고 사용자 �
 }
 ```
 
----
-
-## 추가 정보
-
-### PHP Intelephense
-
-PHP Intelephense는 라이선스 키를 통해 프리미엄 기능을 제공합니다. 텍스트 파일에 키만 저장해 라이선스 키를 제공할 수 있습니다.
-
-- macOS/Linux: `$HOME/intelephense/license.txt`
-- Windows: `%USERPROFILE%/intelephense/license.txt`
-
-파일에는 추가 내용 없이 라이선스 키만 포함하는 것이 좋습니다.

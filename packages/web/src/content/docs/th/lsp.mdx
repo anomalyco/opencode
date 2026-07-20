@@ -33,7 +33,7 @@ OpenCode มาพร้อมกับเซิร์ฟเวอร์ LSP ใ
 | nixd               | .nix                                                                | `nixd` คำสั่งใช้ได้                                     |
 | ocaml-lsp          | .ml, .mli                                                           | `ocamllsp` คำสั่งใช้ได้                                 |
 | oxlint             | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue, .astro, .svelte | `oxlint` การพึ่งพาในโครงการ                             |
-| php intelephense   | .php                                                                | ติดตั้งอัตโนมัติสำหรับโครงการ PHP                       |
+| phpantom            | .php                                                                | ติดตั้งอัตโนมัติจากรีลีส GitHub                        |
 | prisma             | .prisma                                                             | `prisma` คำสั่งใช้ได้                                   |
 | pyright            | .py, .pyi                                                           | `pyright` ติดตั้งการพึ่งพาแล้ว                          |
 | ruby-lsp (rubocop) | .rb, .rake, .gemspec, .ru                                           | มีคำสั่ง `ruby` และ `gem`                               |
@@ -194,15 +194,3 @@ LSP สามารถช่วยให้ agent ค้นหาและแก
 }
 ```
 
----
-
-## ข้อมูลเพิ่มเติม
-
-### PHP อินเทเลฟินส์
-
-PHP Intelephense นำเสนอคุณสมบัติระดับพรีเมียมผ่านรหัสลิขสิทธิ์ คุณสามารถระบุรหัสสัญญาอนุญาตได้โดยการวาง (เท่านั้น) รหัสในไฟล์ข้อความที่:
-
-- บน macOS/Linux: `$HOME/intelephense/license.txt`
-- บน Windows: `%USERPROFILE%/intelephense/license.txt`
-
-ไฟล์ควรมีเฉพาะรหัสลิขสิทธิ์โดยไม่มีเนื้อหาเพิ่มเติม

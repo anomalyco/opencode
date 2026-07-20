@@ -33,7 +33,7 @@ OpenCode, popüler diller için çeşitli yerleşik LSP sunucularıyla birlikte 
 | nixd               | .nix                                                                | `nixd` komutu mevcut                                                  |
 | ocaml-lsp          | .ml, .mli                                                           | `ocamllsp` komutu mevcut                                              |
 | oxlint             | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue, .astro, .svelte | Projede `oxlint` bağımlılığı                                          |
-| php intelephense   | .php                                                                | PHP projeleri için otomatik yüklemeler                                |
+| phpantom            | .php                                                                | GitHub sürümlerinden otomatik yüklenir                                |
 | prisma             | .prisma                                                             | `prisma` komutu mevcut                                                |
 | pyright            | .py, .pyi                                                           | `pyright` bağımlılığı kurulu                                          |
 | ruby-lsp (rubocop) | .rb, .rake, .gemspec, .ru                                           | `ruby` ve `gem` komutları mevcut                                      |
@@ -194,15 +194,3 @@ Komutu ve dosya uzantılarını belirterek özel LSP sunucuları ekleyebilirsini
 }
 ```
 
----
-
-## Ek Bilgiler
-
-### PHP Intelephense
-
-PHP Intelephense, bir lisans anahtarı aracılığıyla premium özellikler sunar. Anahtarı (yalnızca) şu adresteki bir metin dosyasına yerleştirerek bir lisans anahtarı sağlayabilirsiniz:
-
-- macOS/Linux'ta: `$HOME/intelephense/license.txt`
-- Windows'ta: `%USERPROFILE%/intelephense/license.txt`
-
-Dosya, ek içerik olmadan yalnızca lisans anahtarını içermelidir.

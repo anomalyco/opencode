@@ -32,7 +32,7 @@ description: يتكامل OpenCode مع خوادم LSP لديك.
 | nixd               | .nix                                                                | توفر أمر `nixd`                                      |
 | ocaml-lsp          | .ml, .mli                                                           | توفر أمر `ocamllsp`                                  |
 | oxlint             | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue, .astro, .svelte | وجود تبعية `oxlint` في المشروع                       |
-| php intelephense   | .php                                                                | يثبت تلقائيا لمشاريع PHP                             |
+| phpantom            | .php                                                                | يُثبَّت تلقائيًا من إصدارات GitHub                    |
 | prisma             | .prisma                                                             | توفر أمر `prisma`                                    |
 | pyright            | .py, .pyi                                                           | تثبيت تبعية `pyright`                                |
 | ruby-lsp (rubocop) | .rb, .rake, .gemspec, .ru                                           | توفر أمري `ruby` و `gem`                             |
@@ -193,15 +193,3 @@ description: يتكامل OpenCode مع خوادم LSP لديك.
 }
 ```
 
----
-
-## معلومات إضافية
-
-### PHP Intelephense
-
-يوفر PHP Intelephense ميزات مدفوعة عبر مفتاح ترخيص. يمكنك تزويده بمفتاح الترخيص عبر وضع (فقط) المفتاح داخل ملف نصي في:
-
-- على macOS/Linux: `$HOME/intelephense/license.txt`
-- على Windows: `%USERPROFILE%/intelephense/license.txt`
-
-يجب أن يحتوي الملف على مفتاح الترخيص فقط دون أي محتوى إضافي.

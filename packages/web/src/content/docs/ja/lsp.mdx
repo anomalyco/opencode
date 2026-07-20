@@ -33,7 +33,7 @@ OpenCode には、一般的な言語用のいくつかの組み込み LSP サー
 | nixd               | .nix                                                                | `nixd` command available                                     |
 | ocaml-lsp          | .ml, .mli                                                           | `ocamllsp` command available                                 |
 | oxlint             | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue, .astro, .svelte | `oxlint` dependency in project                               |
-| php intelephense   | .php                                                                | Auto-installs for PHP projects                               |
+| phpantom            | .php                                                                | Auto-installs from GitHub releases                           |
 | prisma             | .prisma                                                             | `prisma` command available                                   |
 | pyright            | .py, .pyi                                                           | `pyright` dependency installed                               |
 | ruby-lsp (rubocop) | .rb, .rake, .gemspec, .ru                                           | `ruby` and `gem` commands available                          |
@@ -194,15 +194,3 @@ LSP サーバーの起動時に `env` プロパティを使用して環境変数
 }
 ```
 
----
-
-## 追加情報
-
-### PHP Intelephense
-
-PHP Intelephense は、ライセンスキーを通じてプレミアム機能を提供します。ライセンスキーを指定するには、次の場所にあるテキストファイルにキー (のみ) を配置します。
-
-- macOS/Linux の場合: `$HOME/intelephense/license.txt`
-- Windows の場合: `%USERPROFILE%/intelephense/license.txt`
-
-ファイルにはライセンスキーのみが含まれており、追加のコンテンツは含まれていません。

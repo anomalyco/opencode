@@ -31,7 +31,7 @@ OpenCode dolazi sa nekoliko ugrađenih LSP servera za popularne jezike:
 | nixd               | .nix                                                                | `nixd` komanda dostupna                                  |
 | ocaml-lsp          | .ml, .mli                                                           | `ocamllsp` komanda dostupna                              |
 | oxlint             | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue, .astro, .svelte | `oxlint` zavisnost u projektu                            |
-| php intelephense   | .php                                                                | Automatske instalacije za PHP projekte                   |
+| phpantom            | .php                                                                | Automatska instalacija iz GitHub izdanja                  |
 | prisma             | .prisma                                                             | `prisma` komanda dostupna                                |
 | pyright            | .py, .pyi                                                           | `pyright` ovisnost instalirana                           |
 | ruby-lsp (rubocop) | .rb, .rake, .gemspec, .ru                                           | `ruby` i `gem` komande dostupne                          |
@@ -191,14 +191,3 @@ Možete dodati prilagođene LSP servere navodeći ekstenzije naredbe i datoteke:
 }
 ```
 
----
-
-## Dodatne informacije
-
-### PHP Intelephense
-
-PHP Intelephense nudi vrhunske funkcije putem licencnog ključa. Možete dati licencni ključ postavljanjem (samo) ključa u tekstualnu datoteku na:
-
-- Na macOS/Linuxu: `$HOME/intelephense/license.txt`
-- Na Windowsima: `%USERPROFILE%/intelephense/license.txt`
-  Datoteka treba da sadrži samo licencni ključ bez dodatnog sadržaja.
