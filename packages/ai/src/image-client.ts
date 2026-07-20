@@ -1,17 +1,21 @@
 import { Context, Effect, Layer } from "effect"
 import { RequestExecutor } from "./route/executor"
-import type { ImageRequest, ImageResponse } from "./image"
+import type { ImageOptions, ImageRequest, ImageRequestFor, ImageResponse } from "./image"
 import type { LLMError } from "./schema"
 
 export type Execute = RequestExecutor.Interface["execute"]
 
 export interface Interface {
-  readonly generate: (request: ImageRequest) => Effect.Effect<ImageResponse, LLMError>
+  readonly generate: <Options extends ImageOptions>(
+    request: ImageRequestFor<Options>,
+  ) => Effect.Effect<ImageResponse, LLMError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ImageClient") {}
 
-export const generate = (request: ImageRequest): Effect.Effect<ImageResponse, LLMError> =>
+export const generate = <Options extends ImageOptions>(
+  request: ImageRequestFor<Options>,
+): Effect.Effect<ImageResponse, LLMError> =>
   Effect.gen(function* () {
     const client = yield* Service
     return yield* client.generate(request)
