@@ -837,7 +837,9 @@ describe("PatchTool", () => {
                   "edit",
                 ])
                 expect(assertions[0]?.resources).toEqual([
-                  path.join(yield* Effect.promise(() => fs.realpath(outside.path)), "*").replaceAll("\\", "/"),
+                  process.platform === "win32"
+                    ? FSUtil.normalizePathPattern(path.join(outside.path, "*"))
+                    : path.join(yield* Effect.promise(() => fs.realpath(outside.path)), "*").replaceAll("\\", "/"),
                 ])
                 expect(assertions[1]?.resources).toEqual(assertions[0]?.resources)
               }),
