@@ -24,14 +24,14 @@ function config(input?: {
     leader: input?.leaderTimeout === undefined ? undefined : { timeout: input.leaderTimeout },
     keybinds: {
       ...(input?.leader && { leader: input.leader }),
-      ...(bind?.commandList && { command_list: bind.commandList }),
-      ...(bind?.variantCycle && { variant_cycle: bind.variantCycle }),
-      ...(bind?.interrupt && { session_interrupt: bind.interrupt }),
-      ...(bind?.historyPrevious && { history_previous: bind.historyPrevious }),
-      ...(bind?.historyNext && { history_next: bind.historyNext }),
-      ...(bind?.inputClear && { input_clear: bind.inputClear }),
-      ...(bind?.inputSubmit && { input_submit: bind.inputSubmit }),
-      ...(bind?.inputNewline && { input_newline: bind.inputNewline }),
+      ...(bind?.commandList && { "command.palette.show": bind.commandList }),
+      ...(bind?.variantCycle && { "variant.cycle": bind.variantCycle }),
+      ...(bind?.interrupt && { "session.interrupt": bind.interrupt }),
+      ...(bind?.historyPrevious && { "prompt.history.previous": bind.historyPrevious }),
+      ...(bind?.historyNext && { "prompt.history.next": bind.historyNext }),
+      ...(bind?.inputClear && { "prompt.clear": bind.inputClear }),
+      ...(bind?.inputSubmit && { "input.submit": bind.inputSubmit }),
+      ...(bind?.inputNewline && { "input.newline": bind.inputNewline }),
     },
   })
 }

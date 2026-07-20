@@ -1072,7 +1072,7 @@ test.skip("direct footer recreates the frame across command panel transitions", 
 test.skip("direct footer dispatches leader variant binding only when leader is registered", async () => {
   const calls: string[] = []
   const app = await renderFooter({
-    tuiConfig: createTuiResolvedConfig({ keybinds: { leader: "ctrl+x", variant_cycle: "<leader>t" } }),
+    tuiConfig: createTuiResolvedConfig({ keybinds: { leader: "ctrl+x", "variant.cycle": "<leader>t" } }),
     onCycle: () => calls.push("cycle"),
   })
 
@@ -1092,7 +1092,7 @@ test.skip("direct footer dispatches leader variant binding only when leader is r
 test("direct footer keeps leader variant binding inactive when leader is disabled", async () => {
   const calls: string[] = []
   const app = await renderFooter({
-    tuiConfig: createTuiResolvedConfig({ keybinds: { leader: "none", variant_cycle: "<leader>t" } }),
+    tuiConfig: createTuiResolvedConfig({ keybinds: { leader: "none", "variant.cycle": "<leader>t" } }),
     onCycle: () => calls.push("cycle"),
   })
 
@@ -1663,7 +1663,7 @@ test("direct footer hides the subagent hint when only completed subagents remain
 
 test("direct footer omits interrupt key hint when interrupt is unbound", async () => {
   const app = await renderFooter({
-    tuiConfig: createTuiResolvedConfig({ keybinds: { session_interrupt: "none", input_clear: "ctrl+l" } }),
+    tuiConfig: createTuiResolvedConfig({ keybinds: { "session.interrupt": "none", "prompt.clear": "ctrl+l" } }),
     state: { phase: "running" },
     mono: true,
   })
