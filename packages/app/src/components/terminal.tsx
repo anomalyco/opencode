@@ -603,6 +603,7 @@ export const Terminal = (props: TerminalProps) => {
           tries = 0
           local.onConnect?.()
           scheduleSize(t.cols, t.rows)
+          if (t.getMode(2031)) t.write("\x1b[?996n")
         }
 
         const handleMessage = (event: MessageEvent) => {
