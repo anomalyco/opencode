@@ -177,6 +177,31 @@ describe("markdown stream", () => {
     ])
   })
 
+  test("keeps settled prose as a single full block", () => {
+    expect(stream("# Title\n\nBody", false)).toEqual([{ raw: "# Title\n\nBody", src: "# Title\n\nBody", mode: "full" }])
+  })
+
+  test("splits settled mermaid fences into standalone diagram blocks", () => {
+    const blocks = stream("Before\n\n```mermaid\ngraph TD;A-->B\n```\n\nAfter", false)
+    expect(blocks).toHaveLength(3)
+    expect(blocks[0]).toMatchObject({ mode: "full" })
+    expect(blocks[0]!.src).toContain("Before")
+    expect(blocks[1]).toMatchObject({ mode: "code", language: "mermaid", complete: true, src: "graph TD;A-->B" })
+    expect(blocks[2]).toMatchObject({ mode: "full" })
+    expect(blocks[2]!.src).toContain("After")
+  })
+
+  test("keeps non-mermaid settled code inside the full block", () => {
+    expect(stream("```ts\nconst x = 1\n```", false)).toEqual([
+      { raw: "```ts\nconst x = 1\n```", src: "```ts\nconst x = 1\n```", mode: "full" },
+    ])
+  })
+
+  test("does not split settled mermaid when reference definitions are present", () => {
+    const text = "```mermaid\ngraph TD;A-->B\n```\n\n[1]: https://example.com"
+    expect(stream(text, false)).toEqual([{ raw: text, src: text, mode: "full" }])
+  })
+
   test("closes tilde fences split across provider deltas", () => {
     const open = project(undefined, "~~~ts\nconst x = 1\n", true)
     const one = project(open, `${open.text}~`, true)
