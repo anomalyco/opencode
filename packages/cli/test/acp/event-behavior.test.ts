@@ -460,6 +460,87 @@ describe("acp event behavior", () => {
       await fixture.stop()
     }
   })
+
+  test("returns cancelled when admission is aborted before promotion", async () => {
+    const submitted = Promise.withResolvers<void>()
+    const control: TurnControl = { cancelled: false, admission: new AbortController() }
+    const fixture = createSseFixture({
+      onPrompt({ signal }) {
+        submitted.resolve()
+        return new Promise<void>((resolve) => {
+          if (signal.aborted) return resolve()
+          signal.addEventListener("abort", () => resolve(), { once: true })
+        })
+      },
+    })
+    const result = streamTurn({
+      client: fixture.client,
+      connection: recordingConnection([]),
+      sessionID: "ses_cancel_admission",
+      cwd: "/workspace",
+      start: { type: "input", id: "input_cancel_admission" },
+      control,
+      submit: (signal) =>
+        fixture.client.session.prompt(
+          { sessionID: "ses_cancel_admission", id: "input_cancel_admission", text: "cancel me" },
+          { signal },
+        ),
+    })
+
+    try {
+      await withTimeout(submitted.promise, "cancel test prompt was not submitted")
+      control.cancelled = true
+      control.admission.abort()
+
+      const response = await withTimeout(result, "pre-admission cancellation did not terminate")
+      expect(response).toMatchObject({ stopReason: "cancelled" })
+      expect(fixture.requests.filter((request) => request.path.endsWith("/interrupt"))).toHaveLength(1)
+    } finally {
+      control.cancelled = true
+      control.admission.abort()
+      await result.catch(() => undefined)
+      await fixture.stop()
+    }
+  })
+
+  test("cancels unsupported session forms so execution can continue", async () => {
+    const fixture = createSseFixture({
+      onPrompt({ id, send }) {
+        send(durableEvent("session.input.promoted", { sessionID: "ses_form", inputID: id }))
+        send(
+          ephemeralEvent("form.created", {
+            form: {
+              id: "frm_question",
+              sessionID: "ses_form",
+              title: "Questions",
+              metadata: { kind: "question" },
+              fields: [{ key: "q0", title: "Choice", type: "string" }],
+            },
+          }),
+        )
+      },
+      onFormCancel({ sessionID, formID, send }) {
+        send(ephemeralEvent("form.cancelled", { sessionID, id: formID }))
+        send(durableEvent("session.execution.succeeded", { sessionID }))
+      },
+    })
+
+    try {
+      const response = await turn({
+        fixture,
+        connection: recordingConnection([]),
+        sessionID: "ses_form",
+        inputID: "input_form",
+      })
+
+      expect(response.stopReason).toBe("end_turn")
+      expect(
+        fixture.requests.some((request) => request.path === "/api/session/ses_form/form/frm_question/cancel"),
+      ).toBe(true)
+    } finally {
+      await fixture.stop()
+    }
+  })
 })
 
 function recordingConnection(updates: SessionUpdateParams[]) {

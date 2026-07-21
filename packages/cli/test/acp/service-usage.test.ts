@@ -79,7 +79,7 @@ describe("acp service prompt routing and usage", () => {
     expect(fixture.requests.some((request) => request.path === "/api/session/ses_routes/prompt")).toBe(false)
   })
 
-  test("returns turn usage and publishes cumulative session usage for the selected model", async () => {
+  test("returns turn usage and publishes current context usage with cumulative session cost", async () => {
     const assistantTokens = {
       input: 100,
       output: 40,
@@ -176,7 +176,7 @@ describe("acp service prompt routing and usage", () => {
         sessionId: "ses_usage",
         update: {
           sessionUpdate: "usage_update",
-          used: 150,
+          used: 171,
           size: 200_000,
           cost: { amount: 3.5, currency: "USD" },
         },
@@ -192,12 +192,42 @@ describe("acp service prompt routing and usage", () => {
         }
         if (request.method === "POST" && request.path === "/api/session/ses_usage_failure/prompt") {
           const id = requestID(request)
-          completeTurn(context, "ses_usage_failure", {
+          context.send({
             id: `evt_${id}`,
             type: "session.input.promoted",
             data: { sessionID: "ses_usage_failure", inputID: id },
           })
+          context.send({
+            id: "evt_step_failure",
+            type: "session.step.ended",
+            data: {
+              sessionID: "ses_usage_failure",
+              assistantMessageID: "msg_usage_failure",
+              finish: "stop",
+              cost: 0,
+              tokens: { input: 3, output: 2, reasoning: 0, cache: { read: 0, write: 0 } },
+            },
+          })
+          context.send({
+            id: "evt_done_failure",
+            type: "session.execution.succeeded",
+            data: { sessionID: "ses_usage_failure" },
+          })
           return Response.json({ data: {} })
+        }
+        if (request.method === "GET" && request.path === "/api/session/ses_usage_failure/message/msg_usage_failure") {
+          return Response.json({
+            data: {
+              id: "msg_usage_failure",
+              type: "assistant",
+              agent: "build",
+              model: { providerID: "test", id: "test-model" },
+              content: [],
+              finish: "stop",
+              tokens: { input: 3, output: 2, reasoning: 0, cache: { read: 0, write: 0 } },
+              time: { created: 1, completed: 2 },
+            },
+          })
         }
         if (request.method === "GET" && request.path === "/api/session/ses_usage_failure") {
           return new Response(null, { status: 500 })

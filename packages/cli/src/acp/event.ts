@@ -83,6 +83,12 @@ export async function streamTurn(input: {
         })
         continue
       }
+      if (event.type === "form.created" && event.data.form.sessionID === input.sessionID) {
+        await input.client.form
+          .cancel({ sessionID: input.sessionID, formID: event.data.form.id })
+          .catch(() => input.client.session.interrupt({ sessionID: input.sessionID }).catch(() => {}))
+        continue
+      }
       if (!("sessionID" in event.data) || event.data.sessionID !== input.sessionID) continue
       if (matchesStart(event, input.start)) {
         started = true
@@ -217,10 +223,17 @@ export async function streamTurn(input: {
 
   const completed = consume()
   try {
-    await input.submit(control.admission.signal).catch(async (error) => {
+    await input.submit(control.admission.signal).catch((error) => {
       if (!control.cancelled) throw error
-      await input.client.session.interrupt({ sessionID: input.sessionID }).catch(() => {})
     })
+    if (control.cancelled) {
+      await input.client.session.interrupt({ sessionID: input.sessionID }).catch(() => {})
+      if (!started) {
+        streamController.abort()
+        await completed.catch(() => {})
+        return response(undefined, undefined, "interrupted", true, undefined, input.userMessageID)
+      }
+    }
     const terminal = await completed
     const assistant = assistantMessageID
       ? await input.client.session

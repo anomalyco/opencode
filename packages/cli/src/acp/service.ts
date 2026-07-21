@@ -301,7 +301,7 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
       }).finally(() => {
         if (active.get(state.id) === control) active.delete(state.id)
       })
-      await sendUsageUpdate(input.client, input.connection, state).catch(() => {})
+      await sendUsageUpdate(input.client, input.connection, state, response.usage?.totalTokens).catch(() => {})
       return response
     },
     cancel: async (params) => {
@@ -502,17 +502,18 @@ function stableStringify(value: unknown): string {
     .join(",")}}`
 }
 
-async function sendUsageUpdate(client: OpenCodeClient, connection: Connection, session: Attached) {
-  const info = await client.session.get({ sessionID: session.id })
+async function sendUsageUpdate(client: OpenCodeClient, connection: Connection, session: Attached, used?: number) {
+  if (!used) return
   const model = session.catalog.models.find(
     (item) => item.providerID === session.model.providerID && item.id === session.model.id,
   )
   if (!model?.limit.context) return
+  const info = await client.session.get({ sessionID: session.id })
   await connection.sessionUpdate({
     sessionId: session.id,
     update: {
       sessionUpdate: "usage_update",
-      used: info.tokens.input + info.tokens.cache.read,
+      used,
       size: model.limit.context,
       cost: { amount: info.cost, currency: "USD" },
     },
