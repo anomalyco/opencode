@@ -133,9 +133,10 @@
 }
 
 [data-slot="settings-v2-row-description"] {
+  margin-block: -3.5px;
   font-size: 13px;
   font-weight: 440;
-  line-height: 1;
+  line-height: 20px;
   color: var(--v2-text-text-muted);
 }
 
@@ -270,10 +271,10 @@
 }
 
 .settings-v2-provider-description {
-  margin: 0;
+  margin-block: -3.5px;
   font-size: 13px;
   font-weight: 440;
-  line-height: 1;
+  line-height: 20px;
   color: var(--v2-text-text-muted);
 }
 

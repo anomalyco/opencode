@@ -1070,6 +1070,7 @@ export const dict = {
   "session.new.workspace.triggerLocal": "Lokalt",
   "session.new.workspace.local": "Lokalt depot",
   "session.new.workspace.existing": "Arbeidsområde…",
+  "session.new.git.none": "Ingen Git",
 
   "sidebar.empty.title": "Ingen åpne prosjekter",
   "sidebar.empty.description": "Åpne et prosjekt for å komme i gang",

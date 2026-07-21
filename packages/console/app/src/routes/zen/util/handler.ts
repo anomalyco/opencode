@@ -1168,28 +1168,29 @@ export async function handler(
             const week = getWeekBounds(new Date())
             const month = getMonthlyBounds(new Date(), authInfo.lite!.timeCreated)
             const rollingWindowSeconds = lite.rollingWindow * 3600
+            const quotaCost = Math.round(cost * modelInfo.costMultiplier)
             return [
               db
                 .update(LiteTable)
                 .set({
                   monthlyUsage: sql`
               CASE
-                WHEN ${LiteTable.timeMonthlyUpdated} >= ${month.start} THEN ${LiteTable.monthlyUsage} + ${cost}
-                ELSE ${cost}
+                WHEN ${LiteTable.timeMonthlyUpdated} >= ${month.start} THEN ${LiteTable.monthlyUsage} + ${quotaCost}
+                ELSE ${quotaCost}
               END
             `,
                   timeMonthlyUpdated: sql`now()`,
                   weeklyUsage: sql`
               CASE
-                WHEN ${LiteTable.timeWeeklyUpdated} >= ${week.start} THEN ${LiteTable.weeklyUsage} + ${cost}
-                ELSE ${cost}
+                WHEN ${LiteTable.timeWeeklyUpdated} >= ${week.start} THEN ${LiteTable.weeklyUsage} + ${quotaCost}
+                ELSE ${quotaCost}
               END
             `,
                   timeWeeklyUpdated: sql`now()`,
                   rollingUsage: sql`
               CASE
-                WHEN UNIX_TIMESTAMP(${LiteTable.timeRollingUpdated}) >= UNIX_TIMESTAMP(now()) - ${rollingWindowSeconds} THEN ${LiteTable.rollingUsage} + ${cost}
-                ELSE ${cost}
+                WHEN UNIX_TIMESTAMP(${LiteTable.timeRollingUpdated}) >= UNIX_TIMESTAMP(now()) - ${rollingWindowSeconds} THEN ${LiteTable.rollingUsage} + ${quotaCost}
+                ELSE ${quotaCost}
               END
             `,
                   timeRollingUpdated: sql`
