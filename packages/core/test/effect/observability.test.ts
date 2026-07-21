@@ -6,8 +6,22 @@ import os from "os"
 import path from "path"
 import { fileLogger } from "../../src/observability/logging"
 import { resource } from "../../src/observability/otlp"
+import { makeEventLoopDelayMonitor } from "../../src/observability/event-loop-delay"
 
 const otelResourceAttributes = process.env.OTEL_RESOURCE_ATTRIBUTES
+
+test("measures an immediate event-loop block and stops sampling", async () => {
+  const monitor = makeEventLoopDelayMonitor()
+  const startedAt = performance.now()
+  while (performance.now() - startedAt < 60) {}
+  const maxMs = monitor.stop()
+  const stoppedAt = performance.now()
+  while (performance.now() - stoppedAt < 60) {}
+  await Bun.sleep(40)
+
+  expect(maxMs).toBeGreaterThanOrEqual(20)
+  expect(monitor.maxMs()).toBe(maxMs)
+})
 
 afterEach(() => {
   if (otelResourceAttributes === undefined) delete process.env.OTEL_RESOURCE_ATTRIBUTES

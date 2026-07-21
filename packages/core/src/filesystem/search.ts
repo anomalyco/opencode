@@ -24,6 +24,8 @@ export type Options = typeof Options.Type
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/FileSystem/Search") {}
 
+const FffScanObservationMs = 60_000
+
 export const ripgrepLayer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -127,6 +129,7 @@ export const fffLayer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const location = yield* Location.Service
+    const startedAt = performance.now()
     const result = yield* Effect.try({
       try: () =>
         Fff.create({
@@ -138,6 +141,7 @@ export const fffLayer = Layer.effect(
       catch: (cause) => cause,
     }).pipe(
       Effect.catch((error) => Effect.logWarning("failed to initialize fff", { error }).pipe(Effect.as(undefined))),
+      Effect.withSpan("FileSystemSearch.fff.create"),
     )
     if (!result?.ok) {
       if (result) yield* Effect.logWarning("failed to initialize fff", { error: result.error })
@@ -148,6 +152,28 @@ export const fffLayer = Layer.effect(
       })
     }
     yield* Effect.addFinalizer(() => Effect.sync(() => result.value.destroy()).pipe(Effect.ignore))
+    yield* Effect.logInfo("fff initialized", {
+      durationMs: Math.round(performance.now() - startedAt),
+      scanning: result.value.isScanning(),
+    })
+    yield* Effect.tryPromise({
+      try: () => result.value.waitForScan(FffScanObservationMs),
+      catch: (cause) => cause,
+    }).pipe(
+      Effect.flatMap((scan) => {
+        const data = { durationMs: Math.round(performance.now() - startedAt) }
+        if (!scan.ok) return Effect.logWarning("fff initial scan failed", data)
+        if (!scan.value) return Effect.logWarning("fff initial scan still running", data)
+        return Effect.logInfo("fff initial scan completed", data)
+      }),
+      Effect.catch(() =>
+        Effect.logWarning("failed to observe fff initial scan", {
+          durationMs: Math.round(performance.now() - startedAt),
+        }),
+      ),
+      Effect.withSpan("FileSystemSearch.fff.scan"),
+      Effect.forkScoped,
+    )
     return Service.of({
       glob: (input) =>
         Effect.sync(() => {

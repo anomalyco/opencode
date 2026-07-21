@@ -1,6 +1,6 @@
 export * as ProjectCopy from "./copy"
 
-import { Context, Effect, Layer, Schema } from "effect"
+import { Context, Duration, Effect, Layer, Schema } from "effect"
 import path from "path"
 import { AbsolutePath } from "../schema"
 import { FSUtil } from "../fs-util"
@@ -15,6 +15,7 @@ import { Database } from "../database/database"
 import { Location } from "../location"
 import { Event } from "@opencode-ai/schema/project-directories"
 import { ProjectCopy } from "@opencode-ai/schema/project-copy"
+import { makeEventLoopDelayMonitor } from "../observability/event-loop-delay"
 
 export const StrategyID = ProjectCopy.StrategyID
 export type StrategyID = typeof StrategyID.Type
@@ -214,60 +215,102 @@ const layer = Layer.effect(
     })
 
     const refresh = Effect.fn("ProjectCopy.refresh")(function* (input: RefreshInput) {
-      const stored = yield* directories.list(input.projectID)
-      const checked = yield* Effect.forEach(
-        stored,
-        (item) => fs.isDir(item.directory).pipe(Effect.map((exists) => ({ ...item, exists }))),
-        { concurrency: "unbounded" },
-      )
-      const sourceDirectories = checked
-        .filter((item) => item.strategy === undefined && item.exists)
-        .map((item) => item.directory)
-      const discovered = yield* Effect.forEach(
-        sourceDirectories,
-        (sourceDirectory) =>
-          Effect.forEach(strategies(), (strategy) =>
-            strategy.list(sourceDirectory).pipe(
-              Effect.catchTag("ProjectCopy.DirectoryUnavailableError", () => Effect.succeed([])),
-              Effect.map((items) =>
-                items.map((item) => ({
-                  directory: item.directory,
-                  strategy: item.type === "copy" ? strategy.id : undefined,
-                })),
+      return yield* Effect.acquireUseRelease(
+        Effect.sync(makeEventLoopDelayMonitor),
+        (eventLoopDelay) =>
+          Effect.gen(function* () {
+            const startedAt = performance.now()
+            const loaded = yield* timed("ProjectCopy.refresh.load", directories.list(input.projectID))
+            const checked = yield* timed(
+              "ProjectCopy.refresh.check",
+              Effect.forEach(
+                loaded.value,
+                (item) => fs.isDir(item.directory).pipe(Effect.map((exists) => ({ ...item, exists }))),
+                { concurrency: "unbounded" },
               ),
-            ),
-          ),
-        { concurrency: "unbounded" },
-      ).pipe(
-        Effect.map((sets) => new Map(sets.flat(2).map((item) => [item.directory, item] as const)).values().toArray()),
-      )
-      const removed = checked.filter((item) => !item.exists).map((item) => item.directory)
-      const result = yield* db
-        .transaction((tx) =>
-          Effect.all({
-            updated: Effect.forEach(discovered, (item) =>
-              directories.create(
-                {
-                  projectID: input.projectID,
-                  directory: item.directory,
-                  strategy: item.strategy,
-                  behavior: "replace",
-                },
-                tx,
+            )
+            const sourceDirectories = checked.value
+              .filter((item) => item.strategy === undefined && item.exists)
+              .map((item) => item.directory)
+            const discovered = yield* timed(
+              "ProjectCopy.refresh.discover",
+              Effect.forEach(
+                sourceDirectories,
+                (sourceDirectory) =>
+                  Effect.forEach(strategies(), (strategy) =>
+                    strategy.list(sourceDirectory).pipe(
+                      Effect.catchTag("ProjectCopy.DirectoryUnavailableError", () => Effect.succeed([])),
+                      Effect.map((items) =>
+                        items.map((item) => ({
+                          directory: item.directory,
+                          strategy: item.type === "copy" ? strategy.id : undefined,
+                        })),
+                      ),
+                    ),
+                  ),
+                { concurrency: "unbounded" },
+              ).pipe(
+                Effect.map((sets) =>
+                  new Map(sets.flat(2).map((item) => [item.directory, item] as const)).values().toArray(),
+                ),
               ),
-            ),
-            removed: Effect.forEach(removed, (directory) =>
-              directories.remove({ projectID: input.projectID, directory }, tx),
-            ),
+            )
+            const removed = checked.value.filter((item) => !item.exists).map((item) => item.directory)
+            const committed = yield* timed(
+              "ProjectCopy.refresh.commit",
+              db
+                .transaction((tx) =>
+                  Effect.all({
+                    updated: Effect.forEach(discovered.value, (item) =>
+                      directories.create(
+                        {
+                          projectID: input.projectID,
+                          directory: item.directory,
+                          strategy: item.strategy,
+                          behavior: "replace",
+                        },
+                        tx,
+                      ),
+                    ),
+                    removed: Effect.forEach(removed, (directory) =>
+                      directories.remove({ projectID: input.projectID, directory }, tx),
+                    ),
+                  }),
+                )
+                .pipe(Effect.orDie),
+            )
+            const changes = {
+              updated: discovered.value
+                .filter((_, index) => committed.value.updated[index])
+                .map((item) => item.directory),
+              removed: removed.filter((_, index) => committed.value.removed[index]),
+            }
+            const published = yield* timed(
+              "ProjectCopy.refresh.publish",
+              changed(input.projectID, changes.updated.length > 0 || changes.removed.length > 0),
+            )
+            yield* Effect.logInfo("project copy refresh diagnostics", {
+              projectID: input.projectID,
+              durationMs: Math.round(performance.now() - startedAt),
+              eventLoopDelayMaxMs: Math.round(eventLoopDelay.maxMs()),
+              stored: loaded.value.length,
+              sources: sourceDirectories.length,
+              strategies: strategies().length,
+              discovered: discovered.value.length,
+              updated: changes.updated.length,
+              removed: changes.removed.length,
+              stages: {
+                loadMs: loaded.durationMs,
+                checkMs: checked.durationMs,
+                discoverMs: discovered.durationMs,
+                commitMs: committed.durationMs,
+                publishMs: published.durationMs,
+              },
+            })
+            return changes
           }),
-        )
-        .pipe(Effect.orDie)
-      const changes = {
-        updated: discovered.filter((_, index) => result.updated[index]).map((item) => item.directory),
-        removed: removed.filter((_, index) => result.removed[index]),
-      }
-      yield* changed(input.projectID, changes.updated.length > 0 || changes.removed.length > 0)
-      return changes
+        (eventLoopDelay) => Effect.sync(() => eventLoopDelay.stop()),
+      )
     })
 
     return Service.of({
@@ -290,3 +333,11 @@ export const refreshNode = makeLocationNode({
   layer: Layer.effectDiscard(refreshAfterBoot),
   deps: [node, Location.node],
 })
+
+function timed<A, E, R>(name: string, effect: Effect.Effect<A, E, R>) {
+  return effect.pipe(
+    Effect.timed,
+    Effect.map(([duration, value]) => ({ durationMs: Math.round(Duration.toMillis(duration)), value })),
+    Effect.withSpan(name),
+  )
+}

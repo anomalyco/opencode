@@ -45,6 +45,7 @@ import { ReadToolFileSystem } from "./tool/read-filesystem"
 import { ToolRegistry } from "./tool/registry"
 import { ToolOutputStore } from "./tool-output-store"
 import { Vcs } from "./vcs"
+import { makeEventLoopDelayMonitor } from "./observability/event-loop-delay"
 
 export { LocationServiceMap } from "./location-service-map"
 
@@ -114,24 +115,36 @@ export function buildLocationServiceMap(
     Effect.map(
       LayerMap.make(
         (ref: Location.Ref) => {
-          const startedAt = performance.now()
           const allReplacements = replacements.concat([[Location.node, Location.boundNode(ref)]])
           // Apply replacements during hoist, not afterward: replacements can
           // introduce new tagged dependencies (Location.boundNode depends on
           // Project), and the hoist walk is the only pass that can still slice
           // those back out.
           const location = LayerNode.hoist(locationServices, Node.tags.values.global, allReplacements)
-
-          return LayerNode.compile(location.node).pipe(
+          const compiled = LayerNode.compile(location.node).pipe(
             Layer.fresh,
-            Layer.tap(() =>
-              Effect.logInfo("location services booted", {
-                directory: ref.directory,
-                workspaceID: ref.workspaceID,
-                durationMs: Math.round(performance.now() - startedAt),
-              }),
-            ),
             Layer.provide(LayerNode.compile(location.hoisted)),
+          )
+          return Layer.fromBuild((memoMap, scope) =>
+            Effect.acquireUseRelease(
+              Effect.sync(() => ({
+                startedAt: performance.now(),
+                eventLoopDelay: makeEventLoopDelayMonitor(),
+              })),
+              (diagnostics) =>
+                Layer.buildWithMemoMap(compiled, memoMap, scope).pipe(
+                  Effect.tap(() =>
+                    Effect.logInfo("location services booted", {
+                      directory: ref.directory,
+                      workspaceID: ref.workspaceID,
+                      durationMs: Math.round(performance.now() - diagnostics.startedAt),
+                      eventLoopDelayMaxMs: Math.round(diagnostics.eventLoopDelay.maxMs()),
+                    }),
+                  ),
+                  Effect.withSpan("LocationServices.acquire"),
+                ),
+              (diagnostics) => Effect.sync(() => diagnostics.eventLoopDelay.stop()),
+            ),
           )
         },
         { idleTimeToLive: "60 minutes" },
