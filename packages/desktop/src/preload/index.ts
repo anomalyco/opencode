@@ -4,7 +4,7 @@ import type { UpdaterState } from "@opencode-ai/app/updater"
 
 // BiDi text direction support + message metadata footer
 {
-const css = `[data-component="markdown"]>*{unicode-bidi:plaintext !important}[data-slot="text-part-body"]>*{unicode-bidi:plaintext !important}[data-slot="user-message-text"]{unicode-bidi:plaintext !important}[data-component="reasoning-part"]>*{unicode-bidi:plaintext !important}[data-component="tool-output"]{unicode-bidi:plaintext !important}[data-slot="question-text"]{unicode-bidi:plaintext !important}[data-slot="answer-text"]{unicode-bidi:plaintext !important}[data-component="markdown"] code,[data-component="markdown"] pre{direction:ltr;unicode-bidi:isolate !important}[data-component="markdown"] pre code{unicode-bidi:isolate !important}`
+const css = `[data-component="markdown"]>*{unicode-bidi:plaintext !important}[data-slot="text-part-body"]>*{unicode-bidi:plaintext !important}[data-slot="user-message-text"]{unicode-bidi:plaintext !important}[data-component="reasoning-part"]>*{unicode-bidi:plaintext !important}[data-component="tool-output"]{unicode-bidi:plaintext !important}[data-slot="question-text"]{unicode-bidi:plaintext !important}[data-slot="answer-text"]{unicode-bidi:plaintext !important}[data-component="markdown"] code,[data-component="markdown"] pre{direction:ltr;unicode-bidi:isolate !important}[data-component="markdown"] pre code{unicode-bidi:isolate !important}[data-component="prompt-input"]{unicode-bidi:plaintext !important}[data-slot="question-option"]{text-align:start !important}[data-slot="option-label"]{unicode-bidi:plaintext !important}[data-slot="option-description"]{unicode-bidi:plaintext !important}`
 const s = document.createElement("style");s.textContent=css;s.id="oc-bidi-fix"
 const inj=()=>{if(document.head){document.head.appendChild(s);return true}return false}
 if(!inj())document.addEventListener("DOMContentLoaded",inj,{once:true})
@@ -12,16 +12,18 @@ const C='[data-component="markdown"],[data-slot="text-part-body"],[data-slot="us
 const B='p,li,h1,h2,h3,h4,h5,h6,td,th,blockquote'
 const R='[data-slot="question-text"],[data-slot="answer-text"],[data-component="tool-output"],[data-slot="user-message-text"]'
 const I='[data-component="prompt-input"],[contenteditable]'
+const Q='[data-slot="option-label"],[data-slot="option-description"]'
 const ir=c=>{const p=c.codePointAt(0);return(p>=0x0590&&p<=0x05FF)||(p>=0x0600&&p<=0x06FF)||(p>=0x0750&&p<=0x077F)||(p>=0x08A0&&p<=0x08FF)||(p>=0xFB1D&&p<=0xFDFF)||(p>=0xFE70&&p<=0xFEFF)};
 const da=el=>{const t=el.textContent;let r=0,l=0,f=null;for(const c of t){if(ir(c)){r++;if(f===null)f='r'}else if(/[A-Za-z\u00C0-\u024F]/.test(c)){l++;if(f===null)f='l'}}if(f==='r'){el.setAttribute('dir','rtl');return}if(f==='l'&&r>0&&r>=l*0.4){el.setAttribute('dir','rtl');return}el.setAttribute('dir','ltr')};
-const inp=el=>{da(el);if(!el.hasAttribute("data-ih")){el.setAttribute("data-ih","1");el.addEventListener("input",()=>da(el))}}
+const inp=el=>{da(el);if(!el.hasAttribute("data-ih")){el.setAttribute("data-ih","1");let t;el.addEventListener("input",()=>{clearTimeout(t);t=setTimeout(()=>da(el),300)})}}
 const co=el=>{if(el.getAttribute("data-cd")==="1")return;el.setAttribute("data-cd","1");new MutationObserver(recs=>{for(const r of recs){if(r.type!=="characterData")continue;const p=r.target.parentElement;if(!p)continue;if(p.matches(B)&&p.closest(C))da(p);else if(p.matches(R))da(p)}}).observe(el,{childList:true,subtree:true,characterData:true})}
-const mc=el=>{if(el.getAttribute("data-bc")!=="1"){el.setAttribute("data-bc","1");el.querySelectorAll(B).forEach(da);el.querySelectorAll(R).forEach(da);co(el)}}
-const mo=new MutationObserver(recs=>{for(const r of recs){for(const n of r.addedNodes){if(n.nodeType!==1)continue;if(n.matches(C))mc(n);else n.querySelectorAll(C).forEach(mc);if(n.matches(I))inp(n);else n.querySelectorAll(I).forEach(inp);if(n.matches(B)&&n.closest(C))da(n);else n.querySelectorAll(B).forEach(el=>{if(el.closest(C))da(el)});if(n.matches(R))da(n);else n.querySelectorAll(R).forEach(el=>{if(el.closest(C)||el.matches(R))da(el)})}}})
+const mc=el=>{if(el.getAttribute("data-bc")!=="1"){el.setAttribute("data-bc","1");el.querySelectorAll(B).forEach(da);el.querySelectorAll(R).forEach(da);el.querySelectorAll(Q).forEach(da);co(el)}}
+const mo=new MutationObserver(recs=>{for(const r of recs){for(const n of r.addedNodes){if(n.nodeType!==1)continue;if(n.matches(C))mc(n);else n.querySelectorAll(C).forEach(mc);if(n.matches(I))inp(n);else n.querySelectorAll(I).forEach(inp);if(n.matches(B)&&n.closest(C))da(n);else n.querySelectorAll(B).forEach(el=>{if(el.closest(C))da(el)});if(n.matches(R))da(n);else n.querySelectorAll(R).forEach(el=>{if(el.closest(C)||el.matches(R))da(el)});if(n.matches(Q))da(n);else n.querySelectorAll(Q).forEach(da)}}})
 if(document.documentElement)mo.observe(document.documentElement,{childList:true,subtree:true})
 else document.addEventListener("DOMContentLoaded",()=>mo.observe(document.documentElement,{childList:true,subtree:true}),{once:true})
 document.querySelectorAll(C).forEach(mc)
 document.querySelectorAll(I).forEach(inp)
+document.querySelectorAll(Q).forEach(da)
 
 const mc2=".oc-mf{font-size:11px;color:var(--text-weak);margin-top:4px;text-align:right;cursor:default;line-height:1.4}.oc-mf-ts,.oc-mf-tok{white-space:nowrap}"
 const s2=document.createElement("style");s2.textContent=mc2;s2.id="oc-meta-fix"
