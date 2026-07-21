@@ -58,6 +58,39 @@ describe("Patch", () => {
     ])
   })
 
+  test("parses a whitespace-padded hunk header", () => {
+    expect(parse("*** Begin Patch\n  *** Update File: foo.txt\n@@\n-old\n+new\n*** End Patch")).toEqual([
+      {
+        type: "update",
+        path: "foo.txt",
+        movePath: undefined,
+        chunks: [{ oldLines: ["old"], newLines: ["new"], changeContext: undefined, endOfFile: undefined }],
+      },
+    ])
+  })
+
+  test("parses leading and trailing whitespace around patch markers", () => {
+    expect(parse(" *** Begin Patch\n*** Update File: file.txt\n@@\n-one\n+two\n*** End Patch ")).toEqual([
+      {
+        type: "update",
+        path: "file.txt",
+        movePath: undefined,
+        chunks: [{ oldLines: ["one"], newLines: ["two"], changeContext: undefined, endOfFile: undefined }],
+      },
+    ])
+  })
+
+  test("parses whitespace on the inner sides of patch marker lines", () => {
+    expect(parse("*** Begin Patch \n*** Update File: file.txt\n@@\n-one\n+two\n *** End Patch")).toEqual([
+      {
+        type: "update",
+        path: "file.txt",
+        movePath: undefined,
+        chunks: [{ oldLines: ["one"], newLines: ["two"], changeContext: undefined, endOfFile: undefined }],
+      },
+    ])
+  })
+
   test("derives fuzzy line updates while preserving BOM", () => {
     const update = Patch.derive("update.txt", [{ oldLines: ["  old   "], newLines: ["new"] }], "\uFEFFold\n")
     expect(update).toEqual({ content: "new\n", bom: true })

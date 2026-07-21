@@ -54,19 +54,20 @@ export function parse(patchText: string): Result.Result<ReadonlyArray<Hunk>, Par
   let index = begin + 1
   while (index < end) {
     const line = lines[index]!
-    if (line.startsWith("*** Add File:")) {
-      const path = line.slice("*** Add File:".length).trim()
+    const header = line.trim()
+    if (header.startsWith("*** Add File:")) {
+      const path = header.slice("*** Add File:".length).trim()
       if (!path) {
         index++
         continue
       }
-      const parsed = parseAdd(lines, index + 1)
+      const parsed = parseAdd(lines, index + 1, end)
       hunks.push({ type: "add", path, contents: parsed.content })
       index = parsed.next
       continue
     }
-    if (line.startsWith("*** Delete File:")) {
-      const path = line.slice("*** Delete File:".length).trim()
+    if (header.startsWith("*** Delete File:")) {
+      const path = header.slice("*** Delete File:".length).trim()
       if (!path) {
         index++
         continue
@@ -75,8 +76,8 @@ export function parse(patchText: string): Result.Result<ReadonlyArray<Hunk>, Par
       index++
       continue
     }
-    if (line.startsWith("*** Update File:")) {
-      const path = line.slice("*** Update File:".length).trim()
+    if (header.startsWith("*** Update File:")) {
+      const path = header.slice("*** Update File:".length).trim()
       if (!path) {
         index++
         continue
@@ -87,7 +88,7 @@ export function parse(patchText: string): Result.Result<ReadonlyArray<Hunk>, Par
         movePath = lines[next]!.slice("*** Move to:".length).trim()
         next++
       }
-      const parsed = parseUpdate(lines, next)
+      const parsed = parseUpdate(lines, next, end)
       hunks.push({ type: "update", path, movePath, chunks: parsed.chunks })
       index = parsed.next
       continue
@@ -122,20 +123,20 @@ export function joinBom(text: string, bom: boolean) {
   return bom ? `\uFEFF${stripped}` : stripped
 }
 
-function parseAdd(lines: ReadonlyArray<string>, start: number) {
+function parseAdd(lines: ReadonlyArray<string>, start: number, end: number) {
   const content: string[] = []
   let index = start
-  while (index < lines.length && !lines[index]!.startsWith("***")) {
+  while (index < end && !lines[index]!.startsWith("***")) {
     if (lines[index]!.startsWith("+")) content.push(lines[index]!.slice(1))
     index++
   }
   return { content: content.join("\n"), next: index }
 }
 
-function parseUpdate(lines: ReadonlyArray<string>, start: number) {
+function parseUpdate(lines: ReadonlyArray<string>, start: number, end: number) {
   const chunks: UpdateFileChunk[] = []
   let index = start
-  while (index < lines.length && !lines[index]!.startsWith("***")) {
+  while (index < end && !lines[index]!.startsWith("***")) {
     if (!lines[index]!.startsWith("@@")) {
       index++
       continue
@@ -145,7 +146,7 @@ function parseUpdate(lines: ReadonlyArray<string>, start: number) {
     const newLines: string[] = []
     let endOfFile = false
     index++
-    while (index < lines.length && !lines[index]!.startsWith("@@") && !lines[index]!.startsWith("***")) {
+    while (index < end && !lines[index]!.startsWith("@@") && !lines[index]!.startsWith("***")) {
       const line = lines[index]!
       if (line.startsWith(" ")) {
         oldLines.push(line.slice(1))
