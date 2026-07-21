@@ -70,7 +70,9 @@ ultimate source of truth.
 - [x] `try`, `catch`, optional catch bindings, and `finally`.
 - [x] `throw` with arbitrary values.
 - [x] Labeled statements, labeled `break`, and labeled `continue`.
-- [ ] `for await...of` and async iteration.
+- [x] `for await...of` over the supported synchronous collections, awaiting each yielded CodeMode promise or plain
+      value before binding it. Custom sync/async iterator objects, `Symbol.asyncIterator`, and async generators remain
+      outside the supported subset.
 
 ## Functions and callbacks
 

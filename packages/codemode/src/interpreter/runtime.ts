@@ -635,10 +635,7 @@ export class Interpreter<R> {
     node: AstNode,
     labels?: ReadonlySet<string>,
   ): Effect.Effect<StatementResult, unknown, R> {
-    if (getBoolean(node, "await")) {
-      throw new InterpreterRuntimeError("for await...of is not supported.", node)
-    }
-
+    const awaiting = getBoolean(node, "await")
     const left = getNode(node, "left")
     const declared = loopDeclaration(left, "for...of")
     if (declared?.lexical) this.scopes.push()
@@ -651,7 +648,10 @@ export class Interpreter<R> {
 
       const iterable = spreadItems(right)
       if (iterable === undefined) {
-        throw new InterpreterRuntimeError("for...of requires an array, string, Map, or Set value in CodeMode.", node)
+        throw new InterpreterRuntimeError(
+          `${awaiting ? "for await...of" : "for...of"} requires an array, string, Map, Set, or URLSearchParams value in CodeMode.`,
+          node,
+        )
       }
 
       let assignment: AstNode | undefined
@@ -669,13 +669,18 @@ export class Interpreter<R> {
       }
 
       for (const value of iterable) {
+        const resolved = awaiting
+          ? value instanceof CodeModePromise
+            ? yield* self.settlePromise(value)
+            : yield* Effect.as(Effect.yieldNow, value)
+          : value
         const result = yield* Effect.gen(function* () {
           if (declared) {
             self.scopes.push()
             if (declared.lexical) self.predeclarePattern(declared.pattern, declared.mutable, left)
-            yield* self.declarePattern(declared.pattern, value, declared.mutable, left, declared.lexical)
+            yield* self.declarePattern(declared.pattern, resolved, declared.mutable, left, declared.lexical)
           } else if (assignment) {
-            yield* self.assignPattern(assignment, value, left)
+            yield* self.assignPattern(assignment, resolved, left)
           }
           return yield* self.evaluateStatement(body)
         }).pipe(
