@@ -1,4 +1,5 @@
 import { createSignal } from "solid-js"
+import { mermaidThemeVariables } from "./markdown-mermaid-theme"
 
 export type MermaidColorScheme = "light" | "dark"
 
@@ -48,8 +49,13 @@ export function zoomMermaidCamera(
   return { zoom: next, x: point.x - (point.x - camera.x) * ratio, y: point.y - (point.y - camera.y) * ratio }
 }
 
-export function mermaidThemeFor(scheme: MermaidColorScheme) {
-  return scheme === "dark" ? "dark" : "default"
+// Mermaid measures text in-document, but theme values must be concrete, so the app font
+// token resolves once here instead of passing the CSS variable through.
+function appFontFamily() {
+  const fallback = "ui-sans-serif, system-ui, sans-serif"
+  if (typeof document !== "object") return fallback
+  const value = getComputedStyle(document.documentElement).getPropertyValue("--font-family-sans").trim()
+  return value || fallback
 }
 
 function readColorScheme(): MermaidColorScheme {
@@ -86,7 +92,12 @@ async function load(scheme: MermaidColorScheme) {
   loader ??= import("mermaid").then((module) => module.default)
   const mermaid = await loader
   if (initializedScheme !== scheme) {
-    mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: mermaidThemeFor(scheme) })
+    mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: "strict",
+      theme: "base",
+      themeVariables: { ...mermaidThemeVariables(scheme), fontFamily: appFontFamily(), fontSize: "14px" },
+    })
     initializedScheme = scheme
   }
   return mermaid

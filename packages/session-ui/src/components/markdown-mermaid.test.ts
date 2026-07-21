@@ -3,10 +3,10 @@ import {
   clampMermaidZoom,
   fitMermaidCamera,
   isMermaidLanguage,
-  mermaidThemeFor,
   stepMermaidZoom,
   zoomMermaidCamera,
 } from "./markdown-mermaid"
+import { mermaidThemeVariables } from "./markdown-mermaid-theme"
 
 describe("isMermaidLanguage", () => {
   test("matches mermaid fences case-insensitively", () => {
@@ -23,10 +23,33 @@ describe("isMermaidLanguage", () => {
   })
 })
 
-describe("mermaidThemeFor", () => {
-  test("maps the app color scheme to a mermaid theme", () => {
-    expect(mermaidThemeFor("dark")).toBe("dark")
-    expect(mermaidThemeFor("light")).toBe("default")
+describe("mermaidThemeVariables", () => {
+  test("every color is concrete hex so mermaid's color derivation cannot throw", () => {
+    for (const scheme of ["light", "dark"] as const) {
+      for (const [key, value] of Object.entries(mermaidThemeVariables(scheme))) {
+        if (key === "darkMode") continue
+        expect(value).toMatch(/^#[0-9a-f]{6}$/i)
+      }
+    }
+  })
+
+  test("light and dark variants define the same tokens with different values", () => {
+    const light = mermaidThemeVariables("light")
+    const dark = mermaidThemeVariables("dark")
+    expect(Object.keys(light).sort()).toEqual(Object.keys(dark).sort())
+    expect(light.mainBkg).not.toBe(dark.mainBkg)
+    expect(light.darkMode).toBe(false)
+    expect(dark.darkMode).toBe(true)
+  })
+
+  test("categorical scales stay distinct for parsing large charts", () => {
+    for (const scheme of ["light", "dark"] as const) {
+      const theme = mermaidThemeVariables(scheme)
+      const scale = Array.from({ length: 8 }, (_, index) => theme[`cScale${index}`])
+      expect(new Set(scale).size).toBe(scale.length)
+      expect(scale.every((color) => typeof color === "string")).toBe(true)
+      expect(theme.git0).toBe(theme.cScale0)
+    }
   })
 })
 
