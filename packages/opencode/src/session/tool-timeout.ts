@@ -1,6 +1,6 @@
 export * as ToolTimeout from "./tool-timeout"
 
-import { Schema, Duration } from "effect"
+import { Schema } from "effect"
 import { Effect } from "effect"
 import { Agent } from "@/agent/agent"
 import { Config } from "@/config/config"
@@ -36,15 +36,6 @@ function composeSignals(user?: AbortSignal, ours?: AbortSignal): AbortSignal | u
   return AbortSignal.any(signals)
 }
 
-/**
- * Wrap a tool execution with a timeout controller. Creates an AbortController
- * that fires `ToolTimeoutError` after `timeoutMs`, composes it with the
- * caller's abort signal, and guarantees cleanup (clearTimeout) via finally.
- *
- * Returns `{ signal, ctx }` with the merged abort signal so the tool can
- * pass it into its context construction. The caller is responsible for
- * catching `ToolTimeoutError` and synthesizing the tool-result.
- */
 /**
  * Create a timeout controller for a single tool execution. Returns:
  * - `signal`: merged AbortSignal (caller's signal + our timeout timer)
