@@ -197,6 +197,13 @@ describe("markdown stream", () => {
     ])
   })
 
+  test("splits settled mermaid fences regardless of case and indent", () => {
+    expect(stream("```Mermaid\ngraph TD;A-->B\n```", false)).toEqual([
+      { raw: "```Mermaid\ngraph TD;A-->B\n```", src: "graph TD;A-->B", mode: "code", language: "Mermaid", complete: true },
+    ])
+    expect(stream("  ~~~mermaid\ngraph TD;A-->B\n~~~", false)[0]).toMatchObject({ mode: "code", complete: true })
+  })
+
   test("does not split settled mermaid when reference definitions are present", () => {
     const text = "```mermaid\ngraph TD;A-->B\n```\n\n[1]: https://example.com"
     expect(stream(text, false)).toEqual([{ raw: text, src: text, mode: "full" }])

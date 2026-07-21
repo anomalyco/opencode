@@ -406,23 +406,10 @@ export function Markdown(
           if (block.mode === "code") {
             const cached = completedCode.get(blockKey)
             if (block.complete && cached?.raw === block.raw) return cached
-            if (isMermaidLanguage(block.language)) {
-              const rendered = {
-                key: blockKey,
-                mode: block.mode,
-                raw: block.raw,
-                src: block.src,
-                hash: String(block.raw.length),
-                complete: !!block.complete,
-                language: "mermaid",
-                generation: 0,
-                stable: [] as MarkdownToken[],
-                unstable: [] as MarkdownToken[],
-              }
-              if (block.complete) completedCode.set(blockKey, rendered)
-              return rendered
-            }
-            const result = await code(block.src, block.language, blockKey, block.complete)
+            // Mermaid renders as a diagram from source, so it skips shiki tokenization.
+            const result = isMermaidLanguage(block.language)
+              ? { language: "mermaid", generation: 0, stable: [] as MarkdownToken[], unstable: [] as MarkdownToken[] }
+              : await code(block.src, block.language, blockKey, block.complete)
             const rendered = {
               key: blockKey,
               mode: block.mode,
@@ -690,14 +677,15 @@ function updateCodeBlock(
   container.appendChild(next)
 }
 
-type MermaidBlockState = {
+// Records the source and color scheme of the last render started per block, so identical
+// effect re-runs (including after a deterministic parse failure) do not re-render.
+type MermaidRenderState = {
   source: string
   scheme: MermaidColorScheme
-  status: "incomplete" | "rendering" | "rendered" | "error"
   request: number
 }
 
-const mermaidBlocks = new WeakMap<HTMLElement, MermaidBlockState>()
+const mermaidBlocks = new WeakMap<HTMLElement, MermaidRenderState>()
 
 function updateMermaidBlock(
   container: HTMLDivElement,
@@ -758,33 +746,23 @@ function ensureMermaidWrapper(next: HTMLElement, labels: CopyLabels) {
 }
 
 function renderMermaidBlock(next: HTMLElement, wrapper: HTMLElement, source: string, complete: boolean) {
-  const scheme = mermaidColorScheme()
-  const previous = mermaidBlocks.get(next)
-
   if (!complete) {
     wrapper.dataset.mermaidState = "source"
     delete wrapper.dataset.mermaidError
-    mermaidBlocks.set(next, { source, scheme, status: "incomplete", request: previous?.request ?? 0 })
     return
   }
 
-  if (
-    previous &&
-    (previous.status === "rendered" || previous.status === "rendering") &&
-    previous.source === source &&
-    previous.scheme === scheme
-  )
-    return
+  const scheme = mermaidColorScheme()
+  const previous = mermaidBlocks.get(next)
+  if (previous && previous.source === source && previous.scheme === scheme) return
 
   const request = (previous?.request ?? 0) + 1
-  mermaidBlocks.set(next, { source, scheme, status: "rendering", request })
+  mermaidBlocks.set(next, { source, scheme, request })
   if (wrapper.dataset.mermaidState !== "rendered") wrapper.dataset.mermaidState = "source"
 
   void renderMermaid(source, scheme).then((result) => {
-    const state = mermaidBlocks.get(next)
-    if (!state || state.request !== request || !next.isConnected) return
+    if (mermaidBlocks.get(next)?.request !== request || !next.isConnected) return
     if (!result.ok) {
-      mermaidBlocks.set(next, { ...state, status: "error" })
       wrapper.dataset.mermaidState = "source"
       wrapper.dataset.mermaidError = "true"
       return
@@ -792,7 +770,6 @@ function renderMermaidBlock(next: HTMLElement, wrapper: HTMLElement, source: str
     const diagram = wrapper.querySelector<HTMLElement>('[data-slot="mermaid-diagram"]')
     if (diagram) diagram.innerHTML = result.svg
     delete wrapper.dataset.mermaidError
-    mermaidBlocks.set(next, { ...state, status: "rendered" })
     wrapper.dataset.mermaidState = "rendered"
   })
 }

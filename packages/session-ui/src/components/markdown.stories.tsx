@@ -51,3 +51,17 @@ export default {
 }
 
 export const Basic = story.Basic
+
+export const Mermaid = {
+  args: {
+    text: `Before the diagram.
+
+\`\`\`mermaid
+flowchart LR
+  Read[Read image] --> Action[Ordered tool result]
+  Action --> Final[Selected final response]
+\`\`\`
+
+After the diagram.`,
+  },
+}
