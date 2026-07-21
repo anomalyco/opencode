@@ -42,9 +42,17 @@ export interface Registration {
   readonly namespace?: string
 }
 
+// Invariant model-facing guidance; the changing tool catalog is delivered through Instructions.
+const description = [
+  "Run JavaScript in a confined Code Mode runtime through { code }.",
+  "Call Code Mode tools through `tools` using the exact paths and signatures from the instructions.",
+  "Use `search({ query })` to discover exact signatures when needed.",
+  "Await important calls and use `Promise.all` for independent calls.",
+].join("\n")
+
 export const create = (registrations: ReadonlyMap<string, Registration>) => {
   return make({
-    description: CodeMode.description,
+    description,
     input: CodeMode.Input,
     output: ExecuteOutput,
     structured: ExecuteMetadata,
