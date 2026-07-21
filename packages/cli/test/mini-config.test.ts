@@ -1,6 +1,6 @@
 import { NodeFileSystem } from "@effect/platform-node"
-import { Global } from "@opencode-ai/core/global"
-import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import { Global } from "@opencode-ai/util/global"
+import { InstallationVersion } from "@opencode-ai/util/installation/version"
 import { Effect, Option } from "effect"
 import { expect, mock, test } from "bun:test"
 import { Config } from "../src/config"
