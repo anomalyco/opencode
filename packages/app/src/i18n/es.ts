@@ -783,6 +783,7 @@ export const dict = {
   "sidebar.linear.actions": "Acciones de sincronización",
   "sidebar.linear.push": "Subir",
   "sidebar.linear.pull": "Bajar",
+  "sidebar.linear.pullHint": "Extraer de Linear. Nota: los cambios de jerarquía realizados en Linear (reparentado, eliminación de padre) no se sincronizan localmente — solo se reconcilian los valores de los campos.",
   "sidebar.linear.pullFailed": "Error al bajar desde Linear",
   "sidebar.linear.pullPartialFailed": "Bajada parcialmente fallida: {{count}} error(es)",
   "sidebar.linear.pullSuccess":
@@ -1206,6 +1207,7 @@ export const dict = {
   "sidebar.issue.priority.low": "Bajo",
   "sidebar.issue.toast.archiveFailed": "Error al archivar la tarea",
   "sidebar.issue.toast.reorderFailed": "Error al reordenar la tarea",
+  "sidebar.issue.toast.reparentFailed": "Error al mover la tarea",
   "sidebar.issue.tooltip.archive": "Archivar esta tarea",
   "sidebar.issue.tooltip.delete": "Eliminar esta tarea",
   "sidebar.issue.confirmArchive": "Archivar",

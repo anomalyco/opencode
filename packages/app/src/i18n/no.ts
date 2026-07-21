@@ -1108,6 +1108,7 @@ export const dict = {
   "sidebar.linear.actions": "Synkroniseringshandlinger",
   "sidebar.linear.push": "Send",
   "sidebar.linear.pull": "Hent",
+  "sidebar.linear.pullHint": "Hent fra Linear. Merk: hierarkiendringer gjort på Linear (endre forelder, fjerne forelder) synkroniseres ikke lokalt — kun feltverdier avstemmes.",
   "sidebar.linear.pullFailed": "Kunne ikke hente fra Linear",
   "sidebar.linear.pullPartialFailed": "Henting delvis mislyktes: {{count}} feil",
   "sidebar.linear.pullSuccess":
@@ -1209,6 +1210,7 @@ export const dict = {
   "sidebar.issue.priority.low": "Lav",
   "sidebar.issue.toast.archiveFailed": "Kunne ikke arkivere oppgaven",
   "sidebar.issue.toast.reorderFailed": "Kunne ikke omarrangere oppgaven",
+  "sidebar.issue.toast.reparentFailed": "Kunne ikke flytte oppgaven",
   "sidebar.issue.tooltip.archive": "Arkiver denne oppgaven",
   "sidebar.issue.tooltip.delete": "Slett denne oppgaven",
   "sidebar.issue.confirmArchive": "Arkiver",

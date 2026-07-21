@@ -780,6 +780,7 @@ export const dict = {
   "sidebar.linear.actions": "Akcije sinhronizacije",
   "sidebar.linear.push": "Pošalji",
   "sidebar.linear.pull": "Preuzmi",
+  "sidebar.linear.pullHint": "Povuci iz Linear-a. Napomena: hijerarhijske promjene napravljene na Linear-u (ponovno dodjeljivanje roditelja, uklanjanje roditelja) se ne sinhronizuju lokalno — samo vrijednosti polja se usklađuju.",
   "sidebar.linear.pullFailed": "Preuzimanje sa Linear nije uspjelo",
   "sidebar.linear.pullPartialFailed": "Preuzimanje djelimično nije uspjelo: {{count}} greška",
   "sidebar.linear.pullSuccess":
@@ -1198,6 +1199,7 @@ export const dict = {
   "sidebar.issue.priority.low": "Nisko.",
   "sidebar.issue.toast.archiveFailed": "Neuspješno arhiviranje zadatka",
   "sidebar.issue.toast.reorderFailed": "Neuspješno preuređivanje zadatka",
+  "sidebar.issue.toast.reparentFailed": "Neuspješno premještanje zadatka",
   "sidebar.issue.tooltip.archive": "Arhiviraj ovaj zadatak",
   "sidebar.issue.tooltip.delete": "Obriši ovaj zadatak",
   "sidebar.issue.confirmArchive": "Arhiviraj",

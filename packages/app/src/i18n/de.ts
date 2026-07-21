@@ -729,6 +729,7 @@ export const dict = {
   "sidebar.linear.actions": "Sync-Aktionen",
   "sidebar.linear.push": "Push",
   "sidebar.linear.pull": "Pull",
+  "sidebar.linear.pullHint": "Von Linear ziehen. Hinweis: Auf Linear vorgenommene Hierarchieänderungen (Umhängen, Entfernen des Parents) werden nicht lokal synchronisiert — nur Feldwerte werden abgeglichen.",
   "sidebar.linear.pullFailed": "Pull von Linear fehlgeschlagen",
   "sidebar.linear.pullPartialFailed": "Pull teilweise fehlgeschlagen: {{count}} Fehler",
   "sidebar.linear.pullSuccess":
@@ -1136,6 +1137,7 @@ export const dict = {
   "sidebar.issue.priority.low": "Niedrig",
   "sidebar.issue.toast.archiveFailed": "Aufgabe konnte nicht archiviert werden",
   "sidebar.issue.toast.reorderFailed": "Aufgabe konnte nicht neu angeordnet werden",
+  "sidebar.issue.toast.reparentFailed": "Verschieben der Aufgabe fehlgeschlagen",
   "sidebar.issue.tooltip.archive": "Diese Aufgabe archivieren",
   "sidebar.issue.tooltip.delete": "Diese Aufgabe löschen",
   "sidebar.issue.confirmArchive": "Archivieren",

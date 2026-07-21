@@ -719,6 +719,7 @@ export const dict = {
   "sidebar.linear.actions": "Akcje synchronizacji",
   "sidebar.linear.push": "Wyślij",
   "sidebar.linear.pull": "Pobierz",
+  "sidebar.linear.pullHint": "Pobierz z Linear. Uwaga: zmiany hierarchii dokonane w Linear (zmiana rodzica, usunięcie rodzica) nie są synchronizowane lokalnie — tylko wartości pól są uzgadniane.",
   "sidebar.linear.pullFailed": "Nie udało się pobrać z Linear",
   "sidebar.linear.pullPartialFailed": "Pobieranie częściowo nieudane: {{count}} błąd/błędy",
   "sidebar.linear.pullSuccess":
@@ -1123,6 +1124,7 @@ export const dict = {
   "sidebar.issue.priority.low": "Niski",
   "sidebar.issue.toast.archiveFailed": "Nie udało się zarchiwizować zadania",
   "sidebar.issue.toast.reorderFailed": "Nie udało się zmienić kolejności zadania",
+  "sidebar.issue.toast.reparentFailed": "Nie udało się przenieść zadania",
   "sidebar.issue.tooltip.archive": "Zarchiwizuj to zadanie",
   "sidebar.issue.tooltip.delete": "Usuń to zadanie",
   "sidebar.issue.confirmArchive": "Archiwizuj",

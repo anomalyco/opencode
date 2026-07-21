@@ -781,6 +781,7 @@ export const dict = {
   "sidebar.linear.actions": "Действия синхронизации",
   "sidebar.linear.push": "Отправить",
   "sidebar.linear.pull": "Получить",
+  "sidebar.linear.pullHint": "Получить из Linear. Примечание: изменения иерархии, внесенные в Linear (смена родителя, удаление родителя), не синхронизируются локально — reconciled только значения полей.",
   "sidebar.linear.pullFailed": "Не удалось получить из Linear",
   "sidebar.linear.pullPartialFailed": "Получение частично не удалось: {{count}} ошибок",
   "sidebar.linear.pullSuccess":
@@ -1201,6 +1202,7 @@ export const dict = {
   "sidebar.issue.priority.low": "Низкий",
   "sidebar.issue.toast.archiveFailed": "Не удалось архивировать задачу",
   "sidebar.issue.toast.reorderFailed": "Не удалось изменить порядок задачи",
+  "sidebar.issue.toast.reparentFailed": "Не удалось переместить задачу",
   "sidebar.issue.tooltip.archive": "Архивировать эту задачу",
   "sidebar.issue.tooltip.delete": "Удалить эту задачу",
   "sidebar.issue.confirmArchive": "Архивировать",

@@ -849,6 +849,7 @@ export const dict = {
   "sidebar.linear.actions": "Дії синхронізації",
   "sidebar.linear.push": "Надіслати",
   "sidebar.linear.pull": "Отримати",
+  "sidebar.linear.pullHint": "Отримати з Linear. Примітка: зміни ієрархії, внесені в Linear (зміна батька, видалення батька), не синхронізуються локально — узгоджуються лише значення полів.",
   "sidebar.linear.pullFailed": "Не вдалося отримати з Linear",
   "sidebar.linear.pullPartialFailed": "Отримання частково не вдалося: {{count}} помилок",
   "sidebar.linear.pullSuccess":
@@ -1203,6 +1204,7 @@ export const dict = {
   "sidebar.issue.priority.low": "Низький",
   "sidebar.issue.toast.archiveFailed": "Не вдалося архівувати завдання",
   "sidebar.issue.toast.reorderFailed": "Не вдалося змінити порядок завдань",
+  "sidebar.issue.toast.reparentFailed": "Не вдалося перемістити завдання",
   "sidebar.issue.tooltip.archive": "Архівувати це завдання",
   "sidebar.issue.tooltip.delete": "Видалити це завдання",
   "sidebar.issue.confirmArchive": "Архівувати",
