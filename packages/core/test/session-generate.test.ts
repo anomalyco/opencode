@@ -69,6 +69,7 @@ const models = SessionRunnerModel.layerWith(() =>
   Effect.succeed(
     SessionRunnerModel.resolved(model, {
       capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
+      cost: [],
     }),
   ),
 )

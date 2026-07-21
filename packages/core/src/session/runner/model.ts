@@ -103,7 +103,7 @@ export const resolved = (
   options: {
     readonly capabilities: ModelV2.Capabilities
     readonly variant?: ModelV2.VariantID
-    readonly cost?: ModelV2.Info["cost"]
+    readonly cost: ModelV2.Info["cost"]
   },
 ): Resolved => ({
   model,
@@ -113,7 +113,7 @@ export const resolved = (
     ...(options.variant === undefined ? {} : { variant: options.variant }),
   }),
   capabilities: options.capabilities,
-  cost: options.cost ?? [],
+  cost: options.cost,
 })
 
 const apiKey = (model: ModelV2.Info, credential?: Credential.Value) => {
