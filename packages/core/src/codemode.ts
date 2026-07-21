@@ -1,6 +1,7 @@
 export * as CodeMode from "./codemode"
 
 import { Context, Effect, Layer, Scope } from "effect"
+import { CodeModeCatalog } from "./codemode/catalog"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { PermissionV2 } from "./permission"
 import { ExecuteTool } from "./tool/execute"
@@ -9,7 +10,7 @@ import { Wildcard } from "./util/wildcard"
 
 export interface Materialization {
   readonly tool?: Any
-  readonly instructions?: string
+  readonly catalog?: ReadonlyArray<CodeModeCatalog.Entry>
 }
 
 export interface Interface {
@@ -67,7 +68,7 @@ const layer = Layer.effect(
         if (executeRule?.resource === "*" && executeRule.effect === "deny") return {}
         return {
           tool: ExecuteTool.create(registrations),
-          instructions: ExecuteTool.instructions(registrations),
+          catalog: ExecuteTool.catalog(registrations),
         }
       }),
     })

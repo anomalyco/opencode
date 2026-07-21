@@ -22,8 +22,13 @@ describe("CodeMode", () => {
 
       const materialized = yield* codeMode.materialize()
       expect(materialized.tool).toBeDefined()
-      expect(materialized.instructions).toContain("Echo text")
-      expect(materialized.instructions).toContain("tools.echo(input:")
+      expect(materialized.catalog).toStrictEqual([
+        {
+          path: "echo",
+          description: "Echo text",
+          signature: "tools.echo(input: {\n  text: string,\n}): Promise<string>",
+        },
+      ])
     }).pipe(Effect.scoped, Effect.provide(AppNodeBuilder.build(CodeMode.node))),
   )
 })

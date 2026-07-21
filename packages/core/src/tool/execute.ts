@@ -126,8 +126,8 @@ export const create = (registrations: ReadonlyMap<string, Registration>) => {
   })
 }
 
-export const instructions = (registrations: ReadonlyMap<string, Registration>) => {
-  return runtime(registrations, () => Effect.fail(toolError("Execute context is unavailable"))).instructions()
+export const catalog = (registrations: ReadonlyMap<string, Registration>) => {
+  return runtime(registrations, () => Effect.fail(toolError("Execute context is unavailable"))).catalog()
 }
 
 function runtime(

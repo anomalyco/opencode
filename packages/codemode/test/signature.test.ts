@@ -395,15 +395,15 @@ describe("JSDoc signatures in catalogs and search results", () => {
     }
   })
 
-  test("the inline catalog uses the same JSDoc signatures", async () => {
-    const instructions = runtime.instructions()
+  test("the catalog uses the same JSDoc signatures as search", async () => {
+    const catalog = runtime.catalog()
     const github = (await search("list issues repository")).items.find(
       ({ path }) => path === "tools.github.list_issues",
     )!
     const orders = (await search("look up order")).items.find(({ path }) => path === "tools.orders.lookup")!
-    expect(instructions).toContain(`  - ${github.signature} // List issues in a repository`)
-    expect(instructions).toContain(`  - ${orders.signature} // Look up an order`)
-    expect(instructions).toContain("/** Repository owner */")
+    expect(catalog.map(({ signature }) => signature)).toContain(github.signature)
+    expect(catalog.map(({ signature }) => signature)).toContain(orders.signature)
+    expect(github.signature).toContain("/** Repository owner */")
   })
 })
 
@@ -423,16 +423,10 @@ describe("non-identifier tool paths", () => {
   })
   const runtime = CodeMode.make({ tools: { context7: { "resolve-library-id": resolveLibrary } } })
 
-  test("inline catalog uses bracket notation for dashed tool names", () => {
-    const instructions = runtime.instructions()
-
-    expect(instructions).toContain(
+  test("catalog signatures use bracket notation for dashed tool names", () => {
+    expect(runtime.catalog()[0]?.signature).toBe(
       'tools.context7["resolve-library-id"](input: {\n  query: string,\n  libraryName: string,\n}): Promise<unknown>',
     )
-    expect(instructions).toContain("Do not infer or normalize tool names")
-    expect(instructions).toContain("bracket notation and quotes are part of the path")
-    expect(instructions).not.toContain("tools.context7.resolve-library-id")
-    expect(instructions).not.toContain("tools.context7.resolve_library_id")
   })
 
   test("search results return callable bracket-notation paths and signatures", async () => {

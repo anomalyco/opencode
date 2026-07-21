@@ -30,7 +30,6 @@ describe("dotted tool names", () => {
     expect(catalog).toHaveLength(1)
     expect(catalog[0]?.path).toBe("api.issues.list")
     expect(catalog[0]?.signature).toStartWith("tools.api.issues.list(input:")
-    expect(runtime.instructions()).toContain("tools.api.issues.list(input:")
   })
 
   test("the advertised dotted path is executable", async () => {
