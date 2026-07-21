@@ -26,6 +26,7 @@ import { CredentialHandler } from "./handlers/credential"
 import { ProjectHandler } from "./handlers/project"
 import { ProjectCopyHandler } from "./handlers/project-copy"
 import { VcsHandler } from "./handlers/vcs"
+import { PathHandler } from "./handlers/path"
 import { EventFeed } from "./event-feed"
 
 export const handlers = Layer.mergeAll(
@@ -56,4 +57,5 @@ export const handlers = Layer.mergeAll(
   ReferenceHandler,
   ProjectCopyHandler,
   VcsHandler,
+  PathHandler,
 )
