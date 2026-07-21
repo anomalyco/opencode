@@ -19,6 +19,7 @@ import {
   IntrinsicReference,
   InterpreterRuntimeError,
   isRecord,
+  JsonMethodReference,
   type MemberReference,
   OptionalShortCircuit,
   PromiseCapabilityFunction,
@@ -43,7 +44,6 @@ import {
   invokeGroupBy,
   invokeIntrinsic,
 } from "./methods.js"
-import { invokeJsonMethod } from "../stdlib/json.js"
 import {
   constructPromise,
   invokePromiseInstanceMethod,
@@ -56,7 +56,7 @@ import { ScopeStack } from "./scope.js"
 import { arrayMethods, mapMethods, mapStatics, setMethods, spreadItems } from "../stdlib/collections.js"
 import { consoleMethods, formatConsoleMessage } from "../stdlib/console.js"
 import { dateMethods, dateStatics } from "../stdlib/date.js"
-import { jsonStatics } from "../stdlib/json.js"
+import { invokeJsonMethod, jsonStatics, type JsonMethodName } from "../stdlib/json.js"
 import { mathConstants, mathMethods } from "../stdlib/math.js"
 import { numberConstants, numberMethods, numberStatics } from "../stdlib/number.js"
 import { objectMethodsPreservingIdentity, objectStatics } from "../stdlib/object.js"
@@ -103,7 +103,6 @@ import {
 const globalStaticMembers: Partial<Record<GlobalNamespaceName, Set<string>>> = {
   Object: objectStatics,
   Math: mathMethods,
-  JSON: jsonStatics,
   Array: arrayStatics,
   console: consoleMethods,
   Date: dateStatics,
@@ -1608,7 +1607,6 @@ export class Interpreter<R> {
       }
       if (callable instanceof GlobalMethodReference) {
         if (callable.namespace === "console") return self.invokeConsole(callable.name, args, node)
-        if (callable.namespace === "JSON") return yield* invokeJsonMethod(self.runner, callable.name, args, node)
         if (callable.namespace === "Object" && args[0] instanceof ToolReference) {
           return self.invokeObjectMethodOnTools(callable.name, args[0], node)
         }
@@ -1625,6 +1623,9 @@ export class Interpreter<R> {
           return invokeGlobalMethod(callable, args, node)
         }
         return boundedData(invokeGlobalMethod(callable, args, node), `${callable.namespace}.${callable.name} result`)
+      }
+      if (callable instanceof JsonMethodReference) {
+        return yield* invokeJsonMethod(self.runner, callable.name, args, node)
       }
       if (callable instanceof CoercionFunction) {
         return boundedData(invokeCoercion(callable, args, node), `${callable.name} result`)
@@ -1891,6 +1892,7 @@ export class Interpreter<R> {
     | PromiseInstanceMethodReference
     | IntrinsicReference
     | GlobalMethodReference
+    | JsonMethodReference
     | ComputedValue
     | typeof OptionalShortCircuit
     | undefined,
@@ -1937,6 +1939,10 @@ export class Interpreter<R> {
         if (typeof key !== "string") return new ComputedValue(undefined)
         if (objectValue.name === "Math" && mathConstants.has(key)) {
           return new ComputedValue((Math as unknown as Record<string, number>)[key])
+        }
+        if (objectValue.name === "JSON") {
+          if (jsonStatics.has(key)) return new JsonMethodReference(key as JsonMethodName)
+          return new ComputedValue(undefined)
         }
         if (globalStaticMembers[objectValue.name]?.has(key)) {
           return new GlobalMethodReference(objectValue.name, key)
@@ -2067,7 +2073,8 @@ export class Interpreter<R> {
         reference instanceof PromiseMethodReference ||
         reference instanceof PromiseInstanceMethodReference ||
         reference instanceof IntrinsicReference ||
-        reference instanceof GlobalMethodReference
+        reference instanceof GlobalMethodReference ||
+        reference instanceof JsonMethodReference
       )
         return reference
       if (Array.isArray(reference.target)) {
@@ -2102,6 +2109,7 @@ export class Interpreter<R> {
         reference instanceof PromiseInstanceMethodReference ||
         reference instanceof IntrinsicReference ||
         reference instanceof GlobalMethodReference ||
+        reference instanceof JsonMethodReference ||
         reference.target instanceof CodeModeURL
       ) {
         throw new InterpreterRuntimeError("Only data fields may be deleted in CodeMode.", target, "InvalidDataValue")
@@ -2129,7 +2137,8 @@ export class Interpreter<R> {
         reference instanceof PromiseMethodReference ||
         reference instanceof PromiseInstanceMethodReference ||
         reference instanceof IntrinsicReference ||
-        reference instanceof GlobalMethodReference
+        reference instanceof GlobalMethodReference ||
+        reference instanceof JsonMethodReference
       ) {
         throw new InterpreterRuntimeError("Only data fields may be assigned in CodeMode.", node)
       }

@@ -99,9 +99,13 @@ export class GlobalNamespace {
 
 export class GlobalMethodReference {
   constructor(
-    readonly namespace: GlobalNamespaceName | "Number" | "String",
+    readonly namespace: Exclude<GlobalNamespaceName, "JSON"> | "Number" | "String",
     readonly name: string,
   ) {}
+}
+
+export class JsonMethodReference {
+  constructor(readonly name: "parse" | "stringify") {}
 }
 
 export class CoercionFunction {

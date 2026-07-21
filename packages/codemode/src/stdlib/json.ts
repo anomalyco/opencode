@@ -14,16 +14,15 @@ import {
 } from "../values.js"
 
 export const jsonStatics = new Set(["parse", "stringify"])
+export type JsonMethodName = "parse" | "stringify"
 
 export const invokeJsonMethod = <R>(
   runner: CallbackRunner<R>,
-  name: string,
+  name: JsonMethodName,
   args: Array<unknown>,
   node: AstNode,
 ): Effect.Effect<unknown, unknown, R> => {
-  if (name === "parse") return parse(runner, args, node)
-  if (name === "stringify") return stringify(runner, args, node)
-  throw new InterpreterRuntimeError(`JSON.${name} is not available in CodeMode.`, node)
+  return name === "parse" ? parse(runner, args, node) : stringify(runner, args, node)
 }
 
 const parse = <R>(

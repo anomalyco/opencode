@@ -889,6 +889,9 @@ describe("coercion parity: unknown static members read as undefined", () => {
       "TypeError: Math.sum is not a function.",
     )
     expect(await value(`try { Math["sum"]([1]) } catch (e) { return e.message }`)).toBe("Math.sum is not a function.")
+    expect(await value(`try { JSON.rawJSON("1") } catch (e) { return e.message }`)).toBe(
+      "JSON.rawJSON is not a function.",
+    )
   })
 
   test("blocked members still throw instead of reading as undefined", async () => {

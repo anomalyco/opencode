@@ -8,6 +8,7 @@ import {
   GlobalNamespace,
   IntrinsicReference,
   InterpreterRuntimeError,
+  JsonMethodReference,
   PromiseCapabilityFunction,
   PromiseNamespace,
   UriFunction,
@@ -53,6 +54,7 @@ export type SupportedCallback =
   | UriFunction
   | PromiseCapabilityFunction
   | GlobalMethodReference
+  | JsonMethodReference
   | IntrinsicReference
   | ErrorConstructorReference
   | GlobalNamespace
@@ -64,6 +66,7 @@ export const isSupportedCallback = (value: unknown): value is SupportedCallback 
   value instanceof UriFunction ||
   value instanceof PromiseCapabilityFunction ||
   value instanceof GlobalMethodReference ||
+  value instanceof JsonMethodReference ||
   value instanceof IntrinsicReference ||
   value instanceof ErrorConstructorReference ||
   // Callable namespaces dispatch like JS: Array/Object/Date/RegExp construct,
@@ -167,7 +170,7 @@ export const invokeGlobalMethod = (ref: GlobalMethodReference, args: Array<unkno
   if (ref.namespace === "Map" || ref.namespace === "Set" || ref.namespace === "URLSearchParams") {
     throw new InterpreterRuntimeError(`${ref.namespace}.${ref.name} is not available in CodeMode.`, node)
   }
-  throw new InterpreterRuntimeError(`JSON.${ref.name} requires the effectful JSON dispatcher.`, node)
+  throw new InterpreterRuntimeError(`${ref.namespace}.${ref.name} is not available in CodeMode.`, node)
 }
 
 const requireDataArgument = (name: string, index: number, arg: unknown, node: AstNode): unknown => {

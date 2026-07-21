@@ -7,6 +7,7 @@ import {
   GlobalNamespace,
   InterpreterRuntimeError,
   IntrinsicReference,
+  JsonMethodReference,
   PromiseCapabilityFunction,
   PromiseInstanceMethodReference,
   PromiseMethodReference,
@@ -23,6 +24,7 @@ export const isRuntimeReference = (value: unknown): boolean =>
   value instanceof IntrinsicReference ||
   value instanceof GlobalNamespace ||
   value instanceof GlobalMethodReference ||
+  value instanceof JsonMethodReference ||
   value instanceof PromiseNamespace ||
   value instanceof PromiseMethodReference ||
   value instanceof PromiseInstanceMethodReference ||
@@ -82,12 +84,7 @@ export const containsOpaqueReference = (value: unknown): boolean => {
 }
 
 // Reject cycles before mutation so later boundary walks remain safe.
-export const rejectCircularInsertion = (
-  container: object,
-  value: unknown,
-  label: string,
-  node: AstNode,
-): void => {
+export const rejectCircularInsertion = (container: object, value: unknown, label: string, node: AstNode): void => {
   const pending: Array<Iterator<unknown>> = [[value].values()]
   const seen = new Set<object>()
   while (pending.length > 0) {
@@ -111,6 +108,7 @@ export const typeofValue = (value: unknown): string => {
     value instanceof CoercionFunction ||
     value instanceof IntrinsicReference ||
     value instanceof GlobalMethodReference ||
+    value instanceof JsonMethodReference ||
     value instanceof PromiseMethodReference ||
     value instanceof PromiseInstanceMethodReference ||
     value instanceof PromiseNamespace ||
