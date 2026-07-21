@@ -27,6 +27,16 @@ Repo-wide principles only. Package-level `AGENTS.md` owns package detail; `opens
 - Branches: ≤3 hyphenated words, no slashes or type prefixes (`session-recovery`, not `feat/foo`).
 - Commits / PR titles: `type(scope): summary` — `feat|fix|docs|chore|refactor|test`; scopes like `core`, `kancode`, `tui`, `sdk`, `plugin`, `server`, `cli`.
 
+## Release
+
+- Tags are semver **`MAJOR.MINOR.PATCH`** with **no `v` prefix** (`0.2.5`, not `v0.2.5`). The Release workflow only triggers on `[0-9]+.[0-9]+.[0-9]+`.
+- Choose the bump from commits since the previous KanCode release tag / `@puetsua/kancode` latest:
+  - **patch** (`x.y.Z+1`) — bug fixes only (`fix`)
+  - **minor** (`x.Y+1.0`) — new user-facing features (`feat`), even if fixes are included
+  - **major** (`X+1.0.0`) — breaking changes
+- Do not invent a parallel version line (ignore upstream OpenCode `v1.x` tags/releases). Next tag = last KanCode tag + the bump above.
+- After pushing a release tag, watch `.github/workflows/release.yml` until it succeeds; confirm the GitHub release and `npm view @puetsua/kancode version`.
+
 ## Code
 
 - Early returns; avoid `else` and `let` reassignment.
