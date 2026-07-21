@@ -351,6 +351,28 @@ describe("PatchTool", () => {
     ),
   )
 
+  it.live("includes the move destination in edit permission resources", () =>
+    withTempTool((directory, registry) =>
+      Effect.gen(function* () {
+        const source = path.join(directory, "old", "name.txt")
+        yield* Effect.promise(() => fs.mkdir(path.dirname(source), { recursive: true }))
+        yield* Effect.promise(() => fs.writeFile(source, "old content\n"))
+        yield* executeTool(
+          registry,
+          call(
+            "*** Begin Patch\n*** Update File: old/name.txt\n*** Move to: renamed/dir/name.txt\n@@\n-old content\n+new content\n*** End Patch",
+          ),
+        )
+        expect(assertions).toMatchObject([
+          {
+            action: "edit",
+            resources: ["old/name.txt", "renamed/dir/name.txt"],
+          },
+        ])
+      }),
+    ),
+  )
+
   it.live("inserts lines with an insert-only hunk", () =>
     withTempTool((directory, registry) =>
       Effect.gen(function* () {
