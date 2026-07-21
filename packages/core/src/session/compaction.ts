@@ -10,7 +10,7 @@ import { llmClient } from "../effect/app-node-platform"
 import { SessionEvent } from "./event"
 import type { SessionMessage } from "./message"
 import { SessionModelHeaders } from "./model-headers"
-import { App } from "@opencode-ai/util/app"
+import { App } from "../app"
 import { SessionRunnerModel } from "./runner/model"
 import { SessionSchema } from "./schema"
 import { toSessionError } from "./to-session-error"
@@ -61,7 +61,7 @@ type Settings = {
 }
 
 type Dependencies = {
-  readonly client: string
+  readonly app: App.Info
   readonly events: EventV2.Interface
   readonly llm: {
     readonly stream: (request: LLMRequest) => Stream.Stream<LLMEvent, LLMError>
@@ -260,7 +260,7 @@ const make = (dependencies: Dependencies) => {
       .stream(
         LLM.request({
           model: plan.model,
-          http: { headers: SessionModelHeaders.make(plan.session, dependencies.client) },
+          http: { headers: SessionModelHeaders.make(plan.session, dependencies.app) },
           messages: [Message.user(plan.prompt)],
           tools: [],
         }),
@@ -400,7 +400,7 @@ export const layer = Layer.effect(
     const config = yield* Config.Service
     const models = yield* SessionRunnerModel.Service
     const app = yield* App.Metadata
-    return make({ events, llm, models, config: settings(yield* config.entries()), client: app.name })
+    return make({ events, llm, models, config: settings(yield* config.entries()), app })
   }),
 )
 

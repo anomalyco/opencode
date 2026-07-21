@@ -3,7 +3,7 @@ import { Context, Duration, Effect, Layer, Option, Schedule, Schema } from "effe
 import { HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { ModelsDev } from "@opencode-ai/schema/models-dev"
 import { Money } from "@opencode-ai/schema/money"
-import { App } from "@opencode-ai/util/app"
+import { App } from "./app"
 import { Global } from "@opencode-ai/util/global"
 import { Flock } from "@opencode-ai/util/flock"
 import { Hash } from "@opencode-ai/util/hash"
@@ -555,7 +555,7 @@ export const layer = (options?: Options) =>
 
     const source = options?.url || "https://models.dev"
     const fetch = options?.fetch ?? true
-      const userAgent = `opencode/${app.channel}/${app.version}/${app.name}`
+      const userAgent = App.useragent(app)
     const filepath = path.join(
       Global.Path.cache,
       source === "https://models.dev" ? "models.json" : `models-${Hash.fast(source)}.json`,

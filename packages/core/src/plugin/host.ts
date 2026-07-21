@@ -2,7 +2,7 @@ export * as PluginHost from "./host"
 
 import type { Plugin } from "@opencode-ai/plugin/v2/effect"
 import { EventManifest } from "@opencode-ai/schema/event-manifest"
-import { App } from "@opencode-ai/util/app"
+import { App } from "../app"
 import { Effect, Schema, Stream } from "effect"
 import { AgentV2 } from "../agent"
 import { AISDK } from "../aisdk"

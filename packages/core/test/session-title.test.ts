@@ -17,7 +17,7 @@ import { SessionTitle } from "@opencode-ai/core/session/title"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
-import { InstallationVersion } from "@opencode-ai/util/installation/version"
+import { App } from "@opencode-ai/core/app"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Money } from "@opencode-ai/schema/money"
 import { Effect, Layer, Stream } from "effect"
@@ -155,7 +155,7 @@ it.effect("generates a title from the sole user message and renames the session"
     expect(requests[0]?.http?.headers).toEqual({
       "x-session-affinity": sessionID,
       "X-Session-Id": sessionID,
-      "User-Agent": `opencode/${InstallationVersion}`,
+      "User-Agent": App.useragent(App.make()),
       "x-opencode-project": Project.ID.global,
       "x-opencode-session": sessionID,
       "x-opencode-client": "opencode",

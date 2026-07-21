@@ -1,5 +1,5 @@
 import { Database } from "@opencode-ai/core/database/database"
-import { App } from "@opencode-ai/util/app"
+import { App } from "@opencode-ai/core/app"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { httpClient } from "@opencode-ai/util/effect/app-node-platform"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -140,7 +140,7 @@ function makeRoutes<AuthError, AuthServices>(
         Layer.provide(schemaErrorLayer),
         Layer.provide(auth),
         Layer.provide(
-          Observability.layer(options.observability).pipe(Layer.provide(App.layer(options.app))),
+          Observability.layer({ ...options.observability, client: options.app?.name }),
         ),
         HttpRouter.provideRequest(requestServices),
         Layer.provideMerge(services),

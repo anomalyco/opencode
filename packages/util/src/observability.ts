@@ -7,11 +7,11 @@ import { FetchHttpClient } from "effect/unstable/http"
 import { OtlpSerialization } from "effect/unstable/observability"
 import { Logging } from "./observability/logging.js"
 import { Otlp } from "./observability/otlp.js"
-import { App } from "./app.js"
 
 export const Options = Schema.Struct({
   endpoint: Schema.optional(Schema.String),
   headers: Schema.optional(Schema.String),
+  client: Schema.optional(Schema.String),
 })
 export type Options = typeof Options.Type
 
@@ -28,8 +28,8 @@ export function layer(
   )
   return Layer.unwrap(
     Effect.gen(function* () {
-      const app = yield* App.Metadata
-      const logs = Logger.layer([...Logging.loggers(), ...Otlp.loggers(options, app.name)], {
+      const client = options.client ?? "opencode"
+      const logs = Logger.layer([...Logging.loggers(), ...Otlp.loggers(options, client)], {
         mergeWithExisting: false,
       }).pipe(
         Layer.provide(NodeFileSystem.layer),
@@ -38,7 +38,7 @@ export function layer(
         Layer.orDie,
         Layer.merge(Layer.succeed(References.MinimumLogLevel, Logging.minimumLogLevel())),
       )
-      return Layer.merge(logs, yield* Effect.promise(() => Otlp.tracingLayer(options, app.name)))
+      return Layer.merge(logs, yield* Effect.promise(() => Otlp.tracingLayer(options, client)))
     }),
   ).pipe(Layer.catchCause(() => local))
 }

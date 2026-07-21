@@ -4,7 +4,7 @@ import { LLM, LLMClient, Message, SystemPart } from "@opencode-ai/ai"
 import { Effect, Layer } from "effect"
 import { Database } from "../database/database"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { App } from "@opencode-ai/util/app"
+import { App } from "../app"
 import { llmClient } from "../effect/app-node-platform"
 import { PluginHooks } from "../plugin/hooks"
 import { SessionContext } from "./context"
@@ -51,7 +51,7 @@ export const layer = Layer.effect(
         return (yield* llm.generate(
           LLM.request({
             model: model.model,
-            http: { headers: SessionModelHeaders.make(selection.session, app.name) },
+            http: { headers: SessionModelHeaders.make(selection.session, app) },
             providerOptions: { openai: { promptCacheKey } },
             system: contextEvent.system,
             messages: contextEvent.messages,
