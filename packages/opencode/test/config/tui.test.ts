@@ -703,6 +703,23 @@ it.instance("applies env and file substitutions in tui.json", () =>
   ),
 )
 
+it.instance("escapes environment variables before parsing tui config", () =>
+  withCleanState(
+    withEnv(
+      "TUI_THEME_TEST",
+      'C:\\themes\\"quoted"\nnext',
+      Effect.gen(function* () {
+        const fs = yield* FSUtil.Service
+        const test = yield* TestInstance
+        yield* fs.writeFileString(path.join(test.directory, "tui.jsonc"), `{"theme":"{env:TUI_THEME_TEST}"}`)
+
+        const config = yield* getTuiConfig(test.directory)
+        expect(config.theme).toBe(process.env.TUI_THEME_TEST)
+      }),
+    ),
+  ),
+)
+
 it.instance("applies file substitutions when first identical token is in a commented line", () =>
   withCleanState(
     Effect.gen(function* () {
