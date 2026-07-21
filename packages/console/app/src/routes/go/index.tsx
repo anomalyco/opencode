@@ -23,19 +23,21 @@ const checkLoggedIn = query(async () => {
 }, "checkLoggedIn.get")
 
 const models = [
-  { name: "GLM-5.2", provider: "DeepInfra, Fireworks AI, Z.ai" },
-  { name: "GLM-5.1", provider: "DeepInfra, Fireworks AI, Z.ai" },
-  { name: "Kimi K2.7 Code", provider: "Moonshot AI" },
-  { name: "Kimi K2.6", provider: "Moonshot AI" },
-  { name: "MiMo-V2.5-Pro", provider: "Xiaomi MiMo" },
-  { name: "MiMo-V2.5", provider: "Xiaomi MiMo" },
-  { name: "Qwen3.7 Max", provider: "Alibaba Cloud Model Studio" },
-  { name: "Qwen3.7 Plus", provider: "Alibaba Cloud Model Studio" },
-  { name: "Qwen3.6 Plus", provider: "Alibaba Cloud Model Studio" },
-  { name: "MiniMax M3", provider: "MiniMax" },
-  { name: "MiniMax M2.7", provider: "MiniMax" },
-  { name: "DeepSeek V4 Pro", provider: "DeepSeek" },
-  { name: "DeepSeek V4 Flash", provider: "DeepSeek" },
+  "Grok 4.5",
+  "GLM-5.2",
+  "GLM-5.1",
+  "Kimi K3",
+  "Kimi K2.7 Code",
+  "Kimi K2.6",
+  "MiMo-V2.5-Pro",
+  "MiMo-V2.5",
+  "Qwen3.7 Max",
+  "Qwen3.7 Plus",
+  "Qwen3.6 Plus",
+  "MiniMax M3",
+  "MiniMax M2.7",
+  "DeepSeek V4 Pro",
+  "DeepSeek V4 Flash",
 ]
 
 function LimitsGraph(props: { href: string }) {
@@ -59,8 +61,10 @@ function LimitsGraph(props: { href: string }) {
     onCleanup(() => observer.disconnect())
   })
 
-  const free = 200
+  const baseline = 100
   const graph = [
+    { id: "grok-4.5", name: "Grok 4.5", req: 120, d: "50ms" },
+    { id: "kimi-k3", name: "Kimi K3 (2x usage)", req: 220, baseReq: 110, d: "75ms" },
     { id: "glm-5.2", name: "GLM-5.2", req: 880, d: "100ms" },
     { id: "qwen3.7-max", name: "Qwen3.7 Max", req: 950, d: "110ms" },
     { id: "kimi-k2.7-code", name: "Kimi K2.7 Code", req: 1150, d: "150ms" },
@@ -76,55 +80,31 @@ function LimitsGraph(props: { href: string }) {
   const left = 40
   const right = 60
   const top = 18
-  const bottom = 44
+  const bottom = 18
   const plot = w - left - right
 
-  const ratio = (n: number) => n / free
+  const ratio = (n: number) => n / baseline
   const rmax = Math.max(1, ...graph.map((m) => ratio(m.req)))
   const log = (n: number) => Math.log10(Math.max(n, 1))
   const base = 24
   const p = 2.2
   const x = (r: number) => left + base + Math.pow(log(r) / log(rmax), p) * (plot - base)
-  const start = (x(1) / w) * 100
-
-  const ticks = [1, 5, 10, 25, 50, 100].filter((t) => t <= rmax)
-  const labels = (() => {
-    const set = new Set<number>()
-    let last = -Infinity
-    for (const t of ticks) {
-      if (t === 1) {
-        set.add(t)
-        last = x(t)
-        continue
-      }
-      const pos = x(t)
-      if (pos - last < 44) continue
-      set.add(t)
-      last = pos
-    }
-    return set
-  })()
-  const shown = ticks.filter((t) => labels.has(t))
   const bh = 8
   const gap = 20
   const step = bh + gap
-  const h = 330 + Math.max(0, graph.length - 8) * step
-  const sep = bh + 40
-  const fy = top + 22
-  const gy = (i: number) => fy + sep + step * i
+  const gy = (i: number) => top + 22 + step * i
+  const h = gy(graph.length - 1) + bottom
   const my = graph.length < 2 ? gy(0) : (gy(0) + gy(graph.length - 1)) / 2
   const px = (n: number) => `${(n / w) * 100}%`
   const py = (n: number) => `${(n / h) * 100}%`
   const lx = px(left - 16)
-  const ty = py(h - 18)
 
   return (
     <figure
       data-component="limit-graph"
-      aria-label={i18n.t("go.graph.aria", { free: i18n.t("go.graph.free"), go: i18n.t("go.graph.go") })}
+      aria-label={i18n.t("go.graph.label")}
       data-visible={visible() ? "" : undefined}
       ref={root}
-      style={{ "--start": `${start}%` } as any}
     >
       <div data-slot="plot">
         <svg
@@ -134,35 +114,32 @@ function LimitsGraph(props: { href: string }) {
           aria-hidden="true"
           style={{ height: `${h}px` }}
         >
-          <g data-slot="grid">
-            <For each={ticks}>
-              {(t) => (
-                <g>
-                  <line x1={x(t)} y1={top} x2={x(t)} y2={h - bottom} data-grid />
-                </g>
-              )}
-            </For>
-          </g>
-
           <line x1={left} y1={top} x2={left} y2={h - bottom} data-stub />
 
           <g data-slot="bars">
-            <g style={{ "--d": "0ms" } as any}>
-              <rect x={left} y={fy - bh / 2} width={Math.max(0, x(1) - left)} height={bh} data-bar data-kind="free" />
-            </g>
-
             <For each={graph}>
               {(m, i) => (
                 <g style={{ "--d": m.d } as any}>
                   <rect
                     x={left}
                     y={gy(i()) - bh / 2}
-                    width={Math.max(0, x(ratio(m.req)) - left)}
+                    width={Math.max(0, x(ratio(m.baseReq ?? m.req)) - left)}
                     height={bh}
                     data-bar
                     data-kind="go"
                     data-model={m.id}
                   />
+                  {m.baseReq && (
+                    <rect
+                      x={x(ratio(m.baseReq)) + 2}
+                      y={gy(i()) - bh / 2}
+                      width={Math.max(0, x(ratio(m.req)) - x(ratio(m.baseReq)) - 2)}
+                      height={bh}
+                      data-bar
+                      data-kind="promo"
+                      data-model={m.id}
+                    />
+                  )}
                 </g>
               )}
             </For>
@@ -170,29 +147,12 @@ function LimitsGraph(props: { href: string }) {
         </svg>
 
         <div data-slot="ylabels" aria-hidden="true">
-          <span data-ylabel style={{ "--x": lx, "--y": py(fy) } as any}>
-            {i18n.t("go.graph.free")}
-          </span>
           <span data-ylabel style={{ "--x": lx, "--y": py(my) } as any}>
             {i18n.t("go.graph.go")}
           </span>
         </div>
 
-        <div data-slot="xlabels" aria-hidden="true">
-          <For each={shown}>
-            {(t) => (
-              <span data-xlabel style={{ "--x": px(x(t)), "--y": ty } as any}>
-                {i18n.t("go.graph.tick", { n: t })}
-              </span>
-            )}
-          </For>
-        </div>
-
         <div data-slot="pills" aria-hidden="true">
-          <span data-item data-kind="free" style={{ "--x": px(x(1)), "--y": py(fy), "--d": "0ms" } as any}>
-            <span data-value>{free.toLocaleString()}</span>
-            <span data-name>{i18n.t("go.graph.freePill")}</span>
-          </span>
           <For each={graph}>
             {(m, i) => (
               <span
@@ -252,6 +212,12 @@ export default function Home() {
 
         <div data-component="content">
           <section data-component="hero">
+            <div data-component="desktop-app-banner">
+              <span data-slot="badge">{i18n.t("home.banner.badge")}</span>
+              <div data-slot="content">
+                <span data-slot="text">{i18n.t("go.banner.text")}</span>
+              </div>
+            </div>
             <div data-slot="hero-copy">
               <img data-slot="zen logo light" src={goLogoLight} alt="" />
               <img data-slot="zen logo dark" src={goLogoDark} alt="" />
@@ -447,26 +413,7 @@ export default function Home() {
               <li>
                 <Faq question={i18n.t("go.faq.q2")}>
                   {i18n.t("go.faq.a2")}
-                  <div data-slot="faq-models">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>{i18n.t("workspace.models.table.model")}</th>
-                          <th>{i18n.t("workspace.providers.table.provider")}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <For each={models}>
-                          {(m) => (
-                            <tr>
-                              <td>{m.name}</td>
-                              <td>{m.provider}</td>
-                            </tr>
-                          )}
-                        </For>
-                      </tbody>
-                    </table>
-                  </div>
+                  <div data-slot="faq-models">{models.join(", ")}.</div>
                 </Faq>
               </li>
               <li>

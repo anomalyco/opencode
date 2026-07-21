@@ -8,8 +8,7 @@ import { createMemo, type Component, For, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { useServerSDK } from "@/context/server-sdk"
 import { useServerSync } from "@/context/server-sync"
-import { DialogConnectProvider } from "./dialog-connect-provider"
-import { DialogSelectProvider } from "./dialog-select-provider"
+import { DialogConnectProvider, useProviderConnectController } from "./dialog-connect-provider"
 import { DialogCustomProvider } from "./dialog-custom-provider"
 import { SettingsList } from "./settings-list"
 import { SettingsServerPicker, SettingsServerScope } from "./settings-server-picker"
@@ -28,20 +27,26 @@ const PROVIDER_NOTES = [
   { match: (id: string) => id === "vercel", key: "dialog.provider.vercel.note" },
 ] as const
 
-export const SettingsProviders: Component = () => {
+export const SettingsProviders: Component<{ onBack?: () => void }> = (props) => {
   return (
     <SettingsServerScope>
-      <SettingsProvidersContent />
+      <SettingsProvidersContent onBack={props.onBack} />
     </SettingsServerScope>
   )
 }
 
-const SettingsProvidersContent: Component = () => {
+const SettingsProvidersContent: Component<{ onBack?: () => void }> = (props) => {
   const dialog = useDialog()
   const language = useLanguage()
   const serverSDK = useServerSDK()
   const serverSync = useServerSync()
   const providers = useProviders()
+  const providerConnect = useProviderConnectController({ onBack: props.onBack })
+
+  const connect = (provider?: string) => {
+    providerConnect.select(provider)
+    void dialog.show(() => <DialogConnectProvider controller={providerConnect} />)
+  }
 
   const connected = createMemo(() => {
     return providers
@@ -206,14 +211,7 @@ const SettingsProvidersContent: Component = () => {
                       {(key) => <span class="text-12-regular text-text-weak pl-8">{language.t(key())}</span>}
                     </Show>
                   </div>
-                  <Button
-                    size="large"
-                    variant="secondary"
-                    icon="plus-small"
-                    onClick={() => {
-                      dialog.show(() => <DialogConnectProvider provider={item.id} />)
-                    }}
-                  >
+                  <Button size="large" variant="secondary" icon="plus-small" onClick={() => connect(item.id)}>
                     {language.t("common.connect")}
                   </Button>
                 </div>
@@ -239,7 +237,7 @@ const SettingsProvidersContent: Component = () => {
                 variant="secondary"
                 icon="plus-small"
                 onClick={() => {
-                  dialog.show(() => <DialogCustomProvider back="close" />)
+                  dialog.show(() => <DialogCustomProvider onBack={dialog.close} />)
                 }}
               >
                 {language.t("common.connect")}
@@ -250,9 +248,7 @@ const SettingsProvidersContent: Component = () => {
           <Button
             variant="ghost"
             class="px-0 py-0 mt-5 text-14-medium text-text-interactive-base text-left justify-start hover:bg-transparent active:bg-transparent"
-            onClick={() => {
-              dialog.show(() => <DialogSelectProvider />)
-            }}
+            onClick={() => connect()}
           >
             {language.t("dialog.provider.viewAll")}
           </Button>

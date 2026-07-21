@@ -98,6 +98,13 @@ describe("code mode execute", () => {
     const decode = Schema.decodeUnknownEffect(Parameters)
     await expect(Effect.runPromise(decode({ code: "return 1" }))).resolves.toEqual({ code: "return 1" })
     await expect(Effect.runPromise(decode({}))).rejects.toThrow()
+    expect(Schema.toJsonSchemaDocument(Parameters).schema).toMatchObject({
+      properties: {
+        code: {
+          description: "Script body executed by the confined interpreter.",
+        },
+      },
+    })
   })
 
   test("groups multi-underscore server names by longest matching prefix", () => {
@@ -124,13 +131,15 @@ describe("code mode execute", () => {
       },
       ["weather"],
     )
-    expect(description).toContain("tools.weather.current(input: { city: string }): Promise<{ tempC: number }>")
+    expect(description).toContain(
+      "tools.weather.current(input: {\n  city: string,\n}): Promise<{\n  tempC: number,\n}>",
+    )
   })
 
   test("the static base description carries no catalog; the registry appends it", async () => {
     const tool = await build({ github_list_issues: mcpTool("list_issues", () => "") })
     expect(tool.id).toBe(CODE_MODE_TOOL)
-    expect(tool.description).toContain("confined runtime")
+    expect(tool.description).toBe("Run a confined orchestration script with access to connected MCP tools.")
     expect(tool.description).not.toContain("Available tools")
     expect(tool.description).not.toContain("list_issues")
   })
@@ -150,7 +159,7 @@ describe("code mode execute", () => {
     expect(description).toContain("- github (2 tools)")
     expect(description).toContain("- linear (1 tool)")
     expect(description).toContain(
-      "tools.github.create_issue(input: { title: string; body?: string }): Promise<unknown>",
+      "tools.github.create_issue(input: {\n  title: string,\n  body?: string,\n}): Promise<unknown>",
     )
     expect(description).toContain("tools.github.list_issues(")
     expect(description).toContain("tools.linear.search(")
@@ -159,9 +168,8 @@ describe("code mode execute", () => {
     expect(description).not.toContain("Browse one namespace")
     expect(description).toContain("## Workflow")
     expect(description).toContain("1. Pick a tool from the list under `## Available tools`")
-    expect(description).toContain(
-      '`const data = typeof res === "string" ? JSON.parse(res) : res` - most tools return JSON as a string',
-    )
+    expect(description).not.toContain("JSON.parse(res)")
+    expect(description).toContain("check that it is a non-null object and not an array")
     expect(description).toContain("Return only the fields you need")
     expect(description).not.toContain("total_count")
   })
@@ -180,7 +188,7 @@ describe("code mode execute", () => {
       ),
     })
     expect(description).toContain(
-      "tools.weather.current(input: { city: string }): Promise<{ tempC: number; summary?: string }>",
+      "tools.weather.current(input: {\n  city: string,\n}): Promise<{\n  tempC: number,\n  summary?: string,\n}>",
     )
   })
 
@@ -207,9 +215,16 @@ describe("code mode execute", () => {
     expect(description).toContain("Available tools (PARTIAL - ")
     expect(description).toMatch(/- alpha \(150 tools, \d+ shown\)/)
     expect(description).toContain("- zeta (1 tool)\n")
-    expect(description).toContain("tools.zeta.only_tool(input: { topic: string }): Promise<unknown>")
+    expect(description).toContain(
+      "tools.zeta.only_tool(input: {\n  /** Subject to look up */\n  topic: string,\n}): Promise<unknown>",
+    )
     expect(description).toContain("tools.$codemode.search(")
-    expect(description).toContain("1. If the exact signature is not listed below, first search:")
+    expect(description).toContain("  limit?: number,\n  offset?: number,")
+    expect(description).toContain("  remaining: number,\n  next: {")
+    expect(description).toContain("      offset: number,\n    } | null,")
+    expect(description).toContain(
+      '1. If needed, discover tools: `return await tools.$codemode.search({ query: "<intent + key nouns>" })`.',
+    )
     expect(description).toContain(
       '- Browse one namespace: `await tools.$codemode.search({ query: "", namespace: "<name>" })`.',
     )
@@ -219,17 +234,18 @@ describe("code mode execute", () => {
 
     const tool = await build(tools, ["alpha", "zeta"])
     const out = await Effect.runPromise(
-      tool.execute({ code: "return await tools.$codemode.search({ query: 'only tool', limit: 3 })" }, ctx),
+      tool.execute({ code: "return await tools.$codemode.search({ query: 'only tool', limit: 3, offset: 0 })" }, ctx),
     )
     const result = JSON.parse(out.output)
     expect(result.items.map((i: any) => i.path)).toContain("tools.zeta.only_tool")
+    expect(result).toMatchObject({ remaining: 0, next: null })
     expect(result.items[0].signature).toContain("tools.")
     const signature = result.items.find((i: any) => i.path === "tools.zeta.only_tool").signature
     expect(signature).toContain("tools.zeta.only_tool(input: {\n")
     expect(signature).toContain("  /** Subject to look up */\n  topic: string")
-    expect(description).not.toContain("/**")
+    expect(description).toContain("/** Subject to look up */")
     expect(out.metadata.toolCalls).toEqual([
-      { tool: "$codemode.search", status: "completed", input: { query: "only tool", limit: 3 } },
+      { tool: "$codemode.search", status: "completed", input: { query: "only tool", limit: 3, offset: 0 } },
     ])
   })
 
@@ -240,7 +256,7 @@ describe("code mode execute", () => {
     expect(output.metadata.toolCalls).toEqual([])
   })
 
-  test("Object.keys(tools) enumerates the MCP server namespaces", async () => {
+  test("Object.keys(tools) enumerates the MCP server and CodeMode namespaces", async () => {
     const tool = await build({
       github_list_issues: mcpTool("list_issues", () => ""),
       linear_search: mcpTool("search", () => ""),
@@ -251,7 +267,7 @@ describe("code mode execute", () => {
         ctx,
       ),
     )
-    expect(JSON.parse(output.output)).toEqual({ namespaces: ["github", "linear"], count: 2 })
+    expect(JSON.parse(output.output)).toEqual({ namespaces: ["github", "linear", "$codemode"], count: 3 })
   })
 
   test("calls a namespaced MCP tool and flows its text result back into the program", async () => {

@@ -132,7 +132,7 @@ describe("tool.registry", () => {
 
       expect(ids).toContain("execute")
       expect(tools.map((tool) => tool.id)).toContain("execute")
-      expect(execute?.description).toContain("tools.weather.current(input: { city: string })")
+      expect(execute?.description).toContain("tools.weather.current(input: {\n  city: string,\n})")
     }),
   )
 

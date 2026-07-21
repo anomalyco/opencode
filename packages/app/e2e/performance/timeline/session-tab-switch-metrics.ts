@@ -4,6 +4,8 @@ export type SessionSwitchSample = {
   source: string[]
   hasVisibleRows: boolean
   last: boolean
+  requiredPartVisible?: boolean
+  bottomAnchorRequired?: boolean
   bottomErrorPx?: number
   review?: {
     fileHost: boolean
@@ -41,7 +43,8 @@ export function isCorrectDestination(sample: SessionSwitchSample) {
     sample.destination.length > 0 &&
     sample.source.length === 0 &&
     sample.last &&
-    Math.abs(sample.bottomErrorPx ?? Infinity) <= 1
+    sample.requiredPartVisible !== false &&
+    (sample.bottomAnchorRequired === false || Math.abs(sample.bottomErrorPx ?? Infinity) <= 1)
   )
 }
 

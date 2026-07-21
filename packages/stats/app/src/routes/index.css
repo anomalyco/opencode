@@ -42,6 +42,11 @@
     U+2020-2022, U+2026, U+2030, U+2039-203A, U+2044, U+20AC, U+2122, U+2212, U+FB01-FB02;
 }
 
+body {
+  min-width: 320px;
+  margin: 0;
+}
+
 [data-page="stats"] {
   color-scheme: light;
   --color-background: #ffffff;
@@ -85,6 +90,11 @@
 
 [data-page="stats"] [hidden] {
   display: none !important;
+}
+
+[data-page="stats"][data-layout="compare-detail"] {
+  /* The table contains its own wide rows; keep the page itself out of the horizontal scroll chain. */
+  overflow-x: visible;
 }
 
 [data-page="stats"] section[id],
@@ -2883,7 +2893,7 @@
   padding: 0 8px;
   overflow: hidden;
   background: var(--stats-layer-2);
-  color: var(--stats-faint);
+  color: var(--stats-hero-muted);
   font-size: 13px;
   font-weight: 500;
   line-height: 1.1;
@@ -2892,21 +2902,7 @@
 }
 
 [data-page="stats"] a[data-slot="lab-hero-crumb"] {
-  color: var(--stats-faint);
-}
-
-[data-page="stats"] [data-component="lab-hero-menu"] {
-  position: relative;
-  display: inline-block;
-}
-
-[data-page="stats"] [data-component="lab-hero-menu"] summary {
-  cursor: pointer;
-  list-style: none;
-}
-
-[data-page="stats"] [data-component="lab-hero-menu"] summary::-webkit-details-marker {
-  display: none;
+  color: var(--stats-hero-muted);
 }
 
 [data-page="stats"] [data-slot="lab-hero-crumb"][data-current="true"] {
@@ -2915,9 +2911,7 @@
 }
 
 [data-page="stats"] a[data-slot="lab-hero-crumb"]:hover,
-[data-page="stats"] a[data-slot="lab-hero-crumb"]:focus-visible,
-[data-page="stats"] summary[data-slot="lab-hero-crumb"]:hover,
-[data-page="stats"] summary[data-slot="lab-hero-crumb"]:focus-visible {
+[data-page="stats"] a[data-slot="lab-hero-crumb"]:focus-visible {
   color: var(--stats-text);
   outline: none;
   text-decoration: none;
@@ -2934,57 +2928,6 @@
   width: 16px;
   height: 16px;
   color: currentColor;
-}
-
-[data-page="stats"] [data-component="lab-hero-menu"][open] [data-slot="lab-hero-crumb"] svg {
-  transform: rotate(180deg);
-}
-
-[data-page="stats"] [data-slot="lab-hero-options"] {
-  position: absolute;
-  top: calc(100% + 8px);
-  left: 50%;
-  z-index: 5;
-  display: grid;
-  width: max-content;
-  min-width: 180px;
-  max-width: min(280px, calc(100vw - 48px));
-  max-height: min(360px, calc(100vh - 160px));
-  padding: 6px;
-  overflow: auto;
-  border: 1px solid var(--stats-line);
-  background: var(--stats-bg);
-  box-shadow: 0 12px 32px #0000001a;
-  transform: translateX(-50%);
-}
-
-[data-page="stats"] [data-slot="lab-hero-option"] {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  height: 30px;
-  padding: 0 8px;
-  overflow: hidden;
-  color: var(--stats-muted);
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 1.2;
-  text-decoration: none;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-[data-page="stats"] [data-slot="lab-hero-option"]:hover,
-[data-page="stats"] [data-slot="lab-hero-option"]:focus-visible {
-  background: var(--stats-layer-2);
-  color: var(--stats-text);
-  outline: none;
-  text-decoration: none;
-}
-
-[data-page="stats"] [data-slot="lab-hero-option"][data-current="true"] {
-  background: var(--stats-layer-2);
-  color: var(--stats-text);
 }
 
 [data-page="stats"] [data-slot="lab-hero-separator"] {
@@ -3108,29 +3051,147 @@
   white-space: nowrap;
 }
 
-[data-page="stats"] [data-slot="model-hero-crumb"][data-current="true"] {
+[data-page="stats"] a[data-slot="model-hero-crumb"] {
+  color: var(--stats-hero-muted);
+}
+
+[data-page="stats"] [data-slot="model-hero-crumb"][data-menu="true"] {
   padding-right: 4px;
 }
 
-[data-page="stats"] [data-component="model-hero-menu"] {
-  position: relative;
-  display: inline-block;
+[data-page="stats"] [data-slot="model-hero-crumb"][data-current="true"] {
+  color: var(--stats-text);
+}
+
+[data-page="stats"] [data-component="stats-breadcrumb-select"] {
+  display: inline-flex;
   min-width: 0;
 }
 
-[data-page="stats"] [data-component="model-hero-menu"] summary {
+[data-page="stats"] button[data-slot="stats-breadcrumb-select-trigger"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px;
+  flex: 0 1 auto;
+  max-width: min(100%, 280px);
+  height: 24px;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0 4px 0 8px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  appearance: none;
+  background: var(--stats-layer-2);
+  color: var(--stats-hero-muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.1;
+  text-align: center;
+  white-space: nowrap;
   cursor: pointer;
-  list-style: none;
 }
 
-[data-page="stats"] [data-component="model-hero-menu"] summary::-webkit-details-marker {
-  display: none;
+[data-page="stats"] button[data-slot="stats-breadcrumb-select-trigger"][data-current="true"],
+[data-page="stats"] button[data-slot="stats-breadcrumb-select-trigger"]:hover,
+[data-page="stats"] button[data-slot="stats-breadcrumb-select-trigger"][data-expanded] {
+  color: var(--stats-text);
+}
+
+[data-page="stats"] button[data-slot="stats-breadcrumb-select-trigger"]:focus-visible {
+  color: var(--stats-text);
+  outline: 1px solid var(--stats-text);
+  outline-offset: 2px;
+}
+
+[data-page="stats"] [data-slot="stats-breadcrumb-select-value"] {
+  min-width: 0;
+  overflow: hidden;
+}
+
+[data-page="stats"] [data-slot="stats-breadcrumb-select-value"] span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-page="stats"] [data-slot="stats-breadcrumb-select-icon"] {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--stats-faint);
+}
+
+[data-page="stats"] [data-slot="stats-breadcrumb-select-icon"] svg {
+  width: 16px;
+  height: 16px;
+  color: currentColor;
+}
+
+[data-page="stats"]
+  button[data-slot="stats-breadcrumb-select-trigger"][data-expanded]
+  [data-slot="stats-breadcrumb-select-icon"] {
+  transform: rotate(180deg);
+}
+
+[data-page="stats"] [data-popper-positioner]:has([data-component="stats-breadcrumb-select-content"]) {
+  z-index: 20;
+}
+
+[data-page="stats"] [data-component="stats-breadcrumb-select-content"] {
+  z-index: 20;
+  width: max-content;
+  min-width: 180px;
+  max-width: min(360px, calc(100vw - 48px));
+  overflow: hidden;
+  border: 1px solid var(--stats-line);
+  background: var(--stats-bg);
+  box-shadow: 0 12px 32px #0000001a;
+}
+
+[data-page="stats"] [data-component="stats-breadcrumb-select-content"][data-variant="lab"] {
+  max-width: min(280px, calc(100vw - 48px));
+}
+
+[data-page="stats"] [data-slot="stats-breadcrumb-select-listbox"] {
+  display: grid;
+  max-height: min(360px, calc(100vh - 160px));
+  box-sizing: border-box;
+  margin: 0;
+  padding: 6px;
+  overflow: auto;
+  list-style: none;
+  outline: none;
+}
+
+[data-page="stats"] [data-slot="stats-breadcrumb-select-option"] {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  height: 30px;
+  box-sizing: border-box;
+  padding: 0 8px;
+  overflow: hidden;
+  color: var(--stats-muted);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  outline: none;
+}
+
+[data-page="stats"] [data-slot="stats-breadcrumb-select-option"][data-highlighted],
+[data-page="stats"] [data-slot="stats-breadcrumb-select-option"][data-selected] {
+  background: var(--stats-layer-2);
+  color: var(--stats-text);
 }
 
 [data-page="stats"] a[data-slot="model-hero-crumb"]:hover,
-[data-page="stats"] a[data-slot="model-hero-crumb"]:focus-visible,
-[data-page="stats"] summary[data-slot="model-hero-crumb"]:hover,
-[data-page="stats"] summary[data-slot="model-hero-crumb"]:focus-visible {
+[data-page="stats"] a[data-slot="model-hero-crumb"]:focus-visible {
   color: var(--stats-text);
   outline: none;
   text-decoration: none;
@@ -3146,58 +3207,7 @@
   flex: 0 0 auto;
   width: 16px;
   height: 16px;
-  color: var(--stats-faint);
-}
-
-[data-page="stats"] [data-component="model-hero-menu"][open] [data-slot="model-hero-crumb"] svg {
-  transform: rotate(180deg);
-}
-
-[data-page="stats"] [data-slot="model-hero-options"] {
-  position: absolute;
-  top: calc(100% + 8px);
-  left: 50%;
-  z-index: 5;
-  display: grid;
-  width: max-content;
-  min-width: 180px;
-  max-width: min(360px, calc(100vw - 48px));
-  max-height: min(360px, calc(100vh - 160px));
-  padding: 6px;
-  overflow: auto;
-  border: 1px solid var(--stats-line);
-  background: var(--stats-bg);
-  box-shadow: 0 12px 32px #0000001a;
-  transform: translateX(-50%);
-}
-
-[data-page="stats"] [data-slot="model-hero-option"] {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  height: 30px;
-  padding: 0 8px;
-  overflow: hidden;
-  color: var(--stats-muted);
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 1.2;
-  text-decoration: none;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-[data-page="stats"] [data-slot="model-hero-option"]:hover,
-[data-page="stats"] [data-slot="model-hero-option"]:focus-visible {
-  background: var(--stats-layer-2);
-  color: var(--stats-text);
-  outline: none;
-  text-decoration: none;
-}
-
-[data-page="stats"] [data-slot="model-hero-option"][data-current="true"] {
-  background: var(--stats-layer-2);
-  color: var(--stats-text);
+  color: currentColor;
 }
 
 [data-page="stats"] [data-slot="model-hero-separator"] {
@@ -3911,6 +3921,50 @@
 
 [data-page="stats"] [data-component="model-metric"][data-state="negative"] strong {
   color: #b82d35;
+}
+
+[data-page="stats"] [data-slot="model-efficiency-pattern"] {
+  width: 100%;
+  height: 16px;
+  margin-bottom: 40px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--stats-text) 10%, transparent);
+  mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0H2V2H0V0Z' fill='black'/%3E%3C/svg%3E");
+  mask-position: center top;
+  mask-repeat: repeat;
+  mask-size: 6px 6px;
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0H2V2H0V0Z' fill='black'/%3E%3C/svg%3E");
+  -webkit-mask-position: center top;
+  -webkit-mask-repeat: repeat;
+  -webkit-mask-size: 6px 6px;
+}
+
+[data-page="stats"] [data-component="model-efficiency-grid"] {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+[data-page="stats"] [data-component="model-efficiency-grid"] [data-component="model-metric"] {
+  display: flex;
+  align-items: flex-start;
+  flex-direction: column;
+  box-sizing: border-box;
+  gap: 0;
+  height: 120px;
+  min-height: 120px;
+  padding: 16px;
+  background: var(--stats-layer);
+}
+
+[data-page="stats"] [data-component="model-efficiency-grid"] [data-component="model-metric"] span {
+  line-height: 14px;
+}
+
+[data-page="stats"] [data-component="model-efficiency-grid"] [data-component="model-metric"] strong {
+  margin-top: 32px;
+  font-size: 28px;
+  line-height: 42px;
 }
 
 [data-page="stats"] [data-section="model-panel"][data-variant="lab-models"] {
@@ -4871,9 +4925,254 @@
   background: var(--lab-usage-line);
 }
 
+[data-page="stats"] [data-component="model-usage-chart"][data-variant="model-trend"] {
+  --model-trend-gap: 4px;
+  --model-trend-column-gutter: calc(var(--model-trend-gap) / 2);
+  --model-trend-bar-height: 76px;
+  --model-trend-line-bottom: 124px;
+  --model-trend-bar: #dbdbdb;
+  --model-trend-line: #808080;
+  --model-trend-active: #3b5cf6;
+  --model-trend-band: #f2f2f2;
+  grid-template-rows: minmax(0, 450px) 14px;
+  gap: 40px;
+  height: 504px;
+}
+
+[data-page="stats"] [data-slot="model-trend-plot"] {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: visible;
+}
+
+[data-page="stats"] [data-slot="model-trend-plot"]::after {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: linear-gradient(to bottom, transparent 42%, color-mix(in srgb, var(--stats-text) 3%, transparent));
+  content: "";
+  pointer-events: none;
+}
+
+[data-page="stats"] [data-slot="model-trend-line"] {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: auto;
+  left: 0;
+  display: block;
+  width: 100%;
+  height: calc(100% - var(--model-trend-line-bottom));
+  overflow: visible;
+  pointer-events: none;
+}
+
+[data-page="stats"] [data-slot="model-trend-line"][data-layer="base"] {
+  z-index: 2;
+}
+
+[data-page="stats"] [data-slot="model-trend-line"][data-layer="active"] {
+  z-index: 4;
+}
+
+[data-page="stats"] [data-slot="model-trend-area-layer"] {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+[data-page="stats"] [data-slot="model-trend-area-layer"] [data-slot="model-trend-area"] {
+  stroke: none;
+}
+
+[data-page="stats"] [data-slot="model-trend-line"] path {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+[data-page="stats"] [data-slot="model-trend-line-base"] {
+  stroke: var(--model-trend-line);
+}
+
+[data-page="stats"] [data-slot="model-trend-line-base"][data-tone="active"] {
+  stroke: var(--model-trend-active);
+}
+
+[data-page="stats"] [data-slot="model-trend-line-active"] {
+  stroke: var(--model-trend-active);
+}
+
+[data-page="stats"] [data-slot="model-trend-end-marker"] {
+  position: absolute;
+  top: var(--model-trend-end-top);
+  left: var(--model-trend-end-x);
+  z-index: 3;
+  width: 6px;
+  height: 6px;
+  background: var(--model-trend-bar);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+[data-page="stats"] [data-slot="model-trend-end-marker"][data-tone="active"] {
+  background: var(--model-trend-active);
+}
+
+[data-page="stats"] [data-slot="model-trend-bars"] {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  gap: 0;
+  min-width: 0;
+}
+
+[data-page="stats"] [data-slot="model-trend-column"] {
+  position: relative;
+  box-sizing: border-box;
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+  outline: none;
+  cursor: pointer;
+}
+
+[data-page="stats"] [data-slot="model-trend-column"]::before {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: transparent;
+  content: "";
+  pointer-events: none;
+  transition: background 120ms ease;
+}
+
+[data-page="stats"] [data-slot="model-trend-column"][data-active="true"]::before,
+[data-page="stats"] [data-slot="model-trend-column"]:focus-visible::before {
+  background: var(--model-trend-band);
+  box-shadow:
+    inset var(--model-trend-column-gutter) 0 0 var(--stats-bg),
+    inset calc(var(--model-trend-column-gutter) * -1) 0 0 var(--stats-bg);
+}
+
+[data-page="stats"] [data-slot="model-trend-token-band"] {
+  position: absolute;
+  right: var(--model-trend-column-gutter);
+  bottom: 0;
+  left: var(--model-trend-column-gutter);
+  z-index: 2;
+  height: var(--model-trend-bar-height);
+}
+
+[data-page="stats"] [data-slot="model-trend-token-bar"] {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: var(--model-trend-token-height);
+  background: var(--model-trend-bar);
+  transition:
+    background 120ms ease,
+    opacity 120ms ease;
+}
+
+[data-page="stats"]
+  [data-component="model-usage-chart"][data-highlight-bars="true"]
+  [data-slot="model-trend-column"][data-active="true"]
+  [data-slot="model-trend-token-bar"] {
+  background: var(--model-trend-active);
+}
+
+[data-page="stats"]
+  [data-component="model-usage-chart"][data-highlight-bars="true"]
+  [data-slot="model-trend-column"][data-muted="true"]
+  [data-slot="model-trend-token-bar"] {
+  opacity: 0.64;
+}
+
+[data-page="stats"] [data-slot="model-trend-months"] {
+  position: relative;
+  height: 14px;
+  color: var(--stats-muted);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 14px;
+}
+
+[data-page="stats"] [data-slot="model-trend-months"] span {
+  position: absolute;
+  top: 0;
+  left: var(--model-trend-month-left);
+  transform: translateX(-50%);
+}
+
+[data-page="stats"] [data-slot="model-trend-months"] span[data-align="start"] {
+  transform: none;
+}
+
+[data-page="stats"] [data-slot="model-trend-months"] span[data-align="end"] {
+  transform: translateX(-100%);
+}
+
+[data-page="stats"] [data-component="model-usage-chart"][data-variant="model-trend"] [data-component="chart-tooltip"] {
+  z-index: 6;
+  top: clamp(12px, calc(var(--model-trend-tooltip-y) * 1% - 46px), calc(100% - 108px));
+  width: 192px;
+  min-width: 192px;
+  background: var(--stats-bg);
+}
+
+[data-page="stats"]
+  [data-component="model-usage-chart"][data-variant="model-trend"]
+  [data-component="chart-tooltip"][data-placement="right"] {
+  right: auto;
+  left: calc(var(--model-trend-tooltip-right) + 8px);
+}
+
+[data-page="stats"]
+  [data-component="model-usage-chart"][data-variant="model-trend"]
+  [data-component="chart-tooltip"][data-placement="left"] {
+  right: calc(100% - var(--model-trend-tooltip-left) + 8px);
+  left: auto;
+}
+
+[data-page="stats"]
+  [data-component="model-usage-chart"][data-variant="model-trend"]
+  [data-component="chart-tooltip"]
+  p {
+  height: 16px;
+  margin: 8px 0;
+}
+
+[data-page="stats"]
+  [data-component="model-usage-chart"][data-variant="model-trend"]
+  [data-component="chart-tooltip"]
+  i[data-kind="tokens"] {
+  background: var(--model-trend-active);
+}
+
+[data-page="stats"]
+  [data-component="model-usage-chart"][data-variant="model-trend"]
+  [data-component="chart-tooltip"]
+  i[data-kind="users"] {
+  background: var(--model-trend-active);
+}
+
 [data-page="stats"] [data-component="model-peer-list"] {
   display: grid;
-  gap: 8px;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-template-rows: repeat(5, 64px);
+  gap: 12px 40px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -4881,11 +5180,12 @@
 
 [data-page="stats"] [data-component="model-peer-list"] a {
   display: grid;
-  grid-template-columns: 38px 24px minmax(0, 1fr) minmax(96px, auto) minmax(80px, auto);
-  gap: 12px;
+  grid-template-columns: 32px 32px minmax(0, 1fr) minmax(64px, auto);
+  gap: 16px;
   align-items: center;
-  min-height: 44px;
-  padding: 0 12px;
+  box-sizing: border-box;
+  height: 64px;
+  padding: 15px 16px;
   border: 1px solid var(--stats-line);
   background: var(--stats-layer);
   color: var(--stats-text);
@@ -4894,25 +5194,56 @@
 
 [data-page="stats"] [data-component="model-peer-list"] a:hover,
 [data-page="stats"] [data-component="model-peer-list"] a[data-active="true"] {
-  border-color: var(--stats-line-strong);
+  border-color: var(--stats-text);
   background: var(--stats-bg);
   text-decoration: none;
 }
 
-[data-page="stats"] [data-component="model-peer-list"] span,
+[data-page="stats"] [data-slot="model-peer-rank"],
 [data-page="stats"] [data-component="model-peer-list"] em,
 [data-page="stats"] [data-component="model-peer-list"] b {
   color: var(--stats-muted);
-  font-size: 11px;
+  font-size: 13px;
   font-style: normal;
   font-weight: 500;
-  line-height: 1.2;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
 }
 
-[data-page="stats"] [data-component="model-peer-list"] svg {
+[data-page="stats"] [data-slot="model-peer-rank"] {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+}
+
+[data-page="stats"] [data-component="model-peer-list"] a[data-active="true"] [data-slot="model-peer-rank"]::before {
+  width: 6px;
+  height: 6px;
+  content: "";
+  background: var(--stats-text);
+}
+
+[data-page="stats"] [data-slot="model-peer-avatar"] {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  color: var(--stats-muted);
+  background: var(--stats-bg);
+  box-shadow: inset 0 0 0 1px var(--stats-line);
+}
+
+[data-page="stats"] [data-slot="model-peer-avatar"] svg {
   width: 18px;
   height: 18px;
-  color: var(--stats-muted);
+}
+
+[data-page="stats"] [data-slot="model-peer-copy"] {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
 }
 
 [data-page="stats"] [data-component="model-peer-list"] strong {
@@ -4921,9 +5252,1822 @@
   color: var(--stats-text);
   font-size: 13px;
   font-weight: 600;
-  line-height: 1.2;
+  line-height: 16px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+[data-page="stats"] [data-component="model-peer-list"] b {
+  justify-self: end;
+  color: var(--stats-text);
+}
+
+[data-page="stats"] [data-section="model-panel"][data-variant="compact"] {
+  padding-top: 56px;
+  padding-bottom: 56px;
+}
+
+[data-page="stats"] [data-component="comparison-card-grid"] {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+[data-page="stats"] [data-component="comparison-card"] {
+  display: grid;
+  align-content: space-between;
+  gap: 18px;
+  min-height: 168px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--stats-line);
+  background: var(--stats-layer);
+  color: var(--stats-text);
+  text-decoration: none;
+}
+
+[data-page="stats"] [data-component="comparison-card"]:hover,
+[data-page="stats"] [data-component="comparison-card"]:focus-visible {
+  border-color: var(--stats-text);
+  outline: none;
+  background: var(--stats-bg);
+  text-decoration: none;
+}
+
+[data-page="stats"] [data-component="comparison-card"] span,
+[data-page="stats"] [data-component="comparison-card"] p,
+[data-page="stats"] [data-component="comparison-card"] small {
+  color: var(--stats-muted);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+[data-page="stats"] [data-component="comparison-card"] strong {
+  min-width: 0;
+  color: var(--stats-text);
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 1.08;
+  overflow-wrap: anywhere;
+}
+
+[data-page="stats"] [data-component="comparison-card"] em {
+  color: var(--stats-faint);
+  font: inherit;
+}
+
+[data-page="stats"] [data-component="comparison-card"] p {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+[data-page="stats"] [data-component="comparison-card"] b {
+  min-width: 0;
+  font: inherit;
+  overflow-wrap: anywhere;
+}
+
+[data-page="stats"] [data-component="comparison-card"] i {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 1px;
+  background: var(--stats-line-strong);
+}
+
+[data-page="stats"] [data-component="comparison-selector"] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: end;
+  max-width: 920px;
+}
+
+[data-page="stats"] [data-component="comparison-selector"] label {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+[data-page="stats"] [data-component="comparison-selector"] label span {
+  color: var(--stats-muted);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+[data-page="stats"] [data-component="comparison-selector"] select,
+[data-page="stats"] [data-component="comparison-selector"] button {
+  box-sizing: border-box;
+  height: 40px;
+  min-width: 0;
+  border: 1px solid var(--stats-line);
+  border-radius: 0;
+  appearance: none;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+[data-page="stats"] [data-component="comparison-selector"] select {
+  width: 100%;
+  padding: 0 36px 0 12px;
+  background:
+    linear-gradient(45deg, transparent 50%, var(--stats-muted) 50%) calc(100% - 18px) 17px / 5px 5px no-repeat,
+    linear-gradient(135deg, var(--stats-muted) 50%, transparent 50%) calc(100% - 13px) 17px / 5px 5px no-repeat,
+    var(--stats-bg);
+  color: var(--stats-text);
+}
+
+[data-page="stats"] [data-component="comparison-selector"] button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 14px;
+  background: var(--stats-text);
+  color: var(--stats-bg);
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+[data-page="stats"] [data-component="comparison-selector"] button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+[data-page="stats"] [data-component="comparison-selector"] select:focus-visible,
+[data-page="stats"] [data-component="comparison-selector"] button:focus-visible {
+  outline: 2px solid var(--stats-accent);
+  outline-offset: 2px;
+}
+
+[data-page="stats"] [data-component="comparison-table-wrap"] {
+  overflow-x: auto;
+  border: 1px solid var(--stats-line);
+  background: var(--stats-layer);
+}
+
+[data-page="stats"] [data-component="comparison-table"] {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+  color: var(--stats-text);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+[data-page="stats"] [data-component="comparison-table"] caption {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+[data-page="stats"] [data-component="comparison-table"] th,
+[data-page="stats"] [data-component="comparison-table"] td {
+  min-width: 0;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--stats-line);
+  border-left: 1px solid var(--stats-line);
+  text-align: left;
+  vertical-align: top;
+}
+
+[data-page="stats"] [data-component="comparison-table"] th:first-child {
+  border-left: 0;
+}
+
+[data-page="stats"] [data-component="comparison-table"] thead th {
+  color: var(--stats-muted);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+[data-page="stats"] [data-component="comparison-table"] tbody tr:last-child th,
+[data-page="stats"] [data-component="comparison-table"] tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+[data-page="stats"] [data-component="comparison-table"] tbody th {
+  width: 34%;
+  background: var(--stats-bg);
+}
+
+[data-page="stats"] [data-component="comparison-table"] tbody th strong,
+[data-page="stats"] [data-component="comparison-table"] td strong {
+  display: block;
+  color: var(--stats-text);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+[data-page="stats"] [data-component="comparison-table"] tbody th span,
+[data-page="stats"] [data-component="comparison-table"] td span {
+  display: block;
+  margin-top: 5px;
+  color: var(--stats-muted);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+[data-page="stats"] [data-component="comparison-table"] td[data-best="true"] {
+  position: relative;
+  background: var(--stats-bg);
+  box-shadow: inset 0 0 0 1px var(--stats-accent);
+}
+
+[data-page="stats"] [data-component="comparison-table"] td[data-best="true"]::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 3px;
+  content: "";
+  background: var(--stats-accent);
+}
+
+[data-page="stats"] [data-section="compare-home-hero"],
+[data-page="stats"] [data-section="compare-home-selector"],
+[data-page="stats"] [data-section="compare-home-related"] {
+  position: relative;
+  box-sizing: border-box;
+  color: var(--stats-text);
+}
+
+[data-page="stats"] [data-section="compare-home-hero"] {
+  display: grid;
+  align-content: end;
+  gap: 24px;
+  min-height: 316px;
+  padding: 128px 40px 40px;
+}
+
+[data-page="stats"] [data-component="compare-home-breadcrumb"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 24px;
+  min-width: 0;
+}
+
+[data-page="stats"] [data-slot="compare-home-crumb"] {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  box-sizing: border-box;
+  padding: 0 8px;
+  color: var(--stats-hero-muted);
+  background: var(--stats-layer-2);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.1;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+[data-page="stats"] a[data-slot="compare-home-crumb"] {
+  color: var(--stats-hero-muted);
+}
+
+[data-page="stats"] [data-component="compare-home-breadcrumb"] [data-slot="compare-home-crumb"][data-current="true"] {
+  color: var(--stats-text);
+}
+
+[data-page="stats"] a[data-slot="compare-home-crumb"]:hover,
+[data-page="stats"] a[data-slot="compare-home-crumb"]:focus-visible {
+  color: var(--stats-text);
+  outline: none;
+  text-decoration: none;
+}
+
+[data-page="stats"] [data-slot="compare-home-separator"] {
+  color: var(--stats-faint);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+[data-page="stats"] [data-slot="compare-home-hero-grid"] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 519px);
+  gap: 24px;
+  align-items: center;
+}
+
+[data-page="stats"] [data-section="compare-home-hero"] h1 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+  margin: 0;
+  color: var(--stats-text);
+  font-size: 40px;
+  font-weight: 500;
+  line-height: 60px;
+  letter-spacing: 0;
+}
+
+[data-page="stats"] [data-slot="compare-home-avatar-stack"] {
+  display: inline-flex;
+  align-items: center;
+  height: 46px;
+  padding-inline: 2px;
+}
+
+[data-page="stats"] [data-slot="compare-home-avatar-frame"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  padding: 3px;
+  background: var(--stats-bg);
+}
+
+[data-page="stats"] [data-slot="compare-home-avatar-frame"] + [data-slot="compare-home-avatar-frame"] {
+  margin-left: -16px;
+}
+
+[data-page="stats"] [data-slot="compare-home-avatar"] {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  color: #ffffff;
+  background: var(--stats-accent-text);
+  box-shadow: inset 0 0 0 1px #0000001a;
+}
+
+[data-page="stats"] [data-slot="compare-home-avatar"][data-lab="deepseek"] {
+  background: #5d6ff4;
+}
+
+[data-page="stats"] [data-slot="compare-home-avatar"][data-lab="openai"] {
+  background: #252525;
+}
+
+[data-page="stats"] [data-slot="compare-home-avatar"][data-lab="anthropic"] {
+  background: #c99b75;
+}
+
+[data-page="stats"] [data-slot="compare-home-avatar"][data-size="large"] {
+  width: 40px;
+  height: 40px;
+}
+
+[data-page="stats"] [data-slot="compare-home-avatar"][data-size="large"] svg {
+  width: 28px;
+  height: 28px;
+}
+
+[data-page="stats"] [data-slot="compare-home-avatar"][data-size="small"] {
+  width: 20px;
+  height: 20px;
+}
+
+[data-page="stats"] [data-slot="compare-home-avatar"][data-size="small"] svg {
+  width: 15px;
+  height: 15px;
+}
+
+[data-page="stats"] [data-slot="compare-home-avatar"][data-size="tiny"] {
+  width: 16px;
+  height: 16px;
+}
+
+[data-page="stats"] [data-slot="compare-home-avatar"][data-size="tiny"] svg {
+  width: 12px;
+  height: 12px;
+}
+
+[data-page="stats"] [data-slot="compare-home-hero-grid"] > p {
+  max-width: 520px;
+  margin: 0;
+  color: var(--stats-muted);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 24px;
+}
+
+[data-page="stats"] [data-slot="compare-home-pattern"] {
+  width: calc(100% + 80px);
+  height: 16px;
+  margin-inline: -40px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--stats-text) 10%, transparent);
+  mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0H2V2H0V0Z' fill='black'/%3E%3C/svg%3E");
+  mask-position: center top;
+  mask-repeat: repeat;
+  mask-size: 6px 6px;
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0H2V2H0V0Z' fill='black'/%3E%3C/svg%3E");
+  -webkit-mask-position: center top;
+  -webkit-mask-repeat: repeat;
+  -webkit-mask-size: 6px 6px;
+}
+
+[data-page="stats"] [data-section="compare-home-selector"] {
+  min-height: 98px;
+  border-top: 1px solid var(--stats-line);
+  border-bottom: 1px solid var(--stats-line);
+  box-shadow:
+    inset 1px 0 var(--stats-line),
+    inset -1px 0 var(--stats-line);
+}
+
+[data-page="stats"] [data-component="compare-home-selector"] {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-height: 96px;
+}
+
+[data-page="stats"] [data-component="compare-home-selector"] button[data-slot="compare-home-select-panel"] {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  min-height: 96px;
+  padding: 0;
+  border: 0;
+  appearance: none;
+  border-radius: 0;
+  color: var(--stats-text);
+  background: var(--stats-bg);
+  cursor: pointer;
+  font: inherit;
+  text-align: inherit;
+}
+
+[data-page="stats"]
+  [data-component="compare-home-selector"]
+  button[data-slot="compare-home-select-panel"]:first-child::before,
+[data-page="stats"]
+  [data-component="compare-home-selector"]
+  button[data-slot="compare-home-select-panel"]:last-child::after {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  content: "";
+  background: var(--stats-line);
+  pointer-events: none;
+}
+
+[data-page="stats"]
+  [data-component="compare-home-selector"]
+  button[data-slot="compare-home-select-panel"]:first-child::before {
+  left: 0;
+}
+
+[data-page="stats"]
+  [data-component="compare-home-selector"]
+  button[data-slot="compare-home-select-panel"]:last-child::after {
+  right: 0;
+}
+
+[data-page="stats"]
+  [data-component="compare-home-selector"]
+  button[data-slot="compare-home-select-panel"]
+  + button[data-slot="compare-home-select-panel"] {
+  box-shadow: inset 1px 0 var(--stats-line);
+}
+
+[data-page="stats"] [data-component="compare-home-selector"] button[data-slot="compare-home-select-panel"]:hover,
+[data-page="stats"]
+  [data-component="compare-home-selector"]
+  button[data-slot="compare-home-select-panel"]:focus-within {
+  background: var(--stats-layer);
+}
+
+[data-page="stats"]
+  [data-component="compare-home-selector"]
+  button[data-slot="compare-home-select-panel"]:focus-visible {
+  z-index: 1;
+  outline: 1px solid var(--stats-line-strong);
+  outline-offset: -1px;
+}
+
+[data-page="stats"] [data-slot="compare-home-select-copy"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  max-width: calc(100% - 48px);
+  pointer-events: none;
+}
+
+[data-page="stats"] [data-slot="compare-home-plus"],
+[data-page="stats"] [data-slot="compare-home-select-name"] {
+  min-width: 0;
+  color: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 14px;
+}
+
+[data-page="stats"] [data-slot="compare-home-select-name"] {
+  overflow-wrap: anywhere;
+}
+
+[data-page="stats"] [data-slot="compare-home-select-panel"][data-selected="true"] [data-slot="compare-home-plus"] {
+  display: none;
+}
+
+[data-page="stats"] [data-section="compare-home-related"] {
+  min-height: 425px;
+  margin-top: 40px;
+  padding: 80px 40px;
+  box-shadow:
+    inset 0 1px var(--stats-line),
+    inset 0 -1px var(--stats-line),
+    inset 1px 0 var(--stats-line),
+    inset -1px 0 var(--stats-line);
+}
+
+[data-page="stats"] [data-section="compare-home-related"] [data-slot="section-title"] {
+  margin-bottom: 40px;
+}
+
+[data-page="stats"] [data-component="compare-home-card-grid"] {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+[data-page="stats"] [data-component="compare-home-card"] {
+  position: relative;
+  display: grid;
+  grid-template-rows: 62px 1px auto 20px;
+  gap: 16px;
+  min-width: 0;
+  min-height: 184px;
+  box-sizing: border-box;
+  padding: 16px;
+  overflow: hidden;
+  color: var(--stats-text);
+  background: var(--stats-layer);
+  border: 1px solid var(--stats-line);
+  box-shadow: 0 1px 2px #00000008;
+  text-decoration: none;
+}
+
+[data-page="stats"] [data-component="compare-home-card"]:hover,
+[data-page="stats"] [data-component="compare-home-card"]:focus-visible {
+  border-color: var(--stats-line-strong);
+  outline: none;
+  text-decoration: none;
+}
+
+[data-page="stats"] [data-slot="compare-home-card-head"] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 32px;
+  gap: 16px;
+  min-width: 0;
+}
+
+[data-page="stats"] [data-slot="compare-home-card-head"] > span {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+[data-page="stats"] [data-slot="compare-home-card-head"] strong,
+[data-page="stats"] [data-slot="compare-home-card-head"] em,
+[data-page="stats"] [data-slot="compare-home-card-models"] {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 20px;
+  text-overflow: ellipsis;
+}
+
+[data-page="stats"] [data-slot="compare-home-card-head"] strong {
+  color: var(--stats-text);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+[data-page="stats"] [data-slot="compare-home-card-head"] em {
+  display: -webkit-box;
+  color: var(--stats-muted);
+  font-style: normal;
+  font-weight: 400;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+[data-page="stats"] [data-slot="compare-home-card-head"] b {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  box-sizing: border-box;
+  border: 1px solid var(--stats-line);
+  background: var(--stats-bg);
+  box-shadow: 0 1px 1.5px #0000000f;
+}
+
+[data-page="stats"] [data-slot="compare-home-card-head"] b svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+
+[data-page="stats"] [data-slot="compare-home-card-divider"] {
+  height: 1px;
+  min-width: 0;
+  background: var(--stats-line);
+}
+
+[data-page="stats"] [data-slot="compare-home-card-models"] {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  color: var(--stats-muted);
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+
+[data-page="stats"] [data-slot="compare-home-card-models"] span {
+  flex: 0 0 auto;
+}
+
+[data-page="stats"] [data-slot="compare-home-card-models"] i {
+  flex: 0 0 auto;
+  color: var(--stats-faint);
+  font-style: normal;
+}
+
+[data-page="stats"] [data-slot="compare-home-card-avatars"] {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+[data-page="stats"] [data-section="compare-detail-hero"] {
+  position: relative;
+  display: grid;
+  align-content: end;
+  gap: 24px;
+  min-height: 316px;
+  box-sizing: border-box;
+  padding: 128px 40px 40px;
+  color: var(--stats-text);
+}
+
+[data-page="stats"] [data-slot="compare-detail-hero-grid"] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 24px;
+  align-items: center;
+}
+
+[data-page="stats"] [data-section="compare-detail-hero"] h1 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+  margin: 0;
+  color: var(--stats-text);
+  font-size: 40px;
+  font-weight: 500;
+  line-height: 60px;
+  letter-spacing: 0;
+}
+
+[data-page="stats"] [data-slot="compare-detail-actions"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+[data-page="stats"] button[data-slot="compare-detail-action"],
+[data-page="stats"] a[data-slot="compare-detail-action"] {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 32px;
+  box-sizing: border-box;
+  padding: 0 12px 0 8px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  color: var(--stats-text);
+  background: var(--stats-bg);
+  box-shadow:
+    0 0 0 0.5px color-mix(in srgb, var(--stats-text) 14%, transparent),
+    0 1px 1.5px color-mix(in srgb, #000000 10%, transparent);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.1;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+[data-page="stats"] button[data-slot="compare-detail-action"]::before,
+[data-page="stats"] a[data-slot="compare-detail-action"]::before {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 16px;
+  background: linear-gradient(to bottom, rgb(255 255 255 / 7%), transparent);
+  content: "";
+  pointer-events: none;
+}
+
+[data-page="stats"] [data-slot="compare-detail-action"] > * {
+  position: relative;
+  z-index: 1;
+}
+
+[data-page="stats"] button[data-slot="compare-detail-action"][aria-pressed] {
+  gap: 12px;
+}
+
+[data-page="stats"] button[data-slot="compare-detail-action"]:hover,
+[data-page="stats"] button[data-slot="compare-detail-action"]:focus-visible,
+[data-page="stats"] a[data-slot="compare-detail-action"]:hover,
+[data-page="stats"] a[data-slot="compare-detail-action"]:focus-visible {
+  background: var(--stats-layer);
+  outline: none;
+  text-decoration: none;
+}
+
+[data-page="stats"] button[data-slot="compare-detail-action"]:disabled {
+  color: var(--stats-muted);
+  background: var(--stats-bg);
+  cursor: not-allowed;
+}
+
+[data-page="stats"] button[data-slot="compare-detail-action"][data-active="true"] {
+  color: var(--stats-text);
+  background: var(--stats-bg);
+}
+
+[data-page="stats"] [data-slot="compare-detail-highlight-icon"] {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  width: 31px;
+  height: 16px;
+  box-sizing: border-box;
+  padding: 1px;
+  overflow: hidden;
+  background: var(--stats-line-strong);
+}
+
+[data-page="stats"] [data-slot="compare-detail-highlight-icon"] i {
+  flex: 0 0 14px;
+  width: 14px;
+  height: 14px;
+  background: transparent;
+}
+
+[data-page="stats"]
+  [data-slot="compare-detail-action"][aria-pressed="true"]
+  [data-slot="compare-detail-highlight-icon"] {
+  background: var(--stats-accent);
+}
+
+[data-page="stats"]
+  [data-slot="compare-detail-action"][aria-pressed="false"]
+  [data-slot="compare-detail-highlight-icon"]
+  i:first-child,
+[data-page="stats"]
+  [data-slot="compare-detail-action"][aria-pressed="true"]
+  [data-slot="compare-detail-highlight-icon"]
+  i:last-child {
+  background: #fafafa;
+  box-shadow:
+    0 0 0 0.5px rgb(0 0 0 / 12%),
+    0 1px 2px -1px rgb(0 0 0 / 8%),
+    0 2px 4px rgb(0 0 0 / 4%);
+}
+
+[data-page="stats"] [data-slot="compare-detail-action"] [data-slot="compare-home-plus"] {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
+  line-height: 16px;
+}
+
+[data-page="stats"] [data-section="compare-radar"] {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 800px minmax(0, 1fr);
+  width: 100%;
+  height: 800px;
+  box-sizing: border-box;
+  border-right: 1px solid var(--stats-line);
+  border-bottom: 1px solid var(--stats-line);
+  border-left: 1px solid var(--stats-line);
+  color: var(--stats-text);
+  background: var(--stats-bg);
+}
+
+[data-page="stats"] [data-slot="compare-radar-legend"] {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+  margin: 0;
+  padding: 40px;
+  list-style: none;
+}
+
+[data-page="stats"] [data-slot="compare-radar-legend"] li {
+  display: grid;
+  grid-template-columns: 6px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  min-width: 0;
+}
+
+[data-page="stats"] [data-slot="compare-radar-legend"] li > i {
+  width: 6px;
+  height: 6px;
+  margin-top: 6px;
+}
+
+[data-page="stats"] [data-slot="compare-radar-legend"] li > span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+[data-page="stats"] [data-slot="compare-radar-legend"] strong,
+[data-page="stats"] [data-slot="compare-radar-legend"] small {
+  font-size: 13px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+[data-page="stats"] [data-slot="compare-radar-legend"] strong {
+  color: var(--stats-text);
+  font-weight: 500;
+}
+
+[data-page="stats"] [data-slot="compare-radar-legend"] small {
+  color: var(--stats-muted);
+  font-weight: 400;
+}
+
+[data-page="stats"] [data-slot="compare-radar-chart"] {
+  position: relative;
+  width: 800px;
+  height: 800px;
+}
+
+[data-page="stats"] [data-slot="compare-radar-plot"] {
+  position: absolute;
+  inset: 17.5%;
+}
+
+[data-page="stats"] [data-slot="compare-radar-plot"] svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+[data-page="stats"] [data-slot="compare-radar-grid"] polygon,
+[data-page="stats"] [data-slot="compare-radar-grid"] line {
+  fill: none;
+  stroke: var(--stats-line);
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+}
+
+[data-page="stats"] [data-slot="compare-radar-area"],
+[data-page="stats"] [data-slot="compare-radar-line"] {
+  stroke: currentColor;
+  stroke-width: 1.5px;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+[data-page="stats"] [data-slot="compare-radar-area"] {
+  fill: currentColor;
+  fill-opacity: 0.09;
+}
+
+[data-page="stats"] [data-slot="compare-radar-line"] {
+  fill: none;
+}
+
+[data-page="stats"] [data-slot="compare-radar-point"] {
+  fill: currentColor;
+  stroke: currentColor;
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+}
+
+[data-page="stats"] [data-slot="compare-radar-point-hit"] {
+  fill: transparent;
+  cursor: pointer;
+}
+
+[data-page="stats"] [data-slot="compare-radar-axis"] {
+  position: absolute;
+  top: var(--compare-radar-axis-y);
+  left: var(--compare-radar-axis-x);
+  max-width: 160px;
+  color: var(--stats-text);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 20px;
+  text-align: center;
+  cursor: pointer;
+  transform: translate(var(--compare-radar-axis-translate-x), -50%);
+  white-space: nowrap;
+}
+
+[data-page="stats"] [data-slot="compare-radar-axis"]:focus-visible {
+  outline: none;
+}
+
+[data-page="stats"] [data-slot="compare-radar-axis-label"] {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  box-sizing: border-box;
+  padding: 0 8px;
+  margin: 0 -8px;
+}
+
+[data-page="stats"] [data-slot="compare-radar-axis"][data-active="true"] [data-slot="compare-radar-axis-label"] {
+  background: var(--stats-layer-2);
+}
+
+[data-page="stats"] [data-slot="compare-radar-axis"]:focus-visible [data-slot="compare-radar-axis-label"] {
+  outline: 1px solid var(--stats-text);
+  outline-offset: 2px;
+}
+
+[data-page="stats"] [data-slot="compare-radar-tooltip"] {
+  position: absolute;
+  z-index: 5;
+  top: var(--compare-radar-tooltip-y);
+  left: clamp(104px, var(--compare-radar-tooltip-x), calc(100% - 104px));
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 192px;
+  box-sizing: border-box;
+  padding: 8px;
+  color: var(--stats-text);
+  background: var(--stats-layer);
+  box-shadow:
+    0 0 0 0.5px color-mix(in srgb, var(--stats-text) 12%, transparent),
+    0 4px 8px color-mix(in srgb, #000000 8%, transparent),
+    0 8px 16px color-mix(in srgb, #000000 4%, transparent);
+  pointer-events: none;
+  transform: translate(-50%, var(--compare-radar-tooltip-translate-y));
+}
+
+[data-page="stats"] [data-slot="compare-radar-tooltip"] strong,
+[data-page="stats"] [data-slot="compare-radar-tooltip"] p {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0;
+}
+
+[data-page="stats"] [data-slot="compare-radar-tooltip"] strong {
+  color: var(--stats-text);
+  font-weight: 500;
+  line-height: 12px;
+}
+
+[data-page="stats"] [data-slot="compare-radar-tooltip"] p {
+  color: var(--stats-muted);
+  font-weight: 400;
+  line-height: 16px;
+}
+
+[data-page="stats"] [data-slot="compare-radar-data"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+[data-page="stats"] [data-component="compare-detail-comparison"] {
+  --compare-detail-label-column: 292px;
+  --compare-detail-model-column-min: 360px;
+  position: relative;
+}
+
+[data-page="stats"] [data-component="compare-detail-heading-scroll"] {
+  position: sticky;
+  top: 72px;
+  z-index: 9;
+  overflow-x: auto;
+  overscroll-behavior-x: none;
+  background: var(--stats-bg);
+  scrollbar-width: none;
+}
+
+[data-page="stats"] [data-component="compare-detail-heading-scroll"]::-webkit-scrollbar {
+  display: none;
+}
+
+[data-page="stats"] [data-component="compare-detail-body-scroll"] {
+  overflow-x: auto;
+  overscroll-behavior-x: none;
+}
+
+[data-page="stats"] [data-section="compare-detail-selector"],
+[data-page="stats"] [data-section="compare-detail-matrix"] {
+  min-width: calc(
+    var(--compare-detail-label-column) + var(--compare-detail-model-column-min) + var(--compare-detail-model-column-min)
+  );
+}
+
+[data-page="stats"] [data-section="compare-detail-selector"] {
+  position: relative;
+  height: 98px;
+  min-height: 98px;
+  box-sizing: border-box;
+  border: 0;
+}
+
+[data-page="stats"] [data-section="compare-detail-selector"]::after {
+  position: absolute;
+  z-index: 5;
+  inset: 0;
+  border-top: 1px solid var(--stats-line);
+  border-bottom: 1px solid var(--stats-line);
+  content: "";
+  pointer-events: none;
+}
+
+[data-page="stats"] [data-component="compare-detail-selector-grid"] {
+  display: grid;
+  grid-template-columns: var(--compare-detail-grid);
+  height: 100%;
+}
+
+[data-page="stats"]
+  [data-component="compare-detail-comparison"][data-model-count="3"]
+  [data-section="compare-detail-selector"],
+[data-page="stats"]
+  [data-component="compare-detail-comparison"][data-model-count="3"]
+  [data-section="compare-detail-matrix"] {
+  min-width: calc(
+    var(--compare-detail-label-column) + var(--compare-detail-model-column-min) +
+      var(--compare-detail-model-column-min) + var(--compare-detail-model-column-min)
+  );
+}
+
+[data-page="stats"]
+  [data-component="compare-detail-comparison"][data-model-count="4"]
+  [data-section="compare-detail-selector"],
+[data-page="stats"]
+  [data-component="compare-detail-comparison"][data-model-count="4"]
+  [data-section="compare-detail-matrix"] {
+  min-width: calc(
+    var(--compare-detail-label-column) + var(--compare-detail-model-column-min) +
+      var(--compare-detail-model-column-min) + var(--compare-detail-model-column-min) +
+      var(--compare-detail-model-column-min)
+  );
+}
+
+[data-page="stats"]
+  [data-component="compare-detail-comparison"][data-model-count="5"]
+  [data-section="compare-detail-selector"],
+[data-page="stats"]
+  [data-component="compare-detail-comparison"][data-model-count="5"]
+  [data-section="compare-detail-matrix"] {
+  min-width: calc(
+    var(--compare-detail-label-column) + var(--compare-detail-model-column-min) +
+      var(--compare-detail-model-column-min) + var(--compare-detail-model-column-min) +
+      var(--compare-detail-model-column-min) + var(--compare-detail-model-column-min)
+  );
+}
+
+[data-page="stats"]
+  [data-component="compare-detail-comparison"][data-model-count="6"]
+  [data-section="compare-detail-selector"],
+[data-page="stats"]
+  [data-component="compare-detail-comparison"][data-model-count="6"]
+  [data-section="compare-detail-matrix"] {
+  min-width: calc(
+    var(--compare-detail-label-column) + var(--compare-detail-model-column-min) +
+      var(--compare-detail-model-column-min) + var(--compare-detail-model-column-min) +
+      var(--compare-detail-model-column-min) + var(--compare-detail-model-column-min) +
+      var(--compare-detail-model-column-min)
+  );
+}
+
+[data-page="stats"] [data-slot="compare-detail-selector-spacer"] {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  min-width: 0;
+  box-sizing: border-box;
+  border-right: 1px solid var(--stats-line);
+  border-left: 1px solid var(--stats-line);
+  background: var(--stats-bg);
+}
+
+[data-page="stats"] button[data-slot="compare-detail-select-model"] {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 0 40px;
+  border: 0;
+  appearance: none;
+  border-radius: 0;
+  color: var(--stats-text);
+  background: var(--stats-bg);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+[data-page="stats"] button[data-slot="compare-detail-select-model"][data-column]:not([data-column="0"]) {
+  border-left: 1px solid var(--stats-line);
+}
+
+[data-page="stats"] button[data-slot="compare-detail-select-model"][data-last="true"] {
+  border-right: 1px solid var(--stats-line);
+}
+
+[data-page="stats"] button[data-slot="compare-detail-select-model"]:hover,
+[data-page="stats"] button[data-slot="compare-detail-select-model"]:focus-visible {
+  background: var(--stats-layer);
+  outline: none;
+}
+
+[data-page="stats"] [data-slot="compare-detail-select-name"] {
+  min-width: 0;
+  color: var(--stats-text);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+[data-page="stats"] button[data-slot="compare-detail-select-model"] > svg {
+  flex: 0 0 auto;
+  color: var(--stats-muted);
+}
+
+[data-page="stats"] [data-section="compare-detail-matrix"] {
+  position: relative;
+  color: var(--stats-text);
+  border-bottom: 1px solid var(--stats-line);
+}
+
+[data-page="stats"] [data-component="compare-detail-matrix"] {
+  position: relative;
+}
+
+[data-page="stats"] [data-slot="compare-detail-group"] {
+  display: grid;
+  grid-template-columns: var(--compare-detail-grid);
+}
+
+[data-page="stats"] [data-slot="compare-detail-group"] + [data-slot="compare-detail-group"] {
+  border-top: 1px solid var(--stats-line);
+}
+
+[data-page="stats"] [data-slot="compare-detail-label"],
+[data-page="stats"] [data-slot="compare-detail-value"] {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  min-height: 56px;
+  box-sizing: border-box;
+  padding: 0 40px;
+  font-size: 14px;
+  line-height: 24px;
+}
+
+[data-page="stats"] [data-slot="compare-detail-label"] {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  border-right: 1px solid var(--stats-line);
+  border-left: 1px solid var(--stats-line);
+  color: var(--stats-muted);
+  background: var(--stats-bg);
+  font-weight: 400;
+}
+
+[data-page="stats"] [data-slot="compare-detail-value"][data-column]:not([data-column="0"]) {
+  border-left: 1px solid var(--stats-line);
+}
+
+[data-page="stats"] [data-slot="compare-detail-value"][data-last="true"] {
+  border-right: 1px solid var(--stats-line);
+}
+
+[data-page="stats"] [data-slot="compare-detail-label"][data-spacer="true"],
+[data-page="stats"] [data-slot="compare-detail-value"][data-spacer="true"] {
+  min-height: 40px;
+  padding: 0;
+}
+
+[data-page="stats"] [data-slot="compare-detail-label"][data-heading="true"] {
+  gap: 12px;
+  color: var(--stats-text);
+  font-weight: 500;
+}
+
+[data-page="stats"] [data-slot="compare-detail-label"][data-heading="true"] strong {
+  font-weight: 600;
+}
+
+[data-page="stats"] [data-slot="compare-detail-label"][data-heading="true"] span {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  height: 24px;
+  padding: 0 8px;
+  color: var(--stats-muted);
+  background: var(--stats-layer-2);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+[data-page="stats"] [data-slot="compare-detail-value"] {
+  justify-content: flex-end;
+  color: var(--stats-text);
+  font-weight: 400;
+  text-align: right;
+}
+
+[data-page="stats"] [data-slot="compare-detail-value"][data-best="true"] {
+  background: color-mix(in srgb, #198b43 8%, transparent);
+}
+
+[data-page="stats"] [data-slot="compare-detail-value-main"],
+[data-page="stats"] [data-slot="compare-detail-value-link"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  min-width: 0;
+}
+
+[data-page="stats"] [data-slot="compare-detail-value-link"] {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--stats-text) 30%, transparent);
+  text-underline-offset: 2px;
+}
+
+[data-page="stats"] [data-slot="compare-detail-unit"] {
+  color: var(--stats-muted);
+}
+
+[data-page="stats"] [data-slot="compare-detail-trend"] {
+  display: inline-flex;
+  align-items: center;
+  height: 16px;
+  padding: 0 5px;
+  color: var(--stats-muted);
+  background: var(--stats-layer-2);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+[data-page="stats"] [data-slot="compare-detail-trend"][data-trend="up"] {
+  color: #198b43;
+  background: #e2f8e9;
+}
+
+[data-page="stats"] [data-slot="compare-detail-trend"][data-trend="down"] {
+  color: #c93737;
+  background: #fae8e8;
+}
+
+[data-page="stats"] [data-slot="compare-detail-boolean"] {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+[data-page="stats"] [data-slot="compare-detail-boolean"][data-value="true"] {
+  color: #198b43;
+  background: #e2f8e9;
+}
+
+[data-page="stats"] [data-slot="compare-detail-boolean"][data-value="false"] {
+  color: #c93737;
+  background: #fae8e8;
+}
+
+[data-page="stats"] [data-slot="compare-detail-value"][data-chart="true"] {
+  display: grid;
+  align-content: center;
+  gap: 12px;
+  min-height: 102px;
+}
+
+[data-page="stats"] [data-slot="compare-detail-bars"] {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  width: 100%;
+  height: 40px;
+}
+
+[data-page="stats"] [data-slot="compare-detail-bars"] i {
+  flex: 1 1 0;
+  min-width: 2px;
+  max-width: 6px;
+  background: color-mix(in srgb, var(--stats-text) 18%, transparent);
+}
+
+[data-page="stats"] [data-slot="compare-detail-bar-dates"] {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  color: var(--stats-muted);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 14px;
+}
+
+[data-page="stats"] [data-slot="compare-detail-no-chart"] {
+  justify-self: end;
+  color: var(--stats-muted);
+  font-size: 12px;
+}
+
+@media (max-width: 80rem) {
+  [data-page="stats"] [data-section="compare-detail-hero"] {
+    min-height: 280px;
+    padding: 104px 32px 40px;
+  }
+
+  [data-page="stats"] [data-slot="compare-detail-hero-grid"] {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  [data-page="stats"] [data-slot="compare-detail-actions"] {
+    justify-content: flex-start;
+  }
+
+  [data-page="stats"] [data-section="compare-radar"] {
+    grid-template-columns: minmax(180px, 208px) minmax(0, 1fr);
+  }
+
+  [data-page="stats"] [data-slot="compare-radar-legend"] {
+    padding-right: 24px;
+    padding-left: 32px;
+  }
+
+  [data-page="stats"] [data-slot="compare-radar-chart"] {
+    align-self: center;
+    width: min(100%, 800px);
+    height: auto;
+    aspect-ratio: 1;
+  }
+
+  [data-page="stats"] [data-component="compare-detail-comparison"] {
+    --compare-detail-label-column: 220px;
+    --compare-detail-model-column-min: 320px;
+  }
+
+  [data-page="stats"] button[data-slot="compare-detail-select-model"],
+  [data-page="stats"] [data-slot="compare-detail-label"],
+  [data-page="stats"] [data-slot="compare-detail-value"] {
+    padding-right: 32px;
+    padding-left: 32px;
+  }
+}
+
+@media (max-width: 60rem) {
+  [data-page="stats"] [data-section="compare-detail-hero"] {
+    gap: 20px;
+    min-height: 316px;
+    padding: 72px 24px 40px;
+  }
+
+  [data-page="stats"] [data-section="compare-detail-hero"] h1 {
+    gap: 12px;
+    font-size: 32px;
+    line-height: 42px;
+  }
+
+  [data-page="stats"] [data-slot="compare-detail-actions"] {
+    flex-wrap: wrap;
+  }
+
+  [data-page="stats"] [data-section="compare-radar"] {
+    grid-template-columns: minmax(0, 1fr);
+    height: auto;
+    padding: 32px 24px 24px;
+  }
+
+  [data-page="stats"] [data-slot="compare-radar-legend"] {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 16px 32px;
+    padding: 0 0 16px;
+  }
+
+  [data-page="stats"] [data-slot="compare-radar-legend"] li {
+    flex: 1 1 180px;
+  }
+
+  [data-page="stats"] [data-slot="compare-radar-chart"] {
+    justify-self: center;
+    width: min(100%, 720px);
+  }
+}
+
+@media (max-width: 40rem) {
+  [data-page="stats"] [data-section="compare-detail-hero"] h1 {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  [data-page="stats"] [data-slot="compare-detail-action"] {
+    width: 100%;
+  }
+
+  [data-page="stats"] [data-section="compare-radar"] {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  [data-page="stats"] [data-slot="compare-radar-legend"] {
+    gap: 12px;
+  }
+
+  [data-page="stats"] [data-slot="compare-radar-legend"] li {
+    flex-basis: 140px;
+  }
+
+  [data-page="stats"] [data-slot="compare-radar-axis"] {
+    left: var(--compare-radar-axis-mobile-x);
+    max-width: 104px;
+    font-size: 13px;
+    line-height: 16px;
+    white-space: normal;
+  }
+
+  [data-page="stats"] [data-slot="compare-radar-axis-label"] {
+    padding-right: 6px;
+    padding-left: 6px;
+    margin-right: -6px;
+    margin-left: -6px;
+  }
+
+  [data-page="stats"] [data-component="compare-detail-comparison"] {
+    --compare-detail-label-column: 188px;
+    --compare-detail-model-column-min: 246px;
+  }
+
+  [data-page="stats"] button[data-slot="compare-detail-select-model"],
+  [data-page="stats"] [data-slot="compare-detail-label"],
+  [data-page="stats"] [data-slot="compare-detail-value"] {
+    padding-right: 24px;
+    padding-left: 24px;
+  }
+}
+
+[data-page="stats"] [data-component="compare-model-modal-scrim"] {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  padding: 24px;
+  background: rgb(0 0 0 / 40%);
+}
+
+[data-page="stats"] [data-component="compare-model-modal"] {
+  display: grid;
+  grid-template-columns: minmax(0, 440px) 1px minmax(0, 279px);
+  width: min(720px, calc(100vw - 48px));
+  height: min(480px, calc(100vh - 48px));
+  overflow: hidden;
+  color: var(--stats-text);
+  background: var(--stats-bg);
+  box-shadow:
+    0 0 0 0.5px rgb(0 0 0 / 12%),
+    0 8px 16px rgb(0 0 0 / 8%),
+    0 16px 32px rgb(0 0 0 / 4%);
+}
+
+[data-page="stats"] [data-slot="compare-model-modal-list"] {
+  display: grid;
+  grid-template-rows: 52px minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  background: var(--stats-bg);
+}
+
+[data-page="stats"] [data-slot="compare-model-modal-search"] {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-sizing: border-box;
+  height: 52px;
+  padding: 16px;
+  border-bottom: 1px solid var(--stats-line);
+  color: var(--stats-muted);
+  background: var(--stats-bg);
+}
+
+[data-page="stats"] [data-slot="compare-model-modal-search-icon"] {
+  position: relative;
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  color: var(--stats-faint);
+}
+
+[data-page="stats"] [data-slot="compare-model-modal-search-icon"]::before {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 6px;
+  height: 6px;
+  border: 1.5px solid currentColor;
+  border-radius: 999px;
+  content: "";
+}
+
+[data-page="stats"] [data-slot="compare-model-modal-search-icon"]::after {
+  position: absolute;
+  top: 10px;
+  left: 9px;
+  width: 5px;
+  height: 1.5px;
+  background: currentColor;
+  content: "";
+  transform: rotate(45deg);
+  transform-origin: left center;
+}
+
+[data-page="stats"] [data-slot="compare-model-modal-search"] input {
+  width: 100%;
+  min-width: 0;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  color: var(--stats-text);
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.1;
+}
+
+[data-page="stats"] [data-slot="compare-model-modal-search"] input::placeholder {
+  color: var(--stats-faint);
+  opacity: 1;
+}
+
+[data-page="stats"] [data-slot="compare-model-modal-results"] {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--stats-layer);
+}
+
+[data-page="stats"] [data-component="compare-model-modal"] button[data-slot="compare-model-modal-row"] {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  height: 49px;
+  box-sizing: border-box;
+  padding: 0 16px;
+  border: 0;
+  border-bottom: 1px solid var(--stats-line);
+  appearance: none;
+  border-radius: 0;
+  color: var(--stats-text);
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+[data-page="stats"] [data-component="compare-model-modal"] button[data-slot="compare-model-modal-row"]:hover,
+[data-page="stats"] [data-component="compare-model-modal"] button[data-slot="compare-model-modal-row"]:focus-visible,
+[data-page="stats"]
+  [data-component="compare-model-modal"]
+  button[data-slot="compare-model-modal-row"][data-active="true"] {
+  color: var(--stats-text);
+  background: var(--stats-layer-2);
+  outline: none;
+}
+
+[data-page="stats"] [data-slot="compare-model-modal-row-main"] {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  gap: 12px;
+  min-width: 0;
+}
+
+[data-page="stats"] [data-slot="compare-model-modal-row-main"] > span:last-child {
+  min-width: 0;
+  color: var(--stats-text);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+[data-page="stats"] [data-slot="compare-model-modal-badge"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  height: 16px;
+  padding: 0 6px;
+  color: var(--stats-muted);
+  background: var(--stats-layer-2);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.1;
+}
+
+[data-page="stats"] [data-slot="compare-model-modal-empty"] {
+  display: grid;
+  gap: 8px;
+  padding: 24px 16px;
+  color: var(--stats-muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+[data-page="stats"] [data-slot="compare-model-modal-empty"] strong {
+  color: var(--stats-text);
+  font-weight: 500;
+}
+
+[data-page="stats"] [data-slot="compare-model-modal-divider"] {
+  width: 1px;
+  min-height: 0;
+  background: var(--stats-line);
+}
+
+[data-page="stats"] [data-slot="compare-model-modal-detail"] {
+  display: grid;
+  grid-template-rows: 52px minmax(0, 1fr) auto;
+  min-width: 0;
+  min-height: 0;
+  background: var(--stats-bg);
+}
+
+[data-page="stats"] [data-slot="compare-model-modal-detail-header"] {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-sizing: border-box;
+  height: 52px;
+  padding: 16px;
+  background: var(--stats-bg);
+}
+
+[data-page="stats"] [data-slot="compare-model-modal-detail-header"] strong {
+  min-width: 0;
+  color: var(--stats-text);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+[data-page="stats"] [data-slot="compare-model-modal-description"] {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  padding: 0 16px 16px;
+  overflow: hidden;
+  background: var(--stats-bg);
+}
+
+[data-page="stats"] [data-slot="compare-model-modal-description"] p {
+  margin: 0;
+  color: var(--stats-muted);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+[data-page="stats"] [data-slot="compare-model-modal-description"] > span {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 32px;
+  background: linear-gradient(to bottom, transparent, var(--stats-bg));
+  pointer-events: none;
+}
+
+[data-page="stats"] [data-slot="compare-model-modal-facts"] {
+  display: grid;
+  gap: 8px;
+  box-sizing: border-box;
+  min-width: 0;
+  margin: 0;
+  padding: 16px;
+  overflow: hidden;
+  background: var(--stats-bg);
+}
+
+[data-page="stats"] [data-slot="compare-model-modal-fact"] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  min-width: 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--stats-line);
+  color: var(--stats-muted);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+[data-page="stats"] [data-slot="compare-model-modal-fact"]:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+[data-page="stats"] [data-slot="compare-model-modal-fact"] dt,
+[data-page="stats"] [data-slot="compare-model-modal-fact"] dd {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-page="stats"] [data-slot="compare-model-modal-fact"] dd {
+  color: var(--stats-text);
+  text-align: right;
+}
+
+[data-page="stats"] [data-slot="compare-model-modal-fact"] a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--stats-text) 20%, transparent);
+  text-underline-offset: 2px;
+}
+
+[data-page="stats"] [data-slot="compare-model-modal-uptime"] {
+  display: inline-flex;
+  justify-content: flex-end;
+  gap: 2px;
+}
+
+[data-page="stats"] [data-slot="compare-model-modal-uptime"] span {
+  width: 3px;
+  height: 12px;
+  background: var(--stats-layer-2);
+}
+
+[data-page="stats"] [data-slot="compare-model-modal-uptime"] span[data-active="true"] {
+  background: #198b43;
 }
 
 [data-page="stats"][data-theme="dark"],
@@ -4964,6 +7108,15 @@
   --lab-usage-bar: #3a3a3a;
   --lab-usage-line: #a3a3a3;
   --lab-usage-band: #242424;
+}
+
+[data-page="stats"][data-theme="dark"] [data-component="model-usage-chart"][data-variant="model-trend"],
+:root[data-stats-theme="dark"]
+  [data-page="stats"]:not([data-theme="light"])
+  [data-component="model-usage-chart"][data-variant="model-trend"] {
+  --model-trend-bar: #3a3a3a;
+  --model-trend-line: #a3a3a3;
+  --model-trend-band: #242424;
 }
 
 [data-page="stats"][data-theme="dark"] [data-component="chart-tooltip"],
@@ -5131,6 +7284,14 @@
     --lab-usage-band: #242424;
   }
 
+  :root:not([data-stats-theme="light"])
+    [data-page="stats"]:not([data-theme="light"])
+    [data-component="model-usage-chart"][data-variant="model-trend"] {
+    --model-trend-bar: #3a3a3a;
+    --model-trend-line: #a3a3a3;
+    --model-trend-band: #242424;
+  }
+
   :root:not([data-stats-theme="light"]) [data-page="stats"]:not([data-theme="light"]) [data-component="chart-tooltip"] {
     background: #242424f2;
   }
@@ -5229,15 +7390,27 @@
 [data-page="stats"][data-theme="dark"]
   [data-component="model-usage-chart"][data-variant="lab-usage"]
   [data-component="chart-tooltip"],
+[data-page="stats"][data-theme="dark"]
+  [data-component="model-usage-chart"][data-variant="model-trend"]
+  [data-component="chart-tooltip"],
 :root[data-stats-theme="dark"]
   [data-page="stats"]:not([data-theme="light"])
   [data-component="model-usage-chart"][data-variant="lab-usage"]
+  [data-component="chart-tooltip"],
+:root[data-stats-theme="dark"]
+  [data-page="stats"]:not([data-theme="light"])
+  [data-component="model-usage-chart"][data-variant="model-trend"]
   [data-component="chart-tooltip"],
 :root:not([data-stats-theme="light"])
   [data-page="stats"]:not([data-theme="light"])
   [data-component="model-usage-chart"][data-variant="lab-usage"]
   [data-component="chart-tooltip"],
-[data-page="stats"] [data-component="model-usage-chart"][data-variant="lab-usage"] [data-component="chart-tooltip"] {
+:root:not([data-stats-theme="light"])
+  [data-page="stats"]:not([data-theme="light"])
+  [data-component="model-usage-chart"][data-variant="model-trend"]
+  [data-component="chart-tooltip"],
+[data-page="stats"] [data-component="model-usage-chart"][data-variant="lab-usage"] [data-component="chart-tooltip"],
+[data-page="stats"] [data-component="model-usage-chart"][data-variant="model-trend"] [data-component="chart-tooltip"] {
   background: var(--stats-bg);
 }
 
@@ -5249,13 +7422,15 @@
 
 @media (min-width: 90rem) {
   [data-page="stats"] [data-slot="header-bar"] {
+    display: grid;
+    grid-template-columns: minmax(max-content, 1fr) auto minmax(max-content, 1fr);
     gap: 32px;
   }
 
   [data-page="stats"] [data-slot="brand"],
   [data-page="stats"] [data-component="section-nav"],
   [data-page="stats"] [data-slot="header-actions"] {
-    flex: 1 1 0;
+    min-width: 0;
   }
 
   [data-page="stats"] [data-slot="brand"] {
@@ -5294,8 +7469,20 @@
   [data-page="stats"] [data-section="model-hero"],
   [data-page="stats"] [data-section="lab-hero"],
   [data-page="stats"] [data-section="model-momentum"],
-  [data-page="stats"] [data-section="model-panel"] {
+  [data-page="stats"] [data-section="model-panel"],
+  [data-page="stats"] [data-section="compare-home-hero"],
+  [data-page="stats"] [data-section="compare-home-related"] {
     padding: 64px 32px;
+  }
+
+  [data-page="stats"] [data-section="compare-home-hero"] {
+    min-height: 280px;
+    padding: 104px 32px 40px;
+  }
+
+  [data-page="stats"] [data-slot="compare-home-pattern"] {
+    width: calc(100% + 64px);
+    margin-inline: -32px;
   }
 
   [data-page="stats"] [data-section="lab-hero"] {
@@ -5349,6 +7536,15 @@
   [data-page="stats"] [data-slot="model-hero-grid"] {
     grid-template-columns: 1fr;
     align-items: start;
+  }
+
+  [data-page="stats"] [data-slot="compare-home-hero-grid"] {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  [data-page="stats"] [data-component="compare-home-card-grid"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   [data-page="stats"] [data-section="lab-overview"] {
@@ -5428,16 +7624,27 @@
 
   [data-page="stats"] [data-component="model-metric-grid"],
   [data-page="stats"] [data-component="model-metric-grid"][data-variant="dense"],
-  [data-page="stats"] [data-component="lab-model-grid"] {
+  [data-page="stats"] [data-component="model-efficiency-grid"],
+  [data-page="stats"] [data-component="lab-model-grid"],
+  [data-page="stats"] [data-component="comparison-card-grid"] {
     grid-template-columns: 1fr 1fr;
   }
 
+  [data-page="stats"] [data-component="comparison-selector"] {
+    grid-template-columns: 1fr;
+  }
+
+  [data-page="stats"] [data-component="comparison-selector"] button {
+    width: 100%;
+  }
+
   [data-page="stats"] [data-component="model-peer-list"] a {
-    grid-template-columns: 32px 22px minmax(0, 1fr) minmax(72px, auto);
+    grid-template-columns: 32px 32px minmax(0, 1fr) minmax(64px, auto);
+    gap: 12px;
   }
 
   [data-page="stats"] [data-component="model-peer-list"] em {
-    display: none;
+    display: block;
   }
 
   [data-page="stats"] [data-slot="chart-footer"] {
@@ -5514,6 +7721,13 @@
     margin-top: 16px;
   }
 
+  [data-page="stats"]
+    [data-component="model-usage-chart"][data-variant="model-trend"]
+    [data-component="chart-tooltip"] {
+    position: absolute;
+    margin-top: 0;
+  }
+
   [data-page="stats"] [data-component="footer"] {
     padding: 88px 24px 24px;
   }
@@ -5555,8 +7769,85 @@
   [data-page="stats"] [data-section="model-hero"],
   [data-page="stats"] [data-section="lab-hero"],
   [data-page="stats"] [data-section="model-momentum"],
-  [data-page="stats"] [data-section="model-panel"] {
+  [data-page="stats"] [data-section="model-panel"],
+  [data-page="stats"] [data-section="compare-home-hero"],
+  [data-page="stats"] [data-section="compare-home-related"] {
     padding: 48px 24px;
+  }
+
+  [data-page="stats"] [data-section="compare-home-hero"] {
+    gap: 20px;
+    min-height: 316px;
+    padding: 72px 24px 40px;
+  }
+
+  [data-page="stats"] [data-slot="compare-home-pattern"] {
+    width: calc(100% + 48px);
+    margin-inline: -24px;
+  }
+
+  [data-page="stats"] [data-section="compare-home-hero"] h1 {
+    gap: 12px;
+    font-size: 32px;
+    line-height: 42px;
+  }
+
+  [data-page="stats"] [data-component="compare-home-breadcrumb"] {
+    flex-wrap: wrap;
+    height: auto;
+  }
+
+  [data-page="stats"] [data-component="compare-home-selector"] {
+    grid-template-columns: 1fr;
+  }
+
+  [data-page="stats"] [data-component="compare-home-selector"] button[data-slot="compare-home-select-panel"]::before,
+  [data-page="stats"] [data-component="compare-home-selector"] button[data-slot="compare-home-select-panel"]::after {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    content: "";
+    background: var(--stats-line);
+    pointer-events: none;
+  }
+
+  [data-page="stats"] [data-component="compare-home-selector"] button[data-slot="compare-home-select-panel"]::before {
+    left: 0;
+  }
+
+  [data-page="stats"] [data-component="compare-home-selector"] button[data-slot="compare-home-select-panel"]::after {
+    right: 0;
+  }
+
+  [data-page="stats"] [data-component="compare-model-modal-scrim"] {
+    padding: 16px;
+  }
+
+  [data-page="stats"] [data-component="compare-model-modal"] {
+    grid-template-columns: 1fr;
+    width: calc(100vw - 32px);
+    height: min(520px, calc(100vh - 32px));
+  }
+
+  [data-page="stats"] [data-slot="compare-model-modal-detail"],
+  [data-page="stats"] [data-slot="compare-model-modal-divider"] {
+    display: none;
+  }
+
+  [data-page="stats"]
+    [data-component="compare-home-selector"]
+    button[data-slot="compare-home-select-panel"]
+    + button[data-slot="compare-home-select-panel"] {
+    box-shadow: inset 0 1px var(--stats-line);
+  }
+
+  [data-page="stats"] [data-section="compare-home-related"] {
+    margin-top: 24px;
+  }
+
+  [data-page="stats"] [data-component="compare-home-card-grid"] {
+    grid-template-columns: 1fr;
   }
 
   [data-page="stats"] [data-slot="top-models-title"],
@@ -5589,6 +7880,10 @@
   }
 
   [data-page="stats"] [data-slot="model-hero-crumb"] {
+    max-width: min(100%, 240px);
+  }
+
+  [data-page="stats"] [data-component="model-hero-breadcrumb"] button[data-slot="stats-breadcrumb-select-trigger"] {
     max-width: min(100%, 240px);
   }
 
@@ -5681,10 +7976,6 @@
   [data-page="stats"] [data-slot="lab-hero-pattern"] {
     height: 48px;
     min-width: 48px;
-  }
-
-  [data-page="stats"] [data-slot="lab-hero-options"] {
-    max-width: calc(100vw - 48px);
   }
 
   [data-page="stats"] [data-component="lab-related-list"] {
@@ -5847,12 +8138,27 @@
 
   [data-page="stats"] [data-component="model-metric-grid"],
   [data-page="stats"] [data-component="model-metric-grid"][data-variant="dense"],
-  [data-page="stats"] [data-component="lab-model-grid"] {
+  [data-page="stats"] [data-component="model-efficiency-grid"],
+  [data-page="stats"] [data-component="lab-model-grid"],
+  [data-page="stats"] [data-component="comparison-card-grid"] {
     grid-template-columns: 1fr;
+  }
+
+  [data-page="stats"] [data-component="comparison-table"] {
+    min-width: 640px;
   }
 
   [data-page="stats"] [data-component="model-metric"] {
     min-height: 112px;
+  }
+
+  [data-page="stats"] [data-component="model-efficiency-grid"] [data-component="model-metric"] {
+    height: 112px;
+    min-height: 112px;
+  }
+
+  [data-page="stats"] [data-component="model-efficiency-grid"] [data-component="model-metric"] strong {
+    margin-top: 24px;
   }
 
   [data-page="stats"] [data-component="model-usage-chart"] {
@@ -5935,12 +8241,56 @@
     min-width: 0;
   }
 
-  [data-page="stats"] [data-component="model-peer-list"] a {
-    grid-template-columns: 30px minmax(0, 1fr) minmax(64px, auto);
+  [data-page="stats"] [data-component="model-usage-chart"][data-variant="model-trend"] {
+    --model-usage-mobile-bar-width: 20px;
+    --model-usage-mobile-edge-space: 48px;
+    --model-usage-mobile-track-width: calc(
+      var(--model-usage-count) * var(--model-usage-mobile-bar-width) + var(--model-usage-mobile-edge-space)
+    );
+    --model-trend-bar-height: 64px;
+    --model-trend-line-bottom: 104px;
+    grid-template-rows: minmax(0, 360px) 14px;
+    gap: 24px;
+    height: 398px;
   }
 
-  [data-page="stats"] [data-component="model-peer-list"] svg {
-    display: none;
+  [data-page="stats"] [data-component="model-usage-chart"][data-variant="model-trend"] [data-slot="model-trend-plot"],
+  [data-page="stats"]
+    [data-component="model-usage-chart"][data-variant="model-trend"]
+    [data-slot="model-trend-months"] {
+    direction: ltr;
+    width: var(--model-usage-mobile-track-width);
+    min-width: var(--model-usage-mobile-track-width);
+  }
+
+  [data-page="stats"]
+    [data-component="model-usage-chart"][data-variant="model-trend"]
+    [data-slot="model-trend-column"] {
+    flex: 0 0 var(--model-usage-mobile-bar-width);
+  }
+
+  [data-page="stats"]
+    [data-component="model-usage-chart"][data-variant="model-trend"]
+    [data-component="chart-tooltip"] {
+    top: auto;
+    width: auto;
+    min-width: 0;
+  }
+
+  [data-page="stats"] [data-component="model-peer-list"] {
+    grid-auto-flow: row;
+    grid-auto-columns: auto;
+    grid-template-rows: none;
+    gap: 12px;
+  }
+
+  [data-page="stats"] [data-component="model-peer-list"] a {
+    grid-template-columns: 28px 32px minmax(0, 1fr) minmax(56px, auto);
+    gap: 12px;
+  }
+
+  [data-page="stats"] [data-slot="model-peer-rank"] {
+    width: 28px;
   }
 
   [data-page="stats"] [data-section="top-models"] [data-slot="chart-footer"] {
@@ -6191,6 +8541,16 @@
 }
 
 @media (max-width: 40rem) {
+  [data-page="stats"] [data-section="compare-home-hero"] h1 {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  [data-page="stats"] [data-slot="compare-home-hero-grid"] > p {
+    font-size: 14px;
+    line-height: 22px;
+  }
+
   [data-page="stats"] [data-slot="footer-grid"] {
     grid-template-columns: 1fr;
   }

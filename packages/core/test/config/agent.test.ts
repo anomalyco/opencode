@@ -8,16 +8,43 @@ import { ConfigAgentPlugin } from "@opencode-ai/core/config/plugin/agent"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Global } from "@opencode-ai/core/global"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { AbsolutePath } from "@opencode-ai/core/schema"
+import { ConfigMigrateV1 } from "@opencode-ai/core/v1/config/migrate"
 import { tmpdir } from "../fixture/tmpdir"
 import { testEffect } from "../lib/effect"
 import { agentHost, host } from "../plugin/host"
 
-const it = testEffect(AppNodeBuilder.build(LayerNode.group([AgentV2.node, FSUtil.node])))
+const it = testEffect(AppNodeBuilder.build(LayerNode.group([AgentV2.node, FSUtil.node, Global.node])))
 const decode = Schema.decodeUnknownSync(Config.Info)
 
 describe("ConfigAgentPlugin.Plugin", () => {
+  it.effect("matches POSIX paths against home-relative permissions", () =>
+    Effect.gen(function* () {
+      const permissions = yield* loadHomePermissions("/home/test")
+      expect(PermissionV2.evaluate("external_directory", "/home/test/p/opencode/src/*", permissions).effect).toBe(
+        "allow",
+      )
+      expect(PermissionV2.evaluate("external_directory", "/home/test/cache/files/*", permissions).effect).toBe("deny")
+      expect(PermissionV2.evaluate("external_directory", "/some/~/path", permissions).effect).toBe("deny")
+      expect(PermissionV2.evaluate("external_directory", "$HOMELESS/private/*", permissions).effect).toBe("deny")
+      expect(PermissionV2.evaluate("bash", "$HOME/private/key", permissions).effect).toBe("deny")
+    }),
+  )
+
+  it.effect("matches Windows paths against home-relative permissions", () =>
+    Effect.gen(function* () {
+      const permissions = yield* loadHomePermissions("C:\\Users\\test")
+      expect(
+        PermissionV2.evaluate("external_directory", "C:\\Users\\test\\p\\opencode\\src\\*", permissions).effect,
+      ).toBe("allow")
+      expect(PermissionV2.evaluate("external_directory", "C:\\Users\\test\\cache\\files\\*", permissions).effect).toBe(
+        "deny",
+      )
+    }),
+  )
+
   it.effect("applies all global permissions before agent-specific permissions", () =>
     Effect.gen(function* () {
       const agents = yield* AgentV2.Service
@@ -272,3 +299,51 @@ Use native v2 fields.`,
     ),
   )
 })
+
+function loadHomePermissions(home: string) {
+  return Effect.gen(function* () {
+    const agents = yield* AgentV2.Service
+    const build = AgentV2.ID.make("build")
+    yield* agents.transform((editor) => editor.update(build, () => {}))
+    const config = Config.Service.of({
+      entries: () =>
+        Effect.succeed([
+          new Config.Document({
+            type: "document",
+            info: decode(
+              ConfigMigrateV1.migrate({
+                permission: {
+                  external_directory: {
+                    "~/p/**": "allow",
+                    "/some/~/path": "deny",
+                    "$HOMELESS/**": "deny",
+                  },
+                  bash: {
+                    "$HOME/private/**": "deny",
+                  },
+                },
+                agent: {
+                  build: {
+                    permission: {
+                      external_directory: {
+                        "$HOME/cache/**": "deny",
+                      },
+                    },
+                  },
+                },
+              }),
+            ),
+          }),
+        ]),
+    })
+
+    yield* ConfigAgentPlugin.Plugin.effect(host({ agent: agentHost(agents) })).pipe(
+      Effect.provideService(Config.Service, config),
+      Effect.provideService(Global.Service, Global.Service.of({ ...Global.make(), home })),
+    )
+
+    const agent = yield* agents.get(build)
+    if (!agent) throw new Error("expected configured build agent")
+    return agent.permissions
+  })
+}

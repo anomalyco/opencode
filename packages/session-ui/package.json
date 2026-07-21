@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/session-ui",
-  "version": "1.17.13",
+  "version": "1.18.4",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -18,7 +18,11 @@
     "./context/*": "./src/context/*.tsx",
     "./styles": "./src/styles/index.css",
     "./v2/*.css": "./src/v2/components/*.css",
-    "./v2/*": "./src/v2/components/*.tsx"
+    "./v2/*": "./src/v2/components/*.tsx",
+    "./v2/prompt-input": "./src/v2/components/prompt-input/index.tsx",
+    "./v2/prompt-input/interaction": "./src/v2/components/prompt-input/interaction.ts",
+    "./v2/prompt-input/store": "./src/v2/components/prompt-input/store.ts",
+    "./v2/prompt-input/types": "./src/v2/components/prompt-input/types.ts"
   },
   "scripts": {
     "typecheck": "tsgo --noEmit",

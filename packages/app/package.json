@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/app",
-  "version": "1.17.13",
+  "version": "1.18.4",
   "description": "",
   "type": "module",
   "exports": {
@@ -47,6 +47,7 @@
     "vite-plugin-solid": "catalog:"
   },
   "dependencies": {
+    "@corvu/drawer": "catalog:",
     "@dnd-kit/abstract": "0.5.0",
     "@dnd-kit/dom": "0.5.0",
     "@dnd-kit/helpers": "0.5.0",
@@ -80,7 +81,7 @@
     "diff": "catalog:",
     "effect": "catalog:",
     "fuzzysort": "catalog:",
-    "ghostty-web": "github:anomalyco/ghostty-web#513463a6f1190253057e8a3f0dac8f6ee8393553",
+    "ghostty-web": "github:anomalyco/ghostty-web#83c0a07b8628b748aed073b232cb4b52a6ca11c1",
     "luxon": "catalog:",
     "marked": "catalog:",
     "marked-shiki": "catalog:",
@@ -88,6 +89,7 @@
     "shiki": "catalog:",
     "solid-js": "catalog:",
     "solid-list": "catalog:",
+    "solid-presence": "0.2.0",
     "tailwindcss": "catalog:"
   }
 }

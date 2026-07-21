@@ -177,8 +177,10 @@ describe("code mode integration (real MCP server)", () => {
   test("the appended catalog inlines full signatures with real MCP schemas", () => {
     expect(description).toContain("Available tools (COMPLETE list")
     expect(description).toContain("- fixtures (4 tools)")
-    expect(description).toContain("tools.fixtures.add(input: { a: number; b: number }): Promise<{ sum: number }>")
-    expect(description).toContain("tools.fixtures.get_text(input: { name: string }): Promise<unknown>")
+    expect(description).toContain(
+      "tools.fixtures.add(input: {\n  a: number,\n  b: number,\n}): Promise<{\n  sum: number,\n}>",
+    )
+    expect(description).toContain("tools.fixtures.get_text(input: {\n  name: string,\n}): Promise<unknown>")
     expect(description).toContain("// Add two numbers and return the structured sum")
     expect(description).not.toContain("$codemode")
     expect(description).toContain("## Workflow")
