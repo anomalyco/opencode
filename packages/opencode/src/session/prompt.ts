@@ -41,6 +41,7 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Truncate } from "@/tool/truncate"
 import { Image } from "@/image/image"
 import { decodeDataUrl } from "@/util/data-url"
+import { isMedia } from "@/util/media"
 import { Process } from "@/util/process"
 import { Cause, Effect, Exit, Latch, Layer, Option, Scope, Context, Schema, Types } from "effect"
 import { InstanceState } from "@/effect/instance-state"
@@ -804,6 +805,21 @@ const layer = Layer.effect(
                   { ...part, messageID: info.id, sessionID: input.sessionID },
                 ]
               }
+              if (!isMedia(part.mime)) {
+                // Providers reject the whole message for unsupported file part
+                // media types ("file part media type ... functionality not
+                // supported"). Degrade to a synthetic notice instead — same
+                // treatment as unsupported binary MCP resources above.
+                return [
+                  {
+                    messageID: info.id,
+                    sessionID: input.sessionID,
+                    type: "text",
+                    synthetic: true,
+                    text: `[Attachment omitted: "${part.filename ?? "file"}" (${part.mime}) is not a media type the model can ingest. Ask the user to place the file inside the workspace so it can be read with tools.]`,
+                  },
+                ]
+              }
               break
             case "file:": {
               yield* Effect.logInfo("file", { mime: part.mime })
@@ -943,6 +959,20 @@ const layer = Layer.effect(
                     text: exit.value.output,
                   },
                   { ...part, mime, messageID: info.id, sessionID: input.sessionID },
+                ]
+              }
+
+              if (!isMedia(mime)) {
+                // The file is already on disk — tell the agent where it is
+                // instead of forwarding a media type the provider will reject.
+                return [
+                  {
+                    messageID: info.id,
+                    sessionID: input.sessionID,
+                    type: "text",
+                    synthetic: true,
+                    text: `[Attachment on disk: "${part.filename ?? filepath}" (${mime}) at ${filepath}. This media type cannot be sent to the model directly — read the file with tools when its contents are needed.]`,
+                  },
                 ]
               }
 
