@@ -26,6 +26,19 @@ describe("prompt input v2 interaction machine", () => {
     expect(closed.state.popover).toEqual({ type: "closed" })
   })
 
+  test("completes command names containing slashes", () => {
+    const open = transitionPromptInputV2(
+      createPromptInputV2InteractionState(),
+      { type: "input.changed", value: "/ship/" },
+      persisted(),
+    )
+    const item = { ...command, label: "/ship/inline" }
+    const selected = transitionPromptInputV2(open.state, { type: "popover.select", item }, persisted("/ship/"))
+
+    expect(open.state.popover).toEqual({ type: "command-inline", query: "ship/" })
+    expect(selected.commands).toContainEqual({ type: "draft.setText", value: "/ship/inline " })
+  })
+
   test("opens context completion at the cursor", () => {
     const value = "alpha @sr omega"
     const input = persisted(value)
