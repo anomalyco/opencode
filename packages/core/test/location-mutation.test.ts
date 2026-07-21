@@ -77,7 +77,7 @@ describe("LocationMutation", () => {
     ),
   )
 
-  it.live("rejects a prospective target below an escaping symlink ancestor", () =>
+  it.live("authorizes a prospective target below an external symlink by its in-location path", () =>
     withTmp((directory) => {
       const outside = `${directory}-outside`
       return Effect.gen(function* () {
@@ -86,10 +86,12 @@ describe("LocationMutation", () => {
           await fs.mkdir(outside)
           await fs.symlink(outside, path.join(directory, "escape"))
         })
-        const error = yield* Effect.flip(
-          (yield* LocationMutation.Service).resolve({ path: path.join("escape", "new.txt") }),
-        )
-        expect(error).toMatchObject({ _tag: "LocationMutation.PathError", reason: "location_escape" })
+        const target = yield* (yield* LocationMutation.Service).resolve({ path: path.join("escape", "new.txt") })
+        expect(target).toMatchObject({
+          canonical: path.join(yield* Effect.promise(() => fs.realpath(outside)), "new.txt"),
+          resource: "escape/new.txt",
+        })
+        expect(target.externalDirectory).toBeUndefined()
         yield* Effect.promise(() => fs.rm(outside, { recursive: true, force: true }))
       }).pipe(provide(directory))
     }),
@@ -106,7 +108,7 @@ describe("LocationMutation", () => {
 
         expect(yield* (yield* LocationMutation.Service).resolve({ path: "linked/new.txt" })).toMatchObject({
           canonical: path.join(yield* Effect.promise(() => fs.realpath(directory)), "actual", "new.txt"),
-          resource: "actual/new.txt",
+          resource: "linked/new.txt",
         })
       }).pipe(provide(directory)),
     ),

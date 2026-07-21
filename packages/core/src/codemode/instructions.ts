@@ -1,9 +1,9 @@
 export * as CodeModeInstructions from "./instructions"
 
 import { Context, Effect, Layer, Schema } from "effect"
+import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { AgentV2 } from "../agent"
 import { CodeMode } from "../codemode"
-import { makeLocationNode } from "../effect/app-node"
 import { Instructions } from "../instructions/index"
 
 export interface Interface {
