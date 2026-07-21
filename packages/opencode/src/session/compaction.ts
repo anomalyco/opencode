@@ -32,6 +32,23 @@ const PRUNE_PROTECTED_TOOLS = ["skill"]
 const DEFAULT_TAIL_TURNS = 2
 const MIN_PRESERVE_RECENT_TOKENS = 2_000
 const MAX_PRESERVE_RECENT_TOKENS = 8_000
+
+const MAX_CONSECUTIVE_COMPACTION_FAILURES = 3
+const compactionFailures = new Map<string, number>()
+
+export function recordCompactionFailure(sessionID: string): number {
+  const count = (compactionFailures.get(sessionID) ?? 0) + 1
+  compactionFailures.set(sessionID, count)
+  return count
+}
+
+export function resetCompactionFailures(sessionID: string): void {
+  compactionFailures.delete(sessionID)
+}
+
+export function isCompactionCircuitOpen(sessionID: string): boolean {
+  return (compactionFailures.get(sessionID) ?? 0) >= MAX_CONSECUTIVE_COMPACTION_FAILURES
+}
 type Turn = {
   start: number
   end: number
@@ -402,10 +419,14 @@ const layer = Layer.effect(
       })
 
       if (result === "compact") {
+        const failures = recordCompactionFailure(input.sessionID)
         processor.message.error = new SessionV1.ContextOverflowError({
-          message: replay
-            ? "Conversation history too large to compact - exceeds model context limit"
-            : "Session too large to compact - context exceeds model limit even after stripping media",
+          message:
+            failures >= MAX_CONSECUTIVE_COMPACTION_FAILURES
+              ? `Compaction failed ${failures} times consecutively (circuit breaker open). Try /clear to start a new session, or switch to a model with a larger context window.`
+              : replay
+                ? `Conversation history too large to compact (attempt ${failures}/${MAX_CONSECUTIVE_COMPACTION_FAILURES}) - exceeds model context limit`
+                : `Session too large to compact (attempt ${failures}/${MAX_CONSECUTIVE_COMPACTION_FAILURES}) - context exceeds model limit even after stripping media`,
         }).toObject()
         processor.message.finish = "error"
         yield* session.updateMessage(processor.message)
@@ -505,6 +526,7 @@ const layer = Layer.effect(
 
       if (processor.message.error) return "stop"
       if (result === "continue") {
+        resetCompactionFailures(input.sessionID)
         yield* events.publish(Event.Compacted, { sessionID: input.sessionID })
       }
       return result
