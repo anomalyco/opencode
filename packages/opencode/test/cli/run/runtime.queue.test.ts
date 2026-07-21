@@ -478,4 +478,68 @@ describe("run runtime queue", () => {
     ui.submit("one")
     await expect(task).rejects.toThrow("boom")
   })
+  
+  test("emits turn.idle only when session is truly idle", async () => {
+      const ui = footer()
+      let runCalls = 0
+      let wake: (() => void) | undefined
+      const gate = new Promise<void>((resolve) => {
+        wake = resolve
+      })
+  
+      const task = runPromptQueue({
+        footer: ui.api,
+        run: async (input) => {
+          runCalls = 1
+          if (runCalls === 1) {
+            await gate
+          }
+          ui.api.close()
+        },
+      })
+  
+      ui.submit("one")
+      await Promise.resolve()
+      ui.submit("two")
+      await Promise.resolve()
+      
+      const idleEventsBefore = ui.events.filter((event) => event.type === "turn.idle")
+      expect(idleEventsBefore.length).toBe(0)
+      
+      wake?.()
+      await task
+      
+      const idleEventsAfter = ui.events.filter((event) => event.type === "turn.idle")
+      expect(idleEventsAfter.length).toBe(1)
+    })
+  
+    test("does not emit turn.idle when active prompt is running", async () => {
+      const ui = footer()
+      let runCompleted = false
+      let wake: (() => void) | undefined
+      const gate = new Promise<void>((resolve) => {
+        wake = resolve
+      })
+  
+      const task = runPromptQueue({
+        footer: ui.api,
+        run: async () => {
+          await gate
+          runCompleted = true
+          ui.api.close()
+        },
+      })
+  
+      ui.submit("active")
+      await Promise.resolve()
+      
+      const idleEvents = ui.events.filter((event) => event.type === "turn.idle")
+      expect(idleEvents.length).toBe(0)
+      
+      wake?.()
+      await task
+      
+      const idleEventsAfter = ui.events.filter((event) => event.type === "turn.idle")
+      expect(idleEventsAfter.length).toBe(1)
+    })
 })
