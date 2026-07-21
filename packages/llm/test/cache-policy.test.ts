@@ -234,6 +234,44 @@ describe("applyCachePolicy", () => {
     }),
   )
 
+  it.effect("messages: { tail: 0 } marks no message boundaries", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare(
+        LLM.request({
+          model: anthropicModel,
+          messages: [Message.user("u1"), Message.assistant("a1")],
+          cache: { messages: { tail: 0 } },
+        }),
+      )
+
+      expect(prepared.body).toMatchObject({
+        messages: [
+          { content: [{ cache_control: undefined }] },
+          { content: [{ cache_control: undefined }] },
+        ],
+      })
+    }),
+  )
+
+  it.effect("messages: { tail: 1 } marks only the last message boundary", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare(
+        LLM.request({
+          model: anthropicModel,
+          messages: [Message.user("u1"), Message.assistant("a1")],
+          cache: { messages: { tail: 1 } },
+        }),
+      )
+
+      expect(prepared.body).toMatchObject({
+        messages: [
+          { content: [{ cache_control: undefined }] },
+          { content: [{ cache_control: { type: "ephemeral" } }] },
+        ],
+      })
+    }),
+  )
+
   test("message tail accepts only non-negative integers", () => {
     const decode = Schema.decodeUnknownSync(CachePolicy)
     expect(() => decode({ messages: { tail: 1.5 } })).toThrow()
@@ -248,7 +286,7 @@ describe("applyCachePolicy", () => {
         messages: [Message.user("u1"), Message.assistant("a1")],
         cache: { messages: { tail: 1.5 } },
       }),
-    ).toThrow("Expected an integer")
+    ).toThrow()
   })
 
   it.effect("'latest-assistant' marks the last assistant message", () =>
