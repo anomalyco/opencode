@@ -13,6 +13,7 @@ import {
   parseQuestionAnswers,
   parseQuestions,
   parseTodos,
+  taskPresentation,
   alwaysSeparate,
   toolDisplay,
 } from "../../../src/routes/session"
@@ -285,6 +286,17 @@ describe("TUI inline tool wrapping", () => {
     expect(formatSubagentTitle("Explore", "Inspect renderer", true)).toBe(
       "Explore Task (background) — Inspect renderer",
     )
+  })
+
+  test("resolves task descriptions from metadata and tool titles", () => {
+    expect(taskPresentation({}, { description: "Inspect task renderer", background: true })).toEqual({
+      description: "Inspect task renderer",
+      background: true,
+    })
+    expect(taskPresentation({}, {}, "Fallback title")).toEqual({
+      description: "Fallback title",
+      background: false,
+    })
   })
 
   test("keeps retry status ahead of wrapping messages", () => {

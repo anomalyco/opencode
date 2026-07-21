@@ -2237,11 +2237,20 @@ function Task(props: ToolProps) {
   )
 
   const status = createMemo(() => sync.data.session_status[sessionID() ?? ""])
+  const presentation = createMemo(() =>
+    taskPresentation(
+      props.input,
+      props.metadata,
+      props.part.state.status === "running" || props.part.state.status === "completed"
+        ? props.part.state.title
+        : undefined,
+    ),
+  )
   const isRunning = createMemo(() => {
     const value = status()
     return (
       props.part.state.status === "running" ||
-      (props.metadata.background === true && value !== undefined && value.type !== "idle")
+      (presentation().background && value !== undefined && value.type !== "idle")
     )
   })
   const retry = createMemo(() => {
@@ -2258,13 +2267,13 @@ function Task(props: ToolProps) {
   })
 
   const content = createMemo(() => {
-    const description = stringValue(props.input.description)
+    const description = presentation().description
     if (!description) return ""
     let content = [
       formatSubagentTitle(
         Locale.titlecase(stringValue(props.input.subagent_type) ?? "General"),
         description,
-        props.metadata.background === true,
+        presentation().background,
       ),
     ]
 
@@ -2292,7 +2301,7 @@ function Task(props: ToolProps) {
       separate={true}
       color={retry() ? theme.error : undefined}
       spinner={isRunning()}
-      complete={stringValue(props.input.description)}
+      complete={presentation().description}
       pending="Delegating..."
       part={props.part}
       onClick={() => {
@@ -2306,6 +2315,17 @@ function Task(props: ToolProps) {
       {content()}
     </InlineTool>
   )
+}
+
+export function taskPresentation(
+  input: Record<string, unknown>,
+  metadata: Record<string, unknown>,
+  title?: unknown,
+) {
+  return {
+    description: stringValue(input.description) ?? stringValue(metadata.description) ?? stringValue(title),
+    background: metadata.background === true,
+  }
 }
 
 export function formatSubagentToolcalls(count: number) {
