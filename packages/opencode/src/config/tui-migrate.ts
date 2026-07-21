@@ -24,7 +24,7 @@ interface MigrateInput {
 /**
  * Migrates tui-specific keys (theme, keybinds, tui) from opencode.json files
  * into dedicated tui.json files. Migration is performed per-directory and
- * skips only locations where a tui.json already exists.
+ * skips locations where a tui.json or tui.jsonc already exists.
  */
 export async function migrateTuiConfig(input: MigrateInput) {
   const opencode = await opencodeFiles(input)
@@ -46,9 +46,11 @@ export async function migrateTuiConfig(input: MigrateInput) {
     const tui = extracted.tui ? normalizeTui(extracted.tui) : undefined
     if (extracted.theme === undefined && extracted.keybinds === undefined && !tui) continue
 
-    const target = path.join(path.dirname(file), "tui.json")
-    const targetExists = await Filesystem.exists(target)
-    if (targetExists) continue
+    const dir = path.dirname(file)
+    const target = path.join(dir, "tui.json")
+    // A user-managed tui.jsonc counts as already migrated; skip so we don't
+    // recreate a competing tui.json next to it.
+    if ((await Filesystem.exists(target)) || (await Filesystem.exists(path.join(dir, "tui.jsonc")))) continue
 
     const payload: Record<string, unknown> = {
       $schema: TUI_SCHEMA_URL,
