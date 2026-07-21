@@ -1347,7 +1347,11 @@ export function UserMessageDisplay(props: {
         }
       >
         <div data-slot="user-message-body">
-          <div data-slot="user-message-text" data-comments={messageComments().length > 0 ? "true" : undefined}>
+          <div
+            data-slot="user-message-text"
+            data-comments={messageComments().length > 0 ? "true" : undefined}
+            dir="auto"
+          >
             <HighlightedText text={text()} references={inlineFiles()} agents={agents()} />
             <Show when={messageComments().length > 0}>
               <UserMessageComments comments={messageComments()} bounded />
