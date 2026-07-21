@@ -13,6 +13,7 @@ import type { PluginInternal } from "../internal"
 
 const clientID = "Ov23li8tweQw6odWQebz"
 const apiVersion = "2026-06-01"
+const userApiVersion = "2025-04-01"
 const pollingSafetyMargin = 3000
 const methodID = Integration.MethodID.make("device")
 
@@ -27,6 +28,14 @@ const Token = Schema.Struct({
   error: Schema.optional(Schema.String),
   interval: Schema.optional(Schema.Number),
 })
+const User = Schema.Struct({
+  endpoints: Schema.optional(
+    Schema.Struct({
+      api: Schema.optional(Schema.String),
+    }),
+  ),
+})
+const decodeUser = Schema.decodeUnknownOption(User)
 const JsonBody = Schema.UnknownFromJsonString
 const decodeBody = Schema.decodeUnknownOption(JsonBody)
 
@@ -81,15 +90,32 @@ const oauth = {
           Effect.map(Schema.decodeUnknownSync(Token)),
           Effect.flatMap((token) => {
             if (token.access_token) {
-              return Effect.succeed(
-                Credential.OAuth.make({
-                  type: "oauth",
-                  methodID,
-                  refresh: token.access_token,
-                  access: token.access_token,
-                  expires: 0,
-                  ...(enterprise ? { metadata: { enterpriseUrl: domain } } : {}),
-                }),
+              const access = token.access_token
+              return request(userURL(domain), {
+                headers: {
+                  Accept: "application/json",
+                  Authorization: `Bearer ${access}`,
+                  "User-Agent": `opencode/${InstallationVersion}`,
+                  "X-GitHub-Api-Version": userApiVersion,
+                },
+              }).pipe(
+                Effect.map((user) => Option.getOrUndefined(decodeUser(user))?.endpoints?.api?.replace(/\/+$/, "")),
+                Effect.catch(() => Effect.succeed(undefined)),
+                Effect.map((apiEndpoint) =>
+                  Credential.OAuth.make({
+                    type: "oauth",
+                    methodID,
+                    refresh: access,
+                    access,
+                    expires: 0,
+                    ...((enterprise || apiEndpoint) && {
+                      metadata: {
+                        ...(enterprise ? { enterpriseUrl: domain } : {}),
+                        ...(apiEndpoint ? { apiEndpoint } : {}),
+                      },
+                    }),
+                  }),
+                ),
               )
             }
             if (token.error === "authorization_pending")
@@ -141,8 +167,7 @@ export const GithubCopilotPlugin = define({
         return
       }
 
-      const enterprise = credential.metadata?.enterpriseUrl
-      loaded.baseURL = baseURL(typeof enterprise === "string" ? enterprise : undefined)
+      loaded.baseURL = copilotBaseURL(credential.metadata)
       const provider = yield* catalog.provider.get(ProviderV2.ID.githubCopilot)
       const existing = (yield* catalog.model.all()).filter((model) => model.providerID === ProviderV2.ID.githubCopilot)
       loaded.models = yield* Effect.tryPromise({
@@ -257,8 +282,19 @@ function oauthURLs(domain: string) {
   }
 }
 
+function userURL(domain: string) {
+  return `${domain === "github.com" ? "https://api.github.com" : `https://api.${domain}`}/copilot_internal/user`
+}
+
 function baseURL(enterprise?: string) {
   return enterprise ? `https://copilot-api.${normalizeDomain(enterprise)}` : "https://api.githubcopilot.com"
+}
+
+export function copilotBaseURL(metadata?: Readonly<Record<string, unknown>>) {
+  const endpoint = metadata?.apiEndpoint
+  if (typeof endpoint === "string" && endpoint) return endpoint
+  const enterprise = metadata?.enterpriseUrl
+  return baseURL(typeof enterprise === "string" ? enterprise : undefined)
 }
 
 function headers() {

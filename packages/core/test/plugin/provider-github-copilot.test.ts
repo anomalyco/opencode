@@ -1,11 +1,11 @@
 import { AISDK } from "@opencode-ai/core/aisdk"
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
-import { copilotFetch, GithubCopilotPlugin } from "@opencode-ai/core/plugin/provider/github-copilot"
+import { copilotBaseURL, copilotFetch, GithubCopilotPlugin } from "@opencode-ai/core/plugin/provider/github-copilot"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { Integration } from "@opencode-ai/core/integration"
 import type { LanguageModelV3 } from "@ai-sdk/provider"
@@ -40,6 +40,15 @@ function fakeSelectorSdk(calls: string[]) {
 }
 
 describe("GithubCopilotPlugin", () => {
+  test("prefers the account-specific Copilot API endpoint", () => {
+    expect(
+      copilotBaseURL({
+        enterpriseUrl: "company.ghe.com",
+        apiEndpoint: "https://api.business.githubcopilot.com",
+      }),
+    ).toBe("https://api.business.githubcopilot.com")
+  })
+
   it.effect("registers GitHub Copilot device OAuth", () =>
     Effect.gen(function* () {
       yield* addPlugin()
