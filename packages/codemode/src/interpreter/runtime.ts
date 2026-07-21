@@ -1,4 +1,4 @@
-import { Cause, Effect, Exit } from "effect"
+import { Cause, Deferred, Effect, Exit } from "effect"
 import { isBlockedMember, ToolReference, ToolRuntimeError, type SafeObject } from "../tool-runtime.js"
 import {
   type AstNode,
@@ -6,11 +6,15 @@ import {
   asNode,
   type Binding,
   CodeModeFunction,
+  CodeModeGenerator,
   CoercionFunction,
   ComputedValue,
   ErrorConstructorReference,
   GlobalMethodReference,
   GlobalNamespace,
+  GeneratorMethodReference,
+  GeneratorReturn,
+  type GeneratorRequestKind,
   type GlobalNamespaceName,
   getArray,
   getBoolean,
@@ -35,7 +39,6 @@ import {
   SearchFunction,
   SymbolNamespace,
   type StatementResult,
-  supportedSyntaxMessage,
   unsupportedSyntax,
   UriFunction,
 } from "./model.js"
@@ -216,9 +219,24 @@ const loopDeclaration = (left: AstNode, statement: "for...of" | "for...in") => {
 }
 
 type CustomIterator = {
-  iterator: SafeObject
+  iterator: SafeObject | CodeModeGenerator
   next: unknown
   asynchronous: boolean
+}
+
+type GeneratorRequest = {
+  kind: GeneratorRequestKind
+  value: unknown
+  response: Deferred.Deferred<unknown, unknown>
+}
+
+type GeneratorState = {
+  started: boolean
+  completed: boolean
+  draining: boolean
+  active?: GeneratorRequest
+  pending: Array<GeneratorRequest>
+  available?: Deferred.Deferred<void>
 }
 
 export class Interpreter<R> {
@@ -228,6 +246,8 @@ export class Interpreter<R> {
   private readonly toolKeys: (path: ReadonlyArray<string>) => ReadonlyArray<string>
   private readonly logs: Array<string>
   private readonly promises: PromiseRuntime<R>
+  private generatorState?: GeneratorState
+  private generatorAsync = false
   private readonly runner: CallbackRunner<R> = {
     invokeFunction: (fn, args) => this.invokeFunction(fn, args),
     invokeCallable: (callable, args, node) => this.invokeCallable(callable, args, node),
@@ -403,16 +423,12 @@ export class Interpreter<R> {
   }
 
   private createFunction(node: AstNode): CodeModeFunction {
-    if (node.generator === true) {
-      throw new InterpreterRuntimeError("Generator functions are not supported.", node, "UnsupportedSyntax", [
-        supportedSyntaxMessage,
-      ])
-    }
     return new CodeModeFunction(
       getArray(node, "params").map((parameter, index) => asNode(parameter, `params[${index}]`)),
       getNode(node, "body"),
       this.scopes.capture(),
       node.async === true,
+      node.generator === true,
     )
   }
 
@@ -647,12 +663,12 @@ export class Interpreter<R> {
       const body = getNode(node, "body")
 
       const iterable = spreadItems(right)
-      const iterator = iterable === undefined && awaiting ? yield* self.customIterator(right, node) : undefined
+      const iterator = iterable === undefined ? yield* self.customIterator(right, node, awaiting) : undefined
       if (iterable === undefined && iterator === undefined) {
         throw new InterpreterRuntimeError(
-          `${awaiting ? "for await...of" : "for...of"} requires an array, string, Map, Set, or URLSearchParams${awaiting ? ", or custom iterator" : ""} value.`,
+          `${awaiting ? "for await...of" : "for...of"} requires an array, string, Map, Set, or URLSearchParams, or custom iterator value.`,
           node,
-        )
+        ).as("TypeError")
       }
 
       let assignment: AstNode | undefined
@@ -703,29 +719,29 @@ export class Interpreter<R> {
       if (iterator === undefined) throw new InterpreterRuntimeError("Custom iterator is unavailable.", node)
 
       while (true) {
-        const step = yield* self.nextIteratorResult(iterator, node)
+        const step = yield* self.nextIteratorResult(iterator, node, awaiting)
         if (step.done) return { kind: "none" } satisfies StatementResult
         const bodyExit = yield* Effect.exit(evaluateBody(step.value))
         if (!Exit.isSuccess(bodyExit)) {
           // Process interruption must remain prompt; user cleanup cannot extend a timeout.
-          if (!Cause.hasInterruptsOnly(bodyExit.cause)) yield* Effect.exit(self.closeIterator(iterator, node))
+          if (!Cause.hasInterruptsOnly(bodyExit.cause)) yield* Effect.exit(self.closeIterator(iterator, node, awaiting))
           return yield* Effect.failCause(bodyExit.cause)
         }
         const result = bodyExit.value
 
         if (result.kind === "return") {
-          yield* self.closeIterator(iterator, node)
+          yield* self.closeIterator(iterator, node, awaiting)
           return result
         }
 
         if (result.kind === "break") {
-          yield* self.closeIterator(iterator, node)
+          yield* self.closeIterator(iterator, node, awaiting)
           if (result.label !== undefined && !labels?.has(result.label)) return result
           return { kind: "none" } satisfies StatementResult
         }
 
         if (result.kind === "continue" && result.label !== undefined && !labels?.has(result.label)) {
-          yield* self.closeIterator(iterator, node)
+          yield* self.closeIterator(iterator, node, awaiting)
           return result
         }
       }
@@ -742,26 +758,37 @@ export class Interpreter<R> {
     return value instanceof CodeModePromise ? this.settlePromise(value) : Effect.as(Effect.yieldNow, value)
   }
 
-  private customIterator(value: unknown, node: AstNode) {
+  private customIterator(value: unknown, node: AstNode, allowAsync = true) {
+    if (value instanceof CodeModeGenerator) {
+      if (value.asynchronous && !allowAsync) return Effect.succeed(undefined)
+      return Effect.succeed({
+        iterator: value,
+        next: new GeneratorMethodReference(value, "next"),
+        asynchronous: value.asynchronous,
+      })
+    }
     if (!isRecord(value) || isRuntimeReference(value)) return Effect.succeed(undefined)
-    const asyncMethod = Reflect.get(value, AsyncIteratorSymbol)
+    const asyncMethod = allowAsync ? Reflect.get(value, AsyncIteratorSymbol) : undefined
     const method = asyncMethod ?? Reflect.get(value, IteratorSymbol)
     if (method === undefined || method === null) return Effect.succeed(undefined)
     const self = this
     return Effect.map(
       this.invokeCallable(this.requireIteratorMethod(method, "Iterator method", node), [], node),
       (iterator) => {
-        const object = self.requireIteratorObject(iterator, "Iterator method result", node)
+        const object = self.requireIterator(iterator, node)
         return {
           iterator: object,
-          next: self.requireIteratorMethod(object.next, "Iterator next", node),
+          next:
+            object instanceof CodeModeGenerator
+              ? new GeneratorMethodReference(object, "next")
+              : self.requireIteratorMethod(object.next, "Iterator next", node),
           asynchronous: asyncMethod !== undefined && asyncMethod !== null,
         }
       },
     )
   }
 
-  private nextIteratorResult(iterator: CustomIterator, node: AstNode) {
+  private nextIteratorResult(iterator: CustomIterator, node: AstNode, awaiting: boolean) {
     const self = this
     return Effect.gen(function* () {
       if (iterator.asynchronous) {
@@ -788,13 +815,19 @@ export class Interpreter<R> {
         yield* Effect.yieldNow
         return yield* Effect.failCause(captured.cause)
       }
-      return { done: captured.value.done, value: yield* self.awaitValue(captured.value.value) }
+      return {
+        done: captured.value.done,
+        value: awaiting ? yield* self.awaitValue(captured.value.value) : captured.value.value,
+      }
     })
   }
 
-  private closeIterator(iterator: CustomIterator, node: AstNode): Effect.Effect<void, unknown, R> {
-    const close = iterator.iterator.return
-    if (close === undefined || close === null) return iterator.asynchronous ? Effect.void : Effect.yieldNow
+  private closeIterator(iterator: CustomIterator, node: AstNode, awaiting = true): Effect.Effect<void, unknown, R> {
+    const close =
+      iterator.iterator instanceof CodeModeGenerator
+        ? new GeneratorMethodReference(iterator.iterator, "return")
+        : iterator.iterator.return
+    if (close === undefined || close === null) return iterator.asynchronous || !awaiting ? Effect.void : Effect.yieldNow
     const self = this
     return Effect.gen(function* () {
       const method = self.requireIteratorMethod(close, "Iterator return", node)
@@ -819,13 +852,19 @@ export class Interpreter<R> {
         yield* Effect.yieldNow
         return yield* Effect.failCause(captured.cause)
       }
-      yield* self.awaitValue(captured.value)
+      if (awaiting) yield* self.awaitValue(captured.value)
     })
   }
 
   private requireIteratorObject(value: unknown, context: string, node: AstNode): SafeObject {
     if (isRecord(value) && !isRuntimeReference(value)) return value
     throw new InterpreterRuntimeError(`${context} must be an object.`, node).as("TypeError")
+  }
+
+  private requireIterator(value: unknown, node: AstNode): SafeObject | CodeModeGenerator {
+    return value instanceof CodeModeGenerator
+      ? value
+      : this.requireIteratorObject(value, "Iterator method result", node)
   }
 
   private requireIteratorMethod(value: unknown, context: string, node: AstNode): unknown {
@@ -966,7 +1005,7 @@ export class Interpreter<R> {
 
     const attempted = Effect.matchCauseEffect(this.evaluateStatement(body), {
       onFailure: (cause) => {
-        if (cause.reasons.some(Cause.isInterruptReason) || !handler) {
+        if (cause.reasons.some(Cause.isInterruptReason) || Cause.squash(cause) instanceof GeneratorReturn || !handler) {
           return Effect.failCause(cause)
         }
 
@@ -1259,6 +1298,8 @@ export class Interpreter<R> {
           value instanceof CodeModePromise ? self.settlePromise(value) : Effect.as(Effect.yieldNow, value),
         )
       }
+      case "YieldExpression":
+        return this.evaluateYieldExpression(node)
       case "NewExpression":
         return this.evaluateNewExpression(node)
       default:
@@ -1503,6 +1544,8 @@ export class Interpreter<R> {
   }
 
   private applyBinaryOperator(operator: string, lhs: unknown, rhs: unknown, node: AstNode): unknown {
+    if (operator === "===") return lhs === rhs
+    if (operator === "!==") return lhs !== rhs
     if (containsOpaqueReference(lhs) || containsOpaqueReference(rhs)) {
       throw new InterpreterRuntimeError("Binary operators require data values.", node, "InvalidDataValue")
     }
@@ -1532,12 +1575,8 @@ export class Interpreter<R> {
         return (l as number) ** (r as number)
       case "==":
         return bothObjects ? lhs === rhs : l == r
-      case "===":
-        return lhs === rhs
       case "!=":
         return bothObjects ? lhs !== rhs : l != r
-      case "!==":
-        return lhs !== rhs
       case "<":
         return (l as string) < (r as string)
       case "<=":
@@ -1773,6 +1812,11 @@ export class Interpreter<R> {
       if (callable instanceof CodeModeFunction) {
         return yield* self.invokeFunction(callable, args)
       }
+      if (callable instanceof GeneratorMethodReference) {
+        if (callable.kind === "iterator") return callable.generator
+        const requested = callable.generator.request(callable.kind, args[0], node) as Effect.Effect<unknown, unknown, R>
+        return callable.generator.asynchronous ? yield* self.createPromise(requested) : yield* requested
+      }
       if (callable instanceof IntrinsicReference) {
         return yield* invokeIntrinsic(self.runner, callable, args, node)
       }
@@ -1906,6 +1950,7 @@ export class Interpreter<R> {
 
       return yield* invocation.evaluateExpression(fn.body)
     })
+    if (fn.generator) return Effect.succeed(this.createGenerator(invocation, run, fn.async))
     if (!fn.async) return run
     // The initial yield assigns `box.own` before the body can self-resolve.
     const box: { own?: CodeModePromise } = {}
@@ -1922,6 +1967,224 @@ export class Interpreter<R> {
         return promise
       },
     )
+  }
+
+  private createGenerator(
+    invocation: Interpreter<R>,
+    run: Effect.Effect<unknown, unknown, R>,
+    asynchronous: boolean,
+  ): CodeModeGenerator {
+    const state: GeneratorState = { started: false, completed: false, draining: false, pending: [] }
+    invocation.generatorState = state
+    invocation.generatorAsync = asynchronous
+    const generator = new CodeModeGenerator(asynchronous, (kind, value, node) => {
+      const request = { kind, value, response: Deferred.makeUnsafe<unknown, unknown>() }
+      if (!asynchronous && state.active) {
+        return Effect.fail(new InterpreterRuntimeError("Generator is already running.", node).as("TypeError"))
+      }
+      if (asynchronous && (state.completed || (!state.started && kind !== "next"))) {
+        state.started = true
+        state.completed = true
+        state.pending.push(request)
+        if (state.draining) return Deferred.await(request.response)
+        state.draining = true
+        return Effect.andThen(
+          this.promises.fork(
+            invocation
+              .completeGeneratorRequests(state, true)
+              .pipe(Effect.ensuring(Effect.sync(() => (state.draining = false)))),
+          ),
+          Deferred.await(request.response),
+        )
+      }
+      if (state.completed) {
+        if (kind === "throw") return Effect.fail(new ProgramThrow(value))
+        return Effect.succeed({ value: kind === "return" ? value : undefined, done: true })
+      }
+      if (!state.started && kind !== "next") {
+        state.completed = true
+        if (kind === "throw") return Effect.fail(new ProgramThrow(value))
+        return Effect.succeed({ value, done: true })
+      }
+
+      state.pending.push(request)
+      if (state.available) {
+        const available = state.available
+        state.available = undefined
+        Deferred.doneUnsafe(available, Exit.succeed(undefined))
+      }
+      if (!state.started) {
+        state.started = true
+        const body = Effect.gen(function* () {
+          state.active = yield* invocation.takeGeneratorRequest(state)
+          const exit = yield* Effect.exit(
+            run.pipe(
+              Effect.flatMap((result) => (asynchronous ? invocation.awaitValue(result) : Effect.succeed(result))),
+              Effect.catch((error) =>
+                error instanceof GeneratorReturn
+                  ? asynchronous
+                    ? invocation.awaitValue(error.value)
+                    : Effect.succeed(error.value)
+                  : Effect.fail(error),
+              ),
+            ),
+          )
+          const active = state.active
+          state.active = undefined
+          if (active) {
+            Deferred.doneUnsafe(
+              active.response,
+              Exit.isSuccess(exit) ? Exit.succeed({ value: exit.value, done: true }) : exit,
+            )
+          }
+          yield* invocation.completeGeneratorRequests(state, asynchronous)
+          state.completed = true
+        })
+        return Effect.andThen(this.promises.fork(body), Deferred.await(request.response))
+      }
+      return Deferred.await(request.response)
+    })
+    return generator
+  }
+
+  private completeGeneratorRequests(state: GeneratorState, asynchronous: boolean): Effect.Effect<void, never, R> {
+    const self = this
+    return Effect.gen(function* () {
+      while (state.pending.length > 0) {
+        const pending = state.pending.shift()!
+        if (pending.kind === "throw") {
+          Deferred.doneUnsafe(pending.response, Exit.fail(new ProgramThrow(pending.value)))
+          continue
+        }
+        if (asynchronous && pending.kind === "return") {
+          const resolved = yield* Effect.exit(self.awaitValue(pending.value))
+          Deferred.doneUnsafe(
+            pending.response,
+            Exit.isSuccess(resolved) ? Exit.succeed({ value: resolved.value, done: true }) : resolved,
+          )
+          continue
+        }
+        Deferred.doneUnsafe(
+          pending.response,
+          Exit.succeed({ value: pending.kind === "return" ? pending.value : undefined, done: true }),
+        )
+      }
+    })
+  }
+
+  private takeGeneratorRequest(state: GeneratorState): Effect.Effect<GeneratorRequest> {
+    const next = state.pending.shift()
+    if (next) return Effect.succeed(next)
+    state.available = Deferred.makeUnsafe<void>()
+    return Effect.andThen(
+      Deferred.await(state.available),
+      Effect.sync(() => state.pending.shift()!),
+    )
+  }
+
+  private evaluateYieldExpression(node: AstNode): Effect.Effect<unknown, unknown, R> {
+    const argument = getOptionalNode(node, "argument")
+    const self = this
+    return Effect.gen(function* () {
+      if (!self.generatorState) throw new InterpreterRuntimeError("yield is only valid inside a generator.", node)
+      if (node.delegate === true) {
+        const value = argument ? yield* self.evaluateExpression(argument) : undefined
+        return yield* self.delegateYield(value, node)
+      }
+      const value = argument ? yield* self.evaluateExpression(argument) : undefined
+      const yielded = self.generatorAsync ? yield* self.awaitValue(value) : value
+      return yield* self.suspendGenerator(yielded, node)
+    })
+  }
+
+  private suspendGenerator(value: unknown, node: AstNode): Effect.Effect<unknown, unknown, R> {
+    const state = this.generatorState
+    if (!state?.active) throw new InterpreterRuntimeError("Generator has no active request.", node)
+    Deferred.doneUnsafe(state.active.response, Exit.succeed({ value, done: false }))
+    state.active = undefined
+    return Effect.flatMap(this.takeGeneratorRequest(state), (request) => {
+      state.active = request
+      if (request.kind === "next") return Effect.succeed(request.value)
+      if (request.kind === "throw") return Effect.fail(new ProgramThrow(request.value))
+      return this.generatorAsync
+        ? Effect.flatMap(this.awaitValue(request.value), (value) => Effect.fail(new GeneratorReturn(value)))
+        : Effect.fail(new GeneratorReturn(request.value))
+    })
+  }
+
+  private delegateYield(value: unknown, node: AstNode): Effect.Effect<unknown, unknown, R> {
+    const self = this
+    return Effect.gen(function* () {
+      const spread = spreadItems(value)
+      if (spread !== undefined) {
+        for (const item of spread) {
+          const resumed = yield* Effect.exit(
+            self.suspendGenerator(self.generatorAsync ? yield* self.awaitValue(item) : item, node),
+          )
+          if (Exit.isSuccess(resumed)) continue
+          const error = Cause.squash(resumed.cause)
+          if (error instanceof GeneratorReturn) return yield* Effect.fail(error)
+          if (error instanceof ProgramThrow) {
+            throw new InterpreterRuntimeError("The delegated iterator does not provide a throw() method.", node).as(
+              "TypeError",
+            )
+          }
+          return yield* Effect.failCause(resumed.cause)
+        }
+        return undefined
+      }
+
+      const iterator = yield* self.customIterator(value, node, self.generatorAsync)
+      if (!iterator)
+        throw new InterpreterRuntimeError("yield* requires a compatible iterable value.", node).as("TypeError")
+      let kind: GeneratorRequestKind = "next"
+      let input: unknown = undefined
+      let first = true
+      while (true) {
+        const method =
+          kind === "next"
+            ? iterator.next
+            : iterator.iterator instanceof CodeModeGenerator
+              ? new GeneratorMethodReference(iterator.iterator, kind)
+              : iterator.iterator[kind]
+        if (method === undefined || method === null) {
+          if (kind === "return") return yield* Effect.fail(new GeneratorReturn(input))
+          yield* self.closeIterator(iterator, node, self.generatorAsync)
+          throw new InterpreterRuntimeError("The delegated iterator does not provide a throw() method.", node).as(
+            "TypeError",
+          )
+        }
+        const called = yield* self.invokeCallable(
+          self.requireIteratorMethod(method, `Iterator ${kind}`, node),
+          kind === "next" && first ? [] : [input],
+          node,
+        )
+        first = false
+        const result = self.requireIteratorObject(
+          iterator.asynchronous ? yield* self.awaitValue(called) : called,
+          `Iterator ${kind}() result`,
+          node,
+        )
+        const resultValue = self.generatorAsync ? yield* self.awaitValue(result.value) : result.value
+        if (Boolean(result.done)) {
+          if (kind === "return") return yield* Effect.fail(new GeneratorReturn(resultValue))
+          return resultValue
+        }
+
+        const resumed = yield* Effect.exit(self.suspendGenerator(resultValue, node))
+        if (Exit.isSuccess(resumed)) {
+          kind = "next"
+          input = resumed.value
+          continue
+        }
+        const error = Cause.squash(resumed.cause)
+        if (!(error instanceof GeneratorReturn) && !(error instanceof ProgramThrow)) {
+          return yield* Effect.failCause(resumed.cause)
+        }
+        kind = error instanceof GeneratorReturn ? "return" : "throw"
+        input = error.value
+      }
+    })
   }
 
   private evaluateObjectExpression(node: AstNode): Effect.Effect<Record<string, unknown>, unknown, R> {
@@ -2061,6 +2324,7 @@ export class Interpreter<R> {
     | IntrinsicReference
     | GlobalMethodReference
     | JsonMethodReference
+    | GeneratorMethodReference
     | ComputedValue
     | typeof OptionalShortCircuit
     | undefined,
@@ -2205,6 +2469,19 @@ export class Interpreter<R> {
         )
       }
 
+      if (objectValue instanceof CodeModeGenerator) {
+        if (key === "next" || key === "return" || key === "throw") {
+          return new GeneratorMethodReference(objectValue, key)
+        }
+        if (
+          (key === IteratorSymbol && !objectValue.asynchronous) ||
+          (key === AsyncIteratorSymbol && objectValue.asynchronous)
+        ) {
+          return new GeneratorMethodReference(objectValue, "iterator")
+        }
+        return new ComputedValue(undefined)
+      }
+
       if (isRuntimeReference(objectValue)) {
         throw new InterpreterRuntimeError(
           "Runtime references are opaque and do not expose properties.",
@@ -2248,7 +2525,8 @@ export class Interpreter<R> {
         reference instanceof PromiseInstanceMethodReference ||
         reference instanceof IntrinsicReference ||
         reference instanceof GlobalMethodReference ||
-        reference instanceof JsonMethodReference
+        reference instanceof JsonMethodReference ||
+        reference instanceof GeneratorMethodReference
       )
         return reference
       if (Array.isArray(reference.target)) {
@@ -2284,6 +2562,7 @@ export class Interpreter<R> {
         reference instanceof IntrinsicReference ||
         reference instanceof GlobalMethodReference ||
         reference instanceof JsonMethodReference ||
+        reference instanceof GeneratorMethodReference ||
         reference.target instanceof CodeModeURL
       ) {
         throw new InterpreterRuntimeError("Only data fields may be deleted.", target, "InvalidDataValue")
@@ -2312,7 +2591,8 @@ export class Interpreter<R> {
         reference instanceof PromiseInstanceMethodReference ||
         reference instanceof IntrinsicReference ||
         reference instanceof GlobalMethodReference ||
-        reference instanceof JsonMethodReference
+        reference instanceof JsonMethodReference ||
+        reference instanceof GeneratorMethodReference
       ) {
         throw new InterpreterRuntimeError("Only data fields may be assigned.", node)
       }

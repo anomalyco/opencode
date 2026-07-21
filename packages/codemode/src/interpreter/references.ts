@@ -1,10 +1,12 @@
 import {
   type AstNode,
   CodeModeFunction,
+  CodeModeGenerator,
   CoercionFunction,
   ErrorConstructorReference,
   GlobalMethodReference,
   GlobalNamespace,
+  GeneratorMethodReference,
   InterpreterRuntimeError,
   IntrinsicReference,
   JsonMethodReference,
@@ -21,6 +23,8 @@ import { isCodeModeValue, CodeModePromise } from "../values.js"
 
 export const isRuntimeReference = (value: unknown): boolean =>
   value instanceof CodeModeFunction ||
+  value instanceof CodeModeGenerator ||
+  value instanceof GeneratorMethodReference ||
   value instanceof ToolReference ||
   value instanceof IntrinsicReference ||
   value instanceof GlobalNamespace ||
@@ -107,6 +111,7 @@ export const rejectCircularInsertion = (container: object, value: unknown, label
 export const typeofValue = (value: unknown): string => {
   if (
     value instanceof CodeModeFunction ||
+    value instanceof GeneratorMethodReference ||
     value instanceof CoercionFunction ||
     value instanceof IntrinsicReference ||
     value instanceof GlobalMethodReference ||

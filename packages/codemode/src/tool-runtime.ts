@@ -553,7 +553,7 @@ export const prepare = <R>(tools: Tools<R>, catalogBudget = defaultCatalogBudget
     "## Language",
     "",
     "Use common JavaScript data operations, functions, control flow, selected standard-library methods, and awaited tool calls. Built-ins include Date, RegExp, Map, Set, URL, URLSearchParams, and URI encoding helpers.",
-    "Modules/imports, classes, generators, timers, fetch, eval, prototype access, and unlisted methods are unavailable. Use tools for external operations. Use await with try/catch.",
+    "Modules/imports, classes, timers, fetch, eval, prototype access, and unlisted methods are unavailable. Sync and async generators support yield/yield* and iteration with for...of or for await...of; generator values are confined references, not returnable data. Use tools for external operations. Use await with try/catch.",
     "Prefer explicit `return`; otherwise only the final top-level expression becomes the result.",
     "Dates and URLs serialize to strings at data boundaries; Map/Set/RegExp/URLSearchParams serialize to `{}`.",
   ]

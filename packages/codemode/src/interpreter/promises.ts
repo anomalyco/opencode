@@ -64,6 +64,10 @@ export class PromiseRuntime<R> {
     return Fiber.await(promise.fiber)
   }
 
+  fork(effect: Effect.Effect<unknown, unknown, R>): Effect.Effect<void, never, R> {
+    return Effect.asVoid(Effect.forkIn(effect, this.scope, { startImmediately: true }))
+  }
+
   diagnostics(): Array<Diagnostic> {
     return [...this.failures].sort(([left], [right]) => left - right).map(([, failure]) => failure)
   }

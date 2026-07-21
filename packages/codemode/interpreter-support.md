@@ -65,7 +65,8 @@ ultimate source of truth.
 - [x] `if`/`else` and conditional expressions.
 - [x] `switch`, including default clauses and fallthrough.
 - [x] `for`, `while`, and `do...while`.
-- [x] `for...of` over arrays, strings, Maps, Sets, and URLSearchParams.
+- [x] `for...of` over arrays, strings, Maps, Sets, URLSearchParams, custom synchronous iterators, and confined
+      synchronous generators. Abrupt completion invokes the iterator's optional `return()`.
 - [x] `for...in` over own keys of plain objects, arrays, and tool references.
 - [x] Unlabeled `break` and `continue`.
 - [x] `try`, `catch`, optional catch bindings, and `finally`.
@@ -75,7 +76,7 @@ ultimate source of truth.
       `Symbol.asyncIterator` or the `Symbol.iterator` fallback. Each iterator step is sequential, yielded promises and
       plain values from synchronous collections and sync iterators are awaited before binding, and abrupt loop
       completion invokes the iterator's optional `return()`. Custom async iterators control their yielded values, as in
-      JavaScript; only their `next()` results are awaited. Async generators remain outside the supported subset.
+      JavaScript; only their `next()` results are awaited. Confined sync and async generators are iterable here.
 
 ## Functions and callbacks
 
@@ -104,7 +105,12 @@ ultimate source of truth.
 - [ ] User-defined constructor calls.
 - [ ] `Function.prototype.call`, `apply`, and `bind` for CodeMode functions.
 - [ ] Classes and private fields.
-- [ ] Generator functions and `yield`.
+- [x] Synchronous and async generator declarations/expressions, `yield`, and `yield*`, including lazy bodies,
+      `next(value)`, `return(value)`, `throw(value)`, exhaustion, promise adoption, async request ordering,
+      `try`/`catch`/`finally`, and sync/async iterator symbols. Generator values are opaque runtime references.
+- [x] Generator values integrate with `for...of` (sync only) and `for await...of` (sync and async). Array/argument
+      spread, destructuring, `Array.from`, and Promise combinators retain their existing finite collection subset and
+      do not consume generators.
 
 ## Expressions and operators
 
