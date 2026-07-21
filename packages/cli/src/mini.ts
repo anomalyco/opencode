@@ -22,6 +22,7 @@ export type MiniCommandInput = {
   replayLimit?: number
   demo?: boolean
   tuiConfig?: MiniFrontendInput["tuiConfig"]
+  config?: MiniFrontendInput["config"]
 }
 
 type Model = MiniFrontendInput["model"]
@@ -119,6 +120,7 @@ export async function runMini(input: MiniCommandInput) {
         replayLimit: input.replayLimit,
         demo: input.demo,
         tuiConfig: input.tuiConfig,
+        config: input.config,
       })
     })
     if (result.exitCode !== 0) process.exit(result.exitCode)

@@ -184,6 +184,7 @@ export type TurnSummary = {
 
 export type ScrollbackOptions = {
   suppressBackgrounds?: boolean
+  shellOutput?: boolean
 }
 
 export type ToolCodeSnapshot = {
@@ -293,6 +294,7 @@ export type FooterPromptRoute =
   | { type: "skill" }
   | { type: "model" }
   | { type: "variant" }
+  | { type: "settings" }
 
 export type FooterSubagentTab = {
   sessionID: string
@@ -389,7 +391,17 @@ export type FormCancel = {
   location?: LocationRef
 }
 
-export type RunTuiConfig = Pick<Config.Resolved, "keybinds" | "leader" | "theme" | "session">
+export type RunTuiConfig = Pick<Config.Resolved, "keybinds" | "leader" | "theme" | "session" | "mini">
+
+export type MiniSettings = {
+  thinking: "show" | "hide"
+  shell_output: "show" | "hide"
+}
+
+export type MiniSettingChange = {
+  key: keyof MiniSettings
+  value: "show" | "hide"
+}
 
 // Lifecycle phase of a scrollback entry. "start" opens the entry, "progress"
 // appends content (coalesced in the footer queue), "final" closes it.

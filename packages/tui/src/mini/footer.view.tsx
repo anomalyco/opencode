@@ -17,6 +17,7 @@ import {
   RunCommandMenuBody,
   RunModelSelectBody,
   RunQueuedPromptSelectBody,
+  RunSettingsBody,
   RunSkillSelectBody,
   RunSubagentSelectBody,
   RunVariantSelectBody,
@@ -39,6 +40,8 @@ import type {
   FooterView,
   FormCancel,
   FormReply,
+  MiniSettingChange,
+  MiniSettings,
   PermissionReply,
   RunAgent,
   RunCommand,
@@ -82,6 +85,7 @@ type RunFooterViewProps = {
   queuedPrompts?: () => FooterQueuedPrompt[]
   theme: () => RunTheme
   tuiConfig: RunTuiConfig
+  miniSettings: () => MiniSettings
   history?: () => RunPrompt[]
   onSubmit: (input: RunPrompt) => boolean
   onPermissionReply: (input: PermissionReply) => void | Promise<void>
@@ -100,6 +104,7 @@ type RunFooterViewProps = {
   onRows: (rows: number) => void
   onLayout: (input: { route: FooterPromptRoute; subagentRows: number }) => void
   onStatus: (text: string) => void
+  onMiniSettingChange: (change: MiniSettingChange) => void | Promise<void>
   onSubagentSelect?: (sessionID: string | undefined) => void
   onSubagentInterrupt?: (sessionID: string) => void
 }
@@ -131,6 +136,7 @@ export function RunFooterView(props: RunFooterViewProps) {
   const skilling = createMemo(() => active().type === "prompt" && route().type === "skill")
   const modeling = createMemo(() => active().type === "prompt" && route().type === "model")
   const varianting = createMemo(() => active().type === "prompt" && route().type === "variant")
+  const setting = createMemo(() => active().type === "prompt" && route().type === "settings")
   const panel = createMemo(
     () =>
       active().type === "permission" ||
@@ -140,7 +146,8 @@ export function RunFooterView(props: RunFooterViewProps) {
       commanding() ||
       skilling() ||
       modeling() ||
-      varianting(),
+      varianting() ||
+      setting(),
   )
   const selected = createMemo(() => {
     const current = route()
@@ -257,6 +264,11 @@ export function RunFooterView(props: RunFooterViewProps) {
     props.onSubagentSelect?.(undefined)
   }
 
+  const openSettings = () => {
+    setRoute({ type: "settings" })
+    props.onSubagentSelect?.(undefined)
+  }
+
   const openSubagentMenu = () => {
     if (tabs().length === 0) {
       return
@@ -323,6 +335,7 @@ export function RunFooterView(props: RunFooterViewProps) {
     onExitRequest: props.onExitRequest,
     onExit: props.onExit,
     onSkillMenu: openSkillMenu,
+    onSettings: openSettings,
     onRows: props.onRows,
     onStatus: props.onStatus,
   })
@@ -559,6 +572,7 @@ export function RunFooterView(props: RunFooterViewProps) {
       current.type !== "skill" &&
       current.type !== "model" &&
       current.type !== "variant" &&
+      current.type !== "settings" &&
       current.type !== "queued-menu" &&
       current.type !== "subagent-menu"
     ) {
@@ -668,6 +682,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                             onSubagent={openSubagentMenu}
                             onQueued={openQueuedMenu}
                             onVariant={openVariant}
+                            onSettings={openSettings}
                             onVariantCycle={() => {
                               props.onCycle()
                               closePanel()
@@ -724,6 +739,14 @@ export function RunFooterView(props: RunFooterViewProps) {
                               props.onVariantSelect(variant)
                               closePanel()
                             }}
+                          />
+                        </Match>
+                        <Match when={setting()}>
+                          <RunSettingsBody
+                            theme={theme}
+                            settings={props.miniSettings}
+                            onClose={closePanel}
+                            onChange={props.onMiniSettingChange}
                           />
                         </Match>
                         <Match when={active().type === "permission"}>
@@ -904,6 +927,7 @@ export function RunFooterView(props: RunFooterViewProps) {
             onCycle={cycleTab}
             onClose={closeTab}
             interrupt={() => subagentInterruptShortcut() || undefined}
+            shellOutput={() => props.miniSettings().shell_output === "show"}
           />
         </box>
       </Show>

@@ -51,7 +51,7 @@ type Auto = RunFooterMenuItem & {
 type SlashOption = RunFooterMenuItem & {
   kind: "slash"
   name: string
-  action?: "skill-menu" | "editor"
+  action?: "skill-menu" | "editor" | "settings"
 }
 
 type PromptOption = Auto | SlashOption
@@ -79,6 +79,7 @@ type PromptInput = {
   onExitRequest?: () => boolean
   onExit: () => void
   onSkillMenu: () => void
+  onSettings: () => void
   onRows: (rows: number) => void
   onStatus: (text: string) => void
 }
@@ -379,6 +380,13 @@ export function createPromptState(input: PromptInput): PromptState {
         name: "editor",
         display: "/editor",
         description: "compose in your external editor",
+      } satisfies SlashOption,
+      {
+        kind: "slash",
+        action: "settings" as const,
+        name: "settings",
+        display: "/settings",
+        description: "configure Mini transcript output",
       } satisfies SlashOption,
       { kind: "slash", name: "new", display: "/new", description: "start a new session" } satisfies SlashOption,
       { kind: "slash", name: "exit", display: "/exit", description: "close OpenCode" } satisfies SlashOption,
@@ -815,6 +823,12 @@ export function createPromptState(input: PromptInput): PromptState {
         return
       }
 
+      if (next.action === "settings" && !shell()) {
+        cancelAutocomplete()
+        input.onSettings()
+        return
+      }
+
       const cursor = area.cursorOffset
       const head = parseSlashHead(area.plainText)
       const local = !shell() && (next.name === "new" || next.name === "exit")
@@ -922,6 +936,7 @@ export function createPromptState(input: PromptInput): PromptState {
     if (current === "skill") return false
     if (current === "model") return false
     if (current === "variant") return false
+    if (current === "settings") return false
     if (current === "queued-menu") return false
     if (current === "subagent-menu") return false
     return true
@@ -1116,6 +1131,12 @@ export function createPromptState(input: PromptInput): PromptState {
     const command = next.mode === "shell" ? undefined : selectedCommand(next.text, next.command, input.commands())
     if (!command && next.mode !== "shell" && isExitCommand(next.text)) {
       input.onExit()
+      return
+    }
+
+    if (!command && next.mode !== "shell" && next.text.trim().toLowerCase() === "/settings") {
+      resetDraft()
+      input.onSettings()
       return
     }
 

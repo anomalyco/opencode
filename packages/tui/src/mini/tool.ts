@@ -1273,7 +1273,11 @@ function shellOutput(command: string, raw: string): string | undefined {
   return `\n${body}`
 }
 
-export function toolEntryBody(commit: StreamCommit, raw: string): RunEntryBody | undefined {
+export function toolEntryBody(
+  commit: StreamCommit,
+  raw: string,
+  options?: { shellOutput?: boolean },
+): RunEntryBody | undefined {
   if (commit.shell) {
     if (commit.phase === "start") {
       return textBody(`$ ${commit.shell.command}`)
@@ -1293,6 +1297,8 @@ export function toolEntryBody(commit: StreamCommit, raw: string): RunEntryBody |
 
   const ctx = toolFrame(commit, raw)
   const view = toolView(ctx.name)
+
+  if (ctx.name === "shell" && commit.phase === "progress" && options?.shellOutput === false) return undefined
 
   if (ctx.name === "subagent") {
     if (commit.phase === "start") {

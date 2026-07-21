@@ -11,6 +11,7 @@ import {
   RunCommandMenuBody,
   RunModelSelectBody,
   RunQueuedPromptSelectBody,
+  RunSettingsBody,
   RunSkillSelectBody,
   RunSubagentSelectBody,
   RunVariantSelectBody,
@@ -23,6 +24,8 @@ import type {
   FooterSubagentState,
   FooterSubagentTab,
   FooterView,
+  MiniSettingChange,
+  MiniSettings,
   RunCommand,
   RunInput,
   RunPrompt,
@@ -117,6 +120,8 @@ async function renderFooter(
     onSubmit?: (prompt: RunPrompt) => boolean
     view?: FooterView
     onFormReply?: (input: unknown) => void
+    miniSettings?: MiniSettings
+    onMiniSettingChange?: (change: MiniSettingChange) => void
   } = {},
 ) {
   const [view, setView] = createSignal<FooterView>(input.view ?? { type: "prompt" })
@@ -125,6 +130,7 @@ async function renderFooter(
   )
   const state = footerState(input.state)
   const config = input.tuiConfig ?? tuiConfig
+  const [miniSettings] = createSignal<MiniSettings>(input.miniSettings ?? { thinking: "hide", shell_output: "hide" })
   function Harness() {
     return (
       <Keymap.Provider config={config}>
@@ -143,6 +149,7 @@ async function renderFooter(
           subagent={subagents}
           theme={input.theme ?? (() => RUN_THEME_FALLBACK)}
           tuiConfig={config}
+          miniSettings={miniSettings}
           onSubmit={input.onSubmit ?? (() => true)}
           onPermissionReply={() => {}}
           onFormReply={(value) => input.onFormReply?.(value)}
@@ -157,6 +164,7 @@ async function renderFooter(
           onRows={() => {}}
           onLayout={() => {}}
           onStatus={() => {}}
+          onMiniSettingChange={(change) => input.onMiniSettingChange?.(change)}
         />
       </Keymap.Provider>
     )
@@ -369,6 +377,7 @@ test("direct command panel renders grouped command palette", async () => {
           onQueued={() => {}}
           onVariant={() => {}}
           onVariantCycle={() => {}}
+          onSettings={() => {}}
           onCommand={() => {}}
           onNew={() => {}}
           onExit={() => {}}
@@ -403,6 +412,40 @@ test("direct command panel renders grouped command palette", async () => {
     expect(frame).not.toContain("Cycle reasoning effort for future turns")
     expect(frame).not.toContain("Review code")
     expect(frame).not.toContain("Commands 8")
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("direct settings panel changes Mini transcript preferences", async () => {
+  const [settings, setSettings] = createSignal<MiniSettings>({ thinking: "hide", shell_output: "hide" })
+  const app = await testRender(
+    () => (
+      <box width={100} height={RUN_COMMAND_PANEL_ROWS}>
+        <RunSettingsBody
+          theme={() => RUN_THEME_FALLBACK.footer}
+          settings={settings}
+          onClose={() => {}}
+          onChange={(change) => {
+            setSettings((current) => ({ ...current, [change.key]: change.value }))
+          }}
+        />
+      </box>
+    ),
+    { width: 100, height: RUN_COMMAND_PANEL_ROWS },
+  )
+
+  try {
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("Settings")
+    expect(app.captureCharFrame()).toContain("Thinking")
+    expect(app.captureCharFrame()).toContain("Shell tool output")
+    expect(app.captureCharFrame()).toContain("left/right change")
+
+    app.mockInput.pressKey("ARROW_RIGHT")
+    await app.renderOnce()
+
+    expect(settings()).toEqual({ thinking: "show", shell_output: "hide" })
   } finally {
     app.renderer.destroy()
   }
@@ -518,6 +561,7 @@ test("direct command panel shows subagent entry when available", async () => {
           onQueued={() => {}}
           onVariant={() => {}}
           onVariantCycle={() => {}}
+          onSettings={() => {}}
           onCommand={() => {}}
           onNew={() => {}}
           onExit={() => {}}
@@ -566,6 +610,7 @@ test("direct command panel keeps completed subagents available", async () => {
           onQueued={() => {}}
           onVariant={() => {}}
           onVariantCycle={() => {}}
+          onSettings={() => {}}
           onCommand={() => {}}
           onNew={() => {}}
           onExit={() => {}}
@@ -822,7 +867,7 @@ test("direct footer submits slash autocomplete selections without dispatching sh
     await app.renderOnce()
 
     app.mockInput.pressKey("!")
-    "/rev".split("").forEach((key) => app.mockInput.pressKey(key))
+    "/settings".split("").forEach((key) => app.mockInput.pressKey(key))
     await app.renderOnce()
     app.mockInput.pressEnter()
     await app.renderOnce()
@@ -834,7 +879,7 @@ test("direct footer submits slash autocomplete selections without dispatching sh
       { text: "/new ", parts: [] },
       { text: "/new ", parts: [] },
     ])
-    expect(app.captureCharFrame()).toContain("/review")
+    expect(app.renderer.currentFocusedEditor?.plainText).toBe("/settings ")
   } finally {
     app.cleanup()
   }
@@ -862,6 +907,26 @@ test("direct footer slash autocomplete keeps a real skills command", async () =>
 
     expect(submits).toEqual([{ text: "/skills ", parts: [], command: { name: "skills", arguments: "" } }])
     expect(app.captureCharFrame()).not.toContain("Apply formatter fixes")
+  } finally {
+    app.cleanup()
+  }
+})
+
+test("direct footer closes settings with ctrl-c instead of arming exit", async () => {
+  const app = await renderFooter({ height: 20 })
+
+  try {
+    await app.renderOnce()
+    "/settings".split("").forEach((key) => app.mockInput.pressKey(key))
+    await app.renderOnce()
+    app.mockInput.pressEnter()
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("Shell tool output")
+
+    app.mockInput.pressKey("c", { ctrl: true })
+    await app.renderOnce()
+    expect(app.captureCharFrame()).not.toContain("Shell tool output")
+    expect(app.renderer.currentFocusedEditor?.plainText).toBe("")
   } finally {
     app.cleanup()
   }
@@ -1034,6 +1099,7 @@ test("direct footer shows authoritative pending work while running", async () =>
           ]}
           theme={() => RUN_THEME_FALLBACK}
           tuiConfig={tuiConfig}
+          miniSettings={() => ({ thinking: "hide", shell_output: "hide" })}
           onSubmit={() => true}
           onPermissionReply={() => {}}
           onFormReply={() => {}}
@@ -1048,6 +1114,7 @@ test("direct footer shows authoritative pending work while running", async () =>
           onRows={() => {}}
           onLayout={() => {}}
           onStatus={() => {}}
+          onMiniSettingChange={() => {}}
         />
       </Keymap.Provider>
     )

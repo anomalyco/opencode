@@ -18,6 +18,8 @@ import type {
   FooterApi,
   FormCancel,
   FormReply,
+  MiniSettingChange,
+  MiniSettings,
   MiniHost,
   PermissionReply,
   RunAgent,
@@ -26,6 +28,7 @@ import type {
   RunReference,
   RunTuiConfig,
 } from "./types"
+import { resolveMiniSettings } from "./runtime.boot"
 import { formatModelLabel } from "./variant.shared"
 
 const FOOTER_HEIGHT = 4
@@ -62,6 +65,7 @@ export type LifecycleInput = {
   model: RunInput["model"]
   variant: string | undefined
   tuiConfig: RunTuiConfig | Promise<RunTuiConfig>
+  onMiniSettingChange?: (change: MiniSettingChange) => Promise<MiniSettings>
   onPermissionReply: (input: PermissionReply) => void | Promise<void>
   onFormReply: (input: FormReply) => void | Promise<void>
   onFormCancel: (input: FormCancel) => void | Promise<void>
@@ -224,6 +228,10 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
     theme,
     wrote,
     tuiConfig,
+    miniSettings: {
+      current: resolveMiniSettings(tuiConfig),
+      update: input.onMiniSettingChange,
+    },
     onPermissionReply: input.onPermissionReply,
     onFormReply: input.onFormReply,
     onFormCancel: input.onFormCancel,

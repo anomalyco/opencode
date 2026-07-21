@@ -758,10 +758,12 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       client.session.active(options),
     ])
     if (!current(attempt)) return
-    state.pending = new Map(pending.flatMap((item) => {
-      const prompt = pendingPrompt(item)
-      return prompt ? [[prompt.messageID, prompt] as const] : []
-    }))
+    state.pending = new Map(
+      pending.flatMap((item) => {
+        const prompt = pendingPrompt(item)
+        return prompt ? [[prompt.messageID, prompt] as const] : []
+      }),
+    )
     syncPending()
     state.permissions = permissions
     pruneToolSources()

@@ -5,7 +5,15 @@ import fuzzysort from "fuzzysort"
 import { createEffect, createMemo, createSignal, type Accessor } from "solid-js"
 import { RunFooterMenu, createFooterMenuState, type RunFooterMenuItem } from "./footer.menu"
 import type { RunFooterTheme } from "./theme"
-import type { FooterQueuedPrompt, FooterSubagentTab, RunCommand, RunInput, RunProvider } from "./types"
+import type {
+  FooterQueuedPrompt,
+  FooterSubagentTab,
+  MiniSettingChange,
+  MiniSettings,
+  RunCommand,
+  RunInput,
+  RunProvider,
+} from "./types"
 
 type PanelEntry = RunFooterMenuItem & {
   category: string
@@ -20,6 +28,7 @@ type CommandEntry =
   | (PanelEntry & { action: "subagent" })
   | (PanelEntry & { action: "variant.cycle" })
   | (PanelEntry & { action: "variant.list" })
+  | (PanelEntry & { action: "settings" })
   | (PanelEntry & { action: "slash"; name: string })
   | (PanelEntry & { action: "exit" })
 
@@ -46,6 +55,10 @@ type SubagentEntry = PanelEntry & {
 
 type QueuedEntry = PanelEntry & {
   prompt: FooterQueuedPrompt
+}
+
+type SettingEntry = PanelEntry & {
+  key: keyof MiniSettings
 }
 
 const PANEL_PAD = 2
@@ -266,6 +279,7 @@ function PanelShell(props: {
   inputRef: (input: InputRenderable) => void
   onQuery: (query: string) => void
   children: JSX.Element
+  hint?: string
   dark?: boolean
   chrome?: "default" | "minimal"
 }) {
@@ -294,7 +308,7 @@ function PanelShell(props: {
         ) : null}
         <box flexGrow={1} flexShrink={1} backgroundColor="transparent" />
         <text fg={props.theme().muted} wrapMode="none" truncate flexShrink={0}>
-          esc
+          {props.hint ? `${props.hint} · ` : ""}esc
         </text>
       </box>
       <box height={1} flexShrink={0} backgroundColor={background()} />
@@ -400,6 +414,7 @@ export function RunCommandMenuBody(props: {
   onQueued: () => void
   onVariant: () => void
   onVariantCycle: () => void
+  onSettings: () => void
   onCommand: (name: string) => void
   onNew: () => void
   onExit: () => void
@@ -407,7 +422,7 @@ export function RunCommandMenuBody(props: {
   const skills = createMemo(() => (props.commands() ?? []).filter((item) => item.source === "skill"))
   const activeSubagentCount = createMemo(() => props.subagents().filter((item) => item.status === "running").length)
   const entries = createMemo<CommandEntry[]>(() => {
-    const builtins = ["editor", "new"]
+    const builtins = ["editor", "new", "settings"]
     const session: CommandEntry[] = [
       {
         action: "editor",
@@ -515,6 +530,13 @@ export function RunCommandMenuBody(props: {
       ...prompt,
       ...agent,
       ...commands,
+      {
+        action: "settings",
+        category: "System",
+        display: "Open settings",
+        footer: "/settings",
+        keywords: "/settings settings preferences configuration",
+      },
       { action: "exit", category: "System", display: "Exit", footer: "/exit", keywords: "/exit exit" },
     ]
   })
@@ -551,6 +573,11 @@ export function RunCommandMenuBody(props: {
 
     if (item.action === "variant.list") {
       props.onVariant()
+      return
+    }
+
+    if (item.action === "settings") {
+      props.onSettings()
       return
     }
 
@@ -595,6 +622,87 @@ export function RunCommandMenuBody(props: {
         rows={() => PANEL_LIST_ROWS}
         limit={PANEL_LIST_ROWS}
         empty="No results found"
+        border={false}
+        paddingLeft={PANEL_PAD}
+        paddingRight={PANEL_PAD}
+        grouped={!controller.query().trim()}
+        background
+        headerColor={props.theme().muted}
+      />
+    </PanelShell>
+  )
+}
+
+export function RunSettingsBody(props: {
+  theme: Accessor<RunFooterTheme>
+  settings: Accessor<MiniSettings>
+  onClose: () => void
+  onChange: (change: MiniSettingChange) => void | Promise<void>
+}) {
+  const [saving, setSaving] = createSignal<keyof MiniSettings>()
+  const entries = createMemo<SettingEntry[]>(() => [
+    {
+      category: "Transcript",
+      display: "Thinking",
+      description: "future sessions",
+      footer: saving() === "thinking" ? "saving" : props.settings().thinking,
+      keywords: `thinking reasoning ${props.settings().thinking}`,
+      key: "thinking",
+    },
+    {
+      category: "Transcript",
+      display: "Shell tool output",
+      description: "model-issued commands",
+      footer: saving() === "shell_output" ? "saving" : props.settings().shell_output,
+      keywords: `shell tool command output ${props.settings().shell_output}`,
+      key: "shell_output",
+    },
+  ])
+  const change = (item: SettingEntry) => {
+    if (saving()) return
+    const current = props.settings()[item.key]
+    setSaving(item.key)
+    void Promise.resolve(props.onChange({ key: item.key, value: current === "show" ? "hide" : "show" }))
+      .catch(() => {})
+      .finally(() => setSaving())
+  }
+  const controller = createSearchablePanelController({
+    entries,
+    limit: PANEL_LIST_ROWS,
+    onClose: props.onClose,
+    onSelect: change,
+    onKey(event, item) {
+      const name = event.name.toLowerCase()
+      if (name !== "left" && name !== "right") return false
+      event.preventDefault()
+      if (item) change(item)
+      return true
+    },
+  })
+
+  return (
+    <PanelShell
+      title="Settings"
+      countVisible={false}
+      query={controller.query()}
+      count={controller.items().length}
+      total={entries().length}
+      placeholder="Search"
+      theme={props.theme}
+      inputRef={controller.inputRef}
+      onQuery={controller.setQuery}
+      hint="left/right change"
+      dark
+      chrome="minimal"
+    >
+      <RunFooterMenu
+        theme={props.theme}
+        items={controller.items}
+        selected={controller.menu.selected}
+        offset={controller.menu.offset}
+        rows={() => PANEL_LIST_ROWS}
+        limit={PANEL_LIST_ROWS}
+        empty="No settings found"
         border={false}
         paddingLeft={PANEL_PAD}
         paddingRight={PANEL_PAD}

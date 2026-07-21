@@ -1,5 +1,5 @@
 import { toolEntryBody } from "./tool"
-import type { RunEntryBody, StreamCommit } from "./types"
+import type { RunEntryBody, ScrollbackOptions, StreamCommit } from "./types"
 
 export type EntryFlags = {
   startOnNewLine: boolean
@@ -162,7 +162,7 @@ export function entryCanStream(commit: StreamCommit, body: RunEntryBody): boolea
   return commit.kind === "assistant" || commit.kind === "reasoning"
 }
 
-export function entryBody(commit: StreamCommit): RunEntryBody {
+export function entryBody(commit: StreamCommit, options?: ScrollbackOptions): RunEntryBody {
   if (commit.summary) {
     return RUN_ENTRY_NONE
   }
@@ -174,7 +174,7 @@ export function entryBody(commit: StreamCommit): RunEntryBody {
   }
 
   if (commit.kind === "tool") {
-    return toolEntryBody(commit, raw) ?? RUN_ENTRY_NONE
+    return toolEntryBody(commit, raw, options) ?? RUN_ENTRY_NONE
   }
 
   if (commit.kind === "assistant") {

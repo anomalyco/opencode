@@ -55,6 +55,7 @@ test("down opens subagents from an empty prompt", async () => {
           subagent={subagents}
           theme={() => RUN_THEME_FALLBACK}
           tuiConfig={config}
+          miniSettings={() => ({ thinking: "hide", shell_output: "hide" })}
           onSubmit={() => true}
           onPermissionReply={() => {}}
           onFormReply={() => {}}
@@ -69,6 +70,7 @@ test("down opens subagents from an empty prompt", async () => {
           onRows={() => {}}
           onLayout={() => {}}
           onStatus={() => {}}
+          onMiniSettingChange={() => {}}
         />
       </Keymap.Provider>
     )

@@ -389,7 +389,6 @@ describe("run entry body", () => {
       type: "text",
       content: "$ pwd",
     })
-
     expect(
       entryBody(
         commit({
@@ -408,6 +407,15 @@ describe("run entry body", () => {
     ).toEqual({
       type: "text",
       content: "\n/tmp/demo",
+    })
+  })
+
+  test("hides shell tool output but not direct shell output", () => {
+    const output = commit({ kind: "tool", text: "output", phase: "progress", source: "tool", tool: "shell" })
+    expect(entryBody(output, { shellOutput: false })).toEqual({ type: "none" })
+    expect(entryBody({ ...output, shell: { command: "pwd" } }, { shellOutput: false })).toEqual({
+      type: "text",
+      content: "\noutput",
     })
   })
 

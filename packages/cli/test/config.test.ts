@@ -131,11 +131,16 @@ test("updates a config draft while preserving JSONC comments", async () => {
         const service = yield* Config.Service
         return yield* service.update((draft) => {
           draft.prompt = { paste: "compact" }
+          draft.mini = { thinking: "hide", shell_output: "hide" }
         })
       }),
     )
 
-    expect(config).toEqual({ animations: true, prompt: { paste: "compact" } })
+    expect(config).toEqual({
+      animations: true,
+      prompt: { paste: "compact" },
+      mini: { thinking: "hide", shell_output: "hide" },
+    })
     expect(await Bun.file(path.join(directory, "cli.json")).text()).toContain("// Keep this comment")
   } finally {
     await Bun.$`rm -rf ${directory}`

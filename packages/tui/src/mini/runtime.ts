@@ -10,11 +10,27 @@
 //   4. runs the prompt queue until the footer closes.
 import { SessionMessage } from "@opencode-ai/schema/session-message"
 import type { LocationRef } from "@opencode-ai/client/promise"
+import type { Config } from "../config"
 import { loadRunAgents, loadRunCommands, loadRunReferences, waitForDefaultModel } from "./catalog.shared"
-import { resolveModelInfo, resolveModelInfoStrict, resolveRunTuiConfig, resolveSessionInfo } from "./runtime.boot"
+import {
+  resolveMiniSettings,
+  resolveModelInfo,
+  resolveModelInfoStrict,
+  resolveRunTuiConfig,
+  resolveSessionInfo,
+} from "./runtime.boot"
 import { createRuntimeLifecycle } from "./runtime.lifecycle"
 import { cycleVariant, formatModelLabel, resolveVariant } from "./variant.shared"
-import type { LocalReplayRow, MiniHost, RunInput, RunPrompt, RunProvider, RunTuiConfig, StreamCommit } from "./types"
+import type {
+  LocalReplayRow,
+  MiniHost,
+  MiniSettings,
+  RunInput,
+  RunPrompt,
+  RunProvider,
+  RunTuiConfig,
+  StreamCommit,
+} from "./types"
 
 type BootContext = Pick<RunInput, "sdk" | "agent" | "model" | "variant"> & {
   location: LocationRef
@@ -43,6 +59,7 @@ type RunRuntimeInput = {
   replayLimit?: number
   demo?: RunInput["demo"]
   tuiConfig?: RunTuiConfig | Promise<RunTuiConfig>
+  config?: Pick<Config.Interface, "update">
 }
 
 export type RunDeferredInput = {
@@ -62,6 +79,7 @@ export type RunDeferredInput = {
   replayLimit?: number
   demo?: RunInput["demo"]
   tuiConfig?: RunTuiConfig | Promise<RunTuiConfig>
+  config?: Pick<Config.Interface, "update">
 }
 
 type StreamTransportModule = Pick<
@@ -174,7 +192,12 @@ function abortable<A>(task: Promise<A>, signal: AbortSignal): Promise<A | undefi
 async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDeps = {}): Promise<void> {
   const start = input.host.startup.now()
   const log = input.host.diagnostics.trace
-  const tuiConfigTask = resolveRunTuiConfig(input.tuiConfig, input.host.platform)
+  const config = input.config
+  const configState: { current: MiniSettings } = { current: resolveMiniSettings() }
+  const tuiConfigTask = resolveRunTuiConfig(input.tuiConfig, input.host.platform).then((tuiConfig) => {
+    configState.current = resolveMiniSettings(tuiConfig)
+    return tuiConfig
+  })
   const ctx = await input.boot()
   const runtimeController = new AbortController()
   const session = {
@@ -226,6 +249,16 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     model: state.model,
     variant: state.activeVariant,
     tuiConfig: tuiConfigTask,
+    onMiniSettingChange: config
+      ? async (change) => {
+          const info = await config.update((draft) => {
+            if (!draft.mini || typeof draft.mini !== "object") draft.mini = {}
+            draft.mini[change.key] = change.value
+          })
+          configState.current = resolveMiniSettings(info)
+          return configState.current
+        }
+      : undefined,
     onPermissionReply: async (next) => {
       if (state.demo?.permission(next)) {
         return
@@ -359,8 +392,8 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
       })
     },
   })
-  const tuiConfig = await tuiConfigTask
-  const thinking = input.thinking ?? tuiConfig.session?.thinking !== "hide"
+  await tuiConfigTask
+  const thinking = () => input.thinking ?? configState.current.thinking === "show"
   const footer = shell.footer
   const firstPaint = footer.idle().catch(() => {})
   const offRuntimeClose = footer.onClose(() => runtimeController.abort())
@@ -679,7 +712,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     return createRunDemo({
       footer,
       sessionID: state.sessionID,
-      thinking,
+      thinking: thinking(),
     })
   }
 
@@ -722,7 +755,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
         readTextFile: input.host.files.readText,
         location: state.location,
         sessionID: state.sessionID,
-        thinking,
+        thinking: thinking(),
         replay: input.replay,
         replayLimit: input.replayLimit,
         footer,
@@ -1018,6 +1051,7 @@ export async function runInteractiveDeferredMode(input: RunDeferredInput, deps?:
       replayLimit: input.replayLimit,
       demo: input.demo,
       tuiConfig: input.tuiConfig,
+      config: input.config,
       reconnect: input.reconnect,
       resolveSession: input.target,
       createSession: input.createSession,

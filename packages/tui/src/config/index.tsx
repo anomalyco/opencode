@@ -122,6 +122,16 @@ export const Info = Schema.Struct({
       }),
     }),
   ).annotate({ description: "Session transcript presentation settings" }),
+  mini: Schema.optional(
+    Schema.Struct({
+      thinking: Schema.optional(Schema.Literals(["show", "hide"])).annotate({
+        description: "Show or hide model reasoning in Mini",
+      }),
+      shell_output: Schema.optional(Schema.Literals(["show", "hide"])).annotate({
+        description: "Show or hide raw shell tool output in Mini",
+      }),
+    }),
+  ).annotate({ description: "Mini transcript presentation settings" }),
   hints: Schema.optional(
     Schema.Struct({
       onboarding: Schema.optional(Schema.Boolean).annotate({ description: "Show getting-started guidance" }),

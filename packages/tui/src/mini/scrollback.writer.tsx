@@ -74,7 +74,7 @@ export function RunEntryContent(props: {
   opts?: ScrollbackOptions
 }) {
   const theme = createMemo(() => props.theme ?? RUN_THEME_FALLBACK)
-  const body = createMemo(() => props.body ?? entryBody(props.commit))
+  const body = createMemo(() => props.body ?? entryBody(props.commit, props.opts))
   const style = createMemo(() => entryLook(props.commit, theme().entry))
   const syntax = createMemo(() => entrySyntax(theme()))
   const color = createMemo(() => entryColor(props.commit, theme()))

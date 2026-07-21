@@ -56,6 +56,7 @@ export function RunFooterSubagentBody(props: {
   // Formatted interrupt shortcut from the registered keymap binding; the
   // command itself is dispatched through the keymap in footer.view.
   interrupt?: () => string | undefined
+  shellOutput?: () => boolean
 }) {
   const theme = createMemo(() => props.theme())
   const footer = createMemo(() => theme().footer)
@@ -86,7 +87,7 @@ export function RunFooterSubagentBody(props: {
   const rows = indexArray(commits, (commit, index) => (
     <box flexDirection="column" gap={0} flexShrink={0}>
       {index > 0 && separatorRows(commits()[index - 1], commit()) > 0 ? <box height={1} flexShrink={0} /> : null}
-      <RunEntryContent commit={commit()} theme={theme()} />
+      <RunEntryContent commit={commit()} theme={theme()} opts={{ shellOutput: props.shellOutput?.() ?? true }} />
     </box>
   ))
   let scroll: ScrollBoxRenderable | undefined
