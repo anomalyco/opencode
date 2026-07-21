@@ -341,6 +341,8 @@ export class Interpreter<R> {
         return this.evaluateIfStatement(node)
       case "SwitchStatement":
         return this.evaluateSwitchStatement(node)
+      case "LabeledStatement":
+        return this.evaluateLabeledStatement(node)
       case "WhileStatement":
         return this.evaluateWhileStatement(node)
       case "DoWhileStatement":
@@ -488,7 +490,10 @@ export class Interpreter<R> {
         for (let index = start; index < cases.length; index += 1) {
           for (const statementValue of getArray(cases[index]!, "consequent")) {
             const result = yield* self.evaluateStatement(asNode(statementValue, "consequent"))
-            if (result.kind === "break") return { kind: "none" } satisfies StatementResult
+            if (result.kind === "break") {
+              if (result.label === undefined) return { kind: "none" } satisfies StatementResult
+              return result
+            }
             if (result.kind === "return" || result.kind === "continue") return result
           }
         }
@@ -497,7 +502,10 @@ export class Interpreter<R> {
     })
   }
 
-  private evaluateWhileStatement(node: AstNode): Effect.Effect<StatementResult, unknown, R> {
+  private evaluateWhileStatement(
+    node: AstNode,
+    labels?: ReadonlySet<string>,
+  ): Effect.Effect<StatementResult, unknown, R> {
     const testNode = getNode(node, "test")
     const bodyNode = getNode(node, "body")
 
@@ -507,10 +515,12 @@ export class Interpreter<R> {
         const result = yield* self.evaluateStatement(bodyNode)
 
         if (result.kind === "continue") {
+          if (result.label !== undefined && !labels?.has(result.label)) return result
           continue
         }
 
         if (result.kind === "break") {
+          if (result.label !== undefined && !labels?.has(result.label)) return result
           return { kind: "none" } satisfies StatementResult
         }
 
@@ -523,7 +533,10 @@ export class Interpreter<R> {
     })
   }
 
-  private evaluateDoWhileStatement(node: AstNode): Effect.Effect<StatementResult, unknown, R> {
+  private evaluateDoWhileStatement(
+    node: AstNode,
+    labels?: ReadonlySet<string>,
+  ): Effect.Effect<StatementResult, unknown, R> {
     const bodyNode = getNode(node, "body")
     const testNode = getNode(node, "test")
 
@@ -533,10 +546,12 @@ export class Interpreter<R> {
         const result = yield* self.evaluateStatement(bodyNode)
 
         if (result.kind === "continue") {
+          if (result.label !== undefined && !labels?.has(result.label)) return result
           continue
         }
 
         if (result.kind === "break") {
+          if (result.label !== undefined && !labels?.has(result.label)) return result
           return { kind: "none" } satisfies StatementResult
         }
 
@@ -549,7 +564,10 @@ export class Interpreter<R> {
     })
   }
 
-  private evaluateForStatement(node: AstNode): Effect.Effect<StatementResult, unknown, R> {
+  private evaluateForStatement(
+    node: AstNode,
+    labels?: ReadonlySet<string>,
+  ): Effect.Effect<StatementResult, unknown, R> {
     this.scopes.push()
     const self = this
     return Effect.gen(function* () {
@@ -593,8 +611,11 @@ export class Interpreter<R> {
         }
 
         if (result.kind === "break") {
+          if (result.label !== undefined && !labels?.has(result.label)) return result
           return { kind: "none" } satisfies StatementResult
         }
+
+        if (result.kind === "continue" && result.label !== undefined && !labels?.has(result.label)) return result
 
         nextIteration()
         if (updateNode) {
@@ -610,7 +631,10 @@ export class Interpreter<R> {
     }).pipe(Effect.ensuring(Effect.sync(() => self.scopes.pop())))
   }
 
-  private evaluateForOfStatement(node: AstNode): Effect.Effect<StatementResult, unknown, R> {
+  private evaluateForOfStatement(
+    node: AstNode,
+    labels?: ReadonlySet<string>,
+  ): Effect.Effect<StatementResult, unknown, R> {
     if (getBoolean(node, "await")) {
       throw new InterpreterRuntimeError("for await...of is not supported.", node)
     }
@@ -667,10 +691,12 @@ export class Interpreter<R> {
         }
 
         if (result.kind === "break") {
+          if (result.label !== undefined && !labels?.has(result.label)) return result
           return { kind: "none" } satisfies StatementResult
         }
 
         if (result.kind === "continue") {
+          if (result.label !== undefined && !labels?.has(result.label)) return result
           continue
         }
       }
@@ -698,7 +724,10 @@ export class Interpreter<R> {
     return undefined
   }
 
-  private evaluateForInStatement(node: AstNode): Effect.Effect<StatementResult, unknown, R> {
+  private evaluateForInStatement(
+    node: AstNode,
+    labels?: ReadonlySet<string>,
+  ): Effect.Effect<StatementResult, unknown, R> {
     const left = getNode(node, "left")
     const declared = loopDeclaration(left, "for...in")
     if (declared?.lexical) this.scopes.push()
@@ -748,10 +777,12 @@ export class Interpreter<R> {
         }
 
         if (result.kind === "break") {
+          if (result.label !== undefined && !labels?.has(result.label)) return result
           return { kind: "none" } satisfies StatementResult
         }
 
         if (result.kind === "continue") {
+          if (result.label !== undefined && !labels?.has(result.label)) return result
           continue
         }
       }
@@ -768,22 +799,36 @@ export class Interpreter<R> {
 
   private evaluateBreakStatement(node: AstNode): StatementResult {
     const labelNode = getOptionalNode(node, "label")
-
-    if (labelNode) {
-      throw new InterpreterRuntimeError("Labeled break is not supported in v1.", node)
-    }
-
-    return { kind: "break" }
+    return labelNode ? { kind: "break", label: getString(labelNode, "name") } : { kind: "break" }
   }
 
   private evaluateContinueStatement(node: AstNode): StatementResult {
     const labelNode = getOptionalNode(node, "label")
+    return labelNode ? { kind: "continue", label: getString(labelNode, "name") } : { kind: "continue" }
+  }
 
-    if (labelNode) {
-      throw new InterpreterRuntimeError("Labeled continue is not supported in v1.", node)
+  private evaluateLabeledStatement(node: AstNode): Effect.Effect<StatementResult, unknown, R> {
+    const labels = new Set<string>()
+    let body = node
+    while (body.type === "LabeledStatement") {
+      labels.add(getString(getNode(body, "label"), "name"))
+      body = getNode(body, "body")
     }
 
-    return { kind: "continue" }
+    const evaluated = (() => {
+      if (body.type === "WhileStatement") return this.evaluateWhileStatement(body, labels)
+      if (body.type === "DoWhileStatement") return this.evaluateDoWhileStatement(body, labels)
+      if (body.type === "ForStatement") return this.evaluateForStatement(body, labels)
+      if (body.type === "ForOfStatement") return this.evaluateForOfStatement(body, labels)
+      if (body.type === "ForInStatement") return this.evaluateForInStatement(body, labels)
+      return this.evaluateStatement(body)
+    })()
+
+    return Effect.map(evaluated, (result) =>
+      result.kind === "break" && result.label !== undefined && labels.has(result.label)
+        ? ({ kind: "none" } satisfies StatementResult)
+        : result,
+    )
   }
 
   private evaluateThrowStatement(node: AstNode): Effect.Effect<StatementResult, unknown, R> {
