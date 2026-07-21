@@ -1,12 +1,19 @@
+// Linear client injection is handled by `LinearClientMiddleware` (see
+// `middleware/linear-client.ts`), which provides `LinearClientRef` per
+// request. Handlers yield `LinearClientRef` to get the resolved
+// `LinearMcpClient | null`; they do NOT call `Effect.provideService` to
+// inject it (per `httpapi/AGENTS.md` line 35: "Use
+// `Effect.provideService(...)` in middleware only for request-derived
+// context").
+
 import { InstanceState } from "@/effect/instance-state"
 import { Issue } from "@/issue/issue"
 import { LinearBinding } from "@/issue/linear-binding"
 import { SyncPull } from "@/issue/sync-pull"
 import { SyncPush } from "@/issue/sync-push"
-import { LinearMcpClient } from "@/issue/mcp-client"
+import { LinearClientRef } from "@/issue/mcp-client"
 import { USER, TEAM, PROJECT, ISSUE } from "@/issue/tool-names"
-import { MCP } from "@/mcp"
-import { Effect, Exit, Schema, Option } from "effect"
+import { Effect, Exit, Option, Schema } from "effect"
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
 import { LinearBindingSetPayload, IssueCreatePayload, IssueUpdatePayload } from "../groups/issue"
@@ -18,19 +25,26 @@ type LinearProjectRaw = { id: string; name: string; state?: string }
 
 const decodeJson = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
 
+// MCP tool results are untyped at the TS boundary: `Client.callTool` returns
+// `unknown` (the MCP SDK types the wire shape as `CallToolResult` but our
+// wrapper unwraps it to `unknown`). The Linear MCP server wraps its GraphQL
+// response data inside `{ content: [{ type: "text", text: "<json>" }] }`.
+// The `as Record<string, unknown>` casts below are the unavoidable price of
+// bridging an untyped protocol to typed code — Schema validation happens at
+// the inner `decodeJson` call, the outer shape is structurally asserted.
 const parseContent = (raw: unknown): unknown => {
   if (!raw || typeof raw !== "object") return raw
   const r = raw as Record<string, unknown>
   if (!Array.isArray(r.content)) return raw
-  for (const item of r.content) {
-    if (typeof item !== "object" || !item) continue
-    const c = item as Record<string, unknown>
-    if (c.type === "text" && typeof c.text === "string") {
-      const parsed = Option.getOrUndefined(decodeJson(c.text))
-      if (parsed !== undefined) return parsed
-    }
-  }
-  return raw
+  const parsed = r.content
+    .map((item): unknown => {
+      if (typeof item !== "object" || !item) return undefined
+      const c = item as Record<string, unknown>
+      if (c.type !== "text" || typeof c.text !== "string") return undefined
+      return Option.getOrUndefined(decodeJson(c.text))
+    })
+    .find((x): x is NonNullable<typeof x> => x !== undefined)
+  return parsed ?? raw
 }
 
 const parseUsers = (raw: unknown): LinearUserRaw[] => {
@@ -136,39 +150,6 @@ export const issueHandlers = HttpApiBuilder.group(InstanceHttpApi, "issue", (han
   Effect.gen(function* () {
     const issue = yield* Issue.Service
     const linearBinding = yield* LinearBinding.Service
-    const mcp = yield* MCP.Service
-
-    // Cached fallback client created from LINEAR_API_KEY env var. Lives in
-    // the layer closure so it's reused across requests. Wrapped in a single
-    // mutable ref object so the outer scope only needs one `const` binding
-    // (per AGENTS.md "avoid `let` where `const` suffices"). The ref is
-    // mutated in place; cleared only by process restart.
-    const envClientRef: { client: LinearMcpClient | null; failed: boolean } = {
-      client: null,
-      failed: false,
-    }
-
-    const getLinearClient = Effect.fn("IssueHttpApi.getLinearClient")(function* () {
-      // Path A: Linear MCP registered in opencode.jsonc → use the project's
-      // already-connected MCP client.
-      const clients = yield* mcp.clients()
-      const raw = clients["linear"]
-      if (raw) return LinearMcpClient.wrap(raw)
-      // Path B: no MCP registration; fall back to a direct connection
-      // using LINEAR_API_KEY. After one failure (missing env var or
-      // connection error) we stop retrying — the user must fix env/config
-      // and restart the server.
-      if (envClientRef.client) return envClientRef.client
-      if (envClientRef.failed) return undefined
-      const exit = yield* LinearMcpClient.create().pipe(Effect.exit)
-      if (Exit.isFailure(exit)) {
-        envClientRef.failed = true
-        yield* Effect.logWarning(`[IssueHttpApi.getLinearClient] LinearMcpClient.create failed: ${String(exit)}`)
-        return undefined
-      }
-      envClientRef.client = exit.value
-      return envClientRef.client
-    })
 
     const list = Effect.fn("IssueHttpApi.list")(function* (ctx: { query?: { include_archived?: boolean } }) {
       const directory = yield* InstanceState.directory
@@ -182,7 +163,7 @@ export const issueHandlers = HttpApiBuilder.group(InstanceHttpApi, "issue", (han
       const directory = yield* InstanceState.directory
       const issues = yield* issue.get({ directory, include_archived: ctx.query?.include_archived ?? false })
       const found = issues.find((i) => i.id === ctx.params.id)
-      if (!found) return yield* Effect.fail(new HttpApiError.NotFound({}))
+      if (!found) return yield* new HttpApiError.NotFound({})
       return found
     })
 
@@ -215,12 +196,10 @@ export const issueHandlers = HttpApiBuilder.group(InstanceHttpApi, "issue", (han
 
     const remove = Effect.fn("IssueHttpApi.remove")(function* (ctx: { params: { id: string } }) {
       const directory = yield* InstanceState.directory
-      yield* issue
-        .delete({ directory, id: ctx.params.id })
-        .pipe(
-          Effect.catchTag("Issue.NotArchivedError", () => Effect.fail(new HttpApiError.BadRequest({}))),
-          Effect.catchTag("Issue.NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
-        )
+      yield* issue.delete({ directory, id: ctx.params.id }).pipe(
+        Effect.catchTag("Issue.NotArchivedError", () => Effect.fail(new HttpApiError.BadRequest({}))),
+        Effect.catchTag("Issue.NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
+      )
       return true
     })
 
@@ -248,21 +227,34 @@ export const issueHandlers = HttpApiBuilder.group(InstanceHttpApi, "issue", (han
       payload: typeof LinearBindingSetPayload.Type
     }) {
       const body = ctx.payload
+      // ADR-0004 D3: the payload fields are all optional, but `set()` writes
+      // a full `Binding | null`. Treat the payload as a partial update and
+      // merge with the existing binding so `PUT { teamId: "x" }` does NOT
+      // clobber a previously-stored `projectId`. Sending all fields empty
+      // (or sending `{}`) clears the binding entirely (writes null).
       const hasAny = body.teamId || body.projectId || body.teamName || body.projectName || body.projectUrl
-      const binding = hasAny
-        ? {
-            teamId: body.teamId ?? "",
-            teamName: body.teamName ?? "",
-            projectId: body.projectId ?? "",
-            ...(body.projectName ? { projectName: body.projectName } : {}),
-            ...(body.projectUrl ? { projectUrl: body.projectUrl } : {}),
-          }
-        : null
-      return yield* linearBinding.set(binding as LinearBinding.Binding | null)
+      if (!hasAny) return yield* linearBinding.set(null)
+      const existing = yield* linearBinding.get()
+      const merged: LinearBinding.Binding = {
+        teamId: body.teamId ?? existing?.teamId ?? "",
+        teamName: body.teamName ?? existing?.teamName ?? "",
+        projectId: body.projectId ?? existing?.projectId ?? "",
+        ...(body.projectName !== undefined
+          ? { projectName: body.projectName }
+          : existing?.projectName !== undefined
+            ? { projectName: existing.projectName }
+            : {}),
+        ...(body.projectUrl !== undefined
+          ? { projectUrl: body.projectUrl }
+          : existing?.projectUrl !== undefined
+            ? { projectUrl: existing.projectUrl }
+            : {}),
+      }
+      return yield* linearBinding.set(merged)
     })
 
     const linearTeams = Effect.fn("IssueHttpApi.linearTeams")(function* () {
-      const client = yield* getLinearClient()
+      const client = yield* LinearClientRef
       if (!client) return []
       const exit = yield* client.callTool(TEAM.LIST, { limit: 100 }).pipe(Effect.exit)
       if (Exit.isFailure(exit)) return []
@@ -270,7 +262,7 @@ export const issueHandlers = HttpApiBuilder.group(InstanceHttpApi, "issue", (han
     })
 
     const linearProjects = Effect.fn("IssueHttpApi.linearProjects")(function* (ctx: { query?: { team?: string } }) {
-      const client = yield* getLinearClient()
+      const client = yield* LinearClientRef
       if (!client) return []
       const args: Record<string, unknown> = { limit: 50 }
       const teamFilter = ctx.query?.team
@@ -281,7 +273,7 @@ export const issueHandlers = HttpApiBuilder.group(InstanceHttpApi, "issue", (han
     })
 
     const linearUsers = Effect.fn("IssueHttpApi.linearUsers")(function* () {
-      const client = yield* getLinearClient()
+      const client = yield* LinearClientRef
       if (!client) return []
       const exit = yield* client.callTool(USER.LIST, { limit: 100 }).pipe(Effect.exit)
       if (Exit.isFailure(exit)) return []
@@ -291,7 +283,7 @@ export const issueHandlers = HttpApiBuilder.group(InstanceHttpApi, "issue", (han
     const linearStatuses = Effect.fn("IssueHttpApi.linearStatuses")(function* () {
       const binding = yield* linearBinding.get()
       if (!binding?.teamId) return []
-      const client = yield* getLinearClient()
+      const client = yield* LinearClientRef
       if (!client) return []
       const exit = yield* client.callTool(ISSUE.LIST_STATUSES, { team: binding.teamId }).pipe(Effect.exit)
       if (Exit.isFailure(exit)) return []
@@ -300,51 +292,45 @@ export const issueHandlers = HttpApiBuilder.group(InstanceHttpApi, "issue", (han
 
     const syncPull = Effect.fn("IssueHttpApi.syncPull")(function* () {
       const directory = yield* InstanceState.directory
-      const client = yield* getLinearClient()
-      if (!client) return yield* Effect.fail(new HttpApiError.BadRequest({}))
-      // The Linear MCP client is resolved per-request via `getLinearClient()`
-      // (Path A: shared project MCP client; Path B: env-var fallback). Because
-      // the client identity depends on per-request resolution (which may even
-      // return undefined, in which case we bail above), it cannot be supplied
-      // by a layer-level middleware. A middleware would have to either run
-      // `getLinearClient()` itself (re-implementing the per-request branching
-      // and the missing-client short-circuit) or always provide *some* client,
-      // which would force every Issue route to pay the Linear connection cost
-      // even when the route does not talk to Linear. `Effect.provideService`
-      // here keeps the Linear dependency scoped to exactly the two routes
-      // (`syncPull`, `syncPush`) that need it, with no impact on the other
-      // Issue routes in this same handler module.
+      const client = yield* LinearClientRef
+      if (!client) return yield* new HttpApiError.BadRequest({})
+      // `LinearClientRef` is provided per-request by `LinearClientMiddleware`
+      // (see top-of-file comment). `SyncPull.pull` consumes the same tag, so
+      // the handler's null-check above is the only Linear-client gating.
       return yield* SyncPull.pull({ directory }).pipe(
-        Effect.provideService(SyncPull.Client, client),
-        Effect.catchDefect((defect: unknown) =>
-          Effect.gen(function* () {
-            yield* Effect.logError(`[IssueHttpApi.syncPull] defect: ${String(defect)}`)
-            return yield* Effect.fail(new SyncPull.SyncPullError({ message: String(defect) }))
-          }),
-        ),
+        // Precise error mapping per AGENTS.md errors.md "Do not map every
+        // domain error into one universal HTTP error class". Sync is a
+        // server-side operation: every non-defect failure (SyncPullError,
+        // LinearMcpError, unexpected throws from the MCP SDK / Drizzle)
+        // indicates a server-side problem, not a client input problem.
+        //   - `SyncPullError` (tagged) → 500 InternalServerError — fatal
+        //     sync precondition failure (missing Linear binding, MCP
+        //     transport failure). Not a client input problem.
+        //   - `LinearMcpError` (tagged) → 500 InternalServerError — Linear
+        //     API/MCP transport failure. Server-side.
+        //   - Other non-defect failures → 500 InternalServerError (defensive
+        //     default; sync is server-side, so 500 is the correct shape).
+        // Defects (Interrupt/Die) propagate naturally — NOT caught, so
+        // unexpected bugs surface in logs rather than being masked as 400.
         Effect.tapError((error) => Effect.logError(`[IssueHttpApi.syncPull] error: ${String(error)}`)),
-        Effect.mapError(() => new HttpApiError.BadRequest({})),
+        Effect.catchTag("SyncPullError", () => new HttpApiError.InternalServerError({})),
+        Effect.mapError(() => new HttpApiError.InternalServerError({})),
       )
     })
 
     const syncPush = Effect.fn("IssueHttpApi.syncPush")(function* () {
       const directory = yield* InstanceState.directory
-      const client = yield* getLinearClient()
-      if (!client) return yield* Effect.fail(new HttpApiError.BadRequest({}))
-      // See `syncPull` above for the rationale on per-request
-      // `Effect.provideService` vs. layer-level middleware. The Linear client
-      // is request-scoped, may be undefined (handled by the early return
-      // above), and must not be forced on routes that do not call Linear.
-      return yield* SyncPush.push({ directory, issueIds: "all" }).pipe(
-        Effect.provideService(SyncPush.Client, client),
-        Effect.catchDefect((defect: unknown) =>
-          Effect.gen(function* () {
-            yield* Effect.logError(`[IssueHttpApi.syncPush] defect: ${String(defect)}`)
-            return yield* Effect.fail(new SyncPush.SyncPushError({ message: String(defect) }))
-          }),
-        ),
+      const client = yield* LinearClientRef
+      if (!client) return yield* new HttpApiError.BadRequest({})
+      // See `syncPull` above for the LinearClientRef / middleware rationale.
+      // `issueIds: []` per ADR-0005 D3 — empty filter means "push all
+      // dirty issues" (bulk sync), not "push zero issues".
+      return yield* SyncPush.push({ directory, issueIds: [] }).pipe(
+        // See `syncPull` above for the precise error mapping rationale.
+        // Sync is server-side, so all non-defect failures map to 500.
         Effect.tapError((error) => Effect.logError(`[IssueHttpApi.syncPush] error: ${String(error)}`)),
-        Effect.mapError(() => new HttpApiError.BadRequest({})),
+        Effect.catchTag("SyncPushError", () => new HttpApiError.InternalServerError({})),
+        Effect.mapError(() => new HttpApiError.InternalServerError({})),
       )
     })
 

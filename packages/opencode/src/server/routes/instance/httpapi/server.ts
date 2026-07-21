@@ -18,6 +18,7 @@ import { Git } from "@/git"
 import { Installation } from "@/installation"
 import { Issue } from "@/issue/issue"
 import { LinearBinding } from "@/issue/linear-binding"
+import { LinearGraphqlClient } from "@/issue/linear-graphql"
 import { LSP } from "@/lsp/lsp"
 import { MCP } from "@/mcp"
 import { McpAuth } from "@/mcp/auth"
@@ -110,6 +111,7 @@ import { PtyEnvironment } from "@opencode-ai/server/pty-environment"
 import { schemaErrorLayer as v2SchemaErrorLayer } from "@opencode-ai/server/middleware/schema-error"
 import { workspaceHandlers } from "./handlers/workspace"
 import { instanceContextLayer } from "./middleware/instance-context"
+import { linearClientLayer } from "./middleware/linear-client"
 import { workspaceRoutingLayer } from "./middleware/workspace-routing"
 import { disposeMiddleware } from "./lifecycle"
 import { memoMap } from "@opencode-ai/core/effect/memo-map"
@@ -176,7 +178,7 @@ const instanceApiRoutes = HttpApiBuilder.layer(InstanceHttpApi).pipe(
 )
 
 const instanceRoutes = instanceApiRoutes.pipe(
-  Layer.provide([httpApiAuthLayer, workspaceRoutingLive, instanceContextLayer, schemaErrorLayer]),
+  Layer.provide([httpApiAuthLayer, workspaceRoutingLive, instanceContextLayer, linearClientLayer, schemaErrorLayer]),
 )
 const serverRoutes = HttpApiBuilder.layer(Api).pipe(
   Layer.provide(handlers),
@@ -264,6 +266,7 @@ const app = LayerNode.group([
   Installation.node,
   Issue.node,
   LinearBinding.node,
+  LinearGraphqlClient.node,
   ShareNext.node,
   SessionShare.node,
   InstanceStore.node,

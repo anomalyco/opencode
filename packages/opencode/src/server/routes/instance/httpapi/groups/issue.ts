@@ -2,6 +2,7 @@ import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../middleware/authorization"
 import { InstanceContextMiddleware } from "../middleware/instance-context"
+import { LinearClientMiddleware } from "../middleware/linear-client"
 import {
   WorkspaceRoutingMiddleware,
   WorkspaceRoutingQuery,
@@ -50,13 +51,7 @@ export const IssuePartial = Schema.Struct({
   labels: Schema.optional(Schema.Array(Schema.String)),
   due_date: Schema.optional(Schema.NullOr(Schema.String)),
   assignee_id: Schema.optional(Schema.NullOr(Schema.String)),
-  linear_issue_id: Schema.optional(Schema.NullOr(Schema.String)),
-  linear_team_id: Schema.optional(Schema.NullOr(Schema.String)),
-  linear_project_id: Schema.optional(Schema.NullOr(Schema.String)),
   position: Schema.optional(Schema.Number),
-  last_pushed_at: Schema.optional(Schema.NullOr(Schema.Number)),
-  last_pulled_at: Schema.optional(Schema.NullOr(Schema.Number)),
-  cloud_shadow: Schema.optional(Schema.NullOr(Schema.Record(Schema.String, Schema.Unknown))),
 })
 
 export const IssueCreatePayload = Schema.Struct({
@@ -339,7 +334,11 @@ export const IssueApi = HttpApi.make("issue")
         HttpApiEndpoint.post("syncPull", IssuePaths.syncPull, {
           query: WorkspaceRoutingQuery,
           success: described(SyncPullResponse, "Pull result"),
-          error: HttpApiError.BadRequest,
+          // SyncPullError is a fatal sync precondition failure (missing
+          // Linear binding, MCP transport failure) — semantically 500,
+          // not 400 BadRequest. Per AGENTS.md errors.md "Do not map every
+          // domain error into one universal HTTP error class".
+          error: [HttpApiError.BadRequest, HttpApiError.InternalServerError],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "issue.syncPull",
@@ -351,7 +350,10 @@ export const IssueApi = HttpApi.make("issue")
         HttpApiEndpoint.post("syncPush", IssuePaths.syncPush, {
           query: WorkspaceRoutingQuery,
           success: described(SyncPushResponse, "Push result"),
-          error: HttpApiError.BadRequest,
+          // SyncPushError is a fatal sync precondition failure (missing
+          // Linear binding, MCP transport failure) — semantically 500,
+          // not 400 BadRequest.
+          error: [HttpApiError.BadRequest, HttpApiError.InternalServerError],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "issue.syncPush",
@@ -366,6 +368,13 @@ export const IssueApi = HttpApi.make("issue")
           description: "Issue (Todo) management routes — workspace-scoped, Linear-aligned.",
         }),
       )
+      // Middleware execution order is the REVERSE of registration order
+      // (last registered runs first). `LinearClientMiddleware` calls
+      // `mcp.clients()` → `InstanceState.get` → `InstanceRef`, so it MUST
+      // run AFTER `InstanceContextMiddleware` provides `InstanceRef`.
+      // Registering it first makes it the innermost middleware (runs last,
+      // just before the handler), by which point `InstanceRef` is available.
+      .middleware(LinearClientMiddleware)
       .middleware(InstanceContextMiddleware)
       .middleware(WorkspaceRoutingMiddleware)
       .middleware(Authorization),
