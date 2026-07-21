@@ -312,6 +312,90 @@ test("does not overwrite a concurrent config update during migration", async () 
   }
 })
 
+test("does not overwrite a concurrent update from another config layer", async () => {
+  const directory = await Bun.$`mktemp -d`.text().then((value) => value.trim())
+  const file = path.join(directory, "cli.json")
+  await Bun.write(file, `{"keybinds":{"session_delete":"ctrl+d"}}`)
+  const node = await Effect.runPromise(
+    Effect.gen(function* () {
+      return yield* FileSystem.FileSystem
+    }).pipe(Effect.provide(NodeFileSystem.layer)),
+  )
+  const started = Promise.withResolvers<void>()
+  const resume = Promise.withResolvers<void>()
+  const state = { writes: 0 }
+  const writeFileString: FileSystem.FileSystem["writeFileString"] = (path, data, options) => {
+    state.writes++
+    if (state.writes !== 1) return node.writeFileString(path, data, options)
+    started.resolve()
+    return Effect.gen(function* () {
+      yield* Effect.promise(() => resume.promise)
+      yield* node.writeFileString(path, data, options)
+    })
+  }
+  const fs = new Proxy(node, {
+    get(target, property, receiver) {
+      if (property === "writeFileString") return writeFileString
+      return Reflect.get(target, property, receiver)
+    },
+  })
+  const make = () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        return yield* Config.Service
+      }).pipe(
+        Effect.provide(Config.layer),
+        Effect.provide(Global.layerWith({ config: directory, state: directory })),
+        Effect.provideService(FileSystem.FileSystem, fs),
+      ),
+    )
+
+  try {
+    const first = await make()
+    const second = await make()
+    const reading = Effect.runPromise(first.get())
+    await started.promise
+    const updating = Effect.runPromise(
+      second.update((draft) => {
+        draft.mouse = false
+      }),
+    )
+    await Promise.race([updating, Bun.sleep(100)]).finally(() => resume.resolve())
+    await Promise.all([reading, updating])
+    const config = await Effect.runPromise(second.get())
+
+    expect(config).toMatchObject({ keybinds: { "session.delete": "ctrl+d" }, mouse: false })
+    expect(await Bun.file(file).json()).toMatchObject({ keybinds: { "session.delete": "ctrl+d" }, mouse: false })
+  } finally {
+    resume.resolve()
+    await Bun.$`rm -rf ${directory}`
+  }
+})
+
+test("updates the effective duplicate top-level keybinds", async () => {
+  const directory = await Bun.$`mktemp -d`.text().then((value) => value.trim())
+  const file = path.join(directory, "cli.json")
+  await Bun.write(file, `{"keybinds":{"session_delete":"first"},"keybinds":{"session_delete":"last"}}`)
+
+  try {
+    const config = await run(
+      directory,
+      Effect.gen(function* () {
+        const service = yield* Config.Service
+        yield* service.get()
+        return yield* service.update((draft) => {
+          draft.keybinds = { ...draft.keybinds, "session.delete": "changed" }
+        })
+      }),
+    )
+
+    expect(config.keybinds).toEqual({ "session.delete": "changed" })
+    expect(parse(await Bun.file(file).text()).keybinds).toEqual({ "session.delete": "changed" })
+  } finally {
+    await Bun.$`rm -rf ${directory}`
+  }
+})
+
 test("removes a sole orphaned keybind with a trailing comma", async () => {
   const directory = await Bun.$`mktemp -d`.text().then((value) => value.trim())
   const file = path.join(directory, "cli.json")
