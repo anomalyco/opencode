@@ -685,7 +685,7 @@ function runProvider<E>(
 }
 
 const providerLayer = (endpoint: string) =>
-  SimulatedProvider.layerDrive({ endpoint }).pipe(
+  SimulatedProvider.layerDrive({ endpoint, version: "test" }).pipe(
     Layer.provide(
       Layer.succeed(SdkPlugins.Service, SdkPlugins.Service.of({ register: () => Effect.void, all: () => [] })),
     ),
@@ -694,7 +694,7 @@ const providerLayer = (endpoint: string) =>
 const toolLifecycleLayer = (endpoint: string) => {
   const provider = makeGlobalNode({
     service: SimulatedProvider.Service,
-    layer: SimulatedProvider.layerDrive({ endpoint }),
+    layer: SimulatedProvider.layerDrive({ endpoint, version: "test" }),
     deps: [SdkPlugins.node],
   })
   return AppNodeBuilder.build(

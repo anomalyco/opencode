@@ -1,11 +1,16 @@
 import { Layer } from "effect"
 import { OtlpLogger } from "effect/unstable/observability"
-import { InstallationChannel, InstallationVersion } from "../installation/version.js"
 import { runID } from "./shared.js"
 
 export interface Options {
   readonly endpoint?: string
   readonly headers?: string
+}
+
+export interface App {
+  readonly client: string
+  readonly version: string
+  readonly channel: string
 }
 
 function parseHeaders(value?: string) {
@@ -37,36 +42,36 @@ function resourceAttributes() {
   }
 }
 
-export function resource(client = "cli"): {
+export function resource(app: App = { client: "opencode", version: "unknown", channel: "local" }): {
   serviceName: string
   serviceVersion: string
   attributes: Record<string, string>
 } {
   return {
     serviceName: "opencode",
-    serviceVersion: InstallationVersion,
+    serviceVersion: app.version,
     attributes: {
       ...resourceAttributes(),
-      "deployment.environment.name": InstallationChannel,
-      "opencode.client": client,
+      "deployment.environment.name": app.channel,
+      "opencode.client": app.client,
       "opencode.run": runID,
       "service.instance.id": runID,
     },
   }
 }
 
-export function loggers(options: Options | undefined, client: string) {
+export function loggers(options: Options | undefined, app: App) {
   if (!options?.endpoint) return []
   return [
     OtlpLogger.make({
       url: `${options.endpoint}/v1/logs`,
-      resource: resource(client),
+      resource: resource(app),
       headers: parseHeaders(options.headers),
     }),
   ]
 }
 
-export async function tracingLayer(options: Options | undefined, client: string) {
+export async function tracingLayer(options: Options | undefined, app: App) {
   if (!options?.endpoint) return Layer.empty
   const NodeSdk = await import("@effect/opentelemetry/NodeSdk")
   const OTLP = await import("@opentelemetry/exporter-trace-otlp-http")
@@ -80,7 +85,7 @@ export async function tracingLayer(options: Options | undefined, client: string)
   context.setGlobalContextManager(manager)
 
   return NodeSdk.layer(() => ({
-    resource: resource(client),
+    resource: resource(app),
     spanProcessor: new SdkBase.BatchSpanProcessor(
       new OTLP.OTLPTraceExporter({
         url: `${options.endpoint}/v1/traces`,

@@ -1,6 +1,7 @@
 import { render, TimeToFirstDraw, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { registerOpencodeSpinner } from "./component/register-spinner"
 import { Deferred, Effect } from "effect"
+import { Metadata } from "@opencode-ai/core/app"
 import { Service, type Endpoint } from "@opencode-ai/client/effect/service"
 import { OpenCode } from "@opencode-ai/client"
 import { Global } from "@opencode-ai/util/global"
@@ -32,6 +33,7 @@ import {
 } from "solid-js"
 import {
   TuiLifecycleProvider,
+  TuiAppProvider,
   TuiPathsProvider,
   TuiStartupProvider,
   TuiTerminalEnvironmentProvider,
@@ -176,6 +178,7 @@ function errorMessage(error: unknown) {
 }
 
 export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
+  const app = yield* Metadata
   const log = input.log ?? (() => {})
   const global = yield* Global.Service
   const config = Config.resolve(yield* Effect.tryPromise(() => input.config.get()), {
@@ -273,9 +276,10 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                 }}
               >
                 <EpilogueProvider set={(value) => (exit.epilogue = value)}>
-                  <ErrorBoundary
-                    fallback={(error, reset) => <ErrorComponent error={error} reset={reset} mode={mode} />}
-                  >
+                  <TuiAppProvider value={app}>
+                    <ErrorBoundary
+                      fallback={(error, reset) => <ErrorComponent error={error} reset={reset} mode={mode} />}
+                    >
                     <TuiPathsProvider
                       value={{
                         cwd: process.cwd(),
@@ -381,7 +385,8 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                         </TuiTerminalEnvironmentProvider>
                       </TuiLifecycleProvider>
                     </TuiPathsProvider>
-                  </ErrorBoundary>
+                    </ErrorBoundary>
+                  </TuiAppProvider>
                 </EpilogueProvider>
               </ExitProvider>
             </LogProvider>

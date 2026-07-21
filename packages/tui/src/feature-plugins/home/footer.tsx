@@ -1,8 +1,7 @@
 import { Plugin } from "@opencode-ai/plugin/v2/tui"
-import { InstallationVersion } from "@opencode-ai/util/installation/version"
 import { createMemo, Match, Show, Switch } from "solid-js"
 import { useTerminalDimensions } from "@opentui/solid"
-import { useTuiPaths } from "../../context/runtime"
+import { useTuiApp, useTuiPaths } from "../../context/runtime"
 import { useTheme } from "../../context/theme"
 import { abbreviateHome } from "../../runtime"
 import { FilePath } from "../../ui/file-path"
@@ -50,6 +49,7 @@ function Mcp(props: { context: Plugin.Context }) {
 
 function View(props: { context: Plugin.Context }) {
   const { themeV2 } = useTheme()
+  const app = useTuiApp()
   const dimensions = useTerminalDimensions()
   const mcpWidth = createMemo(() => {
     const list = props.context.data.location.mcp.server.list(props.context.location) ?? []
@@ -71,12 +71,12 @@ function View(props: { context: Plugin.Context }) {
     >
       <Directory
         context={props.context}
-        maxWidth={Math.max(2, dimensions().width - 8 - stringWidth(InstallationVersion) - mcpWidth())}
+        maxWidth={Math.max(2, dimensions().width - 8 - stringWidth(app.version) - mcpWidth())}
       />
       <Mcp context={props.context} />
       <box flexGrow={1} />
       <box flexShrink={0}>
-        <text fg={themeV2.text.subdued}>{InstallationVersion}</text>
+        <text fg={themeV2.text.subdued}>{app.version}</text>
       </box>
     </box>
   )

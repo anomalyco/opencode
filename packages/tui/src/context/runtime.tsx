@@ -1,4 +1,5 @@
 import { createComponent, createContext, type JSX, useContext } from "solid-js"
+import type { Info } from "@opencode-ai/core/app"
 
 export type TuiPaths = Readonly<{
   cwd: string
@@ -23,6 +24,7 @@ export type TuiLifecycle = Readonly<{
 }>
 
 const PathsContext = createContext<TuiPaths>()
+const AppContext = createContext<Info>()
 const TerminalEnvironmentContext = createContext<TuiTerminalEnvironment>()
 const StartupContext = createContext<TuiStartup>()
 const LifecycleContext = createContext<TuiLifecycle>()
@@ -38,6 +40,10 @@ function provider<T>(context: ReturnType<typeof createContext<T>>, value: T, chi
 
 export function TuiPathsProvider(props: { value: TuiPaths; children: JSX.Element }) {
   return provider(PathsContext, props.value, () => props.children)
+}
+
+export function TuiAppProvider(props: { value: Info; children: JSX.Element }) {
+  return provider(AppContext, props.value, () => props.children)
 }
 
 export function TuiTerminalEnvironmentProvider(props: { value: TuiTerminalEnvironment; children: JSX.Element }) {
@@ -60,6 +66,10 @@ function required<T>(context: ReturnType<typeof createContext<T>>, name: string)
 
 export function useTuiPaths() {
   return required(PathsContext, "TuiPathsProvider")
+}
+
+export function useTuiApp() {
+  return required(AppContext, "TuiAppProvider")
 }
 
 export function useTuiTerminalEnvironment() {

@@ -2,6 +2,7 @@ import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { httpClient } from "@opencode-ai/util/effect/app-node-platform"
 import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
+import { App } from "@opencode-ai/core/app"
 import { Config, Effect, Layer } from "effect"
 import { HttpClient } from "effect/unstable/http"
 import { DriveManifest } from "../manifest"
@@ -21,7 +22,8 @@ import { SimulatedProvider } from "./simulated-provider"
  *
  */
 
-export const simulationReplacements = Effect.fn("Simulation.replacements")(function* () {
+export const simulationReplacements = Effect.fn("Simulation.replacements")(function* (input?: Partial<App.Info>) {
+  const app = App.make(input)
   // ModelsDev dies when its catalog fetch fails, so simulation answers it with
   // an empty catalog; providers come from seeded config instead.
   const models = SimulationNetwork.json("GET", "https://models.dev/api.json", {})
@@ -40,6 +42,7 @@ export const simulationReplacements = Effect.fn("Simulation.replacements")(funct
     Layer.provide(
       SimulatedProvider.layerDrive({
         endpoint: manifest.endpoints.backend,
+        version: app.version,
       }),
     ),
   )

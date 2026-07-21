@@ -1,17 +1,16 @@
-import { InstallationVersion } from "@opencode-ai/util/installation/version"
 import { Effect } from "effect"
 import { SimulationControlServer } from "../control-server"
 import { SimulationProtocol } from "../protocol"
 import { SimulationActions, type Harness } from "./actions"
 import { SimulationRenderer } from "./renderer"
 
-function handle(harness: Harness, request: SimulationProtocol.Frontend.Request) {
+function handle(harness: Harness, request: SimulationProtocol.Frontend.Request, version: string) {
   switch (request.method) {
     case "simulation.handshake":
       return SimulationProtocol.Handshake.dispatch(
         {
           role: "ui",
-          server: { name: "opencode", version: InstallationVersion },
+          server: { name: "opencode", version },
           capabilities: SimulationProtocol.Frontend.Capabilities,
         },
         request.params,
@@ -59,13 +58,17 @@ function handle(harness: Harness, request: SimulationProtocol.Frontend.Request) 
   }
 }
 
-export const start = Effect.fn("SimulationServer.start")(function* (harness: Harness, endpoint: string) {
+export const start = Effect.fn("SimulationServer.start")(function* (
+  harness: Harness,
+  endpoint: string,
+  version = "unknown",
+) {
   return yield* SimulationControlServer.start({
     endpoint,
     label: "opencode drive ui websocket",
     data: () => ({ drive: true as const }),
     decode: SimulationProtocol.Frontend.decodeRequestEffect,
-    handle: (_socket, request) => handle(harness, request),
+    handle: (_socket, request) => handle(harness, request, version),
   })
 })
 

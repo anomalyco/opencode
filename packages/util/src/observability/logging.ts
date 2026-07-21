@@ -1,7 +1,6 @@
 import { Formatter, Logger, type LogLevel } from "effect"
 import path from "path"
 import { Global } from "../global.js"
-import { InstallationChannel, InstallationLocal } from "../installation/version.js"
 import { runID } from "./shared.js"
 
 function formatter(id: string = runID) {
@@ -47,7 +46,7 @@ function format(input: unknown) {
   return /^[^\s="\\]+$/.test(value) ? value : JSON.stringify(value)
 }
 
-export function file(local = InstallationLocal, channel = InstallationChannel) {
+export function file(local = true, channel = "local") {
   if (!local) return path.join(Global.Path.log, "opencode.log")
   return path.join(Global.Path.log, `opencode-${channel.replace(/[^a-zA-Z0-9._-]/g, "-")}.log`)
 }
@@ -70,8 +69,9 @@ export function minimumLogLevel() {
   return value && value in levels ? levels[value as keyof typeof levels] : levels.INFO
 }
 
-export function loggers() {
-  return process.env.OPENCODE_PRINT_LOGS === "1" ? [fileLogger(), stderrLogger] : [fileLogger()]
+export function loggers(local = true, channel = "local") {
+  const logger = fileLogger(file(local, channel))
+  return process.env.OPENCODE_PRINT_LOGS === "1" ? [logger, stderrLogger] : [logger]
 }
 
 export * as Logging from "./logging.js"

@@ -118,7 +118,7 @@ function makeRoutes<AuthError, AuthServices>(
     ? Layer.unwrap(
         Effect.gen(function* () {
           const { simulationReplacements } = yield* Effect.promise(() => import("@opencode-ai/simulation/backend"))
-          const simulation = yield* simulationReplacements()
+          const simulation = yield* simulationReplacements(options.app)
           return AppNodeBuilder.build(applicationServices, [...replacements, ...simulation])
         }),
       )
@@ -140,7 +140,12 @@ function makeRoutes<AuthError, AuthServices>(
         Layer.provide(schemaErrorLayer),
         Layer.provide(auth),
         Layer.provide(
-          Observability.layer({ ...options.observability, client: options.app?.name }),
+          Observability.layer({
+            ...options.observability,
+            client: options.app?.name,
+            version: options.app?.version,
+            channel: options.app?.channel,
+          }),
         ),
         HttpRouter.provideRequest(requestServices),
         Layer.provideMerge(services),
