@@ -17,7 +17,7 @@ export const Parameters = Schema.Struct({
       description: "The format to return the content in (text, markdown, or html). Defaults to markdown.",
       default: "markdown",
     })
-    .pipe(Schema.optional, Schema.withDecodingDefault(Effect.succeed("markdown" as const))),
+    .pipe(Schema.withDecodingDefault(Effect.succeed("markdown" as const))),
   timeout: Schema.optional(Schema.Number).annotate({ description: "Optional timeout in seconds (max 120)" }),
 })
 

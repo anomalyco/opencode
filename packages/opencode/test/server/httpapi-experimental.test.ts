@@ -1,4 +1,5 @@
 import { afterEach, describe, expect } from "bun:test"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Deferred, Effect, Fiber, Layer } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 import { eq } from "drizzle-orm"
@@ -9,16 +10,13 @@ import { SessionTable } from "@opencode-ai/core/session/sql"
 import { Database } from "@opencode-ai/core/database/database"
 import { AccountV2 } from "@opencode-ai/core/account"
 import { AccountTable } from "@opencode-ai/core/account/sql"
-import * as Log from "@opencode-ai/core/util/log"
 import { Worktree } from "../../src/worktree"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { httpApiLayer, requestInDirectory } from "./httpapi-layer"
 
-void Log.init({ print: false })
-
-const it = testEffect(Layer.mergeAll(Session.defaultLayer, Database.defaultLayer, httpApiLayer))
+const it = testEffect(Layer.mergeAll(LayerNode.compile(LayerNode.group([Session.node, Database.node])), httpApiLayer))
 const testWorktreeMutations = process.platform === "win32" ? it.instance.skip : it.instance
 
 function request(path: string, directory: string, init: RequestInit = {}) {

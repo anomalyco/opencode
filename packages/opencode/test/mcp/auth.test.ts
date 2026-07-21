@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test"
 import { setTimeout as sleep } from "node:timers/promises"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Effect, Layer } from "effect"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
-import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { McpAuth } from "../../src/mcp/auth"
 
 function authFile() {
@@ -10,12 +10,12 @@ function authFile() {
   let activeWrites = 0
   let sawOverlap = false
 
-  const layer = Layer.effect(
-    AppFileSystem.Service,
+  const fsLayer = Layer.effect(
+    FSUtil.Service,
     Effect.gen(function* () {
-      const fs = yield* AppFileSystem.Service
+      const fs = yield* FSUtil.Service
 
-      return AppFileSystem.Service.of({
+      return FSUtil.Service.of({
         ...fs,
         readJson: (file) =>
           file.endsWith("mcp-auth.json")
@@ -24,7 +24,7 @@ function authFile() {
                   if (!raw) throw new Error("mcp-auth.json missing")
                   return JSON.parse(raw)
                 },
-                catch: (cause) => new AppFileSystem.FileSystemError({ method: "readJson", cause }),
+                catch: (cause) => new FSUtil.FileSystemError({ method: "readJson", cause }),
               })
             : fs.readJson(file),
         writeJson: (file, value, mode) =>
@@ -41,14 +41,14 @@ function authFile() {
             : fs.writeJson(file, value, mode),
       })
     }),
-  ).pipe(Layer.provide(AppFileSystem.defaultLayer))
+  ).pipe(Layer.provide(AppNodeBuilder.build(FSUtil.node)))
 
-  return { layer, raw: () => raw }
+  return { fsLayer, raw: () => raw }
 }
 
-function authService(layer: Layer.Layer<AppFileSystem.Service>) {
+function authService(fsLayer: Layer.Layer<FSUtil.Service>) {
   return McpAuth.Service.use((auth) => Effect.succeed(auth)).pipe(
-    Effect.provide(McpAuth.layer.pipe(Layer.provide(EffectFlock.defaultLayer), Layer.provide(layer))),
+    Effect.provide(AppNodeBuilder.build(McpAuth.node, [[FSUtil.node, fsLayer]])),
   )
 }
 
@@ -57,8 +57,8 @@ test("serializes concurrent auth file updates across service instances", async (
 
   await Effect.runPromise(
     Effect.gen(function* () {
-      const first = yield* authService(file.layer)
-      const second = yield* authService(file.layer)
+      const first = yield* authService(file.fsLayer)
+      const second = yield* authService(file.fsLayer)
 
       yield* Effect.all(
         [

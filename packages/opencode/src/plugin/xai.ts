@@ -1,10 +1,8 @@
 import type { Hooks, PluginInput } from "@opencode-ai/plugin"
-import * as Log from "@opencode-ai/core/util/log"
 import { OAUTH_DUMMY_KEY } from "../auth"
 import { createServer } from "http"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
-
-const log = Log.create({ service: "plugin.xai" })
+import { OauthCallbackPage } from "@opencode-ai/core/oauth/page"
 
 // Public Grok-CLI OAuth client. xAI's auth server rejects loopback OAuth from
 // non-allowlisted clients, so we reuse the Grok-CLI client_id that xAI ships
@@ -75,25 +73,6 @@ function base64UrlEncode(buffer: ArrayBuffer): string {
 
 function generateState(): string {
   return base64UrlEncode(crypto.getRandomValues(new Uint8Array(32)).buffer)
-}
-
-export function escapeHtml(value: string): string {
-  return value.replace(/[&<>"']/g, (char) => {
-    switch (char) {
-      case "&":
-        return "&amp;"
-      case "<":
-        return "&lt;"
-      case ">":
-        return "&gt;"
-      case '"':
-        return "&quot;"
-      case "'":
-        return "&#39;"
-      default:
-        return char
-    }
-  })
 }
 
 interface TokenResponse {
@@ -306,96 +285,6 @@ export async function pollDeviceCodeToken(
   throw new Error("xAI device authorization timed out")
 }
 
-const HTML_SUCCESS = `<!doctype html>
-<html>
-  <head>
-    <title>OpenCode - xAI Authorization Successful</title>
-    <style>
-      body {
-        font-family:
-          system-ui,
-          -apple-system,
-          sans-serif;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        height: 100vh;
-        margin: 0;
-        background: #131010;
-        color: #f1ecec;
-      }
-      .container {
-        text-align: center;
-        padding: 2rem;
-      }
-      h1 {
-        color: #f1ecec;
-        margin-bottom: 1rem;
-      }
-      p {
-        color: #b7b1b1;
-      }
-    </style>
-  </head>
-  <body>
-    <div class="container">
-      <h1>Authorization Successful</h1>
-      <p>You can close this window and return to OpenCode.</p>
-    </div>
-    <script>
-      setTimeout(() => window.close(), 2000)
-    </script>
-  </body>
-</html>`
-
-const HTML_ERROR = (error: string) => `<!doctype html>
-<html>
-  <head>
-    <title>OpenCode - xAI Authorization Failed</title>
-    <style>
-      body {
-        font-family:
-          system-ui,
-          -apple-system,
-          sans-serif;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        height: 100vh;
-        margin: 0;
-        background: #131010;
-        color: #f1ecec;
-      }
-      .container {
-        text-align: center;
-        padding: 2rem;
-      }
-      h1 {
-        color: #fc533a;
-        margin-bottom: 1rem;
-      }
-      p {
-        color: #b7b1b1;
-      }
-      .error {
-        color: #ff917b;
-        font-family: monospace;
-        margin-top: 1rem;
-        padding: 1rem;
-        background: #3c140d;
-        border-radius: 0.5rem;
-      }
-    </style>
-  </head>
-  <body>
-    <div class="container">
-      <h1>Authorization Failed</h1>
-      <p>An error occurred during authorization.</p>
-      <div class="error">${escapeHtml(error)}</div>
-    </div>
-  </body>
-</html>`
-
 // CORS allowlist for the loopback callback. The redirect_uri itself is
 // already bound to 127.0.0.1 and gated by PKCE+state, so we only accept
 // xAI's own auth origins for additional defense-in-depth on the OPTIONS
@@ -446,7 +335,7 @@ async function startOAuthServer(): Promise<{ port: number; redirectUri: string }
         pendingOAuth?.reject(new Error(errorMsg))
         pendingOAuth = undefined
         res.writeHead(200, { "Content-Type": "text/html" })
-        res.end(HTML_ERROR(errorMsg))
+        res.end(OauthCallbackPage.error(errorMsg, { provider: "xAI" }))
         return
       }
 
@@ -455,7 +344,7 @@ async function startOAuthServer(): Promise<{ port: number; redirectUri: string }
         pendingOAuth?.reject(new Error(errorMsg))
         pendingOAuth = undefined
         res.writeHead(400, { "Content-Type": "text/html" })
-        res.end(HTML_ERROR(errorMsg))
+        res.end(OauthCallbackPage.error(errorMsg, { provider: "xAI" }))
         return
       }
 
@@ -464,7 +353,7 @@ async function startOAuthServer(): Promise<{ port: number; redirectUri: string }
         pendingOAuth?.reject(new Error(errorMsg))
         pendingOAuth = undefined
         res.writeHead(400, { "Content-Type": "text/html" })
-        res.end(HTML_ERROR(errorMsg))
+        res.end(OauthCallbackPage.error(errorMsg, { provider: "xAI" }))
         return
       }
 
@@ -476,7 +365,7 @@ async function startOAuthServer(): Promise<{ port: number; redirectUri: string }
         .catch((err) => current.reject(err))
 
       res.writeHead(200, { "Content-Type": "text/html" })
-      res.end(HTML_SUCCESS)
+      res.end(OauthCallbackPage.success({ provider: "xAI" }))
       return
     }
 
@@ -510,8 +399,6 @@ async function startOAuthServer(): Promise<{ port: number; redirectUri: string }
       // behavior and crash the entire opencode process. Matches the silent-
       // swallow behavior the Codex plugin gets from its permanent
       // `oauthServer!.on("error", reject)`.
-      server.on("error", (err) => log.warn("xai oauth server error", { error: err }))
-      log.info("xai oauth server started", { host: OAUTH_HOST, port: OAUTH_PORT })
       resolve()
     })
     oauthServer = server
@@ -522,7 +409,7 @@ async function startOAuthServer(): Promise<{ port: number; redirectUri: string }
 
 function stopOAuthServer() {
   if (oauthServer) {
-    oauthServer.close(() => log.info("xai oauth server stopped"))
+    oauthServer.close()
     oauthServer = undefined
   }
 }
@@ -607,7 +494,6 @@ export async function XaiAuthPlugin(input: PluginInput, options: XaiAuthPluginOp
             if (expiresSoon) {
               if (!refreshPromise) {
                 const refreshToken = currentAuth.refresh
-                log.info("refreshing xai access token")
                 refreshPromise = refreshAccessToken(refreshToken, options)
                   .then(async (tokens) => {
                     const refreshedExpires = Date.now() + (tokens.expires_in ?? 3600) * 1000
@@ -627,7 +513,7 @@ export async function XaiAuthPlugin(input: PluginInput, options: XaiAuthPluginOp
                           expires: refreshedExpires,
                         },
                       })
-                      .catch((err) => log.warn("failed to persist refreshed xai tokens", { error: err }))
+                      .catch(() => {})
                     return { access: tokens.access_token, refresh: refreshedRefresh, expires: refreshedExpires }
                   })
                   .finally(() => {
@@ -688,7 +574,6 @@ export async function XaiAuthPlugin(input: PluginInput, options: XaiAuthPluginOp
                     expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
                   }
                 } catch (err) {
-                  log.error("xai oauth callback failed", { error: err })
                   return { type: "failed" as const }
                 } finally {
                   stopOAuthServer()
@@ -725,7 +610,6 @@ export async function XaiAuthPlugin(input: PluginInput, options: XaiAuthPluginOp
                     expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
                   }
                 } catch (err) {
-                  log.error("xai device code callback failed", { error: err })
                   return { type: "failed" as const }
                 }
               },

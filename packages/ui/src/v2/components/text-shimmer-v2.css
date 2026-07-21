@@ -12,8 +12,8 @@
   --_angle: 90deg;
   --_spread: 5.2ch;
   --_size: 360%;
-  --_base-color: var(--text-text-muted);
-  --_peak-color: var(--text-text-base);
+  --_base-color: var(--v2-text-text-muted);
+  --_peak-color: var(--v2-text-text-base);
   --_sweep: linear-gradient(
     var(--_angle),
     transparent calc(50% - var(--_spread)),

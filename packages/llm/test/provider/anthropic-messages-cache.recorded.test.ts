@@ -1,4 +1,3 @@
-import { Redactor } from "@opencode-ai/http-recorder"
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { CacheHint, LLM } from "../../src"
@@ -33,7 +32,7 @@ const recorded = recordedTests({
   // Two identical requests in one cassette — replay walks the cassette in
   // recording order so the second call replays the cached-hit interaction.
   options: {
-    redactor: Redactor.defaults({ requestHeaders: { allow: ["content-type", "anthropic-version"] } }),
+    redact: { allowRequestHeaders: ["anthropic-version"] },
   },
 })
 

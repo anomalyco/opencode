@@ -1,8 +1,9 @@
 import { afterEach, expect, test } from "bun:test"
 import type { ToolPart } from "@opencode-ai/sdk/v2"
+import { RGBA, SyntaxStyle } from "@opentui/core"
 import { MockTreeSitterClient, createTestRenderer, type TestRenderer } from "@opentui/core/testing"
 import { RunScrollbackStream } from "@/cli/cmd/run/scrollback.surface"
-import { RUN_THEME_FALLBACK } from "@/cli/cmd/run/theme"
+import { RUN_THEME_FALLBACK, type RunTheme } from "@/cli/cmd/run/theme"
 import type { StreamCommit } from "@/cli/cmd/run/types"
 
 type ClaimedCommit = {
@@ -62,6 +63,8 @@ async function setup(
   input: {
     width?: number
     wrote?: boolean
+    theme?: RunTheme
+    onThemeRelease?: (theme: RunTheme) => void
   } = {},
 ) {
   const out = await createTestRenderer({
@@ -78,9 +81,10 @@ async function setup(
 
   return {
     renderer: out.renderer,
-    scrollback: new RunScrollbackStream(out.renderer, RUN_THEME_FALLBACK, {
+    scrollback: new RunScrollbackStream(out.renderer, input.theme ?? RUN_THEME_FALLBACK, {
       treeSitterClient,
       wrote: input.wrote ?? false,
+      onThemeRelease: input.onThemeRelease,
     }),
   }
 }
@@ -106,6 +110,96 @@ function reasoning(text: string, phase: StreamCommit["phase"] = "progress"): Str
     partID: "part-r-1",
   }
 }
+
+test("turn summary starts at the left edge", async () => {
+  const out = await setup()
+
+  try {
+    await out.scrollback.writeTurnSummary({ agent: "Build", model: "Little Frank", duration: "2.2s" })
+
+    const commits = claim(out.renderer)
+    try {
+      expect(renderRows(commits.at(-1)!)[0]).toBe("▣ Build · Little Frank · 2.2s")
+    } finally {
+      destroy(commits)
+    }
+  } finally {
+    out.scrollback.destroy()
+  }
+})
+
+test("theme swaps restyle active reasoning without resetting the stream", async () => {
+  const previousSyntax = SyntaxStyle.fromStyles({ default: { fg: "#123456" } })
+  const nextSyntax = SyntaxStyle.fromStyles({ default: { fg: "#abcdef" } })
+  const released: RunTheme[] = []
+  const previous = {
+    ...RUN_THEME_FALLBACK,
+    block: {
+      ...RUN_THEME_FALLBACK.block,
+      subtleSyntax: previousSyntax,
+    },
+  }
+  const next = {
+    ...RUN_THEME_FALLBACK,
+    block: {
+      ...RUN_THEME_FALLBACK.block,
+      subtleSyntax: nextSyntax,
+    },
+  }
+  const out = await setup({ theme: previous, onThemeRelease: (theme) => released.push(theme) })
+
+  try {
+    await out.scrollback.append(reasoning("before"))
+    expect(activeSyntax(out.scrollback)).toBe(previousSyntax)
+
+    out.scrollback.setTheme(next)
+    expect(activeSyntax(out.scrollback)).toBe(nextSyntax)
+    expect(released).toEqual([])
+
+    await out.scrollback.append(reasoning("after"))
+    expect(activeSyntax(out.scrollback)).toBe(nextSyntax)
+    expect(released).toEqual([previous])
+  } finally {
+    out.scrollback.destroy()
+    destroy(claim(out.renderer))
+    previousSyntax.destroy()
+    nextSyntax.destroy()
+  }
+})
+
+function activeSyntax(scrollback: RunScrollbackStream) {
+  const entry = Reflect.get(scrollback, "active") as { renderable?: { syntaxStyle?: SyntaxStyle } } | undefined
+  return entry?.renderable?.syntaxStyle
+}
+
+test("theme swaps preserve streamed markdown parser state", async () => {
+  const out = await setup()
+  const next = {
+    ...RUN_THEME_FALLBACK,
+    footer: {
+      ...RUN_THEME_FALLBACK.footer,
+      surface: RGBA.fromHex("#123456"),
+    },
+  }
+
+  try {
+    await out.scrollback.append(assistant("```ts\nconst answer ="))
+    out.scrollback.setTheme(next)
+    await out.scrollback.append(assistant(" 42\n```"))
+    await out.scrollback.complete()
+
+    const commits = claim(out.renderer)
+    try {
+      const output = render(commits)
+      expect(output).toContain("const answer = 42")
+      expect(output).not.toContain("```")
+    } finally {
+      destroy(commits)
+    }
+  } finally {
+    out.scrollback.destroy()
+  }
+})
 
 function user(text: string): StreamCommit {
   return {
@@ -495,6 +589,38 @@ test("coalesces same-line tool progress into one snapshot", async () => {
   }
 })
 
+test("omits the current directory from bash titles", async () => {
+  const out = await setup()
+
+  try {
+    await out.scrollback.append(
+      toolCommit({
+        tool: "bash",
+        phase: "start",
+        toolState: "running",
+        state: {
+          status: "running",
+          input: {
+            command: "pwd",
+            workdir: process.cwd(),
+          },
+          time: { start: 1 },
+        },
+      }),
+    )
+
+    const commits = claim(out.renderer)
+    try {
+      expect(render(commits)).toContain("$ pwd")
+      expect(render(commits)).not.toContain("Running in .")
+    } finally {
+      destroy(commits)
+    }
+  } finally {
+    out.scrollback.destroy()
+  }
+})
+
 test("renders completed bash output with one blank line after the command and before the next group", async () => {
   const out = await setup()
 
@@ -521,7 +647,6 @@ test("renders completed bash output with one blank line after the command and be
           input: {
             command: "git status",
             workdir: "/tmp/demo",
-            description: "Show git status",
           },
           time: { start: 1 },
         },
@@ -539,7 +664,6 @@ test("renders completed bash output with one blank line after the command and be
           input: {
             command: "git status",
             workdir: "/tmp/demo",
-            description: "Show git status",
           },
           time: { start: 1, end: 2 },
         },
@@ -551,6 +675,7 @@ test("renders completed bash output with one blank line after the command and be
     take()
 
     const output = lines.join("\n")
+    expect(output).toContain("# Running in /tmp/demo\n$ git status")
     expect(output).toContain("$ git status\n\nOn branch demo")
     expect(output).toContain("nothing to commit, working tree clean\n\noc-run-dev ahead 1")
     expect(output).not.toContain("nothing to commit, working tree clean\n\n\noc-run-dev ahead 1")
@@ -583,7 +708,6 @@ test("inserts a spacer before the next tool after completed multiline bash outpu
           input: {
             command: "pwd; ls -la",
             workdir: "/tmp/demo",
-            description: "Lists current directory files",
           },
           time: { start: 1 },
         },
@@ -601,7 +725,6 @@ test("inserts a spacer before the next tool after completed multiline bash outpu
           input: {
             command: "pwd; ls -la",
             workdir: "/tmp/demo",
-            description: "Lists current directory files",
           },
           output: ["/tmp/demo", "pwd; ls -la", "/tmp/demo", "total 4", "", ""].join("\n"),
           title: "pwd; ls -la",
@@ -661,7 +784,6 @@ test("does not double-space before completed bash output when inline tool header
           input: {
             command: "ls",
             workdir: "src/cli/cmd/run",
-            description: "Lists files in run directory",
           },
           time: { start: 1 },
         },
@@ -711,7 +833,6 @@ test("does not double-space before completed bash output when inline tool header
           input: {
             command: "ls",
             workdir: "src/cli/cmd/run",
-            description: "Lists files in run directory",
           },
           output: ["src/cli/cmd/run", "ls", "demo.ts", "entry.body.ts", "", ""].join("\n"),
           title: "ls",

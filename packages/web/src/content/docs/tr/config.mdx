@@ -491,14 +491,14 @@ Bağlam sıkıştırma davranışını `compaction` seçeneği aracılığıyla 
   "$schema": "https://opencode.ai/config.json",
   "compaction": {
     "auto": true,
-    "prune": true,
+    "prune": false,
     "reserved": 10000
   }
 }
 ```
 
 - `auto` - Bağlam dolduğunda oturumu otomatik olarak sıkıştırır (varsayılan: `true`).
-- `prune` - Belirteçleri kaydetmek için eski araç çıktılarını kaldırın (varsayılan: `true`).
+- `prune` - Belirteçleri kaydetmek için eski araç çıktılarını kaldırın (varsayılan: `false`).
 - `reserved` - Sıkıştırma için belirteç tamponu. Sıkıştırma sırasında taşmayı önlemek için yeterli pencere bırakır.
 
 ---

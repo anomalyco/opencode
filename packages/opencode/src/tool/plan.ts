@@ -1,5 +1,5 @@
 import path from "path"
-import { SessionLegacy } from "@opencode-ai/core/session/legacy"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Effect, Schema } from "effect"
 import * as Tool from "./tool"
 import { Question } from "../question"
@@ -50,7 +50,7 @@ export const PlanExitTool = Tool.define(
           const model =
             lastUser?.info.role === "user" && lastUser.info.model ? lastUser.info.model : yield* provider.defaultModel()
 
-          const msg: SessionLegacy.User = {
+          const msg: SessionV1.User = {
             id: MessageID.ascending(),
             sessionID: ctx.sessionID,
             role: "user",
@@ -66,7 +66,7 @@ export const PlanExitTool = Tool.define(
             type: "text",
             text: `The plan at ${plan} has been approved, you can now edit files. Execute the plan`,
             synthetic: true,
-          } satisfies SessionLegacy.TextPart)
+          } satisfies SessionV1.TextPart)
 
           return {
             title: "Switching to build agent",

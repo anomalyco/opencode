@@ -226,7 +226,7 @@ export async function POST(input: APIEvent) {
           expand: ["discounts", "payments"],
         })
         const paymentID = invoice.payments?.data[0]?.payment.payment_intent as string
-        const couponID = (invoice.discounts[0] as Stripe.Discount).coupon?.id as string
+        const couponID = (invoice.discounts[0] as Stripe.Discount)?.coupon?.id as string
         if (!paymentID) {
           // payment id can be undefined when using coupon
           if (!couponID) throw new Error("Payment ID not found")

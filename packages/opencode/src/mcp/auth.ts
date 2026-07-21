@@ -1,8 +1,9 @@
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import path from "path"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { Global } from "@opencode-ai/core/global"
 import { Effect, Layer, Context, Option, Schema } from "effect"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 
 export const Tokens = Schema.Struct({
@@ -49,17 +50,16 @@ export interface Interface {
   readonly updateOAuthState: (mcpName: string, oauthState: string) => Effect.Effect<void>
   readonly getOAuthState: (mcpName: string) => Effect.Effect<string | undefined>
   readonly clearOAuthState: (mcpName: string) => Effect.Effect<void>
-  readonly isTokenExpired: (mcpName: string) => Effect.Effect<boolean | null>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/McpAuth") {}
 
 export const use = serviceUse(Service)
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const fs = yield* AppFileSystem.Service
+    const fs = yield* FSUtil.Service
     const flock = yield* EffectFlock.Service
 
     const read = Effect.fn("McpAuth.read")(function* () {
@@ -141,13 +141,6 @@ export const layer = Layer.effect(
       return entry?.oauthState
     })
 
-    const isTokenExpired = Effect.fn("McpAuth.isTokenExpired")(function* (mcpName: string) {
-      const entry = yield* get(mcpName)
-      if (!entry?.tokens) return null
-      if (!entry.tokens.expiresAt) return false
-      return entry.tokens.expiresAt < Date.now() / 1000
-    })
-
     return Service.of({
       all,
       get,
@@ -161,14 +154,10 @@ export const layer = Layer.effect(
       updateOAuthState,
       getOAuthState,
       clearOAuthState,
-      isTokenExpired,
     })
   }),
 )
 
-export const defaultLayer = layer.pipe(
-  Layer.provide(EffectFlock.defaultLayer),
-  Layer.provide(AppFileSystem.defaultLayer),
-)
+export const node = LayerNode.make({ service: Service, layer: layer, deps: [FSUtil.node, EffectFlock.node] })
 
 export * as McpAuth from "./auth"

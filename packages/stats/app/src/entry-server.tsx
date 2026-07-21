@@ -1,5 +1,7 @@
 // @refresh reload
 import { createHandler, StartServer } from "@solidjs/start/server"
+import { getRequestEvent } from "solid-js/web"
+import { dir, localeFromRequest, tag } from "./lib/language"
 
 const statsThemePreloadScript = `;(function () {
   var preference = "system"
@@ -15,20 +17,25 @@ const statsThemePreloadScript = `;(function () {
 export default createHandler(
   () => (
     <StartServer
-      document={({ assets, children, scripts }) => (
-        <html lang="en">
-          <head>
-            <meta charset="utf-8" />
-            <meta name="viewport" content="width=device-width, initial-scale=1" />
-            <script id="stats-theme-preload-script">{statsThemePreloadScript}</script>
-            {assets}
-          </head>
-          <body>
-            <div id="app">{children}</div>
-            {scripts}
-          </body>
-        </html>
-      )}
+      document={({ assets, children, scripts }) => {
+        const event = getRequestEvent()
+        const locale = event ? localeFromRequest(event.request) : "en"
+
+        return (
+          <html lang={tag(locale)} dir={dir(locale)} data-locale={locale}>
+            <head>
+              <meta charset="utf-8" />
+              <meta name="viewport" content="width=device-width, initial-scale=1" />
+              <script id="stats-theme-preload-script">{statsThemePreloadScript}</script>
+              {assets}
+            </head>
+            <body>
+              <div id="app">{children}</div>
+              {scripts}
+            </body>
+          </html>
+        )
+      }}
     />
   ),
   {

@@ -1,5 +1,6 @@
+import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import type { Auth } from "@/auth"
-import { SessionLegacy } from "@opencode-ai/core/session/legacy"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 import type { RuntimeFlags } from "@/effect/runtime-flags"
 import { InstanceState } from "@/effect/instance-state"
 import { Permission } from "@/permission"
@@ -17,12 +18,12 @@ import { mergeDeep } from "remeda"
 const USER_AGENT = `opencode/${InstallationVersion}`
 
 type PrepareInput = {
-  readonly user: SessionLegacy.User
+  readonly user: SessionV1.User
   readonly sessionID: string
   readonly parentSessionID?: string
   readonly model: Provider.Model
   readonly agent: Agent.Info
-  readonly permission?: Permission.Ruleset
+  readonly permission?: PermissionV1.Ruleset
   readonly system: string[]
   readonly messages: ModelMessage[]
   readonly small?: boolean
@@ -88,6 +89,13 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
         providerOptions: input.provider.options,
       })
   const options = mergeOptions(mergeOptions(mergeOptions(base, input.model.options), input.agent.options), variant)
+  if (
+    input.model.api.npm === "@ai-sdk/azure" &&
+    (input.provider.options.useCompletionUrls || input.model.options.useCompletionUrls || options.useCompletionUrls)
+  ) {
+    delete options.reasoningSummary
+    delete options.include
+  }
   if (isOpenaiOauth) options.instructions = system.join("\n")
 
   const messages =
@@ -138,6 +146,16 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
   )
 
   const tools = resolveTools(input)
+  // Codex parity: OpenAI Responses-family providers hardcode `strict: false`
+  // on every function tool so MCP-sourced and dynamic schemas that don't
+  // satisfy OpenAI's structured-outputs constraints still register.
+  if (
+    input.model.api.npm === "@ai-sdk/openai" ||
+    input.model.api.npm === "@ai-sdk/azure" ||
+    input.model.api.npm === "@ai-sdk/amazon-bedrock/mantle"
+  ) {
+    for (const key of Object.keys(tools)) tools[key] = { ...tools[key], strict: false }
+  }
   if (
     input.model.providerID.includes("github-copilot") &&
     Object.keys(tools).length === 0 &&
@@ -177,6 +195,7 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
           }
         : {
             "x-session-affinity": input.sessionID,
+            "X-Session-Id": input.sessionID,
             ...(input.parentSessionID ? { "x-parent-session-id": input.parentSessionID } : {}),
             "User-Agent": USER_AGENT,
           }),

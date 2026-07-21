@@ -3,7 +3,7 @@ import { readdir } from "node:fs/promises"
 import path from "node:path"
 import { drizzle } from "drizzle-orm/planetscale-serverless"
 import { geoStat, modelStat, providerStat } from "./database/schema"
-import { modelAuthor, normalizeInferenceModel } from "./domain/model-normalization"
+import { statModel, statProvider } from "./domain/model-normalization"
 import {
   chunks,
   collapseRows,
@@ -190,28 +190,36 @@ function buildQueries(limit: number, tiers: string[]): QuerySpec[] {
     querySpec(
       "model-day",
       tier,
-      metricQuery(["date", "tier", "stat_provider", "stat_model"], limit, tierFilters(tier)),
+      metricQuery(["date", "tier", "stat_provider_2", "stat_model_2"], limit, tierFilters(tier)),
     ),
-    querySpec("provider-day", tier, metricQuery(["date", "tier", "stat_provider"], limit, tierFilters(tier))),
+    querySpec("provider-day", tier, metricQuery(["date", "tier", "stat_provider_2"], limit, tierFilters(tier))),
     querySpec("geo-day", tier, metricQuery(["date", "tier", "country", "continent"], limit, tierFilters(tier))),
     querySpec(
       "geo-model-day",
       tier,
-      metricQuery(["date", "tier", "stat_provider", "stat_model", "country", "continent"], limit, tierFilters(tier)),
+      metricQuery(
+        ["date", "tier", "stat_provider_2", "stat_model_2", "country", "continent"],
+        limit,
+        tierFilters(tier),
+      ),
     ),
   ])
   const weekly = tiers.flatMap((tier) => [
     querySpec(
       "model-week",
       tier,
-      metricQuery(["week", "tier", "stat_provider", "stat_model"], limit, tierFilters(tier)),
+      metricQuery(["week", "tier", "stat_provider_2", "stat_model_2"], limit, tierFilters(tier)),
     ),
-    querySpec("provider-week", tier, metricQuery(["week", "tier", "stat_provider"], limit, tierFilters(tier))),
+    querySpec("provider-week", tier, metricQuery(["week", "tier", "stat_provider_2"], limit, tierFilters(tier))),
     querySpec("geo-week", tier, metricQuery(["week", "tier", "country", "continent"], limit, tierFilters(tier))),
     querySpec(
       "geo-model-week",
       tier,
-      metricQuery(["week", "tier", "stat_provider", "stat_model", "country", "continent"], limit, tierFilters(tier)),
+      metricQuery(
+        ["week", "tier", "stat_provider_2", "stat_model_2", "country", "continent"],
+        limit,
+        tierFilters(tier),
+      ),
     ),
   ])
 
@@ -234,6 +242,7 @@ function metricQuery(breakdowns: string[], limit: number, filters: ReturnType<ty
     calculations: [
       { op: "COUNT_DISTINCT", column: "session" },
       { op: "COUNT" },
+      { op: "COUNT_DISTINCT", column: "workspace" },
       { op: "SUM", column: "tokens.input" },
       { op: "SUM", column: "tokens.output" },
       { op: "SUM", column: "tokens.reasoning" },
@@ -345,19 +354,36 @@ function classifyRows(file: string, rows: RawRow[]): ImportKey {
   const headers = new Set(rows.flatMap((row) => Object.keys(row).map(normalizeHeader)))
   const grain: Grain = headers.has("date") ? "day" : "week"
   if (hasHeader(headers, ["country", "cf.country"])) {
-    if (hasHeader(headers, ["model", "stat_model"]) && hasMetricHeaders(headers)) return `geo-model-${grain}`
+    if (hasHeader(headers, ["model", "stat_model", "stat_model_2"]) && hasMetricHeaders(headers))
+      return `geo-model-${grain}`
     return hasMetricHeaders(headers) ? `geo-${grain}` : `geo-continent-${grain}`
   }
-  if (hasHeader(headers, ["model", "stat_model"]))
+  if (hasHeader(headers, ["model", "stat_model", "stat_model_2"]))
     return hasMetricHeaders(headers) ? `model-${grain}` : `model-provider-model-${grain}`
-  if (hasHeader(headers, ["provider", "provider.normalized", "stat_provider"])) return `provider-${grain}`
+  if (
+    hasHeader(headers, [
+      "provider",
+      "provider.normalized",
+      "stat_provider",
+      "stat_provider_2",
+      "provider.model",
+      "provider_model",
+    ])
+  )
+    return `provider-${grain}`
   fail(`Cannot classify export from columns in ${file}`)
 }
 
 function hasMetricHeaders(headers: Set<string>) {
-  return ["sumtokens", "sumtokensinput", "inputtokens", "totaltokens", "avgduration", "countdistinctsession"].some(
-    (header) => headers.has(header),
-  )
+  return [
+    "sumtokens",
+    "sumtokensinput",
+    "inputtokens",
+    "totaltokens",
+    "avgduration",
+    "countdistinctsession",
+    "countdistinctworkspace",
+  ].some((header) => headers.has(header))
 }
 
 function hasHeader(headers: Set<string>, names: string[]) {
@@ -428,6 +454,11 @@ function baseAggregate(row: RawRow, grain: Grain, opts: ImportOptions): StatBase
     tier: tier(row),
     sessions: integer(row, "sessions", ["COUNT_DISTINCT(session)"]),
     requests: integer(row, "requests", ["COUNT", "COUNT()"]),
+    unique_users: integer(row, "unique_users", [
+      "COUNT_DISTINCT(user_id)",
+      "COUNT_DISTINCT(workspace)",
+      "COUNT_DISTINCT(api_key)",
+    ]),
     input_tokens: integer(row, "input_tokens", ["SUM(tokens.input)", "SUM(tokens_input)"]),
     output_tokens: integer(row, "output_tokens", ["SUM(tokens.output)", "SUM(tokens_output)"]),
     reasoning_tokens: integer(row, "reasoning_tokens", ["SUM(tokens.reasoning)", "SUM(tokens_reasoning)"]),
@@ -588,11 +619,11 @@ function deriveTier(row: RawRow) {
 }
 
 function provider(row: RawRow) {
-  return cell(row, ["stat_provider"]) || modelAuthor(model(row))
+  return statProvider(model(row), providerModel(row), cell(row, ["stat_provider_2", "stat_provider"]))
 }
 
 function model(row: RawRow) {
-  return normalizeInferenceModel(cell(row, ["stat_model"]) || rawModel(row))
+  return statModel(cell(row, ["stat_model_2", "stat_model"]) || rawModel(row), providerModel(row))
 }
 
 function rawModel(row: RawRow) {
@@ -789,6 +820,7 @@ async function upsertModelRows(db: ReturnType<typeof drizzle>, rows: ModelStatRo
           provider_model: inserted("provider_model"),
           sessions: inserted("sessions"),
           requests: inserted("requests"),
+          unique_users: inserted("unique_users"),
           input_tokens: inserted("input_tokens"),
           output_tokens: inserted("output_tokens"),
           reasoning_tokens: inserted("reasoning_tokens"),
@@ -826,6 +858,7 @@ async function upsertProviderRows(db: ReturnType<typeof drizzle>, rows: Provider
         set: {
           sessions: inserted("sessions"),
           requests: inserted("requests"),
+          unique_users: inserted("unique_users"),
           input_tokens: inserted("input_tokens"),
           output_tokens: inserted("output_tokens"),
           reasoning_tokens: inserted("reasoning_tokens"),
@@ -868,6 +901,7 @@ async function upsertGeoRows(db: ReturnType<typeof drizzle>, rows: GeoStatRow[],
           continent: inserted("continent"),
           sessions: inserted("sessions"),
           requests: inserted("requests"),
+          unique_users: inserted("unique_users"),
           input_tokens: inserted("input_tokens"),
           output_tokens: inserted("output_tokens"),
           reasoning_tokens: inserted("reasoning_tokens"),

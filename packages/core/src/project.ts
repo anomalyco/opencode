@@ -3,41 +3,40 @@ export * as Project from "./project"
 
 import { Context, Effect, Layer, Schema } from "effect"
 import path from "path"
-import { AbsolutePath, withStatics } from "./schema"
-import { AppFileSystem } from "./filesystem"
+import { AbsolutePath } from "./schema"
+import { FSUtil } from "./fs-util"
 import { Git } from "./git"
+import { makeGlobalNode } from "./effect/app-node"
 import { Hash } from "./util/hash"
+import { ProjectDirectories } from "./project/directories"
+import { ProjectSchema } from "./project/schema"
 
-export const ID = Schema.String.pipe(
-  Schema.brand("Project.ID"),
-  withStatics((schema) => ({
-    global: schema.make("global"),
-  })),
-)
-export type ID = typeof ID.Type
+export const ID = ProjectSchema.ID
+export type ID = ProjectSchema.ID
 
-export const Vcs = Schema.Union([
-  Schema.Struct({
-    type: Schema.Literal("git"),
-    store: AbsolutePath,
-  }),
-])
-export type Vcs = typeof Vcs.Type
+export const Vcs = ProjectSchema.Vcs
+export type Vcs = ProjectSchema.Vcs
 
 export class Info extends Schema.Class<Info>("Project.Info")({
   id: ID,
 }) {}
 
+export const DirectoriesInput = ProjectDirectories.ListInput
+export type DirectoriesInput = typeof DirectoriesInput.Type
+
+export const Directories = ProjectDirectories.ListOutput
+export type Directories = typeof Directories.Type
+
+export interface Resolved {
+  readonly previous?: ID
+  readonly id: ID
+  readonly directory: AbsolutePath
+  readonly vcs?: Vcs
+}
+
 export interface Interface {
-  readonly resolve: (input: AbsolutePath) => Effect.Effect<
-    {
-      previous?: ID
-      id: ID
-      directory: AbsolutePath
-      vcs?: Vcs
-    },
-    never
-  >
+  readonly directories: (input: DirectoriesInput) => Effect.Effect<Directories>
+  readonly resolve: (input: AbsolutePath) => Effect.Effect<Resolved>
   /**
    * Temporary bridge method for writing the resolved project ID to the repo-local cache.
    *
@@ -52,11 +51,16 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ProjectV2") {}
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const fs = yield* AppFileSystem.Service
+    const fs = yield* FSUtil.Service
     const git = yield* Git.Service
+    const projectDirectories = yield* ProjectDirectories.Service
+
+    const directories = Effect.fn("Project.directories")(function* (input: DirectoriesInput) {
+      return yield* projectDirectories.list(input.projectID)
+    })
 
     const cached = Effect.fnUntraced(function* (dir: string) {
       return yield* fs.readFileString(path.join(dir, "opencode")).pipe(
@@ -66,8 +70,8 @@ export const layer = Layer.effect(
       )
     })
 
-    const remote = Effect.fnUntraced(function* (repo: Git.Repo) {
-      const origin = yield* git.remote(repo)
+    const remote = Effect.fnUntraced(function* (repo: Git.Repository) {
+      const origin = yield* git.remote.get(repo)
       if (!origin) return undefined
       const normalized = url(origin)
       if (!normalized) return undefined
@@ -98,23 +102,22 @@ export const layer = Layer.effect(
       return `${host.toLowerCase()}/${pathname}`
     }
 
-    const root = Effect.fnUntraced(function* (repo: Git.Repo) {
-      const root = (yield* git.roots(repo))[0]
+    const root = Effect.fnUntraced(function* (repo: Git.Repository) {
+      const root = (yield* git.history.rootCommits(repo))[0]
       return root ? ID.make(root) : undefined
     })
 
     const resolve = Effect.fn("Project.resolve")(function* (input: AbsolutePath) {
-      const repo = yield* git.find(input)
+      const repo = yield* git.repo.discover(input)
       if (!repo) return { id: ID.global, directory: AbsolutePath.make(path.parse(input).root), vcs: undefined }
 
-      const previous = yield* cached(repo.store)
+      const previous = yield* cached(repo.commonDirectory)
       const id = (yield* remote(repo)) ?? previous ?? (yield* root(repo))
-
       return {
         previous,
         id: id ?? ID.global,
-        directory: repo.directory,
-        vcs: { type: "git" as const, store: repo.store },
+        directory: repo.worktree,
+        vcs: { type: "git" as const, store: repo.commonDirectory },
       }
     })
 
@@ -122,8 +125,12 @@ export const layer = Layer.effect(
       yield* fs.writeFileString(path.join(input.store, "opencode"), input.id).pipe(Effect.ignore)
     })
 
-    return Service.of({ resolve, commit })
+    return Service.of({ directories, resolve, commit })
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(AppFileSystem.defaultLayer), Layer.provide(Git.defaultLayer))
+export const node = makeGlobalNode({
+  service: Service,
+  layer: layer,
+  deps: [FSUtil.node, Git.node, ProjectDirectories.node],
+})

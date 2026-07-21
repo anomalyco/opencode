@@ -1,7 +1,9 @@
+import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { describe, expect } from "bun:test"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Effect, Layer } from "effect"
 import { GrepTool } from "../../src/tool/grep"
 import { provideInstance, testInstanceStoreLayer, TestInstance, tmpdirScoped } from "../fixture/fixture"
@@ -10,11 +12,9 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Global } from "@opencode-ai/core/global"
 import { Truncate } from "@/tool/truncate"
 import { Agent } from "../../src/agent/agent"
-import { Ripgrep } from "../../src/file/ripgrep"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { Ripgrep } from "@opencode-ai/core/ripgrep"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { testEffect } from "../lib/effect"
-import { Reference } from "@/reference/reference"
-import { RepositoryCache } from "@/reference/repository-cache"
 import { Permission } from "../../src/permission"
 import type * as Tool from "../../src/tool/tool"
 import { Config } from "@/config/config"
@@ -22,26 +22,12 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Git } from "@/git"
 import { Filesystem } from "@/util/filesystem"
 
-const referenceLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
-  Reference.layer.pipe(
-    Layer.provide(Config.defaultLayer),
-    Layer.provide(RepositoryCache.defaultLayer),
-    Layer.provide(RuntimeFlags.layer(flags)),
-  )
-
 const toolLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
-  Layer.mergeAll(
-    CrossSpawnSpawner.defaultLayer,
-    AppFileSystem.defaultLayer,
-    Ripgrep.defaultLayer,
-    Truncate.defaultLayer,
-    Agent.defaultLayer,
-    Git.defaultLayer,
-    referenceLayer(flags),
+  LayerNode.compile(
+    LayerNode.group([CrossSpawnSpawner.node, FSUtil.node, Ripgrep.node, Truncate.node, Agent.node, Git.node]),
   )
 
 const it = testEffect(toolLayer())
-const scout = testEffect(toolLayer({ experimentalScout: true }))
 const rooted = testEffect(Layer.mergeAll(toolLayer(), testInstanceStoreLayer))
 
 const ctx = {
@@ -145,6 +131,25 @@ describe("tool.grep", () => {
     }),
   )
 
+  it.instance("does not report an unknown total when results are truncated", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      yield* Effect.promise(() =>
+        Promise.all(
+          Array.from({ length: 101 }, (_, index) =>
+            Bun.write(path.join(test.directory, `match-${index}.txt`), "needle"),
+          ),
+        ),
+      )
+      const info = yield* GrepTool
+      const grep = yield* info.init()
+      const result = yield* grep.execute({ pattern: "needle", path: test.directory, include: "*.txt" }, ctx)
+
+      expect(result.output).toContain("(Results truncated. Consider using a more specific path or pattern.)")
+      expect(result.output).not.toMatch(/showing \d+ of \d+ matches/)
+    }),
+  )
+
   it.instance("supports exact file paths", () =>
     Effect.gen(function* () {
       const test = yield* TestInstance
@@ -186,7 +191,7 @@ describe("tool.grep", () => {
           [path.join(alias, "*")]: "allow",
         },
       })
-      const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
+      const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
       const next: Tool.Context = {
         ...ctx,
         ask: (req) =>
@@ -212,54 +217,5 @@ describe("tool.grep", () => {
       expect(result.metadata.matches).toBe(1)
       expect(requests.find((req) => req.permission === "external_directory")).toBeUndefined()
     }),
-  )
-
-  scout.instance(
-    "does not ask for external_directory permission inside configured git references",
-    () =>
-      Effect.gen(function* () {
-        yield* TestInstance
-        const appfs = yield* AppFileSystem.Service
-        const cache = path.join(Global.Path.repos, "github.com", "opencode-grep-reference", "repo")
-        yield* appfs.remove(cache, { recursive: true }).pipe(Effect.ignore)
-        yield* Effect.addFinalizer(() => appfs.remove(cache, { recursive: true }).pipe(Effect.ignore))
-
-        const source = yield* tmpdirScoped({ git: true })
-        const remoteRoot = yield* tmpdirScoped()
-        const remoteDir = path.join(remoteRoot, "opencode-grep-reference")
-        const remoteRepo = path.join(remoteDir, "repo.git")
-        yield* appfs.writeWithDirs(path.join(source, "src", "notes.md"), "needle\n")
-        yield* git(source, ["add", "."])
-        yield* git(source, ["commit", "-m", "add notes"])
-        yield* appfs.makeDirectory(remoteDir, { recursive: true }).pipe(Effect.orDie)
-        yield* git(remoteRoot, ["clone", "--bare", source, remoteRepo])
-
-        const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
-        const next: Tool.Context = {
-          ...ctx,
-          ask: (req) =>
-            Effect.sync(() => {
-              requests.push(req)
-            }),
-        }
-
-        const info = yield* GrepTool
-        const grep = yield* info.init()
-        const result = yield* githubBase(
-          `file://${remoteRoot}/`,
-          grep.execute({ pattern: "needle", path: path.join(cache, "src"), include: "*.md" }, next),
-        )
-
-        expect(result.metadata.matches).toBe(1)
-        expect(full(result.output)).toContain(full(path.join(cache, "src", "notes.md")))
-        expect(requests.find((req) => req.permission === "external_directory")).toBeUndefined()
-      }),
-    {
-      config: {
-        reference: {
-          docs: "opencode-grep-reference/repo",
-        },
-      },
-    },
   )
 })

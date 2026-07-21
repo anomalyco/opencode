@@ -1,8 +1,9 @@
 import { afterEach, describe, expect } from "bun:test"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { FSUtil } from "@opencode-ai/core/fs-util"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { parsePatch } from "diff"
 import { Deferred, Effect, Layer } from "effect"
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import fs from "fs/promises"
 import path from "path"
 import {
@@ -13,7 +14,7 @@ import {
   tmpdirScoped,
 } from "../fixture/fixture"
 import { EventV2Bridge } from "../../src/event-v2-bridge"
-import { FileWatcher } from "../../src/file/watcher"
+import { Watcher } from "@opencode-ai/core/filesystem/watcher"
 import { Git } from "../../src/git"
 import { Vcs } from "@/project/vcs"
 import { testEffect } from "../lib/effect"
@@ -24,10 +25,8 @@ import { testEffect } from "../lib/effect"
 
 const weird = process.platform === "win32" ? "space file.txt" : "tab\tfile.txt"
 
-const layer = Layer.mergeAll(
-  Vcs.layer.pipe(Layer.provideMerge(Git.defaultLayer), Layer.provideMerge(EventV2Bridge.defaultLayer)),
-  CrossSpawnSpawner.defaultLayer,
-  AppFileSystem.defaultLayer,
+const layer = LayerNode.compile(
+  LayerNode.group([Vcs.node, Git.node, EventV2Bridge.node, FSUtil.node, CrossSpawnSpawner.node]),
 )
 const it = testEffect(layer)
 const worktreeIt = testEffect(Layer.mergeAll(layer, testInstanceStoreLayer))
@@ -38,11 +37,11 @@ const git = Effect.fn("VcsTest.git")(function* (cwd: string, args: string[]) {
 })
 
 const write = Effect.fn("VcsTest.write")(function* (file: string, content: string) {
-  yield* AppFileSystem.Service.use((fs) => fs.writeWithDirs(file, content))
+  yield* FSUtil.Service.use((fs) => fs.writeWithDirs(file, content))
 })
 
 const remove = Effect.fn("VcsTest.remove")(function* (file: string) {
-  yield* AppFileSystem.Service.use((fs) => fs.remove(file))
+  yield* FSUtil.Service.use((fs) => fs.remove(file))
 })
 
 const symlink = (target: string, file: string) => Effect.promise(() => fs.symlink(target, file))
@@ -73,7 +72,7 @@ const publishHeadChangeUntil = Effect.fn("VcsTest.publishHeadChangeUntil")(funct
 ) {
   const events = yield* EventV2Bridge.Service
   for (let i = 0; i < 50; i++) {
-    yield* events.publish(FileWatcher.Event.Updated, { file: head, event: "change" })
+    yield* events.publish(Watcher.Event.Updated, { file: head, event: "change" })
     if (yield* Deferred.isDone(pending)) return
     yield* Effect.sleep("10 millis")
   }

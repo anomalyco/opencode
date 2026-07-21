@@ -37,7 +37,6 @@ export const oaCompatHelper: ProviderHelper = ({ adjustCacheUsage }) => ({
     }
   },
   createBinaryStreamDecoder: () => undefined,
-  streamSeparator: "\n\n",
   createUsageParser: () => {
     let usage: Usage
 

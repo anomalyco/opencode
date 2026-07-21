@@ -6,7 +6,6 @@
 
   [data-slot="diff-changes-additions"],
   [data-slot="diff-changes-deletions"] {
-    font-family: var(--v2-font-family-sans);
     font-size: 11px;
     font-style: normal;
     font-weight: 440;
@@ -16,10 +15,10 @@
   }
 
   [data-slot="diff-changes-additions"] {
-    color: var(--state-fg-success);
+    color: var(--v2-state-fg-success);
   }
 
   [data-slot="diff-changes-deletions"] {
-    color: var(--state-fg-danger);
+    color: var(--v2-state-fg-danger);
   }
 }

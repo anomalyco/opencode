@@ -1,3 +1,4 @@
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { AppProcess } from "@opencode-ai/core/process"
 import { Effect, Layer, Context, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
@@ -99,7 +100,7 @@ const kind = (code: string): Kind => {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Git") {}
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const appProcess = yield* AppProcess.Service
@@ -342,6 +343,6 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(AppProcess.defaultLayer))
+export const node = LayerNode.make({ service: Service, layer: layer, deps: [AppProcess.node] })
 
 export * as Git from "."

@@ -3,12 +3,9 @@ import { Context, Effect, Layer } from "effect"
 import { HttpApiApp } from "../../src/server/routes/instance/httpapi/server"
 import { McpPaths } from "../../src/server/routes/instance/httpapi/groups/mcp"
 import { Server } from "../../src/server/server"
-import * as Log from "@opencode-ai/core/util/log"
 import { resetDatabase } from "../fixture/db"
 import { TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
-
-void Log.init({ print: false })
 
 const context = Context.empty() as Context.Context<unknown>
 const testStateLayer = Layer.effectDiscard(
@@ -24,11 +21,6 @@ function app() {
 }
 type TestApp = ReturnType<typeof app>
 type TestHandler = ReturnType<typeof HttpApiApp.webHandler>
-
-const handlerScoped = Effect.acquireRelease(
-  Effect.sync(() => HttpApiApp.webHandler()),
-  (handler) => Effect.promise(() => handler.dispose()).pipe(Effect.ignore),
-)
 
 const request = Effect.fnUntraced(function* (
   handler: TestHandler,
@@ -69,7 +61,7 @@ describe("mcp HttpApi", () => {
     () =>
       Effect.gen(function* () {
         const tmp = yield* TestInstance
-        const handler = yield* handlerScoped
+        const handler = HttpApiApp.webHandler()
         const response = yield* request(handler, McpPaths.status, tmp.directory)
 
         expect(response.status).toBe(200)
@@ -93,7 +85,7 @@ describe("mcp HttpApi", () => {
     () =>
       Effect.gen(function* () {
         const tmp = yield* TestInstance
-        const handler = yield* handlerScoped
+        const handler = HttpApiApp.webHandler()
         const added = yield* request(handler, McpPaths.status, tmp.directory, {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -139,7 +131,7 @@ describe("mcp HttpApi", () => {
     () =>
       Effect.gen(function* () {
         const tmp = yield* TestInstance
-        const handler = yield* handlerScoped
+        const handler = HttpApiApp.webHandler()
         const start = yield* request(handler, "/mcp/demo/auth", tmp.directory, { method: "POST" })
         expect(start.status).toBe(400)
 
@@ -202,7 +194,7 @@ describe("mcp HttpApi", () => {
     () =>
       Effect.gen(function* () {
         const tmp = yield* TestInstance
-        const handler = yield* handlerScoped
+        const handler = HttpApiApp.webHandler()
 
         for (const input of [
           { method: "POST", route: "/mcp/missing/auth" },

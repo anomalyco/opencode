@@ -1,34 +1,38 @@
 import { describe, expect } from "bun:test"
-import { SessionLegacy } from "@opencode-ai/core/session/legacy"
-import { Database } from "@opencode-ai/core/database/database"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
+import { EventV2 } from "@opencode-ai/core/event"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { Deferred, Effect, Exit, Layer } from "effect"
 import { Session as SessionNs } from "@/session/session"
-import * as Log from "@opencode-ai/core/util/log"
 import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, type SessionID } from "../../src/session/schema"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { provideInstance, testInstanceStoreLayer, tmpdirScoped } from "../fixture/fixture"
+import { provideInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
-import { Storage } from "@/storage/storage"
 import { RuntimeFlags } from "@/effect/runtime-flags"
-import { BackgroundJob } from "@/background/job"
 import { EventV2Bridge } from "@/event-v2-bridge"
-
-void Log.init({ print: false })
+import { GlobalBus } from "@/bus/global"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { InstanceStore } from "@/project/instance-store"
+import { InstanceBootstrap } from "@/project/bootstrap"
 
 const it = testEffect(
-  Layer.mergeAll(
-    SessionNs.layer.pipe(
-      Layer.provide(Storage.defaultLayer),
-      Layer.provide(Database.defaultLayer),
-      Layer.provideMerge(EventV2Bridge.defaultLayer),
-      Layer.provide(SessionProjector.defaultLayer),
-      Layer.provide(RuntimeFlags.layer({ experimentalWorkspaces: false })),
-      Layer.provide(BackgroundJob.defaultLayer),
-    ),
-    CrossSpawnSpawner.defaultLayer,
-    testInstanceStoreLayer,
+  AppNodeBuilder.build(
+    LayerNode.group([
+      SessionNs.node,
+      EventV2Bridge.node,
+      SessionProjector.node,
+      CrossSpawnSpawner.node,
+      InstanceStore.node,
+    ]),
+    [
+      [RuntimeFlags.node, RuntimeFlags.layer({ experimentalWorkspaces: false })],
+      [
+        InstanceBootstrap.node,
+        Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void })),
+      ],
+    ],
   ),
 )
 
@@ -101,6 +105,31 @@ describe("session.created event", () => {
       yield* session.remove(info.id)
     }),
   )
+
+  it.instance("emits legacy global sync payload", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionNs.Service
+      const received = yield* Deferred.make<{ syncEvent: EventV2.SerializedEvent }>()
+      const listener = (event: { payload: { type?: string; syncEvent?: EventV2.SerializedEvent } }) => {
+        if (event.payload.type === "sync" && event.payload.syncEvent)
+          Deferred.doneUnsafe(received, Effect.succeed({ syncEvent: event.payload.syncEvent }))
+      }
+      GlobalBus.on("event", listener)
+      yield* Effect.addFinalizer(() => Effect.sync(() => GlobalBus.off("event", listener)))
+
+      const info = yield* session.create({})
+      const event = yield* awaitDeferred(received, "timed out waiting for legacy global sync event")
+
+      expect(event.syncEvent).toMatchObject({
+        type: EventV2.versionedType(SessionNs.Event.Created.type, 1),
+        seq: 0,
+        aggregateID: info.id,
+        data: { sessionID: info.id },
+      })
+
+      yield* session.remove(info.id)
+    }),
+  )
 })
 
 describe("step-finish token propagation via event", () => {
@@ -122,17 +151,17 @@ describe("step-finish token propagation via event", () => {
           model: { providerID: "test", modelID: "test" },
           tools: {},
           mode: "",
-        } as unknown as SessionLegacy.Info)
+        } as unknown as SessionV1.Info)
 
-        // Event subscribers receive readonly Schema.Type payloads; `SessionLegacy.Part`
+        // Event subscribers receive readonly Schema.Type payloads; `SessionV1.Part`
         // is the mutable domain type. Cast bridges the two — safe because the
         // test only reads the value afterwards.
-        const received = yield* Deferred.make<SessionLegacy.Part>()
+        const received = yield* Deferred.make<SessionV1.Part>()
         const unsub = yield* events.listen((event) => {
           if (event.type === MessageV2.Event.PartUpdated.type)
             Deferred.doneUnsafe(
               received,
-              Effect.succeed((event.data as typeof MessageV2.Event.PartUpdated.data.Type).part as SessionLegacy.Part),
+              Effect.succeed((event.data as typeof MessageV2.Event.PartUpdated.data.Type).part as SessionV1.Part),
             )
           return Effect.void
         })
@@ -160,7 +189,7 @@ describe("step-finish token propagation via event", () => {
         const receivedPart = yield* awaitDeferred(received, "timed out waiting for message.part.updated")
 
         expect(receivedPart.type).toBe("step-finish")
-        const finish = receivedPart as SessionLegacy.StepFinishPart
+        const finish = receivedPart as SessionV1.StepFinishPart
         expect(finish.tokens.input).toBe(500)
         expect(finish.tokens.output).toBe(800)
         expect(finish.tokens.reasoning).toBe(200)

@@ -1,8 +1,8 @@
 import type { ProviderOptions, ReasoningEffort, TextVerbosity } from "../schema"
 import { mergeProviderOptions } from "../schema"
-import type { OpenAIResponseIncludable } from "../protocols/utils/openai-options"
+import type { OpenAIResponseIncludable, OpenAIServiceTier } from "../protocols/utils/openai-options"
 
-export type { OpenAIResponseIncludable } from "../protocols/utils/openai-options"
+export type { OpenAIResponseIncludable, OpenAIServiceTier } from "../protocols/utils/openai-options"
 
 export interface OpenAIOptionsInput {
   readonly [key: string]: unknown
@@ -15,6 +15,7 @@ export interface OpenAIOptionsInput {
   // native-SDK callers share one shape and no translation is required.
   readonly include?: ReadonlyArray<OpenAIResponseIncludable>
   readonly textVerbosity?: TextVerbosity
+  readonly serviceTier?: OpenAIServiceTier
 }
 
 export type OpenAIProviderOptionsInput = ProviderOptions & {
@@ -33,6 +34,7 @@ const openAIProviderOptions = (options: OpenAIOptionsInput | undefined): Provide
       reasoningSummary: options?.reasoningSummary,
       include: options?.include,
       textVerbosity: options?.textVerbosity,
+      serviceTier: options?.serviceTier,
     }),
   )
   if (Object.keys(openai).length === 0) return undefined

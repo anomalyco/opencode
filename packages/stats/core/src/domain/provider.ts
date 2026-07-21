@@ -1,13 +1,17 @@
-import { and, asc, eq } from "drizzle-orm"
+import { and, asc, eq, inArray } from "drizzle-orm"
 import { Effect, Layer } from "effect"
 import * as Context from "effect/Context"
 import { DatabaseError, DrizzleClient } from "../database"
 import { providerStat } from "../database/schema"
+import { RETIRED_STAT_PROVIDERS } from "./model-normalization"
 import {
   chunks,
   collapseRows,
   inserted,
+  isMissingUniqueUsersColumn,
+  omitUniqueUsers,
   rankRowsWithMarketShare,
+  statRowScope,
   synthesizeAllTierRows,
   toStatBaseRow,
   UPSERT_CHUNK_SIZE,
@@ -36,6 +40,7 @@ export declare namespace ProviderStatRepo {
       readonly source?: string
     }) => Effect.Effect<ProviderStatRow[], DatabaseError>
     readonly upsert: (rows: ProviderStatRow[]) => Effect.Effect<void, DatabaseError>
+    readonly deleteRetiredDimensions: (rows: ProviderStatRow[]) => Effect.Effect<void, DatabaseError>
   }
 }
 
@@ -59,7 +64,14 @@ export class ProviderStatRepo extends Context.Service<ProviderStatRepo, Provider
                 totalTokens: providerStat.total_tokens,
               })
               .from(providerStat)
-              .where(and(eq(providerStat.grain, "day"), eq(providerStat.client, "all"), eq(providerStat.source, "all")))
+              .where(
+                and(
+                  eq(providerStat.grain, "day"),
+                  eq(providerStat.client, "all"),
+                  eq(providerStat.source, "all"),
+                  inArray(providerStat.tier, ["Go", "go"]),
+                ),
+              )
               .orderBy(asc(providerStat.period_key)),
           catch: (cause) => DatabaseError.make({ cause }),
         })
@@ -97,48 +109,83 @@ export class ProviderStatRepo extends Context.Service<ProviderStatRepo, Provider
           chunks(rows, UPSERT_CHUNK_SIZE),
           (chunk) =>
             Effect.tryPromise({
-              try: () =>
-                db
-                  .insert(providerStat)
-                  .values(chunk)
-                  .onDuplicateKeyUpdate({
-                    set: {
-                      sessions: inserted("sessions"),
-                      requests: inserted("requests"),
-                      input_tokens: inserted("input_tokens"),
-                      output_tokens: inserted("output_tokens"),
-                      reasoning_tokens: inserted("reasoning_tokens"),
-                      cache_read_tokens: inserted("cache_read_tokens"),
-                      total_tokens: inserted("total_tokens"),
-                      input_cost_microcents: inserted("input_cost_microcents"),
-                      output_cost_microcents: inserted("output_cost_microcents"),
-                      total_cost_microcents: inserted("total_cost_microcents"),
-                      avg_duration_ms: inserted("avg_duration_ms"),
-                      p50_duration_ms: inserted("p50_duration_ms"),
-                      p95_duration_ms: inserted("p95_duration_ms"),
-                      avg_ttfb_ms: inserted("avg_ttfb_ms"),
-                      p50_ttfb_ms: inserted("p50_ttfb_ms"),
-                      p95_ttfb_ms: inserted("p95_ttfb_ms"),
-                      avg_output_tps: inserted("avg_output_tps"),
-                      success_count: inserted("success_count"),
-                      error_count: inserted("error_count"),
-                      sample_count: inserted("sample_count"),
-                      market_share_tokens: inserted("market_share_tokens"),
-                      market_share_requests: inserted("market_share_requests"),
-                      market_share_sessions: inserted("market_share_sessions"),
-                      rank_by_tokens: inserted("rank_by_tokens"),
-                      rank_by_requests: inserted("rank_by_requests"),
-                      rank_by_sessions: inserted("rank_by_sessions"),
-                      rank_by_cost: inserted("rank_by_cost"),
-                    },
-                  }),
+              try: async () => {
+                try {
+                  return await upsertProviderChunk(chunk, true)
+                } catch (cause) {
+                  if (!isMissingUniqueUsersColumn(cause)) throw cause
+                  return upsertProviderChunk(chunk, false)
+                }
+              },
               catch: (cause) => DatabaseError.make({ cause }),
             }),
           { discard: true },
         )
       })
 
-      return ProviderStatRepo.of({ listDaily, listByPeriod, upsert })
+      function upsertProviderChunk(chunk: ProviderStatRow[], includeUniqueUsers: boolean) {
+        return db
+          .insert(providerStat)
+          .values(includeUniqueUsers ? chunk : omitUniqueUsers(chunk))
+          .onDuplicateKeyUpdate({
+            set: {
+              sessions: inserted("sessions"),
+              requests: inserted("requests"),
+              ...(includeUniqueUsers ? { unique_users: inserted("unique_users") } : {}),
+              input_tokens: inserted("input_tokens"),
+              output_tokens: inserted("output_tokens"),
+              reasoning_tokens: inserted("reasoning_tokens"),
+              cache_read_tokens: inserted("cache_read_tokens"),
+              total_tokens: inserted("total_tokens"),
+              input_cost_microcents: inserted("input_cost_microcents"),
+              output_cost_microcents: inserted("output_cost_microcents"),
+              total_cost_microcents: inserted("total_cost_microcents"),
+              avg_duration_ms: inserted("avg_duration_ms"),
+              p50_duration_ms: inserted("p50_duration_ms"),
+              p95_duration_ms: inserted("p95_duration_ms"),
+              avg_ttfb_ms: inserted("avg_ttfb_ms"),
+              p50_ttfb_ms: inserted("p50_ttfb_ms"),
+              p95_ttfb_ms: inserted("p95_ttfb_ms"),
+              avg_output_tps: inserted("avg_output_tps"),
+              success_count: inserted("success_count"),
+              error_count: inserted("error_count"),
+              sample_count: inserted("sample_count"),
+              market_share_tokens: inserted("market_share_tokens"),
+              market_share_requests: inserted("market_share_requests"),
+              market_share_sessions: inserted("market_share_sessions"),
+              rank_by_tokens: inserted("rank_by_tokens"),
+              rank_by_requests: inserted("rank_by_requests"),
+              rank_by_sessions: inserted("rank_by_sessions"),
+              rank_by_cost: inserted("rank_by_cost"),
+            },
+          })
+      }
+
+      const deleteRetiredDimensions = Effect.fn("ProviderStatRepo.deleteRetiredDimensions")(function* (
+        rows: ProviderStatRow[],
+      ) {
+        const scope = statRowScope(rows)
+        if (!scope) return
+
+        yield* Effect.tryPromise({
+          try: () =>
+            db
+              .delete(providerStat)
+              .where(
+                and(
+                  inArray(providerStat.grain, scope.grains),
+                  inArray(providerStat.period_key, scope.periodKeys),
+                  inArray(providerStat.dataset, scope.datasets),
+                  inArray(providerStat.client, scope.clients),
+                  inArray(providerStat.source, scope.sources),
+                  inArray(providerStat.provider, RETIRED_STAT_PROVIDERS),
+                ),
+              ),
+          catch: (cause) => DatabaseError.make({ cause }),
+        })
+      })
+
+      return ProviderStatRepo.of({ listDaily, listByPeriod, upsert, deleteRetiredDimensions })
     }),
   )
 }

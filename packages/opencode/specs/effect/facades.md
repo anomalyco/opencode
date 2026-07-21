@@ -32,7 +32,7 @@ Caller-heavy batch, all merged:
 
 1. `src/config/config.ts`
 2. `src/provider/provider.ts`
-3. `src/file/index.ts`
+3. `../core/src/filesystem.ts`
 4. `src/lsp/index.ts`
 5. `src/mcp/index.ts`
 
@@ -168,7 +168,7 @@ Usually no.
 Prefer the direct form when there is only one expression:
 
 ```ts
-await AppRuntime.runPromise(File.Service.use((svc) => svc.read(path)))
+await Effect.runPromise(FileSystem.Service.use((svc) => svc.read({ path })))
 ```
 
 Use `Effect.gen(...)` when the workflow actually needs multiple yielded values or branching.
@@ -179,7 +179,7 @@ These were the recurring mistakes and useful corrections from the first two batc
 
 1. Tests should usually provide the specific service layer, not `AppRuntime`.
 2. If a test uses `provideTmpdirInstance(...)` and needs child processes, prefer `CrossSpawnSpawner.defaultLayer`.
-3. Instance-scoped services may need both the service layer and the right instance fixture. `File` tests, for example, needed `provideInstance(...)` plus `File.defaultLayer`.
+3. Location-scoped services may need both the service layer and the right location fixture. `FileSystem` tests, for example, provide `Location.Service` plus `FileSystem.locationLayer`.
 4. Do not wrap a single `Service.use(...)` call in `Effect.gen(...)` just to return it. Use the direct form.
 5. For CLI readability, extract file-local preload helpers when the handler starts doing config load + service load + batched effect fanout inline.
 6. When rebasing a facade branch after nearby merges, prefer the already-cleaned service/test version over older inline facade-era code.
@@ -201,7 +201,7 @@ Most of the original facade-removal backlog is already done. The practical remai
 - [x] `src/worktree/index.ts` (`Worktree`) - service-local facades removed
 - [x] `src/plugin/index.ts` (`Plugin`) - service-local facades removed
 - [x] `src/snapshot/index.ts` (`Snapshot`) - service-local facades removed
-- [x] `src/file/index.ts` (`File`) - facades removed and merged
+- [x] `../core/src/filesystem.ts` (`FileSystem`) - legacy opencode service removed
 - [x] `src/lsp/index.ts` (`LSP`) - facades removed and merged
 - [x] `src/mcp/index.ts` (`MCP`) - facades removed and merged
 - [x] `src/config/config.ts` (`Config`) - facades removed and merged

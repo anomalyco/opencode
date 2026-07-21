@@ -17,13 +17,12 @@
   margin: 0;
   padding: 0;
   border: 0;
-  font-family: var(--v2-font-family-sans);
   font-style: normal;
   font-weight: 530;
   font-size: 13px;
   line-height: 1;
   letter-spacing: -0.04px;
-  color: var(--text-text-base);
+  color: var(--v2-text-text-base);
   font-variation-settings: "slnt" 0;
   cursor: default;
   user-select: none;
@@ -52,13 +51,13 @@
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: var(--icon-icon-muted);
+  color: var(--v2-icon-icon-muted);
   cursor: pointer;
   outline: none;
 }
 
 [data-component="field-v2"] [data-slot="field-v2-label-info"]:is(:hover, [data-state="hover"]) {
-  color: var(--text-text-base);
+  color: var(--v2-text-text-base);
 }
 
 [data-component="field-v2"] [data-slot="field-v2-label-info"]:focus {
@@ -66,7 +65,7 @@
 }
 
 [data-component="field-v2"] [data-slot="field-v2-label-info"]:focus-visible {
-  outline: 2px solid var(--border-border-focus);
+  outline: 2px solid var(--v2-border-border-focus);
   outline-offset: 1px;
   border-radius: 2px;
 }
@@ -76,13 +75,12 @@
   align-self: stretch;
   width: 100%;
   min-height: 11px;
-  font-family: var(--v2-font-family-sans);
   font-style: normal;
   font-weight: 440;
   font-size: 11px;
   line-height: 1;
   letter-spacing: 0.05px;
-  color: var(--text-text-muted);
+  color: var(--v2-text-text-muted);
   font-variation-settings: "slnt" 0;
   user-select: none;
 }

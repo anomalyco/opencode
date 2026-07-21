@@ -98,6 +98,14 @@ describe("opencode CLI help-text snapshots", () => {
     "every documented command emits stable help text",
     ({ opencode }) =>
       Effect.gen(function* () {
+        const topLevel = yield* opencode.spawn(["--help"], { env: SNAPSHOT_ENV })
+        expect(topLevel.exitCode).toBe(0)
+        expect(topLevel.stderr.endsWith("\n")).toBe(true)
+        expect(topLevel.stderr).toContain("--mini")
+        expect(topLevel.stderr).not.toContain("--thinking")
+        expect(topLevel.stderr).not.toContain("--variant")
+        expect(topLevel.stderr).not.toContain("--demo")
+
         const argvs: Array<readonly string[]> = [...TOP_LEVEL.map((c) => [c] as const), ...SUBCOMMANDS]
 
         // Spawn in parallel, then assert in argv order so snapshot output is

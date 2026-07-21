@@ -3,6 +3,7 @@ import { EventEmitter } from "node:events"
 import { createServer, type IncomingMessage, type Server as HttpServer } from "node:http"
 import net, { type AddressInfo, type Socket } from "node:net"
 import WebSocket, { WebSocketServer } from "ws"
+import { APICallError } from "ai"
 import { ProviderError } from "../../src/provider/error"
 import { OpenAIWebSocket } from "../../src/plugin/openai/ws"
 import { OpenAIWebSocketPool, TITLE_HEADER } from "../../src/plugin/openai/ws-pool"
@@ -210,7 +211,7 @@ describe("plugin.openai.ws-pool", () => {
     fetch.close()
   })
 
-  test("prunes HTTP fallback after its idle timeout", async () => {
+  test("keeps HTTP fallback active after its idle timeout", async () => {
     let websocketAttempts = 0
     await using server = await createRejectingWebSocketServer(() => websocketAttempts++)
     const fetch = OpenAIWebSocketPool.createWebSocketFetch({
@@ -226,8 +227,82 @@ describe("plugin.openai.ws-pool", () => {
     const second = await fetch(server.url, streamRequest())
 
     expect(await second.text()).toBe("http")
+    expect(websocketAttempts).toBe(1)
+    expect(server.httpRequests).toHaveLength(2)
+    fetch.close()
+  })
+
+  test("removes HTTP fallback when its session is deleted", async () => {
+    let websocketAttempts = 0
+    await using server = await createRejectingWebSocketServer(() => websocketAttempts++)
+    const fetch = OpenAIWebSocketPool.createWebSocketFetch({
+      url: server.url,
+      connectTimeout: 100,
+      streamRetries: 0,
+    })
+
+    const first = await fetch(server.url, streamRequest())
+    expect(await first.text()).toBe("http")
+    fetch.remove("session-1")
+    const second = await fetch(server.url, streamRequest())
+
+    expect(await second.text()).toBe("http")
     expect(websocketAttempts).toBe(2)
     expect(server.httpRequests).toHaveLength(2)
+    fetch.close()
+  })
+
+  test("terminates active websocket connections when their session is deleted", async () => {
+    let connections = 0
+    await using server = await createWebSocketServer((socket) => {
+      connections += 1
+      socket.once("message", () => {
+        if (connections === 1) {
+          socket.send(JSON.stringify({ type: "response.output_text.delta", delta: "started" }))
+          return
+        }
+        socket.send(JSON.stringify({ type: "response.completed", response: { id: "resp_after_remove" } }))
+      })
+    })
+    const fetch = OpenAIWebSocketPool.createWebSocketFetch({
+      url: server.url,
+    })
+
+    const first = await fetch(server.url, streamRequest())
+    const firstText = first.text()
+    fetch.remove("session-1")
+    expect((await readTextError(firstText)).message).toContain("WebSocket closed before response.completed")
+
+    const second = await fetch(server.url, streamRequest())
+
+    expect(await second.text()).toContain("data: [DONE]")
+    expect(connections).toBe(2)
+    fetch.close()
+  })
+
+  test("prunes idle websocket connections after completed responses", async () => {
+    let connections = 0
+    let closed = 0
+    await using server = await createWebSocketServer((socket) => {
+      connections += 1
+      socket.once("close", () => closed++)
+      socket.once("message", () => {
+        socket.send(JSON.stringify({ type: "response.completed", response: { id: `resp_${connections}` } }))
+      })
+    })
+    const fetch = OpenAIWebSocketPool.createWebSocketFetch({
+      url: server.url,
+      idleTimeout: 20,
+    })
+
+    const first = await fetch(server.url, streamRequest())
+    expect(await first.text()).toContain("data: [DONE]")
+    await waitFor(() => closed === 1, "idle websocket was not pruned")
+
+    const second = await fetch(server.url, streamRequest())
+
+    expect(await second.text()).toContain("data: [DONE]")
+    expect(connections).toBe(2)
     fetch.close()
   })
 
@@ -250,6 +325,72 @@ describe("plugin.openai.ws-pool", () => {
     expect(await second.text()).toContain('data: {"type":"response.completed"}')
     expect(connections).toBe(2)
     expect(server.httpRequests).toHaveLength(0)
+    fetch.close()
+  })
+
+  test("returns initial websocket error frames as HTTP-style API errors", async () => {
+    const error = {
+      type: "invalid_request_error",
+      message: "The model is not supported when using Codex with a ChatGPT account.",
+    }
+    const event = {
+      type: "error",
+      status: 400,
+      error,
+      headers: {
+        "x-codex-primary-window-minutes": 15,
+        ignored: { nested: true },
+      },
+    }
+    await using server = await createWebSocketServer((socket) => {
+      socket.once("message", () => {
+        socket.send(JSON.stringify(event))
+      })
+    })
+    const fetch = OpenAIWebSocketPool.createWebSocketFetch({
+      url: server.url,
+    })
+
+    const response = await fetch(server.url, streamRequest())
+
+    expect(response.status).toBe(400)
+    expect(response.headers.get("content-type")).toContain("application/json")
+    expect(response.headers.get("x-codex-primary-window-minutes")).toBe("15")
+    expect(response.headers.get("ignored")).toBeNull()
+    expect(await response.json()).toEqual(event)
+    fetch.close()
+  })
+
+  test("fails mid-stream wrapped websocket errors as HTTP-style API errors", async () => {
+    const event = {
+      type: "error",
+      status_code: 429,
+      error: {
+        type: "usage_limit_reached",
+        message: "The usage limit has been reached",
+      },
+      headers: {
+        "x-codex-primary-used-percent": "100.0",
+      },
+    }
+    await using server = await createWebSocketServer((socket) => {
+      socket.once("message", () => {
+        socket.send(JSON.stringify({ type: "response.output_text.delta", delta: "started" }))
+        socket.send(JSON.stringify(event))
+      })
+    })
+    const fetch = OpenAIWebSocketPool.createWebSocketFetch({
+      url: server.url,
+    })
+
+    const response = await fetch(server.url, streamRequest())
+    const error = await readTextError(response.text())
+
+    expect(APICallError.isInstance(error)).toBe(true)
+    if (!APICallError.isInstance(error)) throw new Error("Expected APICallError")
+    expect(error.statusCode).toBe(429)
+    expect(error.responseHeaders).toEqual({ "x-codex-primary-used-percent": "100.0" })
+    expect(error.responseBody).toBe(JSON.stringify(event))
     fetch.close()
   })
 
@@ -392,22 +533,54 @@ describe("plugin.openai.ws-pool", () => {
     fetch.close()
   })
 
+  test("keeps websocket retry state until the failed stream becomes idle", async () => {
+    let connections = 0
+    await using server = await createWebSocketServer((socket) => {
+      connections += 1
+      socket.once("message", () => {})
+    })
+    const fetch = OpenAIWebSocketPool.createWebSocketFetch({
+      url: server.url,
+      idleTimeout: 500,
+      streamRetries: 1,
+    })
+
+    await new Promise((resolve) => setTimeout(resolve, 250))
+    const first = await fetch(server.url, streamRequest())
+    expect((await readTextError(first.text())).message).toContain("idle timeout waiting for websocket")
+    await new Promise((resolve) => setTimeout(resolve, 300))
+
+    const second = await fetch(server.url, streamRequest())
+
+    expect(await second.text()).toBe("http")
+    expect(connections).toBe(2)
+    expect(server.httpRequests).toHaveLength(1)
+    fetch.close()
+  })
+
   test("retries failed websocket streams before using HTTP fallback", async () => {
+    const attempts: Array<(socket: WebSocket) => void> = []
     await using server = await createWebSocketServer((socket) => {
       socket.once("message", () => {
         socket.send(JSON.stringify({ type: "response.output_text.delta", delta: "started" }))
+        attempts.shift()?.(socket)
       })
     })
     const fetch = OpenAIWebSocketPool.createWebSocketFetch({
       url: server.url,
-      idleTimeout: 20,
       streamRetries: 1,
     })
 
+    const firstAttempt = new Promise<WebSocket>((resolve) => attempts.push(resolve))
     const first = await fetch(server.url, streamRequest())
-    expect((await readTextError(first.text())).message).toContain("idle timeout waiting for websocket")
+    const firstSocket = await firstAttempt
+    firstSocket.terminate()
+    expect((await readTextError(first.text())).message).toContain("WebSocket closed before response.completed")
+    const secondAttempt = new Promise<WebSocket>((resolve) => attempts.push(resolve))
     const second = await fetch(server.url, streamRequest())
-    expect((await readTextError(second.text())).message).toContain("idle timeout waiting for websocket")
+    const secondSocket = await secondAttempt
+    secondSocket.terminate()
+    expect((await readTextError(second.text())).message).toContain("WebSocket closed before response.completed")
     const third = await fetch(server.url, streamRequest())
 
     expect(await third.text()).toBe("http")

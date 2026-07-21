@@ -1,38 +1,48 @@
 import os from "os"
 import { InstallationVersion } from "../../installation/version"
 import { Effect } from "effect"
-import { PluginV2 } from "../../plugin"
+import { define } from "../internal"
 import { ProviderV2 } from "../../provider"
 
 const providerID = ProviderV2.ID.make("cloudflare-workers-ai")
 
-export const CloudflareWorkersAIPlugin = PluginV2.define({
-  id: PluginV2.ID.make("cloudflare-workers-ai"),
-  effect: Effect.gen(function* () {
-    return {
-      "catalog.transform": Effect.fn(function* (evt) {
+export const CloudflareWorkersAIPlugin = define({
+  id: "cloudflare-workers-ai",
+  effect: Effect.fn(function* (ctx) {
+    yield* ctx.catalog.transform(
+      Effect.fn(function* (evt) {
         const item = evt.provider.get(providerID)
         if (!item) return
         evt.provider.update(item.provider.id, (provider) => {
-          if (provider.endpoint.type !== "aisdk") return
-          if (provider.endpoint.url) return
-          const accountId = resolveAccountId(provider.options.aisdk.provider)
-          if (accountId) provider.endpoint.url = workersEndpoint(accountId)
+          if (provider.api.type !== "aisdk") return
+          if (provider.api.url) return
+          const accountId = resolveAccountId(provider.request.body)
+          if (accountId) provider.api.url = workersEndpoint(accountId)
         })
       }),
-      "aisdk.sdk": Effect.fn(function* (evt) {
+    )
+    yield* ctx.aisdk.sdk(
+      Effect.fn(function* (evt) {
         if (evt.model.providerID !== providerID) return
         if (evt.package !== "@ai-sdk/openai-compatible") return
 
-        if (!hasWorkersEndpoint(evt.model.endpoint)) return
+        const accountId = resolveAccountId(evt.options)
+        if (!hasWorkersEndpoint(evt.model.api) && !accountId) return
         const mod = yield* Effect.promise(() => import("@ai-sdk/openai-compatible"))
-        evt.sdk = mod.createOpenAICompatible(sdkOptions(evt.options) as any)
+        evt.sdk = mod.createOpenAICompatible(
+          sdkOptions({
+            ...evt.options,
+            baseURL: evt.options.baseURL ?? (accountId ? workersEndpoint(accountId) : undefined),
+          }) as any,
+        )
       }),
-      "aisdk.language": Effect.fn(function* (evt) {
+    )
+    yield* ctx.aisdk.language(
+      Effect.fn(function* (evt) {
         if (evt.model.providerID !== providerID) return
-        evt.language = evt.sdk.languageModel(evt.model.apiID)
+        evt.language = evt.sdk.languageModel(evt.model.api.id)
       }),
-    }
+    )
   }),
 })
 
@@ -44,8 +54,8 @@ function workersEndpoint(accountId: string) {
   return `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/v1`
 }
 
-function hasWorkersEndpoint(endpoint: ProviderV2.Endpoint) {
-  return endpoint.type === "aisdk" && Boolean(endpoint.url)
+function hasWorkersEndpoint(api: ProviderV2.Api) {
+  return api.type === "aisdk" && Boolean(api.url)
 }
 
 function sdkOptions(options: Record<string, any>) {

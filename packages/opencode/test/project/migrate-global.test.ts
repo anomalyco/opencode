@@ -4,18 +4,17 @@ import { Database } from "@opencode-ai/core/database/database"
 import { eq } from "drizzle-orm"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
+import { AbsolutePath } from "@opencode-ai/core/schema"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { SessionID } from "../../src/session/schema"
-import * as Log from "@opencode-ai/core/util/log"
 import { $ } from "bun"
 import { tmpdirScoped } from "../fixture/fixture"
-import { Effect, Layer } from "effect"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { Effect } from "effect"
 import { testEffect } from "../lib/effect"
 
-void Log.init({ print: false })
-
-const it = testEffect(Layer.mergeAll(Project.defaultLayer, CrossSpawnSpawner.defaultLayer, Database.defaultLayer))
+const it = testEffect(LayerNode.compile(LayerNode.group([Project.node, Database.node, CrossSpawnSpawner.node])))
 
 function legacySessionID() {
   // Global-session migration covers persisted IDs from before prefixed session IDs.
@@ -48,7 +47,7 @@ function ensureGlobal() {
       .insert(ProjectTable)
       .values({
         id: ProjectV2.ID.global,
-        worktree: "/",
+        worktree: AbsolutePath.make("/"),
         time_created: Date.now(),
         time_updated: Date.now(),
         sandboxes: [],

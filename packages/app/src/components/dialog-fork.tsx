@@ -6,7 +6,7 @@ import { usePrompt } from "@/context/prompt"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
-import { showToast } from "@opencode-ai/ui/toast"
+import { showToast } from "@/utils/toast"
 import { extractPromptFromParts } from "@/utils/prompt"
 import type { TextPart as SDKTextPart } from "@opencode-ai/sdk/v2/client"
 import { base64Encode } from "@opencode-ai/core/util/encode"
@@ -35,13 +35,13 @@ export const DialogFork: Component = () => {
     const sessionID = params.id
     if (!sessionID) return []
 
-    const msgs = sync.data.message[sessionID] ?? []
+    const msgs = sync().data.message[sessionID] ?? []
     const result: ForkableMessage[] = []
 
     for (const message of msgs) {
       if (message.role !== "user") continue
 
-      const parts = sync.data.part[message.id] ?? []
+      const parts = sync().data.part[message.id] ?? []
       const textPart = parts.find((x): x is SDKTextPart => x.type === "text" && !x.synthetic && !x.ignored)
       if (!textPart) continue
 
@@ -61,15 +61,15 @@ export const DialogFork: Component = () => {
     const sessionID = params.id
     if (!sessionID) return
 
-    const parts = sync.data.part[item.id] ?? []
+    const parts = sync().data.part[item.id] ?? []
     const restored = extractPromptFromParts(parts, {
-      directory: sdk.directory,
+      directory: sdk().directory,
       attachmentName: language.t("common.attachment"),
     })
-    const dir = base64Encode(sdk.directory)
+    const dir = base64Encode(sdk().directory)
 
-    sdk.client.session
-      .fork({ sessionID, messageID: item.id })
+    sdk()
+      .client.session.fork({ sessionID, messageID: item.id })
       .then((forked) => {
         if (!forked.data) {
           showToast({ title: language.t("common.requestFailed") })
@@ -88,7 +88,7 @@ export const DialogFork: Component = () => {
   return (
     <Dialog title={language.t("command.session.fork")}>
       <List
-        class="flex-1 min-h-0 [&_[data-slot=list-scroll]]:flex-1 [&_[data-slot=list-scroll]]:min-h-0"
+        class="flex-1 px-3 min-h-0 [&_[data-slot=list-scroll]]:flex-1 [&_[data-slot=list-scroll]]:min-h-0"
         search={{ placeholder: language.t("common.search.placeholder"), autofocus: true }}
         emptyMessage={language.t("dialog.fork.empty")}
         key={(x) => x.id}

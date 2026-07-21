@@ -1,11 +1,11 @@
 import { test, expect, describe } from "bun:test"
-import { SessionLegacy } from "@opencode-ai/core/session/legacy"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { extractResponseText, formatPromptTooLargeError } from "../../src/cli/cmd/github"
 import type { MessageV2 } from "../../src/session/message-v2"
 import { SessionID, MessageID, PartID } from "../../src/session/schema"
 
 // Helper to create minimal valid parts
-function createTextPart(text: string): SessionLegacy.Part {
+function createTextPart(text: string): SessionV1.Part {
   return {
     id: PartID.ascending(),
     sessionID: SessionID.make("ses_test"),
@@ -15,7 +15,7 @@ function createTextPart(text: string): SessionLegacy.Part {
   }
 }
 
-function createReasoningPart(text: string): SessionLegacy.Part {
+function createReasoningPart(text: string): SessionV1.Part {
   return {
     id: PartID.ascending(),
     sessionID: SessionID.make("ses_test"),
@@ -26,11 +26,7 @@ function createReasoningPart(text: string): SessionLegacy.Part {
   }
 }
 
-function createToolPart(
-  tool: string,
-  title: string,
-  status: "completed" | "running" = "completed",
-): SessionLegacy.Part {
+function createToolPart(tool: string, title: string, status: "completed" | "running" = "completed"): SessionV1.Part {
   if (status === "completed") {
     return {
       id: PartID.ascending(),
@@ -64,7 +60,7 @@ function createToolPart(
   }
 }
 
-function createStepStartPart(): SessionLegacy.Part {
+function createStepStartPart(): SessionV1.Part {
   return {
     id: PartID.ascending(),
     sessionID: SessionID.make("ses_test"),
@@ -73,7 +69,7 @@ function createStepStartPart(): SessionLegacy.Part {
   }
 }
 
-function createStepFinishPart(): SessionLegacy.Part {
+function createStepFinishPart(): SessionV1.Part {
   return {
     id: PartID.ascending(),
     sessionID: SessionID.make("ses_test"),

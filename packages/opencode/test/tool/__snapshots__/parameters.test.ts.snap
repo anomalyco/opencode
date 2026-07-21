@@ -24,23 +24,6 @@ exports[`tool parameters JSON Schema (wire shape) bash 1`] = `
       "description": "The command to execute",
       "type": "string",
     },
-    "description": {
-      "description": 
-"Clear, concise description of what this command does in 5-10 words. Examples:
-Input: ls
-Output: Lists files in current directory
-
-Input: git status
-Output: Shows working tree status
-
-Input: npm install
-Output: Installs package dependencies
-
-Input: mkdir foo
-Output: Creates directory 'foo'"
-,
-      "type": "string",
-    },
     "timeout": {
       "description": "Optional timeout in milliseconds",
       "exclusiveMinimum": 0,
@@ -55,7 +38,6 @@ Output: Creates directory 'foo'"
   },
   "required": [
     "command",
-    "description",
   ],
   "type": "object",
 }
@@ -320,7 +302,7 @@ exports[`tool parameters JSON Schema (wire shape) task 1`] = `
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "properties": {
     "background": {
-      "description": "Run the agent in the background. You will be notified when it completes.",
+      "description": "Run the agent in the background. You will be notified when it completes. DO NOT sleep, poll, or proactively check on its progress",
       "type": "boolean",
     },
     "command": {
@@ -396,21 +378,14 @@ exports[`tool parameters JSON Schema (wire shape) webfetch 1`] = `
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "properties": {
     "format": {
-      "anyOf": [
-        {
-          "default": "markdown",
-          "description": "The format to return the content in (text, markdown, or html). Defaults to markdown.",
-          "enum": [
-            "text",
-            "markdown",
-            "html",
-          ],
-          "type": "string",
-        },
-        {
-          "type": "null",
-        },
+      "default": "markdown",
+      "description": "The format to return the content in (text, markdown, or html). Defaults to markdown.",
+      "enum": [
+        "text",
+        "markdown",
+        "html",
       ],
+      "type": "string",
     },
     "timeout": {
       "description": "Optional timeout in seconds (max 120)",
