@@ -301,9 +301,10 @@ model: anthropic/claude-sonnet-4-6
 (command body in markdown: the prompt opencode runs, with $ARGUMENTS for the user's input)
 ```
 
-- `template` is the command body — everything below the frontmatter — and is required: it is the prompt opencode runs when the command is invoked. Do not also put a `template:` key in the frontmatter.
+- `template` is the command body — everything below the frontmatter — and is required for new commands: it is the prompt opencode runs when the command is invoked. Do not also put a `template:` key in the frontmatter.
 - `$ARGUMENTS` is replaced with everything the user typed after the command; `$1`, `$2`, … pull individual positional arguments.
 - Optional: `description`, `agent`, `model`, `variant`, `subtask`.
+- Built-in commands (`init`, `review`) can be partially overridden from `opencode.json` by omitting `template`, e.g. `"command": { "review": { "agent": "my-reviewer" } }` keeps the built-in review prompt but runs it with that agent.
 
 ## Plugins
 
