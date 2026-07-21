@@ -10,6 +10,7 @@ import type {
 } from "@opencode-ai/client/promise"
 import { Event } from "@opencode-ai/schema/event"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
+import { formatContextUsage } from "../util/session"
 import { blockerStatus, pickBlockerView } from "./session-data"
 import { writeSessionOutput } from "./stream"
 import { createFragmentReconciler, fragmentRef, type FragmentReconciler } from "./stream-v2.fragment"
@@ -48,6 +49,7 @@ type StreamInput = {
   trace?: Trace
   signal?: AbortSignal
   onCatalogRefresh?: (signal?: AbortSignal) => unknown | Promise<unknown>
+  contextLimit?: (model: NonNullable<RunInput["model"]>) => number | undefined
 }
 
 export type SessionTurnInput = {
@@ -141,6 +143,7 @@ type State = {
   errors: Set<string>
   pending: Map<string, FooterQueuedPrompt>
   admitted: Set<string>
+  stepModel: RunInput["model"]
 }
 
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" })
@@ -409,6 +412,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     errors: new Set(),
     pending: new Map(),
     admitted: new Set(),
+    stepModel: undefined,
   }
   let readyResolve!: () => void
   let readyReject!: (error: unknown) => void
@@ -857,6 +861,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       return
     }
     if (event.type === "session.step.started") {
+      state.stepModel = { providerID: event.data.model.providerID, modelID: event.data.model.id }
       write([], { phase: "running", status: "assistant responding" })
       return
     }
@@ -1106,13 +1111,16 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         event.data.tokens.reasoning +
         event.data.tokens.cache.read +
         event.data.tokens.cache.write
-      const usage = total > 0 ? total.toLocaleString() : ""
+      const limit = state.stepModel ? input.contextLimit?.(state.stepModel) : undefined
+      state.stepModel = undefined
+      const usage = total > 0 ? formatContextUsage(total, limit ? Math.round((total / limit) * 100) : undefined) : ""
       write([], {
         usage: event.data.cost ? `${usage} · ${money.format(event.data.cost)}` : usage,
       })
       return
     }
     if (event.type === "session.step.failed") {
+      state.stepModel = undefined
       const rendered = state.errors.has(event.data.assistantMessageID)
       state.errors.add(event.data.assistantMessageID)
       if (state.wait) state.wait.failureRendered = true

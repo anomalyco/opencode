@@ -729,6 +729,8 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
         onCommit: rememberLocal,
         trace: log,
         onCatalogRefresh: requestCatalogRefresh,
+        contextLimit: (model) =>
+          state.providers.find((provider) => provider.id === model.providerID)?.models[model.modelID]?.limit?.context,
       })
       if (footer.isClosed) {
         await handle.close()

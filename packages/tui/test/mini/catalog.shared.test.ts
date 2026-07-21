@@ -81,6 +81,9 @@ describe("run catalog shared", () => {
             cost: {
               input: 0,
             },
+            limit: {
+              context: 128_000,
+            },
             status: "active",
             variants: {
               high: {},

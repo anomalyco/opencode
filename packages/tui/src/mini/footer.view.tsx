@@ -48,7 +48,6 @@ import type {
   RunTuiConfig,
 } from "./types"
 import type { RunTheme } from "./theme"
-import { modelInfo } from "./variant.shared"
 
 registerOpencodeSpinner()
 
@@ -158,10 +157,6 @@ export function RunFooterView(props: RunFooterViewProps) {
     return tabs().findIndex((item) => item.sessionID === sessionID) + 1
   })
   const foregroundSubagents = createMemo(() => activeTabs().some((item) => !item.background))
-  const model = createMemo(() => {
-    const current = props.currentModel()
-    return current ? modelInfo(props.providers(), current).model : props.state().model
-  })
   const detail = createMemo(() => {
     const current = route()
     return current.type === "subagent" ? subagent().details[current.sessionID] : undefined
@@ -190,19 +185,15 @@ export function RunFooterView(props: RunFooterViewProps) {
   const theme = createMemo(() => runTheme().footer)
   const block = createMemo(() => runTheme().block)
   const spin = createMemo(() => {
+    const options = {
+      color: theme().highlight,
+      style: "blocks" as const,
+      inactiveFactor: 0.6,
+      minAlpha: 0.3,
+    }
     return {
-      frames: createFrames({
-        color: theme().highlight,
-        style: "blocks",
-        inactiveFactor: 0.6,
-        minAlpha: 0.3,
-      }),
-      color: createColors({
-        color: theme().highlight,
-        style: "blocks",
-        inactiveFactor: 0.6,
-        minAlpha: 0.3,
-      }),
+      frames: createFrames(options),
+      color: createColors(options),
     }
   })
   const permission = createMemo<Extract<FooterView, { type: "permission" }> | undefined>(() => {
@@ -338,7 +329,7 @@ export function RunFooterView(props: RunFooterViewProps) {
       return "EXIT"
     }
 
-    return shell() ? "SHELL" : "BUILD"
+    return shell() ? "SHELL" : undefined
   })
   const modeColor = createMemo(() => {
     if (exiting()) {
@@ -373,17 +364,6 @@ export function RunFooterView(props: RunFooterViewProps) {
 
     return usage()
   })
-  const modelStatus = createMemo(() => {
-    const current = props.currentModel()
-    if (!prompt() || shell() || !current) {
-      return
-    }
-
-    return {
-      model: model(),
-      variant: props.currentVariant(),
-    }
-  })
   const statusColor = createMemo(() => {
     if (exiting()) {
       return theme().error
@@ -401,7 +381,6 @@ export function RunFooterView(props: RunFooterViewProps) {
   })
   const statuslineBackground = createMemo(() => theme().status)
   const hasActivityMeta = createMemo(() => activityMeta().length > 0)
-  const hasModelStatus = createMemo(() => responsive().statusline.showModel && Boolean(modelStatus()))
   const contextHints = createMemo(() => {
     if (!prompt() || shell() || !responsive().statusline.showContextHints) {
       return []
@@ -796,11 +775,15 @@ export function RunFooterView(props: RunFooterViewProps) {
                 flexShrink={0}
                 backgroundColor={statuslineBackground()}
               >
-                <box paddingLeft={1} paddingRight={1} backgroundColor={theme().statusAccent} flexShrink={0}>
-                  <text wrapMode="none" truncate>
-                    <span style={{ fg: modeColor(), bold: true }}>{modeLabel()}</span>
-                  </text>
-                </box>
+                <Show when={modeLabel()}>
+                  {(label) => (
+                    <box paddingLeft={1} paddingRight={1} backgroundColor={theme().statusAccent} flexShrink={0}>
+                      <text wrapMode="none" truncate>
+                        <span style={{ fg: modeColor(), bold: true }}>{label()}</span>
+                      </text>
+                    </box>
+                  )}
+                </Show>
 
                 <box
                   flexDirection="row"
@@ -836,28 +819,11 @@ export function RunFooterView(props: RunFooterViewProps) {
                   </box>
                 </Show>
 
-                <Show when={responsive().statusline.showModel && modelStatus()}>
-                  {(info) => (
-                    <box paddingRight={1} backgroundColor="transparent" flexShrink={0}>
-                      <text fg={theme().text} wrapMode="none">
-                        {info().model}
-                        <Show when={info().variant}>
-                          {(variant) => (
-                            <>
-                              <span style={{ fg: theme().warning, bold: true }}> {variant()}</span>
-                            </>
-                          )}
-                        </Show>
-                      </text>
-                    </box>
-                  )}
-                </Show>
-
                 <For each={contextHints()}>
                   {(hint, index) => (
                     <box paddingRight={1} backgroundColor="transparent" flexShrink={0} maxWidth={24}>
                       <text fg={theme().text} wrapMode="none" truncate>
-                        <Show when={index() > 0 || ((hasActivityMeta() || hasModelStatus()) && index() === 0)}>
+                        <Show when={index() > 0 || (hasActivityMeta() && index() === 0)}>
                           {sectionSeparator()}
                         </Show>
                         <span style={{ fg: theme().text }}>{hint.key}</span>{" "}
@@ -871,7 +837,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                   {(hint) => (
                     <box paddingRight={1} backgroundColor="transparent" flexShrink={0} maxWidth={18}>
                       <text fg={theme().text} wrapMode="none" truncate>
-                        <Show when={hasActivityMeta() || hasModelStatus() || hasContextHints()}>
+                        <Show when={hasActivityMeta() || hasContextHints()}>
                           {sectionSeparator()}
                         </Show>
                         <span style={{ fg: theme().text }}>{hint().key}</span>{" "}

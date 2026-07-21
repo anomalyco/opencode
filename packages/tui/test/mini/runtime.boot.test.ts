@@ -128,6 +128,9 @@ describe("run runtime boot", () => {
               cost: {
                 input: 0,
               },
+              limit: {
+                context: 128_000,
+              },
               status: "active",
               variants: {
                 high: {},

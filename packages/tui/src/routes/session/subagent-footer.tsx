@@ -6,7 +6,7 @@ import { SplitBorder } from "../../ui/border"
 import { Locale } from "../../util/locale"
 import { useTerminalDimensions } from "@opentui/solid"
 import { Keymap } from "../../context/keymap"
-import { contextUsage } from "../../util/session"
+import { contextUsage, formatContextUsage } from "../../util/session"
 
 const money = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -37,11 +37,7 @@ export function SubagentFooter() {
     )
 
     return {
-      context: context
-        ? context.percent === undefined
-          ? Locale.number(context.tokens)
-          : `${Locale.number(context.tokens)} (${context.percent}%)`
-        : undefined,
+      context: context ? formatContextUsage(context.tokens, context.percent) : undefined,
       cost: formattedCost,
     }
   })

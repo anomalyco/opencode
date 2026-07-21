@@ -58,6 +58,9 @@ export type RunProviderModel = {
   cost?: {
     input: number
   }
+  limit?: {
+    context: number
+  }
   status?: string
   variants?: Record<string, unknown>
 }
