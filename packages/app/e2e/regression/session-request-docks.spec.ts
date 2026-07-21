@@ -1,6 +1,7 @@
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { expect, test, type Page } from "@playwright/test"
 import { mockOpenCodeServer } from "../utils/mock-server"
+import { installSseTransport } from "../utils/sse-transport"
 import { expectSessionTitle } from "../utils/waits"
 
 const directory = "C:/OpenCode/RequestDocks"
@@ -98,6 +99,67 @@ test("shows a pending permission dock", async ({ page }) => {
   const request = await reply
   expect(new URL(request.url()).pathname).toBe(`/session/${sessionID}/permissions/permission-request`)
   expect(request.postDataJSON()).toEqual({ response: "once" })
+})
+
+test("restores the draft caret before typing after a request dock closes", async ({ page }) => {
+  const transport = await installSseTransport(page, {
+    server: `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`,
+    retry: 20,
+  })
+  await mockServer(page, { questions: [] })
+  await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
+  await transport.waitForConnection()
+  await expectSessionTitle(page, title)
+
+  const editor = page.locator('[data-component="prompt-input"][contenteditable="true"]')
+  const draft = "keep the caret at the end"
+  await editor.fill(draft)
+  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())))
+  for (let index = 0; index < 4; index++) await page.keyboard.press("ArrowLeft")
+  const cursor = draft.length - 4
+  await expect
+    .poll(() =>
+      editor.evaluate((element) => {
+        const selection = window.getSelection()
+        if (!selection?.rangeCount || !element.contains(selection.anchorNode)) return -1
+        const range = selection.getRangeAt(0).cloneRange()
+        range.selectNodeContents(element)
+        range.setEnd(selection.anchorNode!, selection.anchorOffset)
+        return range.toString().length
+      }),
+    )
+    .toBe(cursor)
+  await transport.send({
+    directory,
+    payload: {
+      type: "question.asked",
+      properties: {
+        id: "question-caret",
+        sessionID,
+        questions: [
+          {
+            header: "Continue",
+            question: "Continue?",
+            options: [{ label: "Yes", description: "Continue the session" }],
+          },
+        ],
+        tool: { messageID: "message-caret", callID: "call-caret" },
+      },
+    },
+  })
+  const question = page.locator('[data-component="dock-prompt"][data-kind="question"]')
+  await expect(question).toBeVisible()
+  await expect(editor).toHaveCount(0)
+
+  await transport.send({
+    directory,
+    payload: { type: "question.rejected", properties: { sessionID, requestID: "question-caret" } },
+  })
+  await expect(question).toHaveCount(0)
+  await expect(editor).toBeVisible()
+  await page.keyboard.press("x")
+
+  await expect(editor).toHaveText(`${draft.slice(0, cursor)}x${draft.slice(cursor)}`)
 })
 
 async function mockServer(

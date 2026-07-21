@@ -1,11 +1,10 @@
-import { createMemo, createSignal, Show, type JSX } from "solid-js"
+import { createMemo, createResource, createSignal, Show, type JSX } from "solid-js"
 import type { SnapshotFileDiff, VcsFileDiff } from "@opencode-ai/sdk/v2"
 import {
   SESSION_REVIEW_V2_SIDEBAR_WIDTH_MAX,
   SESSION_REVIEW_V2_SIDEBAR_WIDTH_MIN,
   SessionReviewV2,
   SessionReviewV2Sidebar,
-  SessionReviewV2SidebarToggle,
 } from "@opencode-ai/session-ui/v2/session-review-v2"
 import { SessionReviewFilePreviewV2 } from "@opencode-ai/session-ui/v2/session-review-file-preview-v2"
 import { DiffChanges } from "@opencode-ai/ui/v2/diff-changes-v2"
@@ -25,6 +24,7 @@ import {
   filterRenderableDiff,
   filterReviewFiles,
   reviewDiffKinds,
+  reviewDiffNeedsLoad,
   type RenderDiff,
 } from "@/pages/session/v2/review-diff-kinds"
 import type { ReviewPanelV2State } from "@/pages/session/v2/review-panel-v2-state"
@@ -37,6 +37,8 @@ export type ReviewPanelV2Props = {
   empty?: JSX.Element
   diffs: () => ReviewDiff[]
   diffsReady: () => boolean
+  diffVersion?: number
+  loadDiff?: (path: string, version?: number) => Promise<RenderDiff | undefined>
   activeFile?: string
   onSelectFile: (path: string) => void
   diffStyle: SessionReviewDiffStyle
@@ -63,6 +65,8 @@ export function ReviewPanelV2(props: ReviewPanelV2Props) {
   )
   const searching = createMemo(() => props.state.filter().trim().length > 0)
   const kinds = createMemo(() => reviewDiffKinds(diffs()))
+  // Changes-only trees omit "M" — every row is already a change; A/D stay visible.
+  const treeKinds = createMemo(() => new Map([...kinds()].filter(([, kind]) => kind !== "mix")))
   const activeDiff = createMemo(() => {
     // A focused comment takes over the preview until the preview applies it and
     // clears the focus; the owner then persists the file as the active selection.
@@ -74,7 +78,26 @@ export function ReviewPanelV2(props: ReviewPanelV2Props) {
     if (active && files.includes(active)) return active
     return files[0]
   })
-  const activeItem = createMemo(() => diffs().find((diff) => diff.file === activeDiff()))
+  const sourceActiveItem = createMemo(() => diffs().find((diff) => diff.file === activeDiff()))
+  const detailSource = createMemo(() => {
+    const diff = sourceActiveItem()
+    const load = props.loadDiff
+    if (!diff || !load || !reviewDiffNeedsLoad(diff)) return
+    return { diff, load, version: props.diffVersion }
+  })
+  const [loadedDiff] = createResource(detailSource, async ({ diff, load, version }) => {
+    const value = await load(diff.file, version)
+    if (value?.file !== diff.file) return
+    return { source: diff, version, value }
+  })
+
+  const activeItem = createMemo(() => {
+    const source = sourceActiveItem()
+    if (loadedDiff.state !== "ready") return source
+    const loaded = loadedDiff()
+    if (loaded && loaded.source === source && loaded.version === props.diffVersion) return loaded.value
+    return source
+  })
 
   const readFile = async (path: string) =>
     sdk()
@@ -91,9 +114,6 @@ export function ReviewPanelV2(props: ReviewPanelV2Props) {
       stats={<DiffChanges changes={diffs()} />}
       empty={props.empty}
       sidebarOpen={props.state.sidebarOpened()}
-      sidebarToggle={
-        <SessionReviewV2SidebarToggle opened={props.state.sidebarOpened()} onToggle={props.state.toggleSidebar} />
-      }
       sidebar={
         // Always mounted: the sidebar header hosts the changes-mode dropdown,
         // which must stay reachable when the current mode has zero diffs.
@@ -105,7 +125,7 @@ export function ReviewPanelV2(props: ReviewPanelV2Props) {
           diffs={diffs}
           filteredFiles={filteredFiles}
           searching={searching}
-          kinds={kinds}
+          kinds={treeKinds}
           activeDiff={activeDiff}
         />
       }
@@ -180,6 +200,7 @@ function ReviewPanelV2Sidebar(props: {
   return (
     <SessionReviewV2Sidebar
       open={props.state.sidebarOpened()}
+      transition={props.state.sidebarTransition()}
       title={props.title}
       stats={<DiffChanges changes={props.diffs()} />}
       filter={props.state.filter()}

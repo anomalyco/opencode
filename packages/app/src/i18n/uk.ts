@@ -93,6 +93,7 @@ export const dict = {
   "command.session.unshare.description": "Припинити поширення цієї сесії",
 
   "palette.search.placeholder": "Пошук файлів, команд і сесій",
+  "palette.search.placeholder.home": "Пошук команд і сесій",
   "palette.empty": "Результатів не знайдено",
   "palette.group.commands": "Команди",
   "palette.group.files": "Файли",
@@ -288,6 +289,11 @@ export const dict = {
   "prompt.context.removeActiveFile": "Видалити активний файл з контексту",
   "prompt.context.removeFile": "Видалити файл з контексту",
   "prompt.action.attachFile": "Додати файли",
+  "prompt.menu.addImagesAndFiles": "Додати файли та інше",
+  "prompt.menu.imagesAndFiles": "Зображення та файли",
+  "prompt.menu.commands": "Команди",
+  "prompt.menu.context": "Контекст",
+  "prompt.menu.shellCommand": "Команда оболонки",
   "prompt.attachment.remove": "Видалити вкладення",
   "prompt.action.send": "Надіслати",
   "prompt.action.stop": "Зупинити",
@@ -626,6 +632,8 @@ export const dict = {
   "home.sessions.group.today": "Сьогодні",
   "home.sessions.group.yesterday": "Учора",
   "home.sessions.group.older": "Раніше",
+  "home.providerTip":
+    "Підключіться до понад 75 провайдерів, щоб використовувати інші моделі, зокрема Claude, GPT, Gemini та інші",
 
   "session.tab.session": "Сесія",
   "session.tab.review": "Огляд",
@@ -695,6 +703,7 @@ export const dict = {
   "session.new.workspace.triggerLocal": "Локально",
   "session.new.workspace.local": "Локальний репозиторій",
   "session.new.workspace.existing": "Робоча область…",
+  "session.new.git.none": "Немає Git",
   "session.new.lastModified": "Востаннє змінено",
 
   "session.header.search.placeholder": "Пошук {{project}}",
@@ -895,9 +904,13 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Розгортати частини інструменту редагування",
   "settings.general.row.editToolPartsExpanded.description":
     "Показувати частини інструментів редагування, запису та патчів розгорнутими за замовчуванням на часовій шкалі",
-  "settings.general.row.newLayoutDesigns.title": "Новий макет і дизайн",
-  "settings.general.row.newLayoutDesigns.description":
-    "Увімкнути оновлений макет та інтерфейси головної сторінки, редактора запитів і сесії",
+  "settings.general.row.newInterface.title": "Новий макет",
+  "settings.general.row.newInterface.badge": "Нове",
+  "settings.general.row.newInterface.description":
+    "Використовуйте нові вкладки та макет головної сторінки. Протягом обмеженого часу можна перемикатися між макетами.",
+  "settings.general.row.newInterfaceNotice.title": "Тепер ви використовуєте новий макет",
+  "settings.general.row.newInterfaceNotice.description": "Попередній макет більше недоступний",
+  "settings.general.row.newInterfaceNotice.dismiss": "Відхилити",
   "settings.general.row.pinchZoom.title": "Масштабування щипком",
   "settings.general.row.pinchZoom.description":
     "Дозволити масштабування жестом щипка на трекпаді та прокручуванням із Ctrl",

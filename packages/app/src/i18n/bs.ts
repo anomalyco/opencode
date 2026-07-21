@@ -93,6 +93,7 @@ export const dict = {
   "command.session.unshare.description": "Zaustavi dijeljenje ove sesije",
 
   "palette.search.placeholder": "Pretraži datoteke, komande i sesije",
+  "palette.search.placeholder.home": "Pretraži komande i sesije",
   "palette.empty": "Nema rezultata",
   "palette.group.commands": "Komande",
   "palette.group.files": "Datoteke",
@@ -287,6 +288,11 @@ export const dict = {
   "prompt.context.removeActiveFile": "Ukloni aktivnu datoteku iz konteksta",
   "prompt.context.removeFile": "Ukloni datoteku iz konteksta",
   "prompt.action.attachFile": "Priloži datoteku",
+  "prompt.menu.addImagesAndFiles": "Dodaj datoteke i više",
+  "prompt.menu.imagesAndFiles": "Slike i datoteke",
+  "prompt.menu.commands": "Komande",
+  "prompt.menu.context": "Kontekst",
+  "prompt.menu.shellCommand": "Shell naredba",
   "prompt.attachment.remove": "Ukloni prilog",
   "prompt.action.send": "Pošalji",
   "prompt.action.stop": "Zaustavi",
@@ -603,6 +609,8 @@ export const dict = {
   "home.sessions.group.today": "Danas",
   "home.sessions.group.yesterday": "Jučer",
   "home.sessions.group.older": "Starije",
+  "home.providerTip":
+    "Povežite se s više od 75 pružalaca usluga kako biste koristili druge modele, uključujući Claude, GPT, Gemini i druge",
 
   "session.tab.session": "Sesija",
   "session.tab.review": "Pregled",
@@ -667,6 +675,7 @@ export const dict = {
   "session.new.workspace.triggerLocal": "Lokalno",
   "session.new.workspace.local": "Lokalni repozitorij",
   "session.new.workspace.existing": "Radni prostor…",
+  "session.new.git.none": "Nema Gita",
   "session.new.lastModified": "Posljednja izmjena",
 
   "session.header.search.placeholder": "Pretraži {{project}}",
@@ -804,9 +813,13 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Proširi dijelove alata za uređivanje",
   "settings.general.row.editToolPartsExpanded.description":
     "Prikaži dijelove alata za uređivanje, pisanje i patch podrazumijevano proširene na vremenskoj traci",
-  "settings.general.row.newLayoutDesigns.title": "Novi raspored i dizajn",
-  "settings.general.row.newLayoutDesigns.description":
-    "Omogući redizajnirani raspored, početnu stranicu, uređivač poruke i interfejs sesije",
+  "settings.general.row.newInterface.title": "Novi raspored",
+  "settings.general.row.newInterface.badge": "Novo",
+  "settings.general.row.newInterface.description":
+    "Koristite nove kartice i raspored početne stranice. Ograničeno vrijeme možete se prebacivati između rasporeda.",
+  "settings.general.row.newInterfaceNotice.title": "Sada koristite novi raspored",
+  "settings.general.row.newInterfaceNotice.description": "Prethodni raspored više nije dostupan",
+  "settings.general.row.newInterfaceNotice.dismiss": "Odbaci",
   "settings.general.row.pinchZoom.title": "Zumiranje štipanjem",
   "settings.general.row.pinchZoom.description":
     "Dozvoli zumiranje gestom štipanja na dodirnoj ploči i pomoću Ctrl-pomjeranja",

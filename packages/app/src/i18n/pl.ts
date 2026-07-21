@@ -86,6 +86,7 @@ export const dict = {
   "command.session.unshare": "Przestań udostępniać sesję",
   "command.session.unshare.description": "Zatrzymaj udostępnianie tej sesji",
   "palette.search.placeholder": "Szukaj plików, poleceń i sesji",
+  "palette.search.placeholder.home": "Szukaj poleceń i sesji",
   "palette.empty": "Brak wyników",
   "palette.group.commands": "Polecenia",
   "palette.group.files": "Pliki",
@@ -268,6 +269,11 @@ export const dict = {
   "prompt.context.removeActiveFile": "Usuń aktywny plik z kontekstu",
   "prompt.context.removeFile": "Usuń plik z kontekstu",
   "prompt.action.attachFile": "Załącz plik",
+  "prompt.menu.addImagesAndFiles": "Dodaj pliki i inne elementy",
+  "prompt.menu.imagesAndFiles": "Obrazy i pliki",
+  "prompt.menu.commands": "Polecenia",
+  "prompt.menu.context": "Kontekst",
+  "prompt.menu.shellCommand": "Polecenie powłoki",
   "prompt.attachment.remove": "Usuń załącznik",
   "prompt.action.send": "Wyślij",
   "prompt.action.stop": "Zatrzymaj",
@@ -553,6 +559,8 @@ export const dict = {
   "home.sessions.group.today": "Dzisiaj",
   "home.sessions.group.yesterday": "Wczoraj",
   "home.sessions.group.older": "Starsze",
+  "home.providerTip":
+    "Połącz się z ponad 75 dostawcami, aby korzystać z innych modeli, w tym Claude, GPT, Gemini i innych",
   "session.tab.session": "Sesja",
   "session.tab.review": "Przegląd",
   "session.tab.context": "Kontekst",
@@ -611,6 +619,7 @@ export const dict = {
   "session.new.workspace.triggerLocal": "Lokalnie",
   "session.new.workspace.local": "Lokalne repozytorium",
   "session.new.workspace.existing": "Przestrzeń robocza…",
+  "session.new.git.none": "Brak Git",
   "session.new.lastModified": "Ostatnio zmodyfikowano",
   "session.header.search.placeholder": "Szukaj {{project}}",
   "session.header.searchFiles": "Szukaj plików",
@@ -739,9 +748,13 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Rozwijaj elementy narzędzia edit",
   "settings.general.row.editToolPartsExpanded.description":
     "Domyślnie pokazuj rozwinięte elementy narzędzi edit, write i patch na osi czasu",
-  "settings.general.row.newLayoutDesigns.title": "Nowy układ i wygląd",
-  "settings.general.row.newLayoutDesigns.description":
-    "Włącz przeprojektowany układ, stronę główną, edytor wiadomości i interfejs sesji",
+  "settings.general.row.newInterface.title": "Nowy układ",
+  "settings.general.row.newInterface.badge": "Nowość",
+  "settings.general.row.newInterface.description":
+    "Używaj nowych kart i układu strony głównej. Przez ograniczony czas możesz przełączać się między układami.",
+  "settings.general.row.newInterfaceNotice.title": "Korzystasz teraz z nowego układu",
+  "settings.general.row.newInterfaceNotice.description": "Poprzedni układ nie jest już dostępny",
+  "settings.general.row.newInterfaceNotice.dismiss": "Odrzuć",
   "settings.general.row.pinchZoom.title": "Powiększanie gestem szczypania",
   "settings.general.row.pinchZoom.description":
     "Zezwalaj na powiększanie gestem szczypania na gładziku i przewijaniem z klawiszem Ctrl",

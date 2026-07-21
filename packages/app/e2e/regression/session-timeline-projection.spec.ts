@@ -152,7 +152,10 @@ test.describe("session timeline projection", () => {
       parentID: "msg_2000_diff_next_user",
       created: 1700000011000,
     })
-    await setupTimeline(page, { messages: [user, assistantMessage(), nextUser, nextAssistant] })
+    await setupTimeline(page, {
+      messages: [user, assistantMessage(), nextUser, nextAssistant],
+      settings: { newLayoutDesigns: false },
+    })
     const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
     await scroller.evaluate((element) => (element.scrollTop = 0))
 

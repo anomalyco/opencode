@@ -97,6 +97,7 @@ export const dict = {
   "command.session.unshare.description": "Bu oturumun paylaşımını durdur",
 
   "palette.search.placeholder": "Dosya, komut ve oturum ara",
+  "palette.search.placeholder.home": "Komut ve oturum ara",
   "palette.empty": "Sonuç bulunamadı",
   "palette.group.commands": "Komutlar",
   "palette.group.files": "Dosyalar",
@@ -291,6 +292,11 @@ export const dict = {
   "prompt.context.removeActiveFile": "Aktif dosyayı bağlamdan çıkar",
   "prompt.context.removeFile": "Dosyayı bağlamdan çıkar",
   "prompt.action.attachFile": "Dosya ekle",
+  "prompt.menu.addImagesAndFiles": "Dosya ve daha fazlasını ekle",
+  "prompt.menu.imagesAndFiles": "Görseller ve dosyalar",
+  "prompt.menu.commands": "Komutlar",
+  "prompt.menu.context": "Bağlam",
+  "prompt.menu.shellCommand": "Kabuk komutu",
   "prompt.attachment.remove": "Eki kaldır",
   "prompt.action.send": "Gönder",
   "prompt.action.stop": "Durdur",
@@ -608,6 +614,7 @@ export const dict = {
   "home.sessions.group.today": "Bugün",
   "home.sessions.group.yesterday": "Dün",
   "home.sessions.group.older": "Daha eski",
+  "home.providerTip": "Claude, GPT, Gemini ve diğer modelleri kullanmak için 75'ten fazla sağlayıcıya bağlanın",
 
   "session.tab.session": "Oturum",
   "session.tab.review": "İnceleme",
@@ -672,6 +679,7 @@ export const dict = {
   "session.new.workspace.triggerLocal": "Yerel",
   "session.new.workspace.local": "Yerel depo",
   "session.new.workspace.existing": "Çalışma alanı…",
+  "session.new.git.none": "Git yok",
   "session.new.lastModified": "Son değişiklik",
 
   "session.header.search.placeholder": "{{project}} ara",
@@ -810,9 +818,13 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Düzenleme araç bileşenlerini genişlet",
   "settings.general.row.editToolPartsExpanded.description":
     "Zaman çizelgesinde düzenleme, yazma ve yama araç bileşenlerini varsayılan olarak genişletilmiş göster",
-  "settings.general.row.newLayoutDesigns.title": "Yeni düzen ve tasarımlar",
-  "settings.general.row.newLayoutDesigns.description":
-    "Yeniden tasarlanan düzeni, ana sayfayı, yazma alanını ve oturum arayüzünü etkinleştir",
+  "settings.general.row.newInterface.title": "Yeni düzen",
+  "settings.general.row.newInterface.badge": "Yeni",
+  "settings.general.row.newInterface.description":
+    "Yeni sekmeleri ve ana sayfa düzenini kullanın. Sınırlı bir süre boyunca düzenler arasında geçiş yapabilirsiniz.",
+  "settings.general.row.newInterfaceNotice.title": "Artık yeni düzeni kullanıyorsunuz",
+  "settings.general.row.newInterfaceNotice.description": "Önceki düzen artık kullanılamıyor",
+  "settings.general.row.newInterfaceNotice.dismiss": "Kapat",
   "settings.general.row.pinchZoom.title": "Sıkıştırarak yakınlaştır",
   "settings.general.row.pinchZoom.description":
     "İzleme dörtgeninde sıkıştırma ve Ctrl-kaydırma hareketleriyle yakınlaştırmaya izin ver",

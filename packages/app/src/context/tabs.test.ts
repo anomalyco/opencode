@@ -22,6 +22,8 @@ describe("tab memory", () => {
       })
 
       expect(memory.ensure("tab", "prompt", () => ({ value: "other" }))).toBe(first)
+      expect(memory.get<typeof first>("tab", "prompt")).toBe(first)
+      expect(memory.get("missing", "prompt")).toBeUndefined()
       expect(memory.ensure("other", "prompt", () => ({ value: "other" }))).not.toBe(first)
 
       memory.remove("tab")

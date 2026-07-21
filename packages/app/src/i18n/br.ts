@@ -86,6 +86,7 @@ export const dict = {
   "command.session.unshare": "Parar de compartilhar sessão",
   "command.session.unshare.description": "Parar de compartilhar esta sessão",
   "palette.search.placeholder": "Buscar arquivos, comandos e sessões",
+  "palette.search.placeholder.home": "Buscar comandos e sessões",
   "palette.empty": "Nenhum resultado encontrado",
   "palette.group.commands": "Comandos",
   "palette.group.files": "Arquivos",
@@ -267,6 +268,11 @@ export const dict = {
   "prompt.context.removeActiveFile": "Remover arquivo ativo do contexto",
   "prompt.context.removeFile": "Remover arquivo do contexto",
   "prompt.action.attachFile": "Anexar arquivo",
+  "prompt.menu.addImagesAndFiles": "Adicionar arquivos e mais",
+  "prompt.menu.imagesAndFiles": "Imagens e arquivos",
+  "prompt.menu.commands": "Comandos",
+  "prompt.menu.context": "Contexto",
+  "prompt.menu.shellCommand": "Comando shell",
   "prompt.attachment.remove": "Remover anexo",
   "prompt.action.send": "Enviar",
   "prompt.action.stop": "Parar",
@@ -552,6 +558,8 @@ export const dict = {
   "home.sessions.group.today": "Hoje",
   "home.sessions.group.yesterday": "Ontem",
   "home.sessions.group.older": "Mais antigas",
+  "home.providerTip":
+    "Conecte-se a mais de 75 provedores para usar outros modelos, incluindo Claude, GPT, Gemini e muito mais",
   "session.tab.session": "Sessão",
   "session.tab.review": "Revisão",
   "session.tab.context": "Contexto",
@@ -611,6 +619,7 @@ export const dict = {
   "session.new.workspace.triggerLocal": "Local",
   "session.new.workspace.local": "Repositório local",
   "session.new.workspace.existing": "Espaço de trabalho…",
+  "session.new.git.none": "Sem Git",
   "session.new.lastModified": "Última modificação",
   "session.header.search.placeholder": "Buscar {{project}}",
   "session.header.searchFiles": "Buscar arquivos",
@@ -739,9 +748,13 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Expandir partes da ferramenta de edição",
   "settings.general.row.editToolPartsExpanded.description":
     "Mostrar partes das ferramentas de edição, escrita e patch expandidas por padrão na linha do tempo",
-  "settings.general.row.newLayoutDesigns.title": "Novo layout e design",
-  "settings.general.row.newLayoutDesigns.description":
-    "Ativar o layout, a página inicial, a área de composição e a interface de sessão reformulados",
+  "settings.general.row.newInterface.title": "Novo layout",
+  "settings.general.row.newInterface.badge": "Novo",
+  "settings.general.row.newInterface.description":
+    "Use as novas abas e o layout da página inicial. Alterne entre os layouts por tempo limitado.",
+  "settings.general.row.newInterfaceNotice.title": "Agora você está usando o novo layout",
+  "settings.general.row.newInterfaceNotice.description": "O layout anterior não está mais disponível",
+  "settings.general.row.newInterfaceNotice.dismiss": "Descartar",
   "settings.general.row.pinchZoom.title": "Zoom com gesto de pinça",
   "settings.general.row.pinchZoom.description":
     "Permitir gestos de pinça no trackpad e de Ctrl+rolagem para aplicar zoom",

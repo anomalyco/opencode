@@ -185,6 +185,14 @@
     background-color 0.15s ease,
     color 0.15s ease;
 
+  [data-component="task-tool-surface"] {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
   [data-slot="basic-tool-tool-info-structured"] {
     flex: 1 1 auto;
     min-width: 0;
@@ -250,16 +258,30 @@
 
 body[data-new-layout] {
   [data-component="task-tool-card"] {
-    padding: 8px 12px 8px 10px;
-    border-radius: 8px;
+    gap: 8px;
+    padding: 0;
+    border-radius: 0;
     border: 0;
     border-color: transparent;
-    background: var(--task-agent-background, light-dark(#fafafa, rgba(250, 250, 250, 0.15)));
-    box-shadow: inset 0 0 0 0.5px var(--task-agent-border, var(--v2-border-border-base));
+    background: transparent;
+    box-shadow: none;
+
+    [data-component="task-tool-surface"] {
+      padding: 8px 12px;
+      border-radius: 8px;
+      background: var(--v2-background-bg-layer-01);
+    }
 
     [data-component="task-tool-spinner"],
-    [data-component="task-tool-title"] {
-      color: var(--task-agent-color, var(--text-strong));
+    [data-component="task-tool-icon"] {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+
+      [data-component="icon"] {
+        color: var(--task-agent-color, var(--v2-icon-icon-base));
+      }
     }
 
     [data-component="task-tool-title"] {
@@ -270,6 +292,7 @@ body[data-new-layout] {
       font-size: 13px;
       line-height: 20px;
       letter-spacing: -0.04px;
+      color: var(--v2-text-text-base);
       flex: none;
       flex-grow: 0;
     }
@@ -281,7 +304,7 @@ body[data-new-layout] {
       font-size: 13px;
       line-height: 20px;
       letter-spacing: -0.04px;
-      color: light-dark(var(--v2-text-text-base), #fafafa);
+      color: var(--v2-text-text-base);
       font-variation-settings: "slnt" 0;
       flex: none;
       flex-grow: 0;
@@ -294,7 +317,11 @@ body[data-new-layout] {
     &:hover,
     &:focus-visible {
       border-color: transparent;
-      background: var(--task-agent-background, light-dark(#fafafa, rgba(250, 250, 250, 0.15)));
+      background: transparent;
+
+      [data-component="task-tool-surface"] {
+        background: var(--v2-background-bg-layer-01);
+      }
     }
   }
 }
