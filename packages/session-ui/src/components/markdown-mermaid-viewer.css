@@ -1,0 +1,69 @@
+[data-component="mermaid-viewer-overlay"] {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: var(--v2-overlay-simple-overlay-scrim);
+}
+
+[data-component="mermaid-viewer"] {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+}
+
+[data-component="mermaid-viewer"] [data-slot="mermaid-viewer-content"] {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  outline: none;
+}
+
+[data-component="mermaid-viewer"] [data-slot="mermaid-viewer-toolbar"] {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 6px;
+  background: var(--v2-background-bg-layer-01);
+  border: 0.5px solid var(--v2-border-border-base);
+  box-shadow: var(--v2-elevation-floating);
+}
+
+[data-component="mermaid-viewer"] [data-slot="mermaid-viewer-zoom-level"] {
+  min-width: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: center;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--v2-text-text-muted);
+  cursor: pointer;
+}
+
+[data-component="mermaid-viewer"] [data-slot="mermaid-viewer-scroll"] {
+  flex: 1;
+  display: flex;
+  overflow: auto;
+  padding: 48px;
+}
+
+[data-component="mermaid-viewer"] [data-slot="mermaid-viewer-canvas"] {
+  box-sizing: content-box;
+  margin: auto;
+  padding: 24px;
+  border-radius: 8px;
+  background: var(--color-background-stronger);
+  border: 0.5px solid var(--v2-border-border-base);
+}
+
+[data-component="mermaid-viewer"] [data-slot="mermaid-viewer-canvas"] svg {
+  display: block;
+}

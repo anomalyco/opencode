@@ -182,6 +182,11 @@ export const dict: Record<string, string> = {
   "ui.message.queued": "Queued",
   "ui.message.attachment.alt": "attachment",
 
+  "ui.mermaid.expand": "Expand diagram",
+  "ui.mermaid.zoomIn": "Zoom in",
+  "ui.mermaid.zoomOut": "Zoom out",
+  "ui.mermaid.zoomReset": "Reset zoom",
+
   "ui.patch.action.deleted": "Deleted",
   "ui.patch.action.created": "Created",
   "ui.patch.action.moved": "Moved",

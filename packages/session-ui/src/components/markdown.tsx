@@ -32,6 +32,7 @@ import { shouldResetCodeTokens, type RenderedCodeState } from "./markdown-code-s
 import { getCachedMarkdown, sanitizeMarkdown, touchCachedMarkdown, type MarkdownCacheEntry } from "./markdown-cache"
 import { inlineCodeKind } from "./markdown-inline-code-kind"
 import { isMermaidLanguage, mermaidColorScheme, renderMermaid, type MermaidColorScheme } from "./markdown-mermaid"
+import { openMermaidViewer } from "./markdown-mermaid-viewer"
 
 type RenderedBlock =
   | (MarkdownCacheEntry & { key: string; mode: Exclude<Block["mode"], "code"> })
@@ -87,6 +88,7 @@ async function code(text: string, language: string | undefined, key: string, com
 type CopyLabels = {
   copy: string
   copied: string
+  expand?: string
 }
 
 type CopyButtonState = {
@@ -158,15 +160,51 @@ function setCopyState(host: HTMLElement, labels: CopyLabels, copied: boolean) {
   host.removeAttribute("data-copied")
 }
 
+type ExpandButtonState = {
+  setLabel: Setter<string>
+  dispose: () => void
+}
+
+const expandButtonState = new WeakMap<HTMLElement, ExpandButtonState>()
+
+function createExpandButton(label: string) {
+  const host = document.createElement("div")
+  host.setAttribute("data-slot", "mermaid-expand-button")
+
+  const state: Partial<ExpandButtonState> = {}
+  const dispose = render(() => {
+    const [value, setValue] = createSignal(label)
+    state.setLabel = setValue
+    return (
+      <TooltipV2 placement="top" value={value()}>
+        <IconButtonV2
+          type="button"
+          size="normal"
+          variant="ghost-muted"
+          aria-label={value()}
+          icon={<IconV2 name="outline-square-arrow" />}
+        />
+      </TooltipV2>
+    )
+  }, host)
+  state.dispose = dispose
+  expandButtonState.set(host, state as ExpandButtonState)
+  return host
+}
+
+const actionButtonSelector = '[data-slot="markdown-copy-button"], [data-slot="mermaid-expand-button"]'
+
 function disposeCopyButton(host: HTMLElement) {
   copyButtonState.get(host)?.dispose()
   copyButtonState.delete(host)
+  expandButtonState.get(host)?.dispose()
+  expandButtonState.delete(host)
 }
 
 function disposeCopyButtons(root: Element) {
   const hosts = [
-    ...(root instanceof HTMLElement && root.getAttribute("data-slot") === "markdown-copy-button" ? [root] : []),
-    ...Array.from(root.querySelectorAll('[data-slot="markdown-copy-button"]')).filter(
+    ...(root instanceof HTMLElement && root.matches(actionButtonSelector) ? [root] : []),
+    ...Array.from(root.querySelectorAll(actionButtonSelector)).filter(
       (el): el is HTMLElement => el instanceof HTMLElement,
     ),
   ]
@@ -282,7 +320,7 @@ function decorate(root: HTMLDivElement, labels: CopyLabels) {
   markCodeLinks(root)
 }
 
-function setupCodeCopy(root: HTMLDivElement, getLabels: () => CopyLabels) {
+function setupCodeActions(root: HTMLDivElement, getLabels: () => CopyLabels, expand: (source: string) => void) {
   const timeouts = new Map<HTMLElement, ReturnType<typeof setTimeout>>()
 
   const updateLabel = (button: HTMLElement) => {
@@ -294,6 +332,15 @@ function setupCodeCopy(root: HTMLDivElement, getLabels: () => CopyLabels) {
   const handleClick = async (event: MouseEvent) => {
     const target = event.target
     if (!(target instanceof Element)) return
+
+    const trigger = target.closest('[data-slot="mermaid-expand-button"], [data-slot="mermaid-diagram"]')
+    if (trigger instanceof HTMLElement) {
+      const wrapper = trigger.closest('[data-component="markdown-code"]')
+      if (!(wrapper instanceof HTMLElement) || wrapper.dataset.mermaidState !== "rendered") return
+      const source = wrapper.querySelector('[data-slot="mermaid-source"] > code')?.textContent ?? ""
+      if (source) expand(source)
+      return
+    }
 
     const button = target.closest('[data-slot="markdown-copy-button"]')
     if (!(button instanceof HTMLElement)) return
@@ -477,6 +524,7 @@ export function Markdown(
     const labels = {
       copy: i18n.t("ui.message.copy"),
       copied: i18n.t("ui.message.copied"),
+      expand: i18n.t("ui.mermaid.expand"),
     }
     const nextCodeKeys = new Set(content.filter((block) => block.mode === "code").map((block) => block.key))
     activeCodeKeys.forEach((key) => {
@@ -494,11 +542,28 @@ export function Markdown(
     container
       .querySelectorAll<HTMLElement>('[data-slot="markdown-copy-button"]')
       .forEach((button) => setCopyState(button, labels, button.dataset.copied === "true"))
+    container
+      .querySelectorAll<HTMLElement>('[data-slot="mermaid-expand-button"]')
+      .forEach((button) => expandButtonState.get(button)?.setLabel(labels.expand))
     if (!copyCleanup)
-      copyCleanup = setupCodeCopy(container, () => ({
-        copy: i18n.t("ui.message.copy"),
-        copied: i18n.t("ui.message.copied"),
-      }))
+      copyCleanup = setupCodeActions(
+        container,
+        () => ({
+          copy: i18n.t("ui.message.copy"),
+          copied: i18n.t("ui.message.copied"),
+          expand: i18n.t("ui.mermaid.expand"),
+        }),
+        (source) =>
+          openMermaidViewer({
+            source,
+            labels: {
+              zoomIn: i18n.t("ui.mermaid.zoomIn"),
+              zoomOut: i18n.t("ui.mermaid.zoomOut"),
+              zoomReset: i18n.t("ui.mermaid.zoomReset"),
+              close: i18n.t("ui.common.close"),
+            },
+          }),
+      )
   })
 
   onCleanup(() => {
@@ -740,6 +805,7 @@ function ensureMermaidWrapper(next: HTMLElement, labels: CopyLabels) {
 
   wrapper.appendChild(pre)
   wrapper.appendChild(diagram)
+  wrapper.appendChild(createExpandButton(labels.expand ?? ""))
   wrapper.appendChild(createCopyButton(labels))
   next.appendChild(wrapper)
   return wrapper

@@ -8,6 +8,20 @@ export function isMermaidLanguage(language: string | undefined) {
   return language?.trim().toLowerCase() === "mermaid"
 }
 
+export function clampMermaidZoom(zoom: number) {
+  return Math.min(8, Math.max(0.25, zoom))
+}
+
+export function stepMermaidZoom(zoom: number, direction: 1 | -1) {
+  return clampMermaidZoom(direction > 0 ? zoom * 1.25 : zoom / 1.25)
+}
+
+// Fit the diagram inside the viewport without ever upscaling past its natural size.
+export function fitMermaidZoom(natural: { width: number; height: number }, viewport: { width: number; height: number }) {
+  if (natural.width <= 0 || natural.height <= 0) return 1
+  return clampMermaidZoom(Math.min(1, viewport.width / natural.width, viewport.height / natural.height))
+}
+
 export function mermaidThemeFor(scheme: MermaidColorScheme) {
   return scheme === "dark" ? "dark" : "default"
 }
