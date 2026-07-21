@@ -21,6 +21,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/cl
 const decode = Schema.decodeUnknownOption(Info)
 const decodeRecord = Schema.decodeUnknownOption(Schema.Record(Schema.String, Schema.Any))
 const empty: Info = {}
+const lock = Semaphore.makeUnsafe(1)
 
 export const layer = Layer.effect(
   Service,
@@ -28,7 +29,6 @@ export const layer = Layer.effect(
     const fs = yield* FileSystem.FileSystem
     const global = yield* Global.Service
     const file = path.join(global.config, "cli.json")
-    const lock = yield* Semaphore.make(1)
 
     const readJson = Effect.fnUntraced(function* () {
       const text = yield* fs.readFileString(file).pipe(Effect.catch(() => Effect.succeed(undefined)))

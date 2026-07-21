@@ -33,6 +33,12 @@ export const run = Effect.fn("cli.config.migrate")(function* (input: {
     if (config === undefined) return
     const keybinds = Option.getOrUndefined(decodeRecord(config.keybinds))
     if (keybinds === undefined) return
+    const deduped = findKeybindObjects(text)
+      .slice(0, -1)
+      .reduce((text) => {
+        const property = findKeybindObjects(text)[0]
+        return property === undefined ? text : removeProperty(text, property)
+      }, text)
     const updated = Object.keys(keybinds).reduce((text, name) => {
       const target =
         TuiKeybind.CommandMap[name as keyof typeof TuiKeybind.CommandMap] ??
@@ -51,7 +57,7 @@ export const run = Effect.fn("cli.config.migrate")(function* (input: {
       const key = findKeybindProperties(updated, name)[0]?.children?.[0]
       if (key === undefined) return text
       return updated.slice(0, key.offset) + JSON.stringify(target) + updated.slice(key.offset + key.length)
-    }, text)
+    }, deduped)
     if (updated === text) return
     const temp = input.file + ".tmp"
     yield* fs.writeFileString(temp, updated, { mode: 0o600 })
@@ -79,10 +85,14 @@ export const run = Effect.fn("cli.config.migrate")(function* (input: {
 })
 
 function findKeybindProperties(text: string, name: string) {
+  const keybinds = findKeybindObjects(text).at(-1)?.children?.[1]
+  return keybinds?.children?.filter((property) => property.children?.[0]?.value === name) ?? []
+}
+
+function findKeybindObjects(text: string) {
   const tree = parseTree(text)
   if (tree === undefined) return []
-  const keybinds = tree.children?.findLast((property) => property.children?.[0]?.value === "keybinds")?.children?.[1]
-  return keybinds?.children?.filter((property) => property.children?.[0]?.value === name) ?? []
+  return tree.children?.filter((property) => property.children?.[0]?.value === "keybinds") ?? []
 }
 
 function removeProperty(text: string, property: Node) {
