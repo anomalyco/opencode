@@ -1,11 +1,10 @@
-import { describe, expect, beforeAll, beforeEach, afterAll } from "bun:test"
+import { describe, expect, beforeEach, afterAll } from "bun:test"
 import { Money } from "@opencode-ai/schema/money"
 import { Effect, Layer, Ref } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNodePlatform } from "@opencode-ai/core/effect/app-node-platform"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import { Global } from "@opencode-ai/core/global"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
@@ -13,22 +12,6 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { it } from "./lib/effect"
 import { readFile, rm, writeFile, utimes, mkdir } from "fs/promises"
 import path from "path"
-
-// test/preload.ts pins OPENCODE_MODELS_PATH to a fixture so other tests can
-// resolve providers without network. These tests need to drive the on-disk
-// cache themselves and silence the eager refresh fork. Save/restore around
-// the suite — never leak the mutation to subsequent test files in the same
-// bun process.
-const ORIGINAL_MODELS_PATH = Flag.OPENCODE_MODELS_PATH
-const ORIGINAL_DISABLE_FETCH = Flag.OPENCODE_DISABLE_MODELS_FETCH
-beforeAll(() => {
-  Flag.OPENCODE_MODELS_PATH = undefined
-  Flag.OPENCODE_DISABLE_MODELS_FETCH = true
-})
-afterAll(() => {
-  Flag.OPENCODE_MODELS_PATH = ORIGINAL_MODELS_PATH
-  Flag.OPENCODE_DISABLE_MODELS_FETCH = ORIGINAL_DISABLE_FETCH
-})
 
 const cacheFile = path.join(Global.Path.cache, "models.json")
 
@@ -172,12 +155,13 @@ const makeMockClient = (state: Ref.Ref<MockState>) =>
     }),
   )
 
-const buildLayer = (state: Ref.Ref<MockState>) =>
+const buildLayer = (state: Ref.Ref<MockState>, options: ModelsDev.Options = { fetch: false }) =>
   // Layer.fresh is required because the ModelsDev implementation is a module-level Layer constant,
   // and Effect.provide uses a process-global MemoMap by default — without fresh,
   // every test would reuse the cachedInvalidateWithTTL state from the first run.
   Layer.fresh(
     AppNodeBuilder.build(ModelsDev.node, [
+      [ModelsDev.node, ModelsDev.configured(options)],
       [LayerNodePlatform.httpClient, Layer.succeed(HttpClient.HttpClient, makeMockClient(state))],
     ]),
   )
@@ -243,17 +227,8 @@ describe("ModelsDev Service", () => {
     Effect.gen(function* () {
       yield* writeCacheText("{")
       const state = yield* Ref.make({ ...initialState, body: JSON.stringify(fixture2) })
-      const context = yield* Layer.build(buildLayer(state))
-      const result = yield* Effect.acquireUseRelease(
-        Effect.sync(() => {
-          Flag.OPENCODE_DISABLE_MODELS_FETCH = false
-        }),
-        () => ModelsDev.Service.use((s) => s.get()).pipe(Effect.provide(context)),
-        () =>
-          Effect.sync(() => {
-            Flag.OPENCODE_DISABLE_MODELS_FETCH = true
-          }),
-      )
+      const context = yield* Layer.build(buildLayer(state, { fetch: true }))
+      const result = yield* ModelsDev.Service.use((s) => s.get()).pipe(Effect.provide(context))
       expect(result).toEqual(fixture2Snapshot)
       expect(yield* Effect.promise(() => readFile(cacheFile, "utf8"))).toBe(JSON.stringify(fixture2))
       const final = yield* Ref.get(state)

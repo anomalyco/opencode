@@ -7,7 +7,7 @@
 //
 // Data flow through the system:
 //
-//   V2 events / demo actions → StreamCommit[] + FooterOutput
+//   V2 events / demo actions → StreamCommit[] + FooterEvent[]
 //     → stream.ts bridges to footer API
 //       → footer.ts queues commits and patches the footer view
 //         → OpenTUI split-footer renderer writes to terminal
@@ -58,6 +58,9 @@ export type RunProviderModel = {
   cost?: {
     input: number
   }
+  limit?: {
+    context: number
+  }
   status?: string
   variants?: Record<string, unknown>
 }
@@ -84,6 +87,8 @@ export type RunPrompt = {
 export type FooterQueuedPrompt = {
   messageID: string
   prompt: RunPrompt
+  delivery: "steer" | "queue"
+  admittedSeq: number
 }
 
 export type RunAgent = {
@@ -161,7 +166,6 @@ export type FooterPhase = "idle" | "running"
 export type FooterState = {
   phase: FooterPhase
   status: string
-  queue: number
   model: string
   usage: string
   first: boolean
@@ -311,13 +315,6 @@ export type FooterSubagentState = {
   forms: MiniFormRequest[]
 }
 
-// The transport emits this alongside scrollback commits so the footer can update in the same frame.
-export type FooterOutput = {
-  patch?: FooterPatch
-  view?: FooterView
-  subagent?: FooterSubagentState
-}
-
 // Typed messages sent to RunFooter.event(). The prompt queue and stream
 // transport both emit these to update footer state without reaching into
 // internal signals directly.
@@ -346,10 +343,6 @@ export type FooterEvent =
       current: string | undefined
     }
   | {
-      type: "queue"
-      queue: number
-    }
-  | {
       type: "queued.prompts"
       prompts: FooterQueuedPrompt[]
     }
@@ -362,14 +355,8 @@ export type FooterEvent =
       model: string
       selection: NonNullable<RunInput["model"]>
     }
-  | {
-      type: "turn.send"
-      queue: number
-    }
-  | {
-      type: "turn.idle"
-      queue: number
-    }
+  | { type: "turn.send" }
+  | { type: "turn.idle" }
   | {
       type: "turn.duration"
       duration: string
@@ -445,7 +432,6 @@ export type LocalReplayRow = {
 export type FooterApi = {
   readonly isClosed: boolean
   onPrompt(fn: (input: RunPrompt) => void): () => void
-  onQueuedRemove(fn: (messageID: string) => boolean | Promise<boolean>): () => void
   onClose(fn: () => void): () => void
   event(next: FooterEvent): void
   append(commit: StreamCommit): void

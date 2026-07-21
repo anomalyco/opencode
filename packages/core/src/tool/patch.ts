@@ -5,12 +5,13 @@ import { ToolFailure } from "@opencode-ai/ai"
 import { FileDiff } from "@opencode-ai/schema/file-diff"
 import { createTwoFilesPatch, diffLines } from "diff"
 import { Effect, Schema } from "effect"
-import { FileMutation } from "../file-mutation"
+import path from "path"
 import { FSUtil } from "../fs-util"
-import { LocationMutation } from "../location-mutation"
+import { Location } from "../location"
 import { Patch } from "../patch"
 import { PermissionV2 } from "../permission"
 import { Tool } from "./tool"
+import DESCRIPTION from "./patch.txt"
 
 export const name = "patch"
 
@@ -34,7 +35,7 @@ export type Output = typeof Output.Type
 
 export const toModelOutput = (output: Output) =>
   [
-    "Applied patch sequentially:",
+    "Success. Updated the following files:",
     ...output.applied.map(
       (item) => `${item.type === "add" ? "A" : item.type === "delete" ? "D" : "M"} ${item.resource}`,
     ),
@@ -42,24 +43,32 @@ export const toModelOutput = (output: Output) =>
 
 type Prepared =
   | (Extract<Patch.Hunk, { readonly type: "add" | "delete" }> & {
-      readonly target: LocationMutation.Target
+      readonly target: Target
       readonly before: string
       readonly after: string
     })
   | (Extract<Patch.Hunk, { readonly type: "update" }> & {
-      readonly target: LocationMutation.Target
-      readonly source: Uint8Array
+      readonly target: Target
       readonly content: string
       readonly before: string
       readonly after: string
+      readonly moveTarget?: Target
     })
+
+interface Target {
+  readonly canonical: string
+  readonly resource: string
+  readonly externalDirectory?: {
+    readonly directory: string
+    readonly resource: string
+  }
+}
 
 export const Plugin = {
   id: "opencode.tool.patch",
   effect: Effect.fn("PatchTool.Plugin")(function* (ctx: PluginContext) {
-    const mutation = yield* LocationMutation.Service
-    const files = yield* FileMutation.Service
     const fs = yield* FSUtil.Service
+    const location = yield* Location.Service
     const permission = yield* PermissionV2.Service
 
     yield* ctx.tool
@@ -68,8 +77,7 @@ export const Plugin = {
           name,
           Tool.withPermission(
             Tool.make({
-              description:
-                "Apply one patch containing add, update, and delete file operations. All targets are resolved and approved before target contents are read. Operations apply sequentially; if a later operation fails, earlier operations remain applied and the failure reports them explicitly. Moves and atomic rollback are not supported yet.",
+              description: DESCRIPTION,
               input: Input,
               output: Output,
               toModelOutput: ({ output }) => [{ type: "text", text: toModelOutput(output) }],
@@ -88,100 +96,184 @@ export const Plugin = {
                     messageID: context.messageID,
                     callID: context.callID,
                   }
-                  if (!input.patchText.trim()) return yield* new ToolFailure({ message: "patchText is required" })
-                  const hunks = yield* Effect.try({
-                    try: () => Patch.parse(input.patchText),
-                    catch: (cause) => new ToolFailure({ message: `patch verification failed: ${String(cause)}` }),
-                  })
-                  if (hunks.length === 0) return yield* new ToolFailure({ message: "patch rejected: empty patch" })
-                  const move = hunks.find((hunk) => hunk.type === "update" && hunk.movePath !== undefined)
-                  if (move) return yield* new ToolFailure({ message: "patch moves are not supported yet" })
-
-                  const targets: Array<{ readonly hunk: Patch.Hunk; readonly target: LocationMutation.Target }> = []
-                  for (const hunk of hunks)
-                    targets.push({ hunk, target: yield* mutation.resolve({ path: hunk.path, kind: "file" }) })
-                  const externalDirectories = new Map<string, LocationMutation.ExternalDirectoryAuthorization>()
-                  for (const { target } of targets) {
-                    const external = target.externalDirectory
-                    if (external) externalDirectories.set(external.resource, external)
+                  if (!input.patchText) return yield* new ToolFailure({ message: "patchText is required" })
+                  const hunks = yield* Effect.fromResult(Patch.parse(input.patchText)).pipe(
+                    Effect.mapError(
+                      (error) => new ToolFailure({ message: `patch verification failed: ${error.message}` }),
+                    ),
+                  )
+                  if (hunks.length === 0) {
+                    const normalized = input.patchText.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim()
+                    if (normalized === "*** Begin Patch\n*** End Patch") {
+                      return yield* new ToolFailure({ message: "patch rejected: empty patch" })
+                    }
+                    return yield* new ToolFailure({ message: "patch verification failed: no hunks found" })
                   }
-                  for (const external of externalDirectories.values()) {
-                    yield* permission.assert({
-                      ...LocationMutation.externalDirectoryPermission(external),
-                      sessionID: context.sessionID,
-                      agent: context.agent,
-                      source,
-                    })
-                  }
-                  yield* permission.assert({
-                    action: "edit",
-                    resources: [...new Set(targets.map(({ target }) => target.resource))],
-                    save: ["*"],
-                    sessionID: context.sessionID,
-                    agent: context.agent,
-                    source,
-                  })
-
                   const prepared: Prepared[] = []
-                  for (const { hunk, target } of targets) {
+                  const targets: Target[] = []
+                  const updates = new Map<string, string>()
+                  for (const hunk of hunks) {
                     yield* Effect.gen(function* () {
+                      const target = resolveTarget(location, hunk.path)
+                      targets.push(target)
+                      if (target.externalDirectory) {
+                        yield* permission.assert({
+                          action: "external_directory",
+                          resources: [target.externalDirectory.resource],
+                          save: [target.externalDirectory.resource],
+                          metadata: {
+                            filepath: target.canonical,
+                            parentDir: target.externalDirectory.directory,
+                          },
+                          sessionID: context.sessionID,
+                          agent: context.agent,
+                          source,
+                        })
+                      }
                       if (hunk.type === "add") {
                         prepared.push({
                           ...hunk,
                           target,
                           before: "",
-                          after:
-                            hunk.contents.endsWith("\n") || hunk.contents === "" ? hunk.contents : `${hunk.contents}\n`,
+                          after: (hunk.contents.endsWith("\n") || hunk.contents === ""
+                            ? hunk.contents
+                            : `${hunk.contents}\n`
+                          ).replace(/^\uFEFF/, ""),
                         })
                         return
                       }
-                      if ((yield* fs.stat(target.canonical)).type !== "File") yield* fail(hunk.path)
-                      const source = yield* fs.readFile(target.canonical)
-                      const original = new TextDecoder("utf-8", { ignoreBOM: true }).decode(source)
-                      const before = original.replace(/^\uFEFF/, "")
                       if (hunk.type === "delete") {
-                        prepared.push({ ...hunk, target, before, after: "" })
+                        const content = yield* fs.readFile(target.canonical).pipe(
+                          Effect.mapError(
+                            (error) =>
+                              new ToolFailure({
+                                message: `patch verification failed: ${error instanceof Error ? error.message : String(error)}`,
+                              }),
+                          ),
+                        )
+                        const original = new TextDecoder("utf-8", { ignoreBOM: true }).decode(content)
+                        prepared.push({ ...hunk, target, before: original.replace(/^\uFEFF/, ""), after: "" })
                         return
                       }
-                      const update = Patch.derive(hunk.path, hunk.chunks, original)
+                      const previous = updates.get(target.canonical)
+                      const original =
+                        previous ??
+                        (yield* Effect.gen(function* () {
+                          const stats = yield* fs.stat(target.canonical).pipe(
+                            Effect.mapError(
+                              (error) =>
+                                new ToolFailure({
+                                  message: `patch verification failed: Failed to read file to update ${target.canonical}: ${error instanceof Error ? error.message : String(error)}`,
+                                }),
+                            ),
+                          )
+                          if (stats.type === "Directory") {
+                            return yield* new ToolFailure({
+                              message: `patch verification failed: Failed to read file to update ${target.canonical}: path is a directory`,
+                            })
+                          }
+                          return new TextDecoder("utf-8", { ignoreBOM: true }).decode(
+                            yield* fs.readFile(target.canonical).pipe(
+                              Effect.mapError(
+                                (error) =>
+                                  new ToolFailure({
+                                    message: `patch verification failed: Failed to read file to update ${target.canonical}: ${error instanceof Error ? error.message : String(error)}`,
+                                  }),
+                              ),
+                            ),
+                          )
+                        }))
+                      const before = original.replace(/^\uFEFF/, "")
+                      const update = yield* Effect.try({
+                        try: () => Patch.derive(hunk.path, hunk.chunks, original),
+                        catch: (error) =>
+                          new ToolFailure({ message: `patch verification failed: ${String(error)}` }),
+                      })
+                      const moveTarget = hunk.movePath ? resolveTarget(location, hunk.movePath) : undefined
+                      if (moveTarget?.externalDirectory) {
+                        yield* permission.assert({
+                          action: "external_directory",
+                          resources: [moveTarget.externalDirectory.resource],
+                          save: [moveTarget.externalDirectory.resource],
+                          metadata: {
+                            filepath: moveTarget.canonical,
+                            parentDir: moveTarget.externalDirectory.directory,
+                          },
+                          sessionID: context.sessionID,
+                          agent: context.agent,
+                          source,
+                        })
+                      }
                       prepared.push({
                         ...hunk,
                         target,
-                        source,
                         content: Patch.joinBom(update.content, update.bom),
                         before,
                         after: update.content,
+                        moveTarget,
                       })
-                    }).pipe(Effect.mapError((error) => fail(hunk.path, error)))
+                      if (!moveTarget) updates.set(target.canonical, Patch.joinBom(update.content, update.bom))
+                    }).pipe(Effect.mapError((error) => (error instanceof ToolFailure ? error : fail(hunk.path, error))))
                   }
 
                   const patchFiles = prepared.map(patchFile)
+                  yield* permission.assert({
+                    action: "edit",
+                    resources: [...new Set(targets.map((target) => target.resource))],
+                    save: ["*"],
+                    metadata: {
+                      filepath: targets.map((target) => target.resource).join(", "),
+                      diff: patchFiles.map((file) => `${file.patch}\n`).join(""),
+                      files: patchFiles,
+                    },
+                    sessionID: context.sessionID,
+                    agent: context.agent,
+                    source,
+                  })
+
                   yield* Effect.forEach(
                     prepared,
                     (change) =>
                       Effect.gen(function* () {
                         if (change.type === "add") {
-                          const result = yield* files.create({
-                            target: change.target,
-                            content:
-                              change.contents.endsWith("\n") || change.contents === ""
-                                ? change.contents
-                                : `${change.contents}\n`,
+                          yield* fs.writeWithDirs(
+                            change.target.canonical,
+                            change.contents.endsWith("\n") || change.contents === ""
+                              ? change.contents
+                              : `${change.contents}\n`,
+                          )
+                          applied.push({
+                            type: change.type,
+                            resource: change.target.resource,
+                            target: change.target.canonical,
                           })
-                          applied.push({ type: change.type, resource: result.resource, target: result.target })
                           return
                         }
                         if (change.type === "delete") {
-                          const result = yield* files.remove({ target: change.target })
-                          applied.push({ type: change.type, resource: result.resource, target: result.target })
+                          yield* fs.remove(change.target.canonical)
+                          applied.push({
+                            type: change.type,
+                            resource: change.target.resource,
+                            target: change.target.canonical,
+                          })
                           return
                         }
-                        const result = yield* files.writeIfUnchanged({
-                          target: change.target,
-                          expected: change.source,
-                          content: change.content,
+                        if (change.moveTarget) {
+                          yield* fs.writeWithDirs(change.moveTarget.canonical, change.content)
+                          yield* fs.remove(change.target.canonical)
+                          applied.push({
+                            type: change.type,
+                            resource: change.moveTarget.resource,
+                            target: change.moveTarget.canonical,
+                          })
+                          return
+                        }
+                        yield* fs.writeWithDirs(change.target.canonical, change.content)
+                        applied.push({
+                          type: change.type,
+                          resource: change.target.resource,
+                          target: change.target.canonical,
                         })
-                        applied.push({ type: change.type, resource: result.resource, target: result.target })
                       }).pipe(Effect.mapError((error) => fail(change.path, error))),
                     { discard: true },
                   )
@@ -199,7 +291,7 @@ export const Plugin = {
     yield* ctx.session.hook("context", (event) =>
       Effect.sync(() => {
         const usePatch =
-          event.model.providerID.toLowerCase() === "openai" || event.model.id.toLowerCase().includes("gpt")
+          event.model.id.includes("gpt-") && !event.model.id.includes("oss") && !event.model.id.includes("gpt-4")
         if (usePatch) {
           delete event.tools.edit
           delete event.tools.write
@@ -212,17 +304,74 @@ export const Plugin = {
 }
 
 function patchFile(change: Prepared): typeof FileDiff.Info.Type {
-  const counts = diffLines(change.before, change.after).reduce(
-    (result, item) => ({
-      additions: result.additions + (item.added ? (item.count ?? 0) : 0),
-      deletions: result.deletions + (item.removed ? (item.count ?? 0) : 0),
-    }),
-    { additions: 0, deletions: 0 },
+  const target = (change.type === "update" ? change.moveTarget : undefined)?.resource ?? change.target.resource
+  const patch = trimDiff(
+    createTwoFilesPatch(change.target.canonical, change.target.canonical, change.before, change.after),
   )
+  const counts =
+    change.type === "delete"
+      ? { additions: 0, deletions: change.before.split("\n").length }
+      : diffLines(change.before, change.after).reduce(
+          (result, item) => ({
+            additions: result.additions + (item.added ? (item.count ?? 0) : 0),
+            deletions: result.deletions + (item.removed ? (item.count ?? 0) : 0),
+          }),
+          { additions: 0, deletions: 0 },
+        )
   return {
-    file: change.target.resource,
-    patch: createTwoFilesPatch(change.target.resource, change.target.resource, change.before, change.after),
+    file: target,
+    patch,
     status: change.type === "add" ? "added" : change.type === "delete" ? "deleted" : "modified",
     ...counts,
+  }
+}
+
+function trimDiff(diff: string) {
+  const lines = diff.split("\n")
+  const content = lines.filter(
+    (line) =>
+      (line.startsWith("+") || line.startsWith("-") || line.startsWith(" ")) &&
+      !line.startsWith("---") &&
+      !line.startsWith("+++"),
+  )
+  if (content.length === 0) return diff
+  const indent = content.reduce((result, line) => {
+    const value = line.slice(1)
+    if (value.trim().length === 0) return result
+    return Math.min(result, value.match(/^(\s*)/)?.[1].length ?? result)
+  }, Infinity)
+  if (indent === Infinity || indent === 0) return diff
+  return lines
+    .map((line) => {
+      if (
+        (line.startsWith("+") || line.startsWith("-") || line.startsWith(" ")) &&
+        !line.startsWith("---") &&
+        !line.startsWith("+++")
+      ) {
+        return line[0] + line.slice(1 + indent)
+      }
+      return line
+    })
+    .join("\n")
+}
+
+function resolveTarget(location: Location.Interface, value: string): Target {
+  const canonical =
+    process.platform === "win32"
+      ? FSUtil.normalizePath(path.resolve(location.directory, value))
+      : path.resolve(location.directory, value)
+  const projectRoot = path.parse(location.project.directory).root
+  const external =
+    !FSUtil.contains(location.directory, canonical) &&
+    (location.project.directory === projectRoot || !FSUtil.contains(location.project.directory, canonical))
+  const directory = path.dirname(canonical)
+  const resource =
+    process.platform === "win32"
+      ? FSUtil.normalizePathPattern(path.join(directory, "*"))
+      : path.join(directory, "*").replaceAll("\\", "/")
+  return {
+    canonical,
+    resource: path.relative(location.project.directory, canonical).replaceAll("\\", "/") || ".",
+    externalDirectory: external ? { directory, resource } : undefined,
   }
 }

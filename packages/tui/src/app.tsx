@@ -4,7 +4,6 @@ import { Deferred, Effect } from "effect"
 import { Service, type Endpoint } from "@opencode-ai/client/effect/service"
 import { OpenCode } from "@opencode-ai/client"
 import { Global } from "@opencode-ai/core/global"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import { ClipboardProvider, useClipboard } from "./context/clipboard"
 import { LogProvider, useLog, type LogSink } from "./context/log"
 import { ExitProvider, useExit } from "./context/exit"
@@ -211,7 +210,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
         useKittyKeyboard: {},
         autoFocus: false,
         openConsoleOnError: false,
-        useMouse: !Flag.OPENCODE_DISABLE_MOUSE && config.mouse,
+        useMouse: config.mouse,
         consoleOptions: {
           keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
         },
@@ -420,7 +419,7 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
   const client = useClient()
   const toast = useToast()
   const themeState = useTheme()
-  const { themeV2, mode, setMode, locked, lock, unlock } = themeState
+  const { themeV2, mode, supports, setMode, locked, lock, unlock } = themeState
   const data = useData()
   const location = useLocation()
   const exit = useExit()
@@ -466,7 +465,7 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
   const offSelectionKeys = keymap.intercept(
     "key",
     ({ event }) => {
-      if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
+      if (config.data.terminal?.copy_on_select ?? process.platform !== "win32") return
       Selection.handleSelectionKey(renderer, toast, event, clipboard)
     },
     { priority: 1 },
@@ -487,15 +486,16 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
     renderer.clearSelection()
   }
   const terminalTitleEnabled = () => config.data.terminal?.title ?? true
+  const copyOnSelectEnabled = () => config.data.terminal?.copy_on_select ?? process.platform !== "win32"
   const pasteSummaryEnabled = () => config.data.prompt?.paste !== "full"
 
   createEffect(() => {
-    renderer.useMouse = !Flag.OPENCODE_DISABLE_MOUSE && config.data.mouse
+    renderer.useMouse = config.data.mouse
   })
 
   // Update terminal window title based on current route and session
   createEffect(() => {
-    if (!terminalTitleEnabled() || Flag.OPENCODE_DISABLE_TERMINAL_TITLE) return
+    if (!terminalTitleEnabled()) return
 
     if (route.data.type === "home") {
       renderer.setTerminalTitle("OpenCode")
@@ -818,6 +818,7 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
         name: "theme.switch_mode",
         title: mode() === "dark" ? "Switch to light mode" : "Switch to dark mode",
         palette: undefined,
+        enabled: () => supports(mode() === "dark" ? "light" : "dark"),
         run: () => {
           setMode(mode() === "dark" ? "light" : "dark")
           dialog.clear()
@@ -1087,9 +1088,9 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
       width={dimensions().width}
       height={dimensions().height}
       flexDirection="column"
-      backgroundColor={themeV2.background()}
+      backgroundColor={themeV2.background.default}
       onMouseDown={(evt) => {
-        if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
+        if (copyOnSelectEnabled()) return
         if (evt.button !== MouseButton.RIGHT) return
 
         if (!Selection.copy(renderer, toast, clipboard)) return
@@ -1097,12 +1098,12 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
         evt.stopPropagation()
       }}
       onMouseUp={
-        !Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT
+        copyOnSelectEnabled()
           ? () => Selection.copy(renderer, toast, clipboard)
           : undefined
       }
     >
-      <Show when={Flag.OPENCODE_SHOW_TTFD}>
+      <Show when={config.data.debug?.timing}>
         <TimeToFirstDraw />
       </Show>
       <box flexGrow={1} minHeight={0} flexDirection="row">

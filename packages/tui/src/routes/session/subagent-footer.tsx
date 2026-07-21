@@ -6,7 +6,7 @@ import { SplitBorder } from "../../ui/border"
 import { Locale } from "../../util/locale"
 import { useTerminalDimensions } from "@opentui/solid"
 import { Keymap } from "../../context/keymap"
-import { contextUsage } from "../../util/session"
+import { contextUsage, formatContextUsage } from "../../util/session"
 
 const money = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -37,11 +37,7 @@ export function SubagentFooter() {
     )
 
     return {
-      context: context
-        ? context.percent === undefined
-          ? Locale.number(context.tokens)
-          : `${Locale.number(context.tokens)} (${context.percent}%)`
-        : undefined,
+      context: context ? formatContextUsage(context.tokens, context.percent) : undefined,
       cost: formattedCost,
     }
   })
@@ -61,18 +57,18 @@ export function SubagentFooter() {
         paddingRight={1}
         {...SplitBorder}
         border={["left"]}
-        borderColor={themeV2.border()}
+        borderColor={themeV2.border.default}
         flexShrink={0}
-        backgroundColor={themeV2.background()}
+        backgroundColor={themeV2.background.default}
       >
         <box flexDirection="row" justifyContent="space-between" gap={1}>
           <box flexDirection="row" gap={1}>
-            <text fg={themeV2.text()}>
+            <text fg={themeV2.text.default}>
               <b>{subagentInfo()}</b>
             </text>
             <Show when={usage()}>
               {(item) => (
-                <text fg={themeV2.text.subdued()} wrapMode="none">
+                <text fg={themeV2.text.subdued} wrapMode="none">
                   {[item().context, item().cost].filter(Boolean).join(" · ")}
                 </text>
               )}
@@ -83,30 +79,36 @@ export function SubagentFooter() {
               onMouseOver={() => setHover("parent")}
               onMouseOut={() => setHover(null)}
               onMouseUp={() => keymap.dispatch("session.parent")}
-              backgroundColor={hover() === "parent" ? themeV2.background.action("hovered") : themeV2.background()}
+              backgroundColor={
+                hover() === "parent" ? themeV2.background.action.primary.hovered : themeV2.background.default
+              }
             >
-              <text fg={themeV2.text()}>
-                Parent <span style={{ fg: themeV2.text.subdued() }}>{shortcuts.get("session.parent")}</span>
+              <text fg={themeV2.text.default}>
+                Parent <span style={{ fg: themeV2.text.subdued }}>{shortcuts.get("session.parent")}</span>
               </text>
             </box>
             <box
               onMouseOver={() => setHover("prev")}
               onMouseOut={() => setHover(null)}
               onMouseUp={() => keymap.dispatch("session.child.previous")}
-              backgroundColor={hover() === "prev" ? themeV2.background.action("hovered") : themeV2.background()}
+              backgroundColor={
+                hover() === "prev" ? themeV2.background.action.primary.hovered : themeV2.background.default
+              }
             >
-              <text fg={themeV2.text()}>
-                Prev <span style={{ fg: themeV2.text.subdued() }}>{shortcuts.get("session.child.previous")}</span>
+              <text fg={themeV2.text.default}>
+                Prev <span style={{ fg: themeV2.text.subdued }}>{shortcuts.get("session.child.previous")}</span>
               </text>
             </box>
             <box
               onMouseOver={() => setHover("next")}
               onMouseOut={() => setHover(null)}
               onMouseUp={() => keymap.dispatch("session.child.next")}
-              backgroundColor={hover() === "next" ? themeV2.background.action("hovered") : themeV2.background()}
+              backgroundColor={
+                hover() === "next" ? themeV2.background.action.primary.hovered : themeV2.background.default
+              }
             >
-              <text fg={themeV2.text()}>
-                Next <span style={{ fg: themeV2.text.subdued() }}>{shortcuts.get("session.child.next")}</span>
+              <text fg={themeV2.text.default}>
+                Next <span style={{ fg: themeV2.text.subdued }}>{shortcuts.get("session.child.next")}</span>
               </text>
             </box>
           </box>

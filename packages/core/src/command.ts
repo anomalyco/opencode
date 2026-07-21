@@ -52,7 +52,7 @@ export interface Interface extends State.Transformable<Draft> {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Command") {}
 
-const layer = Layer.effect(
+export const layer = (options?: ShellSelect.Options) => Layer.effect(
   Service,
   Effect.gen(function* () {
     const mcp = yield* MCP.Service
@@ -111,6 +111,7 @@ const layer = Layer.effect(
           config,
           location,
           processes,
+          shell: options,
         })
 
         const prompt = (yield* mcp.prompts()).find((prompt) => mcpCommandName(prompt.server, prompt.name) === input.name)
@@ -157,6 +158,7 @@ function evaluateTemplate(
     readonly config: Config.Interface
     readonly location: Location.Info
     readonly processes: AppProcess.Interface
+    readonly shell?: ShellSelect.Options
   },
 ) {
   return Effect.gen(function* () {
@@ -188,11 +190,12 @@ const evaluateShell = Effect.fnUntraced(function* (
     readonly config: Config.Interface
     readonly location: Location.Info
     readonly processes: AppProcess.Interface
+    readonly shell?: ShellSelect.Options
   },
 ) {
   const matches = Array.from(text.matchAll(shellRegex))
   if (matches.length === 0) return text
-  const shell = ShellSelect.preferred(Config.latest(yield* services.config.entries(), "shell"))
+  const shell = ShellSelect.preferred(Config.latest(yield* services.config.entries(), "shell"), services.shell)
   const outputs = yield* Effect.forEach(
     matches,
     (match) => {
@@ -240,8 +243,12 @@ const placeholderRegex = /\$(\d+)/g
 const quoteTrimRegex = /^["']|["']$/g
 const shellRegex = /!`([^`]+)`/g
 
-export const node = makeLocationNode({
-  service: Service,
-  layer,
-  deps: [MCP.node, EventV2.node, AppProcess.node, Config.node, Location.node],
-})
+export function configured(options?: ShellSelect.Options) {
+  return makeLocationNode({
+    service: Service,
+    layer: layer(options),
+    deps: [MCP.node, EventV2.node, AppProcess.node, Config.node, Location.node],
+  })
+}
+
+export const node = configured()

@@ -39,7 +39,7 @@ export interface Interface {
 /** Location-scoped outbound model-request preparation. */
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SessionModelRequest") {}
 
-const layer = Layer.effect(
+export const layer = (options?: SessionModelHeaders.Options) => Layer.effect(
   Service,
   Effect.gen(function* () {
     const hooks = yield* PluginHooks.Service
@@ -81,7 +81,7 @@ const layer = Layer.effect(
       const request = LLM.request({
         model,
         http: {
-          headers: SessionModelHeaders.make(session),
+          headers: SessionModelHeaders.make(session, options),
         },
         providerOptions: { openai: { promptCacheKey } },
         system: contextEvent.system,
@@ -112,8 +112,8 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeLocationNode({
-  service: Service,
-  layer,
-  deps: [PluginHooks.node, ToolRegistry.node],
-})
+export function configured(options?: SessionModelHeaders.Options) {
+  return makeLocationNode({ service: Service, layer: layer(options), deps: [PluginHooks.node, ToolRegistry.node] })
+}
+
+export const node = configured()

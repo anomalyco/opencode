@@ -5,7 +5,6 @@ import { ToolFailure } from "@opencode-ai/ai"
 import { Context, Duration, Effect, Layer, Schema } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { makeLocationNode } from "../effect/app-node"
-import { truthy } from "../flag/flag"
 import { InstallationVersion } from "../installation/version"
 import { PositiveInt } from "../schema"
 import { PermissionV2 } from "../permission"
@@ -74,8 +73,13 @@ export const defaultConfigLayer = Layer.sync(ConfigService, () =>
       process.env.OPENCODE_WEBSEARCH_PROVIDER === "exa" || process.env.OPENCODE_WEBSEARCH_PROVIDER === "parallel"
         ? process.env.OPENCODE_WEBSEARCH_PROVIDER
         : undefined,
-    enableExa: truthy("OPENCODE_EXPERIMENTAL") || truthy("OPENCODE_ENABLE_EXA") || truthy("OPENCODE_EXPERIMENTAL_EXA"),
-    enableParallel: truthy("OPENCODE_ENABLE_PARALLEL") || truthy("OPENCODE_EXPERIMENTAL_PARALLEL"),
+    enableExa:
+      ["1", "true"].includes(process.env.OPENCODE_EXPERIMENTAL?.toLowerCase() ?? "") ||
+      ["1", "true"].includes(process.env.OPENCODE_ENABLE_EXA?.toLowerCase() ?? "") ||
+      ["1", "true"].includes(process.env.OPENCODE_EXPERIMENTAL_EXA?.toLowerCase() ?? ""),
+    enableParallel:
+      ["1", "true"].includes(process.env.OPENCODE_ENABLE_PARALLEL?.toLowerCase() ?? "") ||
+      ["1", "true"].includes(process.env.OPENCODE_EXPERIMENTAL_PARALLEL?.toLowerCase() ?? ""),
     exaApiKey: process.env.EXA_API_KEY,
     parallelApiKey: process.env.PARALLEL_API_KEY,
   }),

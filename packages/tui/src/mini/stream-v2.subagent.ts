@@ -23,6 +23,7 @@ import type {
   SessionMessageInfo,
 } from "@opencode-ai/client/promise"
 import { Locale } from "../util/locale"
+import { createFragmentReconciler, fragmentRef, type FragmentReconciler } from "./stream-v2.fragment"
 import type {
   FooterSubagentDetail,
   FooterSubagentState,
@@ -105,10 +106,7 @@ type ChildState = {
   title?: string
   lastUpdatedAt: number
   frames: Frame[]
-  text: Map<string, string>
-  projectedText: Map<string, string>
-  reasoning: Map<string, string>
-  projectedReasoning: Map<string, string>
+  fragments: FragmentReconciler
   tools: Map<string, ToolTrack>
   toolSources: Map<string, SessionMessageAssistantTool>
   finishedTools: Set<string>
@@ -225,8 +223,6 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
   let blockerEpoch = 0
   let closed = false
   const active = (signal = input.signal) => !closed && !input.signal.aborted && !signal.aborted
-  const fragmentKey = (messageID: string, partID: string) => `${messageID}\u0000${partID}`
-
   const admitChild = (sessionID: string): ChildState | undefined => {
     const existing = children.get(sessionID)
     if (!existing && children.size >= FAMILY_LIST_LIMIT) return
@@ -238,10 +234,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       background: false,
       lastUpdatedAt: 0,
       frames: [],
-      text: new Map(),
-      projectedText: new Map(),
-      reasoning: new Map(),
-      projectedReasoning: new Map(),
+      fragments: createFragmentReconciler(),
       tools: new Map(),
       toolSources: new Map(),
       finishedTools: new Set(),
@@ -337,10 +330,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
 
   const rebuild = (child: ChildState, messages: SessionMessageInfo[]) => {
     child.frames = []
-    child.text.clear()
-    child.projectedText.clear()
-    child.reasoning.clear()
-    child.projectedReasoning.clear()
+    child.fragments.clear()
     child.finishedTools.clear()
     child.toolSources.clear()
     child.messageIDs.clear()
@@ -356,33 +346,29 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       let reasoningOrdinal = 0
       for (const item of message.content) {
         if (item.type === "text") {
-          const id = `text:${textOrdinal++}`
-          const key = fragmentKey(message.id, id)
-          child.text.set(key, item.text)
-          child.projectedText.set(key, item.text)
-          setFrame(child, key, {
+          const fragment = fragmentRef(message.id, "text", textOrdinal++)
+          const update = child.fragments.project(fragment, item.text, true)
+          setFrame(child, update.key, {
             kind: "assistant",
             source: "assistant",
             text: item.text,
             phase: "progress",
             messageID: message.id,
-            partID: id,
+            partID: fragment.partID,
           })
           continue
         }
         if (item.type === "reasoning") {
-          const id = `reasoning:${reasoningOrdinal++}`
-          const key = fragmentKey(message.id, id)
-          child.reasoning.set(key, item.text)
-          child.projectedReasoning.set(key, item.text)
+          const fragment = fragmentRef(message.id, "reasoning", reasoningOrdinal++)
+          const update = child.fragments.project(fragment, item.text, true)
           if (input.thinking)
-            setFrame(child, key, {
+            setFrame(child, update.key, {
               kind: "reasoning",
               source: "reasoning",
               text: `Thinking: ${item.text}`,
               phase: "progress",
               messageID: message.id,
-              partID: id,
+              partID: fragment.partID,
             })
           continue
         }
@@ -678,40 +664,35 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       return
     }
     if (event.type === "session.text.delta") {
-      const id = `text:${event.data.ordinal}`
-      const key = fragmentKey(event.data.assistantMessageID, id)
-      const projected = child.projectedText.get(key)
-      const covered = projected?.indexOf(event.data.delta) ?? -1
-      if (projected && covered >= 0) {
-        child.projectedText.set(key, projected.slice(covered + event.data.delta.length))
-        return
-      }
-      const next = (child.text.get(key) ?? "") + event.data.delta
-      child.text.set(key, next)
-      setFrame(child, key, {
+      const update = child.fragments.delta(
+        fragmentRef(event.data.assistantMessageID, "text", event.data.ordinal),
+        event.data.delta,
+      )
+      if (!update) return
+      setFrame(child, update.key, {
         kind: "assistant",
         source: "assistant",
-        text: next,
+        text: update.text,
         phase: "progress",
         messageID: event.data.assistantMessageID,
-        partID: id,
+        partID: update.partID,
       })
       touch(child, event.created)
       notifyDetail(child)
       return
     }
     if (event.type === "session.text.ended") {
-      const id = `text:${event.data.ordinal}`
-      const key = fragmentKey(event.data.assistantMessageID, id)
-      child.text.set(key, event.data.text)
-      child.projectedText.delete(key)
-      setFrame(child, key, {
+      const update = child.fragments.end(
+        fragmentRef(event.data.assistantMessageID, "text", event.data.ordinal),
+        event.data.text,
+      )
+      setFrame(child, update.key, {
         kind: "assistant",
         source: "assistant",
         text: event.data.text,
         phase: "progress",
         messageID: event.data.assistantMessageID,
-        partID: id,
+        partID: update.partID,
       })
       touch(child, event.created)
       notifyDetail(child)
@@ -721,41 +702,36 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       return
     }
     if (event.type === "session.reasoning.delta") {
-      const id = `reasoning:${event.data.ordinal}`
-      const key = fragmentKey(event.data.assistantMessageID, id)
-      const projected = child.projectedReasoning.get(key)
-      const covered = projected?.indexOf(event.data.delta) ?? -1
-      if (projected && covered >= 0) {
-        child.projectedReasoning.set(key, projected.slice(covered + event.data.delta.length))
-        return
-      }
-      const next = (child.reasoning.get(key) ?? "") + event.data.delta
-      child.reasoning.set(key, next)
+      const update = child.fragments.delta(
+        fragmentRef(event.data.assistantMessageID, "reasoning", event.data.ordinal),
+        event.data.delta,
+      )
+      if (!update) return
       if (!input.thinking) return
-      setFrame(child, key, {
+      setFrame(child, update.key, {
         kind: "reasoning",
         source: "reasoning",
-        text: `Thinking: ${next}`,
+        text: `Thinking: ${update.text}`,
         phase: "progress",
         messageID: event.data.assistantMessageID,
-        partID: id,
+        partID: update.partID,
       })
       notifyDetail(child)
       return
     }
     if (event.type === "session.reasoning.ended") {
-      const id = `reasoning:${event.data.ordinal}`
-      const key = fragmentKey(event.data.assistantMessageID, id)
-      child.reasoning.set(key, event.data.text)
-      child.projectedReasoning.delete(key)
+      const update = child.fragments.end(
+        fragmentRef(event.data.assistantMessageID, "reasoning", event.data.ordinal),
+        event.data.text,
+      )
       if (!input.thinking) return
-      setFrame(child, key, {
+      setFrame(child, update.key, {
         kind: "reasoning",
         source: "reasoning",
         text: `Thinking: ${event.data.text}`,
         phase: "progress",
         messageID: event.data.assistantMessageID,
-        partID: id,
+        partID: update.partID,
       })
       notifyDetail(child)
       return

@@ -17,7 +17,6 @@ import { SessionTitle } from "@opencode-ai/core/session/title"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Money } from "@opencode-ai/schema/money"
@@ -153,7 +152,7 @@ it.effect("generates a title from the sole user message and renames the session"
       "User-Agent": `opencode/${InstallationVersion}`,
       "x-opencode-project": Project.ID.global,
       "x-opencode-session": sessionID,
-      "x-opencode-client": Flag.OPENCODE_CLIENT,
+      "x-opencode-client": "cli",
     })
     expect(JSON.stringify(requests[0]?.messages)).toContain("Help me debug the failing build")
     const renamed = yield* store.get(sessionID)

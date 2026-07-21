@@ -58,6 +58,7 @@ import { useSync } from "@/context/sync"
 import { useTabs } from "@/context/tabs"
 import { TerminalProvider, useTerminal } from "@/context/terminal"
 import { PromptInput } from "@/components/prompt-input"
+import { PromptInputV2Composer, usePromptInputV2Controller } from "@/components/prompt-input-v2"
 import { useSettingsCommand } from "@/components/settings-dialog"
 import { setCursorPosition } from "@/components/prompt-input/editor-dom"
 import { promptLength } from "@/components/prompt-input/history"
@@ -665,7 +666,8 @@ export default function Page() {
   const mobileChanges = createMemo(() => !isDesktop() && store.mobileTab === "changes")
   const wantsReview = createMemo(() =>
     isDesktop()
-      ? desktopFileTreeOpen() || (desktopReviewOpen() && activeTab() === "review")
+      ? desktopFileTreeOpen() ||
+        (desktopReviewOpen() && (activeTab() === "review" || (newSessionDesign() && !!activeFileTab())))
       : store.mobileTab === "changes",
   )
   const vcsMode = createMemo<VcsMode | undefined>(() => {
@@ -2006,78 +2008,6 @@ export default function Page() {
 
   useUsageExceededDialogs()
 
-  const composerRegion = () => {
-    const controller = createSessionComposerRegionController({
-      state: composer,
-      sessionKey,
-      sessionID: () => params.id,
-      prompt,
-      centered,
-      followup: () =>
-        params.id && !isChildSession()
-          ? {
-              items: followupDock(),
-              sending: sendingFollowup(),
-              onSend: (id) => void sendFollowup(params.id!, id, { manual: true }),
-              onEdit: editFollowup,
-            }
-          : undefined,
-      revert: () =>
-        rolled().length > 0
-          ? {
-              items: rolled(),
-              restoring: restoring(),
-              disabled: reverting(),
-              onRestore: restore,
-            }
-          : undefined,
-      onResponseSubmit: resumeScroll,
-      openParent: () => {
-        const id = info()?.parentID
-        if (!id) return
-        navigate(
-          params.serverKey
-            ? sessionHref(requireServerKey(params.serverKey), id)
-            : legacySessionHref(sdk().directory, id),
-        )
-      },
-      setPromptRef: (el) => {
-        inputRef = el
-      },
-      setDockRef: (el) => {
-        promptDock = el
-      },
-    })
-    return (
-      <SessionComposerRegion
-        controller={controller}
-        promptInput={
-          <PromptInput
-            controls={inputController()}
-            ref={(el) => {
-              inputRef = el
-            }}
-            newSessionWorktree={newSessionWorktree()}
-            onNewSessionWorktreeReset={() => setStore("newSessionWorktree", "main")}
-            onSubmit={() => {
-              comments.clear()
-              resumeScroll()
-            }}
-            edit={editingFollowup()}
-            onEditLoaded={clearFollowupEdit}
-            shouldQueue={queueEnabled}
-            onQueue={queueFollowup}
-            onAbort={() => {
-              const id = params.id
-              if (!id) return
-              setFollowup("paused", id, true)
-            }}
-          />
-        }
-      />
-    )
-  }
-
   const mobileTabs = (compact = false, bottom = false) => (
     <Tabs value={store.mobileTab} class="h-auto">
       <Tabs.List
@@ -2192,7 +2122,118 @@ export default function Page() {
         </Switch>
       </div>
 
-      <Show when={(params.id || !newSessionDesign()) && !mobileChanges()}>{(_) => composerRegion()}</Show>
+      <Show when={(params.id || !newSessionDesign()) && !mobileChanges()}>
+        {(_) => {
+          const controller = createSessionComposerRegionController({
+            state: composer,
+            sessionKey,
+            sessionID: () => params.id,
+            prompt,
+            centered,
+            followup: () =>
+              params.id && !isChildSession()
+                ? {
+                    items: followupDock(),
+                    sending: sendingFollowup(),
+                    onSend: (id) => void sendFollowup(params.id!, id, { manual: true }),
+                    onEdit: editFollowup,
+                  }
+                : undefined,
+            revert: () =>
+              rolled().length > 0
+                ? {
+                    items: rolled(),
+                    restoring: restoring(),
+                    disabled: reverting(),
+                    onRestore: restore,
+                  }
+                : undefined,
+            onResponseSubmit: resumeScroll,
+            openParent: () => {
+              const id = info()?.parentID
+              if (!id) return
+              navigate(
+                params.serverKey
+                  ? sessionHref(requireServerKey(params.serverKey), id)
+                  : legacySessionHref(sdk().directory, id),
+              )
+            },
+            setPromptRef: (el) => {
+              inputRef = el
+            },
+            setDockRef: (el) => {
+              promptDock = el
+            },
+          })
+          return (
+            <SessionComposerRegion
+              controller={controller}
+              promptInput={
+                <Show
+                  when={newSessionDesign()}
+                  fallback={
+                    <PromptInput
+                      controls={inputController()}
+                      ref={(el) => {
+                        inputRef = el
+                      }}
+                      newSessionWorktree={newSessionWorktree()}
+                      onNewSessionWorktreeReset={() => setStore("newSessionWorktree", "main")}
+                      onSubmit={() => {
+                        comments.clear()
+                        resumeScroll()
+                      }}
+                      edit={editingFollowup()}
+                      onEditLoaded={clearFollowupEdit}
+                      shouldQueue={queueEnabled}
+                      onQueue={queueFollowup}
+                      onAbort={() => {
+                        const id = params.id
+                        if (!id) return
+                        setFollowup("paused", id, true)
+                      }}
+                    />
+                  }
+                >
+                  {(_) => {
+                    const controller = usePromptInputV2Controller({
+                      get controls() {
+                        return inputController()
+                      },
+                      ref: (el) => {
+                        inputRef = el
+                      },
+                      get newSessionWorktree() {
+                        return newSessionWorktree()
+                      },
+                      onNewSessionWorktreeReset: () => setStore("newSessionWorktree", "main"),
+                      onSubmit: () => {
+                        comments.clear()
+                        resumeScroll()
+                      },
+                      shouldQueue: queueEnabled,
+                      onQueue: queueFollowup,
+                      onAbort: () => {
+                        const id = params.id
+                        if (!id) return
+                        setFollowup("paused", id, true)
+                      },
+                    })
+                    return (
+                      <PromptInputV2Composer
+                        controller={controller}
+                        borderUnderlay
+                        edit={editingFollowup()}
+                        onEditLoaded={clearFollowupEdit}
+                      />
+                    )
+                  }}
+                </Show>
+              }
+            />
+          )
+        }}
+      </Show>
       <Show when={!!params.id && mobileTabsBottom()}>{mobileTabs(true, true)}</Show>
     </>
   )
@@ -2282,6 +2323,9 @@ export default function Page() {
                     reviewHasFocusableContent={() => hasReview() || reviewV2State.sidebarOpened()}
                     reviewCount={reviewCount}
                     reviewPanel={reviewPanelV2}
+                    diffVersion={vcsQuery.dataUpdatedAt}
+                    loadDiff={loadReviewDiff}
+                    expandUnchanged={reviewV2State.expandMode() === "expand"}
                     reviewSidebarToggle={(disabled) => (
                       <SessionReviewV2SidebarToggle
                         opened={reviewV2State.sidebarOpened()}

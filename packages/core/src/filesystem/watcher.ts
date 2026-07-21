@@ -5,9 +5,8 @@ import { createWrapper } from "@parcel/watcher/wrapper"
 import type ParcelWatcher from "@parcel/watcher"
 import { FileSystem } from "@opencode-ai/schema/filesystem"
 import { makeGlobalNode } from "../effect/app-node"
-import { Cause, Context, Effect, Layer, PubSub, Scope, Stream } from "effect"
+import { Cause, Context, Effect, Layer, PubSub, Schema, Scope, Stream } from "effect"
 import { KeyedMutex } from "../effect/keyed-mutex"
-import { Flag } from "../flag/flag"
 import { lazy } from "../util/lazy"
 import { watch as watchFileSystem } from "node:fs"
 import path from "path"
@@ -50,14 +49,19 @@ export interface Interface {
   readonly subscribe: (input: WatchInput) => Stream.Stream<Update>
 }
 
+export const Options = Schema.Struct({
+  enabled: Schema.optional(Schema.Boolean),
+})
+export type Options = typeof Options.Type
+
 export class Service extends Context.Service<Service, Interface>()("@opencode/Watcher") {}
 
-const layer = Layer.effect(
+export const layer = (options?: Options) => Layer.effect(
   Service,
   Effect.gen(function* () {
     const backend = getBackend()
     const native = watcher()
-    if (Flag.OPENCODE_DISABLE_FILEWATCHER) {
+    if (options?.enabled === false) {
       return Service.of({ subscribe: () => Stream.empty })
     }
 
@@ -140,7 +144,11 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeGlobalNode({ service: Service, layer, deps: [] })
+export function configured(options?: Options) {
+  return makeGlobalNode({ service: Service, layer: layer(options), deps: [] })
+}
+
+export const node = configured()
 
 function subscribeDirectory(
   native: typeof import("@parcel/watcher") | undefined,

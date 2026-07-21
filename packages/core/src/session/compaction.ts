@@ -60,6 +60,7 @@ type Settings = {
 }
 
 type Dependencies = {
+  readonly headers?: SessionModelHeaders.Options
   readonly events: EventV2.Interface
   readonly llm: {
     readonly stream: (request: LLMRequest) => Stream.Stream<LLMEvent, LLMError>
@@ -258,7 +259,7 @@ const make = (dependencies: Dependencies) => {
       .stream(
         LLM.request({
           model: plan.model,
-          http: { headers: SessionModelHeaders.make(plan.session) },
+          http: { headers: SessionModelHeaders.make(plan.session, dependencies.headers) },
           messages: [Message.user(plan.prompt)],
           tools: [],
         }),
@@ -390,19 +391,23 @@ const make = (dependencies: Dependencies) => {
   })
 }
 
-export const layer = Layer.effect(
+export const layer = (options?: SessionModelHeaders.Options) => Layer.effect(
   Service,
   Effect.gen(function* () {
     const events = yield* EventV2.Service
     const llm = yield* LLMClient.Service
     const config = yield* Config.Service
     const models = yield* SessionRunnerModel.Service
-    return make({ events, llm, models, config: settings(yield* config.entries()) })
+    return make({ events, llm, models, config: settings(yield* config.entries()), headers: options })
   }),
 )
 
-export const node = makeLocationNode({
-  service: Service,
-  layer,
-  deps: [EventV2.node, llmClient, Config.node, SessionRunnerModel.node],
-})
+export function configured(options?: SessionModelHeaders.Options) {
+  return makeLocationNode({
+    service: Service,
+    layer: layer(options),
+    deps: [EventV2.node, llmClient, Config.node, SessionRunnerModel.node],
+  })
+}
+
+export const node = configured()

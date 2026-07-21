@@ -70,6 +70,7 @@ function testLayer(
   watcher?: Layer.Layer<Watcher.Service>,
   credentialNode = emptyCredentialNode,
   wellknownNode = emptyWellknownNode,
+  options?: Config.Options,
 ) {
   const locationLayer = Layer.succeed(
     Location.Service,
@@ -81,6 +82,7 @@ function testLayer(
     ),
   )
   return AppNodeBuilder.build(LayerNode.group([Config.node, EventV2.node]), [
+    [Config.node, Config.configured(options)],
     [Location.node, locationLayer],
     [Global.node, Global.layerWith({ config: globalDirectory, home: path.join(globalDirectory, "home") })],
     [Credential.node, credentialNode],
@@ -98,6 +100,90 @@ const provider = {
 }
 
 describe("Config", () => {
+  it.live("loads explicit file and content overrides in priority order", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) => {
+        const global = path.join(tmp.path, "global")
+        const project = path.join(tmp.path, "project")
+        const explicit = path.join(tmp.path, "custom.json")
+        return Effect.promise(async () => {
+          await fs.mkdir(global, { recursive: true })
+          await fs.mkdir(project, { recursive: true })
+          await fs.writeFile(path.join(global, "opencode.json"), JSON.stringify({ shell: "global" }))
+          await fs.writeFile(explicit, JSON.stringify({ shell: "explicit" }))
+          await fs.writeFile(path.join(project, "opencode.json"), JSON.stringify({ shell: "project" }))
+        }).pipe(
+          Effect.andThen(
+            Effect.gen(function* () {
+              const config = yield* Config.Service
+              const entries = yield* config.entries()
+              expect(
+                entries.flatMap((entry) =>
+                  entry.type === "document" && entry.info.shell ? [entry.info.shell] : [],
+                ),
+              ).toEqual(["global", "explicit", "project", "content"])
+              expect(Config.latest(entries, "shell")).toBe("content")
+            }).pipe(
+              Effect.provide(
+                testLayer(
+                  project,
+                  global,
+                  project,
+                  undefined,
+                  undefined,
+                  emptyCredentialNode,
+                  emptyWellknownNode,
+                  { file: explicit, content: JSON.stringify({ shell: "content" }) },
+                ),
+              ),
+            ),
+          ),
+        )
+      }),
+    ),
+  )
+
+  it.live("skips project configuration when project discovery is disabled", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) => {
+        const global = path.join(tmp.path, "global")
+        const project = path.join(tmp.path, "project")
+        return Effect.promise(async () => {
+            await fs.mkdir(global, { recursive: true })
+            await fs.mkdir(project, { recursive: true })
+            await fs.writeFile(path.join(global, "opencode.json"), JSON.stringify({ shell: "global" }))
+            await fs.writeFile(path.join(project, "opencode.json"), JSON.stringify({ shell: "project" }))
+          }).pipe(
+            Effect.andThen(
+              Effect.gen(function* () {
+                const config = yield* Config.Service
+                expect(Config.latest(yield* config.entries(), "shell")).toBe("global")
+              }).pipe(
+                Effect.provide(
+                  testLayer(
+                    project,
+                    global,
+                    project,
+                    undefined,
+                    undefined,
+                    emptyCredentialNode,
+                    emptyWellknownNode,
+                    { project: false },
+                  ),
+                ),
+              ),
+            ),
+          )
+      }),
+    ),
+  )
+
   it.live("reloads external config and publishes directory updates", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),

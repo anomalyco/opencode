@@ -3,7 +3,6 @@ export * as InstructionDiscovery from "./instruction-discovery"
 import { Array, Context, Effect, Layer, Schema } from "effect"
 import { isAbsolute, join, relative, sep } from "path"
 import { FSUtil } from "./fs-util"
-import { Flag } from "./flag/flag"
 import { Global } from "./global"
 import { Location } from "./location"
 import { AbsolutePath } from "./schema"
@@ -22,9 +21,14 @@ export interface Interface {
   readonly load: () => Effect.Effect<Instructions.Instructions>
 }
 
+export const Options = Schema.Struct({
+  project: Schema.optional(Schema.Boolean),
+})
+export type Options = typeof Options.Type
+
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/InstructionDiscovery") {}
 
-const layer = Layer.effect(
+export const layer = (options?: Options) => Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
@@ -52,7 +56,7 @@ const layer = Layer.effect(
         fromProject === "" || (fromProject !== ".." && !fromProject.startsWith(`..${sep}`) && !isAbsolute(fromProject))
       const discovered = new Set(
         yield* Effect.forEach(
-          Flag.OPENCODE_DISABLE_PROJECT_CONFIG || !insideProject
+          options?.project === false || !insideProject
             ? []
             : yield* fs.up({
                 targets: ["AGENTS.md"],
@@ -93,7 +97,15 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [FSUtil.node, Global.node, Location.node] })
+export function configured(options?: Options) {
+  return makeLocationNode({
+    service: Service,
+    layer: layer(options),
+    deps: [FSUtil.node, Global.node, Location.node],
+  })
+}
+
+export const node = configured()
 
 function render(files: ReadonlyArray<File>) {
   return files.map((file) => `Instructions from: ${file.path}\n${file.content}`).join("\n\n")

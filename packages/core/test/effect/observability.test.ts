@@ -8,14 +8,11 @@ import { fileLogger } from "../../src/observability/logging"
 import { resource } from "../../src/observability/otlp"
 
 const otelResourceAttributes = process.env.OTEL_RESOURCE_ATTRIBUTES
-const opencodeClient = process.env.OPENCODE_CLIENT
 
 afterEach(() => {
   if (otelResourceAttributes === undefined) delete process.env.OTEL_RESOURCE_ATTRIBUTES
   else process.env.OTEL_RESOURCE_ATTRIBUTES = otelResourceAttributes
 
-  if (opencodeClient === undefined) delete process.env.OPENCODE_CLIENT
-  else process.env.OPENCODE_CLIENT = opencodeClient
 })
 
 describe("resource", () => {
@@ -39,16 +36,15 @@ describe("resource", () => {
   })
 
   test("keeps built-in attributes when env values conflict", () => {
-    process.env.OPENCODE_CLIENT = "cli"
     process.env.OTEL_RESOURCE_ATTRIBUTES =
       "opencode.client=web,service.instance.id=override,service.namespace=anomalyco"
 
-    expect(resource().attributes).toMatchObject({
+    expect(resource("cli").attributes).toMatchObject({
       "opencode.client": "cli",
       "service.namespace": "anomalyco",
     })
-    expect(resource().attributes["service.instance.id"]).not.toBe("override")
-    expect(resource().attributes["opencode.run"]).toMatch(/^[0-9a-f]{8}$/)
+    expect(resource("cli").attributes["service.instance.id"]).not.toBe("override")
+    expect(resource("cli").attributes["opencode.run"]).toMatch(/^[0-9a-f]{8}$/)
   })
 })
 
@@ -66,7 +62,7 @@ test("falls back to local logging when OTLP initialization fails", async () => {
       `
         import { Effect } from "effect"
         import { Observability } from "./src/observability.ts"
-        await Effect.void.pipe(Effect.provide(Observability.layer), Effect.scoped, Effect.runPromise)
+        await Effect.void.pipe(Effect.provide(Observability.layer()), Effect.scoped, Effect.runPromise)
       `,
     ],
     {

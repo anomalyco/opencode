@@ -21,6 +21,7 @@ import { discoverThemes, themeDirectories } from "../theme/discovery"
 import { createComponentTheme, type ComponentTheme } from "../theme/v2/component"
 import { resolveThemeFile } from "../theme/v2/resolve"
 import { migrateV1 } from "../theme/v2/v1-migrate"
+import { themeModes } from "../theme/v2/select"
 import { createEffect, createMemo, onCleanup, onMount, type Accessor } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "./helper"
@@ -78,10 +79,12 @@ type ThemeService = {
   has: typeof hasTheme
   syntax: Accessor<SyntaxStyle>
   mode: Accessor<"dark" | "light">
+  modes: Accessor<readonly ("dark" | "light")[]>
+  supports(mode: "dark" | "light"): boolean
   locked: Accessor<boolean>
   lock(): void
   unlock(): void
-  setMode(mode?: "dark" | "light", persist?: boolean): void
+  setMode(mode?: "dark" | "light", persist?: boolean): boolean
   set(theme: string): boolean
   readonly ready: boolean
 }
@@ -271,17 +274,25 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
 
     const source = createMemo(() => store.themes[store.active] ?? store.themes.opencode)
     const sourceName = createMemo(() => (store.themes[store.active] ? store.active : "opencode"))
-    const values = createMemo(() => resolveTheme(source(), store.mode))
-    const valuesV2 = createMemo(() => {
+    const file = createMemo(() => {
       const started = performance.now()
-      const file = migrateV1(source())
+      const result = migrateV1(source())
       themePerformance.set("Convert V1 to V2", duration(performance.now() - started))
+      return result
+    })
+    const modes = createMemo(() => themeModes(file()))
+    const mode = () => {
+      const supported = modes()
+      if (supported.includes(store.mode)) return store.mode
+      return supported[0] ?? store.mode
+    }
+    const values = createMemo(() => resolveTheme(source(), mode()))
+    const valuesV2 = createMemo(() => {
       const resolveStarted = performance.now()
-      const result = resolveThemeFile(file, store.mode, sourceName())
+      const result = resolveThemeFile(file(), mode(), sourceName())
       themePerformance.set("Resolve final theme", duration(performance.now() - resolveStarted))
       return result
     })
-    const mode = () => store.mode
     const themeV2 = createComponentTheme(valuesV2, mode)
     const contextsV2 = {
       elevated: createComponentTheme(() => {
@@ -319,11 +330,17 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       all: allThemes,
       has: hasTheme,
       syntax,
-      mode: () => store.mode,
+      mode,
+      modes,
+      supports: (requested) => modes().includes(requested),
       locked: () => store.lock !== undefined,
-      lock: () => pin(store.mode),
+      lock: () => pin(mode()),
       unlock: free,
-      setMode: pin,
+      setMode(requested = mode(), persist = true) {
+        if (!modes().includes(requested)) return false
+        pin(requested, persist)
+        return true
+      },
       set(theme: string) {
         if (!hasTheme(theme)) return false
         setStore("active", theme)

@@ -64,7 +64,7 @@ describe("H3: array property access reads as undefined (not a throw)", () => {
   })
 
   test("unknown property reads stay undefined for methods CodeMode does not implement", async () => {
-    expect(await value(`return [1,2,3].toSpliced === undefined`)).toBe(true)
+    expect(await value(`return [1,2,3].unknownMethod === undefined`)).toBe(true)
   })
 
   test("array indexing still works", async () => {
@@ -856,9 +856,8 @@ describe("coercion parity: ++ and -- use CodeMode numeric coercion", () => {
 
 describe("coercion parity: unknown static members read as undefined", () => {
   test("feature detection on missing statics works like native JS", async () => {
-    expect(await value(`return typeof Math.sumPrecise`)).toBe("undefined")
-    expect(await value(`return Object.groupBy === undefined`)).toBe(true)
-    expect(await value(`return RegExp.escape === undefined`)).toBe(true)
+    expect(await value(`return typeof Math.sum`)).toBe("undefined")
+    expect(await value(`return RegExp.quote === undefined`)).toBe(true)
     expect(await value(`return Number.range === undefined`)).toBe(true)
     expect(await value(`return String.raw === undefined`)).toBe(true)
     expect(await value(`return isFinite.something === undefined`)).toBe(true)
@@ -866,26 +865,32 @@ describe("coercion parity: unknown static members read as undefined", () => {
     expect(await value(`return Date.moment === undefined`)).toBe(true)
     expect(await value(`return JSON.rawJSON === undefined`)).toBe(true)
     expect(await value(`return URL.createObjectURL === undefined`)).toBe(true)
-    expect(await value(`return Map.groupBy === undefined`)).toBe(true)
-    expect(await value(`return Math.sumPrecise?.([1]) ?? "fallback"`)).toBe("fallback")
+    expect(await value(`return Math.sum?.([1]) ?? "fallback"`)).toBe("fallback")
   })
 
   test("known statics still resolve and run", async () => {
     expect(await value(`return typeof Math.max`)).toBe("function")
     expect(await value(`return typeof console.log`)).toBe("function")
     expect(await value(`return typeof Date.now`)).toBe("function")
+    expect(await value(`return typeof Math.sumPrecise`)).toBe("function")
+    expect(await value(`return typeof RegExp.escape`)).toBe("function")
+    expect(await value(`return typeof Object.groupBy`)).toBe("function")
+    expect(await value(`return typeof Map.groupBy`)).toBe("function")
     expect(await value(`return Math.max(1, 2)`)).toBe(2)
+    expect(await value(`return Math.sumPrecise([1, 2])`)).toBe(3)
+    expect(await value(`return RegExp.escape("a.b")`)).toBe("\\x61\\.b")
     expect(await value(`return URL.canParse("https://example.com")`)).toBe(true)
     expect(await value(`return Number.isInteger(3)`)).toBe(true)
     expect(await value(`return Number.MAX_SAFE_INTEGER`)).toBe(Number.MAX_SAFE_INTEGER)
   })
 
   test("calling an unknown static reports a native-style TypeError", async () => {
-    expect(await value(`try { Math.sumPrecise([1]) } catch (e) { return e.name + ": " + e.message }`)).toBe(
-      "TypeError: Math.sumPrecise is not a function.",
+    expect(await value(`try { Math.sum([1]) } catch (e) { return e.name + ": " + e.message }`)).toBe(
+      "TypeError: Math.sum is not a function.",
     )
-    expect(await value(`try { Math["sumPrecise"]([1]) } catch (e) { return e.message }`)).toBe(
-      "Math.sumPrecise is not a function.",
+    expect(await value(`try { Math["sum"]([1]) } catch (e) { return e.message }`)).toBe("Math.sum is not a function.")
+    expect(await value(`try { JSON.rawJSON("1") } catch (e) { return e.message }`)).toBe(
+      "JSON.rawJSON is not a function.",
     )
   })
 

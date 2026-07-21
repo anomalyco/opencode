@@ -2,7 +2,8 @@ import { createMemo, Show } from "solid-js"
 import type { JSX } from "solid-js"
 import { useSortable } from "@dnd-kit/solid/sortable"
 import { IconButton } from "@opencode-ai/ui/icon-button"
-import { TooltipKeybind } from "@opencode-ai/ui/tooltip"
+import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
+import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { useFile } from "@/context/file"
 import { useLanguage } from "@/context/language"
@@ -19,6 +20,7 @@ export function SortableTabV2(props: {
   const file = useFile()
   const language = useLanguage()
   const command = useCommand()
+  const closeTabKeybind = createMemo(() => command.keybindParts("tab.close"))
   const sortable = useSortable({
     get id() {
       return props.tab
@@ -39,9 +41,15 @@ export function SortableTabV2(props: {
         <Tabs.Trigger
           value={props.tab}
           closeButton={
-            <TooltipKeybind
-              title={language.t("common.closeTab")}
-              keybind={command.keybind("tab.close")}
+            <TooltipV2
+              value={
+                <>
+                  {language.t("common.closeTab")}
+                  <Show when={closeTabKeybind().length > 0}>
+                    <KeybindV2 keys={closeTabKeybind()} variant="neutral" />
+                  </Show>
+                </>
+              }
               placement="bottom"
               gutter={10}
             >
@@ -52,7 +60,7 @@ export function SortableTabV2(props: {
                 onClick={() => props.onTabClose(props.tab)}
                 aria-label={language.t("common.closeTab")}
               />
-            </TooltipKeybind>
+            </TooltipV2>
           }
           hideCloseButton
           onMiddleClick={() => props.onTabClose(props.tab)}

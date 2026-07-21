@@ -1,33 +1,10 @@
 import { describe, expect, test } from "bun:test"
 import { writeSessionOutput } from "../../src/mini/stream"
-import type { FooterApi, FooterEvent, StreamCommit } from "../../src/mini/types"
-
-function footer() {
-  const events: FooterEvent[] = []
-  const commits: StreamCommit[] = []
-
-  const api: FooterApi = {
-    isClosed: false,
-    onPrompt: () => () => {},
-    onQueuedRemove: () => () => {},
-    onClose: () => () => {},
-    event: (next) => {
-      events.push(next)
-    },
-    append: (next) => {
-      commits.push(next)
-    },
-    idle: () => Promise.resolve(),
-    close: () => {},
-    destroy: () => {},
-  }
-
-  return { api, events, commits }
-}
+import { createFooterApiFixture } from "./fixture/footer-api"
 
 describe("run stream bridge", () => {
   test("defaults status patches to running phase", () => {
-    const out = footer()
+    const out = createFooterApiFixture()
 
     writeSessionOutput(
       {
@@ -35,11 +12,7 @@ describe("run stream bridge", () => {
       },
       {
         commits: [],
-        footer: {
-          patch: {
-            status: "assistant responding",
-          },
-        },
+        updates: [{ type: "stream.patch", patch: { status: "assistant responding" } }],
       },
     )
 
@@ -53,4 +26,28 @@ describe("run stream bridge", () => {
       },
     ])
   })
+
+  test("delivers commits before ordered footer updates", () => {
+    const out = createFooterApiFixture()
+
+    writeSessionOutput(
+      { footer: out.api },
+      {
+        commits: [{ kind: "assistant", source: "assistant", text: "answer", phase: "progress" }],
+        updates: [
+          { type: "stream.patch", patch: { phase: "idle", status: "" } },
+          { type: "stream.subagent", state: { tabs: [], details: {}, permissions: [], forms: [] } },
+          { type: "stream.view", view: { type: "prompt" } },
+        ],
+      },
+    )
+
+    expect(out.calls.map((call) => (call.type === "commit" ? "commit" : call.value.type))).toEqual([
+      "commit",
+      "stream.patch",
+      "stream.subagent",
+      "stream.view",
+    ])
+  })
+
 })

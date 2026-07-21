@@ -12,7 +12,7 @@ import { SimulatedProvider } from "./simulated-provider"
 /**
  * Layer replacements applied when the server is built in simulation mode.
  *
- * The server merges these into the app node build when `OPENCODE_SIMULATE`
+ * The server merges these into the app node build when simulation is enabled
  * is enabled, via a dynamic import so this module is never loaded eagerly.
  *
  * - Network: all outbound HTTP resolves against the simulated route table;

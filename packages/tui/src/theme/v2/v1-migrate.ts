@@ -1,44 +1,69 @@
 import { RGBA } from "@opentui/core"
 import { oklchToHex, rgbToOklch } from "@opencode-ai/ui/theme/color"
 import type { Theme, ThemeJson } from "../index"
-import { DEFAULT_THEME } from "./defaults"
-import type { ThemeFile } from "./index"
+import { DEFAULT_CATEGORICAL, DEFAULT_THEME } from "./defaults"
+import type { FileThemeDefinition, Mode, ThemeFile } from "./index"
 import { HueStep } from "./schema"
 
 type ThemeColor = Exclude<keyof Theme, "thinkingOpacity" | "_hasSelectedListItemText">
 type ChromaticHue = "red" | "orange" | "yellow" | "green" | "cyan" | "blue" | "purple"
+type V1HueToken = "secondary" | "accent" | "success" | "warning" | "primary" | "error" | "info"
 
 const chromaticHues: readonly ChromaticHue[] = ["red", "orange", "yellow", "green", "cyan", "blue", "purple"]
+const categoricalTokens: readonly V1HueToken[] = ["secondary", "accent", "success", "warning", "primary", "error"]
 const minimumChroma = 0.03
 const lightThreshold = 0.6
 
 export function migrateV1(theme: ThemeJson): ThemeFile {
+  const light = resolveV1(theme, "light")
+  const dark = resolveV1(theme, "dark")
+  if (light.background.a > 0 && dark.background.a > 0 && light.background.equals(dark.background)) {
+    const lightMode = detectMode(light)
+    const darkMode = detectMode(dark)
+    if (lightMode === darkMode) {
+      if (lightMode === "light") return { version: 2, standalone: true, light: migrateMode(light, "light") }
+      return { version: 2, standalone: true, dark: migrateMode(dark, "dark") }
+    }
+  }
   return {
     version: 2,
     standalone: true,
-    light: migrateMode(resolveV1(theme, "light"), "light"),
-    dark: migrateMode(resolveV1(theme, "dark"), "dark"),
+    light: migrateMode(light, "light"),
+    dark: migrateMode(dark, "dark"),
   }
 }
 
-function migrateMode(theme: Theme, mode: "light" | "dark"): ThemeFile["light"] {
+function detectMode(theme: Theme): Mode {
+  return luminance(theme.text) > luminance(theme.background) ? "dark" : "light"
+}
+
+function luminance(color: RGBA) {
+  return 0.299 * color.r + 0.587 * color.g + 0.114 * color.b
+}
+
+function migrateMode(theme: Theme, mode: Mode): FileThemeDefinition {
   const color = (key: ThemeColor) => hex(theme[key])
   const selected = hex(selectedForeground(theme, theme.primary))
   const destructive = hex(selectedForeground(theme, theme.error))
   const hues = inferHues(theme, mode)
-  const text = mode === "light" ? "$hue.neutral.900" : "$hue.neutral.100"
-  const textMuted = mode === "light" ? "$hue.neutral.700" : "$hue.neutral.300"
-  const primary = mode === "light" ? "$hue.interactive.900" : "$hue.interactive.100"
-  const background = mode === "light" ? "$hue.neutral.100" : "$hue.neutral.900"
-  const backgroundPanel = mode === "light" ? "$hue.neutral.200" : "$hue.neutral.800"
-  const backgroundMenu = mode === "light" ? "$hue.neutral.300" : "$hue.neutral.700"
+  const categorical = categoricalTokens.flatMap((token) => {
+    const hue = hues.byToken[token]
+    return hue ? [hue] : []
+  })
+  const uniqueCategorical = categorical.filter((hue, index) => categorical.indexOf(hue) === index)
+  const text = mode === "light" ? "$hue.neutral.800" : "$hue.neutral.200"
+  const textMuted = mode === "light" ? "$hue.neutral.600" : "$hue.neutral.400"
+  const primary = mode === "light" ? "$hue.interactive.800" : "$hue.interactive.200"
+  const background = mode === "light" ? "$hue.neutral.200" : "$hue.neutral.800"
+  const backgroundPanel = mode === "light" ? "$hue.neutral.300" : "$hue.neutral.700"
+  const backgroundMenu = mode === "light" ? "$hue.neutral.400" : "$hue.neutral.600"
 
   return {
     hue: {
       gray: neutralScale(theme, mode),
       ...Object.fromEntries(
         chromaticHues.map((name) => {
-          const match = hues[name]
+          const match = hues.byHue[name]
           return [name, match ? hueScale(match.color, mode) : "$hue.gray"]
         }),
       ),
@@ -46,6 +71,7 @@ function migrateMode(theme: Theme, mode: "light" | "dark"): ThemeFile["light"] {
       interactive: ambiguous(theme.primary) ? "$hue.gray" : hueScale(theme.primary, mode),
       neutral: "$hue.gray",
     },
+    categorical: uniqueCategorical.length ? uniqueCategorical : DEFAULT_CATEGORICAL,
     text: {
       default: text,
       subdued: textMuted,
@@ -80,7 +106,7 @@ function migrateMode(theme: Theme, mode: "light" | "dark"): ThemeFile["light"] {
         overlay: backgroundMenu,
       },
       action: {
-        primary: { default: "transparent", $hovered: backgroundPanel, $focused: primary, $selected: primary },
+        primary: { default: "transparent", $hovered: backgroundPanel, $focused: primary, $selected: "transparent" },
         destructive: { default: color("error") },
       },
       formfield: {
@@ -154,22 +180,45 @@ function migrateMode(theme: Theme, mode: "light" | "dark"): ThemeFile["light"] {
 }
 
 function inferHues(theme: Theme, mode: "light" | "dark") {
-  return [theme.accent, theme.success, theme.warning, theme.primary, theme.error, theme.info, theme.secondary].reduce<
-    Partial<Record<ChromaticHue, { color: RGBA; distance: number }>>
-  >((result, color) => {
-    const value = toOklch(color)
-    if (ambiguous(color, value.c)) return result
-    const anchor = inferenceAnchor(value.l)
-    const nearest = chromaticHues
-      .map((name) => ({
-        name,
-        distance: hueDistance(value.h, toOklch(RGBA.fromHex(DEFAULT_THEME[mode].hue[name][anchor])).h),
-      }))
-      .sort((first, second) => first.distance - second.distance)[0]
-    const current = result[nearest.name]
-    if (current && current.distance <= nearest.distance) return result
-    return { ...result, [nearest.name]: { color, distance: nearest.distance } }
-  }, {})
+  const colors: readonly [V1HueToken, RGBA][] = [
+    ["accent", theme.accent],
+    ["success", theme.success],
+    ["warning", theme.warning],
+    ["primary", theme.primary],
+    ["error", theme.error],
+    ["info", theme.info],
+    ["secondary", theme.secondary],
+  ]
+  return colors.reduce<{
+    byHue: Partial<Record<ChromaticHue, { color: RGBA; distance: number }>>
+    byToken: Partial<Record<V1HueToken, ChromaticHue>>
+  }>(
+    (result, [token, color]) => {
+      const nearest = inferHue(color, mode)
+      if (!nearest) return result
+      const current = result.byHue[nearest.name]
+      return {
+        byHue:
+          current && current.distance <= nearest.distance
+            ? result.byHue
+            : { ...result.byHue, [nearest.name]: { color, distance: nearest.distance } },
+        byToken: { ...result.byToken, [token]: nearest.name },
+      }
+    },
+    { byHue: {}, byToken: {} },
+  )
+}
+
+function inferHue(color: RGBA, mode: Mode) {
+  const value = toOklch(color)
+  if (ambiguous(color, value.c)) return
+  const anchor = inferenceAnchor(value.l)
+  return chromaticHues
+    .map((name) => ({
+      name,
+      distance: hueDistance(value.h, toOklch(RGBA.fromHex(DEFAULT_THEME[mode].hue[name][anchor])).h),
+    }))
+    .sort((first, second) => first.distance - second.distance)[0]
 }
 
 function inferenceAnchor(lightness: number): HueStep {
@@ -233,13 +282,13 @@ function selectedForeground(theme: Theme, background: RGBA) {
 
 function hueScale(color: RGBA, mode: "light" | "dark") {
   const value = toOklch(color)
-  const anchor = mode === "light" ? 900 : 100
+  const anchor = mode === "light" ? 800 : 200
   const endpoint = mode === "light" ? Math.max(0.97, value.l) : Math.min(0.18, value.l)
   const alpha = color.toInts()[3]
   return Object.fromEntries(
     HueStep.literals.map((step) => {
       if (step === anchor) return [step, hex(color)]
-      const progress = mode === "light" ? (900 - step) / 800 : (step - 100) / 800
+      const progress = mode === "light" ? (anchor - step) / (anchor - 100) : (step - anchor) / (900 - anchor)
       const generated = oklchToHex({
         l: value.l + (endpoint - value.l) * progress,
         c: value.c * (1 - progress * 0.5),
@@ -256,8 +305,14 @@ function neutralScale(theme: Theme, mode: "light" | "dark") {
     HueStep.literals.map((step) => {
       const exact = anchors.find((anchor) => anchor.step === step)
       if (exact) return [step, hex(exact.color)]
-      const lower = anchors.filter((anchor) => anchor.step < step).at(-1)!
-      const upper = anchors.find((anchor) => anchor.step > step)!
+      const first = anchors[0]!
+      const last = anchors.at(-1)!
+      const [lower, upper] =
+        step < first.step
+          ? [first, anchors[1]!]
+          : step > last.step
+            ? [anchors.at(-2)!, last]
+            : [anchors.filter((anchor) => anchor.step < step).at(-1)!, anchors.find((anchor) => anchor.step > step)!]
       return [step, interpolate(lower.color, upper.color, (step - lower.step) / (upper.step - lower.step))]
     }),
   ) as Record<HueStep, string>
@@ -265,11 +320,11 @@ function neutralScale(theme: Theme, mode: "light" | "dark") {
 
 function neutralAnchors(theme: Theme, mode: "light" | "dark") {
   const light: { step: HueStep; color: RGBA }[] = [
-    { step: 100, color: theme.background },
-    { step: 200, color: theme.backgroundPanel },
-    { step: 300, color: theme.backgroundElement || theme.backgroundMenu },
-    { step: 700, color: theme.textMuted },
-    { step: 900, color: theme.text },
+    { step: 200, color: theme.background },
+    { step: 300, color: theme.backgroundPanel },
+    { step: 400, color: theme.backgroundElement || theme.backgroundMenu },
+    { step: 600, color: theme.textMuted },
+    { step: 800, color: theme.text },
   ]
   if (mode === "light") return light
   return light.toReversed().map((source) => ({ ...source, step: (1000 - source.step) as HueStep }))
@@ -278,13 +333,18 @@ function neutralAnchors(theme: Theme, mode: "light" | "dark") {
 function interpolate(first: RGBA, second: RGBA, amount: number) {
   const start = toOklch(first)
   const end = toOklch(second)
-  const hue = ((((end.h - start.h) % 360) + 540) % 360) - 180
+  const startHue = Number.isFinite(start.h) ? start.h : Number.isFinite(end.h) ? end.h : 0
+  const endHue = Number.isFinite(end.h) ? end.h : startHue
+  const hue = ((((endHue - startHue) % 360) + 540) % 360) - 180
   const generated = oklchToHex({
     l: start.l + (end.l - start.l) * amount,
     c: start.c + (end.c - start.c) * amount,
-    h: start.h + hue * amount,
+    h: startHue + hue * amount,
   })
-  const alpha = Math.round(first.toInts()[3] + (second.toInts()[3] - first.toInts()[3]) * amount)
+  const alpha = Math.max(
+    0,
+    Math.min(255, Math.round(first.toInts()[3] + (second.toInts()[3] - first.toInts()[3]) * amount)),
+  )
   return alpha === 255 ? generated : `${generated}${byte(alpha)}`
 }
 

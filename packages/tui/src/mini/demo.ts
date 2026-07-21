@@ -263,11 +263,14 @@ function present(state: State, commits: StreamCommit[], view?: FooterView): void
     { footer: state.footer },
     {
       commits,
-      footer: view
-        ? {
-            view,
-            patch: { status: view.type === "permission" ? "awaiting permission" : "awaiting form" },
-          }
+      updates: view
+        ? [
+            {
+              type: "stream.patch" as const,
+              patch: { status: view.type === "permission" ? "awaiting permission" : "awaiting form" },
+            },
+            { type: "stream.view" as const, view },
+          ]
         : undefined,
     },
   )
@@ -276,7 +279,13 @@ function present(state: State, commits: StreamCommit[], view?: FooterView): void
 function clearBlocker(state: State): void {
   writeSessionOutput(
     { footer: state.footer },
-    { commits: [], footer: { view: { type: "prompt" }, patch: { status: "" } } },
+    {
+      commits: [],
+      updates: [
+        { type: "stream.patch", patch: { status: "" } },
+        { type: "stream.view", view: { type: "prompt" } },
+      ],
+    },
   )
 }
 

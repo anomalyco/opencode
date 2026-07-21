@@ -729,6 +729,8 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
         onCommit: rememberLocal,
         trace: log,
         onCatalogRefresh: requestCatalogRefresh,
+        contextLimit: (model) =>
+          state.providers.find((provider) => provider.id === model.providerID)?.models[model.modelID]?.limit?.context,
       })
       if (footer.isClosed) {
         await handle.close()
@@ -780,6 +782,22 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     }, RESIZE_DELAY)
   })
 
+  const renderPromptError = async (prompt: RunPrompt, error: unknown, signal?: AbortSignal) => {
+    if (signal?.aborted || footer.isClosed) return
+    const text =
+      (await state.stream?.then((item) => item.mod).catch(() => undefined))?.formatUnknownError(error) ??
+      (error instanceof Error ? error.message : String(error))
+    const commit = {
+      kind: "error",
+      text,
+      phase: "start",
+      source: "system",
+      messageID: prompt.messageID,
+    } as const
+    rememberLocal(commit)
+    footer.append(commit)
+  }
+
   const runQueue = async () => {
     await firstPaint
     if (footer.isClosed) return
@@ -798,10 +816,10 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
       footer,
       initialInput: input.initialInput,
       trace: log,
-      onSend: (prompt) => {
+      onSend: (prompt, delivery) => {
         state.shown = true
         state.history.push(prompt)
-        if (prompt.mode !== "shell") {
+        if (prompt.mode !== "shell" && delivery === "steer") {
           rememberLocal({
             kind: "user",
             text: prompt.text,
@@ -810,6 +828,24 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
             messageID: prompt.messageID,
           })
         }
+      },
+      admit: async (prompt, signal) => {
+        await state.switching?.catch(() => {})
+        const next = await ensureStream()
+        await next.handle.queuePromptTurn({
+          agent: state.agent,
+          model: state.model,
+          variant: state.activeVariant,
+          prompt,
+          files: input.files,
+          includeFiles: false,
+          signal,
+        })
+      },
+      onAdmissionError: renderPromptError,
+      settle: async () => {
+        const next = await ensureStream()
+        await next.handle.waitForIdle()
       },
       onNewSession: createSession
         ? async () => {
@@ -856,6 +892,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
                 },
               })
               footer.event({ type: "stream.view", view: { type: "prompt" } })
+              footer.event({ type: "queued.prompts", prompts: [] })
               footer.event({
                 type: "stream.patch",
                 patch: {
@@ -891,7 +928,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
             }
           }
         : undefined,
-      run: async (prompt, signal) => {
+      run: async (prompt, signal, admitted) => {
         if (state.demo && (await state.demo.prompt(prompt, signal))) {
           return
         }
@@ -900,15 +937,18 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
 
         try {
           const next = await ensureStream()
-          await next.handle.runPromptTurn({
-            agent: state.agent,
-            model: state.model,
-            variant: state.activeVariant,
-            prompt,
-            files: input.files,
-            includeFiles,
-            signal,
-          })
+          await next.handle.runPromptTurn(
+            {
+              agent: state.agent,
+              model: state.model,
+              variant: state.activeVariant,
+              prompt,
+              files: input.files,
+              includeFiles,
+              signal,
+            },
+            admitted,
+          )
           if (prompt.messageID) {
             state.localRows = state.localRows.filter(
               (row) => row.commit.kind !== "user" || row.commit.messageID !== prompt.messageID,
@@ -918,22 +958,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
           // pending for the next prompt-shaped turn.
           if (prompt.mode !== "shell" && prompt.command?.source !== "skill") includeFiles = false
         } catch (error) {
-          if (signal.aborted || footer.isClosed) {
-            return
-          }
-
-          const text =
-            (await state.stream?.then((item) => item.mod).catch(() => undefined))?.formatUnknownError(error) ??
-            (error instanceof Error ? error.message : String(error))
-          const commit = {
-            kind: "error",
-            text,
-            phase: "start",
-            source: "system",
-            messageID: prompt.messageID,
-          } as const
-          rememberLocal(commit)
-          footer.append(commit)
+          await renderPromptError(prompt, error, signal)
         }
       },
     })

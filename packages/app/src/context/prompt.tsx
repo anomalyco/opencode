@@ -1,7 +1,7 @@
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useParams, useSearchParams } from "@solidjs/router"
-import { createMemo, createRoot, getOwner, onCleanup } from "solid-js"
+import { createMemo, createResource, createRoot, getOwner, onCleanup } from "solid-js"
 import { requireServerKey } from "@/utils/session-route"
 import { ServerConnection } from "./server"
 import { useServerSDK } from "./server-sdk"
@@ -36,6 +36,7 @@ export type {
   ImageAttachmentPart,
   Prompt,
   PromptModel,
+  PromptStore,
   PromptScope,
   PromptSession,
   TextPart,
@@ -132,18 +133,29 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
     const pick = (scope?: PromptScope) => (scope ? load(scope) : session())
     const ready = createPromptReady(session)
 
+    const withSuspense = <T,>(cb: () => T): (() => T) =>
+      createResource(
+        async () => {
+          const value = cb()
+          await session().ready.promise
+          return value
+        },
+        cb,
+        { initialValue: cb() },
+      )[0]
+
     return {
       ready,
       capture: (scope?: PromptScope) => pick(scope).capture(),
-      current: () => session().current(),
-      cursor: () => session().cursor(),
-      dirty: () => session().dirty(),
+      current: withSuspense(() => session().current()),
+      cursor: withSuspense(() => session().cursor()),
+      dirty: withSuspense(() => session().dirty()),
       model: {
-        current: () => session().model.current(),
+        current: withSuspense(() => session().model.current()),
         set: (model: PromptModel | undefined) => session().model.set(model),
       },
       context: {
-        items: () => session().context.items(),
+        items: withSuspense(() => session().context.items()),
         add: (item: ContextItem) => session().context.add(item),
         remove: (key: string) => session().context.remove(key),
         removeComment: (path: string, commentID: string) => session().context.removeComment(path, commentID),

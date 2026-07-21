@@ -57,15 +57,15 @@ export function DialogConfirm(props: DialogConfirmProps) {
   return (
     <box paddingLeft={2} paddingRight={2} gap={1}>
       <box flexDirection="row" justifyContent="space-between">
-        <text attributes={TextAttributes.BOLD} fg={themeV2.text()}>
+        <text attributes={TextAttributes.BOLD} fg={themeV2.text.default}>
           {props.title}
         </text>
-        <text fg={themeV2.text.subdued()} onMouseUp={() => dialog.clear()}>
+        <text fg={themeV2.text.subdued} onMouseUp={() => dialog.clear()}>
           esc
         </text>
       </box>
       <box paddingBottom={1}>
-        <text fg={themeV2.text.subdued()}>{props.message}</text>
+        <text fg={themeV2.text.subdued}>{props.message}</text>
       </box>
       <box flexDirection="row" justifyContent="flex-end" paddingBottom={1}>
         <For each={["cancel", "confirm"] as const}>
@@ -73,14 +73,14 @@ export function DialogConfirm(props: DialogConfirmProps) {
             <box
               paddingLeft={1}
               paddingRight={1}
-              backgroundColor={key === store.active ? themeV2.background.action("focused") : undefined}
+              backgroundColor={key === store.active ? themeV2.background.action.primary.focused : undefined}
               onMouseUp={() => {
                 if (key === "confirm") props.onConfirm?.()
                 if (key === "cancel") props.onCancel?.()
                 dialog.clear()
               }}
             >
-              <text fg={key === store.active ? themeV2.text.action("focused") : themeV2.text.subdued()}>
+              <text fg={key === store.active ? themeV2.text.action.primary.focused : themeV2.text.subdued}>
                 {Locale.titlecase(key === "cancel" ? (props.label ?? key) : key)}
               </text>
             </box>

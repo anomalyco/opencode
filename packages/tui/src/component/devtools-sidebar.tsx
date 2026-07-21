@@ -4,8 +4,10 @@ import { useTheme } from "../context/theme"
 import { DevTools } from "../devtools"
 
 export function DevToolsSidebar() {
-  const { themeV2, mode, setMode } = useTheme().contextual("elevated")
+  const { themeV2, mode, supports, setMode } = useTheme().contextual("elevated")
   const [modeHovered, setModeHovered] = createSignal(false)
+  const nextMode = () => (mode() === "dark" ? "light" : "dark")
+  const canSwitchMode = () => supports(nextMode())
 
   return (
     <box
@@ -15,26 +17,26 @@ export function DevToolsSidebar() {
       paddingBottom={1}
       paddingLeft={2}
       paddingRight={2}
-      backgroundColor={themeV2.background()}
+      backgroundColor={themeV2.background.default}
     >
       <box flexShrink={0} marginBottom={1}>
         <box marginBottom={1}>
-          <text fg={themeV2.text.action()} attributes={TextAttributes.BOLD}>
+          <text fg={themeV2.text.action.primary.default} attributes={TextAttributes.BOLD}>
             Theme
           </text>
         </box>
         <box flexDirection="row">
-          <text fg={themeV2.text.subdued()}>Mode</text>
+          <text fg={themeV2.text.subdued}>Mode</text>
           <box flexGrow={1} />
           <box
             paddingLeft={1}
             paddingRight={1}
-            backgroundColor={modeHovered() ? themeV2.background.action("hovered") : undefined}
-            onMouseOver={() => setModeHovered(true)}
+            backgroundColor={modeHovered() && canSwitchMode() ? themeV2.background.action.primary.hovered : undefined}
+            onMouseOver={() => setModeHovered(canSwitchMode())}
             onMouseOut={() => setModeHovered(false)}
-            onMouseUp={() => setMode(mode() === "dark" ? "light" : "dark")}
+            onMouseUp={canSwitchMode() ? () => setMode(nextMode()) : undefined}
           >
-            <text fg={themeV2.text()}>{mode()}</text>
+            <text fg={canSwitchMode() ? themeV2.text.default : themeV2.text.subdued}>{mode()}</text>
           </box>
         </box>
       </box>
@@ -42,16 +44,16 @@ export function DevToolsSidebar() {
         {(group) => (
           <box flexShrink={0} marginBottom={1}>
             <box marginBottom={1}>
-              <text fg={themeV2.text.action()} attributes={TextAttributes.BOLD}>
+              <text fg={themeV2.text.action.primary.default} attributes={TextAttributes.BOLD}>
                 {group.title}
               </text>
             </box>
             <For each={group.entries}>
               {(entry) => (
                 <box flexDirection="row">
-                  <text fg={themeV2.text.subdued()}>{entry.key}</text>
+                  <text fg={themeV2.text.subdued}>{entry.key}</text>
                   <box flexGrow={1} />
-                  <text fg={themeV2.text()}>{String(entry.value)}</text>
+                  <text fg={themeV2.text.default}>{String(entry.value)}</text>
                 </box>
               )}
             </For>

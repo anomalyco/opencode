@@ -324,7 +324,7 @@ describe("DatabaseMigration", () => {
   test("serializes concurrent embedded initialization for one database path", async () => {
     await using tmp = await tmpdir()
     const filename = path.join(tmp.path, "embedded.sqlite")
-    const layers = [Database.layerFromPath(filename), Database.layerFromPath(filename)]
+    const layers = [Database.layer({ path: filename }), Database.layer({ path: filename })]
 
     await Effect.runPromise(
       Effect.all(

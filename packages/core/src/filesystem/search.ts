@@ -2,7 +2,7 @@ export * as FileSystemSearch from "./search"
 
 import { makeLocationNode } from "../effect/app-node"
 import path from "path"
-import { Context, Effect, Layer, Scope } from "effect"
+import { Context, Effect, Layer, Schema, Scope } from "effect"
 import { Fff } from "#fff"
 import fuzzysort from "fuzzysort"
 import { FileSystem } from "../filesystem"
@@ -10,13 +10,17 @@ import { FSUtil } from "../fs-util"
 import { Location } from "../location"
 import { Ripgrep } from "../ripgrep"
 import { RelativePath } from "../schema"
-import { Flag } from "../flag/flag"
 
 export interface Interface {
   readonly find: (input: FileSystem.FindInput) => Effect.Effect<FileSystem.Entry[]>
   readonly glob: (input: FileSystem.GlobInput) => Effect.Effect<readonly FileSystem.Entry[]>
   readonly grep: (input: FileSystem.GrepInput) => Effect.Effect<readonly FileSystem.Match[]>
 }
+
+export const Options = Schema.Struct({
+  fff: Schema.optional(Schema.Boolean),
+})
+export type Options = typeof Options.Type
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/FileSystem/Search") {}
 
@@ -232,13 +236,18 @@ export const fffLayer = Layer.effect(
   }),
 )
 
-const layer = Layer.unwrap(
+export const layer = (options?: Options) => Layer.unwrap(
   Effect.gen(function* () {
-    if (Flag.OPENCODE_DISABLE_FFF || !Fff.available()) return ripgrepLayer
+    if (options?.fff === false || (options?.fff === undefined && process.platform === "win32") || !Fff.available())
+      return ripgrepLayer
     const location = yield* Location.Service
     // Non-VCS locations can contain many repositories, so avoid eagerly content-indexing the entire aggregate tree.
     return location.vcs ? fffLayer : ripgrepLayer
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [FSUtil.node, Location.node, Ripgrep.node] })
+export function configured(options?: Options) {
+  return makeLocationNode({ service: Service, layer: layer(options), deps: [FSUtil.node, Location.node, Ripgrep.node] })
+}
+
+export const node = configured()

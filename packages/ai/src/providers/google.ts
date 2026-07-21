@@ -2,14 +2,20 @@ import type { RouteDefaultsInput } from "../route/client"
 import { Auth } from "../route/auth"
 import type { ProviderAuthOption } from "../route/auth-options"
 import type { ProviderPackage } from "../provider-package"
-import { ProviderID, type ModelID, type ProviderOptions } from "../schema"
-import * as Gemini from "../protocols/gemini"
+import { HttpOptions, ProviderID, mergeHttpOptions, type ModelID, type ProviderOptions } from "../schema"
+import { Gemini } from "../protocols/gemini"
+import { GoogleImages } from "../protocols/google-images"
+
+export type { GoogleImageOptions } from "../protocols/google-images"
 
 export const id = ProviderID.make("google")
 
 export const routes = [Gemini.route]
 
-export type Config = RouteDefaultsInput & ProviderAuthOption<"optional"> & { readonly baseURL?: string }
+export type Config = RouteDefaultsInput &
+  ProviderAuthOption<"optional"> & {
+    readonly baseURL?: string
+  }
 
 export interface Settings extends ProviderPackage.Settings {
   readonly apiKey?: string
@@ -31,9 +37,18 @@ const configuredRoute = (input: Config) => {
 
 export const configure = (input: Config = {}) => {
   const route = configuredRoute(input)
+  const image = (modelID: string | ModelID) =>
+    GoogleImages.model({
+      id: modelID,
+      auth: auth(input),
+      baseURL: input.baseURL,
+      headers: input.headers,
+      http: mergeHttpOptions(input.http === undefined ? undefined : HttpOptions.make(input.http)),
+    })
   return {
     id,
     model: (modelID: string | ModelID) => route.model({ id: modelID }),
+    image,
     configure,
   }
 }
@@ -48,3 +63,5 @@ export const model: ProviderPackage.Definition<Settings>["model"] = (modelID, se
     limits: settings.limits,
     providerOptions: settings.providerOptions,
   }).model(modelID)
+
+export const image = provider.image

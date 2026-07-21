@@ -18,7 +18,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   return (
     <Show when={session()}>
       <box
-        backgroundColor={themeV2.background()}
+        backgroundColor={themeV2.background.default}
         width={42}
         height="100%"
         paddingTop={1}
@@ -32,8 +32,8 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
           scrollAcceleration={scrollAcceleration()}
           verticalScrollbarOptions={{
             trackOptions: {
-              backgroundColor: themeV2.background(),
-              foregroundColor: themeV2.scrollbar(),
+              backgroundColor: themeV2.background.default,
+              foregroundColor: themeV2.scrollbar.default,
             },
           }}
         >
@@ -45,11 +45,11 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
               title={session()!.title}
             >
               <box paddingRight={1}>
-                <text fg={themeV2.text()}>
+                <text fg={themeV2.text.default}>
                   <b>{session()!.title}</b>
                 </text>
                 <Show when={session()!.location.workspaceID}>
-                  <text fg={themeV2.text.subdued()}>{session()!.location.workspaceID}</text>
+                  <text fg={themeV2.text.subdued}>{session()!.location.workspaceID}</text>
                 </Show>
               </box>
             </pluginRuntime.Slot>

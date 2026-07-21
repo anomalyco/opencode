@@ -85,7 +85,7 @@ function DiffViewer(props: { context: Plugin.Context }) {
   const config = useConfig()
   const dialog = useDialog()
   const themeState = useTheme()
-  const theme = () => themeState.theme
+  const themeV2 = themeState.themeV2
   const params = () => {
     const route = props.context.ui.router.current()
     return (route.type === "plugin" ? route.data : undefined) as
@@ -741,11 +741,11 @@ function DiffViewer(props: { context: Plugin.Context }) {
     <box position="absolute" zIndex={2500} left={0} top={0} width={dimensions().width} height={dimensions().height}>
       <PanelGroup axis="y" width="100%" height="100%">
         <Panel border="none" flexShrink={0} padding={0} paddingLeft={1}>
-          <text fg={theme().text}>Diff </text>
-          <text fg={theme().textMuted}>{diffSourceLabel(mode())}</text>
+          <text fg={themeV2.text.default}>Diff </text>
+          <text fg={themeV2.text.subdued}>{diffSourceLabel(mode())}</text>
           <box flexGrow={1} />
           <Show when={!diff.loading && !diff.error}>
-            <text fg={theme().textMuted}>
+            <text fg={themeV2.text.subdued}>
               {files().length} {files().length === 1 ? "file" : "files"}
             </text>
           </Show>
@@ -756,19 +756,21 @@ function DiffViewer(props: { context: Plugin.Context }) {
             <Match when={diff.loading}>
               <Separator axis="x" />
               <box flexGrow={1} paddingLeft={1}>
-                <text fg={theme().textMuted}>Loading diff…</text>
+                <text fg={themeV2.text.subdued}>Loading diff…</text>
               </box>
             </Match>
             <Match when={!diff.loading && diff.error}>
               <Separator axis="x" />
               <box flexGrow={1} paddingLeft={1}>
-                <text fg={theme().error}>Could not load diff. Reopen the diff viewer to try again.</text>
+                <text fg={themeV2.text.feedback.error.default}>
+                  Could not load diff. Reopen the diff viewer to try again.
+                </text>
               </box>
             </Match>
             <Match when={!diff.loading && files().length === 0}>
               <Separator axis="x" />
               <box flexGrow={1} paddingLeft={1}>
-                <text fg={theme().textMuted}>No changes to show</text>
+                <text fg={themeV2.text.subdued}>No changes to show</text>
               </box>
             </Match>
             <Match when={!diff.loading}>
@@ -778,7 +780,6 @@ function DiffViewer(props: { context: Plugin.Context }) {
                     files={files()}
                     loading={diff.loading}
                     error={diff.error}
-                    theme={theme()}
                     focused={focus() === "files"}
                     width={FILE_TREE_WIDTH}
                     highlightedNode={highlightedFileNode()}
@@ -812,24 +813,26 @@ function DiffViewer(props: { context: Plugin.Context }) {
                               paddingLeft={1}
                               paddingRight={1}
                               border={patchLeftBorder()}
-                              borderColor={theme().border}
+                              borderColor={themeV2.border.default}
                             >
-                              <text fg={reviewed() ? theme().textMuted : theme().text}>{entry.file.file}</text>
+                              <text fg={reviewed() ? themeV2.text.subdued : themeV2.text.default}>
+                                {entry.file.file}
+                              </text>
                               <box flexGrow={1} />
-                              <text fg={reviewed() ? theme().textMuted : theme().diffAdded}>
+                              <text fg={reviewed() ? themeV2.text.subdued : themeV2.diff.text.added}>
                                 +{entry.file.additions}
                               </text>
-                              <text fg={reviewed() ? theme().textMuted : theme().diffRemoved}>
+                              <text fg={reviewed() ? themeV2.text.subdued : themeV2.diff.text.removed}>
                                 -{entry.file.deletions}
                               </text>
                             </box>
                             <Separator axis="x" start={showFileTree() ? "edge" : undefined} />
                             <Show
                               when={entry.file.patch}
-                              fallback={<text fg={theme().textMuted}>No patch available for this file.</text>}
+                              fallback={<text fg={themeV2.text.subdued}>No patch available for this file.</text>}
                             >
                               {(patch) => (
-                                <box border={patchLeftBorder()} borderColor={theme().border}>
+                                <box border={patchLeftBorder()} borderColor={themeV2.border.default}>
                                   <diff
                                     ref={(element: DiffRenderable) => diffNodeByFileIndex.set(entry.fileIndex, element)}
                                     diff={patch()}
@@ -839,17 +842,27 @@ function DiffViewer(props: { context: Plugin.Context }) {
                                     showLineNumbers={true}
                                     width="100%"
                                     wrapMode="char"
-                                    fg={reviewed() ? theme().textMuted : theme().text}
-                                    addedBg={reviewed() ? theme().backgroundElement : theme().diffAddedBg}
-                                    removedBg={reviewed() ? theme().backgroundElement : theme().diffRemovedBg}
-                                    addedSignColor={reviewed() ? theme().textMuted : theme().diffHighlightAdded}
-                                    removedSignColor={reviewed() ? theme().textMuted : theme().diffHighlightRemoved}
-                                    lineNumberFg={theme().diffLineNumber}
+                                    fg={reviewed() ? themeV2.text.subdued : themeV2.text.default}
+                                    addedBg={
+                                      reviewed() ? themeV2.background.surface.overlay : themeV2.diff.background.added
+                                    }
+                                    removedBg={
+                                      reviewed() ? themeV2.background.surface.overlay : themeV2.diff.background.removed
+                                    }
+                                    addedSignColor={reviewed() ? themeV2.text.subdued : themeV2.diff.highlight.added}
+                                    removedSignColor={
+                                      reviewed() ? themeV2.text.subdued : themeV2.diff.highlight.removed
+                                    }
+                                    lineNumberFg={themeV2.diff.lineNumber.text}
                                     addedLineNumberBg={
-                                      reviewed() ? theme().backgroundElement : theme().diffAddedLineNumberBg
+                                      reviewed()
+                                        ? themeV2.background.surface.overlay
+                                        : themeV2.diff.lineNumber.background.added
                                     }
                                     removedLineNumberBg={
-                                      reviewed() ? theme().backgroundElement : theme().diffRemovedLineNumberBg
+                                      reviewed()
+                                        ? themeV2.background.surface.overlay
+                                        : themeV2.diff.lineNumber.background.removed
                                     }
                                   />
                                 </box>
@@ -860,7 +873,11 @@ function DiffViewer(props: { context: Plugin.Context }) {
                       }}
                     </For>
                     <Show when={patchFillerHeight() > 0}>
-                      <box height={patchFillerHeight()} border={patchLeftBorder()} borderColor={theme().border} />
+                      <box
+                        height={patchFillerHeight()}
+                        border={patchLeftBorder()}
+                        borderColor={themeV2.border.default}
+                      />
                     </Show>
                   </scrollbox>
                   <Separator axis="x" start={showFileTree() ? "edge-in" : undefined} />
@@ -873,57 +890,57 @@ function DiffViewer(props: { context: Plugin.Context }) {
         <Panel flexShrink={0} gap={2} paddingLeft={1} border="none">
           <Show when={switchFocusShortcut()}>
             {(shortcut) => (
-              <text fg={theme().text}>
-                {shortcut()} <span style={{ fg: theme().textMuted }}>focus file tree</span>
+              <text fg={themeV2.text.default}>
+                {shortcut()} <span style={{ fg: themeV2.text.subdued }}>focus file tree</span>
               </text>
             )}
           </Show>
           <Show when={nextFileShortcut()}>
             {(shortcut) => (
-              <text fg={theme().text}>
-                {shortcut()} <span style={{ fg: theme().textMuted }}>next file</span>
+              <text fg={themeV2.text.default}>
+                {shortcut()} <span style={{ fg: themeV2.text.subdued }}>next file</span>
               </text>
             )}
           </Show>
           <Show when={nextHunkShortcut()}>
             {(shortcut) => (
-              <text fg={theme().text}>
-                {shortcut()} <span style={{ fg: theme().textMuted }}>next hunk</span>
+              <text fg={themeV2.text.default}>
+                {shortcut()} <span style={{ fg: themeV2.text.subdued }}>next hunk</span>
               </text>
             )}
           </Show>
           <Show when={previousHunkShortcut()}>
             {(shortcut) => (
-              <text fg={theme().text}>
-                {shortcut()} <span style={{ fg: theme().textMuted }}>previous hunk</span>
+              <text fg={themeV2.text.default}>
+                {shortcut()} <span style={{ fg: themeV2.text.subdued }}>previous hunk</span>
               </text>
             )}
           </Show>
           <Show when={previousFileShortcut()}>
             {(shortcut) => (
-              <text fg={theme().text}>
-                {shortcut()} <span style={{ fg: theme().textMuted }}>previous file</span>
+              <text fg={themeV2.text.default}>
+                {shortcut()} <span style={{ fg: themeV2.text.subdued }}>previous file</span>
               </text>
             )}
           </Show>
           <Show when={switchSourceShortcut()}>
             {(shortcut) => (
-              <text fg={theme().text}>
-                {shortcut()} <span style={{ fg: theme().textMuted }}>switch source</span>
+              <text fg={themeV2.text.default}>
+                {shortcut()} <span style={{ fg: themeV2.text.subdued }}>switch source</span>
               </text>
             )}
           </Show>
           <Show when={markReviewedShortcut()}>
             {(shortcut) => (
-              <text fg={theme().text}>
-                {shortcut()} <span style={{ fg: theme().textMuted }}>mark reviewed</span>
+              <text fg={themeV2.text.default}>
+                {shortcut()} <span style={{ fg: themeV2.text.subdued }}>mark reviewed</span>
               </text>
             )}
           </Show>
           <Show when={helpShortcut()}>
             {(shortcut) => (
-              <text fg={theme().text}>
-                {shortcut()} <span style={{ fg: theme().textMuted }}>all</span>
+              <text fg={themeV2.text.default}>
+                {shortcut()} <span style={{ fg: themeV2.text.subdued }}>all</span>
               </text>
             )}
           </Show>
@@ -934,7 +951,7 @@ function DiffViewer(props: { context: Plugin.Context }) {
 }
 
 function DiffViewerHelpDialog(props: { context: Plugin.Context }) {
-  const { theme } = useTheme()
+  const { themeV2 } = useTheme().contextual("elevated")
   const shortcut = (id: string) => () => props.context.keymap.shortcut(id)
   const rows = [
     {
@@ -1002,30 +1019,30 @@ function DiffViewerHelpDialog(props: { context: Plugin.Context }) {
   return (
     <box paddingLeft={2} paddingRight={2} paddingBottom={1} gap={1}>
       <box flexDirection="row" justifyContent="space-between">
-        <text attributes={TextAttributes.BOLD} fg={theme.text}>
+        <text attributes={TextAttributes.BOLD} fg={themeV2.text.default}>
           Diff shortcuts
         </text>
-        <text fg={theme.textMuted}>esc</text>
+        <text fg={themeV2.text.subdued}>esc</text>
       </box>
       <box flexDirection="row">
-        <text fg={theme.textMuted} width={5} wrapMode="none">
+        <text fg={themeV2.text.subdued} width={5} wrapMode="none">
           Key
         </text>
-        <text fg={theme.textMuted} width={22} wrapMode="none">
+        <text fg={themeV2.text.subdued} width={22} wrapMode="none">
           Action
         </text>
-        <text fg={theme.textMuted}>Description</text>
+        <text fg={themeV2.text.subdued}>Description</text>
       </box>
       <For each={rows}>
         {(row) => (
           <box flexDirection="row">
-            <text fg={theme.text} width={5} wrapMode="none">
+            <text fg={themeV2.text.default} width={5} wrapMode="none">
               {row.shortcut() || "-"}
             </text>
-            <text fg={theme.text} width={22} wrapMode="none">
+            <text fg={themeV2.text.default} width={22} wrapMode="none">
               {row.action}
             </text>
-            <text fg={theme.textMuted}>{row.description}</text>
+            <text fg={themeV2.text.subdued}>{row.description}</text>
           </box>
         )}
       </For>

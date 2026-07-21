@@ -460,7 +460,7 @@ describe("SessionV2.create", () => {
         Effect.promise(() => tmpdir()),
         (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
       )
-      const targetDatabase = Database.layerFromPath(path.join(tmp.path, "target.sqlite"))
+      const targetDatabase = Database.layer({ path: path.join(tmp.path, "target.sqlite") })
       const targetLayer = AppNodeBuilder.build(
         LayerNode.group([Database.node, EventV2.node, SessionProjector.node, SessionStore.node]),
         [[Database.node, targetDatabase]],

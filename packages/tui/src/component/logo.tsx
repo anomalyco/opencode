@@ -8,7 +8,7 @@ export function Logo() {
   const { themeV2 } = useTheme()
 
   const renderLine = (line: string, fg: RGBA, bold: boolean): JSX.Element[] => {
-    const shadow = tint(themeV2.background(), fg, 0.25)
+    const shadow = tint(themeV2.background.default, fg, 0.25)
     const attrs = bold ? TextAttributes.BOLD : undefined
     return Array.from(line).map((char) => {
       if (char === "_") {
@@ -52,8 +52,8 @@ export function Logo() {
       <For each={logo.left}>
         {(line, index) => (
           <box flexDirection="row" gap={1}>
-            <box flexDirection="row">{renderLine(line, themeV2.text.subdued(), false)}</box>
-            <box flexDirection="row">{renderLine(logo.right[index()], themeV2.text(), true)}</box>
+            <box flexDirection="row">{renderLine(line, themeV2.text.subdued, false)}</box>
+            <box flexDirection="row">{renderLine(logo.right[index()], themeV2.text.default, true)}</box>
           </box>
         )}
       </For>

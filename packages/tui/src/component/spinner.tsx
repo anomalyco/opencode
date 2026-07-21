@@ -13,7 +13,7 @@ registerOpencodeSpinner()
 export function Spinner(props: { children?: JSX.Element; color?: RGBA }) {
   const { themeV2 } = useTheme()
   const config = useConfig().data
-  const color = () => props.color ?? themeV2.text.subdued()
+  const color = () => props.color ?? themeV2.text.subdued
   return (
     <Show
       when={config.animations ?? true}

@@ -4,7 +4,6 @@ import { xdgData, xdgCache, xdgConfig, xdgState } from "xdg-basedir"
 import os from "os"
 import { Context, Effect, Layer } from "effect"
 import { Flock } from "./util/flock"
-import { Flag } from "./flag/flag"
 import { makeGlobalNode } from "./effect/app-node"
 
 const app = "opencode"
@@ -61,7 +60,7 @@ export function make(input: Partial<Interface> = {}): Interface {
     home: Path.home,
     data: Path.data,
     cache: Path.cache,
-    config: Flag.OPENCODE_CONFIG_DIR ?? Path.config,
+    config: Path.config,
     state: Path.state,
     tmp: Path.tmp,
     bin: Path.bin,
@@ -73,7 +72,7 @@ export function make(input: Partial<Interface> = {}): Interface {
 
 const layer = Layer.effect(
   Service,
-  Effect.sync(() => Service.of(make())),
+  Effect.sync(() => Service.of(make({ config: process.env.OPENCODE_CONFIG_DIR ?? Path.config }))),
 )
 
 export const node = makeGlobalNode({ service: Service, layer: layer, deps: [] })

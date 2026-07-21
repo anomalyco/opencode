@@ -92,7 +92,6 @@ function footerState(input: Partial<FooterState> = {}) {
   return createSignal<FooterState>({
     phase: "idle",
     status: "",
-    queue: 0,
     model: "gpt-5",
     usage: "",
     first: false,
@@ -158,7 +157,6 @@ async function renderFooter(
           onRows={() => {}}
           onLayout={() => {}}
           onStatus={() => {}}
-          onQueuedRemove={async () => true}
         />
       </Keymap.Provider>
     )
@@ -261,15 +259,9 @@ function footerComposerFrame(root: BoxRenderable | RootRenderable) {
 
 function footerStatusline(root: BoxRenderable | RootRenderable) {
   const status = (RUN_THEME_FALLBACK.footer.status as RGBA).toInts()
-  const accent = (RUN_THEME_FALLBACK.footer.statusAccent as RGBA).toInts()
   const boxes = root.getChildren().filter((item): item is BoxRenderable => item instanceof BoxRenderable)
   for (const box of boxes) {
-    const first = box.getChildren().find((item): item is BoxRenderable => item instanceof BoxRenderable)
-    if (
-      box.backgroundColor?.toInts().every((value, index) => value === status[index]) &&
-      first?.backgroundColor?.toInts().every((value, index) => value === accent[index])
-    )
-      return box
+    if (box.backgroundColor?.toInts().every((value, index) => value === status[index])) return box
     boxes.push(...box.getChildren().filter((item): item is BoxRenderable => item instanceof BoxRenderable))
   }
   throw new Error("Footer statusline not found")
@@ -422,6 +414,7 @@ test("direct skill panel renders searchable skill list", async () => {
     command({ name: "internal", description: "Skill command", source: "skill" }),
     command({ name: "formatter", description: "Apply formatter fixes", source: "skill" }),
   ])
+  const selected: string[] = []
 
   const app = await testRender(
     () => (
@@ -430,7 +423,9 @@ test("direct skill panel renders searchable skill list", async () => {
           theme={() => RUN_THEME_FALLBACK.footer}
           commands={commands}
           onClose={() => {}}
-          onSelect={() => {}}
+          onSelect={(name) => {
+            selected.push(name)
+          }}
         />
       </box>
     ),
@@ -451,6 +446,11 @@ test("direct skill panel renders searchable skill list", async () => {
     expect(frame).toContain("formatter")
     expect(frame).toContain("Apply formatter fixes")
     expect(frame).not.toContain("review")
+    await app.mockInput.typeText("format")
+    await app.renderOnce()
+    expect(app.captureCharFrame()).not.toContain("internal")
+    app.mockInput.pressEnter()
+    expect(selected).toEqual(["formatter"])
   } finally {
     app.renderer.destroy()
   }
@@ -672,8 +672,15 @@ test("direct subagent panel closes when moving up from the first item", async ()
   }
 })
 
-test("direct queued prompt panel renders pending prompt actions", async () => {
-  const [prompts] = createSignal([{ messageID: "m-1", prompt: { text: "fix the auth test", parts: [] } }])
+test("direct pending panel shows durable delivery without edit actions", async () => {
+  const [prompts] = createSignal([
+    {
+      messageID: "m-1",
+      prompt: { text: "fix the auth test", parts: [] },
+      delivery: "queue" as const,
+      admittedSeq: 1,
+    },
+  ])
 
   const app = await testRender(
     () => (
@@ -682,8 +689,6 @@ test("direct queued prompt panel renders pending prompt actions", async () => {
           theme={() => RUN_THEME_FALLBACK.footer}
           prompts={prompts}
           onClose={() => {}}
-          onEdit={() => {}}
-          onDelete={() => {}}
         />
       </box>
     ),
@@ -695,12 +700,14 @@ test("direct queued prompt panel renders pending prompt actions", async () => {
     const frame = app.captureCharFrame()
     const list = panelMenu(app.renderer.root)
 
-    expect(frame).toContain("Queued prompts")
+    expect(frame).toContain("Pending work")
     expect(frame).toContain("fix the auth test")
-    expect(frame).toContain("queued")
+    expect(frame).toContain("queue")
     expect(frame).not.toContain("┌")
     expect(frame).not.toContain("┃")
     expectPaletteList(list, 0)
+    expect(frame).not.toContain("edit")
+    expect(frame).not.toContain("remove")
   } finally {
     app.renderer.destroy()
   }
@@ -981,11 +988,10 @@ test.skip("direct footer clears the synthetic skills draft when the panel closes
   }
 })
 
-test("direct footer shows editable prompts and additional queued work while running", async () => {
+test("direct footer shows authoritative pending work while running", async () => {
   const [state] = createSignal<FooterState>({
     phase: "running",
     status: "",
-    queue: 3,
     model: "gpt-5",
     usage: "",
     first: false,
@@ -1018,7 +1024,14 @@ test("direct footer shows editable prompts and additional queued work while runn
           state={state}
           view={view}
           subagent={subagents}
-          queuedPrompts={() => [{ messageID: "m-queued", prompt: { text: "follow up", parts: [] } }]}
+          queuedPrompts={() => [
+            {
+              messageID: "m-queued",
+              prompt: { text: "follow up", parts: [] },
+              delivery: "queue",
+              admittedSeq: 1,
+            },
+          ]}
           theme={() => RUN_THEME_FALLBACK}
           tuiConfig={tuiConfig}
           onSubmit={() => true}
@@ -1035,7 +1048,6 @@ test("direct footer shows editable prompts and additional queued work while runn
           onRows={() => {}}
           onLayout={() => {}}
           onStatus={() => {}}
-          onQueuedRemove={async () => true}
         />
       </Keymap.Provider>
     )
@@ -1058,30 +1070,25 @@ test("direct footer shows editable prompts and additional queued work while runn
     const frame = app.captureCharFrame()
     const transparent = RGBA.fromValues(0, 0, 0, 0).toInts()
     const tinted = (RUN_THEME_FALLBACK.footer.status as RGBA).toInts()
-    const accent = (RUN_THEME_FALLBACK.footer.statusAccent as RGBA).toInts()
     const statusline = footerStatusline(app.renderer.root)
     const statusItems = statusline.getChildren().filter((item): item is BoxRenderable => item instanceof BoxRenderable)
-    const mode = statusItems[0]
-    const main = statusItems[1]
+    const main = statusItems[0]
     const spinner = main.getChildren()[0]
-    const model = statusItems[2]
-    const queued = statusItems[3]
+    const background = statusItems[1]
+    const queued = statusItems[2]
     const hint = statusItems.at(-1)!
 
     expect(spinner).toBeDefined()
-    expect(frame).toContain("a-model-name-long-enough-to-force-responsive-truncation")
-    expect(frame).toContain("3 queued")
+    expect(frame).toContain("1 pending")
     expect(frame).toContain("ctrl+b background")
-    expect(frame).toContain("ctrl+x q 3 queued")
+    expect(frame).toContain("ctrl+x q 1 pending")
     expect(frame).toContain("↓ subagents")
     expect(frame).toContain("ctrl+p cmd")
-    expect(frame).toContain("a-model-name-long-enough-to-force-responsive-truncation")
     expect(frame).toContain("subagents · ctrl+p cmd")
     expect(frame).not.toContain("1 agent")
     expect(statusline.backgroundColor.toInts()).toEqual(tinted)
-    expect(mode.backgroundColor.toInts()).toEqual(accent)
     expect(main.backgroundColor.toInts()).toEqual(transparent)
-    expect(model.backgroundColor.toInts()).toEqual(transparent)
+    expect(background.backgroundColor.toInts()).toEqual(transparent)
     expect(queued.backgroundColor.toInts()).toEqual(transparent)
     expect(hint.backgroundColor.toInts()).toEqual(transparent)
   } finally {
@@ -1109,9 +1116,7 @@ test("direct footer always offers backgrounding for a foreground subagent", asyn
     await app.renderOnce()
     const frame = app.captureCharFrame()
 
-    expect(frame).toContain("GPT-5")
-    expect(frame).toContain("xhigh · ctrl+b background · ↓ subagents · ctrl+p cmd")
-    expect(frame).toContain("ctrl+b background")
+    expect(frame).toContain("ctrl+b background · ↓ subagents · ctrl+p cmd")
     expect(frame).not.toContain("queued")
   } finally {
     app.cleanup()
@@ -1136,8 +1141,7 @@ test("direct footer hides the subagent hint when only completed subagents remain
     await app.renderOnce()
     const frame = app.captureCharFrame()
 
-    expect(frame).toContain("GPT-5")
-    expect(frame).toContain("xhigh · ctrl+p cmd")
+    expect(frame).toContain("ctrl+p cmd")
     expect(frame).not.toContain("↓ subagents")
   } finally {
     app.cleanup()
@@ -1176,7 +1180,7 @@ test("direct footer shows full usage metadata when room is available", async () 
   }
 })
 
-test("direct footer mode label keeps left padding without a status pill", async () => {
+test("direct footer does not label normal mode as build", async () => {
   const app = await renderFooter()
 
   try {
@@ -1184,10 +1188,10 @@ test("direct footer mode label keeps left padding without a status pill", async 
     const statusline = app
       .captureCharFrame()
       .split("\n")
-      .find((line) => line.includes("BUILD") && line.includes("cmd"))
+      .find((line) => line.includes("cmd"))
 
     expect(statusline).toBeDefined()
-    expect(statusline?.startsWith(" BUILD ")).toBe(true)
+    expect(statusline).not.toContain("BUILD")
   } finally {
     app.cleanup()
   }

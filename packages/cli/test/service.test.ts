@@ -511,7 +511,7 @@ test("a failed service stays registered and owns the selected port until stopped
 }, 30_000)
 
 function withDatabase<A, E>(file: string, effect: Effect.Effect<A, E, Database.Service>) {
-  return Effect.runPromise(effect.pipe(Effect.provide(Database.layerFromPath(file)), Effect.scoped))
+  return Effect.runPromise(effect.pipe(Effect.provide(Database.layer({ path: file })), Effect.scoped))
 }
 
 function waitForExecutionStart(file: string, sessionID: SessionV2.ID) {

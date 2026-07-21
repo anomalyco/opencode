@@ -40,6 +40,7 @@ const background = {
 
 const definition = {
   hue: {} as ThemeDefinition["hue"],
+  categorical: ["blue", "accent"],
   text,
   background,
   border: { default: "$hue.neutral.300" },
@@ -51,6 +52,10 @@ const definition = {
 } satisfies ThemeDefinition
 
 const file = { version: 2, light: definition, dark: definition } satisfies ThemeFile
+const lightOnly = { version: 2, light: definition } satisfies ThemeFile
+const darkOnly = { version: 2, dark: definition } satisfies ThemeFile
+// @ts-expect-error A theme file must provide at least one mode.
+const empty = { version: 2 } satisfies ThemeFile
 
 test("supports property-first definitions, variants, states, and contexts", () => {
   expect(text.action.primary.$hovered).toBe("$hue.neutral.200")
@@ -62,5 +67,9 @@ test("supports property-first definitions, variants, states, and contexts", () =
   expect(background.surface.offset).toBe("$hue.neutral.200")
   expect(definition["@context:elevated"].text?.default).toBe("$hue.neutral.800")
   expect(definition["@context:overlay"].background?.default).toBe("$hue.neutral.300")
+  expect(definition.categorical).toEqual(["blue", "accent"])
   expect(file.light).toBe(definition)
+  expect(lightOnly.light).toBe(definition)
+  expect(darkOnly.dark).toBe(definition)
+  expect(empty.version).toBe(2)
 })

@@ -78,6 +78,25 @@ describe("SessionRunnerModel", () => {
     }),
   )
 
+  it.effect("treats an empty configured API key as omitted", () =>
+    Effect.gen(function* () {
+      const resolved = yield* SessionRunnerModel.fromCatalogModel(
+        model(ProviderV2.aisdk("@ai-sdk/openai"), {
+          settings: { apiKey: "", baseURL: "https://openai.example/v1" },
+        }),
+      )
+      const headers = yield* resolved.route.auth.apply({
+        request: LLM.request({ model: resolved, prompt: "Hello" }),
+        method: "POST",
+        url: "https://openai.example/v1/responses",
+        body: "{}",
+        headers: Headers.empty,
+      })
+
+      expect(headers.authorization).toBeUndefined()
+    }),
+  )
+
   it.effect("uses merged API settings for OpenAI-compatible auth and request defaults", () =>
     Effect.gen(function* () {
       const resolved = yield* SessionRunnerModel.fromCatalogModel(
@@ -634,6 +653,29 @@ describe("SessionRunnerModel", () => {
         package: "aisdk:@ai-sdk/google",
       })
       expect(failure.message).toBe("Unsupported package for test-provider/test-model: aisdk:@ai-sdk/google")
+    }),
+  )
+
+  it.effect("drops an empty API key before loading an AISDK package", () =>
+    Effect.gen(function* () {
+      const native = yield* SessionRunnerModel.fromCatalogModel(
+        model(ProviderV2.aisdk("@ai-sdk/openai"), {
+          settings: { baseURL: "https://openai.example/v1" },
+        }),
+      )
+      yield* SessionRunnerModel.fromCatalogModel(
+        model(ProviderV2.aisdk("@ai-sdk/google"), {
+          settings: { apiKey: "", baseURL: "https://google.example/v1" },
+        }),
+        undefined,
+        {
+          loadAISDK: (runtime) =>
+            Effect.sync(() => {
+              expect(runtime.settings).not.toHaveProperty("apiKey")
+              return native
+            }),
+        },
+      )
     }),
   )
 

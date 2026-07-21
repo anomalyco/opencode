@@ -1,6 +1,5 @@
 import type { MiniFrontendInput } from "@opencode-ai/tui/mini"
 import { createModelPreferenceRepository } from "@opencode-ai/tui/model-preference"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import { Global } from "@opencode-ai/core/global"
 import fs from "node:fs"
 import { readFile } from "node:fs/promises"
@@ -165,7 +164,7 @@ export function createMiniHost(input: {
       sigusr2: signal("SIGUSR2"),
     },
     startup: {
-      showTiming: Flag.OPENCODE_SHOW_TTFD,
+      showTiming: ["1", "true"].includes(process.env.OPENCODE_SHOW_TTFD?.toLowerCase() ?? ""),
       now: () => performance.now(),
     },
     diagnostics: {

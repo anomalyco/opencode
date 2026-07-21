@@ -20,8 +20,10 @@ const instructionLayer = (input: {
   config: string
   locationServiceLayer: Layer.Layer<Location.Service>
   filesystemLayer?: Layer.Layer<FSUtil.Service>
+  project?: boolean
 }) =>
   AppNodeBuilder.build(InstructionDiscovery.node, [
+    [InstructionDiscovery.node, InstructionDiscovery.configured({ project: input.project })],
     [Global.node, Global.layerWith({ config: input.config })],
     [Location.node, input.locationServiceLayer],
     ...(input.filesystemLayer ? [[FSUtil.node, input.filesystemLayer] as const] : []),
@@ -242,15 +244,14 @@ describe("InstructionDiscovery", () => {
 
   it.effect("honors the project instruction opt-out", () =>
     Effect.gen(function* () {
-      const previous = process.env.OPENCODE_DISABLE_PROJECT_CONFIG
       let scanned = false
-      process.env.OPENCODE_DISABLE_PROJECT_CONFIG = "1"
 
       yield* InstructionDiscovery.Service.pipe(
         Effect.flatMap((service) => service.load()),
         Effect.provide(
           instructionLayer({
             config: "/global",
+            project: false,
             filesystemLayer: Layer.effect(
               FSUtil.Service,
               FSUtil.Service.pipe(
@@ -261,12 +262,6 @@ describe("InstructionDiscovery", () => {
               Location.Service,
               Location.Service.of(location({ directory: AbsolutePath.make("/repo") })),
             ),
-          }),
-        ),
-        Effect.ensuring(
-          Effect.sync(() => {
-            if (previous === undefined) delete process.env.OPENCODE_DISABLE_PROJECT_CONFIG
-            else process.env.OPENCODE_DISABLE_PROJECT_CONFIG = previous
           }),
         ),
       )

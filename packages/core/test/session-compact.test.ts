@@ -56,7 +56,7 @@ const locations = Layer.effect(
     () =>
       // The test only needs the compaction location service used by SessionV2.compact.
       // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
-      SessionCompaction.layer.pipe(
+      SessionCompaction.layer().pipe(
         Layer.provide(client),
         Layer.provide(config),
         Layer.provide(models),

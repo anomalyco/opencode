@@ -182,12 +182,11 @@ export const fromCatalogModel = (
   credential?: Credential.Value,
   dependencies: Dependencies = {},
 ): Effect.Effect<Model, UnsupportedPackageError> => {
-  const resolved =
-    credential?.type !== "key" || credential.metadata === undefined
-      ? model
-      : produce(model, (draft) => {
-          draft.body = ProviderV2.mergeOverlay(draft.body, credential.metadata)
-        })
+  const resolved = produce(model, (draft) => {
+    if (draft.settings?.apiKey === "") delete draft.settings.apiKey
+    if (credential?.type === "key" && credential.metadata !== undefined)
+      draft.body = ProviderV2.mergeOverlay(draft.body, credential.metadata)
+  })
   const packageName = ProviderV2.packageName(resolved.package)
   const key = apiKey(resolved, credential)
 

@@ -92,6 +92,7 @@ export const Info = Schema.Struct({
   terminal: Schema.optional(
     Schema.Struct({
       title: Schema.optional(Schema.Boolean).annotate({ description: "Update the terminal window title" }),
+      copy_on_select: Schema.optional(Schema.Boolean).annotate({ description: "Copy selected terminal text" }),
     }),
   ).annotate({ description: "Terminal integration settings" }),
   prompt: Schema.optional(
@@ -129,6 +130,7 @@ export const Info = Schema.Struct({
   debug: Schema.optional(
     Schema.Struct({
       devtools: Schema.optional(Schema.Boolean).annotate({ description: "Show the DevTools sidebar" }),
+      timing: Schema.optional(Schema.Boolean).annotate({ description: "Show time-to-first-draw diagnostics" }),
     }),
   ).annotate({ description: "Debugging settings" }),
   animations: Schema.optional(Schema.Boolean).annotate({ description: "Enable interface animations" }),

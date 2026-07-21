@@ -34,7 +34,10 @@ const ColorValue = Schema.Union([
   Schema.TemplateLiteral(["$", Schema.NonEmptyString]),
 ])
 
-const HueName = Schema.Union([BaseHue, HueAlias])
+export const HueName = Schema.Union([BaseHue, HueAlias])
+export type HueName = Schema.Schema.Type<typeof HueName>
+export const CategoricalDefinition = Schema.Array(HueName).check(Schema.isMinLength(1))
+export type CategoricalDefinition = Schema.Schema.Type<typeof CategoricalDefinition>
 const HueColorValue = Schema.Union([HexColor, Schema.TemplateLiteral(["$hue.", HueName, ".", HueStep])])
 
 const ContextKey = Schema.Literals(["@context:elevated", "@context:overlay"])
@@ -137,15 +140,35 @@ const BackgroundDefinition = Schema.Struct({
 export type BackgroundDefinition = Schema.Schema.Type<typeof BackgroundDefinition>
 
 export const SyntaxToken = Schema.Literals([
-  "comment", "keyword", "function", "variable", "string", "number", "type", "operator", "punctuation",
+  "comment",
+  "keyword",
+  "function",
+  "variable",
+  "string",
+  "number",
+  "type",
+  "operator",
+  "punctuation",
 ])
 export type SyntaxToken = Schema.Schema.Type<typeof SyntaxToken>
 export const SyntaxDefinition = Schema.Record(SyntaxToken, Schema.optionalKey(HueColorValue))
 export type SyntaxDefinition = Schema.Schema.Type<typeof SyntaxDefinition>
 
 export const MarkdownToken = Schema.Literals([
-  "text", "heading", "link", "linkText", "code", "blockQuote", "emphasis", "strong", "horizontalRule", "listItem",
-  "listEnumeration", "image", "imageText", "codeBlock",
+  "text",
+  "heading",
+  "link",
+  "linkText",
+  "code",
+  "blockQuote",
+  "emphasis",
+  "strong",
+  "horizontalRule",
+  "listItem",
+  "listEnumeration",
+  "image",
+  "imageText",
+  "codeBlock",
 ])
 export type MarkdownToken = Schema.Schema.Type<typeof MarkdownToken>
 export const MarkdownDefinition = Schema.Record(MarkdownToken, Schema.optionalKey(HueColorValue))
@@ -194,6 +217,7 @@ export type ThemeTokensDefinition = Schema.Schema.Type<typeof ThemeTokensDefinit
 
 const ThemeDefinitionFields = Schema.Struct({
   hue: HueDefinition,
+  categorical: Schema.optional(CategoricalDefinition),
   ...ThemeTokensDefinition.fields,
   "@context:elevated": Schema.optional(ThemeTokensDefinition),
   "@context:overlay": Schema.optional(ThemeTokensDefinition),
@@ -203,6 +227,7 @@ export type ThemeDefinition = Schema.Schema.Type<typeof ThemeDefinition>
 
 const FileThemeDefinition = Schema.Struct({
   hue: Schema.optional(HueOverrideDefinition),
+  categorical: Schema.optional(CategoricalDefinition),
   ...ThemeTokensDefinition.fields,
   "@context:elevated": Schema.optional(ThemeTokensDefinition),
   "@context:overlay": Schema.optional(ThemeTokensDefinition),
@@ -212,6 +237,7 @@ export type FileThemeDefinition = Schema.Schema.Type<typeof FileThemeDefinition>
 const MergeModeDefinition = Schema.Struct({
   mergeMode: Schema.Literal(true),
   hue: Schema.optional(HueOverrideDefinition),
+  categorical: Schema.optional(CategoricalDefinition),
   ...ThemeTokensDefinition.fields,
   "@context:elevated": Schema.optional(ThemeTokensDefinition),
   "@context:overlay": Schema.optional(ThemeTokensDefinition),
@@ -225,5 +251,8 @@ const FileMetadata = {
   version: Schema.Literal(2),
   standalone: Schema.optional(Schema.Boolean),
 }
-export const ThemeFile = Schema.Struct({ ...FileMetadata, light: ModeDefinition, dark: ModeDefinition })
+export const ThemeFile = Schema.Union([
+  Schema.Struct({ ...FileMetadata, light: ModeDefinition, dark: Schema.optional(ModeDefinition) }),
+  Schema.Struct({ ...FileMetadata, light: Schema.optional(ModeDefinition), dark: ModeDefinition }),
+])
 export type ThemeFile = Schema.Schema.Type<typeof ThemeFile>

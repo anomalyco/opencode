@@ -5,7 +5,7 @@ import { spawn, type ChildProcess } from "child_process"
 import { readFile } from "fs/promises"
 import { statSync } from "fs"
 import { setTimeout } from "node:timers/promises"
-import { Flag } from "../flag/flag"
+import { Schema } from "effect"
 import { FSUtil } from "../fs-util"
 import { which } from "../util/which"
 
@@ -27,6 +27,11 @@ export type Item = {
   name: string
   acceptable: boolean
 }
+
+export const Options = Schema.Struct({
+  gitbash: Schema.optional(Schema.String),
+})
+export type Options = typeof Options.Type
 
 export async function killTree(proc: ChildProcess, opts?: { exited?: () => boolean }): Promise<void> {
   const pid = proc.pid
@@ -63,14 +68,14 @@ function stat(file: string) {
   return statSync(file, { throwIfNoEntry: false }) ?? undefined
 }
 
-function full(file: string) {
+function full(file: string, options?: Options) {
   if (process.platform !== "win32") return file
   const shell = FSUtil.windowsPath(file)
   if (path.win32.dirname(shell) !== ".") {
-    if (shell.startsWith("/") && name(shell) === "bash") return gitbash() || shell
+    if (shell.startsWith("/") && name(shell) === "bash") return gitbash(options) || shell
     return shell
   }
-  if (name(shell) === "bash") return gitbash() || which(shell) || shell
+  if (name(shell) === "bash") return gitbash(options) || which(shell) || shell
   return which(shell) || shell
 }
 
@@ -86,8 +91,8 @@ function rooted(file: string) {
   return path.isAbsolute(FSUtil.windowsPath(file))
 }
 
-function resolve(file: string) {
-  const shell = full(file)
+function resolve(file: string, options?: Options) {
+  const shell = full(file, options)
   if (rooted(shell)) {
     if (stat(shell)?.isFile()) return shell
     return
@@ -95,12 +100,12 @@ function resolve(file: string) {
   return which(shell) ?? undefined
 }
 
-function win() {
+function win(options?: Options) {
   return Array.from(
     new Set(
-      [which("pwsh"), which("powershell"), gitbash(), process.env.COMSPEC || "cmd.exe"]
+      [which("pwsh"), which("powershell"), gitbash(options), process.env.COMSPEC || "cmd.exe"]
         .filter((item): item is string => Boolean(item))
-        .map(full),
+        .map((file) => full(file, options)),
     ),
   )
 }
@@ -111,18 +116,18 @@ async function unix() {
   return ["/bin/bash", "/bin/zsh", "/bin/sh"]
 }
 
-function select(file: string | undefined, opts?: { acceptable?: boolean }) {
+function select(file: string | undefined, options?: Options, opts?: { acceptable?: boolean }) {
   if (file && (!opts?.acceptable || ok(file))) {
-    const shell = resolve(file)
+    const shell = resolve(file, options)
     if (shell) return shell
   }
-  if (process.platform === "win32") return win()[0]
+  if (process.platform === "win32") return win(options)[0]
   return fallback()
 }
 
-export function gitbash() {
+export function gitbash(options?: Options) {
   if (process.platform !== "win32") return
-  if (Flag.OPENCODE_GIT_BASH_PATH) return Flag.OPENCODE_GIT_BASH_PATH
+  if (options?.gitbash) return options.gitbash
   const git = which("git")
   if (!git) return
   const file = path.join(git, "..", "..", "bin", "bash.exe")
@@ -153,12 +158,12 @@ export function ps(file: string) {
   return meta(file)?.ps === true
 }
 
-function info(file: string): Item {
-  const item = full(file)
+function info(file: string, options?: Options): Item {
+  const item = full(file, options)
   const n = name(item)
   return {
     path: item,
-    name: resolve(n) ? n : item,
+    name: resolve(n, options) ? n : item,
     acceptable: ok(item),
   }
 }
@@ -175,8 +180,9 @@ export function args(file: string, command: string) {
 let defaultPreferred: string | undefined
 let defaultAcceptable: string | undefined
 
-export function preferred(configShell?: string) {
-  if (configShell) return select(configShell)
+export function preferred(configShell?: string, options?: Options) {
+  if (configShell) return select(configShell, options)
+  if (options?.gitbash) return select(process.env.SHELL, options)
   defaultPreferred ??= select(process.env.SHELL)
   return defaultPreferred
 }
@@ -184,16 +190,17 @@ preferred.reset = () => {
   defaultPreferred = undefined
 }
 
-export function acceptable(configShell?: string) {
-  if (configShell) return select(configShell, { acceptable: true })
-  defaultAcceptable ??= select(process.env.SHELL, { acceptable: true })
+export function acceptable(configShell?: string, options?: Options) {
+  if (configShell) return select(configShell, options, { acceptable: true })
+  if (options?.gitbash) return select(process.env.SHELL, options, { acceptable: true })
+  defaultAcceptable ??= select(process.env.SHELL, undefined, { acceptable: true })
   return defaultAcceptable
 }
 acceptable.reset = () => {
   defaultAcceptable = undefined
 }
 
-export async function list(): Promise<Item[]> {
-  const shells = process.platform === "win32" ? win() : await unix()
-  return shells.filter((s) => resolve(s)).map(info)
+export async function list(options?: Options): Promise<Item[]> {
+  const shells = process.platform === "win32" ? win(options) : await unix()
+  return shells.filter((shell) => resolve(shell, options)).map((shell) => info(shell, options))
 }

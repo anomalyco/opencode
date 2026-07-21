@@ -5,8 +5,8 @@ import { useTheme } from "../context/theme"
 import { MouseButton, Renderable, RGBA } from "@opentui/core"
 import { createStore } from "solid-js/store"
 import { useToast } from "./toast"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import { useClipboard } from "../context/clipboard"
+import { useConfig } from "../config"
 
 export function Dialog(
   props: ParentProps<{
@@ -59,7 +59,7 @@ export function Dialog(
         }}
         width={width()}
         maxWidth={dimensions().width - 2}
-        backgroundColor={themeV2.background()}
+        backgroundColor={themeV2.background.default}
         paddingTop={1}
       >
         {props.children}
@@ -197,6 +197,8 @@ export function DialogProvider(props: ParentProps) {
   const renderer = useRenderer()
   const toast = useToast()
   const clipboard = useClipboard()
+  const config = useConfig()
+  const copyOnSelectEnabled = () => config.data.terminal?.copy_on_select ?? process.platform !== "win32"
 
   function copySelection() {
     const text = renderer.getSelection()?.getSelectedText()
@@ -216,14 +218,14 @@ export function DialogProvider(props: ParentProps) {
         position="absolute"
         zIndex={3000}
         onMouseDown={(evt: { button: number; preventDefault(): void; stopPropagation(): void }) => {
-          if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
+          if (copyOnSelectEnabled()) return
           if (evt.button !== MouseButton.RIGHT) return
 
           if (!copySelection()) return
           evt.preventDefault()
           evt.stopPropagation()
         }}
-        onMouseUp={!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT ? copySelection : undefined}
+        onMouseUp={copyOnSelectEnabled() ? copySelection : undefined}
       >
         <Show when={value.stack.length}>
           <Dialog onClose={() => value.clear()} size={value.size} centered={value.centered}>

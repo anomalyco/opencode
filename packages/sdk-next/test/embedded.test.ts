@@ -1,13 +1,10 @@
 import fs from "fs/promises"
 import path from "path"
 import { expect } from "bun:test"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import { Deferred, Effect, Latch, Layer, Option, Ref, Schema, Stream } from "effect"
 import { testEffect } from "../../core/test/lib/effect"
 import { tmpdir } from "../../core/test/fixture/tmpdir"
 import type { OpenCodeEvent } from "../src"
-
-Flag.OPENCODE_DB = ":memory:"
 
 const it = testEffect(Layer.empty)
 type Sdk = typeof import("../src")

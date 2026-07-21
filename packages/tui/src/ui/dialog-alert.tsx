@@ -30,27 +30,27 @@ export function DialogAlert(props: DialogAlertProps) {
   return (
     <box paddingLeft={2} paddingRight={2} gap={1}>
       <box flexDirection="row" justifyContent="space-between">
-        <text attributes={TextAttributes.BOLD} fg={themeV2.text()}>
+        <text attributes={TextAttributes.BOLD} fg={themeV2.text.default}>
           {props.title}
         </text>
-        <text fg={themeV2.text.subdued()} onMouseUp={() => dialog.clear()}>
+        <text fg={themeV2.text.subdued} onMouseUp={() => dialog.clear()}>
           esc
         </text>
       </box>
       <box paddingBottom={1}>
-        <text fg={themeV2.text.subdued()}>{props.message}</text>
+        <text fg={themeV2.text.subdued}>{props.message}</text>
       </box>
       <box flexDirection="row" justifyContent="flex-end" paddingBottom={1}>
         <box
           paddingLeft={3}
           paddingRight={3}
-          backgroundColor={themeV2.background.action("focused")}
+          backgroundColor={themeV2.background.action.primary.focused}
           onMouseUp={() => {
             props.onConfirm?.()
             dialog.clear()
           }}
         >
-          <text fg={themeV2.text.action("focused")}>ok</text>
+          <text fg={themeV2.text.action.primary.focused}>ok</text>
         </box>
       </box>
     </box>

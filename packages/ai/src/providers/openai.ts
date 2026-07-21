@@ -5,7 +5,7 @@ import { HttpOptions, ProviderID, ToolDefinition, mergeHttpOptions, type ModelID
 import * as OpenAIChat from "../protocols/openai-chat"
 import * as OpenAIResponses from "../protocols/openai-responses"
 import { withOpenAIOptions, type OpenAIProviderOptionsInput } from "./openai-options"
-import { OpenAIImages, type OpenAIImageOptions } from "../protocols/openai-images"
+import { OpenAIImages, type OpenAIImageString } from "../protocols/openai-images"
 
 export type { OpenAIOptionsInput, OpenAIResponseIncludable } from "./openai-options"
 export type { OpenAIImageOptions } from "../protocols/openai-images"
@@ -22,22 +22,19 @@ export type Config = RouteDefaultsInput &
     readonly baseURL?: string
     readonly queryParams?: Record<string, string>
     readonly providerOptions?: OpenAIProviderOptionsInput
-    readonly image?: ImageConfig
   }
 
-export interface ImageConfig {
-  readonly providerOptions?: OpenAIImageOptions
-}
-
 export interface ImageGenerationOptions {
-  readonly action?: "auto" | "generate" | "edit"
-  readonly background?: "auto" | "opaque" | "transparent"
-  readonly inputFidelity?: "low" | "high"
+  readonly action?: OpenAIImageString<"auto" | "generate" | "edit">
+  readonly background?: OpenAIImageString<"auto" | "opaque" | "transparent">
+  readonly inputFidelity?: OpenAIImageString<"low" | "high">
   readonly outputCompression?: number
-  readonly outputFormat?: "png" | "jpeg" | "webp"
+  readonly outputFormat?: OpenAIImageString<"png" | "jpeg" | "webp">
   readonly partialImages?: number
-  readonly quality?: "auto" | "low" | "medium" | "high"
-  readonly size?: string
+  readonly quality?: OpenAIImageString<"auto" | "low" | "medium" | "high" | "standard" | "hd">
+  readonly size?: OpenAIImageString<
+    "auto" | "256x256" | "512x512" | "1024x1024" | "1536x1024" | "1024x1536" | "1792x1024" | "1024x1792"
+  >
 }
 
 export const imageGeneration = (options: ImageGenerationOptions = {}) =>
@@ -73,7 +70,7 @@ export interface Settings extends ProviderPackage.Settings {
 const auth = (options: ProviderAuthOption<"optional">) => AuthOptions.bearer(options, "OPENAI_API_KEY")
 
 const defaults = (input: Config) => {
-  const { apiKey: _, auth: _auth, baseURL: _baseURL, queryParams: _queryParams, image: _image, ...rest } = input
+  const { apiKey: _, auth: _auth, baseURL: _baseURL, queryParams: _queryParams, ...rest } = input
   return rest
 }
 
@@ -99,14 +96,10 @@ export const configure = (input: Config = {}) => {
       auth: auth(input),
       baseURL: input.baseURL,
       headers: input.headers,
-      defaults: {
-        providerOptions:
-          input.image?.providerOptions === undefined ? undefined : { openai: { ...input.image.providerOptions } },
-        http: mergeHttpOptions(
-          input.http === undefined ? undefined : HttpOptions.make(input.http),
-          input.queryParams === undefined ? undefined : new HttpOptions({ query: input.queryParams }),
-        ),
-      },
+      http: mergeHttpOptions(
+        input.http === undefined ? undefined : HttpOptions.make(input.http),
+        input.queryParams === undefined ? undefined : new HttpOptions({ query: input.queryParams }),
+      ),
     })
 
   return {

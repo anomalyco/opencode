@@ -153,9 +153,16 @@ export interface Interface {
   readonly entries: () => Effect.Effect<Entry[]>
 }
 
+export const Options = Schema.Struct({
+  project: Schema.optional(Schema.Boolean),
+  file: Schema.optional(Schema.String),
+  content: Schema.optional(Schema.String),
+})
+export type Options = typeof Options.Type
+
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Config") {}
 
-const layer = Layer.effect(
+export const layer = (options?: Options) => Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
@@ -239,7 +246,7 @@ const layer = Layer.effect(
       const globalAgentsDirectory = AbsolutePath.make(path.join(global.home, ".agents"))
       const globalClaudeDirectory = AbsolutePath.make(path.join(global.home, ".claude"))
       const locationIsGlobal = path.resolve(location.directory) === path.resolve(global.config)
-      const discovered = locationIsGlobal
+      const discovered = locationIsGlobal || options?.project === false
         ? []
         : yield* fs
             .up({
@@ -288,14 +295,39 @@ const layer = Layer.effect(
         Effect.map((entries) => entries.flat()),
       )
 
+      const file = options?.file
+      const explicit = file
+        ? yield* loadFile(path.resolve(file)).pipe(
+            Effect.map((config) => [
+              ...(config ? [config] : []),
+              new File({ type: "file", path: AbsolutePath.make(path.resolve(file)) }),
+            ]),
+            Effect.orDie,
+          )
+        : []
+      const content = options?.content
+        ? yield* ConfigVariable.substitute({
+            type: "virtual",
+            source: "OPENCODE_CONFIG_CONTENT",
+            dir: location.directory,
+            text: options.content,
+          }).pipe(
+            Effect.map(parseInfo),
+            Effect.map((info) => (info ? [new Document({ type: "document", info })] : [])),
+            Effect.orDie,
+          )
+        : []
+
       const supplementary = yield* Effect.forEach(directories, loadDirectory).pipe(Effect.orDie)
       return [
         ...claude,
         ...agents,
         ...(supplementary[0] ?? []),
+        ...explicit,
         ...direct,
         ...supplementary.slice(1).flat(),
         ...(yield* loadWellknown().pipe(Effect.orDie)),
+        ...content,
       ]
     })
 
@@ -394,8 +426,12 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeLocationNode({
-  service: Service,
-  layer,
-  deps: [Watcher.node, EventV2.node, FSUtil.node, Global.node, Location.node, Credential.node, WellKnown.node],
-})
+export function configured(options?: Options) {
+  return makeLocationNode({
+    service: Service,
+    layer: layer(options),
+    deps: [Watcher.node, EventV2.node, FSUtil.node, Global.node, Location.node, Credential.node, WellKnown.node],
+  })
+}
+
+export const node = configured()

@@ -1,158 +1,162 @@
-import { defineScript } from "opencode-drive"
+import { Effect } from "effect"
+import { defineScript, Llm } from "opencode-drive"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
 
 export default defineScript({
   launch: "manual",
-  setup({ config }) {
-    config.autoupdate = false
-  },
-  async run({ artifacts, llm, server, signal }) {
-    await configureServicePort(artifacts)
-    await server.launch()
+  config: { autoupdate: false },
+  run: ({ artifacts, llm, server }) =>
+    Effect.gen(function* () {
+      yield* Effect.promise(() => configureServicePort(artifacts))
+      yield* server.launch()
 
-    const registration = await serviceRegistration(artifacts)
-    const root = path.resolve(import.meta.dir, "../../../..")
-    const preload = Bun.resolveSync("@opentui/solid/preload", path.join(root, "packages/cli"))
-    const session = `mini-stage2-${process.pid}`
-    const snapshots = path.join(artifacts, "mini-stage2")
-    await mkdir(snapshots, { recursive: true })
+      const registration = yield* Effect.promise(() => serviceRegistration(artifacts))
+      const root = path.resolve(import.meta.dir, "../../../..")
+      const preload = Bun.resolveSync("@opentui/solid/preload", path.join(root, "packages/cli"))
+      const session = `mini-stage2-${process.pid}`
+      const snapshots = path.join(artifacts, "mini-stage2")
+      yield* Effect.promise(() => mkdir(snapshots, { recursive: true }))
 
-    llm.queue(
-      llm.toolCall({
-        index: 0,
-        id: "mini-shell",
-        name: "shell",
-        input: { command: "printf 'drive-mini-tool-output\\n'" },
-      }),
-      llm.finish("tool-calls"),
-    )
-    llm.queue(llm.text("drive mini response complete", { delay: 5, chunkSize: 4 }))
-
-    const abort = () => {
-      void tmux(["kill-session", "-t", session], true).catch(() => {})
-    }
-    signal.addEventListener("abort", abort, { once: true })
-    try {
-      await tmux([
-        "new-session",
-        "-d",
-        "-s",
-        session,
-        "-x",
-        "140",
-        "-y",
-        "30",
-        "--",
-        "env",
-        `PWD=${path.join(artifacts, "files")}`,
-        `OPENCODE_PASSWORD=${registration.password}`,
-        `OPENCODE_CONFIG_DIR=${path.join(artifacts, "files/.opencode")}`,
-        `OPENCODE_TEST_HOME=${artifacts}`,
-        `XDG_CACHE_HOME=${path.join(artifacts, "home/.cache")}`,
-        `XDG_CONFIG_HOME=${path.join(artifacts, "home/.config")}`,
-        `XDG_DATA_HOME=${path.join(artifacts, "logs")}`,
-        `XDG_STATE_HOME=${path.join(artifacts, "home/.local/state")}`,
-        "OPENCODE_DISABLE_AUTOUPDATE=1",
-        "OPENCODE_DIRECT_TRACE=1",
-        process.execPath,
-        "--conditions=browser",
-        `--preload=${preload}`,
-        path.join(root, "packages/cli/src/index.ts"),
-        "mini",
-        "--server",
-        registration.url,
-        "--model",
-        "simulation/gpt-sim-model",
-      ])
-      await tmux(["set-option", "-t", session, "remain-on-exit", "on"])
-
-      const first = await waitForPane(session, "OpenCode")
-      await Bun.write(path.join(snapshots, "01-first-paint.txt"), first)
-      if (first.includes("drive mini response complete")) throw new Error("response rendered before prompt submission")
-
-      await waitForPane(session, "Simulated Model", 15_000)
-      await tmux(["send-keys", "-t", session, "-l", "exercise the mini frontend"])
-      await Bun.sleep(100)
-      await tmux(["send-keys", "-H", "-t", session, "0d"])
-      const completed = await waitForPane(session, "drive mini response complete", 20_000)
-      if (!completed.includes("drive-mini-tool-output")) throw new Error("shell tool output was not rendered")
-      await Bun.write(path.join(snapshots, "02-tool-and-response.txt"), completed)
-
-      await Bun.sleep(500)
-      const resizeOutput = path.join(snapshots, "03-resize-output.ansi")
-      await tmux(["pipe-pane", "-t", session, `cat > ${JSON.stringify(resizeOutput)}`])
-      await tmux(["resize-window", "-t", session, "-x", "72", "-y", "22"])
-      await waitForFile(
-        resizeOutput,
-        (value) => value.includes("drive mini response complete") && value.includes("drive-mini-tool-output"),
-      )
-      await tmux(["pipe-pane", "-t", session])
-      const resized = await captureVisiblePane(session)
-      if (!resized.includes("drive-mini-tool-output")) throw new Error("resize replay lost shell tool output")
-      await Bun.write(path.join(snapshots, "03-resize-replay.txt"), resized)
-
-      llm.queue(
-        llm.toolCall({
+      yield* llm.queue(
+        Llm.toolCall({
           index: 0,
-          id: "mini-question",
-          name: "question",
-          input: {
-            questions: [
-              {
-                header: "Drive form",
-                question: "Choose the Mini Form answer",
-                options: [{ label: "Accepted", description: "Continue the run" }],
-                multiple: false,
-              },
-            ],
-          },
-        }),
-        llm.finish("tool-calls"),
-      )
-      llm.queue(llm.text("drive mini form complete"))
-      await tmux(["send-keys", "-t", session, "-l", "exercise the form"])
-      await tmux(["send-keys", "-H", "-t", session, "0d"])
-      await waitForPane(session, "Choose the Mini Form answer", 20_000)
-      await tmux(["send-keys", "-H", "-t", session, "0d"])
-      await waitForPane(session, "drive mini form complete", 20_000)
-
-      llm.queue(
-        llm.toolCall({
-          index: 0,
-          id: "mini-slow-shell",
+          id: "mini-shell",
           name: "shell",
-          input: { command: "sleep 10" },
+          input: { command: "printf 'drive-mini-tool-output\\n'" },
         }),
-        llm.finish("tool-calls"),
+        Llm.finish("tool-calls"),
       )
-      await tmux(["send-keys", "-t", session, "-l", "interrupt this turn"])
-      await Bun.sleep(100)
-      await tmux(["send-keys", "-H", "-t", session, "0d"])
-      await waitForPane(session, "$ sleep 10")
-      await tmux(["send-keys", "-t", session, "Escape"])
-      const armed = await waitForPane(session, "again to interrupt")
-      await Bun.write(path.join(snapshots, "04-interrupt-armed.txt"), armed)
-      await tmux(["send-keys", "-t", session, "Escape"])
-      const interrupted = await waitForPane(session, "Step interrupted", 10_000)
-      await Bun.write(path.join(snapshots, "05-interrupted.txt"), interrupted)
-      if (!(await paneAlive(session))) throw new Error("Mini exited while interrupting an active turn")
+      yield* llm.queue(Llm.text("drive mini response complete", { delay: 5, chunkSize: 4 }))
 
-      await tmux(["send-keys", "-t", session, "C-c"])
-      await waitForPane(session, "Press ctrl+c again to exit")
-      await tmux(["send-keys", "-t", session, "C-c"])
-      await waitForDeadPane(session)
-      const status = await paneDeadStatus(session)
-      if (status !== 0) throw new Error(`Mini exited with status ${status}`)
-      const exited = await capturePane(session)
-      if (!exited.includes("Continue") || !exited.includes("opencode mini -s"))
-        throw new Error("Mini exit splash was not rendered before teardown")
-      await Bun.write(path.join(snapshots, "06-exit-teardown.txt"), exited)
-    } finally {
-      signal.removeEventListener("abort", abort)
-      await tmux(["kill-session", "-t", session], true)
-    }
-  },
+      const journey = Effect.gen(function* () {
+        yield* Effect.uninterruptible(
+          Effect.promise(() =>
+            tmux([
+              "new-session",
+              "-d",
+              "-s",
+              session,
+              "-x",
+              "140",
+              "-y",
+              "30",
+              "--",
+              "env",
+              `PWD=${path.join(artifacts, "files")}`,
+              `OPENCODE_PASSWORD=${registration.password}`,
+              `OPENCODE_CONFIG_DIR=${path.join(artifacts, "files/.opencode")}`,
+              `OPENCODE_TEST_HOME=${artifacts}`,
+              `XDG_CACHE_HOME=${path.join(artifacts, "home/.cache")}`,
+              `XDG_CONFIG_HOME=${path.join(artifacts, "home/.config")}`,
+              `XDG_DATA_HOME=${path.join(artifacts, "logs")}`,
+              `XDG_STATE_HOME=${path.join(artifacts, "home/.local/state")}`,
+              "OPENCODE_DISABLE_AUTOUPDATE=1",
+              "OPENCODE_DIRECT_TRACE=1",
+              process.execPath,
+              "--conditions=browser",
+              `--preload=${preload}`,
+              path.join(root, "packages/cli/src/index.ts"),
+              "mini",
+              "--server",
+              registration.url,
+              "--model",
+              "simulation/gpt-sim-model",
+            ]),
+          ),
+        )
+        yield* Effect.promise(() => tmux(["set-option", "-t", session, "remain-on-exit", "on"]))
+
+        const first = yield* Effect.promise(() => waitForPane(session, "OpenCode"))
+        yield* Effect.promise(() => Bun.write(path.join(snapshots, "01-first-paint.txt"), first))
+        if (first.includes("drive mini response complete"))
+          throw new Error("response rendered before prompt submission")
+
+        yield* Effect.promise(() => waitForPane(session, "Simulated Model", 15_000))
+        yield* Effect.promise(() => tmux(["send-keys", "-t", session, "-l", "exercise the mini frontend"]))
+        yield* Effect.sleep(100)
+        yield* Effect.promise(() => tmux(["send-keys", "-H", "-t", session, "0d"]))
+        const completed = yield* Effect.promise(() => waitForPane(session, "drive mini response complete", 20_000))
+        if (!completed.includes("drive-mini-tool-output")) throw new Error("shell tool output was not rendered")
+        yield* Effect.promise(() => Bun.write(path.join(snapshots, "02-tool-and-response.txt"), completed))
+
+        yield* Effect.sleep(500)
+        const resizeOutput = path.join(snapshots, "03-resize-output.ansi")
+        yield* Effect.promise(() => tmux(["pipe-pane", "-t", session, `cat > ${JSON.stringify(resizeOutput)}`]))
+        yield* Effect.promise(() => tmux(["resize-window", "-t", session, "-x", "72", "-y", "22"]))
+        yield* Effect.promise(() =>
+          waitForFile(
+            resizeOutput,
+            (value) => value.includes("drive mini response complete") && value.includes("drive-mini-tool-output"),
+          ),
+        )
+        yield* Effect.promise(() => tmux(["pipe-pane", "-t", session]))
+        const resized = yield* Effect.promise(() => captureVisiblePane(session))
+        if (!resized.includes("drive-mini-tool-output")) throw new Error("resize replay lost shell tool output")
+        yield* Effect.promise(() => Bun.write(path.join(snapshots, "03-resize-replay.txt"), resized))
+
+        yield* llm.queue(
+          Llm.toolCall({
+            index: 0,
+            id: "mini-question",
+            name: "question",
+            input: {
+              questions: [
+                {
+                  header: "Drive form",
+                  question: "Choose the Mini Form answer",
+                  options: [{ label: "Accepted", description: "Continue the run" }],
+                  multiple: false,
+                },
+              ],
+            },
+          }),
+          Llm.finish("tool-calls"),
+        )
+        yield* llm.queue(Llm.text("drive mini form complete"))
+        yield* Effect.promise(() => tmux(["send-keys", "-t", session, "-l", "exercise the form"]))
+        yield* Effect.promise(() => tmux(["send-keys", "-H", "-t", session, "0d"]))
+        yield* Effect.promise(() => waitForPane(session, "Choose the Mini Form answer", 20_000))
+        yield* Effect.promise(() => tmux(["send-keys", "-H", "-t", session, "0d"]))
+        yield* Effect.promise(() => waitForPane(session, "drive mini form complete", 20_000))
+
+        yield* llm.queue(
+          Llm.toolCall({
+            index: 0,
+            id: "mini-slow-shell",
+            name: "shell",
+            input: { command: "sleep 10" },
+          }),
+          Llm.finish("tool-calls"),
+        )
+        yield* Effect.promise(() => tmux(["send-keys", "-t", session, "-l", "interrupt this turn"]))
+        yield* Effect.sleep(100)
+        yield* Effect.promise(() => tmux(["send-keys", "-H", "-t", session, "0d"]))
+        yield* Effect.promise(() => waitForPane(session, "$ sleep 10"))
+        yield* Effect.promise(() => tmux(["send-keys", "-t", session, "Escape"]))
+        const armed = yield* Effect.promise(() => waitForPane(session, "again to interrupt"))
+        yield* Effect.promise(() => Bun.write(path.join(snapshots, "04-interrupt-armed.txt"), armed))
+        yield* Effect.promise(() => tmux(["send-keys", "-t", session, "Escape"]))
+        const interrupted = yield* Effect.promise(() => waitForPane(session, "Step interrupted", 10_000))
+        yield* Effect.promise(() => Bun.write(path.join(snapshots, "05-interrupted.txt"), interrupted))
+
+        yield* Effect.promise(async () => {
+          if (!(await paneAlive(session))) throw new Error("Mini exited while interrupting an active turn")
+        })
+        yield* Effect.promise(() => tmux(["send-keys", "-t", session, "C-c"]))
+        yield* Effect.promise(() => waitForPane(session, "Press ctrl+c again to exit"))
+        yield* Effect.promise(() => tmux(["send-keys", "-t", session, "C-c"]))
+        yield* Effect.promise(() => waitForDeadPane(session))
+        const status = yield* Effect.promise(() => paneDeadStatus(session))
+        if (status !== 0) throw new Error(`Mini exited with status ${status}`)
+        const exited = yield* Effect.promise(() => capturePane(session))
+        if (!exited.includes("Continue") || !exited.includes("opencode mini -s"))
+          throw new Error("Mini exit splash was not rendered before teardown")
+        yield* Effect.promise(() => Bun.write(path.join(snapshots, "06-exit-teardown.txt"), exited))
+      })
+
+      yield* journey.pipe(Effect.ensuring(Effect.promise(() => tmux(["kill-session", "-t", session], true))))
+    }),
 })
 
 /** @param {string[]} args */

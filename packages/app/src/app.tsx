@@ -9,7 +9,16 @@ import { Font } from "@opencode-ai/ui/font"
 import { Splash } from "@opencode-ai/ui/logo"
 import { ThemeProvider } from "@opencode-ai/ui/theme/context"
 import { MetaProvider } from "@solidjs/meta"
-import { type BaseRouterProps, Navigate, Route, Router, useNavigate, useParams, useSearchParams } from "@solidjs/router"
+import {
+  type BaseRouterProps,
+  Navigate,
+  Route,
+  Router,
+  useLocation,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "@solidjs/router"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
 import { Effect } from "effect"
 import { base64Encode } from "@opencode-ai/core/util/encode"
@@ -29,6 +38,7 @@ import {
   Show,
 } from "solid-js"
 import { Dynamic } from "solid-js/web"
+import { makeEventListener } from "@solid-primitives/event-listener"
 import { CommandProvider, useCommand, type CommandOption } from "@/context/command"
 import { CommentsProvider } from "@/context/comments"
 import { FileProvider } from "@/context/file"

@@ -89,7 +89,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Pty") {}
 
-const layer = Layer.effect(
+export const layer = (options?: ShellSelect.Options) => Layer.effect(
   Service,
   Effect.gen(function* () {
     const events = yield* EventV2.Service
@@ -164,7 +164,7 @@ const layer = Layer.effect(
 
     const create = Effect.fn("Pty.create")(function* (input: CreateInput) {
       const id = PtyID.ascending()
-      const command = input.command || ShellSelect.preferred(Config.latest(yield* config.entries(), "shell"))
+      const command = input.command || ShellSelect.preferred(Config.latest(yield* config.entries(), "shell"), options)
       const args = ShellSelect.login(command) ? [...(input.args ?? []), "-l"] : [...(input.args ?? [])]
       const cwd = input.cwd || location.directory
       const env = {
@@ -313,4 +313,8 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [EventV2.node, Location.node, Config.node] })
+export function configured(options?: ShellSelect.Options) {
+  return makeLocationNode({ service: Service, layer: layer(options), deps: [EventV2.node, Location.node, Config.node] })
+}
+
+export const node = configured()

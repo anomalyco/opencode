@@ -1,10 +1,9 @@
 export * as Database from "./database"
 
 import { EffectDrizzleSqlite } from "@opencode-ai/effect-drizzle-sqlite"
-import { layer } from "#sqlite"
-import { Context, Effect, Layer } from "effect"
+import { sqliteLayer } from "#sqlite"
+import { Context, Effect, Layer, Schema } from "effect"
 import { Global } from "../global"
-import { Flag } from "../flag/flag"
 import { isAbsolute, join } from "path"
 import { DatabaseMigration } from "./migration"
 import { InstallationChannel } from "../installation/version"
@@ -16,6 +15,11 @@ type DatabaseShape = Effect.Success<typeof makeDatabase>
 export interface Interface {
   db: DatabaseShape
 }
+
+export const Options = Schema.Struct({
+  path: Schema.optional(Schema.String),
+})
+export type Options = typeof Options.Type
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/storage/Database") {}
 
@@ -36,28 +40,25 @@ const databaseLayer = Layer.effect(
   }).pipe(Effect.orDie),
 )
 
-export function layerFromPath(filename: string) {
-  return databaseLayer.pipe(Layer.provide(layer({ filename })))
+export function layer(options?: Options) {
+  return Layer.suspend(() => {
+    const provide = (filename: string) => databaseLayer.pipe(Layer.provide(sqliteLayer({ filename })))
+    if (options?.path === ":memory:" || (options?.path && isAbsolute(options.path))) return provide(options.path)
+    if (options?.path) return provide(join(Global.Path.data, options.path))
+    if (
+      ["latest", "beta", "prod"].includes(InstallationChannel) ||
+      process.env.OPENCODE_DISABLE_CHANNEL_DB === "1" ||
+      process.env.OPENCODE_DISABLE_CHANNEL_DB === "true"
+    )
+      return provide(join(Global.Path.data, "opencode.db"))
+    return provide(
+      join(Global.Path.data, `opencode-${InstallationChannel.replace(/[^a-zA-Z0-9._-]/g, "-")}.db`),
+    )
+  })
 }
 
-export function path() {
-  if (Flag.OPENCODE_DB) {
-    if (Flag.OPENCODE_DB === ":memory:" || isAbsolute(Flag.OPENCODE_DB)) return Flag.OPENCODE_DB
-    return join(Global.Path.data, Flag.OPENCODE_DB)
-  }
-  if (
-    ["latest", "beta", "prod"].includes(InstallationChannel) ||
-    process.env.OPENCODE_DISABLE_CHANNEL_DB === "1" ||
-    process.env.OPENCODE_DISABLE_CHANNEL_DB === "true"
-  )
-    return join(Global.Path.data, "opencode.db")
-  return join(Global.Path.data, `opencode-${InstallationChannel.replace(/[^a-zA-Z0-9._-]/g, "-")}.db`)
+export function configured(options?: Options) {
+  return makeGlobalNode({ service: Service, layer: layer(options), deps: [] })
 }
 
-// Resolve the database path lazily so tests and embedders that set
-// Flag.OPENCODE_DB after module evaluation still control the storage target.
-export const node = makeGlobalNode({
-  service: Service,
-  layer: Layer.suspend(() => layerFromPath(path())),
-  deps: [],
-})
+export const node = configured({ path: ":memory:" })

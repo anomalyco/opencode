@@ -9,6 +9,7 @@ import {
   permissionRun,
 } from "../../src/mini/permission.shared"
 import type { MiniPermissionRequest } from "../../src/mini/types"
+import { canonicalToolPart } from "./fixture/tool-part"
 
 function req(input: Partial<MiniPermissionRequest> = {}): MiniPermissionRequest {
   return {
@@ -89,18 +90,16 @@ describe("run permission shared", () => {
         req({
           action: "shell",
           source: { type: "tool", messageID: "msg-shell", callID: "call-shell" },
-          tool: {
-            type: "tool",
-            id: "call-shell",
-            name: "shell",
-            state: {
+          tool: canonicalToolPart(
+            "shell",
+            {
               status: "running",
               input: { command: "git status --short" },
               structured: {},
               content: [],
             },
-            time: { created: 1, ran: 1 },
-          },
+            "call-shell",
+          ),
         }),
       ),
     ).toMatchObject({
@@ -137,18 +136,16 @@ describe("run permission shared", () => {
           action: "websearch",
           metadata: { provider: "parallel" },
           source: { type: "tool", messageID: "msg-search", callID: "call-search" },
-          tool: {
-            type: "tool",
-            id: "call-search",
-            name: "websearch",
-            state: {
+          tool: canonicalToolPart(
+            "websearch",
+            {
               status: "running",
               input: { query: "current releases" },
               structured: { provider: "exa", retained: true },
               content: [],
             },
-            time: { created: 1, ran: 1 },
-          },
+            "call-search",
+          ),
         }),
       ),
     ).toMatchObject({
@@ -164,18 +161,16 @@ describe("run permission shared", () => {
           action: "edit",
           resources: ["src/index.ts"],
           source: { type: "tool", messageID: "msg-edit", callID: "call-edit" },
-          tool: {
-            type: "tool",
-            id: "call-edit",
-            name: "edit",
-            state: {
+          tool: canonicalToolPart(
+            "edit",
+            {
               status: "running",
               input: { patchText: "*** Begin Patch\n*** Update File: src/index.ts\n@@\n-old\n+new\n*** End Patch" },
               structured: {},
               content: [],
             },
-            time: { created: 1, ran: 1 },
-          },
+            "call-edit",
+          ),
         }),
       ),
     ).toMatchObject({

@@ -1,5 +1,5 @@
 import type { SafeObject } from "../tool-runtime.js"
-import type { CodeModePromise, CodeModeURL } from "../values.js"
+import type { CodeModePromise, CodeModeRegExp, CodeModeURL } from "../values.js"
 
 export type SourcePosition = {
   line: number
@@ -31,11 +31,11 @@ export type Binding = {
 export type StatementResult =
   | { kind: "none" }
   | { kind: "return"; value: unknown }
-  | { kind: "break" }
-  | { kind: "continue" }
+  | { kind: "break"; label?: string }
+  | { kind: "continue"; label?: string }
 
 export type MemberReference = {
-  target: SafeObject | Array<unknown> | CodeModeURL
+  target: SafeObject | Array<unknown> | CodeModeRegExp | CodeModeURL
   key: string | number
 }
 
@@ -99,9 +99,13 @@ export class GlobalNamespace {
 
 export class GlobalMethodReference {
   constructor(
-    readonly namespace: GlobalNamespaceName | "Number" | "String",
+    readonly namespace: Exclude<GlobalNamespaceName, "JSON"> | "Number" | "String",
     readonly name: string,
   ) {}
+}
+
+export class JsonMethodReference {
+  constructor(readonly name: "parse" | "stringify") {}
 }
 
 export class CoercionFunction {

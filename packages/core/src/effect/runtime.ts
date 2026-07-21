@@ -5,7 +5,7 @@ import { Observability } from "../observability"
 export function makeRuntime<I, S, E>(service: Context.Service<I, S>, layer: Layer.Layer<I, E>) {
   let rt: ManagedRuntime.ManagedRuntime<I, E> | undefined
   const getRuntime = () =>
-    (rt ??= ManagedRuntime.make(Layer.provideMerge(layer, Observability.layer) as Layer.Layer<I, E>, {
+    (rt ??= ManagedRuntime.make(Layer.provideMerge(layer, Observability.layer()) as Layer.Layer<I, E>, {
       memoMap,
     }))
 

@@ -162,7 +162,7 @@ const nativeLayer = (config: Config) =>
     }),
   )
 
-const sqliteLayer = (config: Config) => Layer.effect(SqlClient.SqlClient, make(config))
+const clientLayer = (config: Config) => Layer.effect(SqlClient.SqlClient, make(config))
 
 const drizzleLayer = Layer.effect(
   Sqlite.Drizzle,
@@ -171,9 +171,9 @@ const drizzleLayer = Layer.effect(
   }),
 )
 
-export const layer = (config: Config) => {
+export const sqliteLayer = (config: Config) => {
   const native = nativeLayer(config)
-  return Layer.merge(native, Layer.merge(sqliteLayer(config), drizzleLayer).pipe(Layer.provide(native))).pipe(
+  return Layer.merge(native, Layer.merge(clientLayer(config), drizzleLayer).pipe(Layer.provide(native))).pipe(
     Layer.provide(Reactivity.layer),
   )
 }

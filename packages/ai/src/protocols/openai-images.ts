@@ -1,42 +1,50 @@
 import { Effect, Encoding, Schema } from "effect"
-import { Headers, HttpClientRequest } from "effect/unstable/http"
+import { Headers, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import {
   ImageModel,
   GeneratedImage,
   ImageResponse,
-  type ImageRequest,
-  type ImageModelDefaults,
+  type ImageInput,
+  type ImageRequestFor,
   type ImageRoute,
 } from "../image"
 import { Auth, type Definition as AuthDefinition } from "../route/auth"
-import { InvalidProviderOutputReason, LLMError, Usage, mergeHttpOptions, mergeJsonRecords } from "../schema"
+import {
+  InvalidProviderOutputReason,
+  LLMError,
+  Usage,
+  mergeHttpOptions,
+  mergeJsonRecords,
+  type HttpOptions,
+} from "../schema"
 import { ProviderShared } from "./shared"
+import { ImageInputs } from "./utils/image-input"
 import { OpenAIImage } from "./utils/openai-image"
 
 const ADAPTER = "openai-images"
 export const DEFAULT_BASE_URL = "https://api.openai.com/v1"
 export const PATH = "/images/generations"
+export const EDIT_PATH = "/images/edits"
 
-export interface OpenAIImageOptions {
-  readonly quality?: "auto" | "low" | "medium" | "high"
-  readonly background?: "auto" | "opaque" | "transparent"
-  readonly moderation?: "auto" | "low"
-  readonly outputFormat?: "png" | "jpeg" | "webp"
+export type OpenAIImageString<Known extends string> = Known | (string & {})
+
+export type OpenAIImageOptions = {
+  readonly mask?: ImageInput
+  readonly n?: number
+  readonly size?: OpenAIImageString<
+    "auto" | "256x256" | "512x512" | "1024x1024" | "1536x1024" | "1024x1536" | "1792x1024" | "1024x1792"
+  >
+  readonly quality?: OpenAIImageString<"auto" | "low" | "medium" | "high" | "standard" | "hd">
+  readonly background?: OpenAIImageString<"auto" | "opaque" | "transparent">
+  readonly moderation?: OpenAIImageString<"auto" | "low">
+  readonly outputFormat?: OpenAIImageString<"png" | "jpeg" | "webp">
   readonly outputCompression?: number
-}
+} & Record<string, unknown>
 
-const OpenAIImageBody = Schema.Struct({
-  model: Schema.String,
-  prompt: Schema.String,
-  n: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
-  size: Schema.optional(Schema.String),
-  quality: Schema.optional(Schema.Literals(["auto", "low", "medium", "high"])),
-  background: Schema.optional(Schema.Literals(["auto", "opaque", "transparent"])),
-  moderation: Schema.optional(Schema.Literals(["auto", "low"])),
-  output_format: Schema.optional(Schema.Literals(["png", "jpeg", "webp"])),
-  output_compression: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 100 }))),
-})
-export type OpenAIImageBody = Schema.Schema.Type<typeof OpenAIImageBody>
+export type OpenAIImageBody = Record<string, unknown> & {
+  readonly model: string
+  readonly prompt: string
+}
 
 const OpenAIImageResponse = Schema.Struct({
   data: Schema.Array(
@@ -63,26 +71,16 @@ export interface ModelInput {
   readonly auth: AuthDefinition
   readonly baseURL?: string
   readonly headers?: Record<string, string>
-  readonly defaults?: ImageModelDefaults
+  readonly http?: HttpOptions
 }
 
-const providerOptions = (request: ImageRequest): OpenAIImageOptions => ({
-  ...request.model.defaults?.providerOptions?.openai,
-  ...request.providerOptions?.openai,
-})
-
-const body = (request: ImageRequest): OpenAIImageBody => {
-  const options = providerOptions(request)
+const nativeOptions = (options: OpenAIImageOptions | undefined) => {
+  if (!options) return undefined
+  const { mask: _, outputFormat, outputCompression, ...native } = options
   return {
-    model: request.model.id,
-    prompt: request.prompt,
-    n: request.count,
-    size: request.size === undefined ? undefined : `${request.size.width}x${request.size.height}`,
-    quality: options.quality,
-    background: options.background,
-    moderation: options.moderation,
-    output_format: options.outputFormat,
-    output_compression: options.outputCompression,
+    output_format: outputFormat,
+    output_compression: outputCompression,
+    ...native,
   }
 }
 
@@ -100,45 +98,93 @@ const applyQuery = (url: string, query: Record<string, string> | undefined) => {
   return next.toString()
 }
 
-const PROTOCOL_BODY_FIELDS = new Set([
-  "model",
-  "prompt",
-  "n",
-  "size",
-  "quality",
-  "background",
-  "moderation",
-  "output_format",
-  "output_compression",
-])
-
-const bodyWithOverlay = Effect.fn("OpenAIImages.bodyWithOverlay")(function* (
-  imageBody: OpenAIImageBody,
-  overlay: Record<string, unknown> | undefined,
-) {
-  if (!overlay) return imageBody
-  const reserved = Object.keys(overlay).filter((key) => PROTOCOL_BODY_FIELDS.has(key))
-  if (reserved.length > 0)
-    return yield* ProviderShared.invalidRequest(
-      `http.body cannot overlay protocol-owned field(s): ${reserved.join(", ")}`,
-    )
-  return mergeJsonRecords(imageBody, overlay) ?? imageBody
-})
-
 export const model = (input: ModelInput) => {
-  const route: ImageRoute = {
+  const route: ImageRoute<OpenAIImageOptions> = {
     id: ADAPTER,
-    generate: Effect.fn("OpenAIImages.generate")(function* (request: ImageRequest, execute) {
-      if (request.aspectRatio !== undefined)
-        return yield* ProviderShared.invalidRequest("OpenAI Images does not support the common aspectRatio option")
-      if (request.seed !== undefined)
-        return yield* ProviderShared.invalidRequest("OpenAI Images does not support the common seed option")
+    generate: Effect.fn("OpenAIImages.generate")(function* (request: ImageRequestFor<OpenAIImageOptions>, execute) {
+      const mask = request.options?.mask
+      if (mask !== undefined && (request.images?.length ?? 0) === 0)
+        return yield* ImageInputs.invalid(ADAPTER, "An OpenAI image mask requires at least one input image")
+      const http = mergeHttpOptions(request.model.http, request.http)
+      const sourceImages = request.images ?? []
+      const multipartImages = yield* Effect.forEach(sourceImages, (image) => {
+        if (image.type === "bytes") return Effect.succeed({ data: image.data, mediaType: image.mediaType })
+        if (image.type === "url") return ImageInputs.decodeDataUrl(image.url, ADAPTER)
+        return Effect.succeed(undefined)
+      })
+      const multipartMask =
+        mask === undefined
+          ? undefined
+          : mask.type === "bytes"
+            ? { data: mask.data, mediaType: mask.mediaType }
+            : mask.type === "url"
+              ? yield* ImageInputs.decodeDataUrl(mask.url, ADAPTER)
+              : undefined
+      const useMultipart =
+        sourceImages.length > 0 &&
+        multipartImages.every((image) => image !== undefined) &&
+        (mask === undefined || multipartMask !== undefined)
+      const path = sourceImages.length === 0 ? PATH : EDIT_PATH
+      const url = applyQuery(`${(input.baseURL ?? DEFAULT_BASE_URL).replace(/\/$/, "")}${path}`, http?.query)
 
-      const requestBody = yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(OpenAIImageBody))(body(request))
-      const http = mergeHttpOptions(request.model.defaults?.http, request.http)
-      const overlaidBody = yield* bodyWithOverlay(requestBody, http?.body)
-      const text = ProviderShared.encodeJson(overlaidBody)
-      const url = applyQuery(`${(input.baseURL ?? DEFAULT_BASE_URL).replace(/\/$/, "")}${PATH}`, http?.query)
+      if (useMultipart) {
+        const form = new FormData()
+        form.append("model", request.model.id)
+        form.append("prompt", request.prompt)
+        Object.entries(mergeJsonRecords(nativeOptions(request.options), http?.body) ?? {}).forEach(([key, value]) => {
+          if (["model", "prompt", "image", "image[]", "images", "mask"].includes(key)) return
+          form.append(key, typeof value === "string" ? value : ProviderShared.encodeJson(value))
+        })
+        multipartImages.forEach((image, index) => {
+          if (image === undefined) return
+          form.append("image[]", imageBlob(image.data, image.mediaType), `image-${index}`)
+        })
+        if (multipartMask !== undefined)
+          form.append("mask", imageBlob(multipartMask.data, multipartMask.mediaType), "mask")
+        const headers = yield* Auth.toEffect(input.auth)({
+          request,
+          method: "POST",
+          url,
+          body: "[multipart/form-data]",
+          headers: Headers.remove(Headers.fromInput({ ...input.headers, ...http?.headers }), "content-type"),
+        })
+        const response = yield* execute(
+          HttpClientRequest.post(url).pipe(HttpClientRequest.setHeaders(headers), HttpClientRequest.bodyFormData(form)),
+        )
+        return yield* parseResponse(response, request.options, http?.body)
+      }
+
+      const references = sourceImages.map((image) => {
+        if (image.type === "bytes") return { image_url: ImageInputs.dataUrl(image) }
+        if (image.type === "url") return { image_url: image.url }
+        if (image.type === "file-id") return { file_id: image.id }
+        return undefined
+      })
+      if (references.some((image) => image === undefined))
+        return yield* ImageInputs.invalid(ADAPTER, "OpenAI Images accepts image URLs, data URLs, bytes, and file IDs")
+      const maskReference =
+        mask === undefined
+          ? undefined
+          : mask.type === "bytes"
+            ? { image_url: ImageInputs.dataUrl(mask) }
+            : mask.type === "url"
+              ? { image_url: mask.url }
+              : mask.type === "file-id"
+                ? { file_id: mask.id }
+                : undefined
+      if (mask !== undefined && maskReference === undefined)
+        return yield* ImageInputs.invalid(ADAPTER, "OpenAI Images accepts masks as URLs, data URLs, bytes, or file IDs")
+      const requestBody = mergeJsonRecords(
+        {
+          model: request.model.id,
+          prompt: request.prompt,
+          images: references.length === 0 ? undefined : references,
+          mask: maskReference,
+        },
+        nativeOptions(request.options),
+        http?.body,
+      ) as OpenAIImageBody
+      const text = ProviderShared.encodeJson(requestBody)
       const headers = yield* Auth.toEffect(input.auth)({
         request,
         method: "POST",
@@ -152,55 +198,71 @@ export const model = (input: ModelInput) => {
           HttpClientRequest.bodyText(text, "application/json"),
         ),
       )
-      const payload = yield* response.json.pipe(
-        Effect.mapError(() => invalidOutput("Failed to read the OpenAI Images response")),
-      )
-      const decoded = yield* Schema.decodeUnknownEffect(OpenAIImageResponse)(payload).pipe(
-        Effect.mapError(() => invalidOutput("OpenAI Images returned an invalid response")),
-      )
-      const format = decoded.output_format ?? providerOptions(request).outputFormat ?? "png"
-      const images = yield* Effect.forEach(decoded.data, (item, index) => {
-        if (item.b64_json)
-          return Effect.fromResult(Encoding.decodeBase64(item.b64_json)).pipe(
-            Effect.mapError(() => invalidOutput(`OpenAI Images result ${index} contains invalid base64 data`)),
-            Effect.map(
-              (data) =>
-                new GeneratedImage({
-                  mediaType: `image/${format}`,
-                  data,
-                  providerMetadata:
-                    item.revised_prompt === undefined ? undefined : { openai: { revisedPrompt: item.revised_prompt } },
-                }),
-            ),
-          )
-        if (item.url)
-          return Effect.succeed(
+      return yield* parseResponse(response, request.options, http?.body)
+    }),
+  }
+  return ImageModel.make<OpenAIImageOptions>({ id: input.id, provider: "openai", route, http: input.http })
+}
+
+const parseResponse = Effect.fn("OpenAIImages.parseResponse")(function* (
+  response: HttpClientResponse.HttpClientResponse,
+  options: OpenAIImageOptions | undefined,
+  overlay: Record<string, unknown> | undefined,
+) {
+  const payload = yield* response.json.pipe(
+    Effect.mapError(() => invalidOutput("Failed to read the OpenAI Images response")),
+  )
+  const decoded = yield* Schema.decodeUnknownEffect(OpenAIImageResponse)(payload).pipe(
+    Effect.mapError(() => invalidOutput("OpenAI Images returned an invalid response")),
+  )
+  const requestBody = mergeJsonRecords(nativeOptions(options), overlay)
+  const format =
+    decoded.output_format ?? (typeof requestBody?.output_format === "string" ? requestBody.output_format : "png")
+  const images = yield* Effect.forEach(decoded.data, (item, index) => {
+    if (item.b64_json)
+      return Effect.fromResult(Encoding.decodeBase64(item.b64_json)).pipe(
+        Effect.mapError(() => invalidOutput(`OpenAI Images result ${index} contains invalid base64 data`)),
+        Effect.map(
+          (data) =>
             new GeneratedImage({
               mediaType: `image/${format}`,
-              data: item.url,
+              data,
               providerMetadata:
                 item.revised_prompt === undefined ? undefined : { openai: { revisedPrompt: item.revised_prompt } },
             }),
-          )
-        return Effect.fail(invalidOutput(`OpenAI Images result ${index} has neither image data nor a URL`))
-      })
-      if (images.length === 0) return yield* invalidOutput("OpenAI Images returned no images")
-      return new ImageResponse({
-        images,
-        usage:
-          decoded.usage === undefined
-            ? undefined
-            : new Usage({
-                inputTokens: decoded.usage.input_tokens,
-                outputTokens: decoded.usage.output_tokens,
-                totalTokens: decoded.usage.total_tokens,
-                providerMetadata: { openai: decoded.usage },
-              }),
-        providerMetadata: { openai: { outputFormat: format } },
-      })
-    }),
-  }
-  return ImageModel.make({ id: input.id, provider: "openai", route, defaults: input.defaults })
+        ),
+      )
+    if (item.url)
+      return Effect.succeed(
+        new GeneratedImage({
+          mediaType: `image/${format}`,
+          data: item.url,
+          providerMetadata:
+            item.revised_prompt === undefined ? undefined : { openai: { revisedPrompt: item.revised_prompt } },
+        }),
+      )
+    return Effect.fail(invalidOutput(`OpenAI Images result ${index} has neither image data nor a URL`))
+  })
+  if (images.length === 0) return yield* invalidOutput("OpenAI Images returned no images")
+  return new ImageResponse({
+    images,
+    usage:
+      decoded.usage === undefined
+        ? undefined
+        : new Usage({
+            inputTokens: decoded.usage.input_tokens,
+            outputTokens: decoded.usage.output_tokens,
+            totalTokens: decoded.usage.total_tokens,
+            providerMetadata: { openai: decoded.usage },
+          }),
+    providerMetadata: { openai: { outputFormat: format } },
+  })
+})
+
+const imageBlob = (data: Uint8Array, mediaType: string) => {
+  const buffer = new ArrayBuffer(data.byteLength)
+  new Uint8Array(buffer).set(data)
+  return new Blob([buffer], { type: mediaType })
 }
 
 export const OpenAIImages = {

@@ -18,7 +18,6 @@ import { SessionStore } from "@opencode-ai/core/session/store"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Money } from "@opencode-ai/schema/money"
@@ -190,7 +189,7 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
       "User-Agent": `opencode/${InstallationVersion}`,
       "x-opencode-project": Project.ID.global,
       "x-opencode-session": sessionID,
-      "x-opencode-client": Flag.OPENCODE_CLIENT,
+      "x-opencode-client": "cli",
     })
     expect(requests[0]?.generation).toBeUndefined()
     expect(JSON.stringify(requests[0]?.messages)).toContain("Manual compaction should include this short conversation.")

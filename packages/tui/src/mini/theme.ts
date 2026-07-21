@@ -374,7 +374,7 @@ function map(
   const shade = fade(footerTheme.backgroundMenu, footerTheme.background, 0.12, 0.56, 0.72)
   const surface = fade(footerTheme.backgroundMenu, footerTheme.background, 0.18, 0.76, 0.9)
   const line = fade(footerTheme.backgroundMenu, footerTheme.background, 0.24, 0.9, 0.98)
-  const statusBase = tint(footerBackground, rgba("#000000"), footerMode === "dark" ? 0.12 : 0.06)
+  const statusBase = tint(footerBackground, rgba("#000000"), footerMode === "dark" ? 0.13 : 0.06)
   const statusAccentBase =
     footerMode === "dark" ? tint(footerBackground, rgba("#ffffff"), 0.06) : tint(statusBase, rgba("#000000"), 0.04)
   const collapsedStatus = footerMode === "dark" && luminance(statusBase) <= 0.04

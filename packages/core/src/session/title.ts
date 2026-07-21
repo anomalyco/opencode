@@ -17,6 +17,7 @@ import { SessionUsage } from "./usage"
 const MAX_LENGTH = 100
 
 type Dependencies = {
+  readonly headers?: SessionModelHeaders.Options
   readonly events: EventV2.Interface
   readonly llm: {
     readonly stream: (request: LLMRequest) => Stream.Stream<LLMEvent, LLMError>
@@ -66,7 +67,7 @@ const make = (dependencies: Dependencies) => {
       .stream(
         LLM.request({
           model: resolved.model,
-          http: { headers: SessionModelHeaders.make(session) },
+          http: { headers: SessionModelHeaders.make(session, dependencies.headers) },
           system: agent.system,
           messages: [Message.user(firstUser.text)],
           tools: [],
@@ -102,7 +103,7 @@ const make = (dependencies: Dependencies) => {
   return { generateForFirstPrompt }
 }
 
-export const layer = Layer.effect(
+export const layer = (options?: SessionModelHeaders.Options) => Layer.effect(
   Service,
   Effect.gen(function* () {
     const events = yield* EventV2.Service
@@ -110,15 +111,19 @@ export const layer = Layer.effect(
     const agents = yield* AgentV2.Service
     const models = yield* SessionRunnerModel.Service
     const database = yield* Database.Service
-    const title = make({ events, llm, agents, models })
+    const title = make({ events, llm, agents, models, headers: options })
     return Service.of({
       generateForFirstPrompt: (session) => title.generateForFirstPrompt(database.db, session),
     })
   }),
 )
 
-export const node = makeLocationNode({
-  service: Service,
-  layer,
-  deps: [EventV2.node, llmClient, AgentV2.node, SessionRunnerModel.node, Database.node],
-})
+export function configured(options?: SessionModelHeaders.Options) {
+  return makeLocationNode({
+    service: Service,
+    layer: layer(options),
+    deps: [EventV2.node, llmClient, AgentV2.node, SessionRunnerModel.node, Database.node],
+  })
+}
+
+export const node = configured()

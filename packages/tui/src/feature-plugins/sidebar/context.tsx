@@ -20,20 +20,20 @@ function View(props: { context: Plugin.Context; sessionID: string }) {
 
   return (
     <box>
-      <text fg={themeV2.text()}>
+      <text fg={themeV2.text.default}>
         <b>Context</b>
       </text>
-      <Show when={state()} fallback={<text fg={themeV2.text.subdued()}>Not measured</text>}>
+      <Show when={state()} fallback={<text fg={themeV2.text.subdued}>Not measured</text>}>
         {(value) => (
           <>
-            <text fg={themeV2.text.subdued()}>{value().tokens.toLocaleString()} tokens</text>
+            <text fg={themeV2.text.subdued}>{value().tokens.toLocaleString()} tokens</text>
             <Show when={value().percent !== undefined}>
-              <text fg={themeV2.text.subdued()}>{value().percent}% used</text>
+              <text fg={themeV2.text.subdued}>{value().percent}% used</text>
             </Show>
           </>
         )}
       </Show>
-      <text fg={themeV2.text.subdued()}>{money.format(cost())} spent</text>
+      <text fg={themeV2.text.subdued}>{money.format(cost())} spent</text>
     </box>
   )
 }

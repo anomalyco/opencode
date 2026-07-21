@@ -115,10 +115,6 @@ function createEmptySubagentState(): FooterSubagentState {
 }
 
 function eventPatch(next: FooterEvent): FooterPatch | undefined {
-  if (next.type === "queue") {
-    return { queue: next.queue }
-  }
-
   if (next.type === "first") {
     return { first: next.first }
   }
@@ -131,7 +127,6 @@ function eventPatch(next: FooterEvent): FooterPatch | undefined {
     return {
       phase: "running",
       status: "sending prompt",
-      queue: next.queue,
       interrupt: 0,
       exit: 0,
     }
@@ -141,7 +136,6 @@ function eventPatch(next: FooterEvent): FooterPatch | undefined {
     return {
       phase: "idle",
       status: "",
-      queue: next.queue,
     }
   }
 
@@ -156,7 +150,6 @@ export class RunFooter implements FooterApi {
   private closed = false
   private destroyed = false
   private prompts = new Set<(input: RunPrompt) => void>()
-  private queuedRemoves = new Set<(messageID: string) => boolean | Promise<boolean>>()
   private closes = new Set<() => void>()
   // Microtask-coalesced commit queue. Flushed on next microtask or on close/destroy.
   private queue: StreamCommit[] = []
@@ -226,7 +219,6 @@ export class RunFooter implements FooterApi {
     const [state, setState] = createSignal<FooterState>({
       phase: "idle",
       status: "",
-      queue: 0,
       model: options.modelLabel,
       usage: "",
       first: options.first,
@@ -328,7 +320,6 @@ export class RunFooter implements FooterApi {
               onStatus: footer.setStatus,
               onSubagentSelect: options.onSubagentSelect,
               onSubagentInterrupt: options.onSubagentInterrupt,
-              onQueuedRemove: footer.handleQueuedRemove,
             })
           },
         }),
@@ -352,13 +343,6 @@ export class RunFooter implements FooterApi {
     this.prompts.add(fn)
     return () => {
       this.prompts.delete(fn)
-    }
-  }
-
-  public onQueuedRemove(fn: (messageID: string) => boolean | Promise<boolean>): () => void {
-    this.queuedRemoves.add(fn)
-    return () => {
-      this.queuedRemoves.delete(fn)
     }
   }
 
@@ -487,7 +471,6 @@ export class RunFooter implements FooterApi {
     const state = {
       phase: next.phase ?? prev.phase,
       status: typeof next.status === "string" ? next.status : prev.status,
-      queue: typeof next.queue === "number" ? Math.max(0, next.queue) : prev.queue,
       model: typeof next.model === "string" ? next.model : prev.model,
       usage: typeof next.usage === "string" ? next.usage : prev.usage,
       first: typeof next.first === "boolean" ? next.first : prev.first,
@@ -663,11 +646,6 @@ export class RunFooter implements FooterApi {
 
   private setRequestExitHandler = (fn?: () => boolean): void => {
     this.requestExitHandler = fn
-  }
-
-  private handleQueuedRemove = async (messageID: string): Promise<boolean> => {
-    const fn = [...this.queuedRemoves][0]
-    return fn ? await fn(messageID) : false
   }
 
   private handleInputClear = (): void => {
@@ -1080,7 +1058,6 @@ export class RunFooter implements FooterApi {
     for (const timeout of this.themeRefreshTimeouts) clearTimeout(timeout)
     this.themeRefreshTimeouts.length = 0
     this.prompts.clear()
-    this.queuedRemoves.clear()
     this.closes.clear()
     this.scrollback.destroy()
     for (const theme of [...this.themes]) this.destroyTheme(theme)

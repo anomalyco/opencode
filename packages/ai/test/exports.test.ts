@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { LLM, LLMClient, Provider } from "@opencode-ai/ai"
+import { ImageInput, LLM, LLMClient, Provider } from "@opencode-ai/ai"
 import { Route, Protocol } from "@opencode-ai/ai/route"
 import { Provider as ProviderSubpath } from "@opencode-ai/ai/provider"
 import {
@@ -11,12 +11,7 @@ import {
   XAI,
 } from "@opencode-ai/ai/providers"
 import * as GitHubCopilot from "@opencode-ai/ai/providers/github-copilot"
-import {
-  OpenAIChat,
-  OpenAICompatibleChat,
-  OpenAICompatibleResponses,
-  OpenAIResponses,
-} from "@opencode-ai/ai/protocols"
+import { OpenAIChat, OpenAICompatibleChat, OpenAICompatibleResponses, OpenAIResponses } from "@opencode-ai/ai/protocols"
 import * as AnthropicMessages from "@opencode-ai/ai/protocols/anthropic-messages"
 
 describe("public exports", () => {
@@ -24,6 +19,7 @@ describe("public exports", () => {
     expect(LLM.request).toBeFunction()
     expect(LLMClient.Service).toBeFunction()
     expect(LLMClient.layer).toBeDefined()
+    expect(ImageInput.bytes).toBeFunction()
     expect(Provider.make).toBeFunction()
     expect(ProviderSubpath.make).toBe(Provider.make)
   })

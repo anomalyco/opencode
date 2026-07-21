@@ -41,10 +41,7 @@ export function parseModel(model: string) {
   }
 }
 
-export function recentModels(
-  model: ModelPreferenceModel,
-  recent: ModelPreferenceModel[],
-) {
+export function recentModels(model: ModelPreferenceModel, recent: ModelPreferenceModel[]) {
   const seen = new Set<string>()
   return [model, ...recent]
     .filter((item) => {
@@ -95,14 +92,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       const colors = createMemo(() => {
         const step = mode() === "light" ? 800 : 200
         return dedupeWith(
-          [
-            themeV2.hue.blue(step),
-            themeV2.hue.purple(step),
-            themeV2.hue.green(step),
-            themeV2.hue.orange(step),
-            themeV2.hue.red(step),
-            themeV2.hue.cyan(step),
-          ],
+          themeV2.categorical.map((scale) => scale[step]),
           (first, second) => first.equals(second),
         )
       })
