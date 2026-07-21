@@ -100,22 +100,20 @@ export const layerWith = (resolve: Interface["resolve"]) => Layer.succeed(Servic
 /** Builds a Resolved whose catalog identity mirrors the route model. Test or embedding seam. */
 export const resolved = (
   model: Model,
-  variant?: ModelV2.VariantID,
-  cost: ModelV2.Info["cost"] = [],
-  capabilities: ModelV2.Capabilities = {
-    tools: true,
-    input: ["text", "image", "audio", "video", "pdf"],
-    output: ["text"],
+  options: {
+    readonly capabilities: ModelV2.Capabilities
+    readonly variant?: ModelV2.VariantID
+    readonly cost?: ModelV2.Info["cost"]
   },
 ): Resolved => ({
   model,
   ref: ModelV2.Ref.make({
     id: ModelV2.ID.make(model.id),
     providerID: ProviderV2.ID.make(model.provider),
-    ...(variant === undefined ? {} : { variant }),
+    ...(options.variant === undefined ? {} : { variant: options.variant }),
   }),
-  capabilities,
-  cost,
+  capabilities: options.capabilities,
+  cost: options.cost ?? [],
 })
 
 const apiKey = (model: ModelV2.Info, credential?: Credential.Value) => {

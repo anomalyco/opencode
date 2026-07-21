@@ -283,10 +283,10 @@ let currentModel = model
 const models = SessionRunnerModel.layerWith((session) =>
   modelResolveHook.pipe(
     Effect.as(
-      SessionRunnerModel.resolved(
-        session.model?.id === "replacement" ? replacementModel : currentModel,
-        session.model?.variant,
-      ),
+      SessionRunnerModel.resolved(session.model?.id === "replacement" ? replacementModel : currentModel, {
+        capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
+        variant: session.model?.variant,
+      }),
     ),
   ),
 )

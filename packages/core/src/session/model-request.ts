@@ -1,6 +1,6 @@
 export * as SessionModelRequest from "./model-request"
 
-import { LLM, Message, SystemPart, type LLMRequest } from "@opencode-ai/ai"
+import { LLM, Message, SystemPart, type LLMRequest, type ToolContent } from "@opencode-ai/ai"
 import { SessionError } from "@opencode-ai/schema/session-error"
 import { Context, Effect, Layer } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
@@ -57,7 +57,7 @@ export const unsupportedParts = (messages: LLMRequest["messages"], capabilities:
           ...part,
           result: {
             ...part.result,
-            value: part.result.value.map((item) => {
+            value: part.result.value.map((item: ToolContent) => {
               if (item.type !== "file") return item
               return unsupportedMedia(item.mime, item.name, capabilities) ?? item
             }),
