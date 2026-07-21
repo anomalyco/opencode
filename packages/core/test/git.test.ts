@@ -148,8 +148,18 @@ describe("Git trees", () => {
       const git = yield* Git.Service
       const source = yield* git.repo.discover(AbsolutePath.make(root.path))
       if (!source) throw new Error("Repository not found")
-      const storage = AbsolutePath.make(path.join(root.path, ".snapshot"))
+      const storage = AbsolutePath.make(path.join(root.path, ".snapshot storage"))
       const repository = yield* git.repo.create({ worktree: source.worktree, gitDirectory: storage, seed: source })
+      yield* Effect.promise(() => $`git --git-dir ${storage} config core.autocrlf true`.quiet())
+      yield* git.repo.create({ worktree: source.worktree, gitDirectory: storage, seed: source })
+      expect(yield* Effect.promise(() => $`git --git-dir ${storage} config --local core.autocrlf`.text())).toBe(
+        "false\n",
+      )
+      expect(
+        (yield* Effect.promise(() => fs.readFile(path.join(storage, "config"), "utf8"))).match(
+          /OpenCode snapshot configuration/g,
+        ),
+      ).toHaveLength(1)
       yield* git.index.refresh({ repository, scope: RelativePath.make("scope") })
       const before = yield* git.tree.write(repository)
 

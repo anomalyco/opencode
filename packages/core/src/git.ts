@@ -17,6 +17,22 @@ export class Repository extends Schema.Class<Repository>("Git.Repository")({
   commonDirectory: AbsolutePath,
 }) {}
 
+const snapshotConfigStart = "# OpenCode snapshot configuration"
+const snapshotConfigEnd = "# End OpenCode snapshot settings"
+const snapshotConfig = `${snapshotConfigStart}
+[core]
+	autocrlf = false
+	longpaths = true
+	symlinks = true
+	fsmonitor = false
+	untrackedCache = true
+[feature]
+	manyFiles = true
+[index]
+	version = 4
+	threads = true
+${snapshotConfigEnd}`
+
 export const ChangeSet = Schema.String.pipe(Schema.brand("Git.ChangeSet"))
 export type ChangeSet = typeof ChangeSet.Type
 
@@ -354,6 +370,33 @@ const layer = Layer.effect(
       })
     })
 
+    const configureSnapshot = Effect.fnUntraced(function* (gitDirectory: AbsolutePath) {
+      const config = path.join(gitDirectory, "config")
+      const temporary = `${config}.${randomUUID()}.tmp`
+      yield* Effect.gen(function* () {
+        const current = yield* fs.readFileString(config)
+        const start = current.indexOf(snapshotConfigStart)
+        const end = current.indexOf(snapshotConfigEnd, start)
+        const base =
+          start === -1 || end === -1
+            ? current
+            : current.slice(0, start) + current.slice(end + snapshotConfigEnd.length).replace(/^\r?\n/, "")
+        yield* fs.writeFileString(temporary, `${base.trimEnd()}\n\n${snapshotConfig}\n`)
+        yield* fs.rename(temporary, config)
+      }).pipe(
+        Effect.ensuring(fs.remove(temporary, { force: true }).pipe(Effect.catch(() => Effect.void))),
+        Effect.mapError(
+          (cause) =>
+            new OperationError({
+              operation: "create",
+              directory: gitDirectory,
+              message: "Failed to configure Git storage",
+              cause,
+            }),
+        ),
+      )
+    })
+
     const create = Effect.fn("Git.repo.create")(function* (input: {
       worktree: AbsolutePath
       gitDirectory: AbsolutePath
@@ -376,20 +419,7 @@ const layer = Layer.effect(
         commonDirectory: input.gitDirectory,
       })
       yield* repositoryOperation("create", repository, ["init"])
-      yield* Effect.forEach(
-        [
-          ["core.autocrlf", "false"],
-          ["core.longpaths", "true"],
-          ["core.symlinks", "true"],
-          ["core.fsmonitor", "false"],
-          ["feature.manyFiles", "true"],
-          ["index.version", "4"],
-          ["index.threads", "true"],
-          ["core.untrackedCache", "true"],
-        ],
-        ([key, value]) => repositoryOperation("create", repository, ["config", key, value]),
-        { discard: true },
-      )
+      yield* configureSnapshot(input.gitDirectory)
       if (!input.seed) return repository
       yield* fs.ensureDir(path.join(input.gitDirectory, "objects", "info")).pipe(
         Effect.mapError(
