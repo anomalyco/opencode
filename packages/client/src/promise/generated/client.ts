@@ -26,6 +26,8 @@ import type {
   SessionSwitchModelOutput,
   SessionRenameInput,
   SessionRenameOutput,
+  SessionArchiveInput,
+  SessionArchiveOutput,
   SessionMoveInput,
   SessionMoveOutput,
   SessionPromptInput,
@@ -119,6 +121,8 @@ import type {
   CredentialRemoveInput,
   CredentialRemoveOutput,
   ProjectListOutput,
+  ProjectUpdateInput,
+  ProjectUpdateOutput,
   ProjectCurrentInput,
   ProjectCurrentOutput,
   ProjectDirectoriesInput,
@@ -162,6 +166,8 @@ import type {
   SkillListInput,
   SkillListOutput,
   EventSubscribeOutput,
+  PtyShellsInput,
+  PtyShellsOutput,
   PtyListInput,
   PtyListOutput,
   PtyCreateInput,
@@ -172,6 +178,8 @@ import type {
   PtyUpdateOutput,
   PtyRemoveInput,
   PtyRemoveOutput,
+  PtyConnectTokenInput,
+  PtyConnectTokenOutput,
   ShellListInput,
   ShellListOutput,
   ShellCreateInput,
@@ -200,10 +208,14 @@ import type {
   ProjectCopyRemoveOutput,
   ProjectCopyRefreshInput,
   ProjectCopyRefreshOutput,
+  VcsGetInput,
+  VcsGetOutput,
   VcsStatusInput,
   VcsStatusOutput,
   VcsDiffInput,
   VcsDiffOutput,
+  PathGetInput,
+  PathGetOutput,
   DebugLocationListOutput,
   DebugLocationEvictInput,
   DebugLocationEvictOutput,
@@ -529,6 +541,17 @@ export function make(options: ClientOptions) {
             method: "POST",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/rename`,
             body: { title: input["title"] },
+            successStatus: 204,
+            declaredStatuses: [404, 400, 401],
+            empty: true,
+          },
+          requestOptions,
+        ),
+      archive: (input: SessionArchiveInput, requestOptions?: RequestOptions) =>
+        request<SessionArchiveOutput>(
+          {
+            method: "POST",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/archive`,
             successStatus: 204,
             declaredStatuses: [404, 400, 401],
             empty: true,
@@ -1149,6 +1172,18 @@ export function make(options: ClientOptions) {
           { method: "GET", path: `/api/project`, successStatus: 200, declaredStatuses: [401, 400], empty: false },
           requestOptions,
         ),
+      update: (input: ProjectUpdateInput, requestOptions?: RequestOptions) =>
+        request<ProjectUpdateOutput>(
+          {
+            method: "PATCH",
+            path: `/api/project/${encodeURIComponent(input.projectID)}`,
+            body: { name: input["name"], icon: input["icon"], commands: input["commands"] },
+            successStatus: 200,
+            declaredStatuses: [404, 401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
       current: (input?: ProjectCurrentInput, requestOptions?: RequestOptions) =>
         request<ProjectCurrentOutput>(
           {
@@ -1428,6 +1463,18 @@ export function make(options: ClientOptions) {
         ),
     },
     pty: {
+      shells: (input?: PtyShellsInput, requestOptions?: RequestOptions) =>
+        request<PtyShellsOutput>(
+          {
+            method: "GET",
+            path: `/api/pty/shells`,
+            query: { location: input?.["location"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
       list: (input?: PtyListInput, requestOptions?: RequestOptions) =>
         request<PtyListOutput>(
           {
@@ -1493,6 +1540,19 @@ export function make(options: ClientOptions) {
             successStatus: 204,
             declaredStatuses: [404, 401, 400],
             empty: true,
+          },
+          requestOptions,
+        ),
+      connectToken: (input: PtyConnectTokenInput, requestOptions?: RequestOptions) =>
+        request<PtyConnectTokenOutput>(
+          {
+            method: "POST",
+            path: `/api/pty/${encodeURIComponent(input.ptyID)}/connect-token`,
+            query: { location: input["location"] },
+            headers: { "x-opencode-ticket": input["x-opencode-ticket"] },
+            successStatus: 200,
+            declaredStatuses: [403, 404, 401, 400],
+            empty: false,
           },
           requestOptions,
         ),
@@ -1683,6 +1743,18 @@ export function make(options: ClientOptions) {
         ),
     },
     vcs: {
+      get: (input?: VcsGetInput, requestOptions?: RequestOptions) =>
+        request<VcsGetOutput>(
+          {
+            method: "GET",
+            path: `/api/vcs`,
+            query: { location: input?.["location"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
       status: (input?: VcsStatusInput, requestOptions?: RequestOptions) =>
         request<VcsStatusOutput>(
           {
@@ -1701,6 +1773,20 @@ export function make(options: ClientOptions) {
             method: "GET",
             path: `/api/vcs/diff`,
             query: { location: input["location"], mode: input["mode"], context: input["context"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+    },
+    path: {
+      get: (input?: PathGetInput, requestOptions?: RequestOptions) =>
+        request<PathGetOutput>(
+          {
+            method: "GET",
+            path: `/api/path`,
+            query: { location: input?.["location"] },
             successStatus: 200,
             declaredStatuses: [401, 400],
             empty: false,

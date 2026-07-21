@@ -501,6 +501,10 @@ export type QuestionTool = { messageID: string; callID: string }
 
 export type QuestionAnswer = Array<string>
 
+export type PtyShell = { path: string; name: string; acceptable: boolean }
+
+export type PtyTicketConnectToken = { ticket: string; expires_in: number }
+
 export type ShellInfo1 = {
   id: string
   status: "running" | "exited" | "timeout" | "killed"
@@ -526,12 +530,16 @@ export type ReferenceGitSource = {
 
 export type ProjectCopyCopy = { directory: string }
 
+export type VcsInfo = { branch?: string; defaultBranch?: string }
+
 export type VcsFileStatus = {
   file: string
   additions: number
   deletions: number
   status: "added" | "deleted" | "modified"
 }
+
+export type PathInfo = { home: string; state: string; config: string; worktree: string; directory: string }
 
 export type SessionMessageModelSelected = {
   id: string
@@ -549,6 +557,7 @@ export type CommandInfo = {
   agent?: string
   model?: ModelRef
   subtask?: boolean
+  source?: "command" | "mcp"
 }
 
 export type ProviderRequest = {
@@ -597,6 +606,16 @@ export type SessionRenamed = {
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
   data: { sessionID: string; title: string }
+}
+
+export type SessionArchived = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.archived"
+  durable: { aggregateID: string; seq: number; version: 1 }
+  location?: LocationRef
+  data: { sessionID: string }
 }
 
 export type SessionDeleted = {
@@ -2202,6 +2221,7 @@ export type SessionEventDurable =
   | SessionModelSelected
   | SessionMoved
   | SessionRenamed
+  | SessionArchived
   | SessionDeleted
   | SessionForked
   | SessionInputPromoted
@@ -2296,6 +2316,7 @@ export type V2Event =
   | SessionModelSelected
   | SessionMoved
   | SessionRenamed
+  | SessionArchived
   | SessionUsageUpdated
   | SessionDeleted
   | SessionForked
@@ -2495,6 +2516,14 @@ export type McpServerNotFoundError = {
 export const isMcpServerNotFoundError = (value: unknown): value is McpServerNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "McpServerNotFoundError"
 
+export type ProjectNotFoundError = {
+  readonly _tag: "ProjectNotFoundError"
+  readonly projectID: string
+  readonly message: string
+}
+export const isProjectNotFoundError = (value: unknown): value is ProjectNotFoundError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ProjectNotFoundError"
+
 export type FormNotFoundError = { readonly _tag: "FormNotFoundError"; readonly id: string; readonly message: string }
 export const isFormNotFoundError = (value: unknown): value is FormNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "FormNotFoundError"
@@ -2526,6 +2555,10 @@ export const isPermissionNotFoundError = (value: unknown): value is PermissionNo
 export type PtyNotFoundError = { readonly _tag: "PtyNotFoundError"; readonly ptyID: string; readonly message: string }
 export const isPtyNotFoundError = (value: unknown): value is PtyNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "PtyNotFoundError"
+
+export type ForbiddenError = { readonly _tag: "ForbiddenError"; readonly message: string }
+export const isForbiddenError = (value: unknown): value is ForbiddenError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ForbiddenError"
 
 export type ShellNotFoundError = { readonly _tag: "ShellNotFoundError"; readonly id: string; readonly message: string }
 export const isShellNotFoundError = (value: unknown): value is ShellNotFoundError =>
@@ -2756,6 +2789,10 @@ export type SessionRenameInput = {
 }
 
 export type SessionRenameOutput = void
+
+export type SessionArchiveInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
+
+export type SessionArchiveOutput = void
 
 export type SessionMoveInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
@@ -3583,6 +3620,27 @@ export type CredentialRemoveInput = {
 export type CredentialRemoveOutput = void
 
 export type ProjectListOutput = Array<Project>
+
+export type ProjectUpdateInput = {
+  readonly projectID: { readonly projectID: string }["projectID"]
+  readonly name?: {
+    readonly name?: string
+    readonly icon?: { readonly url?: string; readonly override?: string; readonly color?: string }
+    readonly commands?: { readonly start?: string }
+  }["name"]
+  readonly icon?: {
+    readonly name?: string
+    readonly icon?: { readonly url?: string; readonly override?: string; readonly color?: string }
+    readonly commands?: { readonly start?: string }
+  }["icon"]
+  readonly commands?: {
+    readonly name?: string
+    readonly icon?: { readonly url?: string; readonly override?: string; readonly color?: string }
+    readonly commands?: { readonly start?: string }
+  }["commands"]
+}
+
+export type ProjectUpdateOutput = Project
 
 export type ProjectCurrentInput = {
   readonly location?: {
@@ -4646,6 +4704,17 @@ export type SkillListOutput = {
 
 export type EventSubscribeOutput = V2Event
 
+export type PtyShellsInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type PtyShellsOutput = {
+  location: { directory: string; workspaceID?: string; project: { id: string; directory: string } }
+  data: Array<PtyShell>
+}
+
 export type PtyListInput = {
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
@@ -4740,6 +4809,19 @@ export type PtyRemoveInput = {
 }
 
 export type PtyRemoveOutput = void
+
+export type PtyConnectTokenInput = {
+  readonly ptyID: { readonly ptyID: string }["ptyID"]
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+  readonly "x-opencode-ticket"?: { readonly "x-opencode-ticket"?: string | undefined }["x-opencode-ticket"]
+}
+
+export type PtyConnectTokenOutput = {
+  location: { directory: string; workspaceID?: string; project: { id: string; directory: string } }
+  data: PtyTicketConnectToken
+}
 
 export type ShellListInput = {
   readonly location?: {
@@ -4918,6 +5000,17 @@ export type ProjectCopyRefreshInput = {
 
 export type ProjectCopyRefreshOutput = void
 
+export type VcsGetInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type VcsGetOutput = {
+  location: { directory: string; workspaceID?: string; project: { id: string; directory: string } }
+  data: VcsInfo
+}
+
 export type VcsStatusInput = {
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
@@ -4951,6 +5044,14 @@ export type VcsDiffOutput = {
   location: { directory: string; workspaceID?: string; project: { id: string; directory: string } }
   data: Array<FileDiffInfo>
 }
+
+export type PathGetInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type PathGetOutput = PathInfo
 
 export type DebugLocationListOutput = Array<LocationRef>
 
