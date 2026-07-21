@@ -101,6 +101,7 @@ function isOrphanedInterruptedTool(part: SessionV1.ToolPart) {
 
 export interface Interface {
   readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
+  readonly admit: (input: PromptInput) => Effect.Effect<SessionV1.WithParts, Image.Error>
   readonly prompt: (input: PromptInput) => Effect.Effect<SessionV1.WithParts, Image.Error>
   readonly loop: (input: LoopInput) => Effect.Effect<SessionV1.WithParts>
   readonly shell: (input: ShellInput) => Effect.Effect<SessionV1.WithParts, Session.BusyError>
@@ -1049,8 +1050,8 @@ const layer = Layer.effect(
       return { info, parts }
     }, Effect.scoped)
 
-    const prompt: (input: PromptInput) => Effect.Effect<SessionV1.WithParts, Image.Error> = Effect.fn(
-      "SessionPrompt.prompt",
+    const admit: (input: PromptInput) => Effect.Effect<SessionV1.WithParts, Image.Error> = Effect.fn(
+      "SessionPrompt.admit",
     )(function* (input: PromptInput) {
       const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
       yield* revert.cleanup(session)
@@ -1066,6 +1067,13 @@ const layer = Layer.effect(
         yield* sessions.setPermission({ sessionID: session.id, permission: permissions })
       }
 
+      return message
+    })
+
+    const prompt: (input: PromptInput) => Effect.Effect<SessionV1.WithParts, Image.Error> = Effect.fn(
+      "SessionPrompt.prompt",
+    )(function* (input: PromptInput) {
+      const message = yield* admit(input)
       if (input.noReply === true) return message
       return yield* loop({ sessionID: input.sessionID })
     })
@@ -1482,6 +1490,7 @@ const layer = Layer.effect(
 
     return Service.of({
       cancel,
+      admit,
       prompt,
       loop,
       shell,

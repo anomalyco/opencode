@@ -313,7 +313,11 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       payload: typeof PromptPayload.Type
     }) {
       yield* requireSession(ctx.params.sessionID)
-      yield* promptSvc.prompt({ ...ctx.payload, sessionID: ctx.params.sessionID }).pipe(
+      yield* promptSvc
+        .admit({ ...ctx.payload, sessionID: ctx.params.sessionID })
+        .pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
+      if (ctx.payload.noReply === true) return HttpApiSchema.NoContent.make()
+      yield* promptSvc.loop({ sessionID: ctx.params.sessionID }).pipe(
         Effect.catchCause((cause) =>
           Effect.gen(function* () {
             yield* Effect.logError("prompt_async failed", { sessionID: ctx.params.sessionID, cause })
