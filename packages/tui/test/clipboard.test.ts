@@ -1,19 +1,40 @@
-import { expect, test } from "bun:test"
-import { copyCommand } from "../src/clipboard"
+import { afterAll, beforeAll, expect, test } from "bun:test"
+import Clipboard from "@mariozechner/clipboard"
+import { read, write } from "../src/clipboard"
 
-test("prefers Wayland clipboard when available", () => {
-  expect(copyCommand("linux", true, (name) => name === "wl-copy")).toEqual(["wl-copy"])
+const redPixel1x1 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC"
+
+beforeAll(async () => {
+  await Clipboard.clear().catch(() => {})
 })
 
-test("uses osascript on macOS", () => {
-  expect(copyCommand("darwin", false, (name) => name === "osascript")).toEqual(["osascript"])
+afterAll(async () => {
+  await Clipboard.clear().catch(() => {})
 })
 
-test("falls back through X11 clipboard commands", () => {
-  expect(copyCommand("linux", true, (name) => name === "xclip")).toEqual(["xclip", "-selection", "clipboard"])
-  expect(copyCommand("linux", false, (name) => name === "xsel")).toEqual(["xsel", "--clipboard", "--input"])
+test("write and read text round-trip", async () => {
+  await write("hello clipboard")
+  const result = await read()
+  expect(result).toEqual({ data: "hello clipboard", mime: "text/plain" })
 })
 
-test("returns undefined when native clipboard is unavailable", () => {
-  expect(copyCommand("linux", false, () => false)).toBeUndefined()
+test("read returns undefined on empty clipboard", async () => {
+  await Clipboard.clear()
+  const result = await read()
+  expect(result).toBeUndefined()
+})
+
+test("read returns image when clipboard has image", async () => {
+  await Clipboard.setImageBase64(redPixel1x1)
+  const result = await read()
+  expect(result?.mime).toBe("image/png")
+  expect(typeof result?.data).toBe("string")
+  expect(result!.data.length).toBeGreaterThan(0)
+})
+
+test("read falls through to text when image read fails", async () => {
+  await Clipboard.setText("fallback text")
+  const result = await read()
+  expect(result).toEqual({ data: "fallback text", mime: "text/plain" })
 })
