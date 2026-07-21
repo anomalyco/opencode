@@ -179,6 +179,25 @@ describe("Patch", () => {
     ).toBe('He said "hi"\n')
   })
 
+  test("matches Unicode minus signs and spaces", () => {
+    expect(
+      Patch.derive("minus.txt", [{ oldLines: ["value - 1"], newLines: ["value - 2"] }], "value − 1\n")
+        .content,
+    ).toBe("value - 2\n")
+    const spaces = ["\u00A0", "\u2002", "\u2003", "\u2004", "\u2005", "\u2006", "\u2007", "\u2008", "\u2009", "\u200A", "\u202F", "\u205F", "\u3000"]
+    spaces.forEach(
+      (space) => {
+        expect(
+          Patch.derive(
+            "spaces.txt",
+            [{ oldLines: ["hello world"], newLines: ["hello there"] }],
+            `hello${space}world\n`,
+          ).content,
+        ).toBe("hello there\n")
+      },
+    )
+  })
+
   test("matches EOF-anchored chunks from the end", () => {
     expect(
       Patch.derive(
