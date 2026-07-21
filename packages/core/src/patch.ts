@@ -47,8 +47,8 @@ export function parse(patchText: string): Result.Result<ReadonlyArray<Hunk>, Par
   const lines = stripHeredoc(patchText.trim())
     .split("\n")
     .map((line) => (line.endsWith("\r") ? line.slice(0, -1) : line))
-  const begin = lines.findIndex((line) => line.trim() === "*** Begin Patch")
-  const end = lines.findIndex((line) => line.trim() === "*** End Patch")
+  const begin = lines[0]?.trim() === "*** Begin Patch" ? 0 : -1
+  const end = lines.at(-1)?.trim() === "*** End Patch" ? lines.length - 1 : -1
   if (begin === -1) return Result.fail(new BoundaryError({ boundary: "first" }))
   if (end === -1 || begin >= end) return Result.fail(new BoundaryError({ boundary: "last" }))
 
