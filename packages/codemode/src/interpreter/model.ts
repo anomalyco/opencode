@@ -36,7 +36,7 @@ export type StatementResult =
 
 export type MemberReference = {
   target: SafeObject | Array<unknown> | CodeModeRegExp | CodeModeURL
-  key: string | number
+  key: PropertyKey
 }
 
 export class CodeModeFunction {
@@ -60,6 +60,12 @@ export class ComputedValue {
 }
 
 export class PromiseNamespace {}
+
+export class SymbolNamespace {}
+
+export const AsyncIteratorSymbol: unique symbol = Symbol("codemode.async-iterator")
+export const IteratorSymbol: unique symbol = Symbol("codemode.iterator")
+export const IteratorSymbols = [AsyncIteratorSymbol, IteratorSymbol] as const
 
 export type PromiseMethodName = "all" | "allSettled" | "race" | "any" | "resolve" | "reject"
 

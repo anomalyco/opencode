@@ -13,6 +13,7 @@ import {
   PromiseMethodReference,
   PromiseNamespace,
   SearchFunction,
+  SymbolNamespace,
   UriFunction,
 } from "./model.js"
 import { ToolReference } from "../tool-runtime.js"
@@ -34,6 +35,7 @@ export const isRuntimeReference = (value: unknown): boolean =>
   value instanceof SearchFunction ||
   value instanceof PromiseCapabilityFunction ||
   value instanceof ErrorConstructorReference ||
+  value instanceof SymbolNamespace ||
   isCodeModeValue(value)
 
 function* childValues(value: object): Generator<unknown> {
@@ -113,7 +115,8 @@ export const typeofValue = (value: unknown): string => {
     value instanceof PromiseInstanceMethodReference ||
     value instanceof PromiseNamespace ||
     value instanceof PromiseCapabilityFunction ||
-    value instanceof ErrorConstructorReference
+    value instanceof ErrorConstructorReference ||
+    value instanceof SymbolNamespace
   )
     return "function"
   if (value instanceof UriFunction || value instanceof SearchFunction) return "function"

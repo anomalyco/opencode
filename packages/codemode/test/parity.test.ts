@@ -717,6 +717,18 @@ describe("destructuring assignment", () => {
     ).toEqual({ first: 1, rest: [2, 3], entry: "a4" })
   })
 
+  test("excludes computed numeric keys from object rest", async () => {
+    expect(
+      await value(`
+        const { [0]: declared, ...declarationRest } = { 0: "a", 1: "b" }
+        let assigned
+        let assignmentRest
+        ;({ [0]: assigned, ...assignmentRest } = { 0: "c", 1: "d" })
+        return { declared, declarationRest, assigned, assignmentRest }
+      `),
+    ).toEqual({ declared: "a", declarationRest: { 1: "b" }, assigned: "c", assignmentRest: { 1: "d" } })
+  })
+
   test("rejects computed keys that are not confined property keys", async () => {
     const err = await error(`const key = {}; const { [key]: value } = {}`)
     expect(err.message).toContain("Property key must be a string or number")

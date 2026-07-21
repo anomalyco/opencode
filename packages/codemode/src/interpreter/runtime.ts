@@ -1,7 +1,8 @@
-import { Cause, Effect } from "effect"
+import { Cause, Effect, Exit } from "effect"
 import { isBlockedMember, ToolReference, ToolRuntimeError, type SafeObject } from "../tool-runtime.js"
 import {
   type AstNode,
+  AsyncIteratorSymbol,
   asNode,
   type Binding,
   CodeModeFunction,
@@ -19,6 +20,8 @@ import {
   IntrinsicReference,
   InterpreterRuntimeError,
   isRecord,
+  IteratorSymbol,
+  IteratorSymbols,
   JsonMethodReference,
   type MemberReference,
   OptionalShortCircuit,
@@ -30,6 +33,7 @@ import {
   ProgramThrow,
   type ProgramNode,
   SearchFunction,
+  SymbolNamespace,
   type StatementResult,
   supportedSyntaxMessage,
   unsupportedSyntax,
@@ -211,6 +215,12 @@ const loopDeclaration = (left: AstNode, statement: "for...of" | "for...in") => {
   }
 }
 
+type CustomIterator = {
+  iterator: SafeObject
+  next: unknown
+  asynchronous: boolean
+}
+
 export class Interpreter<R> {
   private scopes: ScopeStack
   private readonly invokeTool: (path: ReadonlyArray<string>, args: Array<unknown>) => Effect.Effect<unknown, unknown, R>
@@ -241,6 +251,7 @@ export class Interpreter<R> {
     globalScope.set("tools", { mutable: false, value: new ToolReference([]) })
     globalScope.set("search", { mutable: false, value: new SearchFunction() })
     globalScope.set("Promise", { mutable: false, value: new PromiseNamespace() })
+    globalScope.set("Symbol", { mutable: false, value: new SymbolNamespace() })
     globalScope.set("undefined", { mutable: false, value: undefined })
     globalScope.set("Object", { mutable: false, value: new GlobalNamespace("Object") })
     globalScope.set("Math", { mutable: false, value: new GlobalNamespace("Math") })
@@ -636,9 +647,10 @@ export class Interpreter<R> {
       const body = getNode(node, "body")
 
       const iterable = spreadItems(right)
-      if (iterable === undefined) {
+      const iterator = iterable === undefined && awaiting ? yield* self.customIterator(right, node) : undefined
+      if (iterable === undefined && iterator === undefined) {
         throw new InterpreterRuntimeError(
-          `${awaiting ? "for await...of" : "for...of"} requires an array, string, Map, Set, or URLSearchParams value.`,
+          `${awaiting ? "for await...of" : "for...of"} requires an array, string, Map, Set, or URLSearchParams${awaiting ? ", or custom iterator" : ""} value.`,
           node,
         )
       }
@@ -657,19 +669,14 @@ export class Interpreter<R> {
         throw new InterpreterRuntimeError("Unsupported for...of binding.", left)
       }
 
-      for (const value of iterable) {
-        const resolved = awaiting
-          ? value instanceof CodeModePromise
-            ? yield* self.settlePromise(value)
-            : yield* Effect.as(Effect.yieldNow, value)
-          : value
-        const result = yield* Effect.gen(function* () {
+      const evaluateBody = (value: unknown) =>
+        Effect.gen(function* () {
           if (declared) {
             self.scopes.push()
             if (declared.lexical) self.predeclarePattern(declared.pattern, declared.mutable, left)
-            yield* self.declarePattern(declared.pattern, resolved, declared.mutable, left, declared.lexical)
+            yield* self.declarePattern(declared.pattern, value, declared.mutable, left, declared.lexical)
           } else if (assignment) {
-            yield* self.assignPattern(assignment, resolved, left)
+            yield* self.assignPattern(assignment, value, left)
           }
           return yield* self.evaluateStatement(body)
         }).pipe(
@@ -680,22 +687,48 @@ export class Interpreter<R> {
           ),
         )
 
+      if (iterable !== undefined) {
+        for (const value of iterable) {
+          const result = yield* evaluateBody(awaiting ? yield* self.awaitValue(value) : value)
+
+          if (result.kind === "return") return result
+          if (result.kind === "break") {
+            if (result.label !== undefined && !labels?.has(result.label)) return result
+            return { kind: "none" } satisfies StatementResult
+          }
+          if (result.kind === "continue" && result.label !== undefined && !labels?.has(result.label)) return result
+        }
+        return { kind: "none" } satisfies StatementResult
+      }
+      if (iterator === undefined) throw new InterpreterRuntimeError("Custom iterator is unavailable.", node)
+
+      while (true) {
+        const step = yield* self.nextIteratorResult(iterator, node)
+        if (step.done) return { kind: "none" } satisfies StatementResult
+        const bodyExit = yield* Effect.exit(evaluateBody(step.value))
+        if (!Exit.isSuccess(bodyExit)) {
+          // Process interruption must remain prompt; user cleanup cannot extend a timeout.
+          if (!Cause.hasInterruptsOnly(bodyExit.cause)) yield* Effect.exit(self.closeIterator(iterator, node))
+          return yield* Effect.failCause(bodyExit.cause)
+        }
+        const result = bodyExit.value
+
         if (result.kind === "return") {
+          yield* self.closeIterator(iterator, node)
           return result
         }
 
         if (result.kind === "break") {
+          yield* self.closeIterator(iterator, node)
           if (result.label !== undefined && !labels?.has(result.label)) return result
           return { kind: "none" } satisfies StatementResult
         }
 
-        if (result.kind === "continue") {
-          if (result.label !== undefined && !labels?.has(result.label)) return result
-          continue
+        if (result.kind === "continue" && result.label !== undefined && !labels?.has(result.label)) {
+          yield* self.closeIterator(iterator, node)
+          return result
         }
       }
-
-      return { kind: "none" } satisfies StatementResult
     }).pipe(
       Effect.ensuring(
         Effect.sync(() => {
@@ -703,6 +736,92 @@ export class Interpreter<R> {
         }),
       ),
     )
+  }
+
+  private awaitValue(value: unknown): Effect.Effect<unknown, unknown, R> {
+    return value instanceof CodeModePromise ? this.settlePromise(value) : Effect.as(Effect.yieldNow, value)
+  }
+
+  private customIterator(value: unknown, node: AstNode) {
+    if (!isRecord(value) || isRuntimeReference(value)) return Effect.succeed(undefined)
+    const asyncMethod = (value as Record<PropertyKey, unknown>)[AsyncIteratorSymbol]
+    const method = asyncMethod ?? (value as Record<PropertyKey, unknown>)[IteratorSymbol]
+    if (method === undefined || method === null) return Effect.succeed(undefined)
+    const self = this
+    return Effect.map(this.invokeCallable(method, [], node), (iterator) => {
+      const object = self.requireIteratorObject(iterator, "Iterator method result", node)
+      return {
+        iterator: object,
+        next: object.next,
+        asynchronous: asyncMethod !== undefined && asyncMethod !== null,
+      }
+    })
+  }
+
+  private nextIteratorResult(iterator: CustomIterator, node: AstNode) {
+    const self = this
+    return Effect.gen(function* () {
+      if (iterator.asynchronous) {
+        const object = self.requireIteratorObject(
+          yield* self.awaitValue(yield* self.invokeCallable(iterator.next, [], node)),
+          "Iterator next() result",
+          node,
+        )
+        return { done: Boolean(object.done), value: object.value }
+      }
+
+      const called = yield* Effect.exit(self.invokeCallable(iterator.next, [], node))
+      if (!Exit.isSuccess(called)) {
+        yield* Effect.yieldNow
+        return yield* Effect.failCause(called.cause)
+      }
+      const captured = yield* Effect.exit(
+        Effect.sync(() => {
+          const object = self.requireIteratorObject(called.value, "Iterator next() result", node)
+          return { done: Boolean(object.done), value: object.value }
+        }),
+      )
+      if (!Exit.isSuccess(captured)) {
+        yield* Effect.yieldNow
+        return yield* Effect.failCause(captured.cause)
+      }
+      return { done: captured.value.done, value: yield* self.awaitValue(captured.value.value) }
+    })
+  }
+
+  private closeIterator(iterator: CustomIterator, node: AstNode): Effect.Effect<void, unknown, R> {
+    const close = iterator.iterator.return
+    if (close === undefined || close === null) return iterator.asynchronous ? Effect.void : Effect.yieldNow
+    const self = this
+    return Effect.gen(function* () {
+      if (iterator.asynchronous) {
+        self.requireIteratorObject(
+          yield* self.awaitValue(yield* self.invokeCallable(close, [], node)),
+          "Iterator return() result",
+          node,
+        )
+        return
+      }
+
+      const called = yield* Effect.exit(self.invokeCallable(close, [], node))
+      if (!Exit.isSuccess(called)) {
+        yield* Effect.yieldNow
+        return yield* Effect.failCause(called.cause)
+      }
+      const captured = yield* Effect.exit(
+        Effect.sync(() => self.requireIteratorObject(called.value, "Iterator return() result", node).value),
+      )
+      if (!Exit.isSuccess(captured)) {
+        yield* Effect.yieldNow
+        return yield* Effect.failCause(captured.cause)
+      }
+      yield* self.awaitValue(captured.value)
+    })
+  }
+
+  private requireIteratorObject(value: unknown, context: string, node: AstNode): SafeObject {
+    if (isRecord(value) && !isRuntimeReference(value)) return value
+    throw new InterpreterRuntimeError(`${context} must be an object.`, node).as("TypeError")
   }
 
   private enumerableKeys(value: unknown): Array<string> | undefined {
@@ -922,7 +1041,7 @@ export class Interpreter<R> {
           )
         }
 
-        const consumed = new Set<string>()
+        const consumed = new Set<PropertyKey>()
         for (const propertyValue of getArray(pattern, "properties")) {
           const property = asNode(propertyValue, "properties")
 
@@ -930,6 +1049,10 @@ export class Interpreter<R> {
             const rest: SafeObject = Object.create(null) as SafeObject
             for (const [key, item] of Object.entries(value as SafeObject)) {
               if (!consumed.has(key) && !isBlockedMember(key)) rest[key] = item
+            }
+            for (const symbol of IteratorSymbols) {
+              if (!consumed.has(symbol) && Object.hasOwn(value, symbol))
+                Reflect.set(rest, symbol, Reflect.get(value, symbol))
             }
             yield* self.declarePattern(getNode(property, "argument"), rest, mutable, property, initialize)
             continue
@@ -939,7 +1062,7 @@ export class Interpreter<R> {
           if (isBlockedMember(String(key))) {
             throw new InterpreterRuntimeError(`Property '${String(key)}' is not available.`, property)
           }
-          consumed.add(String(key))
+          consumed.add(typeof key === "symbol" ? key : String(key))
           yield* self.declarePattern(
             getNode(property, "value"),
             self.destructuringPropertyValue(value as SafeObject | Array<unknown>, key),
@@ -1002,13 +1125,17 @@ export class Interpreter<R> {
         }
 
         const source = value as SafeObject | Array<unknown>
-        const consumed = new Set<string>()
+        const consumed = new Set<PropertyKey>()
         for (const propertyValue of getArray(pattern, "properties")) {
           const property = asNode(propertyValue, "properties")
           if (property.type === "RestElement") {
             const rest: SafeObject = Object.create(null) as SafeObject
             for (const [key, item] of Object.entries(source)) {
               if (!consumed.has(key) && !isBlockedMember(key)) rest[key] = item
+            }
+            for (const symbol of IteratorSymbols) {
+              if (!consumed.has(symbol) && Object.hasOwn(source, symbol))
+                Reflect.set(rest, symbol, Reflect.get(source, symbol))
             }
             yield* self.assignPattern(getNode(property, "argument"), rest, property)
             continue
@@ -1017,7 +1144,7 @@ export class Interpreter<R> {
           if (isBlockedMember(String(key))) {
             throw new InterpreterRuntimeError(`Property '${String(key)}' is not available.`, property)
           }
-          consumed.add(String(key))
+          consumed.add(typeof key === "symbol" ? key : String(key))
           yield* self.assignPattern(getNode(property, "value"), self.destructuringPropertyValue(source, key), property)
         }
         return
@@ -1044,7 +1171,7 @@ export class Interpreter<R> {
     })
   }
 
-  private destructuringPropertyKey(property: AstNode): Effect.Effect<string | number, unknown, R> {
+  private destructuringPropertyKey(property: AstNode): Effect.Effect<PropertyKey, unknown, R> {
     if (property.type !== "Property" || getString(property, "kind") !== "init") {
       throw new InterpreterRuntimeError("Unsupported object destructuring property.", property)
     }
@@ -1055,12 +1182,12 @@ export class Interpreter<R> {
     return Effect.succeed(keyNode.type === "Identifier" ? getString(keyNode, "name") : String(keyNode.value))
   }
 
-  private destructuringPropertyValue(source: SafeObject | Array<unknown>, key: string | number): unknown {
-    if (!Array.isArray(source)) return source[String(key)]
+  private destructuringPropertyValue(source: SafeObject | Array<unknown>, key: PropertyKey): unknown {
+    if (!Array.isArray(source)) return (source as Record<PropertyKey, unknown>)[key]
     if (key === "length") return source.length
     if (typeof key === "number") return source[key]
-    if (Object.hasOwn(source, key)) return (source as Record<string, unknown> & Array<unknown>)[key]
-    if (arrayMethods.has(key)) return new IntrinsicReference(source, key)
+    if (Object.hasOwn(source, key)) return (source as Record<PropertyKey, unknown> & Array<unknown>)[key]
+    if (typeof key === "string" && arrayMethods.has(key)) return new IntrinsicReference(source, key)
     return undefined
   }
 
@@ -1690,6 +1817,12 @@ export class Interpreter<R> {
       if (callable instanceof PromiseNamespace) {
         throw new InterpreterRuntimeError("Constructor Promise requires 'new'.", node).as("TypeError")
       }
+      if (callable instanceof SymbolNamespace) {
+        throw new InterpreterRuntimeError(
+          "Symbol is not callable; only Symbol.asyncIterator and Symbol.iterator are available.",
+          node,
+        ).as("TypeError")
+      }
       if (callable instanceof PromiseCapabilityFunction) {
         callable.settle(args[0])
         return undefined
@@ -1800,6 +1933,9 @@ export class Interpreter<R> {
             if (isBlockedMember(key)) throw new InterpreterRuntimeError(`Property '${key}' is not available.`, property)
             objectValue[key] = value
           }
+          for (const symbol of IteratorSymbols) {
+            if (Object.hasOwn(spread, symbol)) Reflect.set(objectValue, symbol, Reflect.get(spread, symbol))
+          }
           continue
         }
 
@@ -1830,7 +1966,7 @@ export class Interpreter<R> {
         if (isBlockedMember(String(key))) {
           throw new InterpreterRuntimeError(`Property '${String(key)}' is not available.`, keyNode)
         }
-        objectValue[String(key)] = yield* self.evaluateExpression(valueNode)
+        Reflect.set(objectValue, key, yield* self.evaluateExpression(valueNode))
       }
 
       return objectValue
@@ -1955,6 +2091,12 @@ export class Interpreter<R> {
         )
       }
 
+      if (objectValue instanceof SymbolNamespace) {
+        if (key === "asyncIterator") return new ComputedValue(AsyncIteratorSymbol)
+        if (key === "iterator") return new ComputedValue(IteratorSymbol)
+        return new ComputedValue(undefined)
+      }
+
       if (objectValue instanceof GlobalNamespace) {
         if (typeof key === "string" && isBlockedMember(key)) {
           throw new InterpreterRuntimeError(`${objectValue.name}.${key} is not available.`, propertyNode)
@@ -1976,7 +2118,7 @@ export class Interpreter<R> {
 
       if (typeof objectValue === "string") {
         if (key === "length") return new ComputedValue(objectValue.length)
-        const index = parseArrayIndex(key)
+        const index = typeof key === "symbol" ? undefined : parseArrayIndex(key)
         if (index !== undefined) return new ComputedValue(objectValue[index])
         if (typeof key === "string" && stringMethods.has(key)) return new IntrinsicReference(objectValue, key)
         return new ComputedValue(undefined)
@@ -2072,7 +2214,7 @@ export class Interpreter<R> {
 
       if (Array.isArray(objectValue)) {
         if (operation === "delete") return { target: objectValue, key }
-        const index = parseArrayIndex(key)
+        const index = typeof key === "symbol" ? undefined : parseArrayIndex(key)
         if (key !== "length" && !(typeof key === "string" && arrayMethods.has(key)) && index === undefined) {
           if (typeof key === "string" && Object.hasOwn(objectValue, key)) {
             return new ComputedValue((objectValue as Record<string, unknown> & Array<unknown>)[key])
@@ -2103,13 +2245,13 @@ export class Interpreter<R> {
       if (Array.isArray(reference.target)) {
         if (reference.key === "length") return reference.target.length
         if (typeof reference.key === "string") return new IntrinsicReference(reference.target, reference.key)
-        return reference.target[reference.key]
+        return (reference.target as unknown as Record<PropertyKey, unknown>)[reference.key]
       }
       if (reference.target instanceof CodeModeRegExp) return reference.target.lastIndex
       if (reference.target instanceof CodeModeURL) {
         return (reference.target.url as unknown as Record<string, unknown>)[String(reference.key)]
       }
-      return reference.target[String(reference.key)]
+      return (reference.target as Record<PropertyKey, unknown>)[reference.key]
     })
   }
 
@@ -2171,22 +2313,22 @@ export class Interpreter<R> {
           throw new InterpreterRuntimeError("Array methods cannot be assigned.", node)
         }
       }
-      const key = Array.isArray(reference.target) ? reference.key : String(reference.key)
+      const key = reference.key
       const { write, next, result } = yield* compute(self.readReferenceValue(reference, key))
       if (write) self.assignToReference(reference, key, next, node)
       return result
     })
   }
 
-  private readReferenceValue(reference: MemberReference, key: number | string): unknown {
+  private readReferenceValue(reference: MemberReference, key: PropertyKey): unknown {
     if (reference.target instanceof CodeModeURL) {
-      return (reference.target.url as unknown as Record<string, unknown>)[key]
+      return (reference.target.url as unknown as Record<PropertyKey, unknown>)[key]
     }
     if (reference.target instanceof CodeModeRegExp) return reference.target.lastIndex
     return (reference.target as Record<PropertyKey, unknown>)[key]
   }
 
-  private assignToReference(reference: MemberReference, key: number | string, next: unknown, node: AstNode): void {
+  private assignToReference(reference: MemberReference, key: PropertyKey, next: unknown, node: AstNode): void {
     if (Array.isArray(reference.target)) {
       const target = reference.target
       if (typeof key !== "number" || parseArrayIndex(key) === undefined) {
@@ -2219,16 +2361,19 @@ export class Interpreter<R> {
       return
     }
     const target = reference.target as SafeObject
-    const objectKey = key as string
     rejectCircularInsertion(target, next, "Object assignment result", node)
-    target[objectKey] = next
+    Reflect.set(target, key, next)
   }
 
-  private toPropertyKey(value: unknown, node: AstNode): string | number {
+  private toPropertyKey(value: unknown, node: AstNode): PropertyKey {
     if (typeof value === "string" || typeof value === "number") {
       return value
     }
+    if (value === AsyncIteratorSymbol || value === IteratorSymbol) return value
 
-    throw new InterpreterRuntimeError("Property key must be a string or number.", node)
+    throw new InterpreterRuntimeError(
+      "Property key must be a string or number, or Symbol.asyncIterator/Symbol.iterator.",
+      node,
+    )
   }
 }

@@ -36,7 +36,8 @@ ultimate source of truth.
 - [x] Regular-expression literals.
 - [x] `NaN` and `Infinity` globals.
 - [ ] BigInt literals and in-interpreter BigInt arithmetic; BigInt remains invalid at JSON-like host boundaries.
-- [ ] Symbol primitive values and symbol-keyed properties.
+- [ ] Arbitrary Symbol primitive values and symbol-keyed properties. The confined `Symbol.iterator` and
+      `Symbol.asyncIterator` keys are available only for custom iterator protocols.
 - [ ] Tagged-template calls.
 - [ ] Getter and setter definitions in object literals.
 
@@ -70,9 +71,11 @@ ultimate source of truth.
 - [x] `try`, `catch`, optional catch bindings, and `finally`.
 - [x] `throw` with arbitrary values.
 - [x] Labeled statements, labeled `break`, and labeled `continue`.
-- [x] `for await...of` over the supported synchronous collections, awaiting each yielded CodeMode promise or plain
-      value before binding it. Custom sync/async iterator objects, `Symbol.asyncIterator`, and async generators remain
-      outside the supported subset.
+- [x] `for await...of` over the supported synchronous collections and custom iterator objects using
+      `Symbol.asyncIterator` or the `Symbol.iterator` fallback. Each iterator step is sequential, yielded promises and
+      plain values from synchronous collections and sync iterators are awaited before binding, and abrupt loop
+      completion invokes the iterator's optional `return()`. Custom async iterators control their yielded values, as in
+      JavaScript; only their `next()` results are awaited. Async generators remain outside the supported subset.
 
 ## Functions and callbacks
 
