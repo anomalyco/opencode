@@ -1,0 +1,24 @@
+--- a/index.js
++++ b/index.js
+@@ -1,6 +1,6 @@
+ import { createComponent, Dynamic, memo } from 'solid-js/web';
+ import { createContext, splitProps, createMemo, onCleanup, createEffect, useContext, createSignal, Show, on, batch } from 'solid-js';
+-import { DragDropManager, resolveCustomizable, defaultPreset, Draggable, Feedback, Droppable } from '@dnd-kit/dom';
++import { DragDropManager, resolveCustomizable, defaultPreset, Draggable, Droppable, Feedback, Scroller, ScrollListener, StyleInjector } from '@dnd-kit/dom';
+ export { KeyboardSensor, PointerSensor } from '@dnd-kit/dom';
+ import { isSortable } from '@dnd-kit/dom/sortable';
+ import { effect, untracked } from '@dnd-kit/state';
+@@ -117,7 +117,12 @@
+   createEffect(() => {
+     const _manager = manager();
+     _manager.renderer = renderer;
+-    _manager.plugins = resolveCustomizable(props.plugins, defaultPreset.plugins);
++    _manager.plugins = [
++      ScrollListener,
++      Scroller,
++      StyleInjector,
++      ...resolveCustomizable(props.plugins, defaultPreset.plugins)
++    ];
+     _manager.sensors = resolveCustomizable(props.sensors, defaultPreset.sensors);
+     _manager.modifiers = resolveCustomizable(props.modifiers, defaultPreset.modifiers);
+   });
