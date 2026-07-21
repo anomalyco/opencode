@@ -487,6 +487,22 @@ describe("PatchTool", () => {
     ),
   )
 
+  it.live("applies successive update operations to one file", () =>
+    withTempTool((directory, registry) =>
+      Effect.gen(function* () {
+        const target = path.join(directory, "successive.txt")
+        yield* Effect.promise(() => fs.writeFile(target, "a\nb\n"))
+        yield* executeTool(
+          registry,
+          call(
+            "*** Begin Patch\n*** Update File: successive.txt\n@@\n-a\n+A\n*** Update File: successive.txt\n@@\n-b\n+B\n*** End Patch",
+          ),
+        )
+        expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("A\nB\n")
+      }),
+    ),
+  )
+
   it.live("does not invent a first-line diff for BOM files", () =>
     withTempTool((directory, registry) =>
       Effect.gen(function* () {

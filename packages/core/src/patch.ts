@@ -54,8 +54,9 @@ export function parse(patchText: string): Result.Result<ReadonlyArray<Hunk>, Par
   let index = begin + 1
   while (index < end) {
     const line = lines[index]!
-    if (line.startsWith("*** Add File:")) {
-      const path = line.slice("*** Add File:".length).trim()
+    const header = line.trim()
+    if (header.startsWith("*** Add File:")) {
+      const path = header.slice("*** Add File:".length).trim()
       if (!path) {
         index++
         continue
@@ -65,8 +66,8 @@ export function parse(patchText: string): Result.Result<ReadonlyArray<Hunk>, Par
       index = parsed.next
       continue
     }
-    if (line.startsWith("*** Delete File:")) {
-      const path = line.slice("*** Delete File:".length).trim()
+    if (header.startsWith("*** Delete File:")) {
+      const path = header.slice("*** Delete File:".length).trim()
       if (!path) {
         index++
         continue
@@ -75,8 +76,8 @@ export function parse(patchText: string): Result.Result<ReadonlyArray<Hunk>, Par
       index++
       continue
     }
-    if (line.startsWith("*** Update File:")) {
-      const path = line.slice("*** Update File:".length).trim()
+    if (header.startsWith("*** Update File:")) {
+      const path = header.slice("*** Update File:".length).trim()
       if (!path) {
         index++
         continue

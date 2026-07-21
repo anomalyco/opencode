@@ -58,6 +58,18 @@ describe("Patch", () => {
     ])
   })
 
+  test("parses whitespace-padded patch markers", () => {
+    expect(parse(" *** Begin Patch\n*** Add File: add.txt\n+added\n*** End Patch ")).toEqual([
+      { type: "add", path: "add.txt", contents: "added" },
+    ])
+  })
+
+  test("parses a whitespace-padded hunk header", () => {
+    expect(parse("*** Begin Patch\n  *** Add File: add.txt\n+added\n*** End Patch")).toEqual([
+      { type: "add", path: "add.txt", contents: "added" },
+    ])
+  })
+
   test("derives fuzzy line updates while preserving BOM", () => {
     const update = Patch.derive("update.txt", [{ oldLines: ["  old   "], newLines: ["new"] }], "\uFEFFold\n")
     expect(update).toEqual({ content: "new\n", bom: true })

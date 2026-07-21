@@ -111,6 +111,7 @@ export const Plugin = {
                   }
                   const prepared: Prepared[] = []
                   const targets: Target[] = []
+                  const updates = new Map<string, string>()
                   for (const hunk of hunks) {
                     yield* Effect.gen(function* () {
                       const target = resolveTarget(location, hunk.path)
@@ -154,28 +155,34 @@ export const Plugin = {
                         prepared.push({ ...hunk, target, before: original.replace(/^\uFEFF/, ""), after: "" })
                         return
                       }
-                      const stats = yield* fs.stat(target.canonical).pipe(
-                        Effect.mapError(
-                          (error) =>
-                            new ToolFailure({
-                              message: `patch verification failed: Failed to read file to update ${target.canonical}: ${error instanceof Error ? error.message : String(error)}`,
-                            }),
-                        ),
-                      )
-                      if (stats.type === "Directory") {
-                        return yield* new ToolFailure({
-                          message: `patch verification failed: Failed to read file to update ${target.canonical}: path is a directory`,
-                        })
-                      }
-                      const content = yield* fs.readFile(target.canonical).pipe(
-                        Effect.mapError(
-                          (error) =>
-                            new ToolFailure({
-                              message: `patch verification failed: Failed to read file to update ${target.canonical}: ${error instanceof Error ? error.message : String(error)}`,
-                            }),
-                        ),
-                      )
-                      const original = new TextDecoder("utf-8", { ignoreBOM: true }).decode(content)
+                      const previous = updates.get(target.canonical)
+                      const original =
+                        previous ??
+                        (yield* Effect.gen(function* () {
+                          const stats = yield* fs.stat(target.canonical).pipe(
+                            Effect.mapError(
+                              (error) =>
+                                new ToolFailure({
+                                  message: `patch verification failed: Failed to read file to update ${target.canonical}: ${error instanceof Error ? error.message : String(error)}`,
+                                }),
+                            ),
+                          )
+                          if (stats.type === "Directory") {
+                            return yield* new ToolFailure({
+                              message: `patch verification failed: Failed to read file to update ${target.canonical}: path is a directory`,
+                            })
+                          }
+                          return new TextDecoder("utf-8", { ignoreBOM: true }).decode(
+                            yield* fs.readFile(target.canonical).pipe(
+                              Effect.mapError(
+                                (error) =>
+                                  new ToolFailure({
+                                    message: `patch verification failed: Failed to read file to update ${target.canonical}: ${error instanceof Error ? error.message : String(error)}`,
+                                  }),
+                              ),
+                            ),
+                          )
+                        }))
                       const before = original.replace(/^\uFEFF/, "")
                       const update = yield* Effect.try({
                         try: () => Patch.derive(hunk.path, hunk.chunks, original),
@@ -205,6 +212,7 @@ export const Plugin = {
                         after: update.content,
                         moveTarget,
                       })
+                      if (!moveTarget) updates.set(target.canonical, Patch.joinBom(update.content, update.bom))
                     }).pipe(Effect.mapError((error) => (error instanceof ToolFailure ? error : fail(hunk.path, error))))
                   }
 
