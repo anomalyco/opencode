@@ -49,8 +49,40 @@ function heal(text: string) {
   return remend(text, { linkMode: "text-only" })
 }
 
+function mermaid(lang: string | undefined) {
+  return language(lang)?.toLowerCase() === "mermaid"
+}
+
+// Settled messages render as one full block, but mermaid fences must become standalone code
+// blocks so they can be swapped for a rendered diagram. Everything else stays coalesced.
+function splitMermaid(text: string): Block[] {
+  if (refs(text)) return [{ raw: text, src: text, mode: "full" }]
+  const tokens = marked.lexer(text)
+  if (!tokens.some((token) => token.type === "code" && mermaid((token as Tokens.Code).lang)))
+    return [{ raw: text, src: text, mode: "full" }]
+
+  const blocks: Block[] = []
+  let buffer = ""
+  const flush = () => {
+    if (!buffer) return
+    blocks.push({ raw: buffer, src: buffer, mode: "full" })
+    buffer = ""
+  }
+  for (const token of tokens) {
+    const code = token.type === "code" ? (token as Tokens.Code) : undefined
+    if (code && mermaid(code.lang)) {
+      flush()
+      blocks.push({ raw: code.raw, src: code.text, mode: "code", language: language(code.lang), complete: true })
+      continue
+    }
+    buffer += token.raw
+  }
+  flush()
+  return blocks
+}
+
 export function stream(text: string, live: boolean): Block[] {
-  if (!live) return [{ raw: text, src: text, mode: "full" }] satisfies Block[]
+  if (!live) return splitMermaid(text)
   if (refs(text)) return [{ raw: text, src: heal(text), mode: "live" }] satisfies Block[]
   const tokens = marked.lexer(text)
   const tail = tokens.findLastIndex((token) => token.type !== "space")

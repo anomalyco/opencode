@@ -199,6 +199,31 @@
     color: var(--markdown-shell-code-token-color) !important;
   }
 
+  [data-component="markdown-code"][data-code-kind="mermaid"] [data-slot="mermaid-diagram"] {
+    display: none;
+  }
+
+  [data-component="markdown-code"][data-code-kind="mermaid"][data-mermaid-state="rendered"] [data-slot="mermaid-diagram"] {
+    display: flex;
+    justify-content: center;
+    margin-top: 12px;
+    margin-bottom: 24px;
+    padding: 16px;
+    overflow-x: auto;
+    background: var(--color-background-stronger);
+    border: 0.5px solid var(--v2-border-border-base);
+    border-radius: 6px;
+  }
+
+  [data-component="markdown-code"][data-code-kind="mermaid"][data-mermaid-state="rendered"] [data-slot="mermaid-source"] {
+    display: none;
+  }
+
+  [data-component="markdown-code"][data-code-kind="mermaid"] [data-slot="mermaid-diagram"] svg {
+    max-width: 100%;
+    height: auto;
+  }
+
   [data-slot="markdown-copy-button"] {
     position: absolute;
     top: 4px;
