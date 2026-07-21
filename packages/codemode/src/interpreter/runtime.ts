@@ -744,18 +744,21 @@ export class Interpreter<R> {
 
   private customIterator(value: unknown, node: AstNode) {
     if (!isRecord(value) || isRuntimeReference(value)) return Effect.succeed(undefined)
-    const asyncMethod = (value as Record<PropertyKey, unknown>)[AsyncIteratorSymbol]
-    const method = asyncMethod ?? (value as Record<PropertyKey, unknown>)[IteratorSymbol]
+    const asyncMethod = Reflect.get(value, AsyncIteratorSymbol)
+    const method = asyncMethod ?? Reflect.get(value, IteratorSymbol)
     if (method === undefined || method === null) return Effect.succeed(undefined)
     const self = this
-    return Effect.map(this.invokeCallable(method, [], node), (iterator) => {
-      const object = self.requireIteratorObject(iterator, "Iterator method result", node)
-      return {
-        iterator: object,
-        next: object.next,
-        asynchronous: asyncMethod !== undefined && asyncMethod !== null,
-      }
-    })
+    return Effect.map(
+      this.invokeCallable(this.requireIteratorMethod(method, "Iterator method", node), [], node),
+      (iterator) => {
+        const object = self.requireIteratorObject(iterator, "Iterator method result", node)
+        return {
+          iterator: object,
+          next: self.requireIteratorMethod(object.next, "Iterator next", node),
+          asynchronous: asyncMethod !== undefined && asyncMethod !== null,
+        }
+      },
+    )
   }
 
   private nextIteratorResult(iterator: CustomIterator, node: AstNode) {
@@ -794,16 +797,17 @@ export class Interpreter<R> {
     if (close === undefined || close === null) return iterator.asynchronous ? Effect.void : Effect.yieldNow
     const self = this
     return Effect.gen(function* () {
+      const method = self.requireIteratorMethod(close, "Iterator return", node)
       if (iterator.asynchronous) {
         self.requireIteratorObject(
-          yield* self.awaitValue(yield* self.invokeCallable(close, [], node)),
+          yield* self.awaitValue(yield* self.invokeCallable(method, [], node)),
           "Iterator return() result",
           node,
         )
         return
       }
 
-      const called = yield* Effect.exit(self.invokeCallable(close, [], node))
+      const called = yield* Effect.exit(self.invokeCallable(method, [], node))
       if (!Exit.isSuccess(called)) {
         yield* Effect.yieldNow
         return yield* Effect.failCause(called.cause)
@@ -822,6 +826,11 @@ export class Interpreter<R> {
   private requireIteratorObject(value: unknown, context: string, node: AstNode): SafeObject {
     if (isRecord(value) && !isRuntimeReference(value)) return value
     throw new InterpreterRuntimeError(`${context} must be an object.`, node).as("TypeError")
+  }
+
+  private requireIteratorMethod(value: unknown, context: string, node: AstNode): unknown {
+    if (typeofValue(value) === "function") return value
+    throw new InterpreterRuntimeError(`${context} must be a function.`, node).as("TypeError")
   }
 
   private enumerableKeys(value: unknown): Array<string> | undefined {
@@ -1183,10 +1192,10 @@ export class Interpreter<R> {
   }
 
   private destructuringPropertyValue(source: SafeObject | Array<unknown>, key: PropertyKey): unknown {
-    if (!Array.isArray(source)) return (source as Record<PropertyKey, unknown>)[key]
+    if (!Array.isArray(source)) return Reflect.get(source, key)
     if (key === "length") return source.length
     if (typeof key === "number") return source[key]
-    if (Object.hasOwn(source, key)) return (source as Record<PropertyKey, unknown> & Array<unknown>)[key]
+    if (Object.hasOwn(source, key)) return Reflect.get(source, key)
     if (typeof key === "string" && arrayMethods.has(key)) return new IntrinsicReference(source, key)
     return undefined
   }
@@ -2245,13 +2254,13 @@ export class Interpreter<R> {
       if (Array.isArray(reference.target)) {
         if (reference.key === "length") return reference.target.length
         if (typeof reference.key === "string") return new IntrinsicReference(reference.target, reference.key)
-        return (reference.target as unknown as Record<PropertyKey, unknown>)[reference.key]
+        return Reflect.get(reference.target, reference.key)
       }
       if (reference.target instanceof CodeModeRegExp) return reference.target.lastIndex
       if (reference.target instanceof CodeModeURL) {
-        return (reference.target.url as unknown as Record<string, unknown>)[String(reference.key)]
+        return Reflect.get(reference.target.url, reference.key)
       }
-      return (reference.target as Record<PropertyKey, unknown>)[reference.key]
+      return Reflect.get(reference.target, reference.key)
     })
   }
 
@@ -2322,10 +2331,10 @@ export class Interpreter<R> {
 
   private readReferenceValue(reference: MemberReference, key: PropertyKey): unknown {
     if (reference.target instanceof CodeModeURL) {
-      return (reference.target.url as unknown as Record<PropertyKey, unknown>)[key]
+      return Reflect.get(reference.target.url, key)
     }
     if (reference.target instanceof CodeModeRegExp) return reference.target.lastIndex
-    return (reference.target as Record<PropertyKey, unknown>)[key]
+    return Reflect.get(reference.target, key)
   }
 
   private assignToReference(reference: MemberReference, key: PropertyKey, next: unknown, node: AstNode): void {

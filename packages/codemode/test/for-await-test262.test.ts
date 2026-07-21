@@ -1,10 +1,15 @@
 /*
  * Portions adapted from Test262 at revision 250f204f23a9249ff204be2baec29600faae7b75:
  * - test/language/statements/for-await-of/ticks-with-sync-iter-resolved-promise-and-constructor-lookup.js
+ * - test/language/statements/for-await-of/ticks-with-async-iter-resolved-promise-and-constructor-lookup.js
  * - test/language/statements/for-await-of/async-func-dstr-let-ary-ptrn-elem-id-iter-val.js
  * - test/language/statements/for-await-of/async-func-decl-dstr-array-rest-after-element.js
+ * - test/language/statements/for-await-of/iterator-close-non-throw-get-method-is-null.js
+ * - test/language/statements/for-await-of/iterator-close-non-throw-get-method-non-callable.js
+ * - test/language/statements/for-await-of/iterator-close-throw-get-method-non-callable.js
  *
  * Copyright (C) 2019 André Bargull. All rights reserved.
+ * Copyright (C) 2020 Alexey Shvayka. All rights reserved.
  * Test262 portions are governed by the BSD license in LICENSE.test262.
  */
 import { describe, expect, test } from "bun:test"
@@ -160,6 +165,26 @@ describe("Test262 for-await-of adaptations", () => {
         for await (const item of iterator) return [item instanceof Promise, await item]
       `),
     ).toEqual([true, 1])
+  })
+
+  test("awaits synchronous results from an async iterator before the body", async () => {
+    expect(
+      await value(`
+        const events = ["pre"]
+        const ticks = Promise.resolve()
+          .then(() => events.push("tick 1"))
+          .then(() => events.push("tick 2"))
+        let done = false
+        const iterator = {
+          [Symbol.asyncIterator]: () => iterator,
+          next: () => done ? { done: true } : (done = true, { done: false, value: Promise.resolve(1) }),
+        }
+        for await (const item of iterator) events.push(item instanceof Promise ? "loop" : "adopted")
+        events.push("post")
+        await ticks
+        return events
+      `),
+    ).toEqual(["pre", "tick 1", "loop", "tick 2", "post"])
   })
 
   test("falls back to a custom synchronous iterator", async () => {
@@ -352,6 +377,115 @@ describe("Test262 for-await-of adaptations", () => {
         return closed
       `),
     ).toBe(2)
+  })
+
+  test("treats a null iterator return method as absent", async () => {
+    expect(
+      await value(`
+        let count = 0
+        const iterator = {
+          [Symbol.asyncIterator]: () => iterator,
+          next: async () => ({ done: false, value: 1 }),
+          return: null,
+        }
+        for await (const item of iterator) {
+          count += 1
+          break
+        }
+        return count
+      `),
+    ).toBe(1)
+  })
+
+  test("a non-callable return method replaces break with TypeError", async () => {
+    expect(
+      await value(`
+        const iterator = {
+          [Symbol.asyncIterator]: () => iterator,
+          next: async () => ({ done: false, value: 1 }),
+          return: true,
+        }
+        try {
+          for await (const item of iterator) break
+        } catch (error) {
+          return error.name
+        }
+        return "missed"
+      `),
+    ).toBe("TypeError")
+  })
+
+  test("a body throw wins over a non-callable return method", async () => {
+    expect(
+      await value(`
+        const iterator = {
+          [Symbol.asyncIterator]: () => iterator,
+          next: async () => ({ done: false, value: 1 }),
+          return: true,
+        }
+        try {
+          for await (const item of iterator) throw "body"
+        } catch (error) {
+          return error
+        }
+        return "missed"
+      `),
+    ).toBe("body")
+  })
+
+  test("rejects a primitive iterator return result", async () => {
+    expect(
+      await value(`
+        const iterator = {
+          [Symbol.asyncIterator]: () => iterator,
+          next: async () => ({ done: false, value: 1 }),
+          return: async () => null,
+        }
+        try {
+          for await (const item of iterator) break
+        } catch (error) {
+          return error.name
+        }
+        return "missed"
+      `),
+    ).toBe("TypeError")
+  })
+
+  test("propagates iterator acquisition failures", async () => {
+    expect(
+      await value(`
+        const iterator = {
+          [Symbol.asyncIterator]: () => { throw "acquire" },
+        }
+        try {
+          for await (const item of iterator) {}
+        } catch (error) {
+          return error
+        }
+        return "missed"
+      `),
+    ).toBe("acquire")
+  })
+
+  test("rejects malformed iterator acquisition methods and results", async () => {
+    expect(
+      await value(`
+        const names = []
+        const invalid = [
+          { [Symbol.asyncIterator]: true },
+          { [Symbol.asyncIterator]: () => 1 },
+          { [Symbol.asyncIterator]: () => ({ next: true }) },
+        ]
+        for (const iterator of invalid) {
+          try {
+            for await (const item of iterator) {}
+          } catch (error) {
+            names.push(error.name)
+          }
+        }
+        return names
+      `),
+    ).toEqual(["TypeError", "TypeError", "TypeError"])
   })
 
   test("preserves iterator protocol keys through object copies", async () => {
