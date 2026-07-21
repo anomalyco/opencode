@@ -16,15 +16,15 @@ The trigger for the program was the user's clarification:
 
 ## Stage-by-stage summary
 
-| Stage | Topic | Outcome | Amendment |
-| --- | --- | --- | --- |
-| 1 | Archived-issue management realignment | Removed `IssueArchivedError` guard from `Issue.update` / `Issue.reorder`; deleted `Issue.patchStatus` service; added `status` parameter to `issue_update` tool | `2026-07-19-archived-issue-management-realignment.md` |
-| 2 | `.catch()` rule source alignment | Confirmed the "use `catchTag`" project_memory rule cannot be sourced to `AGENTS.md` but is retained as a project rule; documented the trade-off | `2026-07-19-catch-rule-source-alignment.md` |
-| 3.1 | `issue.ts` zod → Effect Schema | `Status` / `Outcome` / `Priority` / `Info` / `IssueNode` migrated; `z.infer` → `Schema.Schema.Type`; `NonNegativeInt` for `level`/`position` | `2026-07-19-effect-schema-migration.md` |
-| 3.2 | `linear-binding.ts` zod → Effect Schema | `Binding` / `FileSchema` migrated; `safeParse` → `Schema.decodeUnknownOption` + `Option.getOrUndefined` | (covered by Stage 3 amendment) |
-| 4 | `createSignal` → `createStore` | 3 UI components migrated: `date-picker.tsx`, `todo-popover.tsx`, `linear-sync-history.tsx` | `2026-07-19-createstore-migration.md` |
-| 5 | Composer reuse refactor | `dialog-edit-todo.tsx` now renders shared `PromptPopover` from `@/components/prompt-input/slash-popover`; local `SlashCommand` interface removed; key/id-based active state | `2026-07-19-composer-reuse-refactor.md` |
-| 6 | Final verification + doc consolidation | This document | (this file) |
+| Stage | Topic                                   | Outcome                                                                                                                                                                     | Amendment                                             |
+| ----- | --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| 1     | Archived-issue management realignment   | Removed `IssueArchivedError` guard from `Issue.update` / `Issue.reorder`; deleted `Issue.patchStatus` service; added `status` parameter to `issue_update` tool              | `2026-07-19-archived-issue-management-realignment.md` |
+| 2     | `.catch()` rule source alignment        | Confirmed the "use `catchTag`" project_memory rule cannot be sourced to `AGENTS.md` but is retained as a project rule; documented the trade-off                             | `2026-07-19-catch-rule-source-alignment.md`           |
+| 3.1   | `issue.ts` zod → Effect Schema          | `Status` / `Outcome` / `Priority` / `Info` / `IssueNode` migrated; `z.infer` → `Schema.Schema.Type`; `NonNegativeInt` for `level`/`position`                                | `2026-07-19-effect-schema-migration.md`               |
+| 3.2   | `linear-binding.ts` zod → Effect Schema | `Binding` / `FileSchema` migrated; `safeParse` → `Schema.decodeUnknownOption` + `Option.getOrUndefined`                                                                     | (covered by Stage 3 amendment)                        |
+| 4     | `createSignal` → `createStore`          | 3 UI components migrated: `date-picker.tsx`, `todo-popover.tsx`, `linear-sync-history.tsx`                                                                                  | `2026-07-19-createstore-migration.md`                 |
+| 5     | Composer reuse refactor                 | `dialog-edit-todo.tsx` now renders shared `PromptPopover` from `@/components/prompt-input/slash-popover`; local `SlashCommand` interface removed; key/id-based active state | `2026-07-19-composer-reuse-refactor.md`               |
+| 6     | Final verification + doc consolidation  | This document                                                                                                                                                               | (this file)                                           |
 
 ## Final verification
 

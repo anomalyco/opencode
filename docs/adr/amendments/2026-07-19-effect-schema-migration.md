@@ -38,19 +38,19 @@ out of Todo Sidebar Feature scope per workspace rule).
 
 ### Schema replacements
 
-| Before (zod) | After (Effect Schema) |
-| --- | --- |
-| `import z from "zod"` | `import { NonNegativeInt } from "@opencode-ai/core/schema"` |
-| `z.string().describe("...")` | `Schema.String.annotate({ description: "..." })` |
-| `z.enum(["done", "canceled", "duplicate"])` | `Schema.Literals(["done", "canceled", "duplicate"])` |
-| `z.enum([...]).describe("...")` | `Schema.Literals([...]).annotate({ description: "..." })` |
-| `z.object({...}).meta({ ref: "Issue" })` | `Schema.Struct({...}).annotate({ identifier: "Issue" })` |
-| `Info.extend({...})` (zod extend) | `Schema.Struct({ ...Info.fields, children: Schema.Array(Info) }).annotate({ identifier: "IssueNode" })` |
-| `z.infer<typeof X>` | `Schema.Schema.Type<typeof X>` |
-| `.default("")` | (removed — defaults handled in `toRow`/`mapRow`) |
-| `.nullable().optional()` | `Schema.optional(Schema.NullOr(...))` |
-| `z.number().int().min(0)` | `NonNegativeInt` (from `@opencode-ai/core/schema`) |
-| `z.record(z.string(), z.unknown())` | `Schema.Record(Schema.String, Schema.Unknown)` |
+| Before (zod)                                | After (Effect Schema)                                                                                   |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `import z from "zod"`                       | `import { NonNegativeInt } from "@opencode-ai/core/schema"`                                             |
+| `z.string().describe("...")`                | `Schema.String.annotate({ description: "..." })`                                                        |
+| `z.enum(["done", "canceled", "duplicate"])` | `Schema.Literals(["done", "canceled", "duplicate"])`                                                    |
+| `z.enum([...]).describe("...")`             | `Schema.Literals([...]).annotate({ description: "..." })`                                               |
+| `z.object({...}).meta({ ref: "Issue" })`    | `Schema.Struct({...}).annotate({ identifier: "Issue" })`                                                |
+| `Info.extend({...})` (zod extend)           | `Schema.Struct({ ...Info.fields, children: Schema.Array(Info) }).annotate({ identifier: "IssueNode" })` |
+| `z.infer<typeof X>`                         | `Schema.Schema.Type<typeof X>`                                                                          |
+| `.default("")`                              | (removed — defaults handled in `toRow`/`mapRow`)                                                        |
+| `.nullable().optional()`                    | `Schema.optional(Schema.NullOr(...))`                                                                   |
+| `z.number().int().min(0)`                   | `NonNegativeInt` (from `@opencode-ai/core/schema`)                                                      |
+| `z.record(z.string(), z.unknown())`         | `Schema.Record(Schema.String, Schema.Unknown)`                                                          |
 
 ### Type-inference side effect
 
@@ -79,13 +79,13 @@ This is captured as a Lessons Learned entry in `project_memory.md`.
 
 ### Schema replacements
 
-| Before (zod) | After (Effect Schema) |
-| --- | --- |
-| `import z from "zod"` | `import { ..., Option } from "effect"` (Option already used elsewhere) |
-| `z.object({...})` for `Binding` | `Schema.Struct({...}).annotate({ identifier: "LinearBinding" })` |
-| `z.object({...})` for `FileSchema` | `Schema.Struct({...})` |
+| Before (zod)                                          | After (Effect Schema)                                                                                                |
+| ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `import z from "zod"`                                 | `import { ..., Option } from "effect"` (Option already used elsewhere)                                               |
+| `z.object({...})` for `Binding`                       | `Schema.Struct({...}).annotate({ identifier: "LinearBinding" })`                                                     |
+| `z.object({...})` for `FileSchema`                    | `Schema.Struct({...})`                                                                                               |
 | `FileSchema.safeParse(json)` + `parsed.success` check | `const decodeFile = Schema.decodeUnknownOption(FileSchema)` + `Option.getOrUndefined(decodeFile(json))` + null check |
-| `parsed.data.teamId` access | `parsed.teamId` (the decoded value is already a typed `Schema.Schema.Type<typeof FileSchema>`) |
+| `parsed.data.teamId` access                           | `parsed.teamId` (the decoded value is already a typed `Schema.Schema.Type<typeof FileSchema>`)                       |
 
 ### Renaming constraint
 
@@ -113,11 +113,13 @@ out of the scope of Todo Sidebar Feature".
 ## Verification
 
 ### Stage 3.1
+
 - `bun --cwd packages/opencode typecheck` — passes.
 - `bun --cwd packages/opencode test test/issue/issue.test.ts` — 16 unit tests pass.
 - `bun --cwd packages/opencode test test/tool` — 338 tool tests pass (no regressions).
 
 ### Stage 3.2
+
 - `bun --cwd packages/opencode typecheck` — passes.
 - `bun --cwd packages/opencode test test/issue` — 354 tests pass total.
 

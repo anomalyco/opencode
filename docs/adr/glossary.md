@@ -32,7 +32,7 @@ Living document. Add a term the first time it's used in an ADR or design doc; ex
 
 **IssueTable** — The Drizzle SQLite table for the new feature. Columns: `id, directory, parent_id, level, title, content, description, status, priority, labels, due_date, assignee_id, linear_issue_id, linear_team_id, linear_project_id, position, last_pushed_at, created_at, updated_at`. Keyed by `directory`, not by `session_id`.
 
-**Issue.Service** — The Effect-based service exposing CRUD on `IssueTable`. Mirrors `Session.Todo.Service`'s shape (`get`, `create`, `update`, `delete`, `patchStatus`, `reorder`, `getTree`) but takes `directory` instead of `sessionID` and operates on the Linear-aligned status enum.
+**Issue.Service** — The Effect-based service exposing CRUD on `IssueTable`. Mirrors `Session.Todo.Service`'s shape (`get`, `create`, `update`, `delete`, `reorder`, `archive`) but takes `directory` instead of `sessionID` and operates on the Linear-aligned status enum. Status changes flow through `update` (which accepts a `status` patch field); the deprecated `patchStatus` method was removed per the 2026-07-19 amendment.
 
 ## L
 

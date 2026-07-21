@@ -471,11 +471,12 @@ A two-axis review (Standards + Spec) of the Todo Sidebar feature against `origin
 
 #### D13 — Linear GraphQL HTTP client exception (kernel bypass)
 
-CLAUDE.md (Architecture › MCP integration) states: *"Linear MCP server is the integration point… do not add a Linear-specific HTTP client in the kernel."* `packages/opencode/src/issue/sync-push.ts:293-333` (`clearDueDateViaGraphQL`) deliberately violates this rule.
+CLAUDE.md (Architecture › MCP integration) states: _"Linear MCP server is the integration point… do not add a Linear-specific HTTP client in the kernel."_ `packages/opencode/src/issue/sync-push.ts:293-333` (`clearDueDateViaGraphQL`) deliberately violates this rule.
 
 **Reason for the exception:** Linear MCP's `save_issue` tool cannot clear nullable fields — passing `dueDate: null` (or omitting it) does not null the field on Linear's side, it leaves the existing value untouched. This is a known limitation of the Linear MCP server (verified during implementation). To support the "clear due date" UX in the Add/Edit Todo dialog, the kernel calls Linear's GraphQL endpoint directly (`POST https://api.linear.app/graphql`) with an `issueUpdate` mutation that sets `dueDate: null`.
 
 **Scope of the exception:**
+
 - The bypass is **read-write for field clearing only**. It does not replace MCP for any other operation (create, update non-null fields, list, archive, etc.).
 - Authentication uses `LINEAR_API_KEY` from the process environment (fallback path). When `LINEAR_API_KEY` is absent, the clear-due-date operation fails with a clear error message; it does not silently skip.
 - The bypass is invoked from `SyncPush.pushOne` only when the shadow diff detects that `due_date` transitioned from a non-null value to null.
@@ -509,7 +510,7 @@ The previous i18n keys `sidebar.linear.syncHistory.push` / `pull` / `itemCount.o
 
 #### D16 — Composer reuse in New/Edit Todo dialog (deferred)
 
-ADR-0001 D3 stipulates: *"+ New button opens a dialog (reuses the existing composer for title + rich description with file/skill references, per PRD §4)."* The current `packages/app/src/components/dialog-edit-todo.tsx:305-333` does NOT mount `packages/app/src/pages/session/composer/` — it reimplements `@` and `/` trigger detection inline with its own popover and state.
+ADR-0001 D3 stipulates: _"+ New button opens a dialog (reuses the existing composer for title + rich description with file/skill references, per PRD §4)."_ The current `packages/app/src/components/dialog-edit-todo.tsx:305-333` does NOT mount `packages/app/src/pages/session/composer/` — it reimplements `@` and `/` trigger detection inline with its own popover and state.
 
 **Reason for deferral:** Reusing the chat composer inside a modal dialog is a large task: the composer is tightly coupled to the session context (it dispatches `session.prompt` events, reads session-scoped SDK clients, and assumes a session-scoped `useCommand()` provider). Decoupling it for use in a non-session dialog requires either (a) extracting a headless composer primitive, (b) faking a session context for the dialog, or (c) adding a `mode: "dialog"` prop that switches the composer's dispatch behaviour. Each option touches main-branch session code, which is out of scope for this feature iteration.
 
@@ -524,9 +525,7 @@ ADR-0001 D3 stipulates: *"+ New button opens a dialog (reuses the existing compo
 Per TypeScript best practice for result-or-error types (discriminated unions / tagged unions / algebraic data types — the same pattern used by Rust `Result<T, E>`, Swift, and Effect's `Effect.catchTag`), the outcome is now a discriminated union:
 
 ```ts
-type DeleteOutcome =
-  | { ok: true; remainingCount: number }
-  | { ok: false; reason: "not_archived" }
+type DeleteOutcome = { ok: true; remainingCount: number } | { ok: false; reason: "not_archived" }
 ```
 
 The user's semantic clarification (2026-07-19) is recorded: "archive" = move to recycle bin; "delete" = permanently remove from the recycle bin. Only archived issues can be deleted. The discriminated union makes the two outcomes explicit and self-documenting.
@@ -549,3 +548,58 @@ The workaround treats any click inside an element marked `[data-component="selec
 - The `IssueTable` schema, sync data path, and three-state pull reconcile are unchanged.
 - The session-scoped `TodoTable` remains fully separate.
 - No new migrations, no SDK regeneration required (this amendment is documentation-only).
+
+## Amendment 2026-07-20 — Sync is both UI- and agent-driven (ADR-0005 D8); D13 bypass becomes shared `LinearGraphqlClient`
+
+**Status:** Accepted (2026-07-20)
+**Supersedes:**
+
+- The implicit "sync is UI-driven only" assumption — D8 (and the rest of the ADR) described sync as triggered by user Push/Pull clicks. ADR-0005 D8 adds an agent-driven entry point (`issue_sync` tool) that calls the same `SyncPull.pull` / `SyncPush.push` functions.
+- D13's framing of `clearDueDateViaGraphQL` as a "narrow, read-write for field clearing only" bypass. The bypass is now the shared `LinearGraphqlClient.Service`, used by both user-side sync and the agent-side `linear_graphql` tool.
+
+### Context
+
+ADR-0005 (Agent-driven Linear MCP integration, 2026-07-20) records that the agent path previously had no way to trigger sync — the 6 `issue_*` tools only wrote the local `IssueTable`, and sync was UI-driven only. This created 5 sync断层 where agent edits to Linear-linked issues never reached Linear. ADR-0005 D3 introduces a new `issue_sync` agent tool that wraps `SyncPull.pull` / `SyncPush.push`, and D4 extracts the inline `clearDueDateViaGraphQL` HTTP logic into a shared `LinearGraphqlClient.Service` consumed by both the user-side push path and the new agent-side `linear_graphql` tool.
+
+### Decision
+
+1. **Sync is both UI- and agent-driven.** The `SyncPull.pull` / `SyncPush.push` functions are the single source of truth for sync logic; they are invoked from:
+   - The UI's Push/Pull buttons (HTTP `POST /issue/sync/{push,pull}` → `IssueHttpApi.syncPull` / `syncPush` handlers).
+   - The agent's `issue_sync` tool (`packages/opencode/src/tool/issue_sync.ts`), which calls the same functions with `Effect.provideService` for `SyncPull.Client` / `SyncPush.Client`.
+
+2. **D13's `clearDueDateViaGraphQL` is replaced by `LinearGraphqlClient.Service.call`.** The inline HTTP construction (Effect `HttpClient`, `LINEAR_API_KEY` header, response parsing) moved to `packages/opencode/src/issue/linear-graphql.ts` as a shared Effect `Context.Service`. `SyncPush.clearDueDateViaGraphQL` is now a thin wrapper that constructs the mutation + variables and delegates to the service. The agent-side `linear_graphql` tool calls the same service.
+
+3. **D13's "Removal condition" is unchanged.** When Linear MCP adds support for nulling nullable fields, both `SyncPush.clearDueDateViaGraphQL` AND the `linear_graphql` tool's null-clearing use case must be re-evaluated for MCP migration. The shared `LinearGraphqlClient.Service` itself may still be needed for deletion (`issueDelete` mutation has no MCP equivalent).
+
+### What this does NOT change
+
+- The `SyncPull.pull` / `SyncPush.push` function signatures and semantics (three-state pull, field-level merge push, shadow diff dirty check).
+- The `IssueTable` schema and sync-internal columns (`last_pushed_at`, `last_pulled_at`, `cloud_shadow`).
+- The HTTP routes `POST /issue/sync/{push,pull}` — the UI's Push/Pull buttons are unchanged.
+- The Linear MCP server remains the integration point for all operations the MCP schema supports.
+
+## Amendment 2026-07-20 (revised) — Agent edits locally like the UI (ADR-0005 D1/D2 superseded)
+
+**Status:** Accepted (2026-07-20, same day as the previous amendment)
+**Supersedes:** The "5 sync断层" framing in the previous amendment. The断层 were reframed as expected behavior — local edits to Linear-linked issues drift from Linear until the next Push, the same as the UI path.
+
+### Context
+
+The previous amendment (accepted the same day) was written under the assumption that the agent must route Linear-linked edits through Linear MCP (ADR-0005 D1/D2). The user clarified later the same day that this was wrong: the requirement is that **both the user and the agent can directly operate on local Issues and Linear-linked Issues**, and sync happens via Push (not via the agent calling Linear MCP for every edit).
+
+### Decision
+
+1. **The agent's `issue_*` tools write to the local `IssueTable` directly, including for Linear-linked issues.** The `IssueLinearLinkedError` class is deleted; the pre-check in `issue_update.ts` / `issue_archive.ts` / `issue_delete.ts` is removed.
+
+2. **Sync remains the single path to Linear.** Both UI Push and `issue_sync push` call `SyncPush.push`, which detects dirty rows (`time_updated > last_pushed_at`) and sends them to Linear. The agent does not call Linear MCP for edits — it calls `issue_sync push` after editing locally.
+
+3. **`linear_graphql` is an escape hatch, not the primary path.** SyncPush internally uses `LinearGraphqlClient.Service` for null-clearing (`dueDate: null`); the agent's `linear_graphql` tool is for rare cases where the user explicitly asks for a Linear-side operation that local edit + push cannot do (e.g., permanent deletion).
+
+### What this does NOT change
+
+- The `SyncPull.pull` / `SyncPush.push` function signatures and semantics (three-state pull, field-level merge push, shadow diff dirty check).
+- The `IssueTable` schema and sync-internal columns (`last_pushed_at`, `last_pulled_at`, `cloud_shadow`).
+- The HTTP routes `POST /issue/sync/{push,pull}` — the UI's Push/Pull buttons are unchanged.
+- `issue_sync` tool remains for agent-initiated push/pull.
+- `LinearGraphqlClient.Service` remains the shared transport for `SyncPush.clearDueDateViaGraphQL` and the `linear_graphql` agent tool.
+- See ADR-0005 "Amendment 2026-07-20 — D1 and D2 are superseded" for the full rationale.

@@ -67,6 +67,7 @@ AGENTS.md "Avoid `let` where `const` suffices").
 - Added `import { createStore } from "solid-js/store"`.
 - Consolidated 3 module-level signals + `let idCounter` into one
   module-level store:
+
   ```typescript
   const [state, setState] = createStore({
     entries: [] as SyncEntry[],
@@ -80,6 +81,7 @@ AGENTS.md "Avoid `let` where `const` suffices").
     return `sync-${state.idCounter}`
   }
   ```
+
 - `useSyncHistory` return shape: previously returned
   `Accessor<T>` for `entries`/`isSyncing`/`syncType`; now returns
   plain functions `() => state.x` (callers unaffected — they

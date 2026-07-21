@@ -46,15 +46,15 @@ full management capability over archived issues.
 
 ## Files Changed
 
-| File | Change |
-|---|---|
-| `packages/opencode/src/issue/issue.ts` | Removed `IssueArchivedError` class; removed guard in `update`; removed guard in `reorder`; deleted `patchStatus` service (interface + impl + return); updated `Interface` signatures |
-| `packages/opencode/src/tool/issue_update.ts` | Added `status` parameter to `Parameters` schema; added `if (params.status !== undefined) patch.status = params.status` to patch assembly; removed `Effect.catchTag("Issue.ArchivedError", ...)` fallback |
-| `packages/opencode/src/tool/issue_reorder.ts` | Removed `Effect.catchTag("Issue.ArchivedError", ...)` fallback and the archived-list failure branch |
-| `packages/opencode/src/server/routes/instance/httpapi/handlers/issue.ts` | Removed `Effect.catchTag("Issue.ArchivedError", ...)` from `update` and `reorder` handlers; retained on `remove` (for `IssueNotArchivedError`) |
-| `packages/opencode/src/issue/sync-push.ts` | Updated CREATE-path comment (was "bypass archive guard", now "avoid bus event fan-out") |
-| `packages/opencode/src/issue/sync-pull.ts` | Updated INSERT and UPDATE path comments (same reason) |
-| `packages/opencode/test/issue/issue.test.ts` | Rewrote "archive protection" tests as "archived issue management" tests: now assert that update/reorder/status-transition on archived issues succeed |
+| File                                                                     | Change                                                                                                                                                                                                   |
+| ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/opencode/src/issue/issue.ts`                                   | Removed `IssueArchivedError` class; removed guard in `update`; removed guard in `reorder`; deleted `patchStatus` service (interface + impl + return); updated `Interface` signatures                     |
+| `packages/opencode/src/tool/issue_update.ts`                             | Added `status` parameter to `Parameters` schema; added `if (params.status !== undefined) patch.status = params.status` to patch assembly; removed `Effect.catchTag("Issue.ArchivedError", ...)` fallback |
+| `packages/opencode/src/tool/issue_reorder.ts`                            | Removed `Effect.catchTag("Issue.ArchivedError", ...)` fallback and the archived-list failure branch                                                                                                      |
+| `packages/opencode/src/server/routes/instance/httpapi/handlers/issue.ts` | Removed `Effect.catchTag("Issue.ArchivedError", ...)` from `update` and `reorder` handlers; retained on `remove` (for `IssueNotArchivedError`)                                                           |
+| `packages/opencode/src/issue/sync-push.ts`                               | Updated CREATE-path comment (was "bypass archive guard", now "avoid bus event fan-out")                                                                                                                  |
+| `packages/opencode/src/issue/sync-pull.ts`                               | Updated INSERT and UPDATE path comments (same reason)                                                                                                                                                    |
+| `packages/opencode/test/issue/issue.test.ts`                             | Rewrote "archive protection" tests as "archived issue management" tests: now assert that update/reorder/status-transition on archived issues succeed                                                     |
 
 ## Verification
 

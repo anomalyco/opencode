@@ -6,18 +6,16 @@
 
 ## Context
 
-The PRD (`/Users/tk/repositories/OpenCode-Feature/REQUIREMENTS.md` and `OPENCODE_LINEAR_INTEGRATION.md`) calls for a Linear-style todo system in the OpenCode Desktop sidebar with the following requirements:
+The PRD calls for a Linear-style todo system in the OpenCode Desktop sidebar with the following requirements:
 
 - **Two-level hierarchy** (L1 sequential, L2 parallel) — feature does not validate ordering.
 - **Linear-aligned statuses** (`Backlog`, `Todo`, `In Progress`, `In Review`, `Done`, `Canceled`, `Duplicate`) and **priorities** (`Urgent`, `High`, `Medium`, `Low`, `No priority`). See Amendment 2026-07-19 for the 7-status set rationale.
 - **Project/workspace scope** — each OpenCode directory maps to one project; items persist across sessions in that workspace.
-- **Linear MCP is an add-on**, not a prerequisite. The sidebar must work standalone.
+- **Linear MCP is an add-on**, not a prerequisite. The sidebar must be able to work standalone.
 
-The implementation on the worktree branch (`feature/todo-sidebar-linear`, 21 commits) extended the **existing per-session** `TodoTable` (in `packages/opencode/src/session/session.sql.ts`) with hierarchy and Linear fields, and the **desktop sidebar slot** holds a single `<SidebarLinear>` component that gates on Linear configuration. CLAUDE.md at the workspace root says explicitly:
+The implementation on the worktree branch (`feature/todo-sidebar-linear`) has nothing to do with the **existing per-session** `TodoTable` (in `packages/opencode/src/session/session.sql.ts`) with hierarchy and Linear fields, and the **desktop sidebar slot** holds a single `<SidebarLinear>` component that gates on Linear configuration.
 
 > The existing in-session todo system … is a single-session flat list — it is **not** the new feature. The new feature lives at the project/workspace scope, persists independently, and supports parent/child links and the full Linear status set. Reuse the patterns … but add new tables; do not repurpose `TodoTable`.
-
-That instruction has been violated by the current worktree code. The desktop sidebar shows a Linear configuration panel that animates a fake 3-second sync and emits a hardcoded "Synced 1 item" success toast, with **no local-todo CRUD UI** and **no data path to the kernel** for sync.
 
 ## Decision
 
@@ -34,7 +32,7 @@ The existing in-session `TodoTable` is left untouched. The two systems can coexi
 
 ### D2 — Sidebar surface: one section, two sub-panels
 
-The desktop sidebar gets **one** section called `Todos` (or `Issues`, pending naming) that:
+The desktop sidebar gets **one** section called `Todos` (or `Issues`, aligned with Linear) that:
 
 - **Always renders** when a workspace is open, regardless of Linear configuration.
 - Lists the workspace's items with status indicators, L1/L2 indentation, and per-row actions (status cycle, edit, delete, add child, drag-reorder).
@@ -213,3 +211,198 @@ The `v2` prop switches between v1 and v2 session-header styling (button shape, i
 - The sidebar Todo section (`packages/app/src/pages/layout/sidebar-todo.tsx`) remains the primary surface. The TodoPopover is a convenience mirror, not a replacement.
 - The 7 statuses are passed through directly from Linear; the kernel does not validate or remap them.
 - No new routes, no new SDK methods, no new migrations.
+
+## Amendment 2026-07-20 — Agent layer now owns Linear routing (ADR-0005)
+
+**Status:** Accepted (2026-07-20)
+**Supersedes:**
+
+- The "agent layer needs no code changes — agents discover Linear tools through the existing MCP system" bullet in Amendment 2026-07-17 §"What this does NOT change".
+- The "narrow, justified exception" framing of the 2026-07-17 GraphQL bypass — the bypass is now the shared foundation for both user-side sync and the agent-side `linear_graphql` tool, not a one-off.
+
+### Context
+
+ADR-0005 (Agent-driven Linear MCP integration, 2026-07-20) records that the agent path previously had **no** Linear awareness: the 6 `issue_*` tools only wrote the local `IssueTable`, and sync was UI-driven only. This created 5 sync断層 (update / archive / delete / reorder / add) where agent edits to Linear-linked issues never reached Linear, and the local row drifted silently.
+
+ADR-0005's 8 decisions (D1–D8) restructure the agent layer so that:
+
+- Local `issue_update` / `issue_archive` / `issue_delete` **refuse** writes to Linear-linked issues (`IssueLinearLinkedError`).
+- The agent uses Linear MCP `save_issue` for most edits, and `linear_graphql` for null-clearing and deletion — the same `LinearGraphqlClient.Service` the user-side sync path uses.
+- A new `issue_sync` tool lets the agent trigger pull/push after editing Linear.
+- Agent-facing tool outputs filter sync-internal bookkeeping (`last_pushed_at`, `last_pulled_at`, `cloud_shadow`) via `toAgentInfo`.
+
+### Decision
+
+The "agent layer needs no code changes" clause is **struck**. The agent layer now owns explicit Linear routing logic: 7 tools (`issue_list`, `issue_add`, `issue_update`, `issue_archive`, `issue_delete`, `issue_reorder`, `issue_sync`) plus `linear_graphql`, with `.txt` descriptions that guide the agent to MCP-first / GraphQL-fallback / `issue_sync`-reconcile.
+
+The 2026-07-17 GraphQL bypass is no longer "narrow" — `LinearGraphqlClient.Service` is the shared transport for:
+
+- User-side sync: `SyncPush.clearDueDateViaGraphQL` (clearing `dueDate` on push).
+- Agent-side: the `linear_graphql` tool (clearing any field, deleting issues, arbitrary mutations MCP cannot express).
+
+### What this does NOT change
+
+- The Linear MCP server remains the integration point for all create/update/read operations that the MCP schema supports.
+- The kernel still has no Linear-specific HTTP client outside `LinearGraphqlClient.Service`.
+- The Desktop UI and SDK are unaware of the agent's Linear routing — the UI's Push/Pull buttons are unchanged.
+- All other Linear interactions (list, get, save_issue for non-null fields, list_users, list_issue_statuses) go through MCP.
+
+## Amendment 2026-07-20 (revised) — Agent and UI share the same edit-then-sync path (ADR-0005 D1/D2 superseded)
+
+**Status:** Accepted (2026-07-20, same day as the previous amendment)
+**Supersedes:** The previous "Amendment 2026-07-20 — Agent layer now owns Linear routing" above. That amendment was based on ADR-0005 D1/D2, which have since been superseded.
+
+### Context
+
+The previous amendment (accepted the same day) introduced `IssueLinearLinkedError` and the "agent must use Linear MCP for Linear-linked edits" routing. The user clarified later the same day that this was wrong: **the requirement is that both the user and the agent can directly operate on local Issues and Linear-linked Issues**. The refusal logic created an asymmetry where the user could edit Linear-linked issues locally (via UI) but the agent could not (it was forced into a two-call Linear MCP + `issue_sync pull` pattern).
+
+### Decision
+
+- The `IssueLinearLinkedError` class is deleted.
+- The pre-check in `issue_update.ts` / `issue_archive.ts` / `issue_delete.ts` is removed.
+- The agent and the UI now share the same edit path: write to the local `IssueTable`, then sync to Linear via Push (user clicks Push / agent calls `issue_sync push`).
+- The `linear_graphql` agent tool is kept as an escape hatch (rare use: permanent Linear-side deletion).
+- See ADR-0005 "Amendment 2026-07-20 — D1 and D2 are superseded" for the full rationale and affected files.
+
+### What this keeps
+
+- `LinearGraphqlClient.Service` remains the shared transport for `SyncPush.clearDueDateViaGraphQL` and the `linear_graphql` agent tool.
+- `issue_sync` tool remains for agent-initiated push/pull.
+- Agent-facing tool outputs still filter sync-internal bookkeeping (`last_pushed_at`, `last_pulled_at`, `cloud_shadow`) via `toAgentInfo`.
+- The Linear MCP server remains the integration point for read/list operations.
+
+## Amendment 2026-07-20 (round-2 review) — D1 getTree superseded, D2 persistent sidebar deferred
+
+**Status:** Accepted (2026-07-20)
+**Supersedes:**
+- D1's "Service: … with full CRUD, reorder, getTree, and `publish()` …" — the `getTree` method is removed from the service contract.
+- D2's "Always renders when a workspace is open" and the inline ASCII layout showing a persistent sidebar section — the persistent sidebar surface is deferred; only the toggle popover mounts in this iteration.
+
+### Context
+
+A round-2 spec review of the implemented feature flagged two drifts between ADR-0001 and the actual code:
+
+1. **D1 `getTree`**: The ADR listed `getTree` as a service method. Subsequent amendments (see `2026-07-19-archived-issue-management-realignment.md` and the project memory entry "Linear二级Issue的树形组装在前端实现") moved tree assembly to the frontend. The kernel `Issue.Service` returns a flat list (`issue.get({ directory, include_archived })`); the desktop UI (`sidebar-todo.tsx`) assembles L1/L2 parent/child structure client-side. The `getTree` method was never implemented and is not needed.
+
+2. **D2 persistent sidebar**: The ADR described a sidebar section that "always renders when a workspace is open" with an inline ASCII layout showing a `▼ Todos` panel. The implemented surface is a **toggle popover** (`packages/app/src/components/todo-popover.tsx`), mounted in the session header — not a persistent sidebar section. The user confirmed: "Todo Sidebar目前仅以 toggle popover 形式挂载，Sidebar in Layout 形态暂不实现。"
+
+### Decision
+
+- **D1 `getTree` is superseded.** The `Issue.Service` contract is: `create`, `get`, `update`, `delete`, `reorder`, `archive`. Tree assembly is a frontend concern. The ADR text "with full CRUD, reorder, getTree, and `publish()`" is corrected to "with full CRUD, reorder, and `publish()`".
+- **D2 persistent sidebar is deferred.** The current iteration ships only the toggle popover surface (`todo-popover.tsx` mounted in `session-header.tsx`). The persistent sidebar section (the `▼ Todos` panel in the ASCII layout) is a follow-up, not in scope for this iteration. The ADR's "Always renders when a workspace is open" wording is corrected to "Renders on demand via a toggle popover in the session header; a persistent sidebar section is deferred to a follow-up iteration."
+- **D3 composer reuse is confirmed complete** per Amendment 2026-07-19 (`2026-07-19-composer-reuse-refactor.md`). The Todo dialog reuses the shared `PromptPopover` presentational component plus the `AtOption` / `SlashCommand` types — the same dropdown the chat composer uses. The full `PromptInput` component is NOT reused (it is session-coupled and would require mocking ~10 contexts); this is a documented constraint, not a gap.
+
+### What this does NOT change
+
+- The data model (D1's `IssueTable` schema) is unchanged — only the `getTree` service method is removed from the contract.
+- The Linear sub-panel (D2's collapsible panel inside the Todos section) is still deferred along with the persistent sidebar; the toggle popover surfaces Push/Pull via the popover's footer, not via a sidebar sub-panel.
+- The 7 Linear statuses, priorities, and two-level hierarchy (L1/L2) are unchanged.
+- Auto-progress has been removed entirely (see project memory: "Auto-progress engine is completely removed"); D3's "Auto-progress on/off" toggle is no longer part of the surface.
+
+## Amendment 2026-07-20 (L2 reparenting + Configure Linear entry) — D3 reparent implemented, D2 Configure Linear entry not needed
+
+**Status:** Accepted (2026-07-20)
+**Supersedes:**
+- D3's "Reorder: drag-to-reorder within L1; nested L2 items can be reparented" — the reparenting affordance is now implemented (previously only within-parent L2 reorder was wired; cross-parent reparent was deferred).
+- The implicit assumption that a "Configure Linear" entry should be surfaced when Linear is not yet registered. This is **not needed**: the Linear sub-panel (`packages/app/src/pages/layout/sidebar-linear.tsx`) renders only when the Linear MCP server is connected (`mcpStatus() === true`), and the team/project configuration entry lives inside that sub-panel. There is no pre-registration configuration surface, and none is required.
+
+### Context
+
+A round-2 spec review flagged two items:
+
+1. **D3 L2 reparenting**: The ADR listed "nested L2 items can be reparented" as a reorder affordance, but the initial implementation used nested `DragDropProvider`s per L1 — L2 drags were scoped to their parent's list and could not cross parent boundaries. The review flagged this as a spec gap.
+
+2. **D2 Configure Linear entry**: The review suggested adding a configuration entry for when Linear is not yet registered. On inspection, this is unnecessary: the Linear sub-panel is already gated by MCP connection status (`Show when={mcpStatus()}`). When MCP is not connected (or the user has not completed OAuth), the sub-panel does not render, so there is no surface to host a "Configure Linear" entry. The configuration flow is: enable Linear MCP → OAuth → sub-panel appears → configure team/project inside the sub-panel.
+
+### Decision
+
+1. **D3 L2 reparenting — implemented.** The nested per-L1 `DragDropProvider`s are replaced with a single flat `DragDropProvider` covering both L1 and L2 rows. `makeTreeDragHandler` (in `sidebar-todo.tsx`) inspects the dragged and dropped ids, looks up their levels, and dispatches to one of:
+   - L1 → L1: reorder within L1 (single `issue.reorder` call).
+   - L2 → L2 same parent: reorder within parent (single `issue.reorder` call).
+   - L2 → L2 different parent: reparent — `issue.update({ patch: { parent_id } })` then `issue.reorder` with the new parent's L2 id list.
+   - L2 → L1: reparent — same two-step flow, appending the L2 to the target L1's L2 list.
+   - L1 → L2: rejected (L1 cannot become an L2 child — ADR-0001 §3.2 two-level hierarchy).
+
+   The server-side `Issue.update` already validates hierarchy on `parent_id` changes (target must be an L1 in the same directory, not self, not an L2), so no server changes were required.
+
+2. **D2 Configure Linear entry — not needed.** No code changes. The existing `Show when={mcpStatus()}` gate in `sidebar-linear.tsx` (line 345) is the correct behavior: the Linear sub-panel only renders when MCP is connected and OAuth is complete. The team/project configuration entry lives inside the sub-panel (the settings-gear button at line 366-379). There is no pre-registration surface, and none is required.
+
+### What this does NOT change
+
+- The two-level hierarchy (L1/L2) is unchanged — L1 still cannot become an L2 child.
+- The Linear sub-panel's connection gate (`mcpStatus()`) is unchanged.
+- The team/project binding storage (workspace-scope `.opencode/linear-binding.json`) is unchanged.
+
+## Amendment 2026-07-20 (Linear parent-child sync) — SyncPush two-phase CREATE + parentId dirty-checking via `linear_parent_id` shadow
+
+**Status:** Accepted (2026-07-20, revised after end-to-end probe)
+**Supersedes:** the initial "unconditional parentId for L2 UPDATEs" approach (which only worked for content-dirty L2s, not for the migration case where L2s were already linked but missing the Linear parent link).
+
+### Context
+
+Users reported that after creating 2 L1 issues (each with 2 L2 sub-issues) locally and pushing to Linear, all 6 issues appeared as **flat top-level Linear issues** — the parent-child hierarchy was not established on Linear.
+
+**Two root causes** were identified through an end-to-end probe (creating BOR-40 as parent, BOR-41 as child with `parentId`, then `get_issue` on the child to verify `parentId: "BOR-40"` was persisted):
+
+1. **CREATE path (initial push):** The SyncPush CREATE path pushed all local-only issues as a single concurrent batch with no `parentId` field. The Linear MCP `save_issue` tool **does** accept `parentId` (confirmed via `tools/list` probe — the field accepts "Parent issue ID or identifier (e.g., LIN-123). Null to remove"), but the code never set it.
+
+2. **UPDATE path (re-push after fix):** The first fix attempt added `parentId` to the UPDATE call for L2 issues, but only when the L2 was in the `linkedDirty` cohort (content fields differed from `cloud_shadow`). If an L2 was already linked (had `linear_issue_id`) and its content hadn't changed, it was excluded from `linkedDirty` → never pushed → `parentId` never sent → Linear parent link never repaired. This is exactly the user's situation: 6 issues pushed with old code, then re-pushed with the first fix → nothing happened.
+
+### Decision
+
+SyncPush now establishes Linear parent-child links via three mechanisms:
+
+#### 1. CREATE path — two-phase push
+
+- **Phase 2a (L1):** Local-only L1 issues (level 0, no parent) are pushed first via `save_issue` without `parentId`. Their returned `linear_issue_id` values are collected into a `localIdToLinearId` map (seeded with already-linked issues from the `all` list).
+- **Phase 2b (L2):** Local-only L2 issues (level 1, has parent) are pushed with `parentId` resolved from the parent's `linear_issue_id` via `localIdToLinearId`. If the parent is not linked (no `linear_issue_id` and not just created in Phase 2a), the L2 is skipped with a `parent_not_linked` error.
+
+The two phases are sequential (`yield*` on Phase 2a before Phase 2b starts), ensuring all L1 `linear_issue_id` responses are available before L2 resolution begins.
+
+#### 2. UPDATE path — `linear_parent_id` shadow dirty-checking
+
+The key insight: `parent_id` (local UUID) and Linear's `parentId` (issue identifier, e.g., "BOR-40") are not directly comparable, so `parent_id` is NOT in `SHADOW_FIELDS`. Instead, a **derived** field `linear_parent_id` is tracked in the shadow:
+
+- **`resolveLinearParentId(issue, all)`** — resolves the parent's `linear_issue_id` for an L2 issue (or null for L1 / unlinked parent).
+- **`buildShadowWithParent(issue, all)`** — extends `Issue.buildShadow(issue)` with `linear_parent_id: resolveLinearParentId(issue, all)`. Used when writing `cloud_shadow` after both CREATE and UPDATE pushes.
+- **`isParentLinkDirty(issue, shadow, all)`** — returns true if the L2's resolved `linear_parent_id` differs from `shadow.linear_parent_id`. Old shadows (pre-fix) lack this field → `undefined !== "BOR-40"` → dirty → re-pushed. This is the migration path for issues pushed before the fix.
+
+The `linkedDirty` filter now includes an L2 if **either** content fields are dirty **or** the parent link is dirty:
+
+```typescript
+return diffShadow(i, shadow).length > 0 || isParentLinkDirty(i, shadow, all)
+```
+
+In the UPDATE call itself, if only the parent link is dirty (no content fields), the `save_args` contains just `id`/`team`/`project`/`parentId` — a minimal partial update. Linear treats this as setting only `parentId`, leaving other fields untouched.
+
+#### 3. Pull path — shadow records cloud's `parentId`
+
+`mapLinearFields` in `sync-pull.ts` now includes `linear_parent_id: i.parentId` in the `cloud_shadow` it writes. This ensures:
+
+- After a pull, the shadow reflects the cloud's actual parent link state.
+- If the user reparents locally after a pull, the next push detects the diff (local resolved parent ≠ cloud's `parentId`) and syncs the new parent to Linear.
+- If cloud and local agree on the parent, no push is needed.
+
+Per ADR-0002, pull still never overwrites local `parent_id` — hierarchy remains a local-only concern. The shadow merely records the cloud state for dirty-checking.
+
+### Convergence guarantees
+
+- **First push after fix (migration case):** L2s with old shadows (no `linear_parent_id`) are detected as parent-dirty → `parentId` sent → cloud establishes parent link → shadow updated with `linear_parent_id`. Converges in one push.
+- **Steady state:** Local resolved parent matches `shadow.linear_parent_id` → no dirty → no push. Idempotent.
+- **Local reparent:** User changes `parent_id` locally → resolved `linear_parent_id` changes → dirty → push → cloud updated → shadow updated. Converges in one push.
+- **Cloud-side reparent (rare):** Someone changes the parent on linear.app → next pull records new `parentId` in shadow → local resolved parent differs → dirty → push → cloud updated to match local. Local-wins on hierarchy (per ADR-0002).
+
+### What this does NOT change
+
+- **SHADOW_FIELDS unchanged.** The 8 content fields (`title`, `content`, `description`, `status`, `priority`, `labels`, `due_date`, `assignee_id`) do not include `parent_id` or `linear_parent_id`. The latter is a derived field handled separately in the shadow JSON.
+- **Pull doesn't overwrite local hierarchy.** `parent_id` (local UUID) is never set by pull. Only `cloud_shadow.linear_parent_id` records the cloud's `parentId` for dirty-checking.
+- **Agent tools unchanged.** `issue_update` accepts `parent_id` for local reparenting; the agent doesn't know about `parentId` (Linear-side concern handled by SyncPush).
+- **L1→L2 drag rejection unchanged.** L1 issues cannot become L2 children (two-level hierarchy).
+
+### Edge cases handled
+
+- **L2 whose parent is also local-only (CREATE):** Phase 2a creates the parent first, then Phase 2b resolves the parent's `linear_issue_id` from the map and passes it as `parentId`.
+- **L2 whose parent is already linked (CREATE):** The `localIdToLinearId` map is seeded with all already-linked issues, so the parent's `linear_issue_id` is available without a Phase 2a create.
+- **L2 whose parent failed to create (CREATE):** Phase 2b finds no `linear_issue_id` for the parent and skips the L2 with a `parent_not_linked` error.
+- **L2 whose parent is not linked (UPDATE):** `resolveLinearParentId` returns null → `isParentLinkDirty` returns false → no parent-link push. The Linear issue remains top-level until the parent is pushed.
+- **Old shadow without `linear_parent_id` (migration):** `shadow.linear_parent_id` is `undefined` → if parent is linked, `undefined !== "BOR-40"` → dirty → re-pushed with `parentId`. Converges in one push.

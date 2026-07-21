@@ -2,7 +2,7 @@
 
 ## Context
 
-The project_memory rule "Effect.catch must use catchTag with _tag
+The project_memory rule "Effect.catch must use catchTag with \_tag
 field for precise error handling, allowing defects (Interrupt/Die) to
 propagate" was applied during review. User asked to trace this rule
 back to `opencode/AGENTS.md` and **use AGENTS.md as the source of
@@ -10,17 +10,18 @@ truth**.
 
 ## Rule Traceability Audit
 
-| Source | Text | Scope |
-|---|---|---|
-| `AGENTS.md` (repo root) line 27 | "Avoid `try`/`catch` where possible" | JS `try/catch` blocks |
-| `packages/core/src/tool/AGENTS.md` line 28 | "do not use `catchCause`, because interruption and defects must survive" | Effect `catchCause` |
-| `packages/opencode/AGENTS.md` lines 91-96 | Schema rules (`Schema.Class`, `Schema.brand`, `Schema.TaggedErrorClass`) — **no `.catch()` rule** | — |
-| `project_memory.md` line 56 | "Effect.catch must use catchTag with _tag field..." | **Cannot be traced to any AGENTS.md** |
+| Source                                     | Text                                                                                              | Scope                                 |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| `AGENTS.md` (repo root) line 27            | "Avoid `try`/`catch` where possible"                                                              | JS `try/catch` blocks                 |
+| `packages/core/src/tool/AGENTS.md` line 28 | "do not use `catchCause`, because interruption and defects must survive"                          | Effect `catchCause`                   |
+| `packages/opencode/AGENTS.md` lines 91-96  | Schema rules (`Schema.Class`, `Schema.brand`, `Schema.TaggedErrorClass`) — **no `.catch()` rule** | —                                     |
+| `project_memory.md` line 56                | "Effect.catch must use catchTag with \_tag field..."                                              | **Cannot be traced to any AGENTS.md** |
 
 ### Codebase Convention
 
 The opencode main codebase uses `Effect.catch(...)` (without
 `catchTag`) in 10+ files:
+
 - `src/worktree/index.ts` (5 occurrences)
 - `src/format/index.ts` (1)
 - `src/effect/promise.ts` (1)
@@ -51,7 +52,7 @@ The `Effect.catch` form is the established codebase convention.
    convention. `Effect.catch` (without `catchTag`) is acceptable.
 
 4. **Update project_memory.md** — delete the rule "Effect.catch must
-   use catchTag with _tag field for precise error handling, allowing
+   use catchTag with \_tag field for precise error handling, allowing
    defects (Interrupt/Die) to propagate" and replace with:
 
    > 遵守根 AGENTS.md "Avoid `try`/`catch` where possible"：JS 代码用

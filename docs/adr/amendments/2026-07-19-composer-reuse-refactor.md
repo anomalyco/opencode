@@ -33,15 +33,15 @@ cannot be reused as-is from the session-coupled composer), but the
 
 ### Scope of reuse
 
-| Layer | Before | After |
-| --- | --- | --- |
-| Dropdown UI | Two custom `<Show>` blocks with custom buttons, classes, and i18n keys (`dialog.todo.autocomplete.noFiles`, `dialog.todo.autocomplete.noSkills`) | Single `<PromptPopover>` invocation |
-| `@file` option type | `string` (raw path) | `AtOption` (`{ type: "file", path, display }`) |
-| `/skill` option type | Local `interface SlashCommand` (subset of fields) | Imported `SlashCommand` from `slash-popover.tsx` (adds `type: "builtin" \| "custom"` discriminator) |
-| Active-item tracking | Index-based (`number`) | Key/id-based (`string`), matching `PromptPopover`'s `atKey` / `cmd.id` contract |
-| Keyboard navigation | `setUi("atActive", (i) => (i + 1) % items.length)` | Index derived from key via `items.findIndex((it) => atKey(it) === ui.atActive)`; key set back via `atKey(items[nextIdx])` |
-| i18n keys | `dialog.todo.autocomplete.*` | `prompt.popover.emptyResults`, `prompt.popover.emptyCommands`, `prompt.slash.badge.*` (existing composer keys) |
-| Keybind display | Not shown | `command.keybind(id)` / `command.keybindParts(id)` wired through `useCommand()` |
+| Layer                | Before                                                                                                                                           | After                                                                                                                     |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| Dropdown UI          | Two custom `<Show>` blocks with custom buttons, classes, and i18n keys (`dialog.todo.autocomplete.noFiles`, `dialog.todo.autocomplete.noSkills`) | Single `<PromptPopover>` invocation                                                                                       |
+| `@file` option type  | `string` (raw path)                                                                                                                              | `AtOption` (`{ type: "file", path, display }`)                                                                            |
+| `/skill` option type | Local `interface SlashCommand` (subset of fields)                                                                                                | Imported `SlashCommand` from `slash-popover.tsx` (adds `type: "builtin" \| "custom"` discriminator)                       |
+| Active-item tracking | Index-based (`number`)                                                                                                                           | Key/id-based (`string`), matching `PromptPopover`'s `atKey` / `cmd.id` contract                                           |
+| Keyboard navigation  | `setUi("atActive", (i) => (i + 1) % items.length)`                                                                                               | Index derived from key via `items.findIndex((it) => atKey(it) === ui.atActive)`; key set back via `atKey(items[nextIdx])` |
+| i18n keys            | `dialog.todo.autocomplete.*`                                                                                                                     | `prompt.popover.emptyResults`, `prompt.popover.emptyCommands`, `prompt.slash.badge.*` (existing composer keys)            |
+| Keybind display      | Not shown                                                                                                                                        | `command.keybind(id)` / `command.keybindParts(id)` wired through `useCommand()`                                           |
 
 ### What is NOT reused
 
@@ -84,7 +84,7 @@ a follow-up amendment can introduce a `placement` prop on
 - **Added**: `atKey(x: AtOption | undefined): string` helper, mirroring
   the chat composer's key function.
 - **`runAtQuery`**: Now maps paths to `AtOption[]` (`{ type: "file",
-  path, display: path }`) and pre-selects the first item's key.
+path, display: path }`) and pre-selects the first item's key.
 - **`insertAtSelection`**: Signature changed from `(path: string)` to
   `(option: AtOption | undefined)`; reads `option.path` for the `file`
   variant, falls back to `option.display` for other variants.
