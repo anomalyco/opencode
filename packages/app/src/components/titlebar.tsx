@@ -25,6 +25,7 @@ import { readSessionTabsRemovedDetail, SESSION_TABS_REMOVED_EVENT } from "@/comp
 import { useGlobal } from "@/context/global"
 import { ServerConnection, useServer } from "@/context/server"
 import { tabKey, useTabs } from "@/context/tabs"
+import { stepOrder } from "@/context/tab-order"
 import type { PromptSession } from "@/context/prompt"
 import "./titlebar.css"
 import { newTabTooltipKeybind } from "./command-tooltip-keybind"
@@ -297,12 +298,66 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
 
             const currentTab = () => matchRoute(layout.route())
 
+            // Browser-style Ctrl+Tab cycling: while the modifier is held, presses
+            // walk back through MRU order without reshuffling it; the landed tab
+            // only moves to the front once released. mod+option+Arrow are discrete
+            // jumps that commit immediately (see stepTab).
+            let cycle: { landed: string | undefined } | undefined
+            let cycleCleanup: (() => void) | undefined
+
+            const endCycle = () => {
+              cycleCleanup?.()
+              cycleCleanup = undefined
+              const landed = cycle?.landed
+              cycle = undefined
+              if (landed) tabs.promoteTab(landed)
+            }
+
+            const resolveStep = (anchor: string | undefined, offset: number) => {
+              const key = stepOrder(tabs.order, anchor, offset)
+              if (!key) return
+              const tab = tabsStore.find((item) => tabKey(item) === key)
+              if (!tab) return
+              return { tab, key }
+            }
+
+            // Promotes directly so it stays correct even mid-cycle, where the
+            // route-change effect suppresses promotion.
+            const stepTab = (offset: number) => {
+              const active = currentTab()
+              const result = resolveStep(active ? tabKey(active) : undefined, offset)
+              if (!result) return
+              tabs.select(result.tab)
+              tabs.promoteTab(result.key)
+            }
+
+            const cycleTabs = (offset: number) => {
+              if (!cycle) {
+                const active = currentTab()
+                cycle = { landed: active ? tabKey(active) : undefined }
+                const off = makeEventListener(window, "keyup", (event: KeyboardEvent) => {
+                  if (event.key === "Control" || event.key === "Meta") endCycle()
+                })
+                const blur = makeEventListener(window, "blur", endCycle)
+                cycleCleanup = () => {
+                  off()
+                  blur()
+                }
+              }
+              const result = resolveStep(cycle.landed, offset)
+              if (!result) return
+              cycle.landed = result.key
+              tabs.select(result.tab)
+            }
+
             createEffect(() => {
               const route = layout.route()
               if (!tabs.ready()) return
               const tab = currentTab()
               if (tab) {
                 tabs.remember(tab)
+                // Suppress promotion mid-cycle; endCycle commits the landed tab.
+                if (!cycle) tabs.promoteTab(tabKey(tab))
                 return
               }
 
@@ -417,35 +472,33 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
                   id: `tab.prev`,
                   category: "tab",
                   title: "",
-                  keybind: `mod+option+ArrowLeft,ctrl+shift+tab`,
+                  keybind: `mod+option+ArrowLeft`,
                   hidden: true,
-                  onSelect: () => {
-                    let index = tabsStore.findIndex((tab) => tab === currentTab())
-                    if (index === -1) return
-
-                    index -= 1
-                    if (index === -1) index = tabsStore.length - 1
-
-                    const next = tabsStore[index]
-                    if (next) tabs.select(next)
-                  },
+                  onSelect: () => stepTab(-1),
                 },
                 {
                   id: `tab.next`,
                   category: "tab",
                   title: "",
-                  keybind: `mod+option+ArrowRight,ctrl+tab`,
+                  keybind: `mod+option+ArrowRight`,
                   hidden: true,
-                  onSelect: () => {
-                    let index = tabsStore.findIndex((tab) => tab === currentTab())
-                    if (index === -1) return
-
-                    index += 1
-                    if (index === tabsStore.length) index = 0
-
-                    const next = tabsStore[index]
-                    if (next) tabs.select(next)
-                  },
+                  onSelect: () => stepTab(1),
+                },
+                {
+                  id: `tab.cyclePrev`,
+                  category: "tab",
+                  title: "",
+                  keybind: `ctrl+shift+tab`,
+                  hidden: true,
+                  onSelect: () => cycleTabs(-1),
+                },
+                {
+                  id: `tab.cycleNext`,
+                  category: "tab",
+                  title: "",
+                  keybind: `ctrl+tab`,
+                  hidden: true,
+                  onSelect: () => cycleTabs(1),
                 },
               ].filter((v) => v !== undefined)
             })

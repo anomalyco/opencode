@@ -11,6 +11,7 @@ import { SessionTabsRemovedDetail } from "@/components/titlebar-session-events"
 import { sessionHref } from "@/utils/session-route"
 import { createTabMemory } from "./tab-memory"
 import { nextTabAfterClose, pushClosedTab, removeClosedTabs, takeClosedTab, type ClosedTab } from "./closed-tabs"
+import { promoteOrder, reconcileOrder } from "./tab-order"
 import { createDraftPromptSession, type PromptModel } from "./prompt-state"
 
 export type SessionTab = {
@@ -70,6 +71,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       createStore<Tab[]>([]),
     )
     const [recent, setRecent, , recentReady] = persisted(Persist.window("tabs.recent"), createStore<RecentTab>({}))
+    const [order, setOrder, , orderReady] = persisted(Persist.window("tabs.order"), createStore<string[]>([]))
     const [info, setInfo] = persisted(Persist.window("tabs.info"), createStore<Record<string, TabInfo>>({}))
     const [closed, setClosed, , closedReady] = persisted(Persist.window("tabs.closed"), createStore<ClosedTab[]>([]))
 
@@ -104,6 +106,19 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       }
       void closedReady.promise?.then(apply)
     }
+
+    // MRU order updates are gated on readiness so a burst of early selects does
+    // not clobber the persisted history before it has loaded.
+    const updateOrder = (update: (order: string[]) => string[]) => {
+      const apply = () => setOrder((current) => update(current))
+      if (orderReady()) {
+        apply()
+        return
+      }
+      void orderReady.promise?.then(apply)
+    }
+
+    const promoteTab = (key: string) => updateOrder((current) => promoteOrder(current, key))
 
     const removeDraftPersisted = (draftID: string) => {
       for (const key of draftPersistedKeys()) removePersisted(Persist.draft(draftID, key), platform)
@@ -146,6 +161,15 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       const servers = new Set(server.list.map(ServerConnection.key))
       const next = closed.filter((entry) => servers.has(entry.tab.server))
       if (next.length !== closed.length) setClosed(() => next)
+    })
+
+    // Keep the MRU history in step with the open tabs: drop keys for closed tabs
+    // and append keys for tabs opened elsewhere so every tab stays cyclable.
+    createEffect(() => {
+      if (!ready() || !orderReady()) return
+      const keys = store.map(tabKey)
+      const next = reconcileOrder(order, keys)
+      if (next.length !== order.length || next.some((key, index) => key !== order[index])) setOrder(() => next)
     })
 
     const navigateTab = (tab: Tab) => {
@@ -361,6 +385,9 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
         const key = tabKey(tab)
         if (recentKey() !== key) setRecentKey(key)
       },
+      // Commits a tab to the front of the MRU history. The titlebar suppresses
+      // this mid-cycle so repeated Ctrl+Tab presses keep walking back.
+      promoteTab,
       toggleHome(input: { home: boolean; current?: Tab }) {
         if (input.home) {
           const tab = store.find((tab) => tabKey(tab) === recentKey())
@@ -382,6 +409,6 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       },
     }
 
-    return { ...actions, store, info, ready, recentReady }
+    return { ...actions, store, info, order, ready, recentReady, orderReady }
   },
 })
