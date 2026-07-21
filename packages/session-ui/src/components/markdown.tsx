@@ -182,7 +182,7 @@ function createExpandButton(label: string) {
           size="normal"
           variant="ghost-muted"
           aria-label={value()}
-          icon={<IconV2 name="outline-square-arrow" />}
+          icon={<IconV2 name="fullscreen" />}
         />
       </TooltipV2>
     )

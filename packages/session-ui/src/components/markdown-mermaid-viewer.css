@@ -10,15 +10,22 @@
   inset: 0;
   z-index: 50;
   display: flex;
+  padding: 16px;
+  pointer-events: none;
 }
 
 [data-component="mermaid-viewer"] [data-slot="mermaid-viewer-content"] {
   position: relative;
   display: flex;
-  flex-direction: column;
   flex: 1;
   min-width: 0;
+  overflow: hidden;
   outline: none;
+  pointer-events: auto;
+  border-radius: 8px;
+  background: var(--color-background-stronger);
+  border: 0.5px solid var(--v2-border-border-base);
+  box-shadow: var(--v2-elevation-overlay);
 }
 
 [data-component="mermaid-viewer"] [data-slot="mermaid-viewer-toolbar"] {
@@ -48,22 +55,28 @@
   cursor: pointer;
 }
 
-[data-component="mermaid-viewer"] [data-slot="mermaid-viewer-scroll"] {
-  flex: 1;
-  display: flex;
-  overflow: auto;
-  padding: 48px;
-}
-
 [data-component="mermaid-viewer"] [data-slot="mermaid-viewer-canvas"] {
-  box-sizing: content-box;
-  margin: auto;
-  padding: 24px;
-  border-radius: 8px;
-  background: var(--color-background-stronger);
-  border: 0.5px solid var(--v2-border-border-base);
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
 }
 
-[data-component="mermaid-viewer"] [data-slot="mermaid-viewer-canvas"] svg {
+[data-component="mermaid-viewer"] [data-slot="mermaid-viewer-canvas"][data-panning] {
+  cursor: grabbing;
+}
+
+[data-component="mermaid-viewer"] [data-slot="mermaid-viewer-stage"] {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+[data-component="mermaid-viewer"] [data-slot="mermaid-viewer-stage"] svg {
   display: block;
+  pointer-events: none;
 }
