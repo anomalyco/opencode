@@ -133,6 +133,9 @@ export const Info = Schema.Struct({
       turn_summary: Schema.optional(Schema.Literals(["show", "hide"])).annotate({
         description: "Show or hide the agent, model, and duration summary in scrollback",
       }),
+      footer: Schema.optional(Schema.Literals(["show", "hide"])).annotate({
+        description: "Show or hide persistent activity, model, usage, and context details in the footer",
+      }),
       mono: Schema.optional(Schema.Boolean).annotate({
         description: "Use monochrome ASCII output",
       }),

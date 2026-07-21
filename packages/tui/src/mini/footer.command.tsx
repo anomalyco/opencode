@@ -26,6 +26,7 @@ type CommandEntry =
   | (PanelEntry & { action: "skill" })
   | (PanelEntry & { action: "queued" })
   | (PanelEntry & { action: "subagent" })
+  | (PanelEntry & { action: "status" })
   | (PanelEntry & { action: "variant.cycle" })
   | (PanelEntry & { action: "variant.list" })
   | (PanelEntry & { action: "settings" })
@@ -363,6 +364,7 @@ export function RunCommandMenuBody(props: {
   onQueued: () => void
   onVariant: () => void
   onVariantCycle: () => void
+  onStatus: () => void
   onSettings: () => void
   onCommand: (name: string) => void
   onNew: () => void
@@ -380,6 +382,12 @@ export function RunCommandMenuBody(props: {
         display: "Open editor",
         footer: "/editor",
         keywords: "editor compose draft external editor",
+      },
+      {
+        action: "status",
+        category: "Session",
+        display: "Show status",
+        keywords: "status activity model context usage footer",
       },
       ...(props.subagents().length > 0
         ? [
@@ -526,6 +534,11 @@ export function RunCommandMenuBody(props: {
       return
     }
 
+    if (item.action === "status") {
+      props.onStatus()
+      return
+    }
+
     if (item.action === "settings") {
       props.onSettings()
       return
@@ -612,6 +625,13 @@ export function RunSettingsBody(props: {
       footer: saving() === "turn_summary" ? "saving" : props.settings().turn_summary,
       keywords: `turn summary agent model duration ${props.settings().turn_summary}`,
       key: "turn_summary",
+    },
+    {
+      category: "Terminal",
+      display: "Footer details",
+      footer: saving() === "footer" ? "saving" : props.settings().footer,
+      keywords: `footer status activity model context usage ${props.settings().footer}`,
+      key: "footer",
     },
     {
       category: "Terminal",

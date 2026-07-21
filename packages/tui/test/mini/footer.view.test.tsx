@@ -101,7 +101,7 @@ function footerState(input: Partial<FooterState> = {}) {
     interrupt: 0,
     exit: 0,
     ...input,
-  })[0]
+  })
 }
 
 async function renderFooter(
@@ -129,10 +129,10 @@ async function renderFooter(
   const [subagents] = createSignal<FooterSubagentState>(
     input.subagents ?? { tabs: [], details: {}, permissions: [], forms: [] },
   )
-  const state = footerState(input.state)
+  const [state, setState] = footerState(input.state)
   const config = input.tuiConfig ?? tuiConfig
   const [miniSettings] = createSignal<MiniSettings>(
-    input.miniSettings ?? { thinking: "hide", shell_output: "hide", turn_summary: "show", mono: false },
+    input.miniSettings ?? { thinking: "hide", shell_output: "hide", turn_summary: "show", footer: "show", mono: false },
   )
   function Harness() {
     return (
@@ -186,6 +186,7 @@ async function renderFooter(
   return {
     ...app,
     setView,
+    setState,
     cleanup() {
       app.renderer.currentFocusedRenderable?.blur()
       app.renderer.currentFocusedEditor?.blur()
@@ -362,6 +363,7 @@ test("direct command panel renders grouped command palette", async () => {
   ])
   const [subagents] = createSignal([])
   const [variants] = createSignal(["high", "minimal"])
+  let status = 0
 
   const app = await testRender(
     () => (
@@ -381,6 +383,7 @@ test("direct command panel renders grouped command palette", async () => {
           onQueued={() => {}}
           onVariant={() => {}}
           onVariantCycle={() => {}}
+          onStatus={() => status++}
           onSettings={() => {}}
           onCommand={() => {}}
           onNew={() => {}}
@@ -406,6 +409,7 @@ test("direct command panel renders grouped command palette", async () => {
     expect(frame).toContain("Prompt")
     expect(frame).toContain("Open editor")
     expect(frame).toContain("/editor")
+    expect(frame).toContain("Show status")
     expect(frame).toContain("Switch model")
     expect(frame).toContain("Skills")
     expect(frame).toContain("/skills")
@@ -417,6 +421,12 @@ test("direct command panel renders grouped command palette", async () => {
     expect(frame).not.toContain("Cycle reasoning effort for future turns")
     expect(frame).not.toContain("Review code")
     expect(frame).not.toContain("Commands 8")
+
+    await app.mockInput.typeText("status")
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("Show status")
+    app.mockInput.pressEnter()
+    expect(status).toBe(1)
   } finally {
     app.renderer.destroy()
   }
@@ -427,6 +437,7 @@ test("direct settings panel changes Mini transcript preferences", async () => {
     thinking: "hide",
     shell_output: "hide",
     turn_summary: "show",
+    footer: "show",
     mono: false,
   })
   const app = await testRender(
@@ -454,6 +465,7 @@ test("direct settings panel changes Mini transcript preferences", async () => {
     expect(frame).toContain("Thinking")
     expect(frame).toContain("Shell")
     expect(frame).toContain("Turn summary")
+    expect(frame).toContain("Footer details")
     expect(frame).toContain("Monochrome UI")
     expect(frame).toContain("left/right change")
     expect(frame).not.toMatch(/[^\x00-\x7F]/)
@@ -461,15 +473,16 @@ test("direct settings panel changes Mini transcript preferences", async () => {
     app.mockInput.pressKey("ARROW_RIGHT")
     await app.renderOnce()
 
-    expect(settings()).toEqual({ thinking: "show", shell_output: "hide", turn_summary: "show", mono: false })
+    expect(settings()).toEqual({ thinking: "show", shell_output: "hide", turn_summary: "show", footer: "show", mono: false })
 
     app.mockInput.pressKey("ARROW_DOWN")
     app.mockInput.pressKey("ARROW_DOWN")
     app.mockInput.pressKey("ARROW_RIGHT")
     await app.renderOnce()
 
-    expect(settings()).toEqual({ thinking: "show", shell_output: "hide", turn_summary: "hide", mono: false })
+    expect(settings()).toEqual({ thinking: "show", shell_output: "hide", turn_summary: "hide", footer: "show", mono: false })
 
+    app.mockInput.pressKey("ARROW_DOWN")
     app.mockInput.pressKey("ARROW_DOWN")
     app.mockInput.pressKey("ARROW_RIGHT")
     await app.renderOnce()
@@ -589,6 +602,7 @@ test("direct command panel shows subagent entry when available", async () => {
           onQueued={() => {}}
           onVariant={() => {}}
           onVariantCycle={() => {}}
+          onStatus={() => {}}
           onSettings={() => {}}
           onCommand={() => {}}
           onNew={() => {}}
@@ -638,6 +652,7 @@ test("direct command panel keeps completed subagents available", async () => {
           onQueued={() => {}}
           onVariant={() => {}}
           onVariantCycle={() => {}}
+          onStatus={() => {}}
           onSettings={() => {}}
           onCommand={() => {}}
           onNew={() => {}}
@@ -1127,7 +1142,7 @@ test("direct footer shows authoritative pending work while running", async () =>
           ]}
           theme={() => RUN_THEME_FALLBACK}
           tuiConfig={tuiConfig}
-          miniSettings={() => ({ thinking: "hide", shell_output: "hide", turn_summary: "show", mono: false })}
+          miniSettings={() => ({ thinking: "hide", shell_output: "hide", turn_summary: "show", footer: "show", mono: false })}
           mono={false}
           onSubmit={() => true}
           onPermissionReply={() => {}}
@@ -1296,6 +1311,39 @@ test("direct footer shows full usage metadata when room is available", async () 
     const frame = app.captureCharFrame()
 
     expect(frame).toContain("159.6K (16%) · $4.23")
+  } finally {
+    app.cleanup()
+  }
+})
+
+test("direct footer can hide persistent details and briefly reveal changes", async () => {
+  const app = await renderFooter({
+    state: { usage: "159.6K (16%) · $4.23" },
+    miniSettings: {
+      thinking: "hide",
+      shell_output: "hide",
+      turn_summary: "show",
+      footer: "hide",
+      mono: true,
+    },
+    mono: true,
+    width: 160,
+  })
+
+  try {
+    await app.renderOnce()
+    const initial = app.captureCharFrame()
+    expect(initial).toContain("ctrl+p cmd")
+    expect(initial).not.toContain("gpt-5")
+    expect(initial).not.toContain("159.6K")
+
+    app.setState((state) => ({ ...state, phase: "running" }))
+    await app.renderOnce()
+    const changed = app.captureCharFrame()
+    const statusline = footerStatusline(app.renderer.root)
+
+    expect(changed).toContain("running - gpt-5 - 159.6K (16%) - $4.23")
+    expect(boxPath(statusline, "SpinnerRenderable")).toBeUndefined()
   } finally {
     app.cleanup()
   }

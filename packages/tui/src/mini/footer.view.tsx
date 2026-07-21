@@ -56,6 +56,8 @@ import type { RunTheme } from "./theme"
 
 registerOpencodeSpinner()
 
+const FOOTER_DETAIL_DURATION = 3000
+
 const EMPTY_BORDER = {
   topLeft: "",
   bottomLeft: "",
@@ -189,6 +191,7 @@ export function RunFooterView(props: RunFooterViewProps) {
   const armed = createMemo(() => props.state().interrupt > 0)
   const exiting = createMemo(() => props.state().exit > 0)
   const usage = createMemo(() => props.state().usage)
+  const footerDetails = createMemo(() => props.miniSettings().footer === "show")
   const interruptLabel = createMemo(() => {
     if (!interrupt()) {
       return
@@ -216,6 +219,33 @@ export function RunFooterView(props: RunFooterViewProps) {
       frames: createFrames(options),
       color: createColors(options),
     }
+  })
+  const footerStatus = createMemo(() => {
+    const current = model() ?? props.state().model.trim()
+    const variant = props.currentVariant()
+    const details = [busy() ? "running" : "idle"]
+    if (current) details.push(variant ? `${current} ${variant}` : current)
+    if (usage()) details.push(props.mono ? usage().replaceAll(" · ", " - ") : usage())
+    if (queuedPrompts().length > 0) details.push(`${queuedPrompts().length} pending`)
+    if (activeTabs().length > 0) details.push(`${activeTabs().length} subagent${activeTabs().length === 1 ? "" : "s"}`)
+    return details.join(props.mono ? " - " : " · ")
+  })
+  const [footerNotice, setFooterNotice] = createSignal("")
+  let footerNoticeTimeout: ReturnType<typeof setTimeout> | undefined
+  let previousFooterStatus: string | undefined
+  const showFooterStatus = () => {
+    if (footerNoticeTimeout) clearTimeout(footerNoticeTimeout)
+    setFooterNotice(footerStatus())
+    footerNoticeTimeout = setTimeout(() => {
+      footerNoticeTimeout = undefined
+      setFooterNotice("")
+    }, FOOTER_DETAIL_DURATION)
+  }
+
+  createEffect(() => {
+    const current = footerStatus()
+    if (previousFooterStatus !== undefined && previousFooterStatus !== current && !footerDetails()) showFooterStatus()
+    previousFooterStatus = current
   })
   const permission = createMemo<Extract<FooterView, { type: "permission" }> | undefined>(() => {
     const view = active()
@@ -375,9 +405,11 @@ export function RunFooterView(props: RunFooterViewProps) {
       return `Press ${clearShortcut() || "ctrl+c"} again to exit`
     }
 
-    if (busy()) {
-      return armed() ? "again to interrupt" : "interrupt"
-    }
+    if (busy() && armed()) return "again to interrupt"
+
+    if (footerNotice()) return footerNotice()
+
+    if (busy()) return "interrupt"
 
     if (stateStatus().length > 0) {
       return stateStatus()
@@ -386,7 +418,7 @@ export function RunFooterView(props: RunFooterViewProps) {
     return shell() ? "Shell mode" : ""
   })
   const activityMeta = createMemo(() => {
-    if (!responsive().statusline.showActivityMeta || usage().length === 0) {
+    if (!footerDetails() || !responsive().statusline.showActivityMeta || usage().length === 0) {
       return ""
     }
 
@@ -394,7 +426,7 @@ export function RunFooterView(props: RunFooterViewProps) {
   })
   const modelStatus = createMemo(() => {
     const current = model()
-    if (!prompt() || !responsive().statusline.showModel || !current) return
+    if (!footerDetails() || !prompt() || !responsive().statusline.showModel || !current) return
     return {
       model: current,
       variant: responsive().statusline.showModelVariant ? props.currentVariant() : undefined,
@@ -409,7 +441,7 @@ export function RunFooterView(props: RunFooterViewProps) {
       return theme().highlight
     }
 
-    if (busy() || stateStatus().length > 0) {
+    if (busy() || footerNotice().length > 0 || stateStatus().length > 0) {
       return theme().text
     }
 
@@ -419,7 +451,7 @@ export function RunFooterView(props: RunFooterViewProps) {
   const hasActivityMeta = createMemo(() => activityMeta().length > 0)
   const hasModelStatus = createMemo(() => Boolean(modelStatus()))
   const contextHints = createMemo(() => {
-    if (!prompt() || shell() || !responsive().statusline.showContextHints) {
+    if (!footerDetails() || !prompt() || shell() || !responsive().statusline.showContextHints) {
       return []
     }
 
@@ -459,6 +491,7 @@ export function RunFooterView(props: RunFooterViewProps) {
 
   onCleanup(() => {
     props.onRequestExit?.(undefined)
+    if (footerNoticeTimeout) clearTimeout(footerNoticeTimeout)
   })
 
   Keymap.createLayer(() => ({
@@ -699,6 +732,10 @@ export function RunFooterView(props: RunFooterViewProps) {
                               props.onCycle()
                               closePanel()
                             }}
+                            onStatus={() => {
+                              showFooterStatus()
+                              closePanel()
+                            }}
                             onCommand={(name) => {
                               composer.submitText(`/${name}`)
                               closePanel()
@@ -857,7 +894,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                   paddingRight={1}
                   backgroundColor="transparent"
                 >
-                  <Show when={busy() && !exiting()}>
+                  <Show when={footerDetails() && busy() && !exiting()}>
                     <box flexShrink={0}>
                       <spinner color={spin().color} frames={spin().frames} interval={40} />
                     </box>
