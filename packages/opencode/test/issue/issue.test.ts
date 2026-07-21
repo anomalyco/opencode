@@ -343,3 +343,242 @@ describe("Issue.reorder with archived issues", () => {
     { timeout: 30_000 },
   )
 })
+
+// ADR-0005 D2 (amended 2026-07-20): Linear-linked refusal is enforced at
+// the AGENT TOOL layer (issue_update.ts / issue_archive.ts / issue_delete.ts),
+// NOT at the Issue.Service layer. The HTTP API (UI path) calls the same
+// service to let users edit Linear-linked issues locally before pushing to
+// Linear via SyncPush. These tests verify the service is Linear-agnostic —
+// refusal behavior is covered by tool-layer E2E tests.
+describe("Issue.Service is Linear-agnostic (ADR-0005 D2 amended)", () => {
+  it.live(
+    "update accepts Linear-linked issue (refusal is in the tool layer)",
+    () =>
+      provideTmpdirInstance((dir) =>
+        Effect.gen(function* () {
+          const svc = yield* Issue.Service
+          const created = yield* svc.create({
+            directory: dir,
+            issue: { title: "Linear-linked", level: 0, linear_issue_id: "LIN-100" },
+          })
+
+          const updated = yield* svc.update({
+            directory: dir,
+            id: created.id,
+            patch: { title: "New Title", status: "In Progress" },
+          })
+          expect(updated.title).toBe("New Title")
+          expect(updated.status).toBe("In Progress")
+        }),
+      ),
+    { timeout: 30_000 },
+  )
+
+  it.live(
+    "archive accepts Linear-linked issue",
+    () =>
+      provideTmpdirInstance((dir) =>
+        Effect.gen(function* () {
+          const svc = yield* Issue.Service
+          const created = yield* svc.create({
+            directory: dir,
+            issue: { title: "Linear-linked", level: 0, linear_issue_id: "LIN-102" },
+          })
+
+          const archived = yield* svc.archive({ directory: dir, id: created.id, outcome: "done" })
+          expect(archived.status).toBe("Done")
+        }),
+      ),
+    { timeout: 30_000 },
+  )
+
+  it.live(
+    "delete accepts Linear-linked archived issue",
+    () =>
+      provideTmpdirInstance((dir) =>
+        Effect.gen(function* () {
+          const svc = yield* Issue.Service
+          // Create a Linear-linked issue that is ALREADY archived (status=Done)
+          const created = yield* svc.create({
+            directory: dir,
+            issue: { title: "Linear-linked archived", level: 0, linear_issue_id: "LIN-103", status: "Done" },
+          })
+
+          yield* svc.delete({ directory: dir, id: created.id })
+          const remaining = yield* svc.get({ directory: dir, include_archived: true })
+          expect(remaining.find((i) => i.id === created.id)).toBeUndefined()
+        }),
+      ),
+    { timeout: 30_000 },
+  )
+
+  it.live(
+    "update allows local-only issue (linear_issue_id == null)",
+    () =>
+      provideTmpdirInstance((dir) =>
+        Effect.gen(function* () {
+          const svc = yield* Issue.Service
+          const created = yield* svc.create({ directory: dir, issue: { title: "Local-only", level: 0 } })
+
+          const updated = yield* svc.update({
+            directory: dir,
+            id: created.id,
+            patch: { title: "Updated", status: "In Progress" },
+          })
+          expect(updated.title).toBe("Updated")
+          expect(updated.status).toBe("In Progress")
+        }),
+      ),
+    { timeout: 30_000 },
+  )
+
+  it.live(
+    "archive allows local-only issue",
+    () =>
+      provideTmpdirInstance((dir) =>
+        Effect.gen(function* () {
+          const svc = yield* Issue.Service
+          const created = yield* svc.create({ directory: dir, issue: { title: "Local-only", level: 0 } })
+
+          const archived = yield* svc.archive({ directory: dir, id: created.id, outcome: "done" })
+          expect(archived.status).toBe("Done")
+        }),
+      ),
+    { timeout: 30_000 },
+  )
+
+  it.live(
+    "delete allows local-only archived issue",
+    () =>
+      provideTmpdirInstance((dir) =>
+        Effect.gen(function* () {
+          const svc = yield* Issue.Service
+          const created = yield* svc.create({ directory: dir, issue: { title: "Local-only", level: 0 } })
+          yield* svc.archive({ directory: dir, id: created.id, outcome: "done" })
+
+          yield* svc.delete({ directory: dir, id: created.id })
+          const remaining = yield* svc.get({ directory: dir, include_archived: true })
+          expect(remaining.find((i) => i.id === created.id)).toBeUndefined()
+        }),
+      ),
+    { timeout: 30_000 },
+  )
+
+  it.live(
+    "reorder accepts Linear-linked issues (position is local-only)",
+    () =>
+      provideTmpdirInstance((dir) =>
+        Effect.gen(function* () {
+          const svc = yield* Issue.Service
+          const a = yield* svc.create({
+            directory: dir,
+            issue: { title: "A (Linear)", level: 0, linear_issue_id: "LIN-200" },
+          })
+          const b = yield* svc.create({ directory: dir, issue: { title: "B (local)", level: 0 } })
+
+          yield* svc.reorder({ directory: dir, ids: [b.id, a.id] })
+          const all = yield* svc.get({ directory: dir, include_archived: true })
+          expect(all[0].id).toBe(b.id)
+          expect(all[1].id).toBe(a.id)
+        }),
+      ),
+    { timeout: 30_000 },
+  )
+})
+
+// ADR-0005 D6: agent-facing tool outputs filter sync-internal
+// bookkeeping (last_pushed_at, last_pulled_at, cloud_shadow) so the
+// agent only sees fields with actionable value. linear_* fields stay
+// for routing.
+describe("Issue.toAgentInfo (ADR-0005 D6)", () => {
+  it.live(
+    "strips last_pushed_at, last_pulled_at, cloud_shadow",
+    () =>
+      provideTmpdirInstance((dir) =>
+        Effect.gen(function* () {
+          const svc = yield* Issue.Service
+          const created = yield* svc.create({
+            directory: dir,
+            issue: {
+              title: "Linked",
+              level: 0,
+              linear_issue_id: "LIN-300",
+              last_pushed_at: 1700000000000,
+              last_pulled_at: 1700000001000,
+              cloud_shadow: { title: "Linked", status: "Todo" },
+            },
+          })
+
+          const agent = Issue.toAgentInfo(created)
+          expect(agent.id).toBe(created.id)
+          expect(agent.linear_issue_id).toBe("LIN-300")
+          // Sync-internal fields are stripped
+          expect("last_pushed_at" in agent).toBe(false)
+          expect("last_pulled_at" in agent).toBe(false)
+          expect("cloud_shadow" in agent).toBe(false)
+        }),
+      ),
+    { timeout: 30_000 },
+  )
+
+  it.live(
+    "preserves routing fields (linear_issue_id, linear_team_id, linear_project_id)",
+    () =>
+      provideTmpdirInstance((dir) =>
+        Effect.gen(function* () {
+          const svc = yield* Issue.Service
+          const created = yield* svc.create({
+            directory: dir,
+            issue: {
+              title: "Full Linear",
+              level: 0,
+              linear_issue_id: "LIN-301",
+              linear_team_id: "team-uuid",
+              linear_project_id: "project-uuid",
+            },
+          })
+
+          const agent = Issue.toAgentInfo(created)
+          expect(agent.linear_issue_id).toBe("LIN-301")
+          expect(agent.linear_team_id).toBe("team-uuid")
+          expect(agent.linear_project_id).toBe("project-uuid")
+        }),
+      ),
+    { timeout: 30_000 },
+  )
+
+  it.live(
+    "preserves content + hierarchy fields",
+    () =>
+      provideTmpdirInstance((dir) =>
+        Effect.gen(function* () {
+          const svc = yield* Issue.Service
+          const l1 = yield* svc.create({ directory: dir, issue: { title: "L1", level: 0 } })
+          const l2 = yield* svc.create({
+            directory: dir,
+            issue: {
+              title: "L2",
+              level: 1,
+              parent_id: l1.id,
+              status: "In Progress",
+              priority: "high",
+              labels: ["Feature"],
+              due_date: "2026-08-01",
+              assignee_id: "user-1",
+            },
+          })
+
+          const agent = Issue.toAgentInfo(l2)
+          expect(agent.title).toBe("L2")
+          expect(agent.parent_id).toBe(l1.id)
+          expect(agent.level).toBe(1)
+          expect(agent.status).toBe("In Progress")
+          expect(agent.priority).toBe("high")
+          expect(agent.labels).toEqual(["Feature"])
+          expect(agent.due_date).toBe("2026-08-01")
+          expect(agent.assignee_id).toBe("user-1")
+        }),
+      ),
+    { timeout: 30_000 },
+  )
+})

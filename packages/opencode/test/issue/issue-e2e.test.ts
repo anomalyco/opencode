@@ -252,7 +252,7 @@ describe("Issue tools E2E (OpenCode Zen free model)", () => {
               parts: [
                 {
                   type: "text",
-                  text: 'Use the issue_list tool (with no arguments) to list issues in the current project. Then reply with the count and titles as JSON. Do not use any other tools.',
+                  text: "Use the issue_list tool (with no arguments) to list issues in the current project. Then reply with the count and titles as JSON. Do not use any other tools.",
                 },
               ],
             })
@@ -299,7 +299,7 @@ describe("Issue tools E2E (OpenCode Zen free model)", () => {
               parts: [
                 {
                   type: "text",
-                  text: 'Use the issue_list tool with include_archived set to true to list all issues. Then reply with the count. Do not use any other tools.',
+                  text: "Use the issue_list tool with include_archived set to true to list all issues. Then reply with the count. Do not use any other tools.",
                 },
               ],
             })
@@ -308,6 +308,111 @@ describe("Issue tools E2E (OpenCode Zen free model)", () => {
             const issues = yield* issueSvc.get({ directory: dir, include_archived: true })
             expect(issues.some((i) => i.id === activeL1.id)).toBe(true)
             expect(issues.some((i) => i.id === archivedL1.id)).toBe(true)
+          }),
+        { git: true, config: zenConfig },
+      ),
+    { timeout: 120_000 },
+  )
+
+  // ADR-0005 D3: issue_sync tool must handle "no Linear client" gracefully.
+  // In an environment without Linear MCP registered and without LINEAR_API_KEY,
+  // the tool returns ok:false with a clear reason — it does NOT crash the
+  // session. The agent can surface this to the user.
+  live(
+    "agent calls issue_sync push without a Linear client (graceful failure)",
+    () =>
+      provideTmpdirInstance(
+        (dir) =>
+          Effect.gen(function* () {
+            const prompt = yield* SessionPrompt.Service
+            const sessions = yield* Session.Service
+            const issueSvc = yield* Issue.Service
+
+            // Pre-seed a local-only issue (no linear_issue_id) so the agent
+            // has something to "push".
+            const created = yield* issueSvc.create({
+              directory: dir,
+              issue: { title: "Local for sync push", level: 0 },
+            })
+
+            const session = yield* sessions.create({
+              title: "E2E: issue_sync push no client",
+              permission: allowAllPermission,
+            })
+
+            yield* prompt.prompt({
+              sessionID: session.id,
+              agent: "build",
+              parts: [
+                {
+                  type: "text",
+                  text: 'Use the issue_sync tool with direction "push" to push local issues to Linear. Then reply with the result. Do not use any other tools.',
+                },
+              ],
+            })
+
+            // No Linear client is available (no MCP, no LINEAR_API_KEY in
+            // test env). The tool must return ok:false, and the local issue's
+            // last_pushed_at must NOT be advanced (no successful push happened).
+            const issues = yield* issueSvc.get({ directory: dir, include_archived: true })
+            const target = issues.find((i) => i.id === created.id)
+            expect(target).toBeDefined()
+            expect(target?.last_pushed_at).toBeNull()
+          }),
+        { git: true, config: zenConfig },
+      ),
+    { timeout: 120_000 },
+  )
+
+  // ADR-0005 Amendment 2026-07-20 (D1/D2 superseded): local issue_* write
+  // tools edit Linear-linked issues directly in the local IssueTable, mirroring
+  // the UI path. The agent calls issue_update on a Linear-linked issue; the
+  // local row is updated. The `linear_issue_id` link is preserved. Syncing the
+  // edit to Linear is a separate user-initiated Push (or `issue_sync push`).
+  live(
+    "agent can update a Linear-linked issue via issue_update (local edit)",
+    () =>
+      provideTmpdirInstance(
+        (dir) =>
+          Effect.gen(function* () {
+            const prompt = yield* SessionPrompt.Service
+            const sessions = yield* Session.Service
+            const issueSvc = yield* Issue.Service
+
+            // Pre-seed a Linear-linked issue (linear_issue_id != null).
+            const created = yield* issueSvc.create({
+              directory: dir,
+              issue: {
+                title: "Linear-linked Original",
+                level: 0,
+                linear_issue_id: "LIN-E2E-001",
+              },
+            })
+
+            const session = yield* sessions.create({
+              title: "E2E: issue_update Linear-linked local edit",
+              permission: allowAllPermission,
+            })
+
+            yield* prompt.prompt({
+              sessionID: session.id,
+              agent: "build",
+              parts: [
+                {
+                  type: "text",
+                  text: `Use the issue_update tool to update the issue with id "${created.id}" — set its title to "Hacked Local Title". Do not use any other tools.`,
+                },
+              ],
+            })
+
+            // Per ADR-0005 Amendment 2026-07-20: the tool writes to the local
+            // IssueTable. The title is updated; the Linear link is preserved.
+            // Pushing to Linear is a separate concern (user Push or issue_sync).
+            const issues = yield* issueSvc.get({ directory: dir, include_archived: true })
+            const target = issues.find((i) => i.id === created.id)
+            expect(target).toBeDefined()
+            expect(target?.title).toBe("Hacked Local Title")
+            expect(target?.linear_issue_id).toBe("LIN-E2E-001")
           }),
         { git: true, config: zenConfig },
       ),
