@@ -128,9 +128,9 @@ test("fromConfig - does not expand tilde in middle of path", () => {
   expect(result).toEqual([{ permission: "external_directory", pattern: "/some/~/path", action: "allow" }])
 })
 
-// Permission precedence follows config insertion order. `evaluate()` uses the
-// last matching rule, so later config entries intentionally override earlier
-// entries even when a wildcard appears after a specific permission.
+// Permission precedence follows specificity: more specific patterns win over
+// less specific ones regardless of insertion order. Ties broken by position
+// (later wins).
 
 test("fromConfig - specific permission beats wildcard regardless of order", () => {
   const wildcardFirst = Permission.fromConfig({ "*": "deny", bash: "allow" })
@@ -288,7 +288,7 @@ test("evaluate - wildcard pattern match", () => {
   expect(result.action).toBe("allow")
 })
 
-test("evaluate - last matching rule wins", () => {
+test("evaluate - specific deny beats broad allow at end", () => {
   const result = Permission.evaluate("bash", "rm", [
     { permission: "bash", pattern: "*", action: "allow" },
     { permission: "bash", pattern: "rm", action: "deny" },
@@ -296,7 +296,7 @@ test("evaluate - last matching rule wins", () => {
   expect(result.action).toBe("deny")
 })
 
-test("evaluate - more specific pattern wins over less specific", () => {
+test("evaluate - specific deny beats broad allow at start", () => {
   const result = Permission.evaluate("bash", "rm", [
     { permission: "bash", pattern: "rm", action: "deny" },
     { permission: "bash", pattern: "*", action: "allow" },
@@ -309,7 +309,7 @@ test("evaluate - glob pattern match", () => {
   expect(result.action).toBe("allow")
 })
 
-test("evaluate - last matching glob wins", () => {
+test("evaluate - more specific glob beats broader", () => {
   const result = Permission.evaluate("edit", "src/components/Button.tsx", [
     { permission: "edit", pattern: "src/*", action: "deny" },
     { permission: "edit", pattern: "src/components/*", action: "allow" },
