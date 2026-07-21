@@ -362,6 +362,7 @@ export const dict = {
   "zen.api.error.providerNotSupported": "プロバイダー {{provider}} はサポートされていません",
   "zen.api.error.missingApiKey": "APIキーがありません。",
   "zen.api.error.invalidApiKey": "無効なAPIキーです。",
+  "zen.api.error.requestBlockedByUpstreamProvider": "上流プロバイダーによりリクエストがブロックされました。",
   "zen.api.error.subscriptionQuotaExceeded":
     "サブスクリプションの制限を超えました。{{retryIn}} 後に再試行してください。",
   "zen.api.error.goSubscriptionRollingLimitExceeded":
