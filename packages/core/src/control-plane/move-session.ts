@@ -1,10 +1,10 @@
 export * as MoveSession from "./move-session"
 
 import { Context, DateTime, Effect, Layer, Schema } from "effect"
-import { makeGlobalNode } from "../effect/app-node"
-import { FSUtil } from "../fs-util"
+import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
+import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Git } from "../git"
-import { Global } from "../global"
+import { Global } from "@opencode-ai/util/global"
 import { ProjectV2 } from "../project"
 import { SessionV2 } from "../session"
 import { SessionExecution } from "../session/execution"

@@ -1,11 +1,11 @@
 import { Database } from "@opencode-ai/core/database/database"
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { httpClient } from "@opencode-ai/core/effect/app-node-platform"
+import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { httpClient } from "@opencode-ai/util/effect/app-node-platform"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { EventV2 } from "@opencode-ai/core/event"
 import { EventLogger } from "@opencode-ai/core/event-logger"
 import { FileSystemSearch } from "@opencode-ai/core/filesystem/search"
-import { Observability } from "@opencode-ai/core/observability"
+import { Observability } from "@opencode-ai/util/observability"
 import { Credential } from "@opencode-ai/core/credential"
 import { Config } from "@opencode-ai/core/config"
 import { CommandV2 } from "@opencode-ai/core/command"
@@ -20,7 +20,7 @@ import { SessionModelRequest } from "@opencode-ai/core/session/model-request"
 import { SessionTitle } from "@opencode-ai/core/session/title"
 import { Shell } from "@opencode-ai/core/shell"
 import { Job } from "@opencode-ai/core/job"
-import { Global } from "@opencode-ai/core/global"
+import { Global } from "@opencode-ai/util/global"
 import { InstructionDiscovery } from "@opencode-ai/core/instruction-discovery"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
@@ -30,7 +30,7 @@ import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { WellKnown } from "@opencode-ai/core/wellknown"
 import { Watcher } from "@opencode-ai/core/filesystem/watcher"
-import { HttpRouter, HttpServer } from "effect/unstable/http"
+import { HttpRouter } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { Context, Effect, Layer, Option } from "effect"
 import { Api } from "./api"
@@ -143,5 +143,3 @@ function makeRoutes<AuthError, AuthServices>(
     }),
   )
 }
-
-export const webHandler = () => HttpRouter.toWebHandler(createRoutes().pipe(Layer.provide(HttpServer.layerServices)))

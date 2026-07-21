@@ -3,14 +3,14 @@ import { Context, Duration, Effect, Layer, Option, Schedule, Schema } from "effe
 import { HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { ModelsDev } from "@opencode-ai/schema/models-dev"
 import { Money } from "@opencode-ai/schema/money"
-import { Global } from "./global"
-import { Flock } from "./util/flock"
-import { Hash } from "./util/hash"
-import { FSUtil } from "./fs-util"
-import { InstallationChannel, InstallationVersion } from "./installation/version"
+import { Global } from "@opencode-ai/util/global"
+import { Flock } from "@opencode-ai/util/flock"
+import { Hash } from "@opencode-ai/util/hash"
+import { FSUtil } from "@opencode-ai/util/fs-util"
+import { InstallationChannel, InstallationVersion } from "@opencode-ai/util/installation/version"
 import { EventV2 } from "./event"
-import { makeGlobalNode } from "./effect/app-node"
-import { httpClient } from "./effect/app-node-platform"
+import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
+import { httpClient } from "@opencode-ai/util/effect/app-node-platform"
 import { ModelV2 } from "./model"
 import { ProviderV2 } from "./provider"
 
@@ -552,7 +552,7 @@ export const layer = (options?: Options) => Layer.effect(
       ),
     )
 
-    const source = options?.url ?? "https://models.dev"
+    const source = options?.url || "https://models.dev"
     const fetch = options?.fetch ?? true
     const userAgent = `opencode/${InstallationChannel}/${InstallationVersion}/${options?.client ?? "cli"}`
     const filepath = path.join(

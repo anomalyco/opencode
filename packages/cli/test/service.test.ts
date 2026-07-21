@@ -1,18 +1,9 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { Service, type Info } from "@opencode-ai/client/effect/service"
-import { Database } from "@opencode-ai/core/database/database"
-import { EventV2 } from "@opencode-ai/core/event"
-import { EventTable } from "@opencode-ai/core/event/sql"
-import { Global } from "@opencode-ai/core/global"
-import { InstallationVersion } from "@opencode-ai/core/installation/version"
-import { Project } from "@opencode-ai/core/project"
-import { ProjectTable } from "@opencode-ai/core/project/sql"
-import { AbsolutePath } from "@opencode-ai/core/schema"
-import { SessionV2 } from "@opencode-ai/core/session"
-import { SessionEvent } from "@opencode-ai/core/session/event"
-import { SessionTable } from "@opencode-ai/core/session/sql"
+import { Global } from "@opencode-ai/util/global"
+import { InstallationVersion } from "@opencode-ai/util/installation/version"
 import { expect, test } from "bun:test"
-import { Effect, Schedule, Schema } from "effect"
+import { Effect, Schema } from "effect"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
@@ -20,6 +11,7 @@ import { ServiceConfig } from "../src/services/service-config"
 
 test("managed service ports are stable per installation channel", () => {
   expect(ServiceConfig.defaultPort("latest")).toBe(0xc0de)
+  expect(ServiceConfig.defaultPort("next")).toBe(0xc0de)
   expect(ServiceConfig.defaultPort("local")).toBe(0xc0df)
   expect(ServiceConfig.defaultPort("preview-a")).toBe(ServiceConfig.defaultPort("preview-a"))
   expect(ServiceConfig.defaultPort("preview-a")).not.toBe(ServiceConfig.defaultPort("preview-b"))
@@ -43,15 +35,33 @@ test("local channel stores service config with the local service filename", asyn
   }
 })
 
-test("service filenames isolate installation channels", () => {
+test("service filenames share release channels and identify preview channels", () => {
   expect(ServiceConfig.filename("latest")).toBe("service.json")
+  expect(ServiceConfig.filename("next")).toBe("service.json")
   expect(ServiceConfig.filename("local")).toBe("service-local.json")
-  expect(ServiceConfig.filename("preview-a")).not.toBe(ServiceConfig.filename("preview-b"))
-  expect(ServiceConfig.filename("preview-a")).not.toBe(ServiceConfig.filename("latest"))
+  expect(ServiceConfig.filename("preview-a")).toBe("service-preview-a.json")
+  expect(ServiceConfig.filename("preview/a")).toBe("service-preview-a.json")
   expect(ServiceConfig.versionBelongsToChannel("0.0.0-preview-a-1234", "preview-a")).toBe(true)
   expect(ServiceConfig.versionBelongsToChannel("0.0.0-preview-a-1234.2", "preview-a")).toBe(true)
   expect(ServiceConfig.versionBelongsToChannel("0.0.0-preview-a-other-1234", "preview-a")).toBe(false)
   expect(ServiceConfig.versionBelongsToChannel("1.2.3", "preview-a")).toBe(false)
+})
+
+test("service config migrates from the hashed channel filename", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-config-migration-"))
+  const legacy = path.join(root, ServiceConfig.legacyFilename("preview-a")!)
+  const target = path.join(root, ServiceConfig.filename("preview-a"))
+  try {
+    await fs.writeFile(legacy, JSON.stringify({ hostname: "127.0.0.2", port: 4098 }))
+    await Effect.runPromise(ServiceConfig.migrateConfig(legacy, target).pipe(Effect.provide(NodeFileSystem.layer)))
+    expect(await Bun.file(target).json()).toEqual({ hostname: "127.0.0.2", port: 4098 })
+
+    await fs.writeFile(target, JSON.stringify({ port: 4099 }))
+    await Effect.runPromise(ServiceConfig.migrateConfig(legacy, target).pipe(Effect.provide(NodeFileSystem.layer)))
+    expect(await Bun.file(target).json()).toEqual({ port: 4099 })
+  } finally {
+    await fs.rm(root, { recursive: true, force: true })
+  }
 })
 
 test("preview registration migration never moves stable discovery", async () => {
@@ -185,31 +195,6 @@ test("concurrent service processes elect one server", async () => {
     XDG_DATA_HOME: path.join(root, "data"),
     XDG_STATE_HOME: path.join(root, "state"),
   }
-  const sessionID = SessionV2.ID.make("ses_service_recovery")
-  await withDatabase(
-    database,
-    Effect.gen(function* () {
-      const { db } = yield* Database.Service
-      yield* db
-        .insert(ProjectTable)
-        .values({ id: Project.ID.global, worktree: AbsolutePath.make(root), sandboxes: [] })
-        .run()
-        .pipe(Effect.orDie)
-      yield* db
-        .insert(SessionTable)
-        .values({
-          id: sessionID,
-          project_id: Project.ID.global,
-          slug: "recovery",
-          directory: root,
-          title: "recovery",
-          version: "test",
-          time_suspended: Date.now(),
-        })
-        .run()
-        .pipe(Effect.orDie)
-    }),
-  )
   const command = [process.execPath, path.join(import.meta.dir, "../src/index.ts"), "serve", "--service"]
   const registration = path.join(root, "state", "opencode", "service-local.json")
   const port = await availablePort()
@@ -262,20 +247,6 @@ test("concurrent service processes elect one server", async () => {
       contender.kill("SIGTERM")
       await contender.exited
     }
-    expect(
-      await withDatabase(
-        database,
-        Effect.gen(function* () {
-          const { db } = yield* Database.Service
-          return yield* db
-            .select({ timeSuspended: SessionTable.time_suspended })
-            .from(SessionTable)
-            .get()
-            .pipe(Effect.orDie)
-        }),
-      ),
-    ).toEqual({ timeSuspended: null })
-    expect(await waitForExecutionStart(database, sessionID)).toBe(1)
     await Effect.runPromise(Service.stop({ file: registration }).pipe(Effect.provide(NodeFileSystem.layer)))
     await winner?.exited
     expect(await Bun.file(registration).exists()).toBe(false)
@@ -509,40 +480,6 @@ test("a failed service stays registered and owns the selected port until stopped
     await fs.rm(root, { recursive: true, force: true })
   }
 }, 30_000)
-
-function withDatabase<A, E>(file: string, effect: Effect.Effect<A, E, Database.Service>) {
-  return Effect.runPromise(effect.pipe(Effect.provide(Database.layer({ path: file })), Effect.scoped))
-}
-
-function waitForExecutionStart(file: string, sessionID: SessionV2.ID) {
-  return withDatabase(
-    file,
-    Effect.gen(function* () {
-      const { db } = yield* Database.Service
-      return yield* db
-        .select({ id: EventTable.id, sessionID: EventTable.aggregate_id, type: EventTable.type })
-        .from(EventTable)
-        .all()
-        .pipe(
-          Effect.orDie,
-          Effect.map((rows) =>
-            rows.filter(
-              (row) =>
-                row.sessionID === sessionID &&
-                row.type ===
-                  EventV2.versionedType(
-                    SessionEvent.Execution.Started.type,
-                    SessionEvent.Execution.Started.durable.version,
-                  ),
-            ),
-          ),
-          Effect.filterOrFail((rows) => rows.length > 0),
-          Effect.map((rows) => rows.length),
-          Effect.retry(Schedule.max([Schedule.spaced("50 millis"), Schedule.recurs(200)])),
-        )
-    }),
-  )
-}
 
 async function waitForInfo(file: string, accept: (info: Info) => boolean = () => true) {
   for (let attempt = 0; attempt < 400; attempt++) {

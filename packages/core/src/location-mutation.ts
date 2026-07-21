@@ -1,9 +1,9 @@
 export * as LocationMutation from "./location-mutation"
 
-import { makeLocationNode } from "./effect/app-node"
+import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import path from "path"
 import { Context, Effect, Layer, Schema } from "effect"
-import { FSUtil } from "./fs-util"
+import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Location } from "./location"
 import { Project } from "./project"
 import { AbsolutePath } from "./schema"

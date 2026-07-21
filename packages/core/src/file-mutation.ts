@@ -1,10 +1,10 @@
 export * as FileMutation from "./file-mutation"
 
-import { makeLocationNode } from "./effect/app-node"
+import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Context, Effect, Layer, Schema } from "effect"
 import { dirname } from "path"
 import { KeyedMutex } from "./effect/keyed-mutex"
-import { FSUtil } from "./fs-util"
+import { FSUtil } from "@opencode-ai/util/fs-util"
 
 export interface Target {
   readonly canonical: string

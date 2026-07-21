@@ -1,6 +1,6 @@
-import { Global } from "@opencode-ai/core/global"
-import { InstallationChannel, InstallationVersion } from "@opencode-ai/core/installation/version"
-import { Hash } from "@opencode-ai/core/util/hash"
+import { Global } from "@opencode-ai/util/global"
+import { InstallationChannel, InstallationVersion } from "@opencode-ai/util/installation/version"
+import { Hash } from "@opencode-ai/util/hash"
 import { Service } from "@opencode-ai/client/effect/service"
 import { Effect, FileSystem, Option, Schema } from "effect"
 import { randomBytes } from "crypto"
@@ -25,15 +25,19 @@ const decodeInfo = Schema.decodeUnknownEffect(Schema.fromJsonString(Info))
 const decodeRegistration = Schema.decodeUnknownEffect(Schema.fromJsonString(Service.Info))
 
 export function filename(channel = InstallationChannel) {
-  if (channel === "latest") return "service.json"
-  if (channel === "local") return "service-local.json"
-  return `service-${Hash.fast(channel)}.json`
+  if (channel === "latest" || channel === "next") return "service.json"
+  return `service-${channel.replace(/[^a-zA-Z0-9._-]/g, "-")}.json`
 }
 
 export function defaultPort(channel = InstallationChannel) {
-  if (channel === "latest") return 0xc0de
+  if (channel === "latest" || channel === "next") return 0xc0de
   if (channel === "local") return 0xc0df
   return 10_000 + (Number.parseInt(Hash.fast(channel).slice(0, 8), 16) % 50_000)
+}
+
+export function legacyFilename(channel = InstallationChannel) {
+  if (channel === "latest" || channel === "local") return
+  return `service-${Hash.fast(channel)}.json`
 }
 
 export function versionBelongsToChannel(
@@ -54,13 +58,20 @@ export const migrateRegistration = Effect.fnUntraced(function* (
   channel = InstallationChannel,
   installedVersion = InstallationVersion,
 ) {
-  if (channel === "latest" || channel === "local") return
   const fs = yield* FileSystem.FileSystem
   const text = yield* fs.readFileString(legacy).pipe(Effect.option)
   if (Option.isNone(text)) return
   const registration = yield* decodeRegistration(text.value).pipe(Effect.option)
   if (Option.isNone(registration)) return
   if (!versionBelongsToChannel(registration.value.version, channel, installedVersion)) return
+  yield* fs.writeFileString(file, text.value, { flag: "wx", mode: 0o600 }).pipe(Effect.ignore)
+})
+
+export const migrateConfig = Effect.fnUntraced(function* (legacy: string, file: string) {
+  const fs = yield* FileSystem.FileSystem
+  const text = yield* fs.readFileString(legacy).pipe(Effect.option)
+  if (Option.isNone(text)) return
+  if (Option.isNone(yield* decodeInfo(text.value).pipe(Effect.option))) return
   yield* fs.writeFileString(file, text.value, { flag: "wx", mode: 0o600 }).pipe(Effect.ignore)
 })
 
@@ -73,18 +84,23 @@ const paths = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem
   const global = yield* Global.Service
   const name = filename()
+  const legacy = legacyFilename()
   const file = path.join(global.state, name)
   return {
     fs,
     file,
-    legacyFile: path.join(global.state, "service.json"),
+    legacyConfigFile: legacy ? path.join(global.config, legacy) : undefined,
+    legacyRegistrationFiles: [
+      ...(legacy ? [path.join(global.state, legacy)] : []),
+      ...(name !== "service.json" && InstallationChannel !== "local" ? [path.join(global.state, "service.json")] : []),
+    ],
     configFile: path.join(global.config, name),
   }
 })
 
 export const options = Effect.fnUntraced(function* () {
-  const { file, legacyFile } = yield* paths
-  yield* migrateRegistration(legacyFile, file)
+  const { file, legacyRegistrationFiles } = yield* paths
+  yield* Effect.forEach(legacyRegistrationFiles, (legacy) => migrateRegistration(legacy, file))
   return {
     file,
     version: InstallationVersion,
@@ -93,7 +109,8 @@ export const options = Effect.fnUntraced(function* () {
 })
 
 export const read = Effect.fn("cli.service-config.read")(function* () {
-  const { fs, configFile } = yield* paths
+  const { fs, configFile, legacyConfigFile } = yield* paths
+  if (legacyConfigFile) yield* migrateConfig(legacyConfigFile, configFile)
   return yield* fs.readFileString(configFile).pipe(
     Effect.flatMap(decodeInfo),
     Effect.catch(() => Effect.succeed({} as Info)),

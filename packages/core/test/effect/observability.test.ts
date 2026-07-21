@@ -4,8 +4,8 @@ import { Effect, Layer, Logger } from "effect"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
-import { fileLogger } from "../../src/observability/logging"
-import { resource } from "../../src/observability/otlp"
+import { fileLogger } from "@opencode-ai/util/observability/logging"
+import { resource } from "@opencode-ai/util/observability/otlp"
 
 const otelResourceAttributes = process.env.OTEL_RESOURCE_ATTRIBUTES
 
@@ -61,7 +61,7 @@ test("falls back to local logging when OTLP initialization fails", async () => {
       "--eval",
       `
         import { Effect } from "effect"
-        import { Observability } from "./src/observability.ts"
+        import { Observability } from "@opencode-ai/util/observability"
         await Effect.void.pipe(Effect.provide(Observability.layer()), Effect.scoped, Effect.runPromise)
       `,
     ],

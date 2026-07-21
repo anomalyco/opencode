@@ -1,6 +1,6 @@
 export * as AISDK from "./aisdk"
 
-import { makeLocationNode } from "./effect/app-node"
+import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import type {
   JSONSchema7,
   JSONValue,

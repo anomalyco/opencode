@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Patch } from "@opencode-ai/core/patch"
+import { Patch } from "@opencode-ai/util/patch"
 import { Result } from "effect"
 
 const parse = (input: string) => Result.getOrThrow(Patch.parse(input))
@@ -24,9 +24,7 @@ describe("Patch", () => {
 
   test("parses a file move", () => {
     expect(
-      parse(
-        "*** Begin Patch\n*** Update File: old.txt\n*** Move to: new.txt\n@@\n-old\n+new\n*** End Patch",
-      ),
+      parse("*** Begin Patch\n*** Update File: old.txt\n*** Move to: new.txt\n@@\n-old\n+new\n*** End Patch"),
     ).toEqual([
       {
         type: "update",
@@ -38,9 +36,7 @@ describe("Patch", () => {
   })
 
   test("identifies the missing patch boundary", () => {
-    expect(() => parse("This is not a valid patch")).toThrow(
-      "The first line of the patch must be '*** Begin Patch'",
-    )
+    expect(() => parse("This is not a valid patch")).toThrow("The first line of the patch must be '*** Begin Patch'")
     expect(() => parse("*** Begin Patch\n*** Add File: add.txt\n+added")).toThrow(
       "The last line of the patch must be '*** End Patch'",
     )
@@ -133,12 +129,8 @@ describe("Patch", () => {
   })
 
   test("updates empty files and adds a trailing newline", () => {
-    expect(Patch.derive("empty.txt", [{ oldLines: [], newLines: ["First line"] }], "").content).toBe(
-      "First line\n",
-    )
-    expect(Patch.derive("no-newline.txt", [{ oldLines: ["old"], newLines: ["new"] }], "old").content).toBe(
-      "new\n",
-    )
+    expect(Patch.derive("empty.txt", [{ oldLines: [], newLines: ["First line"] }], "").content).toBe("First line\n")
+    expect(Patch.derive("no-newline.txt", [{ oldLines: ["old"], newLines: ["new"] }], "old").content).toBe("new\n")
   })
 
   test("disambiguates updates with change context", () => {
@@ -152,14 +144,12 @@ describe("Patch", () => {
   })
 
   test("matches leading, trailing, and Unicode punctuation differences", () => {
-    expect(Patch.derive("leading.txt", [{ oldLines: ["line"], newLines: ["next"] }], "  line\n").content).toBe(
-      "next\n",
-    )
+    expect(Patch.derive("leading.txt", [{ oldLines: ["line"], newLines: ["next"] }], "  line\n").content).toBe("next\n")
     expect(Patch.derive("trailing.txt", [{ oldLines: ["line"], newLines: ["next"] }], "line  \n").content).toBe(
       "next\n",
     )
     expect(
-      Patch.derive('unicode.txt', [{ oldLines: ['He said "hello"'], newLines: ['He said "hi"'] }], 'He said “hello”\n')
+      Patch.derive("unicode.txt", [{ oldLines: ['He said "hello"'], newLines: ['He said "hi"'] }], "He said “hello”\n")
         .content,
     ).toBe('He said "hi"\n')
   })

@@ -6,7 +6,7 @@ import { readFile } from "fs/promises"
 import { statSync } from "fs"
 import { setTimeout } from "node:timers/promises"
 import { Schema } from "effect"
-import { FSUtil } from "../fs-util"
+import { FSUtil } from "@opencode-ai/util/fs-util"
 import { which } from "../util/which"
 
 const SIGKILL_TIMEOUT_MS = 200

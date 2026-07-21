@@ -1,5 +1,5 @@
 import os from "os"
-import { InstallationVersion } from "../../installation/version"
+import { InstallationVersion } from "@opencode-ai/util/installation/version"
 import { Effect, Option, Schema } from "effect"
 import { define } from "@opencode-ai/plugin/v2/effect/plugin"
 

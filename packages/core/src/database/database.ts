@@ -3,11 +3,11 @@ export * as Database from "./database"
 import { EffectDrizzleSqlite } from "@opencode-ai/effect-drizzle-sqlite"
 import { sqliteLayer } from "#sqlite"
 import { Context, Effect, Layer, Schema } from "effect"
-import { Global } from "../global"
+import { Global } from "@opencode-ai/util/global"
 import { isAbsolute, join } from "path"
 import { DatabaseMigration } from "./migration"
-import { InstallationChannel } from "../installation/version"
-import { makeGlobalNode } from "../effect/app-node"
+import { InstallationChannel } from "@opencode-ai/util/installation/version"
+import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 
 const makeDatabase = EffectDrizzleSqlite.makeWithDefaults()
 type DatabaseShape = Effect.Success<typeof makeDatabase>

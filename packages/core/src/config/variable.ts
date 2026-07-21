@@ -3,7 +3,7 @@ export * as ConfigVariable from "./variable"
 import os from "os"
 import path from "path"
 import { Effect } from "effect"
-import { FSUtil } from "../fs-util"
+import { FSUtil } from "@opencode-ai/util/fs-util"
 import { InvalidError } from "../v1/config/error"
 
 type ParseSource =

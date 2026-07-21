@@ -1,10 +1,10 @@
-import { Global } from "@opencode-ai/core/global"
-import { AppProcess } from "@opencode-ai/core/process"
+import { Global } from "@opencode-ai/util/global"
+import { AppProcess } from "@opencode-ai/util/process"
 import {
   InstallationChannel,
   InstallationLocal,
   InstallationVersion,
-} from "@opencode-ai/core/installation/version"
+} from "@opencode-ai/util/installation/version"
 import { Context, Duration, Effect, FileSystem, Layer } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { parse, type ParseError } from "jsonc-parser"

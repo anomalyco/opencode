@@ -17,6 +17,7 @@
     "@opencode-ai/core": "workspace:*",
     "@opencode-ai/protocol": "workspace:*",
     "@opencode-ai/simulation": "workspace:*",
+    "@opencode-ai/util": "workspace:*",
     "drizzle-orm": "catalog:",
     "effect": "catalog:"
   },

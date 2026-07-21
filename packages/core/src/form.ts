@@ -2,7 +2,7 @@ export * as Form from "./form"
 
 import { Form } from "@opencode-ai/schema/form"
 import { Cache, Context, Deferred, Duration, Effect, Exit, Layer, Option, Schema } from "effect"
-import { makeLocationNode } from "./effect/app-node"
+import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { EventV2 } from "./event"
 
 const RETENTION = Duration.minutes(10)

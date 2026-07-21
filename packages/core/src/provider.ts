@@ -3,7 +3,7 @@ export * as ProviderV2 from "./provider"
 import { Effect, Schema } from "effect"
 import { Provider } from "@opencode-ai/schema/provider"
 import type { ProviderPackageDefinition } from "@opencode-ai/ai"
-import { Npm } from "./npm"
+import { Npm } from "@opencode-ai/util/npm"
 import type { DeepMutable } from "./schema"
 import { importModule, resolveModule } from "#runtime-import"
 

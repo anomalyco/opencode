@@ -100,9 +100,7 @@ export function parse(patchText: string): Result.Result<ReadonlyArray<Hunk>, Par
   if (hunks.length === 0) {
     const invalid = lines.findIndex((line, index) => index > begin && index < end && line.trim() !== "")
     if (invalid !== -1) {
-      return Result.fail(
-        new InvalidHunkError({ line: lines[invalid]!.trim(), lineNumber: invalid + 1 }),
-      )
+      return Result.fail(new InvalidHunkError({ line: lines[invalid]!.trim(), lineNumber: invalid + 1 }))
     }
   }
   return Result.succeed(hunks)

@@ -3,9 +3,9 @@ import { Money } from "@opencode-ai/schema/money"
 import { Effect, Layer, Ref } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { LayerNodePlatform } from "@opencode-ai/core/effect/app-node-platform"
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { Global } from "@opencode-ai/core/global"
+import { LayerNodePlatform } from "@opencode-ai/util/effect/app-node-platform"
+import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { Global } from "@opencode-ai/util/global"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { ProviderV2 } from "@opencode-ai/core/provider"
@@ -233,6 +233,16 @@ describe("ModelsDev Service", () => {
       expect(yield* Effect.promise(() => readFile(cacheFile, "utf8"))).toBe(JSON.stringify(fixture2))
       const final = yield* Ref.get(state)
       expect(final.calls.length).toBe(1)
+    }),
+  )
+
+  it.live("uses the default models URL when the configured URL is empty", () =>
+    Effect.gen(function* () {
+      const state = yield* Ref.make(initialState)
+      yield* ModelsDev.Service.use((service) => service.get()).pipe(
+        Effect.provide(buildLayer(state, { url: "", fetch: true })),
+      )
+      expect((yield* Ref.get(state)).calls[0]?.url).toBe("https://models.dev/api.json")
     }),
   )
 

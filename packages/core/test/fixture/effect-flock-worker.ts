@@ -2,8 +2,8 @@ import fs from "fs/promises"
 import os from "os"
 import { Effect } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
-import { Global } from "@opencode-ai/core/global"
+import { EffectFlock } from "@opencode-ai/util/effect-flock"
+import { Global } from "@opencode-ai/util/global"
 
 type Msg = {
   key: string

@@ -26,7 +26,7 @@ import { createEffect, createMemo, onCleanup, onMount, type Accessor } from "sol
 import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "./helper"
 import { useConfig } from "../config"
-import { Global } from "@opencode-ai/core/global"
+import { Global } from "@opencode-ai/util/global"
 import { DevTools } from "../devtools"
 
 const themePerformance = DevTools.register({ id: "theme-performance", title: "Theme performance" })

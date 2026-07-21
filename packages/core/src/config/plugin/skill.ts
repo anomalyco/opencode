@@ -6,7 +6,7 @@ import { Effect, Stream } from "effect"
 import { Config } from "../../config"
 import { AbsolutePath } from "../../schema"
 import { SkillV2 } from "../../skill"
-import { Global } from "../../global"
+import { Global } from "@opencode-ai/util/global"
 import { Location } from "../../location"
 
 export const Plugin = define({

@@ -5,7 +5,7 @@ import path from "path"
 import { Effect, Option, Schema, Stream } from "effect"
 import { CommandV2 } from "../../command"
 import { Config } from "../../config"
-import { FSUtil } from "../../fs-util"
+import { FSUtil } from "@opencode-ai/util/fs-util"
 import { ConfigCommand } from "../command"
 import { ConfigMarkdown } from "../markdown"
 

@@ -3,7 +3,7 @@ import fs from "fs/promises"
 import { xdgData, xdgCache, xdgConfig, xdgState } from "xdg-basedir"
 import os from "os"
 import { Context, Effect, Layer } from "effect"
-import { Flock } from "./util/flock"
+import { Flock } from "./flock"
 import { makeGlobalNode } from "./effect/app-node"
 
 const app = "opencode"

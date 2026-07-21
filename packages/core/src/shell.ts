@@ -5,12 +5,12 @@ import { Context, Deferred, Duration, Effect, Fiber, Layer, Schema, Stream } fro
 import { ChildProcess } from "effect/unstable/process"
 import { produce } from "immer"
 import { Shell } from "@opencode-ai/schema/shell"
-import { makeLocationNode } from "./effect/app-node"
-import { AppProcess } from "./process"
+import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { AppProcess } from "@opencode-ai/util/process"
 import { Config } from "./config"
 import { EventV2 } from "./event"
 import { Location } from "./location"
-import { Global } from "./global"
+import { Global } from "@opencode-ai/util/global"
 import { ShellSelect } from "./shell/select"
 
 export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Shell.NotFoundError", {

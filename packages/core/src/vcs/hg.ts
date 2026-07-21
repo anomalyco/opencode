@@ -5,8 +5,8 @@ import { Effect } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { FileDiff } from "@opencode-ai/schema/file-diff"
 import { FileStatus, Mode } from "@opencode-ai/schema/vcs"
-import { FSUtil } from "../fs-util"
-import { AppProcess } from "../process"
+import { FSUtil } from "@opencode-ai/util/fs-util"
+import { AppProcess } from "@opencode-ai/util/process"
 import type { DiffOptions, Interface } from "../vcs"
 import {
   addPatch,

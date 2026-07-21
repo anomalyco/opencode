@@ -1,6 +1,6 @@
 import type { MiniFrontendInput } from "@opencode-ai/tui/mini"
 import { createModelPreferenceRepository } from "@opencode-ai/tui/model-preference"
-import { Global } from "@opencode-ai/core/global"
+import { Global } from "@opencode-ai/util/global"
 import fs from "node:fs"
 import { readFile } from "node:fs/promises"
 import path from "node:path"

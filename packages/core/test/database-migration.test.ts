@@ -25,7 +25,7 @@ import addSessionForkMigration from "@opencode-ai/core/database/migration/202607
 import timeSuspendedMigration from "@opencode-ai/core/database/migration/20260709163752_time_suspended"
 import instructionSyncMigration from "@opencode-ai/core/database/migration/20260710025429_instruction_sync"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"

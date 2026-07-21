@@ -8,7 +8,7 @@ import { and, asc, eq, gt, inArray, lte, sql } from "drizzle-orm"
 import { Database } from "./database/database"
 import { EventSequenceTable, EventTable } from "./event/sql"
 import { Location } from "./location"
-import { makeGlobalNode } from "./effect/app-node"
+import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { isDeepStrictEqual } from "node:util"
 import { Durable } from "@opencode-ai/schema/durable-event-manifest"
 

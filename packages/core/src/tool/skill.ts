@@ -4,7 +4,7 @@ import type { Context as PluginContext } from "@opencode-ai/plugin/v2/effect/plu
 import path from "path"
 import { ToolFailure } from "@opencode-ai/ai"
 import { Effect, Schema } from "effect"
-import { FSUtil } from "../fs-util"
+import { FSUtil } from "@opencode-ai/util/fs-util"
 import { SkillV2 } from "../skill"
 import { PermissionV2 } from "../permission"
 import { Tool } from "./tool"

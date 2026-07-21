@@ -1,7 +1,7 @@
 export * as Job from "./job"
 
 import { Cause, Clock, Context, Deferred, Effect, Exit, Layer, Scope, SynchronizedRef } from "effect"
-import { makeGlobalNode } from "./effect/app-node"
+import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { Identifier } from "./id/id"
 import { SessionSchema } from "./session/schema"
 

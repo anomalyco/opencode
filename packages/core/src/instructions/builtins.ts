@@ -1,6 +1,6 @@
 export * as InstructionBuiltIns from "./builtins"
 
-import { makeLocationNode } from "../effect/app-node"
+import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Context, DateTime, Effect, Layer, Schema } from "effect"
 import { Location } from "../location"
 import { SessionSchema } from "../session/schema"

@@ -4,8 +4,8 @@ import path from "path"
 import { pathToFileURL } from "url"
 import { Context, Effect, Layer, Option, Schema } from "effect"
 import { FileSystem } from "../filesystem"
-import { FSUtil } from "../fs-util"
-import { makeLocationNode } from "../effect/app-node"
+import { FSUtil } from "@opencode-ai/util/fs-util"
+import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { AbsolutePath, PositiveInt, RelativePath } from "../schema"
 
 export const MAX_READ_LINES = 2_000

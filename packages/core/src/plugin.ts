@@ -2,7 +2,7 @@ export * as PluginV2 from "./plugin"
 
 import type { Plugin } from "@opencode-ai/plugin/v2/effect/plugin"
 import { Event, ID, type Info } from "@opencode-ai/schema/plugin"
-import { makeLocationNode } from "./effect/app-node"
+import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Context, Effect, Exit, Layer, Scope, Semaphore } from "effect"
 import { AgentV2 } from "./agent"
 import { AISDK } from "./aisdk"

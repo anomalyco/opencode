@@ -16,7 +16,7 @@ export const load = (dir: string) =>
         npmPath,
         cwd: dir,
         env: { ...process.env },
-        argv: [process.execPath, process.execPath],
+        argv: [process.execPath, process.execPath, "--prefix", dir],
         execPath: process.execPath,
         platform: process.platform,
         definitions,

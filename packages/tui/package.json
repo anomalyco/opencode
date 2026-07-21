@@ -84,6 +84,7 @@
     "@opencode-ai/schema": "workspace:*",
     "@opencode-ai/simulation": "workspace:*",
     "@opencode-ai/ui": "workspace:*",
+    "@opencode-ai/util": "workspace:*",
     "@opentui/core": "catalog:",
     "@opentui/keymap": "catalog:",
     "@opentui/solid": "catalog:",

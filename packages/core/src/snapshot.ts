@@ -1,17 +1,17 @@
 export * as Snapshot from "./snapshot"
 
-import { makeLocationNode } from "./effect/app-node"
+import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import path from "path"
 import { Context, Effect, Fiber, Layer, Schema, Scope } from "effect"
 import { Config } from "./config"
 import { File } from "./file"
-import { FSUtil } from "./fs-util"
+import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Git } from "./git"
-import { Global } from "./global"
+import { Global } from "@opencode-ai/util/global"
 import { Location } from "./location"
 import { AbsolutePath, RelativePath } from "./schema"
 import { ID } from "@opencode-ai/schema/snapshot"
-import { Hash } from "./util/hash"
+import { Hash } from "@opencode-ai/util/hash"
 
 export { ID }
 

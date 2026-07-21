@@ -4,7 +4,7 @@ import path from "path"
 import { define } from "@opencode-ai/plugin/v2/effect/plugin"
 import { Effect } from "effect"
 import { AgentV2 } from "../agent"
-import { Global } from "../global"
+import { Global } from "@opencode-ai/util/global"
 import { Location } from "../location"
 import { PermissionV2 } from "../permission"
 

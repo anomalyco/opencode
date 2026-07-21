@@ -1,6 +1,6 @@
 export * as SessionModelHeaders from "./model-headers"
 
-import { InstallationVersion } from "../installation/version"
+import { InstallationVersion } from "@opencode-ai/util/installation/version"
 import { SessionSchema } from "./schema"
 import { Schema } from "effect"
 

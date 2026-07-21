@@ -1,12 +1,12 @@
 import path from "path"
 import { Context, Effect, Layer, Schema } from "effect"
-import { FSUtil } from "./fs-util"
+import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Git } from "./git"
-import { Global } from "./global"
+import { Global } from "@opencode-ai/util/global"
 import { Repository } from "./repository"
 import { AbsolutePath } from "./schema"
-import { makeGlobalNode } from "./effect/app-node"
-import { EffectFlock } from "./util/effect-flock"
+import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
+import { EffectFlock } from "@opencode-ai/util/effect-flock"
 
 export type Result = {
   readonly repository: string

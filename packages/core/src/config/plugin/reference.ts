@@ -7,7 +7,7 @@ import { Config } from "../../config"
 import { ConfigReference } from "../reference"
 import { Reference } from "../../reference"
 import { AbsolutePath } from "../../schema"
-import { Global } from "../../global"
+import { Global } from "@opencode-ai/util/global"
 import { Location } from "../../location"
 
 export const Plugin = define({

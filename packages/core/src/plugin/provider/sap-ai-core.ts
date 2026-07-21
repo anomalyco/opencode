@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import { pathToFileURL } from "url"
 import { define } from "@opencode-ai/plugin/v2/effect/plugin"
-import { Npm } from "../../npm"
+import { Npm } from "@opencode-ai/util/npm"
 import { ProviderV2 } from "../../provider"
 import { importModule } from "#runtime-import"
 

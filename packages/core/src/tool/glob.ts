@@ -5,7 +5,7 @@ import type { Context as PluginContext } from "@opencode-ai/plugin/v2/effect/plu
 import { Effect, Schema } from "effect"
 import path from "path"
 import { FileSystem } from "../filesystem"
-import { FSUtil } from "../fs-util"
+import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Location } from "../location"
 import { Ripgrep } from "../ripgrep"
 import { RelativePath } from "../schema"

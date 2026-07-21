@@ -1,6 +1,6 @@
 export * as SessionRunnerModel from "./model"
 
-import { makeLocationNode } from "../../effect/app-node"
+import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Model } from "@opencode-ai/ai"
 // ast-grep-ignore: no-star-import
 import * as AnthropicMessages from "@opencode-ai/ai/protocols/anthropic-messages"
@@ -16,7 +16,7 @@ import { Catalog } from "../../catalog"
 import { Credential } from "../../credential"
 import { Integration } from "../../integration"
 import { ModelV2 } from "../../model"
-import { Npm } from "../../npm"
+import { Npm } from "@opencode-ai/util/npm"
 import { OpenAICodex } from "../../plugin/provider/openai-codex"
 import { ProviderV2 } from "../../provider"
 import { SessionSchema } from "../schema"

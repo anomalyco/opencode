@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto"
 import { copyFile, mkdir, readdir, readFile, stat } from "node:fs/promises"
-import { createRequire } from "node:module"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { getNodeAssets } from "@opentui/core/node-assets"
@@ -40,7 +39,7 @@ export async function collectNodeAssets(target: NodeTarget) {
     { key: target.parcelWatcherAsset, source: fileURLToPath(import.meta.resolve(target.parcelWatcherPackage)) },
     {
       key: photonWasmAsset,
-      source: createRequire(path.resolve(dir, "../core/package.json")).resolve(photonWasmAsset),
+      source: fileURLToPath(import.meta.resolve(photonWasmAsset)),
     },
     ...attentionSoundAssets.map((key) => ({
       key,

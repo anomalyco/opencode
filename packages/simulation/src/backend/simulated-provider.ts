@@ -1,4 +1,4 @@
-import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import { InstallationVersion } from "@opencode-ai/util/installation/version"
 import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
 import { Plugin } from "@opencode-ai/plugin/v2/effect"
 import { Tool } from "@opencode-ai/plugin/v2/effect/tool"

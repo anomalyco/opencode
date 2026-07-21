@@ -1,6 +1,6 @@
 export * as Config from "./config"
 
-import { Global } from "@opencode-ai/core/global"
+import { Global } from "@opencode-ai/util/global"
 import { Context, Effect, FileSystem, Layer, Option, Schema, Semaphore } from "effect"
 import { produce, type Draft } from "immer"
 import { applyEdits, modify, parse, type ParseError } from "jsonc-parser"

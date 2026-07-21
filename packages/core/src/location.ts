@@ -1,8 +1,8 @@
 import { Context, Effect, Layer } from "effect"
 import { Info, Ref, response } from "@opencode-ai/schema/location"
 import { Project } from "./project"
-import { LayerNode } from "./effect/layer-node"
-import { makeLocationNode, tags } from "./effect/app-node"
+import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { makeLocationNode, tags } from "@opencode-ai/util/effect/app-node"
 
 export * as Location from "./location"
 

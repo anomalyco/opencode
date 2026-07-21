@@ -2,7 +2,7 @@ export * as PluginRuntime from "./runtime"
 
 import { Context, Effect, Layer } from "effect"
 import { AgentV2 } from "../agent"
-import { makeGlobalNode } from "../effect/app-node"
+import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { Job } from "../job"
 import { Location } from "../location"
 import { LocationServiceMap } from "../location-service-map"

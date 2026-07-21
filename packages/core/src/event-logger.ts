@@ -1,7 +1,7 @@
 export * as EventLogger from "./event-logger"
 
 import { Effect, Layer } from "effect"
-import { makeGlobalNode } from "./effect/app-node"
+import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { EventV2 } from "./event"
 
 const Types = new Set([

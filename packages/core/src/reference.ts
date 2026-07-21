@@ -1,9 +1,9 @@
 export * as Reference from "./reference"
 
-import { makeLocationNode } from "./effect/app-node"
+import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Context, Effect, Layer, Scope, Types } from "effect"
 import { Reference } from "@opencode-ai/schema/reference"
-import { Global } from "./global"
+import { Global } from "@opencode-ai/util/global"
 import { EventV2 } from "./event"
 import { Repository } from "./repository"
 import { RepositoryCache } from "./repository-cache"

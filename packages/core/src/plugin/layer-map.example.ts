@@ -1,7 +1,7 @@
 export * as LayerMapExample from "./layer-map.example"
 
 import { Context, Effect, Layer, LayerMap } from "effect"
-import { Npm } from "../npm"
+import { Npm } from "@opencode-ai/util/npm"
 
 /**
  * Tutorial: split global services from context-specific services.

@@ -1,6 +1,6 @@
 export * as Integration from "./integration"
 
-import { makeLocationNode } from "./effect/app-node"
+import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import {
   Cause,
   Clock,
@@ -22,7 +22,7 @@ import { Credential } from "./credential"
 import { State } from "./state"
 import { EventV2 } from "./event"
 import { IntegrationConnection } from "./integration/connection"
-import { AppProcess } from "./process"
+import { AppProcess } from "@opencode-ai/util/process"
 import { ChildProcess } from "effect/unstable/process"
 
 export const ID = Integration.ID

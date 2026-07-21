@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
-import { Global } from "@opencode-ai/core/global"
-import { Logging } from "@opencode-ai/core/observability/logging"
+import { Global } from "@opencode-ai/util/global"
+import { Logging } from "@opencode-ai/util/observability/logging"
 
 describe("Logging", () => {
   test("uses a local-specific log file for local installs", () => {

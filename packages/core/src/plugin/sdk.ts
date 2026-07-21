@@ -2,7 +2,7 @@ export * as SdkPlugins from "./sdk"
 
 import type { Plugin } from "@opencode-ai/plugin/v2/effect/plugin"
 import { Context, Effect, Layer } from "effect"
-import { makeGlobalNode } from "../effect/app-node"
+import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { EventV2 } from "../event"
 import type { PluginV2 } from "../plugin"
 

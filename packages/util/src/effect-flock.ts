@@ -4,9 +4,9 @@ import { randomUUID } from "crypto"
 import { Context, Effect, Function, Layer, Option, Schedule, Schema } from "effect"
 import type { FileSystem, Scope } from "effect"
 import type { PlatformError } from "effect/PlatformError"
-import { FSUtil } from "../fs-util"
-import { Global } from "../global"
-import { makeGlobalNode } from "../effect/app-node"
+import { FSUtil } from "./fs-util"
+import { Global } from "./global"
+import { makeGlobalNode } from "./effect/app-node"
 import { Hash } from "./hash"
 
 export namespace EffectFlock {

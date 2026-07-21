@@ -21,7 +21,7 @@ import {
 } from "./tool"
 import { Tools } from "./tools"
 import { ToolHooks } from "./hooks"
-import { makeLocationNode } from "../effect/app-node"
+import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { SessionError } from "@opencode-ai/schema/session-error"
 import { toSessionError } from "../session/to-session-error"
 

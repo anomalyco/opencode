@@ -1,6 +1,6 @@
 import { Service, type Endpoint } from "@opencode-ai/client/effect/service"
 import { OpenCode, type OpenCodeClient, type SessionMessageAssistantTool } from "@opencode-ai/client/promise"
-import { FSUtil } from "@opencode-ai/core/fs-util"
+import { FSUtil } from "@opencode-ai/util/fs-util"
 import { open } from "node:fs/promises"
 import path from "node:path"
 import { readStdin } from "../util/io"

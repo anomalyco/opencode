@@ -1,8 +1,7 @@
 import { NodeFileSystem, NodePath } from "@effect/platform-node"
 import { LLMClient, RequestExecutor } from "@opencode-ai/ai/route"
 import { FileSystem, Path } from "effect"
-import { FetchHttpClient } from "effect/unstable/http"
-import { HttpClient } from "effect/unstable/http"
+import { FetchHttpClient, HttpClient } from "effect/unstable/http"
 import { makeGlobalNode } from "./app-node"
 
 export const filesystem = makeGlobalNode({ service: FileSystem.FileSystem, layer: NodeFileSystem.layer, deps: [] })

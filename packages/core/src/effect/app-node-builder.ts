@@ -1,7 +1,7 @@
 import { buildLocationServiceMap } from "../location-services"
 import { LocationServiceMap } from "../location-service-map"
-import { LayerNode } from "./layer-node"
-import { makeGlobalNode } from "./app-node"
+import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 
 export function build<A, E>(root: LayerNode.Node<A, E, any>, replacements: LayerNode.Replacements = []) {
   let allReplacements = replacements

@@ -3,7 +3,7 @@ import type { IntegrationOAuthMethodRegistration } from "@opencode-ai/plugin/v2/
 import { define } from "@opencode-ai/plugin/v2/effect/plugin"
 import { Clock, Deferred, Effect, Option, Schema } from "effect"
 import { Credential } from "../../credential"
-import { InstallationVersion } from "../../installation/version"
+import { InstallationVersion } from "@opencode-ai/util/installation/version"
 import { Integration } from "../../integration"
 import { OauthCallbackPage } from "../../oauth/page"
 import { ProviderV2 } from "../../provider"
