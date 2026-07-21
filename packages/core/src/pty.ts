@@ -78,6 +78,7 @@ export class ExitedError extends Schema.TaggedErrorClass<ExitedError>()("Pty.Exi
 }) {}
 
 export interface Interface {
+  readonly shells: () => Effect.Effect<ReadonlyArray<Pty.Shell>>
   readonly list: () => Effect.Effect<Info[]>
   readonly get: (id: PtyID) => Effect.Effect<Info, NotFoundError>
   readonly create: (input: CreateInput) => Effect.Effect<Info>
@@ -156,6 +157,10 @@ export const layer = (options?: ShellSelect.Options) => Layer.effect(
 
     const list = Effect.fn("Pty.list")(function* () {
       return Array.from(sessions.values()).map((session) => session.info)
+    })
+
+    const shells = Effect.fn("Pty.shells")(function* () {
+      return yield* Effect.promise(() => ShellSelect.list(options))
     })
 
     const get = Effect.fn("Pty.get")(function* (id: PtyID) {
@@ -309,7 +314,7 @@ export const layer = (options?: ShellSelect.Options) => Layer.effect(
       }
     })
 
-    return Service.of({ list, get, create, update, remove, write, attach })
+    return Service.of({ shells, list, get, create, update, remove, write, attach })
   }),
 )
 
