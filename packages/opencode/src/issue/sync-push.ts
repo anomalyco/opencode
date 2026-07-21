@@ -1,7 +1,7 @@
-import { Context, Effect, Schema, Option } from "effect"
-import { HttpClient, HttpClientRequest } from "effect/unstable/http"
+import { Effect, Schema, Option } from "effect"
+import { LinearGraphqlClient } from "./linear-graphql"
 import { ISSUE } from "./tool-names"
-import { LinearMcpClient, LinearMcpError } from "./mcp-client"
+import { LinearClientRef, LinearMcpError } from "./mcp-client"
 import { Issue } from "./issue"
 import { LinearBinding } from "@/issue/linear-binding"
 import { Database } from "@opencode-ai/core/database/database"
@@ -9,6 +9,29 @@ import { eq, and } from "drizzle-orm"
 import { IssueTable } from "./issue.sql"
 
 const decodeJson = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
+
+// NOTE on `as Record<string, unknown>` assertions in this file:
+// Same rationale as `sync-pull.ts`: the Linear MCP server returns untyped
+// JSON via `Client.callTool` (MCP SDK types the wire as `CallToolResult`,
+// our wrapper unwraps to `unknown`). The Linear MCP wraps GraphQL responses
+// inside `{ content: [{ type: "text", text: "<json>" }] }`. We `decodeJson`
+// the inner text payload, then structurally narrow with
+// `as Record<string, unknown>` to navigate the envelope. Schema validation
+// is applied at field-extraction boundaries (e.g. `decodeIssueUpdate`,
+// `decodeGetIssue`, `decodeSaveIssue`); the outer envelope is structurally
+// asserted because the MCP transport is the trust boundary, not the local
+// type system — wrapping every navigation step in Schema would double the
+// code size without catching additional bugs.
+/**
+ * Schema for the `issueUpdate` payload returned by Linear GraphQL. Used to
+ * validate the untyped `unknown` returned by `LinearGraphqlClient.call`
+ * before reading the `success` flag (per AGENTS.md: prefer Schema over
+ * `as` casts for untrusted JSON).
+ */
+const IssueUpdatePayload = Schema.Struct({
+  issueUpdate: Schema.optional(Schema.Struct({ success: Schema.Boolean })),
+})
+const decodeIssueUpdate = Schema.decodeUnknownOption(IssueUpdatePayload)
 
 /**
  * SyncPush — push local IssueTable changes back to Linear (ADR-0002 D8).
@@ -45,13 +68,11 @@ const decodeJson = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
  * dirty checks. Dirty detection for batch push uses the `cloud_shadow`
  * diff (not `last_pushed_at < time_updated`), so a row whose shadow
  * matches the local state is skipped on the next push.
+ *
+ * The Linear MCP client is resolved per-request by
+ * `LinearClientMiddleware` (HTTP path) or provided by the caller
+ * (agent path) and consumed via the `LinearClientRef` context tag.
  */
-
-/**
- * Effect context tag for the Linear MCP client consumed by push().
- * Must be provided in the layer that calls push().
- */
-export const Client = Context.Service<LinearMcpClient>("@opencode/SyncPush/Client")
 
 /** Fatal error when push cannot proceed at all (e.g., missing config). */
 export class SyncPushError extends Schema.TaggedErrorClass<SyncPushError>()("SyncPushError", {
@@ -59,6 +80,17 @@ export class SyncPushError extends Schema.TaggedErrorClass<SyncPushError>()("Syn
   issueID: Schema.optional(Schema.String),
   cause: Schema.optional(Schema.Defect()),
 }) {}
+
+/**
+ * Domain-level Error union for the SyncPush service (per AGENTS.md [E9]).
+ * `SyncPushError` is for fatal preconditions (missing Linear binding,
+ * MCP transport failure) that abort the entire push. Per-row failures
+ * are returned in `Result.failed` as counts, not in this union.
+ * `LinearMcpError` is intentionally NOT in this union — it is caught
+ * at the call site (MCP tool call) and translated into a per-row
+ * failure in `Result.errors`, never propagated as the push's own error.
+ */
+export type Error = SyncPushError
 
 /** Summary of a push operation. */
 export class Result extends Schema.Class<Result>("SyncPushResult")({
@@ -105,6 +137,86 @@ export const mapPriority = (p: Issue.Priority): 0 | 1 | 2 | 3 | 4 => {
  */
 export type VerifyOutcome = "ok" | "orphan" | "mismatch" | "lookup_failed"
 
+/** Extract issue id/projectId/teamId from a single MCP content item. */
+const extractGetIssueFromItem = (item: unknown): { id?: string; projectId?: string; teamId?: string } | undefined => {
+  if (typeof item !== "object" || !item) return undefined
+  const c = item as Record<string, unknown>
+  if (c.type !== "text" || typeof c.text !== "string") return undefined
+  const parsed = Option.getOrUndefined(decodeJson(c.text))
+  if (!parsed || typeof parsed !== "object") return undefined
+  const p = parsed as Record<string, unknown>
+  // Flat shape
+  if (typeof p.id === "string") {
+    return {
+      id: p.id,
+      projectId: typeof p.projectId === "string" ? p.projectId : undefined,
+      teamId: typeof p.teamId === "string" ? p.teamId : undefined,
+    }
+  }
+  // GraphQL shape: { data: { issue: { id, projectId, teamId } } }
+  const data = p.data
+  if (data && typeof data === "object") {
+    const d = data as Record<string, unknown>
+    const issue = d.issue
+    if (issue && typeof issue === "object") {
+      const i = issue as Record<string, unknown>
+      return {
+        id: typeof i.id === "string" ? i.id : undefined,
+        projectId: typeof i.projectId === "string" ? i.projectId : undefined,
+        teamId: typeof i.teamId === "string" ? i.teamId : undefined,
+      }
+    }
+  }
+  return undefined
+}
+
+/** Extract issue id/projectId/teamId from a `save_issue` MCP content item. */
+const extractSaveIssueFromItem = (item: unknown): { id: string; projectId?: string; teamId?: string } | undefined => {
+  if (typeof item !== "object" || !item) return undefined
+  const c = item as Record<string, unknown>
+  if (c.type !== "text" || typeof c.text !== "string") return undefined
+  const parsed = Option.getOrUndefined(decodeJson(c.text))
+  if (!parsed || typeof parsed !== "object") return undefined
+  const p = parsed as Record<string, unknown>
+  // Flat shape: { id: "...", projectId: "...", teamId: "..." }
+  if (typeof p.id === "string") {
+    return {
+      id: p.id,
+      projectId: typeof p.projectId === "string" ? p.projectId : undefined,
+      teamId: typeof p.teamId === "string" ? p.teamId : undefined,
+    }
+  }
+  // GraphQL shape: { data: { saveIssue: { id, projectId, teamId } } }
+  const data = p.data
+  if (data && typeof data === "object") {
+    const d = data as Record<string, unknown>
+    const saveIssue = d.saveIssue
+    if (saveIssue && typeof saveIssue === "object") {
+      const s = saveIssue as Record<string, unknown>
+      if (typeof s.id === "string") {
+        return {
+          id: s.id,
+          projectId: typeof s.projectId === "string" ? s.projectId : undefined,
+          teamId: typeof s.teamId === "string" ? s.teamId : undefined,
+        }
+      }
+    }
+    // Some responses nest under `issue`
+    const issue = d.issue
+    if (issue && typeof issue === "object") {
+      const i = issue as Record<string, unknown>
+      if (typeof i.id === "string") {
+        return {
+          id: i.id,
+          projectId: typeof i.projectId === "string" ? i.projectId : undefined,
+          teamId: typeof i.teamId === "string" ? i.teamId : undefined,
+        }
+      }
+    }
+  }
+  return undefined
+}
+
 /**
  * Best-effort parse of a `get_issue` MCP response into the remote
  * issue's `id`, `projectId`, and `teamId`. Linear's MCP returns the
@@ -116,39 +228,11 @@ const parseGetIssueResponse = (raw: unknown): { id?: string; projectId?: string;
   if (!raw || typeof raw !== "object") return {}
   const r = raw as Record<string, unknown>
 
-  // Try { content: [{ type: "text", text: "<json>" }] }
   if (Array.isArray(r.content)) {
-    for (const item of r.content) {
-      if (typeof item !== "object" || !item) continue
-      const c = item as Record<string, unknown>
-      if (c.type === "text" && typeof c.text === "string") {
-        const parsed = Option.getOrUndefined(decodeJson(c.text))
-        if (!parsed || typeof parsed !== "object") continue
-        const p = parsed as Record<string, unknown>
-        // Flat shape
-        if (typeof p.id === "string") {
-          return {
-            id: p.id,
-            projectId: typeof p.projectId === "string" ? p.projectId : undefined,
-            teamId: typeof p.teamId === "string" ? p.teamId : undefined,
-          }
-        }
-        // GraphQL shape: { data: { issue: { id, projectId, teamId } } }
-        const data = p.data
-        if (data && typeof data === "object") {
-          const d = data as Record<string, unknown>
-          const issue = d.issue
-          if (issue && typeof issue === "object") {
-            const i = issue as Record<string, unknown>
-            return {
-              id: typeof i.id === "string" ? i.id : undefined,
-              projectId: typeof i.projectId === "string" ? i.projectId : undefined,
-              teamId: typeof i.teamId === "string" ? i.teamId : undefined,
-            }
-          }
-        }
-      }
-    }
+    const extracted = r.content
+      .map(extractGetIssueFromItem)
+      .find((x): x is { id?: string; projectId?: string; teamId?: string } => x !== undefined)
+    if (extracted) return extracted
   }
 
   return {}
@@ -165,17 +249,14 @@ const verifyLinearIssue = Effect.fn("SyncPush.verifyLinearIssue")(function* (inp
   expectedProjectId: string | null | undefined
   expectedTeamId: string | null | undefined
 }) {
-  const client = yield* Client
-  const raw = yield* client
-    .callTool(ISSUE.GET, { id: input.linearId })
-    .pipe(
-      // Catch only the expected LinearMcpError; let Interrupt/Die defects
-      // propagate (per packages/core/src/tool/AGENTS.md). A lookup failure
-      // is reported as `_verifyError` so the caller can skip the push.
-      Effect.catchTag("LinearMcpError", (e) =>
-        Effect.succeed({ _verifyError: true, message: e.message }),
-      ),
-    )
+  const client = yield* LinearClientRef
+  if (!client) return "lookup_failed" as VerifyOutcome
+  const raw = yield* client.callTool(ISSUE.GET, { id: input.linearId }).pipe(
+    // Catch only the expected LinearMcpError; let Interrupt/Die defects
+    // propagate (per packages/core/src/tool/AGENTS.md). A lookup failure
+    // is reported as `_verifyError` so the caller can skip the push.
+    Effect.catchTag("LinearMcpError", (e) => Effect.succeed({ _verifyError: true, message: e.message })),
+  )
 
   if (typeof raw === "object" && raw !== null && "_verifyError" in raw) {
     return "lookup_failed" as VerifyOutcome
@@ -215,51 +296,10 @@ const parseSaveIssueResponse = (raw: unknown): { id: string; projectId?: string;
   const r = raw as Record<string, unknown>
 
   if (Array.isArray(r.content)) {
-    for (const item of r.content) {
-      if (typeof item !== "object" || !item) continue
-      const c = item as Record<string, unknown>
-      if (c.type === "text" && typeof c.text === "string") {
-        const parsed = Option.getOrUndefined(decodeJson(c.text))
-        if (!parsed || typeof parsed !== "object") continue
-        const p = parsed as Record<string, unknown>
-        // Flat shape: { id: "...", projectId: "...", teamId: "..." }
-        if (typeof p.id === "string") {
-          return {
-            id: p.id,
-            projectId: typeof p.projectId === "string" ? p.projectId : undefined,
-            teamId: typeof p.teamId === "string" ? p.teamId : undefined,
-          }
-        }
-        // GraphQL shape: { data: { saveIssue: { id, projectId, teamId } } }
-        const data = p.data
-        if (data && typeof data === "object") {
-          const d = data as Record<string, unknown>
-          const saveIssue = d.saveIssue
-          if (saveIssue && typeof saveIssue === "object") {
-            const s = saveIssue as Record<string, unknown>
-            if (typeof s.id === "string") {
-              return {
-                id: s.id,
-                projectId: typeof s.projectId === "string" ? s.projectId : undefined,
-                teamId: typeof s.teamId === "string" ? s.teamId : undefined,
-              }
-            }
-          }
-          // Some responses nest under `issue`
-          const issue = d.issue
-          if (issue && typeof issue === "object") {
-            const i = issue as Record<string, unknown>
-            if (typeof i.id === "string") {
-              return {
-                id: i.id,
-                projectId: typeof i.projectId === "string" ? i.projectId : undefined,
-                teamId: typeof i.teamId === "string" ? i.teamId : undefined,
-              }
-            }
-          }
-        }
-      }
-    }
+    const extracted = r.content
+      .map(extractSaveIssueFromItem)
+      .find((x): x is { id: string; projectId?: string; teamId?: string } => x !== undefined)
+    if (extracted) return extracted
   }
   return undefined
 }
@@ -276,33 +316,38 @@ const mcpErrorMessage = (raw: unknown): string | undefined => {
   const r = raw as Record<string, unknown>
   if (r.isError !== true) return
   if (Array.isArray(r.content)) {
-    for (const item of r.content) {
-      if (typeof item !== "object" || !item) continue
-      const c = item as Record<string, unknown>
-      if (c.type === "text" && typeof c.text === "string") return c.text
-    }
+    const textItem = r.content.find(
+      (item): item is { text: string } =>
+        typeof item === "object" &&
+        item !== null &&
+        (item as Record<string, unknown>).type === "text" &&
+        typeof (item as Record<string, unknown>).text === "string",
+    )
+    if (textItem) return textItem.text
   }
   return "MCP error (no message)"
 }
 
 /**
  * Clear the `dueDate` field on a Linear issue via a direct GraphQL
- * mutation. This is a WORKAROUND for a limitation in the Linear MCP
- * `save_issue` tool: its inputSchema declares `dueDate` as a pure
- * `string` (no `null` in `anyOf`), so passing `dueDate: null` is
- * rejected by MCP-level Zod validation, and `dueDate: ""` is silently
- * ignored by Linear. The underlying Linear GraphQL `issueUpdate`
- * mutation DOES accept `dueDate: null` to clear the field, so we call
- * it directly when the local `due_date` has been cleared.
+ * mutation. The Linear MCP `save_issue` tool's inputSchema declares
+ * `dueDate` as a pure `string` (no `null` in `anyOf`), so passing
+ * `dueDate: null` is rejected by MCP-level Zod validation, and
+ * `dueDate: ""` is silently ignored by Linear. The underlying Linear
+ * GraphQL `issueUpdate` mutation DOES accept `dueDate: null` to clear
+ * the field, so we call it directly when the local `due_date` has been
+ * cleared.
+ *
+ * Per ADR-0005 D4, this GraphQL bypass is the shared foundation for
+ * both user-side sync (this function) and the agent-side
+ * `linear_graphql` tool — both call `LinearGraphqlClient.Service.call`.
  *
  * Returns true on success, false on failure (error message in `errors`).
  */
 const clearDueDateViaGraphQL = Effect.fn("SyncPush.clearDueDateViaGraphQL")(function* (input: { linearId: string }) {
-  const key = process.env.LINEAR_API_KEY
-  if (!key) {
-    return yield* Effect.fail(new LinearMcpError({ message: "LINEAR_API_KEY not set for GraphQL fallback" }))
-  }
-
+  // Thin wrapper over LinearGraphqlClient (ADR-0005 D7 Phase 0 step 2).
+  // The mutation + variables construction stays here so the shared service
+  // remains payload-agnostic; only the HTTP transport moved to the service.
   const mutation = `mutation($id: String!, $input: IssueUpdateInput!) {
       issueUpdate(id: $id, input: $input) {
         success
@@ -311,35 +356,47 @@ const clearDueDateViaGraphQL = Effect.fn("SyncPush.clearDueDateViaGraphQL")(func
     }`
   const variables = { id: input.linearId, input: { dueDate: null } }
 
-  const http = yield* HttpClient.HttpClient
+  const graphql = yield* LinearGraphqlClient.Service
+  const result = yield* graphql.call(mutation, variables)
 
-  const request = yield* HttpClientRequest.post("https://api.linear.app/graphql").pipe(
-    HttpClientRequest.setHeaders({
-      "Content-Type": "application/json",
-      Authorization: key,
-    }),
-    HttpClientRequest.bodyJson({ query: mutation, variables }),
-  )
-
-  const response = yield* http
-    .execute(request)
-    .pipe(
-      Effect.mapError((e) => new LinearMcpError({ message: `GraphQL clearDueDate failed: ${String(e)}`, cause: e })),
-    )
-
-  const data = (yield* response.json) as {
-    data?: { issueUpdate?: { success: boolean } }
-    errors?: Array<{ message: string }>
+  const data = Option.getOrUndefined(decodeIssueUpdate(result))
+  if (!data?.issueUpdate?.success) {
+    return yield* new LinearMcpError({ message: `GraphQL clearDueDate did not succeed for ${input.linearId}` })
   }
-  if (data.errors && data.errors.length > 0) {
-    return yield* Effect.fail(
-      new LinearMcpError({ message: `GraphQL clearDueDate errors: ${data.errors.map((e) => e.message).join(", ")}` }),
-    )
-  }
-  if (!data.data?.issueUpdate?.success) {
-    return yield* Effect.fail(
-      new LinearMcpError({ message: `GraphQL clearDueDate did not succeed for ${input.linearId}` }),
-    )
+})
+
+/**
+ * Clear the Linear-side `parentId` for an issue via a direct GraphQL
+ * mutation. Used when an L2 issue is converted to L1 locally (level: 0,
+ * parent_id: null) — Linear MCP `save_issue` declares `parentId` as a
+ * pure `string` (no `null` in anyOf), so passing `parentId: null` is
+ * rejected at MCP-level Zod validation, and `parentId: ""` is silently
+ * ignored. The underlying Linear GraphQL `issueUpdate` mutation DOES
+ * accept `parentId: null` to remove the parent link.
+ *
+ * Same pattern as `clearDueDateViaGraphQL` (ADR-0005 D4 GraphQL bypass
+ * for null-field clearing). Returns nothing on success, fails with
+ * `LinearMcpError` on failure (caller catches and records to `errors`).
+ */
+const clearParentIdViaGraphQL = Effect.fn("SyncPush.clearParentIdViaGraphQL")(function* (input: { linearId: string }) {
+  // Linear GraphQL `Issue` type has `parent: Issue` (nullable), not `parentId`.
+  // `IssueUpdateInput` accepts `parentId: String` (nullable) to set/clear.
+  // Query only `id` on return — we don't need to verify the cleared parent,
+  // `success: true` is sufficient.
+  const mutation = `mutation($id: String!, $input: IssueUpdateInput!) {
+      issueUpdate(id: $id, input: $input) {
+        success
+        issue { id }
+      }
+    }`
+  const variables = { id: input.linearId, input: { parentId: null } }
+
+  const graphql = yield* LinearGraphqlClient.Service
+  const result = yield* graphql.call(mutation, variables)
+
+  const data = Option.getOrUndefined(decodeIssueUpdate(result))
+  if (!data?.issueUpdate?.success) {
+    return yield* new LinearMcpError({ message: `GraphQL clearParentId did not succeed for ${input.linearId}` })
   }
 })
 
@@ -356,6 +413,107 @@ const diffShadow = (issue: Issue.Info, shadow: Record<string, unknown>): Issue.S
   // order matters for Linear (labels are a set, but we compare exactly).
   // Use JSON.stringify for deep equality across strings/arrays/null.
   return Issue.SHADOW_FIELDS.filter((f) => JSON.stringify(issue[f]) !== JSON.stringify(shadow[f]))
+}
+
+/**
+ * Resolve the Linear-side parent identifier for an issue.
+ *
+ * For L1 issues (level 0, no parent): returns null (no parent on Linear).
+ * For L2 issues (level 1, has parent): returns the parent's
+ * `linear_issue_id` (e.g., "BOR-40"), or null if the parent is not
+ * linked to Linear.
+ *
+ * This is the value that gets sent as `parentId` to Linear's save_issue
+ * and stored in `cloud_shadow.linear_parent_id` for dirty-checking.
+ *
+ * Why a derived field and not a direct Issue.Info column: the local
+ * `parent_id` is a kernel-generated UUID that means nothing to Linear.
+ * Linear's `parentId` is an issue identifier (e.g., "BOR-40"). They are
+ * not directly comparable. Instead, we resolve the parent's
+ * `linear_issue_id` at push time and compare THAT against the last-known
+ * cloud state. This lets us detect:
+ *   - L2 whose parent was just linked (shadow has no linear_parent_id)
+ *   - L2 that was reparented locally (parent's linear_issue_id changed)
+ *   - L2 whose parent link is already synced (no-op, skip push)
+ */
+const resolveLinearParentId = (issue: Issue.Info, all: Issue.Info[]): string | null => {
+  if (issue.level !== 1 || !issue.parent_id) return null
+  const parent = all.find((i) => i.id === issue.parent_id)
+  return parent?.linear_issue_id ?? null
+}
+
+/**
+ * Build a cloud_shadow snapshot that includes both the content fields
+ * (SHADOW_FIELDS) and the derived `linear_parent_id` for parent-link
+ * dirty-checking. This is the shadow written to the DB after a push
+ * so the next push can detect parent-link changes.
+ *
+ * `linear_parent_id` is NOT in SHADOW_FIELDS because it's not a direct
+ * Issue.Info field — it's derived from the parent's linear_issue_id.
+ * Including it in the shadow JSON (a text column) is backwards-
+ * compatible: old shadows without this field are treated as
+ * `undefined !== current_value` → dirty on the next push, which is
+ * correct (we'd rather re-send parentId idempotently than miss a link).
+ */
+const buildShadowWithParent = (issue: Issue.Info, all: Issue.Info[]): Record<string, unknown> => {
+  return {
+    ...Issue.buildShadow(issue),
+    linear_parent_id: resolveLinearParentId(issue, all),
+  }
+}
+
+/**
+ * Check if an issue's parent link is dirty relative to its cloud_shadow.
+ * Returns true if the issue is an L2 with a linked parent whose
+ * linear_issue_id differs from `cloud_shadow.linear_parent_id`.
+ *
+ * Old shadows (pre-fix) lack `linear_parent_id`, so `shadow.linear_parent_id`
+ * is `undefined`. If the current resolved value is a string (parent linked),
+ * `undefined !== "BOR-40"` → dirty. This ensures L2 issues pushed before
+ * this fix get their parent link synced on the next push.
+ */
+const isParentLinkDirty = (issue: Issue.Info, shadow: Record<string, unknown> | null, all: Issue.Info[]): boolean => {
+  if (issue.level !== 1 || !issue.parent_id) return false
+  const current = resolveLinearParentId(issue, all)
+  if (current === null) return false // parent not linked — nothing to sync
+  const shadowed = shadow ? shadow.linear_parent_id : undefined
+  return shadowed !== current
+}
+
+/**
+ * Check if an issue was previously an L2 (had a Linear parent link) but
+ * is now an L1 (parent_id: null) — i.e., the parent link has been
+ * removed locally and must be cleared on Linear.
+ *
+ * Why a separate check from `isParentLinkDirty`: `isParentLinkDirty`
+ * short-circuits when the issue has no parent_id and returns false. But
+ * an L2→L1 conversion is exactly the case where we need to clear the
+ * Linear parent link — Linear MCP `save_issue` rejects `parentId: null`
+ * (Zod schema declares it as pure `string`), so we must dispatch a
+ * GraphQL mutation to remove the link.
+ *
+ * Detection: the issue currently has NO parent_id (regardless of level
+ * — level field may be stale or inconsistent), but
+ * `cloud_shadow.linear_parent_id` is a non-empty string (the
+ * previously-synced parent identifier).
+ *
+ * Why we check `parent_id` instead of `level`: the `level` field is
+ * a denormalized hint that can drift (e.g., sync-pull may set level
+ * differently than the local create path). The authoritative signal
+ * for "is this issue a child?" is `parent_id`. Using `parent_id` avoids
+ * false positives when level is 0 but parent_id is set (data
+ * inconsistency) or level is 1 but parent_id is null (L2→L1 conversion
+ * where level wasn't updated).
+ */
+const isParentLinkCleared = (issue: Issue.Info, shadow: Record<string, unknown> | null): boolean => {
+  // If the issue currently has a parent_id, it's still an L2 — not a
+  // clear. This covers L2 reparent (parent_id changed to a new L1) and
+  // normal L2 (parent_id unchanged). Only issues WITHOUT a parent_id
+  // can be "cleared" (L2→L1 conversion).
+  if (issue.parent_id) return false
+  if (!shadow) return false // no prior sync — nothing to clear
+  const shadowed = shadow.linear_parent_id
+  return typeof shadowed === "string" && shadowed.length > 0
 }
 
 /**
@@ -415,12 +573,13 @@ export const push = Effect.fn("SyncPush.push")(function* (input: { directory: st
   const binding = yield* bindingSvc.get()
 
   if (!binding?.projectId || !binding?.teamId) {
-    return yield* Effect.fail(new SyncPushError({ message: "Linear binding missing projectId or teamId" }))
+    return yield* new SyncPushError({ message: "Linear binding missing projectId or teamId" })
   }
   const cfg = binding
 
   const issueSvc = yield* Issue.Service
-  const { db } = yield* Database.Service
+  const database = yield* Database.Service
+  const db = database.db
   // Load with include_archived=true so that issues archived locally
   // (status ∈ {Done, Canceled, Duplicate}) are still pushed to Linear.
   // Their status field is part of SHADOW_FIELDS, so the field-level diff
@@ -430,7 +589,13 @@ export const push = Effect.fn("SyncPush.push")(function* (input: { directory: st
   // would do nothing for that issue.
   const all = yield* issueSvc.get({ directory: input.directory, include_archived: true })
 
-  const issueIdSet = input.issueIds === "all" || !input.issueIds ? null : new Set(input.issueIds)
+  // ADR-0005 D3: `issueIds: []` means "bulk push" (no filter), NOT "push
+  // zero issues". The three "no filter" shapes are: `"all"`, `undefined`,
+  // and `[]` (empty array). Any non-empty array is a targeted push filter.
+  const issueIdSet =
+    input.issueIds === "all" || !input.issueIds || input.issueIds.length === 0
+      ? null
+      : new Set(input.issueIds)
   const issues = issueIdSet ? all.filter((i) => issueIdSet.has(i.id)) : all
 
   // Split into two cohorts: linked (update) and local-only (create).
@@ -449,14 +614,24 @@ export const push = Effect.fn("SyncPush.push")(function* (input: { directory: st
   const linkedDirty = linked.filter((i) => {
     const shadow = i.cloud_shadow ?? null
     if (!shadow) return true // first sync after migration — push everything
-    return diffShadow(i, shadow).length > 0
+    // Content dirty check (SHADOW_FIELDS) OR parent-link dirty check
+    // (either L2 parent changed, or L2→L1 conversion requires clearing
+    // the Linear parent link via GraphQL — MCP `save_issue` rejects null).
+    return (
+      diffShadow(i, shadow).length > 0 ||
+      isParentLinkDirty(i, shadow, all) ||
+      isParentLinkCleared(i, shadow)
+    )
   })
 
   if (linkedDirty.length === 0 && localOnly.length === 0) {
     return new Result({ pushed: 0, failed: 0, ids: [], errors: [] })
   }
 
-  const client = yield* Client
+  const client = yield* LinearClientRef
+  if (!client) {
+    return yield* new SyncPushError({ message: "Linear client not available" })
+  }
   const ids: string[] = []
   const errors: Array<{ id: string; message: string }> = []
 
@@ -517,21 +692,57 @@ export const push = Effect.fn("SyncPush.push")(function* (input: { directory: st
         // shadow exists (first sync after migration), send all fields.
         const shadow = issue.cloud_shadow ?? null
         const dirtyFields = shadow ? diffShadow(issue, shadow) : [...Issue.SHADOW_FIELDS]
-        if (dirtyFields.length === 0) {
+        // Parent-link dirty check: if the L2's parent link has changed
+        // (or was never synced), we must push even if no content fields
+        // are dirty. This handles the migration case where L2 issues were
+        // pushed before the parentId fix — they're linked but have no
+        // parent-child relationship on Linear.
+        const parentDirty = isParentLinkDirty(issue, shadow, all)
+        // L2→L1 conversion: previously an L2 with a Linear parent link,
+        // now an L1 (parent_id null). The Linear-side parentId must be
+        // cleared via GraphQL (MCP save_issue rejects null). Triggers a
+        // push even if no content fields are dirty — the parent clear is
+        // itself the change.
+        const parentCleared = isParentLinkCleared(issue, shadow)
+        if (dirtyFields.length === 0 && !parentDirty && !parentCleared) {
           // Race: shadow caught up between the filter above and now.
           // Nothing to push.
           return
         }
-        const saveArgs = buildPartialSaveArgs(issue, dirtyFields, linearId, cfg.teamId!, cfg.projectId!)
 
-        const raw = yield* client
-          .callTool(ISSUE.SAVE, saveArgs)
-          .pipe(
-            // Catch only LinearMcpError; defects propagate (AGENTS.md).
-            Effect.catchTag("LinearMcpError", (e) =>
-              Effect.succeed({ _error: true, message: e.message }),
-            ),
-          )
+        // Build save_args. If only the parent link is dirty (no content
+        // fields), send an UPDATE with just `id`/`team`/`project`/
+        // `parentId` — no content fields. Linear treats this as a partial
+        // update (only parentId changes, other fields untouched).
+        //
+        // When parentCleared is true (L2→L1), we DO NOT set parentId here
+        // — save_issue can't clear it. The clear happens via GraphQL
+        // below, after the save_issue call (if any) succeeds.
+        const saveArgs =
+          dirtyFields.length > 0
+            ? buildPartialSaveArgs(issue, dirtyFields, linearId, cfg.teamId!, cfg.projectId!)
+            : { id: linearId, team: cfg.teamId!, project: cfg.projectId! }
+
+        // L2 issues: attach `parentId` (resolved from the parent's
+        // linear_issue_id) so reparenting and initial parent linking sync
+        // to Linear. `parent_id` is not in SHADOW_FIELDS (it's a local UUID,
+        // not comparable to Linear's identifier-format parentId), so we
+        // send it whenever the L2 has a linked parent — idempotent on
+        // Linear's side (setting the same parentId is a no-op). If the
+        // parent is not linked (no linear_issue_id), parentId is omitted;
+        // the Linear issue remains a top-level issue until the parent is
+        // pushed.
+        if (issue.level === 1 && issue.parent_id) {
+          const parentLinearId = resolveLinearParentId(issue, all)
+          if (parentLinearId) {
+            saveArgs.parentId = parentLinearId
+          }
+        }
+
+        const raw = yield* client.callTool(ISSUE.SAVE, saveArgs).pipe(
+          // Catch only LinearMcpError; defects propagate (AGENTS.md).
+          Effect.catchTag("LinearMcpError", (e) => Effect.succeed({ _error: true, message: e.message })),
+        )
 
         if (typeof raw === "object" && raw !== null && "_error" in raw) {
           const msg = String((raw as Record<string, unknown>).message ?? "unknown MCP error")
@@ -568,13 +779,29 @@ export const push = Effect.fn("SyncPush.push")(function* (input: { directory: st
         const dueDateCleared = dirtyFields.includes("due_date") && !issue.due_date
         if (dueDateCleared) {
           const clearResult = yield* clearDueDateViaGraphQL({ linearId }).pipe(
-            Effect.catchTag("LinearMcpError", (e) =>
-              Effect.succeed({ _error: true, message: e.message }),
-            ),
+            Effect.catchTag("LinearMcpError", (e) => Effect.succeed({ _error: true, message: e.message })),
           )
           if (typeof clearResult === "object" && clearResult !== null && "_error" in clearResult) {
             const msg = String((clearResult as Record<string, unknown>).message ?? "unknown GraphQL error")
             errors.push({ id: issue.id, message: `dueDate clear failed: ${msg}` })
+            return
+          }
+        }
+
+        // L2→L1 conversion: clear the Linear-side parentId via GraphQL.
+        // The save_issue call above cannot clear parentId (its Zod schema
+        // declares parentId as a pure string). The GraphQL mutation
+        // `issueUpdate(input: { parentId: null })` DOES accept null and
+        // removes the parent-child relationship on Linear. Idempotent —
+        // if Linear already has no parent, the mutation succeeds as a
+        // no-op.
+        if (parentCleared) {
+          const clearResult = yield* clearParentIdViaGraphQL({ linearId }).pipe(
+            Effect.catchTag("LinearMcpError", (e) => Effect.succeed({ _error: true, message: e.message })),
+          )
+          if (typeof clearResult === "object" && clearResult !== null && "_error" in clearResult) {
+            const msg = String((clearResult as Record<string, unknown>).message ?? "unknown GraphQL error")
+            errors.push({ id: issue.id, message: `parentId clear failed: ${msg}` })
             return
           }
         }
@@ -590,7 +817,7 @@ export const push = Effect.fn("SyncPush.push")(function* (input: { directory: st
           .set({
             last_pushed_at: stamp,
             last_pulled_at: stamp,
-            cloud_shadow: JSON.stringify(Issue.buildShadow(issue)),
+            cloud_shadow: JSON.stringify(buildShadowWithParent(issue, all)),
           })
           .where(and(eq(IssueTable.directory, input.directory), eq(IssueTable.id, issue.id)))
           .run()
@@ -605,101 +832,205 @@ export const push = Effect.fn("SyncPush.push")(function* (input: { directory: st
   // Cohort 2: local-only issues (CREATE path). Call save_issue WITHOUT
   // issueId to create a new Linear issue. On success, patch the local row
   // with the returned `linear_issue_id` so future pushes update it.
+  //
+  // Sub-issue linking: L1 issues (level 0, no parent) are pushed first.
+  // After they're created, their `linear_issue_id` responses are used to
+  // resolve `parentId` for L2 issues (level 1, has parent). Linear MCP
+  // save_issue accepts `parentId` as the parent's ID or identifier (e.g.,
+  // "BOR-15"). Without this two-phase push, all issues would appear as
+  // flat top-level issues in Linear (ADR-0001 D3 — reparent implemented).
+  const localL1 = localOnly.filter((i) => i.level === 0 || i.parent_id === null)
+  const localL2 = localOnly.filter((i) => i.level === 1 && i.parent_id !== null)
+
+  // Map local issue id → linear_issue_id. Seeded with already-linked issues
+  // (an L2's parent may have been linked in a prior push). Extended with
+  // freshly-created L1 IDs after Cohort 2a completes. JavaScript Maps are
+  // safe for concurrent access here because Effect.all with `concurrency`
+  // uses cooperative scheduling — `.set()` runs atomically between yields.
+  //
+  // COOPERATIVE-SCHEDULER ASSUMPTION (ADR-0006 G5):
+  // Effect's `Effect.all` with a numeric `concurrency` option uses
+  // cooperative scheduling — fibers take turns executing at yield points,
+  // and JavaScript's single-threaded event loop guarantees that `.set()`
+  // on a Map runs atomically (no other fiber can observe a half-written
+  // Map entry). If Effect were to switch to truly parallel fibers (e.g.,
+  // worker threads), this assumption would break and `.set()` would need
+  // to be replaced with `Effect.Ref<Map>` + `Effect.update` for atomic
+  // read-modify-write. A guard test (`sync-push` Phase 2a ordering) is
+  // in `test/issue/sync-push-cooperative.test.ts` — it fails if the
+  // runtime stops being cooperative.
+  const localIdToLinearId = new Map<string, string>(
+    all
+      .filter((i) => i.linear_issue_id)
+      .map((i) => [i.id, i.linear_issue_id!] as const),
+  )
+
+  // Shared CREATE logic for both L1 and L2. The optional `parentId`
+  // parameter is passed only for L2 issues (resolved from the parent's
+  // linear_issue_id via `localIdToLinearId`). Returns the new
+  // linear_issue_id on success, or undefined on failure (error already
+  // recorded in `errors`).
+  const runCreate = (issue: Issue.Info, parentId?: string) =>
+    Effect.gen(function* () {
+      // CREATE path: no `id` field (Linear creates a new issue).
+      // Same flat-args + correct field names as the UPDATE path above.
+      // `title` and `team` are required by Linear for CREATE.
+      // `state` is the Linear workflow state name (e.g., "Backlog"),
+      // passed directly — Linear's save_issue accepts state name, type, or ID.
+      const saveArgs: Record<string, unknown> = {
+        title: issue.title || issue.content || "Untitled",
+        description: issue.description || issue.content || "",
+        priority: mapPriority(issue.priority),
+        state: issue.status,
+        team: cfg.teamId!,
+        project: cfg.projectId!,
+        // labels/assignee accept null/[] in the MCP schema (anyOf).
+        labels: issue.labels ?? [],
+        assignee: issue.assignee_id ?? null,
+        // parentId: only set for L2 issues (parentId parameter is the
+        // parent's linear_issue_id, resolved by the caller). Omitted for
+        // L1 issues — they are top-level by definition.
+        ...(parentId ? { parentId } : {}),
+        // dueDate: only send when non-empty. The MCP schema declares it
+        // as a pure string (no null), so null is rejected and "" is
+        // ignored. A new issue without a dueDate is the default state
+        // on Linear, so omitting it on CREATE is correct.
+        ...(issue.due_date ? { dueDate: issue.due_date } : {}),
+      }
+
+      const raw = yield* client.callTool(ISSUE.SAVE, saveArgs).pipe(
+        // Catch only LinearMcpError; defects propagate (AGENTS.md).
+        Effect.catchTag("LinearMcpError", (e) => Effect.succeed({ _error: true, message: e.message })),
+      )
+
+      if (typeof raw === "object" && raw !== null && "_error" in raw) {
+        const msg = String((raw as Record<string, unknown>).message ?? "unknown MCP error")
+        errors.push({ id: issue.id, message: msg })
+        return undefined
+      }
+
+      // Detect MCP-level validation errors (isError: true).
+      const mcpErr = mcpErrorMessage(raw)
+      if (mcpErr) {
+        errors.push({ id: issue.id, message: `MCP: ${mcpErr}` })
+        return undefined
+      }
+
+      const parsed = parseSaveIssueResponse(raw)
+      if (!parsed) {
+        errors.push({
+          id: issue.id,
+          message: "create_failed: save_issue did not return an id for the new issue",
+        })
+        return undefined
+      }
+
+      // Patch the local row with the new linear_issue_id and advance
+      // last_pushed_at so future pushes treat it as up-to-date. Uses a
+      // raw DB write (matching the UPDATE path above) instead of
+      // `issueSvc.update` to avoid publishing `issue.updated` events
+      // during a batch push (the desktop UI refreshes via
+      // `serverSync().todo.refresh(directory)` after the push completes
+      // in sidebar-linear.tsx handleSync). Historically this also
+      // bypassed the now-removed `IssueArchivedError` guard; the guard
+      // is gone (ADR-0001 Amendment 2026-07-19 §D17), but the raw-write
+      // pattern is retained because push is a batch operation that
+      // should not fan out N bus events.
+      //
+      // Store the projectId/teamId UUIDs from the Linear response — NOT
+      // the config values, which may be slugs (e.g.
+      // "graduationdesign-69b3bec34c5f") extracted from the project URL.
+      // The UUIDs are needed for verifyLinearIssue to correctly compare
+      // against get_issue's projectId/teamId on subsequent pushes.
+      // `time_updated` is intentionally NOT bumped — it tracks local
+      // edits only (ADR-0002 §D5/D8). Bumping it on push would mask
+      // subsequent local dirty checks.
+      const stamp = Date.now()
+      yield* db
+        .update(IssueTable)
+        .set({
+          linear_issue_id: parsed.id,
+          linear_team_id: parsed.teamId ?? cfg.teamId!,
+          linear_project_id: parsed.projectId ?? null,
+          last_pushed_at: stamp,
+          // Seed the pull watermark so the first pull after CREATE
+          // doesn't immediately re-reconcile (Linear bumped updatedAt
+          // when it created the issue).
+          last_pulled_at: stamp,
+          // Include `linear_parent_id` in the seed shadow so the next
+          // push doesn't re-send parentId for L2 issues that were just
+          // created with a parent. For L1 issues, linear_parent_id is
+          // null (no parent).
+          cloud_shadow: JSON.stringify(buildShadowWithParent(issue, all)),
+        })
+        .where(and(eq(IssueTable.directory, input.directory), eq(IssueTable.id, issue.id)))
+        .run()
+        .pipe(Effect.orDie)
+
+      return parsed.id
+    })
+
+  // Cohort 2a: push L1 issues (no parent). Results extend the
+  // localIdToLinearId map so Cohort 2b can resolve parent links for L2.
+  // Track which L1 issues failed to create — Cohort 2b uses this to give
+  // an actionable error message when an L2's parent failed in 2a (vs.
+  // the parent simply not being linked yet).
+  const failedL1Ids = new Set<string>()
   yield* Effect.all(
-    localOnly.map((issue) =>
+    localL1.map((issue) =>
       Effect.gen(function* () {
-        // CREATE path: no `id` field (Linear creates a new issue).
-        // Same flat-args + correct field names as the UPDATE path above.
-        // `title` and `team` are required by Linear for CREATE.
-        // `state` is the Linear workflow state name (e.g., "Backlog"),
-        // passed directly — Linear's save_issue accepts state name, type, or ID.
-        const saveArgs: Record<string, unknown> = {
-          title: issue.title || issue.content || "Untitled",
-          description: issue.description || issue.content || "",
-          priority: mapPriority(issue.priority),
-          state: issue.status,
-          team: cfg.teamId!,
-          project: cfg.projectId!,
-          // labels/assignee accept null/[] in the MCP schema (anyOf).
-          labels: issue.labels ?? [],
-          assignee: issue.assignee_id ?? null,
-          // dueDate: only send when non-empty. The MCP schema declares it
-          // as a pure string (no null), so null is rejected and "" is
-          // ignored. A new issue without a dueDate is the default state
-          // on Linear, so omitting it on CREATE is correct.
-          ...(issue.due_date ? { dueDate: issue.due_date } : {}),
-        }
-
-        const raw = yield* client
-          .callTool(ISSUE.SAVE, saveArgs)
-          .pipe(
-            // Catch only LinearMcpError; defects propagate (AGENTS.md).
-            Effect.catchTag("LinearMcpError", (e) =>
-              Effect.succeed({ _error: true, message: e.message }),
-            ),
-          )
-
-        if (typeof raw === "object" && raw !== null && "_error" in raw) {
-          const msg = String((raw as Record<string, unknown>).message ?? "unknown MCP error")
-          errors.push({ id: issue.id, message: msg })
+        const newLinearId = yield* runCreate(issue)
+        if (newLinearId) {
+          localIdToLinearId.set(issue.id, newLinearId)
+          ids.push(newLinearId)
           return
         }
+        // runCreate already recorded the failure in `errors`; track the
+        // local id so Cohort 2b can distinguish "parent failed in 2a"
+        // from "parent never linked".
+        failedL1Ids.add(issue.id)
+      }),
+    ),
+    { concurrency: DEFAULT_BATCH, discard: true },
+  )
 
-        // Detect MCP-level validation errors (isError: true).
-        const mcpErr = mcpErrorMessage(raw)
-        if (mcpErr) {
-          errors.push({ id: issue.id, message: `MCP: ${mcpErr}` })
-          return
-        }
-
-        const parsed = parseSaveIssueResponse(raw)
-        if (!parsed) {
+  // Cohort 2b: push L2 issues (with parent). `parentId` is resolved from
+  // the parent's linear_issue_id via `localIdToLinearId`. If the parent
+  // is not linked (and wasn't just created in Cohort 2a), the L2 is
+  // skipped with an error — the parent must be pushed first so Linear can
+  // establish the parent-child link.
+  //
+  // Error message distinguishes two cases:
+  //   - parent_failed: parent was in Cohort 2a but its CREATE failed.
+  //     Actionable: fix the parent's error (see prior `errors` entry),
+  //     then push again. The L2 cannot be created until the parent exists.
+  //   - parent_not_linked: parent was NOT in Cohort 2a (already linked
+  //     from a prior push) but its linear_issue_id is missing. This
+  //     indicates a data-integrity issue — the parent row should have
+  //     been linked. Actionable: investigate the parent's
+  //     linear_issue_id column.
+  yield* Effect.all(
+    localL2.map((issue) =>
+      Effect.gen(function* () {
+        const parentId = issue.parent_id ? localIdToLinearId.get(issue.parent_id) : undefined
+        if (!parentId) {
+          if (issue.parent_id && failedL1Ids.has(issue.parent_id)) {
+            errors.push({
+              id: issue.id,
+              message: `parent_failed: parent issue ${issue.parent_id} failed to create in Phase 2a (see prior errors); L2 skipped until parent is fixed`,
+            })
+            return
+          }
           errors.push({
             id: issue.id,
-            message: "create_failed: save_issue did not return an id for the new issue",
+            message: `parent_not_linked: parent issue ${issue.parent_id} has no linear_issue_id; cannot set parentId`,
           })
           return
         }
-
-        // Patch the local row with the new linear_issue_id and advance
-        // last_pushed_at so future pushes treat it as up-to-date. Uses a
-        // raw DB write (matching the UPDATE path above) instead of
-        // `issueSvc.update` to avoid publishing `issue.updated` events
-        // during a batch push (the desktop UI refreshes via
-        // `serverSync().todo.refresh(directory)` after the push completes
-        // in sidebar-linear.tsx handleSync). Historically this also
-        // bypassed the now-removed `IssueArchivedError` guard; the guard
-        // is gone (ADR-0001 Amendment 2026-07-19 §D17), but the raw-write
-        // pattern is retained because push is a batch operation that
-        // should not fan out N bus events.
-        //
-        // Store the projectId/teamId UUIDs from the Linear response — NOT
-        // the config values, which may be slugs (e.g.
-        // "graduationdesign-69b3bec34c5f") extracted from the project URL.
-        // The UUIDs are needed for verifyLinearIssue to correctly compare
-        // against get_issue's projectId/teamId on subsequent pushes.
-        // `time_updated` is intentionally NOT bumped — it tracks local
-        // edits only (ADR-0002 §D5/D8). Bumping it on push would mask
-        // subsequent local dirty checks.
-        const stamp = Date.now()
-        yield* db
-          .update(IssueTable)
-          .set({
-            linear_issue_id: parsed.id,
-            linear_team_id: parsed.teamId ?? cfg.teamId!,
-            linear_project_id: parsed.projectId ?? null,
-            last_pushed_at: stamp,
-            // Seed the pull watermark so the first pull after CREATE
-            // doesn't immediately re-reconcile (Linear bumped updatedAt
-            // when it created the issue).
-            last_pulled_at: stamp,
-            cloud_shadow: JSON.stringify(Issue.buildShadow(issue)),
-          })
-          .where(and(eq(IssueTable.directory, input.directory), eq(IssueTable.id, issue.id)))
-          .run()
-          .pipe(Effect.orDie)
-
-        ids.push(parsed.id)
+        const newLinearId = yield* runCreate(issue, parentId)
+        if (newLinearId) {
+          ids.push(newLinearId)
+        }
       }),
     ),
     { concurrency: DEFAULT_BATCH, discard: true },

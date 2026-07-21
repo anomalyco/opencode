@@ -70,6 +70,14 @@ export class IssueHierarchyError extends Schema.TaggedErrorClass<IssueHierarchyE
   }),
 }) {}
 
+/**
+ * Domain-level Error union for the Issue service (per AGENTS.md [E9] —
+ * "Export a domain-level `Error` union from each service module"). All
+ * expected failures from `Issue.Service` methods are tagged errors; DB
+ * errors are die'd via `Effect.orDie` and propagate as defects.
+ */
+export type Error = IssueNotArchivedError | IssueNotFoundError | IssueHierarchyError
+
 export const Priority = Schema.Literals(["none", "urgent", "high", "medium", "low"]).annotate({
   description: "Linear-aligned priority: none, urgent, high, medium, low",
 })
@@ -113,8 +121,7 @@ export const Info = Schema.Struct({
     description: "Unix ms of last successful push to Linear",
   }),
   last_pulled_at: Schema.optional(Schema.NullOr(Schema.Number)).annotate({
-    description:
-      "Mirror of Linear cloud-side updatedAt (Unix ms); watermark for pull reconcile (ADR-0002 D5 revised)",
+    description: "Mirror of Linear cloud-side updatedAt (Unix ms); watermark for pull reconcile (ADR-0002 D5 revised)",
   }),
   cloud_shadow: Schema.optional(Schema.NullOr(Schema.Record(Schema.String, Schema.Unknown))).annotate({
     description:
@@ -161,11 +168,25 @@ export const Event = {
 
 export interface Interface {
   readonly get: (input: { directory: string; include_archived?: boolean }) => Effect.Effect<Info[]>
-  readonly create: (input: { directory: string; issue: Partial<Info> }) => Effect.Effect<Info, IssueNotFoundError | IssueHierarchyError>
-  readonly update: (input: { directory: string; id: string; patch: Partial<Info> }) => Effect.Effect<Info, IssueNotFoundError | IssueHierarchyError>
-  readonly delete: (input: { directory: string; id: string }) => Effect.Effect<void, IssueNotArchivedError | IssueNotFoundError>
+  readonly create: (input: {
+    directory: string
+    issue: Partial<Info>
+  }) => Effect.Effect<Info, IssueNotFoundError | IssueHierarchyError>
+  readonly update: (input: {
+    directory: string
+    id: string
+    patch: Partial<Info>
+  }) => Effect.Effect<Info, IssueNotFoundError | IssueHierarchyError>
+  readonly delete: (input: {
+    directory: string
+    id: string
+  }) => Effect.Effect<void, IssueNotArchivedError | IssueNotFoundError>
   readonly reorder: (input: { directory: string; ids: string[] }) => Effect.Effect<void>
-  readonly archive: (input: { directory: string; id: string; outcome: Outcome }) => Effect.Effect<Info, IssueNotFoundError>
+  readonly archive: (input: {
+    directory: string
+    id: string
+    outcome: Outcome
+  }) => Effect.Effect<Info, IssueNotFoundError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Issue") {}
@@ -200,6 +221,19 @@ const cloudShadowFromRow = (raw: string | null): Record<string, unknown> | null 
   return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null
 }
 
+const decodePriority = Schema.decodeUnknownOption(Priority)
+
+/**
+ * Decode a `priority` DB value into the typed `Priority` union. Falls back
+ * to `"none"` for unknown values — the DB column is `text()` so Drizzle
+ * types it as `string`, but app logic only ever writes valid union members.
+ * The fallback is defensive: if a future migration or external write
+ * introduces an invalid value, we degrade to "no priority" rather than
+ * corrupting the typed channel or failing the read.
+ */
+const priorityFromDb = (raw: string): Priority =>
+  Option.getOrElse(decodePriority(raw), () => "none")
+
 const mapRow = (row: typeof IssueTable.$inferSelect): Info => ({
   id: row.id,
   directory: row.directory,
@@ -208,8 +242,17 @@ const mapRow = (row: typeof IssueTable.$inferSelect): Info => ({
   title: row.title,
   content: row.content,
   description: row.description,
-  status: row.status as Status,
-  priority: row.priority as Priority,
+  // `Status = Schema.String` — DB `text()` column is already `string`, so
+  // no assertion is needed. Linear stores status verbatim (per ADR-0002 D6)
+  // and we do not validate the value against a fixed enum at the DB boundary
+  // because Linear teams may customize workflow state names.
+  status: row.status,
+  // `Priority` is a string literal union ("none" | "urgent" | "high" |
+  // "medium" | "low"). The DB column only stores these values (enforced by
+  // app logic at write time), but TS can't prove that from the Drizzle
+  // `text()` type. Decode through the Schema so invalid values fall back
+  // to "none" rather than corrupting the typed channel.
+  priority: priorityFromDb(row.priority),
   labels: Option.getOrUndefined(decodeJson(row.labels)) as string[],
   due_date: row.due_date,
   assignee_id: row.assignee_id,
@@ -223,6 +266,42 @@ const mapRow = (row: typeof IssueTable.$inferSelect): Info => ({
   time_created: row.time_created,
   time_updated: row.time_updated,
 })
+
+/**
+ * Project an `Issue.Info` into the agent-facing representation (ADR-0005 D6).
+ *
+ * Sync-internal bookkeeping fields (`last_pushed_at`, `last_pulled_at`,
+ * `cloud_shadow`) are stripped — they are not actionable for the agent and
+ * their presence creates confusion. `linear_issue_id` / `linear_team_id` /
+ * `linear_project_id` are kept because the agent needs them to route edits
+ * to the correct remote path (Linear MCP `save_issue` or `linear_graphql`).
+ *
+ * The full `Info` (with all fields) is still returned by `Issue.Service.get`
+ * for UI consumers that need the sync metadata. The filtering happens only
+ * at the agent tool boundary.
+ */
+export const toAgentInfo = (i: Info): Omit<Info, "last_pushed_at" | "last_pulled_at" | "cloud_shadow"> => {
+  return {
+    id: i.id,
+    directory: i.directory,
+    parent_id: i.parent_id,
+    level: i.level,
+    title: i.title,
+    content: i.content,
+    description: i.description,
+    status: i.status,
+    priority: i.priority,
+    labels: i.labels,
+    due_date: i.due_date,
+    assignee_id: i.assignee_id,
+    linear_issue_id: i.linear_issue_id,
+    linear_team_id: i.linear_team_id,
+    linear_project_id: i.linear_project_id,
+    position: i.position,
+    time_created: i.time_created,
+    time_updated: i.time_updated,
+  }
+}
 
 const toRow = (input: { directory: string; issue: Partial<Info>; position?: number }) => {
   const id = input.issue.id ?? crypto.randomUUID()
@@ -254,7 +333,8 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const events = yield* EventV2Bridge.Service
-    const { db } = yield* Database.Service
+    const database = yield* Database.Service
+    const db = database.db
 
     const load = Effect.fn("Issue.load")(function* (directory: string) {
       const rows = yield* db
@@ -330,7 +410,12 @@ export const layer = Layer.effect(
               .orderBy(asc(IssueTable.position))
               .all()
               .pipe(Effect.orDie)
-            const pos = max.length > 0 ? max[max.length - 1].pos! + 1 : 0
+            // `pos` is NonNegativeInt so it's typed as `number`. Drizzle
+            // returns it as `number | null` in select projections even though
+            // the column is NOT NULL — use Option to handle the TS-side null
+            // without a non-null assertion.
+            const lastPos = max.length > 0 ? max[max.length - 1].pos : undefined
+            const pos = lastPos !== undefined ? lastPos + 1 : 0
             yield* tx
               .insert(IssueTable)
               .values({ ...next, position: pos })
@@ -363,6 +448,13 @@ export const layer = Layer.effect(
       const current = (yield* load(input.directory)).find((i) => i.id === input.id)
       if (!current) return yield* new IssueNotFoundError({ id: input.id, context: "before update" })
 
+      // ADR-0005 D2: Linear-linked refusal is enforced at the agent tool
+      // layer (issue_update.ts), NOT here. The HTTP API (UI path) must be
+      // able to edit Linear-linked issues locally — the user edits in the
+      // sidebar, then pushes to Linear via SyncPush. Sync services bypass
+      // the service layer entirely (direct DB writes), so they are
+      // unaffected either way.
+
       const set: Record<string, unknown> = {}
       const p = input.patch
       if (p.content !== undefined) set.content = p.content
@@ -375,9 +467,9 @@ export const layer = Layer.effect(
       if (p.labels !== undefined) set.labels = JSON.stringify(p.labels)
       if (p.due_date !== undefined) set.due_date = p.due_date ?? null
       if (p.assignee_id !== undefined) set.assignee_id = p.assignee_id ?? null
-      if (p.linear_issue_id !== undefined) set.linear_issue_id = p.linear_issue_id ?? null
-      if (p.linear_team_id !== undefined) set.linear_team_id = p.linear_team_id ?? null
-      if (p.linear_project_id !== undefined) set.linear_project_id = p.linear_project_id ?? null
+      // `linear_*` linkage fields are NOT writable via Issue.Service.update
+      // (ADR-0005 Phase 2 step 11). They are set only by SyncPull (on
+      // insert) or SyncPush (on create-from-local) via direct DB writes.
       if (p.position !== undefined) set.position = p.position
       if (p.last_pushed_at !== undefined) set.last_pushed_at = p.last_pushed_at ?? null
       if (p.last_pulled_at !== undefined) set.last_pulled_at = p.last_pulled_at ?? null
@@ -430,7 +522,8 @@ export const layer = Layer.effect(
             .where(and(eq(IssueTable.directory, input.directory), eq(IssueTable.id, finalParentId)))
             .all()
             .pipe(Effect.orDie)
-          if (parent.length === 0) return yield* new IssueHierarchyError({ reason: "parent_not_found", detail: finalParentId })
+          if (parent.length === 0)
+            return yield* new IssueHierarchyError({ reason: "parent_not_found", detail: finalParentId })
           if (parent[0].level !== 0) return yield* new IssueHierarchyError({ reason: "parent_not_l1" })
         }
       }
@@ -454,6 +547,9 @@ export const layer = Layer.effect(
       const current = (yield* load(input.directory)).find((i) => i.id === input.id)
       if (!current) return yield* new IssueNotFoundError({ id: input.id, context: "before delete" })
       if (!isArchived(current.status)) return yield* new IssueNotArchivedError({ id: input.id })
+
+      // ADR-0005 D2: Linear-linked refusal is enforced at the agent tool
+      // layer (issue_delete.ts), NOT here. See `update` above for rationale.
 
       // Cascade delete: remove all L2 children whose parent_id points to this
       // issue (only relevant when deleting an L1), then delete the issue.
@@ -532,6 +628,9 @@ export const layer = Layer.effect(
       if (!current) return yield* new IssueNotFoundError({ id: input.id, context: "before archive" })
       // Idempotent: already archived — return as-is, no state change, no event.
       if (isArchived(current.status)) return current
+
+      // ADR-0005 D2: Linear-linked refusal is enforced at the agent tool
+      // layer (issue_archive.ts), NOT here. See `update` for rationale.
 
       const status = OUTCOME_TO_STATUS[input.outcome]
       yield* db

@@ -1,10 +1,10 @@
-import { Effect, Layer, Context, Schema, Option } from "effect"
+import { Effect, Layer, Context, Schema, Option, Path, DateTime } from "effect"
 import { define, inventory } from "@opencode-ai/schema/event"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { path } from "@opencode-ai/core/effect/app-node-platform"
 import { InstanceState } from "@/effect/instance-state"
-import { dirname } from "path"
 
 const decodeJson = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
 
@@ -70,44 +70,52 @@ export interface Interface {
 }
 export class Service extends Context.Service<Service, Interface>()("@opencode/Issue/LinearBinding") {}
 
-const bindingFilePath = (directory: string): string => {
-  // Normalize trailing slash, then append `.opencode/linear-binding.json`.
-  const base = directory.endsWith("/") ? directory.slice(0, -1) : directory
-  return `${base}/.opencode/linear-binding.json`
-}
+const bindingFilePath = (path: Path.Path, directory: string): string =>
+  // `Path.join` normalizes trailing slashes and cross-platform separators.
+  path.join(directory, ".opencode", "linear-binding.json")
 
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const events = yield* EventV2Bridge.Service
     const fs = yield* FSUtil.Service
+    const pathSvc = yield* Path.Path
 
     const writeToDisk = (directory: string, binding: Binding | null) =>
       Effect.gen(function* () {
-        const file = bindingFilePath(directory)
+        const file = bindingFilePath(pathSvc, directory)
         // Ensure <workspace>/.opencode/ exists.
-        yield* fs.ensureDir(dirname(file)).pipe(Effect.orDie)
+        yield* fs.ensureDir(pathSvc.dirname(file)).pipe(Effect.orDie)
         if (!binding) {
           // Write empty file rather than deleting — avoids TOCTOU races.
           yield* fs.writeFileString(file, "{}\n").pipe(Effect.orDie)
           return
         }
-        // Atomic write: temp file + rename.
+        // Atomic write: temp file + rename. Suffix concatenation is safe
+        // here — `file` is already a normalized absolute path.
         const temp = `${file}.tmp`
-        const content = JSON.stringify({ ...binding, updatedAt: new Date().toISOString() }, null, 2)
+        const now = yield* DateTime.nowAsDate
+        const content = JSON.stringify({ ...binding, updatedAt: now.toISOString() }, null, 2)
         yield* fs.writeFileString(temp, content).pipe(Effect.orDie)
         yield* fs.rename(temp, file).pipe(Effect.orDie)
       })
 
     const loadFromDisk = (directory: string) =>
       Effect.gen(function* () {
-        const file = bindingFilePath(directory)
+        const file = bindingFilePath(pathSvc, directory)
         const exists = yield* fs.existsSafe(file)
         if (!exists) return null
         const content = yield* fs.readFileString(file).pipe(
           // File vanished between existsSafe and readFileString (race) or
-          // read error — treat as missing. Effect.catch only catches
-          // recoverable errors; defects (Interrupt/Die) propagate.
+          // read error — treat as missing. `Effect.catch` only catches
+          // recoverable errors; defects (Interrupt/Die) propagate naturally.
+          //
+          // NOTE: This is a deliberate catch-all (not `catchTag`) because
+          // we genuinely want to swallow ANY FS error — race, permission,
+          // I/O — and treat the binding as missing. `catchTag` requires a
+          // specific tagged error type, but FSUtil errors are untagged.
+          // This is an exception to the catchTag rule for a best-effort
+          // file read where precise error handling is not the intent.
           Effect.catch(() => Effect.succeed(null)),
         )
         if (!content || content.trim() === "{}") return null
@@ -155,6 +163,6 @@ export const layer = Layer.effect(
   }),
 )
 
-export const node = LayerNode.make({ service: Service, layer: layer, deps: [EventV2Bridge.node, FSUtil.node] })
+export const node = LayerNode.make({ service: Service, layer: layer, deps: [EventV2Bridge.node, FSUtil.node, path] })
 
 export * as LinearBinding from "./linear-binding"

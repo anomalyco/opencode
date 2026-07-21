@@ -1,6 +1,6 @@
-import { Context, Effect, Schema, Option } from "effect"
+import { Effect, Schema, Option } from "effect"
 import { ISSUE } from "./tool-names"
-import { LinearMcpClient } from "./mcp-client"
+import { LinearClientRef } from "./mcp-client"
 import { Issue } from "./issue"
 import { LinearBinding } from "@/issue/linear-binding"
 import { Database } from "@opencode-ai/core/database/database"
@@ -9,6 +9,18 @@ import { IssueTable } from "./issue.sql"
 
 const decodeJson = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
 
+// NOTE on `as Record<string, unknown>` assertions in this file:
+// The Linear MCP server returns untyped JSON via `Client.callTool` (the MCP
+// SDK types the wire shape as `CallToolResult` but our wrapper unwraps it to
+// `unknown`). The Linear MCP wraps GraphQL responses inside
+// `{ content: [{ type: "text", text: "<json>" }] }`. We `decodeJson` the
+// inner text payload, then structurally narrow the resulting `unknown` with
+// `as Record<string, unknown>` casts to navigate the envelope. Schema
+// validation is applied at field-extraction boundaries (e.g. decoding
+// `pageInfo`, `issueNodes`); the outer shape is structurally asserted
+// because wrapping every navigation step in `Schema.decodeUnknownOption`
+// would double the code size without catching additional bugs (the MCP
+// transport is the trust boundary, not the local type system).
 /**
  * SyncPull — snapshot-import Linear issues into the local IssueTable
  * (workspace-scoped, per ADR-0001 D1, ADR-0002 D5–D7).
@@ -28,19 +40,27 @@ const decodeJson = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
  * Local-only issues (no `linear_issue_id`) are never touched by a pull.
  * The pull does not skip on "nothing to do" — it always runs and
  * returns honest counts (ADR-0002 D6).
+ *
+ * The Linear MCP client is resolved per-request by
+ * `LinearClientMiddleware` (HTTP path) or provided by the caller
+ * (agent path) and consumed via the `LinearClientRef` context tag.
  */
-
-/**
- * Effect context tag for the Linear MCP client consumed by pull().
- * Must be provided in the layer that calls pull().
- */
-export const Client = Context.Service<LinearMcpClient>("@opencode/SyncPull/Client")
 
 /** Fatal error when pull cannot proceed at all (e.g., missing config). */
 export class SyncPullError extends Schema.TaggedErrorClass<SyncPullError>()("SyncPullError", {
   message: Schema.String,
   cause: Schema.optional(Schema.Defect()),
 }) {}
+
+/**
+ * Domain-level Error union for the SyncPull service (per AGENTS.md [E9]).
+ * Per-row failures during batch insert/update/delete are NOT in this
+ * union — they are returned as `{ ok: false, error }` entries inside
+ * `Result.errors` so the whole pull is not aborted. `SyncPullError` is
+ * only for fatal preconditions (missing Linear binding, MCP transport
+ * failure) that abort the entire pull.
+ */
+export type Error = SyncPullError
 
 /** Summary of a pull operation. */
 export class Result extends Schema.Class<Result>("SyncPullResult")({
@@ -122,45 +142,56 @@ const parseIssues = (raw: unknown): { nodes: unknown[]; pageInfo?: { hasNextPage
   const r = raw as Record<string, unknown>
 
   if (Array.isArray(r.content)) {
-    for (const item of r.content) {
-      if (typeof item !== "object" || !item) continue
-      const c = item as Record<string, unknown>
-      if (c.type === "text" && typeof c.text === "string") {
-        const parsed = parseJson(c.text)
-        if (!parsed || typeof parsed !== "object") continue
-        const p = parsed as Record<string, unknown>
-
-        // Real shape: { issues: [...], hasNextPage: boolean }
-        if (Array.isArray(p.issues)) {
-          return {
-            nodes: p.issues,
-            pageInfo: { hasNextPage: !!p.hasNextPage },
-          }
-        }
-
-        // Legacy/defensive shape: { data: { issues: { nodes, pageInfo } } }
-        if (p.data && typeof p.data === "object") {
-          const d = p.data as Record<string, unknown>
-          const issues = d.issues
-          if (issues && typeof issues === "object") {
-            const ig = issues as Record<string, unknown>
-            if (Array.isArray(ig.nodes)) {
-              return {
-                nodes: ig.nodes,
-                pageInfo: ig.pageInfo as { hasNextPage?: boolean; endCursor?: string } | undefined,
-              }
-            }
-            // data.issues may itself be a flat array
-            if (Array.isArray(issues)) {
-              return { nodes: issues, pageInfo: undefined }
-            }
-          }
-        }
-      }
-    }
+    const extracted = r.content
+      .map(extractIssuesFromItem)
+      .find(
+        (x): x is { nodes: unknown[]; pageInfo?: { hasNextPage?: boolean; endCursor?: string } } =>
+          x !== undefined,
+      )
+    if (extracted) return extracted
   }
 
   return def
+}
+
+/** Extract `{ nodes, pageInfo }` from a single `list_issues` MCP content item. */
+const extractIssuesFromItem = (
+  item: unknown,
+): { nodes: unknown[]; pageInfo?: { hasNextPage?: boolean; endCursor?: string } } | undefined => {
+  if (typeof item !== "object" || !item) return undefined
+  const c = item as Record<string, unknown>
+  if (c.type !== "text" || typeof c.text !== "string") return undefined
+  const parsed = parseJson(c.text)
+  if (!parsed || typeof parsed !== "object") return undefined
+  const p = parsed as Record<string, unknown>
+
+  // Real shape: { issues: [...], hasNextPage: boolean }
+  if (Array.isArray(p.issues)) {
+    return {
+      nodes: p.issues,
+      pageInfo: { hasNextPage: !!p.hasNextPage },
+    }
+  }
+
+  // Legacy/defensive shape: { data: { issues: { nodes, pageInfo } } }
+  if (p.data && typeof p.data === "object") {
+    const d = p.data as Record<string, unknown>
+    const issues = d.issues
+    if (issues && typeof issues === "object") {
+      const ig = issues as Record<string, unknown>
+      if (Array.isArray(ig.nodes)) {
+        return {
+          nodes: ig.nodes,
+          pageInfo: ig.pageInfo as { hasNextPage?: boolean; endCursor?: string } | undefined,
+        }
+      }
+      // data.issues may itself be a flat array
+      if (Array.isArray(issues)) {
+        return { nodes: issues, pageInfo: undefined }
+      }
+    }
+  }
+  return undefined
 }
 
 /**
@@ -314,7 +345,20 @@ const mapLinearFields = (
     // detect subsequent cloud-side edits.
     last_pulled_at: updatedAtMs ?? null,
     // Shadow mirrors the Linear-sourced content fields as they now
-    // appear in the local row after the cloud-wins reconcile.
+    // appear in the local row after the cloud-wins reconcile. This lets a
+    // subsequent single-issue push correctly detect only the fields the user
+    // has since edited locally. `due_date`/`assignee_id` are normalized to
+    // null (not undefined) so the JSON-stringified shadow matches the values
+    // read back from the DB column (which also stores null for absent values).
+    //
+    // `linear_parent_id` records the cloud's parentId (Linear issue
+    // identifier, e.g., "BOR-40") so the push path can detect when the
+    // local parent link differs from the cloud's. Per ADR-0002, pull
+    // never overwrites local `parent_id` — hierarchy is a local-only
+    // concern. But the shadow still records the cloud's parentId so that
+    // if the user reparents locally, the next push detects the diff and
+    // syncs the new parent to Linear. If the cloud has no parent
+    // (top-level issue), linear_parent_id is null.
     cloud_shadow: {
       title,
       content: title,
@@ -324,6 +368,7 @@ const mapLinearFields = (
       labels,
       due_date,
       assignee_id,
+      linear_parent_id: typeof i.parentId === "string" ? i.parentId : null,
     },
   }
 }
@@ -341,26 +386,32 @@ const parseGetIssueNode = (raw: unknown): Record<string, unknown> | undefined =>
   const r = raw as Record<string, unknown>
 
   if (Array.isArray(r.content)) {
-    for (const item of r.content) {
-      if (typeof item !== "object" || !item) continue
-      const c = item as Record<string, unknown>
-      if (c.type === "text" && typeof c.text === "string") {
-        const parsed = Option.getOrUndefined(decodeJson(c.text))
-        if (!parsed || typeof parsed !== "object") continue
-        const p = parsed as Record<string, unknown>
-        // Flat shape: { id, title, ... }
-        if (typeof p.id === "string") return p
-        // GraphQL shape: { data: { issue: { id, ... } } }
-        const data = p.data
-        if (data && typeof data === "object") {
-          const d = data as Record<string, unknown>
-          const issue = d.issue
-          if (issue && typeof issue === "object") {
-            const i = issue as Record<string, unknown>
-            if (typeof i.id === "string") return i
-          }
-        }
-      }
+    const extracted = r.content
+      .map(extractIssueNodeFromItem)
+      .find((x): x is Record<string, unknown> => x !== undefined)
+    if (extracted) return extracted
+  }
+  return undefined
+}
+
+/** Extract a raw issue node from a single `get_issue` MCP content item. */
+const extractIssueNodeFromItem = (item: unknown): Record<string, unknown> | undefined => {
+  if (typeof item !== "object" || !item) return undefined
+  const c = item as Record<string, unknown>
+  if (c.type !== "text" || typeof c.text !== "string") return undefined
+  const parsed = Option.getOrUndefined(decodeJson(c.text))
+  if (!parsed || typeof parsed !== "object") return undefined
+  const p = parsed as Record<string, unknown>
+  // Flat shape: { id, title, ... }
+  if (typeof p.id === "string") return p
+  // GraphQL shape: { data: { issue: { id, ... } } }
+  const data = p.data
+  if (data && typeof data === "object") {
+    const d = data as Record<string, unknown>
+    const issue = d.issue
+    if (issue && typeof issue === "object") {
+      const i = issue as Record<string, unknown>
+      if (typeof i.id === "string") return i
     }
   }
   return undefined
@@ -413,7 +464,8 @@ const buildPullUpdateSet = (patch: Partial<Issue.Info>): Record<string, unknown>
  */
 const rawDelete = (directory: string, id: string, level: number): Effect.Effect<void, unknown, Database.Service> =>
   Effect.gen(function* () {
-    const { db } = yield* Database.Service
+    const database = yield* Database.Service
+  const db = database.db
     if (level === 0) {
       yield* db
         .delete(IssueTable)
@@ -459,13 +511,17 @@ export const pull = Effect.fn("SyncPull.pull")(function* (input: { directory: st
   const binding = yield* bindingSvc.get()
 
   if (!binding?.projectId || !binding?.teamId) {
-    return yield* Effect.fail(new SyncPullError({ message: "Linear binding missing projectId or teamId" }))
+    return yield* new SyncPullError({ message: "Linear binding missing projectId or teamId" })
   }
   const cfg = binding
 
-  const client = yield* Client
+  const client = yield* LinearClientRef
+  if (!client) {
+    return yield* new SyncPullError({ message: "Linear client not available" })
+  }
   const issueSvc = yield* Issue.Service
-  const { db } = yield* Database.Service
+  const database = yield* Database.Service
+  const db = database.db
   // Use include_archived: true so pull sees ALL local rows, including
   // archived ones (Done/Canceled/Duplicate). Without this, a previously-
   // pulled issue that was later archived locally would be invisible to
@@ -480,29 +536,27 @@ export const pull = Effect.fn("SyncPull.pull")(function* (input: { directory: st
   // seeing an existing archived link. Pull reconciles by keeping the
   // first row (oldest by iteration order = insertion order) for
   // UPDATE/SKIP decisions and hard-deleting the rest (see `toDedup`).
-  const linkedMulti = new Map<string, Issue.Info[]>()
-  for (const i of existing) {
-    if (!i.linear_issue_id) continue
-    const list = linkedMulti.get(i.linear_issue_id) ?? []
+  const linkedMulti = existing.reduce((acc, i) => {
+    const lid = i.linear_issue_id
+    if (!lid) return acc
+    const list = acc.get(lid) ?? []
     list.push(i)
-    linkedMulti.set(i.linear_issue_id, list)
-  }
+    acc.set(lid, list)
+    return acc
+  }, new Map<string, Issue.Info[]>())
   // First local row per linear_issue_id — the one we keep and reconcile.
-  const linked = new Map<string, Issue.Info>()
-  for (const [linearId, rows] of linkedMulti) {
-    if (rows.length > 0) linked.set(linearId, rows[0])
-  }
+  const linked = new Map<string, Issue.Info>(
+    Array.from(linkedMulti.entries()).map((entry) => [entry[0], entry[1][0]] as [string, Issue.Info]),
+  )
   // Duplicates to hard-delete after the main reconcile loop. These are
   // all rows except the first for each linear_issue_id.
-  const toDedup: Issue.Info[] = []
-  for (const [, rows] of linkedMulti) {
-    if (rows.length > 1) toDedup.push(...rows.slice(1))
-  }
+  const toDedup: Issue.Info[] = Array.from(linkedMulti.values()).flatMap((rows) =>
+    rows.length > 1 ? rows.slice(1) : [],
+  )
 
   // Per-row outcomes collected from the INSERT/UPDATE phases; counts
   // are derived from these arrays after Effect.all completes (AGENTS.md:
   // Prefer const over let — no `let pulled/skipped/updated/deleted`).
-  const skipReasons: string[] = []
   const ids: string[] = []
   const errors: Array<{ linearIssueId: string; error: string }> = []
 
@@ -513,7 +567,9 @@ export const pull = Effect.fn("SyncPull.pull")(function* (input: { directory: st
   // within JS stack limits even for projects with tens of thousands of
   // issues. A batch-level MCP error short-circuits the recursion by
   // recording the error and returning early.
-  const fetchPages: (cursor: string | undefined) => Effect.Effect<void> = Effect.fnUntraced(function* (cursor: string | undefined) {
+  const fetchPages: (cursor: string | undefined) => Effect.Effect<void> = Effect.fnUntraced(function* (
+    cursor: string | undefined,
+  ) {
     const args: Record<string, unknown> = { project: cfg.projectId, limit: 50 }
     if (cursor) args.cursor = cursor
 
@@ -521,9 +577,7 @@ export const pull = Effect.fn("SyncPull.pull")(function* (input: { directory: st
       // Catch only the expected LinearMcpError from the MCP call;
       // defects (Interrupt/Die) propagate naturally — `Effect.catchTag`
       // only handles recoverable typed errors.
-      Effect.catchTag("LinearMcpError", (e) =>
-        Effect.succeed({ _error: true, message: e.message }),
-      ),
+      Effect.catchTag("LinearMcpError", (e) => Effect.succeed({ _error: true, message: e.message })),
     )
 
     if (typeof raw === "object" && raw !== null && "_error" in raw) {
@@ -533,7 +587,7 @@ export const pull = Effect.fn("SyncPull.pull")(function* (input: { directory: st
     }
 
     const parsed = parseIssues(raw)
-    for (const node of parsed.nodes) allIssues.push(node)
+    allIssues.push(...parsed.nodes)
 
     const hasMore = !!(parsed.pageInfo?.hasNextPage && parsed.pageInfo?.endCursor)
     if (!hasMore) return
@@ -551,17 +605,31 @@ export const pull = Effect.fn("SyncPull.pull")(function* (input: { directory: st
     return !isArchived(i)
   })
 
-  const toInsertL1: Array<{ linearIssueId: string; fields: Partial<Issue.Info> }> = []
-  const toInsertL2: Array<{ linearIssueId: string; parentLinearId: string; fields: Partial<Issue.Info> }> = []
-  const toUpdate: Array<{ localId: string; linearIssueId: string; patch: Partial<Issue.Info> }> = []
+  type InsertL1 = { linearIssueId: string; fields: Partial<Issue.Info> }
+  type InsertL2 = { linearIssueId: string; parentLinearId: string; fields: Partial<Issue.Info> }
+  type Update = { localId: string; linearIssueId: string; patch: Partial<Issue.Info> }
+  type WatermarkRefresh = { localId: string; patch: Partial<Issue.Info> }
+  type Acc = {
+    toInsertL1: InsertL1[]
+    toInsertL2: InsertL2[]
+    toUpdate: Update[]
+    toWatermarkRefresh: WatermarkRefresh[]
+    skipReasons: string[]
+  }
   // Issues whose watermark moved but content fields are identical — refresh
   // only `last_pulled_at` and `cloud_shadow`, counted as skipped.
-  const toWatermarkRefresh: Array<{ localId: string; patch: Partial<Issue.Info> }> = []
+  const initial: Acc = {
+    toInsertL1: [],
+    toInsertL2: [],
+    toUpdate: [],
+    toWatermarkRefresh: [],
+    skipReasons: [],
+  }
 
-  for (const issue of activeIssues) {
+  const acc = activeIssues.reduce<Acc>((acc, issue) => {
     const i = issue as Record<string, unknown>
     const linearId = typeof i.id === "string" ? i.id : undefined
-    if (!linearId) continue
+    if (!linearId) return acc
 
     const parentLinearId = readParentId(i)
 
@@ -572,11 +640,9 @@ export const pull = Effect.fn("SyncPull.pull")(function* (input: { directory: st
       // the parent's local id via linear_issue_id lookup.
       const fields = mapLinearFields(i, linearId, cfg)
       if (parentLinearId === null) {
-        toInsertL1.push({ linearIssueId: linearId, fields: { ...fields, level: 0 } })
-        continue
+        return { ...acc, toInsertL1: [...acc.toInsertL1, { linearIssueId: linearId, fields: { ...fields, level: 0 } }] }
       }
-      toInsertL2.push({ linearIssueId: linearId, parentLinearId, fields })
-      continue
+      return { ...acc, toInsertL2: [...acc.toInsertL2, { linearIssueId: linearId, parentLinearId, fields }] }
     }
 
     // Linked — decide SKIP vs UPDATE by comparing the cloud `updatedAt`
@@ -586,12 +652,10 @@ export const pull = Effect.fn("SyncPull.pull")(function* (input: { directory: st
     // servers that don't return `updatedAt`).
     const cloudUpdatedAt = readUpdatedAtMs(i)
     if (cloudUpdatedAt === undefined) {
-      skipReasons.push("no-cloud-watermark")
-      continue
+      return { ...acc, skipReasons: [...acc.skipReasons, "no-cloud-watermark"] }
     }
     if (local.last_pulled_at !== undefined && local.last_pulled_at === cloudUpdatedAt) {
-      skipReasons.push("watermark-match")
-      continue
+      return { ...acc, skipReasons: [...acc.skipReasons, "watermark-match"] }
     }
 
     // Cloud moved (or local watermark is null on the first post-migration
@@ -617,15 +681,20 @@ export const pull = Effect.fn("SyncPull.pull")(function* (input: { directory: st
       return JSON.stringify(localVal) !== JSON.stringify(cloudVal)
     })
     if (!contentChanged) {
-      toWatermarkRefresh.push({
-        localId: local.id,
-        patch: {
-          last_pulled_at: patch.last_pulled_at,
-          cloud_shadow: patch.cloud_shadow,
-        },
-      })
-      skipReasons.push("content-unchanged")
-      continue
+      return {
+        ...acc,
+        toWatermarkRefresh: [
+          ...acc.toWatermarkRefresh,
+          {
+            localId: local.id,
+            patch: {
+              last_pulled_at: patch.last_pulled_at,
+              cloud_shadow: patch.cloud_shadow,
+            },
+          },
+        ],
+        skipReasons: [...acc.skipReasons, "content-unchanged"],
+      }
     }
 
     // Preserve the local `time_updated` value to prevent `Issue.update`'s
@@ -636,12 +705,24 @@ export const pull = Effect.fn("SyncPull.pull")(function* (input: { directory: st
     // `p.time_updated !== undefined`, so we explicitly pass the existing
     // local value through. Cloud-side watermark is recorded in
     // `last_pulled_at` (already set by `mapLinearFields`).
-    toUpdate.push({
-      localId: local.id,
-      linearIssueId: linearId,
-      patch: { ...patch, time_updated: local.time_updated },
-    })
-  }
+    return {
+      ...acc,
+      toUpdate: [
+        ...acc.toUpdate,
+        {
+          localId: local.id,
+          linearIssueId: linearId,
+          patch: { ...patch, time_updated: local.time_updated },
+        },
+      ],
+    }
+  }, initial)
+
+  const toInsertL1 = acc.toInsertL1
+  const toInsertL2 = acc.toInsertL2
+  const toUpdate = acc.toUpdate
+  const toWatermarkRefresh = acc.toWatermarkRefresh
+  const skipReasons = acc.skipReasons
 
   // Phase 1: INSERT all L1 issues (no parent) first.
   // Outcome-based aggregation (AGENTS.md: Prefer const over let) — each
@@ -651,20 +732,35 @@ export const pull = Effect.fn("SyncPull.pull")(function* (input: { directory: st
     toInsertL1.map(({ linearIssueId, fields }) =>
       Effect.gen(function* () {
         const created = yield* issueSvc.create({ directory: input.directory, issue: fields }).pipe(
-          // issueSvc.create may throw DB errors; catch all recoverable
-          // errors, let defects propagate.
-          Effect.catch((e: unknown) =>
-            Effect.succeed({
-              _error: true,
-              message: e instanceof Error ? e.message : String(e),
-              issueId: linearIssueId,
-            }),
-          ),
+          // Precise catchTag for the typed errors `Issue.create` declares
+          // (HierarchyError + NotFoundError after-insert). DB errors are
+          // die'd via `Effect.orDie` inside `Issue.create`, so they
+          // propagate as defects (per AGENTS.md — defects must NOT be
+          // caught). A per-row failure is recorded so the whole pull is
+          // not aborted.
+          Effect.catchTags({
+            "Issue.HierarchyError": (e) =>
+              Effect.succeed({
+                _error: true,
+                message: e.reason,
+                issueId: linearIssueId,
+              }),
+            "Issue.NotFoundError": (e) =>
+              Effect.succeed({
+                _error: true,
+                message: e.context ?? e.id,
+                issueId: linearIssueId,
+              }),
+          }),
         )
 
         if (typeof created === "object" && created !== null && "_error" in created) {
           const r = created as Record<string, unknown>
-          return { ok: false as const, linearIssueId: (r.issueId as string) || linearIssueId, error: (r.message as string) || "unknown" }
+          return {
+            ok: false as const,
+            linearIssueId: (r.issueId as string) || linearIssueId,
+            error: (r.message as string) || "unknown",
+          }
         }
 
         return { ok: true as const, linearIssueId }
@@ -672,18 +768,19 @@ export const pull = Effect.fn("SyncPull.pull")(function* (input: { directory: st
     ),
     { concurrency: DEFAULT_BATCH },
   )
-  for (const o of insertL1Outcomes) {
-    if (o.ok) ids.push(o.linearIssueId)
-    else errors.push({ linearIssueId: o.linearIssueId, error: o.error })
-  }
+  ids.push(...insertL1Outcomes.filter((o) => o.ok).map((o) => o.linearIssueId))
+  errors.push(
+    ...insertL1Outcomes.filter((o) => !o.ok).map((o) => ({ linearIssueId: o.linearIssueId, error: o.error })),
+  )
 
   // After L1 inserts, rebuild the linked map so L2 inserts can resolve
   // their parent's local id via linear_issue_id.
   const linkedAfterL1 = yield* issueSvc.get({ directory: input.directory })
-  const linkedMapAfterL1 = new Map<string, Issue.Info>()
-  for (const i of linkedAfterL1) {
-    if (i.linear_issue_id) linkedMapAfterL1.set(i.linear_issue_id, i)
-  }
+  const linkedMapAfterL1 = new Map<string, Issue.Info>(
+    linkedAfterL1
+      .filter((i) => !!i.linear_issue_id)
+      .map((i) => [i.linear_issue_id!, i] as [string, Issue.Info]),
+  )
 
   // Phase 2: INSERT all L2 issues (with parent), now that parents exist locally.
   const insertL2Outcomes = yield* Effect.all(
@@ -699,17 +796,28 @@ export const pull = Effect.fn("SyncPull.pull")(function* (input: { directory: st
               issue: { ...fields, level: 0 },
             })
             .pipe(
-              Effect.catch((e: unknown) =>
-                Effect.succeed({
-                  _error: true,
-                  message: e instanceof Error ? e.message : String(e),
-                  issueId: linearIssueId,
-                }),
-              ),
+              Effect.catchTags({
+                "Issue.HierarchyError": (e) =>
+                  Effect.succeed({
+                    _error: true,
+                    message: e.reason,
+                    issueId: linearIssueId,
+                  }),
+                "Issue.NotFoundError": (e) =>
+                  Effect.succeed({
+                    _error: true,
+                    message: e.context ?? e.id,
+                    issueId: linearIssueId,
+                  }),
+              }),
             )
           if (typeof created === "object" && created !== null && "_error" in created) {
             const r = created as Record<string, unknown>
-            return { ok: false as const, linearIssueId: (r.issueId as string) || linearIssueId, error: (r.message as string) || "unknown" }
+            return {
+              ok: false as const,
+              linearIssueId: (r.issueId as string) || linearIssueId,
+              error: (r.message as string) || "unknown",
+            }
           }
           return { ok: true as const, linearIssueId }
         }
@@ -720,18 +828,29 @@ export const pull = Effect.fn("SyncPull.pull")(function* (input: { directory: st
             issue: { ...fields, level: 1, parent_id: parentLocal.id },
           })
           .pipe(
-            Effect.catch((e: unknown) =>
-              Effect.succeed({
-                _error: true,
-                message: e instanceof Error ? e.message : String(e),
-                issueId: linearIssueId,
-              }),
-            ),
+            Effect.catchTags({
+              "Issue.HierarchyError": (e) =>
+                Effect.succeed({
+                  _error: true,
+                  message: e.reason,
+                  issueId: linearIssueId,
+                }),
+              "Issue.NotFoundError": (e) =>
+                Effect.succeed({
+                  _error: true,
+                  message: e.context ?? e.id,
+                  issueId: linearIssueId,
+                }),
+            }),
           )
 
         if (typeof created === "object" && created !== null && "_error" in created) {
           const r = created as Record<string, unknown>
-          return { ok: false as const, linearIssueId: (r.issueId as string) || linearIssueId, error: (r.message as string) || "unknown" }
+          return {
+            ok: false as const,
+            linearIssueId: (r.issueId as string) || linearIssueId,
+            error: (r.message as string) || "unknown",
+          }
         }
 
         return { ok: true as const, linearIssueId }
@@ -739,10 +858,10 @@ export const pull = Effect.fn("SyncPull.pull")(function* (input: { directory: st
     ),
     { concurrency: DEFAULT_BATCH },
   )
-  for (const o of insertL2Outcomes) {
-    if (o.ok) ids.push(o.linearIssueId)
-    else errors.push({ linearIssueId: o.linearIssueId, error: o.error })
-  }
+  ids.push(...insertL2Outcomes.filter((o) => o.ok).map((o) => o.linearIssueId))
+  errors.push(
+    ...insertL2Outcomes.filter((o) => !o.ok).map((o) => ({ linearIssueId: o.linearIssueId, error: o.error })),
+  )
 
   // UPDATE path: raw `db.update` (not `issueSvc.update`) to avoid
   // publishing `issue.updated` events during a batch pull (the desktop
@@ -762,10 +881,15 @@ export const pull = Effect.fn("SyncPull.pull")(function* (input: { directory: st
           .where(and(eq(IssueTable.directory, input.directory), eq(IssueTable.id, localId)))
           .run()
           .pipe(
-            // Catch only recoverable typed errors (e.g., Drizzle's
-            // DB errors); defects (Interrupt/Die) propagate naturally
-            // per AGENTS.md. A failure here is recorded per-row so the
-            // whole pull is not aborted.
+            // Drizzle's `db.update(...).run()` returns untagged errors
+            // (`Effect.Effect<_, unknown, _>`) — they are not
+            // `Schema.TaggedErrorClass` instances, so `catchTag` /
+            // `catchTags` cannot match them. `Effect.catch` is the only
+            // available combinator for untagged errors in this Effect
+            // version (no `catchAll`/`orElse`). Defects (Interrupt/Die)
+            // still propagate naturally — `Effect.catch` only catches
+            // recoverable failures. This is a deliberate exception to
+            // the catchTag rule for raw DB errors.
             Effect.catch((e: unknown) =>
               Effect.succeed({
                 _error: true,
@@ -777,16 +901,20 @@ export const pull = Effect.fn("SyncPull.pull")(function* (input: { directory: st
 
         if (typeof result === "object" && result !== null && "_error" in result) {
           const r = result as Record<string, unknown>
-          return { ok: false as const, linearIssueId: (r.issueId as string) || linearIssueId, error: (r.message as string) || "unknown" }
+          return {
+            ok: false as const,
+            linearIssueId: (r.issueId as string) || linearIssueId,
+            error: (r.message as string) || "unknown",
+          }
         }
         return { ok: true as const }
       }),
     ),
     { concurrency: DEFAULT_BATCH },
   )
-  for (const o of updateOutcomesRaw) {
-    if (!o.ok) errors.push({ linearIssueId: o.linearIssueId, error: o.error })
-  }
+  errors.push(
+    ...updateOutcomesRaw.filter((o) => !o.ok).map((o) => ({ linearIssueId: o.linearIssueId, error: o.error })),
+  )
 
   // Watermark-only refresh: content fields are identical, just sync the
   // `last_pulled_at` watermark and `cloud_shadow` so the next pull
@@ -805,8 +933,9 @@ export const pull = Effect.fn("SyncPull.pull")(function* (input: { directory: st
           .run()
           .pipe(
             // Best-effort: log + swallow recoverable errors (next pull
-            // retries); defects (Interrupt/Die) propagate naturally
-            // (Effect.catch does not catch them).
+            // retries). `db.update` returns untagged errors — see the
+            // updateOutcomesRaw block above for the catchTag-rule
+            // exception rationale. Defects (Interrupt/Die) propagate.
             Effect.catch((e: unknown) =>
               Effect.logWarning(`[SyncPull.watermarkRefresh] failed for ${localId}: ${String(e)}`),
             ),
@@ -839,23 +968,24 @@ export const pull = Effect.fn("SyncPull.pull")(function* (input: { directory: st
   const deleteOutcomes: Array<{ ok: true } | { ok: false; linearIssueId: string; error: string }> = []
   const batchFailed = errors.some((e) => e.linearIssueId === "<batch>")
   if (!batchFailed) {
-    const cloudActiveIds = new Set<string>()
-    for (const node of allIssues) {
-      const i = node as Record<string, unknown>
-      if (isArchived(i)) continue
-      const id = typeof i.id === "string" ? i.id : undefined
-      if (id) cloudActiveIds.add(id)
-    }
-    const toDelete: Array<{ local: Issue.Info; linearIssueId: string }> = []
-    for (const [linearIssueId, local] of linked) {
-      if (!cloudActiveIds.has(linearIssueId)) {
-        toDelete.push({ local, linearIssueId })
-      }
-    }
+    const cloudActiveIds = new Set<string>(
+      allIssues
+        .map((node) => node as Record<string, unknown>)
+        .filter((i) => !isArchived(i))
+        .map((i) => (typeof i.id === "string" ? i.id : undefined))
+        .filter((id): id is string => id !== undefined),
+    )
+    const toDelete: Array<{ local: Issue.Info; linearIssueId: string }> = Array.from(linked.entries())
+      .filter((entry) => !cloudActiveIds.has(entry[0]))
+      .map((entry) => ({ local: entry[1], linearIssueId: entry[0] }))
     const deleteResults = yield* Effect.all(
       toDelete.map(({ local, linearIssueId }) =>
         Effect.gen(function* () {
           const result = yield* rawDelete(input.directory, local.id, local.level).pipe(
+            // `rawDelete` calls Drizzle's `db.delete(...).run()`, which
+            // returns untagged errors. See updateOutcomesRaw block above
+            // for the catchTag-rule exception rationale. Defects
+            // (Interrupt/Die) propagate naturally.
             Effect.catch((e: unknown) =>
               Effect.succeed({
                 _error: true,
@@ -872,7 +1002,7 @@ export const pull = Effect.fn("SyncPull.pull")(function* (input: { directory: st
       ),
       { concurrency: DEFAULT_BATCH },
     )
-    for (const o of deleteResults) deleteOutcomes.push(o)
+    deleteOutcomes.push(...deleteResults)
 
     // Dedup cleanup: hard-delete duplicate local rows that link to the
     // same `linear_issue_id` as another row. These arose from older
@@ -885,6 +1015,10 @@ export const pull = Effect.fn("SyncPull.pull")(function* (input: { directory: st
       toDedup.map((local) =>
         Effect.gen(function* () {
           const result = yield* rawDelete(input.directory, local.id, local.level).pipe(
+            // `rawDelete` calls Drizzle's `db.delete(...).run()`, which
+            // returns untagged errors. See updateOutcomesRaw block above
+            // for the catchTag-rule exception rationale. Defects
+            // (Interrupt/Die) propagate naturally.
             Effect.catch((e: unknown) =>
               Effect.succeed({
                 _error: true,
@@ -894,18 +1028,22 @@ export const pull = Effect.fn("SyncPull.pull")(function* (input: { directory: st
           )
           if (typeof result === "object" && result !== null && "_error" in result) {
             const r = result as Record<string, unknown>
-            return { ok: false as const, linearIssueId: local.linear_issue_id ?? local.id, error: (r.message as string) || "unknown" }
+            return {
+              ok: false as const,
+              linearIssueId: local.linear_issue_id ?? local.id,
+              error: (r.message as string) || "unknown",
+            }
           }
           return { ok: true as const }
         }),
       ),
       { concurrency: DEFAULT_BATCH },
     )
-    for (const o of dedupResults) deleteOutcomes.push(o)
+    deleteOutcomes.push(...dedupResults)
   }
-  for (const o of deleteOutcomes) {
-    if (!o.ok) errors.push({ linearIssueId: o.linearIssueId, error: o.error })
-  }
+  errors.push(
+    ...deleteOutcomes.filter((o) => !o.ok).map((o) => ({ linearIssueId: o.linearIssueId, error: o.error })),
+  )
 
   // Derive counts from outcome arrays (AGENTS.md: Prefer const over let —
   // no `let pulled/skipped/updated/deleted` counters).

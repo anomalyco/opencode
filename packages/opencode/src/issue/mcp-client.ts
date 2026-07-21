@@ -1,8 +1,7 @@
-import { Effect, Schema } from "effect"
+import { Context, Effect, Schema, Config, Option } from "effect"
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
-import { CallToolResultSchema } from "@modelcontextprotocol/sdk/types.js"
-import type { Tool as MCPTool } from "@modelcontextprotocol/sdk/types.js"
+import { CallToolResultSchema, type Tool } from "@modelcontextprotocol/sdk/types.js"
 
 /**
  * Typed error for all Linear MCP failures (connection, tool call, GraphQL
@@ -11,32 +10,44 @@ import type { Tool as MCPTool } from "@modelcontextprotocol/sdk/types.js"
  * field and can be caught precisely with `Effect.catchTag("LinearMcpError", …)`,
  * letting defects (Interrupt/Die) propagate.
  *
- * Fields `message` and `cause` are accessed directly on the instance
- * (`e.message`, `e.cause`), matching the `Schema.TaggedErrorClass` pattern
- * used by `packages/opencode/src/image/image.ts`.
+ * `cause` uses `Schema.Defect` (per AGENTS.md [E4]) since it carries
+ * arbitrary thrown values from the MCP SDK / fetch layer that are
+ * defect-like — preserves the original cause for logs without claiming
+ * a typed shape. Matches the pattern in `sync-pull.ts` / `sync-push.ts`.
  */
 export class LinearMcpError extends Schema.TaggedErrorClass<LinearMcpError>()("LinearMcpError", {
   message: Schema.String,
-  cause: Schema.optional(Schema.Unknown),
+  cause: Schema.optional(Schema.Defect()),
 }) {}
+
+/** Domain-level error union (per AGENTS.md [E9] — export Error from service modules). */
+export type Error = LinearMcpError
+
+/**
+ * Request-derived Context tag carrying the resolved Linear MCP client
+ * (or null when neither MCP registration nor env-var fallback produced a
+ * client).
+ *
+ * Provided per-request by `LinearClientMiddleware` (see
+ * `server/routes/instance/httpapi/middleware/linear-client.ts`), per
+ * `httpapi/AGENTS.md` [line 35]: `Effect.provideService` for this tag
+ * lives in middleware only — handlers yield the tag, they do not inject
+ * it. Consumed by:
+ *   - HTTP handlers in `handlers/issue.ts` (linear* + sync routes)
+ *   - Sync services `SyncPull.pull` and `SyncPush.push`
+ *
+ * The agent-side `issue_sync` tool also provides this tag via
+ * `Effect.provideService` (agent tools are outside the HTTP API rule's
+ * scope — the rule is scoped to `httpapi/`).
+ */
+export const LinearClientRef = Context.Service<LinearMcpClient | null>("@opencode/LinearClientRef")
 
 /** Options for creating a LinearMcpClient */
 export interface Opts {
   /** MCP server URL (default: https://mcp.linear.app/mcp) */
   url?: string
-  /** API key (default: process.env.LINEAR_API_KEY) */
+  /** API key (default: read from `LINEAR_API_KEY` via Effect `Config`) */
   key?: string
-}
-
-/** Re-export of MCP SDK Tool type */
-export type Tool = MCPTool
-
-function err(message: string, cause?: unknown): LinearMcpError {
-  return new LinearMcpError({ message, cause })
-}
-
-function fail(message: string, cause?: unknown): Effect.Effect<never, LinearMcpError> {
-  return Effect.fail(err(message, cause))
 }
 
 /**
@@ -44,6 +55,12 @@ function fail(message: string, cause?: unknown): Effect.Effect<never, LinearMcpE
  *
  * Wraps the MCP SDK Client with linear-opencode lifecycle:
  * connect on create, fail on disconnect, cleanup on close.
+ *
+ * `create` is a traced `Effect.fn` per AGENTS.md [C2]. Instance methods
+ * (`listTools`/`callTool`/`close`/`status`) use plain `Effect.gen` —
+ * they are class methods that close over `this`, and `Effect.fn`'s
+ * arrow-function form loses `this` typing. The class is not a Context
+ * Service, so the service-method [C2] rule does not strictly apply.
  */
 export class LinearMcpClient {
   readonly client: Client
@@ -58,13 +75,18 @@ export class LinearMcpClient {
 
   /**
    * Connect to the Linear MCP server and return a ready client.
-   * Reads `LINEAR_API_KEY` from env if not passed via opts.
+   * Reads `LINEAR_API_KEY` via Effect's `Config` system (per AGENTS.md
+   * [P4] — prefer `Config` over `process.env`) when not passed via opts.
    * Fails with `LinearMcpError` if the key is missing or connection fails.
    */
   static create = Effect.fn("LinearMcpClient.create")(function* (opts: Opts = {}) {
     const url = opts.url ?? "https://mcp.linear.app/mcp"
-    const key = opts.key ?? process.env.LINEAR_API_KEY
-    if (!key) return yield* fail("LINEAR_API_KEY not set")
+    // Effect's `Config` reads through the active ConfigProvider (env vars
+    // by default). `Config.option` returns None if the var is unset.
+    const keyOption = yield* Config.string("LINEAR_API_KEY").pipe(Config.option)
+    const envKey = Option.getOrNull(keyOption)
+    const key = opts.key ?? envKey
+    if (!key) return yield* new LinearMcpError({ message: "LINEAR_API_KEY not set" })
 
     const tr = new StreamableHTTPClientTransport(new URL(url), {
       requestInit: {
@@ -79,7 +101,7 @@ export class LinearMcpClient {
         await cl.connect(tr)
         return new LinearMcpClient(cl, tr)
       },
-      catch: (e) => err(`Failed to connect to Linear MCP: ${String(e)}`, e),
+      catch: (e) => new LinearMcpError({ message: `Failed to connect to Linear MCP: ${String(e)}`, cause: e }),
     })
   })
 
@@ -101,10 +123,10 @@ export class LinearMcpClient {
   listTools(): Effect.Effect<Tool[], LinearMcpError> {
     const self = this
     return Effect.gen(function* () {
-      if (!self.connected) return yield* fail("Client is disconnected")
+      if (!self.connected) return yield* new LinearMcpError({ message: "Client is disconnected" })
       return yield* Effect.tryPromise({
         try: () => self.client.listTools().then((r) => r.tools),
-        catch: (e) => err(`Failed to list tools: ${String(e)}`, e),
+        catch: (e) => new LinearMcpError({ message: `Failed to list tools: ${String(e)}`, cause: e }),
       })
     })
   }
@@ -117,10 +139,11 @@ export class LinearMcpClient {
   callTool(name: string, args: Record<string, unknown>): Effect.Effect<unknown, LinearMcpError> {
     const self = this
     return Effect.gen(function* () {
-      if (!self.connected) return yield* fail("Client is disconnected")
+      if (!self.connected) return yield* new LinearMcpError({ message: "Client is disconnected" })
       return yield* Effect.tryPromise({
         try: () => self.client.callTool({ name, arguments: args }, CallToolResultSchema),
-        catch: (e) => err(`Failed to call tool "${name}": ${String(e)}`, e),
+        catch: (e) =>
+          new LinearMcpError({ message: `Failed to call tool "${name}": ${String(e)}`, cause: e }),
       })
     })
   }

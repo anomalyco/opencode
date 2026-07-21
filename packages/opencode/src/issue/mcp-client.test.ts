@@ -1,6 +1,7 @@
-import { describe, expect, test, afterAll } from "bun:test"
+import { describe, expect, afterAll } from "bun:test"
 import { Effect, Exit } from "effect"
 import { LinearMcpClient } from "./mcp-client"
+import { it } from "../../test/lib/effect"
 
 const MOCK_TOOLS = [
   {
@@ -100,20 +101,21 @@ afterAll(() => {
 const base = () => `http://127.0.0.1:${server.port}/mcp`
 
 describe("LinearMcpClient", () => {
-  test("create() connects and returns a ready client", async () => {
-    const exit = await Effect.runPromiseExit(
+  it.live(
+    "create() connects and returns a ready client",
+    () =>
       Effect.gen(function* () {
         const client = yield* LinearMcpClient.create({ url: base(), key: "test-key" })
         const state = yield* client.status()
         expect(state).toBe("connected")
         yield* client.close()
       }),
-    )
-    expect(Exit.isSuccess(exit)).toBe(true)
-  })
+    { timeout: 30_000 },
+  )
 
-  test("listTools() returns tool definitions from server", async () => {
-    const exit = await Effect.runPromiseExit(
+  it.live(
+    "listTools() returns tool definitions from server",
+    () =>
       Effect.gen(function* () {
         const client = yield* LinearMcpClient.create({ url: base(), key: "test-key" })
         const tools = yield* client.listTools()
@@ -123,12 +125,12 @@ describe("LinearMcpClient", () => {
         expect(tools[1]!.name).toBe("list_issues")
         expect(tools[2]!.name).toBe("save_issue")
       }),
-    )
-    expect(Exit.isSuccess(exit)).toBe(true)
-  })
+    { timeout: 30_000 },
+  )
 
-  test("callTool() invokes a tool and returns result", async () => {
-    const exit = await Effect.runPromiseExit(
+  it.live(
+    "callTool() invokes a tool and returns result",
+    () =>
       Effect.gen(function* () {
         const client = yield* LinearMcpClient.create({ url: base(), key: "test-key" })
         const result = yield* client.callTool("get_issue", { id: "ISS-1" })
@@ -137,63 +139,76 @@ describe("LinearMcpClient", () => {
         expect(content.length).toBeGreaterThan(0)
         expect(JSON.parse(content[0]!.text).name).toBe("get_issue")
       }),
-    )
-    expect(Exit.isSuccess(exit)).toBe(true)
-  })
+    { timeout: 30_000 },
+  )
 
-  test("callTool() fails for unknown tool", async () => {
-    const exit = await Effect.runPromiseExit(
+  it.live(
+    "callTool() fails for unknown tool",
+    () =>
       Effect.gen(function* () {
         const client = yield* LinearMcpClient.create({ url: base(), key: "test-key" })
-        yield* client.callTool("bad_tool", {})
+        const exit = yield* client.callTool("bad_tool", {}).pipe(Effect.exit)
         yield* client.close()
+        expect(Exit.isFailure(exit)).toBe(true)
       }),
-    )
-    expect(Exit.isFailure(exit)).toBe(true)
-  })
+    { timeout: 30_000 },
+  )
 
-  test("close() disconnects and status() returns disconnected", async () => {
-    const exit = await Effect.runPromiseExit(
+  it.live(
+    "close() disconnects and status() returns disconnected",
+    () =>
       Effect.gen(function* () {
         const client = yield* LinearMcpClient.create({ url: base(), key: "test-key" })
         yield* client.close()
         expect(yield* client.status()).toBe("disconnected")
       }),
-    )
-    expect(Exit.isSuccess(exit)).toBe(true)
-  })
+    { timeout: 30_000 },
+  )
 
-  test("listTools() fails after close()", async () => {
-    const exit = await Effect.runPromiseExit(
+  it.live(
+    "listTools() fails after close()",
+    () =>
       Effect.gen(function* () {
         const client = yield* LinearMcpClient.create({ url: base(), key: "test-key" })
         yield* client.close()
-        yield* client.listTools()
+        const exit = yield* client.listTools().pipe(Effect.exit)
+        expect(Exit.isFailure(exit)).toBe(true)
       }),
-    )
-    expect(Exit.isFailure(exit)).toBe(true)
-  })
+    { timeout: 30_000 },
+  )
 
-  test("callTool() fails after close()", async () => {
-    const exit = await Effect.runPromiseExit(
+  it.live(
+    "callTool() fails after close()",
+    () =>
       Effect.gen(function* () {
         const client = yield* LinearMcpClient.create({ url: base(), key: "test-key" })
         yield* client.close()
-        yield* client.callTool("get_issue", { id: "1" })
+        const exit = yield* client.callTool("get_issue", { id: "1" }).pipe(Effect.exit)
+        expect(Exit.isFailure(exit)).toBe(true)
       }),
-    )
-    expect(Exit.isFailure(exit)).toBe(true)
-  })
+    { timeout: 30_000 },
+  )
 
-  test("create() fails with bad URL", async () => {
-    const exit = await Effect.runPromiseExit(
-      LinearMcpClient.create({ url: "http://127.0.0.1:19999/nope", key: "test-key" }),
-    )
-    expect(Exit.isFailure(exit)).toBe(true)
-  })
+  it.live(
+    "create() fails with bad URL",
+    () =>
+      Effect.gen(function* () {
+        const exit = yield* LinearMcpClient.create({
+          url: "http://127.0.0.1:19999/nope",
+          key: "test-key",
+        }).pipe(Effect.exit)
+        expect(Exit.isFailure(exit)).toBe(true)
+      }),
+    { timeout: 30_000 },
+  )
 
-  test("create() fails without API key", async () => {
-    const exit = await Effect.runPromiseExit(LinearMcpClient.create({ url: base(), key: "" }))
-    expect(Exit.isFailure(exit)).toBe(true)
-  })
+  it.live(
+    "create() fails without API key",
+    () =>
+      Effect.gen(function* () {
+        const exit = yield* LinearMcpClient.create({ url: base(), key: "" }).pipe(Effect.exit)
+        expect(Exit.isFailure(exit)).toBe(true)
+      }),
+    { timeout: 30_000 },
+  )
 })
