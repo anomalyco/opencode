@@ -222,13 +222,16 @@ export function disabled(tools: string[], ruleset: PermissionV1.Ruleset): Set<st
     tools.filter((tool) => {
       const permission = edits.includes(tool) ? "edit" : reads.includes(tool) ? "read" : tool
       let best: PermissionV1.Rule | undefined
-      let bestSpec = -1
+      let bestPermSpec = -1
+      let bestPatSpec = -1
       for (const rule of ruleset) {
         if (Wildcard.match(permission, rule.permission)) {
-          const spec = specificity(rule.permission)
-          if (best === undefined || spec > bestSpec || (spec === bestSpec)) {
+          const permSpec = specificity(rule.permission)
+          const patSpec = specificity(rule.pattern)
+          if (best === undefined || permSpec > bestPermSpec || (permSpec === bestPermSpec && patSpec > bestPatSpec) || (permSpec === bestPermSpec && patSpec === bestPatSpec)) {
             best = rule
-            bestSpec = spec
+            bestPermSpec = permSpec
+            bestPatSpec = patSpec
           }
         }
       }

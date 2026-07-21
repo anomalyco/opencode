@@ -433,12 +433,12 @@ test("evaluate - wildcard permission fallback for unknown tool", () => {
   expect(result.action).toBe("ask")
 })
 
-test("evaluate - later wildcard permission can override earlier specific permission", () => {
+test("evaluate - specific permission beats wildcard permission regardless of order", () => {
   const result = Permission.evaluate("bash", "rm", [
     { permission: "bash", pattern: "*", action: "allow" },
     { permission: "*", pattern: "*", action: "deny" },
   ])
-  expect(result.action).toBe("deny")
+  expect(result.action).toBe("allow")
 })
 
 test("evaluate - merges multiple rulesets", () => {
