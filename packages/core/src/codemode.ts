@@ -1,7 +1,7 @@
 export * as CodeMode from "./codemode"
 
 import { Context, Effect, Layer, Scope } from "effect"
-import { makeLocationNode } from "./effect/app-node"
+import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { PermissionV2 } from "./permission"
 import { ExecuteTool } from "./tool/execute"
 import { permission, registrationEntries, type AnyTool } from "./tool/tool"
