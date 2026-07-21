@@ -1074,8 +1074,8 @@ test("direct footer shows authoritative pending work while running", async () =>
     const statusItems = statusline.getChildren().filter((item): item is BoxRenderable => item instanceof BoxRenderable)
     const main = statusItems[0]
     const spinner = main.getChildren()[0]
-    const background = statusItems[1]
-    const queued = statusItems[2]
+    const background = statusItems[2]
+    const queued = statusItems[3]
     const hint = statusItems.at(-1)!
 
     expect(spinner).toBeDefined()
@@ -1098,11 +1098,36 @@ test("direct footer shows authoritative pending work while running", async () =>
   }
 })
 
+test("direct footer progressively adds model details after the command hint", async () => {
+  for (const expected of [
+    { width: 24, model: false, variant: false },
+    { width: 32, model: true, variant: false },
+    { width: 40, model: true, variant: true },
+  ]) {
+    const app = await renderFooter({
+      providers: [provider()],
+      currentModel: { providerID: "opencode", modelID: "gpt-5" },
+      currentVariant: "xhigh",
+      width: expected.width,
+    })
+
+    try {
+      await app.renderOnce()
+      const frame = app.captureCharFrame()
+      expect({
+        width: expected.width,
+        command: frame.includes("ctrl+p cmd"),
+        model: frame.includes("GPT-5"),
+        variant: frame.includes("xhigh"),
+      }).toEqual({ ...expected, command: true })
+    } finally {
+      app.cleanup()
+    }
+  }
+})
+
 test("direct footer always offers backgrounding for a foreground subagent", async () => {
   const app = await renderFooter({
-    providers: [provider()],
-    currentModel: { providerID: "opencode", modelID: "gpt-5" },
-    currentVariant: "xhigh",
     subagents: {
       tabs: [subagent({ sessionID: "s-1", label: "Explore", description: "Inspect auth flow" })],
       details: {},
@@ -1125,9 +1150,6 @@ test("direct footer always offers backgrounding for a foreground subagent", asyn
 
 test("direct footer hides the subagent hint when only completed subagents remain", async () => {
   const app = await renderFooter({
-    providers: [provider()],
-    currentModel: { providerID: "opencode", modelID: "gpt-5" },
-    currentVariant: "xhigh",
     subagents: {
       tabs: [subagent({ sessionID: "s-1", label: "Explore", description: "Inspect auth flow", status: "completed" })],
       details: {},

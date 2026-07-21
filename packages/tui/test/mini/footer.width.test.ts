@@ -3,18 +3,15 @@ import { footerWidthPolicy } from "../../src/mini/footer.width"
 
 describe("run footer width", () => {
   test("preserves shared dialog and statusline breakpoints", () => {
+    expect([23, 24].map((width) => footerWidthPolicy(width).statusline.showCommandHint)).toEqual([false, true])
+    expect([31, 32].map((width) => footerWidthPolicy(width).statusline.showModel)).toEqual([false, true])
+    expect([39, 40].map((width) => footerWidthPolicy(width).statusline.showModelVariant)).toEqual([false, true])
+
     const narrow = footerWidthPolicy(79)
     expect(narrow.dialog.narrow).toBe(true)
     expect(narrow.statusline.showActivityMeta).toBe(false)
-    expect(narrow.statusline.showCommandHint).toBe(true)
     expect(narrow.statusline.showContextHints).toBe(false)
     expect(narrow.statusline.contextHintLimit).toBe(0)
-
-    const command = footerWidthPolicy(65)
-    expect(command.statusline.showCommandHint).toBe(false)
-
-    const commandHint = footerWidthPolicy(66)
-    expect(commandHint.statusline.showCommandHint).toBe(true)
 
     const compact = footerWidthPolicy(80)
     expect(compact.dialog.narrow).toBe(false)

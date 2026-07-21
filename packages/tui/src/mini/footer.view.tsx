@@ -29,6 +29,7 @@ import { RunFormBody } from "./footer.form"
 import { createFormBodyState, type FormBodyState } from "./form.shared"
 import { footerWidthPolicy } from "./footer.width"
 import { Keymap } from "../context/keymap"
+import { modelInfo } from "./variant.shared"
 
 import type {
   FooterPromptRoute,
@@ -157,6 +158,10 @@ export function RunFooterView(props: RunFooterViewProps) {
     return tabs().findIndex((item) => item.sessionID === sessionID) + 1
   })
   const foregroundSubagents = createMemo(() => activeTabs().some((item) => !item.background))
+  const model = createMemo(() => {
+    const current = props.currentModel()
+    return current ? modelInfo(props.providers(), current).model : undefined
+  })
   const detail = createMemo(() => {
     const current = route()
     return current.type === "subagent" ? subagent().details[current.sessionID] : undefined
@@ -364,6 +369,14 @@ export function RunFooterView(props: RunFooterViewProps) {
 
     return usage()
   })
+  const modelStatus = createMemo(() => {
+    const current = model()
+    if (!prompt() || !responsive().statusline.showModel || !current) return
+    return {
+      model: current,
+      variant: responsive().statusline.showModelVariant ? props.currentVariant() : undefined,
+    }
+  })
   const statusColor = createMemo(() => {
     if (exiting()) {
       return theme().error
@@ -381,6 +394,7 @@ export function RunFooterView(props: RunFooterViewProps) {
   })
   const statuslineBackground = createMemo(() => theme().status)
   const hasActivityMeta = createMemo(() => activityMeta().length > 0)
+  const hasModelStatus = createMemo(() => Boolean(modelStatus()))
   const contextHints = createMemo(() => {
     if (!prompt() || shell() || !responsive().statusline.showContextHints) {
       return []
@@ -819,11 +833,29 @@ export function RunFooterView(props: RunFooterViewProps) {
                   </box>
                 </Show>
 
+                <Show when={modelStatus()}>
+                  {(info) => (
+                    <box
+                      minWidth={8}
+                      paddingRight={1}
+                      backgroundColor="transparent"
+                      flexShrink={1}
+                    >
+                      <text fg={theme().text} wrapMode="none" truncate>
+                        {info().model}
+                        <Show when={info().variant}>
+                          {(variant) => <span style={{ fg: theme().warning, bold: true }}> {variant()}</span>}
+                        </Show>
+                      </text>
+                    </box>
+                  )}
+                </Show>
+
                 <For each={contextHints()}>
                   {(hint, index) => (
                     <box paddingRight={1} backgroundColor="transparent" flexShrink={0} maxWidth={24}>
                       <text fg={theme().text} wrapMode="none" truncate>
-                        <Show when={index() > 0 || (hasActivityMeta() && index() === 0)}>
+                        <Show when={index() > 0 || ((hasActivityMeta() || hasModelStatus()) && index() === 0)}>
                           {sectionSeparator()}
                         </Show>
                         <span style={{ fg: theme().text }}>{hint.key}</span>{" "}
@@ -837,7 +869,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                   {(hint) => (
                     <box paddingRight={1} backgroundColor="transparent" flexShrink={0} maxWidth={18}>
                       <text fg={theme().text} wrapMode="none" truncate>
-                        <Show when={hasActivityMeta() || hasContextHints()}>
+                        <Show when={hasActivityMeta() || hasModelStatus() || hasContextHints()}>
                           {sectionSeparator()}
                         </Show>
                         <span style={{ fg: theme().text }}>{hint().key}</span>{" "}
