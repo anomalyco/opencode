@@ -44,6 +44,18 @@ describe("Patch", () => {
     expect(() => parse("*** Begin Patch\n*** Add File: add.txt\n+added")).toThrow(
       "The last line of the patch must be '*** End Patch'",
     )
+    expect(() => parse("extra\n*** Begin Patch\n*** End Patch")).toThrow(
+      "The first line of the patch must be '*** Begin Patch'",
+    )
+    expect(() => parse("*** Begin Patch\n*** Add File: add.txt\n+added\n*** End Patch\nextra")).toThrow(
+      "The last line of the patch must be '*** End Patch'",
+    )
+  })
+
+  test("allows whitespace after the end marker", () => {
+    expect(parse("*** Begin Patch\n*** Add File: add.txt\n+added\n*** End Patch\n \t\n")).toEqual([
+      { type: "add", path: "add.txt", contents: "added" },
+    ])
   })
 
   test("strips a heredoc wrapper", () => {
