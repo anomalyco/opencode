@@ -59,3 +59,26 @@ export const changes = {
   additions: 18,
   deletions: 6,
 }
+
+// One minimal flowchart exercising every node shape, edge style, and grouping construct,
+// used to tune per-shape diagram coloring.
+export const mermaidShapes = [
+  "```mermaid",
+  "flowchart TD",
+  "  A([Start]) --> B[Process]",
+  "  B --> C{Decision?}",
+  "  C -->|yes| D[/Input/]",
+  "  C -->|no| E[[Subroutine]]",
+  "  C -->|maybe| M[Manual review]:::warning",
+  "  D --> F[(Database)]",
+  "  E -.-> G((Circle))",
+  "  F ==> H{{Hexagon}}",
+  "  subgraph Group",
+  "    I[Task one] --> J[Task two]",
+  "  end",
+  "  H --> I",
+  "  G --> K[\\Output\\]",
+  "  J --> L(((Done)))",
+  "  K --> L",
+  "```",
+].join("\n")

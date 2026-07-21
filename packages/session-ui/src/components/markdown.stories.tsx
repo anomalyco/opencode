@@ -1,7 +1,7 @@
 // @ts-nocheck
 import * as mod from "./markdown"
 import { create } from "@opencode-ai/ui/storybook/scaffold"
-import { markdown } from "@opencode-ai/ui/storybook/fixtures"
+import { markdown, mermaidShapes } from "@opencode-ai/ui/storybook/fixtures"
 
 const docs = `### Overview
 Render sanitized Markdown with code blocks, inline code, and safe links.
@@ -51,3 +51,10 @@ export default {
 }
 
 export const Basic = story.Basic
+
+export const MermaidShapes = {
+  ...story.Basic,
+  args: {
+    text: mermaidShapes,
+  },
+}

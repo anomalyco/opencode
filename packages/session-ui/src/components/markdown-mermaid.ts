@@ -1,5 +1,5 @@
 import { createSignal } from "solid-js"
-import { mermaidThemeVariables } from "./markdown-mermaid-theme"
+import { mermaidThemeCss, mermaidThemeVariables } from "./markdown-mermaid-theme"
 
 export type MermaidColorScheme = "light" | "dark"
 
@@ -97,6 +97,7 @@ async function load(scheme: MermaidColorScheme) {
       securityLevel: "strict",
       theme: "base",
       themeVariables: { ...mermaidThemeVariables(scheme), fontFamily: appFontFamily(), fontSize: "14px" },
+      themeCSS: mermaidThemeCss(scheme),
     })
     initializedScheme = scheme
   }

@@ -6,7 +6,7 @@ import {
   stepMermaidZoom,
   zoomMermaidCamera,
 } from "./markdown-mermaid"
-import { mermaidThemeVariables } from "./markdown-mermaid-theme"
+import { mermaidThemeCss, mermaidThemeVariables } from "./markdown-mermaid-theme"
 
 describe("isMermaidLanguage", () => {
   test("matches mermaid fences case-insensitively", () => {
@@ -50,6 +50,23 @@ describe("mermaidThemeVariables", () => {
       expect(scale.every((color) => typeof color === "string")).toBe(true)
       expect(theme.git0).toBe(theme.cScale0)
     }
+  })
+})
+
+describe("mermaidThemeCss", () => {
+  test("covers shape buckets and semantic author classes with concrete hex colors", () => {
+    for (const scheme of ["light", "dark"] as const) {
+      const css = mermaidThemeCss(scheme)
+      expect(css).toContain(".node polygon.label-container")
+      expect(css).toContain(".node path.basic")
+      for (const name of ["info", "success", "warning", "danger", "muted"]) {
+        expect(css).toContain(`.node.${name}.${name}`)
+      }
+      const colors = css.match(/#[0-9a-zA-Z]+/g) ?? []
+      expect(colors.length).toBeGreaterThan(0)
+      expect(colors.every((color) => /^#[0-9a-f]{6}$/i.test(color))).toBe(true)
+    }
+    expect(mermaidThemeCss("light")).not.toBe(mermaidThemeCss("dark"))
   })
 })
 

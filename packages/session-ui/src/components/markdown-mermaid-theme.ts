@@ -122,3 +122,47 @@ const light = withScales(
 export function mermaidThemeVariables(scheme: MermaidColorScheme) {
   return scheme === "dark" ? dark : light
 }
+
+type MermaidAccent = { fill: string; stroke: string }
+
+const darkAccents: Record<string, MermaidAccent> = {
+  info: { fill: "#243d5c", stroke: "#5b7fa6" },
+  success: { fill: "#2a3f22", stroke: "#6f9a62" },
+  warning: { fill: "#413620", stroke: "#8a7440" },
+  danger: { fill: "#46252e", stroke: "#b06a7a" },
+  muted: { fill: "#1a1d24", stroke: "#3d4451" },
+}
+
+const lightAccents: Record<string, MermaidAccent> = {
+  info: { fill: "#d8e4f3", stroke: "#7d9cc4" },
+  success: { fill: "#ddecd3", stroke: "#86ab78" },
+  warning: { fill: "#f1e7c6", stroke: "#b7a054" },
+  danger: { fill: "#f4dbe0", stroke: "#c2808f" },
+  muted: { fill: "#f8fafc", stroke: "#d3dae3" },
+}
+
+const storage: Record<MermaidColorScheme, MermaidAccent> = {
+  dark: { fill: "#3a2b4e", stroke: "#7d6a9e" },
+  light: { fill: "#e7def2", stroke: "#a48cc8" },
+}
+
+// Injected via mermaid's themeCSS, which stylis scopes under the rendered diagram's #id.
+// Flowchart nodes all carry class="node default", so semantics come from two layers:
+// shape buckets (polygons are decisions and other branch-like shapes, circles and stadium
+// groups are terminals, cylinder paths are storage) and author classes (`A:::warning`),
+// which mermaid passes through to the node without requiring a classDef. The doubled
+// class in semantic rules outranks the shape buckets; classDef inline styles still win.
+export function mermaidThemeCss(scheme: MermaidColorScheme) {
+  const accents = scheme === "dark" ? darkAccents : lightAccents
+  const shapes = [
+    `.node polygon.label-container { fill: ${accents.warning.fill}; stroke: ${accents.warning.stroke}; }`,
+    `.node circle.basic { fill: ${accents.info.fill}; stroke: ${accents.info.stroke}; }`,
+    `.node g.basic :is(path, circle) { fill: ${accents.info.fill}; stroke: ${accents.info.stroke}; }`,
+    `.node path.basic { fill: ${storage[scheme].fill}; stroke: ${storage[scheme].stroke}; }`,
+  ]
+  const semantic = Object.entries(accents).map(
+    ([name, accent]) =>
+      `.node.${name}.${name} :is(rect, polygon, circle, ellipse, path) { fill: ${accent.fill}; stroke: ${accent.stroke}; }`,
+  )
+  return [...shapes, ...semantic, `.node.muted.muted .label { opacity: 0.65; }`].join("\n")
+}
