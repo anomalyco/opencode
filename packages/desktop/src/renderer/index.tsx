@@ -21,6 +21,7 @@ import { createMemoryHistory, MemoryRouter, type BaseRouterProps } from "@solidj
 import { createEffect, createMemo, createResource, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { render } from "solid-js/web"
 import pkg from "../../package.json"
+import defaultBackground from "./default-background.avif"
 import { initI18n, t } from "./i18n"
 import { initializationData, initializationReady } from "./initialization"
 import { DesktopFirstLaunchOnboarding } from "./onboarding"
@@ -112,15 +113,20 @@ function DesktopMemoryRouter(props: BaseRouterProps & { windowID: string }) {
 
 const createPlatform = (windowState: DesktopWindowState): Platform => {
   const attachmentPaths = new WeakMap<File, string>()
-  const [backgroundImage, setBackgroundImage] = createSignal(false)
+  const [backgroundImage, setBackgroundImage] = createSignal(true)
   const applyBackgroundImage = (image: Awaited<ReturnType<typeof window.api.loadBackgroundImage>>) => {
-    setBackgroundImage(!!image)
-    document.documentElement.toggleAttribute("data-background-image", !!image)
+    const active = !!image || localStorage.getItem("background-image.default.dismissed") !== "true"
+    setBackgroundImage(active)
+    document.documentElement.toggleAttribute("data-background-image", active)
     if (image) {
       document.documentElement.style.setProperty(
         "--app-background-image",
         `url("oc://renderer/background-image?revision=${encodeURIComponent(image.revision)}")`,
       )
+      return true
+    }
+    if (active) {
+      document.documentElement.style.setProperty("--app-background-image", `url("${defaultBackground}")`)
       return true
     }
     document.documentElement.style.removeProperty("--app-background-image")
@@ -333,11 +339,13 @@ const createPlatform = (windowState: DesktopWindowState): Platform => {
     async selectBackgroundImage() {
       const image = await window.api.selectBackgroundImage()
       if (!image) return backgroundImage()
+      localStorage.removeItem("background-image.default.dismissed")
       return applyBackgroundImage(image)
     },
 
     async clearBackgroundImage() {
       await window.api.clearBackgroundImage()
+      localStorage.setItem("background-image.default.dismissed", "true")
       applyBackgroundImage(null)
     },
 
