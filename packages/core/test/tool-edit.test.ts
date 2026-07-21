@@ -199,6 +199,41 @@ describe("EditTool", () => {
     ),
   )
 
+  it.live("edits an external symlink target with only its in-location permission", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => Promise.all([tmpdir(), tmpdir()])),
+      ([active, outside]) => {
+        reset()
+        if (process.platform === "win32") return Effect.void
+        const target = path.join(outside.path, "external.txt")
+        const link = path.join(active.path, "link.txt")
+        return Effect.promise(async () => {
+          await fs.writeFile(target, "before")
+          await fs.symlink(target, link)
+        }).pipe(
+          Effect.andThen(
+            withTool(active.path, (registry) =>
+              executeTool(registry, call({ path: "link.txt", oldString: "before", newString: "after" })),
+            ),
+          ),
+          Effect.andThen((result) =>
+            Effect.sync(() => {
+              expect(result.type).toBe("text")
+              expect(assertions.map((input) => input.action)).toEqual(["edit"])
+              expect(assertions[0]?.resources).toEqual(["link.txt"])
+            }),
+          ),
+          Effect.andThen(Effect.promise(() => fs.readFile(target, "utf8"))),
+          Effect.tap((content) => Effect.sync(() => expect(content).toBe("after"))),
+        )
+      },
+      ([active, outside]) =>
+        Effect.promise(() =>
+          Promise.all([active[Symbol.asyncDispose](), outside[Symbol.asyncDispose]()]).then(() => undefined),
+        ),
+    ),
+  )
+
   it.live("approves an explicit external absolute path before edit", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => Promise.all([tmpdir(), tmpdir()])),

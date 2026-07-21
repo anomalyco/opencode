@@ -25,7 +25,7 @@ export type ResolveInput = typeof ResolveInput.Type
 
 export class PathError extends Schema.TaggedErrorClass<PathError>()("LocationMutation.PathError", {
   path: Schema.String,
-  reason: Schema.Literals(["location_escape", "non_directory_ancestor"]),
+  reason: Schema.Literal("non_directory_ancestor"),
 }) {}
 
 export interface ExternalDirectoryAuthorization {
@@ -83,7 +83,6 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
     const location = yield* Location.Service
-    const locationRoot = yield* fs.realPath(location.directory)
 
     function notFound<A>(effect: Effect.Effect<A, FSUtil.Error>) {
       return effect.pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)))
@@ -124,14 +123,8 @@ const layer = Layer.effect(
       const lexicallyInternal = FSUtil.contains(location.directory, absolute)
 
       const resolved = yield* resolvePath(absolute)
-      if (lexicallyInternal && !FSUtil.contains(locationRoot, resolved.canonical)) {
-        return yield* new PathError({ path: input.path, reason: "location_escape" })
-      }
-
       const external = !lexicallyInternal
-      const resource = external
-        ? slash(resolved.canonical)
-        : slash(path.relative(locationRoot, resolved.canonical) || ".")
+      const resource = external ? slash(resolved.canonical) : slash(path.relative(location.directory, absolute) || ".")
       const externalDirectory =
         input.kind === "directory" && resolved.type === "Directory" ? resolved.canonical : resolved.directory
       const externalResource = slash(path.join(externalDirectory, "*"))
