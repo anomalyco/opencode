@@ -30,7 +30,7 @@ export const invokeObjectMethod = (name: string, args: Array<unknown>, node: Ast
     return input as Record<string, unknown>
   }
   const guardedSet = (out: Record<string, unknown>, key: string, item: unknown): void => {
-    if (isBlockedMember(key)) throw new InterpreterRuntimeError(`Property '${key}' is not available in CodeMode.`, node)
+    if (isBlockedMember(key)) throw new InterpreterRuntimeError(`Property '${key}' is not available.`, node)
     out[key] = item
   }
   const addEntry = (out: Record<string, unknown>, key: unknown, item: unknown): void => {
@@ -49,7 +49,7 @@ export const invokeObjectMethod = (name: string, args: Array<unknown>, node: Ast
       return Object.hasOwn(requireObject(), String(args[1]))
     case "is":
       if (containsOpaqueReference(args[0]) || containsOpaqueReference(args[1])) {
-        throw new InterpreterRuntimeError("Object.is requires data values in CodeMode.", node, "InvalidDataValue")
+        throw new InterpreterRuntimeError("Object.is requires data values.", node, "InvalidDataValue")
       }
       return Object.is(args[0], args[1])
     case "assign": {
@@ -94,5 +94,5 @@ export const invokeObjectMethod = (name: string, args: Array<unknown>, node: Ast
       return out
     }
   }
-  throw new InterpreterRuntimeError(`Object.${name} is not available in CodeMode.`, node)
+  throw new InterpreterRuntimeError(`Object.${name} is not available.`, node)
 }

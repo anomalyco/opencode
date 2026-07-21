@@ -45,7 +45,7 @@ export const invokeNumberMethod = (value: number, name: string, args: Array<unkn
       result = value
       break
     default:
-      throw new InterpreterRuntimeError(`Number method '${name}' is not available in CodeMode.`, node)
+      throw new InterpreterRuntimeError(`Number method '${name}' is not available.`, node)
   }
   return boundedData(result, `Number.${name} result`)
 }
@@ -71,7 +71,7 @@ export const invokeNumberStatic = (name: string, args: Array<unknown>, node: Ast
     case "parseFloat":
       return parseFloat(coerceToString(value))
     default:
-      throw new InterpreterRuntimeError(`Number.${name} is not available in CodeMode.`, node)
+      throw new InterpreterRuntimeError(`Number.${name} is not available.`, node)
   }
 }
 import { type AstNode, InterpreterRuntimeError } from "../interpreter/model.js"

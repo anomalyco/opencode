@@ -59,7 +59,7 @@ export const invokeDateStatic = (name: string, args: Array<unknown>, node: AstNo
     case "UTC":
       return Date.UTC(...(args.map((arg) => coerceToNumber(arg)) as Parameters<typeof Date.UTC>))
     default:
-      throw new InterpreterRuntimeError(`Date.${name} is not available in CodeMode.`, node)
+      throw new InterpreterRuntimeError(`Date.${name} is not available.`, node)
   }
 }
 
@@ -170,7 +170,7 @@ export const invokeDateMethod = (
       if (args.length < 3) return updateDate(value, hosted.setUTCFullYear(args[0], args[1]))
       return updateDate(value, hosted.setUTCFullYear(args[0], args[1], args[2]))
     default:
-      throw new InterpreterRuntimeError(`Date method '${name}' is not available in CodeMode.`, node)
+      throw new InterpreterRuntimeError(`Date method '${name}' is not available.`, node)
   }
 }
 

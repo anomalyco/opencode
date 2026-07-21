@@ -166,7 +166,7 @@ export class InterpreterRuntimeError extends Error {
 
 export const unsupportedSyntax = (kind: string, node: AstNode): InterpreterRuntimeError =>
   new InterpreterRuntimeError(
-    `Syntax '${kind}' is not supported in CodeMode. ${supportedSyntaxMessage}`,
+    `Syntax '${kind}' is not supported. ${supportedSyntaxMessage}`,
     node,
     "UnsupportedSyntax",
     [supportedSyntaxMessage],

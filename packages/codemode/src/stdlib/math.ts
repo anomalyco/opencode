@@ -51,7 +51,7 @@ export const mathMethods = new Set([
 ])
 
 export const invokeMathMethod = (name: string, args: Array<unknown>, node: AstNode): number => {
-  if (!mathMethods.has(name)) throw new InterpreterRuntimeError(`Math.${name} is not available in CodeMode.`, node)
+  if (!mathMethods.has(name)) throw new InterpreterRuntimeError(`Math.${name} is not available.`, node)
   if (name === "random") return Math.random()
   if (name === "sumPrecise") {
     const items = spreadItems(args[0])
@@ -151,5 +151,5 @@ export const invokeMathMethod = (name: string, args: Array<unknown>, node: AstNo
     case "imul":
       return Math.imul(a, b())
   }
-  throw new InterpreterRuntimeError(`Math.${name} is not available in CodeMode.`, node)
+  throw new InterpreterRuntimeError(`Math.${name} is not available.`, node)
 }

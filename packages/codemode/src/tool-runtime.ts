@@ -363,7 +363,7 @@ const termForms = (term: string): Array<string> => {
 
 const makeSearchTool = (searchIndex: ReadonlyArray<SearchEntry>): Definition => ({
   _tag: "CodeModeTool",
-  description: "Search available Code Mode tools",
+  description: "Search available tools",
   input: SearchInput,
   output: SearchOutput,
   run: (input) =>
@@ -501,8 +501,8 @@ export const prepare = <R>(tools: Tools<R>, catalogBudget = defaultCatalogBudget
     empty
       ? "This is a restricted JavaScript language for calling tools, not a general-purpose runtime."
       : complete
-        ? "This is a restricted JavaScript language for calling tools, not a general-purpose runtime. Inside the confined interpreter, `tools` contains the Code Mode tools listed below; surrounding agent tools are not available."
-        : "This is a restricted JavaScript language for calling tools, not a general-purpose runtime. Inside the confined interpreter, `tools` contains the Code Mode tools listed or searchable below; surrounding agent tools are not available.",
+        ? "This is a restricted JavaScript language for calling tools, not a general-purpose runtime. Inside the confined interpreter, `tools` contains the tools listed below; surrounding agent tools are not available."
+        : "This is a restricted JavaScript language for calling tools, not a general-purpose runtime. Inside the confined interpreter, `tools` contains the tools listed or searchable below; surrounding agent tools are not available.",
     ...(empty
       ? []
       : ["Do not infer or normalize tool names; use only exact signatures shown below or returned by search."]),
@@ -533,8 +533,8 @@ export const prepare = <R>(tools: Tools<R>, catalogBudget = defaultCatalogBudget
         "## Rules",
         "",
         complete
-          ? "- Only Code Mode tools listed here are available; surrounding agent tools are not implicitly exposed."
-          : "- Only Code Mode tools listed here or returned by the built-in `search` function are available; surrounding agent tools are not implicitly exposed.",
+          ? "- Only tools listed here are available; surrounding agent tools are not implicitly exposed."
+          : "- Only tools listed here or returned by the built-in `search` function are available; surrounding agent tools are not implicitly exposed.",
         "- Filter, aggregate, and transform collections in code - never return them raw or call a tool per item across messages.",
         "- A result typed `Promise<unknown>` may be structured data or text. Before reading fields, check that it is a non-null object and not an array; otherwise handle the returned text or primitive directly.",
         '- Run independent calls in parallel: `await Promise.all(items.map((item) => tools.<namespace>.<tool>(item)))`, or use `tools.<namespace>["tool-name"](item)` when the listed signature uses bracket notation.',
@@ -553,7 +553,7 @@ export const prepare = <R>(tools: Tools<R>, catalogBudget = defaultCatalogBudget
     "## Language",
     "",
     "Use common JavaScript data operations, functions, control flow, selected standard-library methods, and awaited tool calls. Built-ins include Date, RegExp, Map, Set, URL, URLSearchParams, and URI encoding helpers.",
-    "Modules/imports, classes, generators, timers, fetch, eval, prototype access, and unlisted methods are unavailable. Use Code Mode tools for external operations. Use await with try/catch.",
+    "Modules/imports, classes, generators, timers, fetch, eval, prototype access, and unlisted methods are unavailable. Use tools for external operations. Use await with try/catch.",
     "Prefer explicit `return`; otherwise only the final top-level expression becomes the result.",
     "Dates and URLs serialize to strings at data boundaries; Map/Set/RegExp/URLSearchParams serialize to `{}`.",
   ]
