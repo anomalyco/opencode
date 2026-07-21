@@ -1060,6 +1060,7 @@ function HomeProjectList(props: {
   const global = useGlobal()
   let listRef!: HTMLDivElement
   let snapshot: string[] | undefined
+  let selectOnDrop: string | undefined
   const projects = () => global.ensureServerCtx(props.server).projects
 
   // Constant-speed edge scrolling. dnd-kit's AutoScroller is deliberately not
@@ -1108,8 +1109,12 @@ function HomeProjectList(props: {
         ...defaults.filter((plugin) => plugin !== Accessibility && plugin !== AutoScroller),
         Feedback.configure({ dropAnimation: null }),
       ]}
-      onDragStart={() => {
+      onDragStart={(event) => {
         snapshot = props.projects.map((project) => project.worktree)
+        selectOnDrop =
+          props.selected.server === ServerConnection.key(props.server)
+            ? undefined
+            : event.operation.source?.id.toString()
         let el = listRef.parentElement
         while (el && !(el.scrollHeight > el.clientHeight && /(auto|scroll)/.test(getComputedStyle(el).overflowY)))
           el = el.parentElement
@@ -1158,7 +1163,10 @@ function HomeProjectList(props: {
           const restore = snapshot
           restore.forEach((worktree, index) => projects().move(worktree, index))
         }
+        const directory = selectOnDrop
         snapshot = undefined
+        selectOnDrop = undefined
+        if (!event.canceled && directory) props.selectProject(props.server, directory)
       }}
     >
       <div class="flex min-w-0 flex-col gap-1" ref={listRef}>
@@ -1177,6 +1185,7 @@ function HomeProjectList(props: {
                 project={project()!}
                 server={props.server}
                 index={index}
+                serverSelected={props.selected.server === ServerConnection.key(props.server)}
                 selected={
                   props.selected.server === ServerConnection.key(props.server) &&
                   props.selected.directory === worktree
@@ -1274,6 +1283,7 @@ function HomeProjectRow(props: {
   project: LocalProject
   server: ServerConnection.Any
   index: () => number
+  serverSelected: boolean
   selected: boolean
   unseenCount: number
   selectProject: (server: ServerConnection.Any, directory: string) => void
@@ -1329,12 +1339,15 @@ function HomeProjectRow(props: {
         aria-current={props.selected ? "page" : undefined}
         disabled={serverUnreachable()}
         onPointerDown={(event) => {
-          // Mouse selection happens on pointerdown (like tabs), but only ever
-          // selects; selectProject toggles, and deselecting here would fire on
-          // every drag of the selected row before the drag threshold is met.
-          // Touch is excluded so flick-scrolling the list cannot select rows.
+          // Same-server mouse selection happens on pointerdown (like tabs),
+          // but only ever selects; selectProject toggles, and deselecting here
+          // would fire on every drag before the threshold is met. Cross-server
+          // selection waits for click so reordering a remote server's projects
+          // does not focus that server and load its session index. Touch is
+          // excluded so flick-scrolling the list cannot select rows.
           pointerDownSelected = undefined
           if (event.button !== 0 || event.pointerType === "touch") return
+          if (!props.serverSelected) return
           pointerDownSelected = props.selected
           if (!props.selected) props.selectProject(props.server, props.project.worktree)
         }}
