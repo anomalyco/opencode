@@ -1,12 +1,12 @@
-export * as Observability from "./observability"
+export * as Observability from "./observability.js"
 
 import { NodeFileSystem } from "@effect/platform-node"
-import { LayerNode } from "./effect/layer-node"
+import { LayerNode } from "./effect/layer-node.js"
 import { Effect, Layer, Logger, References, Schema } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
 import { OtlpSerialization } from "effect/unstable/observability"
-import { Logging } from "./observability/logging"
-import { Otlp } from "./observability/otlp"
+import { Logging } from "./observability/logging.js"
+import { Otlp } from "./observability/otlp.js"
 
 export const Options = Schema.Struct({
   endpoint: Schema.optional(Schema.String),

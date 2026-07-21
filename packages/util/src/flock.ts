@@ -2,7 +2,7 @@ import path from "path"
 import os from "os"
 import { randomBytes, randomUUID } from "crypto"
 import { mkdir, readFile, rm, stat, utimes, writeFile } from "fs/promises"
-import { Hash } from "./hash"
+import { Hash } from "./hash.js"
 import { Effect } from "effect"
 
 export type FlockGlobal = {

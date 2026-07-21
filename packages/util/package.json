@@ -2,9 +2,19 @@
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode-ai/util",
   "version": "1.18.3",
-  "private": true,
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anomalyco/opencode.git",
+    "directory": "packages/util"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ],
   "exports": {
     "./effect/layer-node": "./src/effect/layer-node.ts",
     "./*": "./src/*.ts"
@@ -17,6 +27,7 @@
     }
   },
   "scripts": {
+    "build": "bun run script/build.ts",
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
@@ -24,7 +35,6 @@
     "@effect/platform-node": "catalog:",
     "@npmcli/arborist": "catalog:",
     "@npmcli/config": "10.8.1",
-    "@opencode-ai/ai": "workspace:*",
     "@opentelemetry/api": "1.9.0",
     "@opentelemetry/context-async-hooks": "2.6.1",
     "@opentelemetry/exporter-trace-otlp-http": "0.214.0",

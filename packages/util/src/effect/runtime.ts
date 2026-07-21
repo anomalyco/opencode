@@ -1,6 +1,6 @@
 import { Layer, type Context, ManagedRuntime, type Effect } from "effect"
-import { memoMap } from "./memo-map"
-import { Observability } from "../observability"
+import { memoMap } from "./memo-map.js"
+import { Observability } from "../observability.js"
 
 export function makeRuntime<I, S, E>(service: Context.Service<I, S>, layer: Layer.Layer<I, E>) {
   let rt: ManagedRuntime.ManagedRuntime<I, E> | undefined

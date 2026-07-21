@@ -1,4 +1,4 @@
-import { LayerNode } from "./layer-node"
+import { LayerNode } from "./layer-node.js"
 
 export const tags = LayerNode.tags({
   location: ["global"],
@@ -11,4 +11,4 @@ export type LocationNode<A, E = never> = LayerNode.Node<A, E, (typeof tags.value
 export const makeGlobalNode = tags.make("global")
 export const makeLocationNode = tags.make("location")
 
-export * as Node from "./app-node"
+export * as Node from "./app-node.js"

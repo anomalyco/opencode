@@ -5,10 +5,10 @@ import { readdir } from "fs/promises"
 import { lookup } from "mime-types"
 import { Context, Effect, FileSystem, Layer, Schema } from "effect"
 import type { PlatformError } from "effect/PlatformError"
-import { Glob } from "./glob"
-import { serviceUse } from "./effect/service-use"
-import { makeGlobalNode } from "./effect/app-node"
-import { filesystem } from "./effect/app-node-platform"
+import { Glob } from "./glob.js"
+import { serviceUse } from "./effect/service-use.js"
+import { makeGlobalNode } from "./effect/app-node.js"
+import { filesystem } from "./effect/app-node-platform.js"
 
 export namespace FSUtil {
   export class FileSystemError extends Schema.TaggedErrorClass<FileSystemError>()("FileSystemError", {

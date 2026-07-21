@@ -1,8 +1,8 @@
 import { Formatter, Logger, type LogLevel } from "effect"
 import path from "path"
-import { Global } from "../global"
-import { InstallationChannel, InstallationLocal } from "../installation/version"
-import { runID } from "./shared"
+import { Global } from "../global.js"
+import { InstallationChannel, InstallationLocal } from "../installation/version.js"
+import { runID } from "./shared.js"
 
 function formatter(id: string = runID) {
   return Logger.map(Logger.formatStructured, (output) => {
@@ -74,4 +74,4 @@ export function loggers() {
   return process.env.OPENCODE_PRINT_LOGS === "1" ? [fileLogger(), stderrLogger] : [fileLogger()]
 }
 
-export * as Logging from "./logging"
+export * as Logging from "./logging.js"

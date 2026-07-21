@@ -41,6 +41,9 @@ await $`bun ./packages/schema/script/publish.ts`
 console.log("\n=== ai ===\n")
 await $`bun ./packages/ai/script/publish.ts`
 
+console.log("\n=== util ===\n")
+await $`bun ./packages/util/script/publish.ts`
+
 console.log("\n=== protocol ===\n")
 await $`bun ./packages/protocol/script/publish.ts`
 

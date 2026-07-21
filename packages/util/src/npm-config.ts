@@ -1,4 +1,4 @@
-export * as NpmConfig from "./npm-config"
+export * as NpmConfig from "./npm-config.js"
 
 import { fileURLToPath } from "url"
 // @ts-expect-error npm does not publish types for this internal config API.

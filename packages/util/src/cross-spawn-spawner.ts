@@ -15,8 +15,8 @@ import {
 import * as NodeChildProcess from "node:child_process"
 import { PassThrough } from "node:stream"
 import launch from "cross-spawn"
-import { makeGlobalNode } from "./effect/app-node"
-import { filesystem, path } from "./effect/app-node-platform"
+import { makeGlobalNode } from "./effect/app-node.js"
+import { filesystem, path } from "./effect/app-node-platform.js"
 
 const toError = (err: unknown): Error => (err instanceof globalThis.Error ? err : new globalThis.Error(String(err)))
 
@@ -495,4 +495,4 @@ const layer: Layer.Layer<ChildProcessSpawner, never, FileSystem.FileSystem | Pat
 
 export const node = makeGlobalNode({ service: ChildProcessSpawner, layer, deps: [filesystem, path] })
 
-export * as CrossSpawnSpawner from "./cross-spawn-spawner"
+export * as CrossSpawnSpawner from "./cross-spawn-spawner.js"

@@ -330,4 +330,4 @@ function flatten(node: AnyNode): readonly AnyNode[] {
   return node.kind === "group" ? node.dependencies.flatMap(flatten) : [node]
 }
 
-export * as LayerNode from "./layer-node"
+export * as LayerNode from "./layer-node.js"

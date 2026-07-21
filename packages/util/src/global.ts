@@ -3,8 +3,8 @@ import fs from "fs/promises"
 import { xdgData, xdgCache, xdgConfig, xdgState } from "xdg-basedir"
 import os from "os"
 import { Context, Effect, Layer } from "effect"
-import { Flock } from "./flock"
-import { makeGlobalNode } from "./effect/app-node"
+import { Flock } from "./flock.js"
+import { makeGlobalNode } from "./effect/app-node.js"
 
 const app = "opencode"
 const data = path.join(xdgData!, app)
@@ -83,4 +83,4 @@ export const layerWith = (input: Partial<Interface>) =>
     Effect.sync(() => Service.of(make(input))),
   )
 
-export * as Global from "./global"
+export * as Global from "./global.js"
