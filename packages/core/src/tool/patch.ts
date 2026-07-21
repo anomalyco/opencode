@@ -97,13 +97,11 @@ export const Plugin = {
                     callID: context.callID,
                   }
                   if (!input.patchText) return yield* new ToolFailure({ message: "patchText is required" })
-                  const hunks = yield* Effect.try({
-                    try: () => Patch.parse(input.patchText),
-                    catch: (cause) =>
-                      new ToolFailure({
-                        message: `patch verification failed: ${cause instanceof Error ? cause.message : String(cause)}`,
-                      }),
-                  })
+                  const hunks = yield* Effect.fromResult(Patch.parse(input.patchText)).pipe(
+                    Effect.mapError(
+                      (error) => new ToolFailure({ message: `patch verification failed: ${error.message}` }),
+                    ),
+                  )
                   if (hunks.length === 0) {
                     const normalized = input.patchText.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim()
                     if (normalized === "*** Begin Patch\n*** End Patch") {

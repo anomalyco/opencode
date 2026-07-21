@@ -1,5 +1,26 @@
 export * as Patch from "./patch"
 
+import { Result, Schema } from "effect"
+
+export class BoundaryError extends Schema.TaggedErrorClass<BoundaryError>()("Patch.BoundaryError", {
+  boundary: Schema.Literals(["first", "last"]),
+}) {
+  override get message() {
+    return `The ${this.boundary} line of the patch must be '${this.boundary === "first" ? "*** Begin Patch" : "*** End Patch"}'`
+  }
+}
+
+export class InvalidHunkError extends Schema.TaggedErrorClass<InvalidHunkError>()("Patch.InvalidHunkError", {
+  line: Schema.String,
+  lineNumber: Schema.Number,
+}) {
+  override get message() {
+    return `Invalid hunk at line ${this.lineNumber}: '${this.line}' is not a valid hunk header. Valid hunk headers: '*** Add File: {path}', '*** Delete File: {path}', '*** Update File: {path}'`
+  }
+}
+
+export type ParseError = BoundaryError | InvalidHunkError
+
 export type Hunk =
   | { readonly type: "add"; readonly path: string; readonly contents: string }
   | { readonly type: "delete"; readonly path: string }
@@ -22,12 +43,12 @@ export interface FileUpdate {
   readonly bom: boolean
 }
 
-export function parse(patchText: string): ReadonlyArray<Hunk> {
+export function parse(patchText: string): Result.Result<ReadonlyArray<Hunk>, ParseError> {
   const lines = stripHeredoc(patchText.trim()).split("\n")
   const begin = lines.findIndex((line) => line.trim() === "*** Begin Patch")
   const end = lines.findIndex((line) => line.trim() === "*** End Patch")
-  if (begin === -1) throw new Error("The first line of the patch must be '*** Begin Patch'")
-  if (end === -1 || begin >= end) throw new Error("The last line of the patch must be '*** End Patch'")
+  if (begin === -1) return Result.fail(new BoundaryError({ boundary: "first" }))
+  if (end === -1 || begin >= end) return Result.fail(new BoundaryError({ boundary: "last" }))
 
   const hunks: Hunk[] = []
   let index = begin + 1
@@ -76,12 +97,12 @@ export function parse(patchText: string): ReadonlyArray<Hunk> {
   if (hunks.length === 0) {
     const invalid = lines.findIndex((line, index) => index > begin && index < end && line.trim() !== "")
     if (invalid !== -1) {
-      throw new Error(
-        `Invalid hunk at line ${invalid + 1}: '${lines[invalid]!.trim()}' is not a valid hunk header. Valid hunk headers: '*** Add File: {path}', '*** Delete File: {path}', '*** Update File: {path}'`,
+      return Result.fail(
+        new InvalidHunkError({ line: lines[invalid]!.trim(), lineNumber: invalid + 1 }),
       )
     }
   }
-  return hunks
+  return Result.succeed(hunks)
 }
 
 export function derive(path: string, chunks: ReadonlyArray<UpdateFileChunk>, original: string): FileUpdate {

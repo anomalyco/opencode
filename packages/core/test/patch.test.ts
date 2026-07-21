@@ -1,10 +1,13 @@
 import { describe, expect, test } from "bun:test"
 import { Patch } from "@opencode-ai/core/patch"
+import { Result } from "effect"
+
+const parse = (input: string) => Result.getOrThrow(Patch.parse(input))
 
 describe("Patch", () => {
   test("parses add, update, and delete hunks", () => {
     expect(
-      Patch.parse(
+      parse(
         "*** Begin Patch\n*** Add File: add.txt\n+added\n*** Update File: update.txt\n@@ section\n-old\n+new\n*** Delete File: delete.txt\n*** End Patch",
       ),
     ).toEqual([
@@ -21,7 +24,7 @@ describe("Patch", () => {
 
   test("parses a file move", () => {
     expect(
-      Patch.parse(
+      parse(
         "*** Begin Patch\n*** Update File: old.txt\n*** Move to: new.txt\n@@\n-old\n+new\n*** End Patch",
       ),
     ).toEqual([
@@ -35,22 +38,22 @@ describe("Patch", () => {
   })
 
   test("identifies the missing patch boundary", () => {
-    expect(() => Patch.parse("This is not a valid patch")).toThrow(
+    expect(() => parse("This is not a valid patch")).toThrow(
       "The first line of the patch must be '*** Begin Patch'",
     )
-    expect(() => Patch.parse("*** Begin Patch\n*** Add File: add.txt\n+added")).toThrow(
+    expect(() => parse("*** Begin Patch\n*** Add File: add.txt\n+added")).toThrow(
       "The last line of the patch must be '*** End Patch'",
     )
   })
 
   test("strips a heredoc wrapper", () => {
-    expect(Patch.parse("cat <<'EOF'\n*** Begin Patch\n*** Add File: add.txt\n+added\n*** End Patch\nEOF")).toEqual([
+    expect(parse("cat <<'EOF'\n*** Begin Patch\n*** Add File: add.txt\n+added\n*** End Patch\nEOF")).toEqual([
       { type: "add", path: "add.txt", contents: "added" },
     ])
   })
 
   test("strips a heredoc wrapper without cat", () => {
-    expect(Patch.parse("<<EOF\n*** Begin Patch\n*** Add File: add.txt\n+added\n*** End Patch\nEOF")).toEqual([
+    expect(parse("<<EOF\n*** Begin Patch\n*** Add File: add.txt\n+added\n*** End Patch\nEOF")).toEqual([
       { type: "add", path: "add.txt", contents: "added" },
     ])
   })
@@ -117,13 +120,13 @@ describe("Patch", () => {
   })
 
   test("matches V1 lenient parsing of malformed hunk bodies", () => {
-    expect(Patch.parse("*** Begin Patch\n*** Add File: add.txt\nmissing plus\n*** End Patch")).toEqual([
+    expect(parse("*** Begin Patch\n*** Add File: add.txt\nmissing plus\n*** End Patch")).toEqual([
       { type: "add", path: "add.txt", contents: "" },
     ])
-    expect(Patch.parse("*** Begin Patch\n*** Update File: update.txt\n*** End Patch")).toEqual([
+    expect(parse("*** Begin Patch\n*** Update File: update.txt\n*** End Patch")).toEqual([
       { type: "update", path: "update.txt", movePath: undefined, chunks: [] },
     ])
-    expect(Patch.parse("*** Begin Patch\n*** Delete File: delete.txt\nunexpected body\n*** End Patch")).toEqual([
+    expect(parse("*** Begin Patch\n*** Delete File: delete.txt\nunexpected body\n*** End Patch")).toEqual([
       { type: "delete", path: "delete.txt" },
     ])
   })
