@@ -279,6 +279,9 @@ export const {
         case "session.updated": {
           const result = search(store.session, event.properties.info.id, (s) => s.id)
           if (result.found) {
+            // Ignore stale SSE that can arrive after a newer HTTP apply (e.g. rapid /undo).
+            const current = store.session[result.index]
+            if (current && event.properties.info.time.updated < current.time.updated) break
             setStore("session", result.index, reconcile(event.properties.info))
             break
           }

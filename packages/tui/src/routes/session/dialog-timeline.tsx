@@ -11,6 +11,7 @@ export function DialogTimeline(props: {
   sessionID: string
   onMove: (messageID: string) => void
   setPrompt?: (prompt: PromptInfo) => void
+  onRevert: (messageID: string) => void
 }) {
   const sync = useSync()
   const dialog = useDialog()
@@ -34,7 +35,12 @@ export function DialogTimeline(props: {
         footer: Locale.time(message.time.created),
         onSelect: (dialog) => {
           dialog.replace(() => (
-            <DialogMessage messageID={message.id} sessionID={props.sessionID} setPrompt={props.setPrompt} />
+            <DialogMessage
+              messageID={message.id}
+              sessionID={props.sessionID}
+              setPrompt={props.setPrompt}
+              onRevert={props.onRevert}
+            />
           ))
         },
       })

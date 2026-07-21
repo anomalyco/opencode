@@ -65,6 +65,9 @@ export type PromptProps = {
   sessionID?: string
   visible?: boolean
   disabled?: boolean
+  /** Local busy overlay (e.g. undo/redo). Disables input and shows a status spinner. */
+  busy?: boolean
+  busyText?: string
   onSubmit?: () => void
   ref?: (ref: PromptRef | undefined) => void
   hint?: JSX.Element
@@ -162,6 +165,7 @@ export function Prompt(props: PromptProps) {
   const dialog = useDialog()
   const toast = useToast()
   const status = createMemo(() => sync.data.session_status?.[props.sessionID ?? ""] ?? { type: "idle" })
+  const blocked = createMemo(() => Boolean(props.disabled || props.busy))
   const history = usePromptHistory()
   const stash = usePromptStash()
   const keymap = useOpencodeKeymap()
@@ -261,8 +265,8 @@ export function Prompt(props: PromptProps) {
 
   createEffect(() => {
     if (!input || input.isDestroyed) return
-    if (props.disabled) input.cursorColor = theme.backgroundElement
-    if (!props.disabled) input.cursorColor = theme.text
+    if (blocked()) input.cursorColor = theme.backgroundElement
+    if (!blocked()) input.cursorColor = theme.text
   })
 
   const lastUserMessage = createMemo(() => {
@@ -824,7 +828,7 @@ export function Prompt(props: PromptProps) {
   useBindings(() => {
     return {
       target: inputTarget,
-      enabled: inputTarget() !== undefined && !props.disabled,
+      enabled: inputTarget() !== undefined && !blocked(),
       bindings: tuiConfig.keybinds.get("prompt.paste"),
     }
   })
@@ -832,7 +836,7 @@ export function Prompt(props: PromptProps) {
   useBindings(() => {
     return {
       target: inputTarget,
-      enabled: inputTarget() !== undefined && !props.disabled && store.prompt.input !== "",
+      enabled: inputTarget() !== undefined && !blocked() && store.prompt.input !== "",
       bindings: tuiConfig.keybinds.get("prompt.clear"),
     }
   })
@@ -844,7 +848,7 @@ export function Prompt(props: PromptProps) {
         cursorVersion()
         return (
           inputTarget() !== undefined &&
-          !props.disabled &&
+          !blocked() &&
           store.mode === "normal" &&
           !auto()?.visible &&
           input?.visualCursor.offset === 0
@@ -888,7 +892,7 @@ export function Prompt(props: PromptProps) {
       target: inputTarget,
       enabled: (() => {
         cursorVersion()
-        return inputTarget() !== undefined && !props.disabled && !auto()?.visible && input !== undefined
+        return inputTarget() !== undefined && !blocked() && !auto()?.visible && input !== undefined
       })(),
       commands: [
         {
@@ -920,7 +924,7 @@ export function Prompt(props: PromptProps) {
       target: inputTarget,
       enabled: (() => {
         cursorVersion()
-        return inputTarget() !== undefined && !props.disabled && !auto()?.visible && input !== undefined
+        return inputTarget() !== undefined && !blocked() && !auto()?.visible && input !== undefined
       })(),
       commands: [
         {
@@ -978,7 +982,7 @@ export function Prompt(props: PromptProps) {
       setStore("prompt", "input", input.plainText)
       syncExtmarksWithPromptParts()
     }
-    if (props.disabled) return false
+    if (blocked()) return false
     if (workspace.creating() || move.creating()) return false
     if (auto()?.visible) return false
     if (!store.prompt.input) return false
@@ -1406,7 +1410,7 @@ export function Prompt(props: PromptProps) {
               }}
               onCursorChange={() => setCursorVersion((value) => value + 1)}
               onKeyDown={(e: { preventDefault(): void }) => {
-                if (props.disabled) {
+                if (blocked()) {
                   e.preventDefault()
                   return
                 }
@@ -1417,7 +1421,7 @@ export function Prompt(props: PromptProps) {
                 setTimeout(() => setTimeout(() => submit(), 0), 0)
               }}
               onPaste={async (event: PasteEvent) => {
-                if (props.disabled) {
+                if (blocked()) {
                   event.preventDefault()
                   return
                 }
@@ -1459,7 +1463,7 @@ export function Prompt(props: PromptProps) {
               }}
               onMouseDown={(r: MouseEvent) => r.target?.focus()}
               focusedBackgroundColor={theme.backgroundElement}
-              cursorColor={props.disabled ? theme.backgroundElement : theme.text}
+              cursorColor={blocked() ? theme.backgroundElement : theme.text}
               syntaxStyle={syntax()}
             />
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1} justifyContent="space-between">
@@ -1535,6 +1539,16 @@ export function Prompt(props: PromptProps) {
         </box>
         <box width="100%" flexDirection="row" justifyContent="space-between">
           <Switch>
+            <Match when={props.busy}>
+              <box flexDirection="row" gap={1} flexGrow={1}>
+                <box marginLeft={1} flexShrink={0}>
+                  <Show when={kv.get("animations_enabled", true)} fallback={<text fg={theme.textMuted}>[⋯]</text>}>
+                    <spinner color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
+                  </Show>
+                </box>
+                <text fg={theme.textMuted}>{props.busyText ?? "Working..."}</text>
+              </box>
+            </Match>
             <Match when={status().type !== "idle"}>
               <box
                 flexDirection="row"

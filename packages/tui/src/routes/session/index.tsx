@@ -35,6 +35,7 @@ import type {
   UserMessage,
   TextPart,
   ReasoningPart,
+  Session,
   SessionStatus,
 } from "@kancode/sdk/v2"
 import { useLocal } from "../../context/local"
@@ -49,7 +50,6 @@ import { DialogAlert } from "../../ui/dialog-alert"
 import { TodoItem } from "../../component/todo-item"
 import { DialogMessage } from "./dialog-message"
 import type { PromptInfo } from "../../component/prompt/history"
-import { stripPromptPartIDs as strip } from "../../prompt/part"
 import { DialogConfirm } from "../../ui/dialog-confirm"
 import { DialogTimeline } from "./dialog-timeline"
 import { DialogForkFromTimeline } from "./dialog-fork-from-timeline"
@@ -88,9 +88,17 @@ import { cruiseControlConclusion } from "../../util/cruise-control"
 import { usePluginRuntime } from "../../plugin/runtime"
 import { DialogRetryAction } from "../../component/dialog-retry-action"
 import { getRevertDiffFiles } from "../../util/revert-diff"
+import {
+  createSequentialQueue,
+  findRedoUserMessage,
+  findUndoUserMessage,
+  promptFromMessageParts,
+  waitUntil,
+} from "../../util/session-undo"
 import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useOpencodeKeymap } from "../../keymap"
 import { usePathFormatter } from "../../context/path-format"
 import { LocationProvider } from "../../context/location"
+import { produce, reconcile } from "solid-js/store"
 
 addDefaultParsers(parsers.parsers)
 
@@ -245,7 +253,8 @@ export function Session() {
     return children().flatMap((x) => sync.data.question[x.id] ?? [])
   })
   const visible = createMemo(() => !session()?.parentID && permissions().length === 0 && questions().length === 0)
-  const disabled = createMemo(() => permissions().length > 0 || questions().length > 0)
+  const [reverting, setReverting] = createSignal<"undo" | "redo" | undefined>()
+  const disabled = createMemo(() => permissions().length > 0 || questions().length > 0 || !!reverting())
 
   const pending = createMemo(() => {
     const completed = messages().findLast((x) => x.role === "assistant" && x.time.completed)?.id
@@ -358,6 +367,76 @@ export function Session() {
   const keymap = useOpencodeKeymap()
   const dialog = useDialog()
   const renderer = useRenderer()
+  // Serialize undo/redo so rapid /undo calls don't all target the same message
+  // while waiting for session.updated SSE to catch up.
+  const revertQueue = createSequentialQueue()
+
+  function applySession(info: Session) {
+    const list = sync.data.session
+    let left = 0
+    let right = list.length - 1
+    while (left <= right) {
+      const mid = (left + right) >> 1
+      const id = list[mid]!.id
+      if (id === info.id) {
+        const current = list[mid]!
+        if (info.time.updated < current.time.updated) return
+        sync.set("session", mid, reconcile(info))
+        return
+      }
+      if (id < info.id) left = mid + 1
+      else right = mid - 1
+    }
+    sync.set(
+      "session",
+      produce((draft) => {
+        draft.splice(left, 0, info)
+      }),
+    )
+  }
+
+  async function ensureSessionIdle(sessionID: string) {
+    const status = sync.data.session_status?.[sessionID]
+    if ((status?.type ?? "idle") === "idle") return true
+    await sdk.client.session.abort({ sessionID }).catch(() => {})
+    return waitUntil(() => (sync.data.session_status?.[sessionID]?.type ?? "idle") === "idle")
+  }
+
+  function runRevert(action: "undo" | "redo", task: () => Promise<void>) {
+    if (reverting()) return
+    dialog.clear()
+    setReverting(action)
+    prompt?.blur()
+    void revertQueue.enqueue(async () => {
+      try {
+        await task()
+      } finally {
+        setReverting(undefined)
+        prompt?.focus()
+      }
+    })
+  }
+
+  function revertToMessage(messageID: string) {
+    runRevert("undo", async () => {
+      const sessionID = route.sessionID
+      if (!(await ensureSessionIdle(sessionID))) {
+        toast.show({ message: "Cannot undo while session is busy", variant: "error" })
+        return
+      }
+      const restored = promptFromMessageParts(sync.data.part[messageID] ?? []) as PromptInfo
+      const result = await sdk.client.session
+        .revert({ sessionID, messageID }, { throwOnError: true })
+        .catch((error: unknown) => {
+          toast.show({ message: errorMessage(error) || "Failed to undo", variant: "error" })
+          return undefined
+        })
+      if (!result?.data) return
+      applySession(result.data)
+      prompt?.set(restored)
+      toBottom()
+    })
+  }
 
   event.on("session.status", (evt) => {
     if (evt.properties.sessionID !== route.sessionID) return
@@ -497,6 +576,7 @@ export function Session() {
             }}
             sessionID={route.sessionID}
             setPrompt={(promptInfo) => prompt?.set(promptInfo)}
+            onRevert={revertToMessage}
           />
         ))
       },
@@ -578,63 +658,71 @@ export function Session() {
       title: "Undo previous message",
       value: "session.undo",
       category: "Session",
+      enabled: !reverting(),
       slash: {
         name: "undo",
       },
-      run: async () => {
-        const status = sync.data.session_status?.[route.sessionID]
-        if (status?.type !== "idle") await sdk.client.session.abort({ sessionID: route.sessionID }).catch(() => {})
-        const revert = session()?.revert?.messageID
-        const message = messages().findLast((x) => (!revert || x.id < revert) && x.role === "user")
-        if (!message) return
-        const parts = sync.data.part[message.id] ?? []
-        prompt?.set(
-          parts.reduce(
-            (agg, part) => {
-              if (part.type === "text") {
-                if (!part.synthetic) agg.input += part.text
-              }
-              if (part.type === "file") agg.parts.push(strip(part))
-              return agg
-            },
-            { input: "", parts: [] as PromptInfo["parts"] },
-          ),
-        )
-        await sdk.client.session
-          .revert({
-            sessionID: route.sessionID,
-            messageID: message.id,
-          })
-          .then(() => {
-            toBottom()
-          })
-          .catch(() => {})
-        dialog.clear()
+      run: () => {
+        runRevert("undo", async () => {
+          const sessionID = route.sessionID
+          if (!(await ensureSessionIdle(sessionID))) {
+            toast.show({ message: "Cannot undo while session is busy", variant: "error" })
+            return
+          }
+          const message = findUndoUserMessage(messages(), session()?.revert?.messageID)
+          if (!message) return
+          const restored = promptFromMessageParts(sync.data.part[message.id] ?? []) as PromptInfo
+          const result = await sdk.client.session
+            .revert({ sessionID, messageID: message.id }, { throwOnError: true })
+            .catch((error: unknown) => {
+              toast.show({ message: errorMessage(error) || "Failed to undo", variant: "error" })
+              return undefined
+            })
+          if (!result?.data) return
+          applySession(result.data)
+          prompt?.set(restored)
+          toBottom()
+        })
       },
     },
     {
       title: "Redo",
       value: "session.redo",
       category: "Session",
-      enabled: !!session()?.revert?.messageID,
+      enabled: !!session()?.revert?.messageID && !reverting(),
       slash: {
         name: "redo",
       },
       run: () => {
-        dialog.clear()
-        const messageID = session()?.revert?.messageID
-        if (!messageID) return
-        const message = messages().find((x) => x.role === "user" && x.id > messageID)
-        if (!message) {
-          void sdk.client.session.unrevert({
-            sessionID: route.sessionID,
-          })
-          prompt?.set({ input: "", parts: [] })
-          return
-        }
-        void sdk.client.session.revert({
-          sessionID: route.sessionID,
-          messageID: message.id,
+        runRevert("redo", async () => {
+          const sessionID = route.sessionID
+          const messageID = session()?.revert?.messageID
+          if (!messageID) return
+          if (!(await ensureSessionIdle(sessionID))) {
+            toast.show({ message: "Cannot redo while session is busy", variant: "error" })
+            return
+          }
+          const message = findRedoUserMessage(messages(), messageID)
+          if (!message) {
+            const result = await sdk.client.session
+              .unrevert({ sessionID }, { throwOnError: true })
+              .catch((error: unknown) => {
+                toast.show({ message: errorMessage(error) || "Failed to redo", variant: "error" })
+                return undefined
+              })
+            if (!result?.data) return
+            applySession(result.data)
+            prompt?.set({ input: "", parts: [] })
+            return
+          }
+          const result = await sdk.client.session
+            .revert({ sessionID, messageID: message.id }, { throwOnError: true })
+            .catch((error: unknown) => {
+              toast.show({ message: errorMessage(error) || "Failed to redo", variant: "error" })
+              return undefined
+            })
+          if (!result?.data) return
+          applySession(result.data)
         })
       },
     },
@@ -1243,6 +1331,7 @@ export function Session() {
                                 messageID={message.id}
                                 sessionID={route.sessionID}
                                 setPrompt={(promptInfo) => prompt?.set(promptInfo)}
+                                onRevert={revertToMessage}
                               />
                             ))
                           }}
@@ -1292,6 +1381,8 @@ export function Session() {
                       visible={visible()}
                       ref={bind}
                       disabled={disabled()}
+                      busy={!!reverting()}
+                      busyText={reverting() === "undo" ? "Undoing..." : reverting() === "redo" ? "Redoing..." : undefined}
                       onSubmit={() => {
                         toBottom()
                       }}
