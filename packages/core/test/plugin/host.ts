@@ -19,6 +19,7 @@ type Overrides = Partial<Omit<PluginContext, "options" | "session">> & {
 
 export function host(overrides: Overrides = {}): PluginContext {
   return {
+    app: overrides.app ?? { name: "test", version: "test", channel: "test" },
     options: {},
     agent: overrides.agent ?? {
       get: () => Effect.die("unused agent.get"),

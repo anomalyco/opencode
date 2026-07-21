@@ -10,7 +10,7 @@ import { llmClient } from "../effect/app-node-platform"
 import { SessionEvent } from "./event"
 import type { SessionMessage } from "./message"
 import { SessionModelHeaders } from "./model-headers"
-import { Client } from "@opencode-ai/util/client"
+import { App } from "@opencode-ai/util/app"
 import { SessionRunnerModel } from "./runner/model"
 import { SessionSchema } from "./schema"
 import { toSessionError } from "./to-session-error"
@@ -399,13 +399,13 @@ export const layer = Layer.effect(
     const llm = yield* LLMClient.Service
     const config = yield* Config.Service
     const models = yield* SessionRunnerModel.Service
-    const client = yield* Client.Name
-    return make({ events, llm, models, config: settings(yield* config.entries()), client })
+    const app = yield* App.Metadata
+    return make({ events, llm, models, config: settings(yield* config.entries()), client: app.name })
   }),
 )
 
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [EventV2.node, llmClient, Config.node, SessionRunnerModel.node, Client.node],
+  deps: [EventV2.node, llmClient, Config.node, SessionRunnerModel.node, App.node],
 })

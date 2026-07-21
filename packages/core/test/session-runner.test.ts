@@ -3183,7 +3183,7 @@ describe("SessionRunnerLLM", () => {
         "User-Agent": `opencode/${InstallationVersion}`,
         "x-opencode-project": Project.ID.global,
         "x-opencode-session": sessionID,
-        "x-opencode-client": "cli",
+        "x-opencode-client": "opencode",
       })
     }),
   )

@@ -57,6 +57,7 @@ export function fromPromise(plugin: Plugin) {
             )
 
         const context2: Context = {
+          app: host.app,
           options: host.options,
           agent: {
             get: (id) => run(host.agent.get(id)),

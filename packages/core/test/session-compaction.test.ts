@@ -195,7 +195,7 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
       "User-Agent": `opencode/${InstallationVersion}`,
       "x-opencode-project": Project.ID.global,
       "x-opencode-session": sessionID,
-      "x-opencode-client": "cli",
+      "x-opencode-client": "opencode",
     })
     expect(requests[0]?.generation).toBeUndefined()
     expect(JSON.stringify(requests[0]?.messages)).toContain("Manual compaction should include this short conversation.")

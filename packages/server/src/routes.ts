@@ -1,4 +1,5 @@
 import { Database } from "@opencode-ai/core/database/database"
+import { App } from "@opencode-ai/util/app"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { httpClient } from "@opencode-ai/util/effect/app-node-platform"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -6,7 +7,6 @@ import { EventV2 } from "@opencode-ai/core/event"
 import { EventLogger } from "@opencode-ai/core/event-logger"
 import { FileSystemSearch } from "@opencode-ai/core/filesystem/search"
 import { Observability } from "@opencode-ai/util/observability"
-import { Client } from "@opencode-ai/util/client"
 import { Credential } from "@opencode-ai/core/credential"
 import { Config } from "@opencode-ai/core/config"
 import { CommandV2 } from "@opencode-ai/core/command"
@@ -85,7 +85,7 @@ function makeRoutes<AuthError, AuthServices>(
   const pluginRuntimeCell = PluginRuntime.makeCell()
   const replacements: LayerNode.Replacements = [
     [Database.node, Database.configured(options.database)],
-    [Client.node, Client.configured(options.app?.name)],
+    [App.node, App.configured(options.app)],
     [ModelsDev.node, ModelsDev.configured(options.models)],
     [Watcher.node, Watcher.configured({ enabled: options.fs?.filewatcher })],
     [FileSystemSearch.node, FileSystemSearch.configured({ fff: options.fs?.fff })],
@@ -140,7 +140,7 @@ function makeRoutes<AuthError, AuthServices>(
         Layer.provide(schemaErrorLayer),
         Layer.provide(auth),
         Layer.provide(
-          Observability.layer(options.observability).pipe(Layer.provide(Client.layer(options.app?.name))),
+          Observability.layer(options.observability).pipe(Layer.provide(App.layer(options.app))),
         ),
         HttpRouter.provideRequest(requestServices),
         Layer.provideMerge(services),

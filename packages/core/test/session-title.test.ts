@@ -158,7 +158,7 @@ it.effect("generates a title from the sole user message and renames the session"
       "User-Agent": `opencode/${InstallationVersion}`,
       "x-opencode-project": Project.ID.global,
       "x-opencode-session": sessionID,
-      "x-opencode-client": "cli",
+      "x-opencode-client": "opencode",
     })
     expect(JSON.stringify(requests[0]?.messages)).toContain("Help me debug the failing build")
     const renamed = yield* store.get(sessionID)

@@ -5,7 +5,7 @@ import { Effect, Layer } from "effect"
 import { Commands } from "./commands/commands"
 import { Runtime } from "./framework/runtime"
 import { Observability } from "@opencode-ai/util/observability"
-import { Client } from "@opencode-ai/util/client"
+import { App } from "@opencode-ai/util/app"
 import { Updater } from "./services/updater"
 import { InstallationChannel, InstallationVersion, InstallationLocal } from "@opencode-ai/util/installation/version"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
@@ -74,7 +74,15 @@ Effect.logInfo("cli starting", {
     Observability.layer({
       endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
       headers: process.env.OTEL_EXPORTER_OTLP_HEADERS,
-    }).pipe(Layer.provide(Client.layer(process.env.OPENCODE_CLIENT))),
+    }).pipe(
+      Layer.provide(
+        App.layer({
+          name: process.env.OPENCODE_CLIENT ?? "cli",
+          version: InstallationVersion,
+          channel: InstallationChannel,
+        }),
+      ),
+    ),
   ),
   Effect.provide(NodeServices.layer),
   Effect.scoped,
