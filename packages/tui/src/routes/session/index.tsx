@@ -24,6 +24,7 @@ import { useEvent } from "../../context/event"
 import { SplitBorder } from "../../ui/border"
 import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
 import { Spinner } from "../../component/spinner"
+import { ScrollControls } from "../../component/scroll-controls"
 import { createSyntaxStyleMemo, generateSubtleSyntax, selectedForeground, useTheme } from "../../context/theme"
 import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA } from "@opentui/core"
 import { Prompt, type PromptRef } from "../../component/prompt"
@@ -1165,6 +1166,7 @@ export function Session() {
         <box flexDirection="row" flexGrow={1} minHeight={0}>
           <box flexGrow={1} minHeight={0} paddingBottom={1} paddingLeft={2} paddingRight={2} gap={1}>
             <Show when={session()}>
+              <box flexDirection="row" flexGrow={1} minHeight={0}>
               <scrollbox
                 ref={(r) => (scroll = r)}
                 viewportOptions={{
@@ -1279,6 +1281,8 @@ export function Session() {
                   )}
                 </For>
               </scrollbox>
+              <ScrollControls scroll={scroll} />
+              </box>
               <box flexShrink={0}>
                 <Show when={permissions().length > 0}>
                   <PermissionPrompt

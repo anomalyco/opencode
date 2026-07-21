@@ -132,8 +132,8 @@ export const Definitions = {
   variant_cycle: keybind("ctrl+t", "Cycle model variants"),
   variant_list: keybind("none", "List model variants"),
 
-  messages_page_up: keybind("pageup,ctrl+alt+b", "Scroll messages up by one page"),
-  messages_page_down: keybind("pagedown,ctrl+alt+f", "Scroll messages down by one page"),
+  messages_page_up: keybind("pageup,ctrl+up,ctrl+alt+b", "Scroll messages up by one page"),
+  messages_page_down: keybind("pagedown,ctrl+down,ctrl+alt+f", "Scroll messages down by one page"),
   messages_line_up: keybind("ctrl+alt+y", "Scroll messages up by one line"),
   messages_line_down: keybind("ctrl+alt+e", "Scroll messages down by one line"),
   messages_half_page_up: keybind("ctrl+alt+u", "Scroll messages up by half page"),
