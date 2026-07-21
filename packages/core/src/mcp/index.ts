@@ -157,7 +157,17 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/MCP") {}
 
-export const layer = Layer.effect(
+export const Options = Schema.Struct({
+  clientInfo: Schema.optional(
+    Schema.Struct({
+      name: Schema.String,
+      version: Schema.String,
+    }),
+  ),
+})
+export type Options = typeof Options.Type
+
+export const layer = (options?: Options) => Layer.effect(
   Service,
   Effect.gen(function* () {
     const config = yield* Config.Service
@@ -498,7 +508,14 @@ export const layer = Layer.effect(
         const authProvider = yield* connectProvider(entry)
         // List tools as part of connect so a failure here marks the server failed rather than
         // leaving it connected with a silently empty tool list and no path to recover.
-        const result = yield* MCPClient.connect(name, entry.config, location.directory, authProvider, elicitation).pipe(
+        const result = yield* MCPClient.connect(
+          name,
+          entry.config,
+          location.directory,
+          authProvider,
+          elicitation,
+          options?.clientInfo,
+        ).pipe(
           Effect.flatMap((connection) => connection.tools().pipe(Effect.map((tools) => ({ connection, tools })))),
           Scope.provide(scope),
           Effect.exit,
@@ -772,11 +789,15 @@ export const layer = Layer.effect(
   }),
 )
 
-export const node = makeLocationNode({
-  service: Service,
-  layer,
-  deps: [Config.node, Location.node, EventV2.node, Form.node, Integration.node, Credential.node],
-})
+export function configured(options?: Options) {
+  return makeLocationNode({
+    service: Service,
+    layer: layer(options),
+    deps: [Config.node, Location.node, EventV2.node, Form.node, Integration.node, Credential.node],
+  })
+}
+
+export const node = configured()
 
 // Schema `optional` strips undefined-valued properties on encode, so fields can assign
 // optional properties directly instead of conditionally spreading them.

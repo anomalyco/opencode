@@ -1,7 +1,6 @@
 export * as ServerProcess from "./process"
 
 import { NodeHttpServer, NodeHttpServerRequest } from "@effect/platform-node"
-import { InstallationVersion } from "@opencode-ai/util/installation/version"
 import { SessionRestart } from "@opencode-ai/core/session/execution/restart"
 import { ServiceStatus } from "@opencode-ai/protocol/groups/health"
 import { hasPtyConnectTicketURL } from "@opencode-ai/protocol/groups/pty"
@@ -50,7 +49,7 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
   // Request fibers may continue inbound trace context, but must not inherit the server startup parent.
   yield* bound.http
     .serve(
-      dispatch(password, status, application, shutdown).pipe(
+      dispatch(password, status, application, shutdown, options.app?.version ?? "unknown").pipe(
         HttpMiddleware.cors({ allowedOrigins: isAllowedCorsOrigin, maxAge: 86_400 }),
       ),
       HttpMiddleware.logger,
@@ -153,6 +152,7 @@ function dispatch(
   status: Status.Interface,
   application: Ref.Ref<Option.Option<App>>,
   shutdown: Deferred.Deferred<void>,
+  version: string,
 ): App {
   const auth = ServerAuth.Config.of({ password: Option.some(password), username: "opencode" })
   return Effect.gen(function* () {
@@ -166,7 +166,7 @@ function dispatch(
           : undefined
     if (lifecycle !== undefined) {
       if (!(yield* authorizedRequest(request, auth))) return unauthorized()
-      return yield* control(request, lifecycle, status, () => Deferred.doneUnsafe(shutdown, Effect.void))
+      return yield* control(request, lifecycle, status, () => Deferred.doneUnsafe(shutdown, Effect.void), version)
     }
     const state = yield* status.current
     const app = yield* Ref.get(application)
@@ -189,8 +189,9 @@ const control = Effect.fnUntraced(function* (
   route: "health" | "stop",
   status: Status.Interface,
   stop: () => void,
+  version: string,
 ) {
-  if (route === "health") return yield* healthResponse(status)
+  if (route === "health") return yield* healthResponse(status, version)
   const body = yield* request.json.pipe(Effect.option)
   const input = Option.isSome(body) ? Schema.decodeUnknownOption(ServiceStatus.StopRequest)(body.value) : Option.none()
   if (Option.isNone(input)) return HttpServerResponse.jsonUnsafe({ code: "invalid_request" }, { status: 400 })
@@ -210,10 +211,10 @@ const control = Effect.fnUntraced(function* (
   return HttpServerResponse.jsonUnsafe({ accepted })
 })
 
-const healthResponse = Effect.fnUntraced(function* (status: Status.Interface) {
+const healthResponse = Effect.fnUntraced(function* (status: Status.Interface, version: string) {
   const state = yield* status.current
   return HttpServerResponse.jsonUnsafe(
-    { healthy: true, version: InstallationVersion, pid: process.pid },
+    { healthy: true, version, pid: process.pid },
     {
       status: state.type === "ready" ? 200 : state.type === "failed" ? 500 : 503,
       headers: state.type === "starting" || state.type === "stopping" ? { "retry-after": "1" } : undefined,

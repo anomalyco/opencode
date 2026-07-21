@@ -69,7 +69,11 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
       const instanceID = randomUUID()
       const server = yield* start(
         {
-          client: process.env.OPENCODE_CLIENT ?? "cli",
+          app: {
+            name: process.env.OPENCODE_CLIENT ?? "cli",
+            version: InstallationVersion,
+            channel: InstallationChannel,
+          },
           hostname,
           port,
           password,

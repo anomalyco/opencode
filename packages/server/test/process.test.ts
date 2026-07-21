@@ -10,6 +10,7 @@ it.live("allows browser preflight requests without credentials", () =>
       hostname: "127.0.0.1",
       port: 0,
       password: "secret",
+      app: { version: "test-version" },
       database: { path: ":memory:" },
     })
     const response = yield* Effect.promise(() =>
@@ -38,5 +39,6 @@ it.live("allows browser preflight requests without credentials", () =>
 
     expect(health.status).toBe(200)
     expect(health.headers.get("access-control-allow-origin")).toBe("http://localhost:3000")
+    expect(yield* Effect.promise(() => health.json())).toMatchObject({ version: "test-version" })
   }),
 )
