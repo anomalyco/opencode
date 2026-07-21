@@ -502,7 +502,7 @@ export const SidebarLinear = (props: { directory: Accessor<string> }): JSX.Eleme
               onClick={handlePull}
               disabled={isSyncing()}
               aria-label={language.t("sidebar.linear.pull")}
-              title={language.t("sidebar.linear.pull")}
+              title={language.t("sidebar.linear.pullHint")}
             >
               <Show when={isSyncing() && syncType() === "pull"} fallback={language.t("sidebar.linear.pull")}>
                 <Spinner class="size-3" />

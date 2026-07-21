@@ -130,9 +130,7 @@ export function LinearSyncHistory() {
                 "↙ Linear" text labels to save horizontal space. The arrow
                 alone is sufficient because the entry is always rendered
                 inside the Linear sync panel. */}
-            <span class="text-text-weak shrink-0 w-4 text-center">
-              {entry.type === "push" ? "↗" : "↙"}
-            </span>
+            <span class="text-text-weak shrink-0 w-4 text-center">{entry.type === "push" ? "↗" : "↙"}</span>
             <OutcomeCounts type={entry.type} outcomes={entry.outcomes} />
             <span class="text-text-weaker shrink-0">
               {new Date(entry.timestamp).toLocaleTimeString([], {

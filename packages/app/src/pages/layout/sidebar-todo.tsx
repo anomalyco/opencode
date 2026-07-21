@@ -1,4 +1,4 @@
-import { createMemo, For, Show, type Accessor, type JSX } from "solid-js"
+import { createMemo, For, Show, onCleanup, onMount, type Accessor, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import {
   DragDropProvider,
@@ -28,7 +28,7 @@ const STATUS_ORDER = ["Backlog", "Todo", "In Progress", "In Review", "Done", "Ca
 
 const priorityOrder: Priority[] = ["urgent", "high", "medium", "low", "none"]
 
-const STATUSES = ["Backlog", "Todo", "In Progress", "In Review", "Done", "Canceled"] as const
+const STATUSES = ["Backlog", "Todo", "In Progress", "In Review", "Done", "Canceled", "Duplicate"] as const
 
 /**
  * Archived (terminal) status set — issues in any of these states are
@@ -272,48 +272,164 @@ const SortableTodo = (props: { id: string; children: JSX.Element }): JSX.Element
 }
 
 /**
- * Reorder helper — given a `DragEvent` and the current id order, splice
- * the dragged id to its new position and call `client.issue.reorder`.
- * `Issue.reorder` on the server groups ids by `parent_id` and assigns
- * sequential `position` values within each group, so L1 and L2 lists
- * can be reordered independently with the same call shape.
+ * Unified tree drag handler — ADR-0007 row-split model.
+ *
+ * Each row (L1 or L2) is a single drop target. The mouse Y position
+ * within the target row determines the semantic: upper 2/3 = "before",
+ * lower 1/3 = "after". The 2:1 bias toward the upper zone reflects
+ * that reordering (the dominant L1 operation) is primary.
+ *
+ * 10-scenario behavior matrix (see ADR-0007 §Decision):
+ *   ① L1→L1 upper: reorder, insert before target
+ *   ② L1→L1 lower: reorder, insert after target
+ *   ③ L1→L2 upper/lower: reorder, insert before/after target's parent L1
+ *   ④ L2→L1 upper (non-first): reparent to target's previous sibling L1
+ *   ⑤ L2→L1 upper (first): reparent to target L1 (merge upper/lower)
+ *   ⑥ L2→L1 lower: reparent to target L1
+ *   ⑦ L2→L2 same-parent upper: reorder, insert before target
+ *   ⑧ L2→L2 same-parent lower: reorder, insert after target
+ *   ⑨ L2→L2 cross-parent upper: reparent + insert before target
+ *   ⑩ L2→L2 cross-parent lower: reparent + insert after target
+ *
+ * There are no "disallowed" drags — every drag maps to a reorder or
+ * reparent. L1 never becomes L2 and vice versa; L1→L2 resolves to L1
+ * reordering by the target's parent L1 position.
+ *
+ * The reparent flow is two-step: `issue.update({ patch: { parent_id } })`
+ * to change parent, then `issue.reorder` to set position. See ADR-0001
+ * Amendment 2026-07-20 for the two-step rationale.
  *
  * Returns early (no API call) when:
  *   - `draggable` or `droppable` is missing (drop outside any sortable)
- *   - either id is not in the current list (cross-level drop attempt —
- *     not supported, see ADR-0001 §3.2 two-level hierarchy)
+ *   - either id is not in the current todo set (stale drag)
  *   - from === to (no-op)
+ *   - L2 dropped onto its current parent L1 (no-op reparent)
  */
-const makeReorderHandler = (
-  directory: Accessor<string>,
-  sdk: ReturnType<typeof useServerSDK>,
-  serverSync: ReturnType<typeof useServerSync>,
-  language: ReturnType<typeof useLanguage>,
-  currentIds: () => string[],
-) => (event: DragEvent) => {
-  const { draggable, droppable } = event
-  if (!draggable || !droppable) return
-  const fromId = String(draggable.id)
-  const toId = String(droppable.id)
-  const ids = currentIds()
-  const from = ids.indexOf(fromId)
-  const to = ids.indexOf(toId)
-  if (from === -1 || to === -1 || from === to) return
-  const next = [...ids]
-  const [moved] = next.splice(from, 1)
-  next.splice(to, 0, moved)
-  void (async () => {
-    const res = await sdk().client.issue.reorder({
-      directory: directory(),
-      ids: next,
-    })
-    if (res.error) {
-      showToast({ variant: "error", title: language.t("sidebar.issue.toast.reorderFailed") })
+const makeTreeDragHandler =
+  (
+    directory: Accessor<string>,
+    sdk: ReturnType<typeof useServerSDK>,
+    serverSync: ReturnType<typeof useServerSync>,
+    language: ReturnType<typeof useLanguage>,
+    todos: () => IssueType[],
+    l1: () => IssueType[],
+    l2ByParent: () => Map<string, IssueType[]>,
+  ) =>
+  (event: DragEvent, pointerY: number) => {
+    const { draggable, droppable } = event
+    if (!draggable || !droppable) return
+    const fromId = String(draggable.id)
+    const toId = String(droppable.id)
+
+    const all = todos()
+    const from = all.find((i) => i.id === fromId)
+    const to = all.find((i) => i.id === toId)
+    if (!from || !to) return
+    if (fromId === toId) return
+
+    // Y-coordinate partition: upper 2/3 = "before", lower 1/3 = "after".
+    // 2:1 bias toward upper reflects that reordering is the dominant op.
+    const rect = droppable.node.getBoundingClientRect()
+    const threshold = rect.top + rect.height * (2 / 3)
+    const isUpper = pointerY < threshold
+
+    const reorder = async (ids: string[]) => {
+      const res = await sdk().client.issue.reorder({ directory: directory(), ids })
+      if (res.error) {
+        showToast({ variant: "error", title: language.t("sidebar.issue.toast.reorderFailed") })
+        return
+      }
+      serverSync().todo.refresh(directory())
+    }
+
+    const reparent = async (id: string, newParentId: string, newSiblingIds: string[]) => {
+      const updateRes = await sdk().client.issue.update({
+        id,
+        directory: directory(),
+        patch: { parent_id: newParentId },
+      })
+      if (updateRes.error) {
+        showToast({ variant: "error", title: language.t("sidebar.issue.toast.reparentFailed") })
+        return
+      }
+      const reorderRes = await sdk().client.issue.reorder({ directory: directory(), ids: newSiblingIds })
+      if (reorderRes.error) {
+        showToast({ variant: "error", title: language.t("sidebar.issue.toast.reorderFailed") })
+        return
+      }
+      serverSync().todo.refresh(directory())
+    }
+
+    // Insert fromId into ids at a position relative to targetId.
+    // isUpper = insert before targetId; !isUpper = insert after targetId.
+    // fromId is filtered out first to handle same-list reordering cleanly.
+    const insertRelative = (ids: string[], targetId: string): string[] => {
+      const filtered = ids.filter((id) => id !== fromId)
+      const idx = filtered.indexOf(targetId)
+      if (idx === -1) return [...filtered, fromId]
+      const insertIdx = isUpper ? idx : idx + 1
+      return [...filtered.slice(0, insertIdx), fromId, ...filtered.slice(insertIdx)]
+    }
+
+    // ①②③ L1 being dragged → always reorder.
+    if (from.level === 0) {
+      const l1Ids = l1().map((i) => i.id)
+
+      // ③ L1→L2: resolve to L1 reorder by target's parent L1 position.
+      if (to.level === 1) {
+        const parentL1Id = to.parent_id
+        if (!parentL1Id) return
+        const filtered = l1Ids.filter((id) => id !== fromId)
+        const idx = filtered.indexOf(parentL1Id)
+        if (idx === -1) return
+        const insertIdx = isUpper ? idx : idx + 1
+        void reorder([...filtered.slice(0, insertIdx), fromId, ...filtered.slice(insertIdx)])
+        return
+      }
+
+      // ①② L1→L1: insert before/after target.
+      void reorder(insertRelative(l1Ids, toId))
       return
     }
-    serverSync().todo.refresh(directory())
-  })()
-}
+
+    // ④⑤⑥⑦⑧⑨⑩ L2 being dragged.
+    if (from.level === 1) {
+      // ④⑤⑥ L2→L1: reparent.
+      if (to.level === 0) {
+        const l1List = l1()
+        const toIdx = l1List.findIndex((i) => i.id === toId)
+        if (toIdx === -1) return
+
+        // ④ upper (non-first) → reparent to target's previous sibling L1.
+        // ⑤ upper (first) → reparent to target L1 (merge semantics).
+        // ⑥ lower → reparent to target L1.
+        const targetL1Id = isUpper && toIdx > 0 ? l1List[toIdx - 1].id : toId
+
+        if (from.parent_id === targetL1Id) return // already a child
+        const newSiblingIds = [...(l2ByParent().get(targetL1Id) ?? []).map((i) => i.id), fromId]
+        void reparent(fromId, targetL1Id, newSiblingIds)
+        return
+      }
+
+      // ⑦⑧⑨⑩ L2→L2.
+      if (to.level === 1) {
+        const toParent = to.parent_id
+        if (!toParent) return
+        const fromParent = from.parent_id
+
+        // ⑦⑧ same parent → reorder.
+        if (fromParent === toParent) {
+          const ids = (l2ByParent().get(toParent) ?? []).map((i) => i.id)
+          void reorder(insertRelative(ids, toId))
+          return
+        }
+
+        // ⑨⑩ cross parent → reparent + position.
+        const newSiblingIds = (l2ByParent().get(toParent) ?? []).map((i) => i.id)
+        void reparent(fromId, toParent, insertRelative(newSiblingIds, toId))
+      }
+    }
+  }
 
 export const SidebarTodo = (props: { directory: Accessor<string> }): JSX.Element => {
   const sdk = useServerSDK()
@@ -348,11 +464,11 @@ export const SidebarTodo = (props: { directory: Accessor<string> }): JSX.Element
   )
   const l2ByParent = createMemo(() => {
     const map = todos()
-      .filter((i) => i.level === 1 && i.parent_id)
+      .filter((i): i is IssueType & { parent_id: string } => i.level === 1 && i.parent_id !== null)
       .reduce((acc, i) => {
-        const list = acc.get(i.parent_id!) ?? []
+        const list = acc.get(i.parent_id) ?? []
         list.push(i)
-        acc.set(i.parent_id!, list)
+        acc.set(i.parent_id, list)
         return acc
       }, new Map<string, IssueType[]>())
     for (const list of map.values()) list.sort(sortBy)
@@ -394,6 +510,24 @@ export const SidebarTodo = (props: { directory: Accessor<string> }): JSX.Element
   })
   const toggleExpand = (id: string) => setUi("expanded", id, !ui.expanded[id])
   const isExpanded = (id: string): boolean => ui.expanded[id] === true
+
+  // Flat id list in visual order (L1, then its expanded L2 children, then
+  // next L1, …) for the single SortableProvider. Collapsed L2 children
+  // are excluded because their rows are not rendered and therefore cannot
+  // be drop targets — `closestCenter` would otherwise report stale ids.
+  const allSortableIds = createMemo(() => {
+    const ids: string[] = []
+    const parents = l1()
+    const byParent = l2ByParent()
+    for (const parent of parents) {
+      ids.push(parent.id)
+      if (!isExpanded(parent.id)) continue
+      const kids = byParent.get(parent.id)
+      if (!kids) continue
+      for (const kid of kids) ids.push(kid.id)
+    }
+    return ids
+  })
 
   // Archive area: default collapsed. First expand triggers a fetch of
   // include_archived=true issues via serverSync().todo.refresh.
@@ -444,6 +578,18 @@ export const SidebarTodo = (props: { directory: Accessor<string> }): JSX.Element
   // check in `showEditDialog`. If no click fires (e.g., pointerup landed
   // outside any row), the macrotask still resets the flag — no side effect.
   const guard = { dragged: false }
+
+  // Track the latest pointer Y for ADR-0007 row-split drag partitioning.
+  // `@thisbeyond/solid-dnd`'s DragEvent does not expose mouse coordinates,
+  // so we maintain the value via a global `pointermove` listener and read
+  // it in `onDragEnd` to determine whether the drop landed in the upper
+  // 2/3 ("before") or lower 1/3 ("after") of the target row.
+  const pointerState = { y: 0 }
+  const onPointerMove = (e: PointerEvent) => {
+    pointerState.y = e.clientY
+  }
+  onMount(() => window.addEventListener("pointermove", onPointerMove))
+  onCleanup(() => window.removeEventListener("pointermove", onPointerMove))
 
   const showEditDialog = async (todo: IssueType) => {
     if (guard.dragged) return // Suppress the click that follows a drag-end.
@@ -508,7 +654,10 @@ export const SidebarTodo = (props: { directory: Accessor<string> }): JSX.Element
   const cycleStatus = async (e: MouseEvent, issue: IssueType) => {
     e.stopPropagation()
     const current = statusOf(issue)
-    const idx = STATUSES.indexOf(current as (typeof STATUSES)[number])
+    // `findIndex` avoids narrowing `current: string` to the STATUSES union
+    // via an `as` cast. If `current` is a custom Linear state not in the
+    // list, `idx` is -1 and `(idx + 1) % length` wraps to 0 ("Backlog").
+    const idx = STATUSES.findIndex((s) => s === current)
     const next = STATUSES[(idx + 1) % STATUSES.length]
     const res = await sdk().client.issue.update({
       id: issue.id,
@@ -556,9 +705,7 @@ export const SidebarTodo = (props: { directory: Accessor<string> }): JSX.Element
     const actionTooltip = archived
       ? language.t("sidebar.issue.tooltip.delete")
       : language.t("sidebar.issue.tooltip.archive")
-    const actionLabel = archived
-      ? language.t("common.delete")
-      : language.t("sidebar.issue.confirmArchive")
+    const actionLabel = archived ? language.t("common.delete") : language.t("sidebar.issue.confirmArchive")
     // Left group always has status; priority + due_date are optional members.
     // Center group = labels. Right group = Linear badge only.
     const hasCenterGroup = hasLabels
@@ -584,9 +731,7 @@ export const SidebarTodo = (props: { directory: Accessor<string> }): JSX.Element
         {/* Expand/collapse chevron — only for L1 items that have L2 sub-todos.
             Default is collapsed; clicking toggles the sub-todo list visibility.
             In the archive area, uses archivedL2ByParent; otherwise l2ByParent. */}
-        <Show
-          when={!isL2 && ((isArchivedView ? archivedL2ByParent() : l2ByParent()).get(issue.id) ?? []).length > 0}
-        >
+        <Show when={!isL2 && ((isArchivedView ? archivedL2ByParent() : l2ByParent()).get(issue.id) ?? []).length > 0}>
           <button
             type="button"
             class="shrink-0 size-4 flex items-center justify-center text-text-weaker hover:text-text-base transition-colors pt-0.5"
@@ -659,7 +804,9 @@ export const SidebarTodo = (props: { directory: Accessor<string> }): JSX.Element
               class={`shrink-0 flex items-center justify-center px-0.5 ${
                 readOnly ? "" : "cursor-pointer hover:opacity-80"
               }`}
-              title={readOnly ? language.t("sidebar.issue.priority.none") : language.t("sidebar.issue.tooltip.cyclePriority")}
+              title={
+                readOnly ? language.t("sidebar.issue.priority.none") : language.t("sidebar.issue.tooltip.cyclePriority")
+              }
               onClick={readOnly ? undefined : (e) => cyclePriority(e, issue)}
             >
               <PrioritySignalIcon priority={priority} />
@@ -841,20 +988,23 @@ export const SidebarTodo = (props: { directory: Accessor<string> }): JSX.Element
         fallback={<div class="text-11-regular text-text-base py-2">{language.t("sidebar.issue.empty")}</div>}
       >
         {/*
-          L1 drag-and-drop — wraps the L1 list in a DragDropProvider so the
-          user can drag L1 rows to reorder them. onDragEnd calls
-          `client.issue.reorder` with the new id order; the server's
-          `Issue.reorder` groups ids by `parent_id` (null for L1) and
-          assigns sequential `position` values. Each L1's expanded L2
-          list has its own nested DragDropProvider so L2 rows can be
-          reordered independently within their parent's scope.
-          Archived rows are not in `todos()` (filtered by `filterByArchive`
-          server-side), so they are naturally excluded from the sortable
-          set — no need to disable drag per-row.
+          Unified tree drag-and-drop — ADR-0007 row-split model.
+          A single flat DragDropProvider covers both L1 and L2 rows.
+          `makeTreeDragHandler` uses the pointer Y coordinate (tracked via
+          `pointerState.y`) to partition the target row into upper 2/3
+          ("before") and lower 1/3 ("after"), then dispatches to one of
+          10 scenarios (see ADR-0007 §Decision). There are no disallowed
+          drags — L1→L2 resolves to L1 reordering by the target's parent
+          L1 position. Archived rows are not in `todos()` (filtered by
+          `filterByArchive` server-side), so they are naturally excluded
+          from the sortable set — no need to disable drag per-row.
+          The SortableProvider `ids` list is built in visual order (L1,
+          then its expanded L2 children, then next L1, …) so
+          `closestCenter` collision detection matches the rendered layout.
         */}
         <DragDropProvider
           onDragEnd={(event) => {
-            // Set the click-suppression guard before running the reorder
+            // Set the click-suppression guard before running the drag
             // handler. The browser will dispatch a `click` right after
             // pointerup (same task); `showEditDialog` checks `guard.dragged`
             // and bails out. The macrotask reset ensures the flag is cleared
@@ -863,60 +1013,31 @@ export const SidebarTodo = (props: { directory: Accessor<string> }): JSX.Element
             setTimeout(() => {
               guard.dragged = false
             }, 0)
-            return makeReorderHandler(
+            return makeTreeDragHandler(
               props.directory,
               sdk,
               serverSync,
               language,
-              () => l1().map((i) => i.id),
-            )(event)
+              () => todos(),
+              () => l1(),
+              () => l2ByParent(),
+            )(event, pointerState.y)
           }}
           collisionDetector={closestCenter}
         >
           <DragDropSensors />
-          <SortableProvider ids={l1().map((i) => i.id)}>
+          <SortableProvider ids={allSortableIds()}>
             <div class="flex flex-col gap-0.5">
               <For each={l1()}>
                 {(parent) => (
                   <div class="flex flex-col gap-0.5">
                     <SortableTodo id={parent.id}>{renderRow(parent)}</SortableTodo>
                     <Show when={(l2ByParent().get(parent.id) ?? []).length > 0 && isExpanded(parent.id)}>
-                      {/*
-                        L2 drag-and-drop — nested DragDropProvider scoped to
-                        this parent's L2 list. The nested provider takes
-                        precedence over the outer L1 provider, so L2 drags
-                        stay within their parent's list (no cross-level
-                        drag — ADR-0001 §3.2).
-                      */}
-                      <DragDropProvider
-                        onDragEnd={(event) => {
-                          // Same click-suppression guard as the L1 provider.
-                          // Both providers share the same `guard` object
-                          // (component scope), so an L2 drag also suppresses
-                          // the post-pointerup click on L2 rows.
-                          guard.dragged = true
-                          setTimeout(() => {
-                            guard.dragged = false
-                          }, 0)
-                          return makeReorderHandler(
-                            props.directory,
-                            sdk,
-                            serverSync,
-                            language,
-                            () => (l2ByParent().get(parent.id) ?? []).map((i) => i.id),
-                          )(event)
-                        }}
-                        collisionDetector={closestCenter}
-                      >
-                        <DragDropSensors />
-                        <SortableProvider ids={(l2ByParent().get(parent.id) ?? []).map((i) => i.id)}>
-                          <div class="flex flex-col gap-0.5 pl-[22px]">
-                            <For each={l2ByParent().get(parent.id) ?? []}>
-                              {(kid) => <SortableTodo id={kid.id}>{renderRow(kid, true)}</SortableTodo>}
-                            </For>
-                          </div>
-                        </SortableProvider>
-                      </DragDropProvider>
+                      <div class="flex flex-col gap-0.5 pl-[22px]">
+                        <For each={l2ByParent().get(parent.id) ?? []}>
+                          {(kid) => <SortableTodo id={kid.id}>{renderRow(kid, true)}</SortableTodo>}
+                        </For>
+                      </div>
                     </Show>
                   </div>
                 )}
@@ -952,9 +1073,7 @@ export const SidebarTodo = (props: { directory: Accessor<string> }): JSX.Element
           <Show
             when={archivedL1().length > 0}
             fallback={
-              <div class="text-11-regular text-text-weaker py-2">
-                {language.t("sidebar.issue.archiveArea.empty")}
-              </div>
+              <div class="text-11-regular text-text-weaker py-2">{language.t("sidebar.issue.archiveArea.empty")}</div>
             }
           >
             <div class="flex flex-col gap-0.5">
@@ -962,9 +1081,7 @@ export const SidebarTodo = (props: { directory: Accessor<string> }): JSX.Element
                 {(parent) => (
                   <div class="flex flex-col gap-0.5">
                     {renderRow(parent, false, true)}
-                    <Show
-                      when={(archivedL2ByParent().get(parent.id) ?? []).length > 0 && isExpanded(parent.id)}
-                    >
+                    <Show when={(archivedL2ByParent().get(parent.id) ?? []).length > 0 && isExpanded(parent.id)}>
                       <div class="flex flex-col gap-0.5 pl-[22px]">
                         <For each={archivedL2ByParent().get(parent.id) ?? []}>
                           {(kid) => renderRow(kid, true, true)}

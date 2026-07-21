@@ -108,18 +108,12 @@ const buildGrid = (viewYear: number, viewMonth: number): { date: Date; inMonth: 
   const startWeekday = first.getDay()
   const gridStart = addDays(first, -startWeekday)
 
-  const rows: { date: Date; inMonth: boolean }[][] = []
-  let cursor = gridStart
-  for (let row = 0; row < 6; row++) {
-    const cells: { date: Date; inMonth: boolean }[] = []
-    for (let col = 0; col < 7; col++) {
-      const inMonth = cursor.getMonth() === viewMonth
-      cells.push({ date: new Date(cursor), inMonth })
-      cursor = addDays(cursor, 1)
-    }
-    rows.push(cells)
-  }
-  return rows
+  // 6 rows × 7 cols = 42 days; compute the flat list once, then chunk.
+  const flat = Array.from({ length: 42 }, (_, i) => {
+    const date = addDays(gridStart, i)
+    return { date, inMonth: date.getMonth() === viewMonth }
+  })
+  return Array.from({ length: 6 }, (_, row) => flat.slice(row * 7, row * 7 + 7))
 }
 
 const formatDisplay = (iso: string, t: (k: string) => string): string => {
@@ -146,6 +140,13 @@ export const DatePicker: Component<DatePickerProps> = (props) => {
     view: initialView(),
     focusDay: props.value ?? toDate(today()),
   })
+
+  // `t` alias must be declared before any `createMemo` that references it —
+  // `createMemo` runs its fn once eagerly to compute the initial value, so
+  // a `const t` declared further down would still be in TDZ at that point
+  // (this was the root cause of the "Cannot access 't' before
+  // initialization" crash when the Add Todo dialog opened).
+  const t = (k: string) => language.t(k)
 
   const grid = createMemo(() => buildGrid(state.view.year, state.view.month))
 
@@ -211,8 +212,6 @@ export const DatePicker: Component<DatePickerProps> = (props) => {
     e.preventDefault()
   }
 
-  const t = (k: string) => language.t(k)
-
   const triggerLabel = createMemo(() => {
     if (!props.value) return props.placeholder ?? t("dialog.todo.field.dueDate.placeholder")
     return formatDisplay(props.value, t)
@@ -274,7 +273,7 @@ export const DatePicker: Component<DatePickerProps> = (props) => {
             <span
               role="button"
               tabIndex={-1}
-              class="text-text-weaker hover:text-text-strong transition-colors"
+              class="flex items-center justify-center text-text-weaker hover:text-text-strong transition-colors"
               aria-label={t("dialog.todo.field.dueDate.clear")}
               onClick={(e: MouseEvent) => {
                 e.stopPropagation()

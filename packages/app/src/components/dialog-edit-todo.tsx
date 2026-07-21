@@ -64,6 +64,36 @@ const LABEL_OPTIONS = ["Feature", "Improvement", "Bug", "ready-for-agent"] as co
 // commands (like /clear) here because they are session-scoped and not useful
 // in a Todo description.
 
+/**
+ * Extract a human-readable message from a mutation error. The HTTP API
+ * returns errors in several shapes: bare string, `{ message }`, validation
+ * arrays `[{ path, message, code }]`, or nested `{ error: { message } }`.
+ * Returns undefined when no message can be derived — the caller falls back
+ * to a generic i18n string.
+ */
+const extractErrorMessage = (e: unknown): string | undefined => {
+  if (typeof e === "string") return e
+  if (!e || typeof e !== "object") return undefined
+  const err = e as { message?: string; error?: unknown }
+  if (err.message) return err.message
+  if (typeof err.error === "string") return err.error
+  if (Array.isArray(err.error)) {
+    // Validation errors from the HTTP API: [{ path, message, code }]
+    return err.error
+      .map((x: unknown) => {
+        const z = x as { path?: unknown[]; message?: string; code?: string }
+        const path = Array.isArray(z.path) ? z.path.join(".") : ""
+        return z.message ? (path ? `${path}: ${z.message}` : z.message) : (z.code ?? String(x))
+      })
+      .join("; ")
+  }
+  if (err.error && typeof err.error === "object") {
+    const inner = err.error as { message?: string; error?: string }
+    return inner.message ?? (typeof inner.error === "string" ? inner.error : undefined)
+  }
+  return undefined
+}
+
 export const DialogEditTodo: Component<DialogEditTodoProps> = (props) => {
   const dialog = useDialog()
   const language = useLanguage()
@@ -255,16 +285,23 @@ export const DialogEditTodo: Component<DialogEditTodoProps> = (props) => {
           directory: props.directory,
           issue,
         })
-        // throwOnError:true throws on non-2xx; but hono-openapi validator returns
-        // 200 + {success:false, error:[...]} on validation failure, so we must
-        // check success field manually.
+        // The generated SDK types the response as the success shape, but
+        // hono-openapi's validator returns 200 + `{success:false, error:[...]}`
+        // on validation failure (not a non-2xx). The double assertion
+        // `as unknown as { success?: ... }` widens the SDK type so we can
+        // inspect the `success` flag manually before trusting the payload.
         const r = res as unknown as { success?: boolean; error?: unknown }
         if (r.success === false) throw r
         if (res.error) throw res.error
         return
       }
+      // Update path: `props.todo` and `props.todo.id` are guaranteed non-null
+      // when mode !== "create" (the dialog is only opened in edit mode with
+      // an existing todo). Guard explicitly so the type system agrees without
+      // a non-null assertion.
+      if (!props.todo || !props.todo.id) throw new Error("dialog.todo: missing todo in edit mode")
       const res = await sdk().client.issue.update({
-        id: props.todo!.id!,
+        id: props.todo.id,
         directory: props.directory,
         patch: payload,
       })
@@ -279,28 +316,7 @@ export const DialogEditTodo: Component<DialogEditTodoProps> = (props) => {
       handleClose()
     },
     onError: (e: unknown) => {
-      const msg = (() => {
-        if (typeof e === "string") return e
-        if (!e || typeof e !== "object") return undefined
-        const err = e as { message?: string; error?: unknown }
-        if (err.message) return err.message
-        if (typeof err.error === "string") return err.error
-        if (Array.isArray(err.error)) {
-          // Validation errors from the HTTP API: [{ path, message, code }]
-          return err.error
-            .map((x: unknown) => {
-              const z = x as { path?: unknown[]; message?: string; code?: string }
-              const path = Array.isArray(z.path) ? z.path.join(".") : ""
-              return z.message ? (path ? `${path}: ${z.message}` : z.message) : (z.code ?? String(x))
-            })
-            .join("; ")
-        }
-        if (err.error && typeof err.error === "object") {
-          const inner = err.error as { message?: string; error?: string }
-          return inner.message ?? (typeof inner.error === "string" ? inner.error : undefined)
-        }
-        return undefined
-      })()
+      const msg = extractErrorMessage(e)
       showToast({ variant: "error", title: msg ?? language.t("dialog.todo.error.saveFailed") })
     },
   }))
@@ -362,9 +378,7 @@ export const DialogEditTodo: Component<DialogEditTodoProps> = (props) => {
       setUi("atOptions", [])
       return
     }
-    const paths = (res.data as string[])
-      .filter((p): p is string => !!p)
-      .slice(0, 10)
+    const paths = (res.data as string[]).filter((p): p is string => !!p).slice(0, 10)
     const options: AtOption[] = paths.map((path) => ({ type: "file", path, display: path }))
     setUi("atOptions", options)
     // Pre-select the first item so Enter/Tab inserts it (matches the chat

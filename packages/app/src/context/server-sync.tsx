@@ -156,14 +156,20 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
   const queryClient = useQueryClient()
   const homeSessions = createHomeSessionIndexCache(queryClient, ServerConnection.key(serverSDK.server))
 
-  let bootedAt = 0
-  let bootingRoot = false
-  let eventFrame: number | undefined
-  let eventTimer: ReturnType<typeof setTimeout> | undefined
+  // Non-reactive mutable state for boot/coalesce bookkeeping. Wrapped in a
+  // single `const` object per AGENTS.md "Prefer const over let" — the fields
+  // are mutated, but the binding is stable. SolidJS does not need these to
+  // be signals because they don't drive UI reactivity.
+  const boot = {
+    bootedAt: 0,
+    bootingRoot: false,
+    eventFrame: undefined as number | undefined,
+    eventTimer: undefined as ReturnType<typeof setTimeout> | undefined,
+  }
 
   onCleanup(() => {
-    if (eventFrame !== undefined) cancelAnimationFrame(eventFrame)
-    if (eventTimer !== undefined) clearTimeout(eventTimer)
+    if (boot.eventFrame !== undefined) cancelAnimationFrame(boot.eventFrame)
+    if (boot.eventTimer !== undefined) clearTimeout(boot.eventTimer)
   })
 
   const setProjects = (next: Project[] | ((draft: Project[]) => Project[])) => {
@@ -190,8 +196,8 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
         setGlobalStore: setBootStore,
         queryClient,
       })
-      bootedAt = Date.now()
-      return bootedAt
+      boot.bootedAt = Date.now()
+      return boot.bootedAt
     },
   }))
 
@@ -219,9 +225,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
     const sdk = sdkFor(directory)
     const includeArchived = options?.includeArchived ?? false
     const storeKey = includeArchived ? "workspace_todo_archived" : "workspace_todo"
-    const query = includeArchived
-      ? { directory, include_archived: "true" as const }
-      : { directory }
+    const query = includeArchived ? { directory, include_archived: "true" as const } : { directory }
     void sdk.issue
       .list(query)
       .then((x) => {
@@ -393,7 +397,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
     const directory = e.name
     const key = directoryKey(directory)
     const event = e.details
-    const recent = bootingRoot || Date.now() - bootedAt < 1500
+    const recent = boot.bootingRoot || Date.now() - boot.bootedAt < 1500
 
     session.apply(event)
     if (event.type === "session.created" || event.type === "session.updated" || event.type === "session.deleted") {
@@ -461,16 +465,16 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
 
   onMount(() => {
     if (typeof requestAnimationFrame === "function") {
-      eventFrame = requestAnimationFrame(() => {
-        eventFrame = undefined
-        eventTimer = setTimeout(() => {
-          eventTimer = undefined
+      boot.eventFrame = requestAnimationFrame(() => {
+        boot.eventFrame = undefined
+        boot.eventTimer = setTimeout(() => {
+          boot.eventTimer = undefined
           void serverSDK.event.start()
         }, 0)
       })
     } else {
-      eventTimer = setTimeout(() => {
-        eventTimer = undefined
+      boot.eventTimer = setTimeout(() => {
+        boot.eventTimer = undefined
         void serverSDK.event.start()
       }, 0)
     }
