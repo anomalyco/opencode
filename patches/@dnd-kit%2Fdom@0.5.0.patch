@@ -1,0 +1,17 @@
+--- a/index.js
++++ b/index.js
+@@ -2195,6 +2195,14 @@
+       sensors,
+       modifiers
+     }));
++  }
++  set plugins(plugins) {
++    this.registry.plugins.values = [
++      ScrollListener,
++      Scroller,
++      StyleInjector,
++      ...plugins
++    ];
+   }
+ };
+ var _element_dec, _handle_dec, _c, _init5, _handle, _element;
