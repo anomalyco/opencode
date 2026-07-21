@@ -89,6 +89,13 @@ export function shouldDisplayTabsToast(
   return isAppUpgrade(previous, current) || (!previous && existingInstall)
 }
 
+export function hasExistingWebState(
+  settings: Promise<string> | string | null,
+  previousVersion: string | undefined,
+) {
+  return settings !== null || previousVersion !== undefined
+}
+
 export function shouldEnableNewLayout(previous: string | undefined, current: string | undefined) {
   if (!current) return false
   const currentComparison = compareVersions(current, newLayoutDesignsUpgradeCutoff)
@@ -220,7 +227,7 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
   gate: false,
   init: () => {
     const platform = usePlatform()
-    const [store, setStore, _, ready] = persisted("settings.v3", createStore<Settings>(defaultSettings))
+    const [store, setStore, settingsInit, ready] = persisted("settings.v3", createStore<Settings>(defaultSettings))
     const [launch, setLaunch, , launchReady] = persisted(
       "app-version.v1",
       createStore<{ version?: string }>({ version: undefined }),
@@ -291,6 +298,16 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
       })
       if (!platform.version || launch.version === platform.version) return
       setLaunch("version", platform.version)
+    })
+
+    createEffect(() => {
+      if (!ready() || !launchState.classified || platform.platform !== "web") return
+      if (layoutTransitionClassified()) return
+      setStore(
+        "general",
+        "layoutTransitionEligible",
+        hasExistingWebState(settingsInit, launchState.previous),
+      )
     })
 
     createEffect(() => {
