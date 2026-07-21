@@ -20,7 +20,7 @@ import { AbsolutePath, PositiveInt, RelativePath } from "./schema"
 import { AgentV2 } from "./agent"
 import { SessionV1 } from "./v1/session"
 import { Money } from "@opencode-ai/schema/money"
-import { InstallationVersion } from "@opencode-ai/util/installation/version"
+import { App } from "./app"
 import { Slug } from "./util/slug"
 import { ProjectTable } from "./project/sql"
 import path from "path"
@@ -305,6 +305,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/v2
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
+    const app = yield* App.Metadata
     const database = yield* Database.Service
     const db = database.db
     const events = yield* EventV2.Service
@@ -352,7 +353,7 @@ const layer = Layer.effect(
         const info = SessionV1.SessionInfo.make({
           id: sessionID,
           slug: Slug.create(),
-          version: InstallationVersion,
+          version: app.version,
           projectID: project.id,
           parentID: input.parentID,
           directory: location.directory,
@@ -1040,5 +1041,6 @@ export const node = makeGlobalNode({
     SessionProjector.node,
     FSUtil.node,
     Global.node,
+    App.node,
   ],
 })

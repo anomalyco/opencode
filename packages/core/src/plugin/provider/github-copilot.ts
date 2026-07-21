@@ -4,7 +4,7 @@ import { Catalog } from "../../catalog"
 import { Credential } from "../../credential"
 import { EventV2 } from "../../event"
 import { CopilotModels } from "../../github-copilot/models"
-import { InstallationVersion } from "@opencode-ai/util/installation/version"
+import { App } from "../../app"
 import { Integration } from "../../integration"
 import { ModelV2 } from "../../model"
 import { define } from "@opencode-ai/plugin/v2/effect/plugin"
@@ -30,7 +30,7 @@ const Token = Schema.Struct({
 const JsonBody = Schema.UnknownFromJsonString
 const decodeBody = Schema.decodeUnknownOption(JsonBody)
 
-const oauth = {
+const oauth = (app: App.Info) => ({
   integrationID: Integration.ID.make("github-copilot"),
   method: {
     id: methodID,
@@ -63,7 +63,7 @@ const oauth = {
       const urls = oauthURLs(domain)
       const device = yield* request(urls.device, {
         method: "POST",
-        headers: headers(),
+        headers: headers(app),
         body: JSON.stringify({ client_id: clientID, scope: "read:user" }),
       }).pipe(Effect.map(Schema.decodeUnknownSync(Device)))
       const interval = Math.max(device.interval, 1) * 1000
@@ -71,7 +71,7 @@ const oauth = {
       const poll = (wait: number): Effect.Effect<Credential.OAuth, unknown> =>
         request(urls.token, {
           method: "POST",
-          headers: headers(),
+          headers: headers(app),
           body: JSON.stringify({
             client_id: clientID,
             device_code: device.device_code,
@@ -109,7 +109,7 @@ const oauth = {
         callback: poll(interval),
       }
     }),
-} satisfies IntegrationOAuthMethodRegistration
+}) satisfies IntegrationOAuthMethodRegistration
 
 function shouldUseResponses(modelID: string) {
   // Copilot supports Responses for GPT-5 class models, except mini variants
@@ -152,7 +152,7 @@ export const GithubCopilotPlugin = define({
             {
               ...provider?.headers,
               Authorization: `Bearer ${credential.refresh}`,
-              "User-Agent": `opencode/${InstallationVersion}`,
+              "User-Agent": App.useragent(ctx.app),
               "X-GitHub-Api-Version": apiVersion,
             },
             existing,
@@ -166,7 +166,7 @@ export const GithubCopilotPlugin = define({
     })
 
     yield* ctx.integration.transform((draft) => {
-      draft.method.update(oauth)
+      draft.method.update(oauth(ctx.app))
     })
     yield* ctx.catalog.transform((evt) => {
       const item = evt.provider.get(ProviderV2.ID.githubCopilot)
@@ -209,6 +209,7 @@ export const GithubCopilotPlugin = define({
           typeof evt.options.apiKey === "string" ? evt.options.apiKey : undefined,
           evt.options.fetch,
           evt.package === "@ai-sdk/anthropic",
+          ctx.app,
         )
         if (evt.package === "@ai-sdk/anthropic") {
           evt.options.headers = {
@@ -261,11 +262,11 @@ function baseURL(enterprise?: string) {
   return enterprise ? `https://copilot-api.${normalizeDomain(enterprise)}` : "https://api.githubcopilot.com"
 }
 
-function headers() {
+function headers(app: App.Info) {
   return {
     Accept: "application/json",
     "Content-Type": "application/json",
-    "User-Agent": `opencode/${InstallationVersion}`,
+    "User-Agent": App.useragent(app),
   }
 }
 
@@ -282,7 +283,12 @@ function request(url: string, init: RequestInit) {
 
 type Fetch = (input: Parameters<typeof fetch>[0], init?: RequestInit) => Promise<Response>
 
-export function copilotFetch(token: string | undefined, upstream: Fetch | undefined, anthropic: boolean): Fetch {
+export function copilotFetch(
+  token: string | undefined,
+  upstream: Fetch | undefined,
+  anthropic: boolean,
+  app: App.Info,
+): Fetch {
   const send = upstream ?? fetch
   return async (input, init) => {
     const requestHeaders = new Headers(init?.headers)
@@ -291,7 +297,7 @@ export function copilotFetch(token: string | undefined, upstream: Fetch | undefi
       requestHeaders.delete("x-api-key")
       requestHeaders.set("Authorization", `Bearer ${token}`)
     }
-    requestHeaders.set("User-Agent", `opencode/${InstallationVersion}`)
+    requestHeaders.set("User-Agent", App.useragent(app))
     requestHeaders.set("Openai-Intent", "conversation-edits")
     requestHeaders.set("X-GitHub-Api-Version", apiVersion)
     if (anthropic) requestHeaders.set("anthropic-beta", "interleaved-thinking-2025-05-14")

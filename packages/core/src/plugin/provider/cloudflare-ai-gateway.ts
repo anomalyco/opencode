@@ -1,5 +1,5 @@
 import os from "os"
-import { InstallationVersion } from "@opencode-ai/util/installation/version"
+import { App } from "../../app"
 import { Effect, Option, Schema } from "effect"
 import { define } from "@opencode-ai/plugin/v2/effect/plugin"
 
@@ -23,7 +23,7 @@ export const CloudflareAIGatewayPlugin = define({
           accountId: config.accountId,
           gateway: config.gatewayId,
           apiKey: config.apiKey,
-          options: gatewayOptions(evt.options, metadata),
+          options: gatewayOptions(evt.options, metadata, ctx.app),
         } as any)
         const unified = createUnified({ apiKey: config.apiKey })
         evt.sdk = {
@@ -64,7 +64,7 @@ function gatewayMetadata(options: Record<string, unknown>) {
   return raw ? Option.getOrUndefined(decodeJson(raw)) : undefined
 }
 
-function gatewayOptions(options: Record<string, unknown>, metadata: unknown) {
+function gatewayOptions(options: Record<string, unknown>, metadata: unknown, app: App.Info) {
   return {
     metadata,
     cacheTtl: options.cacheTtl,
@@ -72,7 +72,7 @@ function gatewayOptions(options: Record<string, unknown>, metadata: unknown) {
     skipCache: options.skipCache,
     collectLog: options.collectLog,
     headers: {
-      "User-Agent": `opencode/${InstallationVersion} cloudflare-ai-gateway (${os.platform()} ${os.release()}; ${os.arch()})`,
+      "User-Agent": `${App.useragent(app)} cloudflare-ai-gateway (${os.platform()} ${os.release()}; ${os.arch()})`,
     },
   }
 }

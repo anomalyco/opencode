@@ -2,9 +2,9 @@ import { createServer } from "node:http"
 import type { IntegrationOAuthMethodRegistration } from "@opencode-ai/plugin/v2/effect/integration"
 import { define } from "@opencode-ai/plugin/v2/effect/plugin"
 import { Deferred, Effect, Option, Schema, Semaphore, Stream } from "effect"
+import { App } from "../../app"
 import { Credential } from "../../credential"
 import { EventV2 } from "../../event"
-import { InstallationVersion } from "@opencode-ai/util/installation/version"
 import { Integration } from "../../integration"
 import { ModelV2 } from "../../model"
 import { OauthCallbackPage } from "../../oauth/page"
@@ -42,7 +42,7 @@ const Claims = Schema.fromJsonString(
 )
 const decodeClaims = Schema.decodeUnknownOption(Claims)
 
-const browser = {
+const browser = (app: App.Info) => ({
   integrationID: Integration.ID.make("openai"),
   method: {
     id: browserMethodID,
@@ -91,15 +91,15 @@ const browser = {
         url: authorizeURL(redirect, pkce, state),
         instructions: "Complete authorization in your browser. This window will close automatically.",
         callback: Deferred.await(code).pipe(
-          Effect.flatMap((value) => exchange(value, redirect, pkce)),
+          Effect.flatMap((value) => exchange(value, redirect, pkce, app)),
           Effect.map((tokens) => credential(browserMethodID, tokens)),
         ),
       }
     }),
-  refresh: (value) => refresh(browserMethodID, value),
-} satisfies IntegrationOAuthMethodRegistration
+  refresh: (value) => refresh(browserMethodID, value, app),
+}) satisfies IntegrationOAuthMethodRegistration
 
-const headless = {
+const headless = (app: App.Info) => ({
   integrationID: Integration.ID.make("openai"),
   method: {
     id: headlessMethodID,
@@ -112,7 +112,7 @@ const headless = {
         `${issuer}/api/accounts/deviceauth/usercode`,
         {
           method: "POST",
-          headers: headers("application/json"),
+          headers: headers("application/json", app),
           body: JSON.stringify({ client_id: clientID }),
         },
       )
@@ -127,7 +127,7 @@ const headless = {
               try: (signal) =>
                 fetch(`${issuer}/api/accounts/deviceauth/token`, {
                   method: "POST",
-                  headers: headers("application/json"),
+                  headers: headers("application/json", app),
                   body: JSON.stringify({ device_auth_id: device.device_auth_id, user_code: device.user_code }),
                   signal,
                 }),
@@ -140,10 +140,12 @@ const headless = {
               }
               return credential(
                 headlessMethodID,
-                yield* exchange(data.authorization_code, `${issuer}/deviceauth/callback`, {
-                  verifier: data.code_verifier,
-                  challenge: "",
-                }),
+                yield* exchange(
+                  data.authorization_code,
+                  `${issuer}/deviceauth/callback`,
+                  { verifier: data.code_verifier, challenge: "" },
+                  app,
+                ),
               )
             }
             if (response.status !== 403 && response.status !== 404) {
@@ -154,8 +156,8 @@ const headless = {
         }),
       }
     }),
-  refresh: (value) => refresh(headlessMethodID, value),
-} satisfies IntegrationOAuthMethodRegistration
+  refresh: (value) => refresh(headlessMethodID, value, app),
+}) satisfies IntegrationOAuthMethodRegistration
 
 export const OpenAIPlugin = define({
   id: "opencode.provider.openai",
@@ -173,8 +175,8 @@ export const OpenAIPlugin = define({
     })
 
     yield* ctx.integration.transform((draft) => {
-      draft.method.update(browser)
-      draft.method.update(headless)
+      draft.method.update(browser(ctx.app))
+      draft.method.update(headless(ctx.app))
     })
     yield* load()
     yield* ctx.catalog.transform((evt) => {
@@ -232,14 +234,14 @@ export const OpenAIPlugin = define({
   }),
 } satisfies PluginInternal.InternalPlugin)
 
-function headers(contentType: string) {
-  return { "Content-Type": contentType, "User-Agent": `opencode/${InstallationVersion}` }
+function headers(contentType: string, app: App.Info) {
+  return { "Content-Type": contentType, "User-Agent": App.useragent(app) }
 }
 
-function exchange(code: string, redirect: string, pkce: Pkce) {
+function exchange(code: string, redirect: string, pkce: Pkce, app: App.Info) {
   return request<TokenResponse>(`${issuer}/oauth/token`, {
     method: "POST",
-    headers: headers("application/x-www-form-urlencoded"),
+    headers: headers("application/x-www-form-urlencoded", app),
     body: new URLSearchParams({
       grant_type: "authorization_code",
       code,
@@ -250,10 +252,10 @@ function exchange(code: string, redirect: string, pkce: Pkce) {
   })
 }
 
-function refresh(methodID: Integration.MethodID, value: Pick<Credential.OAuth, "refresh" | "metadata">) {
+function refresh(methodID: Integration.MethodID, value: Pick<Credential.OAuth, "refresh" | "metadata">, app: App.Info) {
   return request<TokenResponse>(`${issuer}/oauth/token`, {
     method: "POST",
-    headers: headers("application/x-www-form-urlencoded"),
+    headers: headers("application/x-www-form-urlencoded", app),
     body: new URLSearchParams({
       grant_type: "refresh_token",
       refresh_token: value.refresh,
