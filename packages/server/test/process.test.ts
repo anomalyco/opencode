@@ -1,0 +1,42 @@
+import { expect } from "bun:test"
+import { Effect } from "effect"
+import { HttpServer } from "effect/unstable/http"
+import { it } from "../../core/test/lib/effect"
+import { ServerProcess } from "../src/process"
+
+it.live("allows browser preflight requests without credentials", () =>
+  Effect.gen(function* () {
+    const server = yield* ServerProcess.start<never, never>({
+      hostname: "127.0.0.1",
+      port: 0,
+      password: "secret",
+      database: { path: ":memory:" },
+    })
+    const response = yield* Effect.promise(() =>
+      fetch(new URL("/api/health", HttpServer.formatAddress(server.address)), {
+        method: "OPTIONS",
+        headers: {
+          origin: "http://localhost:3000",
+          "access-control-request-method": "GET",
+          "access-control-request-headers": "authorization",
+        },
+      }),
+    )
+
+    expect(response.status).toBe(204)
+    expect(response.headers.get("access-control-allow-origin")).toBe("http://localhost:3000")
+    expect(response.headers.get("access-control-allow-headers")).toBe("authorization")
+
+    const health = yield* Effect.promise(() =>
+      fetch(new URL("/api/health", HttpServer.formatAddress(server.address)), {
+        headers: {
+          authorization: `Basic ${btoa("opencode:secret")}`,
+          origin: "http://localhost:3000",
+        },
+      }),
+    )
+
+    expect(health.status).toBe(200)
+    expect(health.headers.get("access-control-allow-origin")).toBe("http://localhost:3000")
+  }),
+)
