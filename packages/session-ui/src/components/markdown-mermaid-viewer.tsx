@@ -1,5 +1,5 @@
 import { Dialog } from "@kobalte/core/dialog"
-import { createEffect, createSignal } from "solid-js"
+import { createEffect, createSignal, onCleanup } from "solid-js"
 import { render } from "solid-js/web"
 import { Icon } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
@@ -37,12 +37,34 @@ export function openMermaidViewer(input: { source: string; labels: MermaidViewer
 }
 
 function MermaidViewer(props: { source: string; labels: MermaidViewerLabels; onClose: () => void }) {
-  const [camera, setCamera] = createSignal({ zoom: 1, x: 0, y: 0 } satisfies MermaidCamera)
-  const [fit, setFit] = createSignal({ zoom: 1, x: 0, y: 0 } satisfies MermaidCamera)
-  const [natural, setNatural] = createSignal<{ width: number; height: number }>()
+  const [percent, setPercent] = createSignal(100)
   const [markup, setMarkup] = createSignal("")
   let canvas: HTMLDivElement | undefined
+  let stage: HTMLDivElement | undefined
+  let camera: MermaidCamera = { zoom: 1, x: 0, y: 0 }
+  let fit: MermaidCamera = { zoom: 1, x: 0, y: 0 }
+  let measured = false
+  let frame: number | undefined
   let panning: { id: number; x: number; y: number } | undefined
+
+  // Wheel and pointer events fire faster than the display refreshes, so camera updates
+  // coalesce into a single direct transform write per frame; only the toolbar percentage
+  // goes through a signal.
+  const apply = () => {
+    frame = undefined
+    if (!stage) return
+    stage.style.transform = `translate(${camera.x}px, ${camera.y}px) scale(${camera.zoom})`
+    setPercent(Math.round(camera.zoom * 100))
+  }
+
+  const update = (next: MermaidCamera) => {
+    camera = next
+    frame ??= requestAnimationFrame(apply)
+  }
+
+  onCleanup(() => {
+    if (frame !== undefined) cancelAnimationFrame(frame)
+  })
 
   createEffect(() => {
     const scheme = mermaidColorScheme()
@@ -54,20 +76,19 @@ function MermaidViewer(props: { source: string; labels: MermaidViewerLabels; onC
   // Measure the fresh SVG and start at a centered fit, but only once so theme-driven
   // re-renders keep the user's camera.
   createEffect(() => {
-    if (!markup() || !canvas) return
-    const svg = canvas.querySelector("svg")
+    if (!markup() || !canvas || !stage) return
+    const svg = stage.querySelector("svg")
     if (!svg) return
     svg.style.maxWidth = "none"
     svg.style.width = "100%"
     svg.style.height = "auto"
     const box = svg.viewBox.baseVal
     if (!box?.width || !box?.height) return
-    const first = !natural()
-    setNatural({ width: box.width, height: box.height })
-    if (!first) return
-    const fitted = fitMermaidCamera(box, { width: canvas.clientWidth, height: canvas.clientHeight })
-    setFit(fitted)
-    setCamera(fitted)
+    stage.style.width = `${box.width}px`
+    if (measured) return
+    measured = true
+    fit = fitMermaidCamera(box, { width: canvas.clientWidth, height: canvas.clientHeight })
+    update(fit)
   })
 
   const localPoint = (event: { clientX: number; clientY: number }) => {
@@ -77,17 +98,16 @@ function MermaidViewer(props: { source: string; labels: MermaidViewerLabels; onC
 
   const center = () => ({ x: (canvas?.clientWidth ?? 0) / 2, y: (canvas?.clientHeight ?? 0) / 2 })
 
-  const zoomAt = (point: { x: number; y: number }, zoom: number) =>
-    setCamera((current) => zoomMermaidCamera(current, zoom, point))
+  const zoomAt = (point: { x: number; y: number }, zoom: number) => update(zoomMermaidCamera(camera, zoom, point))
 
   // Figma-style input: plain wheel pans, ctrl/cmd + wheel (trackpad pinch) zooms at the cursor.
   const wheel = (event: WheelEvent) => {
     event.preventDefault()
     if (event.ctrlKey || event.metaKey) {
-      zoomAt(localPoint(event), camera().zoom * Math.exp(-event.deltaY / 150))
+      zoomAt(localPoint(event), camera.zoom * Math.exp(-event.deltaY / 150))
       return
     }
-    setCamera((current) => ({ ...current, x: current.x - event.deltaX, y: current.y - event.deltaY }))
+    update({ ...camera, x: camera.x - event.deltaX, y: camera.y - event.deltaY })
   }
 
   const pointerDown = (event: PointerEvent) => {
@@ -102,22 +122,13 @@ function MermaidViewer(props: { source: string; labels: MermaidViewerLabels; onC
     const dx = event.clientX - panning.x
     const dy = event.clientY - panning.y
     panning = { id: event.pointerId, x: event.clientX, y: event.clientY }
-    setCamera((current) => ({ ...current, x: current.x + dx, y: current.y + dy }))
+    update({ ...camera, x: camera.x + dx, y: camera.y + dy })
   }
 
   const pointerUp = (event: PointerEvent) => {
     if (panning?.id !== event.pointerId) return
     panning = undefined
     if (canvas) delete canvas.dataset.panning
-  }
-
-  const stageStyle = () => {
-    const size = natural()
-    const current = camera()
-    return {
-      width: size ? `${size.width}px` : "auto",
-      transform: `translate(${current.x}px, ${current.y}px) scale(${current.zoom})`,
-    }
   }
 
   return (
@@ -134,7 +145,7 @@ function MermaidViewer(props: { source: string; labels: MermaidViewerLabels; onC
                   variant="ghost-muted"
                   aria-label={props.labels.zoomOut}
                   icon={<Icon name="minus" />}
-                  onClick={() => zoomAt(center(), stepMermaidZoom(camera().zoom, -1))}
+                  onClick={() => zoomAt(center(), stepMermaidZoom(camera.zoom, -1))}
                 />
               </TooltipV2>
               <TooltipV2 placement="bottom" value={props.labels.zoomReset}>
@@ -142,9 +153,9 @@ function MermaidViewer(props: { source: string; labels: MermaidViewerLabels; onC
                   type="button"
                   data-slot="mermaid-viewer-zoom-level"
                   aria-label={props.labels.zoomReset}
-                  onClick={() => setCamera(fit())}
+                  onClick={() => update(fit)}
                 >
-                  {Math.round(camera().zoom * 100)}%
+                  {percent()}%
                 </button>
               </TooltipV2>
               <TooltipV2 placement="bottom" value={props.labels.zoomIn}>
@@ -154,7 +165,7 @@ function MermaidViewer(props: { source: string; labels: MermaidViewerLabels; onC
                   variant="ghost-muted"
                   aria-label={props.labels.zoomIn}
                   icon={<Icon name="plus" />}
-                  onClick={() => zoomAt(center(), stepMermaidZoom(camera().zoom, 1))}
+                  onClick={() => zoomAt(center(), stepMermaidZoom(camera.zoom, 1))}
                 />
               </TooltipV2>
               <TooltipV2 placement="bottom" value={props.labels.close}>
@@ -176,9 +187,9 @@ function MermaidViewer(props: { source: string; labels: MermaidViewerLabels; onC
               onPointerMove={pointerMove}
               onPointerUp={pointerUp}
               onPointerCancel={pointerUp}
-              onDblClick={(event) => zoomAt(localPoint(event), stepMermaidZoom(camera().zoom, 1))}
+              onDblClick={(event) => zoomAt(localPoint(event), stepMermaidZoom(camera.zoom, 1))}
             >
-              <div data-slot="mermaid-viewer-stage" style={stageStyle()} innerHTML={markup()} />
+              <div data-slot="mermaid-viewer-stage" ref={stage} innerHTML={markup()} />
             </div>
           </Dialog.Content>
         </div>
