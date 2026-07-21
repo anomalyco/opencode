@@ -63,6 +63,19 @@ describe("shell", () => {
     expect(zsh.at(-1)).toBe("/tmp")
   })
 
+  test("preserves bash backslash line continuations", () => {
+    const command = `echo "line1" \\
+  && echo "line2 with \\\\backslash" \\
+  && echo done`
+    const args = Shell.args("/bin/bash", command, "/tmp")
+    expect(args[2]).toContain("eval ")
+    expect(args[2]).not.toContain(JSON.stringify(command))
+
+    const result = Bun.spawnSync(["/bin/bash", ...args], { stdout: "pipe", stderr: "pipe" })
+    expect(result.exitCode).toBe(0)
+    expect(result.stdout.toString()).toBe("line1\nline2 with \\backslash\ndone\n")
+  })
+
   if (process.platform === "win32") {
     test("rejects blacklisted shells case-insensitively", async () => {
       await withShell("NU.EXE", async () => {
