@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
-# Cold OpenCode clone/install/typecheck benchmark for a fresh Ubuntu x86_64 VM.
+# Cold OpenCode clone/install/typecheck benchmark for a fresh x86_64 VM.
+# Supports apt-get and dnf based images.
 
 set -euo pipefail
 
@@ -79,13 +80,17 @@ else
 fi
 
 prepare() {
-  command -v apt-get >/dev/null || {
-    printf 'BENCH_ERROR\tprepare\tapt_get_required\n' >&2
+  if command -v apt-get >/dev/null; then
+    "${SUDO[@]}" apt-get update -qq
+    "${SUDO[@]}" env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+      bash build-essential ca-certificates curl git python3 python3-setuptools unzip xz-utils
+  elif command -v dnf >/dev/null; then
+    "${SUDO[@]}" dnf install -y -q \
+      bash ca-certificates gcc gcc-c++ make git python3 python3-setuptools tar unzip xz
+  else
+    printf 'BENCH_ERROR\tprepare\tapt_get_or_dnf_required\n' >&2
     return 1
-  }
-  "${SUDO[@]}" apt-get update -qq
-  "${SUDO[@]}" env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
-    bash build-essential ca-certificates curl git python3 python3-setuptools unzip xz-utils
+  fi
   python3 -c 'import setuptools'
 
   if [[ "$(node --version 2>/dev/null || true)" != "v${NODE_VERSION}" ]]; then
