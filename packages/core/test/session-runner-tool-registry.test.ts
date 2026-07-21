@@ -505,4 +505,32 @@ describe("ToolRegistry", () => {
       expect(executed).toEqual(["old:request"])
     }),
   )
+
+  // Regression coverage for https://github.com/anomalyco/opencode/issues/35963
+  // A structurally invalid tool registration used to throw inside materialize() and break
+  // every subsequent model step in the Location. The registry must isolate the bad tool:
+  // log it, drop it, and keep the rest of the catalog usable.
+  it.effect("isolates invalid tool definitions during materialize (#35963)", () =>
+    Effect.gen(function* () {
+      const service = yield* ToolRegistry.Service
+      const good = make()
+      // Construct a tool-like object whose `definition()` reads will throw: `input` is
+      // missing so `inputJsonSchema(tool.input)` dereferences undefined.
+      const broken = { description: "broken" } as unknown as Parameters<typeof Tool.make>[0]
+      yield* service.register({ good }, { codemode: false })
+      yield* service.register({ broken: Tool.make(broken) }, { codemode: false })
+
+      const materialized = yield* service.materialize()
+      const names = materialized.definitions.map((definition) => definition.name)
+      expect(names).toEqual(["good"])
+      expect(names).not.toContain("broken")
+
+      // Settling the dropped tool surfaces as "Unknown tool" rather than re-throwing.
+      const settlement = yield* settleTool(service, call("broken"))
+      expect(settlement.result).toEqual({ type: "error", value: "Unknown tool: broken" })
+      // The good tool still executes.
+      const goodSettlement = yield* settleTool(service, call("good"))
+      expect(goodSettlement.result).toMatchObject({ type: "text", value: "good" })
+    }),
+  )
 })
