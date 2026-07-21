@@ -31,6 +31,7 @@ import { createFormBodyState, type FormBodyState } from "./form.shared"
 import { footerWidthPolicy } from "./footer.width"
 import { Keymap } from "../context/keymap"
 import { modelInfo } from "./variant.shared"
+import { monoShortcut } from "./mono"
 
 import type {
   FooterPromptRoute,
@@ -84,6 +85,7 @@ type RunFooterViewProps = {
   subagent?: () => FooterSubagentState
   queuedPrompts?: () => FooterQueuedPrompt[]
   theme: () => RunTheme
+  mono: boolean
   tuiConfig: RunTuiConfig
   miniSettings: () => MiniSettings
   history?: () => RunPrompt[]
@@ -174,14 +176,15 @@ export function RunFooterView(props: RunFooterViewProps) {
     return current.type === "subagent" ? subagent().details[current.sessionID] : undefined
   })
   const shortcuts = Keymap.useShortcuts()
-  const command = () => shortcuts.get("command.palette.show") ?? ""
-  const subagentShortcut = () => shortcuts.get("session.child.first") ?? ""
-  const queuedShortcut = () => shortcuts.get("session.queued_prompts") ?? ""
-  const backgroundShortcut = () => shortcuts.get("session.background") ?? ""
-  const subagentInterruptShortcut = () => shortcuts.get("subagent.interrupt") ?? ""
-  const interrupt = () => shortcuts.get("session.interrupt") ?? ""
-  const variantCycle = () => shortcuts.all("variant.cycle") ?? ""
-  const clearShortcut = () => shortcuts.get("prompt.clear") ?? ""
+  const shortcut = (id: string) => monoShortcut(shortcuts.get(id) ?? "", props.mono)
+  const command = () => shortcut("command.palette.show")
+  const subagentShortcut = () => shortcut("session.child.first")
+  const queuedShortcut = () => shortcut("session.queued_prompts")
+  const backgroundShortcut = () => shortcut("session.background")
+  const subagentInterruptShortcut = () => shortcut("subagent.interrupt")
+  const interrupt = () => shortcut("session.interrupt")
+  const variantCycle = () => monoShortcut(shortcuts.all("variant.cycle") ?? "", props.mono)
+  const clearShortcut = () => shortcut("prompt.clear")
   const busy = createMemo(() => props.state().phase === "running")
   const armed = createMemo(() => props.state().interrupt > 0)
   const exiting = createMemo(() => props.state().exit > 0)
@@ -197,6 +200,12 @@ export function RunFooterView(props: RunFooterViewProps) {
   const theme = createMemo(() => runTheme().footer)
   const block = createMemo(() => runTheme().block)
   const spin = createMemo(() => {
+    if (props.mono) {
+      return {
+        frames: ["-", "\\", "|", "/"],
+        color: theme().text,
+      }
+    }
     const options = {
       color: theme().highlight,
       style: "blocks" as const,
@@ -326,6 +335,7 @@ export function RunFooterView(props: RunFooterViewProps) {
     prompt,
     width,
     theme,
+    mono: () => props.mono,
     history: props.history,
     onSubmit: props.onSubmit,
     onCycle: props.onCycle,
@@ -380,7 +390,7 @@ export function RunFooterView(props: RunFooterViewProps) {
       return ""
     }
 
-    return usage()
+    return props.mono ? usage().replaceAll(" · ", " - ") : usage()
   })
   const modelStatus = createMemo(() => {
     const current = model()
@@ -441,7 +451,7 @@ export function RunFooterView(props: RunFooterViewProps) {
       return { key: command(), label: "cmd" }
     }
   })
-  const sectionSeparator = () => <span style={{ fg: theme().muted }}>· </span>
+  const sectionSeparator = () => <span style={{ fg: theme().muted }}>{props.mono ? "- " : "· "}</span>
 
   createEffect(() => {
     props.onRequestExit?.(composer.requestExit)
@@ -619,7 +629,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                       ? undefined
                       : {
                           ...EMPTY_BORDER,
-                          vertical: "█",
+                          vertical: props.mono ? "|" : "█",
                         }
                   }
                 >
@@ -654,6 +664,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                             onClose={closePanel}
                             onSelect={openTab}
                             onRows={setSubagentMenuRows}
+                            mono={props.mono}
                           />
                         </Match>
                         <Match when={selectingQueued()}>
@@ -662,6 +673,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                             prompts={queuedPrompts}
                             onClose={closePanel}
                             onRows={setSubagentMenuRows}
+                            mono={props.mono}
                           />
                         </Match>
                         <Match when={commanding()}>
@@ -696,6 +708,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                               closePanel()
                             }}
                             onExit={props.onExit}
+                            mono={props.mono}
                           />
                         </Match>
                         <Match when={skilling()}>
@@ -715,6 +728,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                               })
                               closePanel()
                             }}
+                            mono={props.mono}
                           />
                         </Match>
                         <Match when={modeling()}>
@@ -727,6 +741,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                               props.onModelSelect(model)
                               closePanel()
                             }}
+                            mono={props.mono}
                           />
                         </Match>
                         <Match when={varianting()}>
@@ -739,6 +754,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                               props.onVariantSelect(variant)
                               closePanel()
                             }}
+                            mono={props.mono}
                           />
                         </Match>
                         <Match when={setting()}>
@@ -747,6 +763,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                             settings={props.miniSettings}
                             onClose={closePanel}
                             onChange={props.onMiniSettingChange}
+                            mono={props.mono}
                           />
                         </Match>
                         <Match when={active().type === "permission"}>
@@ -756,6 +773,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                             theme={theme()}
                             block={block()}
                             onReply={props.onPermissionReply}
+                            mono={props.mono}
                           />
                         </Match>
                         <Match when={active().type === "form"}>
@@ -779,6 +797,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                                   settledForms.add(input.formID)
                                   formStates.delete(input.formID)
                                 }}
+                                mono={props.mono}
                               />
                             )}
                           </For>
@@ -800,6 +819,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                 limit={FOOTER_MENU_ROWS}
                 border={false}
                 paddingLeft={0}
+                mono={props.mono}
               />
             </Show>
 
@@ -814,7 +834,12 @@ export function RunFooterView(props: RunFooterViewProps) {
               >
                 <Show when={modeLabel()}>
                   {(label) => (
-                    <box paddingLeft={1} paddingRight={1} backgroundColor={theme().statusAccent} flexShrink={0}>
+                    <box
+                      paddingLeft={props.mono ? 0 : 1}
+                      paddingRight={1}
+                      backgroundColor={theme().statusAccent}
+                      flexShrink={0}
+                    >
                       <text wrapMode="none" truncate>
                         <span style={{ fg: modeColor(), bold: true }}>{label()}</span>
                       </text>
@@ -828,7 +853,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                   flexGrow={1}
                   flexShrink={1}
                   minWidth={12}
-                  paddingLeft={1}
+                  paddingLeft={props.mono ? 0 : 1}
                   paddingRight={1}
                   backgroundColor="transparent"
                 >
@@ -914,7 +939,7 @@ export function RunFooterView(props: RunFooterViewProps) {
           borderColor={theme().highlight}
           customBorderChars={{
             ...EMPTY_BORDER,
-            vertical: "┃",
+            vertical: props.mono ? "|" : "┃",
           }}
         >
           <RunFooterSubagentBody
@@ -928,6 +953,7 @@ export function RunFooterView(props: RunFooterViewProps) {
             onClose={closeTab}
             interrupt={() => subagentInterruptShortcut() || undefined}
             shellOutput={() => props.miniSettings().shell_output === "show"}
+            mono={props.mono}
           />
         </box>
       </Show>

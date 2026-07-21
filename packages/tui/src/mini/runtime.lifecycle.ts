@@ -164,6 +164,9 @@ function queueSplash(
 // the entry splash, RunFooter takes over the footer region.
 export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lifecycle> {
   const footerTask = import("./footer")
+  const tuiConfig = await input.tuiConfig
+  const miniSettings = resolveMiniSettings(tuiConfig)
+  const mono = miniSettings.mono
   const renderer = await createCliRenderer({
     stdin: input.host.terminal.stdin,
     targetFps: 30,
@@ -172,15 +175,16 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
     autoFocus: false,
     openConsoleOnError: false,
     exitOnCtrlC: false,
-    useKittyKeyboard: { events: input.host.platform === "win32" },
+    useKittyKeyboard: mono
+      ? { disambiguate: false, alternateKeys: false, events: false, allKeysAsEscapes: false, reportText: false }
+      : { events: input.host.platform === "win32" },
     screenMode: "split-footer",
     footerHeight: FOOTER_HEIGHT,
     externalOutputMode: "capture-stdout",
     consoleMode: "disabled",
     clearOnShutdown: false,
   })
-  const tuiConfig = await input.tuiConfig
-  const theme = await resolveRunTheme(renderer, tuiConfig.theme)
+  const theme = await resolveRunTheme(renderer, tuiConfig.theme, mono)
   renderer.setBackgroundColor(theme.background)
   const state: SplashState = {
     entry: false,
@@ -190,6 +194,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
   const meta = splashMeta({
     title: splash.title,
     session_id: input.sessionID,
+    mono,
   })
   const labels = footerLabels({
     agent: input.agent,
@@ -205,6 +210,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
       theme: theme.splash,
       showSession: splash.showSession,
       detail: directoryLabel(input.getDirectory(), input.host.paths.home),
+      mono,
     }),
   )
   await renderer.idle().catch(() => {})
@@ -226,10 +232,11 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
     first: input.first,
     history: input.history,
     theme,
+    mono,
     wrote,
     tuiConfig,
     miniSettings: {
-      current: resolveMiniSettings(tuiConfig),
+      current: miniSettings,
       update: input.onMiniSettingChange,
     },
     onPermissionReply: input.onPermissionReply,
@@ -319,8 +326,10 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
             ...splashMeta({
               title: splash.title,
               session_id: sessionID,
+              mono,
             }),
             theme: footer.currentTheme().splash,
+            mono,
           }),
         )
         await renderer.idle().catch(() => {})
@@ -374,10 +383,12 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
           ...splashMeta({
             title: splash.title,
             session_id: next.sessionID ?? input.getSessionID?.() ?? input.sessionID,
+            mono,
           }),
           theme: footer.currentTheme().splash,
           showSession: splash.showSession,
           detail: directoryLabel(input.getDirectory(), input.host.paths.home),
+          mono,
         }),
       )
       renderer.requestRender()

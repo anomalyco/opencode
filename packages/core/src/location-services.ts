@@ -2,6 +2,8 @@ import { Effect, Layer, LayerMap } from "effect"
 import { AgentV2 } from "./agent"
 import { AISDK } from "./aisdk"
 import { Catalog } from "./catalog"
+import { CodeMode } from "./codemode"
+import { CodeModeInstructions } from "./codemode/instructions"
 import { CommandV2 } from "./command"
 import { Config } from "./config"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
@@ -66,6 +68,7 @@ const locationServiceNodes = [
   Pty.node,
   Shell.node,
   SkillV2.node,
+  CodeMode.node,
   InstructionBuiltIns.node,
   InstructionDiscovery.node,
   LocationMutation.node,
@@ -77,6 +80,7 @@ const locationServiceNodes = [
   ToolRegistry.toolsNode,
   Image.node,
   SkillInstructions.node,
+  CodeModeInstructions.node,
   ReferenceInstructions.node,
   InstructionEntry.node,
   Form.node,

@@ -89,6 +89,7 @@ export class RunScrollbackStream {
   private treeSitterClient: TreeSitterClient | undefined
   private wrote: boolean
   private shellOutput: () => boolean
+  private mono: boolean
   private pendingThemes: RunTheme[] = []
 
   constructor(
@@ -99,11 +100,13 @@ export class RunScrollbackStream {
       treeSitterClient?: TreeSitterClient
       onThemeRelease?: (theme: RunTheme) => void
       shellOutput?: () => boolean
+      mono?: boolean
     } = {},
   ) {
     this.treeSitterClient = options.treeSitterClient
     this.wrote = options.wrote ?? false
     this.shellOutput = options.shellOutput ?? (() => true)
+    this.mono = options.mono ?? false
     this.onThemeRelease = options.onThemeRelease
   }
 
@@ -351,13 +354,13 @@ export class RunScrollbackStream {
 
     if (commit.summary) {
       this.writeSpacer(1)
-      this.renderer.writeToScrollback(turnSummaryWriter({ ...commit.summary, theme: this.theme }))
+      this.renderer.writeToScrollback(turnSummaryWriter({ ...commit.summary, theme: this.theme, mono: this.mono }))
       this.markRendered(commit)
       this.tail = commit
       return
     }
 
-    const body = entryBody(commit, { shellOutput: this.shellOutput() })
+    const body = entryBody(commit, { shellOutput: this.shellOutput(), mono: this.mono })
     if (body.type === "none") {
       if (entryDone(commit)) {
         this.markRendered(await this.finishActive(false))

@@ -43,6 +43,7 @@ export function RunFormBody(props: {
   openExternal?: (url: string) => Promise<unknown>
   state?: FormBodyState
   onState?: (state: FormBodyState) => void
+  mono?: boolean
 }) {
   const [state, setLocalState] = createSignal(props.state ?? createFormBodyState(props.request))
   const setState = (next: FormBodyState | ((previous: FormBodyState) => FormBodyState)) => {
@@ -258,7 +259,7 @@ export function RunFormBody(props: {
     <box width="100%" height="100%" flexDirection="column" backgroundColor={props.theme.surface}>
       <box flexDirection="column" gap={1} paddingLeft={2} paddingRight={3} paddingTop={1} flexGrow={1} flexShrink={1}>
         <box flexDirection="row" gap={1} flexShrink={0}>
-          <text fg={unsupported() ? props.theme.warning : props.theme.highlight}>◆</text>
+          <text fg={unsupported() ? props.theme.warning : props.theme.highlight}>{props.mono ? "*" : "◆"}</text>
           <text fg={props.theme.text}>{props.request.title}</text>
           <Show when={!unsupported() && !formSingle(props.request)}>
             <text fg={props.theme.muted}>
@@ -352,7 +353,9 @@ export function RunFormBody(props: {
                         onMouseOver={() => setState((previous) => formSetSelected(previous, index()))}
                         onMouseUp={() => choose(index())}
                       >
-                        <text fg={active() ? props.theme.highlight : props.theme.muted}>{index() + 1}.</text>
+                        <text fg={active() ? props.theme.highlight : props.theme.muted}>
+                          {props.mono ? `${active() ? ">" : " "}${index() + 1}.` : `${index() + 1}.`}
+                        </text>
                         <text fg={active() ? props.theme.text : props.theme.muted}>
                           {multiple() ? `[${picked() ? "x" : " "}] ` : ""}
                           {row.label}
@@ -368,7 +371,9 @@ export function RunFormBody(props: {
                 <Show when={custom()}>
                   <box flexDirection="row" gap={1} onMouseUp={() => choose(rows().length)}>
                     <text fg={state().selected === rows().length ? props.theme.highlight : props.theme.muted}>
-                      {rows().length + 1}.
+                      {props.mono
+                        ? `${state().selected === rows().length ? ">" : " "}${rows().length + 1}.`
+                        : `${rows().length + 1}.`}
                     </text>
                     <text fg={state().selected === rows().length ? props.theme.text : props.theme.muted}>
                       Type your own answer
@@ -413,7 +418,9 @@ export function RunFormBody(props: {
                 ? "enter submit   esc dismiss"
                 : textual() || state().editing
                   ? "enter save   esc dismiss"
-                  : "↑↓ select   enter choose   tab next   esc dismiss"}
+                  : props.mono
+                    ? "up/down select   enter choose   tab next   esc dismiss"
+                    : "↑↓ select   enter choose   tab next   esc dismiss"}
         </text>
         <Show when={state().error}>
           <text fg={props.theme.error} wrapMode="none" truncate>

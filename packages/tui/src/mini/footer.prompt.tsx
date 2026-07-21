@@ -28,6 +28,7 @@ import {
 import { parseFileLineRange, parseSlashHead, stripFileLineRange } from "../prompt/parse"
 import { Keymap } from "../context/keymap"
 import { realignEditorPromptParts, resolveEditorSlashValue } from "./prompt.editor"
+import { monoTruncateMiddle } from "./mono"
 import { FOOTER_MENU_ROWS, createFooterMenuState, type RunFooterMenuItem } from "./footer.menu"
 import type { RunFooterTheme } from "./theme"
 import type { FooterState, RunAgent, RunCommand, RunPrompt, RunPromptPart, RunReference, RunTuiConfig } from "./types"
@@ -70,6 +71,7 @@ type PromptInput = {
   prompt: Accessor<boolean>
   width: Accessor<number>
   theme: Accessor<RunFooterTheme>
+  mono: Accessor<boolean>
   history?: Accessor<RunPrompt[]>
   onSubmit: (input: RunPrompt) => boolean | Promise<boolean>
   onCycle: () => void
@@ -302,7 +304,9 @@ export function createPromptState(input: PromptInput): PromptState {
   const references = createMemo<Auto[]>(() => {
     return input.references().map((item) => ({
       kind: "mention",
-      display: Locale.truncateMiddle("@" + item.name, width()),
+      display: input.mono()
+        ? monoTruncateMiddle("@" + item.name, width(), true)
+        : Locale.truncateMiddle("@" + item.name, width()),
       value: item.name,
       description: item.description ?? (item.source.type === "git" ? item.source.repository : item.source.path),
       part: {
@@ -344,7 +348,9 @@ export function createPromptState(input: PromptInput): PromptState {
 
         return {
           kind: "mention",
-          display: Locale.truncateMiddle("@" + filename, width()),
+          display: input.mono()
+            ? monoTruncateMiddle("@" + filename, width(), true)
+            : Locale.truncateMiddle("@" + filename, width()),
           value: filename,
           directory: item.endsWith("/"),
           part: {

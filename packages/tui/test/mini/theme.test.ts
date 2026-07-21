@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { RGBA, type CliRenderer, type TerminalColors } from "@opentui/core"
-import { RUN_THEME_FALLBACK, generateSystem, resolveRunTheme, resolveTheme } from "../../src/mini/theme"
+import { RUN_THEME_MONO, RUN_THEME_FALLBACK, generateSystem, resolveRunTheme, resolveTheme } from "../../src/mini/theme"
 import { DEFAULT_THEMES } from "../../src/theme"
 
 const palette = ["#15161e", "#f7768e", "#9ece6a", "#e0af68", "#7aa2f7", "#bb9af7", "#7dcfff", "#c0caf5"] as const
@@ -23,12 +23,14 @@ function terminalColors(input: Partial<TerminalColors> = {}): TerminalColors {
 function renderer(
   input: {
     themeMode?: "dark" | "light"
+    resolvedThemeMode?: "dark" | "light"
     colors?: TerminalColors
     fail?: boolean
   } = {},
 ) {
   return {
     themeMode: input.themeMode,
+    waitForThemeMode: async () => input.resolvedThemeMode ?? input.themeMode ?? null,
     getPalette: async () => {
       if (input.fail) {
         throw new Error("boom")
@@ -61,6 +63,21 @@ function spread(color: RGBA) {
 
 test("falls back when palette lookup fails", async () => {
   expect(await resolveRunTheme(renderer({ fail: true }))).toBe(RUN_THEME_FALLBACK)
+  expect(await resolveRunTheme(renderer({ fail: true }), undefined, true)).toBe(RUN_THEME_MONO)
+  const light = await resolveRunTheme(renderer({ resolvedThemeMode: "light" }), undefined, true)
+  expect(expectRgba(light.footer.text).toInts().slice(0, 3)).toEqual([0, 0, 0])
+  expect(RUN_THEME_MONO.block.syntax).toBeUndefined()
+  for (const color of [
+    RUN_THEME_MONO.background,
+    ...Object.values(RUN_THEME_MONO.footer),
+    ...Object.values(RUN_THEME_MONO.splash),
+    ...Object.values(RUN_THEME_MONO.entry).flatMap((tone) => [tone.body, tone.start].filter(Boolean)),
+    ...Object.entries(RUN_THEME_MONO.block)
+      .filter(([key]) => key !== "syntax")
+      .map(([, value]) => value),
+  ]) {
+    expect(expectRgba(color).intent).toBe("default")
+  }
 })
 
 test("resolveTheme preserves Mini indexed color and result shape semantics", () => {

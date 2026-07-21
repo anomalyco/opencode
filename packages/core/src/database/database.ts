@@ -6,7 +6,6 @@ import { Context, Effect, Layer, Schema } from "effect"
 import { Global } from "@opencode-ai/util/global"
 import { isAbsolute, join } from "path"
 import { DatabaseMigration } from "./migration"
-import { InstallationChannel } from "@opencode-ai/util/installation/version"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 
 const makeDatabase = EffectDrizzleSqlite.makeWithDefaults()
@@ -40,20 +39,12 @@ const databaseLayer = Layer.effect(
   }).pipe(Effect.orDie),
 )
 
-export function layer(options?: Options) {
+export function layer(options: Options = { path: ":memory:" }) {
   return Layer.suspend(() => {
     const provide = (filename: string) => databaseLayer.pipe(Layer.provide(sqliteLayer({ filename })))
-    if (options?.path === ":memory:" || (options?.path && isAbsolute(options.path))) return provide(options.path)
-    if (options?.path) return provide(join(Global.Path.data, options.path))
-    if (
-      ["latest", "beta", "prod"].includes(InstallationChannel) ||
-      process.env.OPENCODE_DISABLE_CHANNEL_DB === "1" ||
-      process.env.OPENCODE_DISABLE_CHANNEL_DB === "true"
-    )
-      return provide(join(Global.Path.data, "opencode.db"))
-    return provide(
-      join(Global.Path.data, `opencode-${InstallationChannel.replace(/[^a-zA-Z0-9._-]/g, "-")}.db`),
-    )
+    const filename = options.path ?? ":memory:"
+    if (filename === ":memory:" || isAbsolute(filename)) return provide(filename)
+    return provide(join(Global.Path.data, filename))
   })
 }
 

@@ -19,6 +19,7 @@ import {
 } from "@opentui/core"
 import { Locale } from "../util/locale"
 import { go } from "../logo"
+import { monoTruncate, monoTruncateMiddle } from "./mono"
 import type { RunSplashTheme } from "./theme"
 
 const SPLASH_TITLE_LIMIT = 50
@@ -27,6 +28,7 @@ const SPLASH_TITLE_FALLBACK = "Untitled session"
 type SplashInput = {
   title: string | undefined
   session_id: string
+  mono?: boolean
 }
 
 type SplashWriterInput = SplashInput & {
@@ -69,7 +71,7 @@ function cells(line: string): Cell[] {
   return list
 }
 
-function title(text: string | undefined): string {
+function title(text: string | undefined, mono = false): string {
   if (!text) {
     return SPLASH_TITLE_FALLBACK
   }
@@ -94,7 +96,7 @@ function title(text: string | undefined): string {
     return SPLASH_TITLE_FALLBACK
   }
 
-  return Locale.truncate(value, SPLASH_TITLE_LIMIT)
+  return mono ? monoTruncate(value, SPLASH_TITLE_LIMIT, true) : Locale.truncate(value, SPLASH_TITLE_LIMIT)
 }
 
 function write(
@@ -181,7 +183,7 @@ function build(input: SplashWriterInput, kind: "entry" | "exit", ctx: Scrollback
   let height = 1
 
   if (kind === "entry") {
-    const mark = go.right.slice(1)
+    const mark = input.mono ? ["[O]"] : go.right.slice(1)
     const top = 1
     const body_left = (mark[0]?.length ?? 0) + 2
 
@@ -200,16 +202,18 @@ function build(input: SplashWriterInput, kind: "entry" | "exit", ctx: Scrollback
         lines,
         body_left,
         top + 1,
-        Locale.truncateMiddle(input.detail, Math.max(1, width - body_left)),
+        input.mono
+          ? monoTruncateMiddle(input.detail, Math.max(1, width - body_left), true)
+          : Locale.truncateMiddle(input.detail, Math.max(1, width - body_left)),
         left,
         undefined,
       )
     }
-    height = top + mark.length
+    height = top + Math.max(mark.length, input.detail ? 2 : 1)
   }
 
   if (kind === "exit") {
-    const mark = go.right.slice(1)
+    const mark = input.mono ? ["[O]"] : go.right.slice(1)
     const top = 1
     const body_left = (mark[0]?.length ?? 0) + 2
     const session = "Session  "
@@ -239,7 +243,7 @@ function build(input: SplashWriterInput, kind: "entry" | "exit", ctx: Scrollback
       undefined,
       TextAttributes.BOLD,
     )
-    height = top + mark.length
+    height = top + Math.max(mark.length, 2)
   }
 
   const root = new BoxRenderable(ctx.renderContext, {
@@ -266,7 +270,7 @@ function build(input: SplashWriterInput, kind: "entry" | "exit", ctx: Scrollback
 
 export function splashMeta(input: SplashInput): SplashMeta {
   return {
-    title: title(input.title),
+    title: title(input.title, input.mono),
     session_id: input.session_id,
   }
 }

@@ -103,10 +103,19 @@ describe("run runtime boot", () => {
     expect(result.theme).toEqual({ mode: "light" })
     expect(result.leader.timeout).toBe(450)
     expect(result.session?.thinking).toBe("show")
-    expect(resolveMiniSettings(result)).toEqual({ thinking: "hide", shell_output: "hide" })
-    expect(resolveMiniSettings({ mini: { thinking: "show", shell_output: "show" } })).toEqual({
+    expect(resolveMiniSettings(result)).toEqual({
+      thinking: "hide",
+      shell_output: "hide",
+      turn_summary: "show",
+      mono: false,
+    })
+    expect(
+      resolveMiniSettings({ mini: { thinking: "show", shell_output: "show", turn_summary: "hide", mono: true } }),
+    ).toEqual({
       thinking: "show",
       shell_output: "show",
+      turn_summary: "hide",
+      mono: true,
     })
   })
 

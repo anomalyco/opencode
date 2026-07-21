@@ -200,6 +200,22 @@ describe("Patch", () => {
     )
   })
 
+  test("does not normalize ellipses", () => {
+    expect(() =>
+      Patch.derive("ellipsis.txt", [{ oldLines: ["wait..."], newLines: ["done"] }], "wait…\n"),
+    ).toThrow("Failed to find expected lines")
+  })
+
+  test("prefers a later exact match over an earlier normalized match", () => {
+    expect(
+      Patch.derive(
+        "quotes.txt",
+        [{ oldLines: ['He said "hello"'], newLines: ['He said "goodbye"'] }],
+        'He said “hello”\nmiddle\nHe said "hello"\n',
+      ).content,
+    ).toBe('He said “hello”\nmiddle\nHe said "goodbye"\n')
+  })
+
   test("matches EOF-anchored chunks from the end", () => {
     expect(
       Patch.derive(

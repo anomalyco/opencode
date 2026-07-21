@@ -228,7 +228,6 @@ const normalize = (value: string) =>
     .replace(/[‘’‚‛]/g, "'")
     .replace(/[“”„‟]/g, '"')
     .replace(/[‐‑‒–—―−]/g, "-")
-    .replace(/…/g, "...")
     .replace(/[\u00A0\u2002-\u200A\u202F\u205F\u3000]/g, " ")
 const splitBom = (text: string) =>
   text.startsWith("\uFEFF") ? { bom: true, text: text.slice(1) } : { bom: false, text }

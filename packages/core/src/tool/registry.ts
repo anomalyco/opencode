@@ -9,7 +9,7 @@ import { SessionMessage } from "../session/message"
 import { SessionSchema } from "../session/schema"
 import { ToolOutputStore } from "../tool-output-store"
 import { Wildcard } from "../util/wildcard"
-import { ExecuteTool } from "./execute"
+import { CodeMode } from "../codemode"
 import {
   definition,
   permission,
@@ -74,6 +74,7 @@ const registryLayer = Layer.effect(
     const resources = yield* ToolOutputStore.Service
     const toolHooks = yield* ToolHooks.Service
     const image = yield* Image.Service
+    const codeMode = yield* CodeMode.Service
 
     type NormalizedItem = ToolOutput["content"][number] | "decode" | "size"
     const normalizeImages = Effect.fn("ToolRegistry.normalizeImages")(function* (content: ToolOutput["content"]) {
@@ -111,7 +112,6 @@ const registryLayer = Layer.effect(
       readonly tool: AnyTool
       readonly name: string
       readonly namespace?: string
-      readonly codemode: boolean
     }
     const local = new Map<string, Array<{ readonly token: object; readonly registration: Registration }>>()
     const registrationLock = Semaphore.makeUnsafe(1)
@@ -212,15 +212,22 @@ const registryLayer = Layer.effect(
               return yield* Effect.fail(
                 new RegistrationError({ name: reserved.key, message: 'Tool name "execute" is reserved for CodeMode' }),
               )
-            return { entries, codemode }
+            return { tools, options, entries, codemode }
           }),
         )
-        if (planned.every((plan) => plan.entries.length === 0)) return
+        // CodeMode registrations live in the CodeMode service; the registry keeps only direct tools.
+        yield* Effect.forEach(
+          planned.filter((plan) => plan.codemode && plan.entries.length > 0),
+          (plan) => codeMode.register(plan.tools, plan.options),
+          { discard: true },
+        )
+        const direct = planned.filter((plan) => !plan.codemode)
+        if (direct.every((plan) => plan.entries.length === 0)) return
         yield* Effect.uninterruptible(
           registrationLock.withPermit(
             Effect.gen(function* () {
               const token = {}
-              for (const { entries, codemode } of planned)
+              for (const { entries } of direct)
                 for (const entry of entries)
                   local.set(entry.key, [
                     ...(local.get(entry.key) ?? []),
@@ -230,14 +237,13 @@ const registryLayer = Layer.effect(
                         tool: entry.tool,
                         name: entry.name,
                         namespace: entry.namespace,
-                        codemode,
                       },
                     },
                   ])
               yield* Effect.addFinalizer(() =>
                 registrationLock.withPermit(
                   Effect.sync(() => {
-                    for (const { entries } of planned)
+                    for (const { entries } of direct)
                       for (const entry of entries) {
                         const registrations =
                           local.get(entry.key)?.filter((registration) => registration.token !== token) ?? []
@@ -265,19 +271,16 @@ const registryLayer = Layer.effect(
       registerBatch,
       materialize: Effect.fn("ToolRegistry.materialize")((permissions) =>
         registrationLock.withPermit(
-          Effect.sync(() => {
+          Effect.gen(function* () {
             const direct = new Map<string, Registration>()
-            const codemode = new Map<string, Registration>()
             const rules = permissions ?? []
             for (const [name, entries] of local) {
               const registration = entries.at(-1)?.registration
               if (!registration) continue
               if (whollyDisabled(permission(registration.tool, name), rules)) continue
-              if (registration.codemode) codemode.set(name, registration)
-              else direct.set(name, registration)
+              direct.set(name, registration)
             }
-            const execute =
-              codemode.size > 0 && !whollyDisabled("execute", rules) ? ExecuteTool.create(codemode) : undefined
+            const execute = (yield* codeMode.materialize(permissions)).tool
             return {
               definitions: [
                 ...Array.from(direct, ([name, registration]) => definition(name, registration.tool)),
@@ -315,11 +318,11 @@ function whollyDisabled(action: string, rules: PermissionV2.Ruleset) {
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [ToolOutputStore.node, ToolHooks.node, Image.node],
+  deps: [CodeMode.node, ToolOutputStore.node, ToolHooks.node, Image.node],
 })
 
 export const toolsNode = makeLocationNode({
   service: Tools.Service,
   layer,
-  deps: [ToolOutputStore.node, ToolHooks.node, Image.node],
+  deps: [CodeMode.node, ToolOutputStore.node, ToolHooks.node, Image.node],
 })
