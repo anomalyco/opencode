@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import type { NamedError } from "@opencode-ai/core/util/error"
-import { APICallError } from "ai"
+import { APICallError, JSONParseError } from "ai"
 import { setTimeout as sleep } from "node:timers/promises"
 import { Effect, Schedule, Schema } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
@@ -252,6 +252,21 @@ describe("session.retry.retryable", () => {
     const retryable = SessionRetry.retryable(error, retryProvider)
     expect(retryable).toBeDefined()
     expect(retryable).toEqual({ message: "Response decompression failed" })
+  })
+
+  test("retries JSONParseError from malformed SSE streams", () => {
+    // See #13579: malformed SSE chunks should enter retry, not terminate the turn.
+    const parseError = new JSONParseError({
+      text: '{"choices":[{"index":0data: {"id":"abc","choices":[{"index":0}]}}]}',
+      cause: new SyntaxError("JSON Parse error: Expected '}'"),
+    })
+
+    const error = MessageV2.fromError(parseError, { providerID })
+
+    expect(SessionV1.APIError.isInstance(error)).toBe(true)
+    const retryable = SessionRetry.retryable(error, retryProvider)
+    expect(retryable).toBeDefined()
+    expect(retryable?.message).toInclude("malformed JSON stream")
   })
 
   test("maps free limits to Go upsell action", () => {
