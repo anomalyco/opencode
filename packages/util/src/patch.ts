@@ -1,4 +1,4 @@
-export * as Patch from "./patch"
+export * as Patch from "./patch.js"
 
 import { Result, Schema } from "effect"
 
@@ -100,9 +100,7 @@ export function parse(patchText: string): Result.Result<ReadonlyArray<Hunk>, Par
   if (hunks.length === 0) {
     const invalid = lines.findIndex((line, index) => index > begin && index < end && line.trim() !== "")
     if (invalid !== -1) {
-      return Result.fail(
-        new InvalidHunkError({ line: lines[invalid]!.trim(), lineNumber: invalid + 1 }),
-      )
+      return Result.fail(new InvalidHunkError({ line: lines[invalid]!.trim(), lineNumber: invalid + 1 }))
     }
   }
   return Result.succeed(hunks)
@@ -157,6 +155,10 @@ function parseUpdate(lines: ReadonlyArray<string>, start: number, end: number) {
       else if (line.startsWith("+")) newLines.push(line.slice(1))
       index++
     }
+    if (lines[index]?.trim() === "*** End of File") {
+      endOfFile = true
+      index++
+    }
     chunks.push({ oldLines, newLines, changeContext, endOfFile: endOfFile || undefined })
   }
   return { chunks, next: index }
@@ -192,11 +194,15 @@ function computeReplacements(lines: ReadonlyArray<string>, path: string, chunks:
 
 function seek(lines: ReadonlyArray<string>, pattern: ReadonlyArray<string>, start: number, eof = false) {
   if (pattern.length === 0) return -1
-  for (const compare of [exact, rstrip, trim, normalized]) {
-    if (eof) {
-      const offset = lines.length - pattern.length
-      if (offset >= start && matches(lines, pattern, offset, compare)) return offset
+  if (eof) {
+    const offset = lines.length - pattern.length
+    if (offset < start) return -1
+    for (const compare of [exact, rstrip, trim, normalized]) {
+      if (matches(lines, pattern, offset, compare)) return offset
     }
+    return -1
+  }
+  for (const compare of [exact, rstrip, trim, normalized]) {
     for (let offset = start; offset <= lines.length - pattern.length; offset++) {
       if (matches(lines, pattern, offset, compare)) return offset
     }

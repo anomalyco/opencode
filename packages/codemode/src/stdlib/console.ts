@@ -58,7 +58,7 @@ const formatConsoleValue = (value: unknown, seen: Set<object>, depth: number): s
       seen.delete(value)
     }
   }
-  if (isRuntimeReference(value)) return "[CodeMode reference]"
+  if (isRuntimeReference(value)) return "[opaque reference]"
   seen.add(value)
   try {
     if (Array.isArray(value)) {
@@ -74,7 +74,7 @@ const formatConsoleValue = (value: unknown, seen: Set<object>, depth: number): s
 
 const formatConsoleTable = (value: unknown, columnsArgument: unknown): string => {
   if (value === undefined) return "undefined"
-  if (containsOpaqueReference(value)) return "[CodeMode reference]"
+  if (containsOpaqueReference(value)) return "[opaque reference]"
   const data = boundedData(value, "console.table argument")
   const columns = consoleTableColumns(columnsArgument)
   const rows = consoleTableRows(data, columns)

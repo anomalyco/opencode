@@ -8,7 +8,7 @@ import { Effect, Schema } from "effect"
 import path from "path"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Location } from "../location"
-import { Patch } from "../patch"
+import { Patch } from "@opencode-ai/util/patch"
 import { PermissionV2 } from "../permission"
 import { Tool } from "./tool"
 import DESCRIPTION from "./patch.txt"
@@ -186,8 +186,7 @@ export const Plugin = {
                       const before = original.replace(/^\uFEFF/, "")
                       const update = yield* Effect.try({
                         try: () => Patch.derive(hunk.path, hunk.chunks, original),
-                        catch: (error) =>
-                          new ToolFailure({ message: `patch verification failed: ${String(error)}` }),
+                        catch: (error) => new ToolFailure({ message: `patch verification failed: ${String(error)}` }),
                       })
                       const moveTarget = hunk.movePath ? resolveTarget(location, hunk.movePath) : undefined
                       if (moveTarget?.externalDirectory) {

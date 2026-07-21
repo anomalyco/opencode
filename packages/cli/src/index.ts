@@ -15,6 +15,7 @@ import { Npm } from "@opencode-ai/util/npm"
 
 const Handlers = Runtime.handlers(Commands, {
   $: () => import("./commands/handlers/default"),
+  acp: () => import("./commands/handlers/acp"),
   api: () => import("./commands/handlers/api"),
   auth: {
     connect: () => import("./commands/handlers/auth/connect"),

@@ -308,7 +308,7 @@ describe("CodeMode console capture", () => {
     )
 
     expect(result.ok).toBe(true)
-    expect(result.logs).toStrictEqual(['{"box":Map(1) [["self",[Circular]]]}', '{"fn":[CodeMode reference],"ok":1}'])
+    expect(result.logs).toStrictEqual(['{"box":Map(1) [["self",[Circular]]]}', '{"fn":[opaque reference],"ok":1}'])
   })
 
   test("console.table renders CodeMode value cells", async () => {
@@ -696,7 +696,7 @@ describe("CodeMode public contract", () => {
     expect(instructions).toContain("Do not infer or normalize tool names")
     expect(instructions).toContain("bracket notation and quotes are part of the path")
     expect(instructions).toContain("surrounding agent tools are not available")
-    expect(instructions).toContain("Only Code Mode tools listed here are available")
+    expect(instructions).toContain("Only tools listed here are available")
     // Placeholders use generic namespace/tool/field names only - no fabricated real tools
     // and no real catalog tools cherry-picked into example lines.
     expect(instructions).toContain("`const result = await tools.<namespace>.<tool>(input)`")
@@ -718,7 +718,7 @@ describe("CodeMode public contract", () => {
       '1. If needed, discover tools with the built-in search function: `return search({ query: "<intent + key nouns>" })`.',
     )
     expect(partial).toContain("In the next execution, copy a returned path exactly")
-    expect(partial).toContain("Only Code Mode tools listed here or returned by the built-in `search` function")
+    expect(partial).toContain("Only tools listed here or returned by the built-in `search` function")
     expect(partial).toContain('- Browse one namespace: `search({ query: "", namespace: "<name>" })`.')
     expect(partial).toContain("repeat the same search with `offset: next.offset`")
     expect(partial).toContain("  limit?: number,\n  offset?: number,")
@@ -739,7 +739,7 @@ describe("CodeMode public contract", () => {
     expect(instructions).not.toContain("promise chaining")
     expect(instructions).toContain("URL, URLSearchParams, and URI encoding helpers")
     expect(instructions).not.toContain("host globals")
-    expect(instructions).toContain("Use Code Mode tools for external operations")
+    expect(instructions).toContain("Use tools for external operations")
     expect(instructions).toContain(
       "Prefer explicit `return`; otherwise only the final top-level expression becomes the result.",
     )

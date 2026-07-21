@@ -72,7 +72,7 @@ export const matchToValue = (match: RegExpMatchArray): Array<unknown> => {
 }
 
 export const invokeRegExpStatic = (name: string, args: Array<unknown>, node: AstNode): string => {
-  if (name !== "escape") throw new InterpreterRuntimeError(`RegExp.${name} is not available in CodeMode.`, node)
+  if (name !== "escape") throw new InterpreterRuntimeError(`RegExp.${name} is not available.`, node)
   if (typeof args[0] !== "string") {
     throw new InterpreterRuntimeError("RegExp.escape expects a string.", node).as("TypeError")
   }
@@ -104,7 +104,7 @@ export const invokeRegExpMethod = (
     case "toString":
       return coerceToString(value)
     default:
-      throw new InterpreterRuntimeError(`RegExp method '${name}' is not available in CodeMode.`, node)
+      throw new InterpreterRuntimeError(`RegExp method '${name}' is not available.`, node)
   }
 }
 

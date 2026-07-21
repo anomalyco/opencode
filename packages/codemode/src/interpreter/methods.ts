@@ -126,7 +126,7 @@ export const invokeIntrinsic = <R>(
   if (ref.receiver instanceof CodeModeURLSearchParams) {
     return invokeURLSearchParamsMethod(runner, ref.receiver, ref.name, args, node)
   }
-  throw new InterpreterRuntimeError(`Method '${ref.name}' is not available in CodeMode.`, node)
+  throw new InterpreterRuntimeError(`Method '${ref.name}' is not available.`, node)
 }
 
 const coerceNumericArgument = <R>(
@@ -157,8 +157,7 @@ const coerceNumericArgument = <R>(
 }
 
 export const invokeGlobalMethod = (ref: GlobalMethodReference, args: Array<unknown>, node: AstNode): unknown => {
-  if (ref.namespace === "console")
-    throw new InterpreterRuntimeError(`console.${ref.name} is not available in CodeMode.`, node)
+  if (ref.namespace === "console") throw new InterpreterRuntimeError(`console.${ref.name} is not available.`, node)
   if (ref.namespace === "Object") return invokeObjectMethod(ref.name, args, node)
   if (ref.namespace === "Math") return invokeMathMethod(ref.name, args, node)
   if (ref.namespace === "Array") return invokeArrayStatic(ref.name, args, node)
@@ -168,9 +167,9 @@ export const invokeGlobalMethod = (ref: GlobalMethodReference, args: Array<unkno
   if (ref.namespace === "Date") return invokeDateStatic(ref.name, args, node)
   if (ref.namespace === "RegExp") return invokeRegExpStatic(ref.name, args, node)
   if (ref.namespace === "Map" || ref.namespace === "Set" || ref.namespace === "URLSearchParams") {
-    throw new InterpreterRuntimeError(`${ref.namespace}.${ref.name} is not available in CodeMode.`, node)
+    throw new InterpreterRuntimeError(`${ref.namespace}.${ref.name} is not available.`, node)
   }
-  throw new InterpreterRuntimeError(`${ref.namespace}.${ref.name} is not available in CodeMode.`, node)
+  throw new InterpreterRuntimeError(`${ref.namespace}.${ref.name} is not available.`, node)
 }
 
 const requireDataArgument = (name: string, index: number, arg: unknown, node: AstNode): unknown => {
@@ -348,7 +347,7 @@ const invokeStringMethod = (value: string, name: string, args: Array<unknown>, n
       break
     }
     default:
-      throw new InterpreterRuntimeError(`String method '${name}' is not available in CodeMode.`, node)
+      throw new InterpreterRuntimeError(`String method '${name}' is not available.`, node)
   }
   return boundedData(result, `String.${name} result`)
 }
@@ -364,7 +363,7 @@ const invokeArrayStatic = (name: string, args: Array<unknown>, node: AstNode): u
     case "from":
       return arrayFromItems(args[0], node)
     default:
-      throw new InterpreterRuntimeError(`Array.${name} is not available in CodeMode.`, node)
+      throw new InterpreterRuntimeError(`Array.${name} is not available.`, node)
   }
 }
 
@@ -449,7 +448,7 @@ export const invokeGroupBy = <R>(
     for (const item of items) {
       const key = yield* coerceGroupByPropertyKey(runner, yield* apply([item, index]), node)
       if (isBlockedMember(key)) {
-        throw new InterpreterRuntimeError(`Property '${key}' is not available in CodeMode.`, node)
+        throw new InterpreterRuntimeError(`Property '${key}' is not available.`, node)
       }
       const group = result[key]
       if (group === undefined) result[key] = [item]
@@ -619,7 +618,7 @@ const invokeMapMethod = <R>(
       })
     }
     default:
-      throw new InterpreterRuntimeError(`Map method '${name}' is not available in CodeMode.`, node)
+      throw new InterpreterRuntimeError(`Map method '${name}' is not available.`, node)
   }
 }
 
@@ -666,7 +665,7 @@ const invokeSetMethod = <R>(
     case "isDisjointFrom":
       return invokeSetOperation(runner, target, name, args[0], node)
     default:
-      throw new InterpreterRuntimeError(`Set method '${name}' is not available in CodeMode.`, node)
+      throw new InterpreterRuntimeError(`Set method '${name}' is not available.`, node)
   }
 }
 
@@ -861,7 +860,7 @@ const invokeURLSearchParamsMethod = <R>(
       })
     }
     default:
-      throw new InterpreterRuntimeError(`URLSearchParams method '${name}' is not available in CodeMode.`, node)
+      throw new InterpreterRuntimeError(`URLSearchParams method '${name}' is not available.`, node)
   }
 }
 
@@ -1104,7 +1103,7 @@ const invokeArrayMethod = <R>(
         }
         return -1
     }
-    throw new InterpreterRuntimeError(`Array method '${name}' is not available in CodeMode.`, node)
+    throw new InterpreterRuntimeError(`Array method '${name}' is not available.`, node)
   })
 }
 
