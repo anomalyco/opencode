@@ -236,6 +236,16 @@ describe("ModelsDev Service", () => {
     }),
   )
 
+  it.live("uses the default models URL when the configured URL is empty", () =>
+    Effect.gen(function* () {
+      const state = yield* Ref.make(initialState)
+      yield* ModelsDev.Service.use((service) => service.get()).pipe(
+        Effect.provide(buildLayer(state, { url: "", fetch: true })),
+      )
+      expect((yield* Ref.get(state)).calls[0]?.url).toBe("https://models.dev/api.json")
+    }),
+  )
+
   it.live("get() is single-flight under concurrent calls", () =>
     Effect.gen(function* () {
       yield* writeCache(fixture)

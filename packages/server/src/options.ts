@@ -7,7 +7,7 @@ export const ServerOptions = Schema.Struct({
   client: Schema.optional(Schema.String),
   hostname: Schema.optional(Schema.String),
   port: Schema.optional(
-    Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(65_535)),
+    Schema.Int.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(65_535)),
   ),
   password: Schema.optional(Schema.String),
   simulation: Schema.optional(Schema.Boolean),

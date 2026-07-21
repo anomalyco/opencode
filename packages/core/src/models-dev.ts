@@ -552,7 +552,7 @@ export const layer = (options?: Options) => Layer.effect(
       ),
     )
 
-    const source = options?.url ?? "https://models.dev"
+    const source = options?.url || "https://models.dev"
     const fetch = options?.fetch ?? true
     const userAgent = `opencode/${InstallationChannel}/${InstallationVersion}/${options?.client ?? "cli"}`
     const filepath = path.join(

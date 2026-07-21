@@ -30,7 +30,7 @@ import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { WellKnown } from "@opencode-ai/core/wellknown"
 import { Watcher } from "@opencode-ai/core/filesystem/watcher"
-import { HttpRouter, HttpServer } from "effect/unstable/http"
+import { HttpRouter } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { Context, Effect, Layer, Option } from "effect"
 import { Api } from "./api"
@@ -143,5 +143,3 @@ function makeRoutes<AuthError, AuthServices>(
     }),
   )
 }
-
-export const webHandler = () => HttpRouter.toWebHandler(createRoutes().pipe(Layer.provide(HttpServer.layerServices)))
