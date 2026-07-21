@@ -41,11 +41,6 @@
       "node": "./src/image/photon-wasm.node.ts",
       "default": "./src/image/photon-wasm.bun.ts"
     },
-    "#runtime-import": {
-      "bun": "@opencode-ai/util/runtime/import.bun",
-      "node": "@opencode-ai/util/runtime/import.node",
-      "default": "@opencode-ai/util/runtime/import.bun"
-    },
     "#process-lock-ffi": {
       "bun": "./src/util/process-lock-ffi.bun.ts",
       "node": "./src/util/process-lock-ffi.node.ts",

@@ -4,8 +4,8 @@ import { Effect, Schema } from "effect"
 import { Provider } from "@opencode-ai/schema/provider"
 import type { ProviderPackageDefinition } from "@opencode-ai/ai"
 import { Npm } from "@opencode-ai/util/npm"
+import { importModule, resolveModule } from "@opencode-ai/util/runtime/import"
 import type { DeepMutable } from "./schema"
-import { importModule, resolveModule } from "#runtime-import"
 
 export const ID = Provider.ID
 export type ID = typeof ID.Type
