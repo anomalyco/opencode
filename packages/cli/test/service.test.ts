@@ -1,7 +1,7 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { Service, type Info } from "@opencode-ai/client/effect/service"
 import { Global } from "@opencode-ai/util/global"
-import { InstallationVersion } from "@opencode-ai/util/installation/version"
+import { OPENCODE_VERSION } from "../src/version"
 import { expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
 import fs from "node:fs/promises"
@@ -332,7 +332,7 @@ test("unresponsive managed port occupancy reports a bounded conflict", async () 
   )
   const stale = {
     id: "stale",
-    version: InstallationVersion,
+    version: OPENCODE_VERSION,
     url: "http://127.0.0.1:1",
     pid: process.pid,
     password: "stale",
@@ -368,7 +368,7 @@ test("port contender recognizes an incumbent registered during the bind race", a
     fetch() {
       requests.count += 1
       if (requests.count === 2) recognizing.resolve()
-      return Response.json({ healthy: true, version: InstallationVersion, pid: process.pid }, { status: 503 })
+      return Response.json({ healthy: true, version: OPENCODE_VERSION, pid: process.pid }, { status: 503 })
     },
   })
   const registration = path.join(root, "state", "opencode", "service-local.json")
@@ -380,7 +380,7 @@ test("port contender recognizes an incumbent registered during the bind race", a
     registration,
     JSON.stringify({
       id: "stale",
-      version: InstallationVersion,
+      version: OPENCODE_VERSION,
       url: "http://127.0.0.1:1",
       pid: 2_147_483_647,
       password: "stale",
@@ -397,7 +397,7 @@ test("port contender recognizes an incumbent registered during the bind race", a
     await Bun.sleep(8_000)
     const info = {
       id: "incumbent",
-      version: InstallationVersion,
+      version: OPENCODE_VERSION,
       url: `http://127.0.0.1:${listener.port}`,
       pid: process.pid,
       password: "incumbent",

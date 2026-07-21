@@ -38,7 +38,7 @@ import type {
   SetSessionModeRequest,
   SetSessionModeResponse,
 } from "@agentclientprotocol/sdk"
-import { InstallationVersion } from "@opencode-ai/util/installation/version"
+import { OPENCODE_VERSION } from "../version"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { buildConfigOptions, parseModelSelection, type ConfigOptionProvider } from "./config-option"
 import { promptContentToParts } from "./content"
@@ -176,7 +176,7 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
           sessionCapabilities: { close: {}, fork: {}, list: {}, resume: {} },
         },
         authMethods: [authMethod],
-        agentInfo: { name: "OpenCode", version: InstallationVersion },
+        agentInfo: { name: "OpenCode", version: OPENCODE_VERSION },
       }
     },
     authenticate: async (params) => {

@@ -6,7 +6,7 @@ import { Commands } from "./commands/commands"
 import { Runtime } from "./framework/runtime"
 import { Observability } from "@opencode-ai/util/observability"
 import { Updater } from "./services/updater"
-import { InstallationChannel, InstallationVersion, InstallationLocal } from "@opencode-ai/util/installation/version"
+import { OPENCODE_CHANNEL, OPENCODE_LOCAL, OPENCODE_VERSION } from "./version"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Global } from "@opencode-ai/util/global"
 import { AppProcess } from "@opencode-ai/util/process"
@@ -52,12 +52,12 @@ const Handlers = Runtime.handlers(Commands, {
 })
 
 Effect.logInfo("cli starting", {
-  version: InstallationVersion,
-  channel: InstallationChannel,
-  local: InstallationLocal,
+  version: OPENCODE_VERSION,
+  channel: OPENCODE_CHANNEL,
+  local: OPENCODE_LOCAL,
   args: process.argv.slice(2),
 }).pipe(
-  Effect.flatMap(() => Runtime.run(Commands, Handlers, { version: InstallationVersion })),
+  Effect.flatMap(() => Runtime.run(Commands, Handlers, { version: OPENCODE_VERSION })),
   Effect.annotateLogs({ role: "cli" }),
   Effect.provide(Config.layer),
   Effect.provide(Updater.layer),
