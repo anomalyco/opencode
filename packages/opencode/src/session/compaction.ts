@@ -49,6 +49,60 @@ type CompletedCompaction = {
   summary: string | undefined
 }
 
+function buildStructuredPrompt(input: { previousSummary?: string; context: string[] }): string {
+  const sections = [
+    "## 1. Primary Request and Intent",
+    "What the user originally asked for and any evolved intent.",
+    "",
+    "## 2. Key Technical Concepts",
+    "Technologies, frameworks, patterns, and architectural decisions discussed.",
+    "",
+    "## 3. Files and Code Sections",
+    "Every file mentioned or modified, with key code snippets preserved verbatim.",
+    "",
+    "## 4. Errors and Fixes",
+    "Every error encountered and how it was resolved. Include error messages verbatim.",
+    "",
+    "## 5. Problem Solving",
+    "Approaches tried (successful and failed), reasoning behind decisions.",
+    "",
+    "## 6. All User Messages",
+    "Preserve ALL user messages verbatim, in chronological order. Do NOT summarize.",
+    "",
+    "## 7. Pending Tasks",
+    "Incomplete work items, explicitly marked as pending.",
+    "",
+    "## 8. Current Work",
+    "What was being worked on when compaction triggered. Include file paths and line numbers.",
+    "",
+    "## 9. Suggested Next Step",
+    "The most logical next action based on the conversation flow.",
+  ]
+
+  const previous = input.previousSummary
+    ? `\n<previous_summary>\n${input.previousSummary}\n</previous_summary>\n`
+    : ""
+  const additional =
+    input.context.length > 0 ? `\n<additional_context>\n${input.context.join("\n")}\n</additional_context>\n` : ""
+
+  return [
+    "You are summarizing a conversation that has grown too large.",
+    "Create a structured summary preserving all critical information.",
+    "",
+    "Output EXACTLY these 9 sections in order:",
+    "",
+    ...sections,
+    "",
+    "Rules:",
+    "- NEVER omit user messages (section 6) — they are the source of truth",
+    "- Preserve exact file paths, function names, error messages",
+    "- Keep code snippets that are still relevant",
+    "- Be concise but complete — this summary replaces the full history",
+    previous,
+    additional,
+  ].join("\n")
+}
+
 function summaryText(message: SessionV1.WithParts) {
   const text = message.parts
     .filter((part): part is SessionV1.TextPart => part.type === "text")
@@ -345,7 +399,8 @@ const layer = Layer.effect(
         { sessionID: input.sessionID },
         { context: [], prompt: undefined },
       )
-      const nextPrompt = compacting.prompt ?? buildPrompt({ previousSummary, context: compacting.context })
+      const nextPrompt =
+        compacting.prompt ?? buildStructuredPrompt({ previousSummary, context: compacting.context })
       const msgs = structuredClone(selected.head)
       yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
       const modelMessages = yield* MessageV2.toModelMessagesEffect(msgs, model, {
