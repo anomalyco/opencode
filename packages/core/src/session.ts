@@ -20,7 +20,6 @@ import { AbsolutePath, PositiveInt, RelativePath } from "./schema"
 import { AgentV2 } from "./agent"
 import { SessionV1 } from "./v1/session"
 import { Money } from "@opencode-ai/schema/money"
-import { InstallationVersion } from "@opencode-ai/util/installation/version"
 import { Slug } from "./util/slug"
 import { ProjectTable } from "./project/sql"
 import path from "path"
@@ -352,7 +351,7 @@ const layer = Layer.effect(
         const info = SessionV1.SessionInfo.make({
           id: sessionID,
           slug: Slug.create(),
-          version: InstallationVersion,
+          version: "unknown",
           projectID: project.id,
           parentID: input.parentID,
           directory: location.directory,
