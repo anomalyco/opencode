@@ -190,6 +190,7 @@ export const Plugin = {
                           new ToolFailure({ message: `patch verification failed: ${String(error)}` }),
                       })
                       const moveTarget = hunk.movePath ? resolveTarget(location, hunk.movePath) : undefined
+                      if (moveTarget) targets.push(moveTarget)
                       if (moveTarget?.externalDirectory) {
                         yield* permission.assert({
                           action: "external_directory",
