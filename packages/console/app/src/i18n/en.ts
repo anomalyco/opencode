@@ -374,6 +374,8 @@ export const dict = {
   "zen.api.error.userMonthlyLimitReached":
     "You have reached your monthly spending limit of ${{amount}}. Manage your limits here: {{membersUrl}}",
   "zen.api.error.modelDisabled": "Model is disabled",
+  "zen.api.error.modelAccessBlocked":
+    "{{models}} model access has been disabled for this workspace following a report from {{provider}}. Contact support@opencode.ai for help.",
   "zen.api.error.regionNotAllowed":
     "This model is hosted in China. If you would like to use this model, enable it in your settings: {{consoleGoUrl}}",
   "zen.api.error.trialEnded":

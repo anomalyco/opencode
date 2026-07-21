@@ -1,0 +1,1 @@
+ALTER TABLE `workspace` ADD `blocked_model_providers` json;

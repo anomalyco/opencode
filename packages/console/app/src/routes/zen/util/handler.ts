@@ -21,6 +21,7 @@ import {
   MonthlyLimitError,
   UserLimitError,
   ModelError,
+  ModelAccessError,
   RegionError,
   RateLimitError,
   FreeUsageLimitError,
@@ -52,6 +53,7 @@ import { createProviderBudgetTracker } from "./providerBudgetTracker"
 import { accumulateUsage, HOT_WORKSPACES } from "./usageBatcher"
 import { Workspace } from "@opencode-ai/console-core/workspace.js"
 import { countryFromRequest } from "~/lib/request-country"
+import { ModelAccess } from "@opencode-ai/console-core/model-access.js"
 
 type ZenData = Awaited<ReturnType<typeof ZenData.list>>
 type RetryOptions = {
@@ -128,6 +130,7 @@ export async function handler(
       : createKeyRateLimiter(modelInfo.id, modelInfo.rateLimit, zenApiKey, input.request)
     await rateLimiter?.check()
     const authInfo = await authenticate(modelInfo, zenApiKey)
+    validateModelAccess(authInfo, modelInfo)
     const allowedRegions = authInfo?.region
       ? authInfo.region
       : await (async () => {
@@ -466,7 +469,7 @@ export async function handler(
       } catch {}
     }
 
-    if (error instanceof RegionError)
+    if (error instanceof RegionError || error instanceof ModelAccessError)
       return new Response(
         JSON.stringify({
           type: "error",
@@ -697,6 +700,7 @@ export async function handler(
           workspace: {
             id: WorkspaceTable.id,
             region: WorkspaceTable.region,
+            blockedModelProviders: WorkspaceTable.blocked_model_providers,
           },
           billing: {
             balance: BillingTable.balance,
@@ -800,6 +804,7 @@ export async function handler(
       apiKeyId: data.apiKey,
       workspaceID: data.workspace.id,
       region: data.workspace.region,
+      blockedModelProviders: data.workspace.blockedModelProviders,
       billing: data.billing,
       user: data.user,
       black: data.black,
@@ -986,6 +991,13 @@ export async function handler(
       )
 
     return "balance"
+  }
+
+  function validateModelAccess(authInfo: AuthInfo, modelInfo: ModelInfo) {
+    if (!authInfo) return
+    if (!ModelAccess.blocked(modelInfo.id, authInfo.blockedModelProviders)) return
+    const provider = ModelAccess.provider(modelInfo.id)!
+    throw new ModelAccessError(t("zen.api.error.modelAccessBlocked", ModelAccess.label(provider)))
   }
 
   function validateModelSettings(billingSource: BillingSource, authInfo: AuthInfo) {
