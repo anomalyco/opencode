@@ -73,6 +73,9 @@ export function make(
   })
 
   return {
+    info: Effect.fn("VcsHg.info")(function* () {
+      return { branch: yield* hg.branch(), defaultBranch: "default" }
+    }),
     status: Effect.fn("VcsHg.status")(function* () {
       const [items, batch] = yield* Effect.all(
         // Zero-context patches are enough to count changed lines.
