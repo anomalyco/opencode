@@ -29,7 +29,8 @@ ultimate source of truth.
 ## Values and literals
 
 - [x] `null`, `undefined`, booleans, finite and non-finite numbers, and strings.
-- [x] Array literals, including holes and spread from arrays, strings, Maps, Sets, and URLSearchParams.
+- [x] Array literals, including holes and spread from arrays, strings, Maps, Sets, URLSearchParams, custom synchronous
+      iterators, and synchronous generators.
 - [x] Object literals with shorthand, computed string/number keys, and spread from plain data objects; `null` and
       `undefined` are no-ops, while arrays are rejected.
 - [x] Template literals with interpolation.
@@ -57,7 +58,9 @@ ultimate source of truth.
 - [ ] Hoist function declarations accepted directly in switch cases.
 - [x] Computed object destructuring keys such as `const { [field]: value } = record`.
 - [x] Object destructuring from arrays, such as `const { length } = values`.
-- [x] Array destructuring from supported non-array iterables: strings, Maps, Sets, and URLSearchParams.
+- [x] Array binding and assignment destructuring from strings, Maps, Sets, URLSearchParams, custom synchronous
+      iterators, and synchronous generators, including stepwise elisions/rest and `IteratorClose` on early completion
+      or binding/default failure.
 
 ## Statements and control flow
 
@@ -107,10 +110,25 @@ ultimate source of truth.
 - [ ] Classes and private fields.
 - [x] Synchronous and async generator declarations/expressions, `yield`, and `yield*`, including lazy bodies,
       `next(value)`, `return(value)`, `throw(value)`, exhaustion, promise adoption, async request ordering,
-      `try`/`catch`/`finally`, and sync/async iterator symbols. Generator values are opaque runtime references.
-- [x] Generator values integrate with `for...of` (sync only) and `for await...of` (sync and async). Array/argument
-      spread, destructuring, `Array.from`, and Promise combinators retain their existing finite collection subset and
-      do not consume generators.
+      `try`/`catch`/`finally`, and sync/async iterator symbols. Async `yield*` awaits values while adapting a sync
+      iterator but preserves values supplied by a manually implemented async iterator. Generator values are opaque
+      runtime references.
+- [x] Synchronous generators and custom synchronous iterators are consumed stepwise by array/argument spread, array
+      destructuring, `Array.from`, Map/Set/URLSearchParams construction, `Object.fromEntries`, Object/Map `groupBy`,
+      Promise combinators, `AggregateError`, and `Math.sumPrecise`. Mapper/grouping callbacks interleave with iterator
+      steps; synchronous consumers preserve yielded promise objects rather than awaiting them. Async generators are
+      rejected by every synchronous consumer.
+- [x] Synchronous iterator acquisition and result validation follow `IteratorClose` boundaries: consumer errors and
+      intentional early stops invoke `return()`, acquisition/`next()` failures do not, and an original consumer error
+      wins over a cleanup failure. Async iterator consumption remains limited to `for await...of` and async `yield*`.
+- [x] Portable generator protocol coverage is adapted from pinned Test262 cases for suspended-start, suspended-yield,
+      and completed states; sync and async `next`/`return`/`throw`; finally yields and completion overrides; rejected
+      yielded promises; mixed async request queues; sync and async `yield*` forwarding; malformed methods/results;
+      and declaration, expression, and object-method forms with closure and parameter behavior. The adapted suite
+      deliberately skips Test262 variants whose observation mechanism requires unsupported getter definitions,
+      proxies, prototype inspection or mutation, non-arrow `this`, classes, or arbitrary symbols. It also skips tests
+      asserting exact promise reaction-turn counts beyond the observable ordering guarantee documented below. These
+      are interpreter-surface boundaries, not claims that the corresponding full Test262 families pass unchanged.
 
 ## Expressions and operators
 
@@ -136,8 +154,8 @@ ultimate source of truth.
 - [x] Tool calls start eagerly and return supervised, run-once CodeMode promises.
 - [x] Direct `await`, repeated awaits, and implicit resolution when a promise is returned from a function/program.
 - [x] `Promise.resolve` and `Promise.reject`.
-- [x] `Promise.all`, `Promise.allSettled`, `Promise.race`, and `Promise.any` over supported collections containing
-      promises and plain values.
+- [x] `Promise.all`, `Promise.allSettled`, `Promise.race`, and `Promise.any` over finite collections, custom synchronous
+      iterators, and synchronous generators containing promises and plain values.
 - [x] `Promise.all` preserves result order and rejects on the first observed failure without cancelling siblings.
 - [x] `Promise.allSettled` returns plain fulfilled/rejected outcome records.
 - [x] `Promise.race` settles from the first result without cancelling losers at settlement time.
@@ -181,14 +199,16 @@ ultimate source of truth.
 - [x] `Object()` and `new Object()` return `{}` for nullish arguments and pass objects through unchanged;
       primitive wrapper objects (`Object(1)`) are rejected explicitly.
 - [x] Computed property names and object spread.
-- [x] `Object.keys`, `Object.values`, `Object.entries`, `Object.hasOwn`, `Object.assign`, and `Object.fromEntries`.
+- [x] `Object.keys`, `Object.values`, `Object.entries`, `Object.hasOwn`, `Object.assign`, and `Object.fromEntries`, with
+      synchronous iterator support for `fromEntries`.
 - [x] `Object.keys` over arrays and tool references.
 - [x] Object identity is preserved by in-CodeMode Object helpers.
 - [x] Prototype traversal and mutation through `__proto__`, `constructor`, and `prototype` are blocked.
 - [ ] Legal own data fields named `__proto__`, `constructor`, or `prototype` are rejected at JSON/tool boundaries and
       cannot be created, read, or written in CodeMode; tool path segments with those names remain supported.
 - [x] `Object.is` for supported data values.
-- [x] `Object.groupBy` over supported collection iterables, with string-key coercion and null-prototype results.
+- [x] `Object.groupBy` over finite collections and custom synchronous iterators/generators, with string-key coercion
+      and null-prototype results.
 
 ## Arrays
 
@@ -196,7 +216,7 @@ ultimate source of truth.
       array of that length; invalid lengths throw `RangeError`. Iteration, spread, join, and JSON handle holes like
       JavaScript, and host results normalize holes to `null`.
 - [x] Static methods: `Array.isArray`, `Array.of`, and `Array.from`, including the `Array.from` mapper form with
-      `(value, index)` arguments.
+      `(value, index)` arguments and stepwise synchronous iterator consumption.
 - [x] Iteration/transformation: `map`, `filter`, `flatMap`, and `forEach`.
 - [x] Searching/tests: `find`, `findIndex`, `findLast`, `findLastIndex`, `some`, `every`, `includes`, `indexOf`, and
       `lastIndexOf`.
@@ -251,7 +271,8 @@ ultimate source of truth.
       for feature detection. Calling any undefined value reports a native-style `TypeError` naming the callee, for
       example `Math.sum is not a function.` Blocked members (`constructor`, `__proto__`, ...) still throw,
       and unknown `Promise` statics keep their descriptive error.
-- [x] `Math.sumPrecise` over supported collection iterables, rejecting non-number elements without coercion.
+- [x] `Math.sumPrecise` over finite collections and custom synchronous iterators/generators, rejecting non-number
+      elements without coercion.
 - [x] Global coercing `isFinite` and `isNaN`; opaque runtime references reject as data errors, like `Number(...)`.
 
 ## JSON and console
@@ -303,10 +324,10 @@ ultimate source of truth.
 
 ## Map and Set
 
-- [x] Static `Map.groupBy` over supported collection iterables, preserving key identity.
-- [x] `new Map()` from entry arrays or another Map.
+- [x] Static `Map.groupBy` over finite collections and custom synchronous iterators/generators, preserving key identity.
+- [x] `new Map()` from synchronous iterables of entries.
 - [x] Map `get`, `set`, `has`, `delete`, `clear`, `size`, and `forEach`.
-- [x] `new Set()` from arrays, strings, or another Set.
+- [x] `new Set()` from synchronous iterables.
 - [x] Set `add`, `has`, `delete`, `clear`, `size`, and `forEach`.
 - [x] Materialized `keys`, `values`, and `entries` arrays for Map and Set.
 - [x] Spread, `for...of`, `Array.from`, and `Object.fromEntries` integration.
@@ -322,7 +343,7 @@ ultimate source of truth.
 - [x] Readable URL fields: `href`, `origin`, `protocol`, `username`, `password`, `host`, `hostname`, `port`,
       `pathname`, `search`, and `hash`.
 - [x] Writable URL fields except `origin`.
-- [x] `new URLSearchParams()` from query strings, data objects, pairs, Maps, and URLSearchParams.
+- [x] `new URLSearchParams()` from query strings, data objects, synchronous iterables of pairs, and URLSearchParams.
 - [x] URLSearchParams `append`, `delete`, `get`, `getAll`, `has`, `set`, `sort`, `forEach`, `keys`, `values`,
       `entries`, `toString`, and `size`.
 - [x] URL values serialize to their href; URLSearchParams serialize to `{}`.
@@ -332,7 +353,7 @@ ultimate source of truth.
 - [x] `Error`, `TypeError`, `RangeError`, `SyntaxError`, `ReferenceError`, `EvalError`, and `URIError`, callable with
       or without `new`.
 - [x] `AggregateError` with the `(errors, message?)` signature and an own `errors` array, constructed directly or by
-      an all-rejected `Promise.any`.
+      an all-rejected `Promise.any`; direct construction accepts custom synchronous iterators and generators.
 - [x] Error `name`/`message`, error inheritance through `instanceof`, and plain-data serialization.
 - [x] `instanceof` for Date, RegExp, Map, Set, URL, URLSearchParams, Array, Object, Promise, and Error types.
 - [x] Catchable user throws, runtime failures raised during interpreted evaluation, awaited tool failures, and awaited

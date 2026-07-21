@@ -13,9 +13,9 @@ import {
 import { caughtErrorValue, normalizeError } from "./errors.js"
 import { applyCollectionCallback, isSupportedCallback, type CallbackRunner, type SupportedCallback } from "./methods.js"
 import { typeofValue } from "./references.js"
-import { spreadItems } from "../stdlib/collections.js"
 import { createAggregateErrorValue } from "../stdlib/value.js"
 import { CodeModePromise } from "../values.js"
+import type { SyncIteratorRunner } from "./iterator.js"
 
 // Observation only controls rejection reporting; program completion interrupts all promise work.
 export class PromiseRuntime<R> {
@@ -88,7 +88,7 @@ export const selfResolutionError = (node?: AstNode): InterpreterRuntimeError =>
   new InterpreterRuntimeError("Chaining cycle detected: a promise cannot resolve with itself.", node).as("TypeError")
 
 export const invokePromiseMethod = <R>(
-  runner: CallbackRunner<R>,
+  runner: CallbackRunner<R> & SyncIteratorRunner<R>,
   promises: PromiseRuntime<R>,
   ref: PromiseMethodReference,
   args: Array<unknown>,
@@ -102,79 +102,69 @@ export const invokePromiseMethod = <R>(
     return promises.create(Effect.fail(new ProgramThrow(args[0])))
   }
 
-  const spread = spreadItems(args[0])
-  if (spread === undefined) {
-    return promises.create(
-      Effect.fail(
-        new InterpreterRuntimeError(
-          `Promise.${ref.name} expects an array of promises or plain values (e.g. Promise.${ref.name}(items.map((item) => tools.ns.tool(item)))).`,
+  return promises.create(
+    Effect.gen(function* () {
+      const cursor = yield* runner.syncIterator(args[0], node)
+      if (cursor === undefined) {
+        throw new InterpreterRuntimeError(
+          `Promise.${ref.name} expects an array or other synchronous iterable.`,
           node,
-        ).as("TypeError"),
-      ),
-    )
-  }
-  const items = Array.from(spread)
+        ).as("TypeError")
+      }
+      const items: Array<unknown> = []
+      while (true) {
+        const step = yield* cursor.next
+        if (step.done) break
+        items.push(step.value)
+        if (step.value instanceof CodeModePromise) promises.markObserved(step.value)
+      }
 
-  for (const item of items) {
-    if (item instanceof CodeModePromise) promises.markObserved(item)
-  }
-
-  switch (ref.name) {
-    case "all": {
-      const observations = items.map((item) =>
-        item instanceof CodeModePromise ? Effect.flatten(promises.await(item)) : Effect.succeed(item),
-      )
-      return promises.create(settleAfterTurn(Effect.all(observations, { concurrency: "unbounded" })))
-    }
-    case "allSettled": {
-      const observations = items.map((item) =>
-        item instanceof CodeModePromise ? promises.await(item) : Effect.succeed(Exit.succeed(item)),
-      )
-      return promises.create(
-        settleAfterTurn(
-          Effect.gen(function* () {
-            const outcomes: Array<unknown> = []
-            for (const observation of observations) {
-              const exit = yield* observation
-              if (Exit.isSuccess(exit)) {
-                outcomes.push(
-                  Object.assign(Object.create(null) as SafeObject, { status: "fulfilled", value: exit.value }),
-                )
-                continue
-              }
-              if (Cause.hasInterruptsOnly(exit.cause)) {
-                // Teardown interruption is not a program-level rejection.
-                return yield* Effect.failCause(exit.cause)
-              }
-              outcomes.push(
-                Object.assign(Object.create(null) as SafeObject, {
-                  status: "rejected",
-                  reason: caughtErrorValue(Cause.squash(exit.cause)),
-                }),
-              )
-            }
-            return outcomes
-          }),
-        ),
-      )
-    }
-    case "race": {
-      if (items.length === 0) {
-        return promises.create(
-          Effect.fail(
-            new InterpreterRuntimeError(
-              "Promise.race([]) would never settle; provide at least one promise or value.",
-              node,
+      if (ref.name === "all") {
+        return yield* settleAfterTurn(
+          Effect.all(
+            items.map((item) =>
+              item instanceof CodeModePromise ? Effect.flatten(promises.await(item)) : Effect.succeed(item),
+            ),
+            { concurrency: "unbounded" },
+          ),
+        )
+      }
+      if (ref.name === "allSettled") {
+        const outcomes: Array<unknown> = []
+        for (const item of items) {
+          const exit = item instanceof CodeModePromise ? yield* promises.await(item) : Exit.succeed(item)
+          if (Exit.isSuccess(exit)) {
+            outcomes.push(Object.assign(Object.create(null) as SafeObject, { status: "fulfilled", value: exit.value }))
+            continue
+          }
+          if (Cause.hasInterruptsOnly(exit.cause)) return yield* Effect.failCause(exit.cause)
+          outcomes.push(
+            Object.assign(Object.create(null) as SafeObject, {
+              status: "rejected",
+              reason: caughtErrorValue(Cause.squash(exit.cause)),
+            }),
+          )
+        }
+        yield* Effect.yieldNow
+        return outcomes
+      }
+      if (ref.name === "race") {
+        if (items.length === 0) {
+          throw new InterpreterRuntimeError(
+            "Promise.race([]) would never settle; provide at least one promise or value.",
+            node,
+          )
+        }
+        return yield* settleAfterTurn(
+          Effect.flatten(
+            Effect.raceAll(
+              items.map((item) =>
+                item instanceof CodeModePromise ? promises.await(item) : Effect.succeed(Exit.succeed(item)),
+              ),
             ),
           ),
         )
       }
-      const observations = items.map((item) =>
-        item instanceof CodeModePromise ? promises.await(item) : Effect.succeed(Exit.succeed(item)),
-      )
-      return promises.create(settleAfterTurn(Effect.flatten(Effect.raceAll(observations))))
-    }
-    case "any": {
       const flipped = items.map((item) =>
         item instanceof CodeModePromise
           ? Effect.flatMap(promises.await(item), (exit) => {
@@ -184,17 +174,18 @@ export const invokePromiseMethod = <R>(
             })
           : Effect.fail(new PromiseAnyFulfilled(item)),
       )
-      const body = Effect.all(flipped, { concurrency: "unbounded" }).pipe(
-        Effect.flatMap((reasons) =>
-          Effect.fail(new ProgramThrow(createAggregateErrorValue(reasons, "All promises were rejected"))),
-        ),
-        Effect.catch((error) =>
-          error instanceof PromiseAnyFulfilled ? Effect.succeed(error.value) : Effect.fail(error),
+      return yield* settleAfterTurn(
+        Effect.all(flipped, { concurrency: "unbounded" }).pipe(
+          Effect.flatMap((reasons) =>
+            Effect.fail(new ProgramThrow(createAggregateErrorValue(reasons, "All promises were rejected"))),
+          ),
+          Effect.catch((error) =>
+            error instanceof PromiseAnyFulfilled ? Effect.succeed(error.value) : Effect.fail(error),
+          ),
         ),
       )
-      return promises.create(settleAfterTurn(body))
-    }
-  }
+    }),
+  )
 }
 
 export const invokePromiseInstanceMethod = <R>(

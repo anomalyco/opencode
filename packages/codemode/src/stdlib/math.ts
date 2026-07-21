@@ -1,3 +1,5 @@
+import { Effect } from "effect"
+import { preserveConsumerError, type SyncIteratorRunner } from "../interpreter/iterator.js"
 import { type AstNode, InterpreterRuntimeError } from "../interpreter/model.js"
 import { spreadItems } from "./collections.js"
 
@@ -153,3 +155,29 @@ export const invokeMathMethod = (name: string, args: Array<unknown>, node: AstNo
   }
   throw new InterpreterRuntimeError(`Math.${name} is not available.`, node)
 }
+
+export const invokeMathSumPrecise = <R>(
+  runner: SyncIteratorRunner<R>,
+  source: unknown,
+  node: AstNode,
+): Effect.Effect<number, unknown, R> =>
+  Effect.gen(function* () {
+    const cursor = yield* runner.syncIterator(source, node)
+    if (cursor === undefined) {
+      throw new InterpreterRuntimeError("Math.sumPrecise expects a synchronous iterable.", node).as("TypeError")
+    }
+    const numbers: Array<number> = []
+    while (true) {
+      const step = yield* cursor.next
+      if (step.done) return Math.sumPrecise(numbers)
+      yield* preserveConsumerError(
+        cursor,
+        Effect.sync(() => {
+          if (typeof step.value !== "number") {
+            throw new InterpreterRuntimeError("Math.sumPrecise expects an iterable of numbers.", node).as("TypeError")
+          }
+          numbers.push(step.value)
+        }),
+      )
+    }
+  })

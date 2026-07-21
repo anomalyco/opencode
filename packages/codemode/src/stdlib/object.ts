@@ -1,3 +1,4 @@
+import { Effect } from "effect"
 import {
   type AstNode,
   AsyncIteratorSymbol,
@@ -9,6 +10,7 @@ import { containsOpaqueReference } from "../interpreter/references.js"
 import { isBlockedMember } from "../tool-runtime.js"
 import { isCodeModeValue, CodeModeMap, CodeModePromise, CodeModeSet, CodeModeURLSearchParams } from "../values.js"
 import { boundedData, coerceToString } from "./value.js"
+import { preserveConsumerError, type SyncIteratorRunner } from "../interpreter/iterator.js"
 
 export const objectMethodsPreservingIdentity = new Set(["assign", "values", "entries", "fromEntries"])
 
@@ -107,4 +109,45 @@ export const invokeObjectMethod = (name: string, args: Array<unknown>, node: Ast
     }
   }
   throw new InterpreterRuntimeError(`Object.${name} is not available.`, node)
+}
+
+export const invokeObjectFromEntries = <R>(
+  runner: SyncIteratorRunner<R>,
+  source: unknown,
+  node: AstNode,
+): Effect.Effect<Record<string, unknown>, unknown, R> => {
+  const out: Record<string, unknown> = Object.create(null)
+  return Effect.gen(function* () {
+    const cursor = yield* runner.syncIterator(source, node)
+    if (cursor === undefined) {
+      throw new InterpreterRuntimeError("Object.fromEntries expects a synchronous iterable of entries.", node).as(
+        "TypeError",
+      )
+    }
+    while (true) {
+      const step = yield* cursor.next
+      if (step.done) return out
+      yield* preserveConsumerError(
+        cursor,
+        Effect.sync(() => {
+          if (
+            step.value === null ||
+            typeof step.value !== "object" ||
+            isCodeModeValue(step.value) ||
+            containsOpaqueReference(step.value)
+          ) {
+            throw new InterpreterRuntimeError("Object.fromEntries expects [key, value] entry objects.", node).as(
+              "TypeError",
+            )
+          }
+          const entry = step.value as Record<string, unknown>
+          boundedData(entry[0], "Object.fromEntries key")
+          boundedData(entry[1], "Object.fromEntries value")
+          const key = coerceToString(entry[0])
+          if (isBlockedMember(key)) throw new InterpreterRuntimeError(`Property '${key}' is not available.`, node)
+          out[key] = entry[1]
+        }),
+      )
+    }
+  })
 }
