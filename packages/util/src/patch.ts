@@ -13,8 +13,10 @@ export class BoundaryError extends Schema.TaggedErrorClass<BoundaryError>()("Pat
 export class InvalidHunkError extends Schema.TaggedErrorClass<InvalidHunkError>()("Patch.InvalidHunkError", {
   line: Schema.String,
   lineNumber: Schema.Number,
+  reason: Schema.optional(Schema.String),
 }) {
   override get message() {
+    if (this.reason) return `Invalid hunk at line ${this.lineNumber}: ${this.reason}`
     return `Invalid hunk at line ${this.lineNumber}: '${this.line}' is not a valid hunk header. Valid hunk headers: '*** Add File: {path}', '*** Delete File: {path}', '*** Update File: {path}'`
   }
 }
@@ -57,51 +59,35 @@ export function parse(patchText: string): Result.Result<ReadonlyArray<Hunk>, Par
   while (index < end) {
     const line = lines[index]!
     const header = line.trim()
-    if (header.startsWith("*** Add File:")) {
-      const path = header.slice("*** Add File:".length).trim()
-      if (!path) {
-        index++
-        continue
-      }
+    if (header.startsWith("*** Add File: ")) {
+      const path = header.slice("*** Add File: ".length).trim()
       const parsed = parseAdd(lines, index + 1, end)
+      if ("error" in parsed) return Result.fail(parsed.error)
       hunks.push({ type: "add", path, contents: parsed.content })
       index = parsed.next
       continue
     }
-    if (header.startsWith("*** Delete File:")) {
-      const path = header.slice("*** Delete File:".length).trim()
-      if (!path) {
-        index++
-        continue
-      }
+    if (header.startsWith("*** Delete File: ")) {
+      const path = header.slice("*** Delete File: ".length).trim()
       hunks.push({ type: "delete", path })
       index++
       continue
     }
-    if (header.startsWith("*** Update File:")) {
-      const path = header.slice("*** Update File:".length).trim()
-      if (!path) {
-        index++
-        continue
-      }
+    if (header.startsWith("*** Update File: ")) {
+      const path = header.slice("*** Update File: ".length).trim()
       let next = index + 1
       let movePath: string | undefined
-      if (lines[next]?.startsWith("*** Move to:")) {
-        movePath = lines[next]!.slice("*** Move to:".length).trim()
+      if (lines[next]?.trimEnd().startsWith("*** Move to: ")) {
+        movePath = lines[next]!.trimEnd().slice("*** Move to: ".length).trim()
         next++
       }
-      const parsed = parseUpdate(lines, next, end)
+      const parsed = parseUpdate(lines, next, end, path, index)
+      if ("error" in parsed) return Result.fail(parsed.error)
       hunks.push({ type: "update", path, movePath, chunks: parsed.chunks })
       index = parsed.next
       continue
     }
-    index++
-  }
-  if (hunks.length === 0) {
-    const invalid = lines.findIndex((line, index) => index > begin && index < end && line.trim() !== "")
-    if (invalid !== -1) {
-      return Result.fail(new InvalidHunkError({ line: lines[invalid]!.trim(), lineNumber: invalid + 1 }))
-    }
+    return Result.fail(new InvalidHunkError({ line: header, lineNumber: index + 1 }))
   }
   return Result.succeed(hunks)
 }
@@ -123,45 +109,162 @@ export function joinBom(text: string, bom: boolean) {
   return bom ? `\uFEFF${stripped}` : stripped
 }
 
-function parseAdd(lines: ReadonlyArray<string>, start: number, end: number) {
+function parseAdd(
+  lines: ReadonlyArray<string>,
+  start: number,
+  end: number,
+): { content: string; next: number } | { error: InvalidHunkError } {
   const content: string[] = []
   let index = start
-  while (index < end && !lines[index]!.startsWith("***")) {
-    if (lines[index]!.startsWith("+")) content.push(lines[index]!.slice(1))
+  while (index < end && !isBoundary(lines[index]!.trim())) {
+    if (!lines[index]!.startsWith("+")) {
+      return { error: new InvalidHunkError({ line: lines[index]!.trim(), lineNumber: index + 1 }) }
+    }
+    content.push(lines[index]!.slice(1))
     index++
   }
   return { content: content.join("\n"), next: index }
 }
 
-function parseUpdate(lines: ReadonlyArray<string>, start: number, end: number) {
-  const chunks: UpdateFileChunk[] = []
+function parseUpdate(
+  lines: ReadonlyArray<string>,
+  start: number,
+  end: number,
+  path: string,
+  hunk: number,
+): { chunks: ReadonlyArray<UpdateFileChunk>; next: number } | { error: InvalidHunkError } {
+  const chunks: Array<{
+    oldLines: string[]
+    newLines: string[]
+    changeContext?: string
+    endOfFile?: boolean
+  }> = []
   let index = start
-  while (index < end && !lines[index]!.startsWith("***")) {
-    if (!lines[index]!.startsWith("@@")) {
+  let afterEndOfFile = false
+  while (index < end) {
+    const line = lines[index]!
+    const updateLine = line.trimEnd()
+    if (afterEndOfFile) {
+      if (updateLine === "") {
+        index++
+        continue
+      }
+      if (updateLine === "@@" || updateLine.startsWith("@@ ")) afterEndOfFile = false
+      else if (isBoundary(updateLine)) break
+      else {
+        return {
+          error: new InvalidHunkError({
+            line,
+            lineNumber: index + 1,
+            reason: `Expected update hunk to start with a @@ context marker, got: '${line}'`,
+          }),
+        }
+      }
+    }
+    if (updateLine === "*** End of File") {
+      const chunk = chunks.at(-1)
+      if (chunk && chunk.oldLines.length === 0 && chunk.newLines.length === 0) {
+        return {
+          error: new InvalidHunkError({
+            line: updateLine,
+            lineNumber: index + 1,
+            reason: "Update hunk does not contain any lines",
+          }),
+        }
+      }
+      if (chunk) chunk.endOfFile = true
+      afterEndOfFile = true
       index++
       continue
     }
-    const changeContext = lines[index]!.slice(2).trim() || undefined
-    const oldLines: string[] = []
-    const newLines: string[] = []
-    let endOfFile = false
-    index++
-    while (index < end && !lines[index]!.startsWith("@@") && !lines[index]!.startsWith("***")) {
-      const line = lines[index]!
-      if (line.startsWith(" ")) {
-        oldLines.push(line.slice(1))
-        newLines.push(line.slice(1))
-      } else if (line.startsWith("-")) oldLines.push(line.slice(1))
-      else if (line.startsWith("+")) newLines.push(line.slice(1))
+    if (isBoundary(updateLine)) break
+    if (updateLine === "@@" || updateLine.startsWith("@@ ")) {
+      const previous = chunks.at(-1)
+      if (previous && previous.oldLines.length === 0 && previous.newLines.length === 0) {
+        return {
+          error: new InvalidHunkError({
+            line,
+            lineNumber: index + 1,
+            reason: `Unexpected line found in update hunk: '${line}'. Every line should start with ' ' (context line), '+' (added line), or '-' (removed line)`,
+          }),
+        }
+      }
+      chunks.push({
+        oldLines: [],
+        newLines: [],
+        changeContext: updateLine === "@@" ? undefined : updateLine.slice("@@ ".length),
+      })
       index++
+      continue
     }
-    if (lines[index]?.trim() === "*** End of File") {
-      endOfFile = true
+    if (chunks.length === 0) chunks.push({ oldLines: [], newLines: [] })
+    const chunk = chunks.at(-1)!
+    if (line === "") {
+      chunk.oldLines.push("")
+      chunk.newLines.push("")
       index++
+      continue
     }
-    chunks.push({ oldLines, newLines, changeContext, endOfFile: endOfFile || undefined })
+    if (line.startsWith(" ")) {
+      chunk.oldLines.push(line.slice(1))
+      chunk.newLines.push(line.slice(1))
+      index++
+      continue
+    }
+    if (line.startsWith("-")) {
+      chunk.oldLines.push(line.slice(1))
+      index++
+      continue
+    }
+    if (line.startsWith("+")) {
+      chunk.newLines.push(line.slice(1))
+      index++
+      continue
+    }
+    const populated = chunk.oldLines.length > 0 || chunk.newLines.length > 0
+    return {
+      error: new InvalidHunkError({
+        line,
+        lineNumber: index + 1,
+        reason: populated
+          ? `Expected update hunk to start with a @@ context marker, got: '${line}'`
+          : `Unexpected line found in update hunk: '${line}'. Every line should start with ' ' (context line), '+' (added line), or '-' (removed line)`,
+      }),
+    }
+  }
+  if (chunks.length === 0) {
+    return {
+      error: new InvalidHunkError({
+        line: lines[hunk]!.trim(),
+        lineNumber: hunk + 1,
+        reason: `Update file hunk for path '${path}' is empty`,
+      }),
+    }
+  }
+  const last = chunks.at(-1)!
+  if (last.oldLines.length === 0 && last.newLines.length === 0) {
+    const line = lines[index]!.trim()
+    return {
+      error: new InvalidHunkError({
+        line,
+        lineNumber: index + 1,
+        reason:
+          line === "*** End Patch"
+            ? "Update hunk does not contain any lines"
+            : `Unexpected line found in update hunk: '${line}'. Every line should start with ' ' (context line), '+' (added line), or '-' (removed line)`,
+      }),
+    }
   }
   return { chunks, next: index }
+}
+
+function isBoundary(line: string) {
+  return (
+    line === "*** End Patch" ||
+    line.startsWith("*** Add File: ") ||
+    line.startsWith("*** Delete File: ") ||
+    line.startsWith("*** Update File: ")
+  )
 }
 
 function computeReplacements(lines: ReadonlyArray<string>, path: string, chunks: ReadonlyArray<UpdateFileChunk>) {
