@@ -35,7 +35,11 @@ import { IssueDeleteTool } from "./issue_delete"
 import { IssueReorderTool } from "./issue_reorder"
 import { IssueArchiveTool } from "./issue_archive"
 import { IssueListTool } from "./issue_list"
+import { IssueSyncTool } from "./issue_sync"
+import { LinearGraphqlTool } from "./linear_graphql"
 import { Issue } from "@/issue/issue"
+import { LinearGraphqlClient } from "@/issue/linear-graphql"
+import { LinearBinding } from "@/issue/linear-binding"
 import { Glob } from "@opencode-ai/core/util/glob"
 import path from "path"
 import { pathToFileURL } from "url"
@@ -122,6 +126,8 @@ const layer = Layer.effect(
     const issueReorder = yield* IssueReorderTool
     const issueArchive = yield* IssueArchiveTool
     const issueList = yield* IssueListTool
+    const issueSync = yield* IssueSyncTool
+    const linearGraphql = yield* LinearGraphqlTool
     const agent = yield* Agent.Service
     const codeMode = flags.experimentalCodeMode ? yield* Effect.promise(() => import("./code-mode")) : undefined
     const codeModeTool = codeMode ? yield* codeMode.CodeModeTool : undefined
@@ -233,6 +239,8 @@ const layer = Layer.effect(
           issueReorder: Tool.init(issueReorder),
           issueArchive: Tool.init(issueArchive),
           issueList: Tool.init(issueList),
+          issueSync: Tool.init(issueSync),
+          linearGraphql: Tool.init(linearGraphql),
           patch: Tool.init(patchtool),
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
@@ -262,6 +270,8 @@ const layer = Layer.effect(
             tool.issueReorder,
             tool.issueArchive,
             tool.issueList,
+            tool.issueSync,
+            tool.linearGraphql,
             tool.patch,
             ...(tool.execute ? [tool.execute] : []),
             ...(flags.experimentalLspTool ? [tool.lsp] : []),
@@ -470,6 +480,8 @@ export const node = LayerNode.make({
     Database.node,
     Ripgrep.node,
     Issue.node,
+    LinearGraphqlClient.node,
+    LinearBinding.node,
   ],
 })
 

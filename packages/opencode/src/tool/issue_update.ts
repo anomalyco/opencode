@@ -38,6 +38,11 @@ type Metadata = {
  * so typed errors (`IssueNotFoundError`, `IssueHierarchyError`) are caught
  * via `Effect.catchTag` and folded into this union. Defects (Interrupt/Die)
  * propagate naturally.
+ *
+ * ADR-0005 D2 (Linear-linked refusal) was superseded 2026-07-20: the agent
+ * now edits Linear-linked issues directly in the local IssueTable, then
+ * optionally calls `issue_sync push` to sync to Linear — symmetric with the
+ * UI path. See ADR-0005 Amendment 2026-07-20 §D2 for the rationale.
  */
 type UpdateOutcome =
   | { ok: true; issue: Issue.Info }
@@ -55,6 +60,7 @@ export const IssueUpdateTool = Tool.define(
       execute: (params: Schema.Schema.Type<typeof Parameters>, _ctx: Tool.Context) =>
         Effect.gen(function* () {
           const directory = yield* InstanceState.directory
+
           // Construct the patch as an object literal (not via mutation) because
           // `Issue.Info` is inferred as `readonly` from `Schema.Schema.Type` —
           // field assignment on a `Partial<Issue.Info>` would fail typecheck.
@@ -73,42 +79,40 @@ export const IssueUpdateTool = Tool.define(
             ...(params.position !== undefined ? { position: params.position } : {}),
           }
 
-          const outcome = yield* issue
-            .update({ directory, id: params.id, patch })
-            .pipe(
-              Effect.map((updated): UpdateOutcome => ({ ok: true, issue: updated })),
-              Effect.catchTag("Issue.HierarchyError", (e) =>
-                Effect.succeed<UpdateOutcome>({
-                  ok: false,
-                  reason: "hierarchy",
-                  detail: e.reason,
-                }),
-              ),
-              Effect.catchTag("Issue.NotFoundError", (e) =>
-                Effect.succeed<UpdateOutcome>({
-                  ok: false,
-                  reason: "not_found",
-                  detail: e.context ?? e.id,
-                }),
-              ),
-            )
+          const outcome = yield* issue.update({ directory, id: params.id, patch }).pipe(
+            Effect.map((updated): UpdateOutcome => ({ ok: true, issue: updated })),
+            Effect.catchTag("Issue.HierarchyError", (e) =>
+              Effect.succeed<UpdateOutcome>({
+                ok: false,
+                reason: "hierarchy",
+                detail: e.reason,
+              }),
+            ),
+            Effect.catchTag("Issue.NotFoundError", (e) =>
+              Effect.succeed<UpdateOutcome>({
+                ok: false,
+                reason: "not_found",
+                detail: e.context ?? e.id,
+              }),
+            ),
+          )
 
           if (!outcome.ok) {
             return {
               title: `issue_update: ${params.id} failed (${outcome.reason})`,
-              output: JSON.stringify(
-                { updated: false, error: outcome.detail, reason: outcome.reason },
-                null,
-                2,
-              ),
+              output: JSON.stringify({ updated: false, error: outcome.detail, reason: outcome.reason }, null, 2),
               metadata: {} as Metadata,
             }
           }
 
+          // ADR-0005 D6: strip sync-internal bookkeeping fields before
+          // exposing to the agent.
+          const agentIssue = Issue.toAgentInfo(outcome.issue)
+
           return {
             title: `issue_update: ${outcome.issue.title}`,
-            output: JSON.stringify(outcome.issue, null, 2),
-            metadata: { issue: outcome.issue } as Metadata,
+            output: JSON.stringify(agentIssue, null, 2),
+            metadata: { issue: agentIssue } as Metadata,
           }
         }),
     }

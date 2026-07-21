@@ -22,6 +22,11 @@ type Metadata = {
  * `Tool.define` requires the execute Effect to have error channel `never`,
  * so `IssueNotFoundError` is caught via `Effect.catchTag` and folded into
  * this union. Defects (Interrupt/Die) propagate naturally.
+ *
+ * ADR-0005 D2 (Linear-linked refusal) was superseded 2026-07-20: the agent
+ * archives Linear-linked issues directly in the local IssueTable, then
+ * optionally calls `issue_sync push` to sync to Linear — symmetric with the
+ * UI path. See ADR-0005 Amendment 2026-07-20 §D2 for the rationale.
  */
 type ArchiveOutcome =
   | { ok: true; issue: Issue.Info }
@@ -39,6 +44,7 @@ export const IssueArchiveTool = Tool.define(
       execute: (params: Schema.Schema.Type<typeof Parameters>, _ctx: Tool.Context) =>
         Effect.gen(function* () {
           const directory = yield* InstanceState.directory
+
           const outcome = yield* issue
             .archive({
               directory,
@@ -59,19 +65,19 @@ export const IssueArchiveTool = Tool.define(
           if (!outcome.ok) {
             return {
               title: `issue_archive: ${params.id} failed (${outcome.reason})`,
-              output: JSON.stringify(
-                { archived: false, error: outcome.detail, reason: outcome.reason },
-                null,
-                2,
-              ),
+              output: JSON.stringify({ archived: false, error: outcome.detail, reason: outcome.reason }, null, 2),
               metadata: { archived: false } as Metadata,
             }
           }
 
+          // ADR-0005 D6: strip sync-internal bookkeeping fields before
+          // exposing to the agent.
+          const agentIssue = Issue.toAgentInfo(outcome.issue)
+
           return {
             title: `issue_archive: ${outcome.issue.title} (${params.outcome})`,
-            output: JSON.stringify(outcome.issue, null, 2),
-            metadata: { issue: outcome.issue, archived: true } satisfies Metadata,
+            output: JSON.stringify(agentIssue, null, 2),
+            metadata: { issue: agentIssue, archived: true } satisfies Metadata,
           }
         }),
     }

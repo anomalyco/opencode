@@ -9,3 +9,9 @@ This operation is idempotent: archiving an already-archived issue succeeds witho
 Archiving does NOT cascade. When an L1 is archived, its L2 children keep their status but become invisible to the default issue_list view (the entire subtree is hidden because the parent L1 is archived). When an L2 is archived, its parent L1 and sibling L2s are unaffected.
 
 After archiving, the issue becomes read-only — only issue_delete can remove it (archived issues can be deleted; active issues cannot). The Agent is responsible for deciding when to archive and which outcome to record; there is no automatic status advancement.
+
+## Linear linkage
+
+Archiving a Linear-linked issue (`linear_issue_id != null`) sets the local status to Done / Canceled / Duplicate. The Linear cloud copy is not changed by this tool — the user (or `issue_sync push`) is responsible for propagating the status change to Linear. This mirrors the UI path: users archive Linear-linked issues locally, then sync.
+
+If you need to archive on Linear's side immediately (rare), use the Linear MCP `save_issue` tool with the target Linear workflow state name (or `linear_graphql` with `issueUpdate` + `stateId`), then call `issue_sync({ direction: "pull" })` to reconcile.

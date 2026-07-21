@@ -10,3 +10,12 @@ Default behavior (include_archived omitted or false):
 Pass include_archived: true to return ALL issues (Active + Archived). Use this only when the user explicitly asks to review history or archived items; the default view is the active backlog the Agent should act on.
 
 There is no automatic status advancement. After reading the list, the Agent decides what to do: create new issues (issue_add), update fields (issue_update), reorder L1 priority (issue_reorder), or archive completed/canceled/duplicate work (issue_archive). Archived issues are read-only and can only be removed with issue_delete.
+
+## Linear linkage — read the `linear_issue_id` field
+
+Each issue exposes its `linear_issue_id` (string or null):
+
+- `linear_issue_id == null` — local-only issue. Edit freely with `issue_update`, `issue_archive`, `issue_delete`.
+- `linear_issue_id != null` — Linear-linked issue. The Agent can edit it locally with `issue_update` / `issue_archive` / `issue_delete` — edits write to the local IssueTable first, then the user (or `issue_sync push`) syncs them to Linear. This mirrors the UI path: users edit Linear-linked issues in the sidebar, then click Push.
+
+`issue_reorder` accepts Linear-linked issues (position is local-only; Linear orders by priority). `issue_add` always creates local-only issues — to create on Linear directly, use MCP `save_issue` then `issue_sync({ direction: "pull" })`.

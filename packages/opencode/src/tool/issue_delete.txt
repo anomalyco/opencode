@@ -1,3 +1,9 @@
 Delete a workspace-scoped issue (todo) by id. Returns a confirmation with the remaining issue count for the project.
 
 Only Archived issues (status in Done / Canceled / Duplicate) can be deleted. If the issue is still Active (status in Backlog / Todo / In Progress / In Review), this tool refuses the deletion and returns a hint to call `issue_archive({ id, outcome })` first. Deleting an L1 (level 0) issue cascades to its L2 (level 1) children; deleting an L2 issue is leaf-only.
+
+## Linear linkage
+
+Deleting a Linear-linked issue (`linear_issue_id != null`) removes the local row only. The Linear cloud issue is NOT deleted by this tool — the next `issue_sync pull` will re-import the Linear issue as a new local row (the "delete resurrection" behavior). This is intentional and mirrors the UI path: users delete locally, then sync.
+
+To permanently delete on Linear's side (rare), use the `linear_graphql` tool with an `issueDelete` mutation — Linear's MCP server does not expose a delete_issue tool. After the Linear delete succeeds, call `issue_sync({ direction: "pull" })` to reconcile the local copy.

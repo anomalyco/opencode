@@ -27,6 +27,12 @@ type Metadata = {
  * archived issues can be deleted. The discriminated union makes the two
  * outcomes explicit and self-documenting, eliminating the naming hazard.
  *
+ * ADR-0005 D2 (Linear-linked refusal) was superseded 2026-07-20: the agent
+ * can delete Linear-linked archived issues directly in the local IssueTable.
+ * The Linear cloud copy is unaffected — the next `issue_sync pull` will
+ * re-import the Linear issue as a new local row. To delete permanently on
+ * Linear, the user can use Linear's UI or `linear_graphql` (escape hatch).
+ *
  * References:
  * - TypeScript Discriminated Unions handbook
  * - Effect's `Effect.catchTag` pattern (tagged errors → tagged outcomes)
@@ -49,6 +55,7 @@ export const IssueDeleteTool = Tool.define(
       execute: (params: Schema.Schema.Type<typeof Parameters>, _ctx: Tool.Context) =>
         Effect.gen(function* () {
           const directory = yield* InstanceState.directory
+
           const outcome = yield* issue.delete({ directory, id: params.id }).pipe(
             Effect.map((): DeleteOutcome => {
               // Successful deletion — the issue was archived and is now
@@ -56,11 +63,13 @@ export const IssueDeleteTool = Tool.define(
               // agent-facing summary, fetched below.
               return { ok: true, remainingCount: 0 }
             }),
-            Effect.catchTag("Issue.NotArchivedError", (): Effect.Effect<DeleteOutcome> =>
-              Effect.succeed({ ok: false, reason: "not_archived" }),
+            Effect.catchTag(
+              "Issue.NotArchivedError",
+              (): Effect.Effect<DeleteOutcome> => Effect.succeed({ ok: false, reason: "not_archived" }),
             ),
-            Effect.catchTag("Issue.NotFoundError", (): Effect.Effect<DeleteOutcome> =>
-              Effect.succeed({ ok: false, reason: "not_found" }),
+            Effect.catchTag(
+              "Issue.NotFoundError",
+              (): Effect.Effect<DeleteOutcome> => Effect.succeed({ ok: false, reason: "not_found" }),
             ),
           )
 
@@ -68,11 +77,7 @@ export const IssueDeleteTool = Tool.define(
             if (outcome.reason === "not_found") {
               return {
                 title: `issue_delete: ${params.id} not found`,
-                output: JSON.stringify(
-                  { deleted: false, error: `Issue not found: ${params.id}` },
-                  null,
-                  2,
-                ),
+                output: JSON.stringify({ deleted: false, error: `Issue not found: ${params.id}` }, null, 2),
                 metadata: { deleted: false, remainingCount: 0 } as Metadata,
               }
             }

@@ -1,1 +1,7 @@
 Create a new workspace-scoped issue (todo) in the current project directory. Supports L1 issues (level=0) and L2 children (level=1, parent_id=...). Status is a Linear workflow state name (e.g., 'Backlog', 'Todo', 'In Progress', 'In Review', 'Done', 'Canceled', 'Duplicate'); defaults to 'Backlog' if omitted — 'Backlog' is an Active status that will not be auto-promoted until the user or agent moves it to 'Todo'. Priority follows Linear's enum (none, urgent, high, medium, low). A title is required; everything else is optional. To track rich markdown body content (file references, skill references), reuse the chat composer rather than this tool.
+
+## Linear linkage
+
+The new issue is created with `linear_issue_id = null` (local-only). It will NOT appear on Linear until a Push sends it — either the user clicks Push in the UI, or the Agent calls `issue_sync({ direction: "push" })`. Push will create the corresponding Linear issue and backfill the `linear_issue_id` on the local row.
+
+To create an issue directly on Linear (skipping the local-first flow), use the Linear MCP server's `save_issue` tool with `team` and `project`, then call `issue_sync({ direction: "pull" })` to import it into the local IssueTable.

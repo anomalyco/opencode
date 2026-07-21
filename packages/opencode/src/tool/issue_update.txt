@@ -1,1 +1,10 @@
 Update an existing workspace-scoped issue (todo) by id. Only the fields you provide are changed. Omit a field to leave it untouched.
+
+## Linear linkage
+
+The issue's `linear_issue_id` field (read via `issue_list`) tells you whether the issue is also tracked on Linear:
+
+- `linear_issue_id == null` — local-only issue. Edits stay local until a user-initiated Push sends them to Linear.
+- `linear_issue_id != null` — Linear-linked issue. Edits write to the local IssueTable first; the user (or `issue_sync push`) is responsible for pushing them to Linear. This mirrors the UI path — users edit Linear-linked issues locally, then sync.
+
+There is no automatic status advancement — the Agent decides when to move issues between Backlog / Todo / In Progress / In Review / Done / Canceled / Duplicate.

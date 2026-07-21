@@ -42,9 +42,7 @@ type Metadata = {
  * this union, then converted to a tool output. Defects (Interrupt/Die)
  * propagate naturally.
  */
-type CreateOutcome =
-  | { ok: true; issue: Issue.Info }
-  | { ok: false; reason: "hierarchy" | "not_found"; detail: string }
+type CreateOutcome = { ok: true; issue: Issue.Info } | { ok: false; reason: "hierarchy" | "not_found"; detail: string }
 
 /** Create a single workspace-scoped issue (todo) and return it */
 export const IssueAddTool = Tool.define(
@@ -95,19 +93,21 @@ export const IssueAddTool = Tool.define(
           if (!outcome.ok) {
             return {
               title: `issue_add: ${params.title} failed (${outcome.reason})`,
-              output: JSON.stringify(
-                { created: false, error: outcome.detail, reason: outcome.reason },
-                null,
-                2,
-              ),
+              output: JSON.stringify({ created: false, error: outcome.detail, reason: outcome.reason }, null, 2),
               metadata: {} as Metadata,
             }
           }
 
+          // ADR-0005 D6: strip sync-internal bookkeeping fields before
+          // exposing to the agent. New local creates never have
+          // `linear_*` set, but the filter is applied uniformly for
+          // consistency with issue_list / issue_update / issue_archive.
+          const agentIssue = Issue.toAgentInfo(outcome.issue)
+
           return {
             title: `issue_add: ${outcome.issue.title}`,
-            output: JSON.stringify(outcome.issue, null, 2),
-            metadata: { issue: outcome.issue } satisfies Metadata,
+            output: JSON.stringify(agentIssue, null, 2),
+            metadata: { issue: agentIssue } satisfies Metadata,
           }
         }),
     }

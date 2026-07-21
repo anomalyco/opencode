@@ -34,10 +34,14 @@ export const IssueListTool = Tool.define(
           const includeArchived = params.include_archived ?? false
           const issues = yield* issue.get({ directory, include_archived: includeArchived })
 
+          // ADR-0005 D6: strip sync-internal bookkeeping fields before
+          // exposing to the agent. `linear_*` fields stay (routing).
+          const agentIssues = issues.map(Issue.toAgentInfo)
+
           return {
-            title: `issue_list: ${issues.length} issue${issues.length === 1 ? "" : "s"}`,
-            output: JSON.stringify(issues, null, 2),
-            metadata: { count: issues.length, include_archived: includeArchived } satisfies Metadata,
+            title: `issue_list: ${agentIssues.length} issue${agentIssues.length === 1 ? "" : "s"}`,
+            output: JSON.stringify(agentIssues, null, 2),
+            metadata: { count: agentIssues.length, include_archived: includeArchived } satisfies Metadata,
           }
         }),
     }
