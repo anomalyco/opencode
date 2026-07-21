@@ -97,6 +97,7 @@ export const dict = {
   "command.session.unshare.description": "停止分享此工作階段",
 
   "palette.search.placeholder": "搜尋檔案、命令和工作階段",
+  "palette.search.placeholder.home": "搜尋命令和工作階段",
   "palette.empty": "找不到結果",
   "palette.group.commands": "命令",
   "palette.group.files": "檔案",
@@ -662,6 +663,7 @@ export const dict = {
   "session.new.workspace.triggerLocal": "本機",
   "session.new.workspace.local": "本機儲存庫",
   "session.new.workspace.existing": "工作區…",
+  "session.new.git.none": "無 Git",
   "session.new.lastModified": "最後修改",
 
   "session.header.search.placeholder": "搜尋 {{project}}",
