@@ -94,6 +94,7 @@ export const LANGUAGE_EXTENSIONS: Record<string, string> = {
   ".zsh": "shellscript",
   ".ksh": "shellscript",
   ".sql": "sql",
+  ".sol": "solidity",
   ".svelte": "svelte",
   ".swift": "swift",
   ".ts": "typescript",

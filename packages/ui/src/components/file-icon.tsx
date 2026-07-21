@@ -213,6 +213,7 @@ const ICON_MAPS: IconMaps = {
     java: "Java",
     kt: "Kotlin",
     scala: "Scala",
+    sol: "Solidity",
     php: "Php",
     rb: "Ruby",
     cs: "Csharp",
