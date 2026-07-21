@@ -53,7 +53,8 @@ async function load(scheme: MermaidColorScheme) {
 }
 
 export function renderMermaid(source: string, scheme: MermaidColorScheme): Promise<MermaidRenderResult> {
-  const run = async (): Promise<MermaidRenderResult> => {
+  // The runner converts every failure into a result, so the queue never rejects.
+  const result = queue.then(async (): Promise<MermaidRenderResult> => {
     try {
       const mermaid = await load(scheme)
       const { svg } = await mermaid.render(`mermaid-diagram-${++sequence}`, source)
@@ -61,8 +62,7 @@ export function renderMermaid(source: string, scheme: MermaidColorScheme): Promi
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : String(error) }
     }
-  }
-  const result = queue.then(run, run)
-  queue = result.catch(() => {})
+  })
+  queue = result
   return result
 }

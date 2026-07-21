@@ -53,10 +53,13 @@ function mermaid(lang: string | undefined) {
   return language(lang)?.toLowerCase() === "mermaid"
 }
 
+const mermaidFence = /^[ \t]{0,3}(?:`{3,}|~{3,})[ \t]*mermaid\b/im
+
 // Settled messages render as one full block, but mermaid fences must become standalone code
-// blocks so they can be swapped for a rendered diagram. Everything else stays coalesced.
+// blocks so they can be swapped for a rendered diagram. Everything else stays coalesced, and
+// the fence pre-check keeps the settled path lexer-free for messages without diagrams.
 function splitMermaid(text: string): Block[] {
-  if (refs(text)) return [{ raw: text, src: text, mode: "full" }]
+  if (!mermaidFence.test(text) || refs(text)) return [{ raw: text, src: text, mode: "full" }]
   const tokens = marked.lexer(text)
   if (!tokens.some((token) => token.type === "code" && mermaid((token as Tokens.Code).lang)))
     return [{ raw: text, src: text, mode: "full" }]
