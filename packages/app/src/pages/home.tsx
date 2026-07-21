@@ -19,7 +19,6 @@ import { makeEventListener } from "@solid-primitives/event-listener"
 import { createStore, produce } from "solid-js/store"
 import { DragDropProvider, PointerSensor } from "@dnd-kit/solid"
 import { useSortable } from "@dnd-kit/solid/sortable"
-import { defaultSortableTransition } from "@dnd-kit/dom/sortable"
 import { move } from "@dnd-kit/helpers"
 import { Accessibility, AutoScroller, Feedback, PointerActivationConstraints } from "@dnd-kit/dom"
 import { RestrictToVerticalAxis } from "@dnd-kit/abstract/modifiers"
@@ -83,6 +82,8 @@ import {
 } from "@/context/global-sync/home-session-index"
 
 const HOME_SESSION_LIMIT = 64
+const HOME_PROJECT_EDGE_SCROLL_BAND = 16
+const HOME_PROJECT_EDGE_SCROLL_SPEED = 260
 const HOME_SESSION_HEADER_STICKY_TOP = 12
 const HOME_SESSION_HEADER_TEXT_HEIGHT = 16
 const HOME_SESSION_HEADER_FADE_DISTANCE = 16
@@ -1060,44 +1061,38 @@ function HomeProjectList(props: {
   let listRef!: HTMLDivElement
   let snapshot: string[] | undefined
   const projects = () => global.ensureServerCtx(props.server).projects
-  const flips = new WeakMap<HTMLElement, Animation>()
 
-  // Replicates dnd-kit's built-in sortable FLIP animation (Sortable.animate),
-  // which only fires when the OptimisticSortingPlugin moves the DOM itself.
-  // Since we reorder through the store instead, displaced rows would snap into
-  // place without this. Rows are matched by worktree, not element identity,
-  // because the enriched project objects are recreated on every store change
-  // so <For> remounts the row elements on reorder. Old-position measurements
-  // include any in-flight animation offset, keeping fast drags continuous.
-  function animateDisplacedRows(sourceId: string, applyMove: () => void) {
-    const slots = () =>
-      Array.from(listRef.querySelectorAll<HTMLElement>("[data-home-project-slot]:not([data-dnd-placeholder])"))
-    const before = new Map(
-      slots().map((el) => [el.dataset.homeProjectSlot, el.getBoundingClientRect().top] as const),
-    )
-    applyMove()
-    // dnd-kit's Feedback plugin repositions its placeholder from a mutation
-    // observer microtask queued by the DOM reorder above; measuring in a later
-    // microtask sees the settled layout.
-    queueMicrotask(() => {
-      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return
-      for (const el of slots()) {
-        if (el.dataset.homeProjectSlot === sourceId) continue
-        const prev = before.get(el.dataset.homeProjectSlot)
-        if (prev === undefined) continue
-        const delta = prev - el.getBoundingClientRect().top
-        if (!delta) continue
-        flips.get(el)?.cancel()
-        flips.set(
-          el,
-          el.animate(
-            { translate: [`0 ${delta}px`, "0 0"] },
-            { duration: defaultSortableTransition.duration, easing: defaultSortableTransition.easing },
-          ),
-        )
-      }
-    })
+  // Constant-speed edge scrolling. dnd-kit's AutoScroller is deliberately not
+  // used: its activation zone is a percentage of the container height and its
+  // speed ramps with pointer depth, so large containers start creeping the
+  // scroll during ordinary drags. Here the scroll position is only touched
+  // while the pointer is within a fixed band at the container's edges (or past
+  // them), scrolling at a uniform rate.
+  let scroller: HTMLElement | undefined
+  let scrollDirection = 0
+  let scrollFrame: number | undefined
+  let scrollLast = 0
+
+  function stopEdgeScroll() {
+    if (scrollFrame !== undefined) cancelAnimationFrame(scrollFrame)
+    scrollFrame = undefined
+    scrollDirection = 0
+    scroller = undefined
   }
+
+  function edgeScrollTick(timestamp: number) {
+    if (!scroller || !scrollDirection) {
+      scrollFrame = undefined
+      return
+    }
+    const dt = scrollLast ? (timestamp - scrollLast) / 1000 : 0
+    scrollLast = timestamp
+    scroller.scrollTop += scrollDirection * HOME_PROJECT_EDGE_SCROLL_SPEED * dt
+    scrollFrame = requestAnimationFrame(edgeScrollTick)
+  }
+
+  onCleanup(stopEdgeScroll)
+
   return (
     <DragDropProvider
       sensors={[
@@ -1110,12 +1105,34 @@ function HomeProjectList(props: {
       ]}
       modifiers={[RestrictToVerticalAxis, RestrictToElement.configure({ element: () => listRef })]}
       plugins={(defaults) => [
-        ...defaults.filter((plugin) => plugin !== Accessibility),
-        AutoScroller.configure({ acceleration: 8, threshold: { x: 0, y: 0.05 } }),
+        ...defaults.filter((plugin) => plugin !== Accessibility && plugin !== AutoScroller),
         Feedback.configure({ dropAnimation: null }),
       ]}
       onDragStart={() => {
         snapshot = props.projects.map((project) => project.worktree)
+        let el = listRef.parentElement
+        while (el && !(el.scrollHeight > el.clientHeight && /(auto|scroll)/.test(getComputedStyle(el).overflowY)))
+          el = el.parentElement
+        scroller = el ?? undefined
+      }}
+      onDragMove={(event) => {
+        if (!scroller) return
+        // The operation position snapshot lags one event behind; event.to
+        // carries this move's coordinates.
+        const position = event.to ?? event.operation.position?.current
+        if (!position) return
+        const rect = scroller.getBoundingClientRect()
+        // Beyond the container counts as in-band: keep scrolling while the
+        // pointer is above/below it entirely.
+        scrollDirection =
+          position.y <= rect.top + HOME_PROJECT_EDGE_SCROLL_BAND
+            ? -1
+            : position.y >= rect.bottom - HOME_PROJECT_EDGE_SCROLL_BAND
+              ? 1
+              : 0
+        if (scrollDirection === 0 || scrollFrame !== undefined) return
+        scrollLast = 0
+        scrollFrame = requestAnimationFrame(edgeScrollTick)
       }}
       onDragOver={(event) => {
         // The Solid adapter expects the list state to be reordered here, during
@@ -1129,38 +1146,51 @@ function HomeProjectList(props: {
         if (next === order) return
         event.preventDefault()
         const sourceId = source.id.toString()
-        animateDisplacedRows(sourceId, () => projects().move(sourceId, next.indexOf(sourceId)))
+        // Displaced rows animate via dnd-kit's built-in sortable FLIP: the row
+        // elements persist across reorders (worktree-keyed <For>), so their
+        // sortable indices change and Sortable.animate transitions them from
+        // its cached shapes. This matches the titlebar tab strip's behavior.
+        projects().move(sourceId, next.indexOf(sourceId))
       }}
       onDragEnd={(event) => {
+        stopEdgeScroll()
         if (event.canceled && snapshot) {
           const restore = snapshot
-          animateDisplacedRows(event.operation.source?.id.toString() ?? "", () =>
-            restore.forEach((worktree, index) => projects().move(worktree, index)),
-          )
+          restore.forEach((worktree, index) => projects().move(worktree, index))
         }
         snapshot = undefined
       }}
     >
       <div class="flex min-w-0 flex-col gap-1" ref={listRef}>
-        <For each={props.projects}>
-          {(project, index) => (
-            <HomeProjectRow
-              project={project}
-              server={props.server}
-              index={index}
-              selected={
-                props.selected.server === ServerConnection.key(props.server) &&
-                props.selected.directory === project.worktree
-              }
-              unseenCount={props.unseenCount(props.server, project)}
-              selectProject={props.selectProject}
-              openNewSession={props.openNewSession}
-              editProject={props.editProject}
-              closeProject={props.closeProject}
-              clearNotifications={props.clearNotifications}
-              language={props.language}
-            />
-          )}
+        {/* Keyed on worktree strings: the enriched project objects are
+            recreated on every store or sync update, so iterating them directly
+            remounts all rows — killing any in-flight drag activation (the
+            row's sortable unregisters on unmount) and discarding animations.
+            String keys keep row elements alive and move them on reorder. */}
+        <For each={props.projects.map((project) => project.worktree)}>
+          {(worktree, index) => {
+            const project = createMemo<LocalProject | undefined>(
+              (prev) => props.projects.find((item) => item.worktree === worktree) ?? prev,
+            )
+            return (
+              <HomeProjectRow
+                project={project()!}
+                server={props.server}
+                index={index}
+                selected={
+                  props.selected.server === ServerConnection.key(props.server) &&
+                  props.selected.directory === worktree
+                }
+                unseenCount={props.unseenCount(props.server, project()!)}
+                selectProject={props.selectProject}
+                openNewSession={props.openNewSession}
+                editProject={props.editProject}
+                closeProject={props.closeProject}
+                clearNotifications={props.clearNotifications}
+                language={props.language}
+              />
+            )
+          }}
         </For>
       </div>
     </DragDropProvider>
@@ -1284,7 +1314,6 @@ function HomeProjectRow(props: {
   return (
     <div
       ref={sortable.ref}
-      data-home-project-slot={props.project.worktree}
       class="group/project relative flex h-7 min-w-0 items-center rounded-[6px]"
       classList={{ "z-10": sortable.isDragSource() }}
     >
