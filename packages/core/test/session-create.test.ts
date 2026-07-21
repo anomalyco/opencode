@@ -34,6 +34,7 @@ const projects = Layer.succeed(
     list: () => Effect.succeed([]),
     resolve: (directory) => Effect.succeed({ id: ProjectV2.ID.global, directory }),
     directories: () => Effect.succeed([]),
+    update: () => Effect.die("unused"),
     commit: () => Effect.void,
   }),
 )
@@ -658,6 +659,21 @@ describe("SessionV2.create", () => {
             Effect.map((error) => error._tag),
           ),
       ).toBe("Session.NotFoundError")
+    }),
+  )
+
+  it.effect("archives a Session through one durable event", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionV2.Service
+      const created = yield* session.create({ location })
+
+      yield* session.archive(created.id)
+      yield* session.archive(created.id)
+
+      expect((yield* session.get(created.id)).time.archived).toBeDefined()
+      const events = Array.from(yield* logEvents(session, created.id).pipe(Stream.runCollect))
+      expect(events.map((event) => event.type)).toContain("session.archived")
+      expect(events.filter((event) => event.type === "session.archived")).toHaveLength(1)
     }),
   )
 })

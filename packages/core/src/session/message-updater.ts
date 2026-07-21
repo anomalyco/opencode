@@ -171,6 +171,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
       },
       "session.moved": () => Effect.void,
       "session.renamed": () => Effect.void,
+      "session.archived": () => Effect.void,
       "session.deleted": () => Effect.void,
       "session.forked": () => Effect.void,
       "session.input.promoted": () => Effect.void,

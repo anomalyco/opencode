@@ -226,6 +226,7 @@ export interface Interface {
     model: ModelV2.Ref
   }) => Effect.Effect<void, NotFoundError>
   readonly rename: (input: { sessionID: SessionSchema.ID; title: string }) => Effect.Effect<void, NotFoundError>
+  readonly archive: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError>
   readonly move: (input: {
     sessionID: SessionSchema.ID
     directory: AbsolutePath
@@ -704,6 +705,11 @@ const layer = Layer.effect(
           sessionID: input.sessionID,
           title: input.title,
         })
+      }),
+      archive: Effect.fn("V2Session.archive")(function* (sessionID) {
+        const session = yield* result.get(sessionID)
+        if (session.time.archived) return
+        yield* events.publish(SessionEvent.Archived, { sessionID })
       }),
       move: Effect.fn("V2Session.move")(function* (input) {
         const current = yield* result.get(input.sessionID)
