@@ -2,7 +2,6 @@ export * as PluginHost from "./host"
 
 import type { Plugin } from "@opencode-ai/plugin/v2/effect"
 import { EventManifest } from "@opencode-ai/schema/event-manifest"
-import type { Info } from "@opencode-ai/schema/plugin"
 import { Effect, Schema, Stream } from "effect"
 import { AgentV2 } from "../agent"
 import { AISDK } from "../aisdk"
@@ -13,6 +12,7 @@ import { EventV2 } from "../event"
 import { Integration } from "../integration"
 import { Location } from "../location"
 import { ModelV2 } from "../model"
+import type { PluginV2 } from "../plugin"
 import { PluginRuntime } from "./runtime"
 import { ProviderV2 } from "../provider"
 import { Reference } from "../reference"
@@ -25,11 +25,7 @@ import { WorkspaceV2 } from "../workspace"
 import { PluginHooks } from "./hooks"
 
 const mutable = <T>(value: T) => value as DeepMutable<T>
-interface PluginService {
-  readonly list: () => Effect.Effect<Info[]>
-}
-
-export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginService) {
+export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Interface) {
   const agents = yield* AgentV2.Service
   const aisdk = yield* AISDK.Service
   const catalog = yield* Catalog.Service
