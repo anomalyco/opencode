@@ -26,17 +26,17 @@ describe("prompt input v2 interaction machine", () => {
     expect(closed.state.popover).toEqual({ type: "closed" })
   })
 
-  test("completes command names containing slashes", () => {
+  test("completes nested slash command names", () => {
     const open = transitionPromptInputV2(
       createPromptInputV2InteractionState(),
-      { type: "input.changed", value: "/ship/" },
+      { type: "input.changed", value: "/review/" },
       persisted(),
     )
-    const item = { ...command, label: "/ship/inline" }
-    const selected = transitionPromptInputV2(open.state, { type: "popover.select", item }, persisted("/ship/"))
+    const item = { ...command, label: "/review/nested" }
+    const selected = transitionPromptInputV2(open.state, { type: "popover.select", item }, persisted("/review/"))
 
-    expect(open.state.popover).toEqual({ type: "command-inline", query: "ship/" })
-    expect(selected.commands).toContainEqual({ type: "draft.setText", value: "/ship/inline " })
+    expect(open.state.popover).toEqual({ type: "command-inline", query: "review/" })
+    expect(selected.commands).toContainEqual({ type: "draft.setText", value: "/review/nested " })
   })
 
   test("opens context completion at the cursor", () => {
