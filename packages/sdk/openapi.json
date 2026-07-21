@@ -2407,15 +2407,6 @@
                       "assignee_id": {
                         "type": "string"
                       },
-                      "linear_issue_id": {
-                        "type": "string"
-                      },
-                      "linear_team_id": {
-                        "type": "string"
-                      },
-                      "linear_project_id": {
-                        "type": "string"
-                      },
                       "position": {
                         "anyOf": [
                           {
@@ -2438,55 +2429,6 @@
                             "enum": ["Infinity", "-Infinity", "NaN"]
                           }
                         ]
-                      },
-                      "last_pushed_at": {
-                        "anyOf": [
-                          {
-                            "type": "number"
-                          },
-                          {
-                            "type": "string",
-                            "enum": ["NaN"]
-                          },
-                          {
-                            "type": "string",
-                            "enum": ["Infinity"]
-                          },
-                          {
-                            "type": "string",
-                            "enum": ["-Infinity"]
-                          },
-                          {
-                            "type": "string",
-                            "enum": ["Infinity", "-Infinity", "NaN"]
-                          }
-                        ]
-                      },
-                      "last_pulled_at": {
-                        "anyOf": [
-                          {
-                            "type": "number"
-                          },
-                          {
-                            "type": "string",
-                            "enum": ["NaN"]
-                          },
-                          {
-                            "type": "string",
-                            "enum": ["Infinity"]
-                          },
-                          {
-                            "type": "string",
-                            "enum": ["-Infinity"]
-                          },
-                          {
-                            "type": "string",
-                            "enum": ["Infinity", "-Infinity", "NaN"]
-                          }
-                        ]
-                      },
-                      "cloud_shadow": {
-                        "type": "object"
                       }
                     },
                     "additionalProperties": false
@@ -2722,15 +2664,6 @@
                       "assignee_id": {
                         "type": "string"
                       },
-                      "linear_issue_id": {
-                        "type": "string"
-                      },
-                      "linear_team_id": {
-                        "type": "string"
-                      },
-                      "linear_project_id": {
-                        "type": "string"
-                      },
                       "position": {
                         "anyOf": [
                           {
@@ -2753,55 +2686,6 @@
                             "enum": ["Infinity", "-Infinity", "NaN"]
                           }
                         ]
-                      },
-                      "last_pushed_at": {
-                        "anyOf": [
-                          {
-                            "type": "number"
-                          },
-                          {
-                            "type": "string",
-                            "enum": ["NaN"]
-                          },
-                          {
-                            "type": "string",
-                            "enum": ["Infinity"]
-                          },
-                          {
-                            "type": "string",
-                            "enum": ["-Infinity"]
-                          },
-                          {
-                            "type": "string",
-                            "enum": ["Infinity", "-Infinity", "NaN"]
-                          }
-                        ]
-                      },
-                      "last_pulled_at": {
-                        "anyOf": [
-                          {
-                            "type": "number"
-                          },
-                          {
-                            "type": "string",
-                            "enum": ["NaN"]
-                          },
-                          {
-                            "type": "string",
-                            "enum": ["Infinity"]
-                          },
-                          {
-                            "type": "string",
-                            "enum": ["-Infinity"]
-                          },
-                          {
-                            "type": "string",
-                            "enum": ["Infinity", "-Infinity", "NaN"]
-                          }
-                        ]
-                      },
-                      "cloud_shadow": {
-                        "type": "object"
                       }
                     },
                     "additionalProperties": false

@@ -2006,15 +2006,7 @@ export class Issue extends HeyApiClient {
         labels?: Array<string>
         due_date?: string
         assignee_id?: string
-        linear_issue_id?: string
-        linear_team_id?: string
-        linear_project_id?: string
         position?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-        last_pushed_at?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-        last_pulled_at?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-        cloud_shadow?: {
-          [key: string]: unknown
-        }
       }
     },
     options?: Options<never, ThrowOnError>,
@@ -2131,15 +2123,7 @@ export class Issue extends HeyApiClient {
         labels?: Array<string>
         due_date?: string
         assignee_id?: string
-        linear_issue_id?: string
-        linear_team_id?: string
-        linear_project_id?: string
         position?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-        last_pushed_at?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-        last_pulled_at?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-        cloud_shadow?: {
-          [key: string]: unknown
-        }
       }
     },
     options?: Options<never, ThrowOnError>,
