@@ -254,6 +254,7 @@ export const dict = {
   "zen.privacy.exceptionsLink": "følgende unntak",
 
   "go.title": "OpenCode Go | Rimelige kodemodeller for alle",
+  "go.banner.text": "Kimi K3 får 2x bruksgrense i en begrenset periode",
   "go.meta.description":
     "Go starter på $5 for den første måneden, deretter $10/måned, med sjenerøse 5-timers forespørselsgrenser for Grok 4.5, GLM-5.2, GLM-5.1, Kimi K3, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro og DeepSeek V4 Flash.",
   "go.hero.title": "Rimelige kodemodeller for alle",
@@ -272,7 +273,6 @@ export const dict = {
   "go.graph.go": "Go",
   "go.graph.label": "Forespørsler per 5 timer",
   "go.graph.usageLimits": "Bruksgrenser",
-  "go.graph.tick": "{{n}}x",
   "go.graph.aria": "Forespørsler per 5t: {{free}} vs {{go}}",
 
   "go.testimonials.brand.zen": "Zen",
@@ -363,6 +363,7 @@ export const dict = {
   "zen.api.error.providerNotSupported": "Leverandør {{provider}} støttes ikke",
   "zen.api.error.missingApiKey": "Mangler API-nøkkel.",
   "zen.api.error.invalidApiKey": "Ugyldig API-nøkkel.",
+  "zen.api.error.requestBlockedByUpstreamProvider": "Forespørselen ble blokkert av leverandøren.",
   "zen.api.error.subscriptionQuotaExceeded": "Abonnementskvote overskredet. Prøv igjen om {{retryIn}}.",
   "zen.api.error.goSubscriptionRollingLimitExceeded":
     "5-timers bruksgrense nådd. Tilbakestilles om {{retryIn}}. For å fortsette å bruke denne modellen nå, aktiver bruk fra din tilgjengelige saldo: {{consoleGoUrl}}",

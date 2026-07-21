@@ -257,6 +257,7 @@ export const dict = {
   "zen.privacy.exceptionsLink": "siguientes excepciones",
 
   "go.title": "OpenCode Go | Modelos de programación de bajo coste para todos",
+  "go.banner.text": "Kimi K3 tiene límites de uso 2x mayores por tiempo limitado",
   "go.meta.description":
     "Go comienza en $5 el primer mes, luego 10 $/mes, con generosos límites de solicitudes de 5 horas para Grok 4.5, GLM-5.2, GLM-5.1, Kimi K3, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro y DeepSeek V4 Flash.",
   "go.hero.title": "Modelos de programación de bajo coste para todos",
@@ -275,7 +276,6 @@ export const dict = {
   "go.graph.go": "Go",
   "go.graph.label": "Solicitudes por 5 horas",
   "go.graph.usageLimits": "Límites de uso",
-  "go.graph.tick": "{{n}}x",
   "go.graph.aria": "Solicitudes por 5h: {{free}} vs {{go}}",
 
   "go.testimonials.brand.zen": "Zen",
@@ -366,6 +366,7 @@ export const dict = {
   "zen.api.error.providerNotSupported": "Proveedor {{provider}} no soportado",
   "zen.api.error.missingApiKey": "Falta la clave API.",
   "zen.api.error.invalidApiKey": "Clave API inválida.",
+  "zen.api.error.requestBlockedByUpstreamProvider": "El proveedor externo bloqueó la solicitud.",
   "zen.api.error.subscriptionQuotaExceeded": "Cuota de suscripción excedida. Reintenta en {{retryIn}}.",
   "zen.api.error.goSubscriptionRollingLimitExceeded":
     "Límite de uso de 5 horas alcanzado. Se restablece en {{retryIn}}. Para seguir usando este modelo ahora, habilita el uso desde tu saldo disponible: {{consoleGoUrl}}",
