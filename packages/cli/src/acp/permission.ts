@@ -1,6 +1,7 @@
 import type { AgentSideConnection, PermissionOption, ToolCallContent, ToolCallLocation } from "@agentclientprotocol/sdk"
 import type { EventSubscribeOutput, OpenCodeClient } from "@opencode-ai/client/promise"
 import { Patch } from "@opencode-ai/core/patch"
+import { Result } from "effect"
 import { isAbsolute, resolve } from "node:path"
 import { pendingToolCall, stringValue, toLocations, toToolKind, type ToolInput } from "./tool"
 
@@ -101,8 +102,10 @@ async function patchPreviews(input: ToolInput, cwd: string): Promise<ToolCallCon
   const patchText = stringValue(input.patchText)
   if (!patchText) return []
   try {
+    const parsed = Patch.parse(patchText)
+    if (Result.isFailure(parsed)) return []
     return await Promise.all(
-      Patch.parse(patchText).map(async (hunk): Promise<ToolCallContent> => {
+      parsed.success.map(async (hunk): Promise<ToolCallContent> => {
         const oldText = hunk.type === "add" ? "" : await readText(hunk.path, cwd)
         if (hunk.type === "add") {
           const newText = hunk.contents.endsWith("\n") || hunk.contents === "" ? hunk.contents : `${hunk.contents}\n`
