@@ -113,6 +113,21 @@ describe("Patch", () => {
     ])
   })
 
+  test("preserves the end-of-file marker", () => {
+    expect(
+      parse(
+        "*** Begin Patch\n*** Update File: file.txt\n@@\n+quux\n*** End of File\n\n*** End Patch",
+      ),
+    ).toEqual([
+      {
+        type: "update",
+        path: "file.txt",
+        movePath: undefined,
+        chunks: [{ oldLines: [], newLines: ["quux"], changeContext: undefined, endOfFile: true }],
+      },
+    ])
+  })
+
   test("derives fuzzy line updates while preserving BOM", () => {
     const update = Patch.derive("update.txt", [{ oldLines: ["  old   "], newLines: ["new"] }], "\uFEFFold\n")
     expect(update).toEqual({ content: "new\n", bom: true })
@@ -172,6 +187,16 @@ describe("Patch", () => {
         "marker\nmiddle\nmarker\nend\n",
       ).content,
     ).toBe("marker\nmiddle\nmarker changed\nend\n")
+  })
+
+  test("does not fall back to a non-EOF match", () => {
+    expect(() =>
+      Patch.derive(
+        "update.txt",
+        [{ oldLines: ["marker", "end"], newLines: ["changed", "end"], endOfFile: true }],
+        "marker\nend\nmiddle\n",
+      ),
+    ).toThrow("Failed to find expected lines")
   })
 
   test("matches V1 lenient parsing of malformed hunk bodies", () => {

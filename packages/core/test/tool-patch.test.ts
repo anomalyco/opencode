@@ -392,14 +392,32 @@ describe("PatchTool", () => {
     withTempTool((directory, registry) =>
       Effect.gen(function* () {
         const target = path.join(directory, "tail.txt")
-        yield* Effect.promise(() => fs.writeFile(target, "alpha\nlast\n"))
+        yield* Effect.promise(() => fs.writeFile(target, "first\nsecond"))
         yield* executeTool(
           registry,
           call(
-            "*** Begin Patch\n*** Update File: tail.txt\n@@\n-last\n+end\n*** End of File\n*** End Patch",
+            "*** Begin Patch\n*** Update File: tail.txt\n@@\n first\n-second\n+second updated\n*** End of File\n*** End Patch",
           ),
         )
-        expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("alpha\nend\n")
+        expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("first\nsecond updated\n")
+      }),
+    ),
+  )
+
+  it.live("applies an end-of-file chunk to the final duplicate", () =>
+    withTempTool((directory, registry) =>
+      Effect.gen(function* () {
+        const target = path.join(directory, "duplicates.txt")
+        yield* Effect.promise(() => fs.writeFile(target, "marker\nend\nmiddle\nmarker\nend\n"))
+        yield* executeTool(
+          registry,
+          call(
+            "*** Begin Patch\n*** Update File: duplicates.txt\n@@\n-marker\n-end\n+marker changed\n+end\n*** End of File\n*** End Patch",
+          ),
+        )
+        expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe(
+          "marker\nend\nmiddle\nmarker changed\nend\n",
+        )
       }),
     ),
   )
