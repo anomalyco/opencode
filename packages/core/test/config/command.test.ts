@@ -95,9 +95,10 @@ Review files`,
                 variant: ModelV2.VariantID.make("high"),
               },
               subtask: true,
+              source: "command",
             }),
-            CommandV2.Info.make({ name: "empty", template: "" }),
-            CommandV2.Info.make({ name: "nested/docs", template: "Write docs" }),
+            CommandV2.Info.make({ name: "empty", template: "", source: "command" }),
+            CommandV2.Info.make({ name: "nested/docs", template: "Write docs", source: "command" }),
           ])
 
           yield* Effect.promise(() => fs.writeFile(path.join(tmp.path, "commands", "review.md"), "Review again"))
