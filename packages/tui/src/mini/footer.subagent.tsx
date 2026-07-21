@@ -28,20 +28,20 @@ function statusColor(theme: RunFooterTheme, status: FooterSubagentTab["status"])
   return theme.highlight
 }
 
-function statusIcon(status: FooterSubagentTab["status"]) {
+function statusIcon(status: FooterSubagentTab["status"], mono: boolean) {
   if (status === "completed") {
-    return "●"
+    return mono ? "*" : "●"
   }
 
   if (status === "cancelled") {
-    return "○"
+    return mono ? "-" : "○"
   }
 
   if (status === "error") {
-    return "◍"
+    return mono ? "!" : "◍"
   }
 
-  return "◔"
+  return mono ? "." : "◔"
 }
 
 export function RunFooterSubagentBody(props: {
@@ -57,6 +57,7 @@ export function RunFooterSubagentBody(props: {
   // command itself is dispatched through the keymap in footer.view.
   interrupt?: () => string | undefined
   shellOutput?: () => boolean
+  mono?: boolean
 }) {
   const theme = createMemo(() => props.theme())
   const footer = createMemo(() => theme().footer)
@@ -67,6 +68,7 @@ export function RunFooterSubagentBody(props: {
       backgroundColor: footer().surface,
       foregroundColor: footer().line,
     },
+    visible: !props.mono,
   }))
   const title = createMemo(() => {
     const current = tab()
@@ -87,7 +89,11 @@ export function RunFooterSubagentBody(props: {
   const rows = indexArray(commits, (commit, index) => (
     <box flexDirection="column" gap={0} flexShrink={0}>
       {index > 0 && separatorRows(commits()[index - 1], commit()) > 0 ? <box height={1} flexShrink={0} /> : null}
-      <RunEntryContent commit={commit()} theme={theme()} opts={{ shellOutput: props.shellOutput?.() ?? true }} />
+      <RunEntryContent
+        commit={commit()}
+        theme={theme()}
+        opts={{ shellOutput: props.shellOutput?.() ?? true, mono: props.mono }}
+      />
     </box>
   ))
   let scroll: ScrollBoxRenderable | undefined
@@ -134,11 +140,15 @@ export function RunFooterSubagentBody(props: {
             <box width="100%" flexDirection="row" gap={1} paddingBottom={1} flexShrink={0}>
               {current().status === "running" ? (
                 <box flexShrink={0}>
-                  <spinner frames={SPINNER_FRAMES} interval={80} color={statusColor(footer(), current().status)} />
+                  <spinner
+                    frames={props.mono ? ["-", "\\", "|", "/"] : SPINNER_FRAMES}
+                    interval={props.mono ? 160 : 80}
+                    color={statusColor(footer(), current().status)}
+                  />
                 </box>
               ) : (
                 <text fg={statusColor(footer(), current().status)} wrapMode="none" truncate flexShrink={0}>
-                  {statusIcon(current().status)}
+                  {statusIcon(current().status, props.mono ?? false)}
                 </text>
               )}
               <text fg={footer().text} wrapMode="none" truncate flexGrow={1} flexShrink={1}>

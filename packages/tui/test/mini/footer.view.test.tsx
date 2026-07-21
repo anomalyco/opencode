@@ -121,6 +121,7 @@ async function renderFooter(
     view?: FooterView
     onFormReply?: (input: unknown) => void
     miniSettings?: MiniSettings
+    mono?: boolean
     onMiniSettingChange?: (change: MiniSettingChange) => void
   } = {},
 ) {
@@ -131,7 +132,7 @@ async function renderFooter(
   const state = footerState(input.state)
   const config = input.tuiConfig ?? tuiConfig
   const [miniSettings] = createSignal<MiniSettings>(
-    input.miniSettings ?? { thinking: "hide", shell_output: "hide", turn_summary: "show" },
+    input.miniSettings ?? { thinking: "hide", shell_output: "hide", turn_summary: "show", mono: false },
   )
   function Harness() {
     return (
@@ -150,6 +151,7 @@ async function renderFooter(
           view={view}
           subagent={subagents}
           theme={input.theme ?? (() => RUN_THEME_FALLBACK)}
+          mono={input.mono ?? false}
           tuiConfig={config}
           miniSettings={miniSettings}
           onSubmit={input.onSubmit ?? (() => true)}
@@ -397,6 +399,7 @@ test("direct command panel renders grouped command palette", async () => {
     const frame = app.captureCharFrame()
 
     expect(frame).toContain("Commands")
+    expect(frame).toMatch(/^ {2}Commands/m)
     expect(frame).toContain("Search")
     expect(frame).toContain("Session")
     expect(frame).toContain("Agent")
@@ -424,6 +427,7 @@ test("direct settings panel changes Mini transcript preferences", async () => {
     thinking: "hide",
     shell_output: "hide",
     turn_summary: "show",
+    mono: false,
   })
   const app = await testRender(
     () => (
@@ -435,6 +439,7 @@ test("direct settings panel changes Mini transcript preferences", async () => {
           onChange={(change) => {
             setSettings((current) => ({ ...current, [change.key]: change.value }))
           }}
+          mono
         />
       </box>
     ),
@@ -443,23 +448,32 @@ test("direct settings panel changes Mini transcript preferences", async () => {
 
   try {
     await app.renderOnce()
-    expect(app.captureCharFrame()).toContain("Settings")
-    expect(app.captureCharFrame()).toContain("Thinking")
-    expect(app.captureCharFrame()).toContain("Shell tool output")
-    expect(app.captureCharFrame()).toContain("Turn summary")
-    expect(app.captureCharFrame()).toContain("left/right change")
+    const frame = app.captureCharFrame()
+    expect(frame).toContain("Settings")
+    expect(frame).toMatch(/^ Settings/m)
+    expect(frame).toContain("Thinking")
+    expect(frame).toContain("Shell")
+    expect(frame).toContain("Turn summary")
+    expect(frame).toContain("Monochrome UI")
+    expect(frame).toContain("left/right change")
+    expect(frame).not.toMatch(/[^\x00-\x7F]/)
 
     app.mockInput.pressKey("ARROW_RIGHT")
     await app.renderOnce()
 
-    expect(settings()).toEqual({ thinking: "show", shell_output: "hide", turn_summary: "show" })
+    expect(settings()).toEqual({ thinking: "show", shell_output: "hide", turn_summary: "show", mono: false })
 
     app.mockInput.pressKey("ARROW_DOWN")
     app.mockInput.pressKey("ARROW_DOWN")
     app.mockInput.pressKey("ARROW_RIGHT")
     await app.renderOnce()
 
-    expect(settings()).toEqual({ thinking: "show", shell_output: "hide", turn_summary: "hide" })
+    expect(settings()).toEqual({ thinking: "show", shell_output: "hide", turn_summary: "hide", mono: false })
+
+    app.mockInput.pressKey("ARROW_DOWN")
+    app.mockInput.pressKey("ARROW_RIGHT")
+    await app.renderOnce()
+    expect(settings().mono).toBe(true)
   } finally {
     app.renderer.destroy()
   }
@@ -935,11 +949,11 @@ test("direct footer closes settings with ctrl-c instead of arming exit", async (
     await app.renderOnce()
     app.mockInput.pressEnter()
     await app.renderOnce()
-    expect(app.captureCharFrame()).toContain("Shell tool output")
+    expect(app.captureCharFrame()).toContain("Shell")
 
     app.mockInput.pressKey("c", { ctrl: true })
     await app.renderOnce()
-    expect(app.captureCharFrame()).not.toContain("Shell tool output")
+    expect(app.captureCharFrame()).not.toContain("Shell")
     expect(app.renderer.currentFocusedEditor?.plainText).toBe("")
   } finally {
     app.cleanup()
@@ -1113,7 +1127,8 @@ test("direct footer shows authoritative pending work while running", async () =>
           ]}
           theme={() => RUN_THEME_FALLBACK}
           tuiConfig={tuiConfig}
-          miniSettings={() => ({ thinking: "hide", shell_output: "hide", turn_summary: "show" })}
+          miniSettings={() => ({ thinking: "hide", shell_output: "hide", turn_summary: "show", mono: false })}
+          mono={false}
           onSubmit={() => true}
           onPermissionReply={() => {}}
           onFormReply={() => {}}
@@ -1255,14 +1270,17 @@ test("direct footer omits interrupt key hint when interrupt is unbound", async (
   const app = await renderFooter({
     tuiConfig: createTuiResolvedConfig({ keybinds: { session_interrupt: "none", input_clear: "ctrl+l" } }),
     state: { phase: "running" },
+    mono: true,
   })
 
   try {
     await app.renderOnce()
     const frame = app.captureCharFrame()
+    const statusline = frame.split("\n").find((line) => line.includes("interrupt"))
 
     expect(frame).toContain("interrupt")
     expect(frame).not.toContain("ctrl+l")
+    expect(statusline).toMatch(/^\S/)
   } finally {
     app.cleanup()
   }

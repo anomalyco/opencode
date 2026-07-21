@@ -62,29 +62,13 @@ type SettingEntry = PanelEntry & {
 }
 
 const PANEL_PAD = 2
+const panelPad = (mono?: boolean) => (mono ? 1 : PANEL_PAD)
 const PANEL_LIST_ROWS = 10
 const PANEL_FRAME_ROWS = 6
 export const RUN_COMMAND_PANEL_ROWS = PANEL_LIST_ROWS + PANEL_FRAME_ROWS
 const SUBAGENT_LIST_ROWS = 12
 export const RUN_SUBAGENT_PANEL_ROWS = SUBAGENT_LIST_ROWS + PANEL_FRAME_ROWS
 const PANEL_PAGE = PANEL_LIST_ROWS - 1
-const PANEL_BORDER = {
-  topLeft: "",
-  bottomLeft: "",
-  vertical: "┃",
-  topRight: "",
-  bottomRight: "",
-  horizontal: " ",
-  bottomT: "",
-  topT: "",
-  cross: "",
-  leftT: "",
-  rightT: "",
-}
-const PANEL_BOTTOM_BORDER = {
-  ...PANEL_BORDER,
-  vertical: "╹",
-}
 const HALF_BLOCK_BORDER = {
   topLeft: "",
   bottomLeft: "",
@@ -280,19 +264,17 @@ function PanelShell(props: {
   onQuery: (query: string) => void
   children: JSX.Element
   hint?: string
-  dark?: boolean
-  chrome?: "default" | "minimal"
+  mono?: boolean
 }) {
-  const background = () => (props.dark ? props.theme().shade : props.theme().surface)
-  const minimal = () => props.chrome === "minimal"
+  const background = () => props.theme().shade
   const content = (
     <>
       <box height={1} flexShrink={0} backgroundColor={background()} />
       <box
         width="100%"
         height={1}
-        paddingLeft={PANEL_PAD}
-        paddingRight={PANEL_PAD}
+        paddingLeft={panelPad(props.mono)}
+        paddingRight={panelPad(props.mono)}
         flexDirection="row"
         gap={1}
         flexShrink={0}
@@ -308,15 +290,15 @@ function PanelShell(props: {
         ) : null}
         <box flexGrow={1} flexShrink={1} backgroundColor="transparent" />
         <text fg={props.theme().muted} wrapMode="none" truncate flexShrink={0}>
-          {props.hint ? `${props.hint} · ` : ""}esc
+          {props.hint ? `${props.hint} ${props.mono ? "-" : "·"} ` : ""}esc
         </text>
       </box>
       <box height={1} flexShrink={0} backgroundColor={background()} />
       <box
         width="100%"
         height={1}
-        paddingLeft={PANEL_PAD}
-        paddingRight={PANEL_PAD}
+        paddingLeft={panelPad(props.mono)}
+        paddingRight={panelPad(props.mono)}
         flexShrink={0}
         backgroundColor={background()}
       >
@@ -347,25 +329,11 @@ function PanelShell(props: {
   )
   return (
     <box width="100%" flexDirection="column" border={false} backgroundColor="transparent" flexShrink={0}>
-      {minimal() ? (
-        <box width="100%" flexDirection="column" border={false} backgroundColor="transparent" flexShrink={0}>
-          {content}
-        </box>
-      ) : (
-        <box
-          width="100%"
-          flexDirection="column"
-          border={["left"]}
-          borderColor={props.theme().highlight}
-          backgroundColor="transparent"
-          customBorderChars={PANEL_BORDER}
-          flexShrink={0}
-        >
-          {content}
-        </box>
-      )}
-      {minimal() ? (
-        <box width="100%" height={1} border={false} backgroundColor="transparent" flexShrink={0}>
+      <box width="100%" flexDirection="column" border={false} backgroundColor="transparent" flexShrink={0}>
+        {content}
+      </box>
+      <box width="100%" height={1} border={false} backgroundColor="transparent" flexShrink={0}>
+        {props.mono ? null : (
           <box
             width="100%"
             height={1}
@@ -374,27 +342,8 @@ function PanelShell(props: {
             backgroundColor="transparent"
             customBorderChars={HALF_BLOCK_BORDER}
           />
-        </box>
-      ) : (
-        <box
-          width="100%"
-          height={1}
-          border={["left"]}
-          borderColor={props.theme().highlight}
-          backgroundColor="transparent"
-          customBorderChars={PANEL_BOTTOM_BORDER}
-          flexShrink={0}
-        >
-          <box
-            width="100%"
-            height={1}
-            border={["bottom"]}
-            borderColor={background()}
-            backgroundColor="transparent"
-            customBorderChars={HALF_BLOCK_BORDER}
-          />
-        </box>
-      )}
+        )}
+      </box>
     </box>
   )
 }
@@ -418,6 +367,7 @@ export function RunCommandMenuBody(props: {
   onCommand: (name: string) => void
   onNew: () => void
   onExit: () => void
+  mono?: boolean
 }) {
   const skills = createMemo(() => (props.commands() ?? []).filter((item) => item.source === "skill"))
   const activeSubagentCount = createMemo(() => props.subagents().filter((item) => item.status === "running").length)
@@ -433,18 +383,18 @@ export function RunCommandMenuBody(props: {
       },
       ...(props.subagents().length > 0
         ? [
-            {
-              action: "subagent" as const,
-              category: "Session",
-              display: "View subagents",
-              footer:
-                activeSubagentCount() > 0 ? `${activeSubagentCount()} active` : `${props.subagents().length} recent`,
-              keywords: props
-                .subagents()
-                .map((item) => `${item.label} ${item.description} ${item.title ?? ""}`)
-                .join(" "),
-            },
-          ]
+          {
+            action: "subagent" as const,
+            category: "Session",
+            display: "View subagents",
+            footer:
+              activeSubagentCount() > 0 ? `${activeSubagentCount()} active` : `${props.subagents().length} recent`,
+            keywords: props
+              .subagents()
+              .map((item) => `${item.label} ${item.description} ${item.title ?? ""}`)
+              .join(" "),
+          },
+        ]
         : []),
       {
         action: "slash",
@@ -458,16 +408,16 @@ export function RunCommandMenuBody(props: {
     const prompt: CommandEntry[] =
       props.commands() === undefined || skills().length > 0
         ? [
-            {
-              action: "skill" as const,
-              category: "Prompt",
-              display: "Skills",
-              footer: "/skills",
-              keywords: `skill skills ${skills()
-                .map((item) => `${item.name} ${item.description ?? ""}`)
-                .join(" ")}`.trim(),
-            },
-          ]
+          {
+            action: "skill" as const,
+            category: "Prompt",
+            display: "Skills",
+            footer: "/skills",
+            keywords: `skill skills ${skills()
+              .map((item) => `${item.name} ${item.description ?? ""}`)
+              .join(" ")}`.trim(),
+          },
+        ]
         : []
     const agent: CommandEntry[] = [
       {
@@ -477,17 +427,17 @@ export function RunCommandMenuBody(props: {
       },
       ...(props.queued().length > 0
         ? [
-            {
-              action: "queued" as const,
-              category: "Agent",
-              display: "View pending work",
-              footer: `${props.queued().length} pending`,
-              keywords: props
-                .queued()
-                .map((item) => item.prompt.text)
-                .join(" "),
-            },
-          ]
+          {
+            action: "queued" as const,
+            category: "Agent",
+            display: "View pending work",
+            footer: `${props.queued().length} pending`,
+            keywords: props
+              .queued()
+              .map((item) => item.prompt.text)
+              .join(" "),
+          },
+        ]
         : []),
       {
         action: "variant.cycle",
@@ -498,13 +448,13 @@ export function RunCommandMenuBody(props: {
       },
       ...(props.variants().length > 0
         ? [
-            {
-              action: "variant.list" as const,
-              category: "Agent",
-              display: "Switch model variant",
-              keywords: `variant variants ${props.variants().join(" ")}`,
-            },
-          ]
+          {
+            action: "variant.list" as const,
+            category: "Agent",
+            display: "Switch model variant",
+            keywords: `variant variants ${props.variants().join(" ")}`,
+          },
+        ]
         : []),
     ]
     const commands = (props.commands() ?? [])
@@ -533,7 +483,7 @@ export function RunCommandMenuBody(props: {
       {
         action: "settings",
         category: "System",
-        display: "Open settings",
+        display: "Settings",
         footer: "/settings",
         keywords: "/settings settings preferences configuration",
       },
@@ -611,8 +561,7 @@ export function RunCommandMenuBody(props: {
       theme={props.theme}
       inputRef={controller.inputRef}
       onQuery={controller.setQuery}
-      dark
-      chrome="minimal"
+      mono={props.mono}
     >
       <RunFooterMenu
         theme={props.theme}
@@ -623,11 +572,12 @@ export function RunCommandMenuBody(props: {
         limit={PANEL_LIST_ROWS}
         empty="No results found"
         border={false}
-        paddingLeft={PANEL_PAD}
-        paddingRight={PANEL_PAD}
+        paddingLeft={panelPad(props.mono)}
+        paddingRight={panelPad(props.mono)}
         grouped={!controller.query().trim()}
         background
         headerColor={props.theme().muted}
+        mono={props.mono}
       />
     </PanelShell>
   )
@@ -638,21 +588,20 @@ export function RunSettingsBody(props: {
   settings: Accessor<MiniSettings>
   onClose: () => void
   onChange: (change: MiniSettingChange) => void | Promise<void>
+  mono?: boolean
 }) {
   const [saving, setSaving] = createSignal<keyof MiniSettings>()
   const entries = createMemo<SettingEntry[]>(() => [
     {
       category: "Transcript",
       display: "Thinking",
-      description: "future sessions",
       footer: saving() === "thinking" ? "saving" : props.settings().thinking,
       keywords: `thinking reasoning ${props.settings().thinking}`,
       key: "thinking",
     },
     {
       category: "Transcript",
-      display: "Shell tool output",
-      description: "model-issued commands",
+      display: "Shell",
       footer: saving() === "shell_output" ? "saving" : props.settings().shell_output,
       keywords: `shell tool command output ${props.settings().shell_output}`,
       key: "shell_output",
@@ -660,18 +609,27 @@ export function RunSettingsBody(props: {
     {
       category: "Transcript",
       display: "Turn summary",
-      description: "agent, model, and duration",
       footer: saving() === "turn_summary" ? "saving" : props.settings().turn_summary,
       keywords: `turn summary agent model duration ${props.settings().turn_summary}`,
       key: "turn_summary",
     },
+    {
+      category: "Terminal",
+      display: "Monochrome UI",
+      footer: saving() === "mono" ? "saving" : props.settings().mono ? "on" : "off",
+      keywords: `mono monochrome ascii legacy compat terminal ${props.settings().mono ? "on" : "off"}`,
+      key: "mono",
+    },
   ])
   const change = (item: SettingEntry) => {
     if (saving()) return
-    const current = props.settings()[item.key]
+    const next: MiniSettingChange =
+      item.key === "mono"
+        ? { key: "mono", value: !props.settings().mono }
+        : { key: item.key, value: props.settings()[item.key] === "show" ? "hide" : "show" }
     setSaving(item.key)
-    void Promise.resolve(props.onChange({ key: item.key, value: current === "show" ? "hide" : "show" }))
-      .catch(() => {})
+    void Promise.resolve(props.onChange(next))
+      .catch(() => { })
       .finally(() => setSaving())
   }
   const controller = createSearchablePanelController({
@@ -700,8 +658,7 @@ export function RunSettingsBody(props: {
       inputRef={controller.inputRef}
       onQuery={controller.setQuery}
       hint="left/right change"
-      dark
-      chrome="minimal"
+      mono={props.mono}
     >
       <RunFooterMenu
         theme={props.theme}
@@ -712,11 +669,12 @@ export function RunSettingsBody(props: {
         limit={PANEL_LIST_ROWS}
         empty="No settings found"
         border={false}
-        paddingLeft={PANEL_PAD}
-        paddingRight={PANEL_PAD}
+        paddingLeft={panelPad(props.mono)}
+        paddingRight={panelPad(props.mono)}
         grouped={!controller.query().trim()}
         background
         headerColor={props.theme().muted}
+        mono={props.mono}
       />
     </PanelShell>
   )
@@ -729,6 +687,7 @@ export function RunSubagentSelectBody(props: {
   onClose: () => void
   onSelect: (sessionID: string) => void
   onRows?: (rows: number) => void
+  mono?: boolean
 }) {
   const entries = createMemo<SubagentEntry[]>(() =>
     props.tabs().map((item) => {
@@ -764,8 +723,7 @@ export function RunSubagentSelectBody(props: {
       theme={props.theme}
       inputRef={controller.inputRef}
       onQuery={controller.setQuery}
-      dark
-      chrome="minimal"
+      mono={props.mono}
     >
       <RunFooterMenu
         theme={props.theme}
@@ -776,10 +734,11 @@ export function RunSubagentSelectBody(props: {
         limit={SUBAGENT_LIST_ROWS}
         empty="No subagents found"
         border={false}
-        paddingLeft={PANEL_PAD}
-        paddingRight={PANEL_PAD}
+        paddingLeft={panelPad(props.mono)}
+        paddingRight={panelPad(props.mono)}
         grouped={false}
         background
+        mono={props.mono}
       />
     </PanelShell>
   )
@@ -790,6 +749,7 @@ export function RunQueuedPromptSelectBody(props: {
   prompts: Accessor<FooterQueuedPrompt[]>
   onClose: () => void
   onRows?: (rows: number) => void
+  mono?: boolean
 }) {
   const entries = createMemo<QueuedEntry[]>(() =>
     props.prompts().map((prompt) => ({
@@ -818,8 +778,7 @@ export function RunQueuedPromptSelectBody(props: {
       theme={props.theme}
       inputRef={controller.inputRef}
       onQuery={controller.setQuery}
-      dark
-      chrome="minimal"
+      mono={props.mono}
     >
       <RunFooterMenu
         theme={props.theme}
@@ -830,10 +789,11 @@ export function RunQueuedPromptSelectBody(props: {
         limit={SUBAGENT_LIST_ROWS}
         empty="No pending work"
         border={false}
-        paddingLeft={PANEL_PAD}
-        paddingRight={PANEL_PAD}
+        paddingLeft={panelPad(props.mono)}
+        paddingRight={panelPad(props.mono)}
         grouped={false}
         background
+        mono={props.mono}
       />
     </PanelShell>
   )
@@ -844,6 +804,7 @@ export function RunSkillSelectBody(props: {
   commands: Accessor<RunCommand[] | undefined>
   onClose: () => void
   onSelect: (name: string) => void
+  mono?: boolean
 }) {
   const entries = createMemo<SkillEntry[]>(() =>
     (props.commands() ?? [])
@@ -874,8 +835,7 @@ export function RunSkillSelectBody(props: {
       theme={props.theme}
       inputRef={controller.inputRef}
       onQuery={controller.setQuery}
-      dark
-      chrome="minimal"
+      mono={props.mono}
     >
       <RunFooterMenu
         theme={props.theme}
@@ -886,10 +846,11 @@ export function RunSkillSelectBody(props: {
         limit={PANEL_LIST_ROWS}
         empty={props.commands() ? "No skills found" : "Skills loading"}
         border={false}
-        paddingLeft={PANEL_PAD}
-        paddingRight={PANEL_PAD}
+        paddingLeft={panelPad(props.mono)}
+        paddingRight={panelPad(props.mono)}
         grouped={false}
         background
+        mono={props.mono}
       />
     </PanelShell>
   )
@@ -901,6 +862,7 @@ export function RunVariantSelectBody(props: {
   current: Accessor<string | undefined>
   onClose: () => void
   onSelect: (variant: string | undefined) => void
+  mono?: boolean
 }) {
   const entries = createMemo<VariantEntry[]>(() => [
     {
@@ -938,8 +900,7 @@ export function RunVariantSelectBody(props: {
       theme={props.theme}
       inputRef={controller.inputRef}
       onQuery={controller.setQuery}
-      dark
-      chrome="minimal"
+      mono={props.mono}
     >
       <RunFooterMenu
         theme={props.theme}
@@ -950,10 +911,11 @@ export function RunVariantSelectBody(props: {
         limit={PANEL_LIST_ROWS}
         empty="No results found"
         border={false}
-        paddingLeft={PANEL_PAD}
-        paddingRight={PANEL_PAD}
+        paddingLeft={panelPad(props.mono)}
+        paddingRight={panelPad(props.mono)}
         grouped={false}
         background
+        mono={props.mono}
       />
     </PanelShell>
   )
@@ -965,6 +927,7 @@ export function RunModelSelectBody(props: {
   current: Accessor<RunInput["model"]>
   onClose: () => void
   onSelect: (model: NonNullable<RunInput["model"]>) => void
+  mono?: boolean
 }) {
   const entries = createMemo<ModelEntry[]>(() =>
     (props.providers() ?? [])
@@ -1025,8 +988,7 @@ export function RunModelSelectBody(props: {
       theme={props.theme}
       inputRef={controller.inputRef}
       onQuery={controller.setQuery}
-      dark
-      chrome="minimal"
+      mono={props.mono}
     >
       <RunFooterMenu
         theme={props.theme}
@@ -1037,11 +999,12 @@ export function RunModelSelectBody(props: {
         limit={PANEL_LIST_ROWS}
         empty={props.providers() ? "No results found" : "Models loading"}
         border={false}
-        paddingLeft={PANEL_PAD}
-        paddingRight={PANEL_PAD}
+        paddingLeft={panelPad(props.mono)}
+        paddingRight={panelPad(props.mono)}
         grouped={!controller.query().trim()}
         background
         headerColor={props.theme().muted}
+        mono={props.mono}
       />
     </PanelShell>
   )

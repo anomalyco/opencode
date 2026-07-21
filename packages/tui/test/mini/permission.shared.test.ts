@@ -155,28 +155,32 @@ describe("run permission shared", () => {
   })
 
   test("uses source patch text when an edit has no generated diff", () => {
-    expect(
-      permissionInfo(
-        req({
-          action: "edit",
-          resources: ["src/index.ts"],
-          source: { type: "tool", messageID: "msg-edit", callID: "call-edit" },
-          tool: canonicalToolPart(
-            "edit",
-            {
-              status: "running",
-              input: { patchText: "*** Begin Patch\n*** Update File: src/index.ts\n@@\n-old\n+new\n*** End Patch" },
-              structured: {},
-              content: [],
-            },
-            "call-edit",
-          ),
-        }),
+    const patch = '*** Begin Patch\n*** Update File: src/index.ts\n@@\n-old\n+const arrow = "→"\n*** End Patch'
+    const request = req({
+      action: "edit",
+      resources: ["src/index.ts"],
+      source: { type: "tool", messageID: "msg-edit", callID: "call-edit" },
+      tool: canonicalToolPart(
+        "edit",
+        {
+          status: "running",
+          input: { patchText: patch },
+          structured: {},
+          content: [],
+        },
+        "call-edit",
       ),
-    ).toMatchObject({
+    })
+    expect(permissionInfo(request)).toMatchObject({
       title: "Edit src/index.ts",
       diff: undefined,
-      patch: "*** Begin Patch\n*** Update File: src/index.ts\n@@\n-old\n+new\n*** End Patch",
+      patch,
+    })
+    expect(permissionInfo(request, undefined, true)).toMatchObject({
+      title: "Edit src/index.ts",
+      lines: [patch],
+      diff: undefined,
+      patch: undefined,
     })
   })
 

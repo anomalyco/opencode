@@ -82,6 +82,7 @@ type RunFooterOptions = {
   first: boolean
   history?: RunPrompt[]
   theme: RunTheme
+  mono: boolean
   tuiConfig: RunTuiConfig
   miniSettings: {
     current: MiniSettings
@@ -202,7 +203,7 @@ export class RunFooter implements FooterApi {
   private paletteRefreshRunning = false
   private paletteRefreshQueued = false
   private themeRefreshTimeouts: NodeJS.Timeout[] = []
-  private unsubscribeThemeSignal: () => void
+  private unsubscribeThemeSignal = () => {}
 
   private createScrollback(wrote: boolean): RunScrollbackStream {
     return new RunScrollbackStream(this.renderer, this.theme(), {
@@ -214,6 +215,7 @@ export class RunFooter implements FooterApi {
           .finally(() => this.destroyTheme(theme))
       },
       shellOutput: () => this.miniSettings().shell_output === "show",
+      mono: this.options.mono,
     })
   }
 
@@ -281,10 +283,12 @@ export class RunFooter implements FooterApi {
     this.scrollback = this.createScrollback(options.wrote ?? false)
 
     this.renderer.on(CliRenderEvents.DESTROY, this.handleDestroy)
-    this.renderer.on(CliRenderEvents.PALETTE, this.handlePalette)
-    this.renderer.on(CliRenderEvents.THEME_MODE, this.handleThemeRefresh)
-    this.renderer.prependInputHandler(this.handleThemeNotification)
-    this.unsubscribeThemeSignal = options.subscribeThemeSignal(this.handleThemeSignal)
+    if (!options.mono) {
+      this.renderer.on(CliRenderEvents.PALETTE, this.handlePalette)
+      this.renderer.on(CliRenderEvents.THEME_MODE, this.handleThemeRefresh)
+      this.renderer.prependInputHandler(this.handleThemeNotification)
+      this.unsubscribeThemeSignal = options.subscribeThemeSignal(this.handleThemeSignal)
+    }
 
     const footer = this
     void render(
@@ -307,6 +311,7 @@ export class RunFooter implements FooterApi {
               variants: footer.variants,
               currentVariant: footer.currentVariant,
               theme: footer.theme,
+              mono: options.mono,
               tuiConfig: options.tuiConfig,
               miniSettings: footer.miniSettings,
               history: footer.history,
@@ -876,7 +881,7 @@ export class RunFooter implements FooterApi {
 
     try {
       this.setMiniSettings(await this.options.miniSettings.update(change))
-      this.setNotice("settings updated")
+      this.setNotice(change.key === "mono" ? "Mono applies after restart" : "settings updated")
     } catch (error) {
       this.setNotice("failed to save settings")
       throw error
@@ -1018,7 +1023,7 @@ export class RunFooter implements FooterApi {
   }
 
   private handleThemeRefresh = (): void => {
-    if (this.isGone) {
+    if (this.isGone || this.options.mono) {
       return
     }
 

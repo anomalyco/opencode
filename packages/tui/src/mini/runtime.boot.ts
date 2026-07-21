@@ -89,5 +89,6 @@ export function resolveMiniSettings(config?: { mini?: Partial<MiniSettings> }): 
     thinking: config?.mini?.thinking ?? "hide",
     shell_output: config?.mini?.shell_output ?? "hide",
     turn_summary: config?.mini?.turn_summary ?? "show",
+    mono: config?.mini?.mono ?? false,
   }
 }

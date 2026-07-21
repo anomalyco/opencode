@@ -125,13 +125,16 @@ export const Info = Schema.Struct({
   mini: Schema.optional(
     Schema.Struct({
       thinking: Schema.optional(Schema.Literals(["show", "hide"])).annotate({
-        description: "Show or hide model reasoning in Mini",
+        description: "Show or hide model reasoning",
       }),
       shell_output: Schema.optional(Schema.Literals(["show", "hide"])).annotate({
-        description: "Show or hide raw shell tool output in Mini",
+        description: "Show or hide raw shell tool output",
       }),
       turn_summary: Schema.optional(Schema.Literals(["show", "hide"])).annotate({
-        description: "Show or hide the agent, model, and duration summary in Mini scrollback",
+        description: "Show or hide the agent, model, and duration summary in scrollback",
+      }),
+      mono: Schema.optional(Schema.Boolean).annotate({
+        description: "Use monochrome ASCII output",
       }),
     }),
   ).annotate({ description: "Mini transcript presentation settings" }),

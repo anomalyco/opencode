@@ -185,6 +185,7 @@ export type TurnSummary = {
 export type ScrollbackOptions = {
   suppressBackgrounds?: boolean
   shellOutput?: boolean
+  mono?: boolean
 }
 
 export type ToolCodeSnapshot = {
@@ -397,12 +398,12 @@ export type MiniSettings = {
   thinking: "show" | "hide"
   shell_output: "show" | "hide"
   turn_summary: "show" | "hide"
+  mono: boolean
 }
 
 export type MiniSettingChange = {
-  key: keyof MiniSettings
-  value: "show" | "hide"
-}
+  [Key in keyof MiniSettings]: { key: Key; value: MiniSettings[Key] }
+}[keyof MiniSettings]
 
 // Lifecycle phase of a scrollback entry. "start" opens the entry, "progress"
 // appends content (coalesced in the footer queue), "final" closes it.

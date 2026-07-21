@@ -1,4 +1,5 @@
 import { toolEntryBody } from "./tool"
+import { monoPrefix, monoToolText } from "./mono"
 import type { RunEntryBody, ScrollbackOptions, StreamCommit } from "./types"
 
 export type EntryFlags = {
@@ -48,17 +49,17 @@ function markdownBody(content: string): RunEntryBody {
   }
 }
 
-function userBody(raw: string): RunEntryBody {
+function userBody(raw: string, mono: boolean): RunEntryBody {
   if (!raw.trim()) {
     return RUN_ENTRY_NONE
   }
 
   const lead = raw.match(/^\n+/)?.[0] ?? ""
   const body = lead ? raw.slice(lead.length) : raw
-  return textBody(`${lead}› ${body}`)
+  return textBody(`${lead}${mono ? ">" : "›"} ${body}`)
 }
 
-function reasoningBody(raw: string): RunEntryBody {
+function reasoningBody(raw: string, mono: boolean): RunEntryBody {
   const clean = raw.replace(/\[REDACTED\]/g, "")
   if (!clean) {
     return RUN_ENTRY_NONE
@@ -68,14 +69,37 @@ function reasoningBody(raw: string): RunEntryBody {
   const body = lead ? clean.slice(lead.length) : clean
   const mark = "Thinking:"
   if (body.startsWith(mark)) {
+    if (mono) return textBody(`${lead}${mark} ${body.slice(mark.length).trimStart()}`)
     return codeBody(`${lead}_Thinking:_ ${body.slice(mark.length).trimStart()}`, "markdown")
   }
 
-  return codeBody(clean, "markdown")
+  return mono ? textBody(clean) : codeBody(clean, "markdown")
 }
 
 function systemBody(raw: string, phase: StreamCommit["phase"]): RunEntryBody {
   return textBody(phase === "progress" ? raw : raw.trim())
+}
+
+function monoBody(body: RunEntryBody): RunEntryBody {
+  if (body.type === "none" || body.type === "text") return body
+  if (body.type === "code" || body.type === "markdown") return textBody(body.content)
+  const snapshot = body.snapshot
+  if (snapshot.kind === "code") return textBody(`${snapshot.title}\n${snapshot.content}`)
+  if (snapshot.kind === "diff") {
+    return textBody(
+      snapshot.items
+        .map((item) => `${item.title}\n${item.diff.trim() || `-${item.deletions ?? 0} lines`}`)
+        .join("\n\n"),
+    )
+  }
+  if (snapshot.kind === "task") {
+    return textBody([snapshot.title, ...snapshot.rows, snapshot.tail].filter(Boolean).join("\n"))
+  }
+  return textBody(
+    ["# Questions", ...snapshot.items.flatMap((item) => [item.question, item.answer]), snapshot.tail]
+      .filter(Boolean)
+      .join("\n"),
+  )
 }
 
 export function entryFlags(commit: StreamCommit): EntryFlags {
@@ -168,13 +192,17 @@ export function entryBody(commit: StreamCommit, options?: ScrollbackOptions): Ru
   }
 
   const raw = cleanRunText(commit.text)
+  const mono = options?.mono === true
 
   if (commit.kind === "user") {
-    return userBody(raw)
+    return userBody(raw, mono)
   }
 
   if (commit.kind === "tool") {
-    return toolEntryBody(commit, raw, options) ?? RUN_ENTRY_NONE
+    const body = toolEntryBody(commit, raw, options) ?? RUN_ENTRY_NONE
+    const result = mono ? monoBody(body) : body
+    if (!mono || body.type !== "text" || result.type !== "text" || commit.phase === "progress") return result
+    return textBody(monoToolText(result.content, true))
   }
 
   if (commit.kind === "assistant") {
@@ -186,7 +214,7 @@ export function entryBody(commit: StreamCommit, options?: ScrollbackOptions): Ru
       return commit.interrupted ? textBody("assistant interrupted") : RUN_ENTRY_NONE
     }
 
-    return markdownBody(raw)
+    return mono ? textBody(raw) : markdownBody(raw)
   }
 
   if (commit.kind === "reasoning") {
@@ -198,8 +226,10 @@ export function entryBody(commit: StreamCommit, options?: ScrollbackOptions): Ru
       return commit.interrupted ? textBody("reasoning interrupted") : RUN_ENTRY_NONE
     }
 
-    return reasoningBody(raw)
+    return reasoningBody(raw, mono)
   }
 
-  return systemBody(raw, commit.phase)
+  const body = systemBody(raw, commit.phase)
+  if (!mono || body.type !== "text") return body
+  return textBody(monoPrefix(body.content, true))
 }

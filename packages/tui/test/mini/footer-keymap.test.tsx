@@ -55,7 +55,8 @@ test("down opens subagents from an empty prompt", async () => {
           subagent={subagents}
           theme={() => RUN_THEME_FALLBACK}
           tuiConfig={config}
-          miniSettings={() => ({ thinking: "hide", shell_output: "hide", turn_summary: "show" })}
+          miniSettings={() => ({ thinking: "hide", shell_output: "hide", turn_summary: "show", mono: false })}
+          mono={false}
           onSubmit={() => true}
           onPermissionReply={() => {}}
           onFormReply={() => {}}

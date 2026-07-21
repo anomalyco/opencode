@@ -11,7 +11,7 @@
 // The diff view (when available) uses the same diff component as scrollback
 // tool snapshots.
 /** @jsxImportSource @opentui/solid */
-import type { TextareaRenderable } from "@opentui/core"
+import { TextAttributes, type TextareaRenderable } from "@opentui/core"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import { For, Match, Show, Switch, createEffect, createMemo, createSignal } from "solid-js"
 import {
@@ -40,6 +40,7 @@ function buttons(
   disabled: boolean,
   onHover: (option: PermissionOption) => void,
   onSelect: (option: PermissionOption) => void,
+  mono: boolean,
 ) {
   return (
     <box flexDirection="row" gap={1} flexShrink={0}>
@@ -56,7 +57,12 @@ function buttons(
               if (!disabled) onSelect(option)
             }}
           >
-            <text fg={option === selected ? theme.surface : theme.muted}>{permissionLabel(option)}</text>
+            <text
+              fg={option === selected ? theme.surface : theme.muted}
+              attributes={option === selected && mono ? TextAttributes.INVERSE : undefined}
+            >
+              {permissionLabel(option)}
+            </text>
           </box>
         )}
       </For>
@@ -134,12 +140,20 @@ export function RunPermissionBody(props: {
   theme: RunFooterTheme
   block: RunBlockTheme
   onReply: (input: PermissionReply) => void | Promise<void>
+  mono?: boolean
 }) {
   const dims = useTerminalDimensions()
   const [state, setState] = createSignal(createPermissionBodyState(props.request))
-  const info = createMemo(() => permissionInfo(props.request, props.directory?.()))
+  const info = createMemo(() => permissionInfo(props.request, props.directory?.(), props.mono))
   const ft = createMemo(() => toolFiletype(info().file))
   const narrow = createMemo(() => footerWidthPolicy(dims().width).dialog.narrow)
+  const scrollbar = createMemo(() => ({
+    visible: !props.mono,
+    trackOptions: {
+      backgroundColor: props.theme.surface,
+      foregroundColor: props.theme.line,
+    },
+  }))
   const opts = createMemo(() =>
     permissionOptions(state().stage).filter((option) => option !== "always" || (props.request.save?.length ?? 0) > 0),
   )
@@ -269,7 +283,9 @@ export function RunPermissionBody(props: {
         flexShrink={0}
       >
         <box flexDirection="row" gap={1} paddingLeft={1}>
-          <text fg={state().stage === "reject" ? props.theme.error : props.theme.warning}>△</text>
+          <text fg={state().stage === "reject" ? props.theme.error : props.theme.warning}>
+            {props.mono ? "!" : "△"}
+          </text>
           <text fg={props.theme.text}>{title()}</text>
         </box>
         <Switch>
@@ -346,16 +362,7 @@ export function RunPermissionBody(props: {
         <box width="100%" flexGrow={1} flexShrink={1} paddingLeft={1} paddingRight={3} paddingBottom={1}>
           <Switch>
             <Match when={state().stage === "permission"}>
-              <scrollbox
-                width="100%"
-                height="100%"
-                verticalScrollbarOptions={{
-                  trackOptions: {
-                    backgroundColor: props.theme.surface,
-                    foregroundColor: props.theme.line,
-                  },
-                }}
-              >
+              <scrollbox width="100%" height="100%" verticalScrollbarOptions={scrollbar()}>
                 <box width="100%" flexDirection="column" gap={1}>
                   <Show
                     when={info().diff}
@@ -427,16 +434,7 @@ export function RunPermissionBody(props: {
               </scrollbox>
             </Match>
             <Match when={true}>
-              <scrollbox
-                width="100%"
-                height="100%"
-                verticalScrollbarOptions={{
-                  trackOptions: {
-                    backgroundColor: props.theme.surface,
-                    foregroundColor: props.theme.line,
-                  },
-                }}
-              >
+              <scrollbox width="100%" height="100%" verticalScrollbarOptions={scrollbar()}>
                 <box width="100%" flexDirection="column" gap={1} paddingLeft={1}>
                   <For each={permissionAlwaysLines(props.request)}>
                     {(line) => (
@@ -472,6 +470,7 @@ export function RunPermissionBody(props: {
               setState((prev) => permissionHover(prev, option))
             },
             run,
+            props.mono ?? false,
           )}
           <Show
             when={!busy()}
@@ -483,7 +482,7 @@ export function RunPermissionBody(props: {
           >
             <box flexDirection="row" gap={2} flexShrink={0}>
               <text fg={props.theme.text}>
-                {"⇆"} <span style={{ fg: props.theme.muted }}>select</span>
+                {props.mono ? "left/right" : "⇆"} <span style={{ fg: props.theme.muted }}>select</span>
               </text>
               <text fg={props.theme.text}>
                 enter <span style={{ fg: props.theme.muted }}>confirm</span>

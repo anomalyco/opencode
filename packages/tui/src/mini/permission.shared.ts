@@ -1,6 +1,7 @@
 import type { MiniPermissionRequest, PermissionReply } from "./types"
 import { permissionAlwaysLines, permissionOptionLabel, permissionPresentation } from "../util/permission"
 import { toolPath } from "./tool"
+import { monoPrefix } from "./mono"
 
 export type PermissionStage = "permission" | "always" | "reject"
 export type PermissionOption = "once" | "always" | "reject" | "confirm" | "cancel"
@@ -44,9 +45,9 @@ export function permissionOptions(stage: PermissionStage): PermissionOption[] {
   return []
 }
 
-export function permissionInfo(request: MiniPermissionRequest, directory?: string) {
+export function permissionInfo(request: MiniPermissionRequest, directory?: string, mono = false) {
   const state = request.tool?.state
-  return permissionPresentation(
+  const info = permissionPresentation(
     {
       action: request.action,
       resources: request.resources,
@@ -56,6 +57,17 @@ export function permissionInfo(request: MiniPermissionRequest, directory?: strin
     },
     (value) => toolPath(value, { home: true, directory }),
   )
+  if (!mono) return info
+  return {
+    ...info,
+    icon: monoPrefix(info.icon, true),
+    lines: [
+      ...(info.diff || info.patch ? [info.diff ?? info.patch!] : []),
+      ...info.lines.map((line) => monoPrefix(line, true)),
+    ],
+    diff: undefined,
+    patch: undefined,
+  }
 }
 
 export function permissionLabel(option: PermissionOption): string {
