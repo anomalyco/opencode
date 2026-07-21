@@ -10,7 +10,7 @@ const fromConfig = (input: Record<string, unknown>) =>
 const readFlags = RuntimeFlags.Service.useSync((flags) => flags)
 
 describe("RuntimeFlags", () => {
-  it.effect("defaultLayer defaults autoShare to false", () =>
+  it.effect("layer defaults autoShare to false", () =>
     Effect.gen(function* () {
       const flags = yield* readFlags.pipe(Effect.provide(fromConfig({})))
 
@@ -18,7 +18,7 @@ describe("RuntimeFlags", () => {
     }),
   )
 
-  it.effect("defaultLayer parses plugin flags from the active ConfigProvider", () =>
+  it.effect("layer parses plugin flags from the active ConfigProvider", () =>
     Effect.gen(function* () {
       const flags = yield* readFlags.pipe(
         Effect.provide(
@@ -65,7 +65,7 @@ describe("RuntimeFlags", () => {
     }),
   )
 
-  it.effect("defaultLayer parses OPENCODE_EXPERIMENTAL_LSP_TY", () =>
+  it.effect("layer parses OPENCODE_EXPERIMENTAL_LSP_TY", () =>
     Effect.gen(function* () {
       const flags = yield* readFlags.pipe(
         Effect.provide(

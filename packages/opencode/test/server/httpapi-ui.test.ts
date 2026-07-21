@@ -44,7 +44,7 @@ const fsUtilLayer = AppNodeBuilder.build(FSUtil.node)
 const it = testEffect(Layer.mergeAll(testStateLayer, fsUtilLayer, RuntimeFlags.layer()))
 
 function authConfigLayer(input?: { password?: string; username?: string }) {
-  return ServerAuth.Config.layer({
+  return ServerAuth.Config.configLayer({
     password: input?.password === undefined ? Option.none() : Option.some(input.password),
     username: input?.username ?? "opencode",
   })

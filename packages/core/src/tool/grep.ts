@@ -50,7 +50,7 @@ export const toModelOutput = (output: ModelOutput) => {
 }
 
 /** Grep leaf that defaults its filesystem root to the active Location. */
-export const layer = Layer.effectDiscard(
+const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const tools = yield* Tools.Service
     const fs = yield* FSUtil.Service

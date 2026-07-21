@@ -18,7 +18,8 @@ export async function statsProxy(evt: APIEvent) {
   if (
     targetUrl.pathname.startsWith(`${dataPath}/_build/`) ||
     targetUrl.pathname === `${dataPath}/banner.jpg` ||
-    targetUrl.pathname === `${dataPath}/banner.png`
+    targetUrl.pathname === `${dataPath}/banner.png` ||
+    targetUrl.pathname === `${dataPath}/sitemap.xml`
   ) {
     targetUrl.pathname = targetUrl.pathname.slice(dataPath.length)
   }
@@ -39,7 +40,7 @@ export async function statsProxy(evt: APIEvent) {
   headers.delete("content-encoding")
   headers.delete("content-length")
   headers.delete("etag")
-  appendVary(headers, "Accept-Language", "Cookie")
+  appendVary(headers, "Accept-Language", "Cookie", LOCALE_HEADER)
 
   return new Response(rewriteStatsHtml(await response.text()), {
     status: response.status,
@@ -78,7 +79,7 @@ function redirectToLocalizedData(request: Request, url: URL, locale: ReturnType<
     Location: next.toString(),
   })
   headers.append("set-cookie", cookie(locale))
-  appendVary(headers, "Accept-Language", "Cookie")
+  appendVary(headers, "Accept-Language", "Cookie", LOCALE_HEADER)
 
   return new Response(null, {
     status: 308,
@@ -97,7 +98,8 @@ function isDataBypassPath(pathname: string) {
     pathname.startsWith(`${dataPath}/api/`) ||
     pathname.startsWith(`${dataPath}/_server`) ||
     pathname === `${dataPath}/banner.jpg` ||
-    pathname === `${dataPath}/banner.png`
+    pathname === `${dataPath}/banner.png` ||
+    pathname === `${dataPath}/sitemap.xml`
   )
 }
 

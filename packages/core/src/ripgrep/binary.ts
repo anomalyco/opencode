@@ -28,7 +28,7 @@ export namespace RipgrepBinary {
 
   export class Service extends Context.Service<Service, Interface>()("@opencode/RipgrepBinary") {}
 
-  export const layer = Layer.effect(
+  const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
       const fs = yield* FSUtil.Service
@@ -122,12 +122,6 @@ export namespace RipgrepBinary {
         ),
       })
     }),
-  )
-
-  export const defaultLayer = layer.pipe(
-    Layer.provide(FetchHttpClient.layer),
-    Layer.provide(FSUtil.defaultLayer),
-    Layer.provide(CrossSpawnSpawner.defaultLayer),
   )
 
   export const node = makeGlobalNode({

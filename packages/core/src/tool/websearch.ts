@@ -189,7 +189,7 @@ const Output = Schema.Struct({
   text: Schema.String,
 })
 
-export const layer = Layer.effectDiscard(
+const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const tools = yield* Tools.Service
     const http = yield* HttpClient.HttpClient

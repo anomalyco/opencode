@@ -8,7 +8,7 @@ import { SessionStore } from "../store"
 import { SessionExecution } from "../execution"
 
 /** Current-process routing for implicit-local Locations. Future remote placement belongs here. */
-export const layer = Layer.effect(
+const layer = Layer.effect(
   SessionExecution.Service,
   Effect.gen(function* () {
     const store = yield* SessionStore.Service
@@ -36,8 +36,6 @@ export const layer = Layer.effect(
     })
   }),
 )
-
-export const defaultLayer = layer.pipe(Layer.provide(SessionStore.defaultLayer))
 
 export const node = makeGlobalNode({
   service: SessionExecution.Service,
