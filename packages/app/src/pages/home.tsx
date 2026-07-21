@@ -18,9 +18,8 @@ import {
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createStore, produce } from "solid-js/store"
 import { DragDropProvider, PointerSensor } from "@dnd-kit/solid"
-import { useSortable } from "@dnd-kit/solid/sortable"
-import { move } from "@dnd-kit/helpers"
-import { Accessibility, AutoScroller, Feedback, PointerActivationConstraints } from "@dnd-kit/dom"
+import { isSortable, useSortable } from "@dnd-kit/solid/sortable"
+import { AutoScroller, Feedback, PointerActivationConstraints } from "@dnd-kit/dom"
 import { RestrictToVerticalAxis } from "@dnd-kit/abstract/modifiers"
 import { RestrictToElement } from "@dnd-kit/dom/modifiers"
 import { useQuery } from "@tanstack/solid-query"
@@ -1043,7 +1042,7 @@ function HomeServerRow(props: {
   )
 }
 
-function HomeProjectList(props: {
+type HomeProjectListProps = {
   server: ServerConnection.Any
   projects: LocalProject[]
   selected: HomeProjectSelection
@@ -1054,63 +1053,38 @@ function HomeProjectList(props: {
   clearNotifications: (server: ServerConnection.Any, project: LocalProject) => void
   unseenCount: (server: ServerConnection.Any, project: LocalProject) => number
   language: ReturnType<typeof useLanguage>
-}) {
+}
+
+function HomeProjectList(props: HomeProjectListProps) {
   const global = useGlobal()
   let listRef!: HTMLDivElement
-  let snapshot: string[] | undefined
-  let selectOnDrop: string | undefined
   const projects = () => global.ensureServerCtx(props.server).projects
 
   return (
     <DragDropProvider
-      sensors={[
+      sensors={(defaults) => [
+        ...defaults.filter((sensor) => sensor !== PointerSensor),
         PointerSensor.configure({
-          activationConstraints: [new PointerActivationConstraints.Distance({ value: 4 })],
+          activationConstraints: (event) =>
+            event.pointerType === "touch"
+              ? [new PointerActivationConstraints.Delay({ value: 250, tolerance: 5 })]
+              : [new PointerActivationConstraints.Distance({ value: 4 })],
           preventActivation: (event) =>
-            event.pointerType === "touch" ||
-            (event.target instanceof Element && !!event.target.closest("[data-action]")),
+            event.target instanceof Element && !!event.target.closest("[data-action]"),
         }),
       ]}
       modifiers={[RestrictToVerticalAxis, RestrictToElement.configure({ element: () => listRef })]}
       plugins={(defaults) => [
-        ...defaults.filter((plugin) => plugin !== Accessibility),
+        ...defaults.filter((plugin) => plugin !== AutoScroller && plugin !== Feedback),
         AutoScroller.configure({ acceleration: 8, threshold: { x: 0, y: 0.05 } }),
         Feedback.configure({ dropAnimation: null }),
       ]}
-      onDragStart={(event) => {
-        snapshot = props.projects.map((project) => project.worktree)
-        selectOnDrop =
-          props.selected.server === ServerConnection.key(props.server)
-            ? undefined
-            : event.operation.source?.id.toString()
-      }}
-      onDragOver={(event) => {
-        // The Solid adapter expects the list state to be reordered here, during
-        // dragover: it tracks this callback's re-render so dnd-kit's optimistic
-        // sorting plugin skips its own DOM manipulation, keeping Solid's <For>
-        // the sole owner of DOM order. Committing only on drag end desyncs them.
-        const source = event.operation.source
-        if (!source) return
-        const order = props.projects.map((project) => project.worktree)
-        const next = move(order, event)
-        if (next === order) return
-        event.preventDefault()
-        const sourceId = source.id.toString()
-        // Displaced rows animate via dnd-kit's built-in sortable FLIP: the row
-        // elements persist across reorders (worktree-keyed <For>), so their
-        // sortable indices change and Sortable.animate transitions them from
-        // its cached shapes. This matches the titlebar tab strip's behavior.
-        projects().move(sourceId, next.indexOf(sourceId))
-      }}
       onDragEnd={(event) => {
-        if (event.canceled && snapshot) {
-          const restore = snapshot
-          restore.forEach((worktree, index) => projects().move(worktree, index))
-        }
-        const directory = selectOnDrop
-        snapshot = undefined
-        selectOnDrop = undefined
-        if (!event.canceled && directory) props.selectProject(props.server, directory)
+        const source = event.operation.source
+        if (event.canceled || !isSortable(source)) return
+        if (source.initialIndex !== source.index) projects().move(source.id.toString(), source.index)
+        if (props.selected.server !== ServerConnection.key(props.server))
+          props.selectProject(props.server, source.id.toString())
       }}
     >
       <div class="flex min-w-0 flex-col gap-1" ref={listRef}>
@@ -1120,33 +1094,43 @@ function HomeProjectList(props: {
             row's sortable unregisters on unmount) and discarding animations.
             String keys keep row elements alive and move them on reorder. */}
         <For each={props.projects.map((project) => project.worktree)}>
-          {(worktree, index) => {
-            const project = createMemo<LocalProject | undefined>(
-              (prev) => props.projects.find((item) => item.worktree === worktree) ?? prev,
-            )
-            return (
-              <HomeProjectRow
-                project={project()!}
-                server={props.server}
-                index={index}
-                serverSelected={props.selected.server === ServerConnection.key(props.server)}
-                selected={
-                  props.selected.server === ServerConnection.key(props.server) &&
-                  props.selected.directory === worktree
-                }
-                unseenCount={props.unseenCount(props.server, project()!)}
-                selectProject={props.selectProject}
-                openNewSession={props.openNewSession}
-                editProject={props.editProject}
-                closeProject={props.closeProject}
-                clearNotifications={props.clearNotifications}
-                language={props.language}
-              />
-            )
-          }}
+          {(worktree, index) => <HomeProjectSlot {...props} worktree={worktree} index={index} />}
         </For>
       </div>
     </DragDropProvider>
+  )
+}
+
+function HomeProjectSlot(
+  props: HomeProjectListProps & {
+    worktree: string
+    index: () => number
+  },
+) {
+  const project = createMemo(() => props.projects.find((item) => item.worktree === props.worktree))
+
+  return (
+    <Show when={project()}>
+      {(item) => (
+        <HomeProjectRow
+          project={item()}
+          server={props.server}
+          index={props.index}
+          serverSelected={props.selected.server === ServerConnection.key(props.server)}
+          selected={
+            props.selected.server === ServerConnection.key(props.server) &&
+            props.selected.directory === props.worktree
+          }
+          unseenCount={props.unseenCount(props.server, item())}
+          selectProject={props.selectProject}
+          openNewSession={props.openNewSession}
+          editProject={props.editProject}
+          closeProject={props.closeProject}
+          clearNotifications={props.clearNotifications}
+          language={props.language}
+        />
+      )}
+    </Show>
   )
 }
 
