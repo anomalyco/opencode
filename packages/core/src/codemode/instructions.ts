@@ -21,8 +21,11 @@ const layer = Layer.effect(
     return Service.of({
       load: Effect.fn("CodeModeInstructions.load")(function* (selection) {
         const catalog = selection.info ? ((yield* codeMode.materialize(selection.info.permissions)).catalog ?? []) : []
-        // Sorted entries keep the stored snapshot canonical so identical catalogs hash identically.
-        const entries = catalog.toSorted((left, right) => left.path.localeCompare(right.path))
+        // Code-unit sorting keeps the stored snapshot canonical so identical catalogs hash
+        // identically; localeCompare would let host ICU locale and version reorder the array.
+        const entries = catalog.toSorted((left, right) =>
+          left.path < right.path ? -1 : left.path > right.path ? 1 : 0,
+        )
         return Instructions.make<ReadonlyArray<CodeModeCatalog.Entry>>({
           key: Instructions.Key.make("core/codemode"),
           codec: Schema.toCodecJson(Schema.Array(CodeModeCatalog.Entry)),
