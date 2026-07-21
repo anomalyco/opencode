@@ -82,8 +82,6 @@ import {
 } from "@/context/global-sync/home-session-index"
 
 const HOME_SESSION_LIMIT = 64
-const HOME_PROJECT_EDGE_SCROLL_BAND = 16
-const HOME_PROJECT_EDGE_SCROLL_SPEED = 260
 const HOME_SESSION_HEADER_STICKY_TOP = 12
 const HOME_SESSION_HEADER_TEXT_HEIGHT = 16
 const HOME_SESSION_HEADER_FADE_DISTANCE = 16
@@ -1063,37 +1061,6 @@ function HomeProjectList(props: {
   let selectOnDrop: string | undefined
   const projects = () => global.ensureServerCtx(props.server).projects
 
-  // Constant-speed edge scrolling. dnd-kit's AutoScroller is deliberately not
-  // used: its activation zone is a percentage of the container height and its
-  // speed ramps with pointer depth, so large containers start creeping the
-  // scroll during ordinary drags. Here the scroll position is only touched
-  // while the pointer is within a fixed band at the container's edges (or past
-  // them), scrolling at a uniform rate.
-  let scroller: HTMLElement | undefined
-  let scrollDirection = 0
-  let scrollFrame: number | undefined
-  let scrollLast = 0
-
-  function stopEdgeScroll() {
-    if (scrollFrame !== undefined) cancelAnimationFrame(scrollFrame)
-    scrollFrame = undefined
-    scrollDirection = 0
-    scroller = undefined
-  }
-
-  function edgeScrollTick(timestamp: number) {
-    if (!scroller || !scrollDirection) {
-      scrollFrame = undefined
-      return
-    }
-    const dt = scrollLast ? (timestamp - scrollLast) / 1000 : 0
-    scrollLast = timestamp
-    scroller.scrollTop += scrollDirection * HOME_PROJECT_EDGE_SCROLL_SPEED * dt
-    scrollFrame = requestAnimationFrame(edgeScrollTick)
-  }
-
-  onCleanup(stopEdgeScroll)
-
   return (
     <DragDropProvider
       sensors={[
@@ -1106,7 +1073,8 @@ function HomeProjectList(props: {
       ]}
       modifiers={[RestrictToVerticalAxis, RestrictToElement.configure({ element: () => listRef })]}
       plugins={(defaults) => [
-        ...defaults.filter((plugin) => plugin !== Accessibility && plugin !== AutoScroller),
+        ...defaults.filter((plugin) => plugin !== Accessibility),
+        AutoScroller.configure({ acceleration: 8, threshold: { x: 0, y: 0.05 } }),
         Feedback.configure({ dropAnimation: null }),
       ]}
       onDragStart={(event) => {
@@ -1115,29 +1083,6 @@ function HomeProjectList(props: {
           props.selected.server === ServerConnection.key(props.server)
             ? undefined
             : event.operation.source?.id.toString()
-        let el = listRef.parentElement
-        while (el && !(el.scrollHeight > el.clientHeight && /(auto|scroll)/.test(getComputedStyle(el).overflowY)))
-          el = el.parentElement
-        scroller = el ?? undefined
-      }}
-      onDragMove={(event) => {
-        if (!scroller) return
-        // The operation position snapshot lags one event behind; event.to
-        // carries this move's coordinates.
-        const position = event.to ?? event.operation.position?.current
-        if (!position) return
-        const rect = scroller.getBoundingClientRect()
-        // Beyond the container counts as in-band: keep scrolling while the
-        // pointer is above/below it entirely.
-        scrollDirection =
-          position.y <= rect.top + HOME_PROJECT_EDGE_SCROLL_BAND
-            ? -1
-            : position.y >= rect.bottom - HOME_PROJECT_EDGE_SCROLL_BAND
-              ? 1
-              : 0
-        if (scrollDirection === 0 || scrollFrame !== undefined) return
-        scrollLast = 0
-        scrollFrame = requestAnimationFrame(edgeScrollTick)
       }}
       onDragOver={(event) => {
         // The Solid adapter expects the list state to be reordered here, during
@@ -1158,7 +1103,6 @@ function HomeProjectList(props: {
         projects().move(sourceId, next.indexOf(sourceId))
       }}
       onDragEnd={(event) => {
-        stopEdgeScroll()
         if (event.canceled && snapshot) {
           const restore = snapshot
           restore.forEach((worktree, index) => projects().move(worktree, index))
