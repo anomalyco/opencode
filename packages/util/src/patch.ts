@@ -47,8 +47,8 @@ export function parse(patchText: string): Result.Result<ReadonlyArray<Hunk>, Par
   const lines = stripHeredoc(patchText.trim())
     .split("\n")
     .map((line) => (line.endsWith("\r") ? line.slice(0, -1) : line))
-  const begin = lines.findIndex((line) => line.trim() === "*** Begin Patch")
-  const end = lines.findIndex((line) => line.trim() === "*** End Patch")
+  const begin = lines[0]?.trim() === "*** Begin Patch" ? 0 : -1
+  const end = lines.at(-1)?.trim() === "*** End Patch" ? lines.length - 1 : -1
   if (begin === -1) return Result.fail(new BoundaryError({ boundary: "first" }))
   if (end === -1 || begin >= end) return Result.fail(new BoundaryError({ boundary: "last" }))
 
@@ -227,9 +227,9 @@ const normalize = (value: string) =>
   value
     .replace(/[‘’‚‛]/g, "'")
     .replace(/[“”„‟]/g, '"')
-    .replace(/[‐‑‒–—―]/g, "-")
+    .replace(/[‐‑‒–—―−]/g, "-")
     .replace(/…/g, "...")
-    .replace(/ /g, " ")
+    .replace(/[\u00A0\u2002-\u200A\u202F\u205F\u3000]/g, " ")
 const splitBom = (text: string) =>
   text.startsWith("\uFEFF") ? { bom: true, text: text.slice(1) } : { bom: false, text }
 const stripHeredoc = (input: string) =>
