@@ -39,7 +39,7 @@ import { WellKnown } from "../wellknown"
 import { PluginInternal } from "./internal"
 import { PluginRuntime } from "./runtime"
 import { SdkPlugins } from "./sdk"
-import { importModule } from "#runtime-import"
+import { importModule } from "@opencode-ai/util/runtime-import"
 
 const PluginModule = Schema.Struct({
   default: Schema.Union([

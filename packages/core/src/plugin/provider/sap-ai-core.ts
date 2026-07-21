@@ -3,7 +3,7 @@ import { pathToFileURL } from "url"
 import { define } from "@opencode-ai/plugin/v2/effect/plugin"
 import { Npm } from "@opencode-ai/util/npm"
 import { ProviderV2 } from "../../provider"
-import { importModule } from "#runtime-import"
+import { importModule } from "@opencode-ai/util/runtime-import"
 
 export const SapAICorePlugin = define({
   id: "opencode.provider.sap-ai-core",
