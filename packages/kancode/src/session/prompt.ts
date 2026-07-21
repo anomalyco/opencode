@@ -35,6 +35,8 @@ import { Tool } from "@/tool/tool"
 import { Permission } from "@/permission"
 import { SessionStatus } from "./status"
 import { LLM } from "./llm"
+import { VisionFallback } from "./vision-fallback"
+import { ModelState } from "./model-state"
 import { Shell } from "@kancode/core/shell"
 import { ShellID } from "@/tool/shell/id"
 import { FSUtil } from "@kancode/core/fs-util"
@@ -1258,13 +1260,64 @@ const layer = Layer.effect(
 
             yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
-            const [skills, env, instructions, mcpInstructions, modelMsgs] = yield* Effect.all([
+            const [skills, env, instructions, mcpInstructions, modelMsgsRaw] = yield* Effect.all([
               sys.skills(agent),
               sys.environment(model),
               instruction.system().pipe(Effect.orDie),
               sys.mcp(agent, session.permission),
               MessageV2.toModelMessagesEffect(msgs, model),
             ])
+            // Describe unsupported image/PDF parts via user-scope vision fallback
+            // before ProviderTransform.unsupportedParts would strip them to ERROR text.
+            // Provide closed-over services so runLoop keeps R=never (same pattern as title).
+            // Persist describe surfaces on the user message for TUI (synthetic+ignored).
+            const modelMsgs = !VisionFallback.hasUnsupportedMedia(modelMsgsRaw, model)
+              ? modelMsgsRaw
+              : yield* ModelState.readFallbackFor({
+                    providerID: model.providerID,
+                    modelID: model.id,
+                  }).pipe(
+                    Effect.provideService(FSUtil.Service, fsys),
+                    Effect.flatMap((visionFallback) =>
+                      VisionFallback.describeUnsupported({
+                        messages: modelMsgsRaw,
+                        model,
+                        sessionID,
+                        user: lastUser,
+                        fallback: visionFallback,
+                      }).pipe(
+                        Effect.provideService(LLM.Service, llm),
+                        Effect.provideService(Provider.Service, provider),
+                        Effect.flatMap((described) =>
+                          Effect.gen(function* () {
+                            const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
+                            const pending = VisionFallback.unpersistedSurfaces(
+                              lastUserMsg?.parts ?? [],
+                              described.surfaces,
+                            )
+                            for (const surface of pending) {
+                              yield* sessions.updatePart({
+                                id: PartID.ascending(),
+                                messageID: lastUser.id,
+                                sessionID,
+                                type: "text",
+                                text: surface.text,
+                                synthetic: true,
+                                ignored: true,
+                                metadata: {
+                                  visionFallback: true,
+                                  providerID: surface.providerID,
+                                  modelID: surface.modelID,
+                                  modality: surface.modality,
+                                },
+                              })
+                            }
+                            return described.messages
+                          }),
+                        ),
+                      ),
+                    ),
+                  )
             const system = [
               ...env,
               ...instructions,

@@ -20,7 +20,7 @@ import {
   resolveSelectionCurrent,
 } from "./dialog-model-flow"
 import { isSubscriptionProvider } from "../util/model-row"
-import { DialogNote } from "./dialog-note"
+import { DialogConfig } from "./dialog-config"
 import { useConnected } from "./use-connected"
 
 export function DialogModel(props: {
@@ -289,7 +289,14 @@ export function DialogModel(props: {
           },
           {
             command: "model.dialog.favorite",
-            title: "Favorite",
+            title: (option) => {
+              if (!option) return "Favorite"
+              const value = option.value as { providerID: string; modelID: string }
+              const favorited = local.model
+                .favorite()
+                .some((f) => f.providerID === value.providerID && f.modelID === value.modelID)
+              return favorited ? "Unfavorite" : "Favorite"
+            },
             hidden: !connected(),
             onTrigger: (option) => {
               local.model.toggleFavorite(option.value as { providerID: string; modelID: string })
@@ -309,25 +316,11 @@ export function DialogModel(props: {
             },
           },
           {
-            command: "model.dialog.note",
-            title: "Note",
+            command: "model.dialog.config",
+            title: "Edit model",
             hidden: !connected(),
             onTrigger: (option) => {
-              dialog.push(() => <DialogNote model={option.value as { providerID: string; modelID: string }} />)
-            },
-          },
-          {
-            command: "model.dialog.variant",
-            title: "Variants",
-            // Config pickers ignore variant selection — hide the affordance.
-            hidden: !connected() || configPicker(),
-            disabled: (option) => {
-              if (!option) return true
-              const value = option.value as { providerID: string; modelID: string }
-              return listModelVariants(sync.data.provider, value).length === 0
-            },
-            onTrigger: (option) => {
-              openVariantPicker(option.value as { providerID: string; modelID: string })
+              dialog.push(() => <DialogConfig model={option.value as { providerID: string; modelID: string }} />)
             },
           },
         ]}

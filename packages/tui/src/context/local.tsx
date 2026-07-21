@@ -13,6 +13,11 @@ import { useTheme } from "./theme"
 import { useToast } from "../ui/toast"
 import { useRoute } from "./route"
 import { usePermission } from "./permission"
+import {
+  fallbackFor as resolveAttachmentFallback,
+  parseAttachmentFallbackState,
+  withModelAttachmentFallback,
+} from "../util/attachment-fallback"
 
 export function parseModel(model: string) {
   const [providerID, ...rest] = model.split("/")
@@ -157,6 +162,12 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           modelID: string
         }[]
         notes: Record<string, string>
+        attachmentFallback: { providerID: string; modelID: string } | null
+        // Per-model vision-fallback overrides (`null` = explicit opt-out).
+        modelAttachmentFallback: Record<
+          string,
+          { providerID: string; modelID: string } | null
+        >
       }>({
         ready: false,
         model: {},
@@ -165,6 +176,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         variant: {},
         hidden: [],
         notes: {},
+        attachmentFallback: null,
+        modelAttachmentFallback: {},
       })
 
       getHidden = () => modelStore.hidden
@@ -186,6 +199,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           variant: modelStore.variant,
           hidden: modelStore.hidden,
           notes: modelStore.notes,
+          attachmentFallback: modelStore.attachmentFallback,
+          modelAttachmentFallback: modelStore.modelAttachmentFallback,
         })
       }
 
@@ -200,6 +215,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           if (Array.isArray(value.hidden)) setModelStore("hidden", value.hidden)
           if (typeof value.notes === "object" && value.notes !== null)
             setModelStore("notes", value.notes as Record<string, string>)
+          const parsed = parseAttachmentFallbackState(value)
+          setModelStore("attachmentFallback", parsed.attachmentFallback)
+          setModelStore("modelAttachmentFallback", parsed.modelAttachmentFallback)
         })
         .catch(() => {})
         .finally(() => {
@@ -315,6 +333,64 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             }
             save()
           })
+        },
+        attachmentFallback() {
+          return modelStore.attachmentFallback ?? undefined
+        },
+        hasAttachmentFallback() {
+          return modelStore.attachmentFallback !== null
+        },
+        setAttachmentFallback(target: { providerID: string; modelID: string }) {
+          batch(() => {
+            setModelStore("attachmentFallback", target)
+            save()
+          })
+        },
+        clearAttachmentFallback() {
+          batch(() => {
+            setModelStore("attachmentFallback", null)
+            save()
+          })
+        },
+        // The per-model `modelAttachmentFallback` map is active in v1.
+        // `modelAttachmentFallback(model)` returns the per-model override:
+        //   - a target object if one is set
+        //   - `null` for an explicit opt-out (the entry exists, value is null)
+        //   - `undefined` if no entry exists for the model
+        modelAttachmentFallback(model: { providerID: string; modelID: string }) {
+          const key = `${model.providerID}/${model.modelID}`
+          const value = modelStore.modelAttachmentFallback[key]
+          if (value === undefined) return undefined
+          return value
+        },
+        setModelAttachmentFallback(model: { providerID: string; modelID: string }, target: { providerID: string; modelID: string } | null) {
+          batch(() => {
+            setModelStore(
+              "modelAttachmentFallback",
+              withModelAttachmentFallback(modelStore.modelAttachmentFallback, model, target),
+            )
+            save()
+          })
+        },
+        clearModelAttachmentFallback(model: { providerID: string; modelID: string }) {
+          batch(() => {
+            const key = `${model.providerID}/${model.modelID}`
+            // Solid stores shallow-merge objects: `setStore(path, { ...withoutKey })`
+            // does NOT remove the deleted key. Path + `undefined` deletes it.
+            setModelStore("modelAttachmentFallback", key, undefined!)
+            save()
+          })
+        },
+        // Effective fallback for a model. Per-model map wins (including `null`
+        // for explicit opt-out); otherwise the global; otherwise `undefined`.
+        fallbackFor(model: { providerID: string; modelID: string }) {
+          return resolveAttachmentFallback(
+            {
+              attachmentFallback: modelStore.attachmentFallback,
+              modelAttachmentFallback: modelStore.modelAttachmentFallback,
+            },
+            model,
+          )
         },
         parsed: createMemo(() => {
           const value = currentModel()

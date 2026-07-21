@@ -26,8 +26,9 @@ import {
   rightPaneContentKey,
   type RightMode,
 } from "./dialog-model-flow"
-import { DialogNote } from "./dialog-note"
 import { isSubscriptionProvider, modelRow, type ModelRowTheme } from "../util/model-row"
+import { capabilityLineSegments } from "../util/model"
+import { DialogConfig } from "./dialog-config"
 import { Locale } from "../util/locale"
 import { getScrollAcceleration } from "../util/scroll"
 import type { Provider } from "@kancode/sdk/v2"
@@ -46,7 +47,7 @@ type LeftRow = { kind: "header"; title: string } | { kind: "item"; entry: LeftEn
 
 interface Action {
   command: string
-  title: string
+  title: string | ((option: DialogSelectOption<ModelValue> | undefined) => string)
   hidden?: boolean
   disabled?: boolean
   onTrigger: () => void
@@ -252,10 +253,20 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
       opts?.favorite ??
       local.model.favorite().some((f) => f.providerID === provider.id && f.modelID === modelID)
     const current = props.current
+    const modelRef = { providerID: provider.id, modelID }
+    const fallback = local.model.fallbackFor(modelRef)
+    const segs = capabilityLineSegments(
+      info,
+      fallback,
+      local.model.attachmentFallback(),
+      local.model.modelAttachmentFallback(modelRef),
+    )
     const row = modelRow(info, modelID, provider, rowTheme, {
       favorite: isFavorite,
       current: !!current && current.providerID === provider.id && current.modelID === modelID,
       subscription: isSubscriptionFor(provider.id),
+      fallback,
+      capabilitySegments: segs,
       onSelect: () => commitSelect(provider.id, modelID),
       // Two-pane list does not use DialogSelect category headers, and string
       // footers avoid allocating a JSX tree per model on every provider switch.
@@ -472,11 +483,6 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
     dialog.clear()
   }
 
-  const selectedHasVariants = createMemo(() => {
-    const opt = rightOptions()[rightSelected()]
-    return !!opt && modelHasVariants(opt.value)
-  })
-
   // ----- Footer actions -----
   const isHiddenMode = createMemo(() => rightMode()?.kind === "hidden")
   const selectedIsHidden = createMemo(() => {
@@ -498,7 +504,14 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
       },
       {
         command: "model.dialog.favorite",
-        title: "Favorite",
+        title: (option) => {
+          if (!option) return "Favorite"
+          const value = option.value
+          const favorited = local.model
+            .favorite()
+            .some((f) => f.providerID === value.providerID && f.modelID === value.modelID)
+          return favorited ? "Unfavorite" : "Favorite"
+        },
         hidden: !connected() || isHiddenMode(),
         onTrigger() {
           const opt = rightOptions()[rightSelected()]
@@ -516,24 +529,13 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
         },
       },
       {
-        command: "model.dialog.note",
-        title: "Note",
+        command: "model.dialog.config",
+        title: "Edit model",
         hidden: !connected(),
         singleKey: true,
         onTrigger() {
           const opt = rightOptions()[rightSelected()]
-          if (opt) dialog.push(() => <DialogNote model={opt.value} />)
-        },
-      },
-      {
-        command: "model.dialog.variant",
-        title: "Variants",
-        // Config pickers ignore variant selection — hide the affordance.
-        hidden: !connected() || configPicker() || isHiddenMode() || !selectedHasVariants(),
-        singleKey: true,
-        onTrigger() {
-          const opt = rightOptions()[rightSelected()]
-          if (opt) openVariantPicker(opt.value)
+          if (opt) dialog.push(() => <DialogConfig model={opt.value} />)
         },
       },
     ]
@@ -555,9 +557,14 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
     }
     return labels
   })
+  const currentOption = createMemo(() => rightOptions()[rightSelected()])
   const visibleActions = createMemo(() =>
     shownActions()
-      .map((a) => ({ ...a, label: actionLabels().get(a.command) ?? "" }))
+      .map((a) => ({
+        ...a,
+        title: typeof a.title === "function" ? a.title(currentOption()) : a.title,
+        label: actionLabels().get(a.command) ?? "",
+      }))
       .filter((a) => a.label)
       // Hide single-key shortcuts (h/n/v) unless the right pane is focused;
       // modifier-key actions (ctrl+a, ctrl+f) stay visible in all states.
@@ -1177,11 +1184,40 @@ function RowContent(props: {
         </Show>
       </box>
       <For each={props.option.details}>
-        {(detail) => (
-          <text fg={theme.textMuted} wrapMode="none">
-            {Locale.truncateMiddle(detail, 76)}
-          </text>
-        )}
+        {(detail) => {
+          if (typeof detail === "string") {
+            return (
+              <text fg={theme.textMuted} wrapMode="none">
+                {Locale.truncateMiddle(detail, 76)}
+              </text>
+            )
+          }
+          const joined = detail.parts.map((p) => p.text).join(" · ")
+          if (joined.length > 76) {
+            return (
+              <text fg={theme.textMuted} wrapMode="none">
+                {Locale.truncateMiddle(joined, 76)}
+              </text>
+            )
+          }
+          return (
+            <box flexDirection="row">
+              {detail.parts.map((part, i) => (
+                <box flexDirection="row" flexShrink={0}>
+                  <Show when={i > 0}>
+                    <text fg={theme.textMuted}> · </text>
+                  </Show>
+                  <text
+                    fg={part.color === "info" ? theme.info : theme.textMuted}
+                    wrapMode="none"
+                  >
+                    {part.text}
+                  </text>
+                </box>
+              ))}
+            </box>
+          )
+        }}
       </For>
     </box>
   )

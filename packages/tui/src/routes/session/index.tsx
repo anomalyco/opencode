@@ -54,6 +54,7 @@ import { DialogConfirm } from "../../ui/dialog-confirm"
 import { DialogTimeline } from "./dialog-timeline"
 import { DialogForkFromTimeline } from "./dialog-fork-from-timeline"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
+import { DialogFallback } from "../../component/dialog-fallback"
 import { Sidebar } from "./sidebar"
 import { SubagentFooter } from "./subagent-footer.tsx"
 import { filetype } from "../../util/filetype"
@@ -77,6 +78,12 @@ import { useClipboard } from "../../context/clipboard"
 import { nextThinkingMode, reasoningSummary, useThinkingMode, type ThinkingMode } from "../../context/thinking"
 import { getScrollAcceleration } from "../../util/scroll"
 import { collapseToolOutput } from "../../util/collapse-tool-output"
+import {
+  visionFallbackLabel,
+  visionFallbackParts,
+  visionFallbackShouldCollapse,
+  type VisionFallbackPart as VisionFallbackPartData,
+} from "../../util/vision-fallback-part"
 import { cruiseControlConclusion } from "../../util/cruise-control"
 import { usePluginRuntime } from "../../plugin/runtime"
 import { DialogRetryAction } from "../../component/dialog-retry-action"
@@ -540,6 +547,31 @@ export function Session() {
           providerID: selectedModel.providerID,
         })
         dialog.clear()
+      },
+    },
+    {
+      title: "Set vision fallback",
+      value: "session.vision_fallback",
+      category: "Session",
+      slash: {
+        name: "vision-fallback",
+        aliases: ["vf"],
+      },
+      run: () => {
+        const current = local.model.attachmentFallback()
+        dialog.push(() => (
+          <DialogFallback
+            title="Set global vision fallback"
+            current={current ?? null}
+            // Only show "Clear global vision fallback" when a global is set.
+            // The picker becomes useless without a current to clear.
+            clearLabel={current ? "Clear global vision fallback" : undefined}
+            onClear={current ? () => local.model.clearAttachmentFallback() : undefined}
+            commit={(target) => {
+              if (target) local.model.setAttachmentFallback(target)
+            }}
+          />
+        ))
       },
     },
     {
@@ -1319,6 +1351,7 @@ function UserMessage(props: {
     return texts.join("\n\n")
   })
   const files = createMemo(() => props.parts.flatMap((x) => (x.type === "file" ? [x] : [])))
+  const visionFallbacks = createMemo(() => visionFallbackParts(props.parts))
   const { theme } = useTheme()
   const [hover, setHover] = createSignal(false)
   const queued = createMemo(() => props.pending && props.message.id > props.pending)
@@ -1390,6 +1423,9 @@ function UserMessage(props: {
           </box>
         </box>
       </Show>
+      <For each={visionFallbacks()}>
+        {(part) => <VisionFallbackPart part={part} />}
+      </For>
       <Show when={compaction()}>
         <box
           marginTop={1}
@@ -1400,6 +1436,50 @@ function UserMessage(props: {
         />
       </Show>
     </>
+  )
+}
+
+function VisionFallbackPart(props: { part: VisionFallbackPartData }) {
+  const { theme } = useTheme()
+  const ctx = use()
+  const long = createMemo(() => visionFallbackShouldCollapse(props.part.text))
+  const [expanded, setExpanded] = createSignal(false)
+  const open = createMemo(() => !long() || expanded())
+  const syntax = createSyntaxStyleMemo(() => generateSubtleSyntax(theme))
+  const label = createMemo(() => visionFallbackLabel(props.part))
+
+  return (
+    <Show when={props.part.text.trim()}>
+      <box
+        ref={(el: BoxRenderable) => alwaysSeparate.add(el)}
+        paddingLeft={3}
+        marginTop={1}
+        flexDirection="column"
+        flexShrink={0}
+      >
+        <box onMouseUp={long() ? () => setExpanded((prev) => !prev) : undefined}>
+          <text fg={theme.textMuted} wrapMode="none">
+            <Show when={long()}>
+              <span>{open() ? "- " : "+ "}</span>
+            </Show>
+            <span>{label()}</span>
+          </text>
+        </box>
+        <Show when={open()}>
+          <box paddingLeft={2} marginTop={1}>
+            <code
+              filetype="markdown"
+              drawUnstyledText={false}
+              streaming={false}
+              syntaxStyle={syntax()}
+              content={props.part.text}
+              conceal={ctx.conceal()}
+              fg={theme.textMuted}
+            />
+          </box>
+        </Show>
+      </box>
+    </Show>
   )
 }
 

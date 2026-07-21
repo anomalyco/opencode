@@ -2,7 +2,13 @@ import { TextAttributes, type RGBA } from "@opentui/core"
 import { Show, type JSX } from "solid-js"
 import type { Provider } from "@kancode/sdk/v2"
 import type { DialogSelectOption } from "../ui/dialog-select"
-import { capabilityLine, humanizeContext, humanizeCost, type ModelShape } from "./model"
+import {
+  capabilityLine,
+  type CapabilitySegment,
+  type ModelShape,
+  humanizeContext,
+  humanizeCost,
+} from "./model"
 
 export interface ModelRowTheme {
   text: RGBA
@@ -21,6 +27,19 @@ export interface ModelRowOptions {
   // id isn't in SUBSCRIPTION_PROVIDERS. Used for providers like `openai` whose
   // subscription vs metered status depends on the active auth method.
   subscription?: boolean
+  // Effective vision-fallback target for this model (already resolved via
+  // `local.model.fallbackFor(model)`). When set, the capability line appends
+  // the `fallback-vision` token for non-vision models (no `attachment`, no
+  // `input.image`, no `input.pdf`).
+  fallback?: { providerID: string; modelID: string } | null
+  // Pre-computed capability-line segments (preferred). When set, the row
+  // renders a single `{ parts }` detail so `fallback-vision` can use
+  // `theme.info` for per-model overrides while other tokens stay muted.
+  // Falls back to a plain joined string via `capabilityLineText` / `capabilityLine`.
+  capabilitySegments?: CapabilitySegment[]
+  // The pre-computed capability-line string to render when segments are not
+  // supplied. Kept for callers that do not need per-token color.
+  capabilityLineText?: string
   onSelect?: () => void
 }
 
@@ -127,7 +146,25 @@ export function modelRow(
   const tokens = plainFooter ? undefined : footerTokens(model, provider, opts, theme)
   const footer = plainFooter ? labeled : tokens!.view
   const footerWidth = plainFooter ? (labeled?.length ?? 0) : tokens!.width
-  const capLine = capabilityLine(model)
+  // Prefer structured segments so `fallback-vision` can be colored (info for
+  // per-model, muted for global). Fall back to a plain joined string for
+  // callers that do not pass segments.
+  const segs = opts.capabilitySegments
+  const capLine = opts.capabilityLineText ?? capabilityLine(model, opts.fallback)
+  const details: NonNullable<DialogSelectOption<
+    { providerID: string; modelID: string }
+  >["details"]> = segs && segs.length > 0
+    ? [
+        {
+          parts: segs.map((s) => ({
+            text: s.text,
+            color: s.colorHint === "info" ? "info" : "muted",
+          })),
+        },
+      ]
+    : capLine
+      ? [capLine]
+      : []
   // Default title budget from DialogSelect.Option is 61; reserve room for the footer + 3 (padding).
   const titleWidth = Math.max(20, 61 - footerWidth - 1)
   return {
@@ -136,7 +173,7 @@ export function modelRow(
     titleWidth,
     truncateTitle: true,
     footer,
-    details: capLine ? [capLine] : undefined,
+    details,
     categoryView: opts.peers ? providerHeader(provider, opts.peers, theme) : undefined,
     onSelect: opts.onSelect,
   }

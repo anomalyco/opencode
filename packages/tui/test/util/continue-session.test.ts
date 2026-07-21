@@ -29,3 +29,23 @@ test("scopes fallback and last-session match to a directory", () => {
 test("ignores a missing last session id", () => {
   expect(resolveContinueSessionID(sessions, { lastID: "ses_gone" })).toBe("ses_other")
 })
+
+test("matches windows directories ignoring drive letter case and slash style", () => {
+  const windows = [
+    { id: "ses_win", time: { updated: 1 }, directory: "D:\\Projects\\kancode" },
+    { id: "ses_other", time: { updated: 2 }, directory: "C:\\other" },
+  ]
+  expect(
+    resolveContinueSessionID(windows, {
+      lastID: "ses_win",
+      directory: "d:/Projects/kancode",
+      platform: "win32",
+    }),
+  ).toBe("ses_win")
+  expect(
+    resolveContinueSessionID(windows, {
+      directory: "d:/Projects/kancode",
+      platform: "win32",
+    }),
+  ).toBe("ses_win")
+})

@@ -63,6 +63,11 @@ import { DialogConfirm } from "./ui/dialog-confirm"
 import { ToastProvider, useToast } from "./ui/toast"
 import { isDefaultTitle } from "./util/session"
 import { resolveContinueSessionID } from "./util/continue-session"
+import {
+  formatTerminalTitle,
+  resolveTerminalTitleStatus,
+  truncateTerminalTitleName,
+} from "./util/terminal-title"
 import { KVProvider, useKV } from "./context/kv"
 import * as Model from "./util/model"
 import { ArgsProvider, useArgs, type Args } from "./context/args"
@@ -455,29 +460,49 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     kv.get("paste_summary_enabled", !sync.data.config.experimental?.disable_paste_summary),
   )
 
-  // Update terminal window title based on current route and session
+  // OpenTUI writes OSC 0; on Windows also set process.title (SetConsoleTitle) so
+  // Windows Terminal picks up the title during early auto-resume navigation when
+  // OSC updates can be dropped by ConPTY.
+  const setTerminalTitle = (title: string) => {
+    renderer.setTerminalTitle(title)
+    if (process.platform === "win32") process.title = title
+  }
+
+  // Update terminal window title based on current route and session status.
+  // Prefixes: `? ` needs attention (question/permission), `* ` busy/retry, none when idle.
   createEffect(() => {
     if (!terminalTitleEnabled() || Flag.OPENCODE_DISABLE_TERMINAL_TITLE) return
 
     if (route.data.type === "home") {
-      renderer.setTerminalTitle("KanCode")
+      setTerminalTitle("KanCode")
       return
     }
 
     if (route.data.type === "session") {
-      const session = sync.session.get(route.data.sessionID)
+      const sessionID = route.data.sessionID
+      const status = resolveTerminalTitleStatus({
+        sessionStatus: sync.data.session_status[sessionID],
+        questions: sync.data.question[sessionID],
+        permissions: sync.data.permission[sessionID],
+      })
+      const session = sync.session.get(sessionID)
       if (!session || isDefaultTitle(session.title)) {
-        renderer.setTerminalTitle("KanCode")
+        setTerminalTitle(formatTerminalTitle({ status, name: "KanCode" }))
         return
       }
 
-      const title = session.title.length > 40 ? session.title.slice(0, 37) + "..." : session.title
-      renderer.setTerminalTitle(`OC | ${title}`)
+      setTerminalTitle(
+        formatTerminalTitle({
+          status,
+          name: truncateTerminalTitleName(session.title),
+          branded: true,
+        }),
+      )
       return
     }
 
     if (route.data.type === "plugin") {
-      renderer.setTerminalTitle(`OC | ${route.data.id}`)
+      setTerminalTitle(formatTerminalTitle({ status: "idle", name: route.data.id, branded: true }))
     }
   })
 
@@ -975,7 +1000,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
           setTerminalTitleEnabled((prev) => {
             const next = !prev
             kv.set("terminal_title_enabled", next)
-            if (!next) renderer.setTerminalTitle("")
+            if (!next) setTerminalTitle("")
             return next
           })
           dialog.clear()
@@ -1177,8 +1202,8 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
             ? "Update failed"
             : undefined
 
-    if (upgradeError) {
-      await DialogAlert.show(dialog, "Update Failed", upgradeError)
+    if (upgradeError || !result.data || result.data.success !== true) {
+      await DialogAlert.show(dialog, "Update Failed", upgradeError ?? "Update failed")
       return
     }
 

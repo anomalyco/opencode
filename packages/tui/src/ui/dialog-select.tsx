@@ -58,7 +58,12 @@ export interface DialogSelectOption<T = any> {
   titleView?: JSX.Element
   value: T
   description?: string
-  details?: string[]
+  // A detail row below the row title. Each entry is one row. Plain strings
+  // are rendered in `theme.textMuted`. A `{ parts }` entry renders inline
+  // colored tokens on a single row (used for the model capability line so
+  // `fallback-vision` can use `theme.info` for per-model overrides while
+  // other tokens stay muted).
+  details?: Array<string | { parts: Array<{ text: string; color?: "muted" | "info" }> }>
   footer?: JSX.Element | string
   titleWidth?: number
   truncateTitle?: boolean | "left"
@@ -706,13 +711,49 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                             />
                           </box>
                           <For each={option.details}>
-                            {(detail) => (
-                              <box paddingLeft={3} paddingRight={3}>
-                                <text fg={theme.textMuted} wrapMode="none">
-                                  {Locale.truncateMiddle(detail, Math.max(1, Math.min(76, dimensions().width - 12)))}
-                                </text>
-                              </box>
-                            )}
+                            {(detail) => {
+                              const max = Math.max(1, Math.min(76, dimensions().width - 12))
+                              if (typeof detail === "string") {
+                                return (
+                                  <box paddingLeft={3} paddingRight={3}>
+                                    <text fg={theme.textMuted} wrapMode="none">
+                                      {Locale.truncateMiddle(detail, max)}
+                                    </text>
+                                  </box>
+                                )
+                              }
+                              // Structured capability-line parts: one row, per-token color.
+                              // If the joined line exceeds the budget, fall back to a
+                              // single muted truncated string (color distinction lost
+                              // only when truncated).
+                              const joined = detail.parts.map((p) => p.text).join(" · ")
+                              if (joined.length > max) {
+                                return (
+                                  <box paddingLeft={3} paddingRight={3}>
+                                    <text fg={theme.textMuted} wrapMode="none">
+                                      {Locale.truncateMiddle(joined, max)}
+                                    </text>
+                                  </box>
+                                )
+                              }
+                              return (
+                                <box paddingLeft={3} paddingRight={3} flexDirection="row">
+                                  {detail.parts.map((part, i) => (
+                                    <box flexDirection="row" flexShrink={0}>
+                                      <Show when={i > 0}>
+                                        <text fg={theme.textMuted}> · </text>
+                                      </Show>
+                                      <text
+                                        fg={part.color === "info" ? theme.info : theme.textMuted}
+                                        wrapMode="none"
+                                      >
+                                        {part.text}
+                                      </text>
+                                    </box>
+                                  ))}
+                                </box>
+                              )
+                            }}
                           </For>
                         </box>
                       )
