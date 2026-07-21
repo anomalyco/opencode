@@ -265,7 +265,7 @@ export const CachePolicyObject = Schema.Struct({
     Schema.Union([
       Schema.Literal("latest-user-message"),
       Schema.Literal("latest-assistant"),
-      Schema.Struct({ tail: Schema.Number }),
+      Schema.Struct({ tail: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)) }),
     ]),
   ),
   ttlSeconds: Schema.optional(Schema.Number),
