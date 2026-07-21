@@ -31,8 +31,8 @@ export type Binding = {
 export type StatementResult =
   | { kind: "none" }
   | { kind: "return"; value: unknown }
-  | { kind: "break" }
-  | { kind: "continue" }
+  | { kind: "break"; label?: string }
+  | { kind: "continue"; label?: string }
 
 export type MemberReference = {
   target: SafeObject | Array<unknown> | CodeModeRegExp | CodeModeURL

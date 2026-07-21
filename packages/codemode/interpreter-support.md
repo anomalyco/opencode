@@ -69,7 +69,7 @@ ultimate source of truth.
 - [x] Unlabeled `break` and `continue`.
 - [x] `try`, `catch`, optional catch bindings, and `finally`.
 - [x] `throw` with arbitrary values.
-- [ ] Labeled statements, labeled `break`, and labeled `continue`.
+- [x] Labeled statements, labeled `break`, and labeled `continue`.
 - [ ] `for await...of` and async iteration.
 
 ## Functions and callbacks
