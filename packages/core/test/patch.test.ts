@@ -91,6 +91,28 @@ describe("Patch", () => {
     ])
   })
 
+  test("strips one carriage return from CRLF patch lines", () => {
+    expect(parse("*** Begin Patch\r\n*** Update File: file.txt\r\n@@\r\n-old\r\n+new\r\n*** End Patch\r\n")).toEqual([
+      {
+        type: "update",
+        path: "file.txt",
+        movePath: undefined,
+        chunks: [{ oldLines: ["old"], newLines: ["new"], changeContext: undefined, endOfFile: undefined }],
+      },
+    ])
+  })
+
+  test("preserves an extra carriage return in CRLF patch lines", () => {
+    expect(parse("*** Begin Patch\r\n*** Update File: file.txt\r\n@@\r\n-old\r\r\n+new\r\n*** End Patch\r\n")).toEqual([
+      {
+        type: "update",
+        path: "file.txt",
+        movePath: undefined,
+        chunks: [{ oldLines: ["old\r"], newLines: ["new"], changeContext: undefined, endOfFile: undefined }],
+      },
+    ])
+  })
+
   test("derives fuzzy line updates while preserving BOM", () => {
     const update = Patch.derive("update.txt", [{ oldLines: ["  old   "], newLines: ["new"] }], "\uFEFFold\n")
     expect(update).toEqual({ content: "new\n", bom: true })

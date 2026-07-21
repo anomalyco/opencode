@@ -44,7 +44,9 @@ export interface FileUpdate {
 }
 
 export function parse(patchText: string): Result.Result<ReadonlyArray<Hunk>, ParseError> {
-  const lines = stripHeredoc(patchText.trim()).split("\n")
+  const lines = stripHeredoc(patchText.trim())
+    .split("\n")
+    .map((line) => (line.endsWith("\r") ? line.slice(0, -1) : line))
   const begin = lines.findIndex((line) => line.trim() === "*** Begin Patch")
   const end = lines.findIndex((line) => line.trim() === "*** End Patch")
   if (begin === -1) return Result.fail(new BoundaryError({ boundary: "first" }))
