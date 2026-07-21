@@ -118,7 +118,7 @@ function makeRoutes<AuthError, AuthServices>(
     ? Layer.unwrap(
         Effect.gen(function* () {
           const { simulationReplacements } = yield* Effect.promise(() => import("@opencode-ai/simulation/backend"))
-          const simulation = yield* simulationReplacements(options.app)
+          const simulation = yield* simulationReplacements({ version: App.make(options.app).version })
           return AppNodeBuilder.build(applicationServices, [...replacements, ...simulation])
         }),
       )
