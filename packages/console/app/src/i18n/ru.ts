@@ -368,6 +368,7 @@ export const dict = {
   "zen.api.error.providerNotSupported": "Провайдер {{provider}} не поддерживается",
   "zen.api.error.missingApiKey": "Отсутствует API ключ.",
   "zen.api.error.invalidApiKey": "Неверный API ключ.",
+  "zen.api.error.requestBlockedByUpstreamProvider": "Запрос заблокирован вышестоящим провайдером.",
   "zen.api.error.subscriptionQuotaExceeded": "Квота подписки превышена. Повторите попытку через {{retryIn}}.",
   "zen.api.error.goSubscriptionRollingLimitExceeded":
     "Достигнут лимит использования за 5 часов. Сбросится через {{retryIn}}. Чтобы продолжить использовать эту модель сейчас, включите оплату с доступного баланса: {{consoleGoUrl}}",
