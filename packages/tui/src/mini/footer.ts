@@ -384,6 +384,7 @@ export class RunFooter implements FooterApi {
     }
 
     if (next.type === "turn.duration") {
+      if (this.miniSettings().turn_summary === "hide") return
       const current = this.currentModel()
       this.flush()
       this.flushing = this.flushing

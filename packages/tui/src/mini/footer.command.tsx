@@ -657,6 +657,14 @@ export function RunSettingsBody(props: {
       keywords: `shell tool command output ${props.settings().shell_output}`,
       key: "shell_output",
     },
+    {
+      category: "Transcript",
+      display: "Turn summary",
+      description: "agent, model, and duration",
+      footer: saving() === "turn_summary" ? "saving" : props.settings().turn_summary,
+      keywords: `turn summary agent model duration ${props.settings().turn_summary}`,
+      key: "turn_summary",
+    },
   ])
   const change = (item: SettingEntry) => {
     if (saving()) return

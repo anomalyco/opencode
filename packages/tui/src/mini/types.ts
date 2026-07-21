@@ -396,6 +396,7 @@ export type RunTuiConfig = Pick<Config.Resolved, "keybinds" | "leader" | "theme"
 export type MiniSettings = {
   thinking: "show" | "hide"
   shell_output: "show" | "hide"
+  turn_summary: "show" | "hide"
 }
 
 export type MiniSettingChange = {

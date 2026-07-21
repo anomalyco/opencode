@@ -130,6 +130,9 @@ export const Info = Schema.Struct({
       shell_output: Schema.optional(Schema.Literals(["show", "hide"])).annotate({
         description: "Show or hide raw shell tool output in Mini",
       }),
+      turn_summary: Schema.optional(Schema.Literals(["show", "hide"])).annotate({
+        description: "Show or hide the agent, model, and duration summary in Mini scrollback",
+      }),
     }),
   ).annotate({ description: "Mini transcript presentation settings" }),
   hints: Schema.optional(

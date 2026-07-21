@@ -130,7 +130,9 @@ async function renderFooter(
   )
   const state = footerState(input.state)
   const config = input.tuiConfig ?? tuiConfig
-  const [miniSettings] = createSignal<MiniSettings>(input.miniSettings ?? { thinking: "hide", shell_output: "hide" })
+  const [miniSettings] = createSignal<MiniSettings>(
+    input.miniSettings ?? { thinking: "hide", shell_output: "hide", turn_summary: "show" },
+  )
   function Harness() {
     return (
       <Keymap.Provider config={config}>
@@ -418,7 +420,11 @@ test("direct command panel renders grouped command palette", async () => {
 })
 
 test("direct settings panel changes Mini transcript preferences", async () => {
-  const [settings, setSettings] = createSignal<MiniSettings>({ thinking: "hide", shell_output: "hide" })
+  const [settings, setSettings] = createSignal<MiniSettings>({
+    thinking: "hide",
+    shell_output: "hide",
+    turn_summary: "show",
+  })
   const app = await testRender(
     () => (
       <box width={100} height={RUN_COMMAND_PANEL_ROWS}>
@@ -440,12 +446,20 @@ test("direct settings panel changes Mini transcript preferences", async () => {
     expect(app.captureCharFrame()).toContain("Settings")
     expect(app.captureCharFrame()).toContain("Thinking")
     expect(app.captureCharFrame()).toContain("Shell tool output")
+    expect(app.captureCharFrame()).toContain("Turn summary")
     expect(app.captureCharFrame()).toContain("left/right change")
 
     app.mockInput.pressKey("ARROW_RIGHT")
     await app.renderOnce()
 
-    expect(settings()).toEqual({ thinking: "show", shell_output: "hide" })
+    expect(settings()).toEqual({ thinking: "show", shell_output: "hide", turn_summary: "show" })
+
+    app.mockInput.pressKey("ARROW_DOWN")
+    app.mockInput.pressKey("ARROW_DOWN")
+    app.mockInput.pressKey("ARROW_RIGHT")
+    await app.renderOnce()
+
+    expect(settings()).toEqual({ thinking: "show", shell_output: "hide", turn_summary: "hide" })
   } finally {
     app.renderer.destroy()
   }
@@ -1099,7 +1113,7 @@ test("direct footer shows authoritative pending work while running", async () =>
           ]}
           theme={() => RUN_THEME_FALLBACK}
           tuiConfig={tuiConfig}
-          miniSettings={() => ({ thinking: "hide", shell_output: "hide" })}
+          miniSettings={() => ({ thinking: "hide", shell_output: "hide", turn_summary: "show" })}
           onSubmit={() => true}
           onPermissionReply={() => {}}
           onFormReply={() => {}}
