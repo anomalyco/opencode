@@ -17,6 +17,13 @@ import {
 } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createStore, produce } from "solid-js/store"
+import { DragDropProvider, PointerSensor } from "@dnd-kit/solid"
+import { useSortable } from "@dnd-kit/solid/sortable"
+import { defaultSortableTransition } from "@dnd-kit/dom/sortable"
+import { move } from "@dnd-kit/helpers"
+import { Accessibility, AutoScroller, Feedback, PointerActivationConstraints } from "@dnd-kit/dom"
+import { RestrictToVerticalAxis } from "@dnd-kit/abstract/modifiers"
+import { RestrictToElement } from "@dnd-kit/dom/modifiers"
 import { useQuery } from "@tanstack/solid-query"
 import { Button } from "@opencode-ai/ui/button"
 import { Logo } from "@opencode-ai/ui/logo"
@@ -1049,28 +1056,114 @@ function HomeProjectList(props: {
   unseenCount: (server: ServerConnection.Any, project: LocalProject) => number
   language: ReturnType<typeof useLanguage>
 }) {
+  const global = useGlobal()
+  let listRef!: HTMLDivElement
+  let snapshot: string[] | undefined
+  const projects = () => global.ensureServerCtx(props.server).projects
+  const flips = new WeakMap<HTMLElement, Animation>()
+
+  // Replicates dnd-kit's built-in sortable FLIP animation (Sortable.animate),
+  // which only fires when the OptimisticSortingPlugin moves the DOM itself.
+  // Since we reorder through the store instead, displaced rows would snap into
+  // place without this. Rows are matched by worktree, not element identity,
+  // because the enriched project objects are recreated on every store change
+  // so <For> remounts the row elements on reorder. Old-position measurements
+  // include any in-flight animation offset, keeping fast drags continuous.
+  function animateDisplacedRows(sourceId: string, applyMove: () => void) {
+    const slots = () =>
+      Array.from(listRef.querySelectorAll<HTMLElement>("[data-home-project-slot]:not([data-dnd-placeholder])"))
+    const before = new Map(
+      slots().map((el) => [el.dataset.homeProjectSlot, el.getBoundingClientRect().top] as const),
+    )
+    applyMove()
+    // dnd-kit's Feedback plugin repositions its placeholder from a mutation
+    // observer microtask queued by the DOM reorder above; measuring in a later
+    // microtask sees the settled layout.
+    queueMicrotask(() => {
+      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return
+      for (const el of slots()) {
+        if (el.dataset.homeProjectSlot === sourceId) continue
+        const prev = before.get(el.dataset.homeProjectSlot)
+        if (prev === undefined) continue
+        const delta = prev - el.getBoundingClientRect().top
+        if (!delta) continue
+        flips.get(el)?.cancel()
+        flips.set(
+          el,
+          el.animate(
+            { translate: [`0 ${delta}px`, "0 0"] },
+            { duration: defaultSortableTransition.duration, easing: defaultSortableTransition.easing },
+          ),
+        )
+      }
+    })
+  }
   return (
-    <div class="flex min-w-0 flex-col gap-1">
-      <For each={props.projects}>
-        {(project) => (
-          <HomeProjectRow
-            project={project}
-            server={props.server}
-            selected={
-              props.selected.server === ServerConnection.key(props.server) &&
-              props.selected.directory === project.worktree
-            }
-            unseenCount={props.unseenCount(props.server, project)}
-            selectProject={props.selectProject}
-            openNewSession={props.openNewSession}
-            editProject={props.editProject}
-            closeProject={props.closeProject}
-            clearNotifications={props.clearNotifications}
-            language={props.language}
-          />
-        )}
-      </For>
-    </div>
+    <DragDropProvider
+      sensors={[
+        PointerSensor.configure({
+          activationConstraints: [new PointerActivationConstraints.Distance({ value: 4 })],
+          preventActivation: (event) =>
+            event.pointerType === "touch" ||
+            (event.target instanceof Element && !!event.target.closest("[data-action]")),
+        }),
+      ]}
+      modifiers={[RestrictToVerticalAxis, RestrictToElement.configure({ element: () => listRef })]}
+      plugins={(defaults) => [
+        ...defaults.filter((plugin) => plugin !== Accessibility),
+        AutoScroller.configure({ acceleration: 8, threshold: { x: 0, y: 0.05 } }),
+        Feedback.configure({ dropAnimation: null }),
+      ]}
+      onDragStart={() => {
+        snapshot = props.projects.map((project) => project.worktree)
+      }}
+      onDragOver={(event) => {
+        // The Solid adapter expects the list state to be reordered here, during
+        // dragover: it tracks this callback's re-render so dnd-kit's optimistic
+        // sorting plugin skips its own DOM manipulation, keeping Solid's <For>
+        // the sole owner of DOM order. Committing only on drag end desyncs them.
+        const source = event.operation.source
+        if (!source) return
+        const order = props.projects.map((project) => project.worktree)
+        const next = move(order, event)
+        if (next === order) return
+        event.preventDefault()
+        const sourceId = source.id.toString()
+        animateDisplacedRows(sourceId, () => projects().move(sourceId, next.indexOf(sourceId)))
+      }}
+      onDragEnd={(event) => {
+        if (event.canceled && snapshot) {
+          const restore = snapshot
+          animateDisplacedRows(event.operation.source?.id.toString() ?? "", () =>
+            restore.forEach((worktree, index) => projects().move(worktree, index)),
+          )
+        }
+        snapshot = undefined
+      }}
+    >
+      <div class="flex min-w-0 flex-col gap-1" ref={listRef}>
+        <For each={props.projects}>
+          {(project, index) => (
+            <HomeProjectRow
+              project={project}
+              server={props.server}
+              index={index}
+              selected={
+                props.selected.server === ServerConnection.key(props.server) &&
+                props.selected.directory === project.worktree
+              }
+              unseenCount={props.unseenCount(props.server, project)}
+              selectProject={props.selectProject}
+              openNewSession={props.openNewSession}
+              editProject={props.editProject}
+              closeProject={props.closeProject}
+              clearNotifications={props.clearNotifications}
+              language={props.language}
+            />
+          )}
+        </For>
+      </div>
+    </DragDropProvider>
   )
 }
 
@@ -1150,6 +1243,7 @@ function HomeRecentlyClosedRow(props: {
 function HomeProjectRow(props: {
   project: LocalProject
   server: ServerConnection.Any
+  index: () => number
   selected: boolean
   unseenCount: number
   selectProject: (server: ServerConnection.Any, directory: string) => void
@@ -1163,6 +1257,15 @@ function HomeProjectRow(props: {
   const platform = usePlatform()
   const serverUnreachable = () => global.servers.health[ServerConnection.key(props.server)]?.healthy === false
   const [state, setState] = createStore({ menuOpen: false })
+  const sortable = useSortable({
+    get id() {
+      return props.project.worktree
+    },
+    get index() {
+      return props.index()
+    },
+  })
+  let pointerDownSelected: boolean | undefined
   const canRevealInFileManager = () =>
     platform.platform === "desktop" && !!platform.openPath && ServerConnection.local(props.server)
   const fileManagerActionLabel = () =>
@@ -1179,15 +1282,47 @@ function HomeProjectRow(props: {
     )
   }
   return (
-    <div class="group/project relative flex h-7 min-w-0 items-center rounded-[6px]">
+    <div
+      ref={sortable.ref}
+      data-home-project-slot={props.project.worktree}
+      class="group/project relative flex h-7 min-w-0 items-center rounded-[6px]"
+      classList={{ "z-10": sortable.isDragSource() }}
+    >
       <button
         type="button"
         data-component="home-project-row"
         class={`${HOME_PROJECT_NAV_ROW} pr-16 disabled:opacity-60`}
+        classList={{
+          "bg-v2-background-bg-layer-01 text-v2-text-text-base [box-shadow:inset_0_0_0_0.5px_var(--v2-border-border-muted)]":
+            sortable.isDragSource(),
+        }}
         data-selected={props.selected ? "" : undefined}
         aria-current={props.selected ? "page" : undefined}
         disabled={serverUnreachable()}
-        onClick={() => props.selectProject(props.server, props.project.worktree)}
+        onPointerDown={(event) => {
+          // Mouse selection happens on pointerdown (like tabs), but only ever
+          // selects; selectProject toggles, and deselecting here would fire on
+          // every drag of the selected row before the drag threshold is met.
+          // Touch is excluded so flick-scrolling the list cannot select rows.
+          pointerDownSelected = undefined
+          if (event.button !== 0 || event.pointerType === "touch") return
+          pointerDownSelected = props.selected
+          if (!props.selected) props.selectProject(props.server, props.project.worktree)
+        }}
+        onClick={(event) => {
+          // The drag sensor calls preventDefault on post-drag clicks; never
+          // toggle selection as part of a reorder.
+          if (event.defaultPrevented) return
+          // Keyboard activation and touch taps keep the original toggle.
+          if (event.detail === 0 || pointerDownSelected === undefined) {
+            props.selectProject(props.server, props.project.worktree)
+            return
+          }
+          // Mouse: pointerdown already selected unselected rows; a plain click
+          // on an already-selected row toggles it off.
+          if (pointerDownSelected) props.selectProject(props.server, props.project.worktree)
+          pointerDownSelected = undefined
+        }}
       >
         <HomeProjectAvatar project={props.project} />
         <span class={HOME_PROJECT_NAV_LABEL}>{displayName(props.project)}</span>
