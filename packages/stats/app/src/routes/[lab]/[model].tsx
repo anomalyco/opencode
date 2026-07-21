@@ -1,4 +1,3 @@
-import "../index.css"
 import { Meta, Title } from "@solidjs/meta"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { geoEquirectangular, geoPath } from "d3-geo"
@@ -200,6 +199,7 @@ export default function StatsModel() {
                   pairs={modelComparisonPairs(catalog(), catalogEntry() ?? null, stats() ?? null)}
                   title="Compare This Model"
                   description="Other models to compare with this one."
+                  variant="featured"
                 />
               </>
             </Show>

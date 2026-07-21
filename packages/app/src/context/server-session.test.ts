@@ -174,7 +174,7 @@ describe("server session", () => {
     await ctx.store.sync("root")
 
     expect(ctx.get).toEqual([{ sessionID: "root" }])
-    expect(ctx.messages).toEqual([{ sessionID: "root", limit: 2, before: undefined }])
+    expect(ctx.messages).toEqual([{ sessionID: "root", limit: 20, before: undefined }])
     expect(ctx.store.data.message.root).toEqual([])
   })
 
@@ -194,10 +194,53 @@ describe("server session", () => {
 
     await store.sync("child")
 
-    expect(client.requests).toEqual([{ sessionID: "child", limit: 2, before: undefined }])
+    expect(client.requests).toEqual([{ sessionID: "child", limit: 20, before: undefined }])
     expect(client.rootRequests).toEqual([{ sessionID: "child", messageID: user.id }])
     expect(store.data.message.child).toEqual([user, ...assistants])
     expect(store.history.more("child")).toBe(true)
+  })
+
+  test("keeps assistant history when its deleted parent cannot be backfilled", async () => {
+    const missing = Promise.withResolvers<SingleMessageResponse>()
+    const assistant = assistantMessage("message-2", "message-missing")
+    const client = rootMessageClient([response([{ info: assistant, parts: [] }], "older")], [missing.promise])
+    const store = createServerSession(client)
+    const loading = store.sync("child")
+    await client.rootRequested(1)
+
+    missing.reject(new Error("Message not found: message-missing", { cause: { status: 404 } }))
+    await loading
+
+    expect(client.rootRequests).toEqual([{ sessionID: "child", messageID: "message-missing" }])
+    expect(store.data.message.child).toEqual([assistant])
+    expect(store.history.more("child")).toBe(true)
+  })
+
+  test("drops a cached parent when a forced refresh confirms it was deleted", async () => {
+    const missing = Promise.withResolvers<SingleMessageResponse>()
+    const parent = userMessage("message-1")
+    const part = textPart(parent.id)
+    const assistant = assistantMessage("message-2", parent.id)
+    const client = rootMessageClient(
+      [
+        response([
+          { info: parent, parts: [part] },
+          { info: assistant, parts: [] },
+        ]),
+        response([{ info: assistant, parts: [] }], "older"),
+      ],
+      [missing.promise],
+    )
+    const store = createServerSession(client)
+    await store.sync("child")
+    const loading = store.sync("child", { force: true })
+    await client.rootRequested(1)
+
+    missing.reject(new Error(`Message not found: ${parent.id}`, { cause: { status: 404 } }))
+    await loading
+
+    expect(store.data.message.child).toEqual([assistant])
+    expect(store.data.part[parent.id]).toBeUndefined()
   })
 
   test("does not let an optimistic user suppress initial root backfill", async () => {
