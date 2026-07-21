@@ -59,6 +59,7 @@
   position: absolute;
   inset: 0;
   overflow: hidden;
+  outline: none;
   cursor: grab;
   touch-action: none;
   user-select: none;

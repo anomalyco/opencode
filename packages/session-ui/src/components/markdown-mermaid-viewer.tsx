@@ -136,7 +136,15 @@ function MermaidViewer(props: { source: string; labels: MermaidViewerLabels; onC
       <Dialog.Portal>
         <Dialog.Overlay data-component="mermaid-viewer-overlay" onClick={props.onClose} />
         <div data-component="mermaid-viewer">
-          <Dialog.Content data-slot="mermaid-viewer-content">
+          <Dialog.Content
+            data-slot="mermaid-viewer-content"
+            onOpenAutoFocus={(event) => {
+              // Keep focus inside the dialog so Escape still closes it, but on the canvas
+              // instead of the first toolbar button, which would flash a focus ring.
+              event.preventDefault()
+              canvas?.focus({ preventScroll: true })
+            }}
+          >
             <div data-slot="mermaid-viewer-toolbar">
               <TooltipV2 placement="bottom" value={props.labels.zoomOut}>
                 <IconButtonV2
@@ -182,6 +190,7 @@ function MermaidViewer(props: { source: string; labels: MermaidViewerLabels; onC
             <div
               data-slot="mermaid-viewer-canvas"
               ref={canvas}
+              tabindex="-1"
               onWheel={wheel}
               onPointerDown={pointerDown}
               onPointerMove={pointerMove}
