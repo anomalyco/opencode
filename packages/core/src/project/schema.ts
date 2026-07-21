@@ -22,6 +22,9 @@ export type DirectoriesInput = typeof DirectoriesInput.Type
 export const Directories = Project.Directories
 export type Directories = typeof Directories.Type
 
+export const UpdateInput = Project.UpdateInput
+export type UpdateInput = typeof UpdateInput.Type
+
 export const Vcs = Schema.Union([
   Schema.Struct({
     type: Schema.Literal("git"),
