@@ -11,6 +11,7 @@ import { useSDK } from "@/context/sdk"
 import { displayName } from "@/pages/layout/helpers"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { SessionFileView } from "@/pages/session/file-tabs"
+import type { RenderDiff } from "@/pages/session/v2/review-diff-kinds"
 import { applyFileListKeyDown, SessionFileListV2 } from "@/pages/session/v2/session-file-list-v2"
 import { pathKey } from "@/utils/path-key"
 
@@ -30,6 +31,10 @@ export function SessionFileBrowserTab(props: {
   active?: string
   kinds: ReadonlyMap<string, Kind>
   state: SessionFileBrowserState
+  diff?: RenderDiff
+  diffVersion?: number
+  loadDiff?: (path: string, version?: number) => Promise<RenderDiff | undefined>
+  expandUnchanged?: boolean
   onSelect: (path: string) => void
   onSelectPermanent: (path: string) => void
   filterRef?: (element: HTMLInputElement) => void
@@ -172,7 +177,15 @@ export function SessionFileBrowserTab(props: {
       >
         <div class="min-h-0 flex-1">
           <Show when={props.tab} keyed>
-            {(tab) => <SessionFileView tab={tab} />}
+            {(tab) => (
+              <SessionFileView
+                tab={tab}
+                diff={props.diff}
+                diffVersion={props.diffVersion}
+                loadDiff={props.loadDiff}
+                expandUnchanged={props.expandUnchanged}
+              />
+            )}
           </Show>
         </div>
       </Show>
