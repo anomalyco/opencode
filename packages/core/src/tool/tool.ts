@@ -17,21 +17,21 @@ import { Effect } from "effect"
 export type NonEmptyContent = readonly [ToolContent, ...ToolContent[]]
 
 /**
- * The execution-local interpretation of one tool call: the machine output for
+ * The execution-local result of one tool call: the machine output for
  * Code Mode, canonical model content, and optional UI metadata. The typed
  * domain output never leaves this function.
  */
-export type Interpretation = {
+export type Executed = {
   readonly output: unknown
   readonly content: NonEmptyContent
   readonly metadata?: Metadata
 }
 
-export const interpret = (
+export const execute = (
   tool: AnyTool,
   input: unknown,
   context: Context,
-): Effect.Effect<Interpretation, Failure> =>
+): Effect.Effect<Executed, Failure> =>
   Effect.gen(function* () {
     if ("jsonSchema" in tool) {
       const result = yield* tool.execute(input, context)

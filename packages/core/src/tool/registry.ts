@@ -10,7 +10,7 @@ import { SessionSchema } from "../session/schema"
 import { ToolOutputStore } from "../tool-output-store"
 import { Wildcard } from "../util/wildcard"
 import { CodeMode } from "../codemode"
-import { Tool, definition, interpret, nonEmpty, permission, registrationEntries, validateNamespace } from "./tool"
+import { Tool, definition, nonEmpty, permission, registrationEntries, validateNamespace } from "./tool"
 import { Tools } from "./tools"
 import { ToolHooks } from "./hooks"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
@@ -171,7 +171,7 @@ const registryLayer = Layer.effect(
         input: input.call.input,
       }
       yield* toolHooks.runBefore(beforeEvent)
-      const interpreted = yield* interpret(tool, beforeEvent.input, {
+      const executed = yield* Tool.execute(tool, beforeEvent.input, {
         sessionID: input.sessionID,
         agent: input.agent,
         messageID: input.messageID,
@@ -184,22 +184,22 @@ const registryLayer = Layer.effect(
           )
         },
       }).pipe(
-        Effect.map((interpretation) => ({ interpretation })),
+        Effect.map((value) => ({ value })),
         Effect.catchTag("LLM.ToolFailure", (failure) => Effect.succeed({ failure: toSessionError(failure) })),
       )
 
       const execution: ToolExecution = yield* Effect.gen(function* () {
-        if ("failure" in interpreted) return { status: "error" as const, error: interpreted.failure }
+        if ("failure" in executed) return { status: "error" as const, error: executed.failure }
         const bounded = yield* resources.bound({
           sessionID: input.sessionID,
           callID: input.call.id,
-          content: yield* normalizeImages(interpreted.interpretation.content),
+          content: yield* normalizeImages(executed.value.content),
         })
-        const metadata = yield* validMetadata(input.call.name, interpreted.interpretation.metadata)
+        const metadata = yield* validMetadata(input.call.name, executed.value.metadata)
         return {
           status: "completed" as const,
-          output: interpreted.interpretation.output,
-          content: nonEmpty(bounded.content) ?? interpreted.interpretation.content,
+          output: executed.value.output,
+          content: nonEmpty(bounded.content) ?? executed.value.content,
           ...(metadata === undefined ? {} : { metadata }),
           ...(bounded.outputPaths.length > 0 ? { outputPaths: bounded.outputPaths } : {}),
         }

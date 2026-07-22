@@ -3,7 +3,7 @@ export * as ExecuteTool from "./execute"
 import { CodeMode, Tool, toolError } from "@opencode-ai/codemode"
 import type { ToolContent } from "@opencode-ai/ai"
 import { Effect, Ref, Schema } from "effect"
-import { definition, interpret, make, type AnyTool, type Metadata } from "./tool"
+import { definition, execute, make, type AnyTool, type Metadata } from "./tool"
 
 const ExecuteFile = Schema.Struct({
   data: Schema.String,
@@ -79,21 +79,17 @@ export const create = (registrations: ReadonlyMap<string, Registration>) => {
           (name, registration, input) =>
             Effect.gen(function* () {
               const index = yield* Ref.getAndUpdate(callIndex, (index) => index + 1)
-              const interpretation = yield* interpret(
-                registration.tool,
-                input,
-                {
-                  sessionID: context.sessionID,
-                  agent: context.agent,
-                  messageID: context.messageID,
-                  callID: context.callID,
-                  progress: context.progress,
-                },
-              ).pipe(Effect.mapError((failure) => toolError(failure.message, failure)))
-              const outputFileParts = outputFiles(interpretation.content)
+              const executed = yield* execute(registration.tool, input, {
+                sessionID: context.sessionID,
+                agent: context.agent,
+                messageID: context.messageID,
+                callID: context.callID,
+                progress: context.progress,
+              }).pipe(Effect.mapError((failure) => toolError(failure.message, failure)))
+              const outputFileParts = outputFiles(executed.content)
               if (outputFileParts.length > 0)
                 yield* Ref.update(files, (items) => [...items, { index, files: outputFileParts }])
-              return interpretation.output
+              return executed.output
             }),
           {
             onToolCallStart: ({ index, name, input }) =>
