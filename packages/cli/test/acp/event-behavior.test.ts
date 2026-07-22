@@ -564,7 +564,6 @@ function turn(input: {
     sessionID: input.sessionID,
     cwd: "/workspace",
     start: { type: "input", id: input.inputID },
-    userMessageID: `client_${input.inputID}`,
     control: { cancelled: false, admission: new AbortController() },
     submit: (signal) =>
       input.fixture.client.session.prompt({ sessionID: input.sessionID, id: input.inputID, text: "hello" }, { signal }),

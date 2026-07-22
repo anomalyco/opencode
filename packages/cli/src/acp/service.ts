@@ -33,8 +33,6 @@ import type {
   ResumeSessionResponse,
   SetSessionConfigOptionRequest,
   SetSessionConfigOptionResponse,
-  SetSessionModelRequest,
-  SetSessionModelResponse,
   SetSessionModeRequest,
   SetSessionModeResponse,
 } from "@agentclientprotocol/sdk"
@@ -88,7 +86,6 @@ export interface Interface {
   forkSession(input: ForkSessionRequest): Promise<ForkSessionResponse>
   setSessionConfigOption(input: SetSessionConfigOptionRequest): Promise<SetSessionConfigOptionResponse>
   setSessionMode(input: SetSessionModeRequest): Promise<SetSessionModeResponse>
-  setSessionModel(input: SetSessionModelRequest): Promise<SetSessionModelResponse>
   prompt(input: PromptRequest): Promise<PromptResponse>
   cancel(input: CancelNotification): Promise<void>
 }
@@ -270,13 +267,6 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
       await selectMode(input.client, await requireSession(params.sessionId), params.modeId)
       return {}
     },
-    setSessionModel: async (params) => {
-      const state = await requireSession(params.sessionId)
-      const selected = requireModel(state.catalog, params.modelId)
-      state.model = selected
-      await input.client.session.switchModel({ sessionID: state.id, model: selected })
-      return {}
-    },
     prompt: async (params) => {
       const state = await requireSession(params.sessionId)
       if (active.has(state.id)) {
@@ -295,7 +285,6 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
         sessionID: state.id,
         cwd: state.cwd,
         start: prepared.start,
-        userMessageID: params.messageId,
         control,
         submit: (signal) => submitPrompt(input.client, state, prepared, signal),
       }).finally(() => {
@@ -479,6 +468,7 @@ async function registerMcpServers(
 
 function mcpConfig(server: McpServer) {
   if ("type" in server) {
+    if (server.type === "acp") throw new Error("MCP-over-ACP is not supported")
     return {
       type: "remote" as const,
       url: server.url,

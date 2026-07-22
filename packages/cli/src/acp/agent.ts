@@ -13,7 +13,6 @@ import {
   type PromptRequest,
   type ResumeSessionRequest,
   type SetSessionConfigOptionRequest,
-  type SetSessionModelRequest,
   type SetSessionModeRequest,
 } from "@agentclientprotocol/sdk"
 import type { OpenCodeClient } from "@opencode-ai/client/promise"
@@ -33,7 +32,6 @@ export function create(client: OpenCodeClient, connection: AgentSideConnection) 
     unstable_forkSession: (params: ForkSessionRequest) => run(service.forkSession(params)),
     setSessionConfigOption: (params: SetSessionConfigOptionRequest) => run(service.setSessionConfigOption(params)),
     setSessionMode: (params: SetSessionModeRequest) => run(service.setSessionMode(params)),
-    unstable_setSessionModel: (params: SetSessionModelRequest) => run(service.setSessionModel(params)),
     prompt: (params: PromptRequest) => run(service.prompt(params)),
     cancel: (params: CancelNotification) => run(service.cancel(params)),
   } satisfies Agent

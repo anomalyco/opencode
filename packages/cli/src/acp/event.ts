@@ -47,7 +47,6 @@ export async function streamTurn(input: {
   readonly sessionID: string
   readonly cwd: string
   readonly start: TurnStart
-  readonly userMessageID?: string | null
   readonly submit: (signal: AbortSignal) => Promise<unknown>
   readonly control: TurnControl
 }): Promise<PromptResponse> {
@@ -231,7 +230,7 @@ export async function streamTurn(input: {
       if (!started) {
         streamController.abort()
         await completed.catch(() => {})
-        return response(undefined, undefined, "interrupted", true, undefined, input.userMessageID)
+        return response(undefined, undefined, "interrupted", true, undefined)
       }
     }
     const terminal = await completed
@@ -246,7 +245,6 @@ export async function streamTurn(input: {
       terminal,
       control.cancelled,
       finish,
-      input.userMessageID,
     )
   } catch (error) {
     streamController.abort()
@@ -400,7 +398,6 @@ function response(
   terminal: "succeeded" | "failed" | "interrupted",
   cancelled: boolean,
   finish: SessionMessageAssistant["finish"],
-  messageID: string | null | undefined,
 ): PromptResponse {
   const error = assistant?.error ?? executionError
   if (error?.type === "provider.auth") throw new ACPError.AuthRequiredError()
@@ -423,7 +420,7 @@ function response(
       }
     : undefined
   const stopReason = resolveStopReason({ terminal, cancelled, finish, error: error?.type })
-  return { stopReason, ...(usage ? { usage } : {}), ...(messageID ? { userMessageId: messageID } : {}), _meta: {} }
+  return { stopReason, ...(usage ? { usage } : {}), _meta: {} }
 }
 
 function resolveStopReason(input: {
