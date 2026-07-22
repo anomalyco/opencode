@@ -74,6 +74,7 @@ The current list of models includes:
 - **Qwen3.6 Plus**
 - **DeepSeek V4 Pro**
 - **DeepSeek V4 Flash**
+- **Hy3**
 
 The list of models may change as we test and add new ones.
 
@@ -108,6 +109,7 @@ The table below provides an estimated request count based on typical Go usage pa
 | Qwen3.6 Plus      | 3,300               | 8,200             | 16,300             |
 | DeepSeek V4 Pro   | 3,450               | 8,550             | 17,150             |
 | DeepSeek V4 Flash | 31,650              | 79,050            | 158,150            |
+| Hy3               | 4,300               | 10,750            | 21,500             |
 
 The estimates are based on observed request patterns:
 
@@ -124,6 +126,7 @@ The estimates are based on observed request patterns:
 - Qwen3.7 Max — 420 input, 66,000 cached, 200 output tokens per request
 - Qwen3.7 Plus — 500 input, 57,000 cached, 190 output tokens per request
 - Qwen3.6 Plus — 500 input, 57,000 cached, 190 output tokens per request
+- Hy3 — 830 input, 71,500 cached, 295 output tokens per request
 
 The estimates are also based on the following prices per 1M tokens and the monthly usage included with each model:
 
@@ -147,6 +150,7 @@ The estimates are also based on the following prices per 1M tokens and the month
 | Qwen3.6 Plus (> 256K tokens) | $2.00  | $6.00  | $0.20       | $2.50        | $60   |
 | DeepSeek V4 Pro              | $0.435 | $0.87  | $0.003625   | -            | $15   |
 | DeepSeek V4 Flash            | $0.14  | $0.28  | $0.0028     | -            | $60   |
+| Hy3                          | $0.14  | $0.58  | $0.035      | -            | $60   |
 
 You can track your current usage in the **<a href={console}>console</a>**.
 
@@ -200,6 +204,7 @@ You can also access Go models through the following API endpoints.
 | Qwen3.7 Max       | qwen3.7-max       | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.7 Plus      | qwen3.7-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus      | qwen3.6-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Hy3               | hy3               | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 
 The [model id](/docs/config/#models) in your OpenCode config
 uses the format `opencode-go/<model-id>`. For example, for Kimi K3, you would
