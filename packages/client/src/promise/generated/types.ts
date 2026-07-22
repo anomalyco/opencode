@@ -1388,6 +1388,7 @@ export type SessionToolCalled = {
 }
 
 export type ModelCompatibility = { reasoningField?: ModelReasoningField }
+
 export type ModelCost = {
   tier?: { type: "context"; size: number }
   input: MoneyUSDPerMillionTokens
