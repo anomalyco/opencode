@@ -1300,10 +1300,15 @@ export function Prompt(props: PromptProps) {
 
   const highlight = createMemo(() => {
     if (leader()) return themeV2.border.default
-    if (store.mode === "shell") return themeV2.background.action.primary.default
+    if (store.mode === "shell") return themeV2.text.action.primary.selected
     const agent = local.agent.current()
     if (!agent) return themeV2.border.default
     return local.agent.color(agent.id)
+  })
+  const agentLabel = createMemo(() => {
+    if (store.mode === "shell") return "Shell"
+    const agent = local.agent.current()
+    return agent ? Locale.titlecase(agent.id) : undefined
   })
 
   const showVariant = createMemo(() => {
@@ -1313,7 +1318,7 @@ export function Prompt(props: PromptProps) {
     return !!current
   })
 
-  const agentMetaAlpha = createFadeIn(() => !!local.agent.current(), animationsEnabled)
+  const agentMetaAlpha = createFadeIn(() => store.mode === "shell" || !!local.agent.current(), animationsEnabled)
   const modelMetaAlpha = createFadeIn(() => !!local.agent.current() && store.mode === "normal", animationsEnabled)
   const variantMetaAlpha = createFadeIn(
     () => !!local.agent.current() && store.mode === "normal" && showVariant(),
@@ -1460,12 +1465,10 @@ export function Prompt(props: PromptProps) {
             />
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1} justifyContent="space-between">
               <box flexDirection="row" gap={1}>
-                <Show when={local.agent.current()} fallback={<box height={1} />}>
-                  {(agent) => (
+                <Show when={agentLabel()} fallback={<box height={1} />}>
+                  {(label) => (
                     <>
-                      <text fg={fadeColor(highlight(), agentMetaAlpha())}>
-                        {store.mode === "shell" ? "Shell" : Locale.titlecase(agent().id)}
-                      </text>
+                      <text fg={fadeColor(highlight(), agentMetaAlpha())}>{label()}</text>
                       <Show when={store.mode === "normal" && local.permission.mode === "auto"}>
                         <text fg={fadeColor(themeV2.text.subdued, agentMetaAlpha())}>auto</text>
                       </Show>
