@@ -25,6 +25,7 @@ import addSessionForkMigration from "@opencode-ai/core/database/migration/202607
 import timeSuspendedMigration from "@opencode-ai/core/database/migration/20260709163752_time_suspended"
 import instructionSyncMigration from "@opencode-ai/core/database/migration/20260710025429_instruction_sync"
 import deleteToolProgressEventsMigration from "@opencode-ai/core/database/migration/20260722011141_delete_tool_progress_events"
+import canonicalToolResultsMigration from "@opencode-ai/core/database/migration/20260722170000_canonical_tool_results"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
@@ -578,6 +579,152 @@ describe("DatabaseMigration", () => {
         expect(yield* db.get(sql`SELECT aggregate_id, seq FROM event_sequence`)).toEqual({
           aggregate_id: "ses_test",
           seq: 5,
+        })
+      }),
+    )
+  })
+
+  test("rewrites projected tool rows into the canonical result shape", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(
+          sql`CREATE TABLE session_message (id text PRIMARY KEY, session_id text NOT NULL, type text NOT NULL, seq integer NOT NULL, time_created integer NOT NULL, time_updated integer NOT NULL, data text NOT NULL)`,
+        )
+        const assistant = {
+          agent: "build",
+          model: { id: "model", providerID: "provider" },
+          content: [
+            { type: "text", text: "before" },
+            {
+              type: "tool",
+              id: "call_content",
+              name: "grep",
+              state: {
+                status: "completed",
+                input: { pattern: "TODO" },
+                content: [{ type: "text", text: "src/a.ts:1: TODO" }],
+                structured: { value: [{ file: "src/a.ts", line: 1 }] },
+              },
+              time: { created: 1, completed: 2 },
+            },
+            {
+              type: "tool",
+              id: "call_structured_only",
+              name: "read",
+              state: {
+                status: "completed",
+                input: { path: "README.md" },
+                content: [],
+                structured: { text: "hello" },
+              },
+              time: { created: 1, completed: 2 },
+            },
+            {
+              type: "tool",
+              id: "call_hosted",
+              name: "web_search",
+              executed: true,
+              providerResultState: { blockType: "web_search_tool_result" },
+              state: {
+                status: "completed",
+                input: { query: "effect" },
+                content: [],
+                structured: {},
+                result: { type: "json", value: [{ url: "https://example.com" }] },
+              },
+              time: { created: 1, completed: 2 },
+            },
+            {
+              type: "tool",
+              id: "call_failed",
+              name: "shell",
+              state: {
+                status: "error",
+                input: { command: "sleep 99" },
+                error: { type: "tool.execution", message: "timed out" },
+                content: [{ type: "text", text: "partial output" }],
+                structured: { truncated: false },
+                result: { type: "error", value: "timed out" },
+              },
+              time: { created: 1, completed: 2 },
+            },
+            {
+              type: "tool",
+              id: "call_running",
+              name: "shell",
+              state: {
+                status: "running",
+                input: { command: "sleep 1" },
+                structured: { truncated: false },
+                content: [{ type: "text", text: "tick" }],
+              },
+              time: { created: 1, ran: 2 },
+            },
+          ],
+          time: { created: 1 },
+        }
+        yield* db.run(
+          sql`INSERT INTO session_message VALUES ('msg_tools', 'ses_test', 'assistant', 1, 10, 11, ${JSON.stringify(assistant)})`,
+        )
+        yield* db.run(
+          sql`INSERT INTO session_message VALUES ('msg_user', 'ses_test', 'user', 2, 12, 13, '{"text":"hi","time":{"created":1}}')`,
+        )
+
+        yield* DatabaseMigration.applyOnly(db, [canonicalToolResultsMigration])
+
+        const row = yield* db.get<{ data: string }>(sql`SELECT data FROM session_message WHERE id = 'msg_tools'`)
+        const migrated = JSON.parse(row!.data)
+        // Every migrated row must decode with the current schema; reload hard-fails otherwise.
+        Schema.decodeUnknownSync(SessionMessage.Info)({ ...migrated, id: "msg_tools", type: "assistant" })
+        const states = new Map(
+          migrated.content.flatMap((part: { type: string; id?: string }) =>
+            part.type === "tool" ? [[part.id, part]] : [],
+          ),
+        )
+        expect(states.get("call_content")).toMatchObject({
+          state: {
+            status: "completed",
+            input: { pattern: "TODO" },
+            content: [{ type: "text", text: "src/a.ts:1: TODO" }],
+          },
+        })
+        expect((states.get("call_content") as { state: Record<string, unknown> }).state).not.toHaveProperty(
+          "structured",
+        )
+        expect(states.get("call_structured_only")).toMatchObject({
+          state: {
+            status: "completed",
+            content: [{ type: "text", text: JSON.stringify({ text: "hello" }, null, 2) }],
+          },
+        })
+        expect(states.get("call_hosted")).toMatchObject({
+          executed: true,
+          providerResultState: {
+            blockType: "web_search_tool_result",
+            result: [{ url: "https://example.com" }],
+          },
+          state: { status: "completed" },
+        })
+        expect(states.get("call_failed")).toMatchObject({
+          state: {
+            status: "error",
+            error: { type: "tool.execution", message: "timed out" },
+            content: [{ type: "text", text: "partial output" }],
+          },
+        })
+        const failed = (states.get("call_failed") as { state: Record<string, unknown> }).state
+        expect(failed).not.toHaveProperty("result")
+        expect(failed).not.toHaveProperty("structured")
+        expect(states.get("call_running")).toMatchObject({
+          state: {
+            status: "running",
+            metadata: { truncated: false },
+            content: [{ type: "text", text: "tick" }],
+          },
+        })
+        expect(yield* db.get(sql`SELECT data FROM session_message WHERE id = 'msg_user'`)).toEqual({
+          data: '{"text":"hi","time":{"created":1}}',
         })
       }),
     )
