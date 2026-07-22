@@ -16,6 +16,7 @@ import { writeSessionOutput } from "./stream"
 import { createFragmentReconciler, fragmentRef, type FragmentReconciler } from "./stream-v2.fragment"
 import { createSubagentTracker, toolCommit, toolFinalPhase } from "./stream-v2.subagent"
 import { normalizeTool, toolOutputText } from "./tool"
+import { nonEmptyToolContent } from "../util/tool-display"
 import type {
   FooterApi,
   FooterView,
@@ -670,8 +671,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
             {
               kind: "reasoning",
               source: "reasoning",
-              text:
-                update.previous.length === 0 ? `Thinking: ${item.text}` : item.text.slice(update.previous.length),
+              text: update.previous.length === 0 ? `Thinking: ${item.text}` : item.text.slice(update.previous.length),
               phase: "progress",
               messageID: message.id,
               partID: fragment.partID,
@@ -1042,7 +1042,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         name: current?.part.name ?? "tool",
         executed: event.data.executed,
         providerState: event.data.state,
-        state: { status: "running", input: event.data.input, structured: {}, content: [] },
+        state: { status: "running", input: event.data.input, metadata: {}, content: [] },
         time: { created: current?.part.time.created ?? event.created, ran: event.created },
       }
       renderTool(event.data.assistantMessageID, item)
@@ -1062,7 +1062,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         state: {
           status: "running",
           input: part && part.state.status !== "streaming" ? part.state.input : {},
-          structured: event.data.structured,
+          metadata: event.data.metadata,
           content: event.data.content,
         },
         time: { created: part?.time.created ?? event.created, ran: part?.time.ran ?? event.created },
@@ -1084,18 +1084,18 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
           ? {
               status: "error",
               input: part && part.state.status !== "streaming" ? part.state.input : {},
-              structured:
-                event.data.metadata ?? (part && part.state.status !== "streaming" ? part.state.structured : {}),
-              content: event.data.content ?? (part && part.state.status !== "streaming" ? part.state.content : []),
+              metadata:
+                event.data.metadata ?? (part && part.state.status !== "streaming" ? part.state.metadata : undefined),
+              content:
+                event.data.content ??
+                (part && part.state.status !== "streaming" ? nonEmptyToolContent(part.state.content) : undefined),
               error: event.data.error,
-              result: event.data.result,
             }
           : {
               status: "completed",
               input: part && part.state.status !== "streaming" ? part.state.input : {},
-              structured: event.data.structured,
+              metadata: event.data.metadata,
               content: event.data.content,
-              result: event.data.result,
             },
         time: { created: part?.time.created ?? event.created, ran: part?.time.ran, completed: event.created },
       }

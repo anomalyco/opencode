@@ -28,7 +28,7 @@ export type TurnControl = {
 type ToolState = {
   readonly name: string
   input: ToolInput
-  structured: Record<string, unknown>
+  metadata: Record<string, unknown>
   content: ToolContent
 }
 
@@ -38,7 +38,7 @@ export type TurnStart =
   | { readonly type: "compaction"; readonly id: string }
 
 function emptyToolState(): ToolState {
-  return { name: "tool", input: {}, structured: {}, content: [] }
+  return { name: "tool", input: {}, metadata: {}, content: [] }
 }
 
 export async function streamTurn(input: {
@@ -120,7 +120,7 @@ export async function streamTurn(input: {
       }
       if (event.type === "session.tool.input.started") {
         assistantMessageID = event.data.assistantMessageID
-        tools.set(event.data.callID, { name: event.data.name, input: {}, structured: {}, content: [] })
+        tools.set(event.data.callID, { name: event.data.name, input: {}, metadata: {}, content: [] })
         await update({
           sessionUpdate: "tool_call",
           ...pendingToolCall({
@@ -151,7 +151,7 @@ export async function streamTurn(input: {
       if (event.type === "session.tool.progress") {
         const current = tools.get(event.data.callID)
         if (!current) continue
-        current.structured = event.data.structured
+        current.metadata = event.data.metadata
         current.content = event.data.content
         await update({
           sessionUpdate: "tool_call_update",
@@ -175,7 +175,7 @@ export async function streamTurn(input: {
           cwd: input.cwd,
           toolName: current.name,
           toolInput: current.input,
-          structured: event.data.structured,
+          metadata: event.data.metadata ?? {},
         }).catch(() => {})
         await update({
           sessionUpdate: "tool_call_update",
@@ -183,9 +183,8 @@ export async function streamTurn(input: {
             toolCallId: event.data.callID,
             toolName: current.name,
             input: current.input,
-            structured: event.data.structured,
+            metadata: event.data.metadata,
             content: event.data.content,
-            result: event.data.result,
           }),
         })
         continue
@@ -199,7 +198,7 @@ export async function streamTurn(input: {
             toolCallId: event.data.callID,
             toolName: current.name,
             input: current.input,
-            structured: event.data.metadata ?? current.structured,
+            metadata: event.data.metadata ?? current.metadata,
             content: event.data.content ?? current.content,
             error: event.data.error.message,
             cwd: input.cwd,
@@ -342,9 +341,8 @@ async function replayMessage(
               toolCallId: part.id,
               toolName: part.name,
               input: part.state.input,
-              structured: part.state.structured,
+              metadata: part.state.metadata,
               content: part.state.content,
-              result: part.state.result,
             }),
           },
         })
@@ -373,7 +371,7 @@ async function replayMessage(
               toolCallId: part.id,
               toolName: part.name,
               input: part.state.input,
-              structured: part.state.structured,
+              metadata: part.state.metadata,
               content: part.state.content,
               error: part.state.error.message,
               cwd,

@@ -2146,7 +2146,7 @@ function ToolPart(props: { part: SessionMessageAssistantTool }) {
     },
     get output() {
       if (props.part.state.status === "streaming") return undefined
-      return props.part.state.content
+      return (props.part.state.content ?? [])
         .flatMap((content) => (content.type === "text" ? [content.text] : [content.name ?? content.uri]))
         .join("\n")
     },
@@ -2591,7 +2591,7 @@ function Shell(props: ToolProps) {
   const output = createMemo(() => {
     if (props.part.state.status === "streaming") return ""
     if (shellID()) return expanded() ? backgroundOutput() : ""
-    const content = props.part.state.content[0]
+    const content = props.part.state.content?.[0]
     return stripAnsi(content?.type === "text" ? content.text.trim() : "")
   })
   const maxLines = 10

@@ -63,7 +63,7 @@ describe("acp tools", () => {
           { type: "file", mime: "image/png", name: "image.png", uri: `data:image/png;base64,${image}` },
           { type: "file", mime: "text/plain", name: "note.txt", uri: "data:text/plain;base64,bm90ZQ==" },
         ],
-        structured: {},
+        metadata: {},
       }).content,
     ).toEqual([
       {
@@ -93,7 +93,7 @@ describe("acp tools", () => {
           content: "created",
         },
         content: [{ type: "text", text: "wrote /tmp/file.ts" }],
-        structured: {},
+        metadata: {},
       }).content,
     ).toEqual([
       {
@@ -103,14 +103,14 @@ describe("acp tools", () => {
     ])
   })
 
-  test("uses clean structured read content instead of model-facing formatting", () => {
+  test("uses clean read metadata content instead of model-facing formatting", () => {
     expect(
       completedToolUpdate({
         toolCallId: "tool-read",
         toolName: "read",
         input: { path: "/tmp/file.ts" },
         content: [{ type: "text", text: "<content>1: first\n2: second</content>" }],
-        structured: {
+        metadata: {
           type: "text-page",
           content: "first\nsecond",
           mime: "text/plain",
@@ -126,7 +126,7 @@ describe("acp tools", () => {
         toolName: "read",
         input: { path: "/tmp" },
         content: [],
-        structured: {
+        metadata: {
           entries: [
             { path: "a.ts", type: "file" },
             { path: "src", type: "directory" },
@@ -171,7 +171,7 @@ describe("acp tools", () => {
           newString: "after",
         },
         content: [{ type: "text", text: "Edit applied successfully." }],
-        structured: { output: "Edit applied successfully." },
+        metadata: { output: "Edit applied successfully." },
       }),
     ).toEqual({
       toolCallId: "tool-1",
@@ -189,7 +189,7 @@ describe("acp tools", () => {
         },
       ],
       rawOutput: {
-        structured: { output: "Edit applied successfully." },
+        metadata: { output: "Edit applied successfully." },
       },
     })
   })
@@ -209,7 +209,7 @@ describe("acp tools", () => {
     })
   })
 
-  test("builds completed raw output with structured data and optional result", () => {
+  test("builds completed raw output with optional metadata", () => {
     const attachments = [
       {
         type: "file",
@@ -225,12 +225,10 @@ describe("acp tools", () => {
         toolName: "read",
         input: {},
         content: [],
-        structured: { output: "done", metadata: { exit: 0 }, attachments },
-        result: "done",
+        metadata: { output: "done", metadata: { exit: 0 }, attachments },
       }).rawOutput,
     ).toEqual({
-      structured: { output: "done", metadata: { exit: 0 }, attachments },
-      result: "done",
+      metadata: { output: "done", metadata: { exit: 0 }, attachments },
     })
 
     expect(
@@ -239,9 +237,8 @@ describe("acp tools", () => {
         toolName: "read",
         input: {},
         content: [],
-        structured: { output: "done" },
       }).rawOutput,
-    ).toEqual({ structured: { output: "done" } })
+    ).toEqual({})
   })
 
   test("extracts image attachments only from data URLs", () => {
@@ -255,7 +252,7 @@ describe("acp tools", () => {
           { type: "file", mime: "image/png", uri: "https://example.com/image.png" },
           { type: "file", mime: "text/plain", uri: "data:text/plain;base64,BBBB" },
         ],
-        structured: {},
+        metadata: {},
       }).content,
     ).toEqual([
       {
@@ -272,7 +269,7 @@ describe("acp tools", () => {
         toolName: "read",
         input: { filePath: "/tmp/a" },
         content: [{ type: "text", text: "partial output" }],
-        structured: { path: "/tmp/a" },
+        metadata: { path: "/tmp/a" },
         error: "failed",
       }),
     ).toEqual({
@@ -286,7 +283,7 @@ describe("acp tools", () => {
         { type: "content", content: { type: "text", text: "partial output" } },
         { type: "content", content: { type: "text", text: "failed" } },
       ],
-      rawOutput: { structured: { path: "/tmp/a" }, error: "failed" },
+      rawOutput: { metadata: { path: "/tmp/a" }, error: "failed" },
     })
   })
 })

@@ -157,7 +157,8 @@ function text(v: unknown): string {
   return typeof v === "string" ? v : ""
 }
 
-export function toolOutputText(name: string, content: ReadonlyArray<{ type: string; text?: string }>) {
+export function toolOutputText(name: string, content: ReadonlyArray<{ type: string; text?: string }> | undefined) {
+  if (!content) return ""
   // V2 shell content appends model-only status after the user-visible command output.
   if (canonicalToolName(name) === "shell") return content.find((item) => item.type === "text")?.text ?? ""
   return content.flatMap((item) => (item.type === "text" && item.text ? [item.text] : [])).join("\n")
@@ -202,16 +203,16 @@ function normalizeFile(value: unknown): PatchFile | undefined {
   }
 }
 
-function normalizeStructured(name: string, value: unknown) {
-  const structured = dict(value)
-  const files = list(structured.files).flatMap((item) => {
+function normalizeMetadata(name: string, value: unknown) {
+  const metadata = dict(value)
+  const files = list(metadata.files).flatMap((item) => {
     const file = normalizeFile(item)
     return file ? [file] : []
   })
-  const sessionID = text(structured.sessionID) || text(structured.sessionId)
+  const sessionID = text(metadata.sessionID) || text(metadata.sessionId)
   return {
-    ...structured,
-    ...(["edit", "patch"].includes(name) && Array.isArray(structured.files) ? { files } : {}),
+    ...metadata,
+    ...(["edit", "patch"].includes(name) && Array.isArray(metadata.files) ? { files } : {}),
     ...(name === "subagent" && sessionID ? { sessionID } : {}),
   }
 }
@@ -225,7 +226,7 @@ export function normalizeTool(tool: SessionMessageAssistantTool): SessionMessage
     state: {
       ...tool.state,
       input: normalizeInput(name, tool.state.input),
-      structured: normalizeStructured(name, toolDisplayMetadata(tool.state)),
+      metadata: normalizeMetadata(name, toolDisplayMetadata(tool.state)),
     },
   } as SessionMessageAssistantTool
 }
@@ -1095,7 +1096,7 @@ function frame(part: SessionMessageAssistantTool, directory?: string): ToolFrame
     raw: output,
     name: tool.name,
     input: normalizeInput(tool.name, tool.state.input),
-    meta: normalizeStructured(tool.name, tool.state.structured),
+    meta: normalizeMetadata(tool.name, tool.state.metadata),
     state: dict(tool.state),
     status: tool.state.status,
     error: tool.state.status === "error" ? tool.state.error.message : "",

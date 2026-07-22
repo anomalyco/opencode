@@ -58,11 +58,11 @@ export async function syncEditedFiles(input: {
   readonly cwd: string
   readonly toolName: string
   readonly toolInput: ToolInput
-  readonly structured: Readonly<Record<string, unknown>>
+  readonly metadata: Readonly<Record<string, unknown>>
 }) {
   if (!input.writeTextFile || !input.connection.writeTextFile || toToolKind(input.toolName) !== "edit") return
-  const files = Array.isArray(input.structured.files)
-    ? input.structured.files.flatMap((file): string[] => {
+  const files = Array.isArray(input.metadata.files)
+    ? input.metadata.files.flatMap((file): string[] => {
         if (!file || typeof file !== "object") return []
         const path = Reflect.get(file, "file")
         return typeof path === "string" ? [path] : []

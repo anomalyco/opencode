@@ -23,7 +23,7 @@ describe("CLI frontend import boundaries", () => {
 
     expect(Object.keys(run).sort()).toEqual(["runNonInteractive", "runV1Bridge"])
     expect(Object.keys(mini).sort()).toEqual(["runMiniFrontend"])
-    expect(Object.keys(tool).sort()).toEqual(["toolInlineInfo", "toolOutputText"])
+    expect(Object.keys(tool).sort()).toEqual(["nonEmptyToolContent", "toolInlineInfo", "toolOutputText"])
     expect(Object.keys(cli.exports).filter((key) => key === "./mini" || key.startsWith("./mini/"))).toEqual([])
   })
 

@@ -75,7 +75,7 @@ function traceCommit(commit: StreamCommit) {
           state: {
             status: commit.part.state.status,
             input: summarize(commit.part.state.input),
-            structured: "structured" in commit.part.state ? summarize(commit.part.state.structured) : undefined,
+            metadata: "metadata" in commit.part.state ? summarize(commit.part.state.metadata) : undefined,
             content: "content" in commit.part.state ? summarize(commit.part.state.content) : undefined,
             error: "error" in commit.part.state ? summarize(commit.part.state.error) : undefined,
           },
