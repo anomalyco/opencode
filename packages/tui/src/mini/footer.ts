@@ -194,8 +194,6 @@ export class RunFooter implements FooterApi {
   private interruptTimeout: NodeJS.Timeout | undefined
   private exitTimeout: NodeJS.Timeout | undefined
   private noticeTimeout: NodeJS.Timeout | undefined
-  private noticeRestoreStatus = ""
-  private statusVersion = 0
   private requestExitHandler: (() => boolean) | undefined
   private scrollback: RunScrollbackStream
   private themes: RunTheme[]
@@ -225,6 +223,7 @@ export class RunFooter implements FooterApi {
     const [state, setState] = createSignal<FooterState>({
       phase: "idle",
       status: "",
+      notice: "",
       model: options.modelLabel,
       usage: "",
       first: options.first,
@@ -449,6 +448,7 @@ export class RunFooter implements FooterApi {
     if (patch) {
       if (typeof patch.status === "string") {
         this.clearNoticeTimer()
+        patch.notice = ""
       }
       if (next.type === "turn.send") {
         this.clearInterruptTimer()
@@ -479,12 +479,10 @@ export class RunFooter implements FooterApi {
     }
 
     const prev = this.state()
-    if (typeof next.status === "string") {
-      this.statusVersion++
-    }
     const state = {
       phase: next.phase ?? prev.phase,
       status: typeof next.status === "string" ? next.status : prev.status,
+      notice: typeof next.notice === "string" ? next.notice : prev.notice,
       model: typeof next.model === "string" ? next.model : prev.model,
       usage: typeof next.usage === "string" ? next.usage : prev.usage,
       first: typeof next.first === "boolean" ? next.first : prev.first,
@@ -635,26 +633,13 @@ export class RunFooter implements FooterApi {
   }
 
   private setNotice(status: string): void {
-    const restore = this.noticeTimeout ? this.noticeRestoreStatus : this.state().status
-    this.clearNoticeTimer(false)
-    this.patch({ status })
-    if (!status) {
-      this.noticeRestoreStatus = ""
-      return
-    }
+    this.clearNoticeTimer()
+    this.patch({ notice: status })
+    if (!status) return
 
-    this.noticeRestoreStatus = restore
-    const version = this.statusVersion
     this.noticeTimeout = setTimeout(() => {
       this.noticeTimeout = undefined
-      if (this.isGone || version !== this.statusVersion) {
-        this.noticeRestoreStatus = ""
-        return
-      }
-
-      const next = this.noticeRestoreStatus
-      this.noticeRestoreStatus = ""
-      this.patch({ status: next })
+      this.patch({ notice: "" })
     }, NOTICE_DURATION)
   }
 
@@ -895,19 +880,9 @@ export class RunFooter implements FooterApi {
     this.interruptTimeout = undefined
   }
 
-  private clearNoticeTimer(reset = true): void {
-    if (!this.noticeTimeout) {
-      if (reset) {
-        this.noticeRestoreStatus = ""
-      }
-      return
-    }
-
-    clearTimeout(this.noticeTimeout)
+  private clearNoticeTimer(): void {
+    if (this.noticeTimeout) clearTimeout(this.noticeTimeout)
     this.noticeTimeout = undefined
-    if (reset) {
-      this.noticeRestoreStatus = ""
-    }
   }
 
   private armInterruptTimer(): void {

@@ -12,6 +12,7 @@ test("down opens subagents from an empty prompt", async () => {
   const [state] = createSignal<FooterState>({
     phase: "idle",
     status: "",
+    notice: "",
     model: "gpt-5",
     usage: "",
     first: false,

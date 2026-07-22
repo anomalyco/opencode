@@ -166,6 +166,7 @@ type FooterPhase = "idle" | "running"
 export type FooterState = {
   phase: FooterPhase
   status: string
+  notice: string
   model: string
   usage: string
   first: boolean

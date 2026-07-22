@@ -55,8 +55,6 @@ import type { RunTheme } from "./theme"
 
 registerOpencodeSpinner()
 
-const FOOTER_DETAIL_DURATION = 3000
-
 const EMPTY_BORDER = {
   topLeft: "",
   bottomLeft: "",
@@ -228,23 +226,6 @@ export function RunFooterView(props: RunFooterViewProps) {
     if (activeTabs().length > 0) details.push(`${activeTabs().length} subagent${activeTabs().length === 1 ? "" : "s"}`)
     return details.join(props.mono ? " - " : " · ")
   })
-  const [footerNotice, setFooterNotice] = createSignal("")
-  let footerNoticeTimeout: ReturnType<typeof setTimeout> | undefined
-  let previousFooterStatus: string | undefined
-  const showFooterStatus = () => {
-    if (footerNoticeTimeout) clearTimeout(footerNoticeTimeout)
-    setFooterNotice(footerStatus())
-    footerNoticeTimeout = setTimeout(() => {
-      footerNoticeTimeout = undefined
-      setFooterNotice("")
-    }, FOOTER_DETAIL_DURATION)
-  }
-
-  createEffect(() => {
-    const current = footerStatus()
-    if (previousFooterStatus !== undefined && previousFooterStatus !== current && !footerDetails()) showFooterStatus()
-    previousFooterStatus = current
-  })
   const permission = createMemo<Extract<FooterView, { type: "permission" }> | undefined>(() => {
     const view = active()
     return view.type === "permission" ? view : undefined
@@ -379,6 +360,7 @@ export function RunFooterView(props: RunFooterViewProps) {
   const shell = createMemo(() => prompt() && composer.shell())
   const menu = createMemo(() => prompt() && composer.visible())
   const stateStatus = createMemo(() => props.state().status.trim())
+  const notice = createMemo(() => props.state().notice.trim())
   const modeLabel = createMemo(() => {
     if (exiting()) {
       return "EXIT"
@@ -404,7 +386,9 @@ export function RunFooterView(props: RunFooterViewProps) {
 
     if (busy() && armed()) return "again to interrupt"
 
-    if (footerNotice()) return footerNotice()
+    if (notice()) return notice()
+
+    if (!footerDetails()) return shell() ? "Shell mode" : ""
 
     if (busy()) return "interrupt"
 
@@ -438,7 +422,7 @@ export function RunFooterView(props: RunFooterViewProps) {
       return theme().highlight
     }
 
-    if (busy() || footerNotice().length > 0 || stateStatus().length > 0) {
+    if (busy() || notice().length > 0 || stateStatus().length > 0) {
       return theme().text
     }
 
@@ -488,7 +472,6 @@ export function RunFooterView(props: RunFooterViewProps) {
 
   onCleanup(() => {
     props.onRequestExit?.(undefined)
-    if (footerNoticeTimeout) clearTimeout(footerNoticeTimeout)
   })
 
   Keymap.createLayer(() => ({
@@ -730,7 +713,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                               closePanel()
                             }}
                             onStatus={() => {
-                              showFooterStatus()
+                              props.onStatus(footerStatus())
                               closePanel()
                             }}
                             onCommand={(name) => {
@@ -898,7 +881,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                   </Show>
 
                   <text fg={statusColor()} wrapMode="none" truncate flexGrow={1} flexShrink={1}>
-                    <Show when={busy() && !exiting()} fallback={statusText()}>
+                    <Show when={busy() && !exiting() && (footerDetails() || armed())} fallback={statusText()}>
                       <Show when={interruptLabel()}>
                         {(label) => <span style={{ fg: armed() ? statusColor() : theme().muted }}>{label()} </span>}
                       </Show>

@@ -94,6 +94,7 @@ function footerState(input: Partial<FooterState> = {}) {
   return createSignal<FooterState>({
     phase: "idle",
     status: "",
+    notice: "",
     model: "gpt-5",
     usage: "",
     first: false,
@@ -1109,6 +1110,7 @@ test("direct footer shows authoritative pending work while running", async () =>
   const [state] = createSignal<FooterState>({
     phase: "running",
     status: "",
+    notice: "",
     model: "gpt-5",
     usage: "",
     first: false,
@@ -1324,7 +1326,7 @@ test("direct footer shows full usage metadata when room is available", async () 
   }
 })
 
-test("direct footer can hide persistent details and briefly reveal changes", async () => {
+test("direct footer hides routine activity and shows explicit notices", async () => {
   const app = await renderFooter({
     state: { usage: "159.6K (16%) · $4.23" },
     miniSettings: {
@@ -1345,13 +1347,21 @@ test("direct footer can hide persistent details and briefly reveal changes", asy
     expect(initial).not.toContain("gpt-5")
     expect(initial).not.toContain("159.6K")
 
-    app.setState((state) => ({ ...state, phase: "running" }))
+    app.setState((state) => ({ ...state, phase: "running", status: "assistant responding" }))
     await app.renderOnce()
     const changed = app.captureCharFrame()
     const statusline = footerStatusline(app.renderer.root)
 
-    expect(changed).toContain("running - gpt-5 - 159.6K (16%) - $4.23")
+    expect(changed).not.toContain("running")
+    expect(changed).not.toContain("assistant responding")
+    expect(changed).not.toContain("interrupt")
+    expect(changed).not.toContain("gpt-5")
+    expect(changed).not.toContain("159.6K")
     expect(boxPath(statusline, "SpinnerRenderable")).toBeUndefined()
+
+    app.setState((state) => ({ ...state, notice: "variant high" }))
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("variant high")
   } finally {
     app.cleanup()
   }
