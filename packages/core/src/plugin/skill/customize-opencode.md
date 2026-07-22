@@ -192,6 +192,22 @@ Register skills from non-default locations via `skills.paths` (scanned
 recursively for `**/SKILL.md`) and `skills.urls` (each URL serves a list of
 skills).
 
+External skill sources (`.claude`, `.agents`, `.cursor`, `.codex`, `.kilo`,
+`.opencode`) are opt-in. By default KanCode only loads skills from `.kancode/`
+and configured `skills.paths`/`skills.urls`. To enable discovery from an
+external source, list it under `skills.external`:
+
+```json
+{
+  "skills": {
+    "external": [".claude", ".codex"]
+  }
+}
+```
+
+Only the listed sources are scanned (both project-level and `~/.<source>/`
+global). Sources not listed are ignored.
+
 ## References
 
 References make local directories and Git repositories outside the active

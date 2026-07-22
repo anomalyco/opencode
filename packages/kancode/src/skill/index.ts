@@ -209,23 +209,29 @@ const discoverSkills = Effect.fnUntraced(function* (
 ) {
   const state: ScanState = { matches: new Set(), dirs: new Set() }
 
-  const externalDirs: string[] = []
-  if (!disableExternalSkills) {
-    for (const dir of EXTERNAL_DIRS) {
-      // .claude is gated by disableClaudeCodeSkills; every other external
-      // dir is always scanned (when external skills are enabled at all).
-      if (dir === CLAUDE_EXTERNAL_DIR && disableClaudeCodeSkills) continue
-      externalDirs.push(dir)
-    }
+  const cfg = yield* config.get()
 
-    for (const dir of externalDirs) {
+  // External skill sources are opt-in. Only sources listed in
+  // `skills.external` are scanned; default is none. The env flags remain as
+  // hard kill switches: disableExternalSkills clears the list entirely, and
+  // disableClaudeCodeSkills drops .claude even when it is listed.
+  const enabledExternal: string[] = []
+  if (!disableExternalSkills) {
+    for (const dir of cfg.skills?.external ?? []) {
+      if (dir === CLAUDE_EXTERNAL_DIR && disableClaudeCodeSkills) continue
+      enabledExternal.push(dir)
+    }
+  }
+
+  if (enabledExternal.length > 0) {
+    for (const dir of enabledExternal) {
       const root = path.join(global.home, dir)
       if (!(yield* fsys.isDir(root))) continue
       yield* scan(state, root, PATTERN_BY_DIR[dir] ?? EXTERNAL_SKILL_PATTERN, { dot: true, scope: "global" })
     }
 
     const upDirs = yield* fsys
-      .up({ targets: externalDirs, start: directory, stop: worktree })
+      .up({ targets: enabledExternal, start: directory, stop: worktree })
       .pipe(Effect.catch(() => Effect.succeed([] as string[])))
 
     for (const root of upDirs) {
@@ -240,7 +246,6 @@ const discoverSkills = Effect.fnUntraced(function* (
     yield* scan(state, dir, OPENCODE_SKILL_PATTERN)
   }
 
-  const cfg = yield* config.get()
   for (const item of cfg.skills?.paths ?? []) {
     const expanded = item.startsWith("~/") ? path.join(global.home, item.slice(2)) : item
     const dir = path.isAbsolute(expanded) ? expanded : path.join(directory, expanded)

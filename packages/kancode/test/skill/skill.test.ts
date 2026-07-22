@@ -285,14 +285,14 @@ description: A skill in the .claude/skills directory.
           expect(item).toBeDefined()
           expect(item!.location).toContain(path.join(".claude", "skills", "claude-skill", "SKILL.md"))
         }),
-      { git: true },
+      { git: true, config: { skills: { external: [".claude"] } } },
     ),
   )
 
   it.live("discovers global skills from ~/.claude/skills/ directory", () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireRelease(
-        Effect.promise(() => tmpdir({ git: true })),
+        Effect.promise(() => tmpdir({ git: true, config: { skills: { external: [".claude"] } } })),
         (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
       )
 
@@ -321,6 +321,91 @@ description: A skill in the .claude/skills directory.
           expect((yield* skill.all()).filter((s) => s.location !== "<built-in>")).toEqual([])
         }),
       { git: true },
+    ),
+  )
+
+  it.live("does not discover external skills by default (opt-in)", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Promise.all([
+              Bun.write(
+                path.join(dir, ".claude", "skills", "claude-skill", "SKILL.md"),
+                `---
+name: claude-skill
+description: A skill in the .claude/skills directory.
+---
+
+# Claude Skill
+`,
+              ),
+              Bun.write(
+                path.join(dir, ".codex", "skills", "codex-skill", "SKILL.md"),
+                `---
+name: codex-skill
+description: A skill in the .codex/skills directory.
+---
+
+# Codex Skill
+`,
+              ),
+              Bun.write(
+                path.join(dir, ".kancode", "skill", "kancode-skill", "SKILL.md"),
+                `---
+name: kancode-skill
+description: A skill in .kancode.
+---
+
+# KanCode Skill
+`,
+              ),
+            ]),
+          )
+
+          const skill = yield* Skill.Service
+          // Only .kancode skills are discovered; external sources require opt-in.
+          const list = (yield* skill.all()).filter((s) => s.location !== "<built-in>")
+          expect(list.map((s) => s.name)).toEqual(["kancode-skill"])
+        }),
+      { git: true },
+    ),
+  )
+
+  it.live("enables only listed external sources", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Promise.all([
+              Bun.write(
+                path.join(dir, ".claude", "skills", "claude-skill", "SKILL.md"),
+                `---
+name: claude-skill
+description: A skill in the .claude/skills directory.
+---
+
+# Claude Skill
+`,
+              ),
+              Bun.write(
+                path.join(dir, ".codex", "skills", "codex-skill", "SKILL.md"),
+                `---
+name: codex-skill
+description: A skill in the .codex/skills directory.
+---
+
+# Codex Skill
+`,
+              ),
+            ]),
+          )
+
+          const skill = yield* Skill.Service
+          const list = (yield* skill.all()).filter((s) => s.location !== "<built-in>")
+          expect(list.map((s) => s.name)).toEqual(["codex-skill"])
+        }),
+      { git: true, config: { skills: { external: [".codex"] } } },
     ),
   )
 
@@ -379,14 +464,14 @@ description: A skill in the .agents/skills directory.
           expect(item).toBeDefined()
           expect(item!.location).toContain(path.join(".agents", "skills", "agent-skill", "SKILL.md"))
         }),
-      { git: true },
+      { git: true, config: { skills: { external: [".agents"] } } },
     ),
   )
 
   it.live("discovers global skills from ~/.agents/skills/ directory", () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireRelease(
-        Effect.promise(() => tmpdir({ git: true })),
+        Effect.promise(() => tmpdir({ git: true, config: { skills: { external: [".agents"] } } })),
         (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
       )
 
@@ -458,7 +543,7 @@ description: A skill in the .agents/skills directory.
           expect(list.find((x) => x.name === "claude-skill")).toBeDefined()
           expect(list.find((x) => x.name === "agent-skill")).toBeDefined()
         }),
-      { git: true },
+      { git: true, config: { skills: { external: [".claude", ".agents"] } } },
     ),
   )
 
@@ -495,7 +580,7 @@ description: A skill in the .agents/skills directory.
           const list = (yield* skill.all()).filter((s) => s.location !== "<built-in>")
           expect(list.map((s) => s.name)).toEqual(["agent-skill"])
         }),
-      { git: true },
+      { git: true, config: { skills: { external: [".claude", ".agents"] } } },
     ),
   )
 
@@ -542,7 +627,7 @@ description: A skill in the .kancode/skill directory.
           const list = (yield* skill.all()).filter((s) => s.location !== "<built-in>")
           expect(list.map((s) => s.name)).toEqual(["opencode-skill"])
         }),
-      { git: true },
+      { git: true, config: { skills: { external: [".claude", ".agents"] } } },
     ),
   )
 
@@ -598,7 +683,7 @@ description: A skill in the .kancode/skills directory.
           const skill = yield* Skill.Service
           expect((yield* skill.dirs()).length).toBe(4)
         }),
-      { git: true },
+      { git: true, config: { skills: { external: [".claude", ".agents"] } } },
     ),
   )
 
@@ -626,7 +711,7 @@ description: A skill in the .cursor/skills directory.
           expect(item).toBeDefined()
           expect(item!.location).toContain(path.join(".cursor", "skills", "cursor-skill", "SKILL.md"))
         }),
-      { git: true },
+      { git: true, config: { skills: { external: [".cursor"] } } },
     ),
   )
 
@@ -654,7 +739,7 @@ description: A skill in the .codex/skills directory.
           expect(item).toBeDefined()
           expect(item!.location).toContain(path.join(".codex", "skills", "codex-skill", "SKILL.md"))
         }),
-      { git: true },
+      { git: true, config: { skills: { external: [".codex"] } } },
     ),
   )
 
@@ -682,7 +767,7 @@ description: A skill in the .kilo/skills directory.
           expect(item).toBeDefined()
           expect(item!.location).toContain(path.join(".kilo", "skills", "kilo-skill", "SKILL.md"))
         }),
-      { git: true },
+      { git: true, config: { skills: { external: [".kilo"] } } },
     ),
   )
 
@@ -710,7 +795,7 @@ description: A skill in the legacy .opencode/skills directory.
           expect(item).toBeDefined()
           expect(item!.location).toContain(path.join(".opencode", "skills", "legacy-skill", "SKILL.md"))
         }),
-      { git: true },
+      { git: true, config: { skills: { external: [".opencode"] } } },
     ),
   )
 
@@ -738,7 +823,7 @@ description: A skill in the legacy .opencode/skill (singular) directory.
           expect(item).toBeDefined()
           expect(item!.location).toContain(path.join(".opencode", "skill", "singular-skill", "SKILL.md"))
         }),
-      { git: true },
+      { git: true, config: { skills: { external: [".opencode"] } } },
     ),
   )
 
@@ -785,7 +870,7 @@ description: A skill in the .kancode/skill directory.
           const list = (yield* skill.all()).filter((s) => s.location !== "<built-in>")
           expect(list.map((s) => s.name)).toEqual(["kancode-skill"])
         }),
-      { git: true },
+      { git: true, config: { skills: { external: [".cursor", ".opencode"] } } },
     ),
   )
 

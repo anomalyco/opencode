@@ -128,9 +128,9 @@ describe("SkillV2", () => {
     // expected substrings work on both posix and win32.
     const sep = path.sep
 
-    it.effect("returns 'built-in' for the built-in sentinel", () =>
+    it.effect("returns '' for the built-in sentinel (part of KanCode)", () =>
       Effect.sync(() => {
-        expect(SkillV2.origin("<built-in>")).toBe("built-in")
+        expect(SkillV2.origin("<built-in>")).toBe("")
       }),
     )
 

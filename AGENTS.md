@@ -12,7 +12,7 @@ Repo-wide principles only. Package-level `AGENTS.md` owns package detail; `opens
 ## Config
 
 - Load `kancode.json(c)` only — never `opencode.json(c)`.
-- Project dir: `.kancode/` only — no project `.opencode/` discovery. Migrate legacy via built-in `import-opencode` skill. Exception: KanCode discovers skills from `.opencode/skill(s)/` (legacy layout) the same way it does from `.claude/`, `.agents/`, `.cursor/`, `.codex/`, `.kilo/` — config and other resources stay KanCode-only.
+- Project dir: `.kancode/` only — no project `.opencode/` discovery. Migrate legacy via built-in `import-opencode` skill. External skill sources (`.claude/`, `.agents/`, `.cursor/`, `.codex/`, `.kilo/`, `.opencode/`) are opt-in via `skills.external` in `kancode.json(c)`; default is none. Config and other resources stay KanCode-only.
 - User scope: `~/.kancode` (and XDG paths) — no `~/.opencode` fallback.
 - Honor `OPENCODE_*` and `KANCODE_*`; `KANCODE_*` wins.
 

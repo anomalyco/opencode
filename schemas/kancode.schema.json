@@ -951,6 +951,22 @@
                 "type": "string"
               },
               "description": "URLs to fetch skills from (e.g., https://example.com/.well-known/skills/)"
+            },
+            "external": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  ".claude",
+                  ".agents",
+                  ".cursor",
+                  ".codex",
+                  ".kilo",
+                  ".opencode"
+                ],
+                "description": "External skill source to enable: one of .claude, .agents, .cursor, .codex, .kilo, .opencode"
+              },
+              "description": "External skill sources to enable. Default: none. List a source dir (e.g. \".codex\", \".claude\") to scan it for skills. External skills are opt-in; sources not listed here are ignored."
             }
           },
           "additionalProperties": false,
