@@ -192,8 +192,15 @@ test("standalone themes skip OpenCode defaults and use the red core fallback", (
 })
 
 test("uses defaults for the selected mode when it merges the other mode", () => {
-  const theme = resolveThemeFile({ version: 2, light: { hue: light.hue }, dark: { mergeMode: true } }, "dark")
-  expect(theme.background.default.toInts()).toEqual(resolveTheme(dark).background.default.toInts())
+  const theme = resolveThemeFile(
+    {
+      version: 2,
+      light: { hue: light.hue, background: { default: "#123456" } },
+      dark: { mergeMode: true },
+    },
+    "dark",
+  )
+  expect(theme.background.default.toInts()).toEqual([18, 52, 86, 255])
 })
 
 test("resolves matched action variants and states", () => {

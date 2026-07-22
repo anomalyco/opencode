@@ -3,11 +3,15 @@
   "name": "@opencode-ai/docs",
   "private": true,
   "scripts": {
-    "dev": "bun --bun mint dev --no-open --port 3333",
-    "validate": "bun --bun mint validate",
+    "dev": "bun run generate && bun --bun mint dev --no-open --port 3333",
+    "generate": "bun script/generate-theme-tokens.ts",
+    "check:generated": "bun script/generate-theme-tokens.ts --check",
+    "validate": "bun run check:generated && bun --bun mint validate",
     "broken-links": "bun --bun mint broken-links"
   },
   "devDependencies": {
-    "mint": "4.2.666"
+    "effect": "catalog:",
+    "mint": "4.2.666",
+    "prettier": "3.6.2"
   }
 }

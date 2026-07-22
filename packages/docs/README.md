@@ -19,4 +19,15 @@ bun validate
 bun broken-links
 ```
 
+The V2 theme token reference is generated from
+`packages/tui/src/theme/v2/schema.ts`. Regenerate it after schema changes:
+
+```bash
+bun run generate
+```
+
+`bun validate` checks that the committed snippet is current. The repository's
+generation workflow also refreshes it on pushes to `dev`, so Mintlify always
+receives the generated MDX as part of the published docs tree.
+
 The hosted preview is available at [opencode.mintlify.site](https://opencode.mintlify.site).

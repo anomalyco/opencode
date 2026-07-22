@@ -38,6 +38,7 @@
               "attachments",
               "compaction",
               "warming",
+              "themes",
               "formatters",
               "lsp",
               "references"

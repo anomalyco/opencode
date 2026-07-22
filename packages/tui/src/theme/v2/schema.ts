@@ -243,7 +243,7 @@ const MergeModeDefinition = Schema.Struct({
   "@context:overlay": Schema.optional(ThemeTokensDefinition),
 })
 export type MergeModeDefinition = Schema.Schema.Type<typeof MergeModeDefinition>
-export const ModeDefinition = Schema.Union([FileThemeDefinition, MergeModeDefinition])
+export const ModeDefinition = Schema.Union([MergeModeDefinition, FileThemeDefinition])
 export type ModeDefinition = Schema.Schema.Type<typeof ModeDefinition>
 
 const FileMetadata = {
