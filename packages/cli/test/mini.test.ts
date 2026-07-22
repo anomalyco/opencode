@@ -121,11 +121,12 @@ describe("mini command", () => {
     expect(result.stdout).toContain("run        Run OpenCode with a message")
   })
 
-  test("exposes run without legacy attach or command modes", async () => {
+  test("exposes run without legacy interactive, attach, or command modes", async () => {
     const result = await cli(["run", "--help"])
 
     expect(result.exitCode).toBe(0)
     expect(result.stdout).toContain("--server string")
+    expect(result.stdout).not.toContain("--interactive")
     expect(result.stdout).not.toContain("--variant")
     expect(result.stdout).not.toContain("--attach")
     expect(result.stdout).not.toContain("--command")
@@ -212,6 +213,7 @@ describe("mini command", () => {
 
     expect(result.exitCode).toBe(0)
     expect(result.stdout).toContain("--server string")
+    expect(result.stdout).toContain("--prompt string")
     expect(result.stdout).not.toContain("SUBCOMMANDS")
   })
 
