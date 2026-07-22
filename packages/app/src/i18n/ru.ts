@@ -246,6 +246,7 @@ export const dict = {
   "prompt.mode.shell": "Оболочка",
   "prompt.mode.normal": "Промпт",
   "prompt.mode.shell.exit": "esc для выхода",
+  "prompt.branch.tooltip": "Текущая ветка Git",
   "session.child.promptDisabled": "В сессиях субагентов нельзя отправлять запросы.",
   "session.child.backToParent": "Вернуться к основной сессии.",
 

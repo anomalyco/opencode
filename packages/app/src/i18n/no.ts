@@ -239,6 +239,7 @@ export const dict = {
   "prompt.mode.shell": "Shell",
   "prompt.mode.normal": "Prompt",
   "prompt.mode.shell.exit": "ESC for å avslutte",
+  "prompt.branch.tooltip": "Gjeldende Git-gren",
 
   "prompt.example.1": "Fiks en TODO i kodebasen",
   "prompt.example.2": "Hva er teknologistabelen i dette prosjektet?",

@@ -234,6 +234,7 @@ export const dict = {
   "prompt.mode.shell": "Shell",
   "prompt.mode.normal": "Prompt",
   "prompt.mode.shell.exit": "esc zum Verlassen",
+  "prompt.branch.tooltip": "Aktueller Git-Branch",
   "session.child.promptDisabled": "Unteragenten-Sitzungen können keine Prompts erhalten.",
   "session.child.backToParent": "Zurück zur Hauptsitzung.",
   "prompt.example.1": "Ein TODO in der Codebasis beheben",

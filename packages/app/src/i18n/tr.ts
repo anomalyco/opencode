@@ -251,6 +251,7 @@ export const dict = {
   "prompt.mode.shell": "Kabuk",
   "prompt.mode.normal": "Komut",
   "prompt.mode.shell.exit": "çıkmak için esc",
+  "prompt.branch.tooltip": "Geçerli Git dalı",
   "session.child.promptDisabled": "Alt ajan oturumlarına istem gönderilemez.",
   "session.child.backToParent": "Ana oturuma dön.",
 

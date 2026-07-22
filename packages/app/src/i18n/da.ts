@@ -245,6 +245,7 @@ export const dict = {
   "prompt.mode.shell": "Shell",
   "prompt.mode.normal": "Prompt",
   "prompt.mode.shell.exit": "esc for at afslutte",
+  "prompt.branch.tooltip": "Nuværende Git-gren",
   "session.child.promptDisabled": "Der kan ikke sendes prompts til underagentsessioner.",
   "session.child.backToParent": "Tilbage til hovedsessionen.",
 

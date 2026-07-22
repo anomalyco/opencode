@@ -268,6 +268,7 @@ export const dict = {
   "prompt.mode.shell": "Shell",
   "prompt.mode.normal": "Prompt",
   "prompt.mode.shell.exit": "按 esc 退出",
+  "prompt.branch.tooltip": "当前 Git 分支",
   "session.child.promptDisabled": "无法向子智能体会话发送提示词。",
   "session.child.backToParent": "返回主会话。",
   "prompt.example.1": "修复代码库中的一个 TODO",

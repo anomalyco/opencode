@@ -247,6 +247,7 @@ export const dict = {
   "prompt.mode.shell": "Shell",
   "prompt.mode.normal": "Prompt",
   "prompt.mode.shell.exit": "esc za izlaz",
+  "prompt.branch.tooltip": "Trenutna Git grana",
   "session.child.promptDisabled": "Sesijama podagenta nije moguće slati upite.",
   "session.child.backToParent": "Nazad na glavnu sesiju.",
 

@@ -229,6 +229,7 @@ export const dict = {
   "prompt.mode.shell": "Shell",
   "prompt.mode.normal": "Prompt",
   "prompt.mode.shell.exit": "esc للخروج",
+  "prompt.branch.tooltip": "فرع Git الحالي",
   "session.child.promptDisabled": "لا يمكن إرسال موجّهات إلى جلسات الوكلاء الفرعيين.",
   "session.child.backToParent": "العودة إلى الجلسة الرئيسية.",
   "prompt.example.1": "إصلاح TODO في قاعدة التعليمات البرمجية",

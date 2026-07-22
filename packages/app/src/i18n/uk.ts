@@ -248,6 +248,7 @@ export const dict = {
   "prompt.mode.shell": "Команда",
   "prompt.mode.normal": "Запит",
   "prompt.mode.shell.exit": "esc для виходу",
+  "prompt.branch.tooltip": "Поточна гілка Git",
   "session.child.promptDisabled": "Сесії підагентів не можна надсилати запити.",
   "session.child.backToParent": "Назад до основної сесії.",
 
