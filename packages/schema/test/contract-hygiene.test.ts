@@ -20,6 +20,12 @@ import { PersistedRevert } from "../src/session-revert.js"
 import { optional } from "../src/schema.js"
 
 describe("contract hygiene", () => {
+  test("restricts agent colors to six-digit hex values", () => {
+    const decode = Schema.decodeUnknownSync(Agent.Color)
+    expect(decode("#ff6b6b")).toBe("#ff6b6b")
+    expect(() => decode("warning")).toThrow()
+  })
+
   test("keeps absolute costs distinct from model rates", () => {
     const usd = Money.USD.make(1)
     const rate = Money.USDPerMillionTokens.make(1)

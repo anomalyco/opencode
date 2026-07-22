@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { Effect, Schema } from "effect"
@@ -22,6 +22,10 @@ const defaultPermissions = [
   { action: "*", resource: "*", effect: "allow" },
   { action: "external_directory", resource: "*", effect: "ask" },
 ] satisfies PermissionV2.Ruleset
+
+test("rejects named agent color tokens", () => {
+  expect(() => decode({ agents: { reviewer: { color: "warning" } } })).toThrow()
+})
 
 describe("ConfigAgentPlugin.Plugin", () => {
   it.effect("matches POSIX paths against home-relative permissions", () =>
@@ -160,7 +164,7 @@ describe("ConfigAgentPlugin.Plugin", () => {
                     description: "Reviews changes",
                     mode: "subagent",
                     hidden: true,
-                    color: "warning",
+                    color: "#ff6b6b",
                     steps: 12,
                     request: {
                       headers: { first: "one", shared: "first" },
@@ -197,7 +201,7 @@ describe("ConfigAgentPlugin.Plugin", () => {
         description: "Reviews changes",
         mode: "subagent",
         hidden: true,
-        color: "warning",
+        color: "#ff6b6b",
         steps: 12,
         model: { providerID: "anthropic", id: "claude-sonnet" },
       })

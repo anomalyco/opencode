@@ -118,22 +118,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           if (index === -1) return colors()[0]
           const agent = visibleAgents()[index]
 
-          if (agent?.color) {
-            const color = agent.color
-            if (color.startsWith("#")) return RGBA.fromHex(color)
-            const step = mode() === "light" ? 800 : 200
-            const named = {
-              primary: themeV2.hue.interactive[step],
-              secondary: themeV2.categorical[0][step],
-              accent: themeV2.hue.accent[step],
-              success: themeV2.text.feedback.success.default,
-              warning: themeV2.text.feedback.warning.default,
-              error: themeV2.text.feedback.error.default,
-              info: themeV2.text.feedback.info.default,
-            }
-            // Agent colors are validated by the config schema.
-            return named[color as keyof typeof named]
-          }
+          if (agent?.color) return RGBA.fromHex(agent.color)
           return colors()[index % colors().length]
         },
       }

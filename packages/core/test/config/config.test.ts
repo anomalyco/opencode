@@ -738,7 +738,7 @@ describe("Config", () => {
                     system: "Find regressions.",
                     mode: "subagent",
                     hidden: false,
-                    color: "warning",
+                    color: "#ff6b6b",
                     steps: 12,
                     disabled: false,
                     permissions: [{ action: "edit", resource: "*", effect: "deny" }],
@@ -824,7 +824,7 @@ describe("Config", () => {
             expect(reviewer?.system).toBe("Find regressions.")
             expect(reviewer?.mode).toBe("subagent")
             expect(reviewer?.hidden).toBe(false)
-            expect(reviewer?.color).toBe("warning")
+            expect(reviewer?.color).toBe("#ff6b6b")
             expect(reviewer?.steps).toBe(12)
             expect(reviewer?.disabled).toBe(false)
             expect(reviewer?.permissions).toEqual([{ action: "edit", resource: "*", effect: "deny" }])
