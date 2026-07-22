@@ -5,7 +5,6 @@ import { copyOut, ToolRuntimeError, type SafeObject } from "../tool-runtime.js"
 import { type AstNode, formatLocation, InterpreterRuntimeError, ProgramThrow, sourceLocation } from "./model.js"
 import { containsRuntimeReference } from "./references.js"
 import { type SyncIteratorRunner } from "./iterator.js"
-import { spreadItems } from "../stdlib/collections.js"
 import { coerceToString, createAggregateErrorValue, createErrorValue, errorConstructors } from "../stdlib/value.js"
 
 export const normalizeError = (error: unknown): Diagnostic => {
@@ -81,18 +80,8 @@ export const caughtErrorValue = (thrown: unknown): unknown => {
   return createErrorValue(name, normalizeError(thrown).message)
 }
 
-export const constructErrorValue = (name: string, args: Array<unknown>, node: AstNode): SafeObject => {
-  if (name !== "AggregateError") return createErrorValue(name, args[0] === undefined ? "" : coerceToString(args[0]))
-  const errors = spreadItems(args[0])
-  if (errors === undefined) {
-    throw new InterpreterRuntimeError(
-      "new AggregateError(...) expects an array of errors (e.g. new AggregateError(errors, message?)).",
-      node,
-    ).as("TypeError")
-  }
-  // Error values must not alias caller-owned arrays.
-  return createAggregateErrorValue([...errors], args[1] === undefined ? "" : coerceToString(args[1]))
-}
+export const constructErrorValue = (name: string, args: Array<unknown>): SafeObject =>
+  createErrorValue(name, args[0] === undefined ? "" : coerceToString(args[0]))
 
 export const constructAggregateErrorValue = <R>(
   runner: SyncIteratorRunner<R>,

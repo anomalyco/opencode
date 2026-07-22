@@ -362,19 +362,12 @@ const invokeArrayStatic = (name: string, args: Array<unknown>, node: AstNode): u
       return Array.isArray(args[0])
     case "of":
       return [...args]
-    case "from":
-      return arrayFromItems(args[0], node)
     default:
       throw new InterpreterRuntimeError(`Array.${name} is not available.`, node)
   }
 }
 
-const arrayFromItems = (source: unknown, node: AstNode): Array<unknown> => {
-  if (source instanceof CodeModeMap) return Array.from(source.map.entries(), ([key, item]) => [key, item])
-  if (source instanceof CodeModeSet) return Array.from(source.set.values())
-  if (source instanceof CodeModeURLSearchParams) {
-    return Array.from(source.params.entries(), ([key, value]) => [key, value])
-  }
+const arrayLikeSource = (source: unknown, node: AstNode): { readonly length: number; readonly source: object } => {
   if (source instanceof CodeModePromise) {
     throw new InterpreterRuntimeError(
       "Array.from received an un-awaited Promise; await it before creating the array.",
@@ -382,15 +375,16 @@ const arrayFromItems = (source: unknown, node: AstNode): Array<unknown> => {
       "InvalidDataValue",
     )
   }
-  if (typeof source === "string") return Array.from(source)
-  if (Array.isArray(source)) return [...source]
   if (
     source !== null &&
     typeof source === "object" &&
     (Object.getPrototypeOf(source) === Object.prototype || Object.getPrototypeOf(source) === null) &&
     typeof (source as { length?: unknown }).length === "number"
   ) {
-    return Array.from(source as ArrayLike<unknown>)
+    const length = (source as { length: number }).length
+    const normalized = Number.isNaN(length) || length <= 0 ? 0 : Math.trunc(length)
+    if (normalized > 4_294_967_295) throw new RangeError("Invalid array length")
+    return { length: normalized, source }
   }
   throw new InterpreterRuntimeError(
     "Array.from expects an array, string, Map, Set, or array-like value.",
@@ -415,20 +409,11 @@ export const invokeArrayFrom = <R>(
           "TypeError",
         )
       }
-      const items = arrayFromItems(source, node)
-      if (apply === undefined) return items
+      const arrayLike = arrayLikeSource(source, node)
       const values: Array<unknown> = []
-      for (let index = 0; index < items.length; index += 1) {
-        const item =
-          source !== null &&
-          typeof source === "object" &&
-          !Array.isArray(source) &&
-          !(source instanceof CodeModeMap) &&
-          !(source instanceof CodeModeSet) &&
-          !(source instanceof CodeModeURLSearchParams)
-            ? Reflect.get(source, index)
-            : items[index]
-        values.push(yield* apply([item, index]))
+      for (let index = 0; index < arrayLike.length; index += 1) {
+        const item = Reflect.get(arrayLike.source, index)
+        values.push(apply === undefined ? item : yield* apply([item, index]))
       }
       return values
     }

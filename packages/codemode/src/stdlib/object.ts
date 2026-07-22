@@ -8,7 +8,7 @@ import {
 } from "../interpreter/model.js"
 import { containsOpaqueReference } from "../interpreter/references.js"
 import { isBlockedMember } from "../tool-runtime.js"
-import { isCodeModeValue, CodeModeMap, CodeModePromise, CodeModeSet, CodeModeURLSearchParams } from "../values.js"
+import { isCodeModeValue, CodeModePromise } from "../values.js"
 import { boundedData, coerceToString } from "./value.js"
 import { preserveConsumerError, type SyncIteratorRunner } from "../interpreter/iterator.js"
 
@@ -40,11 +40,6 @@ export const invokeObjectMethod = (name: string, args: Array<unknown>, node: Ast
   const guardedSet = (out: Record<string, unknown>, key: string, item: unknown): void => {
     if (isBlockedMember(key)) throw new InterpreterRuntimeError(`Property '${key}' is not available.`, node)
     out[key] = item
-  }
-  const addEntry = (out: Record<string, unknown>, key: unknown, item: unknown): void => {
-    boundedData(key, "Object.fromEntries key")
-    boundedData(item, "Object.fromEntries value")
-    guardedSet(out, coerceToString(key), item)
   }
   switch (name) {
     case "keys":
@@ -78,32 +73,6 @@ export const invokeObjectMethod = (name: string, args: Array<unknown>, node: Ast
         for (const symbol of IteratorSymbols) {
           if (Object.hasOwn(source, symbol)) Reflect.set(out, symbol, Reflect.get(source, symbol))
         }
-      }
-      return out
-    }
-    case "fromEntries": {
-      if (args[0] instanceof CodeModeMap) {
-        const out: Record<string, unknown> = Object.create(null)
-        for (const [key, item] of args[0].map.entries()) addEntry(out, key, item)
-        return out
-      }
-      if (args[0] instanceof CodeModeURLSearchParams) {
-        const out: Record<string, unknown> = Object.create(null)
-        for (const [key, value] of args[0].params.entries()) guardedSet(out, key, value)
-        return out
-      }
-      const pairs = args[0] instanceof CodeModeSet ? Array.from(args[0].set.values()) : args[0]
-      if (!Array.isArray(pairs)) {
-        boundedData(args[0], "Object.fromEntries input")
-        throw new InterpreterRuntimeError("Object.fromEntries expects an array of [key, value] pairs.", node)
-      }
-      const out: Record<string, unknown> = Object.create(null)
-      for (const pair of pairs) {
-        const validated = boundedData(pair, "Object.fromEntries entry")
-        if (validated === null || typeof validated !== "object" || isCodeModeValue(validated))
-          throw new InterpreterRuntimeError("Object.fromEntries expects [key, value] entry objects.", node)
-        const entry = pair as Record<string, unknown>
-        addEntry(out, entry[0], entry[1])
       }
       return out
     }
