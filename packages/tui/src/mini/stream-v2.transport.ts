@@ -1084,8 +1084,9 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
           ? {
               status: "error",
               input: part && part.state.status !== "streaming" ? part.state.input : {},
-              structured: part && part.state.status !== "streaming" ? part.state.structured : {},
-              content: part && part.state.status !== "streaming" ? part.state.content : [],
+              structured:
+                event.data.structured ?? (part && part.state.status !== "streaming" ? part.state.structured : {}),
+              content: event.data.content ?? (part && part.state.status !== "streaming" ? part.state.content : []),
               error: event.data.error,
               result: event.data.result,
             }

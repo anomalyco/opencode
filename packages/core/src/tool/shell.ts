@@ -256,13 +256,22 @@ export const Plugin = {
                   }
                 }
 
+                let previousProgress: { readonly output: string; readonly truncated: boolean } | undefined
                 const progress = yield* Effect.sleep("1 second").pipe(
                   Effect.andThen(
                     captureShell().pipe(
                       Effect.flatMap((capture) =>
-                        context.progress({
-                          structured: { truncated: capture.truncated },
-                          content: [{ type: "text", text: capture.output }],
+                        Effect.gen(function* () {
+                          if (
+                            previousProgress?.output === capture.output &&
+                            previousProgress.truncated === capture.truncated
+                          )
+                            return
+                          previousProgress = capture
+                          yield* context.progress({
+                            structured: { truncated: capture.truncated },
+                            content: [{ type: "text", text: capture.output }],
+                          })
                         }),
                       ),
                     ),

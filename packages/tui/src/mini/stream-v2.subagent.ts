@@ -837,8 +837,9 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
             ? {
                 status: "error",
                 input: part && part.state.status !== "streaming" ? part.state.input : {},
-                structured: part && part.state.status !== "streaming" ? part.state.structured : {},
-                content: part && part.state.status !== "streaming" ? part.state.content : [],
+                structured:
+                  event.data.structured ?? (part && part.state.status !== "streaming" ? part.state.structured : {}),
+                content: event.data.content ?? (part && part.state.status !== "streaming" ? part.state.content : []),
                 error: event.data.error,
                 result: event.data.result,
               }
@@ -957,14 +958,15 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
         if (pendingCalls.has(key)) pendingCalls.set(key, event.data.input)
         return
       }
-      if (event.type === "session.tool.failed") {
-        pendingCalls.delete(sourceKey(event.data.assistantMessageID, event.data.callID))
+      if (
+        event.type !== "session.tool.progress" &&
+        event.type !== "session.tool.success" &&
+        event.type !== "session.tool.failed"
+      )
         return
-      }
-      if (event.type !== "session.tool.progress" && event.type !== "session.tool.success") return
       const key = sourceKey(event.data.assistantMessageID, event.data.callID)
       const pending = pendingCalls.get(key)
-      if (event.type === "session.tool.success") pendingCalls.delete(key)
+      if (event.type !== "session.tool.progress") pendingCalls.delete(key)
       const found = childSessionID(record(event.data.structured))
       if (!found) return
       const child = admitChild(found.sessionID)

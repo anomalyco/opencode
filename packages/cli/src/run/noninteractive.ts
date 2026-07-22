@@ -408,8 +408,8 @@ export async function runNonInteractivePrompt(input: Input) {
           state: {
             status: "error",
             input: current.input,
-            structured: current.structured,
-            content: current.content,
+            structured: event.data.structured ?? current.structured,
+            content: event.data.content ?? current.content,
             error: event.data.error,
             result: event.data.result,
           },

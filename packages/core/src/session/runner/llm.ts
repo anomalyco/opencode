@@ -62,6 +62,8 @@ const layer = Layer.effect(
             assistantMessageID: message.id,
             callID: tool.id,
             error: { type: "aborted", message: `Tool execution interrupted: ${tool.name}` },
+            structured: tool.state.status === "running" ? tool.state.structured : {},
+            content: tool.state.status === "running" ? tool.state.content : [],
             executed: tool.executed === true,
           })
         }
@@ -163,16 +165,7 @@ const layer = Layer.effect(
                     agent: agent.id,
                     messageID: assistantMessageID,
                     call: event,
-                    progress: (update) =>
-                      serialized(
-                        events.publish(SessionEvent.Tool.Progress, {
-                          sessionID: session.id,
-                          assistantMessageID,
-                          callID: event.id,
-                          structured: { ...update.structured },
-                          content: [...update.content],
-                        }),
-                      ),
+                    progress: (update) => serialized(publisher.progress(event.id, update)),
                   }),
                 ).pipe(
                   Effect.flatMap((settlement) =>

@@ -2332,7 +2332,6 @@ test("settles pending tools when a live failure arrives", async () => {
       id: "evt_progress_1",
       created: 0,
       type: "session.tool.progress",
-      durable: durable("session-1", 5),
       data: {
         sessionID: "session-1",
         assistantMessageID: "msg_explicit_assistant_9",

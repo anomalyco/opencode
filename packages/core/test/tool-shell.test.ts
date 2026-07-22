@@ -159,6 +159,9 @@ const mixedOutputCommand = isWindows
   ? "[Console]::Out.Write('stdout'); Start-Sleep -Milliseconds 50; [Console]::Error.Write('stderr'); Start-Sleep -Milliseconds 100"
   : "printf stdout; sleep 0.05; printf stderr >&2"
 const idleCommand = isWindows ? "Start-Sleep -Seconds 60" : "sleep 60"
+const steadyProgressCommand = isWindows
+  ? "[Console]::Out.Write('steady'); Start-Sleep -Milliseconds 3400"
+  : "printf steady; sleep 3.4"
 const bodyExitCommand = isWindows
   ? "[Console]::Out.Write('body'); Start-Sleep -Milliseconds 100; exit 7"
   : "printf body && exit 7"
@@ -460,6 +463,34 @@ describe("ShellTool", () => {
         (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
       ),
     { timeout: 15_000 },
+  )
+
+  it.live(
+    "does not repeat unchanged shell progress",
+    () =>
+      Effect.acquireUseRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => {
+          reset()
+          return withSession(tmp.path, (registry) =>
+            Effect.gen(function* () {
+              const updates: ToolRegistry.Progress[] = []
+              yield* settleTool(registry, {
+                ...call({ command: steadyProgressCommand }, "call-steady-progress"),
+                progress: (update) => Effect.sync(() => updates.push(update)),
+              })
+              expect(updates).toEqual([
+                {
+                  structured: { truncated: false },
+                  content: [{ type: "text", text: "steady" }],
+                },
+              ])
+            }),
+          )
+        },
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+      ),
+    { timeout: 10_000 },
   )
 
   it.live("returns a useful timeout settlement", () =>

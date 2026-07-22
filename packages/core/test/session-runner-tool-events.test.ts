@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { Effect, Schema } from "effect"
+import { Cause, Effect, Exit, Schema } from "effect"
 import { LLMEvent } from "@opencode-ai/ai"
 import { Money } from "@opencode-ai/schema/money"
 import { EventV2 } from "@opencode-ai/core/event"
@@ -16,11 +16,11 @@ import { createLLMEventPublisher } from "@opencode-ai/core/session/runner/publis
 const sessionID = SessionV2.ID.make("ses_tool_event_test")
 const base64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB"
 
-const capture = (providerMetadataKey = "anthropic") => {
+const capture = (providerMetadataKey = "anthropic", options?: { readonly interruptProgress?: boolean }) => {
   const published: Array<{ readonly type: string; readonly data: unknown }> = []
   const events: Pick<EventV2.Interface, "publish"> = {
-    publish: (definition, data) =>
-      Effect.sync(() => {
+    publish: (definition, data) => {
+      const publish = Effect.sync(() => {
         const event = { id: EventV2.ID.create(), type: definition.type, data } as EventV2.Payload<typeof definition>
         published.push({
           type: definition.durable
@@ -29,7 +29,11 @@ const capture = (providerMetadataKey = "anthropic") => {
           data,
         })
         return event
-      }),
+      })
+      return definition.type === SessionEvent.Tool.Progress.type && options?.interruptProgress
+        ? publish.pipe(Effect.andThen(Effect.interrupt))
+        : publish
+    },
   }
   return {
     published,
@@ -90,6 +94,24 @@ test("provider-executed success retains its raw provider result", async () => {
   await Effect.runPromise(publisher.publish(LLMEvent.toolResult({ ...result, providerExecuted: true })))
   const success = published.find((event) => event.type === "session.tool.success.1")
   expect(success?.data).toHaveProperty("result")
+})
+
+test("interrupted progress publication remains in the terminal failure snapshot", async () => {
+  const { published, publisher } = capture("anthropic", { interruptProgress: true })
+  await Effect.runPromise(publisher.publish(call))
+  const exit = await Effect.runPromiseExit(
+    publisher.progress(call.id, {
+      structured: { phase: "visible" },
+      content: [{ type: "text", text: "visible" }],
+    }),
+  )
+  expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBe(true)
+  await Effect.runPromise(publisher.failUnsettledTools({ type: "aborted", message: "interrupted" }))
+
+  expect(published.find((event) => event.type === "session.tool.failed.1")?.data).toMatchObject({
+    structured: { phase: "visible" },
+    content: [{ type: "text", text: "visible" }],
+  })
 })
 
 test("provider metadata is flattened using the route key", async () => {

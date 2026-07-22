@@ -2044,7 +2044,6 @@ describe("V2 mini transport", () => {
       id: "evt_progress",
       created: 3,
       type: "session.tool.progress",
-      durable: durable("ses_1", 2),
       data: {
         sessionID: "ses_1",
         assistantMessageID: "msg_progress",
@@ -2063,6 +2062,8 @@ describe("V2 mini transport", () => {
         assistantMessageID: "msg_progress",
         callID: "call_progress",
         error: { type: "unknown", message: "boom" },
+        structured: { checkpoint: 1 },
+        content: [{ type: "text", text: "partial" }],
         executed: true,
       },
     })
@@ -2844,6 +2845,71 @@ describe("V2 mini transport", () => {
     await transport.close()
   })
 
+  test("discovers a subagent from its terminal failure snapshot", async () => {
+    const events = feed()
+    events.push(connected())
+    const client = sdk({ streams: [events], messages: { ses_child_failed: [] } })
+    const ui = footer()
+    const transport = await createSessionTransport({
+      sdk: client,
+      sessionID: "ses_1",
+      thinking: false,
+      footer: ui.api,
+    })
+    const states = () => ui.events.flatMap((event) => (event.type === "stream.subagent" ? [event.state] : []))
+    events.push({
+      id: "evt_failed_subagent_input",
+      created: 1,
+      type: "session.tool.input.started",
+      durable: durable("ses_1"),
+      data: {
+        sessionID: "ses_1",
+        assistantMessageID: "msg_failed_subagent",
+        callID: "call_failed_subagent",
+        name: "subagent",
+      },
+    })
+    events.push({
+      id: "evt_failed_subagent_called",
+      created: 2,
+      type: "session.tool.called",
+      durable: durable("ses_1", 1),
+      data: {
+        sessionID: "ses_1",
+        assistantMessageID: "msg_failed_subagent",
+        callID: "call_failed_subagent",
+        input: { agent: "explore", description: "Inspect failure", prompt: "inspect" },
+        executed: true,
+      },
+    })
+    events.push({
+      id: "evt_failed_subagent",
+      created: 3,
+      type: "session.tool.failed",
+      durable: durable("ses_1", 2),
+      data: {
+        sessionID: "ses_1",
+        assistantMessageID: "msg_failed_subagent",
+        callID: "call_failed_subagent",
+        error: { type: "unknown", message: "subagent failed" },
+        structured: { sessionID: "ses_child_failed", status: "running" },
+        content: [],
+        executed: true,
+      },
+    })
+
+    while (!states().some((state) => state.tabs.some((tab) => tab.sessionID === "ses_child_failed")))
+      await Bun.sleep(0)
+    expect(states().at(-1)?.tabs).toMatchObject([
+      {
+        sessionID: "ses_child_failed",
+        label: "Explore",
+        description: "Inspect failure",
+      },
+    ])
+    await transport.close()
+  })
+
   test("discovers current subagents from progress and reduces descendant tool state", async () => {
     const events = feed()
     events.push(connected())
@@ -2885,7 +2951,6 @@ describe("V2 mini transport", () => {
       id: "evt_subagent_progress",
       created: 3,
       type: "session.tool.progress",
-      durable: durable("ses_1", 2),
       data: {
         sessionID: "ses_1",
         assistantMessageID: "msg_subagent",
@@ -2937,7 +3002,6 @@ describe("V2 mini transport", () => {
       id: "evt_child_tool_progress",
       created: 6,
       type: "session.tool.progress",
-      durable: durable("ses_child_progress", 2),
       data: {
         sessionID: "ses_child_progress",
         assistantMessageID: "msg_child_tool",
@@ -2968,6 +3032,8 @@ describe("V2 mini transport", () => {
         assistantMessageID: "msg_child_tool",
         callID: "call_child_shell",
         error: { type: "unknown", message: "child boom" },
+        structured: { checkpoint: "child" },
+        content: [{ type: "text", text: "child partial" }],
         executed: true,
       },
     })

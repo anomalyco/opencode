@@ -130,7 +130,6 @@ function failedTool(inputID: string): V2Event[] {
       id: "evt_failed_tool_progress",
       created: 3,
       type: "session.tool.progress",
-      durable: { aggregateID: "ses_1", seq: 3, version: 1 },
       data: {
         sessionID: "ses_1",
         assistantMessageID: "msg_failed_tool",
@@ -149,6 +148,8 @@ function failedTool(inputID: string): V2Event[] {
         assistantMessageID: "msg_failed_tool",
         callID: "call_failed_tool",
         error: { type: "unknown", message: "tool failed" },
+        structured: { checkpoint: 1 },
+        content: [{ type: "text", text: "partial output" }],
         executed: true,
       },
     },

@@ -24,6 +24,7 @@ import renameInstructionsMigration from "@opencode-ai/core/database/migration/20
 import addSessionForkMigration from "@opencode-ai/core/database/migration/20260706223930_add-session-fork"
 import timeSuspendedMigration from "@opencode-ai/core/database/migration/20260709163752_time_suspended"
 import instructionSyncMigration from "@opencode-ai/core/database/migration/20260710025429_instruction_sync"
+import deleteToolProgressEventsMigration from "@opencode-ai/core/database/migration/20260722011141_delete_tool_progress_events"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
@@ -553,6 +554,31 @@ describe("DatabaseMigration", () => {
         expect(
           yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'instruction_checkpoint'`),
         ).toBeUndefined()
+      }),
+    )
+  })
+
+  test("deletes durable tool progress without changing aggregate sequence watermarks", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`CREATE TABLE event_sequence (aggregate_id text PRIMARY KEY, seq integer NOT NULL)`)
+        yield* db.run(
+          sql`CREATE TABLE event (id text PRIMARY KEY, aggregate_id text NOT NULL, seq integer NOT NULL, type text NOT NULL, data text NOT NULL)`,
+        )
+        yield* db.run(sql`INSERT INTO event_sequence VALUES ('ses_test', 5)`)
+        yield* db.run(sql`INSERT INTO event VALUES ('evt_success', 'ses_test', 4, 'session.tool.success.1', '{}')`)
+        yield* db.run(sql`INSERT INTO event VALUES ('evt_progress', 'ses_test', 5, 'session.tool.progress.1', '{}')`)
+
+        yield* DatabaseMigration.applyOnly(db, [deleteToolProgressEventsMigration])
+
+        expect(yield* db.all(sql`SELECT id, seq, type, data FROM event ORDER BY seq`)).toEqual([
+          { id: "evt_success", seq: 4, type: "session.tool.success.1", data: "{}" },
+        ])
+        expect(yield* db.get(sql`SELECT aggregate_id, seq FROM event_sequence`)).toEqual({
+          aggregate_id: "ses_test",
+          seq: 5,
+        })
       }),
     )
   })

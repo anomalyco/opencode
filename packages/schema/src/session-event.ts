@@ -3,7 +3,6 @@ export * as SessionEvent from "./session-event.js"
 import { Schema } from "effect"
 import { optional } from "./schema.js"
 import { Event } from "./event.js"
-import { ToolContent } from "./llm.js"
 import { FinishReason } from "./llm.js"
 import { Model } from "./model.js"
 import { NonNegativeInt, PositiveInt, RelativePath } from "./schema.js"
@@ -410,18 +409,15 @@ export namespace Tool {
   })
   export type Called = typeof Called.Type
 
-  /**
-   * Replayable bounded running-tool state. Tools should checkpoint semantic
-   * transitions or at a bounded cadence, not persist every stdout/stderr chunk.
-   */
-  export const Progress = Event.durable({
+  const ToolOutputFields = {
+    structured: SessionMessage.ToolStateRunning.fields.structured,
+    content: SessionMessage.ToolStateRunning.fields.content,
+  }
+
+  /** Live replacement snapshot for a running tool. Terminal events own durable output. */
+  export const Progress = Event.ephemeral({
     type: "session.tool.progress",
-    ...options,
-    schema: {
-      ...ToolBase,
-      structured: Schema.Record(Schema.String, Schema.Unknown),
-      content: Schema.Array(ToolContent),
-    },
+    schema: { ...ToolBase, ...ToolOutputFields },
   })
   export type Progress = typeof Progress.Type
 
@@ -430,8 +426,7 @@ export namespace Tool {
     ...options,
     schema: {
       ...ToolBase,
-      structured: Schema.Record(Schema.String, Schema.Unknown),
-      content: Schema.Array(ToolContent),
+      ...ToolOutputFields,
       result: Schema.Unknown.pipe(optional),
       executed: Schema.Boolean,
       resultState: SessionMessage.ProviderState.pipe(optional),
@@ -445,6 +440,9 @@ export namespace Tool {
     schema: {
       ...ToolBase,
       error: SessionError.Error,
+      // Optional only for compatibility with existing v1 failure rows.
+      structured: ToolOutputFields.structured.pipe(optional),
+      content: ToolOutputFields.content.pipe(optional),
       result: Schema.Unknown.pipe(optional),
       executed: Schema.Boolean,
       resultState: SessionMessage.ProviderState.pipe(optional),
