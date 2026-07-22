@@ -2,8 +2,9 @@ import { sql } from "drizzle-orm"
 import { Effect, Schema } from "effect"
 import type { DatabaseMigration } from "../migration"
 
-const decodeJson = Schema.decodeUnknownSync(Schema.UnknownFromJsonString)
+const decodeJson = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
 const isObject = Schema.is(Schema.Record(Schema.String, Schema.Unknown))
+const isJsonObject = Schema.is(Schema.Record(Schema.String, Schema.Json))
 
 const object = (value: unknown): Record<string, unknown> => (isObject(value) ? value : {})
 
@@ -47,7 +48,14 @@ export default {
 function rewrite(tx: Parameters<DatabaseMigration.Migration["up"]>[0], messages: { id: string; data: string }[]) {
   return Effect.gen(function* () {
     for (const row of messages) {
-      const data = object(decodeJson(row.data))
+      // A row that never decoded is skipped rather than failing the whole
+      // migration on every startup; it was equally unreadable before.
+      const decoded = decodeJson(row.data)
+      if (decoded._tag === "None") {
+        yield* Effect.logWarning("skipping undecodable session_message row").pipe(Effect.annotateLogs({ id: row.id }))
+        continue
+      }
+      const data = object(decoded.value)
       if (!Array.isArray(data.content)) continue
       let changed = false
       const content = data.content.map((part) => {
@@ -73,6 +81,12 @@ function rewrite(tx: Parameters<DatabaseMigration.Migration["up"]>[0], messages:
             ? { providerResultState: { ...object(tool.providerResultState), result: state.result.value } }
             : {}
         const preserved = contentOf(state)
+        // Old generic `structured` payloads carry what consumers now read from
+        // canonical metadata (edit/patch diffs, subagent session joins).
+        const metadata =
+          isJsonObject(state.structured) && Object.keys(state.structured).length > 0
+            ? { metadata: state.structured }
+            : {}
         if (state.status === "completed")
           return {
             ...tool,
@@ -84,6 +98,7 @@ function rewrite(tx: Parameters<DatabaseMigration.Migration["up"]>[0], messages:
                 preserved.length > 0
                   ? preserved
                   : [{ type: "text", text: stringify(state.structured ?? state.result) }],
+              ...metadata,
             },
           }
         return {
@@ -94,6 +109,7 @@ function rewrite(tx: Parameters<DatabaseMigration.Migration["up"]>[0], messages:
             input: object(state.input),
             error: state.error,
             ...(preserved.length > 0 ? { content: preserved } : {}),
+            ...metadata,
           },
         }
       })

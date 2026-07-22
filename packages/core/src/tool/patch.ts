@@ -81,6 +81,7 @@ export const Plugin = {
               input: Input,
               output: Output,
               toModelOutput: ({ output }) => [{ type: "text", text: toModelOutput(output) }],
+              toMetadata: ({ output }) => ({ files: output.files }),
               execute: (input, context) => {
                 const applied: Array<typeof Applied.Type> = []
                 const fail = (path: string, error?: unknown) => {

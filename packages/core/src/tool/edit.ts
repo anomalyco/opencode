@@ -106,6 +106,7 @@ export const Plugin = {
               toModelOutput: ({ input, output }) => [
                 { type: "text", text: toModelOutput(output, input.oldString, input.newString) },
               ],
+              toMetadata: ({ output }) => ({ files: output.files }),
               execute: (input, context) => {
                 const unableToEdit = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
                   effect.pipe(

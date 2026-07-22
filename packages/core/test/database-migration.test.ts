@@ -670,6 +670,10 @@ describe("DatabaseMigration", () => {
         yield* db.run(
           sql`INSERT INTO session_message VALUES ('msg_user', 'ses_test', 'user', 2, 12, 13, '{"text":"hi","time":{"created":1}}')`,
         )
+        // A row that never decoded must be skipped, not fail the migration.
+        yield* db.run(
+          sql`INSERT INTO session_message VALUES ('msg_corrupt', 'ses_test', 'assistant', 3, 14, 15, 'not json')`,
+        )
 
         yield* DatabaseMigration.applyOnly(db, [canonicalToolResultsMigration])
 
@@ -687,6 +691,8 @@ describe("DatabaseMigration", () => {
             status: "completed",
             input: { pattern: "TODO" },
             content: [{ type: "text", text: "src/a.ts:1: TODO" }],
+            // Old generic structured payloads survive as canonical metadata.
+            metadata: { value: [{ file: "src/a.ts", line: 1 }] },
           },
         })
         expect((states.get("call_content") as { state: Record<string, unknown> }).state).not.toHaveProperty(
@@ -696,6 +702,7 @@ describe("DatabaseMigration", () => {
           state: {
             status: "completed",
             content: [{ type: "text", text: JSON.stringify({ text: "hello" }, null, 2) }],
+            metadata: { text: "hello" },
           },
         })
         expect(states.get("call_hosted")).toMatchObject({
@@ -711,6 +718,7 @@ describe("DatabaseMigration", () => {
             status: "error",
             error: { type: "tool.execution", message: "timed out" },
             content: [{ type: "text", text: "partial output" }],
+            metadata: { truncated: false },
           },
         })
         const failed = (states.get("call_failed") as { state: Record<string, unknown> }).state
@@ -725,6 +733,9 @@ describe("DatabaseMigration", () => {
         })
         expect(yield* db.get(sql`SELECT data FROM session_message WHERE id = 'msg_user'`)).toEqual({
           data: '{"text":"hi","time":{"created":1}}',
+        })
+        expect(yield* db.get(sql`SELECT data FROM session_message WHERE id = 'msg_corrupt'`)).toEqual({
+          data: "not json",
         })
       }),
     )

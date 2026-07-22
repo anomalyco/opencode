@@ -153,7 +153,10 @@ describe("EditTool", () => {
                     text: "Edited file successfully: hello.txt\nReplacements: 1\n```diff\n-before\n+after\n```",
                   },
                 ])
-                expect(settled.metadata).toBeUndefined()
+                // Compact UI metadata carries the file diffs the TUI renders.
+                expect(settled.metadata).toMatchObject({
+                  files: [{ file: "hello.txt", status: "modified", additions: 1, deletions: 1 }],
+                })
                 expect(settled.output).toEqual({
                   replacements: 1,
                   files: [
