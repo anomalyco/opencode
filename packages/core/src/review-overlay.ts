@@ -14,6 +14,10 @@ let enabled = false
 let activeSession: string | undefined
 const entries = new Map<string, Entry>()
 const pending: PendingWrite[] = []
+// Tracks the exact content most recently drained per path, so a later
+// enqueueUnflushed() call in the same turn doesn't re-send a write that was
+// already flushed to the client (entries isn't cleared until end of turn).
+const flushedContent = new Map<string, string>()
 
 export function setEnabled(value: boolean) {
   enabled = value
@@ -46,12 +50,14 @@ export function has(path: string) {
 }
 
 // Recover staged edits that were written before a session was active, so a late
-// flush still sends them. Skips paths already queued and delete markers.
+// flush still sends them. Skips paths already queued, delete markers, and
+// content that was already flushed to the client earlier in this turn.
 export function enqueueUnflushed(sessionID: string) {
   const queued = new Set(pending.map((item) => item.path))
   for (const [path, entry] of entries) {
     if (!("content" in entry)) continue
     if (queued.has(path)) continue
+    if (flushedContent.get(path) === entry.content) continue
     pending.push({ sessionID, path, content: entry.content })
     queued.add(path)
   }
@@ -60,6 +66,7 @@ export function enqueueUnflushed(sessionID: string) {
 export function drainPendingWrites() {
   const drained = [...pending]
   pending.length = 0
+  for (const item of drained) flushedContent.set(item.path, item.content)
   return drained
 }
 
@@ -67,6 +74,7 @@ export function drainPendingWrites() {
 export function clear() {
   entries.clear()
   pending.length = 0
+  flushedContent.clear()
   activeSession = undefined
 }
 
@@ -76,4 +84,5 @@ export function reset() {
   activeSession = undefined
   entries.clear()
   pending.length = 0
+  flushedContent.clear()
 }
