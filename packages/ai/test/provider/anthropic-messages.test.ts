@@ -294,7 +294,7 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
-  it.effect("rejects non-image media in tool-result content with a clear error", () =>
+  it.effect("rejects unsupported media in tool-result content with a clear error", () =>
     Effect.gen(function* () {
       const error = yield* LLMClient.prepare(
         LLM.request({

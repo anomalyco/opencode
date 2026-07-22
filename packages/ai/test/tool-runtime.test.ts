@@ -183,6 +183,51 @@ describe("LLMClient tools", () => {
     }),
   )
 
+  it.effect("preserves provider metadata on dispatched tool results", () =>
+    Effect.gen(function* () {
+      const tool = Tool.make({
+        description: "Return text.",
+        parameters: Schema.Struct({}),
+        success: Schema.String,
+        execute: () => Effect.succeed("hello"),
+      })
+      const providerMetadata = { google: { functionCallId: "provider_call" } }
+      const dispatched = yield* ToolRuntime.dispatch(
+        { tool },
+        LLMEvent.toolCall({ id: "call_1", name: "tool", input: {}, providerMetadata }),
+      )
+
+      expect(dispatched.events).toEqual([
+        LLMEvent.toolResult({
+          id: "call_1",
+          name: "tool",
+          result: { type: "text", value: "hello" },
+          output: { structured: "hello", content: [{ type: "text", text: "hello" }] },
+          providerMetadata,
+        }),
+      ])
+
+      const failed = yield* ToolRuntime.dispatch(
+        {},
+        LLMEvent.toolCall({ id: "call_2", name: "missing", input: {}, providerMetadata }),
+      )
+      expect(failed.events).toEqual([
+        LLMEvent.toolError({
+          id: "call_2",
+          name: "missing",
+          message: "Unknown tool: missing",
+          providerMetadata,
+        }),
+        LLMEvent.toolResult({
+          id: "call_2",
+          name: "missing",
+          result: { type: "error", value: "Unknown tool: missing" },
+          providerMetadata,
+        }),
+      ])
+    }),
+  )
+
   it.effect("uses the narrow default projection for encoded typed success", () =>
     Effect.gen(function* () {
       const text = Tool.make({
