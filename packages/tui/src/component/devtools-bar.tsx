@@ -350,7 +350,7 @@ export function DevToolsBar() {
                 }
                 hoverBackground
               >
-                {timing() ? "[x]" : "[ ]"} Timing
+                {timing() ? "[x]" : "[ ]"} Time to first draw
               </Action>
             </box>
             <For each={groups()}>
@@ -366,13 +366,9 @@ export function DevToolsBar() {
           </PanelBox>
         </Show>
       </BarItem>
-      <TimeToFirstDraw
-        visible={timing()}
-        width={28}
-        flexShrink={0}
-        fg={themeV2.text.subdued}
-        label="Time to first draw"
-      />
+      <box flexGrow={1} minWidth={0}>
+        <TimeToFirstDraw visible={timing()} width="100%" fg={themeV2.text.subdued} label="Time to first draw" />
+      </box>
     </box>
   )
 }
@@ -451,7 +447,7 @@ function Action(props: ParentProps<{ onClick: () => void; disabled?: boolean; ho
   return (
     <box
       backgroundColor={
-        props.hoverBackground && hovered() && !props.disabled ? themeV2.raise(themeV2.background.default) : undefined
+        props.hoverBackground && hovered() && !props.disabled ? themeV2.background.action.primary.hovered : undefined
       }
       onMouseOver={() => setHovered(true)}
       onMouseOut={() => setHovered(false)}
