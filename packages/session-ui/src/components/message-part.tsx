@@ -2127,6 +2127,7 @@ ToolRegistry.register({
       <BasicTool
         {...props}
         icon="console"
+        allowOpenWhilePending
         trigger={(open) => (
           <div data-slot="basic-tool-tool-info-structured">
             <div data-slot="basic-tool-tool-info-main">

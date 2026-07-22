@@ -346,6 +346,7 @@ export const dict = {
   "zen.api.error.providerNotSupported": "不支援供應商 {{provider}}",
   "zen.api.error.missingApiKey": "缺少 API 金鑰。",
   "zen.api.error.invalidApiKey": "無效的 API 金鑰。",
+  "zen.api.error.requestBlockedByUpstreamProvider": "請求遭上游供應商封鎖。",
   "zen.api.error.subscriptionQuotaExceeded": "超出訂閱配額。請在 {{retryIn}} 後重試。",
   "zen.api.error.goSubscriptionRollingLimitExceeded":
     "已達 5 小時使用上限，將在 {{retryIn}} 後重置。若要立即繼續使用此模型，請從可用餘額啟用使用量：{{consoleGoUrl}}",

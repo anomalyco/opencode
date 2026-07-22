@@ -17,6 +17,11 @@ import {
 } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createStore, produce } from "solid-js/store"
+import { DragDropProvider, PointerSensor } from "@dnd-kit/solid"
+import { isSortable, useSortable } from "@dnd-kit/solid/sortable"
+import { AutoScroller, Feedback, PointerActivationConstraints } from "@dnd-kit/dom"
+import { RestrictToVerticalAxis } from "@dnd-kit/abstract/modifiers"
+import { RestrictToElement } from "@dnd-kit/dom/modifiers"
 import { useQuery } from "@tanstack/solid-query"
 import { Button } from "@opencode-ai/ui/button"
 import { Logo } from "@opencode-ai/ui/logo"
@@ -1037,7 +1042,7 @@ function HomeServerRow(props: {
   )
 }
 
-function HomeProjectList(props: {
+type HomeProjectListProps = {
   server: ServerConnection.Any
   projects: LocalProject[]
   selected: HomeProjectSelection
@@ -1048,29 +1053,82 @@ function HomeProjectList(props: {
   clearNotifications: (server: ServerConnection.Any, project: LocalProject) => void
   unseenCount: (server: ServerConnection.Any, project: LocalProject) => number
   language: ReturnType<typeof useLanguage>
-}) {
+}
+
+function HomeProjectList(props: HomeProjectListProps) {
+  const global = useGlobal()
+  let listRef!: HTMLDivElement
+  const projects = () => global.ensureServerCtx(props.server).projects
+
   return (
-    <div class="flex min-w-0 flex-col gap-1">
-      <For each={props.projects}>
-        {(project) => (
-          <HomeProjectRow
-            project={project}
-            server={props.server}
-            selected={
-              props.selected.server === ServerConnection.key(props.server) &&
-              props.selected.directory === project.worktree
-            }
-            unseenCount={props.unseenCount(props.server, project)}
-            selectProject={props.selectProject}
-            openNewSession={props.openNewSession}
-            editProject={props.editProject}
-            closeProject={props.closeProject}
-            clearNotifications={props.clearNotifications}
-            language={props.language}
-          />
-        )}
-      </For>
-    </div>
+    <DragDropProvider
+      sensors={(defaults) => [
+        ...defaults.filter((sensor) => sensor !== PointerSensor),
+        PointerSensor.configure({
+          activationConstraints: (event) =>
+            event.pointerType === "touch"
+              ? [new PointerActivationConstraints.Delay({ value: 250, tolerance: 5 })]
+              : [new PointerActivationConstraints.Distance({ value: 4 })],
+          preventActivation: (event) => event.target instanceof Element && !!event.target.closest("[data-action]"),
+        }),
+      ]}
+      modifiers={[RestrictToVerticalAxis, RestrictToElement.configure({ element: () => listRef })]}
+      plugins={(defaults) => [
+        ...defaults.filter((plugin) => plugin !== AutoScroller && plugin !== Feedback),
+        AutoScroller.configure({ acceleration: 8, threshold: { x: 0, y: 0.05 } }),
+        Feedback.configure({ dropAnimation: null }),
+      ]}
+      onDragEnd={(event) => {
+        const source = event.operation.source
+        if (event.canceled || !isSortable(source)) return
+        if (source.initialIndex !== source.index) projects().move(source.id.toString(), source.index)
+        if (props.selected.server !== ServerConnection.key(props.server))
+          props.selectProject(props.server, source.id.toString())
+      }}
+    >
+      <div class="flex min-w-0 flex-col gap-1" ref={listRef}>
+        {/* Keyed on worktree strings: the enriched project objects are
+            recreated on every store or sync update, so iterating them directly
+            remounts all rows — killing any in-flight drag activation (the
+            row's sortable unregisters on unmount) and discarding animations.
+            String keys keep row elements alive and move them on reorder. */}
+        <For each={props.projects.map((project) => project.worktree)}>
+          {(worktree, index) => <HomeProjectSlot {...props} worktree={worktree} index={index} />}
+        </For>
+      </div>
+    </DragDropProvider>
+  )
+}
+
+function HomeProjectSlot(
+  props: HomeProjectListProps & {
+    worktree: string
+    index: () => number
+  },
+) {
+  const project = createMemo(() => props.projects.find((item) => item.worktree === props.worktree))
+
+  return (
+    <Show when={project()}>
+      {(item) => (
+        <HomeProjectRow
+          project={item()}
+          server={props.server}
+          index={props.index}
+          serverSelected={props.selected.server === ServerConnection.key(props.server)}
+          selected={
+            props.selected.server === ServerConnection.key(props.server) && props.selected.directory === props.worktree
+          }
+          unseenCount={props.unseenCount(props.server, item())}
+          selectProject={props.selectProject}
+          openNewSession={props.openNewSession}
+          editProject={props.editProject}
+          closeProject={props.closeProject}
+          clearNotifications={props.clearNotifications}
+          language={props.language}
+        />
+      )}
+    </Show>
   )
 }
 
@@ -1150,6 +1208,8 @@ function HomeRecentlyClosedRow(props: {
 function HomeProjectRow(props: {
   project: LocalProject
   server: ServerConnection.Any
+  index: () => number
+  serverSelected: boolean
   selected: boolean
   unseenCount: number
   selectProject: (server: ServerConnection.Any, directory: string) => void
@@ -1163,6 +1223,15 @@ function HomeProjectRow(props: {
   const platform = usePlatform()
   const serverUnreachable = () => global.servers.health[ServerConnection.key(props.server)]?.healthy === false
   const [state, setState] = createStore({ menuOpen: false })
+  const sortable = useSortable({
+    get id() {
+      return props.project.worktree
+    },
+    get index() {
+      return props.index()
+    },
+  })
+  let pointerDownSelected: boolean | undefined
   const canRevealInFileManager = () =>
     platform.platform === "desktop" && !!platform.openPath && ServerConnection.local(props.server)
   const fileManagerActionLabel = () =>
@@ -1179,15 +1248,49 @@ function HomeProjectRow(props: {
     )
   }
   return (
-    <div class="group/project relative flex h-7 min-w-0 items-center rounded-[6px]">
+    <div
+      ref={sortable.ref}
+      class="group/project relative flex h-7 min-w-0 items-center rounded-[6px]"
+      classList={{ "z-10": sortable.isDragSource() }}
+    >
       <button
         type="button"
         data-component="home-project-row"
         class={`${HOME_PROJECT_NAV_ROW} pr-16 disabled:opacity-60`}
+        classList={{
+          "bg-v2-background-bg-layer-01 text-v2-text-text-base [box-shadow:inset_0_0_0_0.5px_var(--v2-border-border-muted)]":
+            sortable.isDragSource(),
+        }}
         data-selected={props.selected ? "" : undefined}
         aria-current={props.selected ? "page" : undefined}
         disabled={serverUnreachable()}
-        onClick={() => props.selectProject(props.server, props.project.worktree)}
+        onPointerDown={(event) => {
+          // Same-server mouse selection happens on pointerdown (like tabs),
+          // but only ever selects; selectProject toggles, and deselecting here
+          // would fire on every drag before the threshold is met. Cross-server
+          // selection waits for click so reordering a remote server's projects
+          // does not focus that server and load its session index. Touch is
+          // excluded so flick-scrolling the list cannot select rows.
+          pointerDownSelected = undefined
+          if (event.button !== 0 || event.pointerType === "touch") return
+          if (!props.serverSelected) return
+          pointerDownSelected = props.selected
+          if (!props.selected) props.selectProject(props.server, props.project.worktree)
+        }}
+        onClick={(event) => {
+          // The drag sensor calls preventDefault on post-drag clicks; never
+          // toggle selection as part of a reorder.
+          if (event.defaultPrevented) return
+          // Keyboard activation and touch taps keep the original toggle.
+          if (event.detail === 0 || pointerDownSelected === undefined) {
+            props.selectProject(props.server, props.project.worktree)
+            return
+          }
+          // Mouse: pointerdown already selected unselected rows; a plain click
+          // on an already-selected row toggles it off.
+          if (pointerDownSelected) props.selectProject(props.server, props.project.worktree)
+          pointerDownSelected = undefined
+        }}
       >
         <HomeProjectAvatar project={props.project} />
         <span class={HOME_PROJECT_NAV_LABEL}>{displayName(props.project)}</span>

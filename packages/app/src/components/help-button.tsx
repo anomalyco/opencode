@@ -16,6 +16,7 @@ export function TabsInfoPopup() {
   const settings = useSettings()
   const platform = usePlatform()
   const [drawerOpen, setDrawerOpen] = createSignal(false)
+  const windows = () => platform.platform === "desktop" && platform.os === "windows"
 
   return (
     <Drawer open={drawerOpen()} onOpenChange={setDrawerOpen} side="right">
@@ -70,12 +71,40 @@ export function TabsInfoPopup() {
           </button>
         </div>
       </Show>
-      <DrawerContent>
-        <div class="flex h-[52px] w-full shrink-0 items-center gap-4 self-stretch border-b border-v2-border-border-muted p-4">
+      <DrawerContent
+        style={
+          windows()
+            ? {
+                inset: "0 0 0 auto",
+                "max-height": "100vh",
+                "max-width": "100vw",
+                "border-radius": "0",
+              }
+            : undefined
+        }
+      >
+        <Show when={windows()}>
+          <DrawerClose
+            as={IconButtonV2}
+            type="button"
+            size="small"
+            variant="neutral"
+            aria-label="Close"
+            icon={<IconV2 name="xmark-small" />}
+            class="absolute top-[10px] left-[-36px]"
+          />
+        </Show>
+        <div
+          class="flex w-full shrink-0 items-center gap-4 self-stretch border-b border-v2-border-border-muted"
+          classList={{
+            "h-[40px] px-4": windows(),
+            "h-[52px] p-4": !windows(),
+          }}
+        >
           <p class="min-h-0 min-w-0 flex-1 text-[13px] font-[530] leading-5 tracking-[-0.04px] tabular-nums text-v2-text-text-muted">
             July 14
           </p>
-          <Show when={platform.platform !== "desktop" || platform.os !== "windows"}>
+          <Show when={!windows()}>
             <DrawerClose
               as={IconButtonV2}
               type="button"

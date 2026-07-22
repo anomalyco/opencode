@@ -357,6 +357,7 @@ export const dict = {
   "zen.api.error.providerNotSupported": "{{provider}} 제공자는 지원되지 않습니다",
   "zen.api.error.missingApiKey": "API 키가 누락되었습니다.",
   "zen.api.error.invalidApiKey": "유효하지 않은 API 키입니다.",
+  "zen.api.error.requestBlockedByUpstreamProvider": "상위 제공자가 요청을 차단했습니다.",
   "zen.api.error.subscriptionQuotaExceeded": "구독 할당량을 초과했습니다. {{retryIn}} 후 다시 시도해 주세요.",
   "zen.api.error.goSubscriptionRollingLimitExceeded":
     "5시간 사용 한도에 도달했습니다. {{retryIn}} 후 초기화됩니다. 이 모델을 지금 계속 사용하려면 사용 가능한 잔액에서 사용을 활성화하세요: {{consoleGoUrl}}",

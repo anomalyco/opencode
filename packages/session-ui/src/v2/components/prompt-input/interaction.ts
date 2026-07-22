@@ -82,9 +82,7 @@ export function createPromptInputV2Controller(input: {
       draft.addMention(part)
       return true
     }
-    const text = draft.state.prompt.map((item) => ("content" in item ? item.content : "")).join("")
-    const cursor = draft.state.cursor ?? text.length
-    draft.setText(text.slice(0, cursor) + part.content + text.slice(cursor))
+    draft.addText(part.content)
     return true
   }
   const attachments = input.attachments
@@ -164,21 +162,24 @@ export function createPromptInputV2Controller(input: {
   function dispatch(event: PromptInputV2InteractionEvent) {
     const mode = state.mode
     const result = transitionPromptInputV2(state, event, draft.state)
-    setState(reconcile(result.state))
-    result.commands.forEach(execute)
-    if (mode !== result.state.mode) {
-      if (result.state.mode === "shell") input.view.shell?.onOpen()
-      if (result.state.mode === "normal") input.view.shell?.onClose()
-    }
+    const action = event.type === "popover.select" ? input.onSuggestionSelect?.(event.item) : undefined
     if (event.type === "popover.select") {
-      const action = input.onSuggestionSelect?.(event.item)
-      if (!action) return result.handled
-      if (event.item.kind === "command") {
+      if (!action || state.popover.type !== "command-menu") result.commands.forEach(execute)
+      if (action && event.item.kind === "command" && state.popover.type !== "command-menu") {
         draft.setPrompt(
           draft.state.prompt.filter((part): part is PromptInputV2Attachment => part.type === "image"),
           0,
         )
       }
+    }
+    setState(reconcile(result.state))
+    if (event.type !== "popover.select") result.commands.forEach(execute)
+    if (mode !== result.state.mode) {
+      if (result.state.mode === "shell") input.view.shell?.onOpen()
+      if (result.state.mode === "normal") input.view.shell?.onClose()
+    }
+    if (event.type === "popover.select") {
+      if (!action) return result.handled
       action()
     }
     return result.handled
