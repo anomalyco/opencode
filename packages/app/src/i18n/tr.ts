@@ -679,6 +679,7 @@ export const dict = {
   "session.new.workspace.triggerLocal": "Yerel",
   "session.new.workspace.local": "Yerel depo",
   "session.new.workspace.existing": "Çalışma alanı…",
+  "session.new.git.none": "Git yok",
   "session.new.lastModified": "Son değişiklik",
 
   "session.header.search.placeholder": "{{project}} ara",

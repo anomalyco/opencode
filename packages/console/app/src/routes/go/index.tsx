@@ -38,6 +38,7 @@ const models = [
   "MiniMax M2.7",
   "DeepSeek V4 Pro",
   "DeepSeek V4 Flash",
+  "Hy3",
 ]
 
 function LimitsGraph(props: { href: string }) {
@@ -63,8 +64,8 @@ function LimitsGraph(props: { href: string }) {
 
   const baseline = 100
   const graph = [
-    { id: "grok-4.5", name: "Grok 4.5", req: 80, d: "50ms" },
-    { id: "kimi-k3", name: "Kimi K3 (2x usage)", req: 280, baseReq: 140, d: "75ms" },
+    { id: "grok-4.5", name: "Grok 4.5", req: 120, d: "50ms" },
+    { id: "kimi-k3", name: "Kimi K3 (2x usage)", req: 220, baseReq: 110, d: "75ms" },
     { id: "glm-5.2", name: "GLM-5.2", req: 880, d: "100ms" },
     { id: "qwen3.7-max", name: "Qwen3.7 Max", req: 950, d: "110ms" },
     { id: "kimi-k2.7-code", name: "Kimi K2.7 Code", req: 1150, d: "150ms" },
@@ -72,6 +73,7 @@ function LimitsGraph(props: { href: string }) {
     { id: "mimo-v2.5-pro", name: "MiMo-V2.5-Pro", req: 3250, d: "240ms" },
     { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro", req: 3450, d: "270ms" },
     { id: "qwen3.7-plus", name: "Qwen3.7 Plus", req: 4300, d: "300ms" },
+    { id: "hy3", name: "Hy3", req: 4300, d: "320ms" },
     { id: "mimo-v2.5", name: "MiMo-V2.5", req: 30100, d: "340ms" },
     { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash", req: 31650, d: "340ms" },
   ]

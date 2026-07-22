@@ -243,15 +243,7 @@
   color: var(--v2-icon-icon-base);
 }
 
-[data-component="icon-button-v2"][data-variant="ghost"].session-review-v2-sidebar-toggle[aria-expanded="true"]:not(
-    :disabled
-  ),
-[data-component="icon-button-v2"][data-variant="ghost"].session-review-v2-sidebar-toggle[aria-expanded="true"]:is(
-    :hover,
-    [data-state="hover"],
-    :active,
-    [data-state="pressed"]
-  ):not(:disabled) {
+[data-component="icon-button-v2"][data-variant="ghost"].session-review-v2-sidebar-toggle[aria-expanded="true"] {
   background-color: var(--v2-overlay-simple-overlay-pressed);
 }
 
