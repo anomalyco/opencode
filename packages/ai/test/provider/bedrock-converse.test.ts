@@ -553,13 +553,8 @@ describe("Bedrock Converse route", () => {
           messages: [
             Message.user([
               { type: "text", text: "Summarize these documents." },
-              {
-                type: "media",
-                mediaType: "application/pdf",
-                data: "UERGREFUQQ==",
-                filename: "../quarterly_report!.pdf",
-              },
-              { type: "media", mediaType: "text/csv", data: "Q1NWREFUQQ==" },
+              { type: "media", mediaType: "application/pdf", data: "UERGREFUQQ==", filename: "report.pdf" },
+              { type: "media", mediaType: "text/csv", data: "Q1NWREFUQQ==", filename: "data.csv" },
             ]),
           ],
         }),
@@ -571,10 +566,8 @@ describe("Bedrock Converse route", () => {
             role: "user",
             content: [
               { text: "Summarize these documents." },
-              // Bedrock document names exclude extensions and restricted punctuation.
-              { document: { format: "pdf", name: "quarterly report", source: { bytes: "UERGREFUQQ==" } } },
-              // Falls back to a stable placeholder when filename is missing.
-              { document: { format: "csv", name: "document", source: { bytes: "Q1NWREFUQQ==" } } },
+              { document: { format: "pdf", name: "report.pdf", source: { bytes: "UERGREFUQQ==" } } },
+              { document: { format: "csv", name: "data.csv", source: { bytes: "Q1NWREFUQQ==" } } },
             ],
           },
         ],
@@ -582,7 +575,7 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
-  it.effect("requires text alongside documents in user messages", () =>
+  it.effect("requires names for document media", () =>
     Effect.gen(function* () {
       const error = yield* LLMClient.prepare(
         LLM.request({
@@ -591,7 +584,33 @@ describe("Bedrock Converse route", () => {
         }),
       ).pipe(Effect.flip)
 
-      expect(error.message).toContain("user messages containing documents must also contain text")
+      expect(error.message).toContain("document media requires a filename")
+    }),
+  )
+
+  it.effect("passes named document-only messages through for provider validation", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<BedrockConverse.BedrockConverseBody>(
+        LLM.request({
+          model,
+          cache: "none",
+          messages: [
+            Message.user({
+              type: "media",
+              mediaType: "application/pdf",
+              data: "UERGREFUQQ==",
+              filename: "report.pdf",
+            }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "user",
+          content: [{ document: { format: "pdf", name: "report.pdf", source: { bytes: "UERGREFUQQ==" } } }],
+        },
+      ])
     }),
   )
 
@@ -613,7 +632,7 @@ describe("Bedrock Converse route", () => {
                     type: "file",
                     uri: "data:application/pdf;base64,UERGREFUQQ==",
                     mime: "application/pdf",
-                    name: "report.pdf",
+                    name: "report",
                   },
                 ],
               },

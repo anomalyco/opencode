@@ -15,13 +15,6 @@ const model = Gemini.route
   })
   .model({ id: "gemini-2.5-flash" })
 
-const gemini3 = Gemini.route
-  .with({
-    endpoint: { baseURL: "https://generativelanguage.test/v1beta/" },
-    auth: Auth.header("x-goog-api-key", "test"),
-  })
-  .model({ id: "gemini-3-flash" })
-
 const request = LLM.request({
   id: "req_1",
   model,
@@ -102,7 +95,12 @@ describe("Gemini route", () => {
           {
             role: "user",
             parts: [
-              { functionResponse: { name: "lookup", response: { name: "lookup", content: '{"forecast":"sunny"}' } } },
+              {
+                functionResponse: {
+                  name: "lookup",
+                  response: { name: "lookup", content: '{"forecast":"sunny"}' },
+                },
+              },
             ],
           },
         ],
@@ -154,54 +152,16 @@ describe("Gemini route", () => {
               functionResponse: {
                 name: "read",
                 response: { name: "read", content: "Image read successfully" },
+                parts: [
+                  { inlineData: { mimeType: "image/png", data: "AAECAw==" } },
+                  { inlineData: { mimeType: "application/pdf", data: "JVBERi0xLjQ=" } },
+                ],
               },
             },
-            { inlineData: { mimeType: "image/png", data: "AAECAw==" } },
-            { inlineData: { mimeType: "application/pdf", data: "JVBERi0xLjQ=" } },
           ],
         },
       ])
       expect(JSON.stringify(prepared.body.contents)).not.toContain('"content":"AAECAw=="')
-    }),
-  )
-
-  it.effect("nests media tool results in Gemini 3 function responses", () =>
-    Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<Gemini.GeminiBody>(
-        LLM.request({
-          model: gemini3,
-          messages: [
-            Message.assistant([ToolCallPart.make({ id: "call_file", name: "read", input: { path: "report.pdf" } })]),
-            Message.tool({
-              id: "call_file",
-              name: "read",
-              result: {
-                type: "content",
-                value: [
-                  { type: "text", text: "File read successfully" },
-                  { type: "file", uri: "data:application/pdf;base64,JVBERi0xLjQ=", mime: "application/pdf" },
-                ],
-              },
-            }),
-          ],
-        }),
-      )
-
-      expect(prepared.body.contents).toEqual([
-        { role: "model", parts: [{ functionCall: { name: "read", args: { path: "report.pdf" } } }] },
-        {
-          role: "user",
-          parts: [
-            {
-              functionResponse: {
-                name: "read",
-                response: { name: "read", content: "File read successfully" },
-                parts: [{ inlineData: { mimeType: "application/pdf", data: "JVBERi0xLjQ=" } }],
-              },
-            },
-          ],
-        },
-      ])
     }),
   )
 
@@ -228,8 +188,13 @@ describe("Gemini route", () => {
         {
           role: "user",
           parts: [
-            { functionResponse: { name: "read", response: { name: "read", content: "" } } },
-            { inlineData: { mimeType: "image/jpeg", data: "/9j/" } },
+            {
+              functionResponse: {
+                name: "read",
+                response: { name: "read", content: "" },
+                parts: [{ inlineData: { mimeType: "image/jpeg", data: "/9j/" } }],
+              },
+            },
           ],
         },
       ])
@@ -426,7 +391,10 @@ describe("Gemini route", () => {
               parts: [
                 { text: "thinking", thought: true },
                 { text: "", thought: true, thoughtSignature: "thought_sig" },
-                { functionCall: { name: "lookup", args: { query: "weather" } }, thoughtSignature: "tool_sig" },
+                {
+                  functionCall: { id: "provider_call", name: "lookup", args: { query: "weather" } },
+                  thoughtSignature: "tool_sig",
+                },
               ],
             },
             finishReason: "STOP",
@@ -452,7 +420,10 @@ describe("Gemini route", () => {
         id: "reasoning-0",
         providerMetadata: { google: { thoughtSignature: "thought_sig" } },
       })
-      expect(toolCall).toMatchObject({ providerMetadata: { google: { thoughtSignature: "tool_sig" } } })
+      expect(toolCall).toMatchObject({
+        id: "tool_0",
+        providerMetadata: { google: { functionCallId: "provider_call", thoughtSignature: "tool_sig" } },
+      })
       expect(response.events.findIndex((event) => event.type === "reasoning-end")).toBeLessThan(
         response.events.findIndex((event) => event.type === "tool-call"),
       )
@@ -470,6 +441,13 @@ describe("Gemini route", () => {
                 providerMetadata: toolCall?.providerMetadata,
               }),
             ]),
+            Message.tool({
+              id: "tool_0",
+              name: "lookup",
+              result: "done",
+              resultType: "text",
+              providerMetadata: toolCall?.providerMetadata,
+            }),
           ],
         }),
       )
@@ -478,7 +456,22 @@ describe("Gemini route", () => {
           role: "model",
           parts: [
             { text: "thinking", thought: true, thoughtSignature: "thought_sig" },
-            { functionCall: { name: "lookup", args: { query: "weather" } }, thoughtSignature: "tool_sig" },
+            {
+              functionCall: { id: "provider_call", name: "lookup", args: { query: "weather" } },
+              thoughtSignature: "tool_sig",
+            },
+          ],
+        },
+        {
+          role: "user",
+          parts: [
+            {
+              functionResponse: {
+                id: "provider_call",
+                name: "lookup",
+                response: { name: "lookup", content: "done" },
+              },
+            },
           ],
         },
       ])
@@ -552,7 +545,7 @@ describe("Gemini route", () => {
             content: {
               role: "model",
               parts: [
-                { functionCall: { name: "lookup", args: { query: "weather" } } },
+                { functionCall: { id: "tool_0", name: "lookup", args: { query: "weather" } } },
                 { functionCall: { name: "lookup", args: { query: "news" } } },
               ],
             },
@@ -567,7 +560,13 @@ describe("Gemini route", () => {
       ).pipe(Effect.provide(fixedResponse(body)))
 
       expect(response.toolCalls).toEqual([
-        { type: "tool-call", id: "tool_0", name: "lookup", input: { query: "weather" } },
+        {
+          type: "tool-call",
+          id: "tool_0",
+          name: "lookup",
+          input: { query: "weather" },
+          providerMetadata: { google: { functionCallId: "tool_0" } },
+        },
         { type: "tool-call", id: "tool_1", name: "lookup", input: { query: "news" } },
       ])
       expect(response.events.at(-1)).toMatchObject({ type: "finish", reason: "tool-calls" })

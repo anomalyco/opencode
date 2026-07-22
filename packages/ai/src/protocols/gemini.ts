@@ -45,6 +45,7 @@ type GeminiInlineDataPart = Schema.Schema.Type<typeof GeminiInlineDataPart>
 
 const GeminiFunctionCallPart = Schema.Struct({
   functionCall: Schema.Struct({
+    id: Schema.optional(Schema.String),
     name: Schema.String,
     args: Schema.Unknown,
   }),
@@ -53,6 +54,7 @@ const GeminiFunctionCallPart = Schema.Struct({
 
 const GeminiFunctionResponsePart = Schema.Struct({
   functionResponse: Schema.Struct({
+    id: Schema.optional(Schema.String),
     name: Schema.String,
     response: Schema.Unknown,
     parts: Schema.optional(Schema.Array(GeminiInlineDataPart)),
@@ -199,14 +201,18 @@ const thoughtSignature = (providerMetadata: ProviderMetadata | undefined) => {
     : undefined
 }
 
+const functionCallId = (providerMetadata: ProviderMetadata | undefined) => {
+  const google = providerMetadata?.google
+  return ProviderShared.isRecord(google) && typeof google.functionCallId === "string" ? google.functionCallId : undefined
+}
+
 const lowerToolCall = (part: ToolCallPart) => ({
-  functionCall: { name: part.name, args: part.input },
+  functionCall: { id: functionCallId(part.providerMetadata), name: part.name, args: part.input },
   thoughtSignature: thoughtSignature(part.providerMetadata),
 })
 
 const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMRequest) {
   const contents: GeminiContent[] = []
-  const supportsFunctionResponseParts = String(request.model.id).startsWith("gemini-3")
 
   for (const message of request.messages) {
     if (message.role === "system") {
@@ -258,6 +264,7 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
       if (part.result.type !== "content") {
         parts.push({
           functionResponse: {
+            id: functionCallId(part.providerMetadata),
             name: part.name,
             response: {
               name: part.name,
@@ -277,15 +284,15 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
       }
       parts.push({
         functionResponse: {
+          id: functionCallId(part.providerMetadata),
           name: part.name,
           response: {
             name: part.name,
             content: text.join("\n"),
           },
-          parts: supportsFunctionResponseParts && media.length > 0 ? media : undefined,
+          parts: media.length > 0 ? media : undefined,
         },
       })
-      if (!supportsFunctionResponseParts) parts.push(...media)
     }
     contents.push({ role: "user", parts })
   }
@@ -447,6 +454,10 @@ const step = (state: ParserState, event: GeminiEvent) => {
     if ("functionCall" in part) {
       const input = part.functionCall.args
       const id = `tool_${nextToolCallId++}`
+      const metadata = {
+        ...(part.functionCall.id === undefined ? {} : { functionCallId: part.functionCall.id }),
+        ...(part.thoughtSignature === undefined ? {} : { thoughtSignature: part.thoughtSignature }),
+      }
       lifecycle = Lifecycle.reasoningEnd(
         lifecycle,
         events,
@@ -459,9 +470,7 @@ const step = (state: ParserState, event: GeminiEvent) => {
           id,
           name: part.functionCall.name,
           input,
-          providerMetadata: part.thoughtSignature
-            ? googleMetadata({ thoughtSignature: part.thoughtSignature })
-            : undefined,
+          providerMetadata: Object.keys(metadata).length > 0 ? googleMetadata(metadata) : undefined,
         }),
       )
       hasToolCalls = true

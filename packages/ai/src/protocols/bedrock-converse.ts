@@ -330,10 +330,6 @@ const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (
           continue
         }
       }
-      if (content.some((part) => "document" in part) && !content.some((part) => "text" in part))
-        return yield* ProviderShared.invalidRequest(
-          "Bedrock Converse user messages containing documents must also contain text",
-        )
       messages.push({ role: "user", content })
       continue
     }
