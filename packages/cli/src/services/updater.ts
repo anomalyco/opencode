@@ -95,7 +95,7 @@ export const layer = Layer.effect(
       const response = yield* Effect.tryPromise({
         try: () =>
           fetch(
-            `https://registry.npmjs.org/${encodeURIComponent(packageName)}/${encodeURIComponent(OPENCODE_CHANNEL)}`,
+            `https://update.opencode.ai/api/${encodeURIComponent(channel)}/cli/npm`,
             { headers: { "User-Agent": `opencode/${OPENCODE_VERSION}` }, signal: AbortSignal.timeout(10_000) },
           ),
         catch: (cause) => new Error("Failed to check for updates", { cause }),
