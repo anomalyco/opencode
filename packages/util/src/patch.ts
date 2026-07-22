@@ -77,8 +77,12 @@ export function parse(patchText: string): Result.Result<ReadonlyArray<Hunk>, Par
       const path = header.slice("*** Update File: ".length).trim()
       let next = index + 1
       let movePath: string | undefined
-      if (lines[next]?.trimEnd().startsWith("*** Move to: ")) {
-        movePath = lines[next]!.trimEnd().slice("*** Move to: ".length).trim()
+      const move = lines[next]?.trimEnd()
+      if (move === "*** Move to:" || move?.startsWith("*** Move to: ")) {
+        movePath = move.slice("*** Move to: ".length).trim()
+        if (!movePath) {
+          return Result.fail(new InvalidHunkError({ line: lines[next]!.trim(), lineNumber: next + 1 }))
+        }
         next++
       }
       const parsed = parseUpdate(lines, next, end, path, index)
@@ -163,7 +167,7 @@ function parseUpdate(
     }
     if (updateLine === "*** End of File") {
       const chunk = chunks.at(-1)
-      if (chunk && chunk.oldLines.length === 0 && chunk.newLines.length === 0) {
+      if (!chunk || (chunk.oldLines.length === 0 && chunk.newLines.length === 0)) {
         return {
           error: new InvalidHunkError({
             line: updateLine,
@@ -334,5 +338,4 @@ const normalize = (value: string) =>
     .replace(/[\u00A0\u2002-\u200A\u202F\u205F\u3000]/g, " ")
 const splitBom = (text: string) =>
   text.startsWith("\uFEFF") ? { bom: true, text: text.slice(1) } : { bom: false, text }
-const stripHeredoc = (input: string) =>
-  input.match(/^(?:cat\s+)?<<['"]?(\w+)['"]?\s*\n([\s\S]*?)\n\1\s*$/)?.[2] ?? input
+const stripHeredoc = (input: string) => input.match(/^(?:cat\s+)?<<(['"]?)(\w+)\1\s*\n([\s\S]*?)\n\2\s*$/)?.[3] ?? input
