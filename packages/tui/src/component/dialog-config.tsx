@@ -223,10 +223,10 @@ const settings: Setting[] = [
     labels: ["off", "on"],
   },
   {
-    title: "Timing",
+    title: "DevTools: Timing",
     category: "Debug",
     path: ["debug", "timing"],
-    default: false,
+    default: true,
     values: [false, true],
     labels: ["off", "on"],
   },

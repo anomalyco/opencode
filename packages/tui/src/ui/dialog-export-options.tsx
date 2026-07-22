@@ -9,11 +9,11 @@ export type ExportFormat = "markdown" | "json"
 
 export type DialogExportOptionsProps = {
   defaultThinking: boolean
-  onConfirm?: (options: { action: "copy" | "export"; format: ExportFormat; debug: boolean; thinking: boolean }) => void
+  onConfirm?: (options: { action: "copy" | "export"; format: ExportFormat; thinking: boolean }) => void
   onCancel?: () => void
 }
 
-type Active = ExportFormat | "debug" | "thinking" | "copy" | "export"
+type Active = ExportFormat | "thinking" | "copy" | "export"
 
 export function DialogExportOptions(props: DialogExportOptionsProps) {
   const dialog = useDialog()
@@ -21,7 +21,6 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
   const { themeV2: overlayTheme } = useTheme().contextual("overlay")
   const [store, setStore] = createStore({
     format: "markdown" as ExportFormat,
-    debug: false,
     thinking: props.defaultThinking,
     active: "markdown" as Active,
   })
@@ -30,7 +29,6 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
     props.onConfirm?.({
       action,
       format: store.format,
-      debug: store.debug,
       thinking: store.thinking,
     })
 
@@ -39,7 +37,6 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
       setStore("format", store.active)
       return
     }
-    if (store.active === "debug") setStore("debug", !store.debug)
     if (store.active === "thinking") setStore("thinking", !store.thinking)
     if (store.active === "copy" || store.active === "export") confirm(store.active)
   }
@@ -55,7 +52,7 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
           const order: Active[] =
             store.format === "markdown"
               ? ["markdown", "json", "thinking", "copy", "export"]
-              : ["markdown", "json", "debug", "copy", "export"]
+              : ["markdown", "json", "copy", "export"]
           setStore("active", order[(order.indexOf(store.active) + 1) % order.length])
         },
       },
@@ -156,46 +153,6 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
           </text>
         </box>
       </Show>
-      <Show when={store.format === "json"}>
-        <box
-          flexDirection="row"
-          gap={1}
-          backgroundColor={
-            store.active === "debug"
-              ? themeV2.background.formfield.focused
-              : store.debug
-                ? themeV2.background.formfield.selected
-                : themeV2.background.formfield.default
-          }
-          onMouseUp={() => {
-            setStore("active", "debug")
-            setStore("debug", !store.debug)
-          }}
-        >
-          <text
-            fg={
-              store.active === "debug"
-                ? themeV2.text.formfield.focused
-                : store.debug
-                  ? themeV2.text.formfield.selected
-                  : themeV2.text.formfield.default
-            }
-          >
-            {store.debug ? "[x]" : "[ ]"}
-          </text>
-          <text
-            fg={
-              store.active === "debug"
-                ? themeV2.text.formfield.focused
-                : store.debug
-                  ? themeV2.text.formfield.selected
-                  : themeV2.text.formfield.default
-            }
-          >
-            Events (debug)
-          </text>
-        </box>
-      </Show>
       <box flexDirection="row" justifyContent="flex-end" gap={1} paddingBottom={1}>
         <box
           paddingLeft={4}
@@ -230,7 +187,6 @@ DialogExportOptions.show = (dialog: DialogContext, defaultThinking: boolean) => 
   return new Promise<{
     action: "copy" | "export"
     format: ExportFormat
-    debug: boolean
     thinking: boolean
   } | null>((resolve) => {
     dialog.replace(

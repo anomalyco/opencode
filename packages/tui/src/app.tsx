@@ -1,9 +1,10 @@
-import { render, TimeToFirstDraw, useRenderer, useTerminalDimensions } from "@opentui/solid"
+import { render, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { registerOpencodeSpinner } from "./component/register-spinner"
 import { Deferred, Effect } from "effect"
 import { Service, type Endpoint } from "@opencode-ai/client/effect/service"
 import { OpenCode } from "@opencode-ai/client"
 import { Global } from "@opencode-ai/util/global"
+import { InstallationLocal } from "@opencode-ai/core/installation/version"
 import { ClipboardProvider, useClipboard } from "./context/clipboard"
 import { LogProvider, useLog, type LogSink } from "./context/log"
 import { ExitProvider, useExit } from "./context/exit"
@@ -47,8 +48,7 @@ import { EditorContextProvider } from "./context/editor"
 import { useEvent } from "./context/event"
 import { ClientProvider, useClient } from "./context/client"
 import { StartupLoading } from "./component/startup-loading"
-import { DevToolsSidebar } from "./component/devtools-sidebar"
-import { DevTools } from "./devtools"
+import { DevToolsBar } from "./component/devtools-bar"
 import { Reconnecting } from "./component/reconnecting"
 import { DataProvider, useData } from "./context/data"
 import { LocationProvider, useLocation } from "./context/location"
@@ -87,8 +87,6 @@ import { DialogVariant } from "./component/dialog-variant"
 import { win32DisableProcessedInput, win32FlushInputBuffer } from "./terminal-win32"
 import { destroyRenderer } from "./util/renderer"
 import { cliErrorMessage, errorFormat } from "./util/error"
-
-const themePerformance = DevTools.register({ id: "theme-performance", title: "Theme performance" })
 
 registerOpencodeSpinner()
 
@@ -257,12 +255,9 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
       const pluginRuntime = createPluginRuntime()
 
       yield* Effect.tryPromise(async () => {
-        const appStarted = performance.now()
         // Prewarm palette before ThemeProvider mounts so `system` theme avoids a first-paint fallback flash.
         void renderer.getPalette({ size: 16 }).catch(() => undefined)
-        const modeStarted = performance.now()
         const mode = handoff?.mode ?? (await renderer.waitForThemeMode(1000)) ?? "dark"
-        themePerformance.set("Detect light/dark mode", `${(performance.now() - modeStarted).toFixed(2)} ms`)
         if (renderer.isDestroyed) return
 
         await render(() => {
@@ -351,7 +346,6 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                                 <EditorContextProvider>
                                                                   <PluginProvider packages={input.packages}>
                                                                     <App
-                                                                      started={appStarted}
                                                                       pair={
                                                                         input.server.endpoint.auth
                                                                           ? input.server.endpoint.auth
@@ -409,11 +403,11 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   })
 })
 
-function App(props: { pair?: DialogPairCredentials; started: number }) {
+function App(props: { pair?: DialogPairCredentials }) {
   const log = useLog({ component: "app" })
   const startup = useTuiStartup()
   const config = useConfig()
-  const devtools = createMemo(() => config.data.debug?.devtools ?? false)
+  const devtools = createMemo(() => config.data.debug?.devtools ?? InstallationLocal)
   const route = useRoute()
   const dimensions = useTerminalDimensions()
   const renderer = useRenderer()
@@ -432,11 +426,6 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
   const pluginRuntime = usePluginRuntime()
   const plugins = usePlugin()
   const clipboard = useClipboard()
-
-  createEffect(() => {
-    if (!themeState.ready) return
-    themePerformance.set("Total", `${(performance.now() - props.started).toFixed(2)} ms`)
-  })
 
   // Toast once when an MCP server enters a failed or needs-auth state so the user knows to act,
   // without having to open the status panel. Tracking the last alerted status avoids re-toasting
@@ -1110,9 +1099,6 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
           : undefined
       }
     >
-      <Show when={config.data.debug?.timing}>
-        <TimeToFirstDraw />
-      </Show>
       <box flexGrow={1} minHeight={0} flexDirection="row">
         <box flexGrow={1} minWidth={0} flexDirection="column">
           <Show when={plugins.ready()}>
@@ -1141,10 +1127,10 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
             <PluginSlot name="app" />
           </Show>
         </box>
-        <Show when={devtools()}>
-          <DevToolsSidebar />
-        </Show>
       </box>
+      <Show when={devtools()}>
+        <DevToolsBar />
+      </Show>
       <Show when={!startup.skipInitialLoading}>
         <StartupLoading ready={plugins.ready} />
       </Show>
