@@ -359,6 +359,7 @@ export const dict = {
   "zen.api.error.providerNotSupported": "ไม่รองรับผู้ให้บริการ {{provider}}",
   "zen.api.error.missingApiKey": "ไม่มี API key",
   "zen.api.error.invalidApiKey": "API key ไม่ถูกต้อง",
+  "zen.api.error.requestBlockedByUpstreamProvider": "คำขอถูกบล็อกโดยผู้ให้บริการต้นทาง",
   "zen.api.error.subscriptionQuotaExceeded": "โควต้าการสมัครสมาชิกเกินขีดจำกัด ลองใหม่ในอีก {{retryIn}}",
   "zen.api.error.goSubscriptionRollingLimitExceeded":
     "ถึงขีดจำกัดการใช้งานในรอบ 5 ชั่วโมงแล้ว จะรีเซ็ตในอีก {{retryIn}} หากต้องการใช้โมเดลนี้ต่อทันที ให้เปิดใช้งานจากยอดเงินคงเหลือของคุณ: {{consoleGoUrl}}",
