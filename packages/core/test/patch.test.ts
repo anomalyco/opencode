@@ -185,6 +185,19 @@ describe("Patch", () => {
     ])
   })
 
+  test("allows an end-of-file marker before an explicit chunk", () => {
+    expect(
+      parse("*** Begin Patch\n*** Update File: file.txt\n*** End of File\n@@\n-old\n+new\n*** End Patch"),
+    ).toEqual([
+      {
+        type: "update",
+        path: "file.txt",
+        movePath: undefined,
+        chunks: [{ oldLines: ["old"], newLines: ["new"], changeContext: undefined }],
+      },
+    ])
+  })
+
   test("derives fuzzy line updates while preserving BOM", () => {
     const update = Patch.derive("update.txt", [{ oldLines: ["  old   "], newLines: ["new"] }], "\uFEFFold\n")
     expect(update).toEqual({ content: "new\n", bom: true })
@@ -388,14 +401,8 @@ describe("Patch", () => {
       ),
     ).toThrow("Invalid hunk at line 2: Update file hunk for path 'old.txt' is empty")
     expect(() => parse("*** Begin Patch\n*** Update File: file.txt\n*** End of File\n*** End Patch")).toThrow(
-      "Invalid hunk at line 3: Update hunk does not contain any lines",
+      "Invalid hunk at line 2: Update file hunk for path 'file.txt' is empty",
     )
-  })
-
-  test("rejects an end-of-file marker before update lines", () => {
-    expect(() =>
-      parse("*** Begin Patch\n*** Update File: file.txt\n*** End of File\n@@\n-old\n+new\n*** End Patch"),
-    ).toThrow("Invalid hunk at line 3: Update hunk does not contain any lines")
   })
 
   test("rejects an empty update chunk", () => {

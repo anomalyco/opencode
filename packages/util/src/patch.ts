@@ -167,7 +167,7 @@ function parseUpdate(
     }
     if (updateLine === "*** End of File") {
       const chunk = chunks.at(-1)
-      if (!chunk || (chunk.oldLines.length === 0 && chunk.newLines.length === 0)) {
+      if (chunk && chunk.oldLines.length === 0 && chunk.newLines.length === 0) {
         return {
           error: new InvalidHunkError({
             line: updateLine,
