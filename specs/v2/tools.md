@@ -34,14 +34,13 @@ Every local tool receives the same concrete invocation context:
 interface Tool.Context {
   readonly sessionID: Session.ID
   readonly agent: Agent.ID
-  readonly assistantMessageID: SessionMessage.ID
-  readonly toolCallID: string
+  readonly messageID: SessionMessage.ID
+  readonly callID: string
+  readonly progress: (update: Progress) => Effect.Effect<void>
 }
 ```
 
-`assistantMessageID` is the durable ID of the assistant message containing the call. The Session runner owns this association and supplies the complete context to the registry; the registry does not infer it.
-
-Durable events call the invocation identifier `callID`; `Tool.Context.toolCallID` is the same value at the executor boundary.
+`messageID` is the durable ID of the assistant message containing the call. The Session runner owns this association and supplies the complete context to the registry; the registry does not infer it. `callID` carries the same invocation identifier durable events use.
 
 Decoded tool input is passed separately to `execute`. Raw provider input and domain services do not belong in the invocation context.
 
@@ -105,8 +104,8 @@ yield *
             agent: context.agent,
             source: {
               type: "tool",
-              messageID: context.assistantMessageID,
-              callID: context.toolCallID,
+              messageID: context.messageID,
+              callID: context.callID,
             },
             action: "grep",
             resources: [input.pattern],
@@ -160,7 +159,7 @@ Outcomes remain distinct:
 - `ToolFailure` is an expected model-visible failure.
 - Interruption cancels the invocation and is not a tool result.
 - Unexpected typed errors and defects follow the runner's operational failure policy.
-- Unknown and invalid calls become explicit model-visible settlement errors without invoking a handler.
+- Unknown and invalid calls become explicit model-visible execution errors without invoking a handler.
 
 Leaf tools translate only errors they deliberately classify as recoverable. Broad cause-catching around an executor is invalid because it consumes interruption and defects.
 

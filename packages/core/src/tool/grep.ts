@@ -9,7 +9,7 @@ import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Location } from "../location"
 import { PermissionV2 } from "../permission"
 import { Ripgrep } from "../ripgrep"
-import { NonNegativeInt, RelativePath } from "../schema"
+import { RelativePath } from "../schema"
 import { Tool } from "./tool"
 
 export const name = "grep"

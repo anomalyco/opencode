@@ -2,9 +2,9 @@
 
 ## Status
 
-This document describes the agreed target design for V2 tools. It is an implementation plan, not documentation for the current API.
+Implemented on this branch. This document is the historical plan kept for reviewer context; the authoritative semantic overview is [`specs/v2/tools.md`](../../../../specs/v2/tools.md), and where the two disagree the spec and code win. Delete this file at merge.
 
-The current semantic overview remains in [`specs/v2/tools.md`](../../../../specs/v2/tools.md) until this plan is implemented. The plan's base is `origin/v2` at `b91dd78ab3`. Progress-event ephemerality already landed there (`5a9ed4d350`, `fix: make tool progress live-only`), including the failed-event partial snapshot this plan builds on. Delta-compressed progress is a later follow-up.
+The plan's base was `origin/v2` at `b91dd78ab3`. Progress-event ephemerality already landed there (`5a9ed4d350`, `fix: make tool progress live-only`), including the failed-event partial snapshot this plan builds on. Delta-compressed progress is a later follow-up.
 
 ## Reader And Job
 

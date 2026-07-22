@@ -414,6 +414,9 @@ export namespace Tool {
     type: "session.tool.progress",
     schema: {
       ...ToolBase,
+      // Deliberately looser than terminal metadata (JSON-only): live snapshots
+      // are ephemeral, and only the JSON-validated subset survives into a
+      // durable failure snapshot.
       metadata: Schema.Record(Schema.String, Schema.Unknown),
       content: Schema.Array(ToolContent),
     },

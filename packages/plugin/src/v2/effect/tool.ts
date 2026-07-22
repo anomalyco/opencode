@@ -95,15 +95,12 @@ export type Definition<Input extends SchemaType<any>, Output extends SchemaType<
    * Optional model projection. Receives the typed domain output. When absent, an
    * encoded string becomes text and any other encoded JSON is serialized once.
    */
-  readonly toModelOutput?: (input: {
+  readonly toModelOutput?: (call: {
     readonly input: InputValue<Input>
     readonly output: OutputValue<Output>
   }) => ModelOutput
   /** Optional compact UI metadata. Receives the typed domain output. Absent means absent: no defaults. */
-  readonly toMetadata?: (input: {
-    readonly input: InputValue<Input>
-    readonly output: OutputValue<Output>
-  }) => Metadata
+  readonly toMetadata?: (call: { readonly input: InputValue<Input>; readonly output: OutputValue<Output> }) => Metadata
 }
 
 /** A dynamic tool's split result: a machine value for Code Mode and content for the model. */

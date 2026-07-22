@@ -8,7 +8,7 @@ import { FileSystem } from "../filesystem"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Location } from "../location"
 import { Ripgrep } from "../ripgrep"
-import { NonNegativeInt, RelativePath } from "../schema"
+import { RelativePath } from "../schema"
 import { PermissionV2 } from "../permission"
 import { Tool } from "./tool"
 
