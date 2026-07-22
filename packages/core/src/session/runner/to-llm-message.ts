@@ -1,11 +1,4 @@
-import {
-  Message,
-  ToolCallPart,
-  ToolOutput,
-  ToolResultPart,
-  type ContentPart,
-  type ProviderMetadata,
-} from "@opencode-ai/ai"
+import { Message, ToolCallPart, ToolResultPart, type ContentPart, type ProviderMetadata } from "@opencode-ai/ai"
 import { Option, Schema } from "effect"
 import type { ModelV2 } from "../../model"
 import { SessionMessage } from "../message"
@@ -116,8 +109,8 @@ const toolResult = (tool: SessionMessage.AssistantTool, providerMetadata: Provid
 }
 
 const assistant = (message: SessionMessage.Assistant, model: ModelV2.Ref, providerMetadataKey: string) => {
-  const sameModel =
-    String(message.model.providerID) === String(model.providerID) && String(message.model.id) === String(model.id)
+  const sameProvider = String(message.model.providerID) === String(model.providerID)
+  const sameModel = sameProvider && String(message.model.id) === String(model.id)
   const reuseProviderMetadata = sameModel && message.error === undefined
   const content = message.content.flatMap((item): ContentPart[] => {
     if (item.type === "text") return [{ type: "text", text: item.text }]
@@ -141,11 +134,15 @@ const assistant = (message: SessionMessage.Assistant, model: ModelV2.Ref, provid
       reuseToolProviderMetadata ? providerMetadata(providerMetadataKey, item.providerState) : undefined,
     )
     if (item.executed !== true) return [call]
+    // Hosted result payloads are provider-format state, not model state:
+    // replay must survive a model switch within the same provider.
     const result = toolResult(
       item,
       reuseToolProviderMetadata
         ? providerMetadata(providerMetadataKey, item.providerResultState ?? item.providerState)
-        : undefined,
+        : sameProvider && item.executed === true && item.providerResultState !== undefined
+          ? providerMetadata(providerMetadataKey, item.providerResultState)
+          : undefined,
     )
     return result ? [call, result] : [call]
   })

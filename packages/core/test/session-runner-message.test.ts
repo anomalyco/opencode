@@ -645,7 +645,7 @@ Recent work
     ])
   })
 
-  test("drops provider-native continuation metadata after a model switch", () => {
+  test("drops model-scoped continuation metadata after a model switch but keeps hosted result payloads", () => {
     const messages = toLLMMessages(
       [
         SessionMessage.Assistant.make({
@@ -712,7 +712,9 @@ Recent work
         providerExecuted: true,
         cache: undefined,
         metadata: undefined,
-        providerMetadata: undefined,
+        // Hosted result payloads are provider-format state and must survive a
+        // model switch within the same provider for replay to stay valid.
+        providerMetadata: { provider: { itemId: "hosted-old-model" } },
       },
       {
         type: "tool-call",
