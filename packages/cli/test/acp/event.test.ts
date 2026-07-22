@@ -96,6 +96,7 @@ test("acp prompt resolves after ordered turn updates", async () => {
       sessionID: "ses_test",
       cwd: "/workspace",
       start: { type: "input", id },
+      writeTextFile: false,
       control: { cancelled: false, admission: new AbortController() },
       submit: () => client.session.prompt({ sessionID: "ses_test", id, text: "hi" }),
     })

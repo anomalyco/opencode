@@ -47,6 +47,7 @@ export async function streamTurn(input: {
   readonly sessionID: string
   readonly cwd: string
   readonly start: TurnStart
+  readonly writeTextFile: boolean
   readonly submit: (signal: AbortSignal) => Promise<unknown>
   readonly control: TurnControl
 }): Promise<PromptResponse> {
@@ -169,6 +170,7 @@ export async function streamTurn(input: {
         tools.delete(event.data.callID)
         await syncEditedFiles({
           connection: input.connection,
+          writeTextFile: input.writeTextFile,
           sessionID: input.sessionID,
           cwd: input.cwd,
           toolName: current.name,

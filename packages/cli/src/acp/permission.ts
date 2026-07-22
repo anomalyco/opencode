@@ -53,13 +53,14 @@ export async function replyPermission(input: {
 
 export async function syncEditedFiles(input: {
   readonly connection: Partial<Pick<AgentSideConnection, "writeTextFile">>
+  readonly writeTextFile: boolean
   readonly sessionID: string
   readonly cwd: string
   readonly toolName: string
   readonly toolInput: ToolInput
   readonly structured: Readonly<Record<string, unknown>>
 }) {
-  if (!input.connection.writeTextFile || toToolKind(input.toolName) !== "edit") return
+  if (!input.writeTextFile || !input.connection.writeTextFile || toToolKind(input.toolName) !== "edit") return
   const files = Array.isArray(input.structured.files)
     ? input.structured.files.flatMap((file): string[] => {
         if (!file || typeof file !== "object") return []

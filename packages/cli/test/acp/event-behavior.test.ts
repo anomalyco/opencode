@@ -439,6 +439,7 @@ describe("acp event behavior", () => {
       sessionID: "ses_cancel",
       cwd: "/workspace",
       start: { type: "input", id: "input_cancel" },
+      writeTextFile: false,
       control,
       submit: async (signal) => {
         await fixture.client.session.prompt(
@@ -481,6 +482,7 @@ describe("acp event behavior", () => {
       sessionID: "ses_cancel_admission",
       cwd: "/workspace",
       start: { type: "input", id: "input_cancel_admission" },
+      writeTextFile: false,
       control,
       submit: (signal) =>
         fixture.client.session.prompt(
@@ -566,6 +568,7 @@ function turn(input: {
     sessionID: input.sessionID,
     cwd: "/workspace",
     start: { type: "input", id: input.inputID },
+    writeTextFile: false,
     control: { cancelled: false, admission: new AbortController() },
     submit: (signal) =>
       input.fixture.client.session.prompt({ sessionID: input.sessionID, id: input.inputID, text: "hello" }, { signal }),

@@ -16,6 +16,8 @@ import type {
   CancelNotification,
   CloseSessionRequest,
   CloseSessionResponse,
+  DeleteSessionRequest,
+  DeleteSessionResponse,
   ForkSessionRequest,
   ForkSessionResponse,
   InitializeRequest,
@@ -45,7 +47,8 @@ import { ACPError } from "./error"
 
 export const AuthMethodID = "opencode-login"
 
-type Connection = Pick<AgentSideConnection, "sessionUpdate" | "requestPermission">
+type Connection = Pick<AgentSideConnection, "sessionUpdate" | "requestPermission"> &
+  Partial<Pick<AgentSideConnection, "writeTextFile">>
 
 type Catalog = {
   readonly providers: ConfigOptionProvider[]
@@ -81,6 +84,7 @@ export interface Interface {
   newSession(input: NewSessionRequest): Promise<NewSessionResponse>
   loadSession(input: LoadSessionRequest): Promise<LoadSessionResponse>
   listSessions(input: ListSessionsRequest): Promise<ListSessionsResponse>
+  deleteSession(input: DeleteSessionRequest): Promise<DeleteSessionResponse>
   resumeSession(input: ResumeSessionRequest): Promise<ResumeSessionResponse>
   closeSession(input: CloseSessionRequest): Promise<CloseSessionResponse>
   forkSession(input: ForkSessionRequest): Promise<ForkSessionResponse>
@@ -95,6 +99,7 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
   const catalogs = new Map<string, Promise<Catalog>>()
   const registeredMcp = new Map<string, Set<string>>()
   const active = new Map<string, TurnControl>()
+  const capabilities = { writeTextFile: false }
 
   const catalog = (cwd: string) => {
     const cached = catalogs.get(cwd)
@@ -154,6 +159,7 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
 
   return {
     initialize: async (params) => {
+      capabilities.writeTextFile = params.clientCapabilities?.fs?.writeTextFile === true
       const authMethod: AuthMethod = {
         description: "Run `opencode auth login` in the terminal",
         name: "Login with opencode",
@@ -170,7 +176,7 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
           loadSession: true,
           mcpCapabilities: { http: true, sse: false },
           promptCapabilities: { embeddedContext: true, image: true },
-          sessionCapabilities: { close: {}, fork: {}, list: {}, resume: {} },
+          sessionCapabilities: { close: {}, delete: {}, fork: {}, list: {}, resume: {} },
         },
         authMethods: [authMethod],
         agentInfo: { name: "OpenCode", version: OPENCODE_VERSION },
@@ -212,6 +218,14 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
         })),
         ...(page.cursor.next ? { nextCursor: page.cursor.next } : {}),
       }
+    },
+    deleteSession: async (params) => {
+      await input.client.session.remove({ sessionID: params.sessionId }).catch((error) => {
+        if (!isSessionNotFoundError(error)) throw error
+      })
+      sessions.delete(params.sessionId)
+      registeredMcp.delete(params.sessionId)
+      return {}
     },
     resumeSession: async (params) => {
       const session = await getSession(input.client, params.sessionId)
@@ -285,6 +299,7 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
         sessionID: state.id,
         cwd: state.cwd,
         start: prepared.start,
+        writeTextFile: capabilities.writeTextFile,
         control,
         submit: (signal) => submitPrompt(input.client, state, prepared, signal),
       }).finally(() => {
