@@ -588,21 +588,21 @@ export function latest(msgs: WithParts[]) {
   let finished: Assistant | undefined
   for (const msg of msgs) {
     const info = msg.info
-    if (info.role === "user" && (!user || isAfter(info, user))) user = info
-    if (info.role === "assistant" && (!assistant || isAfter(info, assistant))) assistant = info
-    if (info.role === "assistant" && info.finish && (!finished || isAfter(info, finished))) finished = info
+    if (info.role === "user" && (!user || isNewerMessage(info, user))) user = info
+    if (info.role === "assistant" && (!assistant || isNewerMessage(info, assistant))) assistant = info
+    if (info.role === "assistant" && info.finish && (!finished || isNewerMessage(info, finished))) finished = info
   }
   const tasks = msgs.flatMap((m) =>
-    finished && !isAfter(m.info, finished)
+    finished && !isNewerMessage(m.info, finished)
       ? []
       : m.parts.filter((p): p is CompactionPart | SubtaskPart => p.type === "compaction" || p.type === "subtask"),
   )
   return { user, assistant, finished, tasks }
 }
 
-function isAfter(a: Info, b: Info) {
-  if (a.time.created !== b.time.created) return a.time.created > b.time.created
-  return a.id > b.id
+function isNewerMessage(candidate: Info, current: Info) {
+  if (candidate.time.created !== current.time.created) return candidate.time.created > current.time.created
+  return candidate.id > current.id
 }
 
 export function fromError(
