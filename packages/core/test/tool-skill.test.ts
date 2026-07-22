@@ -119,9 +119,12 @@ describe("SkillTool", () => {
                 ...toolIdentity,
                 call: { type: "tool-call", id: "call-skill-overflow", name: "skill", input: { id: "effect" } },
               }),
-            ).toMatchObject({
+            ).toEqual({
               result: { type: "text", value: SkillTool.toModelOutput(info, [reference]) },
-              output: { structured: { name: "Effect" } },
+              output: {
+                structured: { name: "Effect", directory },
+                content: [{ type: "text", text: SkillTool.toModelOutput(info, [reference]) }],
+              },
             })
             expect(assertions).toMatchObject([
               { sessionID, action: "skill", resources: ["effect"], save: ["effect"] },

@@ -31,6 +31,10 @@ export const Output = Schema.Struct({
   status: Schema.Literals(["completed", "running"]),
   output: Schema.String,
 })
+export const StructuredOutput = Schema.Struct({
+  sessionID: SessionSchema.ID,
+  status: Output.fields.status,
+})
 
 export const description = [
   "Spawn a subagent: a child session running a configured agent with fresh context.",
@@ -115,6 +119,8 @@ export const Plugin = {
             description,
             input: Input,
             output: Output,
+            structured: StructuredOutput,
+            toStructuredOutput: ({ output }) => ({ sessionID: output.sessionID, status: output.status }),
             toModelOutput: ({ output }) => [{ type: "text", text: output.output }],
             execute: (input, context) =>
               Effect.gen(function* () {

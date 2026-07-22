@@ -21,6 +21,10 @@ export const Output = Schema.Struct({
   directory: Schema.String,
   output: Schema.String,
 })
+export const StructuredOutput = Schema.Struct({
+  name: SkillV2.Name,
+  directory: Schema.String,
+})
 
 export const description = [
   "Load a specialized skill when the task at hand matches one of the available skills in the instructions.",
@@ -66,6 +70,8 @@ export const Plugin = {
             description,
             input: Input,
             output: Output,
+            structured: StructuredOutput,
+            toStructuredOutput: ({ output }) => ({ name: output.name, directory: output.directory }),
             toModelOutput: ({ output }) => [{ type: "text", text: output.output }],
             execute: (input, context) =>
               Effect.gen(function* () {

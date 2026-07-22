@@ -53,6 +53,7 @@ type ToolInput = ToolDict & {
   pattern?: string
   url?: string
   query?: string
+  numResults?: number
   agent?: string
   description?: string
   name?: string
@@ -394,9 +395,11 @@ function runEdit(p: ToolProps): ToolInline {
 
 function runWebSearch(p: ToolProps): ToolInline {
   const title = webSearchProviderLabel(p.metadata.provider)
+  const requested = finiteNumber(p.input.numResults)
   return {
     icon: "◈",
     title: p.input.query ? `${title} "${p.input.query}"` : title,
+    description: requested === undefined ? undefined : `requested: ${requested} results`,
   }
 }
 

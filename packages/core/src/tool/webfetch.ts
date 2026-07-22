@@ -37,6 +37,9 @@ const Output = Schema.Struct({
   format: Input.fields.format,
   output: Schema.String,
 })
+export const StructuredOutput = Schema.Struct({
+  contentType: Schema.String,
+})
 
 type Format = (typeof Input.Type)["format"]
 
@@ -126,6 +129,8 @@ export const Plugin = {
             description,
             input: Input,
             output: Output,
+            structured: StructuredOutput,
+            toStructuredOutput: ({ output }) => ({ contentType: output.contentType }),
             toModelOutput: ({ output }) => [{ type: "text", text: output.output }],
             execute: (input, context) =>
               Effect.gen(function* () {

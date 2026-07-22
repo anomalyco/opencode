@@ -157,6 +157,54 @@ function failedTool(inputID: string): V2Event[] {
   ]
 }
 
+function successfulGrep(inputID: string): V2Event[] {
+  const text = "Found 2 matches\n/src/a.ts:\n  Line 1: needle\n/src/b.ts:\n  Line 2: needle"
+  return [
+    prompted(inputID),
+    {
+      id: "evt_grep_input",
+      created: 1,
+      type: "session.tool.input.started",
+      durable: { aggregateID: "ses_1", seq: 1, version: 1 },
+      data: {
+        sessionID: "ses_1",
+        assistantMessageID: "msg_grep",
+        callID: "call_grep",
+        name: "grep",
+      },
+    },
+    {
+      id: "evt_grep_called",
+      created: 2,
+      type: "session.tool.called",
+      durable: { aggregateID: "ses_1", seq: 2, version: 1 },
+      data: {
+        sessionID: "ses_1",
+        assistantMessageID: "msg_grep",
+        callID: "call_grep",
+        input: { pattern: "needle" },
+        executed: true,
+      },
+    },
+    {
+      id: "evt_grep_success",
+      created: 3,
+      type: "session.tool.success",
+      durable: { aggregateID: "ses_1", seq: 3, version: 1 },
+      data: {
+        sessionID: "ses_1",
+        assistantMessageID: "msg_grep",
+        callID: "call_grep",
+        structured: { matches: 2 },
+        content: [{ type: "text", text }],
+        result: { type: "text", value: text },
+        executed: true,
+      },
+    },
+    settled(),
+  ]
+}
+
 // Runs one non-interactive prompt against a mocked SDK. `turn` produces the
 // live events the prompt admission triggers, keyed by the generated message ID.
 async function run(input: {
@@ -269,6 +317,32 @@ afterEach(() => {
 })
 
 describe("runNonInteractivePrompt", () => {
+  test("keeps formatted tool output and compact structured metadata in JSON", async () => {
+    const output = await capture({ format: "json", turn: successfulGrep })
+    const events = output.stdout
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line))
+
+    expect(events).toHaveLength(1)
+    expect(events[0]).toMatchObject({
+      type: "tool_use",
+      part: {
+        tool: "grep",
+        state: {
+          status: "completed",
+          output: expect.stringContaining("Found 2 matches"),
+          metadata: {
+            structured: { matches: 2 },
+            content: [{ type: "text", text: expect.stringContaining("/src/a.ts") }],
+            result: { type: "text", value: expect.stringContaining("/src/b.ts") },
+          },
+        },
+      },
+    })
+    expect(events[0].part.state.metadata.structured).toEqual({ matches: 2 })
+  })
+
   test("uses session.wait then reconciles projected output without a terminal event", async () => {
     const idle = Promise.withResolvers<void>()
     let done = false

@@ -25,6 +25,9 @@ export const Input = Schema.Struct({
 })
 
 export const Output = Schema.Array(FileSystem.Entry)
+export const StructuredOutput = Schema.Struct({
+  count: Schema.Number,
+})
 type ModelOutput = typeof Output.Encoded
 
 /** Format raw search results into the concise line-oriented output models expect. */
@@ -51,6 +54,8 @@ export const Plugin = {
               "Find files by glob pattern within the active Location. Returns concise relative file resources. Use a relative path to narrow the search and limit to bound the result count.",
             input: Input,
             output: Output,
+            structured: StructuredOutput,
+            toStructuredOutput: ({ output }) => ({ count: output.length }),
             toModelOutput: ({ output }) => [
               {
                 type: "text",
