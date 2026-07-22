@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
-import { coalesceProgressCommit } from "../../src/mini/footer"
-import type { StreamCommit } from "../../src/mini/types"
+import { coalesceProgressCommit, resolveRunAgent } from "../../src/mini/footer"
+import type { RunAgent, StreamCommit } from "../../src/mini/types"
 
 function progress(input: Partial<StreamCommit> = {}): StreamCommit {
   return {
@@ -22,4 +22,17 @@ test("coalesces progress only within the same message and tool state", () => {
   expect(coalesceProgressCommit(progress(), progress({ text: "two", directory: "/latest" }))).toEqual(
     progress({ text: "onetwo", directory: "/latest" }),
   )
+})
+
+test("resolves the first selectable agent when none is selected", () => {
+  const agents: RunAgent[] = [
+    { id: "task", name: "Task", mode: "subagent", hidden: false },
+    { id: "secret", name: "Secret", mode: "primary", hidden: true },
+    { id: "build", name: "Build", mode: "primary", hidden: false },
+    { id: "plan", name: "Plan", mode: "primary", hidden: false },
+  ]
+
+  expect(resolveRunAgent(agents, undefined)?.id).toBe("build")
+  expect(resolveRunAgent(agents, "plan")?.id).toBe("plan")
+  expect(resolveRunAgent(agents, "missing")?.id).toBe("build")
 })

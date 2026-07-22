@@ -102,6 +102,11 @@ type RunFooterOptions = {
   subscribeThemeSignal: (listener: () => void) => () => void
 }
 
+export function resolveRunAgent(agents: RunAgent[], current: string | undefined) {
+  const selectable = agents.filter((agent) => agent.mode !== "subagent" && !agent.hidden)
+  return selectable.find((agent) => agent.id === current) ?? selectable.at(0)
+}
+
 const PERMISSION_ROWS = 12
 const FORM_ROWS = 14
 const SUBAGENT_ROWS = RUN_SUBAGENT_PANEL_ROWS
@@ -252,13 +257,15 @@ export class RunFooter implements FooterApi {
     const [providers, setProviders] = createSignal<RunProvider[] | undefined>()
     this.providers = providers
     this.setProviders = setProviders
-    const [currentAgentID, setCurrentAgentID] = createSignal(options.agent)
-    this.currentAgentID = currentAgentID
+    const [selectedAgentID, setCurrentAgentID] = createSignal(options.agent)
+    const currentAgent = () => resolveRunAgent(this.agents(), selectedAgentID())
+    this.currentAgentID = () => currentAgent()?.id ?? selectedAgentID()
     this.setCurrentAgentID = setCurrentAgentID
     this.currentAgent = () => {
-      const agent = currentAgentID()
-      if (!agent) return "Default"
-      return this.agents().find((item) => item.id === agent)?.name ?? Locale.titlecase(agent)
+      const agent = currentAgent()
+      if (agent) return agent.name
+      const selected = selectedAgentID()
+      return selected ? Locale.titlecase(selected) : "Default"
     }
     const [currentModel, setCurrentModel] = createSignal<RunInput["model"]>(options.model)
     this.currentModel = currentModel
