@@ -16,7 +16,30 @@ export default defineScript({
       const preload = Bun.resolveSync("@opentui/solid/preload", path.join(root, "packages/cli"))
       const session = `mini-stage2-${process.pid}`
       const snapshots = path.join(artifacts, "mini-stage2")
-      yield* Effect.promise(() => mkdir(snapshots, { recursive: true }))
+      const explicitDirectory = path.join(artifacts, "explicit-model")
+      yield* Effect.promise(() => Promise.all([snapshots, explicitDirectory].map((dir) => mkdir(dir, { recursive: true }))))
+      /** @param {string} directory @param {string | undefined} model */
+      const mini = (directory, model) => [
+        "env",
+        `PWD=${directory}`,
+        `OPENCODE_PASSWORD=${registration.password}`,
+        `OPENCODE_CONFIG_DIR=${path.join(artifacts, "files/.opencode")}`,
+        `OPENCODE_TEST_HOME=${artifacts}`,
+        `XDG_CACHE_HOME=${path.join(artifacts, "home/.cache")}`,
+        `XDG_CONFIG_HOME=${path.join(artifacts, "home/.config")}`,
+        `XDG_DATA_HOME=${path.join(artifacts, "logs")}`,
+        `XDG_STATE_HOME=${path.join(artifacts, "home/.local/state")}`,
+        "OPENCODE_DISABLE_AUTOUPDATE=1",
+        "OPENCODE_DIRECT_TRACE=1",
+        process.execPath,
+        "--conditions=browser",
+        `--preload=${preload}`,
+        path.join(root, "packages/cli/src/index.ts"),
+        "mini",
+        "--server",
+        registration.url,
+        ...(model ? ["--model", model] : []),
+      ]
 
       yield* llm.queue(
         Llm.toolCall({
@@ -42,26 +65,7 @@ export default defineScript({
               "-y",
               "30",
               "--",
-              "env",
-              `PWD=${path.join(artifacts, "files")}`,
-              `OPENCODE_PASSWORD=${registration.password}`,
-              `OPENCODE_CONFIG_DIR=${path.join(artifacts, "files/.opencode")}`,
-              `OPENCODE_TEST_HOME=${artifacts}`,
-              `XDG_CACHE_HOME=${path.join(artifacts, "home/.cache")}`,
-              `XDG_CONFIG_HOME=${path.join(artifacts, "home/.config")}`,
-              `XDG_DATA_HOME=${path.join(artifacts, "logs")}`,
-              `XDG_STATE_HOME=${path.join(artifacts, "home/.local/state")}`,
-              "OPENCODE_DISABLE_AUTOUPDATE=1",
-              "OPENCODE_DIRECT_TRACE=1",
-              process.execPath,
-              "--conditions=browser",
-              `--preload=${preload}`,
-              path.join(root, "packages/cli/src/index.ts"),
-              "mini",
-              "--server",
-              registration.url,
-              "--model",
-              "simulation/gpt-sim-model",
+              ...mini(path.join(artifacts, "files"), undefined),
             ]),
           ),
         )
@@ -72,7 +76,16 @@ export default defineScript({
         if (first.includes("drive mini response complete"))
           throw new Error("response rendered before prompt submission")
 
-        yield* Effect.promise(() => waitForPane(session, "Simulated Model", 15_000))
+        yield* Effect.promise(() => waitForPane(session, "Default model", 15_000))
+        yield* Effect.promise(() => tmux(["send-keys", "-t", session, "C-p"]))
+        yield* Effect.promise(() => waitForVisiblePane(session, "Commands"))
+        yield* Effect.promise(() => tmux(["send-keys", "-t", session, "-l", "model"]))
+        yield* Effect.promise(() => waitForVisiblePane(session, "Switch model"))
+        yield* Effect.promise(() => tmux(["send-keys", "-H", "-t", session, "0d"]))
+        yield* Effect.promise(() => waitForVisiblePane(session, "Select model"))
+        yield* Effect.promise(() => waitForVisiblePane(session, "Simulated Model", 15_000))
+        yield* Effect.promise(() => tmux(["send-keys", "-t", session, "Escape"]))
+        yield* Effect.promise(() => waitForVisiblePane(session, "Ask anything..."))
         yield* Effect.promise(() => tmux(["send-keys", "-t", session, "-l", "exercise the mini frontend"]))
         yield* Effect.sleep(100)
         yield* Effect.promise(() => tmux(["send-keys", "-H", "-t", session, "0d"]))
@@ -134,7 +147,7 @@ export default defineScript({
         yield* Effect.promise(() => tmux(["send-keys", "-H", "-t", session, "0d"]))
         yield* Effect.promise(() => waitForPane(session, "$ sleep 10"))
         yield* Effect.promise(() => tmux(["send-keys", "-t", session, "Escape"]))
-        const armed = yield* Effect.promise(() => waitForPane(session, "again to interrupt"))
+        const armed = yield* Effect.promise(() => waitForPane(session, "esc again"))
         yield* Effect.promise(() => Bun.write(path.join(snapshots, "04-interrupt-armed.txt"), armed))
         yield* Effect.promise(() => tmux(["send-keys", "-t", session, "Escape"]))
         const interrupted = yield* Effect.promise(() => waitForPane(session, "Step interrupted", 10_000))
@@ -144,7 +157,7 @@ export default defineScript({
           if (!(await paneAlive(session))) throw new Error("Mini exited while interrupting an active turn")
         })
         yield* Effect.promise(() => tmux(["send-keys", "-t", session, "C-c"]))
-        yield* Effect.promise(() => waitForPane(session, "Press ctrl+c again to exit"))
+        yield* Effect.promise(() => waitForPane(session, "EXIT  Press ctrl+"))
         yield* Effect.promise(() => tmux(["send-keys", "-t", session, "C-c"]))
         yield* Effect.promise(() => waitForDeadPane(session))
         const status = yield* Effect.promise(() => paneDeadStatus(session))
@@ -153,6 +166,75 @@ export default defineScript({
         if (!exited.includes("Continue") || !exited.includes("opencode mini -s"))
           throw new Error("Mini exit splash was not rendered before teardown")
         yield* Effect.promise(() => Bun.write(path.join(snapshots, "06-exit-teardown.txt"), exited))
+
+        yield* Effect.promise(() => tmux(["clear-history", "-t", session]))
+        yield* Effect.promise(() =>
+          tmux([
+            "respawn-pane",
+            "-k",
+            "-t",
+            session,
+            "--",
+            ...mini(explicitDirectory, "simulation/gpt-sim-model"),
+          ]),
+        )
+        const explicitModel = yield* Effect.promise(() => waitForPane(session, "Simulated Model", 15_000))
+        yield* Effect.promise(() => Bun.write(path.join(snapshots, "07-explicit-model.txt"), explicitModel))
+        yield* Effect.promise(() => tmux(["send-keys", "-t", session, "C-c"]))
+        yield* Effect.promise(() => waitForPane(session, "EXIT  Press ctrl+"))
+        yield* Effect.promise(() => tmux(["send-keys", "-t", session, "C-c"]))
+        yield* Effect.promise(() => waitForDeadPane(session))
+        if ((yield* Effect.promise(() => paneDeadStatus(session))) !== 0)
+          throw new Error("Explicit-model Mini did not exit cleanly")
+
+        yield* Effect.promise(async () => {
+          for (const failure of [
+            {
+              args: ["--model", "simulation/definitely-missing"],
+              capture: "08-unavailable-model.txt",
+              expected: "Model unavailable: simulation/definitely-missing",
+            },
+            {
+              args: ["--agent", "definitely-missing"],
+              capture: "09-unavailable-agent.txt",
+              expected: 'Agent not found: "definitely-missing"',
+            },
+          ]) {
+            const child = Bun.spawn(
+              [
+                process.execPath,
+                path.join(root, "packages/cli/src/index.ts"),
+                "run",
+                "--server",
+                registration.url,
+                ...failure.args,
+                "optimistic selection check",
+              ],
+              {
+                cwd: path.join(root, "packages/cli"),
+                env: {
+                  ...process.env,
+                  PWD: path.join(artifacts, "files"),
+                  OPENCODE_PASSWORD: registration.password,
+                  OPENCODE_CONFIG_DIR: path.join(artifacts, "files/.opencode"),
+                  OPENCODE_DISABLE_AUTOUPDATE: "1",
+                },
+                stdin: "ignore",
+                stdout: "pipe",
+                stderr: "pipe",
+              },
+            )
+            const [exitCode, stdout, stderr] = await Promise.all([
+              child.exited,
+              new Response(child.stdout).text(),
+              new Response(child.stderr).text(),
+            ])
+            await Bun.write(path.join(snapshots, failure.capture), stdout + stderr)
+            if (exitCode !== 1) throw new Error(`${failure.expected} run exited with status ${exitCode}`)
+            if (!stderr.includes(failure.expected))
+              throw new Error(`Selection failure was not diagnosed by execution: ${stderr}`)
+          }
+        })
       })
 
       yield* journey.pipe(Effect.ensuring(Effect.promise(() => tmux(["kill-session", "-t", session], true))))
@@ -186,6 +268,19 @@ function capturePane(session) {
 /** @param {string} session */
 function captureVisiblePane(session) {
   return tmux(["capture-pane", "-p", "-t", session])
+}
+
+/** @param {string} session @param {string} text @param {number} [timeout] */
+async function waitForVisiblePane(session, text, timeout = 5_000) {
+  const deadline = Date.now() + timeout
+  let last = ""
+  while (Date.now() < deadline) {
+    last = await captureVisiblePane(session)
+    if (last.includes(text)) return last
+    if (!(await paneAlive(session))) throw new Error(`Mini exited before rendering ${JSON.stringify(text)}:\n${last}`)
+    await Bun.sleep(50)
+  }
+  throw new Error(`Timed out waiting for visible ${JSON.stringify(text)}:\n${last}`)
 }
 
 /** @param {string} session */

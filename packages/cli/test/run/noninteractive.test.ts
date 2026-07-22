@@ -169,6 +169,7 @@ async function run(input: {
   renderToolError?: (part: SessionMessageAssistantTool) => Promise<void>
   messages?: (inputID: string) => SessionMessageInfo[]
   wait?: () => Promise<void>
+  terminalDelay?: number
 }) {
   const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
   const values: V2Event[] = [{ id: "evt_connected", type: "server.connected", data: {} }]
@@ -183,7 +184,10 @@ async function run(input: {
         })
         continue
       }
-      if (value.type.startsWith("session.execution.")) setTimeout(wait.resolve, 0)
+      if (value.type.startsWith("session.execution.")) {
+        if (input.terminalDelay) await Bun.sleep(input.terminalDelay)
+        setTimeout(wait.resolve, 0)
+      }
       yield value
     }
   })()
@@ -251,7 +255,7 @@ async function capture(input: Parameters<typeof run>[0]) {
   })
   try {
     await run(input)
-    return { stdout: stdout.join(""), stderr: stderr.join("") }
+    return { stdout: stdout.join(""), stderr: stderr.join(""), exitCode: process.exitCode }
   } finally {
     process.exitCode = exitCode ?? 0
     stdoutWrite.mockRestore()
@@ -319,6 +323,26 @@ describe("runNonInteractivePrompt", () => {
         error: { type: "provider.transport", message: "instructions unavailable" },
       }),
     ])
+    expect(output.exitCode).toBe(1)
+  })
+
+  test("waits for a terminal failure when idle wins before projection", async () => {
+    for (const promotedBeforeFailure of [true, false]) {
+      const output = await capture({
+        format: "json",
+        turn: (messageID) => [
+          ...(promotedBeforeFailure ? [prompted(messageID)] : []),
+          executionFailed("selection unavailable"),
+        ],
+        messages: (messageID) =>
+          promotedBeforeFailure ? [{ id: messageID, type: "user", text: "hello", time: { created: 1 } }] : [],
+        wait: () => Promise.resolve(),
+        terminalDelay: 10,
+      })
+
+      expect(output.exitCode).toBe(1)
+      expect(output.stdout).toContain("selection unavailable")
+    }
   })
 
   test("cancels session and global form blockers and exits on pre-promotion interrupt", async () => {
@@ -413,7 +437,7 @@ describe("runNonInteractivePrompt", () => {
       ],
     })
 
-    expect(output).toEqual({ stdout: "", stderr: "" })
+    expect(output).toEqual({ stdout: "", stderr: "", exitCode: 0 })
   })
 
   test("renders native failed tool output before the terminal error", async () => {

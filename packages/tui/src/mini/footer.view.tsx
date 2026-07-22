@@ -425,7 +425,7 @@ export function RunFooterView(props: RunFooterViewProps) {
     return props.mono ? usage().replaceAll(" · ", " - ") : usage()
   })
   const modelStatus = createMemo(() => {
-    const current = model()
+    const current = model() ?? props.state().model.trim()
     if (!footerDetails() || !prompt() || !responsive().statusline.showModel || !current) return
     return {
       model: current,

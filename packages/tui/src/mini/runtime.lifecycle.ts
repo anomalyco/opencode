@@ -126,7 +126,7 @@ function footerLabels(input: Pick<RunInput, "agent" | "model" | "variant">): Foo
   const agentLabel = Locale.titlecase(input.agent ?? "build")
   return {
     agentLabel,
-    modelLabel: input.model ? formatModelLabel(input.model, input.variant) : "",
+    modelLabel: input.model ? formatModelLabel(input.model, input.variant) : "Default model",
   }
 }
 

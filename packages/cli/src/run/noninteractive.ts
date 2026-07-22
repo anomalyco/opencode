@@ -211,10 +211,17 @@ export async function runNonInteractivePrompt(input: Input) {
       }
       if (!promoted && event.type === "session.execution.failed") {
         prePromotionError = event.data.error
+        if (finalizing) return
         continue
       }
+      if (
+        !promoted &&
+        finalizing &&
+        (event.type === "session.execution.succeeded" || event.type === "session.execution.interrupted")
+      )
+        return
       if (!promoted) continue
-      if (finalizing) continue
+      if (finalizing && !event.type.startsWith("session.execution.")) continue
 
       if (event.type === "session.step.started") {
         const part = {
@@ -618,7 +625,10 @@ export async function runNonInteractivePrompt(input: Input) {
         if (!emit("error", timestamp, { error: message.error })) UI.error(message.error.message)
       }
     }
-    return projected.found
+    return {
+      found: projected.found,
+      responded: projected.messages.some((message) => message.type === "assistant"),
+    }
   }
 
   const interrupt = () => {
@@ -708,9 +718,18 @@ export async function runNonInteractivePrompt(input: Input) {
     const waiting = input.client.session.wait({ sessionID: input.sessionID })
     await Promise.race([waiting, completed.then(() => waiting)])
     finalizing = true
-    controller.abort()
-    const found = await reconcile()
-    if (!found && !interrupted && !permissionRejected && !formCancelled && !emittedError) {
+    const projected = await reconcile()
+    if (
+      !projected.responded &&
+      !interrupted &&
+      !permissionRejected &&
+      !formCancelled &&
+      !emittedError &&
+      !prePromotionError
+    ) {
+      await completed
+    }
+    if (!projected.found && !interrupted && !permissionRejected && !formCancelled && !emittedError) {
       const error = prePromotionError ?? { type: "unknown", message: "Prompt was not promoted" }
       emittedError = true
       process.exitCode = 1

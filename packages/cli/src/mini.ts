@@ -2,7 +2,6 @@ import { Service, type Endpoint } from "@opencode-ai/client/effect/service"
 import { ClientError, OpenCode, type OpenCodeClient } from "@opencode-ai/client/promise"
 import type { MiniFrontendInput } from "@opencode-ai/tui/mini"
 import { setTimeout } from "node:timers/promises"
-import { waitForCatalogReady } from "./services/catalog"
 import { readStdin } from "./util/io"
 import { createMiniHost, INTERACTIVE_INPUT_ERROR, usingInteractiveStdin } from "./mini-host"
 import { parseSessionTargetModel, resolveSessionTarget, type SessionTargetPreparation } from "./session-target"
@@ -214,63 +213,7 @@ function parseModel(value?: string) {
 }
 
 function prepareTarget(requestedAgent?: string): SessionTargetPreparation {
-  return async (input) => {
-    if (input.model)
-      await waitForCatalogReady({
-        sdk: input.client,
-        directory: input.location.directory,
-        workspace: input.location.workspaceID,
-        model: { providerID: input.model.providerID, modelID: input.model.id },
-        signal: input.signal,
-      })
-    return {
-      model: input.model,
-      agent: requestedAgent
-        ? await validateAgent(
-            input.client,
-            input.location.directory,
-            input.location.workspaceID,
-            requestedAgent,
-            input.signal,
-          )
-        : input.agent,
-    }
-  }
-}
-
-async function validateAgent(
-  sdk: OpenCodeClient,
-  directory: string,
-  workspace: string | undefined,
-  name?: string,
-  signal?: AbortSignal,
-) {
-  if (!name) return
-  const deadline = Date.now() + 5_000
-  let agents: Awaited<ReturnType<OpenCodeClient["agent"]["list"]>> | undefined
-  while (Date.now() < deadline && !signal?.aborted) {
-    agents = await sdk.agent.list({ location: { directory, workspace } }, { signal }).catch((error) => {
-      if (signal && error instanceof ClientError && error.reason === "Transport") throw error
-      return undefined
-    })
-    const agent = agents?.data.find((item) => item.id === name)
-    if (agent?.mode === "subagent") {
-      warning(`agent "${name}" is a subagent, not a primary agent. Falling back to default agent`)
-      return
-    }
-    if (agent) return name
-    await setTimeout(25, undefined, { signal }).catch(() => {})
-  }
-  if (signal?.aborted) return
-  if (!agents) {
-    warning("failed to list agents. Falling back to default agent")
-    return
-  }
-  warning(`agent "${name}" not found. Falling back to default agent`)
-}
-
-function warning(message: string) {
-  process.stderr.write(`\x1b[93m\x1b[1m!\x1b[0m ${message}\n`)
+  return async (input) => ({ model: input.model, agent: requestedAgent ?? input.agent })
 }
 
 function fail(message: string): never {

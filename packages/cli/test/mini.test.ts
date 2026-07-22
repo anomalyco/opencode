@@ -138,32 +138,47 @@ describe("mini command", () => {
     expect(result.stderr).not.toContain("You must provide a message")
   })
 
-  test("preserves a run failure exit code", async () => {
-    let modelRequests = 0
+  test("passes explicit selections to session creation without catalog preflight", async () => {
+    const requests: string[] = []
+    let session: unknown
     const server = Bun.serve({
       port: 0,
-      fetch(request) {
+      async fetch(request) {
         const url = new URL(request.url)
+        requests.push(url.pathname)
         if (url.pathname === "/api/health")
           return Response.json({ healthy: true, version: OPENCODE_VERSION, pid: process.pid })
         if (url.pathname === "/api/location")
           return Response.json({ directory: process.cwd(), project: { id: "global", directory: process.cwd() } })
-        if (url.pathname === "/api/model") {
-          modelRequests++
-          return Response.json({
-            location: { directory: process.cwd(), project: { id: "global", directory: process.cwd() } },
-            data: modelRequests === 1 ? [{ id: "missing", providerID: "definitely" }] : [],
-          })
+        if (url.pathname === "/api/session") {
+          session = await request.json()
+          return new Response("boom", { status: 500 })
         }
         return new Response(undefined, { status: 404 })
       },
     })
 
     try {
-      const result = await cli(["run", "--server", server.url.toString(), "--model", "definitely/missing", "hi"])
+      const result = await cli([
+        "run",
+        "--server",
+        server.url.toString(),
+        "--model",
+        "definitely/missing",
+        "--agent",
+        "definitely-missing",
+        "hi",
+      ])
 
       expect(result.exitCode).toBe(1)
-      expect(result.stderr).toContain("Model unavailable: definitely/missing")
+      expect(result.stderr).toContain("UnexpectedStatus")
+      expect(session).toMatchObject({
+        agent: "definitely-missing",
+        model: { providerID: "definitely", id: "missing" },
+      })
+      expect(requests).not.toContain("/api/model")
+      expect(requests).not.toContain("/api/agent")
+      expect(requests).not.toContain("/api/location/wait")
     } finally {
       server.stop(true)
     }

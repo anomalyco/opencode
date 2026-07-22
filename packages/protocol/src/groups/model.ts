@@ -17,7 +17,8 @@ export const ModelGroup = HttpApiGroup.make("server.model")
         OpenApi.annotations({
           identifier: "v2.model.list",
           summary: "List models",
-          description: "Retrieve available models ordered by release date.",
+          description:
+            "Retrieve the current snapshot of available models ordered by release date. The snapshot may precede initial plugin settlement.",
         }),
       ),
   )

@@ -5,7 +5,6 @@ import { open } from "node:fs/promises"
 import path from "node:path"
 import { readStdin } from "../util/io"
 import { ServerConnection } from "../services/server-connection"
-import { waitForCatalogReady } from "../services/catalog"
 import { parseSessionTargetModel, resolveSessionTarget } from "../session-target"
 import { toolInlineInfo } from "@opencode-ai/tui/mini/tool"
 import { runNonInteractivePrompt } from "./noninteractive"
@@ -95,9 +94,11 @@ async function execute(input: RunCommandInput, prepared: Prepared, endpoint: End
     prepare: async (next) => {
       const selected =
         next.model ??
-        (await client.model
-          .default({ location: { directory: next.location.directory, workspace: next.location.workspaceID } })
-          .then((result) => result.data))
+        (options.variant
+          ? await client.model
+              .default({ location: { directory: next.location.directory, workspace: next.location.workspaceID } })
+              .then((result) => result.data)
+          : undefined)
       const model = selected
         ? {
             providerID: selected.providerID,
@@ -107,25 +108,7 @@ async function execute(input: RunCommandInput, prepared: Prepared, endpoint: End
         : undefined
       if ((options.variant ?? explicit?.variant) && !model)
         throw new RunTargetError("Cannot select a variant before selecting a model", next.session?.id)
-      if (model) {
-        await waitForCatalogReady({
-          sdk: client,
-          directory: next.location.directory,
-          workspace: next.location.workspaceID,
-          model: { providerID: model.providerID, modelID: model.id },
-        })
-        const available = await client.model.list({
-          location: { directory: next.location.directory, workspace: next.location.workspaceID },
-        })
-        if (!available.data.some((item) => item.providerID === model.providerID && item.id === model.id))
-          throw new RunTargetError(`Model unavailable: ${model.providerID}/${model.id}`, next.session?.id)
-      }
-      return {
-        model,
-        agent: input.agent
-          ? await validateAgent(client, next.location.directory, next.location.workspaceID, input.agent)
-          : next.agent,
-      }
+      return { model, agent: next.agent }
     },
   }).catch((error) => {
     if (!(error instanceof RunTargetError)) throw error
@@ -188,28 +171,6 @@ export function parseRunModel(value?: string) {
     model: { providerID: ref.providerID, modelID: ref.id },
     variant: ref.variant,
   }
-}
-
-async function validateAgent(client: OpenCodeClient, directory: string, workspace: string | undefined, name?: string) {
-  if (!name) return
-  const agents = await client.agent
-    .list({ location: { directory, workspace } })
-    .then((result) => result.data)
-    .catch(() => undefined)
-  if (!agents) {
-    warning("failed to list agents. Falling back to default agent")
-    return
-  }
-  const agent = agents.find((item) => item.id === name)
-  if (!agent) {
-    warning(`agent "${name}" not found. Falling back to default agent`)
-    return
-  }
-  if (agent.mode === "subagent") {
-    warning(`agent "${name}" is a subagent, not a primary agent. Falling back to default agent`)
-    return
-  }
-  return name
 }
 
 async function prepareFile(input: string, directory: string, options: ExecutionOptions): Promise<FilePart> {

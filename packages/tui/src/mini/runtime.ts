@@ -11,7 +11,7 @@
 import { SessionMessage } from "@opencode-ai/schema/session-message"
 import type { LocationRef } from "@opencode-ai/client/promise"
 import type { Config } from "../config"
-import { loadRunAgents, loadRunCommands, loadRunReferences, waitForDefaultModel } from "./catalog.shared"
+import { loadRunAgents, loadRunCommands, loadRunReferences } from "./catalog.shared"
 import {
   resolveMiniSettings,
   resolveModelInfo,
@@ -492,39 +492,20 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     const signal = AbortSignal.any([runtimeController.signal, controller.signal])
     modelAttempt = controller
     try {
-      if (selected) {
-        const info = await abortable(resolveModelInfo(sdk, state.location, signal), signal)
-        if (
-          !info ||
-          !currentModelLoad(generation, sdk) ||
-          state.model?.providerID !== selected.providerID ||
-          state.model.modelID !== selected.modelID
-        )
-          return
-        applyModelInfo(info, session.variant, { sdk, generation, signal }, true, savedVariant)
+      const info = await abortable(resolveModelInfo(sdk, state.location, signal), signal)
+      if (
+        !info ||
+        !currentModelLoad(generation, sdk) ||
+        (selected &&
+          (state.model?.providerID !== selected.providerID || state.model.modelID !== selected.modelID))
+      )
         return
-      }
-
-      const model = await waitForDefaultModel({
-        sdk,
-        location: state.location,
-        active: () => currentModelLoad(generation, sdk),
-        signal,
-      })
-      if (!currentModelLoad(generation, sdk)) return
-      const [fallbackSavedVariant, info] = await Promise.all([
-        input.host.preferences.resolveVariant(model),
-        abortable(resolveModelInfo(sdk, state.location, signal), signal),
-      ])
-      if (!info || !currentModelLoad(generation, sdk)) return
-      if (model && !state.model) state.model = model
-      const boot = !!model && state.model?.providerID === model.providerID && state.model.modelID === model.modelID
       applyModelInfo(
         info,
-        boot ? session.variant : state.activeVariant,
+        selected ? session.variant : state.activeVariant,
         { sdk, generation, signal },
-        boot,
-        fallbackSavedVariant,
+        !!selected,
+        savedVariant,
       )
     } finally {
       if (modelAttempt === controller) modelAttempt = undefined

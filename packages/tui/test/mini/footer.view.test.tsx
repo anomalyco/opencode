@@ -195,6 +195,16 @@ async function renderFooter(
   }
 }
 
+test("direct footer shows the generic default model before resolution", async () => {
+  const app = await renderFooter({ state: { model: "Default model" } })
+  try {
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("Default model")
+  } finally {
+    app.cleanup()
+  }
+})
+
 test("direct footer preserves a partial multi-field form draft across permission preemption", async () => {
   const request: FormInfo = {
     id: "frm_preempted",
