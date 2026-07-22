@@ -103,12 +103,12 @@ function containHomeWheel(event: WheelEvent, viewport: HTMLElement) {
 }
 const SHOW_HOME_SESSION_ARCHIVE = false
 const HOME_ROW_LAYOUT =
-  "flex min-w-0 w-full shrink-0 cursor-default items-center rounded-[6px] bg-transparent text-left transition-[background-color,color,box-shadow] duration-[120ms] ease-in-out focus-visible:outline-none"
-const HOME_ROW_BASE = `${HOME_ROW_LAYOUT} border-0`
-const HOME_ROW = `${HOME_ROW_BASE} [font-weight:530] text-v2-text-text-muted hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover`
+  "flex min-w-0 w-full shrink-0 cursor-default items-center rounded-[8px] bg-transparent text-left transition-all duration-[150ms] ease-out focus-visible:outline-none"
+const HOME_ROW_BASE = `${HOME_ROW_LAYOUT} border border-transparent`
+const HOME_ROW = `${HOME_ROW_BASE} [font-weight:530] text-v2-text-text-muted hover:bg-v2-overlay-simple-overlay-hover hover:border-v2-border-border-muted/30 focus-visible:bg-v2-overlay-simple-overlay-hover`
 const HOME_PROJECT_NAV_LABEL = "min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap"
-const HOME_PROJECT_NAV_ROW = `${HOME_ROW_LAYOUT} h-7 gap-2 px-1.5 [font-weight:440] text-v2-text-text-muted hover:bg-v2-background-bg-layer-01 hover:text-v2-text-text-base hover:[box-shadow:inset_0_0_0_0.5px_var(--v2-border-border-muted)] data-[selected]:bg-v2-background-bg-layer-03 data-[selected]:text-v2-text-text-base data-[selected]:[box-shadow:inset_0_0_0_0.5px_var(--v2-border-border-muted)] data-[selected]:hover:bg-v2-background-bg-layer-03 focus-visible:bg-v2-background-bg-layer-01 focus-visible:text-v2-text-text-base focus-visible:[box-shadow:inset_0_0_0_0.5px_var(--v2-border-border-muted)]`
-const HOME_SECTION_LABEL = "text-v2-text-text-muted [font-weight:440]"
+const HOME_PROJECT_NAV_ROW = `${HOME_ROW_LAYOUT} h-7.5 gap-2 px-2 [font-weight:450] text-v2-text-text-muted hover:bg-v2-background-bg-layer-01 hover:text-v2-text-text-base hover:translate-x-0.5 data-[selected]:bg-v2-background-bg-layer-03 data-[selected]:text-v2-text-text-base data-[selected]:font-medium focus-visible:bg-v2-background-bg-layer-01`
+const HOME_SECTION_LABEL = "text-[11px] uppercase tracking-wider font-semibold text-v2-text-text-muted/80"
 
 type HomeSessionRecord = {
   session: Session
@@ -439,7 +439,7 @@ export function NewHome() {
                   ),
                 )
               })
-              .catch(() => {})
+              .catch(() => { })
               .finally(dispose)
           } catch {
             dispose()
@@ -638,7 +638,10 @@ export function NewHome() {
   }
 
   return (
-    <div class="rounded-[10px] shadow-[var(--v2-elevation-raised)] m-2 min-h-0 overflow-hidden bg-v2-background-bg-base self-stretch flex-1">
+    <div class="relative rounded-[16px] border border-v2-border-border-muted/50 shadow-[0_16px_48px_rgba(0,0,0,0.18)] m-2 min-h-0 overflow-hidden bg-v2-background-bg-base/95 backdrop-blur-xl self-stretch flex-1">
+      {/* Background ambient glowing accents for visual depth */}
+      <div class="pointer-events-none absolute -left-36 -top-36 size-96 rounded-full bg-v2-icon-icon-accent/5 blur-[120px]" />
+      <div class="pointer-events-none absolute -bottom-36 -right-36 size-96 rounded-full bg-v2-icon-icon-accent/5 blur-[120px]" />
       <ScrollView
         class="h-full [container-type:size]"
         thumbContainer={sessionThumbTrack}
@@ -654,7 +657,7 @@ export function NewHome() {
           containHomeWheel(event, sessionViewport)
         }}
       >
-        <div class="mx-auto grid min-h-full w-full max-w-[1080px] grid-rows-[auto_minmax(0,1fr)_auto] gap-4 px-3 lg:grid-cols-[280px_minmax(0,720px)] lg:grid-rows-1 lg:gap-8 lg:px-6">
+        <div class="mx-auto grid min-h-full w-full max-w-[1240px] grid-rows-[auto_minmax(0,1fr)_auto] gap-4 px-3 lg:grid-cols-[280px_minmax(0,1fr)] lg:grid-rows-1 lg:gap-8 lg:px-6">
           <HomeProjectColumn
             projects={projects()}
             recentlyClosed={recentlyClosed()}
@@ -691,11 +694,59 @@ export function NewHome() {
             aria-label={language.t("sidebar.project.recentSessions")}
           >
             <div
-              class="sticky top-0 z-30 shrink-0 bg-v2-background-bg-base pb-3 pt-6 lg:pt-12"
+              class="sticky top-0 z-30 shrink-0 bg-v2-background-bg-base/95 backdrop-blur-md pb-3 pt-6 lg:pt-8"
               onWheel={(event) => {
                 if (sessionViewport) containHomeWheel(event, sessionViewport)
               }}
             >
+              <Show when={platform.platform === "desktop"}>
+                <div class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-v2-border-border-muted/40 bg-v2-background-bg-layer-01/60 p-3.5 backdrop-blur-md shadow-sm">
+                  <div class="flex items-center gap-2.5">
+                    <div class="flex size-7 items-center justify-center rounded-lg bg-v2-icon-icon-accent/15 text-v2-icon-icon-accent">
+                      <IconV2 name="laptop" size="small" />
+                    </div>
+                    <div class="flex flex-col">
+                      <div class="flex items-center gap-2">
+                        <span class="text-[13px] font-semibold text-v2-text-text-base">Desktop App</span>
+                        <Show when={platform.os}>
+                          {(os) => (
+                            <span class="rounded bg-v2-background-bg-layer-02 px-1.5 py-0.5 text-[10px] font-medium capitalize text-v2-text-text-muted">
+                              {os()}
+                            </span>
+                          )}
+                        </Show>
+                      </div>
+                      <span class="text-[11px] text-v2-text-text-muted/70">Native workspace environment</span>
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <Show when={focusedServer()}>
+                      {(conn) => (
+                        <ButtonV2
+                          variant="ghost-muted"
+                          size="small"
+                          icon="folder-add-left"
+                          class="h-7.5 px-2.5 text-[12px]"
+                          onClick={() => chooseProject(conn())}
+                        >
+                          {language.t("command.project.open")}
+                        </ButtonV2>
+                      )}
+                    </Show>
+                    <Show when={newSessionProject()}>
+                      <ButtonV2
+                        variant="neutral"
+                        size="small"
+                        icon="edit"
+                        class="h-7.5 px-2.5 text-[12px] shadow-sm"
+                        onClick={openNewSession}
+                      >
+                        {language.t("command.session.new")}
+                      </ButtonV2>
+                    </Show>
+                  </div>
+                </div>
+              </Show>
               <HomeSessionSearch
                 value={state.search}
                 placeholder={searchPlaceholder()}
@@ -835,8 +886,11 @@ function HomeProjectColumn(props: {
         props.onWheel(event)
       }}
     >
-      <div class="flex h-7 min-w-0 shrink-0 items-center justify-between pl-1.5 pr-3">
-        <div class="text-v2-text-text-muted [font-weight:530]">{props.language.t("home.projects")}</div>
+      <div class="flex h-7 min-w-0 shrink-0 items-center justify-between pl-2 pr-3">
+        <div class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-v2-text-text-muted/90">
+          <IconV2 name="folder" size="small" class="text-v2-icon-icon-muted" />
+          <span>{props.language.t("home.projects")}</span>
+        </div>
         <Show
           when={global.servers.list().length === 1 && !(props.projects.length === 0 && props.recentlyClosed.length > 0)}
         >
@@ -1250,9 +1304,12 @@ function HomeProjectRow(props: {
   return (
     <div
       ref={sortable.ref}
-      class="group/project relative flex h-7 min-w-0 items-center rounded-[6px]"
+      class="group/project relative flex h-7.5 min-w-0 items-center rounded-[8px]"
       classList={{ "z-10": sortable.isDragSource() }}
     >
+      <Show when={props.selected}>
+        <span class="absolute -left-1 top-1/2 h-4 w-1 -translate-y-1/2 rounded-r-full bg-v2-icon-icon-accent shadow-[0_0_8px_var(--v2-icon-icon-accent)]" />
+      </Show>
       <button
         type="button"
         data-component="home-project-row"
@@ -1299,6 +1356,21 @@ function HomeProjectRow(props: {
         class="hover-reveal absolute right-1 top-1/2 flex -translate-y-1/2 items-center gap-1 group-hover/project:opacity-100 focus-within:opacity-100 data-[menu=true]:opacity-100"
         data-menu={state.menuOpen}
       >
+        <Show when={canRevealInFileManager()}>
+          <TooltipV2 placement="bottom" value={fileManagerActionLabel()}>
+            <IconButtonV2
+              data-action="home-project-reveal"
+              variant="ghost-muted"
+              size="small"
+              icon={<IconV2 name="folder" />}
+              aria-label={fileManagerActionLabel()}
+              onClick={(e) => {
+                e.stopPropagation()
+                revealInFileManager()
+              }}
+            />
+          </TooltipV2>
+        </Show>
         <MenuV2
           gutter={6}
           modal={false}
@@ -1530,11 +1602,11 @@ function HomeSessionSearch(props: {
             </div>
           </div>
         </Show>
-        <label class="relative z-20 flex h-9 w-full items-center gap-2 rounded-[6px] bg-v2-background-bg-layer-02/60 py-1 pl-3 pr-2 text-v2-icon-icon-muted transition-[background-color,box-shadow] duration-[120ms] ease-in-out hover:bg-v2-background-bg-layer-02 focus-within:bg-v2-background-bg-layer-02">
-          <IconV2 name="magnifying-glass" />
+        <label class="relative z-20 flex h-9.5 w-full items-center gap-2.5 rounded-xl border border-v2-border-border-muted/40 bg-v2-background-bg-layer-02/70 backdrop-blur-md py-1 pl-3 pr-2.5 text-v2-icon-icon-muted transition-all duration-200 ease-out hover:bg-v2-background-bg-layer-02/90 hover:border-v2-border-border-muted/70 focus-within:bg-v2-background-bg-layer-02 focus-within:border-v2-icon-icon-accent/50 focus-within:ring-2 focus-within:ring-v2-icon-icon-accent/15">
+          <IconV2 name="magnifying-glass" class="transition-colors duration-150 group-focus-within/input:text-v2-icon-icon-accent" />
           <input
             ref={input}
-            class="relative z-20 min-w-0 flex-1 border-0 bg-transparent text-v2-text-text-base outline-0 [font-weight:440] placeholder:text-v2-text-text-faint"
+            class="relative z-20 min-w-0 flex-1 border-0 bg-transparent text-[13px] text-v2-text-text-base outline-0 [font-weight:450] placeholder:text-v2-text-text-faint"
             value={props.value}
             placeholder={props.placeholder}
             aria-label={props.placeholder}
@@ -1571,7 +1643,11 @@ function HomeSessionSearch(props: {
               }
             }}
           />
-          <Show when={props.value}>
+          <Show when={props.value} fallback={
+            <span class="hidden sm:inline-flex items-center rounded border border-v2-border-border-muted/50 px-1.5 py-0.5 text-[10px] font-mono text-v2-text-text-muted/60 select-none">
+              ⌘F
+            </span>
+          }>
             <IconButtonV2
               type="button"
               variant="ghost-muted"
@@ -1657,11 +1733,13 @@ function HomeSessionGroupHeader(props: {
   return (
     <div
       ref={props.ref}
-      class={`pointer-events-none sticky top-[84px] lg:top-[108px] flex h-7 min-w-0 items-center justify-between pl-3 bg-v2-background-bg-base ${props.elevated ? "home-session-group-header z-[5]" : "z-10"}`}
+      class={`pointer-events-none sticky top-[84px] lg:top-[108px] flex h-8 min-w-0 items-center justify-between pl-2 bg-v2-background-bg-base/90 backdrop-blur-md ${props.elevated ? "home-session-group-header z-[5]" : "z-10"}`}
     >
-      <div class={HOME_SECTION_LABEL} style={{ opacity: props.titleOpacity }}>
-        {props.title}
+      <div class="flex items-center gap-2" style={{ opacity: props.titleOpacity }}>
+        <span class="size-1.5 rounded-full bg-v2-icon-icon-accent/80" />
+        <span class={HOME_SECTION_LABEL}>{props.title}</span>
       </div>
+      <div class="h-px flex-1 ml-3 bg-v2-border-border-muted/20" />
     </div>
   )
 }
@@ -1676,16 +1754,20 @@ function HomeSessionRow(props: {
   const language = useLanguage()
   const title = createMemo(() => sessionTitle(props.record.session.title) || props.record.session.id)
   const showProjectName = () => props.showProjectName && props.record.projectName
+  const relativeTime = createMemo(() => {
+    const ts = props.record.session.time.updated ?? props.record.session.time.created
+    return ts ? DateTime.fromMillis(ts).toRelative() : ""
+  })
 
   return (
     <div
-      class="group/session relative flex h-10 min-w-0 items-center rounded-[6px]"
+      class="group/session relative flex h-10.5 min-w-0 items-center rounded-[8px] transition-all duration-150 ease-out hover:-translate-y-[0.5px]"
       classList={{ group: !!showProjectName() }}
     >
       <button
         type="button"
         data-component="home-session-row"
-        class={`${HOME_ROW} h-10 min-w-0 flex-1 gap-2 py-3 pl-3 pr-10`}
+        class={`${HOME_ROW} h-10.5 min-w-0 flex-1 gap-2.5 py-2.5 pl-3 pr-10`}
         onMouseDown={(event) => {
           if (event.button === 1) event.preventDefault()
         }}
@@ -1703,13 +1785,18 @@ function HomeSessionRow(props: {
           revealProjectOnHover={!!showProjectName()}
         />
         <span
-          class={`min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-v2-text-text-base [font-weight:530] ${showProjectName() ? "max-w-[min(70%,480px)] flex-[0_1_auto]" : "flex-[1_1_auto]"}`}
+          class={`min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-v2-text-text-base [font-weight:530] ${showProjectName() ? "max-w-[min(65%,440px)] flex-[0_1_auto]" : "flex-[1_1_auto]"}`}
         >
           {title()}
         </span>
         <Show when={showProjectName()}>
           <span class="min-w-0 flex-[1_1_auto] overflow-hidden text-ellipsis whitespace-nowrap text-v2-text-text-muted [font-weight:440]">
             {props.record.projectName}
+          </span>
+        </Show>
+        <Show when={relativeTime()}>
+          <span class="shrink-0 text-[11px] font-medium text-v2-text-text-muted/60 group-hover/session:text-v2-text-text-muted transition-colors">
+            {relativeTime()}
           </span>
         </Show>
       </button>
@@ -1738,16 +1825,21 @@ function HomeSessionRow(props: {
 function HomeSessionsEmpty(props: { onNewSession?: () => void }) {
   const language = useLanguage()
   return (
-    <div class="flex min-h-full flex-col items-center gap-4 px-6 pt-[52px] text-center">
-      <div class="shrink-0 text-[13px] leading-[13px] tracking-[-0.04px] text-v2-text-text-base [font-weight:530]">
-        {language.t("home.sessions.empty")}
+    <div class="my-8 flex min-h-[280px] flex-col items-center justify-center gap-4 rounded-2xl border border-v2-border-border-muted/30 bg-v2-background-bg-layer-01/40 backdrop-blur-md p-8 text-center shadow-sm">
+      <div class="flex size-12 items-center justify-center rounded-xl bg-v2-background-bg-layer-02 text-v2-icon-icon-accent shadow-inner">
+        <IconV2 name="edit" size="large" />
       </div>
-      <p class="mb-1 text-center text-[13px] leading-5 tracking-[-0.04px] text-v2-text-text-muted [font-weight:440]">
-        {language.t("home.sessions.empty.description")}
-      </p>
+      <div class="flex flex-col gap-1.5">
+        <div class="text-[14px] leading-tight tracking-[-0.04px] text-v2-text-text-base font-semibold">
+          {language.t("home.sessions.empty")}
+        </div>
+        <p class="max-w-sm text-center text-[13px] leading-relaxed text-v2-text-text-muted [font-weight:440]">
+          {language.t("home.sessions.empty.description")}
+        </p>
+      </div>
       <Show when={props.onNewSession}>
         {(onNewSession) => (
-          <ButtonV2 data-action="home-new-session" variant="neutral" size="normal" icon="edit" onClick={onNewSession()}>
+          <ButtonV2 data-action="home-new-session" variant="neutral" size="normal" icon="edit" class="mt-2 shadow-md hover:shadow-lg transition-all" onClick={onNewSession()}>
             {language.t("command.session.new")}
           </ButtonV2>
         )}

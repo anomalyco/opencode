@@ -327,4 +327,21 @@
       animation-range: 0 0.1px;
     }
   }
+
+  /* Lovable Theme Utilities & Selection Styling */
+  .lovable-gradient-text {
+    background: linear-gradient(135deg, #a855f7 0%, #ec4899 50%, #6366f1 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .lovable-glow-border {
+    border-color: rgba(168, 85, 247, 0.25);
+    box-shadow: 0 0 16px -2px rgba(124, 58, 237, 0.15);
+  }
+
+  ::selection {
+    background: rgba(168, 85, 247, 0.3);
+    color: inherit;
+  }
 }

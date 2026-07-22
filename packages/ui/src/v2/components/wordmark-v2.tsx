@@ -1,8 +1,9 @@
 import { createUniqueId, type ComponentProps } from "solid-js"
 
-export function WordmarkV2(props: Pick<ComponentProps<"svg">, "class">) {
+export function WordmarkV2(props: Pick<ComponentProps<"svg">, "class"> & { opacity?: number }) {
   const mask = createUniqueId()
   const maskGradient = createUniqueId()
+  const innerOpacity = () => props.opacity ?? 0.16
 
   return (
     <svg
@@ -13,7 +14,7 @@ export function WordmarkV2(props: Pick<ComponentProps<"svg">, "class">) {
     >
       <g opacity="0.6">
         <g mask={`url(#${mask})`}>
-          <g opacity="0.16">
+          <g opacity={innerOpacity()}>
             <path
               opacity="0.7"
               d="M55.3846 36.4286H18.4615V91.7143H55.3846V36.4286ZM73.8462 110.143H0V18H73.8462V110.143Z"

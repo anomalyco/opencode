@@ -61,6 +61,7 @@ const names: Record<string, string> = {
   gruvbox: "Gruvbox",
   kanagawa: "Kanagawa",
   "lucent-orng": "Lucent Orng",
+  lovable: "Lovable",
   material: "Material",
   matrix: "Matrix",
   mercury: "Mercury",
