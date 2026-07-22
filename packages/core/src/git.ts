@@ -20,6 +20,9 @@ export class Repository extends Schema.Class<Repository>("Git.Repository")({
 // Included from $GIT_DIR/config via include.path (git >= 1.7.10); OpenCode owns
 // this file entirely, so updates are plain rewrites with no config parsing.
 const snapshotConfigFile = "opencode.gitconfig"
+const snapshotConfigInclude = `[include]
+	path = ${snapshotConfigFile}
+`
 const snapshotConfig = `[core]
 	autocrlf = false
 	longpaths = true
@@ -392,7 +395,15 @@ const layer = Layer.effect(
         commonDirectory: input.gitDirectory,
       })
       yield* repositoryOperation("create", repository, ["init"])
-      yield* fs.writeFileString(path.join(input.gitDirectory, snapshotConfigFile), snapshotConfig).pipe(
+      yield* Effect.gen(function* () {
+        yield* fs.writeFileString(path.join(input.gitDirectory, snapshotConfigFile), snapshotConfig)
+        const config = path.join(input.gitDirectory, "config")
+        const current = yield* fs.readFileString(config)
+        if (current.includes(snapshotConfigInclude)) return
+        yield* fs.writeFileString(config, `${current.endsWith("\n") ? "\n" : "\n\n"}${snapshotConfigInclude}`, {
+          flag: "a",
+        })
+      }).pipe(
         Effect.mapError(
           (cause) =>
             new OperationError({
@@ -403,7 +414,6 @@ const layer = Layer.effect(
             }),
         ),
       )
-      yield* repositoryOperation("create", repository, ["config", "include.path", snapshotConfigFile])
       if (!input.seed) return repository
       yield* fs.ensureDir(path.join(input.gitDirectory, "objects", "info")).pipe(
         Effect.mapError(

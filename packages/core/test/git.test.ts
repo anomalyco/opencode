@@ -150,6 +150,8 @@ describe("Git trees", () => {
       if (!source) throw new Error("Repository not found")
       const storage = AbsolutePath.make(path.join(root.path, ".snapshot storage"))
       const repository = yield* git.repo.create({ worktree: source.worktree, gitDirectory: storage, seed: source })
+      yield* Effect.promise(() => $`git --git-dir ${storage} config --add include.path first.gitconfig`.quiet())
+      yield* Effect.promise(() => $`git --git-dir ${storage} config --add include.path second.gitconfig`.quiet())
       yield* Effect.promise(() => $`git --git-dir ${storage} config core.autocrlf true`.quiet())
       yield* git.repo.create({ worktree: source.worktree, gitDirectory: storage, seed: source })
       expect(
@@ -158,6 +160,9 @@ describe("Git trees", () => {
       expect(
         (yield* Effect.promise(() => fs.readFile(path.join(storage, "config"), "utf8"))).match(/opencode\.gitconfig/g),
       ).toHaveLength(1)
+      expect(
+        yield* Effect.promise(() => $`git --git-dir ${storage} config --local --get-all include.path`.text()),
+      ).toBe("opencode.gitconfig\nfirst.gitconfig\nsecond.gitconfig\n")
       yield* git.index.refresh({ repository, scope: RelativePath.make("scope") })
       const before = yield* git.tree.write(repository)
 
