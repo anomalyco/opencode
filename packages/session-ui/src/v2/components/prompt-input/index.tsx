@@ -8,6 +8,7 @@ import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
 import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
+import { SegmentedControlItemV2, SegmentedControlV2 } from "@opencode-ai/ui/v2/segmented-control-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { AttachmentCardV2 } from "../attachment-card-v2"
 import { CommentCardV2 } from "../comment-card-v2"
@@ -212,7 +213,14 @@ export function PromptInputV2(props: PromptInputV2Props) {
             />
             <Show when={view.agent}>
               {(control) => (
-                <PromptInputV2ConfiguredSelect title="Choose agent" keybind={["Mod", "."]} control={control()} />
+                <Show
+                  when={control().options().length === 2}
+                  fallback={
+                    <PromptInputV2ConfiguredSelect title="Choose agent" keybind={["Mod", "."]} control={control()} />
+                  }
+                >
+                  <PromptInputV2SegmentedToggle title="Choose agent" keybind={["Mod", "."]} control={control()} />
+                </Show>
               )}
             </Show>
             <Show
@@ -528,6 +536,43 @@ function PromptInputV2ConfiguredSelect(props: {
       }
       onSelect={props.control.onSelect}
     />
+  )
+}
+
+function PromptInputV2SegmentedToggle(props: {
+  title: string
+  keybind?: string[]
+  control: PromptInputV2SelectControl
+}) {
+  const keybind = () => props.control.keybind?.() ?? props.keybind ?? []
+  return (
+    <TooltipV2
+      placement="top"
+      value={
+        <>
+          {props.title}
+          <KeybindV2 keys={keybind()} variant="neutral" />
+        </>
+      }
+    >
+      <SegmentedControlV2
+        value={props.control.current()}
+        onChange={(value) => {
+          if (value === null) return
+          props.control.onSelect(value)
+        }}
+        class="segmented-control-v2--compact"
+        aria-label={props.title}
+      >
+        <For each={props.control.options()}>
+          {(option) => (
+            <SegmentedControlItemV2 value={option.id} class="capitalize">
+              {option.label}
+            </SegmentedControlItemV2>
+          )}
+        </For>
+      </SegmentedControlV2>
+    </TooltipV2>
   )
 }
 
