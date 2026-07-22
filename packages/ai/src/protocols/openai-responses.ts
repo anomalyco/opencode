@@ -253,7 +253,7 @@ const OpenAIResponsesEvent = Schema.Struct({
       Schema.Struct({
         id: Schema.optional(Schema.String),
         service_tier: optionalNull(Schema.String),
-        incomplete_details: optionalNull(Schema.Struct({ reason: Schema.String })),
+        incomplete_details: optionalNull(Schema.Struct({ reason: Schema.optional(Schema.String) })),
         usage: optionalNull(OpenAIResponsesUsage),
         error: optionalNull(OpenAIResponsesErrorPayload),
       }),
@@ -602,7 +602,8 @@ const mapUsage = (usage: OpenAIResponsesUsage | null | undefined) => {
 
 const mapFinishReason = (event: OpenAIResponsesEvent, hasFunctionCall: boolean): FinishReason => {
   const reason = event.response?.incomplete_details?.reason
-  if (reason === undefined || reason === null) return hasFunctionCall ? "tool-calls" : "stop"
+  if (reason === undefined || reason === null)
+    return hasFunctionCall ? "tool-calls" : event.type === "response.incomplete" ? "unknown" : "stop"
   if (reason === "max_output_tokens") return "length"
   if (reason === "content_filter") return "content-filter"
   return hasFunctionCall ? "tool-calls" : "unknown"
