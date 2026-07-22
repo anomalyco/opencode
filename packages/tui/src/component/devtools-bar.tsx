@@ -383,6 +383,7 @@ function BarItem(props: ParentProps<{ active: boolean; onClick: () => void }>) {
   return (
     <box
       position="relative"
+      zIndex={props.active ? 2500 : undefined}
       height={1}
       flexDirection="row"
       paddingLeft={1}
@@ -404,7 +405,7 @@ function PanelBox(props: ParentProps) {
   return (
     <box
       position="absolute"
-      zIndex={2500}
+      zIndex={2600}
       bottom={1}
       left={0}
       width={42}
