@@ -87,6 +87,52 @@ export class PromiseRuntime<R> {
 export const selfResolutionError = (node?: AstNode): InterpreterRuntimeError =>
   new InterpreterRuntimeError("Chaining cycle detected: a promise cannot resolve with itself.", node).as("TypeError")
 
+export const resolvePromiseValue = <R>(
+  runner: CallbackRunner<R>,
+  promises: PromiseRuntime<R>,
+  value: unknown,
+  node: AstNode,
+  own?: { promise?: CodeModePromise },
+): Effect.Effect<unknown, unknown, R> => {
+  if (own?.promise !== undefined && value === own.promise) return Effect.fail(selfResolutionError(node))
+  if (value instanceof CodeModePromise) return runner.settlePromise(value)
+  if (value === null || typeof value !== "object" || !Object.hasOwn(value, "then")) return Effect.succeed(value)
+  const then = (value as SafeObject).then
+  if (typeofValue(then) !== "function") return Effect.succeed(value)
+
+  return Effect.gen(function* () {
+    // Promise resolution invokes a thenable's method in a later job.
+    yield* Effect.yieldNow
+    const deferred = Deferred.makeUnsafe<unknown, unknown>()
+    const resolve = new PromiseCapabilityFunction((result) => {
+      Deferred.doneUnsafe(deferred, Exit.succeed(result))
+    })
+    const reject = new PromiseCapabilityFunction((reason) => {
+      Deferred.doneUnsafe(deferred, Exit.fail(new ProgramThrow(reason)))
+    })
+    const executed = yield* Effect.exit(runner.invokeCallable(then, [resolve, reject], node))
+    if (!Exit.isSuccess(executed)) {
+      if (Cause.hasInterruptsOnly(executed.cause)) return yield* Effect.failCause(executed.cause)
+      Deferred.doneUnsafe(deferred, Exit.fail(Cause.squash(executed.cause)))
+    }
+    return yield* resolvePromiseValue(runner, promises, yield* Deferred.await(deferred), node, own)
+  })
+}
+
+export const resolvePromise = <R>(
+  runner: CallbackRunner<R>,
+  promises: PromiseRuntime<R>,
+  value: unknown,
+  node: AstNode,
+): Effect.Effect<CodeModePromise, never, R> => {
+  if (value instanceof CodeModePromise) return Effect.succeed(value)
+  const box: { promise?: CodeModePromise } = {}
+  return Effect.map(promises.create(resolvePromiseValue(runner, promises, value, node, box)), (promise) => {
+    box.promise = promise
+    return promise
+  })
+}
+
 export const invokePromiseMethod = <R>(
   runner: CallbackRunner<R> & SyncIteratorRunner<R>,
   promises: PromiseRuntime<R>,
@@ -95,8 +141,7 @@ export const invokePromiseMethod = <R>(
   node: AstNode,
 ): Effect.Effect<unknown, unknown, R> => {
   if (ref.name === "resolve") {
-    const value = args[0]
-    return value instanceof CodeModePromise ? Effect.succeed(value) : promises.create(Effect.succeed(value))
+    return resolvePromise(runner, promises, args[0], node)
   }
   if (ref.name === "reject") {
     return promises.create(Effect.fail(new ProgramThrow(args[0])))
@@ -111,20 +156,19 @@ export const invokePromiseMethod = <R>(
           node,
         ).as("TypeError")
       }
-      const items: Array<unknown> = []
+      const items: Array<CodeModePromise> = []
       while (true) {
         const step = yield* cursor.next
         if (step.done) break
-        items.push(step.value)
-        if (step.value instanceof CodeModePromise) promises.markObserved(step.value)
+        const item = yield* resolvePromise(runner, promises, step.value, node)
+        promises.markObserved(item)
+        items.push(item)
       }
 
       if (ref.name === "all") {
         return yield* settleAfterTurn(
           Effect.all(
-            items.map((item) =>
-              item instanceof CodeModePromise ? Effect.flatten(promises.await(item)) : Effect.succeed(item),
-            ),
+            items.map((item) => Effect.flatten(promises.await(item))),
             { concurrency: "unbounded" },
           ),
         )
@@ -132,7 +176,7 @@ export const invokePromiseMethod = <R>(
       if (ref.name === "allSettled") {
         const outcomes: Array<unknown> = []
         for (const item of items) {
-          const exit = item instanceof CodeModePromise ? yield* promises.await(item) : Exit.succeed(item)
+          const exit = yield* promises.await(item)
           if (Exit.isSuccess(exit)) {
             outcomes.push(Object.assign(Object.create(null) as SafeObject, { status: "fulfilled", value: exit.value }))
             continue
@@ -155,24 +199,14 @@ export const invokePromiseMethod = <R>(
             node,
           )
         }
-        return yield* settleAfterTurn(
-          Effect.flatten(
-            Effect.raceAll(
-              items.map((item) =>
-                item instanceof CodeModePromise ? promises.await(item) : Effect.succeed(Exit.succeed(item)),
-              ),
-            ),
-          ),
-        )
+        return yield* settleAfterTurn(Effect.flatten(Effect.raceAll(items.map((item) => promises.await(item)))))
       }
       const flipped = items.map((item) =>
-        item instanceof CodeModePromise
-          ? Effect.flatMap(promises.await(item), (exit) => {
-              if (Exit.isSuccess(exit)) return Effect.fail(new PromiseAnyFulfilled(exit.value))
-              if (Cause.hasInterruptsOnly(exit.cause)) return Effect.failCause(exit.cause)
-              return Effect.succeed(caughtErrorValue(Cause.squash(exit.cause)))
-            })
-          : Effect.fail(new PromiseAnyFulfilled(item)),
+        Effect.flatMap(promises.await(item), (exit) => {
+          if (Exit.isSuccess(exit)) return Effect.fail(new PromiseAnyFulfilled(exit.value))
+          if (Cause.hasInterruptsOnly(exit.cause)) return Effect.failCause(exit.cause)
+          return Effect.succeed(caughtErrorValue(Cause.squash(exit.cause)))
+        }),
       )
       return yield* settleAfterTurn(
         Effect.all(flipped, { concurrency: "unbounded" }).pipe(
@@ -219,15 +253,11 @@ export const constructPromise = <R>(
   }
   return Effect.gen(function* () {
     const deferred = Deferred.makeUnsafe<unknown, unknown>()
-    const box: { own?: CodeModePromise } = {}
+    const box: { promise?: CodeModePromise } = {}
     const promise = yield* promises.create(
-      Effect.flatMap(Deferred.await(deferred), (value) => {
-        if (!(value instanceof CodeModePromise)) return Effect.succeed(value)
-        if (value === box.own) return Effect.fail(selfResolutionError(node))
-        return runner.settlePromise(value)
-      }),
+      Effect.flatMap(Deferred.await(deferred), (value) => resolvePromiseValue(runner, promises, value, node, box)),
     )
-    box.own = promise
+    box.promise = promise
     const resolve = new PromiseCapabilityFunction((value) => {
       Deferred.doneUnsafe(deferred, Exit.succeed(value))
     })
@@ -283,19 +313,17 @@ const chainReaction = <R>(
   method: string,
   node: AstNode,
 ): Effect.Effect<CodeModePromise, never, R> => {
-  const box: { derived?: CodeModePromise } = {}
+  const box: { promise?: CodeModePromise } = {}
   const body = Effect.gen(function* () {
     const exit = yield* reactionExit(promises, source)
     const handler = Exit.isSuccess(exit) ? onFulfilled : onRejected
     if (handler === undefined) return yield* exit
     const input = Exit.isSuccess(exit) ? exit.value : caughtErrorValue(Cause.squash(exit.cause))
     const result = yield* applyCollectionCallback(runner, handler, method, node)([input])
-    if (result === box.derived) return yield* Effect.fail(selfResolutionError(node))
-    if (result instanceof CodeModePromise) return yield* runner.settlePromise(result)
-    return result
+    return yield* resolvePromiseValue(runner, promises, result, node, box)
   })
   return Effect.map(promises.create(body), (derived) => {
-    box.derived = derived
+    box.promise = derived
     return derived
   })
 }
@@ -313,7 +341,13 @@ const chainFinally = <R>(
       const exit = yield* reactionExit(promises, source)
       if (cleanup !== undefined) {
         const result = yield* applyCollectionCallback(runner, cleanup, method, node)([])
-        if (result instanceof CodeModePromise) yield* runner.settlePromise(result)
+        const intermediate = yield* promises.create(
+          Effect.gen(function* () {
+            yield* runner.settlePromise(yield* resolvePromise(runner, promises, result, node))
+            return yield* exit
+          }),
+        )
+        return yield* runner.settlePromise(intermediate)
       }
       return yield* exit
     }),

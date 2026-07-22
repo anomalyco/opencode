@@ -136,8 +136,8 @@ ultimate source of truth.
 - [x] Optional property access and optional calls.
 - [x] Function/tool calls and spread arguments.
 - [x] Sequence expressions (the comma operator).
-- [x] `await` for CodeMode promises; a plain value passes through unchanged, though every `await` still defers its
-      continuation one reaction turn.
+- [x] `await` for CodeMode promises and callable thenables; a plain value passes through unchanged, though every
+      `await` still defers its continuation one reaction turn.
 - [x] `new` for Array, Object, Error types, Date, RegExp, Map, Set, URL, URLSearchParams, and Promise.
 - [x] Arithmetic operators: `+`, `-`, `*`, `/`, `%`, and `**`.
 - [x] Equality and ordering: `==`, `!=`, `===`, `!==`, `<`, `<=`, `>`, and `>=`.
@@ -152,7 +152,8 @@ ultimate source of truth.
 ## Promises and tools
 
 - [x] Tool calls start eagerly and return supervised, run-once CodeMode promises.
-- [x] Direct `await`, repeated awaits, and implicit resolution when a promise is returned from a function/program.
+- [x] Direct `await`, repeated awaits, and recursive thenable assimilation when a promise or thenable is returned from
+      a function/program.
 - [x] `Promise.resolve` and `Promise.reject`.
 - [x] `Promise.all`, `Promise.allSettled`, `Promise.race`, and `Promise.any` over finite collections, custom synchronous
       iterators, and synchronous generators containing promises and plain values.
@@ -178,11 +179,14 @@ ultimate source of truth.
       the catch-normalized reasons in input order, and empty input rejects with an empty `AggregateError`.
 - [x] `new Promise((resolve, reject) => ...)`: the executor runs synchronously and receives first-class resolve/reject
       callables that settle the promise exactly once (they may escape the executor and settle later); an executor
-      throw rejects unless the promise already settled, resolving with a promise adopts it, and resolving with the
-      promise itself rejects with a `TypeError`. Resolver callables work anywhere callbacks are accepted, including
-      `.then`/`.catch` handlers and collection callbacks, but remain opaque references that cannot cross the data
-      boundary.
-- [ ] Thenable assimilation; objects with a callable `then` field remain plain data.
+      throw rejects unless the promise already settled, resolving with a promise or callable thenable adopts it, and
+      resolving with the promise itself rejects with a `TypeError`. Resolver callables work anywhere callbacks are
+      accepted, including `.then`/`.catch` handlers and collection callbacks, but remain opaque references that cannot
+      cross the data boundary.
+- [x] Recursive assimilation of objects with an own callable `then` field across `Promise.resolve`, combinators,
+      constructors, reactions, `finally`, `await`, and async returns. Thenable methods run deferred, receive
+      first-call-wins resolve/reject functions, and ignore throws after settlement. Inherited/accessor `then` fields
+      and a JavaScript `this` receiver remain outside the supported object/function model.
 - [x] Dotted tool names are canonicalized into namespace paths; a path can be both callable and a namespace, and the
       last definition supplied for a canonical path wins.
 - [x] Tool path segments may be named `constructor`, `prototype`, or `__proto__` because paths use inert Map keys.

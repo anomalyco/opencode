@@ -57,7 +57,8 @@ import {
   invokePromiseInstanceMethod,
   invokePromiseMethod,
   PromiseRuntime,
-  selfResolutionError,
+  resolvePromise,
+  resolvePromiseValue,
 } from "./promises.js"
 import { containsOpaqueReference, isRuntimeReference, rejectCircularInsertion, typeofValue } from "./references.js"
 import { ScopeStack } from "./scope.js"
@@ -266,6 +267,8 @@ type GeneratorState = {
   available?: Deferred.Deferred<void>
 }
 
+const promiseResolutionNode: AstNode = { type: "PromiseResolution" }
+
 export class Interpreter<R> {
   private scopes: ScopeStack
   private readonly invokeTool: (path: ReadonlyArray<string>, args: Array<unknown>) => Effect.Effect<unknown, unknown, R>
@@ -356,7 +359,7 @@ export class Interpreter<R> {
       }
 
       // The implicit async body adopts returned promises before copy-out.
-      if (value instanceof CodeModePromise) value = yield* self.settlePromise(value)
+      value = yield* resolvePromiseValue(self.runner, self.promises, value, program)
       return value
     }).pipe(Effect.ensuring(Effect.sync(() => self.scopes.pop())))
   }
@@ -778,8 +781,10 @@ export class Interpreter<R> {
     )
   }
 
-  private awaitValue(value: unknown): Effect.Effect<unknown, unknown, R> {
-    return value instanceof CodeModePromise ? this.settlePromise(value) : Effect.as(Effect.yieldNow, value)
+  private awaitValue(value: unknown, node: AstNode = promiseResolutionNode): Effect.Effect<unknown, unknown, R> {
+    return Effect.flatMap(resolvePromise(this.runner, this.promises, value, node), (promise) =>
+      this.settlePromise(promise),
+    )
   }
 
   private awaitAsyncFromSyncValue(
@@ -1387,9 +1392,8 @@ export class Interpreter<R> {
         return this.evaluateUpdateExpression(node)
       case "AwaitExpression": {
         // Await always suspends, including for plain values.
-        const self = this
         return Effect.flatMap(this.evaluateExpression(getNode(node, "argument")), (value) =>
-          value instanceof CodeModePromise ? self.settlePromise(value) : Effect.as(Effect.yieldNow, value),
+          this.awaitValue(value, node),
         )
       }
       case "YieldExpression":
@@ -2102,18 +2106,14 @@ export class Interpreter<R> {
     })
     if (fn.generator) return Effect.succeed(this.createGenerator(invocation, run, fn.async))
     if (!fn.async) return run
-    // The initial yield assigns `box.own` before the body can self-resolve.
-    const box: { own?: CodeModePromise } = {}
+    // The initial yield assigns the promise before the body can self-resolve.
+    const box: { promise?: CodeModePromise } = {}
     return Effect.map(
       this.createPromise(
-        Effect.flatMap(run, (value) => {
-          if (!(value instanceof CodeModePromise)) return Effect.succeed(value)
-          if (value === box.own) return Effect.fail(selfResolutionError())
-          return invocation.settlePromise(value)
-        }),
+        Effect.flatMap(run, (value) => resolvePromiseValue(invocation.runner, this.promises, value, fn.body, box)),
       ),
       (promise) => {
-        box.own = promise
+        box.promise = promise
         return promise
       },
     )
