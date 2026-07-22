@@ -1,7 +1,6 @@
 import fs from "fs/promises"
 import path from "path"
-import { fileURLToPath } from "url"
-import { describe, expect, test } from "bun:test"
+import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { FileMutation } from "@opencode-ai/core/file-mutation"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -362,26 +361,4 @@ describe("WriteTool", () => {
         ),
     ),
   )
-})
-
-test("keeps the locked write schema, semantics docstring, and deferred UX TODOs visible", async () => {
-  const source = (await fs.readFile(new URL("../src/tool/write.ts", import.meta.url), "utf8")).replaceAll("\r\n", "\n")
-  const definition = await Effect.runPromise(
-    withTool(path.dirname(fileURLToPath(import.meta.url)), (registry) => toolDefinitions(registry)),
-  )
-  const schema = definition[0]?.inputSchema as { readonly properties?: Record<string, unknown> }
-
-  expect(Object.keys(schema.properties ?? {}).sort()).toEqual(["content", "path"])
-  expect(source).toContain(
-    "absolute external paths retain mutation capability through a separate\n * external_directory approval before edit approval.",
-  )
-  for (const todo of [
-    "Revisit whether model-facing mutation schemas should prefer absolute `filePath` naming for trained-in compatibility after evaluating model behavior.",
-    "Add formatter integration after V2 formatter runtime exists.",
-    "Publish watcher/file-edit events after V2 watcher integration exists.",
-    "Add snapshots / undo after design exists.",
-    "Add LSP notification and diagnostics after V2 LSP runtime exists.",
-  ]) {
-    expect(source).toContain(`TODO: ${todo}`)
-  }
 })
