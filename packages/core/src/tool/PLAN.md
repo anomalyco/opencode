@@ -614,11 +614,12 @@ Two exceptions to "just get to the final state":
 
 Most invariants are already tested and need only mechanical updates during the rewrite: snapshot capture (`session-runner-tool-registry.test.ts` "executes the tool advertised in a model request", "reveals the previous registration after an overlay closes"), parallel tools (`session-runner.test.ts` "Run parallel tools"), final-Step `toolChoice: "none"` (four assertions across session-runner and session-generate tests), `Promise<unknown>` for schema-less Code Mode tools (`codemode.test.ts`), hosted-tool lowering (`packages/ai` provider tests), shell failure output at the tool level (`tool-shell.test.ts` "keeps non-zero exits useful", "returns a useful timeout settlement"), and the failure partial snapshot (`5a9ed4d350` added "persists the latest partial snapshot when a tool fails", "interrupted progress publication remains in the terminal failure snapshot", and "failure before progress omits partial output fields").
 
-Write only the three missing baselines, on the unmodified base:
+The Anthropic hosted-tool round trip is covered by two composing tests: `session-runner.test.ts` persists a hosted call/result and asserts the continuation request carries the full payload, and `anthropic-messages.test.ts` "round-trips provider-executed assistant content into server tool blocks" lowers that message shape into the typed wire block. Both must keep passing (with mechanical field updates) after `result` moves to `resultState`.
 
-- One Anthropic hosted-tool storage round trip: persist a server-tool result, reload, lower the next request, assert the typed result block carries the exact payload.
+Write only the two missing baselines, on the unmodified base:
+
 - MCP `isError: true` becomes one failed tool call (current MCP tests only exercise `isError: false`).
-- MCP mixed text-plus-image content reaches the model request intact.
+- MCP mixed text-plus-media content reaches the model intact.
 
 Assert through public surfaces so the tests survive the rewrite. Target-state behaviors (grep/glob raw arrays disappearing, per-call unavailable failure, runtime final-Step rejection) are verified in the matrix afterward, not baselined.
 

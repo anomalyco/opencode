@@ -241,10 +241,41 @@ const mcp = Layer.mock(MCP.Service, {
         description: "Lookup",
         inputSchema: { type: "object", properties: {} },
       }),
+      new MCP.Tool({
+        server: MCP.ServerName.make("direct"),
+        name: "fail",
+        codemode: false,
+        description: "Always fails",
+        inputSchema: { type: "object", properties: {} },
+      }),
+      new MCP.Tool({
+        server: MCP.ServerName.make("direct"),
+        name: "media",
+        codemode: false,
+        description: "Returns text and an image",
+        inputSchema: { type: "object", properties: {} },
+      }),
     ]),
   callTool: (input) =>
     Effect.sync(() => {
       calls += 1
+      if (input.name === "fail")
+        return new MCP.ToolResult({
+          server: MCP.ServerName.make(input.server),
+          tool: input.name,
+          isError: true,
+          content: [{ type: "text", text: "search index unavailable" }],
+        })
+      if (input.name === "media")
+        return new MCP.ToolResult({
+          server: MCP.ServerName.make(input.server),
+          tool: input.name,
+          isError: false,
+          content: [
+            { type: "text", text: "rendered chart" },
+            { type: "media", data: "aGVsbG8=", mimeType: "image/png" },
+          ],
+        })
       return new MCP.ToolResult({
         server: MCP.ServerName.make(input.server),
         tool: input.name,
@@ -647,9 +678,7 @@ test("loads and reads MCP resources", async () => {
           })
           expect(server.clientVersion()).toMatchObject({ name: "sdk", version: "1.2.3" })
         }).pipe(
-          Effect.provide(
-            resourceMcpLayer(server.url, undefined, { clientInfo: { name: "sdk", version: "1.2.3" } }),
-          ),
+          Effect.provide(resourceMcpLayer(server.url, undefined, { clientInfo: { name: "sdk", version: "1.2.3" } })),
         )
       }),
     ),
@@ -790,6 +819,50 @@ it.effect("advertises MCP tools directly when Code Mode is disabled for the serv
 
     expect(definitions.some((tool) => tool.name === "direct_lookup")).toBe(true)
     expect(execute?.description).not.toContain("tools.direct.lookup")
+  }),
+)
+
+// Baseline (PLAN.md step 1): MCP isError must become one failed tool call, not a
+// success whose text happens to describe an error.
+it.effect("fails the call when MCP reports isError", () =>
+  Effect.gen(function* () {
+    assertion = yield* Deferred.make<PermissionV2.AssertInput>()
+    decision = Effect.void
+    const registry = yield* ToolRegistry.Service
+    yield* waitForTool(registry, "direct_fail")
+
+    const settlement = yield* settleTool(registry, {
+      sessionID: SessionV2.ID.make("ses_mcp_is_error"),
+      ...toolIdentity,
+      call: { type: "tool-call", id: "call_mcp_is_error", name: "direct_fail", input: {} },
+    })
+
+    expect(settlement.result).toEqual({ type: "error", value: "search index unavailable" })
+    expect(settlement.error).toMatchObject({ message: "search index unavailable" })
+    expect(settlement.output).toBeUndefined()
+  }),
+)
+
+// Baseline (PLAN.md step 1): mixed MCP text and media content must reach the model intact.
+it.effect("preserves MCP text and media content for the model", () =>
+  Effect.gen(function* () {
+    assertion = yield* Deferred.make<PermissionV2.AssertInput>()
+    decision = Effect.void
+    const registry = yield* ToolRegistry.Service
+    yield* waitForTool(registry, "direct_media")
+
+    const settlement = yield* settleTool(registry, {
+      sessionID: SessionV2.ID.make("ses_mcp_media"),
+      ...toolIdentity,
+      call: { type: "tool-call", id: "call_mcp_media", name: "direct_media", input: {} },
+    })
+
+    expect(settlement.error).toBeUndefined()
+    expect(settlement.result.type).toBe("content")
+    expect(settlement.output?.content).toMatchObject([
+      { type: "text", text: "rendered chart" },
+      { type: "file", mime: "image/png" },
+    ])
   }),
 )
 
