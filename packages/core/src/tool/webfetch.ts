@@ -36,6 +36,14 @@ const Output = Schema.Struct({
   contentType: Schema.String,
   format: Input.fields.format,
   output: Schema.String,
+  data: Schema.String.pipe(Schema.optional),
+  mime: Schema.String.pipe(Schema.optional),
+})
+const StructuredOutput = Schema.Struct({
+  url: Output.fields.url,
+  contentType: Output.fields.contentType,
+  format: Output.fields.format,
+  output: Output.fields.output,
 })
 
 type Format = (typeof Input.Type)["format"]
@@ -104,7 +112,9 @@ const isTextualMime = (mime: string) =>
   mime === "application/xml" ||
   mime.endsWith("+xml") ||
   mime === "application/javascript" ||
-  mime === "application/x-javascript"
+  mime === "application/x-javascript" ||
+  mime === "image/svg+xml" ||
+  mime === "image/vnd.fastbidsheet"
 const convert = (content: string, contentType: string, format: Format) => {
   if (!contentType.includes("text/html")) return content
   if (format === "markdown") return convertHTMLToMarkdown(content)
@@ -126,7 +136,21 @@ export const Plugin = {
             description,
             input: Input,
             output: Output,
-            toModelOutput: ({ output }) => [{ type: "text", text: output.output }],
+            structured: StructuredOutput,
+            // Image base64 belongs in the native file content only so it is not persisted twice.
+            toStructuredOutput: ({ output }) => ({
+              url: output.url,
+              contentType: output.contentType,
+              format: output.format,
+              output: output.output,
+            }),
+            toModelOutput: ({ input, output }) => {
+              if (output.data === undefined || output.mime === undefined) return [{ type: "text", text: output.output }]
+              return [
+                { type: "text", text: output.output },
+                { type: "file", data: output.data, mime: output.mime, name: input.url },
+              ]
+            },
             execute: (input, context) =>
               Effect.gen(function* () {
                 yield* Effect.try({
@@ -150,9 +174,7 @@ export const Plugin = {
                   )
                   const contentType = response.headers["content-type"] || ""
                   const mime = mimeFrom(contentType)
-                  if (isImageAttachment(mime))
-                    return yield* Effect.fail(new Error(`Unsupported fetched image content type: ${mime}`))
-                  if (!isTextualMime(mime))
+                  if (!isTextualMime(mime) && !isImageAttachment(mime))
                     return yield* Effect.fail(new Error(`Unsupported fetched file content type: ${mime}`))
                   return { body: yield* collectBody(response), contentType }
                 }).pipe(
@@ -161,6 +183,16 @@ export const Plugin = {
                     orElse: () => Effect.fail(new Error("Request timed out")),
                   }),
                 )
+                const mime = mimeFrom(contentType)
+                if (isImageAttachment(mime))
+                  return {
+                    url: input.url,
+                    contentType,
+                    format: input.format,
+                    output: "Image fetched successfully",
+                    data: Buffer.from(body).toString("base64"),
+                    mime,
+                  }
                 const content = new TextDecoder().decode(body)
                 const output = yield* Effect.try({
                   try: () => convert(content, contentType, input.format),

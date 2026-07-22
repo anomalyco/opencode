@@ -17,6 +17,10 @@ and other binary prompt attachments are not currently included in the model
 request. Some clients may let you select a PDF, but V2 does not yet make that
 PDF visible to the model.
 
+The built-in `webfetch` tool returns HTTP image responses as image media when
+the response uses an `image/*` content type. SVG and FastBid sheet responses
+remain text.
+
 <Warning>
   Use a model that supports image input before attaching an image. OpenCode
   passes supported image media to the selected provider, but the provider and
@@ -133,9 +137,9 @@ All fields are optional:
 
 <Note>
   In the current V2 runtime, these settings apply to image media produced by
-  the built-in `read` tool. Images attached directly through the TUI, desktop,
-  web, CLI, or API bypass this normalization. Resize direct attachments before
-  adding them if the provider requires smaller media.
+  built-in tools such as `read` and `webfetch`. Images attached directly
+  through the TUI, desktop, web, CLI, or API bypass this normalization. Resize
+  direct attachments before adding them if the provider requires smaller media.
 </Note>
 
 The `read` tool recognizes PNG, JPEG, GIF, and WebP by their contents and will

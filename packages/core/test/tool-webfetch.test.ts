@@ -234,20 +234,67 @@ describe("WebFetchTool registration", () => {
     }),
   )
 
-  it.effect("keeps images and files unsupported until typed settlement can carry attachments", () =>
+  it.effect("returns images as native media and keeps other files unsupported", () =>
     Effect.gen(function* () {
       reset()
       const registry = yield* ToolRegistry.Service
-      respond = () => Effect.succeed(new Response("png", { headers: { "content-type": "image/png" } }))
-      expect(yield* executeTool(registry, call({ url: "https://1.1.1.1/image", format: "html" }))).toEqual({
-        type: "error",
-        value: "Unable to fetch https://1.1.1.1/image",
+      respond = () => Effect.succeed(new Response("png", { headers: { "content-type": "IMAGE/PNG; charset=binary" } }))
+      expect(yield* settleTool(registry, call({ url: "https://1.1.1.1/image", format: "html" }))).toEqual({
+        result: {
+          type: "content",
+          value: [
+            { type: "text", text: "Image fetched successfully" },
+            {
+              type: "file",
+              uri: "data:image/png;base64,cG5n",
+              mime: "image/png",
+              name: "https://1.1.1.1/image",
+            },
+          ],
+        },
+        output: {
+          structured: {
+            url: "https://1.1.1.1/image",
+            contentType: "IMAGE/PNG; charset=binary",
+            format: "html",
+            output: "Image fetched successfully",
+          },
+          content: [
+            { type: "text", text: "Image fetched successfully" },
+            {
+              type: "file",
+              uri: "data:image/png;base64,cG5n",
+              mime: "image/png",
+              name: "https://1.1.1.1/image",
+            },
+          ],
+        },
       })
 
       respond = () => Effect.succeed(new Response("pdf", { headers: { "content-type": "application/pdf" } }))
       expect(yield* executeTool(registry, call({ url: "https://1.1.1.1/file", format: "html" }))).toEqual({
         type: "error",
         value: "Unable to fetch https://1.1.1.1/file",
+      })
+    }),
+  )
+
+  it.effect("keeps SVG and FastBid sheets as text instead of image media", () =>
+    Effect.gen(function* () {
+      reset()
+      const registry = yield* ToolRegistry.Service
+      respond = () =>
+        Effect.succeed(new Response("<svg><text>hello</text></svg>", { headers: { "content-type": "image/svg+xml" } }))
+      expect(yield* executeTool(registry, call({ url: "https://1.1.1.1/image.svg", format: "html" }))).toEqual({
+        type: "text",
+        value: "<svg><text>hello</text></svg>",
+      })
+
+      respond = () =>
+        Effect.succeed(new Response("table Sheet {}", { headers: { "content-type": "image/vnd.fastbidsheet" } }))
+      expect(yield* executeTool(registry, call({ url: "https://1.1.1.1/sheet.fbs", format: "text" }))).toEqual({
+        type: "text",
+        value: "table Sheet {}",
       })
     }),
   )
