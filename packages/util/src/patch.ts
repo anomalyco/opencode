@@ -79,6 +79,9 @@ export function parse(patchText: string): Result.Result<ReadonlyArray<Hunk>, Par
       const path = header.slice("*** Delete File: ".length).trim()
       const next = lines[index + 1]?.trim()
       if (index + 1 < end && next !== undefined && !isBoundary(next)) {
+        if (next.startsWith("*** ")) {
+          return Result.fail(new InvalidHunkError({ line: next, lineNumber: index + 2 }))
+        }
         return Result.fail(
           new InvalidHunkError({
             line: next,

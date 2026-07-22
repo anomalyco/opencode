@@ -333,6 +333,26 @@ describe("PatchTool", () => {
     ),
   )
 
+  it.live("moves a file without changing its contents", () =>
+    withTempTool((directory, registry) =>
+      Effect.gen(function* () {
+        const source = path.join(directory, "old.txt")
+        const destination = path.join(directory, "moved.txt")
+        yield* Effect.promise(() => fs.writeFile(source, "same\n"))
+        expect(
+          yield* executeTool(
+            registry,
+            call(
+              "*** Begin Patch\n*** Update File: old.txt\n*** Move to: moved.txt\n@@\n same\n*** End Patch",
+            ),
+          ),
+        ).toEqual({ type: "text", value: "Success. Updated the following files:\nM moved.txt" })
+        expect(yield* exists(source)).toBe(false)
+        expect(yield* Effect.promise(() => fs.readFile(destination, "utf8"))).toBe("same\n")
+      }),
+    ),
+  )
+
   it.live("moves a symlink without deleting its target", () =>
     withTempTool((directory, registry) =>
       Effect.gen(function* () {
@@ -712,14 +732,17 @@ describe("PatchTool", () => {
       Effect.gen(function* () {
         const target = path.join(directory, "unchanged.txt")
         yield* Effect.promise(() => fs.writeFile(target, "line1\nline2\n"))
-        expect(
-          yield* executeTool(
-            registry,
-            call("*** Begin Patch\n*** Update File: unchanged.txt\n@@\n-missing\n+changed\n*** End Patch"),
-          ),
-        ).toEqual({
+        const settled = yield* settleTool(
+          registry,
+          call("*** Begin Patch\n*** Update File: unchanged.txt\n@@\n-missing\n+changed\n*** End Patch"),
+        )
+        expect(settled.result).toEqual({
           type: "error",
           value: "patch verification failed: Failed to find expected lines in unchanged.txt:\nmissing",
+        })
+        expect(settled.error).toEqual({
+          type: "tool.execution",
+          message: "patch verification failed: Failed to find expected lines in unchanged.txt:\nmissing",
         })
         expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("line1\nline2\n")
       }),
@@ -787,7 +810,7 @@ describe("PatchTool", () => {
           ),
         ).toEqual({
           type: "error",
-          value: `Unable to apply patch at new.txt: Unknown: FileSystem.writeWithDirs (${path.join(directory, "new.txt")}): forced write failure`,
+          value: "Unable to apply patch at new.txt: forced write failure",
         })
         expect(yield* Effect.promise(() => fs.readFile(path.join(directory, "old.txt"), "utf8"))).toBe("before\n")
         expect(yield* exists(path.join(directory, "new.txt"))).toBe(false)
@@ -808,7 +831,8 @@ describe("PatchTool", () => {
           ),
         ).toEqual({
           type: "error",
-          value: `Patch partially applied before failing at second.txt: Unknown: FileSystem.writeWithDirs (${path.join(directory, "second.txt")}): forced write failure. Applied: first.txt`,
+          value:
+            "Patch partially applied before failing at second.txt: forced write failure. Completed before failure: first.txt",
         })
         expect(yield* Effect.promise(() => fs.readFile(path.join(directory, "first.txt"), "utf8"))).toBe("first\n")
         expect(yield* exists(path.join(directory, "second.txt"))).toBe(false)
@@ -830,7 +854,8 @@ describe("PatchTool", () => {
           ),
         ).toEqual({
           type: "error",
-          value: `Patch partially applied while moving old.txt to new.txt: wrote new.txt but failed to remove old.txt: Unknown: FileSystem.remove (${path.join(directory, "old.txt")}): forced remove failure`,
+          value:
+            "Patch partially applied while moving old.txt to new.txt: wrote new.txt but failed to remove old.txt: forced remove failure",
         })
         expect(yield* Effect.promise(() => fs.readFile(path.join(directory, "old.txt"), "utf8"))).toBe("before\n")
         expect(yield* Effect.promise(() => fs.readFile(path.join(directory, "new.txt"), "utf8"))).toBe("after\n")

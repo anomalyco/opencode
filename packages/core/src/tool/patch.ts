@@ -5,6 +5,7 @@ import { ToolFailure } from "@opencode-ai/ai"
 import { FileDiff } from "@opencode-ai/schema/file-diff"
 import { createTwoFilesPatch, diffLines } from "diff"
 import { Effect, Schema } from "effect"
+import { PlatformError } from "effect/PlatformError"
 import path from "path"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Location } from "../location"
@@ -89,7 +90,7 @@ export const Plugin = {
                     return new ToolFailure({ message: `Unable to apply patch at ${path}${detail}`, error })
                   }
                   return new ToolFailure({
-                    message: `Patch partially applied before failing at ${path}${detail}. Applied: ${applied.map((item) => item.resource).join(", ")}`,
+                    message: `Patch partially applied before failing at ${path}${detail}. Completed before failure: ${applied.map((item) => item.resource).join(", ")}`,
                     error,
                   })
                 }
@@ -97,7 +98,7 @@ export const Plugin = {
                   const previous =
                     applied.length === 0
                       ? ""
-                      : `. Applied before move: ${applied.map((item) => item.resource).join(", ")}`
+                      : `. Completed before move: ${applied.map((item) => item.resource).join(", ")}`
                   return new ToolFailure({
                     message: `Patch partially applied while moving ${source} to ${destination}: wrote ${destination} but failed to remove ${source}: ${errorMessage(error)}${previous}`,
                     error,
@@ -112,7 +113,7 @@ export const Plugin = {
                   if (!input.patchText) return yield* new ToolFailure({ message: "patchText is required" })
                   const hunks = yield* Effect.fromResult(Patch.parse(input.patchText)).pipe(
                     Effect.mapError(
-                      (error) => new ToolFailure({ message: `patch verification failed: ${error.message}`, error }),
+                      (error) => new ToolFailure({ message: `patch verification failed: ${error.message}` }),
                     ),
                   )
                   if (hunks.length === 0) {
@@ -157,7 +158,6 @@ export const Plugin = {
                             (error) =>
                               new ToolFailure({
                                 message: `patch verification failed: Failed to read file to delete ${target.canonical}: ${errorMessage(error)}`,
-                                error,
                               }),
                           ),
                         )
@@ -174,7 +174,6 @@ export const Plugin = {
                               (error) =>
                                 new ToolFailure({
                                   message: `patch verification failed: Failed to read file to update ${target.canonical}: ${errorMessage(error)}`,
-                                  error,
                                 }),
                             ),
                           )
@@ -189,7 +188,6 @@ export const Plugin = {
                                 (error) =>
                                   new ToolFailure({
                                     message: `patch verification failed: Failed to read file to update ${target.canonical}: ${errorMessage(error)}`,
-                                    error,
                                   }),
                               ),
                             ),
@@ -199,7 +197,7 @@ export const Plugin = {
                       const update = yield* Effect.try({
                         try: () => Patch.derive(hunk.path, hunk.chunks, original),
                         catch: (error) =>
-                          new ToolFailure({ message: `patch verification failed: ${errorMessage(error)}`, error }),
+                          new ToolFailure({ message: `patch verification failed: ${errorMessage(error)}` }),
                       })
                       const moveTarget = hunk.movePath ? resolveTarget(location, hunk.movePath) : undefined
                       if (moveTarget) targets.push(moveTarget)
@@ -328,6 +326,7 @@ export const Plugin = {
 }
 
 function errorMessage(error: unknown) {
+  if (error instanceof PlatformError) return error.reason.description ?? error.reason.message
   return error instanceof Error ? error.message : String(error)
 }
 

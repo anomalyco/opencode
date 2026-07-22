@@ -246,6 +246,35 @@ describe("Patch", () => {
     ).toBe("line 1\nLINE 2\nline 3\nLINE 4\n")
   })
 
+  test("appends a pure-addition chunk to a nonempty file", () => {
+    expect(Patch.derive("update.txt", [{ oldLines: [], newLines: ["added 1", "added 2"] }], "line 1\nline 2\n").content).toBe(
+      "line 1\nline 2\nadded 1\nadded 2\n",
+    )
+  })
+
+  test("applies a pure-addition chunk after an earlier replacement", () => {
+    expect(
+      Patch.derive(
+        "update.txt",
+        [
+          { oldLines: [], newLines: ["after-context", "second-line"] },
+          { oldLines: ["line1", "line2", "line3"], newLines: ["line1", "line2-replacement"] },
+        ],
+        "line1\nline2\nline3\n",
+      ).content,
+    ).toBe("line1\nline2-replacement\nafter-context\nsecond-line\n")
+  })
+
+  test("applies a deletion-only update chunk", () => {
+    expect(
+      Patch.derive(
+        "update.txt",
+        [{ oldLines: ["line1", "line2", "line3"], newLines: ["line1", "line3"] }],
+        "line1\nline2\nline3\n",
+      ).content,
+    ).toBe("line1\nline3\n")
+  })
+
   test("updates empty files and adds a trailing newline", () => {
     expect(Patch.derive("empty.txt", [{ oldLines: [], newLines: ["First line"] }], "").content).toBe("First line\n")
     expect(Patch.derive("no-newline.txt", [{ oldLines: ["old"], newLines: ["new"] }], "old").content).toBe("new\n")
@@ -424,6 +453,9 @@ describe("Patch", () => {
     expect(() => parse("*** Begin Patch\n*** Delete File: file.txt\nbad\n*** End Patch")).toThrow(
       "Invalid hunk at line 3: Unexpected line after Delete File 'file.txt': 'bad'. Delete hunks do not contain body lines",
     )
+    expect(() =>
+      parse("*** Begin Patch\n*** Delete File: file.txt\n*** Frobnicate File: next.txt\n*** End Patch"),
+    ).toThrow("Invalid hunk at line 3: '*** Frobnicate File: next.txt' is not a valid hunk header")
   })
 
   test("rejects an empty update hunk", () => {
