@@ -233,6 +233,56 @@ export function registerIpcHandlers(deps: Deps) {
     })
   })
   ipcMain.handle("logout", () => deps.logout())
+
+  ipcMain.handle("user.get", async () => {
+    try {
+      const { url, password } = await deps.awaitInitialization()
+      const auth = Buffer.from(`opencode:${password}`).toString("base64")
+      const res = await fetch(`${url}/identity/me`, {
+        headers: { authorization: `Basic ${auth}` },
+      })
+      if (!res.ok) return null
+      return res.json()
+    } catch {
+      return null
+    }
+  })
+
+  ipcMain.handle("user.listAdmin", async () => {
+    try {
+      const { url, password } = await deps.awaitInitialization()
+      const auth = Buffer.from(`opencode:${password}`).toString("base64")
+      const res = await fetch(`${url}/admin/users`, {
+        headers: { authorization: `Basic ${auth}` },
+      })
+      if (!res.ok) return null
+      return res.json()
+    } catch {
+      return null
+    }
+  })
+
+  ipcMain.handle(
+    "user.credit",
+    async (_event: IpcMainInvokeEvent, userId: string, amount: number, description: string) => {
+      try {
+        const { url, password } = await deps.awaitInitialization()
+        const auth = Buffer.from(`opencode:${password}`).toString("base64")
+        const res = await fetch(`${url}/admin/users/${userId}/credit`, {
+          method: "POST",
+          headers: {
+            authorization: `Basic ${auth}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ amount, description }),
+        })
+        if (!res.ok) return null
+        return res.json()
+      } catch {
+        return null
+      }
+    },
+  )
 }
 
 export function sendMenuCommand(win: BrowserWindow, id: string) {

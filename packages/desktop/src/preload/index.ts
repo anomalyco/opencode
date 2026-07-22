@@ -118,6 +118,11 @@ const api: ElectronAPI = {
   exportDebugLogs: () => ipcRenderer.invoke("export-debug-logs"),
   recordFatalRendererError: (error) => ipcRenderer.invoke("record-fatal-renderer-error", error),
   logout: () => ipcRenderer.invoke("logout"),
+  user: {
+    get: () => ipcRenderer.invoke("user.get"),
+    listAdmin: () => ipcRenderer.invoke("user.listAdmin"),
+    credit: (userId, amount, description) => ipcRenderer.invoke("user.credit", userId, amount, description),
+  },
 }
 
 contextBridge.exposeInMainWorld("api", api)

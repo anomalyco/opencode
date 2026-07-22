@@ -119,6 +119,10 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
   const canForward = createMemo(() => history.index < history.stack.length - 1)
   const hasProjects = createMemo(() => layout.projects.list().length > 0)
   const nav = createMemo(() => (useV2Titlebar() ? settings.general.showNavigation() : true))
+  const [user] = createResource(
+    () => "boot",
+    () => (window as { api?: { user?: { get: () => Promise<{ email: string } | null> } } }).api?.user?.get() ?? Promise.resolve(null),
+  )
   const updateState = createMemo<TitlebarUpdatePillState>(() => {
     const installing = props.update?.installing() ?? false
     const version = props.update?.version()
@@ -481,6 +485,11 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                     />
                   </TooltipV2>
                 </Show>
+                <Show when={user()}>
+                  <span class="shrink-0 text-v2-text-text-secondary text-xs mr-2 truncate max-w-[160px]">
+                    Signed in as {user()!.email}
+                  </span>
+                </Show>
                 <TitlebarV2Right state={v2RightState()} />
                 <Show when={windows() && !electronWindows()}>
                   <div data-tauri-decorum-tb class="flex flex-row" />
@@ -636,6 +645,11 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
               data-tauri-drag-region
               onMouseDown={drag}
             >
+              <Show when={user()}>
+                <span class="text-text-secondary text-xs mr-2 truncate max-w-[160px]">
+                  Signed in as {user()!.email}
+                </span>
+              </Show>
               <div id="opencode-titlebar-right" class="flex items-center gap-1 shrink-0 justify-end" />
               <Show when={windows()}>
                 {!tauriApi() && <div class="shrink-0" style={{ width: windowsControlsWidth() }} />}

@@ -40,6 +40,48 @@ export type FatalRendererError = {
   os?: string
 }
 
+export type UserGetResponse = {
+  id: string
+  email: string
+  displayName: string | null
+  tenantId: string | null
+  isAdmin: boolean
+  balance: number
+}
+
+export type UserListItem = {
+  id: string
+  email: string
+  displayName: string | null
+  tenantId: string | null
+  createdAt: number
+  lastLoginAt: number
+  isAdmin: boolean
+  balance: number
+  lifetimeUsed: number
+}
+
+export type UserListAdminResponse = {
+  users: UserListItem[]
+}
+
+export type UserCreditPayload = {
+  amount: number
+  description: string
+}
+
+export type UserCreditResponse = {
+  userId: string
+  newBalance: number
+  transactionId: number
+}
+
+export type UserAPI = {
+  get: () => Promise<UserGetResponse | null>
+  listAdmin: () => Promise<UserListAdminResponse | null>
+  credit: (userId: string, amount: number, description: string) => Promise<UserCreditResponse | null>
+}
+
 export type ElectronAPI = {
   killSidecar: () => Promise<void>
   installCli: () => Promise<string>
@@ -100,4 +142,5 @@ export type ElectronAPI = {
   exportDebugLogs: () => Promise<string>
   recordFatalRendererError: (error: FatalRendererError) => Promise<void>
   logout: () => Promise<number>
+  user: UserAPI
 }
