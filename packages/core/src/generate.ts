@@ -1,12 +1,15 @@
 export * as Generate from "./generate"
 
 import { LLM, LLMClient, LLMError } from "@opencode-ai/ai"
+import { Npm } from "@opencode-ai/util/npm"
 import { Context, Effect, Layer, Schema } from "effect"
+import { AISDK } from "./aisdk"
 import { Catalog } from "./catalog"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { llmClient } from "./effect/app-node-platform"
 import { Integration } from "./integration"
 import { ModelV2 } from "./model"
+import { ProviderV2 } from "./provider"
 import { SessionRunnerModel } from "./session/runner/model"
 
 export interface TextInput {
@@ -38,6 +41,8 @@ export const layer = Layer.effect(
     const catalog = yield* Catalog.Service
     const integrations = yield* Integration.Service
     const llm = yield* LLMClient.Service
+    const npm = yield* Npm.Service
+    const aisdk = yield* AISDK.Service
 
     const selectModel = Effect.fn("Generate.selectModel")(function* (requested?: ModelV2.Ref) {
       const selected = requested
@@ -72,7 +77,10 @@ export const layer = Layer.effect(
         provider?.integrationID ?? Integration.ID.make(selected.providerID),
       )
       const credential = connection ? yield* integrations.connection.resolve(connection) : undefined
-      const model = yield* SessionRunnerModel.fromCatalogModel(selected, credential).pipe(
+      const model = yield* SessionRunnerModel.fromCatalogModel(selected, credential, {
+        loadPackage: (specifier) => ProviderV2.loadPackage(specifier, npm),
+        loadAISDK: (model) => aisdk.model(model),
+      }).pipe(
         Effect.mapError((error) =>
           input.model
             ? new ModelSelectionError({ message: error.message })
@@ -106,4 +114,8 @@ export const layer = Layer.effect(
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [Catalog.node, Integration.node, llmClient] })
+export const node = makeLocationNode({
+  service: Service,
+  layer,
+  deps: [Catalog.node, Integration.node, llmClient, Npm.node, AISDK.node],
+})
