@@ -1,5 +1,6 @@
 import { isAbsolute, resolve } from "node:path"
 import type { ToolCall, ToolCallContent, ToolCallLocation, ToolCallUpdate, ToolKind } from "@agentclientprotocol/sdk"
+import { readDisplayText } from "@opencode-ai/tui/mini/tool"
 
 export type ToolInput = Record<string, unknown>
 export type ToolContent = ReadonlyArray<
@@ -103,7 +104,9 @@ export function completedToolUpdate(input: {
   readonly metadata?: Readonly<Record<string, unknown>>
 }): ToolCallUpdate {
   const normalized = toolContent(input.content)
-  const read = input.toolName.toLocaleLowerCase() === "read" ? readDisplayText(input.metadata ?? {}) : undefined
+  // Read's model content is a JSON page envelope; show the clean text instead.
+  const firstText = input.content.find((part) => part.type === "text")
+  const read = input.toolName.toLocaleLowerCase() === "read" && firstText ? readDisplayText(firstText.text) : undefined
   const images = normalized.filter((part) => part.type === "content" && part.content.type === "image")
   const primary =
     read === undefined
@@ -163,21 +166,6 @@ function toolContent(content: ToolContent): ToolCallContent[] {
     if (!match?.[1]?.startsWith("image/") || match[2] === undefined) return []
     return [{ type: "content", content: { type: "image", mimeType: match[1], data: match[2] } }]
   })
-}
-
-function readDisplayText(metadata: Readonly<Record<string, unknown>>) {
-  if (typeof metadata.content === "string") {
-    if (metadata.type === "text-page" || metadata.encoding === "utf8") return metadata.content
-  }
-  if (!Array.isArray(metadata.entries)) return undefined
-  return metadata.entries
-    .flatMap((entry): string[] => {
-      if (typeof entry === "string") return [entry]
-      if (!entry || typeof entry !== "object") return []
-      const path = Reflect.get(entry, "path")
-      return typeof path === "string" ? [path] : []
-    })
-    .join("\n")
 }
 
 function toolTitle(toolName: string, input: ToolInput, fallback: string | undefined) {

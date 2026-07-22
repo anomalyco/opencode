@@ -161,7 +161,32 @@ export function toolOutputText(name: string, content: ReadonlyArray<{ type: stri
   if (!content) return ""
   // V2 shell content appends model-only status after the user-visible command output.
   if (canonicalToolName(name) === "shell") return content.find((item) => item.type === "text")?.text ?? ""
-  return content.flatMap((item) => (item.type === "text" && item.text ? [item.text] : [])).join("\n")
+  const joined = content.flatMap((item) => (item.type === "text" && item.text ? [item.text] : [])).join("\n")
+  if (canonicalToolName(name) === "read") return readDisplayText(joined) ?? joined
+  return joined
+}
+
+/** Read's model content is a JSON page envelope; unwrap the human-facing text. */
+export function readDisplayText(text: string): string | undefined {
+  if (!text.startsWith("{")) return undefined
+  const parsed = (() => {
+    try {
+      return JSON.parse(text) as unknown
+    } catch {
+      return undefined
+    }
+  })()
+  const envelope = dict(parsed)
+  if (typeof envelope.content === "string" && (envelope.type === "text-page" || envelope.encoding === "utf8"))
+    return envelope.content
+  if (!Array.isArray(envelope.entries)) return undefined
+  return envelope.entries
+    .flatMap((entry): string[] => {
+      if (typeof entry === "string") return [entry]
+      const path = dict(entry).path
+      return typeof path === "string" ? [path] : []
+    })
+    .join("\n")
 }
 
 function normalizeInput(name: string, value: unknown) {

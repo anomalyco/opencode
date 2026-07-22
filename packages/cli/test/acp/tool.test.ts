@@ -103,20 +103,22 @@ describe("acp tools", () => {
     ])
   })
 
-  test("uses clean read metadata content instead of model-facing formatting", () => {
+  test("unwraps read's JSON page envelope instead of showing model-facing formatting", () => {
     expect(
       completedToolUpdate({
         toolCallId: "tool-read",
         toolName: "read",
         input: { path: "/tmp/file.ts" },
-        content: [{ type: "text", text: "<content>1: first\n2: second</content>" }],
-        metadata: {
-          type: "text-page",
-          content: "first\nsecond",
-          mime: "text/plain",
-          offset: 1,
-          truncated: false,
-        },
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(
+              { type: "text-page", content: "first\nsecond", mime: "text/plain", offset: 1, truncated: false },
+              null,
+              2,
+            ),
+          },
+        ],
       }).content,
     ).toEqual([{ type: "content", content: { type: "text", text: "first\nsecond" } }])
 
@@ -125,13 +127,17 @@ describe("acp tools", () => {
         toolCallId: "tool-list",
         toolName: "read",
         input: { path: "/tmp" },
-        content: [],
-        metadata: {
-          entries: [
-            { path: "a.ts", type: "file" },
-            { path: "src", type: "directory" },
-          ],
-        },
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              entries: [
+                { path: "a.ts", type: "file" },
+                { path: "src", type: "directory" },
+              ],
+            }),
+          },
+        ],
       }).content,
     ).toEqual([{ type: "content", content: { type: "text", text: "a.ts\nsrc" } }])
   })
