@@ -15,14 +15,9 @@ test("execute preserves successful results with visible unhandled rejections", a
   })
   const execute = ExecuteTool.create(new Map([["fail", { tool: child, name: "fail" }]]))
   const result = await Effect.runPromise(
-    Tool.settle(
+    Tool.execute(
       execute,
-      {
-        type: "tool-call",
-        id: "call_execute",
-        name: "execute",
-        input: { code: `tools.fail({}); return "done"` },
-      },
+      { code: `tools.fail({}); return "done"` },
       {
         sessionID: Session.ID.make("ses_execute"),
         agent: Agent.ID.make("build"),
@@ -33,7 +28,7 @@ test("execute preserves successful results with visible unhandled rejections", a
     ),
   )
 
-  expect(result.structured).toEqual({ toolCalls: [{ tool: "fail", status: "error" }] })
+  expect(result.metadata).toEqual({ toolCalls: [{ tool: "fail", status: "error" }] })
   expect(result.content).toEqual([
     {
       type: "text",
@@ -67,14 +62,9 @@ test("execute supports callable namespace tools", async () => {
     ]),
   )
   const result = await Effect.runPromise(
-    Tool.settle(
+    Tool.execute(
       execute,
-      {
-        type: "tool-call",
-        id: "call_execute",
-        name: "execute",
-        input: { code: "return [await tools.slack.admin({}), await tools.slack.admin.create({})]" },
-      },
+      { code: "return [await tools.slack.admin({}), await tools.slack.admin.create({})]" },
       {
         sessionID: Session.ID.make("ses_execute"),
         agent: Agent.ID.make("build"),
@@ -85,7 +75,7 @@ test("execute supports callable namespace tools", async () => {
     ),
   )
 
-  expect(result.structured).toEqual({
+  expect(result.metadata).toEqual({
     toolCalls: [
       { tool: "slack.admin", status: "completed" },
       { tool: "slack.admin.create", status: "completed" },

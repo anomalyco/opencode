@@ -287,7 +287,7 @@ describe("fromPromise", () => {
               input: Schema.Struct({ name: Schema.String }),
               output: Schema.String,
               execute: async ({ name }, context) => {
-                await context.progress({ structured: { phase: "greeting" } })
+                await context.progress({ metadata: { phase: "greeting" } })
                 return `Hello, ${name}!`
               },
             })
@@ -297,18 +297,22 @@ describe("fromPromise", () => {
 
       yield* PluginPromise.fromPromise(promisePlugin).effect(host)
 
-      const materialized = yield* registry.materialize()
-      expect(materialized.definitions).toContainEqual(expect.objectContaining({ name: "hello", description: "Hello" }))
+      const toolSet = yield* registry.snapshot()
+      expect(toolSet.definitions).toContainEqual(expect.objectContaining({ name: "hello", description: "Hello" }))
       expect(
-        yield* materialized.settle({
+        yield* toolSet.execute({
           sessionID: SessionV2.ID.make("ses_promise_tool"),
           agent: AgentV2.ID.make("build"),
           messageID: SessionMessage.ID.make("msg_promise_tool"),
           progress: (update) => Effect.sync(() => progress.push(update)),
           call: { type: "tool-call", id: "call_promise_tool", name: "hello", input: { name: "world" } },
         }),
-      ).toMatchObject({ result: { type: "text", value: "Hello, world!" } })
-      expect(progress).toEqual([{ structured: { phase: "greeting" }, content: [] }])
+      ).toMatchObject({
+        status: "completed",
+        output: "Hello, world!",
+        content: [{ type: "text", text: "Hello, world!" }],
+      })
+      expect(progress).toEqual([{ metadata: { phase: "greeting" }, content: [] }])
     }),
   )
 })

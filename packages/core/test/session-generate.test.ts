@@ -95,10 +95,10 @@ const references = Layer.mock(ReferenceInstructions.Service, { load: () => Effec
 const mcp = Layer.mock(McpInstructions.Service, { load: () => Effect.succeed(Instructions.empty) })
 const plugins = Layer.mock(PluginSupervisor.Service, { flush: Effect.void })
 const tools = Layer.mock(ToolRegistry.Service, {
-  materialize: () =>
+  snapshot: () =>
     Effect.succeed({
       definitions: [ToolDefinition.make({ name: "lookup", description: "Lookup", inputSchema: { type: "object" } })],
-      settle: () => Effect.die(new Error("unused")),
+      execute: () => Effect.die(new Error("unused")),
     }),
   register: () => Effect.die(new Error("unused")),
   registerBatch: () => Effect.die(new Error("unused")),

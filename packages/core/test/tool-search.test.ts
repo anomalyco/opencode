@@ -19,7 +19,7 @@ import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { location } from "./fixture/location"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
-import { executeTool, registerToolPlugin, settleTool, toolIdentity } from "./lib/tool"
+import { executeTool, registerToolPlugin, toolIdentity } from "./lib/tool"
 
 const globToolNode = makeLocationNode({
   name: "test/glob-tool-plugin",
@@ -83,15 +83,17 @@ describe("search tools", () => {
           )
           yield* withTools(tmp.path, (registry) =>
             Effect.gen(function* () {
-              const glob = yield* settleTool(registry, call("glob", { pattern: "*" }))
-              const grep = yield* settleTool(registry, call("grep", { pattern: "needle" }))
+              const glob = yield* executeTool(registry, call("glob", { pattern: "*" }))
+              const grep = yield* executeTool(registry, call("grep", { pattern: "needle" }))
 
-              expect(glob.output?.structured).toEqual({ count: FileSystem.DEFAULT_SEARCH_LIMIT })
-              expect(grep.output?.structured).toEqual({ matches: FileSystem.DEFAULT_SEARCH_LIMIT })
-              expect(glob.output?.content).toEqual([{ type: "text", text: String(glob.result.value) }])
-              expect(grep.output?.content).toEqual([{ type: "text", text: String(grep.result.value) }])
-              expect(String(glob.result.value).split("\n")).toHaveLength(FileSystem.DEFAULT_SEARCH_LIMIT)
-              expect(grep.result.value).toStartWith(`Found ${FileSystem.DEFAULT_SEARCH_LIMIT} matches\n`)
+              expect(glob.metadata).toEqual({ count: FileSystem.DEFAULT_SEARCH_LIMIT })
+              expect(grep.metadata).toEqual({ matches: FileSystem.DEFAULT_SEARCH_LIMIT })
+              expect(glob.content).toHaveLength(1)
+              expect(grep.content).toHaveLength(1)
+              const globText = glob.content?.[0]?.type === "text" ? glob.content[0].text : ""
+              const grepText = grep.content?.[0]?.type === "text" ? grep.content[0].text : ""
+              expect(globText.split("\n")).toHaveLength(FileSystem.DEFAULT_SEARCH_LIMIT)
+              expect(grepText).toStartWith(`Found ${FileSystem.DEFAULT_SEARCH_LIMIT} matches\n`)
             }),
           )
         }),
@@ -110,7 +112,10 @@ describe("search tools", () => {
                 registry,
                 call(name, { path: "missing", pattern: name === "glob" ? "*" : "needle" }),
               )
-              expect(result).toEqual({ type: "error", value: "Search path does not exist: missing" })
+              expect(result).toEqual({
+                status: "error",
+                error: { type: "tool.execution", message: "Search path does not exist: missing" },
+              })
             }),
           ),
         (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),

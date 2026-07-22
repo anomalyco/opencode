@@ -84,30 +84,30 @@ describe("Tool.Progress", () => {
 
       yield* start("call-success")
       expect((yield* readAssistant).content[0]).toMatchObject({
-        state: { status: "running", structured: {}, content: [] },
+        state: { status: "running", metadata: {}, content: [] },
       })
 
       const progress = yield* service.publish(SessionEvent.Tool.Progress, {
         sessionID,
         assistantMessageID,
         callID: "call-success",
-        structured: { phase: "checkpoint" },
+        metadata: { phase: "checkpoint" },
         content: content("saved"),
       })
       expect((yield* readAssistant).content[0]).toMatchObject({
-        state: { status: "running", structured: {}, content: [] },
+        state: { status: "running", metadata: {}, content: [] },
       })
 
       const success = yield* service.publish(SessionEvent.Tool.Success, {
         sessionID,
         assistantMessageID,
         callID: "call-success",
-        structured: { phase: "done" },
+        metadata: { phase: "done" },
         content: content("complete"),
         executed: false,
       })
       expect((yield* readAssistant).content[0]).toMatchObject({
-        state: { status: "completed", structured: { phase: "done" }, content: content("complete") },
+        state: { status: "completed", metadata: { phase: "done" }, content: content("complete") },
       })
 
       yield* start("call-failed")
@@ -115,7 +115,7 @@ describe("Tool.Progress", () => {
         sessionID,
         assistantMessageID,
         callID: "call-failed",
-        structured: { phase: "checkpoint" },
+        metadata: { phase: "checkpoint" },
         content: content("before failure"),
       })
       const failed = yield* service.publish(SessionEvent.Tool.Failed, {
@@ -130,7 +130,7 @@ describe("Tool.Progress", () => {
       expect((yield* readAssistant).content[1]).toMatchObject({
         state: {
           status: "error",
-          structured: { phase: "checkpoint" },
+          metadata: { phase: "checkpoint" },
           content: content("before failure"),
           error: { type: "unknown", message: "boom" },
         },
@@ -147,8 +147,8 @@ describe("Tool.Progress", () => {
         .all()
         .pipe(Effect.orDie)
       expect(rows.map((row) => row.type)).not.toContain(EventV2.versionedType(SessionEvent.Tool.Progress.type, 1))
-      expect(rows.map((row) => row.type)).toContain(EventV2.versionedType(SessionEvent.Tool.Success.type, 1))
-      expect(rows.map((row) => row.type)).toContain(EventV2.versionedType(SessionEvent.Tool.Failed.type, 1))
+      expect(rows.map((row) => row.type)).toContain(EventV2.versionedType(SessionEvent.Tool.Success.type, 2))
+      expect(rows.map((row) => row.type)).toContain(EventV2.versionedType(SessionEvent.Tool.Failed.type, 2))
     }),
   )
 })

@@ -53,52 +53,31 @@ describe("ToolOutputStore", () => {
         const result = yield* store.bound({
           sessionID,
           callID: "call-aggregate",
-          output: {
-            structured: { kind: "report" },
-            content: [
-              { type: "text", text: first },
-              { type: "text", text: second },
-            ],
-          },
+          content: [
+            { type: "text", text: first },
+            { type: "text", text: second },
+          ],
         })
-        expect(result.output.structured).toEqual({ kind: "report" })
         expect(result.outputPaths).toHaveLength(1)
         expect(yield* fs.readFileString(result.outputPaths[0])).toBe(first + second)
-        if (result.output.content[0]?.type !== "text") throw new Error("expected text preview")
-        expect(Buffer.byteLength(result.output.content[0].text)).toBeLessThanOrEqual(ToolOutputStore.MAX_BYTES)
+        if (result.content[0]?.type !== "text") throw new Error("expected text preview")
+        expect(Buffer.byteLength(result.content[0].text)).toBeLessThanOrEqual(ToolOutputStore.MAX_BYTES)
       }),
     ),
   )
 
-  it.live("uses bounded text for oversized structured-only output", () =>
-    withStore(({ store, fs }) =>
-      Effect.gen(function* () {
-        const structured = { text: "x".repeat(ToolOutputStore.MAX_BYTES) }
-        const result = yield* store.bound({ sessionID, callID: "call-json", output: { structured, content: [] } })
-        expect(result.output.structured).toEqual(structured)
-        expect(result.outputPaths).toHaveLength(1)
-        expect(JSON.parse(yield* fs.readFileString(result.outputPaths[0]))).toEqual(structured)
-        expect(result.output.content).toHaveLength(1)
-      }),
-    ),
-  )
-
-  it.live("preserves native media and structured metadata without applying a settlement media limit", () =>
+  it.live("preserves native media without applying an execution media limit", () =>
     withStore(({ store }) =>
       Effect.gen(function* () {
         const data = "a".repeat(6 * 1024 * 1024)
         const result = yield* store.bound({
           sessionID,
           callID: "call-file",
-          output: {
-            structured: { caption: "pixel" },
-            content: [{ type: "file", uri: `data:image/png;base64,${data}`, mime: "image/png", name: "pixel.png" }],
-          },
+          content: [{ type: "file", uri: `data:image/png;base64,${data}`, mime: "image/png", name: "pixel.png" }],
         })
         expect(result.outputPaths).toEqual([])
-        expect(result.output.structured).toEqual({ caption: "pixel" })
-        expect(result.output.content).toHaveLength(1)
-        expect(result.output.content[0]).toEqual({
+        expect(result.content).toHaveLength(1)
+        expect(result.content[0]).toEqual({
           type: "file",
           uri: `data:image/png;base64,${data}`,
           mime: "image/png",
@@ -108,7 +87,7 @@ describe("ToolOutputStore", () => {
     ),
   )
 
-  it.live("preserves structured metadata and native media when bounding text", () =>
+  it.live("preserves native media when bounding text", () =>
     withStore(({ store, fs }) =>
       Effect.gen(function* () {
         const text = "x".repeat(ToolOutputStore.MAX_BYTES + 1)
@@ -121,30 +100,29 @@ describe("ToolOutputStore", () => {
         const result = yield* store.bound({
           sessionID,
           callID: "call-text-and-media",
-          output: { structured: { caption: "pixel" }, content: [{ type: "text", text }, media] },
+          content: [{ type: "text", text }, media],
         })
 
-        expect(result.output.structured).toEqual({ caption: "pixel" })
-        expect(result.output.content[1]).toEqual(media)
+        expect(result.content[1]).toEqual(media)
         expect(yield* fs.readFileString(result.outputPaths[0])).toBe(text)
       }),
     ),
   )
 
-  it.live("does not double-count structured data duplicated in projected text", () =>
+  it.live("returns content within the limits unchanged", () =>
     withStore(({ store }) =>
       Effect.gen(function* () {
         const text = "x".repeat(30_000)
-        const output = { structured: { output: text }, content: [{ type: "text" as const, text }] }
-        expect(yield* store.bound({ sessionID, callID: "call-duplicated", output })).toEqual({
-          output,
+        const content = [{ type: "text" as const, text }]
+        expect(yield* store.bound({ sessionID, callID: "call-duplicated", content })).toEqual({
+          content,
           outputPaths: [],
         })
       }),
     ),
   )
 
-  it.live("fails oversized settlement when complete retention cannot be written", () =>
+  it.live("fails oversized execution when complete retention cannot be written", () =>
     withStore(({ root, store, fs }) =>
       Effect.gen(function* () {
         yield* fs.writeFileString(path.join(root, "tool-output"), "not a directory")
@@ -152,24 +130,12 @@ describe("ToolOutputStore", () => {
           .bound({
             sessionID,
             callID: "call-lossy",
-            output: { structured: {}, content: [{ type: "text", text: "x".repeat(ToolOutputStore.MAX_BYTES + 1) }] },
+            content: [{ type: "text", text: "x".repeat(ToolOutputStore.MAX_BYTES + 1) }],
           })
           .pipe(Effect.exit)
         expect(Exit.isFailure(exit)).toBe(true)
         if (Exit.isFailure(exit))
           expect(Option.getOrUndefined(Cause.findErrorOption(exit.cause))?._tag).toBe("ToolOutputStore.StorageError")
-      }),
-    ),
-  )
-
-  it.live("does not encode ignored structured metadata when projected content exists", () =>
-    withStore(({ store }) =>
-      Effect.gen(function* () {
-        const output = { structured: { value: 1n }, content: [{ type: "text" as const, text: "readable text" }] }
-        expect(yield* store.bound({ sessionID, callID: "call-unencodable", output })).toEqual({
-          output,
-          outputPaths: [],
-        })
       }),
     ),
   )
@@ -198,7 +164,7 @@ describe("ToolOutputStore", () => {
           .bound({
             sessionID,
             callID: "call-interrupted",
-            output: { structured: {}, content: [{ type: "text", text: "x".repeat(ToolOutputStore.MAX_BYTES + 1) }] },
+            content: [{ type: "text", text: "x".repeat(ToolOutputStore.MAX_BYTES + 1) }],
           })
           .pipe(Effect.forkChild)
         yield* Fiber.interrupt(fiber)
@@ -217,7 +183,7 @@ describe("ToolOutputStore", () => {
           const result = yield* store.bound({
             sessionID,
             callID: "call-config",
-            output: { structured: {}, content: [{ type: "text", text: "one\ntwo\nthree" }] },
+            content: [{ type: "text", text: "one\ntwo\nthree" }],
           })
           expect(result.outputPaths).toHaveLength(1)
         }),

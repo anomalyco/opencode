@@ -13,7 +13,7 @@ import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Image } from "@opencode-ai/core/image"
 import { testEffect } from "./lib/effect"
 import { imagePassthrough } from "./lib/image"
-import { toolIdentity, executeTool, registerToolPlugin, settleTool, toolDefinitions } from "./lib/tool"
+import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "./lib/tool"
 
 const webSearchToolNode = makeLocationNode({
   name: "test/websearch-tool-plugin",
@@ -172,7 +172,10 @@ describe("WebSearchTool registration", () => {
             },
           },
         }),
-      ).toEqual({ type: "text", value: "exa results" })
+      ).toMatchObject({
+        status: "completed",
+        content: [{ type: "text", text: "exa results" }],
+      })
       expect(assertions).toMatchObject([
         {
           sessionID,
@@ -221,7 +224,7 @@ describe("WebSearchTool registration", () => {
       config = { provider: "parallel", enableExa: false, enableParallel: false, parallelApiKey: "parallel-secret" }
       const registry = yield* ToolRegistry.Service
 
-      const settled = yield* settleTool(registry, {
+      const settled = yield* executeTool(registry, {
         sessionID,
         ...toolIdentity,
         call: { type: "tool-call", id: "call-parallel", name: "websearch", input: { query: "effect layers" } },
@@ -242,11 +245,10 @@ describe("WebSearchTool registration", () => {
       })
       expect(requests[0]?.body).not.toHaveProperty("params.arguments.model_name")
       expect(settled).toEqual({
-        result: { type: "text", value: "parallel results" },
-        output: {
-          structured: { provider: "parallel" },
-          content: [{ type: "text", text: "parallel results" }],
-        },
+        status: "completed",
+        output: { provider: "parallel", text: "parallel results" },
+        content: [{ type: "text", text: "parallel results" }],
+        metadata: { provider: "parallel" },
       })
       expect(JSON.stringify(settled)).not.toContain("parallel-secret")
     }),
@@ -260,7 +262,7 @@ describe("WebSearchTool registration", () => {
       config = { provider: "exa", enableExa: false, enableParallel: false, exaApiKey: "exa secret" }
       const registry = yield* ToolRegistry.Service
 
-      const settled = yield* settleTool(registry, {
+      const settled = yield* executeTool(registry, {
         sessionID,
         ...toolIdentity,
         call: { type: "tool-call", id: "call-exa-key", name: "websearch", input: { query: "effect schema" } },
@@ -285,7 +287,10 @@ describe("WebSearchTool registration", () => {
           ...toolIdentity,
           call: { type: "tool-call", id: "call-empty", name: "websearch", input: { query: "nothing" } },
         }),
-      ).toEqual({ type: "text", value: WebSearchTool.NO_RESULTS })
+      ).toMatchObject({
+        status: "completed",
+        content: [{ type: "text", text: WebSearchTool.NO_RESULTS }],
+      })
     }),
   )
 
@@ -318,7 +323,12 @@ describe("WebSearchTool registration", () => {
           ...toolIdentity,
           call: { type: "tool-call", id: "call-large-response", name: "websearch", input: { query: "too much" } },
         }),
-      ).toEqual({ type: "error", value: "Unable to search the web for too much" })
+        // toSessionError unwraps the "Unable to search the web for <query>" ToolFailure
+        // to its byte-limit cause message.
+      ).toEqual({
+        status: "error",
+        error: { type: "unknown", message: expect.stringContaining("response exceeded") },
+      })
       expect(chunksRead).toBeLessThan(10)
       expect(cancelled).toBe(true)
     }),

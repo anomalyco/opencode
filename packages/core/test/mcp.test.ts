@@ -33,7 +33,7 @@ import { Image } from "@opencode-ai/core/image"
 import { testEffect } from "./lib/effect"
 import { imagePassthrough } from "./lib/image"
 import { location } from "./fixture/location"
-import { settleTool, toolDefinitions, toolIdentity, waitForTool } from "./lib/tool"
+import { executeTool, toolDefinitions, toolIdentity, waitForTool } from "./lib/tool"
 
 let assertion: Deferred.Deferred<PermissionV2.AssertInput> | undefined
 let decision: Effect.Effect<void, PermissionV2.Error> = Effect.void
@@ -803,8 +803,8 @@ it.effect("advertises MCP output schemas to Code Mode", () =>
   Effect.gen(function* () {
     const registry = yield* ToolRegistry.Service
     yield* waitForTool(registry, "execute")
-    const materialized = yield* registry.materialize()
-    const execute = materialized.definitions.find((tool) => tool.name === "execute")
+    const definitions = yield* toolDefinitions(registry)
+    const execute = definitions.find((tool) => tool.name === "execute")
 
     expect(execute?.description).not.toContain("tools.demo.search")
   }),
@@ -831,15 +831,14 @@ it.effect("fails the call when MCP reports isError", () =>
     const registry = yield* ToolRegistry.Service
     yield* waitForTool(registry, "direct_fail")
 
-    const settlement = yield* settleTool(registry, {
+    const execution = yield* executeTool(registry, {
       sessionID: SessionV2.ID.make("ses_mcp_is_error"),
       ...toolIdentity,
       call: { type: "tool-call", id: "call_mcp_is_error", name: "direct_fail", input: {} },
     })
 
-    expect(settlement.result).toEqual({ type: "error", value: "search index unavailable" })
-    expect(settlement.error).toMatchObject({ message: "search index unavailable" })
-    expect(settlement.output).toBeUndefined()
+    expect(execution).toMatchObject({ status: "error", error: { message: "search index unavailable" } })
+    expect(execution.content).toBeUndefined()
   }),
 )
 
@@ -851,15 +850,14 @@ it.effect("preserves MCP text and media content for the model", () =>
     const registry = yield* ToolRegistry.Service
     yield* waitForTool(registry, "direct_media")
 
-    const settlement = yield* settleTool(registry, {
+    const execution = yield* executeTool(registry, {
       sessionID: SessionV2.ID.make("ses_mcp_media"),
       ...toolIdentity,
       call: { type: "tool-call", id: "call_mcp_media", name: "direct_media", input: {} },
     })
 
-    expect(settlement.error).toBeUndefined()
-    expect(settlement.result.type).toBe("content")
-    expect(settlement.output?.content).toMatchObject([
+    expect(execution.status).toBe("completed")
+    expect(execution.content).toMatchObject([
       { type: "text", text: "rendered chart" },
       { type: "file", mime: "image/png" },
     ])
@@ -875,7 +873,7 @@ it.effect("waits for permission before calling an MCP tool", () =>
     const registry = yield* ToolRegistry.Service
     yield* waitForTool(registry, "execute")
 
-    const fiber = yield* settleTool(registry, {
+    const fiber = yield* executeTool(registry, {
       sessionID: SessionV2.ID.make("ses_mcp_permission"),
       ...toolIdentity,
       call: {
@@ -914,7 +912,7 @@ it.effect("does not call MCP when permission is blocked", () =>
     const registry = yield* ToolRegistry.Service
     yield* waitForTool(registry, "execute")
 
-    const settlement = yield* settleTool(registry, {
+    const execution = yield* executeTool(registry, {
       sessionID: SessionV2.ID.make("ses_mcp_blocked"),
       ...toolIdentity,
       call: {
@@ -924,8 +922,9 @@ it.effect("does not call MCP when permission is blocked", () =>
         input: { code: "return await tools.demo.search({})" },
       },
     })
-    expect(settlement.result).toEqual({ type: "text", value: "Unable to execute demo_search" })
-    expect(settlement.output?.structured).toEqual({
+    expect(execution.status).toBe("completed")
+    expect(execution.content).toEqual([{ type: "text", text: "Unable to execute demo_search" }])
+    expect(execution.metadata).toEqual({
       toolCalls: [{ tool: "demo.search", status: "error" }],
       error: true,
     })

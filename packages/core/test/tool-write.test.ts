@@ -18,7 +18,7 @@ import { location } from "./fixture/location"
 import { tmpdir } from "./fixture/tmpdir"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { testEffect } from "./lib/effect"
-import { toolIdentity, executeTool, registerToolPlugin, settleTool, toolDefinitions } from "./lib/tool"
+import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "./lib/tool"
 
 const writeToolNode = makeLocationNode({
   name: "test/write-tool-plugin",
@@ -119,18 +119,16 @@ describe("WriteTool", () => {
         return withTool(tmp.path, (registry) =>
           Effect.gen(function* () {
             expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["write"])
-            const settled = yield* settleTool(registry, call({ path: "src/new.txt", content: "created" }))
+            const settled = yield* executeTool(registry, call({ path: "src/new.txt", content: "created" }))
             expect(settled).toEqual({
-              result: { type: "text", value: "Created file successfully: src/new.txt" },
+              status: "completed",
               output: {
-                structured: {
-                  operation: "write",
-                  target: path.join(yield* Effect.promise(() => fs.realpath(tmp.path)), "src", "new.txt"),
-                  resource: "src/new.txt",
-                  existed: false,
-                },
-                content: [{ type: "text", text: "Created file successfully: src/new.txt" }],
+                operation: "write",
+                target: path.join(yield* Effect.promise(() => fs.realpath(tmp.path)), "src", "new.txt"),
+                resource: "src/new.txt",
+                existed: false,
               },
+              content: [{ type: "text", text: "Created file successfully: src/new.txt" }],
             })
             expect(yield* Effect.promise(() => fs.readFile(path.join(tmp.path, "src", "new.txt"), "utf8"))).toBe(
               "created",
@@ -151,12 +149,14 @@ describe("WriteTool", () => {
         reset()
         return Effect.promise(() => fs.writeFile(path.join(tmp.path, "existing.txt"), "before")).pipe(
           Effect.andThen(
-            withTool(tmp.path, (registry) => settleTool(registry, call({ path: "existing.txt", content: "after" }))),
+            withTool(tmp.path, (registry) => executeTool(registry, call({ path: "existing.txt", content: "after" }))),
           ),
           Effect.andThen((settled) =>
             Effect.gen(function* () {
-              expect(settled.result).toEqual({ type: "text", value: "Wrote file successfully: existing.txt" })
-              expect(settled.output?.structured).toMatchObject({ resource: "existing.txt", existed: true })
+              expect(settled.status).toBe("completed")
+              if (settled.status !== "completed") return
+              expect(settled.content).toEqual([{ type: "text", text: "Wrote file successfully: existing.txt" }])
+              expect(settled.output).toMatchObject({ resource: "existing.txt", existed: true })
               expect(yield* Effect.promise(() => fs.readFile(path.join(tmp.path, "existing.txt"), "utf8"))).toBe(
                 "after",
               )
@@ -182,8 +182,8 @@ describe("WriteTool", () => {
           Effect.andThen(
             withTool(tmp.path, (registry) =>
               Effect.gen(function* () {
-                yield* settleTool(registry, call({ path: "preserved.txt", content: "after" }, "call-preserved"))
-                yield* settleTool(
+                yield* executeTool(registry, call({ path: "preserved.txt", content: "after" }, "call-preserved"))
+                yield* executeTool(
                   registry,
                   call({ path: "deduplicated.txt", content: "\uFEFFafter" }, "call-deduplicated"),
                 )
@@ -208,7 +208,10 @@ describe("WriteTool", () => {
         return withTool(tmp.path, (registry) => executeTool(registry, call({ path: target, content: "inside" }))).pipe(
           Effect.andThen((result) =>
             Effect.gen(function* () {
-              expect(result).toEqual({ type: "text", value: "Created file successfully: absolute.txt" })
+              expect(result).toMatchObject({
+                status: "completed",
+                content: [{ type: "text", text: "Created file successfully: absolute.txt" }],
+              })
               expect(assertions.map((input) => input.action)).toEqual(["edit"])
               expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("inside")
             }),
@@ -236,7 +239,7 @@ describe("WriteTool", () => {
           ),
           Effect.andThen((result) =>
             Effect.sync(() => {
-              expect(result.type).toBe("text")
+              expect(result.status).toBe("completed")
               expect(assertions.map((input) => input.action)).toEqual(["edit"])
               expect(assertions[0]?.resources).toEqual(["link.txt"])
             }),
@@ -259,7 +262,7 @@ describe("WriteTool", () => {
         reset()
         const target = path.join(outside.path, "external.txt")
         return withTool(active.path, (registry) =>
-          settleTool(registry, call({ path: target, content: "external" })),
+          executeTool(registry, call({ path: target, content: "external" })),
         ).pipe(
           Effect.andThen((settled) =>
             Effect.gen(function* () {
@@ -271,10 +274,13 @@ describe("WriteTool", () => {
                 ],
               })
               expect(assertions[1]).toMatchObject({ resources: [canonicalTarget.replaceAll("\\", "/")], save: ["*"] })
-              expect(settled.output?.structured).toMatchObject({
-                target: canonicalTarget,
-                resource: canonicalTarget.replaceAll("\\", "/"),
-                existed: false,
+              expect(settled).toMatchObject({
+                status: "completed",
+                output: {
+                  target: canonicalTarget,
+                  resource: canonicalTarget.replaceAll("\\", "/"),
+                  existed: false,
+                },
               })
               expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("external")
               expect(writes).toEqual([canonicalTarget])
@@ -336,8 +342,8 @@ describe("WriteTool", () => {
               executeTool(registry, call({ path: external, content: "blocked" })),
             ),
           ).toEqual({
-            type: "error",
-            value: `Unable to write ${external}`,
+            status: "error",
+            error: { type: "permission.rejected", message: "Permission denied: external_directory" },
           })
           expect(assertions.map((input) => input.action)).toEqual(["external_directory"])
           expect(writes).toEqual([])
@@ -349,8 +355,8 @@ describe("WriteTool", () => {
               executeTool(registry, call({ path: "denied.txt", content: "blocked" })),
             ),
           ).toEqual({
-            type: "error",
-            value: "Unable to write denied.txt",
+            status: "error",
+            error: { type: "permission.rejected", message: "Permission denied: edit" },
           })
           expect(assertions.map((input) => input.action)).toEqual(["edit"])
           expect(writes).toEqual([])
