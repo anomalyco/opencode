@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "metadata": {
+    "tags": [
+      "prefix:pdf",
+      "pdf",
+      "provider:google",
+      "protocol:gemini",
+      "user-input"
+    ],
+    "name": "pdf/gemini-user-input",
+    "recordedAt": "2026-07-22T18:20:55.140Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:streamGenerateContent?alt=sse",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"contents\":[{\"role\":\"user\",\"parts\":[{\"inlineData\":{\"mimeType\":\"application/pdf\",\"data\":\"JVBERi0xLjQKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2JqCjIgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2JqCjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCA2MTIgNzkyXSAvUmVzb3VyY2VzIDw8IC9Gb250IDw8IC9GMSA1IDAgUiA+PiA+PiAvQ29udGVudHMgNCAwIFIgPj4KZW5kb2JqCjQgMCBvYmoKPDwgL0xlbmd0aCA3NSA+PgpzdHJlYW0KQlQKL0YxIDE4IFRmCjcyIDcyMCBUZAooUERGIGNhc3NldHRlIHZlcmlmaWNhdGlvbiBjb2RlOiBPUkNISUQtNzM5MSkgVGoKRVQKZW5kc3RyZWFtCmVuZG9iago1IDAgb2JqCjw8IC9UeXBlIC9Gb250IC9TdWJ0eXBlIC9UeXBlMSAvQmFzZUZvbnQgL0hlbHZldGljYSA+PgplbmRvYmoKeHJlZgowIDYKMDAwMDAwMDAwMCA2NTUzNSBmIAowMDAwMDAwMDA5IDAwMDAwIG4gCjAwMDAwMDAwNTggMDAwMDAgbiAKMDAwMDAwMDExNSAwMDAwMCBuIAowMDAwMDAwMjQxIDAwMDAwIG4gCjAwMDAwMDAzNjUgMDAwMDAgbiAKdHJhaWxlcgo8PCAvU2l6ZSA2IC9Sb290IDEgMCBSID4+CnN0YXJ0eHJlZgo0MzUKJSVFT0YK\"}},{\"text\":\"Return only the verification code from the PDF.\"}]}],\"generationConfig\":{\"maxOutputTokens\":256,\"temperature\":0}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"ORCH\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 10,\"candidatesTokenCount\": 2,\"totalTokenCount\": 127,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 10}],\"thoughtsTokenCount\": 115,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-3.5-flash\",\"responseId\": \"BQpharW2KaPgz7IP6uSLiAw\"}\r\n\r\ndata: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"ID-7391\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 10,\"candidatesTokenCount\": 8,\"totalTokenCount\": 133,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 10}],\"thoughtsTokenCount\": 115,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-3.5-flash\",\"responseId\": \"BQpharW2KaPgz7IP6uSLiAw\"}\r\n\r\ndata: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"\",\"thoughtSignature\": \"EokECoYEARFNMg8L4fpLqaX8tIQZcvw2vLt3WsFjGqpuJGgna0/AGczwuzndRcf3LGIEaliCf4ijVOb1AG4/VPBh1kMzfjeAyHhvWIe4yQVoBwI7BjpFyLie+SnGTXQXKKy5ygRqRLFsV6DcAixNXXBHJw2x/2Nhtriryqs4fhWrL/P7ppHC10sMnTwN6Mw5x20NKwgT+rrw6lvYmQe9rdQsBJ6Zmp0GpPlwZZiAgzvwPfVoNwHSGb54xe/T9wjISjwWNgpedhbsIBDRZFDwruS4x57KBKeMPO69GLfeMP8PJ7rpR0HgT7nRbrl/OdykG/jqSMTvoRSqxawsD+Yr/DukgGatyfB5Ic+X4RhD07URpkGTAu/cakBtzhSmM/hpzKU9m/cId1UCjopLTtonUqSAKkroPdp8kIYw0MI2OZCNVwbDrdClUPmjRKfcTkcC2jNj1rS+WDFbm+mo+SP3rDSvvCdyJuiXHGKiM2EhbYnu42aHVC6w7eAe4Gv3Fq/0faW47r0ihbiAohFB9XUA+fD07g83EjIuc9Q6BRVTTcBfoRkrR/yFZKt3qwPq02W6rPD13/1wAnMtabNcxePMMGk7Dlxwng9yPS0NEge2KD+miOj9SC4aTvOTq2451tfK1x3UZqqb205zGOPbjizhH/CA/PGkG84hdkAG4mrUK0rEHqeWwRXDsxpyfto=\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 530,\"candidatesTokenCount\": 8,\"totalTokenCount\": 653,\"promptTokensDetails\": [{\"modality\": \"IMAGE\",\"tokenCount\": 520},{\"modality\": \"TEXT\",\"tokenCount\": 10}],\"thoughtsTokenCount\": 115,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-3.5-flash\",\"responseId\": \"BQpharW2KaPgz7IP6uSLiAw\"}\r\n\r\n"
+      }
+    }
+  ]
+}

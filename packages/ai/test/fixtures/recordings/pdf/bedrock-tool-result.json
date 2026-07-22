@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "metadata": {
+    "tags": [
+      "prefix:pdf",
+      "pdf",
+      "provider:amazon-bedrock",
+      "protocol:bedrock-converse",
+      "tool",
+      "tool-result"
+    ],
+    "name": "pdf/bedrock-tool-result",
+    "recordedAt": "2026-07-22T18:15:52.400Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://bedrock-runtime.us-east-1.amazonaws.com/model/us.anthropic.claude-haiku-4-5-20251001-v1%3A0/converse-stream",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"modelId\":\"us.anthropic.claude-haiku-4-5-20251001-v1:0\",\"messages\":[{\"role\":\"user\",\"content\":[{\"text\":\"Return only the verification code from the PDF.\"}]},{\"role\":\"assistant\",\"content\":[{\"toolUse\":{\"toolUseId\":\"call_pdf_1\",\"name\":\"read_pdf\",\"input\":{}}}]},{\"role\":\"user\",\"content\":[{\"toolResult\":{\"toolUseId\":\"call_pdf_1\",\"content\":[{\"text\":\"PDF read successfully\"},{\"document\":{\"format\":\"pdf\",\"name\":\"verification\",\"source\":{\"bytes\":\"JVBERi0xLjQKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2JqCjIgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2JqCjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCA2MTIgNzkyXSAvUmVzb3VyY2VzIDw8IC9Gb250IDw8IC9GMSA1IDAgUiA+PiA+PiAvQ29udGVudHMgNCAwIFIgPj4KZW5kb2JqCjQgMCBvYmoKPDwgL0xlbmd0aCA3NSA+PgpzdHJlYW0KQlQKL0YxIDE4IFRmCjcyIDcyMCBUZAooUERGIGNhc3NldHRlIHZlcmlmaWNhdGlvbiBjb2RlOiBPUkNISUQtNzM5MSkgVGoKRVQKZW5kc3RyZWFtCmVuZG9iago1IDAgb2JqCjw8IC9UeXBlIC9Gb250IC9TdWJ0eXBlIC9UeXBlMSAvQmFzZUZvbnQgL0hlbHZldGljYSA+PgplbmRvYmoKeHJlZgowIDYKMDAwMDAwMDAwMCA2NTUzNSBmIAowMDAwMDAwMDA5IDAwMDAwIG4gCjAwMDAwMDAwNTggMDAwMDAgbiAKMDAwMDAwMDExNSAwMDAwMCBuIAowMDAwMDAwMjQxIDAwMDAwIG4gCjAwMDAwMDAzNjUgMDAwMDAgbiAKdHJhaWxlcgo8PCAvU2l6ZSA2IC9Sb290IDEgMCBSID4+CnN0YXJ0eHJlZgo0MzUKJSVFT0YK\"}}}],\"status\":\"success\"}}]}],\"system\":[{\"text\":\"Read the PDF returned by the tool and follow the user's response format exactly.\"}],\"inferenceConfig\":{\"maxTokens\":40,\"temperature\":0},\"toolConfig\":{\"tools\":[{\"toolSpec\":{\"name\":\"read_pdf\",\"description\":\"Read the attached PDF.\",\"inputSchema\":{\"json\":{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}}}}]}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/vnd.amazon.eventstream"
+        },
+        "body": "AAAAqgAAAFLa0GiGCzpldmVudC10eXBlBwAMbWVzc2FnZVN0YXJ0DTpjb250ZW50LXR5cGUHABBhcHBsaWNhdGlvbi9qc29uDTptZXNzYWdlLXR5cGUHAAVldmVudHsicCI6ImFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6QUJDREVGR0hJSktMTU5PUFFSUyIsInJvbGUiOiJhc3Npc3RhbnQifXIDPnsAAADIAAAAV0lIuCQLOmV2ZW50LXR5cGUHABFjb250ZW50QmxvY2tEZWx0YQ06Y29udGVudC10eXBlBwAQYXBwbGljYXRpb24vanNvbg06bWVzc2FnZS10eXBlBwAFZXZlbnR7ImNvbnRlbnRCbG9ja0luZGV4IjowLCJkZWx0YSI6eyJ0ZXh0IjoiT1JDSCJ9LCJwIjoiYWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXpBQkNERUZHSElKS0xNTk9QUSJ9z2HHHgAAAMUAAABXsdh8lQs6ZXZlbnQtdHlwZQcAEWNvbnRlbnRCbG9ja0RlbHRhDTpjb250ZW50LXR5cGUHABBhcHBsaWNhdGlvbi9qc29uDTptZXNzYWdlLXR5cGUHAAVldmVudHsiY29udGVudEJsb2NrSW5kZXgiOjAsImRlbHRhIjp7InRleHQiOiJJRC0ifSwicCI6ImFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6QUJDREVGR0hJSktMTU5PIn2+8d8RAAAAywAAAFcO6ML0CzpldmVudC10eXBlBwARY29udGVudEJsb2NrRGVsdGENOmNvbnRlbnQtdHlwZQcAEGFwcGxpY2F0aW9uL2pzb24NOm1lc3NhZ2UtdHlwZQcABWV2ZW50eyJjb250ZW50QmxvY2tJbmRleCI6MCwiZGVsdGEiOnsidGV4dCI6IjcifSwicCI6ImFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6QUJDREVGR0hJSktMTU5PUFFSU1RVVlcifSIeZ+kAAACzAAAAV8dKafoLOmV2ZW50LXR5cGUHABFjb250ZW50QmxvY2tEZWx0YQ06Y29udGVudC10eXBlBwAQYXBwbGljYXRpb24vanNvbg06bWVzc2FnZS10eXBlBwAFZXZlbnR7ImNvbnRlbnRCbG9ja0luZGV4IjowLCJkZWx0YSI6eyJ0ZXh0IjoiMzkxIn0sInAiOiJhYmNkZWZnaGlqa2xtbm9wcXJzdHV2dyJ9HAStJQAAAMAAAABWDj/Dcws6ZXZlbnQtdHlwZQcAEGNvbnRlbnRCbG9ja1N0b3ANOmNvbnRlbnQtdHlwZQcAEGFwcGxpY2F0aW9uL2pzb24NOm1lc3NhZ2UtdHlwZQcABWV2ZW50eyJjb250ZW50QmxvY2tJbmRleCI6MCwicCI6ImFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVowMTIzNDU2NyJ9EPTSwQAAALAAAABRaYm2Hws6ZXZlbnQtdHlwZQcAC21lc3NhZ2VTdG9wDTpjb250ZW50LXR5cGUHABBhcHBsaWNhdGlvbi9qc29uDTptZXNzYWdlLXR5cGUHAAVldmVudHsicCI6ImFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6QUJDREVGR0hJSktMTU5PUFFSU1RVIiwic3RvcFJlYXNvbiI6ImVuZF90dXJuIn0SuCAcAAAA+AAAAE6MAqhiCzpldmVudC10eXBlBwAIbWV0YWRhdGENOmNvbnRlbnQtdHlwZQcAEGFwcGxpY2F0aW9uL2pzb24NOm1lc3NhZ2UtdHlwZQcABWV2ZW50eyJtZXRyaWNzIjp7ImxhdGVuY3lNcyI6MzkyMn0sInAiOiJhYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5ekFCQ0RFIiwidXNhZ2UiOnsiaW5wdXRUb2tlbnMiOjIyNDEsIm91dHB1dFRva2VucyI6Niwic2VydmVyVG9vbFVzYWdlIjp7fSwidG90YWxUb2tlbnMiOjIyNDd9fcd35Hw=",
+        "bodyEncoding": "base64"
+      }
+    }
+  ]
+}

@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "metadata": {
+    "tags": [
+      "prefix:pdf",
+      "pdf",
+      "provider:google",
+      "protocol:gemini",
+      "tool",
+      "tool-result"
+    ],
+    "name": "pdf/gemini-tool-result",
+    "recordedAt": "2026-07-22T18:21:59.606Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:streamGenerateContent?alt=sse",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"contents\":[{\"role\":\"user\",\"parts\":[{\"text\":\"Use read_pdf with path verification.pdf and return the verification code.\"}]}],\"systemInstruction\":{\"parts\":[{\"text\":\"Call read_pdf exactly once with path verification.pdf, then reply only with the verification code from its PDF.\"}]},\"tools\":[{\"functionDeclarations\":[{\"name\":\"read_pdf\",\"description\":\"Read the attached PDF.\",\"parameters\":{\"required\":[\"path\"],\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}}}}]}],\"generationConfig\":{\"maxOutputTokens\":256,\"temperature\":0}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "data: {\"candidates\": [{\"content\": {\"parts\": [{\"functionCall\": {\"name\": \"read_pdf\",\"args\": {\"path\": \"verification.pdf\"},\"id\": \"58shgmez\"},\"thoughtSignature\": \"EqkCCqYCARFNMg/JrCTv5i3zYENFBVpZNFL3pbzJmi5Eu387ncF703xFMB4pwyaP7a1gi49EqBhCI2hWOpesU5nZQOLAhGgExKGa2GM+HzpEB5g62r0NFblm/BGkVZaImTuHR7bytfRC5jHQlHKo4OS27OLUVjvkMkBIYsvjhDErY7niERbXJVpyxTVqUf1GgZMSu8kC9/5WDlMs9xVKNT/6KMW4PhhSR9nXg4KZUa+bC03/ydhsWWgBa5aLCgvTq7WPj217xIsmUkSiRedIffPsUSNjYdMHUvWi8bOlvM1veEEP6GIfv5h9gXXzjnHbEHfQxV8PZuBAyY7iM6nqyfkJNdkZ1HdB7DXMBsMsRN6SgrIrFoXX2WaGrkoEI5tdZx1t/gdwF1jEVT6k\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 81,\"candidatesTokenCount\": 18,\"totalTokenCount\": 151,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 81}],\"thoughtsTokenCount\": 52,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-3.5-flash\",\"responseId\": \"RAphaui3OaSHz7IPy8Kb4Ak\"}\r\n\r\ndata: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 81,\"candidatesTokenCount\": 18,\"totalTokenCount\": 151,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 81}],\"thoughtsTokenCount\": 52,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-3.5-flash\",\"responseId\": \"RAphaui3OaSHz7IPy8Kb4Ak\"}\r\n\r\n"
+      }
+    },
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:streamGenerateContent?alt=sse",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"contents\":[{\"role\":\"user\",\"parts\":[{\"text\":\"Use read_pdf with path verification.pdf and return the verification code.\"}]},{\"role\":\"model\",\"parts\":[{\"functionCall\":{\"id\":\"58shgmez\",\"name\":\"read_pdf\",\"args\":{\"path\":\"verification.pdf\"}},\"thoughtSignature\":\"EqkCCqYCARFNMg/JrCTv5i3zYENFBVpZNFL3pbzJmi5Eu387ncF703xFMB4pwyaP7a1gi49EqBhCI2hWOpesU5nZQOLAhGgExKGa2GM+HzpEB5g62r0NFblm/BGkVZaImTuHR7bytfRC5jHQlHKo4OS27OLUVjvkMkBIYsvjhDErY7niERbXJVpyxTVqUf1GgZMSu8kC9/5WDlMs9xVKNT/6KMW4PhhSR9nXg4KZUa+bC03/ydhsWWgBa5aLCgvTq7WPj217xIsmUkSiRedIffPsUSNjYdMHUvWi8bOlvM1veEEP6GIfv5h9gXXzjnHbEHfQxV8PZuBAyY7iM6nqyfkJNdkZ1HdB7DXMBsMsRN6SgrIrFoXX2WaGrkoEI5tdZx1t/gdwF1jEVT6k\"}]},{\"role\":\"user\",\"parts\":[{\"functionResponse\":{\"id\":\"58shgmez\",\"name\":\"read_pdf\",\"response\":{\"name\":\"read_pdf\",\"content\":\"PDF read successfully\"},\"parts\":[{\"inlineData\":{\"mimeType\":\"application/pdf\",\"data\":\"JVBERi0xLjQKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2JqCjIgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2JqCjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCA2MTIgNzkyXSAvUmVzb3VyY2VzIDw8IC9Gb250IDw8IC9GMSA1IDAgUiA+PiA+PiAvQ29udGVudHMgNCAwIFIgPj4KZW5kb2JqCjQgMCBvYmoKPDwgL0xlbmd0aCA3NSA+PgpzdHJlYW0KQlQKL0YxIDE4IFRmCjcyIDcyMCBUZAooUERGIGNhc3NldHRlIHZlcmlmaWNhdGlvbiBjb2RlOiBPUkNISUQtNzM5MSkgVGoKRVQKZW5kc3RyZWFtCmVuZG9iago1IDAgb2JqCjw8IC9UeXBlIC9Gb250IC9TdWJ0eXBlIC9UeXBlMSAvQmFzZUZvbnQgL0hlbHZldGljYSA+PgplbmRvYmoKeHJlZgowIDYKMDAwMDAwMDAwMCA2NTUzNSBmIAowMDAwMDAwMDA5IDAwMDAwIG4gCjAwMDAwMDAwNTggMDAwMDAgbiAKMDAwMDAwMDExNSAwMDAwMCBuIAowMDAwMDAwMjQxIDAwMDAwIG4gCjAwMDAwMDAzNjUgMDAwMDAgbiAKdHJhaWxlcgo8PCAvU2l6ZSA2IC9Sb290IDEgMCBSID4+CnN0YXJ0eHJlZgo0MzUKJSVFT0YK\"}}]}}]}],\"systemInstruction\":{\"parts\":[{\"text\":\"Call read_pdf exactly once with path verification.pdf, then reply only with the verification code from its PDF.\"}]},\"tools\":[{\"functionDeclarations\":[{\"name\":\"read_pdf\",\"description\":\"Read the attached PDF.\",\"parameters\":{\"required\":[\"path\"],\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}}}}]}],\"generationConfig\":{\"maxOutputTokens\":256,\"temperature\":0}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"ORCHID-7391\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 123,\"candidatesTokenCount\": 8,\"totalTokenCount\": 184,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 123}],\"thoughtsTokenCount\": 53,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-3.5-flash\",\"responseId\": \"RgphaoL6CMjQz7IPjOnEmQI\"}\r\n\r\ndata: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"\",\"thoughtSignature\": \"EqECCp4CARFNMg9obBl8O6iU9lawUIWiE+1vztZm9NtaT9FuyJz343hd9ruz+xPco4Q1DY1GF81ZiSI2ElBkt8Wfwsqtix9LNGSMvbZhhk/ZnB54t05M/Dft1kujcMvEdZUWUI/jWaJ349tO1bKVH9MacG5+gl0n4y8DwyQZSV3xIcet547drSkcA/TM03RB+yj1/dcLHsvUjmv9EnO897vZgO2Dk4tbZ2NyCtOeQ3JKVhUTLg2pjkGk+POCNiOdESWiUzxdQKw9LiV6nnzi071tXNiMeVimq6d7xAzRVNapI2uXynvn9Uk3eyn85purOFa8cKriK9oD6vcyGMqgd9+gu2m3to0IHqd7o+2YSr1m5qV1xT1R2/WRQEtb1b1AuOAU6w==\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 1277,\"candidatesTokenCount\": 8,\"totalTokenCount\": 1338,\"promptTokensDetails\": [{\"modality\": \"IMAGE\",\"tokenCount\": 1102},{\"modality\": \"TEXT\",\"tokenCount\": 175}],\"thoughtsTokenCount\": 53,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-3.5-flash\",\"responseId\": \"RgphaoL6CMjQz7IPjOnEmQI\"}\r\n\r\n"
+      }
+    }
+  ]
+}

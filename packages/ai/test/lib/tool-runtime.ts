@@ -59,7 +59,12 @@ export const runTools = <T extends Tools>(options: RunOptions<T>) =>
             ...request.messages,
             Message.assistant(state.assistantContent),
             ...dispatched.map(([call, dispatched]) =>
-              Message.tool({ id: call.id, name: call.name, result: dispatched.result }),
+              Message.tool({
+                id: call.id,
+                name: call.name,
+                result: dispatched.result,
+                providerMetadata: call.providerMetadata,
+              }),
             ),
           ],
         })
