@@ -85,7 +85,7 @@ function traceCommit(commit: StreamCommit) {
   }
 }
 
-export function traceSubagentState(state: FooterSubagentState) {
+function traceSubagentState(state: FooterSubagentState) {
   return {
     tabs: state.tabs,
     details: Object.fromEntries(

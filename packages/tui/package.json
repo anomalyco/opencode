@@ -30,7 +30,7 @@
     "./editor": "./src/editor.ts",
     "./editor-zed": "./src/editor-zed.ts",
     "./mini": "./src/mini/index.ts",
-    "./mini/tool": "./src/mini/tool.ts",
+    "./mini/tool": "./src/mini/tool.public.ts",
     "./model-preference": "./src/model-preference.ts",
     "./runtime": "./src/runtime.tsx",
     "./terminal-win32": "./src/terminal-win32.ts",

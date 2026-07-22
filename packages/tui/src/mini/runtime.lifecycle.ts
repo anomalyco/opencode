@@ -232,7 +232,6 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
     findFiles: input.findFiles,
     agents: input.agents,
     references: input.references,
-    sessionID: input.getSessionID ?? (() => input.sessionID),
     ...labels,
     model: input.model,
     variant: input.variant,

@@ -76,7 +76,7 @@ export function permissionLabel(option: PermissionOption): string {
 
 export { permissionAlwaysLines }
 
-export function permissionReply(
+function permissionReply(
   sessionID: string,
   requestID: string,
   reply: PermissionReply["reply"],

@@ -16,8 +16,9 @@
 // the synthetic tool parts through the same callbacks used by the live footer.
 import path from "path"
 import type { JsonValue, SessionMessageAssistantTool } from "@opencode-ai/client/promise"
+import { parseSlashHead } from "../prompt/parse"
 import { writeSessionOutput } from "./stream"
-import { toolCommit } from "./stream-v2.subagent"
+import { toolCommit, toolFinalPhase } from "./stream-v2.subagent"
 import type {
   FooterApi,
   FooterView,
@@ -110,7 +111,6 @@ const SAMPLE_TABLE = [
 
 type Ref = {
   msg: string
-  part: string
   call: string
   tool: string
   input: Record<string, JsonValue>
@@ -126,7 +126,6 @@ type FormRequest = {
 type Perm = {
   ref: Ref
   done: {
-    title: string
     output: string
     metadata?: Record<string, JsonValue>
   }
@@ -203,7 +202,6 @@ function showSubagent(
           description: input.description,
           status: input.status,
           title: input.title,
-          lastUpdatedAt: Date.now(),
         },
       ],
       details: {
@@ -337,7 +335,6 @@ async function emitReasoning(state: State, body: string, signal?: AbortSignal): 
 function make(state: State, tool: string, input: Record<string, JsonValue>): Ref {
   return {
     msg: open(state),
-    part: take(state, "part", "part"),
     call: take(state, "call", "call"),
     tool,
     input,
@@ -346,7 +343,7 @@ function make(state: State, tool: string, input: Record<string, JsonValue>): Ref
 }
 
 function startTool(state: State, ref: Ref, structured: Record<string, JsonValue> = {}): SessionMessageAssistantTool {
-  state.started.add(ref.part)
+  state.started.add(ref.call)
   const part = {
     type: "tool" as const,
     id: ref.call,
@@ -386,12 +383,11 @@ function doneTool(
   state: State,
   ref: Ref,
   output: {
-    title: string
     output: string
     metadata?: Record<string, JsonValue>
   },
 ): void {
-  if (!state.started.has(ref.part)) startTool(state, ref)
+  if (!state.started.has(ref.call)) startTool(state, ref)
   const part: SessionMessageAssistantTool = {
     type: "tool",
     id: ref.call,
@@ -404,11 +400,11 @@ function doneTool(
     },
     time: { created: ref.start, ran: ref.start, completed: Date.now() },
   }
-  present(state, [toolCommit(part, ref.msg, output.output ? "progress" : "final")])
+  present(state, [toolCommit(part, ref.msg, toolFinalPhase(part))])
 }
 
 function failTool(state: State, ref: Ref, error: string): void {
-  if (!state.started.has(ref.part)) startTool(state, ref)
+  if (!state.started.has(ref.call)) startTool(state, ref)
   present(state, [
     toolCommit(
       {
@@ -443,7 +439,6 @@ async function emitBash(state: State, signal?: AbortSignal): Promise<void> {
   startTool(state, ref)
   await wait(70, signal)
   doneTool(state, ref, {
-    title: "git status",
     output: `${process.cwd()}\ngit status\nOn branch demo\nnothing to commit, working tree clean\n`,
     metadata: {
       exit: 0,
@@ -458,7 +453,6 @@ function emitWrite(state: State): void {
     content: "export const demo = 42\n",
   })
   doneTool(state, ref, {
-    title: "write",
     output: "",
     metadata: {},
   })
@@ -470,7 +464,6 @@ function emitEdit(state: State): void {
     path: file,
   })
   doneTool(state, ref, {
-    title: "edit",
     output: "",
     metadata: {
       files: [
@@ -490,7 +483,6 @@ function emitPatch(state: State): void {
     patchText: "*** Begin Patch\n*** End Patch",
   })
   doneTool(state, ref, {
-    title: "patch",
     output: "",
     metadata: {
       files: [
@@ -517,10 +509,9 @@ function emitTask(state: State): void {
     agent: "explore",
   })
   doneTool(state, ref, {
-    title: "Reducer touchpoints found",
     output: "",
     metadata: {
-      sessionID: "sub_demo_1",
+      sessionID: "ses_demo_child",
       status: "completed",
       output: "",
     },
@@ -542,7 +533,7 @@ function emitTask(state: State): void {
     time: { created: Date.now(), ran: Date.now() },
   } satisfies SessionMessageAssistantTool
   showSubagent(state, {
-    sessionID: "sub_demo_1",
+    sessionID: "ses_demo_child",
     label: "Explore",
     description: "Scan run/* for reducer touchpoints",
     status: "completed",
@@ -562,16 +553,7 @@ function emitTask(state: State): void {
         messageID: "sub_demo_msg_reasoning",
         partID: "sub_demo_reasoning_1",
       },
-      {
-        kind: "tool",
-        text: "running read",
-        phase: "start",
-        source: "tool",
-        messageID: "sub_demo_msg_tool",
-        partID: "sub_demo_tool_1",
-        tool: "read",
-        part,
-      },
+      toolCommit(part, "sub_demo_msg_tool", "start"),
       {
         kind: "assistant",
         text: "Footer updates flow through stream.ts into RunFooter",
@@ -610,7 +592,6 @@ function emitQuestionTool(state: State): void {
     ],
   })
   doneTool(state, ref, {
-    title: "question",
     output: "",
     metadata: {
       answers: [["Diff"], ["Usage", "custom-note"]],
@@ -635,7 +616,6 @@ function emitPermission(state: State, kind: PermissionKind = "edit"): void {
       patterns: [command],
       always: ["*"],
       done: {
-        title: "git status --short",
         output: `${root}\ngit status --short\n M src/demo-format.ts\n?? src/demo-permission.ts\n`,
         metadata: {
           exit: 0,
@@ -658,7 +638,6 @@ function emitPermission(state: State, kind: PermissionKind = "edit"): void {
       patterns: [target],
       always: [target],
       done: {
-        title: "read",
         output: ["1: {", '2:   "name": "opencode",', '3:   "private": true', "4: }"].join("\n"),
         metadata: {},
       },
@@ -677,7 +656,6 @@ function emitPermission(state: State, kind: PermissionKind = "edit"): void {
       patterns: ["explore"],
       always: ["*"],
       done: {
-        title: "Footer spacing checked",
         output: "",
         metadata: {
           sessionID: "sub_demo_perm_1",
@@ -707,7 +685,6 @@ function emitPermission(state: State, kind: PermissionKind = "edit"): void {
       },
       always: [`${dir}/**`],
       done: {
-        title: "read",
         output: `1: # External demo\n2: Shared preview file\nPath: ${target}`,
         metadata: {},
       },
@@ -726,7 +703,6 @@ function emitPermission(state: State, kind: PermissionKind = "edit"): void {
       patterns: ["*"],
       always: ["*"],
       done: {
-        title: "Retry allowed",
         output: "Continuing after repeated failures.\n",
         metadata: {},
       },
@@ -744,7 +720,6 @@ function emitPermission(state: State, kind: PermissionKind = "edit"): void {
     patterns: [file],
     always: [file],
     done: {
-      title: "edit",
       output: "",
       metadata: {
         files: [{ file, status: "modified", patch: diff }],
@@ -955,8 +930,9 @@ export function createRunDemo(input: Input) {
 
   const prompt = async (line: RunPrompt, signal?: AbortSignal): Promise<boolean> => {
     const text = line.text.trim()
-    const list = text.split(/\s+/)
-    const cmd = list[0] || ""
+    const head = parseSlashHead(text)
+    const list = head?.arguments.split(/\s+/).filter(Boolean) ?? []
+    const cmd = head ? `/${head.name}` : ""
 
     clearSubagent(state.footer)
 
@@ -966,7 +942,7 @@ export function createRunDemo(input: Input) {
     }
 
     if (cmd === "/permission") {
-      const kind = permissionKind(list[1])
+      const kind = permissionKind(list[0])
       if (!kind) {
         note(state.footer, `Pick a permission kind: ${PERMISSIONS.join(", ")}`)
         return true
@@ -977,7 +953,7 @@ export function createRunDemo(input: Input) {
     }
 
     if (cmd === "/form") {
-      const kind = formKind(list[1])
+      const kind = formKind(list[0])
       if (!kind) {
         note(state.footer, `Pick a form kind: ${FORMS.join(", ")}`)
         return true
@@ -988,8 +964,8 @@ export function createRunDemo(input: Input) {
     }
 
     if (cmd === "/fmt") {
-      const kind = (list[1] || "").toLowerCase()
-      const body = list.slice(2).join(" ")
+      const kind = (list[0] || "").toLowerCase()
+      const body = list.slice(1).join(" ")
       if (!kind) {
         note(state.footer, `Pick a kind: ${KINDS.join(", ")}`)
         return true
@@ -1032,7 +1008,6 @@ export function createRunDemo(input: Input) {
     clearBlocker(state)
     if (form.kind === "question") {
       doneTool(state, form.ref, {
-        title: "question",
         output: "",
         metadata: {
           answers: form.request.fields.map((field) => {
@@ -1045,7 +1020,6 @@ export function createRunDemo(input: Input) {
       return true
     }
     doneTool(state, form.ref, {
-      title: form.request.title,
       output: `Form submitted: ${Object.entries(input.answer)
         .map(([key, value]) => `${key}=${Array.isArray(value) ? value.join(", ") : String(value)}`)
         .join("; ")}\n`,

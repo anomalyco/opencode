@@ -54,10 +54,6 @@ type SubagentEntry = PanelEntry & {
   current: boolean
 }
 
-type QueuedEntry = PanelEntry & {
-  prompt: FooterQueuedPrompt
-}
-
 type SettingEntry = PanelEntry & {
   key: keyof MiniSettings
 }
@@ -747,13 +743,12 @@ export function RunQueuedPromptSelectBody(props: {
   onRows?: (rows: number) => void
   mono?: boolean
 }) {
-  const entries = createMemo<QueuedEntry[]>(() =>
+  const entries = createMemo(() =>
     props.prompts().map((prompt) => ({
       category: "",
       display: prompt.prompt.text.replaceAll("\n", " "),
       footer: prompt.delivery,
       keywords: prompt.prompt.text,
-      prompt,
     })),
   )
   const controller = createSearchablePanelController({

@@ -194,7 +194,6 @@ function tab(child: ChildState): FooterSubagentTab {
     status: child.status,
     background: child.background ? true : undefined,
     title: child.title,
-    lastUpdatedAt: child.lastUpdatedAt,
   }
 }
 
@@ -1084,11 +1083,11 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       input.emit()
     },
     snapshot() {
-      const tabs = [...children.values()].map(tab).toSorted((a, b) => {
+      const tabs = [...children.values()].toSorted((a, b) => {
         const active = Number(b.status === "running") - Number(a.status === "running")
         if (active !== 0) return active
         return b.lastUpdatedAt - a.lastUpdatedAt
-      })
+      }).map(tab)
       const child = selected ? children.get(selected) : undefined
       const details: Record<string, FooterSubagentDetail> =
         child && !child.detailStale ? { [child.sessionID]: { commits: child.frames.map((item) => item.commit) } } : {}

@@ -27,18 +27,17 @@ import {
 import { formatPath } from "../util/path-format"
 import type { RunEntryBody, StreamCommit, ToolSnapshot } from "./types"
 
-export type { MiniToolPart } from "./types"
 export { canonicalToolName } from "../util/tool-display"
 
-export type ToolView = {
+type ToolView = {
   output: boolean
   final: boolean
   snap?: "code" | "diff" | "structured"
 }
 
-export type ToolPhase = "start" | "progress" | "final"
+type ToolPhase = "start" | "progress" | "final"
 
-export type ToolDict = Record<string, unknown>
+type ToolDict = Record<string, unknown>
 
 type PatchFile = {
   status?: string
@@ -78,7 +77,7 @@ type ToolMetadata = ToolDict & {
   exit?: number
 }
 
-export type ToolFrame = {
+type ToolFrame = {
   directory?: string
   raw: string
   name: string
@@ -94,7 +93,7 @@ export type ToolFrame = {
   }
 }
 
-export type ToolInline = {
+type ToolInline = {
   icon: string
   title: string
   description?: string
@@ -102,7 +101,7 @@ export type ToolInline = {
   body?: string
 }
 
-export type ToolProps = {
+type ToolProps = {
   input: ToolInput
   metadata: ToolMetadata
   frame: ToolFrame
@@ -166,7 +165,7 @@ export function toolOutputText(name: string, content: ReadonlyArray<{ type: stri
 
 function normalizeInput(name: string, value: unknown) {
   const input = dict(value)
-  const path = typeof input.path === "string" ? input.path : text(input.filePath) || text(input.filepath)
+  const path = typeof input.path === "string" ? input.path : text(input.filePath)
   const agent = typeof input.agent === "string" ? input.agent : text(input.subagent_type)
   return {
     ...input,
@@ -191,7 +190,7 @@ function normalizeFile(value: unknown): PatchFile | undefined {
           : legacy === "move"
             ? "moved"
             : legacy)
-  const patch = typeof file.patch === "string" ? file.patch : text(file.diff) || undefined
+  const patch = typeof file.patch === "string" ? file.patch : undefined
   const deletions = finiteNumber(file.deletions)
   return {
     ...file,
@@ -214,11 +213,6 @@ function normalizeStructured(name: string, value: unknown) {
     ...structured,
     ...(["edit", "patch"].includes(name) && Array.isArray(structured.files) ? { files } : {}),
     ...(name === "subagent" && sessionID ? { sessionID } : {}),
-    ...(name === "shell" &&
-    finiteNumber(structured.exit) === undefined &&
-    finiteNumber(structured.exitCode) !== undefined
-      ? { exit: finiteNumber(structured.exitCode) }
-      : {}),
   }
 }
 
@@ -674,7 +668,7 @@ function scrollShellFinal(p: ToolProps): string {
     return fail(p.frame)
   }
 
-  const code = p.metadata.exit ?? finiteNumber(p.frame.meta.exitCode) ?? finiteNumber(p.frame.meta.exit_code)
+  const code = p.metadata.exit
   const time = span(p.frame)
   if (code === undefined) {
     if (!time) {
@@ -1113,7 +1107,7 @@ function frame(part: SessionMessageAssistantTool, directory?: string): ToolFrame
   }
 }
 
-export function toolFrame(commit: StreamCommit, raw: string): ToolFrame {
+function toolFrame(commit: StreamCommit, raw: string): ToolFrame {
   const current = commit.part ? frame(commit.part, commit.directory) : undefined
   return {
     directory: commit.directory,
@@ -1198,7 +1192,7 @@ export function toolScroll(phase: ToolPhase, ctx: ToolFrame): string {
   return fallbackFinal(ctx)
 }
 
-export function toolSnapshot(commit: StreamCommit, raw: string): ToolSnapshot | undefined {
+function toolSnapshot(commit: StreamCommit, raw: string): ToolSnapshot | undefined {
   const ctx = toolFrame(commit, raw)
   const draw = rule(ctx.name)?.snap
   if (!draw) {

@@ -30,7 +30,7 @@ export function sameEntryGroup(left: StreamCommit | undefined, right: StreamComm
   return Boolean(current && next && current === next)
 }
 
-export function entryLayout(commit: StreamCommit, body: RunEntryBody = entryBody(commit)): EntryLayout {
+function entryLayout(commit: StreamCommit, body: RunEntryBody = entryBody(commit)): EntryLayout {
   if (commit.kind === "tool") {
     if (body.type === "structured" || body.type === "markdown") {
       return "block"

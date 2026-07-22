@@ -26,7 +26,6 @@ test("down opens subagents from an empty prompt", async () => {
         label: "Explore",
         description: "Inspect the keymap",
         status: "running",
-        lastUpdatedAt: 1,
       },
     ],
     details: {},
@@ -54,7 +53,6 @@ test("down opens subagents from an empty prompt", async () => {
           view={view}
           subagent={subagents}
           theme={() => RUN_THEME_FALLBACK}
-          tuiConfig={config}
           miniSettings={() => ({ thinking: "hide", shell_output: "hide", turn_summary: "show", footer: "show", mono: false })}
           mono={false}
           onSubmit={() => true}

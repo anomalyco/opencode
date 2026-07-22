@@ -3,7 +3,7 @@ import { OpenCode } from "@opencode-ai/client/promise"
 import type { Resolved } from "../../src/config"
 import { resolveMiniSettings, resolveModelInfo, resolveRunTuiConfig } from "../../src/mini/runtime.boot"
 import { catalogModel, catalogProvider } from "./fixture/catalog"
-import { createTuiResolvedConfig } from "./fixture/tui-runtime"
+import { createTuiResolvedConfig } from "../fixture/tui-runtime"
 
 function config(input?: {
   leader?: string
@@ -21,7 +21,7 @@ function config(input?: {
 }): Resolved {
   const bind = input?.bindings
   return createTuiResolvedConfig({
-    leader_timeout: input?.leaderTimeout,
+    leader: input?.leaderTimeout === undefined ? undefined : { timeout: input.leaderTimeout },
     keybinds: {
       ...(input?.leader && { leader: input.leader }),
       ...(bind?.commandList && { command_list: bind.commandList }),
@@ -95,14 +95,12 @@ describe("run runtime boot", () => {
     const result = await resolveRunTuiConfig(
       createTuiResolvedConfig({
         theme: { mode: "light" },
-        leader_timeout: 450,
-        session: { thinking: "show" },
+        leader: { timeout: 450 },
       }),
     )
 
     expect(result.theme).toEqual({ mode: "light" })
     expect(result.leader.timeout).toBe(450)
-    expect(result.session?.thinking).toBe("show")
     expect(resolveMiniSettings(result)).toEqual({
       thinking: "hide",
       shell_output: "hide",

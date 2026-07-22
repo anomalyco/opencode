@@ -35,7 +35,7 @@ import type {
 } from "../../src/mini/types"
 import { selectedCommand } from "../../src/mini/footer.prompt"
 import { RejectField } from "../../src/mini/footer.permission"
-import { createTuiResolvedConfig } from "./fixture/tui-runtime"
+import { createTuiResolvedConfig } from "../fixture/tui-runtime"
 
 const tuiConfig = createTuiResolvedConfig()
 
@@ -87,7 +87,6 @@ function subagent(input: {
     label: input.label,
     description: input.description,
     status: input.status ?? "running",
-    lastUpdatedAt: 1,
   } satisfies FooterSubagentTab
 }
 
@@ -152,7 +151,6 @@ async function renderFooter(
           subagent={subagents}
           theme={input.theme ?? (() => RUN_THEME_FALLBACK)}
           mono={input.mono ?? false}
-          tuiConfig={config}
           miniSettings={miniSettings}
           onSubmit={input.onSubmit ?? (() => true)}
           onPermissionReply={() => {}}
@@ -996,27 +994,17 @@ test("direct footer closes settings with ctrl-c instead of arming exit", async (
   }
 })
 
-test("selectedCommand backfills the catalog source for bound drafts", () => {
-  const catalog = [command({ name: "opencode-ts", description: "TS skill", source: "skill" })]
-
-  // The skill picker binds `/name ` drafts; older drafts may lack source.
-  expect(selectedCommand("/opencode-ts fix it", { name: "opencode-ts", arguments: "" }, catalog)).toEqual({
-    name: "opencode-ts",
-    arguments: "fix it",
-    source: "skill",
-  })
-  // An explicit source wins without a catalog lookup.
+test("selectedCommand validates the bound command and refreshes its arguments", () => {
   expect(selectedCommand("/opencode-ts", { name: "opencode-ts", arguments: "", source: "skill" })).toEqual({
     name: "opencode-ts",
     arguments: "",
     source: "skill",
   })
-  // Plain commands stay untagged.
-  expect(
-    selectedCommand("/deploy prod", { name: "deploy", arguments: "" }, [
-      command({ name: "deploy", description: "Deploy" }),
-    ]),
-  ).toEqual({ name: "deploy", arguments: "prod" })
+  expect(selectedCommand("/deploy prod", { name: "deploy", arguments: "" })).toEqual({
+    name: "deploy",
+    arguments: "prod",
+  })
+  expect(selectedCommand("/other", { name: "deploy", arguments: "" })).toBeUndefined()
 })
 
 test("direct footer tags skill slash submissions with their catalog source", async () => {
@@ -1162,7 +1150,6 @@ test("direct footer shows authoritative pending work while running", async () =>
             },
           ]}
           theme={() => RUN_THEME_FALLBACK}
-          tuiConfig={tuiConfig}
           miniSettings={() => ({ thinking: "hide", shell_output: "hide", turn_summary: "show", footer: "show", mono: false })}
           mono={false}
           onSubmit={() => true}

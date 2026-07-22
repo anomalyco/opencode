@@ -5,7 +5,6 @@ import type { LifecycleInput } from "../../src/mini/runtime.lifecycle"
 import type { FooterEvent, MiniHost } from "../../src/mini/types"
 import { catalogModel, catalogProvider, stubCatalogLists } from "./fixture/catalog"
 import { createFooterApiFixture } from "./fixture/footer-api"
-import { createTuiResolvedConfig } from "./fixture/tui-runtime"
 
 function defer<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void

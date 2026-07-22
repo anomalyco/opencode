@@ -74,7 +74,6 @@ type RunFooterOptions = {
   agents: RunAgent[]
   references: RunReference[]
   wrote?: boolean
-  sessionID: () => string | undefined
   agentLabel: string
   modelLabel: string
   model: RunInput["model"]
@@ -312,7 +311,6 @@ export class RunFooter implements FooterApi {
               currentVariant: footer.currentVariant,
               theme: footer.theme,
               mono: options.mono,
-              tuiConfig: options.tuiConfig,
               miniSettings: footer.miniSettings,
               history: footer.history,
               onSubmit: footer.handlePrompt,

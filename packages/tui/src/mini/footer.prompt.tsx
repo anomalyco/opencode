@@ -31,13 +31,13 @@ import { realignEditorPromptParts, resolveEditorSlashValue } from "./prompt.edit
 import { monoTruncateMiddle } from "./mono"
 import { FOOTER_MENU_ROWS, createFooterMenuState, type RunFooterMenuItem } from "./footer.menu"
 import type { RunFooterTheme } from "./theme"
-import type { FooterState, RunAgent, RunCommand, RunPrompt, RunPromptPart, RunReference, RunTuiConfig } from "./types"
+import type { FooterState, RunAgent, RunCommand, RunPrompt, RunPromptPart, RunReference } from "./types"
 
 const AUTOCOMPLETE_ROWS = FOOTER_MENU_ROWS
 const AUTOCOMPLETE_BOTTOM_ROWS = 1
 
 export const TEXTAREA_MIN_ROWS = 1
-export const TEXTAREA_MAX_ROWS = 6
+const TEXTAREA_MAX_ROWS = 6
 export const PROMPT_MAX_ROWS = TEXTAREA_MAX_ROWS + AUTOCOMPLETE_ROWS - 1 + AUTOCOMPLETE_BOTTOM_ROWS
 
 type Mention = Extract<RunPromptPart, { type: "file" | "agent" }>
@@ -65,7 +65,6 @@ type PromptInput = {
   agents: Accessor<RunAgent[]>
   references: Accessor<RunReference[]>
   commands: Accessor<RunCommand[] | undefined>
-  tuiConfig: RunTuiConfig
   state: Accessor<FooterState>
   view: Accessor<string>
   prompt: Accessor<boolean>
@@ -142,7 +141,7 @@ function parseSlashCommand(text: string, commands: RunCommand[] | undefined) {
   }
 }
 
-export function selectedCommand(text: string, command: RunPrompt["command"], commands?: RunCommand[]) {
+export function selectedCommand(text: string, command: RunPrompt["command"]) {
   if (!command) {
     return
   }
@@ -152,14 +151,10 @@ export function selectedCommand(text: string, command: RunPrompt["command"], com
     return
   }
 
-  // Bound drafts (e.g. the skill picker) may predate or omit the catalog
-  // source; resolve it at submit time so routing never degrades to a plain
-  // command for a skill entry.
-  const source = command.source ?? commands?.find((item) => item.name === command.name)?.source
   return {
     name: command.name,
     arguments: head.arguments,
-    ...(source ? { source } : {}),
+    ...(command.source ? { source: command.source } : {}),
   }
 }
 
@@ -1140,7 +1135,7 @@ export function createPromptState(input: PromptInput): PromptState {
       return
     }
 
-    const command = next.mode === "shell" ? undefined : selectedCommand(next.text, next.command, input.commands())
+    const command = next.mode === "shell" ? undefined : selectedCommand(next.text, next.command)
     if (!command && next.mode !== "shell" && isExitCommand(next.text)) {
       input.onExit()
       return

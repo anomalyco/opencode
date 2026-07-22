@@ -14,7 +14,7 @@ import {
 import type { FormAnswerField } from "../util/form"
 import type { FormReply, MiniFormRequest } from "./types"
 
-export { formCustom, formLabel, formRows, formSelected, formTextual, formValidateValue }
+export { formCustom, formLabel, formRows, formTextual, formValidateValue }
 
 export type FormBodyState = {
   formID: string
@@ -97,7 +97,7 @@ export function formSetSelected(state: FormBodyState, selected: number): FormBod
   return { ...state, selected, error: "" }
 }
 
-export function formSetEditing(state: FormBodyState, editing: boolean): FormBodyState {
+function formSetEditing(state: FormBodyState, editing: boolean): FormBodyState {
   return { ...state, editing, error: "" }
 }
 

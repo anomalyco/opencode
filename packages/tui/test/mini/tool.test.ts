@@ -33,7 +33,7 @@ describe("Mini tool presentation", () => {
                 type: "update",
                 filePath: "/tmp/project/src/a.ts",
                 relativePath: "src/a.ts",
-                diff: "@@ -1 +1 @@\n-old\n+new",
+                patch: "@@ -1 +1 @@\n-old\n+new",
               },
             ],
           },

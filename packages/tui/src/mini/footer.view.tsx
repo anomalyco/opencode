@@ -50,7 +50,6 @@ import type {
   RunPrompt,
   RunProvider,
   RunReference,
-  RunTuiConfig,
 } from "./types"
 import type { RunTheme } from "./theme"
 
@@ -88,7 +87,6 @@ type RunFooterViewProps = {
   queuedPrompts?: () => FooterQueuedPrompt[]
   theme: () => RunTheme
   mono: boolean
-  tuiConfig: RunTuiConfig
   miniSettings: () => MiniSettings
   history?: () => RunPrompt[]
   onSubmit: (input: RunPrompt) => boolean
@@ -359,7 +357,6 @@ export function RunFooterView(props: RunFooterViewProps) {
     agents: props.agents,
     references: props.references,
     commands: props.commands,
-    tuiConfig: props.tuiConfig,
     state: props.state,
     view: promptView,
     prompt,
