@@ -333,7 +333,7 @@ function normalizeMessages(
 }
 
 function applyCaching(msgs: ModelMessage[], model: Provider.Model): ModelMessage[] {
-  const system = msgs.filter((msg) => msg.role === "system").slice(0, 2)
+  const system = msgs.filter((msg) => msg.role === "system")
   const final = msgs.filter((msg) => msg.role !== "system").slice(-2)
 
   const providerOptions = {
