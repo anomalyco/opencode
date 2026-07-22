@@ -525,6 +525,7 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
   })
 
   const args = useArgs()
+  const startupPrompt = args.prompt ? { text: args.prompt, files: [], agents: [], pasted: [] } : undefined
   onMount(() => {
     batch(() => {
       if (args.agent) local.agent.set(args.agent)
@@ -542,6 +543,7 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
         route.navigate({
           type: "session",
           sessionID: args.sessionID,
+          prompt: startupPrompt,
         })
       }
     })
@@ -564,12 +566,12 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
         const match = response.data[0]?.id
         if (!match) return
         if (!args.fork) {
-          route.navigate({ type: "session", sessionID: match })
+          route.navigate({ type: "session", sessionID: match, prompt: startupPrompt })
           return
         }
         void client.api.session
           .fork({ sessionID: match })
-          .then((result) => route.navigate({ type: "session", sessionID: result.id }))
+          .then((result) => route.navigate({ type: "session", sessionID: result.id, prompt: startupPrompt }))
           .catch(toast.error)
       })
       .catch(toast.error)
@@ -582,7 +584,7 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
     forked = true
     void client.api.session
       .fork({ sessionID: args.sessionID })
-      .then((result) => route.navigate({ type: "session", sessionID: result.id }))
+      .then((result) => route.navigate({ type: "session", sessionID: result.id, prompt: startupPrompt }))
       .catch(toast.error)
   })
 

@@ -84,6 +84,7 @@ import { createSessionRows, messageBoundaryIDs, resolvePart, type PartRef, type 
 import { switchLabel } from "../../util/model"
 import { findMessageBoundary, messageNavigationSlack } from "./message-navigation"
 import { stringWidth } from "../../util/string-width"
+import { useArgs } from "../../context/args"
 
 addDefaultParsers(parsers.parsers)
 
@@ -120,6 +121,7 @@ export function Session() {
   const { navigate } = useRoute()
   const data = useData()
   const local = useLocal()
+  const args = useArgs()
   const paths = useTuiPaths()
   const configState = useConfig()
   const config = configState.data
@@ -216,6 +218,7 @@ export function Session() {
   const boundaries = createMemo(() => messageBoundaryIDs(rows, messages()))
   const [navigationMessage, setNavigationMessage] = createSignal<string>()
   const [navigationSlack, setNavigationSlack] = createSignal(0)
+  const [synced, setSynced] = createSignal(false)
 
   const clearMessageNavigation = () => {
     setNavigationSlack(0)
@@ -242,6 +245,7 @@ export function Session() {
 
   createEffect(() => {
     if (client.connection.status() !== "connected") return
+    setSynced(false)
     const sessionID = route.sessionID
     void (async () => {
       await Promise.all([
@@ -261,6 +265,7 @@ export function Session() {
       }
       editor.reconnect(info.location.directory)
       if (route.sessionID === sessionID && scroll) scroll.scrollBy(100_000)
+      setSynced(true)
     })().catch((error) => {
       if (route.sessionID !== sessionID) return
       toast.show({
@@ -273,15 +278,25 @@ export function Session() {
   })
 
   let seeded = false
+  let sent = false
   let scroll: ScrollBoxRenderable
-  let prompt: PromptRef | undefined
+  const [prompt, setPrompt] = createSignal<PromptRef>()
   const bind = (r: PromptRef | undefined) => {
-    prompt = r
+    setPrompt(r)
     promptRef.set(r)
     if (seeded || !route.prompt || !r) return
     seeded = true
     r.set(route.prompt)
   }
+
+  createEffect(() => {
+    const current = prompt()
+    if (sent || !current || !synced() || !local.model.ready) return
+    if (!local.agent.current() || !local.model.current()) return
+    if (!args.prompt || route.prompt?.text !== args.prompt || current.current.text !== args.prompt) return
+    sent = true
+    current.submit()
+  })
   const dialog = useDialog()
   const renderer = useRenderer()
   const unavailable = (feature: string) => {
@@ -526,7 +541,7 @@ export function Session() {
         void client.api.session.revert
           .stage({ sessionID: route.sessionID, messageID: message.id })
           .catch((error) => toast.show({ message: errorMessage(error), variant: "error", duration: 5000 }))
-        prompt?.set({
+        prompt()?.set({
           ...projectedPromptInput(message),
           pasted: [],
         })

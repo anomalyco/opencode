@@ -55,7 +55,11 @@ export default Runtime.handler(Commands, (input) =>
             }
           : undefined,
       },
-      args: { continue: input.continue, sessionID: Option.getOrUndefined(input.session) },
+      args: {
+        continue: input.continue,
+        sessionID: Option.getOrUndefined(input.session),
+        prompt: Option.getOrUndefined(input.prompt),
+      },
       config: {
         path: config.path,
         get: () => runPromise(config.get()),
