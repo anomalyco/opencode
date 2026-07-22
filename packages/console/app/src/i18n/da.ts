@@ -362,6 +362,7 @@ export const dict = {
   "zen.api.error.providerNotSupported": "Udbyder {{provider}} understøttes ikke",
   "zen.api.error.missingApiKey": "Manglende API-nøgle.",
   "zen.api.error.invalidApiKey": "Ugyldig API-nøgle.",
+  "zen.api.error.requestBlockedByUpstreamProvider": "Anmodningen blev blokeret af upstream-udbyderen.",
   "zen.api.error.subscriptionQuotaExceeded": "Abonnementskvote overskredet. Prøv igen om {{retryIn}}.",
   "zen.api.error.goSubscriptionRollingLimitExceeded":
     "Forbrugsgrænsen for 5 timer er nået. Nulstilles om {{retryIn}}. For at fortsætte med at bruge denne model nu, aktivér forbrug fra din tilgængelige saldo: {{consoleGoUrl}}",
