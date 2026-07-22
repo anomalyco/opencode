@@ -6,6 +6,7 @@ import { InstanceState } from "@/effect/instance-state"
 import PROMPT_ANTHROPIC from "./prompt/anthropic.txt"
 import PROMPT_DEFAULT from "./prompt/default.txt"
 import PROMPT_BEAST from "./prompt/beast.txt"
+import PROMPT_DEEPSEEK from "./prompt/deepseek.txt"
 import PROMPT_GEMINI from "./prompt/gemini.txt"
 import PROMPT_GPT from "./prompt/gpt.txt"
 import PROMPT_KIMI from "./prompt/kimi.txt"
@@ -26,6 +27,7 @@ import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 
 export function provider(model: Provider.Model) {
   if (model.api.id.includes("muse-spark")) return [PROMPT_META]
+  if (model.api.id.toLowerCase().includes("deepseek")) return [PROMPT_DEEPSEEK]
   if (model.api.id.includes("gpt-4") || model.api.id.includes("o1") || model.api.id.includes("o3"))
     return [PROMPT_BEAST]
   if (model.api.id.includes("gpt")) {

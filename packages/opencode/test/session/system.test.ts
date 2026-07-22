@@ -5,9 +5,9 @@ import type { Agent } from "../../src/agent/agent"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { Skill } from "../../src/skill"
 import { Permission } from "../../src/permission"
-import type { Provider } from "../../src/provider/provider"
 import { SystemPrompt } from "../../src/session/system"
 import { MCP } from "../../src/mcp"
+import { ProviderTest } from "../fake/provider"
 import { testEffect } from "../lib/effect"
 
 const skills: Skill.Info[] = [
@@ -85,10 +85,29 @@ const it = testEffect(
 
 describe("session.system", () => {
   test("selects the Meta prompt for Muse Spark model IDs", () => {
-    expect(SystemPrompt.provider({ api: { id: "meta/muse-spark-preview" } } as Provider.Model)[0]).toContain(
-      "Meta Muse Spark",
-    )
+    const model = ProviderTest.model({
+      api: { id: "meta/muse-spark-preview", url: "https://example.com", npm: "@ai-sdk/openai-compatible" },
+    })
+
+    expect(SystemPrompt.provider(model)[0]).toContain("Meta Muse Spark")
   })
+
+  test.each(["deepseek-v4-pro", "deepseek-v4-flash", "deepseek-chat", "deepseek-reasoner", "deepseek/deepseek-v4-pro"])(
+    "selects the DeepSeek prompt for %s",
+    (id) => {
+      const model = ProviderTest.model({
+        api: { id, url: "https://example.com", npm: "@ai-sdk/openai-compatible" },
+      })
+      const prompt = SystemPrompt.provider(model)[0]
+
+      expect(prompt).toContain("Prefer read, grep, and glob")
+      expect(prompt).toContain("Do not delegate routine file search or reading")
+      expect(prompt).not.toContain("fewer than 4 lines")
+      expect(prompt).not.toContain("One word answers are best")
+      expect(prompt).not.toContain("After working on a file, just stop")
+      expect(prompt).not.toContain("prefer to use the Task tool")
+    },
+  )
 
   it.effect("skills output is sorted by name and stable across calls", () =>
     Effect.gen(function* () {
