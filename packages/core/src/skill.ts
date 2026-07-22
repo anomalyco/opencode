@@ -46,8 +46,9 @@ const ORIGIN_BY_DIR: Record<string, string> = {
 
 // Classifies a skill location into an origin label. Returns "" for
 // .kancode, config-dir, and custom `skills.paths` skills (hidden by design).
+// Built-in skills are part of KanCode itself, so they're hidden by design too.
 export function origin(location: string): string {
-  if (location === "<built-in>") return "built-in"
+  if (location === "<built-in>") return ""
   const sep = path.sep
   for (const dir of EXTERNAL_DIRS) {
     if (location.includes(`${sep}${dir}${sep}skills${sep}`)) return ORIGIN_BY_DIR[dir]

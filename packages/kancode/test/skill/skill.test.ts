@@ -816,8 +816,8 @@ description: A skill in the .kancode/skill directory.
       // .kancode skills show no origin tag.
       expect(output).toContain("- **kancode-skill**: A skill from .kancode.")
       expect(output).not.toContain("[.kancode]")
-      // Built-in skills show the "built-in" tag.
-      expect(output).toContain("- **built-in-skill**: [built-in] A built-in skill.")
+      // Built-in skills are part of KanCode, so they show no origin tag.
+      expect(output).toContain("- **built-in-skill**: A built-in skill.")
     }),
   )
 })
