@@ -1,5 +1,5 @@
-import { ToolOutput, type LLMEvent, type ProviderMetadata, type ToolResultValue } from "@opencode-ai/ai"
-import { Effect } from "effect"
+import { type LLMEvent, type ProviderMetadata, type ToolContent, type ToolResultValue } from "@opencode-ai/ai"
+import { Effect, Schema } from "effect"
 import { EventV2 } from "../../event"
 import { ModelV2 } from "../../model"
 import { SessionEvent } from "../event"
@@ -34,15 +34,20 @@ const message = (value: unknown) => {
   }
 }
 
-type SettledOutput =
-  | { readonly structured: Record<string, unknown>; readonly content: ToolOutput["content"] }
-  | { readonly error: SessionError.Error }
+const JsonMetadata = Schema.Record(Schema.String, Schema.Json)
 
-const settledOutput = (value: ToolOutput | undefined, result: ToolResultValue): SettledOutput => {
-  if (result.type === "error") return { error: { type: "tool.execution", message: message(result.value) } }
-  const settled = value ?? ToolOutput.fromResultValue(result)
-  if (!settled) throw new Error(`Unsupported tool result: ${message(result)}`)
-  return { structured: record(settled.structured), content: settled.content }
+/** Defensive boundary: non-JSON metadata is dropped rather than failing publication. */
+const jsonMetadata = (metadata: Readonly<Record<string, unknown>> | undefined) => {
+  if (metadata === undefined) return undefined
+  const decoded = Schema.decodeUnknownOption(JsonMetadata)(metadata)
+  return decoded._tag === "Some" ? decoded.value : undefined
+}
+
+/** Derives canonical model content from a provider-hosted tool result. */
+const hostedContent = (result: ToolResultValue): readonly [ToolContent, ...ToolContent[]] => {
+  if (result.type === "content" && result.value.length > 0)
+    return result.value as unknown as readonly [ToolContent, ...ToolContent[]]
+  return [{ type: "text", text: message(result.value) }]
 }
 
 /** Persist one step without executing tools or starting a continuation step. */
@@ -61,9 +66,10 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
   const failureSnapshot = (tool: { readonly progress?: ToolRegistry.Progress }) => {
     if (!tool.progress) return {}
     const first = tool.progress.content[0]
+    const metadata = jsonMetadata(tool.progress.metadata)
     return {
       ...(first === undefined ? {} : { content: [first, ...tool.progress.content.slice(1)] as const }),
-      metadata: tool.progress.structured,
+      ...(metadata === undefined ? {} : { metadata }),
     }
   }
   let assistantMessageID = input.assistantMessageID
@@ -409,6 +415,7 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
         return
       }
       case "tool-result": {
+        // Provider-hosted results only; local executions settle through `toolExecution`.
         const tool = tools.get(event.id)
         if (!tool?.called) return yield* Effect.die(new Error(`Tool result before call: ${event.id}`))
         if (tool.name !== event.name)
@@ -418,17 +425,15 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
           return yield* Effect.die(new Error(`Duplicate tool result: ${event.id}`))
         }
         tool.settled = true
-        const result = error ? { error } : settledOutput(event.output, event.result)
         const executed = event.providerExecuted === true || tool.providerExecuted
         const resultState = providerState(event.providerMetadata)
-        if ("error" in result) {
+        if (error !== undefined || event.result.type === "error") {
           yield* events.publish(SessionEvent.Tool.Failed, {
             sessionID: input.sessionID,
             assistantMessageID: tool.assistantMessageID,
             callID: event.id,
-            error: result.error,
+            error: error ?? { type: "tool.execution", message: message(event.result.value) },
             ...failureSnapshot(tool),
-            result: event.result,
             executed,
             resultState,
           })
@@ -438,8 +443,7 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
           sessionID: input.sessionID,
           assistantMessageID: tool.assistantMessageID,
           callID: event.id,
-          ...result,
-          ...(executed ? { result: event.result } : {}),
+          content: hostedContent(event.result),
           executed,
           resultState,
         })
@@ -489,7 +493,7 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
     const tool = tools.get(callID)
     if (!tool?.called || tool.settled)
       return yield* Effect.die(new Error(`Tool progress outside running call: ${callID}`))
-    const current = { structured: { ...update.structured }, content: [...update.content] }
+    const current = { metadata: { ...update.metadata }, content: [...update.content] }
     tool.progress = current
     yield* events.publish(SessionEvent.Tool.Progress, {
       sessionID: input.sessionID,
@@ -499,9 +503,54 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
     })
   })
 
+  /** Publishes one canonical terminal event for a locally executed tool call. */
+  const toolExecution = Effect.fnUntraced(function* (
+    callID: string,
+    name: string,
+    execution: ToolRegistry.ToolExecution,
+  ) {
+    const tool = tools.get(callID)
+    if (!tool?.called) return yield* Effect.die(new Error(`Tool execution before call: ${callID}`))
+    if (tool.name !== name)
+      return yield* Effect.die(new Error(`Tool execution name changed for ${callID}: ${tool.name} -> ${name}`))
+    if (tool.settled) {
+      if (execution.status === "error") return
+      return yield* Effect.die(new Error(`Duplicate tool execution: ${callID}`))
+    }
+    tool.settled = true
+    if (execution.status === "completed") {
+      yield* events.publish(SessionEvent.Tool.Success, {
+        sessionID: input.sessionID,
+        assistantMessageID: tool.assistantMessageID,
+        callID,
+        content: execution.content,
+        ...(execution.metadata === undefined ? {} : { metadata: execution.metadata }),
+        executed: tool.providerExecuted,
+      })
+      return
+    }
+    // An execution-provided snapshot wins; otherwise fall back to retained progress.
+    const snapshot =
+      execution.content !== undefined
+        ? {
+            content: execution.content,
+            ...(execution.metadata === undefined ? {} : { metadata: execution.metadata }),
+          }
+        : failureSnapshot(tool)
+    yield* events.publish(SessionEvent.Tool.Failed, {
+      sessionID: input.sessionID,
+      assistantMessageID: tool.assistantMessageID,
+      callID,
+      error: execution.error,
+      ...snapshot,
+      executed: tool.providerExecuted,
+    })
+  })
+
   return {
     publish,
     progress,
+    toolExecution,
     flush,
     failAssistant,
     publishStepFailure,

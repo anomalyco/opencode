@@ -186,7 +186,7 @@ export const Plugin = {
 
                 const background = input.background === true
                 yield* context.progress({
-                  structured: { sessionID: child.id, status: "running" },
+                  metadata: { sessionID: child.id, status: "running" },
                 })
 
                 const run = Effect.gen(function* () {

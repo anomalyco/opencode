@@ -395,23 +395,32 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
           })
         }
         return toolHooks.hook.after((event) => {
-          const output = {
+          // JS plugin boundary: marshal the canonical outcome out, copy mutations back.
+          const output: Record<string, unknown> = {
             tool: event.tool,
             sessionID: event.sessionID,
             agent: event.agent,
             messageID: event.messageID,
             callID: event.callID,
             input: event.input,
-            result: event.result,
-            output: event.output,
+            status: event.status,
+            content: event.content,
+            metadata: event.metadata,
             outputPaths: event.outputPaths,
+            ...(event.status === "error" ? { error: event.error } : {}),
           }
           return Reflect.apply(callback, undefined, [output]).pipe(
             Effect.tap(() =>
               Effect.sync(() => {
-                event.result = output.result
-                event.output = output.output
-                event.outputPaths = output.outputPaths
+                if (event.status === "completed") {
+                  if (Array.isArray(output.content) && output.content.length > 0)
+                    event.content = output.content as unknown as typeof event.content
+                } else {
+                  event.content = output.content as unknown as typeof event.content
+                  if (output.error !== undefined) event.error = output.error as typeof event.error
+                }
+                event.metadata = output.metadata as typeof event.metadata
+                event.outputPaths = output.outputPaths as typeof event.outputPaths
               }),
             ),
           )

@@ -6,13 +6,14 @@ export type Context = Omit<Tool.Context, "progress"> & {
 }
 export type SchemaType<A> = Tool.SchemaType<A>
 export type Content = Tool.Content
+export type Metadata = Tool.Metadata
+export type ModelOutput = Tool.ModelOutput
 export type DynamicOutput = Tool.DynamicOutput
 
-export type Definition<
-  Input extends SchemaType<any>,
-  Output extends SchemaType<any>,
-  Structured extends SchemaType<any> = Output,
-> = Omit<Tool.Definition<Input, Structured, Output>, "execute" | "permission"> & {
+export type Definition<Input extends SchemaType<any>, Output extends SchemaType<any>> = Omit<
+  Tool.Definition<Input, Output>,
+  "execute" | "permission"
+> & {
   readonly name: string
   readonly options?: RegisterOptions
   readonly execute: (input: Tool.InputValue<Input>, context: Context) => Promise<Tool.OutputValue<Output>>
@@ -24,16 +25,14 @@ export type DynamicDefinition = Omit<Tool.DynamicDefinition, "execute" | "permis
   readonly execute: (input: unknown, context: Context) => Promise<DynamicOutput>
 }
 
-export type AnyTool = Definition<any, any, any> | DynamicDefinition
+export type AnyTool = Definition<any, any> | DynamicDefinition
 
 export type ToolExecuteBeforeEvent = Tool.ToolExecuteBeforeEvent
 export type ToolExecuteAfterEvent = Tool.ToolExecuteAfterEvent
 export type RegisterOptions = Tool.RegisterOptions
 
 export interface ToolDraft {
-  add<Input extends SchemaType<any>, Output extends SchemaType<any>, Structured extends SchemaType<any> = Output>(
-    tool: Definition<Input, Output, Structured>,
-  ): void
+  add<Input extends SchemaType<any>, Output extends SchemaType<any>>(tool: Definition<Input, Output>): void
   add(tool: DynamicDefinition): void
 }
 

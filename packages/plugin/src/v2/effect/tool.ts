@@ -3,10 +3,19 @@ export * as Tool from "./tool.js"
 import { Agent } from "@opencode-ai/schema/agent"
 import type { LLM } from "@opencode-ai/schema/llm"
 import { Session } from "@opencode-ai/schema/session"
+import type { SessionError } from "@opencode-ai/schema/session-error"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
 import type { StandardJSONSchemaV1, StandardSchemaV1 } from "@standard-schema/spec"
 import { Effect, JsonSchema, Schema } from "effect"
 import type { Hooks, Transform } from "./registration.js"
+
+// Tool declarations
+
+/** A JSON-compatible value. Tool metadata and encoded outputs must be JSON. */
+export type JsonValue = typeof Schema.Json.Type
+
+/** Compact JSON metadata for tool-specific UI and client behavior. */
+export type Metadata = Readonly<Record<string, JsonValue>>
 
 export interface Context {
   readonly sessionID: Session.ID
@@ -16,8 +25,9 @@ export interface Context {
   readonly progress: (update: Progress) => Effect.Effect<void>
 }
 
+/** Live replacement snapshot for a running tool: content for the model, metadata for the UI. */
 export interface Progress {
-  readonly structured: Readonly<Record<string, unknown>>
+  readonly metadata: Metadata
   readonly content?: ReadonlyArray<Content>
 }
 
@@ -57,26 +67,9 @@ type ToolDefinition = {
   readonly outputSchema?: JsonSchema.JsonSchema
 }
 
-type ToolCall = {
-  readonly input: unknown
-  readonly [key: string]: unknown
-}
-
-type ToolResultValue =
-  | { readonly type: "json"; readonly value: unknown }
-  | { readonly type: "text"; readonly value: unknown }
-  | { readonly type: "error"; readonly value: unknown }
-  | { readonly type: "content"; readonly value: ReadonlyArray<LLM.ToolContent> }
-
-type ToolOutput = {
-  readonly structured: unknown
-  readonly content: ReadonlyArray<LLM.ToolContent>
-}
-
 export class Failure extends Schema.TaggedErrorClass<Failure>()("LLM.ToolFailure", {
   message: Schema.String,
   error: Schema.optional(Schema.Defect()),
-  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 }) {}
 
 export class RegistrationError extends Schema.TaggedErrorClass<RegistrationError>()("Tool.RegistrationError", {
@@ -88,36 +81,41 @@ export type Content =
   | { readonly type: "text"; readonly text: string }
   | { readonly type: "file"; readonly data: string; readonly mime: string; readonly name?: string }
 
-export type Definition<
-  Input extends SchemaType<any>,
-  Structured extends SchemaType<any>,
-  Output extends SchemaType<any> = any,
-> = {
+/** What `toModelOutput` may return: plain text or non-empty rich content. */
+export type ModelOutput = string | readonly [Content, ...Content[]]
+
+export type Definition<Input extends SchemaType<any>, Output extends SchemaType<any> = any> = {
   readonly description: string
   readonly input: Input
+  /** Required. The encoded side must be JSON: it validates the handler result and is what Code Mode receives. */
   readonly output: Output
-  readonly structured?: Structured
   readonly permission?: string
-  readonly toStructuredOutput?: (input: {
-    readonly input: InputValue<Input>
-    readonly output: EncodedValue<Output>
-  }) => OutputValue<Structured>
   readonly execute: (input: InputValue<Input>, context: Context) => Effect.Effect<OutputValue<Output>, Failure>
+  /**
+   * Optional model projection. Receives the typed domain output. When absent, an
+   * encoded string becomes text and any other encoded JSON is serialized once.
+   */
   readonly toModelOutput?: (input: {
     readonly input: InputValue<Input>
-    readonly output: EncodedValue<Output>
-  }) => ReadonlyArray<Content>
+    readonly output: OutputValue<Output>
+  }) => ModelOutput
+  /** Optional compact UI metadata. Receives the typed domain output. Absent means absent: no defaults. */
+  readonly toMetadata?: (input: {
+    readonly input: InputValue<Input>
+    readonly output: OutputValue<Output>
+  }) => Metadata
 }
 
+/** A dynamic tool's split result: a machine value for Code Mode and content for the model. */
 export type DynamicOutput = {
-  readonly structured: unknown
+  readonly output: unknown
   readonly content: ReadonlyArray<Content>
 }
 
 /**
  * Config for a tool whose input shape is a raw JSON Schema not known at compile
  * time (MCP servers, plugin manifests). Input is passed through as `unknown`;
- * `execute` returns the already-projected structured value and model content.
+ * `execute` returns the machine output and model content directly.
  */
 export type DynamicDefinition = {
   readonly description: string
@@ -129,21 +127,16 @@ export type DynamicDefinition = {
 
 export type AnyTool = Definition<any, any> | DynamicDefinition
 
-export function make<
-  Input extends SchemaType<any>,
-  Output extends SchemaType<any>,
-  Structured extends SchemaType<any> = Output,
->(config: Definition<Input, Structured, Output>): Definition<Input, Structured, Output>
+export function make<Input extends SchemaType<any>, Output extends SchemaType<any>>(
+  config: Definition<Input, Output>,
+): Definition<Input, Output>
 export function make(config: DynamicDefinition): DynamicDefinition
 export function make(config: AnyTool): AnyTool
 export function make(config: AnyTool): AnyTool {
   return config
 }
 
-function toModelContent(part: Content) {
-  if (part.type === "text") return { type: "text" as const, text: part.text }
-  return { type: "file" as const, uri: `data:${part.mime};base64,${part.data}`, mime: part.mime, name: part.name }
-}
+// Registration
 
 export const validateName = (name: string) =>
   /^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(name)
@@ -189,32 +182,12 @@ export const definition = (name: string, tool: AnyTool): ToolDefinition =>
         name,
         description: tool.description,
         inputSchema: inputJsonSchema(tool.input),
-        outputSchema: outputJsonSchema(tool.structured ?? tool.output),
+        outputSchema: outputJsonSchema(tool.output),
       }
 
-export const settle = (tool: AnyTool, call: ToolCall, context: Context): Effect.Effect<ToolOutput, Failure> =>
-  Effect.gen(function* () {
-    if ("jsonSchema" in tool) {
-      const output = yield* tool.execute(call.input, context)
-      return { structured: output.structured, content: output.content.map(toModelContent) }
-    }
+// Schema interpretation
 
-    const input = yield* decodeInput(tool.input, call.input)
-    const value = yield* tool.execute(input, context)
-    const output = yield* encodeOutput(tool.output, value)
-    const structured =
-      tool.structured && tool.toStructuredOutput
-        ? yield* encodeOutput(tool.structured, tool.toStructuredOutput({ input, output }))
-        : output
-    return {
-      structured,
-      content:
-        tool.toModelOutput?.({ input, output }).map(toModelContent) ??
-        (typeof output === "string" ? [{ type: "text" as const, text: output }] : []),
-    }
-  })
-
-function decodeInput(schema: SchemaType<any>, value: unknown): Effect.Effect<any, Failure> {
+export function decodeInput(schema: SchemaType<any>, value: unknown): Effect.Effect<any, Failure> {
   if (Schema.isSchema(schema))
     return Schema.decodeUnknownEffect(schema)(value).pipe(
       Effect.mapError((error) => new Failure({ message: `Invalid tool input: ${error.message}` })),
@@ -222,7 +195,7 @@ function decodeInput(schema: SchemaType<any>, value: unknown): Effect.Effect<any
   return validateStandard(schema, value, "Invalid tool input")
 }
 
-function encodeOutput(schema: SchemaType<any>, value: unknown): Effect.Effect<any, Failure> {
+export function encodeOutput(schema: SchemaType<any>, value: unknown): Effect.Effect<any, Failure> {
   if (Schema.isSchema(schema))
     return Schema.encodeEffect(schema)(value).pipe(
       Effect.mapError(
@@ -272,6 +245,8 @@ function toJsonSchema(schema: Schema.Top): JsonSchema.JsonSchema {
   return { ...document.schema, $defs: document.definitions }
 }
 
+// Plugin events
+
 export interface ToolExecuteBeforeEvent {
   readonly tool: string
   readonly sessionID: Session.ID
@@ -281,17 +256,36 @@ export interface ToolExecuteBeforeEvent {
   input: unknown
 }
 
-export interface ToolExecuteAfterEvent {
+type ToolHookBase = {
   readonly tool: string
   readonly sessionID: Session.ID
   readonly agent: Agent.ID
   readonly messageID: SessionMessage.ID
   readonly callID: string
   readonly input: unknown
-  result: ToolResultValue
-  output?: ToolOutput
-  outputPaths?: ReadonlyArray<string>
 }
+
+/**
+ * The canonical execution outcome as seen by `execute.after` hooks. Hooks
+ * observe bounded model content, optional metadata, and managed output paths;
+ * they never observe the raw domain output.
+ */
+export type ToolExecuteAfterEvent = ToolHookBase &
+  (
+    | {
+        readonly status: "completed"
+        content: readonly [LLM.ToolContent, ...LLM.ToolContent[]]
+        metadata?: Metadata
+        outputPaths?: ReadonlyArray<string>
+      }
+    | {
+        readonly status: "error"
+        error: SessionError.Error
+        content?: readonly [LLM.ToolContent, ...LLM.ToolContent[]]
+        metadata?: Metadata
+        outputPaths?: ReadonlyArray<string>
+      }
+  )
 
 export interface RegisterOptions {
   readonly namespace?: string

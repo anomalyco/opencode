@@ -87,9 +87,16 @@ export const layer = Layer.effectDiscard(
                       ? { type: "text" as const, text: part.text }
                       : { type: "file" as const, data: part.data, mime: part.mimeType },
                   )
+                  // A server that advertises an output schema promises machine-readable
+                  // structured content; falling back to text would violate the advertised
+                  // Code Mode return contract.
+                  if (tool.outputSchema !== undefined && result.structured === undefined)
+                    return yield* new ToolFailure({
+                      message: `MCP tool ${name(tool.server, tool.name)} declared an output schema but returned no structured content`,
+                    })
                   const text = content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
                   return {
-                    structured: result.structured ?? (text === "" ? null : text),
+                    output: result.structured ?? (text === "" ? null : text),
                     content,
                   }
                 }).pipe(

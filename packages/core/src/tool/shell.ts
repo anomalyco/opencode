@@ -147,15 +147,14 @@ export const Plugin = {
             description: `Execute one shell command string with the host user's filesystem, process, and network authority. The active Location is the default working directory. Relative workdir values resolve from that Location. External workdir values require external_directory approval; best-effort command-argument path warnings are advisory only. An optional timeout may be provided in milliseconds (zero: unlimited; foreground default: ${DEFAULT_TIMEOUT_MS}; maximum: ${MAX_TIMEOUT_MS}). Background commands default to unlimited. Uses the configured shell when set; otherwise uses /bin/sh on POSIX and COMSPEC or cmd.exe on Windows. Background mode (background=true) launches the command asynchronously and returns immediately; you are notified when it finishes.`,
             input: Input,
             output: Output,
-            structured: StructuredOutput,
-            toStructuredOutput: ({ output }) => ({
+            toMetadata: ({ output }) => ({
               truncated: output.truncated,
               ...(output.exit === undefined ? {} : { exit: output.exit }),
               ...(output.shellID === undefined ? {} : { shellID: output.shellID }),
               ...(output.timeout === undefined ? {} : { timeout: output.timeout }),
             }),
             toModelOutput: ({ output }) => {
-              const parts: Content[] = [{ type: "text", text: output.output }]
+              const parts: [Content, ...Content[]] = [{ type: "text", text: output.output }]
               const model = modelOutput(output)
               if (model) parts.push({ type: "text", text: model })
               return parts
@@ -269,7 +268,7 @@ export const Plugin = {
                             return
                           previousProgress = capture
                           yield* context.progress({
-                            structured: { truncated: capture.truncated },
+                            metadata: { truncated: capture.truncated },
                             content: [{ type: "text", text: capture.output }],
                           })
                         }),

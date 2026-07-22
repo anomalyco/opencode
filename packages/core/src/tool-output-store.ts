@@ -8,7 +8,7 @@ import { Global } from "@opencode-ai/util/global"
 import { makeGlobalNode, makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { SessionSchema } from "./session/schema"
 import { Identifier } from "./util/identifier"
-import type { ToolOutput } from "@opencode-ai/ai"
+import type { ToolContent } from "@opencode-ai/ai"
 
 export const MAX_LINES = 2_000
 export const MAX_BYTES = 50 * 1024
@@ -19,11 +19,11 @@ export const MANAGED_DIRECTORY = "tool-output"
 export interface BoundInput {
   readonly sessionID: SessionSchema.ID
   readonly callID: string
-  readonly output: ToolOutput
+  readonly content: ReadonlyArray<ToolContent>
 }
 
 export interface BoundResult {
-  readonly output: ToolOutput
+  readonly content: ReadonlyArray<ToolContent>
   readonly outputPaths: ReadonlyArray<string>
 }
 
@@ -137,21 +137,14 @@ const layer = Layer.effect(
 
     const bound = Effect.fn("ToolOutputStore.bound")(function* (input: BoundInput) {
       const outputLimits = yield* limits()
-      const media = input.output.content.filter((item) => item.type === "file")
-      const text = input.output.content.filter((item) => item.type === "text")
-      const contextual =
-        input.output.content.length === 0
-          ? yield* Effect.try({
-              try: () => JSON.stringify(input.output.structured, null, 2) ?? String(input.output.structured),
-              catch: (cause) => new StorageError({ operation: "encode", cause }),
-            })
-          : text.map((item) => item.text).join("")
+      const media = input.content.filter((item) => item.type === "file")
+      const contextual = input.content.flatMap((item) => (item.type === "text" ? [item.text] : [])).join("")
       if (
         lineCount(contextual) <= outputLimits.maxLines &&
         Buffer.byteLength(contextual, "utf-8") <= outputLimits.maxBytes
       )
         return {
-          output: input.output,
+          content: input.content,
           outputPaths: [],
         }
 
@@ -159,16 +152,13 @@ const layer = Layer.effect(
       const marker = `... output truncated; full content saved to ${outputPath} ...`
 
       return {
-        output: {
-          structured: input.output.structured,
-          content: [
-            {
-              type: "text" as const,
-              text: boundedPreview(contextual, marker, outputLimits.maxLines, outputLimits.maxBytes),
-            },
-            ...media,
-          ],
-        },
+        content: [
+          {
+            type: "text" as const,
+            text: boundedPreview(contextual, marker, outputLimits.maxLines, outputLimits.maxBytes),
+          },
+          ...media,
+        ],
         outputPaths: [outputPath],
       }
     })

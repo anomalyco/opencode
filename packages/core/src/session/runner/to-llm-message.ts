@@ -90,15 +90,15 @@ const toolCall = (tool: SessionMessage.AssistantTool, providerMetadata: Provider
 const toolResult = (tool: SessionMessage.AssistantTool, providerMetadata: ProviderMetadata | undefined) => {
   if (tool.state.status === "completed") {
     // TODO: Materialize remote and managed URIs before provider-history lowering.
-    // ToolOutput.toResultValue rejects unresolved URIs rather than treating them as media bytes.
-    const result =
-      tool.executed === true && tool.state.result !== undefined
-        ? tool.state.result
-        : ToolOutput.toResultValue({ structured: tool.state.structured, content: tool.state.content })
+    const content = tool.state.content
+    const single = content.length === 1 ? content[0] : undefined
     return ToolResultPart.make({
       id: tool.id,
       name: tool.name,
-      result,
+      result:
+        single?.type === "text"
+          ? { type: "text" as const, value: single.text }
+          : { type: "content" as const, value: content },
       providerExecuted: tool.executed,
       providerMetadata,
     })
@@ -107,10 +107,7 @@ const toolResult = (tool: SessionMessage.AssistantTool, providerMetadata: Provid
     return ToolResultPart.make({
       id: tool.id,
       name: tool.name,
-      result:
-        tool.executed === true && tool.state.result !== undefined
-          ? tool.state.result
-          : { error: tool.state.error, content: tool.state.content, structured: tool.state.structured },
+      result: { error: tool.state.error, content: tool.state.content ?? [] },
       resultType: "error",
       providerExecuted: tool.executed,
       providerMetadata,
@@ -138,9 +135,7 @@ const assistant = (message: SessionMessage.Assistant, model: ModelV2.Ref, provid
           : []
     const reuseToolProviderMetadata =
       reuseProviderMetadata ||
-      (sameModel &&
-        item.executed === true &&
-        (item.state.status === "completed" || (item.state.status === "error" && item.state.result !== undefined)))
+      (sameModel && item.executed === true && (item.state.status === "completed" || item.state.status === "error"))
     const call = toolCall(
       item,
       reuseToolProviderMetadata ? providerMetadata(providerMetadataKey, item.providerState) : undefined,

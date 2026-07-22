@@ -144,21 +144,18 @@ const layer = Layer.effect(
             }
             yield* publish(event)
             if (LLMEvent.is.toolInputError(event)) {
-              if (prepared.resolveToolCall(event.name).type === "settle") needsContinuation = true
+              if (!prepared.stepLimitReached) needsContinuation = true
               return
             }
             if (event.type !== "tool-call" || event.providerExecuted) return
-            const tool = prepared.resolveToolCall(event.name)
-            if (tool.type === "reject") {
-              yield* serialized(publisher.failUnsettledTools(tool.error))
-              return
-            }
-            needsContinuation = true
+            // Unavailable calls fail individually through the same execution seam;
+            // continuation depends only on remaining Step allowance.
+            if (!prepared.stepLimitReached) needsContinuation = true
             const assistantMessageID = yield* publisher.assistantMessageID(event.id)
             ownedToolFibers.push(
               yield* Effect.uninterruptibleMask((restore) =>
                 restore(
-                  tool.settle({
+                  prepared.executeTool({
                     sessionID: session.id,
                     agent: agent.id,
                     messageID: assistantMessageID,
@@ -166,17 +163,7 @@ const layer = Layer.effect(
                     progress: (update) => serialized(publisher.progress(event.id, update)),
                   }),
                 ).pipe(
-                  Effect.flatMap((settlement) =>
-                    publish(
-                      LLMEvent.toolResult({
-                        id: event.id,
-                        name: event.name,
-                        result: settlement.result,
-                        output: settlement.output,
-                      }),
-                      settlement.error,
-                    ),
-                  ),
+                  Effect.flatMap((execution) => serialized(publisher.toolExecution(event.id, event.name, execution))),
                 ),
               ).pipe(FiberSet.run(toolFibers)),
             )

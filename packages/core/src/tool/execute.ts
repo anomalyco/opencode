@@ -1,9 +1,9 @@
 export * as ExecuteTool from "./execute"
 
 import { CodeMode, Tool, toolError } from "@opencode-ai/codemode"
-import { ToolOutput } from "@opencode-ai/ai"
+import type { ToolContent } from "@opencode-ai/ai"
 import { Effect, Ref, Schema } from "effect"
-import { definition, make, settle, type AnyTool } from "./tool"
+import { definition, interpret, make, type AnyTool, type Metadata } from "./tool"
 
 const ExecuteFile = Schema.Struct({
   data: Schema.String,
@@ -14,15 +14,10 @@ const ExecuteFile = Schema.Struct({
 const ExecuteCall = Schema.Struct({
   tool: Schema.String,
   status: Schema.Literals(["running", "completed", "error"]),
-  input: Schema.optionalKey(Schema.Record(Schema.String, Schema.Unknown)),
+  input: Schema.optionalKey(Schema.Record(Schema.String, Schema.Json)),
 })
 
 type ExecuteCall = typeof ExecuteCall.Type
-
-const ExecuteMetadata = Schema.Struct({
-  toolCalls: Schema.Array(ExecuteCall),
-  error: Schema.optionalKey(Schema.Literal(true)),
-})
 
 const ExecuteOutput = Schema.Struct({
   output: Schema.String,
@@ -55,8 +50,7 @@ export const create = (registrations: ReadonlyMap<string, Registration>) => {
     description,
     input: CodeMode.Input,
     output: ExecuteOutput,
-    structured: ExecuteMetadata,
-    toStructuredOutput: ({ output }) => ({
+    toMetadata: ({ output }): Metadata => ({
       toolCalls: output.toolCalls,
       ...(output.error ? { error: true as const } : {}),
     }),
@@ -85,9 +79,9 @@ export const create = (registrations: ReadonlyMap<string, Registration>) => {
           (name, registration, input) =>
             Effect.gen(function* () {
               const index = yield* Ref.getAndUpdate(callIndex, (index) => index + 1)
-              const output = yield* settle(
+              const interpretation = yield* interpret(
                 registration.tool,
-                { type: "tool-call", id: context.callID, name, input },
+                input,
                 {
                   sessionID: context.sessionID,
                   agent: context.agent,
@@ -96,10 +90,10 @@ export const create = (registrations: ReadonlyMap<string, Registration>) => {
                   progress: context.progress,
                 },
               ).pipe(Effect.mapError((failure) => toolError(failure.message, failure)))
-              const outputFileParts = outputFiles(output)
+              const outputFileParts = outputFiles(interpretation.content)
               if (outputFileParts.length > 0)
                 yield* Ref.update(files, (items) => [...items, { index, files: outputFileParts }])
-              return output.structured
+              return interpretation.output
             }),
           {
             onToolCallStart: ({ index, name, input }) =>
@@ -154,11 +148,12 @@ function runtime(
   return CodeMode.make<typeof tools>({ tools, ...hooks })
 }
 
-function displayInput(input: unknown): Record<string, unknown> | undefined {
+// Tool inputs arrive as parsed JSON, so the JSON value cast is a boundary fact.
+function displayInput(input: unknown): Record<string, typeof Schema.Json.Type> | undefined {
   if (input === null || input === undefined) return
-  if (typeof input !== "object" || Array.isArray(input)) return { input }
+  if (typeof input !== "object" || Array.isArray(input)) return { input: input as typeof Schema.Json.Type }
   if (Object.keys(input).length === 0) return
-  return input as Record<string, unknown>
+  return input as Record<string, typeof Schema.Json.Type>
 }
 
 function formatResult(result: CodeMode.Result) {
@@ -180,8 +175,8 @@ function formatValue(value: CodeMode.DataValue) {
   return JSON.stringify(value, null, 2) ?? String(value)
 }
 
-function outputFiles(output: ToolOutput): Array<typeof ExecuteFile.Type> {
-  return output.content.flatMap((part) => {
+function outputFiles(content: ReadonlyArray<ToolContent>): Array<typeof ExecuteFile.Type> {
+  return content.flatMap((part) => {
     if (part.type !== "file") return []
     const prefix = `data:${part.mime};base64,`
     if (!part.uri.startsWith(prefix)) return []

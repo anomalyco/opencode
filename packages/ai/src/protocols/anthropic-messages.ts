@@ -330,7 +330,10 @@ const lowerServerToolResult = Effect.fn("AnthropicMessages.lowerServerToolResult
   const wireType = serverToolResultType(part.name)
   if (!wireType)
     return yield* invalid(`Anthropic Messages does not know how to round-trip server tool result for ${part.name}`)
-  return { type: wireType, tool_use_id: part.id, content: part.result.value } satisfies AnthropicServerToolResultBlock
+  // Prefer the provider-owned replay payload; fall back to the result value for
+  // histories constructed directly from provider events.
+  const payload = part.providerMetadata?.anthropic?.["result"] ?? part.result.value
+  return { type: wireType, tool_use_id: part.id, content: payload } satisfies AnthropicServerToolResultBlock
 })
 
 const lowerMedia = Effect.fn("AnthropicMessages.lowerMedia")(function* (part: MediaPart) {
@@ -682,7 +685,9 @@ const serverToolResultEvent = (block: NonNullable<AnthropicEvent["content_block"
     name: SERVER_TOOL_RESULT_NAMES[block.type],
     result: isError ? { type: "error", value: block.content } : { type: "json", value: block.content },
     providerExecuted: true,
-    providerMetadata: anthropicMetadata({ blockType: block.type }),
+    // The complete payload is irreducible provider replay state: subsequent
+    // stateless requests must round-trip the typed result block verbatim.
+    providerMetadata: anthropicMetadata({ blockType: block.type, result: block.content }),
   })
 }
 
