@@ -28,65 +28,77 @@ export default {
   id: "20260722170000_canonical_tool_results",
   up(tx) {
     return Effect.gen(function* () {
-      const messages = yield* tx.all<{ id: string; data: string }>(
-        sql`SELECT id, data FROM session_message WHERE type = 'assistant'`,
-      )
-      for (const row of messages) {
-        const data = object(decodeJson(row.data))
-        if (!Array.isArray(data.content)) continue
-        let changed = false
-        const content = data.content.map((part) => {
-          const tool = object(part)
-          if (tool.type !== "tool" || !isObject(tool.state)) return part
-          const state = tool.state
-          if (state.status !== "completed" && state.status !== "error" && state.status !== "running") return part
-          changed = true
-          if (state.status === "running")
-            return {
-              ...tool,
-              state: {
-                status: "running",
-                input: object(state.input),
-                metadata: object(state.structured),
-                content: contentOf(state),
-              },
-            }
-          // Hosted payloads are irreducible provider replay state; keep them under
-          // the provider-owned result state instead of a generic result field.
-          const hosted =
-            tool.executed === true && isObject(state.result) && "value" in state.result
-              ? { providerResultState: { ...object(tool.providerResultState), result: state.result.value } }
-              : {}
-          const preserved = contentOf(state)
-          if (state.status === "completed")
-            return {
-              ...tool,
-              ...hosted,
-              state: {
-                status: "completed",
-                input: object(state.input),
-                content:
-                  preserved.length > 0
-                    ? preserved
-                    : [{ type: "text", text: stringify(state.structured ?? state.result) }],
-              },
-            }
-          return {
-            ...tool,
-            ...hosted,
-            state: {
-              status: "error",
-              input: object(state.input),
-              error: state.error,
-              ...(preserved.length > 0 ? { content: preserved } : {}),
-            },
-          }
-        })
-        if (!changed) continue
-        yield* tx.run(
-          sql`UPDATE session_message SET data = ${JSON.stringify({ ...data, content })} WHERE id = ${row.id}`,
+      // Keyset-paginated batches keep memory bounded: production databases hold
+      // gigabytes of assistant rows, and materializing them all at once was
+      // measured at a ~5GB RSS spike.
+      let cursor = ""
+      while (true) {
+        const messages = yield* tx.all<{ id: string; data: string }>(
+          sql`SELECT id, data FROM session_message WHERE type = 'assistant' AND id > ${cursor} ORDER BY id LIMIT 1000`,
         )
+        if (messages.length === 0) break
+        cursor = messages[messages.length - 1].id
+        yield* rewrite(tx, messages)
       }
     })
   },
 } satisfies DatabaseMigration.Migration
+
+function rewrite(tx: Parameters<DatabaseMigration.Migration["up"]>[0], messages: { id: string; data: string }[]) {
+  return Effect.gen(function* () {
+    for (const row of messages) {
+      const data = object(decodeJson(row.data))
+      if (!Array.isArray(data.content)) continue
+      let changed = false
+      const content = data.content.map((part) => {
+        const tool = object(part)
+        if (tool.type !== "tool" || !isObject(tool.state)) return part
+        const state = tool.state
+        if (state.status !== "completed" && state.status !== "error" && state.status !== "running") return part
+        changed = true
+        if (state.status === "running")
+          return {
+            ...tool,
+            state: {
+              status: "running",
+              input: object(state.input),
+              metadata: object(state.structured),
+              content: contentOf(state),
+            },
+          }
+        // Hosted payloads are irreducible provider replay state; keep them under
+        // the provider-owned result state instead of a generic result field.
+        const hosted =
+          tool.executed === true && isObject(state.result) && "value" in state.result
+            ? { providerResultState: { ...object(tool.providerResultState), result: state.result.value } }
+            : {}
+        const preserved = contentOf(state)
+        if (state.status === "completed")
+          return {
+            ...tool,
+            ...hosted,
+            state: {
+              status: "completed",
+              input: object(state.input),
+              content:
+                preserved.length > 0
+                  ? preserved
+                  : [{ type: "text", text: stringify(state.structured ?? state.result) }],
+            },
+          }
+        return {
+          ...tool,
+          ...hosted,
+          state: {
+            status: "error",
+            input: object(state.input),
+            error: state.error,
+            ...(preserved.length > 0 ? { content: preserved } : {}),
+          },
+        }
+      })
+      if (!changed) continue
+      yield* tx.run(sql`UPDATE session_message SET data = ${JSON.stringify({ ...data, content })} WHERE id = ${row.id}`)
+    }
+  })
+}
