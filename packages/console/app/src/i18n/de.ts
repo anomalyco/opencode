@@ -365,6 +365,7 @@ export const dict = {
   "zen.api.error.providerNotSupported": "Anbieter {{provider}} wird nicht unterstützt",
   "zen.api.error.missingApiKey": "Fehlender API-Key.",
   "zen.api.error.invalidApiKey": "Ungültiger API-Key.",
+  "zen.api.error.requestBlockedByUpstreamProvider": "Anfrage vom vorgelagerten Anbieter blockiert.",
   "zen.api.error.subscriptionQuotaExceeded": "Abonnement-Quote überschritten. Erneuter Versuch in {{retryIn}}.",
   "zen.api.error.goSubscriptionRollingLimitExceeded":
     "5-Stunden-Nutzungslimit erreicht. Wird in {{retryIn}} zurückgesetzt. Um dieses Modell jetzt weiter zu nutzen, aktiviere die Nutzung über dein verfügbares Guthaben: {{consoleGoUrl}}",

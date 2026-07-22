@@ -557,6 +557,7 @@ export function PromptInputV2Select(props: {
           variant="ghost-muted"
           size="normal"
           class={`max-w-[220px] justify-start ![font-weight:440] ${props.class ?? ""}`}
+          aria-label={props.title}
         >
           {props.currentIcon}
           <span class="truncate capitalize leading-5">
