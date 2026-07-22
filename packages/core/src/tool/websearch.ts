@@ -190,10 +190,6 @@ const Output = Schema.Struct({
   provider: Provider,
   text: Schema.String,
 })
-const StructuredOutput = Schema.Struct({
-  provider: Output.fields.provider,
-})
-
 export const Plugin = {
   id: "opencode.tool.websearch",
   effect: Effect.fn("WebSearchTool.Plugin")(function* (ctx: PluginContext) {
@@ -209,8 +205,7 @@ export const Plugin = {
             description,
             input: Input,
             output: Output,
-            structured: StructuredOutput,
-            toStructuredOutput: ({ output }) => ({ provider: output.provider }),
+            toMetadata: ({ output }) => ({ provider: output.provider }),
             toModelOutput: ({ output }) => [{ type: "text", text: output.text }],
             execute: (input, context) => {
               const provider = selectProvider(context.sessionID, config, config.provider)
