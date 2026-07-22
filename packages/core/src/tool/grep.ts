@@ -9,7 +9,7 @@ import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Location } from "../location"
 import { PermissionV2 } from "../permission"
 import { Ripgrep } from "../ripgrep"
-import { RelativePath } from "../schema"
+import { NonNegativeInt, RelativePath } from "../schema"
 import { Tool } from "./tool"
 
 export const name = "grep"
@@ -30,8 +30,8 @@ export const Input = Schema.Struct({
 })
 
 export const Output = Schema.Array(FileSystem.Match)
-export const StructuredOutput = Schema.Struct({
-  matches: Schema.Number,
+const StructuredOutput = Schema.Struct({
+  matches: NonNegativeInt,
 })
 type ModelOutput = typeof Output.Encoded
 

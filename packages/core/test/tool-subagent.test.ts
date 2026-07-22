@@ -35,7 +35,8 @@ const childModel = ModelV2.Ref.make({ id: ModelV2.ID.make("child"), providerID: 
 const parentModel = ModelV2.Ref.make({ id: ModelV2.ID.make("parent"), providerID: ProviderV2.ID.make("test") })
 const tokens = { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
 
-const outputSessionID = (value: unknown) => Schema.decodeUnknownSync(SubagentTool.StructuredOutput)(value).sessionID
+const outputSessionID = (value: unknown) =>
+  Schema.decodeUnknownSync(Schema.Struct({ sessionID: SessionV2.ID }))(value).sessionID
 
 const executionNode = makeGlobalNode({
   service: SessionExecution.Service,

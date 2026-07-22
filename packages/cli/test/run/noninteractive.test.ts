@@ -197,8 +197,7 @@ function successfulGrep(inputID: string): V2Event[] {
         callID: "call_grep",
         structured: { matches: 2 },
         content: [{ type: "text", text }],
-        result: { type: "text", value: text },
-        executed: true,
+        executed: false,
       },
     },
     settled(),
@@ -335,12 +334,12 @@ describe("runNonInteractivePrompt", () => {
           metadata: {
             structured: { matches: 2 },
             content: [{ type: "text", text: expect.stringContaining("/src/a.ts") }],
-            result: { type: "text", value: expect.stringContaining("/src/b.ts") },
           },
         },
       },
     })
     expect(events[0].part.state.metadata.structured).toEqual({ matches: 2 })
+    expect(events[0].part.state.metadata.result).toBeUndefined()
   })
 
   test("uses session.wait then reconciles projected output without a terminal event", async () => {

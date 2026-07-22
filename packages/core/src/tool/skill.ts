@@ -21,9 +21,9 @@ export const Output = Schema.Struct({
   directory: Schema.String,
   output: Schema.String,
 })
-export const StructuredOutput = Schema.Struct({
-  name: SkillV2.Name,
-  directory: Schema.String,
+const StructuredOutput = Schema.Struct({
+  name: Output.fields.name,
+  directory: Output.fields.directory,
 })
 
 export const description = [

@@ -2669,10 +2669,7 @@ function WebFetch(props: ToolProps) {
 function WebSearch(props: ToolProps) {
   return (
     <InlineTool icon="◈" pending="Searching web..." complete={stringValue(props.input.query)} part={props.part}>
-      {webSearchProviderLabel(props.metadata.provider)} "{stringValue(props.input.query)}"{" "}
-      <Show when={finiteNumber(props.input.numResults)}>
-        (requested: {finiteNumber(props.input.numResults)} results)
-      </Show>
+      {webSearchProviderLabel(props.metadata.provider)} "{stringValue(props.input.query)}"
     </InlineTool>
   )
 }

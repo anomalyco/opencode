@@ -190,8 +190,8 @@ const Output = Schema.Struct({
   provider: Provider,
   text: Schema.String,
 })
-export const StructuredOutput = Schema.Struct({
-  provider: Provider,
+const StructuredOutput = Schema.Struct({
+  provider: Output.fields.provider,
 })
 
 export const Plugin = {

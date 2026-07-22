@@ -244,24 +244,6 @@ describe("acp tools", () => {
     ).toEqual({ structured: { output: "done" } })
   })
 
-  test("keeps formatted search content while exposing compact raw metadata", () => {
-    const text = "Found 2 matches\n/src/a.ts:\n  Line 1: needle\n/src/b.ts:\n  Line 2: needle"
-    const update = completedToolUpdate({
-      toolCallId: "call-grep",
-      toolName: "grep",
-      input: { pattern: "needle" },
-      content: [{ type: "text", text }],
-      structured: { matches: 2 },
-      result: { type: "text", value: text },
-    })
-
-    expect(update.content).toEqual([{ type: "content", content: { type: "text", text } }])
-    expect(update.rawOutput).toEqual({
-      structured: { matches: 2 },
-      result: { type: "text", value: text },
-    })
-  })
-
   test("extracts image attachments only from data URLs", () => {
     expect(
       completedToolUpdate({

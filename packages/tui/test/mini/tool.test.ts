@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { normalizeTool, toolInlineInfo, toolOutputText, toolPath, toolScroll } from "../../src/mini/tool"
+import { canonicalToolPart } from "./fixture/tool-part"
 
 describe("Mini tool presentation", () => {
   test("uses V2 shell output without the model-facing status", () => {
@@ -105,37 +106,27 @@ describe("Mini tool presentation", () => {
     ).toBe('→ Skill "effect"')
   })
 
-  test("renders compact search metadata and labels websearch requests honestly", () => {
-    const tool = (
-      name: "glob" | "grep" | "websearch",
-      input: Record<string, string | number>,
-      structured: Record<string, string | number>,
-    ) => ({
-      type: "tool" as const,
-      id: `call-${name}`,
-      name,
-      state: {
-        status: "completed" as const,
-        input,
-        structured,
-        content: [],
-      },
-      time: { created: 1, ran: 1, completed: 2 },
-    })
-
-    expect(toolInlineInfo(tool("glob", { pattern: "*.ts" }, { count: 3 })).description).toBe("3 matches")
-    expect(toolInlineInfo(tool("grep", { pattern: "needle" }, { matches: 1 })).description).toBe("1 match")
-    expect(
-      toolInlineInfo(tool("websearch", { query: "Effect releases", numResults: 5 }, { provider: "parallel" })),
-    ).toMatchObject({
-      title: 'Parallel Web Search "Effect releases"',
-      description: "requested: 5 results",
-    })
+  test("renders compact search metadata", () => {
     expect(
       toolInlineInfo(
-        tool("websearch", { query: "Effect releases", numResults: 5 }, { provider: "exa", numResults: 99 }),
+        canonicalToolPart("glob", {
+          status: "completed",
+          input: { pattern: "*.ts" },
+          structured: { count: 3 },
+          content: [],
+        }),
       ).description,
-    ).toBe("requested: 5 results")
+    ).toBe("3 matches")
+    expect(
+      toolInlineInfo(
+        canonicalToolPart("grep", {
+          status: "completed",
+          input: { pattern: "needle" },
+          structured: { matches: 1 },
+          content: [],
+        }),
+      ).description,
+    ).toBe("1 match")
   })
 
   test("keeps segment-safe contained tool paths relative", () => {

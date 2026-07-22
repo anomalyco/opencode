@@ -31,8 +31,8 @@ export const Output = Schema.Struct({
   status: Schema.Literals(["completed", "running"]),
   output: Schema.String,
 })
-export const StructuredOutput = Schema.Struct({
-  sessionID: SessionSchema.ID,
+const StructuredOutput = Schema.Struct({
+  sessionID: Output.fields.sessionID,
   status: Output.fields.status,
 })
 

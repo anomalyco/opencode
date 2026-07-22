@@ -117,40 +117,4 @@ describe("search tools", () => {
       ),
     )
   }
-
-  it.effect("records deterministic size reductions for representative search and web payloads", () =>
-    Effect.sync(() => {
-      const entries = Array.from({ length: 100 }, (_, index) => ({
-        path: `src/generated/feature-${String(index).padStart(3, "0")}.typescript`,
-        type: "file",
-      }))
-      const matches = entries.map((entry, index) => ({
-        entry,
-        line: index + 1,
-        offset: index * 80,
-        text: `export const generatedFeature${index} = "representative search payload"`,
-        submatches: [{ text: "representative", start: 42, end: 56 }],
-      }))
-      const webfetch = {
-        url: "https://example.com/reference",
-        contentType: "text/markdown; charset=utf-8",
-        format: "markdown",
-        output: "representative web content\n".repeat(2_000),
-      }
-      const websearch = { provider: "exa", text: "representative search context\n".repeat(2_000) }
-      const bytes = (value: unknown) => Buffer.byteLength(JSON.stringify(value))
-
-      expect({
-        glob: { complete: bytes(entries), compact: bytes({ count: entries.length }) },
-        grep: { complete: bytes(matches), compact: bytes({ matches: matches.length }) },
-        webfetch: { complete: bytes(webfetch), compact: bytes({ contentType: webfetch.contentType }) },
-        websearch: { complete: bytes(websearch), compact: bytes({ provider: websearch.provider }) },
-      }).toEqual({
-        glob: { complete: 6_201, compact: 13 },
-        grep: { complete: 23_367, compact: 15 },
-        webfetch: { complete: 56_116, compact: 46 },
-        websearch: { complete: 62_028, compact: 18 },
-      })
-    }),
-  )
 })

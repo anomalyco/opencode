@@ -8,7 +8,7 @@ import { FileSystem } from "../filesystem"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Location } from "../location"
 import { Ripgrep } from "../ripgrep"
-import { RelativePath } from "../schema"
+import { NonNegativeInt, RelativePath } from "../schema"
 import { PermissionV2 } from "../permission"
 import { Tool } from "./tool"
 
@@ -25,8 +25,8 @@ export const Input = Schema.Struct({
 })
 
 export const Output = Schema.Array(FileSystem.Entry)
-export const StructuredOutput = Schema.Struct({
-  count: Schema.Number,
+const StructuredOutput = Schema.Struct({
+  count: NonNegativeInt,
 })
 type ModelOutput = typeof Output.Encoded
 

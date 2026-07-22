@@ -37,8 +37,8 @@ const Output = Schema.Struct({
   format: Input.fields.format,
   output: Schema.String,
 })
-export const StructuredOutput = Schema.Struct({
-  contentType: Schema.String,
+const StructuredOutput = Schema.Struct({
+  contentType: Output.fields.contentType,
 })
 
 type Format = (typeof Input.Type)["format"]
