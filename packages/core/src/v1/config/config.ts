@@ -120,6 +120,10 @@ export const Info = Schema.Struct({
   instructions: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
     description: "Additional instruction files or patterns to include",
   }),
+  instruction_files: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
+    description:
+      "Built-in instruction filenames to scan for (project walk-up and global). Defaults to [\"AGENTS.md\"]. Add \"CLAUDE.md\" or \"CONTEXT.md\" to also load those legacy files.",
+  }),
   layout: Schema.optional(ConfigLayoutV1.Layout).annotate({ description: "@deprecated Always uses stretch layout." }),
   permission: Schema.optional(ConfigPermissionV1.Info),
   permission_modules: Schema.optional(ConfigPermissionModule.Info).annotate({

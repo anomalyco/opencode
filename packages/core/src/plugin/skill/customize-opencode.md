@@ -71,7 +71,8 @@ Every field is optional.
   "logLevel": "DEBUG" | "INFO" | "WARN" | "ERROR",
   "autoupdate": true | false | "notify",
   "snapshot": true,
-  "instructions": ["AGENTS.md", "docs/style.md"],
+  "instructions": ["docs/style.md"],
+  "instruction_files": ["AGENTS.md", "CLAUDE.md"],
 
   "skills": {
     "paths": [".opencode/skills", "/abs/path/to/skills"],
@@ -154,6 +155,7 @@ Shape notes worth being explicit about:
 
 - `model` always carries a provider prefix: `"anthropic/claude-sonnet-4-6"`.
 - `skills` is an object with `paths` and/or `urls`, not an array.
+- `instruction_files` controls which built-in instruction filenames are scanned (project walk-up and global). Default: `["AGENTS.md"]`. Add `"CLAUDE.md"` or `"CONTEXT.md"` to also load those legacy files. `instructions` is a separate array of additional paths/URLs.
 - `references` is an object keyed by alias. Each value is a local path, Git repository, or string shorthand.
 - `agent` is an object keyed by agent name, not an array.
 - `command` is an object keyed by command name, not an array.

@@ -1287,6 +1287,13 @@
           },
           "description": "Additional instruction files or patterns to include"
         },
+        "instruction_files": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Built-in instruction filenames to scan for (project walk-up and global). Defaults to [\"AGENTS.md\"]. Add \"CLAUDE.md\" or \"CONTEXT.md\" to also load those legacy files."
+        },
         "layout": {
           "$ref": "#/$defs/LayoutConfig",
           "description": "@deprecated Always uses stretch layout."

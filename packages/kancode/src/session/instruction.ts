@@ -55,8 +55,8 @@ const layer: Layer.Layer<
     const fs = yield* FSUtil.Service
     const global = yield* Global.Service
     const http = HttpClient.filterStatusOk(withTransientReadRetry(yield* HttpClient.HttpClient))
-    const globalFiles = [path.join(global.config, "AGENTS.md"), path.join(global.home, ".claude", "CLAUDE.md")]
-    const instructionFiles = ["AGENTS.md", "CLAUDE.md", "CONTEXT.md"]
+    const DEFAULT_INSTRUCTION_FILES = ["AGENTS.md"]
+    const CLAUDE_FILE = "CLAUDE.md"
 
     const state = yield* InstanceState.make(
       Effect.fn("Instruction.state")(() =>
@@ -66,6 +66,20 @@ const layer: Layer.Layer<
         }),
       ),
     )
+
+    const instructionFiles = Effect.fnUntraced(function* () {
+      const config = yield* cfg.get()
+      return config.instruction_files ?? DEFAULT_INSTRUCTION_FILES
+    })
+
+    const globalFiles = Effect.fnUntraced(function* () {
+      const files = yield* instructionFiles()
+      const result = [path.join(global.config, "AGENTS.md")]
+      if (files.includes(CLAUDE_FILE)) {
+        result.push(path.join(global.home, ".claude", CLAUDE_FILE))
+      }
+      return result
+    })
 
     const relative = Effect.fnUntraced(function* (instruction: string) {
       const ctx = yield* InstanceState.context
@@ -102,8 +116,9 @@ const layer: Layer.Layer<
       const config = yield* cfg.get()
       const ctx = yield* InstanceState.context
       const paths = new Set<string>()
+      const gFiles = yield* globalFiles()
 
-      for (const file of globalFiles) {
+      for (const file of gFiles) {
         if (yield* fs.existsSafe(file)) {
           paths.add(path.resolve(file))
           break
@@ -112,7 +127,8 @@ const layer: Layer.Layer<
 
       // The first project-level match wins so we don't stack AGENTS.md/CLAUDE.md from every ancestor.
       if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
-        for (const file of instructionFiles) {
+        const files = yield* instructionFiles()
+        for (const file of files) {
           const matches = yield* fs
             .findUp(file, ctx.directory, ctx.worktree)
             .pipe(Effect.catch(() => Effect.succeed([])))
@@ -160,7 +176,8 @@ const layer: Layer.Layer<
     })
 
     const find = Effect.fn("Instruction.find")(function* (dir: string) {
-      for (const file of instructionFiles) {
+      const files = yield* instructionFiles()
+      for (const file of files) {
         const filepath = path.resolve(path.join(dir, file))
         if (yield* fs.existsSafe(filepath)) return filepath
       }

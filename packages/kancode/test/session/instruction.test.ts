@@ -29,18 +29,16 @@ const it = testEffect(
   ]),
 )
 
-const configLayer = Layer.succeed(Config.Service, TestConfig.make())
-
-const instructionLayer = (global: Partial<Global.Interface>) =>
+const instructionLayer = (global: Partial<Global.Interface>, configOverrides: Partial<Config.Interface> = {}) =>
   AppNodeBuilder.build(Instruction.node, [
-    [Config.node, configLayer],
+    [Config.node, Layer.succeed(Config.Service, TestConfig.make(configOverrides))],
     [Global.node, Global.layerWith(global)],
   ])
 
 const provideInstruction =
-  (global: Partial<Global.Interface>) =>
+  (global: Partial<Global.Interface>, configOverrides: Partial<Config.Interface> = {}) =>
   <A, E, R>(self: Effect.Effect<A, E, R>) =>
-    self.pipe(Effect.provide(instructionLayer(global)))
+    self.pipe(Effect.provide(instructionLayer(global, configOverrides)))
 
 const write = (filepath: string, content: string) =>
   Effect.gen(function* () {
@@ -227,7 +225,7 @@ describe("Instruction.system", () => {
     }),
   )
 
-  it.live("loads project and global CLAUDE.md alongside AGENTS.md", () =>
+  it.live("loads project and global CLAUDE.md when listed in instruction_files", () =>
     Effect.gen(function* () {
       const globalTmp = yield* tmpWithFiles({ ".claude/CLAUDE.md": "# Global Claude" })
       const projectTmp = yield* tmpWithFiles({ "CLAUDE.md": "# Project Claude" })
@@ -237,6 +235,23 @@ describe("Instruction.system", () => {
         const paths = yield* svc.systemPaths()
         expect(paths.has(path.join(globalTmp, ".claude", "CLAUDE.md"))).toBe(true)
         expect(paths.has(path.join(projectTmp, "CLAUDE.md"))).toBe(true)
+      }).pipe(
+        provideInstance(projectTmp),
+        provideInstruction({ home: globalTmp, config: globalTmp }, { get: () => Effect.succeed({ instruction_files: ["AGENTS.md", "CLAUDE.md"] }) }),
+      )
+    }),
+  )
+
+  it.live("does not load CLAUDE.md by default (AGENTS.md only)", () =>
+    Effect.gen(function* () {
+      const globalTmp = yield* tmpWithFiles({ ".claude/CLAUDE.md": "# Global Claude" })
+      const projectTmp = yield* tmpWithFiles({ "CLAUDE.md": "# Project Claude" })
+
+      yield* Effect.gen(function* () {
+        const svc = yield* Instruction.Service
+        const paths = yield* svc.systemPaths()
+        expect(paths.has(path.join(globalTmp, ".claude", "CLAUDE.md"))).toBe(false)
+        expect(paths.has(path.join(projectTmp, "CLAUDE.md"))).toBe(false)
       }).pipe(provideInstance(projectTmp), provideInstruction({ home: globalTmp, config: globalTmp }))
     }),
   )
