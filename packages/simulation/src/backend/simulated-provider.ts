@@ -518,7 +518,10 @@ const makeToolDriver = Effect.fn("SimulatedProvider.makeToolDriver")(function* (
             ),
           ),
       )
-      if (invocation.type === "success") return invocation.output
+      // The simulation wire protocol keeps its historical field names; map to the
+      // canonical dynamic output at this boundary.
+      if (invocation.type === "success")
+        return { output: invocation.output.structured, content: invocation.output.content }
       return yield* Effect.fail(new Tool.Failure({ message: invocation.message }))
     })
 
@@ -768,7 +771,10 @@ const makeToolDriver = Effect.fn("SimulatedProvider.makeToolDriver")(function* (
                 message: `Expected simulated tool update sequence ${expected}, received ${params.sequence}`,
               }),
             )
-          yield* invocation.progress(params.update)
+          yield* invocation.progress({
+            metadata: params.update.structured,
+            ...(params.update.content === undefined ? {} : { content: params.update.content }),
+          })
           invocation.update = { sequence: params.sequence, fingerprint }
         }),
       )
