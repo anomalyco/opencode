@@ -1,5 +1,6 @@
 @layer theme, base, components, utilities;
 
+@import "../components/json-viewer.css" layer(components);
 @import "../components/basic-tool.css" layer(components);
 @import "../components/file.css" layer(components);
 @import "../components/markdown.css" layer(components);
