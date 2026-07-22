@@ -62,8 +62,6 @@ const layer = Layer.effect(
             assistantMessageID: message.id,
             callID: tool.id,
             error: { type: "aborted", message: `Tool execution interrupted: ${tool.name}` },
-            structured: tool.state.status === "running" ? tool.state.structured : {},
-            content: tool.state.status === "running" ? tool.state.content : [],
             executed: tool.executed === true,
           })
         }

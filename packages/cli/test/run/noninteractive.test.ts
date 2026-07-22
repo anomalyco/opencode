@@ -148,7 +148,7 @@ function failedTool(inputID: string): V2Event[] {
         assistantMessageID: "msg_failed_tool",
         callID: "call_failed_tool",
         error: { type: "unknown", message: "tool failed" },
-        structured: { checkpoint: 1 },
+        metadata: { checkpoint: 1 },
         content: [{ type: "text", text: "partial output" }],
         executed: true,
       },
@@ -441,11 +441,11 @@ describe("runNonInteractivePrompt", () => {
     expect(output).toEqual({ stdout: "", stderr: "", exitCode: 0 })
   })
 
-  test("renders native failed tool output before the terminal error", async () => {
+  test("renders a native terminal failure snapshot when live progress was missed", async () => {
     const rendered: SessionMessageAssistantTool[] = []
     const failed: SessionMessageAssistantTool[] = []
     await capture({
-      turn: failedTool,
+      turn: (inputID) => failedTool(inputID).filter((event) => event.type !== "session.tool.progress"),
       renderTool: (part) => {
         rendered.push(part)
         return Promise.resolve()

@@ -265,7 +265,7 @@ describe("acp event behavior", () => {
             assistantMessageID: "msg_tools",
             callID: "call_fail",
             error: { type: "tool.error", message: "not found" },
-            structured: { bytes: 0 },
+            metadata: { bytes: 0 },
             content: [{ type: "text", text: "opening" }],
             executed: true,
           }),

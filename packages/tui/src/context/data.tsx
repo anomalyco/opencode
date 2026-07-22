@@ -643,7 +643,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
               status: "error",
               error: event.data.error,
               input: typeof match.state.input === "string" ? {} : match.state.input,
-              structured: event.data.structured ?? (match.state.status === "running" ? match.state.structured : {}),
+              structured: event.data.metadata ?? (match.state.status === "running" ? match.state.structured : {}),
               content: event.data.content ?? (match.state.status === "running" ? match.state.content : []),
               result: event.data.result,
             }

@@ -58,10 +58,14 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
       progress?: ToolRegistry.Progress
     }
   >()
-  const failureState = (tool: { readonly progress?: ToolRegistry.Progress }) => ({
-    structured: tool.progress?.structured ?? {},
-    content: tool.progress?.content ?? [],
-  })
+  const failureSnapshot = (tool: { readonly progress?: ToolRegistry.Progress }) => {
+    if (!tool.progress) return {}
+    const first = tool.progress.content[0]
+    return {
+      ...(first === undefined ? {} : { content: [first, ...tool.progress.content.slice(1)] as const }),
+      metadata: tool.progress.structured,
+    }
+  }
   let assistantMessageID = input.assistantMessageID
   let stepStarted = false
   let stepFailed = false
@@ -238,7 +242,7 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
         type: "tool.input-json",
         message: "Tool call arguments were malformed JSON and were not executed. Retry with valid JSON.",
       },
-      ...failureState(tool),
+      ...failureSnapshot(tool),
       executed: false,
     })
   })
@@ -263,7 +267,7 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
         assistantMessageID: tool.assistantMessageID,
         callID,
         error,
-        ...failureState(tool),
+        ...failureSnapshot(tool),
         executed: tool.providerExecuted,
       })
     }
@@ -423,7 +427,7 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
             assistantMessageID: tool.assistantMessageID,
             callID: event.id,
             error: result.error,
-            ...failureState(tool),
+            ...failureSnapshot(tool),
             result: event.result,
             executed,
             resultState,
@@ -456,7 +460,7 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
             event.message === `Unknown tool: ${event.name}`
               ? { type: "tool.unknown", message: event.message }
               : { type: "tool.execution", message: event.message },
-          ...failureState(tool),
+          ...failureSnapshot(tool),
           executed: tool.providerExecuted,
           resultState: providerState(event.providerMetadata),
         })

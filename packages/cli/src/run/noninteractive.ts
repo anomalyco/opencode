@@ -398,6 +398,8 @@ export async function runNonInteractivePrompt(input: Input) {
         const key = toolKey(event.data.assistantMessageID, event.data.callID)
         const current = tools.get(key) ?? fallbackTool(event)
         const error = event.data.error.message
+        const structured = event.data.metadata ?? current.structured
+        const content = event.data.content ?? current.content
         const tool: SessionMessageAssistantTool = {
           type: "tool",
           id: event.data.callID,
@@ -408,8 +410,8 @@ export async function runNonInteractivePrompt(input: Input) {
           state: {
             status: "error",
             input: current.input,
-            structured: event.data.structured ?? current.structured,
-            content: event.data.content ?? current.content,
+            structured,
+            content,
             error: event.data.error,
             result: event.data.result,
           },
@@ -439,14 +441,14 @@ export async function runNonInteractivePrompt(input: Input) {
         renderedTools.add(key)
         if (input.compatibility === "v1" && (permissionRejected || formCancelled)) continue
         if (!emit("tool_use", time, { part })) {
-          if (toolOutputText(current.tool, current.content).trim())
+          if (toolOutputText(current.tool, content).trim())
             await input.renderTool({
               ...tool,
               state: {
                 status: "completed",
                 input: current.input,
-                structured: current.structured,
-                content: current.content,
+                structured,
+                content,
                 result: event.data.result,
               },
             })

@@ -892,7 +892,7 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("persists the final progress snapshot when a tool fails", () =>
+  it.effect("persists the latest partial snapshot when a tool fails", () =>
     Effect.gen(function* () {
       const session = yield* setup
       const registry = yield* ToolRegistry.Service

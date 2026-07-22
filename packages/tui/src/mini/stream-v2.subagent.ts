@@ -838,7 +838,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
                 status: "error",
                 input: part && part.state.status !== "streaming" ? part.state.input : {},
                 structured:
-                  event.data.structured ?? (part && part.state.status !== "streaming" ? part.state.structured : {}),
+                  event.data.metadata ?? (part && part.state.status !== "streaming" ? part.state.structured : {}),
                 content: event.data.content ?? (part && part.state.status !== "streaming" ? part.state.content : []),
                 error: event.data.error,
                 result: event.data.result,
@@ -967,7 +967,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       const key = sourceKey(event.data.assistantMessageID, event.data.callID)
       const pending = pendingCalls.get(key)
       if (event.type !== "session.tool.progress") pendingCalls.delete(key)
-      const found = childSessionID(record(event.data.structured))
+      const found = childSessionID(record(event.type === "session.tool.failed" ? event.data.metadata : event.data.structured))
       if (!found) return
       const child = admitChild(found.sessionID)
       if (!child) return

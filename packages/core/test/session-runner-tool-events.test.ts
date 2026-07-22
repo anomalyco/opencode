@@ -109,9 +109,19 @@ test("interrupted progress publication remains in the terminal failure snapshot"
   await Effect.runPromise(publisher.failUnsettledTools({ type: "aborted", message: "interrupted" }))
 
   expect(published.find((event) => event.type === "session.tool.failed.1")?.data).toMatchObject({
-    structured: { phase: "visible" },
+    metadata: { phase: "visible" },
     content: [{ type: "text", text: "visible" }],
   })
+})
+
+test("failure before progress omits partial output fields", async () => {
+  const { published, publisher } = capture()
+  await Effect.runPromise(publisher.publish(call))
+  await Effect.runPromise(publisher.failUnsettledTools({ type: "aborted", message: "interrupted" }))
+
+  const failed = published.find((event) => event.type === "session.tool.failed.1")?.data
+  expect(failed).not.toHaveProperty("content")
+  expect(failed).not.toHaveProperty("metadata")
 })
 
 test("provider metadata is flattened using the route key", async () => {

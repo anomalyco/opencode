@@ -198,7 +198,7 @@ export async function streamTurn(input: {
             toolCallId: event.data.callID,
             toolName: current.name,
             input: current.input,
-            structured: event.data.structured ?? current.structured,
+            structured: event.data.metadata ?? current.structured,
             content: event.data.content ?? current.content,
             error: event.data.error.message,
             cwd: input.cwd,

@@ -22,10 +22,10 @@ const it = testEffect(LayerNode.compile(LayerNode.group([Database.node, EventV2.
 const timestamp = DateTime.makeUnsafe(1)
 const model = { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") }
 
-const content = (text: string) => [{ type: "text" as const, text }]
+const content = (text: string) => [{ type: "text" as const, text }] as const
 
 describe("Tool.Progress", () => {
-  it.effect("keeps progress live-only and terminal settlements replayable", () =>
+  it.effect("keeps progress live-only and terminal settlements durable", () =>
     Effect.gen(function* () {
       const { db } = yield* Database.Service
       const service = yield* EventV2.Service
@@ -123,7 +123,7 @@ describe("Tool.Progress", () => {
         assistantMessageID,
         callID: "call-failed",
         error: { type: "unknown", message: "boom" },
-        structured: { phase: "checkpoint" },
+        metadata: { phase: "checkpoint" },
         content: content("before failure"),
         executed: false,
       })
@@ -149,7 +149,6 @@ describe("Tool.Progress", () => {
       expect(rows.map((row) => row.type)).not.toContain(EventV2.versionedType(SessionEvent.Tool.Progress.type, 1))
       expect(rows.map((row) => row.type)).toContain(EventV2.versionedType(SessionEvent.Tool.Success.type, 1))
       expect(rows.map((row) => row.type)).toContain(EventV2.versionedType(SessionEvent.Tool.Failed.type, 1))
-
     }),
   )
 })

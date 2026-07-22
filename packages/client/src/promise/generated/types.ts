@@ -1863,8 +1863,8 @@ export type SessionToolFailed = {
     assistantMessageID: string
     callID: string
     error: SessionStructuredError
-    structured?: { [x: string]: any }
-    content?: Array<LLMToolContent>
+    content?: [LLMToolContent, ...Array<LLMToolContent>]
+    metadata?: { [x: string]: any }
     result?: any
     executed: boolean
     resultState?: SessionMessageProviderState7
