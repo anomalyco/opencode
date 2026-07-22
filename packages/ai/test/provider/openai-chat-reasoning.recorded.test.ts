@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMEvent, LLMResponse } from "../../src"
+import { LLM, LLMEvent, LLMResponse, Model } from "../../src"
 import { OpenAIChat } from "../../src/protocols/openai-chat"
 import * as OpenAICompatible from "../../src/providers/openai-compatible"
 import * as OpenRouter from "../../src/providers/openrouter"
@@ -11,22 +11,28 @@ import { expectWeatherToolLoop, goldenWeatherToolLoopRequest, runWeatherToolLoop
 const cases = [
   {
     name: "OpenRouter",
-    model: OpenRouter.configure({
-      apiKey: process.env.OPENROUTER_API_KEY ?? "fixture",
-      providerOptions: { openrouter: { reasoning: { max_tokens: 1024 } } },
-    }).model("anthropic/claude-sonnet-4.6"),
+    model: Model.update(
+      OpenRouter.configure({
+        apiKey: process.env.OPENROUTER_API_KEY ?? "fixture",
+        providerOptions: { openrouter: { reasoning: { max_tokens: 1024 } } },
+      }).model("anthropic/claude-sonnet-4.6"),
+      { reasoningField: "reasoning" },
+    ),
     requires: ["OPENROUTER_API_KEY"],
     cassette: "openrouter-reasoning",
     structured: true,
   },
   {
     name: "Vercel AI Gateway",
-    model: OpenAICompatible.configure({
-      provider: "vercel-ai-gateway",
-      baseURL: "https://ai-gateway.vercel.sh/v1",
-      apiKey: process.env.AI_GATEWAY_API_KEY ?? "fixture",
-      http: { body: { reasoning: { enabled: true, max_tokens: 1024 } } },
-    }).model("anthropic/claude-sonnet-4.6"),
+    model: Model.update(
+      OpenAICompatible.configure({
+        provider: "vercel-ai-gateway",
+        baseURL: "https://ai-gateway.vercel.sh/v1",
+        apiKey: process.env.AI_GATEWAY_API_KEY ?? "fixture",
+        http: { body: { reasoning: { enabled: true, max_tokens: 1024 } } },
+      }).model("anthropic/claude-sonnet-4.6"),
+      { reasoningField: "reasoning" },
+    ),
     requires: ["AI_GATEWAY_API_KEY"],
     cassette: "vercel-ai-gateway-reasoning",
     structured: true,

@@ -697,32 +697,6 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
-  it.effect("keeps configured reasoning_details structured during replay", () =>
-    Effect.gen(function* () {
-      const details = [{ type: "reasoning.text", text: "thinking", format: "provider-v1", index: 0 }]
-      const custom = Model.update(model, { reasoningField: "reasoning_details" })
-      const response = yield* LLMClient.generate(LLM.updateRequest(request, { model: custom })).pipe(
-        Effect.provide(
-          fixedResponse(
-            sseEvents(
-              { choices: [{ delta: { reasoning_details: details } }] },
-              { choices: [{ delta: { content: "Hello" } }] },
-              { choices: [{ delta: {}, finish_reason: "stop" }] },
-            ),
-          ),
-        ),
-      )
-
-      const replay = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
-        LLM.request({ model: custom, messages: [response.message, Message.assistant("Done")] }),
-      )
-      expect(replay.body.messages).toEqual([
-        { role: "assistant", content: "Hello", reasoning_details: details },
-        { role: "assistant", content: "Done", reasoning_details: [] },
-      ])
-    }),
-  )
-
   it.effect("uses reasoning details as display fallback without inventing a scalar replay field", () =>
     Effect.gen(function* () {
       const details = [

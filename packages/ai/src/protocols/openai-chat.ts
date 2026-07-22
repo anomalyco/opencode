@@ -308,10 +308,9 @@ const lowerAssistantMessage = Effect.fn("OpenAIChat.lowerAssistantMessage")(func
     role: "assistant" as const,
     content: content.length === 0 ? null : ProviderShared.joinText(content),
     tool_calls: toolCalls.length === 0 ? undefined : toolCalls,
-    reasoning_details: field === "reasoning_details" && configuredField !== undefined ? (details ?? []) : details,
+    reasoning_details: details,
   }
   if (field === undefined || reasoningText === undefined) return result
-  if (field === "reasoning_details") return result
   return { ...result, [field]: reasoningText }
 })
 
