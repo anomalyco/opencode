@@ -61,6 +61,23 @@ describe("shell", () => {
     expect(ShellSelect.args("/bin/bash", "echo hi")).toEqual(["-c", "echo hi"])
   })
 
+  test("switches cmd output to UTF-8", () => {
+    expect(ShellSelect.args("cmd", 'echo "你好"')).toEqual(["/d", "/c", 'chcp 65001 >nul 2>nul & echo "你好"'])
+  })
+
+  test("transports PowerShell commands independently of the active code page", () => {
+    const args = ShellSelect.args("pwsh", 'Write-Output "你好"')
+    expect(args.slice(0, 4)).toEqual(["-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand"])
+    expect(Buffer.from(args[4], "base64").toString("utf16le")).toBe(
+      "$utf8 = [System.Text.UTF8Encoding]::new($false); [Console]::InputEncoding = $utf8; [Console]::OutputEncoding = $utf8; $OutputEncoding = $utf8; & ([scriptblock]::Create([System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('V3JpdGUtT3V0cHV0ICLkvaDlpb0i')))); $success = $?; $code = $LASTEXITCODE; if ($null -ne $code) { exit $code }; if (-not $success) { exit 1 }",
+    )
+  })
+
+  test("forces piped Python output to UTF-8 on Windows", () => {
+    expect(ShellSelect.env("win32")).toEqual({ PYTHONIOENCODING: "utf-8" })
+    expect(ShellSelect.env("linux")).toEqual({})
+  })
+
   if (process.platform === "win32") {
     test("rejects blacklisted shells case-insensitively", async () => {
       await withShell("NU.EXE", async () => {

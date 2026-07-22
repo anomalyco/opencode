@@ -173,6 +173,7 @@ export const layer = (options?: ShellSelect.Options) => Layer.effect(
       const file = path.join(outputDir, `${id}.out`)
       const env = {
         ...process.env,
+        ...ShellSelect.env(),
         TERM: "xterm-256color",
         OPENCODE_TERMINAL: "1",
       } as Record<string, string>

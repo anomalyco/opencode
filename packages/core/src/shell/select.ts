@@ -168,12 +168,37 @@ function info(file: string, options?: Options): Item {
   }
 }
 
+export function env(platform = process.platform) {
+  if (platform === "win32") return { PYTHONIOENCODING: "utf-8" }
+  return {}
+}
+
 export function args(file: string, command: string) {
   const n = name(file)
   if (n === "nu" || n === "fish") return ["-c", command]
   if (n === "zsh" || n === "bash") return ["-c", command]
-  if (n === "cmd") return ["/c", command]
-  if (ps(file)) return ["-NoProfile", "-Command", command]
+  if (n === "cmd") return ["/d", "/c", `chcp 65001 >nul 2>nul & ${command}`]
+  if (ps(file)) {
+    const payload = Buffer.from(command, "utf8").toString("base64")
+    const script = [
+      "$utf8 = [System.Text.UTF8Encoding]::new($false)",
+      "[Console]::InputEncoding = $utf8",
+      "[Console]::OutputEncoding = $utf8",
+      "$OutputEncoding = $utf8",
+      `& ([scriptblock]::Create([System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${payload}'))))`,
+      "$success = $?",
+      "$code = $LASTEXITCODE",
+      "if ($null -ne $code) { exit $code }",
+      "if (-not $success) { exit 1 }",
+    ].join("; ")
+    return [
+      "-NoLogo",
+      "-NoProfile",
+      "-NonInteractive",
+      "-EncodedCommand",
+      Buffer.from(script, "utf16le").toString("base64"),
+    ]
+  }
   return ["-c", command]
 }
 

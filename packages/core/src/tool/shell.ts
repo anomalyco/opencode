@@ -70,7 +70,7 @@ const modelOutput = (output: Output): string | undefined => {
 // TODO: Port tree-sitter bash / PowerShell parser-based approval reduction.
 // TODO: Port BashArity reusable command-prefix approvals.
 // TODO: Replace token-based command-argument external-directory advisories with parser-based detection.
-// TODO: Restore PowerShell and cmd-specific invocation/path handling on Windows.
+// TODO: Restore Windows shell-specific path handling.
 // TODO: Add plugin shell.env environment augmentation once V2 plugin hooks exist.
 // TODO: Persist job status and define restart recovery before exposing remote observation.
 // TODO: Add HTTP job observation only after durable status, restart recovery, and authorization are defined.
