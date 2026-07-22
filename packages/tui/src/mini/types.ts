@@ -393,6 +393,7 @@ export type MiniSettings = {
   shell_output: "show" | "hide"
   turn_summary: "show" | "hide"
   footer: "show" | "hide"
+  splash: "show" | "hide"
   mono: boolean
 }
 

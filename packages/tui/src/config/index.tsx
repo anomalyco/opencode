@@ -136,6 +136,9 @@ export const Info = Schema.Struct({
       footer: Schema.optional(Schema.Literals(["show", "hide"])).annotate({
         description: "Show or hide persistent activity, model, usage, and context details in the footer",
       }),
+      splash: Schema.optional(Schema.Literals(["show", "hide"])).annotate({
+        description: "Show or hide the entry and exit splash banners",
+      }),
       mono: Schema.optional(Schema.Boolean).annotate({
         description: "Use monochrome ASCII output",
       }),

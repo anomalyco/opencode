@@ -616,6 +616,10 @@ export class RunFooter implements FooterApi {
     return this.theme()
   }
 
+  public currentMiniSettings(): MiniSettings {
+    return this.miniSettings()
+  }
+
   private destroyTheme(theme: RunTheme): void {
     const index = this.themes.indexOf(theme)
     if (index === -1) {

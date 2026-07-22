@@ -686,6 +686,13 @@ export function RunSettingsBody(props: {
     },
     {
       category: "Terminal",
+      display: "Splash",
+      footer: saving() === "splash" ? "saving" : props.settings().splash,
+      keywords: `splash entry exit banner ${props.settings().splash}`,
+      key: "splash",
+    },
+    {
+      category: "Terminal",
       display: "Monochrome UI",
       footer: saving() === "mono" ? "saving" : props.settings().mono ? "on" : "off",
       keywords: `mono monochrome ascii legacy compat terminal ${props.settings().mono ? "on" : "off"}`,

@@ -196,13 +196,15 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
     renderer,
     state,
     "entry",
-    entrySplash({
-      ...meta,
-      theme: theme.splash,
-      showSession: splash.showSession,
-      detail: directoryLabel(input.getDirectory(), input.host.paths.home),
-      mono,
-    }),
+    miniSettings.splash === "show"
+      ? entrySplash({
+          ...meta,
+          theme: theme.splash,
+          showSession: splash.showSession,
+          detail: directoryLabel(input.getDirectory(), input.host.paths.home),
+          mono,
+        })
+      : undefined,
   )
   await renderer.idle().catch(() => {})
 
@@ -224,7 +226,9 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
     history: input.history,
     theme,
     mono,
-    wrote,
+    // The transcript always starts one row below the terminal's prior output,
+    // even when the entry splash itself is hidden.
+    wrote: wrote || miniSettings.splash === "hide",
     tuiConfig,
     miniSettings: {
       current: miniSettings,
@@ -306,8 +310,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
     try {
       await footer.idle().catch(() => {})
 
-      const show = renderer.isDestroyed ? false : next.showExit
-      if (!renderer.isDestroyed && show) {
+      if (!renderer.isDestroyed && next.showExit && footer.currentMiniSettings().splash === "show") {
         const sessionID = next.sessionID || input.getSessionID?.() || input.sessionID
         const splash = splashInfo(next.sessionTitle ?? input.sessionTitle, next.history ?? input.history)
         wroteExit = queueSplash(

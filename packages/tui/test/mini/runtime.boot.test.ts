@@ -106,17 +106,26 @@ describe("run runtime boot", () => {
       shell_output: "hide",
       turn_summary: "show",
       footer: "show",
+      splash: "show",
       mono: false,
     })
     expect(
       resolveMiniSettings({
-        mini: { thinking: "show", shell_output: "show", turn_summary: "hide", footer: "hide", mono: true },
+        mini: {
+          thinking: "show",
+          shell_output: "show",
+          turn_summary: "hide",
+          footer: "hide",
+          splash: "hide",
+          mono: true,
+        },
       }),
     ).toEqual({
       thinking: "show",
       shell_output: "show",
       turn_summary: "hide",
       footer: "hide",
+      splash: "hide",
       mono: true,
     })
   })

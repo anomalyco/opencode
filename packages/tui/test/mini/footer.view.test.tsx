@@ -136,7 +136,14 @@ async function renderFooter(
   const [state, setState] = footerState(input.state)
   const config = input.tuiConfig ?? tuiConfig
   const [miniSettings] = createSignal<MiniSettings>(
-    input.miniSettings ?? { thinking: "hide", shell_output: "hide", turn_summary: "show", footer: "show", mono: false },
+    input.miniSettings ?? {
+      thinking: "hide",
+      shell_output: "hide",
+      turn_summary: "show",
+      footer: "show",
+      splash: "show",
+      mono: false,
+    },
   )
   function Harness() {
     return (
@@ -471,6 +478,7 @@ test("direct settings panel changes Mini transcript preferences", async () => {
     shell_output: "hide",
     turn_summary: "show",
     footer: "show",
+    splash: "show",
     mono: false,
   })
   const app = await testRender(
@@ -499,6 +507,7 @@ test("direct settings panel changes Mini transcript preferences", async () => {
     expect(frame).toContain("Shell")
     expect(frame).toContain("Turn summary")
     expect(frame).toContain("Footer details")
+    expect(frame).toContain("Splash")
     expect(frame).toContain("Monochrome UI")
     expect(frame).toContain("left/right change")
     expect(frame).not.toMatch(/[^\x00-\x7F]/)
@@ -506,16 +515,35 @@ test("direct settings panel changes Mini transcript preferences", async () => {
     app.mockInput.pressKey("ARROW_RIGHT")
     await app.renderOnce()
 
-    expect(settings()).toEqual({ thinking: "show", shell_output: "hide", turn_summary: "show", footer: "show", mono: false })
+    expect(settings()).toEqual({
+      thinking: "show",
+      shell_output: "hide",
+      turn_summary: "show",
+      footer: "show",
+      splash: "show",
+      mono: false,
+    })
 
     app.mockInput.pressKey("ARROW_DOWN")
     app.mockInput.pressKey("ARROW_DOWN")
     app.mockInput.pressKey("ARROW_RIGHT")
     await app.renderOnce()
 
-    expect(settings()).toEqual({ thinking: "show", shell_output: "hide", turn_summary: "hide", footer: "show", mono: false })
+    expect(settings()).toEqual({
+      thinking: "show",
+      shell_output: "hide",
+      turn_summary: "hide",
+      footer: "show",
+      splash: "show",
+      mono: false,
+    })
 
     app.mockInput.pressKey("ARROW_DOWN")
+    app.mockInput.pressKey("ARROW_DOWN")
+    app.mockInput.pressKey("ARROW_RIGHT")
+    await app.renderOnce()
+    expect(settings().splash).toBe("hide")
+
     app.mockInput.pressKey("ARROW_DOWN")
     app.mockInput.pressKey("ARROW_RIGHT")
     await app.renderOnce()
@@ -1169,7 +1197,14 @@ test("direct footer shows authoritative pending work while running", async () =>
             },
           ]}
           theme={() => RUN_THEME_FALLBACK}
-          miniSettings={() => ({ thinking: "hide", shell_output: "hide", turn_summary: "show", footer: "show", mono: false })}
+          miniSettings={() => ({
+            thinking: "hide",
+            shell_output: "hide",
+            turn_summary: "show",
+            footer: "show",
+            splash: "show",
+            mono: false,
+          })}
           mono={false}
           onSubmit={() => true}
           onPermissionReply={() => {}}
@@ -1357,6 +1392,7 @@ test("direct footer hides routine activity and shows explicit notices", async ()
       shell_output: "hide",
       turn_summary: "show",
       footer: "hide",
+      splash: "show",
       mono: true,
     },
     mono: true,

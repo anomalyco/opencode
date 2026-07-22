@@ -90,6 +90,7 @@ export function resolveMiniSettings(config?: { mini?: Partial<MiniSettings> }): 
     shell_output: config?.mini?.shell_output ?? "hide",
     turn_summary: config?.mini?.turn_summary ?? "show",
     footer: config?.mini?.footer ?? "show",
+    splash: config?.mini?.splash ?? "show",
     mono: config?.mini?.mono ?? false,
   }
 }
