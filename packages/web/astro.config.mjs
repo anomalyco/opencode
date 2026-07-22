@@ -119,6 +119,11 @@ export default defineConfig({
           lang: "zh-CN",
           dir: "ltr",
         },
+        uk: {
+          label: "Українська",
+          lang: "uk",
+          dir: "ltr",
+        },
         "zh-tw": {
           label: "繁體中文",
           lang: "zh-TW",
@@ -199,6 +204,7 @@ export default defineConfig({
             "tr-TR": "Windows",
             "zh-CN": "Windows",
             "zh-TW": "Windows",
+            uk: "Windows",
           },
           link: "windows-wsl",
         },
@@ -223,6 +229,7 @@ export default defineConfig({
             "tr-TR": "Kullanım",
             "zh-CN": "使用",
             "zh-TW": "使用",
+            uk: "Використання",
           },
           items: ["go", "tui", "cli", "web", "ide", "zen", "share", "github", "gitlab"],
         },
@@ -248,6 +255,7 @@ export default defineConfig({
             "tr-TR": "Yapılandırma",
             "zh-CN": "配置",
             "zh-TW": "設定",
+            uk: "Налаштування",
           },
           items: [
             "tools",
@@ -290,6 +298,7 @@ export default defineConfig({
             "tr-TR": "Geliştirme",
             "zh-CN": "开发",
             "zh-TW": "開發",
+            uk: "Розробка",
           },
           items: ["sdk", "server", "plugins", "ecosystem"],
         },
