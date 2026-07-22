@@ -13,6 +13,10 @@ import { Auth } from "@/auth"
 import { Config } from "@/config/config"
 import { Plugin } from "@/plugin"
 import { Provider } from "@/provider/provider"
+import { Budget } from "@/provider/budget"
+import { Identity } from "@/identity"
+import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 
 import { Filesystem } from "@/util/filesystem"
 import { LLMEvent, LLMResponse } from "@opencode-ai/llm"
@@ -294,6 +298,32 @@ function recordedNativeLLMLayer(scenario: RecordedScenario) {
     Layer.provide(Layer.mergeAll(RequestExecutor.layer.pipe(Layer.provide(recordedHttp)), WebSocketExecutor.layer)),
   )
 
+  const mockBudget = Layer.succeed(
+    Budget.Service,
+    Budget.Service.of({
+      resolveModel: () => Effect.succeed({
+        action: "free",
+        modelId: ModelV2.ID.make("test"),
+        providerID: ProviderV2.ID.make("opencode"),
+      } satisfies Budget.ResolveModelResult),
+      deduct: () => Effect.void,
+      check: () => Effect.void,
+      credit: () => Effect.void,
+    }),
+  )
+
+  const mockIdentity = Layer.succeed(
+    Identity.Service,
+    Identity.Service.of({
+      upsertFromAuth: () => Effect.void,
+      getByID: () => Effect.succeed(null),
+      getCurrent: () => Effect.succeed(null),
+      requireAdmin: () => Effect.fail(new Identity.Unauthorized({ message: "mock" })),
+      listUsersWithBalances: () => Effect.succeed([]),
+      credit: () => Effect.succeed({ newBalance: 0, transactionId: 0 }),
+    }),
+  )
+
   return Layer.mergeAll(
     provider,
     LLM.layer.pipe(
@@ -303,6 +333,8 @@ function recordedNativeLLMLayer(scenario: RecordedScenario) {
       Layer.provide(Plugin.defaultLayer),
       Layer.provide(recordedClient),
       Layer.provide(RuntimeFlags.layer({ experimentalNativeLlm: true })),
+      Layer.provide(mockBudget),
+      Layer.provide(mockIdentity),
     ),
   )
 }

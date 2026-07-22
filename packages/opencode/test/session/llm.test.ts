@@ -23,6 +23,8 @@ import { MessageV2 } from "../../src/session/message-v2"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Permission } from "@/permission"
+import { Budget } from "@/provider/budget"
+import { Identity } from "@/identity"
 import { LLMAISDK } from "@/session/llm/ai-sdk"
 import { Session as SessionNs } from "@/session/session"
 import { ProviderV2 } from "@opencode-ai/core/provider"
@@ -75,6 +77,32 @@ const drainWith = (layer: Layer.Layer<LLM.Service>, input: LLM.StreamInput) =>
     )
   })
 
+const mockBudget = Layer.succeed(
+  Budget.Service,
+  Budget.Service.of({
+    resolveModel: () => Effect.succeed({
+      action: "free",
+      modelId: ModelV2.ID.make("test"),
+      providerID: ProviderV2.ID.make("opencode"),
+    } satisfies Budget.ResolveModelResult),
+    deduct: () => Effect.void,
+    check: () => Effect.void,
+    credit: () => Effect.void,
+  }),
+)
+
+const mockIdentity = Layer.succeed(
+  Identity.Service,
+  Identity.Service.of({
+    upsertFromAuth: () => Effect.void,
+    getByID: () => Effect.succeed(null),
+    getCurrent: () => Effect.succeed(null),
+    requireAdmin: () => Effect.fail(new Identity.Unauthorized({ message: "mock" })),
+    listUsersWithBalances: () => Effect.succeed([]),
+    credit: () => Effect.succeed({ newBalance: 0, transactionId: 0 }),
+  }),
+)
+
 function llmLayerWithExecutor(executor: Layer.Layer<RequestExecutor.Service>, flags: Partial<RuntimeFlags.Info> = {}) {
   return LLM.layer.pipe(
     Layer.provide(Auth.defaultLayer),
@@ -83,6 +111,8 @@ function llmLayerWithExecutor(executor: Layer.Layer<RequestExecutor.Service>, fl
     Layer.provide(Plugin.defaultLayer),
     Layer.provide(LLMClient.layer.pipe(Layer.provide(Layer.mergeAll(executor, WebSocketExecutor.layer)))),
     Layer.provide(RuntimeFlags.layer(flags)),
+    Layer.provide(mockBudget),
+    Layer.provide(mockIdentity),
   )
 }
 
@@ -1136,6 +1166,8 @@ describe("session.llm.stream", () => {
             Layer.provide(Plugin.defaultLayer),
             Layer.provide(failingNativeClient),
             Layer.provide(RuntimeFlags.layer({ experimentalNativeLlm: false })),
+            Layer.provide(mockBudget),
+            Layer.provide(mockIdentity),
           ),
           {
             user: {

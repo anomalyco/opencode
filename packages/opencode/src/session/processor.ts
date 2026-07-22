@@ -31,6 +31,8 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import * as DateTime from "effect/DateTime"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ToolOutput, Usage, type LLMEvent } from "@opencode-ai/llm"
+import { Budget } from "@/provider/budget"
+import { Identity } from "@/identity"
 
 const DOOM_LOOP_THRESHOLD = 3
 export type Result = "compact" | "stop" | "continue"
@@ -106,6 +108,8 @@ export const layer = Layer.effect(
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
     const database = yield* Database.Service
+    const budget = yield* Budget.Service
+    const identity = yield* Identity.Service
 
     const create = Effect.fn("SessionProcessor.create")(function* (input: Input) {
       // Pre-capture snapshot before the LLM stream starts. The AI SDK
@@ -698,6 +702,25 @@ export const layer = Layer.effect(
               usage: value.usage ?? new Usage({}),
               metadata: value.providerMetadata,
             })
+
+            // --- Budget enforcement: deduct usage cost ---
+            if (ctx.model && !Budget.isFreeModel(ctx.model.providerID)) {
+              const currentUser = yield* identity.getCurrent()
+              if (currentUser) {
+                const costNum = usage.cost ?? 0
+                yield* budget.deduct({
+                  userId: currentUser.id,
+                  amount: -costNum,
+                  model: ctx.model.id,
+                  providerID: ctx.model.providerID,
+                  tokensUsed: usage.tokens.total ?? 0,
+                  costUsd: costNum,
+                  sessionId: ctx.sessionID,
+                }).pipe(Effect.catch(() => Effect.logWarning("Budget deduct failed")))
+              }
+            }
+            // --- end budget enforcement ---
+
             if (!ctx.assistantMessage.summary) {
               // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
               if (mirrorAssistant) {
@@ -1062,6 +1085,8 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(RuntimeFlags.defaultLayer),
     Layer.provide(Database.defaultLayer),
     Layer.provide(EventV2Bridge.defaultLayer),
+    Layer.provide(Budget.defaultLayer),
+    Layer.provide(Identity.defaultLayer),
   ),
 )
 
@@ -1079,6 +1104,8 @@ export const node = LayerNode.make(layer, [
   EventV2Bridge.node,
   RuntimeFlags.node,
   Database.node,
+  Budget.node,
+  Identity.node,
 ])
 
 export * as SessionProcessor from "./processor"

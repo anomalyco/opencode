@@ -4,6 +4,7 @@ import { Cause, Clock, Duration, Effect, Schedule } from "effect"
 import { MessageV2 } from "./message-v2"
 import { iife } from "@/util/iife"
 import { isRecord } from "@/util/record"
+import { Budget } from "@/provider/budget"
 
 export type Err = ReturnType<NamedError["toObject"]>
 
@@ -68,6 +69,21 @@ export function delay(attempt: number, error?: SessionV1.APIError) {
 export function retryable(error: Err, provider: string) {
   // context overflow errors should not be retried
   if (SessionV1.ContextOverflowError.isInstance(error)) return undefined
+  // Budget exhausted / upsell
+  const errData = isRecord(error.data) ? error.data : {}
+  if ((errData._tag as string | undefined) === "BudgetExhaustedError" || String(errData.message ?? "").includes("subscribe to Go")) {
+    return {
+      message: GO_UPSELL_MESSAGE,
+      action: {
+        reason: "free_tier_limit" as const,
+        provider,
+        title: "Free limit reached",
+        message: "Subscribe to OpenCode Go for reliable access to the best open-source models, starting at $5/month.",
+        label: "subscribe",
+        link: GO_UPSELL_URL,
+      },
+    }
+  }
   if (SessionV1.APIError.isInstance(error)) {
     const status = error.data.statusCode
     // 5xx errors are transient server failures and should always be retried,

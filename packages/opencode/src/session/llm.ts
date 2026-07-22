@@ -29,6 +29,8 @@ import * as OtelTracer from "@effect/opentelemetry/Tracer"
 import { LLMAISDK } from "./llm/ai-sdk"
 import { LLMNativeRuntime } from "./llm/native-runtime"
 import { LLMRequestPrep } from "./llm/request"
+import { Budget } from "@/provider/budget"
+import { Identity } from "@/identity"
 
 export const OUTPUT_TOKEN_MAX = ProviderTransform.OUTPUT_TOKEN_MAX
 
@@ -70,6 +72,8 @@ const live: Layer.Layer<
   | EventV2Bridge.Service
   | LLMClientService
   | RuntimeFlags.Service
+  | Budget.Service
+  | Identity.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -81,8 +85,30 @@ const live: Layer.Layer<
     const events = yield* EventV2Bridge.Service
     const llmClient = yield* LLMClient.Service
     const flags = yield* RuntimeFlags.Service
+    const budget = yield* Budget.Service
+    const identity = yield* Identity.Service
 
     const run = Effect.fn("LLM.run")(function* (input: StreamRequest) {
+      // --- Budget enforcement: resolve model before streaming ---
+      const currentUser = yield* identity.getCurrent()
+      if (currentUser) {
+        const resolved = yield* budget.resolveModel({
+          userId: currentUser.id,
+          modelId: input.model.id,
+          providerID: input.model.providerID,
+        })
+        if (resolved.action === "swapped") {
+          yield* Effect.logInfo("budget model swap", {
+            from: input.model.id,
+            to: resolved.modelId,
+            provider: resolved.providerID,
+          })
+          const zenModel = yield* provider.getModel(resolved.providerID, resolved.modelId)
+          input = { ...input, model: zenModel }
+        }
+      }
+      // --- end budget enforcement ---
+
       yield* Effect.logInfo("stream", {
         providerID: input.model.providerID,
         modelID: input.model.id,
@@ -396,6 +422,8 @@ export const defaultLayer = Layer.suspend(() =>
       LLMClient.layer.pipe(Layer.provide(Layer.mergeAll(RequestExecutor.defaultLayer, WebSocketExecutor.layer))),
     ),
     Layer.provide(RuntimeFlags.defaultLayer),
+    Layer.provide(Budget.defaultLayer),
+    Layer.provide(Identity.defaultLayer),
   ),
 )
 
@@ -410,6 +438,8 @@ export const node = LayerNode.make(layer, [
   EventV2Bridge.node,
   llmClient,
   RuntimeFlags.node,
+  Budget.node,
+  Identity.node,
 ])
 
 export * as LLM from "./llm"
