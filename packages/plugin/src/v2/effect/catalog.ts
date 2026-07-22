@@ -4,7 +4,7 @@ import type { Model } from "@opencode-ai/schema/model"
 import type { Effect } from "effect"
 import type { Transform } from "./registration.js"
 
-type CatalogModel = ModelInfo & { reasoningField?: Model.ReasoningField }
+type CatalogModel = ModelInfo & { compatibility?: Model.Compatibility }
 
 export interface CatalogProviderRecord {
   readonly provider: ProviderV2Info

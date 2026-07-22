@@ -209,14 +209,14 @@ export const fromCatalogModel = (
     return Effect.succeed(
       withDefaults(resolved, OpenAIResponses.route)
         .with({ auth: key === undefined ? Auth.none : Auth.bearer(key) })
-        .model({ id: resolved.modelID ?? resolved.id, reasoningField: resolved.reasoningField }),
+        .model({ id: resolved.modelID ?? resolved.id, compatibility: resolved.compatibility }),
     )
   }
   if (ProviderV2.isAISDK(resolved.package) && packageName === "@ai-sdk/anthropic") {
     return Effect.succeed(
       withDefaults(resolved, AnthropicMessages.route)
         .with({ auth: key === undefined ? Auth.none : Auth.header("x-api-key", key) })
-        .model({ id: resolved.modelID ?? resolved.id, reasoningField: resolved.reasoningField }),
+        .model({ id: resolved.modelID ?? resolved.id, compatibility: resolved.compatibility }),
     )
   }
   if (
@@ -227,7 +227,7 @@ export const fromCatalogModel = (
     return Effect.succeed(
       withDefaults(resolved, OpenAICompatibleChat.route)
         .with({ auth: key === undefined ? Auth.none : Auth.bearer(key) })
-        .model({ id: resolved.modelID ?? resolved.id, reasoningField: resolved.reasoningField }),
+        .model({ id: resolved.modelID ?? resolved.id, compatibility: resolved.compatibility }),
     )
   }
   if (ProviderV2.isAISDK(resolved.package)) {
@@ -257,11 +257,15 @@ export const fromCatalogModel = (
       limits: { context: resolved.limit.context, output: resolved.limit.output },
     }
     return yield* Effect.try({
-      try: () =>
-        Model.update(module.model(resolved.modelID ?? resolved.id, settings), {
+      try: () => {
+        const runtime = module.model(resolved.modelID ?? resolved.id, settings)
+        return Model.update(runtime, {
           provider: resolved.providerID,
-          reasoningField: resolved.reasoningField,
-        }),
+          compatibility: resolved.compatibility
+            ? { ...runtime.compatibility, ...resolved.compatibility }
+            : runtime.compatibility,
+        })
+      },
       catch: () => unsupported(resolved),
     })
   })
@@ -305,7 +309,7 @@ const codexModel = (
         account === undefined ? Auth.none : Auth.headers({ "chatgpt-account-id": account }),
       ),
     })
-    .model({ id: model.modelID ?? model.id, reasoningField: model.reasoningField })
+    .model({ id: model.modelID ?? model.id, compatibility: model.compatibility })
 }
 
 const unsupported = (model: ModelV2.Info) =>

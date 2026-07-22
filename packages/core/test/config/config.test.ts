@@ -419,7 +419,7 @@ describe("Config", () => {
     }),
   )
 
-  it.effect("migrates v1 interleaved fields to reasoningField", () =>
+  it.effect("migrates v1 interleaved fields to compatibility", () =>
     Effect.sync(() => {
       const migrated = ConfigMigrateV1.migrate({
         provider: {
@@ -433,9 +433,11 @@ describe("Config", () => {
         },
       })
 
-      expect(migrated.providers?.custom?.models?.object?.reasoningField).toBe("vendor_reasoning")
-      expect(migrated.providers?.custom?.models?.string?.reasoningField).toBe("reasoning_text")
-      expect(migrated.providers?.custom?.models?.boolean?.reasoningField).toBeUndefined()
+      expect(migrated.providers?.custom?.models?.object?.compatibility).toEqual({
+        reasoningField: "vendor_reasoning",
+      })
+      expect(migrated.providers?.custom?.models?.string?.compatibility).toEqual({ reasoningField: "reasoning_text" })
+      expect(migrated.providers?.custom?.models?.boolean?.compatibility).toBeUndefined()
     }),
   )
 

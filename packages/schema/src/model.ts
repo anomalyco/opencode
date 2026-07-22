@@ -47,6 +47,11 @@ export const ReasoningField: Schema.Codec<ReasoningField> = Schema.Union([
   Schema.String,
 ]).annotate({ identifier: "Model.ReasoningField" })
 
+export interface Compatibility extends Schema.Schema.Type<typeof Compatibility> {}
+export const Compatibility = Schema.Struct({
+  reasoningField: ReasoningField.pipe(optional),
+}).annotate({ identifier: "Model.Compatibility" })
+
 export interface Capabilities extends Schema.Schema.Type<typeof Capabilities> {}
 export const Capabilities = Schema.Struct({
   tools: Schema.Boolean,
@@ -81,7 +86,7 @@ export const Info = Schema.Struct({
   providerID: Provider.ID,
   family: Family.pipe(optional),
   name: Schema.String,
-  reasoningField: ReasoningField.pipe(optional),
+  compatibility: Compatibility.pipe(optional),
   package: Provider.Package.pipe(optional),
   ...Provider.Overlays,
   capabilities: Capabilities,

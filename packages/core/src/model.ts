@@ -15,6 +15,9 @@ export type Family = Model.Family
 export const ReasoningField = Model.ReasoningField
 export type ReasoningField = Model.ReasoningField
 
+export const Compatibility = Model.Compatibility
+export type Compatibility = Model.Compatibility
+
 export const Capabilities = Model.Capabilities
 export type Capabilities = Model.Capabilities
 
@@ -28,10 +31,10 @@ export type Info = Model.Info
 
 export type MutableInfo = DeepMutable<Info>
 
-export function reasoningField(input: unknown): ReasoningField | undefined {
-  if (typeof input === "string") return input
+export function compatibility(input: unknown): Compatibility | undefined {
+  if (typeof input === "string") return { reasoningField: input }
   if (typeof input !== "object" || input === null || Array.isArray(input) || !("field" in input)) return undefined
-  return typeof input.field === "string" ? input.field : undefined
+  return typeof input.field === "string" ? { reasoningField: input.field } : undefined
 }
 
 export function parse(input: string): { providerID: ProviderV2.ID; modelID: ID } {

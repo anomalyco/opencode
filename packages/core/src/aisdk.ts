@@ -348,7 +348,7 @@ function modelFromLanguage(info: ModelV2.Info, language: LanguageModelV3) {
     id: info.modelID ?? info.id,
     provider: info.providerID,
     route,
-    reasoningField: info.reasoningField,
+    compatibility: info.compatibility,
   })
 }
 

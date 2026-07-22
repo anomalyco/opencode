@@ -134,7 +134,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | EventV2.Service | S
             if (config.family !== undefined) model.family = config.family
             if (config.name !== undefined) model.name = config.name
             if (config.id !== undefined) model.modelID = config.id
-            model.reasoningField = ModelV2.reasoningField(config.interleaved) ?? model.reasoningField
+            model.compatibility = ModelV2.compatibility(config.interleaved) ?? model.compatibility
             if (config.provider !== undefined) {
               model.package = config.provider.npm ? ProviderV2.aisdk(config.provider.npm) : undefined
               if (config.provider.api) model.settings = { ...model.settings, baseURL: config.provider.api }

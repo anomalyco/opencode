@@ -1405,6 +1405,8 @@ export type SessionToolFailed = {
   }
 }
 
+export type ModelCompatibility = { reasoningField?: ModelReasoningField }
+
 export type ModelCost = {
   tier?: { type: "context"; size: number }
   input: MoneyUSDPerMillionTokens
@@ -1895,7 +1897,7 @@ export type ModelInfo = {
   providerID: string
   family?: string
   name: string
-  reasoningField?: ModelReasoningField
+  compatibility?: ModelCompatibility
   package?: string
   settings?: { [x: string]: JsonValue }
   headers?: { [x: string]: string }

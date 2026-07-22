@@ -96,7 +96,7 @@ describe("OpenAI Chat route", () => {
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
         LLM.request({
-          model: Model.update(model, { reasoningField: "vendor_reasoning" }),
+          model: Model.update(model, { compatibility: { reasoningField: "vendor_reasoning" } }),
           messages: [
             Message.assistant([
               {
@@ -122,7 +122,7 @@ describe("OpenAI Chat route", () => {
     Effect.gen(function* () {
       const error = yield* LLMClient.prepare(
         LLM.request({
-          model: Model.update(model, { reasoningField: "content" }),
+          model: Model.update(model, { compatibility: { reasoningField: "content" } }),
           messages: [Message.assistant([{ type: "reasoning", text: "thinking" }])],
         }),
       ).pipe(Effect.flip)
@@ -611,7 +611,7 @@ describe("OpenAI Chat route", () => {
 
   it.effect("parses and replays a configured custom reasoning field", () =>
     Effect.gen(function* () {
-      const custom = Model.update(model, { reasoningField: "vendor_reasoning" })
+      const custom = Model.update(model, { compatibility: { reasoningField: "vendor_reasoning" } })
       const response = yield* LLMClient.generate(LLM.updateRequest(request, { model: custom })).pipe(
         Effect.provide(
           fixedResponse(

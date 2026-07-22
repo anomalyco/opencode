@@ -380,7 +380,7 @@ const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: 
       continue
     }
     flushImages()
-    messages.push(...(yield* lowerMessage(message, request.model.reasoningField)))
+    messages.push(...(yield* lowerMessage(message, request.model.compatibility?.reasoningField)))
   }
   flushImages()
   return messages
@@ -398,9 +398,10 @@ const lowerOptions = Effect.fn("OpenAIChat.lowerOptions")(function* (request: LL
 const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (request: LLMRequest) {
   // `fromRequest` returns the provider body only. Endpoint, auth, framing,
   // validation, and HTTP execution are composed by `Route.make`.
-  if (request.model.reasoningField && RESERVED_REASONING_FIELDS.has(request.model.reasoningField))
+  const reasoningField = request.model.compatibility?.reasoningField
+  if (reasoningField && RESERVED_REASONING_FIELDS.has(reasoningField))
     return yield* ProviderShared.invalidRequest(
-      `OpenAI Chat reasoning field conflicts with reserved field ${request.model.reasoningField}`,
+      `OpenAI Chat reasoning field conflicts with reserved field ${reasoningField}`,
     )
   const generation = request.generation
   const toolSchemaCompatibility = request.model.compatibility?.toolSchema
@@ -664,7 +665,7 @@ export const protocol = Protocol.make({
       pendingTools: {},
       toolCallEvents: [],
       lifecycle: Lifecycle.initial(),
-      reasoningField: request.model.reasoningField,
+      reasoningField: request.model.compatibility?.reasoningField,
       reasoningDetails: [],
       reasoningDetailsObserved: false,
       reasoningEmitted: false,

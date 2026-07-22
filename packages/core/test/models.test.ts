@@ -15,11 +15,11 @@ import path from "path"
 
 const cacheFile = path.join(Global.Path.cache, "models.json")
 
-test("normalizes permissive interleaved values to reasoning fields", () => {
-  expect(ModelV2.reasoningField("reasoning_text")).toBe("reasoning_text")
-  expect(ModelV2.reasoningField({ field: "vendor_reasoning" })).toBe("vendor_reasoning")
-  expect(ModelV2.reasoningField(true)).toBeUndefined()
-  expect(ModelV2.reasoningField(false)).toBeUndefined()
+test("normalizes permissive interleaved values to compatibility", () => {
+  expect(ModelV2.compatibility("reasoning_text")).toEqual({ reasoningField: "reasoning_text" })
+  expect(ModelV2.compatibility({ field: "vendor_reasoning" })).toEqual({ reasoningField: "vendor_reasoning" })
+  expect(ModelV2.compatibility(true)).toBeUndefined()
+  expect(ModelV2.compatibility(false)).toBeUndefined()
 })
 
 const fixture = {
@@ -57,7 +57,7 @@ const fixtureSnapshot = [
         modelID: ModelV2.ID.make("acme-1"),
         providerID: ProviderV2.ID.make("acme"),
         name: "Acme One",
-        reasoningField: "vendor_reasoning",
+        compatibility: { reasoningField: "vendor_reasoning" },
         family: undefined,
         package: undefined,
         settings: undefined,

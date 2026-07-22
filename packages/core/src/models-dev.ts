@@ -495,7 +495,7 @@ function modelInfo(
     modelID: ModelV2.ID.make(model.id),
     providerID,
     name: input.name ?? model.name,
-    reasoningField: ModelV2.reasoningField(model.interleaved),
+    compatibility: ModelV2.compatibility(model.interleaved),
     family: model.family ? ModelV2.Family.make(model.family) : undefined,
     package: model.provider?.npm ? ProviderV2.aisdk(model.provider.npm) : undefined,
     settings: model.provider?.api ? { baseURL: model.provider.api } : undefined,
