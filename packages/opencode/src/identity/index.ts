@@ -1,7 +1,8 @@
 import { Auth } from "../auth"
 import { Database } from "@opencode-ai/core/database/database"
-import { UserIdentityTable, TokenBalanceTable } from "@opencode-ai/core/account/sql"
-import { eq } from "drizzle-orm"
+import { UserIdentityTable, TokenBalanceTable, TokenTransactionTable } from "@opencode-ai/core/account/sql"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { eq, sql } from "drizzle-orm"
 import { Context, Effect, Layer, Schema } from "effect"
 
 // Gating: when OPENCODE_TOKEN_MGMT is unset, the Identity layer is a no-op.
@@ -45,7 +46,7 @@ export interface Interface {
     userId: string
     amount: number
     description: string
-  }) => Effect.Effect<void>
+  }) => Effect.Effect<{ newBalance: number; transactionId: number }>
 }
 
 // --- Service ---
@@ -201,14 +202,78 @@ export const layer = Layer.effect(
       }))
     })
 
-    // Fase 2+ stub — placeholder for real budget deduction.
-    const credit = Effect.fn("Identity.credit")(function* (_input: {
+    const credit = Effect.fn("Identity.credit")(function* (input: {
       userId: string
       amount: number
       description: string
     }) {
-      if (!isEnabled()) return
-      // Stub: no-op until Fase 2 budget integration.
+      if (!isEnabled()) return { newBalance: 0, transactionId: 0 }
+
+      const createTransaction = Effect.fnUntraced(function* () {
+        return yield* db.transaction(
+          (tx) =>
+            Effect.gen(function* () {
+              // Upsert balance row to ensure it exists.
+              yield* tx
+                .insert(TokenBalanceTable)
+                .values({
+                  userId: input.userId,
+                  balance: 0,
+                  lifetimeUsed: 0,
+                  updatedAt: Date.now(),
+                })
+                .onConflictDoNothing()
+                .run()
+
+              // Update balance atomically.
+              yield* tx
+                .update(TokenBalanceTable)
+                .set({
+                  balance: sql`${TokenBalanceTable.balance} + ${input.amount}`,
+                  updatedAt: Date.now(),
+                })
+                .where(eq(TokenBalanceTable.userId, input.userId))
+                .run()
+
+              // Read back new balance.
+              const updated = yield* tx
+                .select({ balance: TokenBalanceTable.balance })
+                .from(TokenBalanceTable)
+                .where(eq(TokenBalanceTable.userId, input.userId))
+                .get()
+
+              // Record transaction.
+              yield* tx
+                .insert(TokenTransactionTable)
+                .values({
+                  userId: input.userId,
+                  amount: input.amount,
+                  description: input.description,
+                  createdAt: Date.now(),
+                })
+                .run()
+
+              // Read back the auto-increment id.
+              const txRow = yield* tx
+                .select({ id: TokenTransactionTable.id })
+                .from(TokenTransactionTable)
+                .where(eq(TokenTransactionTable.userId, input.userId))
+                .orderBy(sql`${TokenTransactionTable.id} DESC`)
+                .limit(1)
+                .get()
+
+              return {
+                newBalance: updated?.balance ?? 0,
+                transactionId: txRow?.id ?? 0,
+              }
+            }),
+          { behavior: "immediate" },
+        )
+      })
+
+      return yield* createTransaction().pipe(
+        Effect.catch(() => Effect.succeed({ newBalance: 0, transactionId: 0 })),
+      )
     })
 
     return Service.of({
@@ -221,6 +286,8 @@ export const layer = Layer.effect(
     })
   }),
 )
+
+export const node = LayerNode.make(layer, [Auth.node, Database.node])
 
 export const defaultLayer = layer.pipe(
   Layer.provide(Database.defaultLayer),

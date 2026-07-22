@@ -109,10 +109,17 @@ describe("Identity.Service", () => {
     }),
   )
 
-  it.live("credit is a no-op stub (Fase 2+) and does not throw", () =>
+  it.live("credit updates balance and returns transaction info", () =>
     Effect.gen(function* () {
       const identity = yield* Identity.Service
-      yield* identity.credit({ userId: "user-1", amount: 100, description: "test" })
+      process.env["OPENCODE_TOKEN_MGMT"] = "1"
+
+      // First upsert the user so tables exist.
+      yield* identity.upsertFromAuth({ id: "user-1", email: "alice@contoso.com" })
+
+      const result = yield* identity.credit({ userId: "user-1", amount: 100, description: "test credit" })
+      expect(result.newBalance).toBe(100)
+      expect(result.transactionId).toBeGreaterThan(0)
     }),
   )
 

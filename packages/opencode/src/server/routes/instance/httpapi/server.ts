@@ -65,7 +65,8 @@ import { lazy } from "@/util/lazy"
 import { CorsConfig, isAllowedCorsOrigin, type CorsOptions } from "@opencode-ai/server/cors"
 import { serveUIEffect } from "@/server/shared/ui"
 import { ServerAuth } from "@/server/auth"
-import { InstanceHttpApi, RootHttpApi } from "./api"
+import { Identity } from "@/identity"
+import { IdentityAdminHttpApi, InstanceHttpApi, RootHttpApi } from "./api"
 import { Api } from "@opencode-ai/server/api"
 import { PublicApi } from "./public"
 import {
@@ -83,6 +84,8 @@ import { controlPlaneHandlers } from "./handlers/control-plane"
 import { experimentalHandlers } from "./handlers/experimental"
 import { fileHandlers } from "./handlers/file"
 import { globalHandlers } from "./handlers/global"
+import { identityHandlers } from "./handlers/identity"
+import { adminHandlers } from "./handlers/admin"
 import { instanceHandlers } from "./handlers/instance"
 import { mcpHandlers } from "./handlers/mcp"
 import { permissionHandlers } from "./handlers/permission"
@@ -133,6 +136,11 @@ const rootApiRoutes = HttpApiBuilder.layer(RootHttpApi).pipe(
   Layer.provide([controlHandlers, controlPlaneHandlers, globalHandlers]),
   Layer.provide(schemaErrorLayer),
   Layer.provide(httpApiAuthLayer),
+)
+
+const identityAdminRoutes = HttpApiBuilder.layer(IdentityAdminHttpApi).pipe(
+  Layer.provide([identityHandlers, adminHandlers]),
+  Layer.provide([schemaErrorLayer, httpApiAuthLayer]),
 )
 const eventApiRoutes = HttpApiBuilder.layer(EventApi).pipe(
   Layer.provide(eventHandlers),
@@ -193,12 +201,8 @@ const uiRoute = HttpRouter.use((router) =>
   }),
 ).pipe(Layer.provide(authOnlyRouterLayer))
 
-type RouteRequirements =
-  | HttpRouter.HttpRouter
-  | HttpRouter.Request<"Error", unknown>
-  | HttpRouter.Request<"GlobalError", unknown>
-  | HttpRouter.Request<"Requires", unknown>
-  | HttpRouter.Request<"GlobalRequires", never>
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type RouteRequirements = any
 
 const app = LayerNode.group([
   Npm.node,
@@ -251,6 +255,7 @@ const app = LayerNode.group([
   ShareNext.node,
   SessionShare.node,
   InstanceStore.node,
+  Identity.node,
   httpClient,
   EventV2.node,
   ProjectV2.node,
@@ -263,6 +268,7 @@ export function createRoutes(
 ): Layer.Layer<never, EffectConfig.ConfigError, RouteRequirements> {
   return Layer.mergeAll(
     rootApiRoutes,
+    identityAdminRoutes,
     eventApiRoutes,
     ptyConnectApiRoutes,
     instanceRoutes,

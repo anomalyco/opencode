@@ -29,6 +29,8 @@ import { makeApi } from "@opencode-ai/protocol/api"
 import { LocationMiddleware } from "@opencode-ai/server/location"
 import { SessionLocationMiddleware } from "@opencode-ai/server/middleware/session-location"
 import { GlobalApi } from "./groups/global"
+import { IdentityApi } from "./groups/identity"
+import { AdminApi } from "./groups/admin"
 import { Authorization } from "./middleware/authorization"
 import { SchemaErrorMiddleware } from "./middleware/schema-error"
 
@@ -76,8 +78,15 @@ export const InstanceHttpApi = HttpApi.make("opencode-instance")
   .addHttpApi(WorkspaceApi)
   .middleware(SchemaErrorMiddleware)
 
+export const IdentityAdminHttpApi = HttpApi.make("identity-admin")
+  .addHttpApi(IdentityApi)
+  .addHttpApi(AdminApi)
+  .middleware(SchemaErrorMiddleware)
+  .middleware(Authorization)
+
 export const OpenCodeHttpApi = HttpApi.make("opencode")
   .addHttpApi(RootHttpApi)
+  .addHttpApi(IdentityAdminHttpApi)
   .addHttpApi(EventApi)
   .addHttpApi(InstanceHttpApi)
   .addHttpApi(ServerApi)
