@@ -79,6 +79,13 @@ function normalizeMessages(
   model: Provider.Model,
   _options: Record<string, unknown>,
 ): ModelMessage[] {
+  // NVIDIA NIM rejects developer messages when chat_template_kwargs is present.
+  // Use system role instead for NVIDIA-hosted OpenAI-compatible models.
+  if (model.providerID === "nvidia") {
+    msgs = msgs.map((msg) =>
+      (msg as { role?: string }).role === "developer" ? ({ ...msg, role: "system" } as ModelMessage) : msg,
+    )
+  }
   const sanitizeToolResultOutput = (content: ToolResultPart) => {
     if (content.output.type === "text" || content.output.type === "error-text") {
       content.output.value = sanitizeSurrogates(content.output.value)
@@ -1224,6 +1231,16 @@ export function options(input: {
     result["enable_thinking"] = true
   }
 
+  // NVIDIA NIM DeepSeek V4 requires chat_template_kwargs to stream reasoning.
+  if (input.model.providerID === "nvidia" && input.model.api.npm === "@ai-sdk/openai-compatible") {
+    if (modelId.includes("deepseek-v4")) {
+      result["chat_template_kwargs"] = {
+        thinking: true,
+        reasoning_effort: "high",
+      }
+    }
+
+  }
   if (input.model.api.npm === "@ai-sdk/azure" && input.model.api.id.includes("gpt-5.5")) {
     result["reasoningSummary"] = "auto"
     return result
