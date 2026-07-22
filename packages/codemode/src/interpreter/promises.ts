@@ -89,7 +89,6 @@ export const selfResolutionError = (node?: AstNode): InterpreterRuntimeError =>
 
 export const resolvePromiseValue = <R>(
   runner: CallbackRunner<R>,
-  promises: PromiseRuntime<R>,
   value: unknown,
   node: AstNode,
   own?: { promise?: CodeModePromise },
@@ -115,7 +114,7 @@ export const resolvePromiseValue = <R>(
       if (Cause.hasInterruptsOnly(executed.cause)) return yield* Effect.failCause(executed.cause)
       Deferred.doneUnsafe(deferred, Exit.fail(Cause.squash(executed.cause)))
     }
-    return yield* resolvePromiseValue(runner, promises, yield* Deferred.await(deferred), node, own)
+    return yield* resolvePromiseValue(runner, yield* Deferred.await(deferred), node, own)
   })
 }
 
@@ -127,7 +126,7 @@ export const resolvePromise = <R>(
 ): Effect.Effect<CodeModePromise, never, R> => {
   if (value instanceof CodeModePromise) return Effect.succeed(value)
   const box: { promise?: CodeModePromise } = {}
-  return Effect.map(promises.create(resolvePromiseValue(runner, promises, value, node, box)), (promise) => {
+  return Effect.map(promises.create(resolvePromiseValue(runner, value, node, box)), (promise) => {
     box.promise = promise
     return promise
   })
@@ -255,7 +254,7 @@ export const constructPromise = <R>(
     const deferred = Deferred.makeUnsafe<unknown, unknown>()
     const box: { promise?: CodeModePromise } = {}
     const promise = yield* promises.create(
-      Effect.flatMap(Deferred.await(deferred), (value) => resolvePromiseValue(runner, promises, value, node, box)),
+      Effect.flatMap(Deferred.await(deferred), (value) => resolvePromiseValue(runner, value, node, box)),
     )
     box.promise = promise
     const resolve = new PromiseCapabilityFunction((value) => {
@@ -320,7 +319,7 @@ const chainReaction = <R>(
     if (handler === undefined) return yield* exit
     const input = Exit.isSuccess(exit) ? exit.value : caughtErrorValue(Cause.squash(exit.cause))
     const result = yield* applyCollectionCallback(runner, handler, method, node)([input])
-    return yield* resolvePromiseValue(runner, promises, result, node, box)
+    return yield* resolvePromiseValue(runner, result, node, box)
   })
   return Effect.map(promises.create(body), (derived) => {
     box.promise = derived

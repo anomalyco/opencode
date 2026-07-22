@@ -359,7 +359,7 @@ export class Interpreter<R> {
       }
 
       // The implicit async body adopts returned promises before copy-out.
-      value = yield* resolvePromiseValue(self.runner, self.promises, value, program)
+      value = yield* resolvePromiseValue(self.runner, value, program)
       return value
     }).pipe(Effect.ensuring(Effect.sync(() => self.scopes.pop())))
   }
@@ -2109,9 +2109,7 @@ export class Interpreter<R> {
     // The initial yield assigns the promise before the body can self-resolve.
     const box: { promise?: CodeModePromise } = {}
     return Effect.map(
-      this.createPromise(
-        Effect.flatMap(run, (value) => resolvePromiseValue(invocation.runner, this.promises, value, fn.body, box)),
-      ),
+      this.createPromise(Effect.flatMap(run, (value) => resolvePromiseValue(invocation.runner, value, fn.body, box))),
       (promise) => {
         box.promise = promise
         return promise
