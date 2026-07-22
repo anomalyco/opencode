@@ -4,7 +4,6 @@ import { Deferred, Effect } from "effect"
 import { Service, type Endpoint } from "@opencode-ai/client/effect/service"
 import { OpenCode } from "@opencode-ai/client"
 import { Global } from "@opencode-ai/util/global"
-import { InstallationLocal } from "@opencode-ai/core/installation/version"
 import { ClipboardProvider, useClipboard } from "./context/clipboard"
 import { LogProvider, useLog, type LogSink } from "./context/log"
 import { ExitProvider, useExit } from "./context/exit"
@@ -37,6 +36,7 @@ import {
   TuiPathsProvider,
   TuiStartupProvider,
   TuiTerminalEnvironmentProvider,
+  useTuiApp,
   useTuiStartup,
   type TuiApp,
 } from "./context/runtime"
@@ -405,9 +405,10 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
 
 function App(props: { pair?: DialogPairCredentials }) {
   const log = useLog({ component: "app" })
+  const app = useTuiApp()
   const startup = useTuiStartup()
   const config = useConfig()
-  const devtools = createMemo(() => config.data.debug?.devtools ?? InstallationLocal)
+  const devtools = createMemo(() => config.data.debug?.devtools ?? app.channel === "local")
   const route = useRoute()
   const dimensions = useTerminalDimensions()
   const renderer = useRenderer()
