@@ -241,12 +241,20 @@ async function runMicrosoftOAuth(serverUrl: string, serverPassword: string): Pro
     const tokens = await tokenPromise
 
     // Store tokens via server API
+    const accountId = extractAccountId(tokens)
+    const identityFields = tokens.id_token ? extractIdentityFromIdToken(tokens.id_token) : undefined
+    if (tokens.id_token && !identityFields) {
+      logger.log("microsoft id_token present but malformed — continuing with accountId only")
+    }
     const authPayload = {
       type: "oauth",
       access: tokens.access_token,
       refresh: tokens.refresh_token,
       expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
-      ...(tokens.id_token ? { accountId: extractAccountId(tokens) } : {}),
+      ...(accountId && { accountId }),
+      ...(identityFields?.email && { email: identityFields.email }),
+      ...(identityFields?.displayName && { displayName: identityFields.displayName }),
+      ...(identityFields?.tenantId && { tenantId: identityFields.tenantId }),
     }
 
     const res = await fetch(`${serverUrl}/auth/microsoft`, {
@@ -535,6 +543,28 @@ function extractAccountId(tokens: TokenResponse): string | undefined {
     if (id) return id
   }
   return undefined
+}
+
+/**
+ * Extract identity fields from a Microsoft ID token JWT.
+ * Maps Microsoft Entra ID claims to application-level identity fields:
+ *   preferred_username → email, name → displayName, tid → tenantId
+ * Returns undefined for malformed JWTs — caller logs and continues with
+ * accountId only.
+ */
+function extractIdentityFromIdToken(idToken: string): { email?: string; displayName?: string; tenantId?: string } | undefined {
+  try {
+    const parts = idToken.split(".")
+    if (parts.length !== 3) return undefined
+    const claims = JSON.parse(Buffer.from(parts[1], "base64url").toString())
+    return {
+      ...(claims.preferred_username && { email: claims.preferred_username }),
+      ...(claims.name && { displayName: claims.name }),
+      ...(claims.tid && { tenantId: claims.tid }),
+    }
+  } catch {
+    return undefined
+  }
 }
 
 // --- Main Gate ---

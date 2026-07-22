@@ -103,6 +103,6 @@ export const defaultLayer = layer.pipe(Layer.provide(FSUtil.defaultLayer))
 
 export const node = LayerNode.make(layer, [FSUtil.node])
 
-export { parseJwtClaims, type JwtClaims } from "./jwt"
+export { parseJwtClaims, extractIdentity, type JwtClaims, type IdentityFields } from "./jwt"
 
 export * as Auth from "."

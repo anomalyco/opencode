@@ -1,5 +1,5 @@
 import type { Hooks, PluginInput } from "@opencode-ai/plugin"
-import { OAUTH_DUMMY_KEY } from "../auth"
+import { OAUTH_DUMMY_KEY, extractIdentity } from "../auth"
 import { createServer } from "http"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 
@@ -671,6 +671,7 @@ export async function MicrosoftAuthPlugin(
                     const refreshedExpires = Date.now() + (tokens.expires_in ?? 3600) * 1000
                     const refreshedRefresh = tokens.refresh_token || refreshToken
                     const accountId = extractAccountId(tokens) || (currentAuth as any).accountId
+                    const identity = tokens.id_token ? extractIdentity(tokens.id_token) : null
                     await input.client.auth
                       .set({
                         path: { id: "microsoft" },
@@ -680,6 +681,9 @@ export async function MicrosoftAuthPlugin(
                           refresh: refreshedRefresh,
                           expires: refreshedExpires,
                           ...(accountId && { accountId }),
+                          ...(identity?.email && { email: identity.email }),
+                          ...(identity?.displayName && { displayName: identity.displayName }),
+                          ...(identity?.tenantId && { tenantId: identity.tenantId }),
                         },
                       })
                       .catch((err) =>
@@ -748,12 +752,16 @@ export async function MicrosoftAuthPlugin(
                 try {
                   const tokens = await callbackPromise
                   const accountId = extractAccountId(tokens)
+                  const identity = tokens.id_token ? extractIdentity(tokens.id_token) : null
                   return {
                     type: "success" as const,
                     refresh: tokens.refresh_token,
                     access: tokens.access_token,
                     expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
                     ...(accountId && { accountId }),
+                    ...(identity?.email && { email: identity.email }),
+                    ...(identity?.displayName && { displayName: identity.displayName }),
+                    ...(identity?.tenantId && { tenantId: identity.tenantId }),
                   }
                 } catch (err) {
                   console.error("microsoft oauth callback failed", { error: err })
@@ -780,12 +788,16 @@ export async function MicrosoftAuthPlugin(
                 try {
                   const tokens = await pollDeviceCodeToken(device, config)
                   const accountId = extractAccountId(tokens)
+                  const identity = tokens.id_token ? extractIdentity(tokens.id_token) : null
                   return {
                     type: "success" as const,
                     refresh: tokens.refresh_token,
                     access: tokens.access_token,
                     expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
                     ...(accountId && { accountId }),
+                    ...(identity?.email && { email: identity.email }),
+                    ...(identity?.displayName && { displayName: identity.displayName }),
+                    ...(identity?.tenantId && { tenantId: identity.tenantId }),
                   }
                 } catch (err) {
                   console.error("microsoft device code callback failed", { error: err })
