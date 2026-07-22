@@ -460,6 +460,72 @@ export const SettingsGeneralV2: Component<{
           />
         </SettingsRowV2>
 
+        <div data-component="settings-v2-theme-preview">
+          <div data-slot="settings-v2-theme-preview-label">
+            {language.t("settings.general.row.theme.preview.before")}{" "}
+            <span data-slot="settings-v2-theme-preview-inline">code</span>{" "}
+            {language.t("settings.general.row.theme.preview.after")}
+          </div>
+          <pre
+            data-slot="settings-v2-theme-preview-code"
+            style={{ "font-family": monoFontFamily(settings.appearance.font()) }}
+          >
+            <code>
+              <span class="text-syntax-comment">{"// Theme preview"}</span>
+              {"\n"}
+              <span class="text-syntax-keyword">type</span>{" "}
+              <span class="text-syntax-type">User</span>{" "}
+              <span class="text-syntax-operator">=</span>{" "}
+              <span class="text-syntax-punctuation">{"{"}</span>{" "}
+              <span class="text-syntax-property">id</span>
+              <span class="text-syntax-punctuation">:</span>{" "}
+              <span class="text-syntax-type">number</span>
+              <span class="text-syntax-punctuation">;</span>{" "}
+              <span class="text-syntax-property">name</span>
+              <span class="text-syntax-punctuation">:</span>{" "}
+              <span class="text-syntax-type">string</span>{" "}
+              <span class="text-syntax-punctuation">{"}"}</span>
+              {"\n"}
+              <span class="text-syntax-keyword">const</span>{" "}
+              <span class="text-syntax-variable">find</span>{" "}
+              <span class="text-syntax-operator">=</span>{" "}
+              <span class="text-syntax-punctuation">(</span>
+              <span class="text-syntax-variable">id</span>
+              <span class="text-syntax-punctuation">:</span>{" "}
+              <span class="text-syntax-type">number</span>
+              <span class="text-syntax-punctuation">)</span>
+              <span class="text-syntax-punctuation">:</span>{" "}
+              <span class="text-syntax-type">User</span>{" "}
+              <span class="text-syntax-operator">|</span>{" "}
+              <span class="text-syntax-primitive">null</span>{" "}
+              <span class="text-syntax-operator">{"=>"}</span>{" "}
+              <span class="text-syntax-punctuation">{"{"}</span>
+              {"\n"}
+              {"  "}
+              <span class="text-syntax-keyword">if</span>{" "}
+              <span class="text-syntax-punctuation">(</span>
+              <span class="text-syntax-variable">id</span>{" "}
+              <span class="text-syntax-operator">{"<"}</span>{" "}
+              <span class="text-syntax-primitive">1</span>
+              <span class="text-syntax-punctuation">)</span>{" "}
+              <span class="text-syntax-keyword">return</span>{" "}
+              <span class="text-syntax-primitive">null</span>
+              {"\n"}
+              {"  "}
+              <span class="text-syntax-keyword">return</span>{" "}
+              <span class="text-syntax-punctuation">{"{"}</span>{" "}
+              <span class="text-syntax-property">id</span>
+              <span class="text-syntax-punctuation">,</span>{" "}
+              <span class="text-syntax-property">name</span>
+              <span class="text-syntax-punctuation">:</span>{" "}
+              <span class="text-syntax-string">'"MJ"'</span>{" "}
+              <span class="text-syntax-punctuation">{"}"}</span>
+              {"\n"}
+              <span class="text-syntax-punctuation">{"}"}</span>
+            </code>
+          </pre>
+        </div>
+
         <SettingsRowV2
           title={language.t("settings.general.row.uiFont.title")}
           description={language.t("settings.general.row.uiFont.description")}
