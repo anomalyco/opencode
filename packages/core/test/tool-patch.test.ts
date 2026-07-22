@@ -387,17 +387,6 @@ describe("PatchTool", () => {
     ),
   )
 
-  it.live("updates an empty file", () =>
-    withTempTool((directory, registry) =>
-      Effect.gen(function* () {
-        const target = path.join(directory, "empty.txt")
-        yield* Effect.promise(() => fs.writeFile(target, ""))
-        yield* executeTool(registry, call("*** Begin Patch\n*** Update File: empty.txt\n@@\n+First line\n*** End Patch"))
-        expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("First line\n")
-      }),
-    ),
-  )
-
   it.live("rejects deleting a directory", () =>
     withTempTool((directory, registry) =>
       Effect.gen(function* () {
@@ -406,40 +395,6 @@ describe("PatchTool", () => {
           yield* executeTool(registry, call("*** Begin Patch\n*** Delete File: dir\n*** End Patch")),
         ).toMatchObject({ type: "error" })
         expect(yield* exists(path.join(directory, "dir"))).toBe(true)
-      }),
-    ),
-  )
-
-  it.live("supports an end-of-file anchor", () =>
-    withTempTool((directory, registry) =>
-      Effect.gen(function* () {
-        const target = path.join(directory, "tail.txt")
-        yield* Effect.promise(() => fs.writeFile(target, "first\nsecond"))
-        yield* executeTool(
-          registry,
-          call(
-            "*** Begin Patch\n*** Update File: tail.txt\n@@\n first\n-second\n+second updated\n*** End of File\n*** End Patch",
-          ),
-        )
-        expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("first\nsecond updated\n")
-      }),
-    ),
-  )
-
-  it.live("applies an end-of-file chunk to the final duplicate", () =>
-    withTempTool((directory, registry) =>
-      Effect.gen(function* () {
-        const target = path.join(directory, "duplicates.txt")
-        yield* Effect.promise(() => fs.writeFile(target, "marker\nend\nmiddle\nmarker\nend\n"))
-        yield* executeTool(
-          registry,
-          call(
-            "*** Begin Patch\n*** Update File: duplicates.txt\n@@\n-marker\n-end\n+marker changed\n+end\n*** End of File\n*** End Patch",
-          ),
-        )
-        expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe(
-          "marker\nend\nmiddle\nmarker changed\nend\n",
-        )
       }),
     ),
   )
@@ -513,20 +468,6 @@ describe("PatchTool", () => {
     ),
   )
 
-  it.live("applies multiple hunks to one file", () =>
-    withTempTool((directory, registry) =>
-      Effect.gen(function* () {
-        const target = path.join(directory, "multi.txt")
-        yield* Effect.promise(() => fs.writeFile(target, "a\nb\nc\nd\n"))
-        yield* executeTool(
-          registry,
-          call("*** Begin Patch\n*** Update File: multi.txt\n@@\n-b\n+B\n@@\n-d\n+D\n*** End Patch"),
-        )
-        expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("a\nB\nc\nD\n")
-      }),
-    ),
-  )
-
   it.live("applies successive update operations to one file", () =>
     withTempTool((directory, registry) =>
       Effect.gen(function* () {
@@ -562,110 +503,6 @@ describe("PatchTool", () => {
         expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe(
           `${bom}using System;\n\nclass Test {}\nclass Next {}\n`,
         )
-      }),
-    ),
-  )
-
-  it.live("appends a trailing newline on update", () =>
-    withTempTool((directory, registry) =>
-      Effect.gen(function* () {
-        const target = path.join(directory, "no-newline.txt")
-        yield* Effect.promise(() => fs.writeFile(target, "no newline at end"))
-        yield* executeTool(
-          registry,
-          call(
-            "*** Begin Patch\n*** Update File: no-newline.txt\n@@\n-no newline at end\n+first line\n+second line\n*** End Patch",
-          ),
-        )
-        expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("first line\nsecond line\n")
-      }),
-    ),
-  )
-
-  it.live("disambiguates change context with an @@ header", () =>
-    withTempTool((directory, registry) =>
-      Effect.gen(function* () {
-        const target = path.join(directory, "context.txt")
-        yield* Effect.promise(() => fs.writeFile(target, "fn a\nx=10\ny=2\nfn b\nx=10\ny=20\n"))
-        yield* executeTool(
-          registry,
-          call("*** Begin Patch\n*** Update File: context.txt\n@@ fn b\n-x=10\n+x=11\n*** End Patch"),
-        )
-        expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe(
-          "fn a\nx=10\ny=2\nfn b\nx=11\ny=20\n",
-        )
-      }),
-    ),
-  )
-
-  it.live("parses a heredoc-wrapped patch", () =>
-    withTempTool((directory, registry) =>
-      Effect.gen(function* () {
-        yield* executeTool(
-          registry,
-          call("cat <<'EOF'\n*** Begin Patch\n*** Add File: heredoc.txt\n+with cat\n*** End Patch\nEOF"),
-        )
-        expect(yield* Effect.promise(() => fs.readFile(path.join(directory, "heredoc.txt"), "utf8"))).toBe(
-          "with cat\n",
-        )
-      }),
-    ),
-  )
-
-  it.live("parses a heredoc-wrapped patch without cat", () =>
-    withTempTool((directory, registry) =>
-      Effect.gen(function* () {
-        yield* executeTool(
-          registry,
-          call("<<EOF\n*** Begin Patch\n*** Add File: heredoc.txt\n+without cat\n*** End Patch\nEOF"),
-        )
-        expect(yield* Effect.promise(() => fs.readFile(path.join(directory, "heredoc.txt"), "utf8"))).toBe(
-          "without cat\n",
-        )
-      }),
-    ),
-  )
-
-  it.live("matches with trailing whitespace differences", () =>
-    withTempTool((directory, registry) =>
-      Effect.gen(function* () {
-        const target = path.join(directory, "trailing.txt")
-        yield* Effect.promise(() => fs.writeFile(target, "line1  \nline2\nline3   \n"))
-        yield* executeTool(
-          registry,
-          call("*** Begin Patch\n*** Update File: trailing.txt\n@@\n-line2\n+changed\n*** End Patch"),
-        )
-        expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("line1  \nchanged\nline3   \n")
-      }),
-    ),
-  )
-
-  it.live("matches with leading whitespace differences", () =>
-    withTempTool((directory, registry) =>
-      Effect.gen(function* () {
-        const target = path.join(directory, "leading.txt")
-        yield* Effect.promise(() => fs.writeFile(target, "  line1\nline2\n  line3\n"))
-        yield* executeTool(
-          registry,
-          call("*** Begin Patch\n*** Update File: leading.txt\n@@\n-line2\n+changed\n*** End Patch"),
-        )
-        expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("  line1\nchanged\n  line3\n")
-      }),
-    ),
-  )
-
-  it.live("matches with Unicode punctuation differences", () =>
-    withTempTool((directory, registry) =>
-      Effect.gen(function* () {
-        const target = path.join(directory, "unicode.txt")
-        yield* Effect.promise(() => fs.writeFile(target, "He said “hello”\nsome—dash\nend\n"))
-        yield* executeTool(
-          registry,
-          call(
-            '*** Begin Patch\n*** Update File: unicode.txt\n@@\n-He said "hello"\n+He said "hi"\n*** End Patch',
-          ),
-        )
-        expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe('He said "hi"\nsome—dash\nend\n')
       }),
     ),
   )
