@@ -16,7 +16,7 @@ export function DialogFork(props: { sessionID: string; messageID?: string; onMov
   const client = useClient()
   const route = useRoute()
   const toast = useToast()
-  const [pending, setPending] = createSignal(false)
+  const [pending, setPending] = createSignal(!!props.messageID)
 
   const fork = async (messageID?: string) => {
     setPending(true)
