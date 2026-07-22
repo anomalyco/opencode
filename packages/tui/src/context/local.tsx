@@ -23,16 +23,6 @@ import { useRoute } from "./route"
 import { useData } from "./data"
 import { usePermission } from "./permission"
 
-export type LocalTheme = {
-  secondary: RGBA
-  accent: RGBA
-  success: RGBA
-  warning: RGBA
-  primary: RGBA
-  error: RGBA
-  info: RGBA
-}
-
 export function parseModel(model: string) {
   const [providerID, ...rest] = model.split("/")
   return {
@@ -60,7 +50,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const data = useData()
     const client = useClient()
     const toast = useToast()
-    const { theme, themeV2, mode } = useTheme()
+    const { themeV2, mode } = useTheme()
     const route = useRoute()
     const paths = useTuiPaths()
     const args = useArgs()
@@ -131,8 +121,18 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           if (agent?.color) {
             const color = agent.color
             if (color.startsWith("#")) return RGBA.fromHex(color)
-            // already validated by config, just satisfying TS here
-            return theme[color as keyof typeof theme] as RGBA
+            const step = mode() === "light" ? 800 : 200
+            const named = {
+              primary: themeV2.hue.interactive[step],
+              secondary: themeV2.categorical[0][step],
+              accent: themeV2.hue.accent[step],
+              success: themeV2.text.feedback.success.default,
+              warning: themeV2.text.feedback.warning.default,
+              error: themeV2.text.feedback.error.default,
+              info: themeV2.text.feedback.info.default,
+            }
+            // Agent colors are validated by the config schema.
+            return named[color as keyof typeof named]
           }
           return colors()[index % colors().length]
         },

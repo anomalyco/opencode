@@ -71,7 +71,6 @@ type State = {
 
 type ContextName = "elevated" | "overlay"
 type ThemeService = {
-  theme: Theme
   themeV2: ComponentTheme
   contextual(context: ContextName): ThemeService
   readonly selected: string
@@ -280,7 +279,7 @@ const themeContext = createSimpleContext({
       if (supported.includes(store.mode)) return store.mode
       return supported[0] ?? store.mode
     }
-    const values = createMemo(() => resolveTheme(source(), mode()))
+    const legacySyntaxTheme = createMemo(() => resolveTheme(source(), mode()))
     const valuesV2 = createMemo(() => resolveThemeFile(file(), mode(), sourceName()))
     valuesV2()
     themePerformance.set("Init", `${(performance.now() - initStarted).toFixed(2)} ms`)
@@ -298,21 +297,13 @@ const themeContext = createSimpleContext({
       }, mode),
     }
 
-    createEffect(() => renderer.setBackgroundColor(values().background))
+    createEffect(() => renderer.setBackgroundColor(valuesV2().background.default))
 
-    const syntax = createSyntaxStyleMemo(() => generateSyntax(values()))
-
-    const theme = new Proxy(values(), {
-      get(_target, prop) {
-        // @ts-expect-error Properties are forwarded to the current reactive value.
-        return values()[prop]
-      },
-    })
+    const syntax = createSyntaxStyleMemo(() => generateSyntax(legacySyntaxTheme()))
     function contextual(context: ContextName) {
       return contextualServices[context]
     }
     const service: ThemeService = {
-      theme,
       themeV2,
       contextual,
       get selected() {
