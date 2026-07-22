@@ -48,6 +48,103 @@ afterEach(() => {
 })
 
 describe("run interactive runtime", () => {
+  test("resolves the default model reactively without blocking catalog startup", async () => {
+    const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
+    const events: FooterEvent[] = []
+    const ui = createFooterApiFixture({ events })
+    const api = ui.api
+    const selected = defer<Awaited<ReturnType<typeof sdk.model.default>>>()
+    const catalogLoaded = defer<void>()
+    const model = catalogModel({
+      id: "resolved",
+      providerID: "test",
+      name: "Resolved Model",
+      variants: ["low", "high"],
+    })
+    let lifecycle!: LifecycleInput
+    let turnModel: { providerID: string; modelID: string } | undefined
+    let refreshCatalog: (() => Promise<unknown>) | undefined
+    stubCatalogLists(sdk, {
+      providers: [catalogProvider("test", "Test Provider")],
+      models: [model],
+    })
+    const defaultModel = spyOn(sdk.model, "default").mockImplementation(() => selected.promise)
+
+    const task = runInteractiveDeferredMode(
+      {
+        host: host(),
+        sdk,
+        directory: "/tmp",
+        target: async () => ({
+          sessionID: "ses_root",
+          location: { directory: "/tmp", project: { id: "pro-1", directory: "/tmp" } },
+          agent: "build",
+          model: undefined,
+          variant: undefined,
+          resume: false,
+        }),
+        agent: "build",
+        model: undefined,
+        variant: undefined,
+        files: [],
+      },
+      {
+        createRuntimeLifecycle: async (input) => {
+          lifecycle = input
+          return {
+            footer: api,
+            onResize: () => () => {},
+            refreshTheme: () => {},
+            setTitle: () => {},
+            resetForReplay: () => Promise.resolve(),
+            close: () => Promise.resolve(),
+          }
+        },
+        streamTransport: Promise.resolve({
+          createSessionTransport: async (input) => {
+            refreshCatalog = () => Promise.resolve(input.onCatalogRefresh?.())
+            await refreshCatalog()
+            catalogLoaded.resolve()
+            return {
+              runPromptTurn: async (input) => {
+                turnModel = input.model
+                api.close()
+              },
+              queuePromptTurn: async () => {},
+              waitForIdle: async () => {},
+              interruptActiveTurn: async () => {},
+              selectSubagent: () => {},
+              replayOnResize: async () => false,
+              close: async () => {},
+            }
+          },
+          formatUnknownError: (error: unknown) => String(error),
+        }),
+      },
+    )
+
+    await catalogLoaded.promise
+    expect(events.some((event) => event.type === "model")).toBe(false)
+    await refreshCatalog?.()
+    expect(defaultModel).toHaveBeenCalledTimes(1)
+    selected.resolve({
+      location: { directory: "/tmp", project: { id: "pro-1", directory: "/tmp" } },
+      data: model,
+    })
+    while (defaultModel.mock.calls.length < 2) await Bun.sleep(0)
+    while (!events.some((event) => event.type === "model")) await Bun.sleep(0)
+    expect(events).toContainEqual({
+      type: "model",
+      model: "Resolved Model · Test Provider",
+      selection: { providerID: "test", modelID: "resolved" },
+    })
+    expect(lifecycle.onCycleVariant?.()).toMatchObject({ status: "variant low", variant: "low" })
+    ui.submit("hello")
+    while (!turnModel) await Bun.sleep(0)
+    expect(turnModel).toEqual({ providerID: "test", modelID: "resolved" })
+    await task
+  })
+
   test("routes form responses to their owners with global location and local settlement", async () => {
     const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
     const api = footer()

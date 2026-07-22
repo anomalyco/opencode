@@ -380,7 +380,19 @@ async function resolveSelectedModel(
     .then((response) => response.model)
   if (session) return { ...session, variant: next.variant }
 
-  const fallback = await sdk.model.default(undefined, { signal: next.signal }).then((response) => response.data)
+  const fallback = await sdk.model
+    .default(
+      input.location
+        ? {
+            location: {
+              directory: input.location.directory,
+              workspace: input.location.workspaceID,
+            },
+          }
+        : undefined,
+      { signal: next.signal },
+    )
+    .then((response) => response.data)
   if (!fallback) return
   return { providerID: fallback.providerID, id: fallback.id, variant: next.variant }
 }

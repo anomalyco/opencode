@@ -2085,12 +2085,13 @@ describe("V2 mini transport", () => {
     const ui = footer()
     const transport = await createSessionTransport({
       sdk: client,
+      location: { directory: "/project", workspaceID: "wrk_1" },
       sessionID: "ses_1",
       thinking: false,
       footer: ui.api,
     })
     spyOn(client.session, "get").mockImplementation(() => ok({ model: undefined }) as never)
-    spyOn(client.model, "default").mockImplementation(
+    const defaultModel = spyOn(client.model, "default").mockImplementation(
       () =>
         ok({
           location: { directory: "/tmp", project: { id: "proj_1", directory: "/tmp" } },
@@ -2136,6 +2137,10 @@ describe("V2 mini transport", () => {
 
     expect(switched).toHaveBeenCalledWith(
       { sessionID: "ses_1", model: { providerID: "openai", id: "gpt-5", variant: "high" } },
+      { signal: undefined },
+    )
+    expect(defaultModel).toHaveBeenCalledWith(
+      { location: { directory: "/project", workspace: "wrk_1" } },
       { signal: undefined },
     )
     await transport.close()
