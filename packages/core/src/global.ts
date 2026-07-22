@@ -54,11 +54,15 @@ export interface Interface {
   readonly bin: string
   readonly log: string
   readonly repos: string
+  // Directory holding Claude Code user-level state (CLAUDE.md, skills, ide
+  // locks). Follows Claude Code's own CLAUDE_CONFIG_DIR override.
+  readonly claudeConfigDir: string
 }
 
 export function make(input: Partial<Interface> = {}): Interface {
+  const home = input.home ?? Path.home
   return {
-    home: Path.home,
+    home,
     data: Path.data,
     cache: Path.cache,
     config: Flag.OPENCODE_CONFIG_DIR ?? Path.config,
@@ -67,6 +71,7 @@ export function make(input: Partial<Interface> = {}): Interface {
     bin: Path.bin,
     log: Path.log,
     repos: Path.repos,
+    claudeConfigDir: Flag.CLAUDE_CONFIG_DIR ?? path.join(home, ".claude"),
     ...input,
   }
 }

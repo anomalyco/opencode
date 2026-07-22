@@ -31,6 +31,10 @@ const itWithoutExternalSkills = testEffect(
     testInstanceStoreLayer,
   ),
 )
+// Runner without a pre-built Skill.Service, so a test can provide its own
+// Skill layer with per-test Global overrides (an outer Skill.Service would
+// shadow the inner one).
+const itWithoutSkill = testEffect(Layer.mergeAll(node, testInstanceStoreLayer))
 
 async function createGlobalSkill(homeDir: string) {
   const skillDir = path.join(homeDir, ".claude", "skills", "global-test-skill")
@@ -291,6 +295,64 @@ description: A skill in the .claude/skills directory.
           }).pipe(provideInstance(tmp.path))
         }),
       )
+    }),
+  )
+
+  itWithoutSkill.live("discovers global skills from a relocated Claude config dir", () =>
+    Effect.gen(function* () {
+      const home = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      const project = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir({ git: true })),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      const claudeConfigDir = path.join(home.path, "claude-config")
+
+      yield* Effect.promise(async () => {
+        const skillDir = path.join(claudeConfigDir, "skills", "relocated-skill")
+        await fs.mkdir(skillDir, { recursive: true })
+        await Bun.write(
+          path.join(skillDir, "SKILL.md"),
+          `---
+name: relocated-skill
+description: A global skill from a relocated Claude config dir.
+---
+
+# Relocated Skill
+`,
+        )
+        // Decoy: the default ~/.claude location must be ignored when the
+        // Claude config dir is relocated (CLAUDE_CONFIG_DIR semantics).
+        const decoyDir = path.join(home.path, ".claude", "skills", "decoy-skill")
+        await fs.mkdir(decoyDir, { recursive: true })
+        await Bun.write(
+          path.join(decoyDir, "SKILL.md"),
+          `---
+name: decoy-skill
+description: Must not be discovered when the Claude config dir is relocated.
+---
+
+# Decoy Skill
+`,
+        )
+      })
+
+      const layer = Layer.mergeAll(
+        LayerNode.compile(Skill.node, [
+          [Global.node, Global.layerWith({ home: home.path, claudeConfigDir })],
+        ]),
+        node,
+        testInstanceStoreLayer,
+      )
+
+      yield* Effect.gen(function* () {
+        const skill = yield* Skill.Service
+        const list = (yield* skill.all()).filter((s) => s.location !== "<built-in>")
+        expect(list.map((s) => s.name)).toEqual(["relocated-skill"])
+        expect(list[0].location).toContain(path.join("claude-config", "skills", "relocated-skill", "SKILL.md"))
+      }).pipe(provideInstance(project.path), Effect.provide(layer))
     }),
   )
 

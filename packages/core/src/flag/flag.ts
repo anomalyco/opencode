@@ -51,6 +51,10 @@ export const Flag = {
 
   // Evaluated at access time (not module load) because tests, the CLI, and
   // external tooling set these env vars at runtime.
+  get CLAUDE_CONFIG_DIR() {
+    // Empty string counts as unset (e.g. `CLAUDE_CONFIG_DIR= opencode`).
+    return process.env["CLAUDE_CONFIG_DIR"] || undefined
+  },
   get OPENCODE_DISABLE_PROJECT_CONFIG() {
     return truthy("OPENCODE_DISABLE_PROJECT_CONFIG")
   },

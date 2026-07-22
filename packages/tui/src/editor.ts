@@ -1,4 +1,5 @@
 import type { CliRenderer } from "@opentui/core"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs"
 import { readFile, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
@@ -54,7 +55,7 @@ export async function openEditor(input: { value: string; renderer: CliRenderer; 
 }
 
 export function discoverEditorConnection(directory: string) {
-  const root = path.join(os.homedir(), ".claude", "ide")
+  const root = path.join(Flag.CLAUDE_CONFIG_DIR ?? path.join(os.homedir(), ".claude"), "ide")
   const contains = (parent: string) => {
     const resolved = path.resolve(parent)
     const relative = path.relative(resolved, path.resolve(directory))

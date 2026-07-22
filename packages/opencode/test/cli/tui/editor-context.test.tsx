@@ -11,10 +11,12 @@ import { discoverEditorConnection } from "@opencode-ai/tui/editor"
 
 const originalClaudePort = process.env.CLAUDE_CODE_SSE_PORT
 const originalOpencodePort = process.env.OPENCODE_EDITOR_SSE_PORT
+const originalClaudeConfigDir = process.env.CLAUDE_CONFIG_DIR
 
 afterEach(() => {
   process.env.CLAUDE_CODE_SSE_PORT = originalClaudePort
   process.env.OPENCODE_EDITOR_SSE_PORT = originalOpencodePort
+  process.env.CLAUDE_CONFIG_DIR = originalClaudeConfigDir
 })
 
 function nextTick() {
@@ -279,6 +281,31 @@ test("useEditorContext preserves selection for the next reconnect when requested
   expect(mounted.editor.labelState()).toBe("none")
 
   mounted.dispose()
+})
+
+test("discoverEditorConnection reads lock files from CLAUDE_CONFIG_DIR", async () => {
+  await using tmp = await tmpdir()
+  const workspace = path.join(tmp.path, "workspace")
+  const claudeConfigDir = path.join(tmp.path, "claude-config")
+  const ideDirectory = path.join(claudeConfigDir, "ide")
+  const decoyIdeDirectory = path.join(tmp.path, "home", ".claude", "ide")
+  await mkdir(workspace, { recursive: true })
+  await mkdir(ideDirectory, { recursive: true })
+  await mkdir(decoyIdeDirectory, { recursive: true })
+  await writeFile(
+    path.join(ideDirectory, "3001.lock"),
+    JSON.stringify({ transport: "ws", workspaceFolders: [workspace] }),
+  )
+  await writeFile(
+    path.join(decoyIdeDirectory, "3999.lock"),
+    JSON.stringify({ transport: "ws", workspaceFolders: [workspace] }),
+  )
+
+  process.env.CLAUDE_CONFIG_DIR = claudeConfigDir
+  spyOn(os, "homedir").mockImplementation(() => path.join(tmp.path, "home"))
+
+  const connection = discoverEditorConnection(workspace)
+  expect(connection?.url).toBe("ws://127.0.0.1:3001")
 })
 
 test("useEditorContext connects with OPENCODE_EDITOR_SSE_PORT", async () => {

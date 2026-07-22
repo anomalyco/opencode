@@ -246,6 +246,27 @@ describe("Instruction.system", () => {
       )
     }),
   )
+
+  it.live("loads global CLAUDE.md from claudeConfigDir instead of ~/.claude", () =>
+    Effect.gen(function* () {
+      const globalTmp = yield* tmpWithFiles({ ".claude/CLAUDE.md": "# Decoy Claude" })
+      const claudeTmp = yield* tmpWithFiles({ "CLAUDE.md": "# Relocated Claude" })
+      const projectTmp = yield* tmpdirScoped()
+
+      yield* Effect.gen(function* () {
+        const svc = yield* Instruction.Service
+        const paths = yield* svc.systemPaths()
+        expect(paths.has(path.join(claudeTmp, "CLAUDE.md"))).toBe(true)
+        expect(paths.has(path.join(globalTmp, ".claude", "CLAUDE.md"))).toBe(false)
+        expect(yield* svc.system()).toEqual([
+          `Instructions from: ${path.join(claudeTmp, "CLAUDE.md")}\n# Relocated Claude`,
+        ])
+      }).pipe(
+        provideInstance(projectTmp),
+        provideInstruction({ home: globalTmp, config: globalTmp, claudeConfigDir: claudeTmp }),
+      )
+    }),
+  )
 })
 
 describe("Instruction.systemPaths global config", () => {
