@@ -92,18 +92,6 @@ function countLabel(count: number, total: number, query: string) {
   return `${count}/${total}`
 }
 
-function categoryRank(category: string) {
-  if (category === "Project Commands") {
-    return 0
-  }
-
-  if (category === "MCP Commands") {
-    return 1
-  }
-
-  return 2
-}
-
 function subagentStatusLabel(status: FooterSubagentTab["status"]) {
   if (status === "completed") {
     return "done"
@@ -374,7 +362,6 @@ export function RunCommandMenuBody(props: {
   const skills = createMemo(() => (props.commands() ?? []).filter((item) => item.source === "skill"))
   const activeSubagentCount = createMemo(() => props.subagents().filter((item) => item.status === "running").length)
   const entries = createMemo<CommandEntry[]>(() => {
-    const builtins = ["compact", "editor", "new", "settings"]
     const session: CommandEntry[] = [
       {
         action: "editor",
@@ -473,29 +460,10 @@ export function RunCommandMenuBody(props: {
         ]
         : []),
     ]
-    const commands = (props.commands() ?? [])
-      .filter((item) => item.source !== "skill" && !builtins.includes(item.name))
-      .map(
-        (item) =>
-          ({
-            action: "slash",
-            category: item.source === "mcp" ? "MCP Commands" : "Project Commands",
-            name: item.name,
-            display: item.name,
-            footer: `/${item.name}`,
-            keywords:
-              item.source === "mcp"
-                ? `/${item.name} ${item.name} mcp ${item.description ?? ""}`
-                : `/${item.name} ${item.name} ${item.description ?? ""}`,
-          }) satisfies CommandEntry,
-      )
-      .sort((a, b) => categoryRank(a.category) - categoryRank(b.category) || a.display.localeCompare(b.display))
-
     return [
       ...session,
       ...prompt,
       ...agent,
-      ...commands,
       {
         action: "settings",
         category: "System",

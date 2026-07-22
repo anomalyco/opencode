@@ -365,7 +365,7 @@ test("run entry content updates when live commit text changes", async () => {
   }
 })
 
-test("direct command panel renders grouped command palette", async () => {
+test("direct command panel renders grouped actions without catalog commands", async () => {
   const [commands] = createSignal<RunCommand[] | undefined>([
     command({ name: "review", description: "Review code" }),
     command({ name: "deploy", description: "Deploy prompt", source: "mcp" }),
@@ -433,6 +433,16 @@ test("direct command panel renders grouped command palette", async () => {
     expect(frame).not.toContain("Review code")
     expect(frame).not.toContain("Commands 8")
 
+    await app.mockInput.typeText("review")
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("No results found")
+
+    app.mockInput.pressKey("u", { ctrl: true })
+    await app.mockInput.typeText("deploy")
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("No results found")
+
+    app.mockInput.pressKey("u", { ctrl: true })
     await app.mockInput.typeText("status")
     await app.renderOnce()
     expect(app.captureCharFrame()).toContain("Show status")
