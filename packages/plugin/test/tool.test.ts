@@ -1,17 +1,6 @@
 import { expect, test } from "bun:test"
-import { Agent } from "@opencode-ai/schema/agent"
-import { Session } from "@opencode-ai/schema/session"
-import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { Effect, Schema } from "effect"
 import * as Tool from "../src/v2/effect/tool"
-
-const context = {
-  sessionID: Session.ID.make("ses_test"),
-  agent: Agent.ID.make("build"),
-  messageID: SessionMessage.ID.make("msg_test"),
-  callID: "call_test",
-  progress: () => Effect.void,
-} satisfies Tool.Context
 
 test("tools remain valid across separate module instances", async () => {
   const ForeignTool = await import(`${new URL("../src/v2/effect/tool.ts", import.meta.url).href}?foreign`)
@@ -39,10 +28,7 @@ test("tools remain valid across separate module instances", async () => {
       additionalProperties: false,
     },
   })
-  expect(await Effect.runPromise(Tool.settle(tool, { input: { value: "input" } }, context))).toEqual({
-    structured: { ok: true },
-    content: [],
-  })
+  expect(await Effect.runPromise(Tool.decodeInput(tool.input, { value: "input" }))).toEqual({ value: "input" })
 })
 
 test("portable schemas validate and describe typed tools", async () => {
@@ -86,10 +72,9 @@ test("portable schemas validate and describe typed tools", async () => {
     inputSchema: { type: "object", properties: { count: { type: "string" } } },
     outputSchema: { type: "string" },
   })
-  expect(await Effect.runPromise(Tool.settle(tool, { input: { count: "41" } }, context))).toEqual({
-    structured: "42",
-    content: [{ type: "text", text: "42" }],
-  })
+  const decoded = await Effect.runPromise(Tool.decodeInput(tool.input, { count: "41" }))
+  expect(decoded).toEqual({ count: 41 })
+  expect(await Effect.runPromise(Tool.encodeOutput(tool.output, 42))).toBe("42")
 })
 
 test("portable schema failures become tool failures", async () => {
@@ -104,29 +89,23 @@ test("portable schema failures become tool failures", async () => {
       },
     },
   }
-  const tool = Tool.make({
-    description: "Failing tool",
-    input,
-    output: input,
-    execute: Effect.succeed,
-  })
 
-  const error = await Effect.runPromiseExit(Tool.settle(tool, { input: 1 }, context))
+  const error = await Effect.runPromiseExit(Tool.decodeInput(input, 1))
   expect(error.toString()).toContain("Invalid tool input: expected a string")
 })
 
-test("two-parameter Definition annotations retain their original meaning", () => {
+test("metadata projection receives the typed domain output", () => {
   const input = Schema.Struct({ value: Schema.String })
   const output = Schema.Struct({ value: Schema.String, internal: Schema.Boolean })
-  const structured = Schema.Struct({ value: Schema.String })
-  const tool: Tool.Definition<typeof input, typeof structured> = Tool.make({
+  const tool = Tool.make({
     description: "Annotated tool",
     input,
     output,
-    structured,
-    toStructuredOutput: ({ output }) => ({ value: output.value }),
+    toMetadata: ({ output }) => ({ value: output.value }),
     execute: ({ value }) => Effect.succeed({ value, internal: true }),
   })
 
-  expect(tool.structured).toBe(structured)
+  expect(tool.toMetadata?.({ input: { value: "in" }, output: { value: "out", internal: true } })).toEqual({
+    value: "out",
+  })
 })

@@ -664,7 +664,14 @@ describe("Anthropic Messages route", () => {
         name: "web_search",
         result: { type: "json", value: [{ type: "web_search_result", url: "https://example.com", title: "Example" }] },
         providerExecuted: true,
-        providerMetadata: { anthropic: { blockType: "web_search_tool_result" } },
+        // The complete payload rides in provider metadata as irreducible replay
+        // state for later stateless requests.
+        providerMetadata: {
+          anthropic: {
+            blockType: "web_search_tool_result",
+            result: [{ type: "web_search_result", url: "https://example.com", title: "Example" }],
+          },
+        },
       })
       expect(response.text).toBe("Found it.")
       expect(response.events.at(-1)).toMatchObject({ type: "finish", reason: "stop" })
