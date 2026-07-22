@@ -53,6 +53,11 @@ export function isNewCommand(input: string): boolean {
   return input.trim().toLowerCase() === "/new"
 }
 
+export function isCompactCommand(input: string): boolean {
+  const text = input.trim().toLowerCase()
+  return text === "/compact" || text === "/summarize"
+}
+
 export function createPromptHistory(items?: RunPrompt[]): PromptHistoryState {
   const list = (items ?? []).filter((item) => item.text.trim().length > 0).map(promptCopy)
   const next: RunPrompt[] = []

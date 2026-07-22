@@ -876,6 +876,9 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
         })
       },
       onAdmissionError: renderPromptError,
+      onCompact: async () => {
+        await state.sdk.session.compact({ sessionID: state.sessionID }, formRequestOptions(state.location))
+      },
       settle: async () => {
         const next = await ensureStream()
         await next.handle.waitForIdle()

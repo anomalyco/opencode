@@ -80,6 +80,63 @@ describe("run runtime queue", () => {
     ])
   })
 
+  test.each(["/compact", "/summarize"])("treats %s as a local compaction command", async (command) => {
+    const ui = createFooterApiFixture()
+    const seen: string[] = []
+    let compacted = 0
+
+    const task = runPromptQueue({
+      footer: ui.api,
+      onCompact: async () => {
+        compacted += 1
+      },
+      run: async (input) => {
+        seen.push(input.text)
+        ui.api.close()
+      },
+    })
+
+    ui.submit(command)
+    ui.submit("hello")
+    await task
+
+    expect(compacted).toBe(1)
+    expect(seen).toEqual(["hello"])
+    expect(ui.commits.map((item) => item.text)).toEqual(["hello"])
+  })
+
+  test("keeps prompts submitted after an in-flight /compact behind the compaction barrier", async () => {
+    const ui = createFooterApiFixture()
+    const active = Promise.withResolvers<void>()
+    const order: string[] = []
+
+    const task = runPromptQueue({
+      footer: ui.api,
+      onCompact: async () => {
+        order.push("compact")
+      },
+      admit: async (prompt) => {
+        order.push(`admit:${prompt.text}`)
+      },
+      run: async (prompt) => {
+        order.push(`run:${prompt.text}`)
+        if (prompt.text === "first") await active.promise
+        if (prompt.text === "later") ui.api.close()
+      },
+    })
+
+    ui.submit("first")
+    await Promise.resolve()
+    ui.submit("/compact")
+    ui.submit("later")
+    await Promise.resolve()
+    expect(order).toEqual(["run:first"])
+
+    active.resolve()
+    await task
+    expect(order).toEqual(["run:first", "compact", "run:later"])
+  })
+
   test("shell mode submits /exit as a shell command", async () => {
     const ui = createFooterApiFixture()
     const seen: RunPrompt[] = []

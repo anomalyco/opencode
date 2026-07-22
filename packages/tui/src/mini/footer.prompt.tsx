@@ -395,6 +395,12 @@ export function createPromptState(input: PromptInput): PromptState {
         description: "configure Mini transcript output",
       } satisfies SlashOption,
       { kind: "slash", name: "new", display: "/new", description: "start a new session" } satisfies SlashOption,
+      {
+        kind: "slash",
+        name: "compact",
+        display: "/compact",
+        description: "summarize the session to reduce context usage",
+      } satisfies SlashOption,
       { kind: "slash", name: "exit", display: "/exit", description: "close OpenCode" } satisfies SlashOption,
     ]
     const hidden = new Set(builtins.map((item) => item.name))

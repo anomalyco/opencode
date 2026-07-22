@@ -4,13 +4,13 @@
 // operations drain one at a time. Ordinary prompts submitted during an active
 // ordinary turn are admitted immediately to the server's durable queue.
 //
-// The queue also handles /exit, /quit, and /new commands, empty-prompt rejection,
+// The queue also handles local session commands, empty-prompt rejection,
 // and tracks per-turn wall-clock duration for the footer status line.
 //
 // Resolves when the footer closes and all in-flight work finishes.
 import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { Locale } from "../util/locale"
-import { isExitCommand, isNewCommand } from "./prompt.shared"
+import { isCompactCommand, isExitCommand, isNewCommand } from "./prompt.shared"
 import type { FooterApi, FooterEvent, RunPrompt } from "./types"
 
 type Trace = {
@@ -24,6 +24,7 @@ export type QueueInput = {
   onSend?: (prompt: RunPrompt, delivery: "steer" | "queue") => void
   onAdmissionError?: (prompt: RunPrompt, error: unknown) => void | Promise<void>
   onNewSession?: () => void | Promise<void>
+  onCompact?: () => void | Promise<void>
   admit: (prompt: RunPrompt, signal: AbortSignal) => Promise<void>
   settle: () => Promise<void>
   run: (prompt: RunPrompt, signal: AbortSignal, admitted: () => void) => Promise<void>
@@ -123,6 +124,24 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
               },
             )
             await input.onNewSession()
+            continue
+          }
+
+          if (prompt.mode !== "shell" && isCompactCommand(prompt.text)) {
+            emit(
+              {
+                type: "stream.patch",
+                patch: {
+                  phase: "running",
+                  status: "compacting session",
+                },
+              },
+              {
+                phase: "running",
+                status: "compacting session",
+              },
+            )
+            await input.onCompact?.()
             continue
           }
 
@@ -251,7 +270,11 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
       active.mode !== "shell" &&
       prompt.mode !== "shell" &&
       prompt.command?.source !== "skill" &&
-      !isNewCommand(prompt.text)
+      !isNewCommand(prompt.text) &&
+      !isCompactCommand(prompt.text) &&
+      !state.queue.some(
+        (item) => item.mode !== "shell" && (isNewCommand(item.text) || isCompactCommand(item.text)),
+      )
     ) {
       const sent = { ...prompt, messageID: SessionMessage.ID.create() }
       const admission = state.admission
@@ -265,7 +288,7 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
     }
 
     state.queue.push(prompt)
-    if (prompt.mode !== "shell" && isNewCommand(prompt.text)) {
+    if (prompt.mode !== "shell" && (isNewCommand(prompt.text) || isCompactCommand(prompt.text))) {
       drain()
       return
     }
