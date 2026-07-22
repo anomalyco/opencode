@@ -3,7 +3,7 @@ title: SDK
 description: Типобезпечний JS-клієнт для сервера opencode.
 ---
 
-import config from "../../../config.mjs"
+import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
 JS/TS SDK від opencode надає типобезпечний клієнт для взаємодії з сервером.
@@ -360,7 +360,7 @@ await client.session.prompt({
 | `find.text({ query })`      | Пошук тексту у файлах          | Масив об'єктів збігів з `path`, `lines`, `line_number`, `absolute_offset`, `submatches`     |
 | `find.files({ query })`     | Пошук файлів і каталогів за назвою | `string[]` (шляхи)                                                                          |
 | `find.symbols({ query })`   | Пошук символів робочої області | <a href={typesUrl}><code>Symbol[]</code></a>                                                |
-| `file.read({ query })`      | Читання файлу                   | `{ type: "raw" | "patch", content: string }`                                                |
+| `file.read({ query })`      | Читання файлу                   | `{ type: "raw" \| "patch", content: string }`                                                |
 | `file.status({ query? })`   | Статус відстежуваних файлів     | <a href={typesUrl}><code>File[]</code></a>                                                  |
 
 `find.files` підтримує кілька необов'язкових полів запиту:

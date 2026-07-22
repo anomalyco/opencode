@@ -99,6 +99,11 @@ export default defineConfig({
           lang: "pt-BR",
           dir: "ltr",
         },
+        uk: {
+          label: "Українська",
+          lang: "uk",
+          dir: "ltr",
+        },
         ru: {
           label: "Русский",
           lang: "ru-RU",
@@ -117,11 +122,6 @@ export default defineConfig({
         "zh-cn": {
           label: "简体中文",
           lang: "zh-CN",
-          dir: "ltr",
-        },
-        uk: {
-          label: "Українська",
-          lang: "uk",
           dir: "ltr",
         },
         "zh-tw": {

@@ -3,7 +3,7 @@ title: Сервер
 description: Взаємодія з сервером opencode через HTTP.
 ---
 
-import config from "../../../config.mjs"
+import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
 Команда `opencode serve` запускає безголовий HTTP-сервер, який надає кінцеву точку OpenAPI, яку може використовувати клієнт opencode.
