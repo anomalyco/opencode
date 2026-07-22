@@ -327,6 +327,12 @@ describe("Patch", () => {
     ).toThrow("Failed to find expected lines")
   })
 
+  test("identifies a missing blank line", () => {
+    expect(() =>
+      Patch.derive("update.txt", [{ oldLines: [""], newLines: ["added"] }], "content\n"),
+    ).toThrow("Failed to find an expected blank line in update.txt")
+  })
+
   test("parses an update without an explicit first chunk header", () => {
     expect(parse("*** Begin Patch\n*** Update File: file.txt\n import foo\n+bar\n*** End Patch")).toEqual([
       {
@@ -413,10 +419,10 @@ describe("Patch", () => {
 
   test("rejects invalid add and delete lines", () => {
     expect(() => parse("*** Begin Patch\n*** Add File: file.txt\nbad\n*** End Patch")).toThrow(
-      "Invalid hunk at line 3: 'bad' is not a valid hunk header",
+      "Invalid hunk at line 3: Invalid Add File line for 'file.txt': expected a line starting with '+', got 'bad'",
     )
     expect(() => parse("*** Begin Patch\n*** Delete File: file.txt\nbad\n*** End Patch")).toThrow(
-      "Invalid hunk at line 3: 'bad' is not a valid hunk header",
+      "Invalid hunk at line 3: Unexpected line after Delete File 'file.txt': 'bad'. Delete hunks do not contain body lines",
     )
   })
 
@@ -478,6 +484,6 @@ describe("Patch", () => {
     }
     expect(() =>
       parse("*** Begin Patch\n*** Update File: old.txt\n*** Move to: \n@@\n-old\n+new\n*** End Patch"),
-    ).toThrow("Invalid hunk at line 3: '*** Move to:' is not a valid hunk header")
+    ).toThrow("Invalid hunk at line 3: Move destination for 'old.txt' must not be empty")
   })
 })
