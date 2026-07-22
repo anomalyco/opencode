@@ -11,6 +11,8 @@ import { AgentV2 } from "../../agent"
 import { Snapshot } from "../../snapshot"
 import { RelativePath } from "../../schema"
 import { SessionUsage } from "../usage"
+import { Tool } from "../../tool/tool"
+import { MAX_BYTES } from "../../tool-output-store"
 import type { ToolRegistry } from "../../tool/registry"
 
 type Input = {
@@ -25,29 +27,11 @@ type Input = {
 const record = (value: unknown): Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : { value }
 
-const message = (value: unknown) => {
-  if (typeof value === "string") return value
-  try {
-    return JSON.stringify(value) ?? String(value)
-  } catch {
-    return String(value)
-  }
-}
-
-const JsonMetadata = Schema.Record(Schema.String, Schema.Json)
-
-/** Defensive boundary: non-JSON metadata is dropped rather than failing publication. */
-const jsonMetadata = (metadata: Readonly<Record<string, unknown>> | undefined) => {
-  if (metadata === undefined) return undefined
-  const decoded = Schema.decodeUnknownOption(JsonMetadata)(metadata)
-  return decoded._tag === "Some" ? decoded.value : undefined
-}
-
 /** Derives canonical model content from a provider-hosted tool result. */
 const hostedContent = (result: ToolResultValue): readonly [ToolContent, ...ToolContent[]] => {
   if (result.type === "content" && result.value.length > 0)
     return result.value as unknown as readonly [ToolContent, ...ToolContent[]]
-  return [{ type: "text", text: message(result.value) }]
+  return [{ type: "text", text: Tool.stringify(result.value) }]
 }
 
 /** Persist one step without executing tools or starting a continuation step. */
@@ -66,7 +50,7 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
   const failureSnapshot = (tool: { readonly progress?: ToolRegistry.Progress }) => {
     if (!tool.progress) return {}
     const first = tool.progress.content[0]
-    const metadata = jsonMetadata(tool.progress.metadata)
+    const metadata = Tool.jsonMetadata(tool.progress.metadata, MAX_BYTES)
     return {
       ...(first === undefined ? {} : { content: [first, ...tool.progress.content.slice(1)] as const }),
       ...(metadata === undefined ? {} : { metadata }),
@@ -260,11 +244,7 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
   const failTools = Effect.fnUntraced(function* (error: SessionError.Error, mode: "all" | "hosted" | "uncalled") {
     let failed = false
     for (const [callID, tool] of tools) {
-      if (
-        tool.settled ||
-        (mode === "hosted" && !tool.providerExecuted) ||
-        (mode === "uncalled" && tool.called)
-      )
+      if (tool.settled || (mode === "hosted" && !tool.providerExecuted) || (mode === "uncalled" && tool.called))
         continue
       tool.settled = true
       failed = true
@@ -415,12 +395,14 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
         return
       }
       case "tool-result": {
-        // Provider-hosted results only; local executions settle through `toolExecution`.
+        // Provider-hosted results only; local executions publish through `toolExecution`.
         const tool = tools.get(event.id)
         if (!tool?.called) return yield* Effect.die(new Error(`Tool result before call: ${event.id}`))
         if (tool.name !== event.name)
           return yield* Effect.die(new Error(`Tool result name changed for ${event.id}: ${tool.name} -> ${event.name}`))
         if (tool.settled) {
+          // A late error result is a benign straggler (e.g. after an abort
+          // sweep); a late success would mean double execution, so it dies.
           if (event.result.type === "error") return
           return yield* Effect.die(new Error(`Duplicate tool result: ${event.id}`))
         }
@@ -432,7 +414,7 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
             sessionID: input.sessionID,
             assistantMessageID: tool.assistantMessageID,
             callID: event.id,
-            error: error ?? { type: "tool.execution", message: message(event.result.value) },
+            error: error ?? { type: "tool.execution", message: Tool.stringify(event.result.value) },
             ...failureSnapshot(tool),
             executed,
             resultState,

@@ -11,7 +11,7 @@ import {
   type Failure,
   type Metadata,
 } from "@opencode-ai/plugin/v2/effect/tool"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 
 /** Non-empty canonical model content. */
 export type NonEmptyContent = readonly [ToolContent, ...ToolContent[]]
@@ -27,11 +27,7 @@ export type Executed = {
   readonly metadata?: Metadata
 }
 
-export const execute = (
-  tool: AnyTool,
-  input: unknown,
-  context: Context,
-): Effect.Effect<Executed, Failure> =>
+export const execute = (tool: AnyTool, input: unknown, context: Context): Effect.Effect<Executed, Failure> =>
   Effect.gen(function* () {
     if ("jsonSchema" in tool) {
       const result = yield* tool.execute(input, context)
@@ -43,19 +39,23 @@ export const execute = (
     const decoded = yield* decodeInput(tool.input, input)
     const output = yield* tool.execute(decoded, context)
     const encoded = yield* encodeOutput(tool.output, output)
-    const projected = tool.toModelOutput?.({ input: decoded, output })
     const metadata = tool.toMetadata?.({ input: decoded, output })
     return {
       output: encoded,
-      content:
-        projected === undefined
-          ? [textContent(typeof encoded === "string" ? encoded : stringify(encoded))]
-          : typeof projected === "string"
-            ? [textContent(projected)]
-            : (nonEmpty(projected.map(toModelContent)) ?? [textContent(stringify(encoded))]),
+      content: contentFrom(tool.toModelOutput?.({ input: decoded, output }), encoded),
       ...(metadata === undefined ? {} : { metadata }),
     }
   })
+
+/** Model content from the tool's projection, falling back to the stringified encoded output. */
+const contentFrom = (projected: string | ReadonlyArray<Content> | undefined, encoded: unknown): NonEmptyContent => {
+  if (typeof projected === "string") return [textContent(projected)]
+  if (projected !== undefined) {
+    const mapped = nonEmpty(projected.map(toModelContent))
+    if (mapped !== undefined) return mapped
+  }
+  return [textContent(stringify(encoded))]
+}
 
 export const toModelContent = (part: Content): ToolContent =>
   part.type === "text"
@@ -67,11 +67,23 @@ export const nonEmpty = (content: ReadonlyArray<ToolContent>): NonEmptyContent |
 
 const textContent = (text: string): ToolContent => ({ type: "text", text })
 
-const stringify = (value: unknown) => {
+/** Human-readable text for an arbitrary value; strings pass through unchanged. */
+export const stringify = (value: unknown) => {
   if (typeof value === "string") return value
   try {
     return JSON.stringify(value) ?? String(value)
   } catch {
     return String(value)
   }
+}
+
+const MetadataSchema = Schema.Record(Schema.String, Schema.Json)
+
+/** Defensive boundary: non-JSON or oversized metadata is dropped, never failing the producing call. */
+export const jsonMetadata = (value: unknown, maxBytes?: number): Metadata | undefined => {
+  if (value === undefined) return undefined
+  const decoded = Schema.decodeUnknownOption(MetadataSchema)(value)
+  if (decoded._tag === "None") return undefined
+  if (maxBytes !== undefined && Buffer.byteLength(JSON.stringify(decoded.value), "utf-8") > maxBytes) return undefined
+  return decoded.value
 }

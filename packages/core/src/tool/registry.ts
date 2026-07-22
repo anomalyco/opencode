@@ -79,8 +79,6 @@ export type ToolExecution =
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/ToolRegistry") {}
 
-const MetadataSchema = Schema.Record(Schema.String, Schema.Json)
-
 const registryLayer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -90,27 +88,23 @@ const registryLayer = Layer.effect(
     const codeMode = yield* CodeMode.Service
 
     type NormalizedItem = ToolContent | "decode" | "size"
-    const normalizeImages = Effect.fn("ToolRegistry.normalizeImages")(function* (
-      content: ReadonlyArray<ToolContent>,
-    ) {
+    const normalizeImages = Effect.fn("ToolRegistry.normalizeImages")(function* (content: ReadonlyArray<ToolContent>) {
       const normalized = yield* Effect.forEach(content, (item): Effect.Effect<NormalizedItem> => {
         if (item.type !== "file" || !item.mime.startsWith("image/")) return Effect.succeed(item)
         // RFC 2397 permits parameters between the mime and ";base64".
         const base64 = /^data:[^,]*;base64,(.*)$/s.exec(item.uri)?.[1]
         if (base64 === undefined) return Effect.succeed(item)
         const resource = item.name ?? `${item.mime} tool output`
-        return image
-          .normalize(resource, { uri: resource, content: base64, encoding: "base64", mime: item.mime })
-          .pipe(
-            Effect.map((result) => ({
-              ...item,
-              uri: `data:${result.mime};base64,${result.content}`,
-              mime: result.mime,
-            })),
-            Effect.catchTag("Image.ResizerUnavailableError", () => Effect.succeed(item)),
-            Effect.catchTag("Image.DecodeError", () => Effect.succeed("decode" as const)),
-            Effect.catchTag("Image.SizeError", () => Effect.succeed("size" as const)),
-          )
+        return image.normalize(resource, { uri: resource, content: base64, encoding: "base64", mime: item.mime }).pipe(
+          Effect.map((result) => ({
+            ...item,
+            uri: `data:${result.mime};base64,${result.content}`,
+            mime: result.mime,
+          })),
+          Effect.catchTag("Image.ResizerUnavailableError", () => Effect.succeed(item)),
+          Effect.catchTag("Image.DecodeError", () => Effect.succeed("decode" as const)),
+          Effect.catchTag("Image.SizeError", () => Effect.succeed("size" as const)),
+        )
       })
       const note = (reason: "decode" | "size", text: string) => {
         const count = normalized.filter((item) => item === reason).length
@@ -128,28 +122,11 @@ const registryLayer = Layer.effect(
     // successful side-effecting tool.
     const validMetadata = Effect.fnUntraced(function* (tool: string, metadata: Tool.Metadata | undefined) {
       if (metadata === undefined) return undefined
-      const decoded = Schema.decodeUnknownOption(MetadataSchema)(metadata)
-      if (decoded._tag === "None") {
-        yield* Effect.logWarning("dropping non-JSON tool metadata").pipe(
-          Effect.annotateLogs({ tool }),
-        )
-        return undefined
-      }
       const limits = yield* resources.limits()
-      const measured = (() => {
-        try {
-          return Buffer.byteLength(JSON.stringify(metadata), "utf-8")
-        } catch {
-          return Number.POSITIVE_INFINITY
-        }
-      })()
-      if (measured > limits.maxBytes) {
-        yield* Effect.logWarning("dropping oversized tool metadata").pipe(
-          Effect.annotateLogs({ tool, bytes: measured }),
-        )
-        return undefined
-      }
-      return metadata
+      const valid = Tool.jsonMetadata(metadata, limits.maxBytes)
+      if (valid === undefined)
+        yield* Effect.logWarning("dropping invalid or oversized tool metadata").pipe(Effect.annotateLogs({ tool }))
+      return valid
     })
 
     type Registration = {
@@ -331,14 +308,14 @@ const registryLayer = Layer.effect(
               if (whollyDisabled(permission(registration.tool, name), rules)) continue
               direct.set(name, registration)
             }
-            const execute = (yield* codeMode.materialize(permissions)).tool
+            const codemodeTool = (yield* codeMode.materialize(permissions)).tool
             return {
               definitions: [
                 ...Array.from(direct, ([name, registration]) => definition(name, registration.tool)),
-                ...(execute ? [definition("execute", execute)] : []),
+                ...(codemodeTool ? [definition("execute", codemodeTool)] : []),
               ],
               execute: (input: ExecuteInput) => {
-                if (input.call.name === "execute" && execute) return executeTool(input, execute)
+                if (input.call.name === "execute" && codemodeTool) return executeTool(input, codemodeTool)
                 const registration = direct.get(input.call.name)
                 if (registration) return executeTool(input, registration.tool)
                 return Effect.succeed<ToolExecution>({

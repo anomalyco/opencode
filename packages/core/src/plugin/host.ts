@@ -127,8 +127,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
             ),
       },
       model: {
-        get: (providerID, modelID) =>
-          catalog.model.get(ProviderV2.ID.make(providerID), ModelV2.ID.make(modelID)),
+        get: (providerID, modelID) => catalog.model.get(ProviderV2.ID.make(providerID), ModelV2.ID.make(modelID)),
         list: () => response(catalog.model.available()),
         default: () => response(catalog.model.default()),
       },
@@ -412,14 +411,20 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
           return Reflect.apply(callback, undefined, [output]).pipe(
             Effect.tap(() =>
               Effect.sync(() => {
+                // Terminal content must stay schema-valid: completed content is
+                // non-empty, failed content is non-empty or absent. An untyped
+                // hook clearing it must not produce an unencodable event.
                 if (event.status === "completed") {
                   if (Array.isArray(output.content) && output.content.length > 0)
                     event.content = output.content as unknown as typeof event.content
                 } else {
-                  event.content = output.content as unknown as typeof event.content
+                  event.content =
+                    Array.isArray(output.content) && output.content.length > 0
+                      ? (output.content as unknown as typeof event.content)
+                      : undefined
                   if (output.error !== undefined) event.error = output.error as typeof event.error
                 }
-                event.metadata = output.metadata as typeof event.metadata
+                event.metadata = Tool.jsonMetadata(output.metadata) as typeof event.metadata
                 event.outputPaths = output.outputPaths as typeof event.outputPaths
               }),
             ),
