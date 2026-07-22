@@ -26,6 +26,12 @@ describe("Patch", () => {
     expect(parse("*** Begin Patch\n*** End Patch")).toEqual([])
   })
 
+  test("ignores a Codex environment preamble", () => {
+    expect(
+      parse("*** Begin Patch\n*** Environment ID: remote\n*** Add File: file.txt\n+content\n*** End Patch"),
+    ).toEqual([{ type: "add", path: "file.txt", contents: "content" }])
+  })
+
   test("parses an update followed by an add", () => {
     expect(
       parse("*** Begin Patch\n*** Update File: update.txt\n@@\n+line\n*** Add File: add.txt\n+content\n*** End Patch"),
@@ -193,6 +199,29 @@ describe("Patch", () => {
         type: "update",
         path: "file.txt",
         movePath: undefined,
+        chunks: [{ oldLines: ["old"], newLines: ["new"], changeContext: undefined }],
+      },
+    ])
+  })
+
+  test("allows an end-of-file marker before an implicit chunk and move", () => {
+    expect(parse("*** Begin Patch\n*** Update File: file.txt\n*** End of File\n-old\n+new\n*** End Patch")).toEqual([
+      {
+        type: "update",
+        path: "file.txt",
+        movePath: undefined,
+        chunks: [{ oldLines: ["old"], newLines: ["new"] }],
+      },
+    ])
+    expect(
+      parse(
+        "*** Begin Patch\n*** Update File: old.txt\n*** End of File\n*** Move to: new.txt\n@@\n-old\n+new\n*** End Patch",
+      ),
+    ).toEqual([
+      {
+        type: "update",
+        path: "old.txt",
+        movePath: "new.txt",
         chunks: [{ oldLines: ["old"], newLines: ["new"], changeContext: undefined }],
       },
     ])
@@ -418,6 +447,9 @@ describe("Patch", () => {
     expect(() =>
       parse("*** Begin Patch\n*** Update File: file.txt\n@@\n*** Update File: other.txt\n@@\n-old\n+new\n*** End Patch"),
     ).toThrow("Invalid hunk at line 4: Unexpected line found in update hunk: '*** Update File: other.txt'")
+    expect(() => parse("*** Begin Patch\n*** Update File: file.txt\n@@\nbad\n*** End Patch")).toThrow(
+      "Invalid hunk at line 4: Unexpected line found in update hunk: 'bad'",
+    )
   })
 
   test("rejects an invalid update line", () => {

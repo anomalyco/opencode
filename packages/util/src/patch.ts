@@ -59,6 +59,14 @@ export function parse(patchText: string): Result.Result<ReadonlyArray<Hunk>, Par
   while (index < end) {
     const line = lines[index]!
     const header = line.trim()
+    if (
+      index === begin + 1 &&
+      header.startsWith("*** Environment ID:") &&
+      header.slice("*** Environment ID:".length).trim()
+    ) {
+      index++
+      continue
+    }
     if (header.startsWith("*** Add File: ")) {
       const path = header.slice("*** Add File: ".length).trim()
       const parsed = parseAdd(lines, index + 1, end)
@@ -77,6 +85,7 @@ export function parse(patchText: string): Result.Result<ReadonlyArray<Hunk>, Par
       const path = header.slice("*** Update File: ".length).trim()
       let next = index + 1
       let movePath: string | undefined
+      while (lines[next]?.trimEnd() === "*** End of File") next++
       const move = lines[next]?.trimEnd()
       if (move === "*** Move to:" || move?.startsWith("*** Move to: ")) {
         movePath = move.slice("*** Move to: ".length).trim()
@@ -176,8 +185,10 @@ function parseUpdate(
           }),
         }
       }
-      if (chunk) chunk.endOfFile = true
-      afterEndOfFile = true
+      if (chunk) {
+        chunk.endOfFile = true
+        afterEndOfFile = true
+      }
       index++
       continue
     }
