@@ -4,7 +4,7 @@ import { LLM, Message, SystemPart, type LLMRequest, type ToolContent } from "@op
 import { SessionError } from "@opencode-ai/schema/session-error"
 import { Context, Effect, Layer } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { Client } from "@opencode-ai/util/client"
+import { App } from "../app"
 import { ModelV2 } from "../model"
 import { PluginHooks } from "../plugin/hooks"
 import { ToolRegistry } from "../tool/registry"
@@ -85,7 +85,7 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const hooks = yield* PluginHooks.Service
     const registry = yield* ToolRegistry.Service
-    const client = yield* Client.Name
+    const app = yield* App.Metadata
 
     const prepare = Effect.fn("SessionModelRequest.prepare")(function* (input: PrepareInput) {
       const session = input.context.session
@@ -123,7 +123,7 @@ export const layer = Layer.effect(
       const request = LLM.request({
         model,
         http: {
-          headers: SessionModelHeaders.make(session, client),
+          headers: SessionModelHeaders.make(session, app),
         },
         providerOptions: { openai: { promptCacheKey } },
         system: contextEvent.system,
@@ -157,5 +157,5 @@ export const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [PluginHooks.node, ToolRegistry.node, Client.node],
+  deps: [PluginHooks.node, ToolRegistry.node, App.node],
 })

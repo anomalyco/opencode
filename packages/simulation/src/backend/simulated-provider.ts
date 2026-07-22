@@ -1,4 +1,3 @@
-import { InstallationVersion } from "@opencode-ai/util/installation/version"
 import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
 import { Plugin } from "@opencode-ai/plugin/v2/effect"
 import { Tool } from "@opencode-ai/plugin/v2/effect/tool"
@@ -152,7 +151,7 @@ class ToolControllerError extends Schema.TaggedErrorClass<ToolControllerError>()
   { message: Schema.String },
 ) {}
 
-export const layerDrive = (options: { readonly endpoint: string }) =>
+export const layerDrive = (options: { readonly endpoint: string; readonly version: string }) =>
   Layer.effect(
     Service,
     Effect.gen(function* () {
@@ -277,7 +276,8 @@ export const layerDrive = (options: { readonly endpoint: string }) =>
         label: "opencode drive backend websocket",
         data: () => ({}),
         decode: SimulationProtocol.Backend.decodeRequestEffect,
-        handle: (socket, request) => handle(driver, tools, fibers, activeController, controllerLock, socket, request),
+        handle: (socket, request) =>
+          handle(driver, tools, fibers, activeController, controllerLock, socket, request, options.version),
         close: (socket) =>
           Effect.all([releaseController(activeController, controllerLock, socket), tools.release(socket)], {
             discard: true,
@@ -306,13 +306,14 @@ function handle(
   controllerLock: Semaphore.Semaphore,
   socket: ControlSocket,
   request: SimulationProtocol.Backend.Request,
+  version: string,
 ) {
   switch (request.method) {
     case "simulation.handshake":
       return SimulationProtocol.Handshake.dispatch(
         {
           role: "backend",
-          server: { name: "opencode", version: InstallationVersion },
+          server: { name: "opencode", version },
           capabilities: SimulationProtocol.Backend.Capabilities,
         },
         request.params,

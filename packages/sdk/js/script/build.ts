@@ -12,6 +12,12 @@ import { createClient } from "@hey-api/openapi-ts"
 const opencode = path.resolve(dir, "../../opencode")
 const client = path.resolve(dir, "../../client")
 
+if (!(await Bun.file(path.join(opencode, "package.json")).exists())) {
+  await $`rm -rf dist`
+  await $`bun tsc`
+  process.exit(0)
+}
+
 await $`bun dev generate > ${dir}/openapi.json`.cwd(opencode)
 await $`bun -e ${`
   import { OpenApi } from "effect/unstable/httpapi"

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { ClientError, OpenCode } from "@opencode-ai/client/promise"
-import { InstallationVersion } from "@opencode-ai/util/installation/version"
+import { OPENCODE_VERSION } from "../src/version"
 import path from "node:path"
 import { createMiniConnection, mergeInput as mergeInteractiveInput, resolveMiniTarget } from "../src/mini"
 import { mergeInput as mergeNonInteractiveInput, parseRunModel } from "../src/run/run"
@@ -31,14 +31,14 @@ describe("mini command", () => {
     const initial = Bun.serve({
       port: 0,
       fetch() {
-        return Response.json({ healthy: true, version: InstallationVersion, pid: process.pid })
+        return Response.json({ healthy: true, version: OPENCODE_VERSION, pid: process.pid })
       },
     })
     const replacement = Bun.serve({
       port: 0,
       fetch(request) {
         authorization.push(request.headers.get("authorization"))
-        return Response.json({ healthy: true, version: InstallationVersion, pid: process.pid })
+        return Response.json({ healthy: true, version: OPENCODE_VERSION, pid: process.pid })
       },
     })
     const controller = new AbortController()
@@ -145,7 +145,7 @@ describe("mini command", () => {
       fetch(request) {
         const url = new URL(request.url)
         if (url.pathname === "/api/health")
-          return Response.json({ healthy: true, version: InstallationVersion, pid: process.pid })
+          return Response.json({ healthy: true, version: OPENCODE_VERSION, pid: process.pid })
         if (url.pathname === "/api/location")
           return Response.json({ directory: process.cwd(), project: { id: "global", directory: process.cwd() } })
         if (url.pathname === "/api/model") {

@@ -3,6 +3,7 @@
 import { Script } from "@opencode-ai/script"
 import { $ } from "bun"
 import { fileURLToPath } from "url"
+import { UpdateArtifact } from "./update-artifact"
 
 console.log("=== publishing ===\n")
 
@@ -82,4 +83,13 @@ if (Script.release && !Script.preview) {
 
 if (Script.release) {
   await $`gh release edit ${tag} --draft=false --repo ${process.env.GH_REPO}`
+  const repo = process.env.GH_REPO
+  if (!repo) throw new Error("GH_REPO is required")
+  await UpdateArtifact.publish({
+    channel: Script.channel,
+    name: "desktop",
+    distribution: "github",
+    version: Script.version,
+    metadata: await UpdateArtifact.desktopMetadata(Script.version, repo),
+  })
 }

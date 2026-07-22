@@ -22,7 +22,7 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNodePlatform } from "@opencode-ai/core/effect/app-node-platform"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
-import { InstallationVersion } from "@opencode-ai/util/installation/version"
+import { App } from "@opencode-ai/core/app"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { EventTable } from "@opencode-ai/core/event/sql"
 import { Project } from "@opencode-ai/core/project"
@@ -3180,10 +3180,10 @@ describe("SessionRunnerLLM", () => {
       expect(requests[0]?.http?.headers).toEqual({
         "x-session-affinity": sessionID,
         "X-Session-Id": sessionID,
-        "User-Agent": `opencode/${InstallationVersion}`,
+        "User-Agent": App.useragent(App.make()),
         "x-opencode-project": Project.ID.global,
         "x-opencode-session": sessionID,
-        "x-opencode-client": "cli",
+        "x-opencode-client": "opencode",
       })
     }),
   )

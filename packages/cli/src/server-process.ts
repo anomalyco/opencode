@@ -4,7 +4,7 @@ import { NodeServices } from "@effect/platform-node"
 import { Service, type DiscoverOptions, type Info } from "@opencode-ai/client/effect/service"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Global } from "@opencode-ai/util/global"
-import { InstallationChannel, InstallationVersion } from "@opencode-ai/util/installation/version"
+import { OPENCODE_CHANNEL, OPENCODE_VERSION } from "./version"
 import { AppProcess } from "@opencode-ai/util/process"
 import { randomBytes, randomUUID } from "node:crypto"
 import path from "node:path"
@@ -69,7 +69,11 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
       const instanceID = randomUUID()
       const server = yield* start(
         {
-          client: process.env.OPENCODE_CLIENT ?? "cli",
+          app: {
+            name: process.env.OPENCODE_CLIENT ?? "cli",
+            version: OPENCODE_VERSION,
+            channel: OPENCODE_CHANNEL,
+          },
           hostname,
           port,
           password,
@@ -77,11 +81,11 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
           database: {
             path:
               process.env.OPENCODE_DB ??
-              (["latest", "beta", "prod"].includes(InstallationChannel) ||
+              (["latest", "beta", "prod"].includes(OPENCODE_CHANNEL) ||
               process.env.OPENCODE_DISABLE_CHANNEL_DB === "1" ||
               process.env.OPENCODE_DISABLE_CHANNEL_DB === "true"
                 ? "opencode.db"
-                : `opencode-${InstallationChannel.replace(/[^a-zA-Z0-9._-]/g, "-")}.db`),
+                : `opencode-${OPENCODE_CHANNEL.replace(/[^a-zA-Z0-9._-]/g, "-")}.db`),
           },
           models: {
             url: process.env.OPENCODE_MODELS_URL,
@@ -173,7 +177,7 @@ const register = Effect.fnUntraced(function* (
   yield* fs.makeDirectory(path.dirname(file), { recursive: true })
   const info = {
     id,
-    version: InstallationVersion,
+    version: OPENCODE_VERSION,
     url: HttpServer.formatAddress(address),
     pid: process.pid,
     password,

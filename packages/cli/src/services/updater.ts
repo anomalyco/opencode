@@ -1,10 +1,6 @@
 import { Global } from "@opencode-ai/util/global"
 import { AppProcess } from "@opencode-ai/util/process"
-import {
-  InstallationChannel,
-  InstallationLocal,
-  InstallationVersion,
-} from "@opencode-ai/util/installation/version"
+import { OPENCODE_CHANNEL, OPENCODE_LOCAL, OPENCODE_VERSION } from "../version"
 import { Context, Duration, Effect, FileSystem, Layer } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { parse, type ParseError } from "jsonc-parser"
@@ -52,7 +48,7 @@ export const layer = Layer.effect(
     const fs = yield* FileSystem.FileSystem
     const global = yield* Global.Service
     const appProcess = yield* AppProcess.Service
-    const channel = InstallationChannel.replace(/[^a-zA-Z0-9._-]/g, "-")
+    const channel = OPENCODE_CHANNEL.replace(/[^a-zA-Z0-9._-]/g, "-")
 
     const readPolicy = Effect.fnUntraced(function* () {
       const values = yield* Effect.forEach(["config.json", "opencode.json", "opencode.jsonc"], (name) =>
@@ -99,8 +95,8 @@ export const layer = Layer.effect(
       const response = yield* Effect.tryPromise({
         try: () =>
           fetch(
-            `https://registry.npmjs.org/${encodeURIComponent(packageName)}/${encodeURIComponent(InstallationChannel)}`,
-            { headers: { "User-Agent": `opencode/${InstallationVersion}` }, signal: AbortSignal.timeout(10_000) },
+            `https://registry.npmjs.org/${encodeURIComponent(packageName)}/${encodeURIComponent(OPENCODE_CHANNEL)}`,
+            { headers: { "User-Agent": `opencode/${OPENCODE_VERSION}` }, signal: AbortSignal.timeout(10_000) },
           ),
         catch: (cause) => new Error("Failed to check for updates", { cause }),
       })
@@ -138,13 +134,13 @@ export const layer = Layer.effect(
 
     const check = Effect.fn("cli.updater.check")(function* () {
       if (
-        InstallationLocal ||
+        OPENCODE_LOCAL ||
         ["1", "true"].includes(process.env.OPENCODE_DISABLE_AUTOUPDATE?.toLowerCase() ?? "")
       )
         return yield* Effect.logInfo("update check skipped", {
-          reason: InstallationLocal ? "local-install" : "disabled",
-          version: InstallationVersion,
-          channel: InstallationChannel,
+          reason: OPENCODE_LOCAL ? "local-install" : "disabled",
+          version: OPENCODE_VERSION,
+          channel: OPENCODE_CHANNEL,
         })
       const policy = yield* readPolicy()
       if (policy === false) return yield* Effect.logInfo("update check skipped", { reason: "policy-disabled" })
@@ -152,15 +148,15 @@ export const layer = Layer.effect(
       return yield* Effect.gen(function* () {
         const version = yield* latest()
         yield* Effect.logInfo("update check", {
-          current: InstallationVersion,
+          current: OPENCODE_VERSION,
           latest: version,
         })
-        const next = action(InstallationVersion, version, policy)
+        const next = action(OPENCODE_VERSION, version, policy)
         if (next === "none") return yield* Effect.logInfo("update check done", { action: "up-to-date" })
         const detected = yield* method()
         if (!detected) return yield* Effect.logWarning("automatic update skipped: installation method not found")
         yield* upgrade(detected, version)
-        yield* Effect.logInfo("updated OpenCode", { from: InstallationVersion, to: version, method: detected })
+        yield* Effect.logInfo("updated OpenCode", { from: OPENCODE_VERSION, to: version, method: detected })
       })
     }, Effect.catchCause((cause) => Effect.logWarning("automatic update failed", { cause })))
 

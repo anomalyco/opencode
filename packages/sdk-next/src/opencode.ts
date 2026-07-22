@@ -11,7 +11,7 @@ export const create = Effect.fn("OpenCode.create")(function* (options: ServerOpt
       ManagedRuntime.make(
         createEmbeddedRoutes({
           ...options,
-          client: options.client ?? "sdk",
+          app: { ...options.app, name: options.app?.name ?? "sdk" },
           database: { path: ":memory:", ...options.database },
         }).pipe(Layer.provide(HttpServer.layerServices)),
       ),

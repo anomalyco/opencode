@@ -39,12 +39,13 @@ describe("resource", () => {
     process.env.OTEL_RESOURCE_ATTRIBUTES =
       "opencode.client=web,service.instance.id=override,service.namespace=anomalyco"
 
-    expect(resource("cli").attributes).toMatchObject({
+    const app = { client: "cli", version: "1.2.3", channel: "beta" }
+    expect(resource(app).attributes).toMatchObject({
       "opencode.client": "cli",
       "service.namespace": "anomalyco",
     })
-    expect(resource("cli").attributes["service.instance.id"]).not.toBe("override")
-    expect(resource("cli").attributes["opencode.run"]).toMatch(/^[0-9a-f]{8}$/)
+    expect(resource(app).attributes["service.instance.id"]).not.toBe("override")
+    expect(resource(app).attributes["opencode.run"]).toMatch(/^[0-9a-f]{8}$/)
   })
 })
 

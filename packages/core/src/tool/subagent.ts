@@ -185,7 +185,11 @@ export const Plugin = {
 
                 const run = Effect.gen(function* () {
                   // The child session owns its agent/model (set at create); prompt only admits input.
-                  yield* runtime.session.prompt({ sessionID: child.id, text: input.prompt, resume: false })
+                  yield* runtime.session.prompt({
+                    sessionID: child.id,
+                    text: ["You are a subagent spawned by another session.", input.prompt].join("\n"),
+                    resume: false,
+                  })
                   yield* runtime.session.resume(child.id)
                   return yield* latestAssistantText(child.id)
                 }).pipe(Effect.onInterrupt(() => runtime.session.interrupt(child.id)))

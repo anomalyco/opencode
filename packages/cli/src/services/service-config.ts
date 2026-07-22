@@ -1,5 +1,5 @@
 import { Global } from "@opencode-ai/util/global"
-import { InstallationChannel, InstallationVersion } from "@opencode-ai/util/installation/version"
+import { OPENCODE_CHANNEL, OPENCODE_VERSION } from "../version"
 import { Hash } from "@opencode-ai/util/hash"
 import { Service } from "@opencode-ai/client/effect/service"
 import { Effect, FileSystem, Option, Schema } from "effect"
@@ -24,26 +24,26 @@ type Key = (typeof keys)[number]
 const decodeInfo = Schema.decodeUnknownEffect(Schema.fromJsonString(Info))
 const decodeRegistration = Schema.decodeUnknownEffect(Schema.fromJsonString(Service.Info))
 
-export function filename(channel = InstallationChannel) {
+export function filename(channel = OPENCODE_CHANNEL) {
   if (channel === "latest" || channel === "next") return "service.json"
   return `service-${channel.replace(/[^a-zA-Z0-9._-]/g, "-")}.json`
 }
 
-export function defaultPort(channel = InstallationChannel) {
+export function defaultPort(channel = OPENCODE_CHANNEL) {
   if (channel === "latest" || channel === "next") return 0xc0de
   if (channel === "local") return 0xc0df
   return 10_000 + (Number.parseInt(Hash.fast(channel).slice(0, 8), 16) % 50_000)
 }
 
-export function legacyFilename(channel = InstallationChannel) {
+export function legacyFilename(channel = OPENCODE_CHANNEL) {
   if (channel === "latest" || channel === "local") return
   return `service-${Hash.fast(channel)}.json`
 }
 
 export function versionBelongsToChannel(
   version: string | undefined,
-  channel = InstallationChannel,
-  installedVersion = InstallationVersion,
+  channel = OPENCODE_CHANNEL,
+  installedVersion = OPENCODE_VERSION,
 ) {
   if (version === undefined) return false
   if (version === installedVersion) return true
@@ -55,8 +55,8 @@ export function versionBelongsToChannel(
 export const migrateRegistration = Effect.fnUntraced(function* (
   legacy: string,
   file: string,
-  channel = InstallationChannel,
-  installedVersion = InstallationVersion,
+  channel = OPENCODE_CHANNEL,
+  installedVersion = OPENCODE_VERSION,
 ) {
   const fs = yield* FileSystem.FileSystem
   const text = yield* fs.readFileString(legacy).pipe(Effect.option)
@@ -92,7 +92,7 @@ const paths = Effect.gen(function* () {
     legacyConfigFile: legacy ? path.join(global.config, legacy) : undefined,
     legacyRegistrationFiles: [
       ...(legacy ? [path.join(global.state, legacy)] : []),
-      ...(name !== "service.json" && InstallationChannel !== "local" ? [path.join(global.state, "service.json")] : []),
+      ...(name !== "service.json" && OPENCODE_CHANNEL !== "local" ? [path.join(global.state, "service.json")] : []),
     ],
     configFile: path.join(global.config, name),
   }
@@ -103,7 +103,7 @@ export const options = Effect.fnUntraced(function* () {
   yield* Effect.forEach(legacyRegistrationFiles, (legacy) => migrateRegistration(legacy, file))
   return {
     file,
-    version: InstallationVersion,
+    version: OPENCODE_VERSION,
     command: [...selfCommand(), "serve", "--service"],
   }
 })

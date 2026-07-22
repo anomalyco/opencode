@@ -32,10 +32,12 @@ import {
 } from "solid-js"
 import {
   TuiLifecycleProvider,
+  TuiAppProvider,
   TuiPathsProvider,
   TuiStartupProvider,
   TuiTerminalEnvironmentProvider,
   useTuiStartup,
+  type TuiApp,
 } from "./context/runtime"
 import { DialogProvider, useDialog } from "./ui/dialog"
 import { DialogIntegration } from "./component/dialog-integration"
@@ -139,6 +141,7 @@ const appBindingCommands = [
 ] as const
 
 export type TuiInput = {
+  app: TuiApp
   server: {
     endpoint: Endpoint
     service?: {
@@ -224,7 +227,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
         }
         if (process.env.OPENCODE_DRIVE) {
           const { Drive } = yield* Effect.promise(() => import("@opencode-ai/simulation/frontend"))
-          return yield* Drive.create(options)
+          return yield* Drive.create(options, input.app.version)
         }
         return yield* Effect.acquireRelease(
           Effect.tryPromise({
@@ -273,9 +276,10 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                 }}
               >
                 <EpilogueProvider set={(value) => (exit.epilogue = value)}>
-                  <ErrorBoundary
-                    fallback={(error, reset) => <ErrorComponent error={error} reset={reset} mode={mode} />}
-                  >
+                  <TuiAppProvider value={input.app}>
+                    <ErrorBoundary
+                      fallback={(error, reset) => <ErrorComponent error={error} reset={reset} mode={mode} />}
+                    >
                     <TuiPathsProvider
                       value={{
                         cwd: process.cwd(),
@@ -381,7 +385,8 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                         </TuiTerminalEnvironmentProvider>
                       </TuiLifecycleProvider>
                     </TuiPathsProvider>
-                  </ErrorBoundary>
+                    </ErrorBoundary>
+                  </TuiAppProvider>
                 </EpilogueProvider>
               </ExitProvider>
             </LogProvider>

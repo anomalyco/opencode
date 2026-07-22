@@ -1,6 +1,6 @@
 import { Service, type Endpoint, type EnsureOptions } from "@opencode-ai/client/effect/service"
 import { ClientError, isUnauthorizedError, OpenCode } from "@opencode-ai/client/promise"
-import { InstallationVersion } from "@opencode-ai/util/installation/version"
+import { OPENCODE_VERSION } from "../version"
 import { Effect, Redacted } from "effect"
 import { Env } from "../env"
 import { ServiceConfig } from "./service-config"
@@ -32,9 +32,9 @@ export const resolve = Effect.fn("cli.server-connection.resolve")(function* (arg
       try: () => client.health.get({ signal: AbortSignal.timeout(5_000) }),
       catch: (cause) => connectError(endpoint, cause),
     })
-    if (health.version !== InstallationVersion)
+    if (health.version !== OPENCODE_VERSION)
       process.stderr.write(
-        `Warning: Server at ${endpoint.url} has version ${health.version}; this client is ${InstallationVersion}. Continuing anyway.\n`,
+        `Warning: Server at ${endpoint.url} has version ${health.version}; this client is ${OPENCODE_VERSION}. Continuing anyway.\n`,
       )
     return { endpoint } satisfies Resolved
   }

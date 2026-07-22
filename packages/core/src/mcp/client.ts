@@ -12,6 +12,7 @@ import {
   ElicitationCompleteNotificationSchema,
   ElicitRequestSchema,
   GetPromptResultSchema,
+  type Implementation,
   type ElicitRequestFormParams,
   type ElicitRequestParams,
   type ElicitRequestURLParams,
@@ -29,7 +30,6 @@ import {
 } from "@modelcontextprotocol/sdk/types.js"
 import { Cause, Effect, Exit, Schema } from "effect"
 import { ConfigMCP } from "../config/mcp"
-import { InstallationVersion } from "@opencode-ai/util/installation/version"
 
 const DEFAULT_STARTUP_TIMEOUT = 30_000
 const DEFAULT_CATALOG_TIMEOUT = 30_000
@@ -185,6 +185,7 @@ export const connect = Effect.fnUntraced(function* (
   // stored token (and a no-op redirect) surfaces an UnauthorizedError, which we map to needs_auth.
   authProvider?: OAuthClientProvider,
   elicitation?: ElicitationHandler,
+  clientInfo: Implementation = { name: "opencode", version: "unknown" },
 ) {
   const transport: Transport = yield* Effect.gen(function* () {
     if (config.type === "local") {
@@ -209,7 +210,7 @@ export const connect = Effect.fnUntraced(function* (
     })
   })
   const client = new Client(
-    { name: "opencode", version: InstallationVersion },
+    clientInfo,
     {
       capabilities: {
         ...(elicitation ? { elicitation: { form: { applyDefaults: true }, url: {} } } : {}),

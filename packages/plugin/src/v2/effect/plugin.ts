@@ -1,6 +1,7 @@
 import type { PluginApi } from "@opencode-ai/client/effect/api"
 import type { Effect, Scope } from "effect"
 import type { PluginOptions } from "../options.js"
+import type { App } from "../app.js"
 import type { AgentDomain } from "./agent.js"
 import type { AISDKDomain } from "./aisdk.js"
 import type { CatalogDomain } from "./catalog.js"
@@ -13,6 +14,7 @@ import type { SkillDomain } from "./skill.js"
 import type { ToolDomain } from "./tool.js"
 
 export interface Context {
+  readonly app: App
   readonly options: PluginOptions
   readonly agent: AgentDomain
   readonly aisdk: AISDKDomain

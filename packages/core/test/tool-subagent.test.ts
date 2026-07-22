@@ -273,6 +273,9 @@ describe("SubagentTool", () => {
             agent: "reviewer",
             model: childModel,
           })
+          expect((yield* sessions.pending(child.id)).find((message) => message.type === "user")?.data.text).toBe(
+            "You are a subagent spawned by another session.\nreview this",
+          )
 
           const fallback = yield* settleTool(registry, {
             sessionID: parent.id,

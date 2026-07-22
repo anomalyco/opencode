@@ -2,8 +2,8 @@ import { createServer } from "node:http"
 import type { IntegrationOAuthMethodRegistration } from "@opencode-ai/plugin/v2/effect/integration"
 import { define } from "@opencode-ai/plugin/v2/effect/plugin"
 import { Clock, Deferred, Effect, Option, Schema } from "effect"
+import { App } from "../../app"
 import { Credential } from "../../credential"
-import { InstallationVersion } from "@opencode-ai/util/installation/version"
 import { Integration } from "../../integration"
 import { OauthCallbackPage } from "../../oauth/page"
 import { ProviderV2 } from "../../provider"
@@ -48,7 +48,7 @@ const DeviceError = Schema.Struct({
 })
 const decodeDeviceError = Schema.decodeUnknownOption(Schema.fromJsonString(DeviceError))
 
-const browser = {
+const browser = (app: App.Info) => ({
   integrationID: Integration.ID.make("xai"),
   method: {
     id: browserMethodID,
@@ -108,15 +108,15 @@ const browser = {
         url: authorizeURL(pkce, state, randomString(32)),
         instructions: "Complete authorization in your browser. This window will close automatically.",
         callback: Deferred.await(code).pipe(
-          Effect.flatMap((value) => exchange(value, pkce)),
+          Effect.flatMap((value) => exchange(value, pkce, app)),
           Effect.flatMap((tokens) => credential(browserMethodID, tokens)),
         ),
       }
     }),
-  refresh: (value) => refresh(browserMethodID, Credential.OAuth.make({ ...value, methodID: browserMethodID })),
-} satisfies IntegrationOAuthMethodRegistration
+  refresh: (value) => refresh(browserMethodID, Credential.OAuth.make({ ...value, methodID: browserMethodID }), app),
+}) satisfies IntegrationOAuthMethodRegistration
 
-const device = {
+const device = (app: App.Info) => ({
   integrationID: Integration.ID.make("xai"),
   method: {
     id: deviceMethodID,
@@ -128,7 +128,7 @@ const device = {
       `${issuer}/device/code`,
       {
         method: "POST",
-        headers: headers(),
+        headers: headers(app),
         body: new URLSearchParams({ client_id: clientID, scope }).toString(),
       },
       Device,
@@ -142,14 +142,14 @@ const device = {
               url: value.verification_uri_complete ?? value.verification_uri,
               instructions: `Open ${value.verification_uri} on any device and enter code: ${value.user_code}`,
               ...(lifetime ? { expiresAt: created + lifetime * 1000 } : {}),
-              callback: poll(value).pipe(Effect.flatMap((tokens) => credential(deviceMethodID, tokens))),
+              callback: poll(value, app).pipe(Effect.flatMap((tokens) => credential(deviceMethodID, tokens))),
             }
           }),
         ),
       ),
     ),
-  refresh: (value) => refresh(deviceMethodID, Credential.OAuth.make({ ...value, methodID: deviceMethodID })),
-} satisfies IntegrationOAuthMethodRegistration
+  refresh: (value) => refresh(deviceMethodID, Credential.OAuth.make({ ...value, methodID: deviceMethodID }), app),
+}) satisfies IntegrationOAuthMethodRegistration
 
 export const XAIPlugin = define({
   id: "opencode.provider.xai",
@@ -158,8 +158,8 @@ export const XAIPlugin = define({
       draft.update("xai", (integration) => {
         integration.name = "xAI"
       })
-      draft.method.update(browser)
-      draft.method.update(device)
+      draft.method.update(browser(ctx.app))
+      draft.method.update(device(ctx.app))
       draft.method.update({ integrationID: "xai", method: { type: "key", label: "Manually enter API Key" } })
     })
     yield* ctx.aisdk.hook(
@@ -180,12 +180,12 @@ export const XAIPlugin = define({
   }),
 })
 
-function exchange(code: string, pkce: Pkce) {
+function exchange(code: string, pkce: Pkce, app: App.Info) {
   return request(
     `${issuer}/token`,
     {
       method: "POST",
-      headers: headers(),
+      headers: headers(app),
       body: new URLSearchParams({
         grant_type: "authorization_code",
         code,
@@ -198,12 +198,12 @@ function exchange(code: string, pkce: Pkce) {
   )
 }
 
-function refresh(methodID: Integration.MethodID, value: Credential.OAuth) {
+function refresh(methodID: Integration.MethodID, value: Credential.OAuth, app: App.Info) {
   return request(
     `${issuer}/token`,
     {
       method: "POST",
-      headers: headers(),
+      headers: headers(app),
       body: new URLSearchParams({
         grant_type: "refresh_token",
         refresh_token: value.refresh,
@@ -214,7 +214,7 @@ function refresh(methodID: Integration.MethodID, value: Credential.OAuth) {
   ).pipe(Effect.flatMap((tokens) => credential(methodID, tokens, value.refresh, value.metadata)))
 }
 
-function poll(device: typeof Device.Type): Effect.Effect<Token, unknown> {
+function poll(device: typeof Device.Type, app: App.Info): Effect.Effect<Token, unknown> {
   return Effect.gen(function* () {
     const started = yield* Clock.currentTimeMillis
     const expires = started + positiveSeconds(device.expires_in, 300) * 1000
@@ -225,7 +225,7 @@ function poll(device: typeof Device.Type): Effect.Effect<Token, unknown> {
         }
         const response = yield* send(`${issuer}/token`, {
           method: "POST",
-          headers: headers(),
+          headers: headers(app),
           body: new URLSearchParams({
             grant_type: deviceGrant,
             client_id: clientID,
@@ -314,11 +314,11 @@ function tokenExpiration(tokens: Token) {
   return expiration ? expiration * 1000 : Date.now() + 3600 * 1000
 }
 
-function headers() {
+function headers(app: App.Info) {
   return {
     "Content-Type": "application/x-www-form-urlencoded",
     Accept: "application/json",
-    "User-Agent": `opencode/${InstallationVersion}`,
+    "User-Agent": App.useragent(app),
   }
 }
 

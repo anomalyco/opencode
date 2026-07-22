@@ -4,7 +4,13 @@ import { Observability } from "@opencode-ai/util/observability"
 import { Schema } from "effect"
 
 export const ServerOptions = Schema.Struct({
-  client: Schema.optional(Schema.String),
+  app: Schema.optional(
+    Schema.Struct({
+      name: Schema.optional(Schema.String),
+      version: Schema.optional(Schema.String),
+      channel: Schema.optional(Schema.String),
+    }),
+  ),
   hostname: Schema.optional(Schema.String),
   port: Schema.optional(
     Schema.Int.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(65_535)),

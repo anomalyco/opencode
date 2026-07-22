@@ -1,4 +1,5 @@
 import { AISDK } from "@opencode-ai/core/aisdk"
+import { App } from "@opencode-ai/core/app"
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
@@ -71,6 +72,7 @@ describe("GithubCopilotPlugin", () => {
           return Response.json({ ok: true })
         },
         false,
+        App.make({ name: "test", version: "1.2.3", channel: "beta" }),
       )
       yield* Effect.promise(() =>
         send("https://api.githubcopilot.com/chat/completions", {
@@ -86,6 +88,7 @@ describe("GithubCopilotPlugin", () => {
       expect(requests[0]?.get("x-initiator")).toBe("user")
       expect(requests[0]?.get("copilot-vision-request")).toBe("true")
       expect(requests[0]?.get("x-github-api-version")).toBe("2026-06-01")
+      expect(requests[0]?.get("user-agent")).toBe("opencode/beta/1.2.3/test")
     }),
   )
 

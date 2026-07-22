@@ -12,3 +12,9 @@ test("rejects ports outside the valid range", () => {
   expect(Option.isNone(decode({ port: -1 }))).toBe(true)
   expect(Option.isNone(decode({ port: 65_536 }))).toBe(true)
 })
+
+test("accepts optional app metadata", () => {
+  expect(
+    Option.getOrThrow(decode({ app: { name: "sdk", version: "1.2.3", channel: "beta" } })).app,
+  ).toEqual({ name: "sdk", version: "1.2.3", channel: "beta" })
+})

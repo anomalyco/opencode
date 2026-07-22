@@ -1,6 +1,5 @@
 import { TextAttributes } from "@opentui/core"
 import { createMemo, createSignal, For } from "solid-js"
-import { InstallationChannel, InstallationVersion } from "@opencode-ai/util/installation/version"
 import { Keymap } from "../context/keymap"
 import { useTheme } from "../context/theme"
 import { useDialog } from "../ui/dialog"
@@ -9,6 +8,7 @@ import { useLocal } from "../context/local"
 import { useClipboard } from "../context/clipboard"
 import { useToast } from "../ui/toast"
 import { describeOS, describeTerminal } from "../util/system"
+import { useTuiApp } from "../context/runtime"
 
 export function DialogDebug() {
   const { themeV2 } = useTheme()
@@ -17,6 +17,7 @@ export function DialogDebug() {
   const local = useLocal()
   const clipboard = useClipboard()
   const toast = useToast()
+  const app = useTuiApp()
   const [copied, setCopied] = createSignal(false)
 
   dialog.setSize("large")
@@ -24,7 +25,7 @@ export function DialogDebug() {
   const entries = createMemo(() => {
     const model = local.model.current()
     return [
-      { label: "Version", value: `${InstallationVersion} (${InstallationChannel})` },
+      { label: "Version", value: `${app.version} (${app.channel})` },
       { label: "Date", value: new Date().toISOString() },
       { label: "OS", value: describeOS() },
       { label: "Terminal", value: describeTerminal() },

@@ -1,5 +1,5 @@
 import os from "os"
-import { InstallationVersion } from "@opencode-ai/util/installation/version"
+import { App } from "../../app"
 import { Effect } from "effect"
 import { define } from "@opencode-ai/plugin/v2/effect/plugin"
 import { ProviderV2 } from "../../provider"
@@ -29,10 +29,13 @@ export const CloudflareWorkersAIPlugin = define({
         if (!hasWorkersEndpoint(evt.model) && !accountId) return
         const mod = yield* Effect.promise(() => import("@ai-sdk/openai-compatible"))
         evt.sdk = mod.createOpenAICompatible(
-          sdkOptions({
-            ...evt.options,
-            baseURL: evt.options.baseURL ?? (accountId ? workersEndpoint(accountId) : undefined),
-          }) as any,
+          sdkOptions(
+            {
+              ...evt.options,
+              baseURL: evt.options.baseURL ?? (accountId ? workersEndpoint(accountId) : undefined),
+            },
+            ctx.app,
+          ) as any,
         )
       }),
     )
@@ -61,13 +64,13 @@ function hasWorkersEndpoint(model: {
   return ProviderV2.isAISDK(model.package) && typeof model.settings?.baseURL === "string"
 }
 
-function sdkOptions(options: Record<string, any>) {
+function sdkOptions(options: Record<string, any>, app: App.Info) {
   return {
     ...options,
     baseURL: expandAccountId(options.baseURL),
     apiKey: process.env.CLOUDFLARE_API_KEY ?? options.apiKey,
     headers: {
-      "User-Agent": `opencode/${InstallationVersion} cloudflare-workers-ai (${os.platform()} ${os.release()}; ${os.arch()})`,
+      "User-Agent": `${App.useragent(app)} cloudflare-workers-ai (${os.platform()} ${os.release()}; ${os.arch()})`,
       ...options.headers,
     },
     name: providerID,

@@ -6,7 +6,7 @@ import { SimulationRenderer } from "./renderer"
 import { SimulationServer } from "./server"
 
 /** Drive-mode renderer and control-server acquisition. */
-export const create = Effect.fn("Drive.create")(function* (options: CliRendererConfig) {
+export const create = Effect.fn("Drive.create")(function* (options: CliRendererConfig, version: string) {
   const headless = (yield* Config.string("OPENCODE_DRIVE_RENDERER").pipe(Config.withDefault("visible"))) === "headless"
   const manifest = yield* DriveManifest.resolve()
   const renderer = headless
@@ -19,7 +19,7 @@ export const create = Effect.fn("Drive.create")(function* (options: CliRendererC
           }),
       )
   if (!headless && manifest.viewport) renderer.resize(manifest.viewport.cols, manifest.viewport.rows)
-  const server = yield* SimulationServer.start(SimulationActions.createHarness(renderer), manifest.endpoints.ui)
+  const server = yield* SimulationServer.start(SimulationActions.createHarness(renderer), manifest.endpoints.ui, version)
   yield* Effect.sync(() => process.stderr.write(`opencode drive ui websocket: ${server.url}\n`))
   return renderer
 })

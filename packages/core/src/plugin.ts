@@ -3,6 +3,7 @@ export * as PluginV2 from "./plugin"
 import type { Plugin } from "@opencode-ai/plugin/v2/effect/plugin"
 import { Event, ID, type Info } from "@opencode-ai/schema/plugin"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { App } from "./app"
 import { Context, Effect, Exit, Layer, Scope, Semaphore } from "effect"
 import { AgentV2 } from "./agent"
 import { AISDK } from "./aisdk"
@@ -144,6 +145,7 @@ export const node = makeLocationNode({
   layer,
   deps: [
     EventV2.node,
+    App.node,
     AgentV2.node,
     AISDK.node,
     Catalog.node,

@@ -3,14 +3,15 @@ import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import { createSignal, For, Show } from "solid-js"
 import { getScrollAcceleration } from "../util/scroll"
 import { useClipboard } from "../context/clipboard"
-import { InstallationVersion } from "@opencode-ai/util/installation/version"
 import { useExit } from "../context/exit"
+import { useTuiApp } from "../context/runtime"
 import { describeOS, describeTerminal } from "../util/system"
 
 export function ErrorComponent(props: { error: Error; reset: () => void; mode?: "dark" | "light" }) {
   const term = useTerminalDimensions()
   const exit = useExit()
   const clipboard = useClipboard()
+  const app = useTuiApp()
   const [copied, setCopied] = createSignal(false)
 
   // Safe fallback palette per mode (mirrors theme/assets/opencode.json) since the
@@ -42,7 +43,7 @@ export function ErrorComponent(props: { error: Error; reset: () => void; mode?: 
 
   const message = props.error.message || "An unknown error occurred."
   const stack = props.error.stack || "No stack trace available."
-  const issueURL = buildIssueURL(message, stack)
+  const issueURL = buildIssueURL(message, stack, app.version)
 
   const copyReport = () => {
     void clipboard.write?.(issueURL.toString()).then(() => setCopied(true))
@@ -192,7 +193,7 @@ export function ErrorComponent(props: { error: Error; reset: () => void; mode?: 
                 ? "Report copied — paste it into a new GitHub issue."
                 : "Copy the report and open a GitHub issue to help us fix this."}
             </text>
-            <text fg={colors.muted}>OpenCode {InstallationVersion}</text>
+            <text fg={colors.muted}>OpenCode {app.version}</text>
           </box>
         </Show>
       </box>
@@ -200,13 +201,13 @@ export function ErrorComponent(props: { error: Error; reset: () => void; mode?: 
   )
 }
 
-function buildIssueURL(message: string, stack: string) {
+function buildIssueURL(message: string, stack: string, version: string) {
   // Field keys match the ids in .github/ISSUE_TEMPLATE/bug-report.yml so the issue
   // form opens pre-filled. Populating os/terminal/reproduce keeps the report past
   // the contributing-guidelines compliance check, which pushes for system info.
   const url = new URL("https://github.com/anomalyco/opencode/issues/new?template=bug-report.yml")
   url.searchParams.set("title", `TUI crash: ${message}`)
-  url.searchParams.set("opencode-version", InstallationVersion)
+  url.searchParams.set("opencode-version", version)
   url.searchParams.set("os", describeOS())
   url.searchParams.set("terminal", describeTerminal())
   url.searchParams.set(

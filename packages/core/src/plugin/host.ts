@@ -2,6 +2,7 @@ export * as PluginHost from "./host"
 
 import type { Plugin } from "@opencode-ai/plugin/v2/effect"
 import { EventManifest } from "@opencode-ai/schema/event-manifest"
+import { App } from "../app"
 import { Effect, Schema, Stream } from "effect"
 import { AgentV2 } from "../agent"
 import { AISDK } from "../aisdk"
@@ -26,6 +27,7 @@ import { PluginHooks } from "./hooks"
 
 const mutable = <T>(value: T) => value as DeepMutable<T>
 export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Interface) {
+  const app = yield* App.Metadata
   const agents = yield* AgentV2.Service
   const aisdk = yield* AISDK.Service
   const catalog = yield* Catalog.Service
@@ -61,6 +63,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
     effect.pipe(Effect.map((data) => ({ location: locationInfo(), data })))
 
   return {
+    app,
     options: {},
     agent: {
       get: (id) => agents.get(AgentV2.ID.make(id)),

@@ -1,6 +1,6 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { Global } from "@opencode-ai/util/global"
-import { InstallationVersion } from "@opencode-ai/util/installation/version"
+import { OPENCODE_VERSION } from "../src/version"
 import { expect, test } from "bun:test"
 import { Effect, FileSystem, Scope } from "effect"
 import fs from "node:fs/promises"
@@ -17,7 +17,7 @@ test("resolution groups Effect-native lifecycle operations only for the managed 
     fetch() {
       return Response.json({
         healthy: true,
-        version: InstallationVersion,
+        version: OPENCODE_VERSION,
         pid: process.pid,
       })
     },
@@ -33,7 +33,7 @@ test("resolution groups Effect-native lifecycle operations only for the managed 
       registration,
       JSON.stringify({
         id,
-        version: InstallationVersion,
+        version: OPENCODE_VERSION,
         url: server.url.toString(),
         pid: process.pid,
       }),
