@@ -52,6 +52,7 @@ const BedrockToolResultContentItem = Schema.Union([
   Schema.Struct({ text: Schema.String }),
   Schema.Struct({ json: Schema.Unknown }),
   BedrockMedia.ImageBlock,
+  BedrockMedia.DocumentBlock,
 ])
 
 const BedrockToolResultBlock = Schema.Struct({
@@ -283,8 +284,6 @@ const lowerToolResultContent = Effect.fn("BedrockConverse.lowerToolResultContent
       data: item.uri,
       filename: item.name,
     })
-    if (!("image" in media))
-      return yield* ProviderShared.invalidRequest("Bedrock Converse only supports image media in tool results")
     content.push(media)
   }
   return content
@@ -331,6 +330,10 @@ const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (
           continue
         }
       }
+      if (content.some((part) => "document" in part) && !content.some((part) => "text" in part))
+        return yield* ProviderShared.invalidRequest(
+          "Bedrock Converse user messages containing documents must also contain text",
+        )
       messages.push({ role: "user", content })
       continue
     }

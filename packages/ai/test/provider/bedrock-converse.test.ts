@@ -549,9 +549,16 @@ describe("Bedrock Converse route", () => {
         LLM.request({
           id: "req_doc",
           model,
+          cache: "none",
           messages: [
             Message.user([
-              { type: "media", mediaType: "application/pdf", data: "UERGREFUQQ==", filename: "report.pdf" },
+              { type: "text", text: "Summarize these documents." },
+              {
+                type: "media",
+                mediaType: "application/pdf",
+                data: "UERGREFUQQ==",
+                filename: "../quarterly_report!.pdf",
+              },
               { type: "media", mediaType: "text/csv", data: "Q1NWREFUQQ==" },
             ]),
           ],
@@ -563,14 +570,79 @@ describe("Bedrock Converse route", () => {
           {
             role: "user",
             content: [
-              // Filename round-trips when supplied.
-              { document: { format: "pdf", name: "report.pdf", source: { bytes: "UERGREFUQQ==" } } },
+              { text: "Summarize these documents." },
+              // Bedrock document names exclude extensions and restricted punctuation.
+              { document: { format: "pdf", name: "quarterly report", source: { bytes: "UERGREFUQQ==" } } },
               // Falls back to a stable placeholder when filename is missing.
-              { document: { format: "csv", name: "document.csv", source: { bytes: "Q1NWREFUQQ==" } } },
+              { document: { format: "csv", name: "document", source: { bytes: "Q1NWREFUQQ==" } } },
             ],
           },
         ],
       })
+    }),
+  )
+
+  it.effect("requires text alongside documents in user messages", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.prepare(
+        LLM.request({
+          model,
+          messages: [Message.user({ type: "media", mediaType: "application/pdf", data: "UERGREFUQQ==" })],
+        }),
+      ).pipe(Effect.flip)
+
+      expect(error.message).toContain("user messages containing documents must also contain text")
+    }),
+  )
+
+  it.effect("lowers document media in tool results", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<BedrockConverse.BedrockConverseBody>(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "read", input: { path: "report.pdf" } })]),
+            Message.tool({
+              id: "call_1",
+              name: "read",
+              result: {
+                type: "content",
+                value: [
+                  { type: "text", text: "Read successfully" },
+                  {
+                    type: "file",
+                    uri: "data:application/pdf;base64,UERGREFUQQ==",
+                    mime: "application/pdf",
+                    name: "report.pdf",
+                  },
+                ],
+              },
+            }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "assistant",
+          content: [{ toolUse: { toolUseId: "call_1", name: "read", input: { path: "report.pdf" } } }],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              toolResult: {
+                toolUseId: "call_1",
+                status: "success",
+                content: [
+                  { text: "Read successfully" },
+                  { document: { format: "pdf", name: "report", source: { bytes: "UERGREFUQQ==" } } },
+                ],
+              },
+            },
+          ],
+        },
+      ])
     }),
   )
 

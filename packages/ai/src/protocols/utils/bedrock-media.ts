@@ -49,10 +49,18 @@ const DOCUMENT_FORMATS = {
   "text/markdown": "md",
 } as const satisfies Record<string, DocumentFormat>
 
+const documentName = (filename: string | undefined) => {
+  const name = (filename?.split(/[\\/]/).at(-1)?.replace(/\.[^.]*$/, "") ?? "document")
+    .replace(/[^\p{L}\p{N}\s()[\]-]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+  return name || "document"
+}
+
 const documentBlock = (part: MediaPart, format: DocumentFormat, bytes: string): DocumentBlock => ({
   document: {
     format,
-    name: part.filename ?? `document.${format}`,
+    name: documentName(part.filename),
     source: { bytes },
   },
 })

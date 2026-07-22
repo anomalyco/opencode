@@ -15,6 +15,13 @@ const model = Gemini.route
   })
   .model({ id: "gemini-2.5-flash" })
 
+const gemini3 = Gemini.route
+  .with({
+    endpoint: { baseURL: "https://generativelanguage.test/v1beta/" },
+    auth: Auth.header("x-goog-api-key", "test"),
+  })
+  .model({ id: "gemini-3-flash" })
+
 const request = LLM.request({
   id: "req_1",
   model,
@@ -155,6 +162,46 @@ describe("Gemini route", () => {
         },
       ])
       expect(JSON.stringify(prepared.body.contents)).not.toContain('"content":"AAECAw=="')
+    }),
+  )
+
+  it.effect("nests media tool results in Gemini 3 function responses", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<Gemini.GeminiBody>(
+        LLM.request({
+          model: gemini3,
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_file", name: "read", input: { path: "report.pdf" } })]),
+            Message.tool({
+              id: "call_file",
+              name: "read",
+              result: {
+                type: "content",
+                value: [
+                  { type: "text", text: "File read successfully" },
+                  { type: "file", uri: "data:application/pdf;base64,JVBERi0xLjQ=", mime: "application/pdf" },
+                ],
+              },
+            }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.contents).toEqual([
+        { role: "model", parts: [{ functionCall: { name: "read", args: { path: "report.pdf" } } }] },
+        {
+          role: "user",
+          parts: [
+            {
+              functionResponse: {
+                name: "read",
+                response: { name: "read", content: "File read successfully" },
+                parts: [{ inlineData: { mimeType: "application/pdf", data: "JVBERi0xLjQ=" } }],
+              },
+            },
+          ],
+        },
+      ])
     }),
   )
 

@@ -339,7 +339,7 @@ const lowerMedia = Effect.fn("AnthropicMessages.lowerMedia")(function* (part: Me
   const media = yield* ProviderShared.validateMedia(
     "Anthropic Messages",
     part,
-    new Set<string>([...ProviderShared.IMAGE_MIMES, ...ProviderShared.DOCUMENT_MIMES]),
+    new Set<string>([...ProviderShared.IMAGE_MIMES, ...ProviderShared.PDF_MIMES]),
   )
   if (media.mime === "application/pdf")
     return {
@@ -369,7 +369,7 @@ const lowerToolResultContentItem = Effect.fn("AnthropicMessages.lowerToolResultC
   const media = yield* ProviderShared.validateToolFile(
     "Anthropic Messages",
     item,
-    new Set<string>([...ProviderShared.IMAGE_MIMES, ...ProviderShared.DOCUMENT_MIMES]),
+    new Set<string>([...ProviderShared.IMAGE_MIMES, ...ProviderShared.PDF_MIMES]),
   )
   if (media.mime === "application/pdf")
     return {

@@ -364,7 +364,7 @@ const lowerUserContent = Effect.fn("OpenAIResponses.lowerUserContent")(function*
     const media = yield* ProviderShared.validateMedia(
       "OpenAI Responses",
       part,
-      new Set<string>([...ProviderShared.IMAGE_MIMES, ...ProviderShared.DOCUMENT_MIMES]),
+      new Set<string>([...ProviderShared.IMAGE_MIMES, ...ProviderShared.PDF_MIMES]),
     )
     if (media.mime === "application/pdf")
       return {
@@ -386,7 +386,7 @@ const lowerToolResultContentItem = Effect.fn("OpenAIResponses.lowerToolResultCon
   const media = yield* ProviderShared.validateToolFile(
     "OpenAI Responses",
     item,
-    new Set<string>([...ProviderShared.IMAGE_MIMES, ...ProviderShared.DOCUMENT_MIMES]),
+    new Set<string>([...ProviderShared.IMAGE_MIMES, ...ProviderShared.PDF_MIMES]),
   )
   if (media.mime === "application/pdf")
     return {

@@ -41,6 +41,7 @@ const GeminiInlineDataPart = Schema.Struct({
     data: Schema.String,
   }),
 })
+type GeminiInlineDataPart = Schema.Schema.Type<typeof GeminiInlineDataPart>
 
 const GeminiFunctionCallPart = Schema.Struct({
   functionCall: Schema.Struct({
@@ -54,6 +55,7 @@ const GeminiFunctionResponsePart = Schema.Struct({
   functionResponse: Schema.Struct({
     name: Schema.String,
     response: Schema.Unknown,
+    parts: Schema.optional(Schema.Array(GeminiInlineDataPart)),
   }),
 })
 
@@ -204,6 +206,7 @@ const lowerToolCall = (part: ToolCallPart) => ({
 
 const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMRequest) {
   const contents: GeminiContent[] = []
+  const supportsFunctionResponseParts = String(request.model.id).startsWith("gemini-3")
 
   for (const message of request.messages) {
     if (message.role === "system") {
@@ -266,6 +269,12 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
       }
       const content: ReadonlyArray<ToolContent> = part.result.value
       const text = content.filter((item) => item.type === "text").map((item) => item.text)
+      const media: GeminiInlineDataPart[] = []
+      for (const item of content) {
+        if (item.type === "text") continue
+        const value = yield* ProviderShared.validateToolFile("Gemini", item, MEDIA_MIMES)
+        media.push({ inlineData: { mimeType: value.mime, data: value.base64 } })
+      }
       parts.push({
         functionResponse: {
           name: part.name,
@@ -273,13 +282,10 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
             name: part.name,
             content: text.join("\n"),
           },
+          parts: supportsFunctionResponseParts && media.length > 0 ? media : undefined,
         },
       })
-      for (const item of content) {
-        if (item.type === "text") continue
-        const media = yield* ProviderShared.validateToolFile("Gemini", item, MEDIA_MIMES)
-        parts.push({ inlineData: { mimeType: media.mime, data: media.base64 } })
-      }
+      if (!supportsFunctionResponseParts) parts.push(...media)
     }
     contents.push({ role: "user", parts })
   }
