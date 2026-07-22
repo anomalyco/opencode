@@ -2,6 +2,7 @@ import { createScrollbackWriter } from "@opentui/solid"
 import { TextRenderable, type ColorInput, type ScrollbackRenderContext, type ScrollbackWriter } from "@opentui/core"
 import { Match, Switch, createMemo } from "solid-js"
 import { entryBody, entryFlags } from "./entry.body"
+import { monoMarkdown, monoMarkdownRenderNode, monoMarkdownTableOptions } from "./mono"
 import { entryColor, entryLook, entrySyntax } from "./scrollback.shared"
 import { toolFiletype, toolStructuredFinal } from "./tool"
 import { RUN_THEME_FALLBACK, transparent, type RunTheme } from "./theme"
@@ -239,9 +240,10 @@ export function RunEntryContent(props: {
           width="100%"
           syntaxStyle={syntax()}
           streaming={streaming()}
-          content={markdown()!.content}
+          content={monoMarkdown(markdown()!.content, props.opts?.mono === true)}
           fg={color()}
-          tableOptions={{ widthMode: "content" }}
+          tableOptions={props.opts?.mono ? monoMarkdownTableOptions : { widthMode: "content" }}
+          renderNode={props.opts?.mono ? monoMarkdownRenderNode : undefined}
         />
       </Match>
     </Switch>

@@ -1,7 +1,8 @@
 import { afterEach, expect, test } from "bun:test"
 import type { SessionMessageAssistantTool } from "@opencode-ai/client/promise"
-import { RGBA, SyntaxStyle } from "@opentui/core"
+import { CliRenderEvents, MarkdownRenderable, RGBA, SyntaxStyle, TextRenderable } from "@opentui/core"
 import { MockTreeSitterClient, createTestRenderer, type TestRenderer } from "@opentui/core/testing"
+import { monoSnapshot } from "../../src/mini/mono"
 import { RunScrollbackStream } from "../../src/mini/scrollback.surface"
 import { entryGroupKey } from "../../src/mini/scrollback.writer"
 import { RUN_THEME_FALLBACK, type RunTheme } from "../../src/mini/theme"
@@ -67,6 +68,7 @@ async function setup(
     wrote?: boolean
     theme?: RunTheme
     onThemeRelease?: (theme: RunTheme) => void
+    mono?: boolean
   } = {},
 ) {
   const out = await createTestRenderer({
@@ -77,6 +79,7 @@ async function setup(
     consoleMode: "disabled",
   })
   active.push(out.renderer)
+  if (input.mono) out.renderer.on(CliRenderEvents.EXTERNAL_OUTPUT, monoSnapshot)
 
   const treeSitterClient = new MockTreeSitterClient({ autoResolveTimeout: 0 })
   treeSitterClient.setMockResult({ highlights: [] })
@@ -87,6 +90,7 @@ async function setup(
       treeSitterClient,
       wrote: input.wrote ?? false,
       onThemeRelease: input.onThemeRelease,
+      mono: input.mono,
     }),
   }
 }
@@ -200,6 +204,42 @@ test("theme swaps preserve streamed markdown parser state", async () => {
     }
   } finally {
     out.scrollback.destroy()
+  }
+})
+
+test("renders monochrome scrollback as ASCII markdown", async () => {
+  const out = await setup({ mono: true, width: 60 })
+  const output: string[] = []
+  out.renderer.on(CliRenderEvents.EXTERNAL_OUTPUT, (event) => {
+    output.push(decoder.decode(event.snapshot.getRealCharBytes(true)))
+  })
+
+  try {
+    await out.scrollback.append(assistant("# H"))
+    expect(Reflect.get(out.scrollback, "active")?.renderable).toBeInstanceOf(MarkdownRenderable)
+    await out.scrollback.append(assistant('éading →\n\n> “quote”\n\n---\n\n| A | B |\n| - | - |\n| α | β |'))
+    await out.scrollback.complete()
+    out.renderer.writeToScrollback((ctx) => ({
+      root: new TextRenderable(ctx.renderContext, {
+        content: "plain │ emoji 🙂",
+        width: ctx.width,
+        height: 1,
+      }),
+      width: ctx.width,
+      height: 1,
+      trailingNewline: false,
+    }))
+
+    const rendered = output.join("").replace(/ +\n/g, "\n")
+    expect(rendered).toContain("# H?ading ->")
+    expect(rendered).toContain('| "quote"')
+    expect(rendered).toContain("------------------------------------------------------------")
+    expect(rendered).toContain("?  ?")
+    expect(rendered).toContain("plain ? emoji ?")
+    expect(rendered).not.toMatch(/[^\x00-\x7f]/)
+  } finally {
+    out.scrollback.destroy()
+    destroy(claim(out.renderer))
   }
 })
 

@@ -214,7 +214,7 @@ export function entryBody(commit: StreamCommit, options?: ScrollbackOptions): Ru
       return commit.interrupted ? textBody("assistant interrupted") : RUN_ENTRY_NONE
     }
 
-    return mono ? textBody(raw) : markdownBody(raw)
+    return markdownBody(raw)
   }
 
   if (commit.kind === "reasoning") {

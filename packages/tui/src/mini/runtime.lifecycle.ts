@@ -11,6 +11,7 @@
 import path from "path"
 import { CliRenderEvents, createCliRenderer, type CliRenderer, type ScrollbackWriter } from "@opentui/core"
 import { isDefaultTitle } from "../util/session"
+import { monoSnapshot } from "./mono"
 import { entrySplash, exitSplash, splashMeta } from "./splash"
 import { resolveRunTheme } from "./theme"
 import type {
@@ -172,6 +173,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
     consoleMode: "disabled",
     clearOnShutdown: false,
   })
+  if (mono) renderer.on(CliRenderEvents.EXTERNAL_OUTPUT, monoSnapshot)
   const setTitle = (title?: string) => {
     if (input.host.platform !== "linux") return
     if (!title || isDefaultTitle(title)) return renderer.setTerminalTitle("OpenCode")
@@ -329,6 +331,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
       await footer.idle().catch(() => {})
       footer.destroy()
       if (input.host.platform === "linux") renderer.setTerminalTitle("")
+      if (mono) renderer.off(CliRenderEvents.EXTERNAL_OUTPUT, monoSnapshot)
       shutdown(renderer)
       if (!wroteExit) {
         input.host.stdout.write("\n")
