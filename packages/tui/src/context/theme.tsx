@@ -4,10 +4,8 @@ import {
   DEFAULT_THEMES,
   addTheme,
   allThemes,
-  generateSyntax,
   hasTheme,
   isTheme,
-  resolveTheme,
   selectedForeground,
   setCustomThemes,
   setSystemTheme,
@@ -16,6 +14,7 @@ import {
   type Theme,
   type ThemeJson,
 } from "../theme"
+import { generateSyntax } from "../theme/v2/syntax"
 import { generateSystem, terminalMode } from "../theme/system"
 import { discoverThemes, themeDirectories } from "../theme/discovery"
 import { createComponentTheme, type ComponentTheme } from "../theme/v2/component"
@@ -279,7 +278,6 @@ const themeContext = createSimpleContext({
       if (supported.includes(store.mode)) return store.mode
       return supported[0] ?? store.mode
     }
-    const legacySyntaxTheme = createMemo(() => resolveTheme(source(), mode()))
     const valuesV2 = createMemo(() => resolveThemeFile(file(), mode(), sourceName()))
     valuesV2()
     themePerformance.set("Init", `${(performance.now() - initStarted).toFixed(2)} ms`)
@@ -299,7 +297,7 @@ const themeContext = createSimpleContext({
 
     createEffect(() => renderer.setBackgroundColor(valuesV2().background.default))
 
-    const syntax = createSyntaxStyleMemo(() => generateSyntax(legacySyntaxTheme()))
+    const syntax = createSyntaxStyleMemo(() => generateSyntax(valuesV2(), mode()))
     function contextual(context: ContextName) {
       return contextualServices[context]
     }
